@@ -1174,11 +1174,12 @@ describe("production health probe registration", () => {
     const path = join(root, "store.db");
     const config = { credential: CREDENTIAL, principalId: "operator-local", projectId: "project-monitor-timer", storePath: path,
       schedule: { timer: { set: () => { throw new Error("not disclosed"); }, clear: () => {} } } };
+    let provider: ReturnType<typeof createStoreDependencies> | undefined;
     try {
-      expect(() => createStoreDependencies(config)).toThrow("SCHEDULE_TIMER_FAILED@DAEMON_INGRESS");
+      expect(() => { provider = createStoreDependencies(config); }).toThrow(/^SCHEDULE_TIMER_FAILED@DAEMON_INGRESS$/u);
       const reopened = SqliteEventStore.openForProject(path, config.projectId);
       try { expect(reopened.getHealth().quickCheck).toBe("ok"); } finally { reopened.close(); }
-    } finally { rmSync(root, { recursive: true, force: true }); }
+    } finally { provider?.close(); rmSync(root, { recursive: true, force: true }); }
   });
 
   it("rebinds one durable monitor on restart and retains the same probe rate", async () => {

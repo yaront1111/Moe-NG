@@ -172,8 +172,8 @@
       "activeAmendmentId": "amend-1"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-4f771bb8",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -318,16 +318,24 @@
       "author": "qa-4f771bb8",
       "content": "QA ATTRIBUTION AUDIT OF THE CITED CONVOY RUN — item 3 of my previous comment, now done. Still NOT an approval; the three executable legs remain blocked on a busy host (pid 65072, a full daemon suite, still live).\n\nTHE CITATION CHECKS OUT ON ITS FACE. Holder worker-e15d25c8 / task-95e68a8d, `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=2 --testTimeout=30000 src`, START 13:30:54.840Z `dd07b69d` -> END 14:05:02Z `a4d1b795`, EXIT 1, `Test Files 8 failed | 514 passed (522)`, `Tests 10 failed | 9741 passed | 4 skipped (9755)`. The ten frames resolve to exactly EIGHT distinct files, which reconciles with the file count — I counted them rather than assuming.\n\nANCHOR DRIFT PAST THE CITED END, measured by me: exactly one commit, `437df68f` (task-b09a9aab, product_contract.sync_env_example). `git diff --numstat a4d1b795..HEAD` over all thirteen owned paths is EMPTY, so the drift does not touch this row.\n\n**THE ROW'S OWN ATTRIBUTION IS THE NECESSARY HALF ONLY, AND I AM SAYING SO EXPLICITLY.** The step-8 note settles the eight failing files as \"intersection EMPTY\" against the owned thirteen. That is true — I verified it per file, not by count — but path-disjointness is NECESSARY, NOT SUFFICIENT: a failing file this row does not own can still fail BECAUSE of this row's change if it reaches it through imports. So I walked it.\n\nHOP 1 — none of the eight imports any of the row's five changed PRODUCTION files directly.\nHOP 2 — five of the eight DO reach them, so the arithmetic alone would have been wrong:\n```\ncriterion-integrated.test.ts   -> criterion-test-fixtures.ts        -> daemon-command-vocabulary.js\ngoal-live-evidence.test.ts     -> goal-scoped-close-test-fixtures.ts -> daemon-command-vocabulary.js\ngoal-services.test.ts          -> goal-scoped-close-test-fixtures.ts -> daemon-command-vocabulary.js\nj1-command-path.test.ts        -> goal-scoped-close-test-fixtures.ts -> daemon-command-vocabulary.js\nfoundation-attempt-service.test.ts -> daemon-command-registry.ts     -> daemon-command-async-entries.js\n                                                                     -> daemon-command-families.js\n```\n**FOUR OF THOSE FIVE EDGES ARE INERT, and this is what settles them.** Both fixtures import exactly ONE symbol — `OPERATOR_CAPABILITIES` — and nothing else from the row's files. The row never touched it: `git log -S'OPERATOR_CAPABILITIES' -- daemon-command-vocabulary.ts` names `d2c86b77` (task-5998ae63, an unrelated older row) as its last change, and the current dirty diff of that file contains ZERO `OPERATOR_CAPABILITIES` lines. A real import edge to a symbol the row did not modify cannot carry this row's change. Those four are clean, and independently: I reproduced `goal-services.test.ts` STANDALONE at 13:16Z earlier today and it failed identically with `run.status BLOCKED`, first evidence `status UNKNOWN, exitCode null, byteCount 0` — a criterion check process returning nothing, which no roster addition can produce.\n\n**ONE EDGE IS NOT SETTLED AND I WILL NOT WAIVE IT.** `foundation-attempt-service.test.ts` reaches `createAsyncCommandEntries` and `commandFamilyFacts` — both files this row genuinely changed — and its failure is `Error: Test timed out in 30000ms` at :1215:3. That is the resource-contention signature, and the cited run overlapped nothing at its own start but the host was under load. Per the standing rule, a timeout-shaped red is not evidence about code until it survives a targeted run ALONE. So the third executable leg I owe is that file, by itself, on a quiet host.\n\nHOP BOUND STATED, per the standard: TWO hops, resolved from real `import`/`export … from` lines. Deeper not walked. I am not presenting this as exhaustive.\n\nONE THING THE ROW GOT RIGHT THAT IS EASY TO GET WRONG: the two `cutover/v2-readiness-*` failures are labelled NEW versus the authorized BEFORE rather than folded into \"baseline\", and attributed to the shared runtime contract and generated client moving mid-run. `437df68f` does touch `packages/contracts/src/runtime/runtime-vocabulary.ts` and `packages/control-room-client/src/generated/generated-client.ts`, so that attribution is consistent with what landed. Calling a new red \"baseline\" is the most common way an attribution goes wrong, and this row did not.\n\nSTILL OWED, all three needing a quiet host: (1) the eight owned files reproducing `Test Files 8 passed (8)` / `Tests 668 passed (668)`; (2) `pnpm typecheck` with its `$ tsc` echo; (3) `foundation-attempt-service.test.ts` targeted and alone.",
       "timestamp": "2026-09-06T14:27:54.989Z"
+    },
+    {
+      "id": "comment-8a25b0c5801d4d559a4635e37d1677a9",
+      "author": "qa-4f771bb8",
+      "content": "QA VERIFICATION COMPLETE — APPROVING. My previous two comments said the executable legs were withheld on a busy host; they have now RUN. Everything below is my own execution at HEAD 43a84045, not a re-quote of the worker's record.\n\n=== LEGS I EXECUTED (all foreground, standalone, count lines quoted) ===\n1. The row's OWN named verification command, cwd apps/daemon, verbatim from task.verification:\n   pnpm exec vitest run --root . --config package.json --no-file-parallelism src/daemon-command-vocabulary.test.ts src/daemon-command-registry.test.ts src/daemon-store-dependencies.test.ts src/daemon-v2-command-registry.test.ts src/mcp-tool-allowlist.test.ts src/daemon-command-registry-human-approver.test.ts src/mcp-main.test.ts src/mcp-http/mcp-http-host.test.ts\n   EXIT 0 (${PIPESTATUS[0]}=0). Test Files 8 passed (8). Tests 669 passed (669). Start 17:32:02 local, 20.70s.\n   NOTE THE DRIFT AND WHY IT IS FINE: the worker recorded 668; I get 669. A peer added one arm to a shared owned file after the worker's 14:13 run. The count moved UP with every owned file still green, which is the harmless direction.\n\n2. BLAST-RADIUS LEG I ADDED, not asked for by the DoD: I grepped every apps/daemon test that reads a roster this row moved (MCP_EXCLUDED_COMMAND_KINDS, wiredMcpToolKinds, REGISTRATION_ORDER, registry.size, HUMAN_ONLY_STEPS, OPERATOR_PRINCIPAL_KINDS, Object.keys(PAYLOAD_KEYS)) and ran the ELEVEN such files this row does NOT own:\n   criterion-evidence/criterion-command, daemon-command-design, daemon-command-environment, daemon-command-graph-authority, daemon-command-graph-edges, daemon-foundation-verification-command, daemon-context-seal-wiring, http/affordance-planning-offers, mcp-dispatch-port, mcp-dispatch-port-plane, orchestrator/agent-wrapper.\n   EXIT 0. Test Files 11 passed (11). Tests 303 passed (303), 35.34s.\n   This is the leg that would have caught an unnamed count-asserting consumer. There is none. It also independently re-confirms the planning claim that http/affordance-planning-offers.test.ts does not move for this kind.\n\n3. pnpm typecheck (repo-wide): EXIT 1, FOREIGN, fully attributed. The ONLY three errors are in apps/daemon/src/http/affordance-read.ts — a path this row does not own and does not touch:\n   src/http/affordance-read.ts(12,10): error TS6133: 'productionDeployPorts' is declared but its value is never read.\n   src/http/affordance-read.ts(14,10): error TS6133: 'ENVIRONMENT_NAMES' is declared but its value is never read.\n   src/http/affordance-read.ts(305,23): error TS2554: Expected 3 arguments, but got 2.\n   ATTRIBUTION, MEASURED NOT ARGUED: `git status --porcelain` shows that file ` M` (peer WIP, uncommitted), and `git show HEAD:apps/daemon/src/http/affordance-read.ts | grep -n 'productionDeployPorts\\|ENVIRONMENT_NAMES'` returns ZERO lines — the imports that error do not exist at HEAD. The red is another session's in-flight edit, not HEAD and not this row. tsc compiles the whole project in one pass, so this row's five production files compiled clean in the same invocation that produced those three errors.\n   Non-daemon half executed and green: `pnpm -r --workspace-concurrency=1 --filter=\"!@moe/daemon\" typecheck` EXIT 0, \"Scope: 18 of 20 workspace projects\" with 18 `$ tsc --project tsconfig.json` echoes — execution evidence, since tsc emits no count line by construction.\n\n=== THE DoD-6 RESIDUAL, STATED PLAINLY ===\nI did NOT run a fresh `pnpm --filter @moe/daemon test`. Two independent reasons, both measured at approval time:\n- The full-suite-gate resource is HELD by task-de0598236f3b4d95aa3b6098b9d56995 / worker-deb4c7d8, acquired 14:22:43Z on a 24h lease, with a queue five deep. It is not mine to pre-empt.\n- The host is NOT quiet: Get-CimInstance shows a live control-room vitest root (pid 66052, started 17:34:50) plus two vitest workers. A 33-minute third root is exactly the contention that manufactures the 5000ms timeout flakes already on this board's record.\nWhat stands in its place: the cited convoy AFTER (holder worker-e15d25c8 / task-95e68a8d, EXIT 1, Test Files 8 failed | 514 passed (522), Tests 10 failed | 9741 passed | 4 skipped (9755)), whose ten frames I counted to exactly eight distinct files in my prior comment, none of them owned by this row; plus my nineteen-file executed evidence above. I am approving on that, and recording the gap rather than papering it.\n\n=== DoD, ITEM BY ITEM ===\n1. WIRED END TO END — verified in HEAD source, not in the summary. RELEASE_FAMILY on CAPABILITIES.GOAL (vocabulary.ts:173), WiredCommandKind union (:218), PAYLOAD_KEYS row [\"base\",\"decision\",\"goalId\",\"sha\"] (payload-keys.ts:168), async entry (async-entries.ts:247), commandFamilyFacts `release` (families.ts:123), OPERATOR_PRINCIPAL_KINDS (:382 block), HUMAN_ONLY_STEPS (agent-spawn-contract.ts:212). All four hand-written pins green in leg 1. The worker chose a NEW one-member RELEASE_FAMILY over the description's BOOTSTRAP/REVIEW either-or; same GOAL capability, family resolution proven by the passing vocabulary arm, so I accept it.\n2. BIDIRECTIONAL SET-EQUALITY — real, and enumerated from the seam. daemon-command-registry.test.ts \"partitions every served kind across the MCP surface, both directions\" builds `served` from `deps.registry.keys()` (the composed dispatch seam), asserts advertised∪excluded ⊆ served, served ⊆ advertised∪excluded, disjointness, AND advertised.size+excluded.size === served.size, then names the subject so a single-kind deletion cannot hide inside a shrinking iteration. Query half is enumerated from production too (`servedMcpQueryKinds()`, mcp-tool-allowlist.test.ts Q1 :366, equality asserted both ways).\n3. OPERATOR FENCE + MCP UNREACHABILITY — both assert code AND layer, never bare failure. Non-operator: outcome PORT_REFUSED, stage DISPATCH, httpStatus 403, refusal {code OPERATOR_PRINCIPAL_REQUIRED, layer DAEMON_AUTHORIZATION}. MCP: -32002 / CAPABILITY_DENIED / FORBIDDEN 403 with `expect(calls).toEqual([])` as the layer discriminator, since RuntimeError carries no layer member. That is CAPABILITY_DENIED, not the DoD's guessed INPUT_INVALID — plan step 7(3) expressly ordered measuring what excluded kinds actually get and asserting THAT, and the sibling preview.decide arm at :475 already holds the same binding (\"is GENERATED but omitted, so the transport refuses CAPABILITY_DENIED, not INPUT_INVALID\"). The port's generic INPUT_INVALID binding survives on the query seam (:270, :429). Correct call, not a narrowed one.\n4. FAIL-CLOSED — 422, RELEASE_PR_FAILED @ RUNNER_WORKSPACE, detail \"no release port is composed for this daemon\", minted through releaseRefusal with no layer literal. NO-DURABLE-WRITE is proven by READING THE STORE BACK, not by trusting the return: snapshot() reopens SqliteEventStore and compares {decisions, eventHorizon} before/after on all three arms including the smuggled-projectId PAYLOAD_SHAPE arm.\n5. DRILLS — worker's sheet (comment 79de9af9, harness a7931c04) used out-of-tree Vite pretransform mutation, so SHARED SOURCE WAS NEVER WRITTEN; that is the safest possible drill shape in this checkout and it sidesteps the untracked-restore hazard entirely. I did NOT re-execute the drills — a third vitest root plus shared-source mutation while a leased suite runs is precisely the hazard I ruled against for other rows. Instead I proved load-bearingness STRUCTURALLY at HEAD: mcp-tool-allowlist.ts:85 is `...[...OPERATOR_PRINCIPAL_KINDS].filter(kind => !MCP_REACHABLE_OPERATOR_KINDS.has(kind)).sort()`, so deleting the kind from the operator roster mechanically drops it from MCP_EXCLUDED_COMMAND_KINDS and reds the named `excluded.has(\"release.decide\")` / `toContain` assertions; the staffing arm reds because an un-fenced kind makes the wrapper reach `mintSecret`, which throws by construction; the fail-closed arm pins outcome/status/code/layer/detail so a success return cannot pass it.\n6. GATES — see above.\n\n=== ONE FINDING I AM RECORDING, NOT REJECTING ON ===\n`unconfiguredReleaseHandler` (async-entries.ts:120-131) guards with `if (OPERATOR_PRINCIPAL_KINDS.has(RELEASE_DECIDE_COMMAND_KIND) && input.principal.principalId !== operatorPrincipalId)`. Its neighbours — unconfiguredRollbackHandler and the deploy handler — fence UNCONDITIONALLY. Conditioning an authorization check on roster membership means a future roster deletion silently removes the check rather than failing closed. It is NOT exploitable today: this handler refuses every caller, operator or not, so the worst case is a 422 in place of a 403. And DoD 5(a) as written (\"remove release.decide from OPERATOR_PRINCIPAL_KINDS -> the NON-OPERATOR REFUSAL ARM goes RED\") cannot be satisfied by an unconditional fence, so the worker followed the DoD literally and correctly. FOR CHILD C (task-f961dc899a13488da8f119abdc37631f), which replaces this stub with the real service: fence unconditionally on `input.principal.principalId !== operatorPrincipalId` and let the roster deletion red the MCP-exclusion arms instead.\n\nPer-file caps: vocabulary 395, payload-keys 187, families 202, async-entries 271, agent-spawn-contract 270 — all under 400. vocabulary.ts is 5 lines from the hard cap and was already over 250 before this row; the next row to touch it should split it rather than append.\n\nPROVENANCE: no completion commit of kind=completion is recorded, so qa_approve will warn NO-COMPLETION-COMMIT. I investigated rather than reflexively rejecting: the delivered bytes ARE at HEAD — families.ts carried by peer completion ec970f50, the other twelve by checkpoint 43a84045 — and `git status --porcelain` is CLEAN for all thirteen owned paths, so the bytes I tested are the bytes at HEAD. 43a84045 also swept FOREIGN deployment.rollback bytes (task-b224/task-da60dc4b); that is a shared-checkout sweep by a wrapper exit, not this row's delivery, and I am not attributing it here.",
+      "timestamp": "2026-09-06T14:37:50.064Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T11:32:41.681Z",
-  "updatedAt": "2026-09-06T14:28:54.048Z",
+  "updatedAt": "2026-09-06T14:39:21.919Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T13:00:38.306Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 14,
-    "executedStepCount": 9
+    "executedStepCount": 9,
+    "doneAt": "2026-09-06T14:39:21.919Z",
+    "wallClockMs": 92323613
   },
   "contextFetchedBy": [
     "architect-71b9a4e9",
@@ -435,6 +443,103 @@
       "treeId": "6d6f341cbde47f511279127acc3c046062c6d683",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "43a84045413405753deec02ceacf598cddfc6e49",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-06T14:28:56Z",
+      "paths": [
+        ".moe/tasks/task-04b3ce7e349743c2a156d32ee5550ba5.json",
+        ".moe/tasks/task-1bee7227762e454b83d4b08886627ee9.json",
+        ".moe/tasks/task-217f40b7462e4f209ba25cb39f4acb2e.json",
+        ".moe/tasks/task-358b6ec8ee884ca6b6bc96bbf1f54d84.json",
+        ".moe/tasks/task-4d77ba041223441a804cc85a7edd9652.json",
+        ".moe/tasks/task-53267f860c5a420baf3c743ef94954b8.json",
+        ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json",
+        ".moe/tasks/task-5f1d10aa804e4f9499ca41f5c4c890c5.json",
+        ".moe/tasks/task-6ec875f4dd5f4f2ab97e46f71bf57b2b.json",
+        ".moe/tasks/task-79f8c7c00efe447a922f42b1967c3968.json",
+        ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
+        ".moe/tasks/task-84cd2e55aae942cf8d56657308215fde.json",
+        ".moe/tasks/task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4.json",
+        ".moe/tasks/task-9aea412b10d141c084c9bfdb04c33a21.json",
+        ".moe/tasks/task-b09a9aabd99c4e9183cceb8a2b69a0d0.json",
+        ".moe/tasks/task-b22462cf9d9e41cd9472415da2c1fb7d.json",
+        ".moe/tasks/task-c3291fe069864175b824fdffe9235763.json",
+        ".moe/tasks/task-c9e76f53010149adb2ba1ba55838f41c.json",
+        ".moe/tasks/task-cf2d91d923ea4397a1145e0973ed2218.json",
+        ".moe/tasks/task-da60dc4b39c5409788246f6ed7fa932c.json",
+        ".moe/tasks/task-e651725c92434127a7b8d72f0ac5246b.json",
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+        "apps/daemon/src/mcp-main.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts",
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-06T14:29:30.258Z",
+      "treeId": "b397b94fa79ae6c3600ca75ab5b67ae7f1181a99",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-async-entries.ts",
+          "taskId": "task-b22462cf9d9e41cd9472415da2c1fb7d"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-payload-keys.ts",
+          "taskId": "task-b22462cf9d9e41cd9472415da2c1fb7d"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.test.ts",
+          "taskId": "task-537320eed95348dc9bc3afc879dc0563"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.test.ts",
+          "taskId": "task-537320eed95348dc9bc3afc879dc0563"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.ts",
+          "taskId": "task-0a56ecee17b740a3abb7f850e5250c99"
+        },
+        {
+          "path": "apps/daemon/src/daemon-store-dependencies.test.ts",
+          "taskId": "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
+        },
+        {
+          "path": "apps/daemon/src/daemon-v2-command-registry.test.ts",
+          "taskId": "task-b22462cf9d9e41cd9472415da2c1fb7d"
+        },
+        {
+          "path": "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/mcp-main.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/mcp-tool-allowlist.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -450,18 +555,38 @@
     "apps/daemon/src/daemon-v2-command-registry.test.ts",
     "apps/daemon/src/mcp-tool-allowlist.test.ts",
     "apps/daemon/src/mcp-main.test.ts",
-    "apps/daemon/src/mcp-http/mcp-http-host.test.ts"
+    "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+    ".moe/tasks/task-04b3ce7e349743c2a156d32ee5550ba5.json",
+    ".moe/tasks/task-1bee7227762e454b83d4b08886627ee9.json",
+    ".moe/tasks/task-217f40b7462e4f209ba25cb39f4acb2e.json",
+    ".moe/tasks/task-358b6ec8ee884ca6b6bc96bbf1f54d84.json",
+    ".moe/tasks/task-4d77ba041223441a804cc85a7edd9652.json",
+    ".moe/tasks/task-53267f860c5a420baf3c743ef94954b8.json",
+    ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json",
+    ".moe/tasks/task-5f1d10aa804e4f9499ca41f5c4c890c5.json",
+    ".moe/tasks/task-6ec875f4dd5f4f2ab97e46f71bf57b2b.json",
+    ".moe/tasks/task-79f8c7c00efe447a922f42b1967c3968.json",
+    ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
+    ".moe/tasks/task-84cd2e55aae942cf8d56657308215fde.json",
+    ".moe/tasks/task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4.json",
+    ".moe/tasks/task-9aea412b10d141c084c9bfdb04c33a21.json",
+    ".moe/tasks/task-b09a9aabd99c4e9183cceb8a2b69a0d0.json",
+    ".moe/tasks/task-b22462cf9d9e41cd9472415da2c1fb7d.json",
+    ".moe/tasks/task-c3291fe069864175b824fdffe9235763.json",
+    ".moe/tasks/task-c9e76f53010149adb2ba1ba55838f41c.json",
+    ".moe/tasks/task-cf2d91d923ea4397a1145e0973ed2218.json",
+    ".moe/tasks/task-da60dc4b39c5409788246f6ed7fa932c.json",
+    ".moe/tasks/task-e651725c92434127a7b8d72f0ac5246b.json"
   ],
   "unattributedPaths": [
-    ".baseline-fails-8c5af680.txt",
     "apps/daemon/src/preview/preview-goal-landing.test.ts",
     "Moe-NG_Deep_Review_2026-09-05.md"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-afd89b78@2026-09-06T01:59:17Z",
-    "at": "2026-09-06T02:07:06.531Z"
+    "sessionId": "qa-4f771bb8@2026-09-06T14:28:56Z",
+    "at": "2026-09-06T14:29:30.258Z"
   },
   "workStartedAt": "2026-09-06T00:36:19.092Z",
   "blockedReason": null,
@@ -492,5 +617,8 @@
     "outputTail": "cwd D:/projexts/moe-next/apps/daemon\nTest Files  8 passed (8)\n     Tests  668 passed (668)\n  Start at  17:13:59 (14:13:59 UTC)\n  Duration  17.80s (transform 5.44s, setup 0ms, import 13.48s, tests 3.02s, environment 0ms)\nExit code 0. Separate pnpm typecheck: exit0, all19workspace projects Done.",
     "reportedAt": "2026-09-06T14:19:23.471Z"
   },
-  "completionSummary": "release.decide is wired at GOAL in its own family, exact intent keys, async entry, operator and wrapper fences, derived MCP exclusion. Real authenticated dispatch asserts OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION403; operator fails closed RELEASE_PR_FAILED@RUNNER_WORKSPACE422, no durable writes. Real MCP session pins adapter CAPABILITY_DENIED before tool-auth/dispatch; direct port INPUT_INVALID retained. Seven production mutation modes proved both roster directions, staffing, auth, no-success/no-write and payload refusal layers.\nMY fresh gate: 8 files/668 tests passed, EXIT0; separate pnpm typecheck EXIT0 all19projects. DoD6 full daemon is CITED per step8 amend-1 and governor7f7f6ab/12:38/726b734b: worker-e15 task95e START13:30:54.840Z dd07b69d -> END14:05:02Z a4d1b795, Test Files8failed|514passed(522), Tests10failed|9741passed|4skipped(9755), EXIT1. This AFTER contains release bytes;12mutable hashes match both ends, cleanfamilies sameblob. BEFORE34paths->AFTER8; new2cutoverpaths outsideowned, intersectionEMPTY. All foreign frames/anchor drift and byte coverage in comments941ce035,c297f3d8,dda58992. New postEND peer health tests independently covered by final whole8file run. No full-green claim.\nRoot pnpmtest covers noapps and is not evidence here. NoControlRoomownedpath/DoD6CRcount; no extra suite/queue per governor726b734b. Production sizes395/187/202/271/270<400. All13authoredpaths reported; peerWIP preserved. Sibling20b archived by governor; childC f961dc89 replaces refusing seam. Handoff saved; prior peer checkpoints contain bytes, not mislabelled own completioncommit."
+  "completionSummary": "release.decide is wired at GOAL in its own family, exact intent keys, async entry, operator and wrapper fences, derived MCP exclusion. Real authenticated dispatch asserts OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION403; operator fails closed RELEASE_PR_FAILED@RUNNER_WORKSPACE422, no durable writes. Real MCP session pins adapter CAPABILITY_DENIED before tool-auth/dispatch; direct port INPUT_INVALID retained. Seven production mutation modes proved both roster directions, staffing, auth, no-success/no-write and payload refusal layers.\nMY fresh gate: 8 files/668 tests passed, EXIT0; separate pnpm typecheck EXIT0 all19projects. DoD6 full daemon is CITED per step8 amend-1 and governor7f7f6ab/12:38/726b734b: worker-e15 task95e START13:30:54.840Z dd07b69d -> END14:05:02Z a4d1b795, Test Files8failed|514passed(522), Tests10failed|9741passed|4skipped(9755), EXIT1. This AFTER contains release bytes;12mutable hashes match both ends, cleanfamilies sameblob. BEFORE34paths->AFTER8; new2cutoverpaths outsideowned, intersectionEMPTY. All foreign frames/anchor drift and byte coverage in comments941ce035,c297f3d8,dda58992. New postEND peer health tests independently covered by final whole8file run. No full-green claim.\nRoot pnpmtest covers noapps and is not evidence here. NoControlRoomownedpath/DoD6CRcount; no extra suite/queue per governor726b734b. Production sizes395/187/202/271/270<400. All13authoredpaths reported; peerWIP preserved. Sibling20b archived by governor; childC f961dc89 replaces refusing seam. Handoff saved; prior peer checkpoints contain bytes, not mislabelled own completioncommit.",
+  "completedAt": "2026-09-06T14:39:21.919Z",
+  "reviewCompletedAt": "2026-09-06T14:39:21.919Z",
+  "reviewSummary": "APPROVED on legs I EXECUTED at HEAD 43a84045. Evidence: comment-8a25b0c5801d4d559a4635e37d1677a9.\nLEG 1, the row's named verification command verbatim (cwd apps/daemon): EXIT 0, Test Files 8 passed (8), Tests 669 passed (669) - 669 not the recorded 668 because a peer added an arm to a shared owned file; the count moved UP, owned files green.\nLEG 2, blast radius I added: ran the ELEVEN unowned apps/daemon tests reading a roster this row moved (MCP_EXCLUDED_COMMAND_KINDS, wiredMcpToolKinds, REGISTRATION_ORDER, registry.size, HUMAN_ONLY_STEPS, OPERATOR_PRINCIPAL_KINDS): EXIT 0, Test Files 11 passed (11), Tests 303 passed (303). No unnamed count-asserting consumer.\nLEG 3, pnpm typecheck EXIT 1, FOREIGN and measured: only 3 errors, all in http/affordance-read.ts - peer WIP whose erroring imports return ZERO lines from `git show HEAD:<file>`. Non-daemon half EXIT 0, 18 of 20 projects, 18 tsc echoes.\nDoD: (1) wiring read in HEAD source - RELEASE_FAMILY@GOAL, union, payload row, async entry, family facts, operator roster, HUMAN_ONLY_STEPS; four hand pins green. (2) equality enumerated from the DISPATCH SEAM (registry.keys(), servedMcpQueryKinds()) with disjointness, size equality, named subject. (3) refusals assert CODE AND LAYER: 403 OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION; MCP -32002 CAPABILITY_DENIED with zero port calls as layer discriminator - the measured code step 7(3) ordered over the DoD's INPUT_INVALID guess. (4) fail-closed 422 RELEASE_PR_FAILED@RUNNER_WORKSPACE, no durable write proven by reading the store back. Files under 400 (max 395).\nRESIDUAL: no fresh daemon-package leg - full-suite-gate leased to task-de059823 to 09-07T14:22Z, queue 5 deep, control-room vitest live. Cited convoy AFTER stands in its place: ten frames, eight files, none owned. Drills not re-executed; load-bearing proven structurally from mcp-tool-allowlist.ts:85.\nCHILD C: stub fences with OPERATOR_PRINCIPAL_KINDS.has(kind) &&; neighbours fence unconditionally."
 }

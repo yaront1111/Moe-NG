@@ -162,7 +162,7 @@
       "activeAmendmentId": "amend-1"
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -211,11 +211,17 @@
       "author": "worker-7bdbffac",
       "content": "FINAL NON-RESOURCE GATES, foreground finished 2026-09-06 13:05Z. (1) pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 src/daemon-command-vocabulary.test.ts src/daemon-command-registry.test.ts src/daemon-store-dependencies.test.ts src/daemon-v2-command-registry.test.ts src/mcp-tool-allowlist.test.ts src/daemon-command-registry-human-approver.test.ts src/mcp-main.test.ts src/mcp-http/mcp-http-host.test.ts src/preview/preview-start-command.test.ts => EXIT0, Test Files9passed(9),Tests683passed(683),32.51s, POST8DRILLS. (2) pnpm typecheck => EXIT0,19workspace projects including daemon Done. (3) pnpm --filter @moe/control-room test => EXIT0, Test Files172passed(172),Tests2135passed(2135),31.93s. (4) pnpm verify:foundation => EXIT0,35files756tests. (5) pnpm verify:store => EXIT0,52files675tests. (6) git diff --check over explicit13ownedpaths => EXIT0. All child sessions polled to exit; no own drill-runner process remains. Shared foreign WIP preserved, including setter-code hunk by f72 in registry test; no manual stage/commit. Implementation complete but task NOT complete: step8 still lacks required full pnpm --filter @moe/daemon test AFTER. Queue6 behind f72; its12:46Z run cannot certify final edits made12:57Z. Full root also not yet cited (designated shared root run), and root alone never covers apps. Await lease, run full AFTER and report exact delta vs authorized BEFORE, rerun scoped/typecheck if needed, complete_step8 then complete_task. Governor scoped verification/BEFORE-reference request msg2facf717.",
       "timestamp": "2026-09-06T13:06:38.040Z"
+    },
+    {
+      "id": "comment-75eb72ae7f5a45d4b47b2443f4ac0d8b",
+      "author": "governor-afbde490",
+      "content": "GOVERNOR 14:33Z — YOUR BYTES ARE ON THE BRANCH under another row's sha. Commit 43a840454134 (`wip(task-54b74b80…) … recovered`, qa-4f771bb8's wrapper post-flight at 14:29:23Z) carried 12 of this row's 13 declared paths — every +/- hunk in them is this row's deployment.rollback work (qa-4f771bb8 diffed each line before the sweep, 14:22Z; the commit's own Moe-Contested trailers name this row for three of them). No surgery, no rewrite: I recorded 43a84045 on this row's ledger as a checkpoint with those 12 paths. Still dirty and this row's alone: apps/daemon/src/preview/preview-start-command.test.ts — it lands with your completion. Next claimer: bytes have been frozen since 13:03Z (comment 22da1161 hashes); cite e15d25c8's 14:04Z daemon END or 1d53e70c's 14:22Z END under the two-arm rule (blob pairs for the 12 now-clean paths, hash pair for the test file), run the owned scope fresh, complete_task. Do not re-run a full suite for this row.",
+      "timestamp": "2026-09-06T14:30:37.072Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:50:56.488Z",
-  "updatedAt": "2026-09-06T13:49:18.527Z",
+  "updatedAt": "2026-09-06T14:33:14.042Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:58:22.326Z",
     "plannedStepCount": 8,
@@ -246,10 +252,10 @@
     "worker-7bdbffac"
   ],
   "workStartedAt": "2026-09-06T11:02:45.095Z",
-  "blockedReason": "RESOURCE WAIT ONLY. Steps1–7 complete, all production wiring and8 applied mutation drills complete; step8 lacks full daemon AFTER only. Fresh postdrill owned9files683tests0; typecheck19projects0; ControlRoom172files2135tests0; foundation35files756tests0;store52files675tests0;diffcheck0. Every child polled to completion; no own background jobs. All13paths declared; exactcount roster/drills/finalSHA evidence in rowcomments and Serena handoff. Queue6 behind currentholder f72. Governor msg3e4cbc6 confirms cannot cite f72 run because b224 final edits occurred during it; final13hashes anchored13:03Z for next run. No fullgate0 claimed. On grant verifyRAM/processes, announceGATE START, run pnpm --filter @moe/daemon test foreground, release immediately, disclose exactfailedpaths/counts and authorizedBEFORE∩owneddelta, finishstep8 and complete_task. Scoped verification/BEFOREreference request pending governor msg2facf717. Resource wait retainsseat and auto-unblocks; no safety/workblock, no manualgit or foreignWIP alteration.",
-  "blockedResourceId": "full-suite-gate",
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-06T13:06:39.219Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorBlockedReason": "Effective step1/2/5 re-read including disk activeAmendmentId/amendments: ALL null, so no superseding overlay. Step1 forbids fence files and calls interim MCP-advertised; step2(3) adds OPERATOR_PRINCIPAL_KINDS. Production mcp-tool-allowlist.ts84 now DERIVES exclusion from that set minus session.open. Thus this addition immediately changes four unnamed consumers: mcp-tool-allowlist.test.ts205/231-245, daemon-command-registry-human-approver.test.ts343-358, mcp-main.test.ts211-248, mcp-http/mcp-http-host.test.ts690/692/721. These would be OWN rollback delta failures, not foreign baseline. PAYLOAD_KEYS definition also moved out of planned vocabulary.ts into unowned daemon-command-payload-keys.ts75. Minimum scope6+1+4=11>10; global unnamed-consumer rail requires report before extra edits, not knowingly deliver red or evade checks. Existing fence sibling2ab7b462 already owns that seam and waits on this row; amend/re-slice existing rows, never reverse dependency/cycle. Evidence at HEAD9218fda7 in comment3b1d1bc7. No code edits; no gates run/pass claimed. Shared peer dirt preserved and NOT the block premise.",
   "blockedOnTaskIds": null,
   "declaredFiles": [
@@ -276,5 +282,53 @@
       "releasedBy": "worker-7bdbffac",
       "reason": "Explicit user request: next task. Handing off completed implementation with resource-only full daemon gate remaining; no completion claimed."
     }
-  ]
+  ],
+  "commits": [
+    {
+      "sha": "43a840454134",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "governor",
+      "sessionId": "governor-afbde490@2026-09-06T14:32:00Z",
+      "paths": [
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+        "apps/daemon/src/mcp-main.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts",
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts"
+      ],
+      "recordedBy": "governor-afbde490",
+      "recordedAt": "2026-09-06T14:30:33.193Z",
+      "status": "BLOCKED",
+      "pushed": true,
+      "message": "Governor attribution: 43a84045 is qa-4f771bb8's recovered checkpoint under task-54b74b80, but every +/- hunk in these 12 paths is task-b22462cf's deployment.rollback work (qa-4f771bb8 diffed each line, 14:22Z); recorded here so b224's ledger carries its own delivery. preview-start-command.test.ts (b224-only) is still dirty and lands with b224's completion."
+    }
+  ],
+  "filesModified": [
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    "apps/daemon/src/daemon-command-payload-keys.ts",
+    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+    "apps/daemon/src/mcp-main.test.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "apps/daemon/src/orchestrator/agent-spawn-contract.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "governor-afbde490@2026-09-06T14:32:00Z",
+    "at": "2026-09-06T14:30:33.193Z"
+  }
 }
