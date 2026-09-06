@@ -1219,7 +1219,7 @@ describe("the offer roster and the step projection agree on a browser-approved g
   });
 
   /**
-   * `goal.close` DISPATCHED FROM ITS OWN OFFER — and it now CLOSES.
+   * `goal.close` dispatched from its own offer reaches the goal's receipt fence.
    *
    * THE ANSWER MOVED, AND HERE IS WHY (task-8bdd14af). This arm used to assert a REFUSAL: past
    * the sequence gate, but stopped by the goal's own closure fence, because
@@ -1275,7 +1275,7 @@ describe("the offer roster and the step projection agree on a browser-approved g
     // through a Foundation verification receipt it does not hold. The close is graded where it is
     // reachable, on `goals/goal-intent-approved-closure.test.ts`'s contract-bound world.
     expect(dispatched.ok ? "closed" : `${dispatched.code}@${String(dispatched.refusedBy)}`)
-      .toBe("GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED@DAEMON_PREREQUISITE");
+      .toBe("GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT@DAEMON_PREREQUISITE");
     // NOT admitted by the sequence gate alone, and asserted on the production reader rather than
     // on the code — `publishRepository` proves two authorities can share one code and one layer.
     expect(missingPrerequisites(readDurableLedger(worldStore, BOOTSTRAP_PROJECT), "goal.close"))

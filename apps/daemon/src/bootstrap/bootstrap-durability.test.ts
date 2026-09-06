@@ -84,16 +84,13 @@ afterEach(closeStores);
  * The frozen tuple `goal.close` answers on this journey, restated by hand so a code, a layer or
  * an authority quietly changing is a red rather than a shrug.
  *
- * THE CODE MOVED UP ONE FENCE (task-ae6fd9ac). Qualification no longer demands a Foundation
- * verification receipt — the live leg closes on the running loop's own evidence — so the guard
- * this journey reaches first is the REVIEW one: it drives the bootstrap sequence and never
- * accepts a node's output, so no durable acceptance names the approved node. Same layer, same
- * authority, one fence earlier.
+ * This journey has an approved legacy scope without a compiled Product Contract binding.
+ * It must supply a Foundation receipt before review acceptance can qualify the close.
  */
-const NO_ACCEPTANCE_REFUSAL = Object.freeze({
+const NO_FOUNDATION_RECEIPT_REFUSAL = Object.freeze({
   advisoryOnly: true,
   authority: "NONE",
-  code: "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED",
+  code: "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
   ok: false,
   refusedBy: "DAEMON_PREREQUISITE",
 });
@@ -270,11 +267,11 @@ describe("one durable terminal decision and exact replay (DoD 2)", () => {
         expect(scan.exhausted).toBe(true);
         expect(scan.activationRows).toBe(0);
 
-        expect(send(store, request)).toMatchObject(NO_ACCEPTANCE_REFUSAL);
+        expect(send(store, request)).toMatchObject(NO_FOUNDATION_RECEIPT_REFUSAL);
         expect(decisionCount(store)).toBe(before);
         // A refusal is not a decision, so the SECOND call re-derives it rather than replaying a
         // row: identical answer, still nothing durable.
-        expect(send(store, request)).toMatchObject(NO_ACCEPTANCE_REFUSAL);
+        expect(send(store, request)).toMatchObject(NO_FOUNDATION_RECEIPT_REFUSAL);
         expect(decisionCount(store)).toBe(before);
         return;
       }
@@ -826,8 +823,8 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
    *
    * THE ARM IS KEPT, NOT DELETED, AND IT STILL GRADES THIS ROW'S FIX: the scope fence is asserted
    * SATISFIED — a named, non-null scope over the sealed node — so the refusal below is provably
-   * the newer fence and not the empty-scope defect this row removed. The refusal MESSAGE is the
-   * discriminator, because both fences raise the same code at the same layer.
+   * the newer fence and not the empty-scope defect this row removed. The exact receipt-absent
+   * code and message distinguish it from an unknown scope or missing review acceptance.
    *
    * THE CLOSE ITSELF NOW LIVES WHERE IT IS REACHABLE:
    * `goals/goal-intent-approved-closure.test.ts` drives a CONTRACT-BOUND world approved only
@@ -844,9 +841,9 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
     const closed = send(
       store, envelope("goal.close", store.getAggregateVersion(GOAL_ID), acceptancePayload()));
 
-    expect(label(closed)).toBe("GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED@DAEMON_PREREQUISITE");
+    expect(label(closed)).toBe("GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT@DAEMON_PREREQUISITE");
     expect(qualifyGoalClosure(store, PROJECT_ID, GOAL_ID)).toMatchObject({
-      code: "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED",
+      code: "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
       layer: "DAEMON_PREREQUISITE",
       message: "no Foundation receipt proves the legacy approved node",
       ok: false,
@@ -871,14 +868,8 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
   });
 
   /**
-   * FAIL-CLOSED AT THE CLOSE IS UNCHANGED: an approved node the live loop never accepted still
-   * refuses, and the ACCEPTANCE fence is provably the one that answered.
-   *
-   * THE DISCRIMINATOR IS THE MESSAGE, and it has to be. `GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED`
-   * at `DAEMON_PREREQUISITE` is ALSO what the scope fence answers, so an arm reading the code and
-   * the layer alone would have passed before this row shipped — while testing nothing about
-   * acceptance at all. `qualifyGoalClosure` carries the exact sentence each fence raises, so the
-   * two are told apart; the non-null scope assertion is the second leg of the same proof.
+   * A legacy approved node without review acceptance still reaches the Foundation fence first.
+   * Pin its code, message and named scope so an earlier scope refusal cannot satisfy this arm.
    */
   it("still refuses the close when no review acceptance names the approved node", () => {
     const store = intentApprovedWorld("cmd-intent-approve-unaccepted");
@@ -889,7 +880,7 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
     const closed = send(
       store, envelope("goal.close", store.getAggregateVersion(GOAL_ID), acceptancePayload()));
 
-    expect(label(closed)).toBe("GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED@DAEMON_PREREQUISITE");
+    expect(label(closed)).toBe("GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT@DAEMON_PREREQUISITE");
     // ORDERING, PINNED (task-8bdd14af, after 4b6d2bc2). This world holds NO review acceptance at
     // all, and the arm above holds one naming the approved node exactly; both answer the SAME
     // message, so the legacy Foundation-receipt fence provably PRECEDES the acceptance fence. The
@@ -898,7 +889,7 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
     // split these two arms apart, which is what makes this assertion load-bearing rather than a
     // restatement of its neighbour.
     expect(qualifyGoalClosure(store, PROJECT_ID, GOAL_ID)).toMatchObject({
-      code: "GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED",
+      code: "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
       layer: "DAEMON_PREREQUISITE",
       message: "no Foundation receipt proves the legacy approved node",
       ok: false,
@@ -943,7 +934,7 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
     const closed = send(
       store, envelope("goal.close", store.getAggregateVersion(GOAL_ID), acceptancePayload()));
 
-    expect(label(closed)).toBe("GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED@DAEMON_PREREQUISITE");
+    expect(label(closed)).toBe("GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT@DAEMON_PREREQUISITE");
     expect(readApprovedNodeScope(store, GOAL_ID))
       .toEqual({ approvalRef: `approval:${RUN_ID}`, scope: [SEALED_EXECUTION_NODE] });
   });
