@@ -22,8 +22,9 @@
     {
       "stepId": "step-1",
       "description": "MEASURE AND BASELINE. This step EDITS NOTHING.\n\n(1) RE-VERIFY THE FOUR LANDED PIECES the plan builds on, quoting each line: `requiredVariableNames` at `environment/environment-required-variables.ts:90`; the optional field at `controlled-profile/controlled-profile-generator.ts:63` and its use at `:138`; `envExample`'s dedupe/filter/collision/sort at `controlled-profile/controlled-profile-root-templates.ts:170-182`; and the ABSENCE of a names field on `BootstrapRequest` at `repository/repository-bootstrap-contracts.ts:61-67`. If any has moved, re-anchor before editing (global rail 6 — the description's line numbers are stale by default).\n\n(2) CONFIRM THIS ROW IS THE PRODUCER'S FIRST CONSUMER. `git grep -n \"requiredVariableNames\" -- apps/daemon/src` should show hits ONLY in `environment-required-variables.ts` and the controlled-profile pair. If a peer has already wired a call site, STOP — that is a duplicate and the owner must be found first (global rail 6, gap-claimed-present direction).\n\n(3) RECORD THE GOLDEN BASELINE. Run `pnpm --filter @moe/daemon test -- controlled-profile-generator` and record `GOLDEN_FILE_COUNT` (22 at planning), the `.env.example` row of `GOLDEN_MANIFEST`, and the value of `GOLDEN_ENV_EXAMPLE_WITH_NAMES` (:211). These are the before-bytes DoD 4 compares against. Note the `--` caveat: it reaches vitest as a FILTER, so confirm the printed `Test Files N passed` count is nonzero and names the file you meant — a filter that matches nothing still exits 0.\n\n(4) BASELINE THE GATES AT YOUR MERGE-BASE for path-attributed red (global rail 3): `pnpm --filter @moe/daemon test` and `pnpm typecheck`. Record every failing path with exact lines and each count line. Give the daemon leg its own standalone foreground call at the maximum timeout — it has measured at 560-2006s on this board. A known foreign red at planning time: untracked peer WIP `apps/daemon/src/environment/environment-delivery.test.ts` reds `pnpm typecheck`; re-measure rather than assuming.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-06T09:28:31.261Z"
     },
     {
       "stepId": "step-2",
@@ -78,7 +79,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -98,11 +99,35 @@
       "author": "architect-fa3a3e17",
       "content": "DESCRIPTION TAIL: IGNORE THE TRAILING `</description>` (architect-fa3a3e17, 2026-09-06). My create_task call leaked a stray XML close tag onto the end of the description. It is not scope, not a field, and not an instruction. Everything above it is intended and the `definitionOfDone` field is authoritative and complete (6 items, beginning \"`BootstrapRequest` carries the required variable NAMES\"). There is no tool to edit a description after creation, which is why this is a comment rather than a fix in place. Second time I have made this slip today; noting it so a reader does not go looking for a truncated sentence.",
       "timestamp": "2026-09-06T09:12:13.309Z"
+    },
+    {
+      "id": "comment-ff74c9b5b94a4f378d90d7145f32ec35",
+      "author": "worker-7bdbffac",
+      "content": "PRE-FLIGHT MEASUREMENTS at575fc4fe, NO EDITS: producer environment-required-variables.ts90; generator optionalfield63/pass138; roottemplate filter/dedupe170-182; BootstrapRequest61-67 lacksnames. Full requiredVariableNames grep shows producer+its tests+generator/templates only, no command consumer. True scoped baseline `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository/controlled-profile/controlled-profile-generator.test.ts --maxWorkers=1` exit0: Test Files1passed(1), Tests19passed(19). Used explicit execfilter because package testscript already passes src; appending test -- filter is not assumed narrow. Golden22files, no-name .env.exampleSHA79bcb754cd763c0996100e4be74218a0b32b5be9f6b0c5908b33ee6db266f280; namesSHAa391d228e1a3adbd5922aaf8adbce752b02365c01617f05a336338d8fdd379e1. Golden/testsource unchanged. Full baseline NOT STARTED: workerf72 holds hostslot09:14+ and explicit shape-stop discovered first; no claimfullgreen.",
+      "timestamp": "2026-09-06T09:31:13.235Z"
+    },
+    {
+      "id": "comment-1f19f07c023a451ea0a83264f9c1278b",
+      "author": "worker-7bdbffac",
+      "content": "PLAN CORRECTIONS NEEDED BEFORE CODE. (1) `git grep -n -F 'payloadKeys: [\"dir\", \"github\", \"productName\", \"profileVersion\"]' -- apps/daemon/src` gives registry.test.ts243 AND daemon-command-vocabulary.test.ts233. Step4 names only first; second is unnamed required asserting consumer (6->7files, no splitneeded). Clarification to chat9277: step4 prohibits editing vocabulary.ts PRODUCTION, not vocabulary.test.ts; test is OMITTED, not expresslyforbidden. (2) Current != APPROVED. product-contract-v2-reader.ts126-191 returnscurrent after provenance/binding/workflow-current checks, no gateapprovalread. Existing product-contract-v2-store.test.ts136 asserts currentread immediately after commitProductContractRevisionV2 (no approval). Step3 otherwise requiredVariableNames(current.revision) would publish names from UNAPPROVED proposal despite DoD1/step5D. Existing resolveProductContractGate1V2 in product-contract-v2-gate-1-resolver.ts checks exactcurrent, clarifications, readProductContractGate1Approval133, effectiveGateRef135 and validator140. Minimalcorrected step3 within SAMEownedcommandfile: currentread -> resolver({projectId:options.projectId,ref:current.slot.currentRevision}) -> gate.ok ? requiredVariableNames : []; no newauthority/refusalcode. Need unapproved-but-readable no-op arm, not just absentcontract. Also review5C malformedname-approvedfixture (core admission alreadyfilters/rejects) and mutation6b payloadprojectId (unknownpayloadkey refusedbeforehandler): don't forge approval or call a mutant that cannot reach its subject evidence.",
+      "timestamp": "2026-09-06T09:31:13.541Z"
+    },
+    {
+      "id": "comment-7387da00ab654c4d957192d63d944b8a",
+      "author": "worker-7bdbffac",
+      "content": "Additional measured test-plan correction (not separate implementation row): core/product-contract-v2-admission.ts216-226 rejects nonconforming environmentVariableNames through invalid() at78 -> PRODUCT_CONTRACT_V2_PROVENANCE_INVALID / PRODUCT_CONTRACT_V2_PROVENANCE. Thus step5C cannot seed a REAL APPROVED contract with invalidname; doing so would fabricate authority/bypass the producer. Preserve existing malformed-name golden defense; at command edge assert invaliddraft refusal code+layer then noapprovedcontract baseline, or architect-adjust arm accordingly. Similarly step6b's payloadprojectId mutation cannot expose foreign data through registered path because projectId is not admittedpayload; mutate resolver scope to the actual foreign fixture project constant to prove project-scoping rather than widening payloadauthority. Existing current+Gate1 resolver fully adequate for approvedread, no new package/authority necessary. No production/test edits made.",
+      "timestamp": "2026-09-06T09:32:25.423Z"
+    },
+    {
+      "id": "comment-4904a6e39ebf4d4ba76206ea4b56d7b3",
+      "author": "worker-7bdbffac",
+      "content": "READ-ONLY FIXTURE HANDOFF: no new prerequisite needed. Existing production commitProductContractRevisionV2 creates legal binding/workflow even on bare realstore (product-contract-v2-store.test). To seed actual humanapproval without TEST_HUMAN_AUTHORITY/mock: adapt plan-reject-test-fixtures.ts144-183 installTestRecoveryBinding + createOperatorSessionHandshakePort.mint + createSessionAuthority + createProductContractGate1Authority, then use runProductContractGate1V2Command (NOT that fixture's V1 writer) with BEARER subject digest and sessionId mintedprincipal/transportOrigin MCP_HTTP. Assert resolveProductContractGate1V2 ok before bootstrap. No generic exported V2approvedfixture found; small helper can live in ownedjourneyfile. Fulltree shapeaudit confirms only two keytranscribers registry.test243/964 and vocabulary.test233/319. No edits or ownbackgroundjobs.",
+      "timestamp": "2026-09-06T09:32:40.786Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T09:12:03.680Z",
-  "updatedAt": "2026-09-06T09:18:05.822Z",
+  "updatedAt": "2026-09-06T09:32:40.786Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T09:12:56.167Z",
     "plannedStepCount": 7,
@@ -131,5 +156,13 @@
       "apps/daemon/src/repository/repository-bootstrap-journey.test.ts"
     ]
   },
-  "planApprovedAt": "2026-09-06T09:18:05.822Z"
+  "planApprovedAt": "2026-09-06T09:18:05.822Z",
+  "contextFetchedBy": [
+    "worker-7bdbffac"
+  ],
+  "workStartedAt": "2026-09-06T09:28:31.261Z",
+  "blockedReason": "Preflight measured TWO plan defects, no active amendments on freshcontext09:31. (1) Step4's one-transcriber premise false: gitgrep exactpayloadKeys finds owned registry.test.ts243 AND unowned apps/daemon/src/daemon-command-vocabulary.test.ts233. Globalunnamed-shapeconsumerrail requiresstopbeforekeyedit; add seventhpath (no splitneeded). (2) Step3 prescribes current.ok -> requiredVariableNames, but readCurrentProductContractRevisionV2 only proves CURRENT, not APPROVED. Existing store.test136 reads newrevision beforeapproval. Would publish unapprovedproposal names contraryDoD1/failsoftunapproved intent. Existing resolveProductContractGate1V2 can guard sameownedcommandfile; requiregate.ok otherwise[], no inventedauthority/refusalcode. Correctstep3+add readable-unapprovedno-oparm. Test5C malformedapprovedname impossibleunderrealcoreadmission(PRODUCT_CONTRACT_V2_PROVENANCE_INVALID@PRODUCT_CONTRACT_V2_PROVENANCE), and6bpayloadprojectIdmutant refusedat ingress; measurement+safealternatives incomments1f19f07 andtestnote. NO source/test edits. Goldenbaseline1file19tests0, hashesrecorded; fullbaseline notstarted(peerholds slot), nobackgroundjobs. This is scope+approval-authority correction, NOT peer-dirt/fullgate-red block.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-06T09:32:26.333Z"
 }

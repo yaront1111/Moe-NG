@@ -101,7 +101,7 @@ export const RUNTIME_COMMAND_KINDS = Object.freeze([
   "integration.start", "integration.submit_finding", "journal.append", "lease.confirm_revoke",
   "lease.extend", "lease.mark_suspect", "plan.propose", "planning.cancel", "planning.claim",
   "planning.recover_absent", "planning.release", "planning.submit_decomposition",
-  "policy.install", "policy.validate", "preview.decide",
+  "policy.install", "policy.validate", "preview.decide", "preview.start",
   "product_contract.answer_clarification", "product_contract.approve_gate_1",
   "product_contract.ask_clarification", "product_contract.propose_revision",
   "profile.register", "project.activate",

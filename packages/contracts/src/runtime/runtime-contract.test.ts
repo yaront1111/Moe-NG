@@ -51,7 +51,7 @@ const EXPECTED_COMMAND_KINDS = [
   "integration.start", "integration.submit_finding", "journal.append", "lease.confirm_revoke",
   "lease.extend", "lease.mark_suspect", "plan.propose", "planning.cancel", "planning.claim",
   "planning.recover_absent", "planning.release", "planning.submit_decomposition",
-  "policy.install", "policy.validate", "preview.decide",
+  "policy.install", "policy.validate", "preview.decide", "preview.start",
   "product_contract.answer_clarification", "product_contract.approve_gate_1",
   "product_contract.ask_clarification", "product_contract.propose_revision",
   "profile.register", "project.activate",
@@ -105,8 +105,8 @@ describe("runtime vocabulary is closed and disjoint", () => {
       expect(commands.has(kind)).toBe(false);
     }
     expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS);
-    // Literal 118, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
-    expect(commands.size).toBe(118);
+    // Literal 119, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
+    expect(commands.size).toBe(119);
     expect(RUNTIME_COMMAND_KINDS).toContain("plan.propose");
     expect(RUNTIME_COMMAND_KINDS).toContain("graph.prepare_supersession");
     expect(RUNTIME_COMMAND_KINDS).toContain("foundation.dispatch");
@@ -149,8 +149,20 @@ describe("runtime vocabulary is closed and disjoint", () => {
     // product_contract family ("policy" < "preview" < "product"), so the left bracket moved out
     // by one. Both neighbours stay pinned: the new kind's own sorted slot is asserted here
     // because the generator sorts its copy and therefore cannot catch a misplaced source tuple.
-    expect(RUNTIME_COMMAND_KINDS[position - 2]).toBe("preview.decide");
-    expect(RUNTIME_COMMAND_KINDS[position - 3]).toBe("policy.validate");
+    // task-0e87ab34: `preview.start` then took the slot between `preview.decide` and the
+    // product_contract family ("preview.decide" < "preview.start" < "product"), so the left
+    // bracket moved out by one again. Both older neighbours stay pinned, one index further out.
+    expect(RUNTIME_COMMAND_KINDS[position - 2]).toBe("preview.start");
+    expect(RUNTIME_COMMAND_KINDS[position - 3]).toBe("preview.decide");
+    expect(RUNTIME_COMMAND_KINDS[position - 4]).toBe("policy.validate");
+    // ...and `preview.start` is pinned by its own neighbours too, so a later insertion elsewhere
+    // in the tuple cannot silently relieve this kind of its sorted-slot guarantee.
+    const previewStartPosition = RUNTIME_COMMAND_KINDS.indexOf("preview.start");
+    expect(previewStartPosition).toBeGreaterThan(-1);
+    expect(RUNTIME_COMMAND_KINDS[previewStartPosition - 1]).toBe("preview.decide");
+    expect(RUNTIME_COMMAND_KINDS[previewStartPosition + 1]).toBe(
+      "product_contract.answer_clarification",
+    );
     // task-b7f71ffe: `goal.create_with_source` is pinned the same way. `goal.create` is a strict
     // prefix of it, so the sorted slot is immediately after `goal.create` and before `goal.pause`
     // ("c" < "p"). The generator sorts before it emits, so no generated-side gate can catch a
