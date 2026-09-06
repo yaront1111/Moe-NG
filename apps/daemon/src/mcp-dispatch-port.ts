@@ -19,6 +19,8 @@ import type {
 import type { GraphQueryPort } from "./planning/graph-query.js";
 import { COMMAND_AUTHORITY_PLANES, WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import { DAEMON_COMMAND_SEAM } from "./http/http-async-contract.js";
+import { answerDesignReadQuery } from "./mcp-design-read-query.js";
+import type { DesignReadPort } from "./mcp-design-read-query.js";
 import { answerWorkContextQuery } from "./mcp-work-context-query.js";
 
 /**
@@ -52,6 +54,8 @@ export interface McpDispatchPortConfig {
   readonly affordances?: AffordancePort | undefined;
   /** The goal's approved Product Contract reader; absent means product_contract.read refuses. */
   readonly contract?: ProductContractReadPort | undefined;
+  /** The goal's design-revision reader; absent means design.read refuses, as `contract` does. */
+  readonly design?: DesignReadPort | undefined;
   /** The goal-scoped full-PRD reader; absent means documents.source_read refuses. */
   readonly documents?: GoalSourceReadPort | undefined;
   /** Stdio has one identity per process; HTTP always supplies its authenticated request bearer. */
@@ -293,8 +297,24 @@ const answerProductContractRead: QueryHandler = (envelope, context, config) => {
   return bytesOf(config.contract.read(request["goalRef"]));
 };
 
+// The seat's read of the goal's design revision. A DELEGATE and nothing else: the whole answer
+// -- absent-port refusal, authentication, the `{goalRef, version?}` payload vocabulary, and the
+// rule that `projectId` comes off the AUTHENTICATED PRINCIPAL and never off the payload -- lives
+// in `mcp-design-read-query.ts`, so the table keeps its shape and the security decision stays
+// beside the code that makes it. `design.read` is the ONE kind this row serves over MCP for a
+// SEAT rather than an operator: the design step is authored by an agent, so a human-only fence
+// here would leave it permanently unstaffable while every roster test stayed green.
+const answerDesignRead: QueryHandler = (envelope, context, config) => answerDesignReadQuery({
+  authenticator: authenticatorOf(config.deps),
+  body: envelope["payload"],
+  credential: context?.credential ?? config.fallbackCredential ?? null,
+  port: config.design,
+  protocolVersion: WIRE_PROTOCOL_VERSION,
+});
+
 /** Every query kind this port serves, and the only place that set is decided. */
 const QUERY_HANDLERS: Readonly<Record<string, QueryHandler>> = Object.freeze({
+  "design.read": answerDesignRead,
   "documents.source_read": answerDocumentsSourceRead,
   "events.read": answerEventsRead,
   "graph.get": answerGraphGet,

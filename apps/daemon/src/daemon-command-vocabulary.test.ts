@@ -3,7 +3,8 @@ import { describe, expect, it } from "vitest";
 import {
   APPROVAL_INTENT_FAMILY,
   CRITERION_FAMILY, REPOSITORY_RECOVERY_FAMILY,
-  BOOTSTRAP_FAMILY, CAPABILITIES, COMPILER_FAMILY, ENVIRONMENT_FAMILY, GRAPH_FAMILY,
+  BOOTSTRAP_FAMILY, CAPABILITIES, COMPILER_FAMILY, DESIGN_FAMILY, ENVIRONMENT_FAMILY,
+  GRAPH_FAMILY,
   GRAPH_MUTATION_COMMAND_KINDS,
   OPERATOR_CAPABILITIES, OPERATOR_PRINCIPAL_KINDS,
   PAYLOAD_KEYS, PREVIEW_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY,
@@ -23,7 +24,8 @@ import {
  */
 type Family =
   | "CRITERION" | "REPOSITORY_RECOVERY"
-  | "APPROVAL_INTENT" | "BOOTSTRAP" | "COMPILER" | "ENVIRONMENT" | "GRAPH" | "PREVIEW"
+  | "APPROVAL_INTENT" | "BOOTSTRAP" | "COMPILER" | "DESIGN" | "ENVIRONMENT" | "GRAPH"
+  | "PREVIEW"
   | "REVIEW" | "SESSION" | "STANDALONE" | "STEP" | "WORK";
 
 interface VocabularyRow {
@@ -158,6 +160,15 @@ const ROWS: readonly VocabularyRow[] = [
     kind: "environment.set_variable", payloadKeys: ["environment", "name", "value"] },
   { agent: [ADMIN, WORK], capability: ADMIN, family: "ENVIRONMENT",
     kind: "environment.unset_variable", payloadKeys: ["environment", "name"] },
+  // THE ONE SEAT KIND IN THIS BATCH, and its `agent` is the assertion that matters. Every
+  // neighbour above -- the environment pair, preview.decide, product_contract.answer_clarification
+  // -- is a HUMAN act carrying either a null agent list or an OPERATOR_ONLY entry. This one has
+  // NEITHER: a non-null [PLANNING, WORK] and no seat in OPERATOR_ONLY below, because a planning
+  // seat AUTHORS the design. A null here would leave every other arm in this file green while
+  // the design step became permanently unstaffable, which is why
+  // `daemon-command-design.test.ts` also proves it behaviourally over a real dispatch.
+  { agent: [PLANNING, WORK], capability: PLANNING, family: "DESIGN", kind: "design.submit",
+    payloadKeys: ["contractRef", "goalRef", "revision"] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW", kind: "escalation.decide",
     payloadKeys: ["decision", "escalationRef", "subjectRef"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.close",
@@ -241,6 +252,7 @@ const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<st
   APPROVAL_INTENT: new Map(Object.entries(APPROVAL_INTENT_FAMILY)),
   BOOTSTRAP: new Map(Object.entries(BOOTSTRAP_FAMILY)),
   COMPILER: new Map(Object.entries(COMPILER_FAMILY)),
+  DESIGN: new Map(Object.entries(DESIGN_FAMILY)),
   ENVIRONMENT: new Map(Object.entries(ENVIRONMENT_FAMILY)),
   PREVIEW: new Map(Object.entries(PREVIEW_FAMILY)),
   REVIEW: new Map(Object.entries(REVIEW_FAMILY)),
@@ -252,7 +264,8 @@ const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<st
 
 const FAMILY_NAMES = [
   "CRITERION", "REPOSITORY_RECOVERY",
-  "APPROVAL_INTENT", "BOOTSTRAP", "COMPILER", "ENVIRONMENT", "GRAPH", "PREVIEW", "REVIEW",
+  "APPROVAL_INTENT", "BOOTSTRAP", "COMPILER", "DESIGN", "ENVIRONMENT", "GRAPH", "PREVIEW",
+  "REVIEW",
   "SESSION", "STEP", "WORK",
 ] as const;
 
@@ -282,11 +295,11 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
 ];
 
 describe("command vocabulary", () => {
-  it("carries exactly fifty-three wired kinds in their registration order", () => {
+  it("carries exactly fifty-four wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(53);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(53);
+    expect(ROWS).toHaveLength(54);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(54);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -330,7 +343,7 @@ describe("command vocabulary", () => {
     // That is exactly how `preview.decide` was nearly transcribed as standalone.
     expect([...FAMILY_NAMES].sort()).toEqual(Object.keys(FAMILY_MAPS).sort());
     const declared = ROWS.filter((row) => row.family !== "STANDALONE");
-    expect(declared).toHaveLength(42);
+    expect(declared).toHaveLength(43);
     for (const name of FAMILY_NAMES) {
       expect([...FAMILY_MAPS[name].keys()].sort()).toEqual(
         declared.filter((row) => row.family === name).map((row) => row.kind).sort(),
@@ -341,6 +354,7 @@ describe("command vocabulary", () => {
     expect(FAMILY_MAPS.REPOSITORY_RECOVERY.size).toBe(1);
     expect(FAMILY_MAPS.BOOTSTRAP.size).toBe(13);
     expect(FAMILY_MAPS.COMPILER.size).toBe(4);
+    expect(FAMILY_MAPS.DESIGN.size).toBe(1);
     expect(FAMILY_MAPS.ENVIRONMENT.size).toBe(2);
     expect(FAMILY_MAPS.GRAPH.size).toBe(5);
     expect(FAMILY_MAPS.PREVIEW.size).toBe(1);

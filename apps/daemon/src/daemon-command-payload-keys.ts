@@ -112,6 +112,16 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     // the canary that proves it). ORDERED, not merely membered: the registry asserts the order.
     [ENVIRONMENT_COMMAND_KIND_SET]: ["environment", "name", "value"],
     [ENVIRONMENT_COMMAND_KIND_UNSET]: ["environment", "name"],
+    // CALLER INTENT ONLY, and the absences are the guarantee. `DesignSubmitInput` names nine
+    // fields; six of them -- commandId, correlationId, decidedAt, expectedVersion, principalId
+    // and projectId -- are SERVER facts the edge re-attaches from the envelope, the clock and
+    // the authenticated principal, so a caller naming any of them is refused INPUT_INVALID at
+    // PAYLOAD_SHAPE before the handler runs. `contractRef` IS admitted and grants NOTHING: the
+    // store re-proves the Gate 1 approval from durable state on every submit
+    // (`design/design-store.js:130`), so presenting a triple only says which one the seat
+    // believes it authored against. `revision` stays `unknown` until `decodeDesignRevision`
+    // narrows it -- this roster fences KEYS, never the shape inside them.
+    "design.submit": ["contractRef", "goalRef", "revision"],
     "escalation.decide": ["decision", "escalationRef", "subjectRef"],
     "goal.close": ["closureWitness", "goalId", "zeroAuthorityWitness"],
     // PROSE ONLY. The goal, its planning run and its budget account are all derived from the

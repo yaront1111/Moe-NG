@@ -49,6 +49,9 @@ const port = createMcpDispatchPort({
   affordances: provider.affordances?.(),
   contract: createProductContractReadPort({ projectId: PROJECT, store: contractStore }),
   deps: provider.provide(),
+  // Composed, not omitted: an ADVERTISED query whose port is absent falls through to the
+  // port's generic INPUT_INVALID, which is exactly the "phantom tool" the arm below forbids.
+  design: provider.designReads?.(),
   documents: provider.goalSource?.(),
   fallbackCredential: CREDENTIAL,
   graph: provider.graph?.(),
@@ -69,6 +72,7 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
 const PAYLOAD_FOR: Readonly<Record<string, Record<string, unknown>>> = Object.freeze({
+  "design.read": { goalRef: "goal-allowlist-probe" },
   "documents.source_read": { goalRef: "goal-allowlist-probe" },
   "product_contract.read": { goalRef: "goal-allowlist-probe" },
   "events.read": { limit: 5, projection: "moe.board", subscriberId: "control-room-1" },
@@ -175,7 +179,13 @@ describe("wiredMcpToolKinds command half", () => {
     // `environment.set_variable`, `environment.unset_variable` and `repository.bootstrap`
     // entered the vocabulary AND the operator-only class in the same change, so each one was
     // subtracted the moment it was added and never spent a commit MCP-advertised.
-    }).toEqual({ excluded: 17, queries: 6, vocabulary: 53, wired: 42 });
+    // task-06ac0da1 moved `vocabulary` and `queries` by one each and `excluded` by ZERO, and
+    // that zero IS the row: `design.submit` is a SEAT kind, so it entered the vocabulary
+    // WITHOUT entering the operator-only class, and `wired` therefore moved by two -- one
+    // advertised command plus one advertised query (`design.read`). A `design.submit` that had
+    // been copied into OPERATOR_PRINCIPAL_KINDS by habit would show here as excluded: 18,
+    // wired: 43.
+    }).toEqual({ excluded: 17, queries: 7, vocabulary: 54, wired: 44 });
   });
 
   it("is deterministic and frozen", () => {

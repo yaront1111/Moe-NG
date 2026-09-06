@@ -11,6 +11,7 @@ import { createMcpDispatchPort } from "../mcp-dispatch-port.js";
 import { wiredMcpToolKinds } from "../mcp-tool-allowlist.js";
 import type { GoalSourceReadPort } from "../documents/document-source-full-read.js";
 import type { GraphQueryPort } from "../planning/graph-query.js";
+import type { DesignReadPort } from "../mcp-design-read-query.js";
 import type { ProductContractReadPort } from "../product-contract/product-contract-read-port.js";
 import { MCP_HTTP_BODY_TOO_LARGE } from "./mcp-http-body-bound.js";
 import { webRequestFrom, writeWebResponse } from "./mcp-http-node-bridge.js";
@@ -35,6 +36,10 @@ export interface McpHttpHostOptions {
   readonly affordances?: AffordancePort | undefined;
   /** The goal's approved Product Contract reader; absent means product_contract.read refuses. */
   readonly contract?: ProductContractReadPort | undefined;
+  /** The goal's design-revision reader; absent means design.read refuses. THIS host is the
+   *  seats' only MCP endpoint (`orchestrator/agent-wrapper-main.ts`), so leaving it unset is
+   *  what would make the design step unstaffable while the tool still appeared on the roster. */
+  readonly design?: DesignReadPort | undefined;
   /** The goal-scoped full-PRD reader; absent means documents.source_read refuses. */
   readonly documents?: GoalSourceReadPort | undefined;
   /** The current-active-graph reader; absent means graph.get refuses. */
@@ -143,6 +148,7 @@ export function createMcpHttpHost(options: McpHttpHostOptions): McpHttpHost {
         commandAuthorityPlane: options.commandAuthorityPlane,
         contract: options.contract,
         deps: options.deps,
+        design: options.design,
         documents: options.documents,
         graph: options.graph,
         subscriptions: options.subscriptions,

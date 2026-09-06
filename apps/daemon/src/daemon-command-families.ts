@@ -29,7 +29,8 @@ import { RESOURCE_RECONCILE_COMMAND_KIND } from "./work/resource-reconcile-comma
 import { STEP_LIFECYCLE_SCHEMA_VERSION } from "./work/step-lifecycle-contracts.js";
 import { WORK_CLAIM_SCHEMA_VERSION } from "./work/work-claim-contracts.js";
 import {
-  CAPABILITIES, ENVIRONMENT_FAMILY, GRAPH_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY,
+  CAPABILITIES, DESIGN_FAMILY, ENVIRONMENT_FAMILY, GRAPH_FAMILY, REVIEW_FAMILY, SESSION_FAMILY,
+  STEP_FAMILY,
   WORK_FAMILY, familyCapabilityOf, type WiredCommandKind,
 } from "./daemon-command-vocabulary.js";
 import { GRAPH_COMMAND_SCHEMA_VERSION } from "./daemon-command-graph-contracts.js";
@@ -60,6 +61,11 @@ export interface CommandFamilyFacts {
   readonly continuation: boolean;
   /** The one-way GA activation, answered by its own service from a ports-bearing seam. */
   readonly cutover: boolean;
+  /** The design authoring wire, answered by its own edge. The ONE SEAT kind in this batch: a
+   *  planning agent submits it, so unlike its neighbours it carries no operator fence. It never
+   *  reaches `requestOf` -- the design slice owns its own closed refusal vocabulary and would
+   *  lose the code the assembler refused with. */
+  readonly design: boolean;
   /** The two OPERATOR-ONLY environment-variable writes, answered by their own edge from an
    *  exact request shape. The SET payload carries a production secret, so this seam never
    *  reaches `requestOf`: a request record would put the value in durable command bytes. */
@@ -99,6 +105,7 @@ function membershipOf(kind: WiredCommandKind): Omit<
     confirmReleased: kind === RESOURCE_CONFIRM_RELEASED_COMMAND_KIND,
     continuation: kind === CONTINUATION_COMMAND_KIND,
     cutover: kind === CUTOVER_ACTIVATE_COMMAND_KIND,
+    design: kind in DESIGN_FAMILY,
     environment: kind in ENVIRONMENT_FAMILY,
     eventResume: kind === EVENT_STREAM_RESUME_COMMAND_KIND,
     graph: kind in GRAPH_FAMILY,
@@ -166,9 +173,12 @@ function requiredCapabilityOf(
   // act. `PREVIEW_FAMILY` answers the same capability one line below; the two must agree, and
   // taking the branch here means a reader never has to open the vocabulary to learn why.
   if (member.preview) return CAPABILITIES.REVIEW;
-  // Every remaining kind -- bootstrap, GRAPH, review, session and work-claim -- reads its
-  // capability from the one table search `agentCapabilitiesFor` uses, so an entry's demanded
-  // capability and an agent's granted set can never come from different tables.
+  // Every remaining kind -- bootstrap, DESIGN, GRAPH, review, session and work-claim -- reads
+  // its capability from the one table search `agentCapabilitiesFor` uses, so an entry's demanded
+  // capability and an agent's granted set can never come from different tables. `design.submit`
+  // takes NO branch above on purpose: a branch here would be a second place its capability is
+  // decided, and the whole point of that kind is that the seat's granted set and the entry's
+  // demanded one are the SAME PLANNING answer out of `DESIGN_FAMILY`.
   const family = familyCapabilityOf(kind);
   if (family === null) throw new Error(`command kind has no capability family: ${kind}`);
   return family;

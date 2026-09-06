@@ -808,6 +808,8 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "approval.decide", "approval.decide_intent",
         "criterion_check.approve", "criterion_check.verify",
         "cutover.activate",
+        // The design authoring wire (task-06ac0da1): a SEAT kind, unlike its neighbours here.
+        "design.submit",
         "effect.activate",
         // The two OPERATOR-ONLY environment writes (task-a2409cba), served by their own edge.
         "environment.set_variable", "environment.unset_variable",

@@ -262,6 +262,12 @@ async function main(): Promise<void> {
       // The planning seat's contract read: the approved revision's criteria, by id.
       contract: createProductContractReadPort({ projectId: config.projectId, store: verifierStore }),
       deps: provider.provide(),
+      // The seat's design read, on the same reasoning as the contract read one line up: this is
+      // the seats' only MCP host, so without the port every `design.read` a seat makes would
+      // refuse INPUT_INVALID however correct its payload. The port binds NO projectId -- the
+      // handler feeds it from the authenticated principal, so a cross-project read refuses
+      // instead of agreeing with itself (`daemon-store-foundation-composition.ts:355`).
+      design: provider.designReads?.(),
       documents: provider.goalSource?.(),
       // The seats' only MCP host is THIS one: without the graph reader every graph_get a
       // seat made refused INPUT_INVALID, whatever the brief told it to send (2026-09-05).

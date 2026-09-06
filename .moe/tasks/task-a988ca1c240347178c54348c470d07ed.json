@@ -138,8 +138,8 @@
       "completedAt": "2026-09-06T02:20:08.853Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-4f771bb8",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -157,16 +157,24 @@
       "author": "worker-8c5af680",
       "content": "From child 2a (task-138fab30), for child 3 (UI). Landed on `moe/work-2026-09-04`. Daemon-only row — I changed NO control-room file. These are the surface facts your screens now read.\n\n**1. `/affordances/read` — the approval card MOVES to the successor after a REJECT.**\n`goal.planningRunRef` is still IMMUTABLE and is NOT the run to render. The ladder resolves the goal's CURRENT run through `currentPlanningRun` and targets that. Concretely, over one goal:\n- before the reject: `approval.decide_intent` and `approval.decide` target the original run.\n- after the REJECT: BOTH approval kinds are withheld entirely, and `planning.submit_decomposition` is offered for the GOAL id (the compiler card comes back). The rejected run is offered under NO kind — asserted as whole-surface set-equality, not per-kind.\n- after the successor compiles: both approval kinds target the SUCCESSOR run id, and `planning.submit_decomposition` is spent.\n- `planningGoalRefs` follows too: it reads `{ [currentRunId]: goalId }` — the rejected run's key is ABSENT. If your UI keys anything off `planningGoalRefs`, it will re-key across a rejection. A second rejection moves it again (run 3); the chain is followed, not one hop.\n\n**2. `/activity/read` rows now carry `verdict` for the approval kinds.**\n`VERDICT_KINDS` gained `approval.decide_intent` and `approval.decide`, joining `escalation.decide` and `review.submit`. Rows carry `verdict: \"REJECT\" | \"APPROVE\"`. This is NOT a row-shape change — `verdict` already existed and simply gains values on kinds that previously read `null`.\nThe rule, because the two verdicts commit different results: a REJECT commits the run record carrying `decision`, so the word is read straight off it; an APPROVE commits a GoalState which has NO decision word but a `lifecycle`, and the approval seams admit APPROVE only, so a lifecycle IS the verdict there. A malformed or undecodable result yields `null`, never a throw.\n`apps/control-room/src/v2/ops/activity-words.ts:69` ALREADY renders both words (\"rejected the plan\" / \"approved the plan\") — verified by grep, no UI edit was needed or made. Your work is whatever consumes the word beyond that line.\n\n**3. One behaviour to render honestly.** When the run chain cannot be walked, the surface read fails OPEN: it answers about the goal's immutable ref rather than refusing, so a corrupt chain costs one goal its freshness and not the whole board its offers. The WRITE path does the opposite and refuses `SUBMIT_DECOMPOSITION_RUN_UNREADABLE`. So a stale-looking card can coexist with a compile that refuses; do not render the read's answer as proof the write will be accepted.",
       "timestamp": "2026-09-05T16:56:02.223Z"
+    },
+    {
+      "id": "comment-b1bf7f4e77d94b1598e35f3130cf3b9d",
+      "author": "qa-4f771bb8",
+      "content": "QA REVIEW EVIDENCE — qa-4f771bb8, 2026-09-06. APPROVED at completion commit 2911207a3581e6633416484b4b44ee901e133291.\n\n== COMMIT INTEGRITY, checked first because two rows tore HEAD tonight ==\n2911207a is on moe/work-2026-09-04 and carries ALL 16 of the row's code paths: the 9 modified, the 7 new, 2307 insertions / 207 deletions across 18 files. `git status --porcelain -- apps/control-room/src/v2 tests/e2e/control-room README.md docs/agent-stack-runbook.md` afterwards = EMPTY. No half-landing. ZERO daemon production files in the stat, which is what makes the foreign-red intersection empty by construction rather than by argument.\n\nREADME.md and docs/agent-stack-runbook.md are NOT in this commit — both were already committed, swept into task-ac9d5e2d's `b16bc455`. The CONTENT is at HEAD and that is what the DoD grades: README:20 \"or sends back with a reason, which re-plans it into a successor run the gate then follows\", runbook:674-687 carrying APPROVAL_REJECT_REASON_REQUIRED @ APPROVAL_INTENT_REJECTION, the successor binding, the \"Plan sent back\" strip word, the PLAN_REJECTED item that clears, and the bad-toned feed line. DoD 5's docs clause holds. (My own first grep missed README:20 because I searched \"sent back\" and the line reads \"sends back\" — my error, corrected before it reached a verdict.)\n\n== WHAT I RAN ==\n- The row's three new suites: `Test Files 3 passed (3)` / `Tests 26 passed (26)` — matches your \"3 test files and 26 tests\" exactly.\n- Every directory the row touched, `src/v2/goals/ src/v2/approvals/ src/v2/board/`: `Test Files 38 passed (38)` / `Tests 458 passed (458)`.\n- DoD 5's ASCII/apostrophe gate, `packages/scheduler/src/package-boundary.test.ts`: `Test Files 1 passed (1)` / `Tests 56 passed (56)`.\n- `pnpm typecheck` -> EXIT 0, `apps/control-room typecheck$ tsc --project tsconfig.json` ... `Done` echo present.\n\nI did NOT take the `@moe/control-room` or `@moe/daemon` package legs. Measured reason: three concurrent full-package vitest runs were live (pids 55116, 49492, 64828, all `--maxWorkers=4 --testTimeout=30000`) plus a bare `vitest run` at 43668. A fourth contends and mints timeout reds that are inadmissible. Your recorded 167/2060 stands on its own and my targeted legs cover every owned path.\n\n== FOUR MUTATION DRILLS, mine, independent of yours. Tracked+clean before each; restored and `git diff HEAD` empty across all touched paths afterwards ==\nA. `canReject` loses its `reason.trim() !== \"\"` term (Reject enabled on an empty reason) -> RED, `expected false to be true`. `Tests 1 failed | 8 passed (9)`.\nB. `planSentBack` forced to `return true` (the item can never clear) -> RED across FIVE arms in two files: \"returns to PLAN once the successor is offered, so the stage cannot outlive the wait\", \"says sent-back only while the successor is not yet offered\", \"returns the controls bound to the SUCCESSOR run\", \"clears the reason when the gate re-binds\", \"approves the SUCCESSOR too\". `expected 'PLAN_REJECTED' not to be 'PLAN_REJECTED'`. DoD 3's \"disappears once the successor is offered\" is pinned in both the needs-you and the stage/gate directions.\nC. `key={runId}` frozen to a constant (approve-plan.tsx:117) -> RED on `plan-run-resolution.test.tsx:245`, `expected 'typed against the first run' to be ''`. I read that arm rather than trusting the note: :256 asserts the cleared input value AND :258 asserts Reject disabled, so it really does cover both halves of the hazard you describe, not one.\nD. `decisionReason` given a suffix -> RED, `expected { decision: 'REJECT', …(3) } to deeply equal {...}`. The payload is genuinely byte-exact for content.\n\nOne earlier drill of mine, `} else if (planSentBack(` -> `} if (`, stayed GREEN. That is NOT a gap: it confirms the mutual exclusivity you documented at needs-you-model.ts:16-21 — if the two conditions can never both hold, dropping `else` is unobservable. Recording it so nobody re-runs it and misreads the green.\n\n== ONE COVERAGE GAP, recorded not charged ==\nMutating `decisionReason` to `decisionReason.trim()` in plan-approval.ts leaves ALL 394 arms in `src/v2/goals/` green. The byte-exact fixture is `DURABLE.reason = \"The acceptance criteria do not cover the recovery path\"` — no surrounding whitespace, so `trim()` is a no-op against it. So step 3's explicit design claim — \"what is sent is `reason` itself, untrimmed and un-reworded, because the daemon fences that text verbatim into the successor's compiler mission\" — is the one assertion in this row that no arm pins.\n\nI am NOT rejecting on it. DoD 1 asks for the payload asserted byte-exact and it IS, for content; the gate already refuses whitespace-only reasons, so the unguarded case is a reason with content plus surrounding whitespace. But it is the same \"one character from vacuous\" shape I rejected another row for tonight, and the fix is one line: give one arm a reason like `\"  spacing matters  \"` and assert the payload carries it untrimmed. Worth doing wherever this file is next touched, or in the epic-final hardening row.\n\n== SIZE, and why I am not charging cordum-app.tsx ==\nVerified every `wc -l` you quoted, at HEAD: approve-plan.tsx 128 (was 263 — you SHRANK it), approve-plan-body.tsx 162, approve-plan-gate.tsx 157, plan-approval.ts 214, plan-run-resolution.ts 75, goal-status.ts 248, goal-status-strip.tsx 112, needs-you-model.ts 226, needs-you.tsx 212, board-feed.tsx 96. All <=250.\n\n`cordum-app.tsx` is 472. I confirmed your disclosure independently: `git show 2911207a^:apps/control-room/src/v2/cordum-app.tsx | wc -l` = 466, so your delta is +6 into a file that was already over the 400 split line before you touched it. DoD 5 says \"every production file touched\", which that misses literally. I am reading it by intent: the clause exists so a row does not grow files past the cap, and this row moved the other way — it split a 263-line screen into 128+162. Splitting the app composition root is outside this row's keyFiles with peer rows live in it, and rail 16 says record rather than block. Routing cordum-app.tsx to the epic-final hardening row as a follow-up. `plan-reject-frames.fixture.ts` at 492 is exempt as a fixture module, same precedent as the shipped live-close-frames.fixture.ts.\n\n== THE THREE DEFECTS YOU FOUND ==\nWorth saying plainly: all three were found by arms you wrote, not by me, and the third (the reason box outliving its run — reject A, be offered B, one click from sending B back for a reason nobody wrote about it) is a genuine operator-facing hazard that no DoD clause asked for. That is what an adversarial pass is supposed to produce.",
+      "timestamp": "2026-09-06T02:29:29.804Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T10:28:11.070Z",
-  "updatedAt": "2026-09-06T02:21:51.434Z",
+  "updatedAt": "2026-09-06T02:30:50.146Z",
   "metrics": {
     "firstClaimAt": "2026-09-04T23:14:31.266Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-06T02:30:50.146Z",
+    "wallClockMs": 98178880
   },
   "planSizeWarnings": [
     "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -246,7 +254,97 @@
     "apps/control-room/src/v2/goals/plan-rejected-surfaces.test.tsx",
     "tests/e2e/control-room/plan-reject-replan.spec.ts",
     "README.md",
-    "docs/agent-stack-runbook.md"
+    "docs/agent-stack-runbook.md",
+    ".moe/tasks/task-971caed1c5ca46bd871a7ec1c6ca8de1.json",
+    ".moe/tasks/task-a988ca1c240347178c54348c470d07ed.json"
   ],
-  "completionSummary": "REJECT ON THE PLAN GATE SHIPPED. `cr.approve.reject` + required-reason input `cr.approve.reason.input` (distinct from the withheld-reason DISPLAY `cr.approve.reason`), disabled while empty/whitespace, dispatching the SAME `approval.decide_intent` grant with the four-key payload {decision:\"REJECT\", decisionReason, dependencyChanges, runId}. After a reject the gate FOLLOWS THE SUCCESSOR, resolved by inverting the surface's `planningGoalRefs` in a new `plan-run-resolution.ts` (75 lines) - no daemon change, no catalog shape change. Needs-you kind PLAN_REJECTED, board stage PLAN_REJECTED -> \"Plan sent back\" / \"Waiting for a new plan\", feed line \"rejected the plan\". README + runbook name the reject path.\n\nTHREE REAL DEFECTS FOUND AND FIXED, each caught by an arm I wrote, each drilled red:\n1. NEEDS-YOU WENT EMPTY AFTER A RE-PLAN. `itemsFor` keyed the approval offer on the catalog's IMMUTABLE `planningRunRef`, which post-reject names the REJECTED run - so once the successor compiled, PLAN_APPROVAL never reappeared and a waiting plan was listed nowhere. First red: `expected [] to deeply equal [ 'PLAN_APPROVAL' ]`.\n2. A REJECT TINTED GREEN. `board-feed.tsx toneOf` had `approval.decide_intent` in GOOD_KINDS unconditionally, so the tint contradicted \"rejected the plan\" on its own line.\n3. THE REASON BOX OUTLIVED ITS RUN (adversarial pass). Rejecting A then being offered successor B returned the controls with A's reason typed and Reject ENABLED - one click from sending B back for a reason nobody wrote. Fixed with `key={runId}` on `<ApproveGate>`.\n\nE2E, REAL DAEMON + REAL BUNDLE + REAL CHROMIUM: new `tests/e2e/control-room/plan-reject-replan.spec.ts` drives build -> daemon -> seed -> handshake pairing -> operator creates a goal from a PRD -> planner proposes a /1 revision -> operator approves Gate 1 -> scripted seat compiles -> **OPERATOR REJECTS IN THE BROWSER WITH A REASON** -> daemon commits it (asserted in `/activity/read`) -> gate reads \"Plan sent back - waiting for a new pl"
+  "completionSummary": "REJECT ON THE PLAN GATE SHIPPED. `cr.approve.reject` + required-reason input `cr.approve.reason.input` (distinct from the withheld-reason DISPLAY `cr.approve.reason`), disabled while empty/whitespace, dispatching the SAME `approval.decide_intent` grant with the four-key payload {decision:\"REJECT\", decisionReason, dependencyChanges, runId}. After a reject the gate FOLLOWS THE SUCCESSOR, resolved by inverting the surface's `planningGoalRefs` in a new `plan-run-resolution.ts` (75 lines) - no daemon change, no catalog shape change. Needs-you kind PLAN_REJECTED, board stage PLAN_REJECTED -> \"Plan sent back\" / \"Waiting for a new plan\", feed line \"rejected the plan\". README + runbook name the reject path.\n\nTHREE REAL DEFECTS FOUND AND FIXED, each caught by an arm I wrote, each drilled red:\n1. NEEDS-YOU WENT EMPTY AFTER A RE-PLAN. `itemsFor` keyed the approval offer on the catalog's IMMUTABLE `planningRunRef`, which post-reject names the REJECTED run - so once the successor compiled, PLAN_APPROVAL never reappeared and a waiting plan was listed nowhere. First red: `expected [] to deeply equal [ 'PLAN_APPROVAL' ]`.\n2. A REJECT TINTED GREEN. `board-feed.tsx toneOf` had `approval.decide_intent` in GOOD_KINDS unconditionally, so the tint contradicted \"rejected the plan\" on its own line.\n3. THE REASON BOX OUTLIVED ITS RUN (adversarial pass). Rejecting A then being offered successor B returned the controls with A's reason typed and Reject ENABLED - one click from sending B back for a reason nobody wrote. Fixed with `key={runId}` on `<ApproveGate>`.\n\nE2E, REAL DAEMON + REAL BUNDLE + REAL CHROMIUM: new `tests/e2e/control-room/plan-reject-replan.spec.ts` drives build -> daemon -> seed -> handshake pairing -> operator creates a goal from a PRD -> planner proposes a /1 revision -> operator approves Gate 1 -> scripted seat compiles -> **OPERATOR REJECTS IN THE BROWSER WITH A REASON** -> daemon commits it (asserted in `/activity/read`) -> gate reads \"Plan sent back - waiting for a new pl",
+  "commits": [
+    {
+      "sha": "2911207a3581e6633416484b4b44ee901e133291",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-06T01:22:38Z",
+      "paths": [
+        ".moe/tasks/task-971caed1c5ca46bd871a7ec1c6ca8de1.json",
+        ".moe/tasks/task-a988ca1c240347178c54348c470d07ed.json",
+        "apps/control-room/src/v2/approvals/needs-you.tsx",
+        "apps/control-room/src/v2/approvals/needs-you-model.ts",
+        "apps/control-room/src/v2/board/board-feed.tsx",
+        "apps/control-room/src/v2/cordum-app.tsx",
+        "apps/control-room/src/v2/goals/approve-plan.tsx",
+        "apps/control-room/src/v2/goals/approve-plan-body.tsx",
+        "apps/control-room/src/v2/goals/approve-plan-gate.tsx",
+        "apps/control-room/src/v2/goals/approve-plan-reject.test.tsx",
+        "apps/control-room/src/v2/goals/goal-status.ts",
+        "apps/control-room/src/v2/goals/goal-status-strip.tsx",
+        "apps/control-room/src/v2/goals/plan-approval.ts",
+        "apps/control-room/src/v2/goals/plan-rejected-surfaces.test.tsx",
+        "apps/control-room/src/v2/goals/plan-reject-frames.fixture.ts",
+        "apps/control-room/src/v2/goals/plan-run-resolution.test.tsx",
+        "apps/control-room/src/v2/goals/plan-run-resolution.ts",
+        "tests/e2e/control-room/plan-reject-replan.spec.ts"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-06T02:22:17.490Z",
+      "treeId": "039a9f53e638256637b7982fa08e752d666a2e8a",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/approvals/needs-you.tsx",
+          "taskId": "task-33ceae56edc348e9864bc592430fa1d0"
+        },
+        {
+          "path": "apps/control-room/src/v2/approvals/needs-you-model.ts",
+          "taskId": "task-33ceae56edc348e9864bc592430fa1d0"
+        },
+        {
+          "path": "apps/control-room/src/v2/cordum-app.tsx",
+          "taskId": "task-f3409f9a1f3a4925a73974ea371098e5"
+        },
+        {
+          "path": "apps/control-room/src/v2/goals/approve-plan-gate.tsx",
+          "taskId": "task-f3409f9a1f3a4925a73974ea371098e5"
+        },
+        {
+          "path": "apps/control-room/src/v2/goals/goal-status.ts",
+          "taskId": "task-33ceae56edc348e9864bc592430fa1d0"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/v2/cordum-app.tsx",
+    "docs/agent-stack-runbook.md",
+    "apps/control-room/src/v2/goals/plan-reject-frames.fixture.ts",
+    "apps/control-room/src/v2/goals/approve-plan-body.tsx",
+    "tests/e2e/control-room/plan-reject-replan.spec.ts",
+    "apps/control-room/src/v2/goals/approve-plan-reject.test.tsx",
+    "apps/control-room/src/v2/goals/plan-run-resolution.ts",
+    "apps/control-room/src/v2/goals/approve-plan-gate.tsx",
+    "README.md",
+    "apps/control-room/src/v2/goals/goal-status-strip.tsx",
+    "apps/control-room/src/v2/goals/plan-rejected-surfaces.test.tsx",
+    "apps/control-room/src/v2/approvals/needs-you.tsx",
+    "apps/control-room/src/v2/goals/plan-run-resolution.test.tsx",
+    "apps/control-room/src/v2/goals/approve-plan.tsx",
+    "apps/control-room/src/v2/approvals/needs-you-model.ts",
+    "apps/control-room/src/v2/goals/goal-status.ts",
+    "apps/control-room/src/v2/goals/plan-approval.ts",
+    "apps/control-room/src/v2/board/board-feed.tsx"
+  ],
+  "unattributedPaths": [
+    ".baseline-fails-8c5af680.txt"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-caece97b@2026-09-06T01:22:38Z",
+    "at": "2026-09-06T02:22:17.490Z"
+  },
+  "completedAt": "2026-09-06T02:30:50.146Z",
+  "reviewCompletedAt": "2026-09-06T02:30:50.146Z",
+  "reviewSummary": "APPROVED at completion commit 2911207a3581e663. Full evidence: comment-b1bf7f4e.\n\nCOMMIT INTEGRITY FIRST, since two rows tore HEAD tonight: 2911207a carries ALL 16 code paths (9 modified + 7 new, +2307/-207 over 18 files); `git status --porcelain` on the row's paths afterwards EMPTY. No half-landing. ZERO daemon files in the stat, so the foreign-red intersection is empty by construction. README/runbook were swept into task-ac9d5e2d's b16bc455, but the CONTENT is at HEAD (README:20 \"or sends back with a reason, which re-plans it into a successor run\"; runbook:674-687) - DoD 5's docs clause holds.\n\nRAN MYSELF: the 3 new suites `Test Files 3 passed (3)` / `Tests 26 passed (26)`, matching the claimed 3 files / 26 tests; every touched directory `38 passed (38)` / `458 passed (458)`; DoD 5's ASCII/apostrophe gate package-boundary.test.ts `56 passed (56)`; `pnpm typecheck` EXIT 0 with the `apps/control-room typecheck$ tsc` echo. NOT the package legs - three concurrent full-package vitest runs were live (pids 55116, 49492, 64828); a fourth mints inadmissible timeout reds.\n\nFOUR DRILLS, mine, restored clean: drop `reason.trim() !== \"\"` -> RED; force `planSentBack` true -> RED across 5 arms in 2 files; freeze `key={runId}` -> RED on plan-run-resolution.test.tsx:245, whose :256/:258 assert BOTH cleared value and disabled Reject; suffix `decisionReason` -> RED byte-exact. A fifth (`else if` -> `if`) stayed green, CONFIRMING the documented mutual exclusivity.\n\nONE GAP, recorded not charged: `decisionReason.trim()` leaves all 394 goals arms green - the fixture reason has no surrounding whitespace, so step 3's \"untrimmed\" claim is unpinned. One padded-reason arm closes it.\n\nSIZE: every quoted `wc -l` verified at HEAD, all touched files <=250 (approve-plan.tsx 263->128). cordum-app.tsx 472 confirmed PRE-EXISTING at 466, +6 delta, disclosed not claimed; splitting it is outside keyFiles with peers live in it, so rail 16 says record - routed to hardening."
 }

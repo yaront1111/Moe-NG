@@ -1,0 +1,38 @@
+{
+  "id": "task-53267f860c5a420baf3c743ef94954b8",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "repository.bootstrap discloses its receipt to the caller, so a partial GitHub failure is visible",
+  "description": "SPUN OUT BY worker-caece97b FROM task-80322112a48d44c69c6c55f846f8d43f (child 3, the browser form and proof row) at its step 1, 2026-09-06. That row is BLOCKED on this one. The capability belongs to the command edge landed by task-facff1d1e7ce44a6b1101490524890a9 (DONE), which this row extends; row rail 3 on the consumer forbids it patching across the seam.\n\nTHE DEFECT, MEASURED AT HEAD (moe/work-2026-09-04), six links, every one read from production source:\n\n1. apps/daemon/src/repository/repository-bootstrap-service.ts:63-67 - when the GitHub half fails, `bootstrapRepository` returns `outcome: \"BOOTSTRAPPED\"` with `githubRefusal` set. The COMMAND SUCCEEDS. This is correct and deliberate: the local repository is real, committed and bound. It is a PARTIAL SUCCESS.\n2. apps/daemon/src/repository/repository-bootstrap-command.ts, last line of `createRepositoryBootstrapHandler` - `return decisionOf(committed)`.\n3. apps/daemon/src/daemon-command-dispatch.ts:139-144 - `decisionOf` returns exactly `{commandId, disposition, effectId, resultCode}`. The receipt is DROPPED here.\n4. apps/daemon/src/http/http-adapter.ts:72-77 - `answer()` on ACCEPTED serves `{decision, httpStatus, ok, outcome}`. Still no receipt.\n5. NO READ ROUTE PROJECTS IT. `git grep -rn \"RepositoryBootstrapped\\|REPOSITORY_BOOTSTRAPPED_EVENT\" -- apps/daemon/src apps/control-room/src` excluding tests returns TWO hits, both in the writer (repository-bootstrap-command.ts:43 and :108). `/repository/remote/read` folds the PUBLISH ledger (`readProjectRemote` from repository/publish-ledger.js) which a bootstrap never writes, so it reads unbound after every bootstrap.\n6. THE EVENT STREAM CARRIES NO PAYLOAD. apps/daemon/src/http/event-stream-contract.ts:154-163 `WireEvent` = {aggregateId, committedAt, eventId, eventType, globalPosition, identity, ledgerObservation, seamObservation}. apps/control-room/src/live/live-event-feed.ts:110-124 `rowOf` decodes exactly those. No payload field exists on either side.\n\nCONSEQUENCE: `BOOTSTRAP_GH_UNAVAILABLE` is unreachable from the browser by ANY route. A caller that asked for a GitHub repository and did not get one is told plain success. That is the exact harm child 3 exists to prevent, inverted: instead of an operator deleting a good local repository because they were told \"bootstrap failed\", an operator believes their code is on GitHub when it is not.\n\nThe three hard refusals are NOT affected and DO reach the caller: BOOTSTRAP_DIR_NOT_EMPTY, BOOTSTRAP_GIT_UNAVAILABLE and BOOTSTRAP_PROFILE_VERSION_UNKNOWN take the `receipt.outcome === \"REFUSED\"` branch and `throw refusalOf(receipt.refusal)`, arriving as `code @ layer`. Only the PARTIAL path is dark.\n\nSHAPE OF THE FIX IS THE ARCHITECT'S CALL, not prescribed here. Two candidates were measured as viable: (a) widen the accepted answer so the async entry can attach a disclosure to its DurableDecision - note this touches a shape four mirrors pin, so the epic rail 1 census applies; (b) add a bootstrap-receipt read route beside the other `/*/read` routes and proxy it in apps/control-room/src/live/dev-proxy-paths.ts. (b) is the smaller blast radius and matches how every other operator card reads a daemon fact.\n\nWHAT MUST NOT HAPPEN: the consumer inferring the refusal from the absence of a remote. That invents an authority the daemon never stated and is what epic rail 4 and global rail 4 forbid. The code must travel VERBATIM from the layer that produced it.",
+  "definitionOfDone": [
+    "A browser caller that requested a GitHub repository and did not get one can read `BOOTSTRAP_GH_UNAVAILABLE` VERBATIM, together with its `BootstrapDetail`, over an authenticated route the control-room may proxy. Asserted by a daemon test that drives the real command edge with an injected failing `BootstrapGhPort` and reads the code back through the same seam a browser would use - not by reading the receipt object in-process.",
+    "The LOCAL half is disclosed as intact on that same path: the committed sha and the bound directory are readable, so a consumer can render 'the repository exists and is bound' without inferring it. Assert the sha matches `git rev-parse HEAD` in the created directory, read from git and not from the response.",
+    "The three hard refusals are UNCHANGED and still arrive as `code @ layer`: BOOTSTRAP_DIR_NOT_EMPTY, BOOTSTRAP_GIT_UNAVAILABLE, BOOTSTRAP_PROFILE_VERSION_UNKNOWN. One arm per code, each asserting the specific code and the layer that refused, and each proven red by mutating the production surface.",
+    "NO SECRET ON THE NEW PATH. `BootstrapDetail` stays a closed literal union; no exception message, no stdout, no remote URL with embedded userinfo and no credential may reach a caller. Assert the response over the GITHUB-REQUESTED path contains no token-shaped value and no userinfo-bearing URL (epic rail 3).",
+    "If the fix adds a route: it is registered in the production listener AND in apps/control-room/src/live/dev-proxy-paths.ts, with a bidirectional roster arm (every advertised path served, every served path advertised - global rail 9). If the fix widens a returned shape: the four GENERATED_CONTRACT_DIGEST mirrors are re-censused with a full-tree `git grep` of the literal and `pnpm --filter @moe/control-room test` is run (epic rail 1).",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`. An exit-0 leg with no `Test Files N passed` line ran nothing."
+  ],
+  "taskRails": [
+    "THE CODE TRAVELS VERBATIM FROM THE LAYER THAT PRODUCED IT. A consumer inferring BOOTSTRAP_GH_UNAVAILABLE from a missing remote is inventing authority - the thing this row exists to make unnecessary.",
+    "A PARTIAL SUCCESS STAYS A SUCCESS. Do not turn the GitHub failure into a command refusal: the local repository is real, committed and bound, and refusing would tell an operator to throw it away. Disclose, do not re-classify.",
+    "NO SECRET ON ANY PATH: no credential, no stdout, no remote URL carrying userinfo. BootstrapDetail stays a closed union.",
+    "If this widens a shape the four GENERATED_CONTRACT_DIGEST mirrors pin, re-census ALL FOUR with a full-tree git grep and run `pnpm --filter @moe/control-room test` - two mirrors are invisible to `pnpm test` and the daemon leg (epic rail 1)."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-5ef1a0a9010c4bfe872ff9b774068234",
+  "dependsOn": [
+    "task-facff1d1e7ce44a6b1101490524890a9"
+  ],
+  "priority": "HIGH",
+  "order": 82.5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-06T02:35:55.518Z",
+  "updatedAt": "2026-09-06T02:35:55.518Z"
+}

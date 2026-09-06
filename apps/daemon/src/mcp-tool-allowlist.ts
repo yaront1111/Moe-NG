@@ -31,6 +31,12 @@ export const MCP_SERVED_QUERY_KINDS: readonly string[] = Object.freeze([
   "product_contract.read",
   "events.read",
   "documents.source_read",
+  // The seat's read of the design it (or a peer seat) authored. A QUERY, so it is served ONLY
+  // through this roster plus a `QUERY_HANDLERS` entry -- it has no command family, no
+  // PAYLOAD_KEYS row and no registry entry, exactly like `product_contract.read` above. Both
+  // halves land together on purpose: an entry here without a handler advertises a capability
+  // the port cannot serve, and `mcp-tool-allowlist.test.ts`'s arm Q1 reds on either alone.
+  "design.read",
 ]);
 
 /**
