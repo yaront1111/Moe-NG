@@ -53,7 +53,7 @@ function written(): ReadonlyMap<string, string> {
 }
 
 const PROVENANCE = (comment: string): readonly string[] => [
-  `${comment} Generated for profile controlled-1. Do not edit: regenerate instead.`,
+  `${comment} Generated for profile ${CONTROLLED_PROFILE_VERSION}. Do not edit: regenerate instead.`,
   `${comment} Satisfies deployment requirements: deployment-loopback, deployment-runtime`,
 ];
 

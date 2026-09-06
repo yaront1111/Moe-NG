@@ -79,12 +79,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor handoff to re-plan (owner: \"unblock\"); this row is the critical path for task-14260d5e → task-72b22fcf. Parked 09:32Z by worker-7bdbffac on two measured plan defects, no code touched: (1) step 4's one-transcriber premise is false — daemon-command-vocabulary.test.ts:233 pins repository.bootstrap payloadKeys next to the owned registry.test.ts:243, so add it as the seventh path; (2) step 3 reads readCurrentProductContractRevisionV2, which proves CURRENT not APPROVED (store.test:136 reads a new revision before approval) and would publish unapproved proposal names against DoD 1 — guard with the existing resolveProductContractGate1V2 in the same owned command file, gate.ok else [], plus a readable-unapproved no-op arm; tests 5C / 6b are unreachable under real core admission. Full measurement in comment 1f19f07 and the prior blockedReason.",
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-14260d5ec20c43e697521a8a98904136",
   "dependsOn": [
@@ -127,7 +127,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T09:12:03.680Z",
-  "updatedAt": "2026-09-06T09:32:40.786Z",
+  "updatedAt": "2026-09-06T10:57:09.022Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T09:12:56.167Z",
     "plannedStepCount": 7,
@@ -161,8 +161,10 @@
     "worker-7bdbffac"
   ],
   "workStartedAt": "2026-09-06T09:28:31.261Z",
-  "blockedReason": "Preflight measured TWO plan defects, no active amendments on freshcontext09:31. (1) Step4's one-transcriber premise false: gitgrep exactpayloadKeys finds owned registry.test.ts243 AND unowned apps/daemon/src/daemon-command-vocabulary.test.ts233. Globalunnamed-shapeconsumerrail requiresstopbeforekeyedit; add seventhpath (no splitneeded). (2) Step3 prescribes current.ok -> requiredVariableNames, but readCurrentProductContractRevisionV2 only proves CURRENT, not APPROVED. Existing store.test136 reads newrevision beforeapproval. Would publish unapprovedproposal names contraryDoD1/failsoftunapproved intent. Existing resolveProductContractGate1V2 can guard sameownedcommandfile; requiregate.ok otherwise[], no inventedauthority/refusalcode. Correctstep3+add readable-unapprovedno-oparm. Test5C malformedapprovedname impossibleunderrealcoreadmission(PRODUCT_CONTRACT_V2_PROVENANCE_INVALID@PRODUCT_CONTRACT_V2_PROVENANCE), and6bpayloadprojectIdmutant refusedat ingress; measurement+safealternatives incomments1f19f07 andtestnote. NO source/test edits. Goldenbaseline1file19tests0, hashesrecorded; fullbaseline notstarted(peerholds slot), nobackgroundjobs. This is scope+approval-authority correction, NOT peer-dirt/fullgate-red block.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-06T09:32:26.333Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "Preflight measured TWO plan defects, no active amendments on freshcontext09:31. (1) Step4's one-transcriber premise false: gitgrep exactpayloadKeys finds owned registry.test.ts243 AND unowned apps/daemon/src/daemon-command-vocabulary.test.ts233. Globalunnamed-shapeconsumerrail requiresstopbeforekeyedit; add seventhpath (no splitneeded). (2) Step3 prescribes current.ok -> requiredVariableNames, but readCurrentProductContractRevisionV2 only proves CURRENT, not APPROVED. Existing store.test136 reads newrevision beforeapproval. Would publish unapprovedproposal names contraryDoD1/failsoftunapproved intent. Existing resolveProductContractGate1V2 can guard sameownedcommandfile; requiregate.ok otherwise[], no inventedauthority/refusalcode. Correctstep3+add readable-unapprovedno-oparm. Test5C malformedapprovedname impossibleunderrealcoreadmission(PRODUCT_CONTRACT_V2_PROVENANCE_INVALID@PRODUCT_CONTRACT_V2_PROVENANCE), and6bpayloadprojectIdmutant refusedat ingress; measurement+safealternatives incomments1f19f07 andtestnote. NO source/test edits. Goldenbaseline1file19tests0, hashesrecorded; fullbaseline notstarted(peerholds slot), nobackgroundjobs. This is scope+approval-authority correction, NOT peer-dirt/fullgate-red block.",
+  "blockedOnTaskIds": null
 }

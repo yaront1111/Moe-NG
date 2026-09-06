@@ -22,86 +22,145 @@
     {
       "stepId": "step-1",
       "description": "PREFLIGHT — RE-MEASURE, NO EDITS. Every line number in this row's comments is from 2026-09-05 and the profile files were edited 2026-09-06 04:08-05:02; confirm each before trusting it. (a) Re-run the retirement census: `git grep -n 'controlled-1' -- apps packages tools scripts` minus `apps/daemon/src/repository/controlled-profile/`. It returned EXACTLY THREE at planning time — repository-bootstrap-service.test.ts:15, deployment/deployment-infrastructure-generator.test.ts:56, and apps/daemon/src/deployment/deploy-service.test.ts:37 (note the LAST one is in a different directory and is named in no prior artefact). If the census now returns a fourth, STOP and report rather than editing an unrostered file — the roster is at 8 of 10 files with two slots of slack. (b) Re-confirm `git grep -n 'CONTROLLED_PROFILE_VERSION\\|profileVersion'` shows production comparing against the CONSTANT only (repository-bootstrap-service.ts:13, deployment-infrastructure-generator.ts:84), so the bump needs no production edit outside the profile. (c) Re-confirm nothing PERSISTS a profile version, which is what makes strict retirement safe. (d) Probe the host: `docker info --format '{{.ServerVersion}}'` (29.6.2 / EXIT 0 at planning time). If the engine is down again, steps 2-5 and 7-8 still proceed; only step 6's expensive arm is affected, and the row reports that honestly rather than claiming a green it did not get. (e) Record the global-rail-3 baseline: run `pnpm --filter @moe/daemon test` and `pnpm typecheck` and SAVE the failing-file rosters for attribution in step 7. (f) `git status --porcelain` the target paths — two are peer-dirty; note them and continue, never revert or stash.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts"
-      ]
+      ],
+      "note": "Measured HEAD7be56433921b56cabefa1b3890e3688e2002c6ef; census exactly3 external controlled-1 consumers remains. Production checks constant; BootstrapReceipt/BootstrapRepository do not persist version. Target paths clean at current claim; unrelated shared dirt preserved. Docker29.6.2 exit0. Root manifest lives unrostered root-templates.ts:28-54; amendment requested, no source edits. Baseline typecheck exit1 at bootstrap-sequence.ts:45 TS2739/:109 TS7053 missing deployment.deploy/set_target (log TEMP/moe-463f195e-baseline-typecheck-worker-b3d8772c.log). Baseline daemon started09:43Z, interrupted on governor09:50Z gate order: baseline deferred: host gate held by f72a1438. No aggregate test count; no pass or complete failure-roster claim; partial timeout log TEMP/moe-463f195e-baseline-daemon-worker-b3d8772c.log. Governor explicitly directs narrow work and rerun after532 END/freeRAM>=6GB, one full host gate at a time.",
+      "startedAt": "2026-09-06T09:43:24.635Z",
+      "completedAt": "2026-09-06T09:51:27.105Z"
     },
     {
       "stepId": "step-2",
       "description": "THE SCAFFOLD CHANGE PLUS THE VERSION BUMP, in the templates and never a fork (rail 2). (1) In controlled-profile-package-templates.ts add node-pg-migrate to the generated package.json at a PINNED EXACT version (no range prefix), add `db:migrate` and `db:migrate:down` scripts, and emit a `migrations/` directory containing an initial migration that CREATES A REAL TABLE with an explicit `down` that drops it — an empty or no-op initial migration makes DoD 2 and DoD 3 unfalsifiable. KEEP THE PRODUCT NAME OUT of every migration file and its config: generator.test.ts asserts the name reaches exactly `[\"README.md\", \"package.json\"]`, and embedding it there reds that arm (the fix is the migration, never a widened expected list). Watch the cap: this file is 250 lines, the target; the additions should land near 300 and must not approach 400, and do NOT create a new production module to dodge it — a new module with a `.js` bridge needs a name-matched `.test.ts` sibling or runtime-entrypoint.test.ts reports the bridge as `unexpected`. (2) Bump `CONTROLLED_PROFILE_VERSION` at controlled-profile-generator.ts:26 to `controlled-2`. This RETIRES controlled-1 by construction — `isKnownProfileVersion` (:86-87) is a strict single-value equality — and that is the intended decision, not an accident: accepting both strings while the bytes differ would make one version name two trees. (3) Define `MIGRATION_TOOL_MISSING` in generator.ts beside the existing codes at :29 and :36, adding it to the union at :46-47, and REUSE A ROSTERED LAYER rather than minting a new layer constant — :73-75 states why: the security lane carries a boundary roster over layer constants that a new one silently desynchronises. It is RAISED by children 2 and 3; document where, and do not manufacture a call site here (DoD 4 says so explicitly).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/repository/controlled-profile/controlled-profile-package-templates.ts",
         "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-package-templates.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts"
+      ],
+      "note": "TDD two new contract arms RED (controlled-1 vs2; scripts and deps undefined; migrations empty) then focused run GREEN1file/5passed16filtered. Version controlled-2 strictly retires predecessor; fixed migrations/1700000000000-initial.js creates app_metadata(key,value), explicit down drops it. MIGRATION_TOOL_MISSING defined in existing union with DAEMON_INGRESS documented; detection deferred to verifier/deployment consumers. Scope grew by ONE existing emitter file: rootPackageJson actually lives root-templates.ts:28, package-templates only emits api/web manifests. Declared root template explicitly; this corrects approved producer location, not a new consumer/capability. Shape census owns generator.test.ts; release-version scanner pins unchanged0.1.0. Root deps exact node-pg-migrate9.0.0 and required peer pg8.23.0 (autoInstallPeers:false). Root scripts up and down1. Root317/template267 lines<400. No repo manifest/install changes. Full golden intentionally awaits steps3/4; contract tests added early for TDD.",
+      "startedAt": "2026-09-06T09:51:49.045Z",
+      "completedAt": "2026-09-06T09:54:42.308Z"
     },
     {
       "stepId": "step-3",
       "description": "RE-MINT THE LOCKFILE AS A VERSIONED ASSET — READ THE HAZARD FIRST. The generator reads a VERSIONED asset, `LOCKFILE_ASSET` at controlled-profile-generator.ts:110 pointing at `./assets/controlled-profile-v1-lock.yaml`. Create `assets/controlled-profile-v2-lock.yaml` and switch that URL to it. PRESERVE the v1 asset — deleting it is a separate cleanup once nothing references controlled-1 and is out of this row's budget.\n\nNEVER RUN `pnpm install` IN D:\\projexts\\moe-next. It fails with ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY whenever it has real work, and the recovery path rimrafs `node_modules/.pnpm` — a fleet-wide outage with roughly ten live seats running gates. node-pg-migrate is a dependency of the GENERATED PRODUCT ONLY: it must NOT be added to any moe-next package.json, and this row must leave no moe-next manifest edit in the tree (a manifest newer than `node_modules/.pnpm-workspace-state-v1.json` makes `runDepsStatusCheck` auto-run install before EVERY seat's `pnpm --filter` command, failing them with an unrelated-looking stack trace).\n\nMINT IT OUT OF TREE: generate the v2 profile into a fresh temp directory, run pnpm THERE with `--store-dir \"C:\\Users\\Yaron\\AppData\\Local\\pnpm\\store\\v11\"` (the store `node_modules/.modules.yaml` actually records), and copy the resulting `pnpm-lock.yaml` back as the v2 asset. The proof that the mint is correct is step 6's `pnpm install --frozen-lockfile` leg passing in a child tree, plus controlled-profile-build.test.ts's existing arm that the lockfile is BYTE-IDENTICAL after install — not the mint command's exit code.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/repository/controlled-profile/assets/controlled-profile-v2-lock.yaml",
         "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts"
       ],
       "newFiles": [
         "apps/daemon/src/repository/controlled-profile/assets/controlled-profile-v2-lock.yaml"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+        "apps/daemon/src/repository/controlled-profile/assets/controlled-profile-v2-lock.yaml"
+      ],
+      "note": "Minted ONLY in fresh C:/Users/Yaron/AppData/Local/Temp/moe-mint-worker-b3d8772c-WTo3uW from production generator. Child pnpm install --lockfile-only --no-frozen-lockfile --store-dir C:/Users/Yaron/AppData/Local/pnpm/store/v11 exit0; Scope all3workspace projects, resolved139. Copied v2 asset and switched URL, preserved v1 asset. Temp removed finally. Focused lock/determinism tests1file/4passed17filtered exit0. Frozen-lockfile+byte-equality acceptance remains step6, not inferred from mint exit. No root install or moe-next manifest modification.",
+      "startedAt": "2026-09-06T09:55:07.396Z",
+      "completedAt": "2026-09-06T09:55:36.127Z"
     },
     {
       "stepId": "step-4",
       "description": "THE GOLDEN TEST MOVES WITH THE BUMP (controlled-profile-generator.test.ts, 380 lines; test files are exempt from the 400-line cap, so growing it is fine). Update `GOLDEN_MANIFEST` for the new paths — the migrations directory, its initial migration — and the byte pins for package.json carrying the new dependency and the two scripts. TAKE EVERY HASH FROM THE PRINTED EXPECTED-VS-RECEIVED OF A FAILING RUN, never from arithmetic or a hand-computed digest. RE-ASSERT, DO NOT WEAKEN: byte-identity across two generations must still hold, and `differing` between two products must still be EXACTLY `[\"README.md\", \"package.json\"]` — if that arm reds, the product name leaked into a migration file and the fix belongs in step 2, not here. ADD THE ARM THIS ROW OWES ITS CHILDREN: assert the generated package.json declares BOTH `db:migrate` and `db:migrate:down` BY NAME, and that the migrations directory is non-empty. Children 2 and 3 raise `MIGRATION_TOOL_MISSING` for a workspace declaring no `db:migrate` script, so the scaffold's promise that it always declares one is the thing that must be pinned here rather than assumed there.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts"
+      ],
+      "note": "Golden controlled-2 pins23files (one migration). Three changed hashes copied verbatim from failing Vitest expected/received: migration e3e86d8c..., root636ff642..., lock0963d16c.... Root byte expectation includes both named scripts and exact deps. Two new TDD contract arms retained (version + scripts/deps/nonempty migration), existing exact product-name differing=[README.md,package.json], two-generation byte identity and names-only env golden unchanged. Fresh focused generator suite EXIT0 Test Files1passed(1), Tests21passed(21), no skips.",
+      "startedAt": "2026-09-06T09:55:36.349Z",
+      "completedAt": "2026-09-06T09:56:12.099Z"
     },
     {
       "stepId": "step-5",
       "description": "RETIRE controlled-1 ACROSS ALL THREE EXTERNAL CONSUMERS (global rail 23 — every file referencing the retired value must be in this plan, including source-text asserters that never import the symbol). Re-read each at edit time; the offsets below are from planning and two of these files are peer-dirty. (1) apps/daemon/src/repository/repository-bootstrap-service.test.ts:15 — the shared request fixture hardcodes `profileVersion: \"controlled-1\"`; move it to the new version. LEAVE the :80 arm passing `\"unknown\"` alone: it is the negative control proving BOOTSTRAP_PROFILE_VERSION_UNKNOWN is still reachable. Prefer importing `CONTROLLED_PROFILE_VERSION` over a fresh literal so this fixture never goes stale again. (2) apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts:56 — the golden provenance literal `Generated for profile controlled-1.`; this file is currently peer-dirty, so re-read before editing and touch only this line's concern. Its :291 `controlled-99` refusal arm must keep passing. (3) apps/daemon/src/deployment/deploy-service.test.ts:37 — `deploymentInfrastructureFiles(\"controlled-1\", [])`. THIS FILE IS IN A DIFFERENT DIRECTORY from (2) and is named in no prior artefact on this row; it is the consumer the earlier plan missed. Production code needs NO edit: repository-bootstrap-service.ts:13 and deployment-infrastructure-generator.ts:84 both compare against the CONSTANT and follow the bump automatically — if you find yourself editing production here, re-measure, because that means something holds a literal.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/repository/repository-bootstrap-service.test.ts",
         "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts",
         "apps/daemon/src/deployment/deploy-service.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-service.test.ts",
+        "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts",
+        "apps/daemon/src/deployment/deploy-service.test.ts"
+      ],
+      "note": "All3external consumers now import/use CONTROLLED_PROFILE_VERSION (provenance template uses already-imported constant). Unknown/controlled-99 negative controls untouched. Consumer red-first20failures expected version mismatch, then additional owned bootstrap count22->23 from printed failure; no new consumer found by shape/count census. Fresh focused3file gate EXIT0 Test Files3passed(3), Tests76passed(76). Target paths clean before edits; no production consumer changes and no foreign edits removed.",
+      "startedAt": "2026-09-06T09:56:12.314Z",
+      "completedAt": "2026-09-06T09:59:33.487Z"
     },
     {
       "stepId": "step-6",
       "description": "THE REAL-POSTGRES PROOF (DoD 2 and DoD 3). Create controlled-profile-migrate.test.ts, modelled on controlled-profile-build.test.ts — READ ITS HEADER (:1-45) FIRST, it is the design and it already solved the hard parts. Gate the expensive arm OPT-IN: `const RUN_MIGRATE = process.env.MOE_SCAFFOLD_MIGRATE === \"1\"` with `it.runIf(RUN_MIGRATE)`, matching MOE_SCAFFOLD_BUILD (:25) and the sibling MOE_DEPLOY_IMAGE_BUILD. Reuse three things rather than re-deriving them: `childEnv()` (:54-56), which STRIPS inherited `npm_*` — a child pnpm honouring `npm_config_filter=@moe/daemon` prints \"No projects matched\" and EXITS 0, a vacuous pass; `spawnSync(\"pnpm\", [...argv], { shell: false })` with executable `pnpm`, never a hard-coded `pnpm.cmd` (EINVAL on this host); and SEPARATE FOREGROUND legs, never an `&&` chain (it reports only the last status) or a pipe. For the database reuse the TRACKED production probe `probeDocker()` (repository/deployment/deployment-docker-probe.ts:72) — do not write a second docker probe — and copy the container spawn/cleanup shape from deployment-image-build.test.ts:59 and :159. THE ALWAYS-ON ARM IS MANDATORY, or the opt-in becomes a decoration: assert precisely the preconditions whose absence would make the expensive arm vacuous — that the generated tree contains both scripts and a non-empty migrations directory. THE EXPENSIVE ARM: start a disposable PostgreSQL container under a UNIQUE name, generate the product to a temp dir, `pnpm install --frozen-lockfile`, run `pnpm db:migrate`, and ASSERT THE TABLE EXISTS — exit 0 is not proof, a tool with nothing to do also exits 0; then run `pnpm db:migrate:down` and ASSERT THE TABLE IS ABSENT. TEARDOWN ON EVERY EXIT PATH INCLUDING FAILURES (epic rail 4): a `finally`, not a trailing statement — a leaked container or held port makes every later gate on this board inadmissible. Quote the CHILD run's output labelled as the generated product's, never conflated with moe-next's own gates.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/repository/controlled-profile/controlled-profile-migrate.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/repository/controlled-profile/controlled-profile-migrate.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-migrate.test.ts"
+      ],
+      "note": "New harness150lines, existing probeDocker, npm_*+NODE_OPTIONS stripping, executable pnpm argv shell:false, separate bounded foreground child legs. Always-on1passed1opt-in skipped. Opt-in MOE_SCAFFOLD_MIGRATE=1 fresh EXIT0 Test Files1passed(1), Tests2passed(2),22.85s. GENERATED PRODUCT install --frozen-lockfile0 (lock byte-identical), db:migrate0 -> public.app_metadata PRESENT/pgmigrations1, db:migrate:down0 -> ABSENT/pgmigrations0. Unique container/OS-assigned loopback port, disposable trust-auth DB with NO credentials minted; finally removes container+volumes, asserts name absent, removes temp even cleanup failure. Existing MOE_SCAFFOLD_BUILD=1 arm also EXIT0 Test Files1passed Tests2passed9.84s, generated child typecheck/test/build0 with child Test Files1passed each web+api,4totaltests. Child logs TEMP/moe-463f195e-{migrate,build}-worker-b3d8772c.log. No generated app output conflated with daemon gates.",
+      "startedAt": "2026-09-06T09:59:33.743Z",
+      "completedAt": "2026-09-06T10:01:05.548Z"
     },
     {
       "stepId": "step-7",
       "description": "DRILLS, THEN GATES. `git status --porcelain` the exact mutated paths FIRST, and say which restore proof applies to which — MIXED here: controlled-profile-migrate.test.ts and the v2 lock asset are NEW and untracked, so `git diff` is BLIND to them and the restore must be proved by SHA256 against an out-of-tree backup (%TEMP%, suffixed by worker id) in a call SEPARATE from the restore; the template, generator and three consumer files are TRACKED and take an empty `git diff` (global rail 13). THREE DRILLS: (i) THE LOCKFILE DRILL — the one that protects the generated product rather than this repo. Restore the v1 lockfile bytes while KEEPING node-pg-migrate in the generated package.json, run step 6's opt-in arm, and confirm `pnpm install --frozen-lockfile` FAILS IN THE CHILD. Quote it. That is the failure that would otherwise ship silently in every product this profile generates while moe-next's own gates stayed green. (ii) Make the initial migration a no-op that creates nothing, and confirm the DoD-2 table assertion goes RED — proving the arm tests the schema and not the exit code. (iii) Break `down` (drop its body) and confirm the DoD-3 absence assertion goes RED. Restore all three and prove it. THEN THE GATES, each STANDALONE and FOREGROUND, quoting the `Test Files N passed` count line: `pnpm --filter @moe/daemon test` and `pnpm typecheck`. A leg printing no count line RAN NO TESTS and is not a pass (global rail 8). Attribute repo-wide red by merge-base-vs-HEAD against step 1's saved rosters, intersect with this row's owned paths, and disclose every foreign red verbatim with its failing paths (global rail 3).",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/repository/controlled-profile/controlled-profile-migrate.test.ts",
         "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts"
+      ],
+      "note": "All 4 drills RED at intended seam, restored and separate-call SHA256 matched external backups (comment7f39). Final owned opt-in suite EXIT0: Test Files 6 passed (6), Tests 102 passed (102), real PostgreSQL up/down and generated build included. Added vocabulary-only MIGRATION_TOOL_MISSING/type layer assertion; no fabricated detector. Fresh standalone pnpm typecheck EXIT0. Full daemon EXIT1: 38 failed/476 passed files, 180 failed/9284 passed/50 skipped tests; all failing paths foreign, disclosed verbatim with lines in comments33f141/be1005/26bcfc. Contention timeouts not graded; BEFORE full run deferred on governor stop, owned AFTER failure intersection empty. Foundation35files756tests0, store52files675tests0. Root pnpm test still queued on full-suite-gate, required before final completion (step8). Preserved all peer dirt; no manifests or root install.",
+      "startedAt": "2026-09-06T10:01:05.816Z",
+      "completedAt": "2026-09-06T10:49:10.102Z"
     },
     {
       "stepId": "step-8",
       "description": "ADVERSARIAL SELF-REVIEW, ANSWER THE TWO OPEN CONTRACTS, THEN COMPLETE. Read the diff as an attacker: Did any moe-next package.json change (it must not — node-pg-migrate belongs to the GENERATED product only, and a stray manifest edit makes every seat's `pnpm --filter` auto-run an install that can rimraf the shared virtual store)? Was `pnpm install` ever run in the repo root? Can the migrate test leak a container or a port on a FAILING path, not just a passing one? Does the always-on arm actually fail if the scripts vanish, or does it only pass when the opt-in is set? Is `MIGRATION_TOOL_MISSING` carrying a ROSTERED layer rather than a newly minted constant? Does anything still name `controlled-1` outside the preserved v1 asset? TWO CONTRACTS THIS ROW OWES CHILDREN 2 AND 3 — state both in the completion record, because they are the interface those rows build on: (1) does `pnpm db:migrate:down` revert exactly ONE migration or ALL of them, and (2) where is `MIGRATION_TOOL_MISSING` exercised, given it is DEFINED here and RAISED there. Also state the DoD-5 determinism decision plainly: the scaffold writes the initial migration itself with a hardcoded filename so its bytes are stable by construction — node-pg-migrate only timestamps names when ITS CLI creates them — and say what a coding seat authoring migration two will get, since the golden test pins only the scaffold's own tree. Report every path created or modified in complete_step.modifiedFiles; note the peer-dirty paths and never revert, stash or `git add -A` them.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
         "apps/daemon/src/repository/controlled-profile/controlled-profile-package-templates.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-package-templates.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+        "apps/daemon/src/repository/controlled-profile/assets/controlled-profile-v2-lock.yaml",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-migrate.test.ts",
+        "apps/daemon/src/repository/repository-bootstrap-service.test.ts",
+        "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts",
+        "apps/daemon/src/deployment/deploy-service.test.ts"
+      ],
+      "note": "Adversarial review repeated: unique temp/container/loopback port; finally cleanup on failed installs/migrations; no secrets, repo manifest edits, root install or new production bridges; controlled-1 census empty; name-differing golden unchanged. No resume edits. Fresh owned opt-in gate0:6files102tests51.70s, real PG up/down and generated build; strict scoped tsc0. Latest full typecheck1 ONLY foreign mcp-tool-allowlist.test.ts89/90 TS2554; disclosed, earlier typecheck0 not relabelled latest. Full daemon38foreignfailed/476passed files disclosed; no owned failure. Governor msg-e35611 ruled completion without unnamed root lane; root pnpm test NOT RUN, no repo-wide green claim. Contract: down1 reverts ONE migration, not batch/all. MIGRATION_TOOL_MISSING defined/type-pinned here at existing DAEMON_INGRESS; children2/3 own missing-script detection/refusal. Fixed1700000000000-initial.js/LF bytes deterministic; later CLI create timestamps coding-seat migrations. All9ownedpaths reported; preserved foreign WIP.",
+      "startedAt": "2026-09-06T10:49:50.231Z",
+      "completedAt": "2026-09-06T11:00:45.448Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": null,
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-4f771bb8",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor handoff to re-plan (owner: \"unblock tasks\"). Parked 22:22Z on two things: (1) real PostgreSQL unavailable (Docker Desktop engine pipe absent, service stopped, psql/pg_dump absent); governor started Docker Desktop at 07:42Z, verify the pipe before relying on it; (2) architect gaps: the controlled-2 retirement needs two unrostered consumers added to affectedFiles (widening requested 09-05, never landed) and the version premise changed (repository-bootstrap-service.ts:13-14/54 already validates the version). Step-1 preflight measurements are in the comments. Re-plan with the widened affectedFiles and the PostgreSQL prerequisite made explicit.",
+  "reopenReason": "Resource block cleared by governor: the worker left the full-suite-gate queue because the approved eight steps name only the daemon suite and typecheck (both already run and disclosed), no root lane. Restored to WORKING with worker-b3d8772c's assignment kept so it can complete step 8 and complete_task under the path-attributed baseline ruling (msg-e35611b7).",
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-8f86e10504c74e248ccfa6f427b41a15",
   "priority": "HIGH",
@@ -124,17 +183,81 @@
       "author": "worker-f72a1438",
       "content": "RULING UPDATE 22:26Z: governor-afbde490 says HALT superseded since22:24. Full suite requires #general gate free plus measured freeRAM>=6GB and START/END; targeted exempt. Five suites currently running; no full gate started here. Governor explicitly confirms this park is correctly shaped for operator-provided database plus architect controlled-1 consumer scope answer. Therefore remove old HALT from blocking grounds; real PostgreSQL unavailable and version/scope ruling remain.",
       "timestamp": "2026-09-05T22:26:50.193Z"
+    },
+    {
+      "id": "comment-54003c7094ff48719cecc2ee76532ed0",
+      "author": "worker-b3d8772c",
+      "content": "Step1 preflight at production-at-claim HEAD7be56433921b56cabefa1b3890e3688e2002c6ef: exactly three external controlled-1 users remain (deploy-service.test.ts:44; repository/deployment/deployment-infrastructure-generator.test.ts:56; repository-bootstrap-service.test.ts:15). Production compares constant via isKnownProfileVersion or direct constant; receipt/bind/catalog shapes in repository-bootstrap-contracts.ts do not persist it (request carries it; emitted provenance comments retain it). Exact target git status empty now (earlier peer-dirty consumers already landed); unrelated shared dirt preserved. Docker info29.6.2 exit0. Root manifest actually lives controlled-profile-root-templates.ts:28-54, absent from affectedFiles; amendment requested9/10 paths, no postprocessing workaround. npm registry probe9.0.0 node-pg-migrate engines>=20.11; runtime peer pg>=4.3<9 and optional @types/pg. Profile autoInstallPeers:false therefore must pin pg explicitly too (registry latest8.23.0; no ORM). Plan add root dependencies node-pg-migrate9.0.0 + pg8.23.0, scripts node-pg-migrate up / node-pg-migrate down 1. Primary CLI docs https://salsita.github.io/node-pg-migrate/cli confirm down1 reverts ONE migration, not a batch.",
+      "timestamp": "2026-09-06T09:46:00.149Z"
+    },
+    {
+      "id": "comment-7f39dffba6e341908cecd4b64582017d",
+      "author": "worker-b3d8772c",
+      "content": "STEP7 MUTATION EVIDENCE (production-owned paths at working tree10:01-10:04Z). Before drills git status: package/root templates tracked M, v2 lock/harness untracked??. Out-of-tree backups TEMP/moe-463f195e-drills-worker-b3d8772c. Each restore in finally and SHA256 equality proved in SEPARATE tool call, including untracked paths (never used empty git diff as their proof). v2 asset hash0963D16C8E4227942C882ED08BDBA2F8A7E74D4339B92BC6E10952357C286265. Template ACDD6D1A1C88A17365D287DC4BEBA48A247AFFA7F6041DB257DC115320320DB7; root32B198EBDEA1C3F724C371366FD053138D552508879BFA59CA469A9B4289B7DC; harnessE0789F8C6908081A5AB5ED7675E7D67A8C192E7257CAC02C752E0A09222C1330.\n\n1) Replaced v2 asset with v1bytes, retained new root deps: GENERATED PRODUCT pnpm install --frozen-lockfile ->1, ERR_PNPM_OUTDATED_LOCKFILE, specifiers mismatch:2dependencies added node-pg-migrate9.0.0/pg8.23.0. Test Files1failed, Tests1failed1passed. Caught exact child reason; not some daemon refusal.\n2) Made generated up body no-op: install0, GENERATED PRODUCT db:migrate0/Migrations complete, then MIGRATION_UP_TABLE_MISSING: expected false to be true at migrate.test.ts108.1failed1passed,16.44s. This kills exit-only proof.\n3) Empty down body: install0/up0 and tablePRESENT, down0/Migrations complete, then MIGRATION_DOWN_TABLE_REMAINS: expected true to be false at112.1failed1passed,18.64s. This kills exit-only down proof.\n4) Removed the two script names via temporary key replacements in production root template: optin UNSET, always-on arm failed both undefined vs node-pg-migrate up/down1;1failed1skipped,0.506s.\n\nAfter EACH failed real arm, docker ps --all --filter name=moe-migrate- --format {{.Names}} returned EMPTY (exit0). Harness finally also asserts exact unique name absent and removes temp dir on every exit. All4restored byte hashes independently equal backups before full gate. No drill mutation left in tree.",
+      "timestamp": "2026-09-06T10:05:21.257Z"
+    },
+    {
+      "id": "comment-6d23794401e94e87bab125504aa546f7",
+      "author": "worker-b3d8772c",
+      "content": "CONTRACTS FOR MIGRATION CONSUMERS (delivered source anchor; not claims of downstream composition): root-template emits db:migrate='node-pg-migrate up' (all pending) and db:migrate:down='node-pg-migrate down 1' (exactly ONE last migration, NOT a deployment batch). The real PG arm executes this exact generated script and proves table/drop plus migration ledger1->0. Any later last-BATCH behavior must compose/count migrations in its own owning deploy row, not assume down1 means batch.\n\nMIGRATION_TOOL_MISSING is DEFINED only in controlled-profile-generator.ts, included in ControlledProfileRefusalCode whose refusal type is existing BootstrapRefusedBy and factory stamps DAEMON_INGRESS. Definition documents no db:migrate script as the condition. This row does NOT detect it or manufacture a raising call site: the verifier and deploy migration consumers (description children2/3 under task-8f86e10504c74e248ccfa6f427b41a15) own that exercise. Durable grep: git grep -n MIGRATION_TOOL_MISSING -- apps packages. No verifier/deploy/UI implementation claimed here.\n\nDETERMINISM: production template writes migrations/1700000000000-initial.js itself from fixed LF line arrays; it never invokes node-pg-migrate create or reads a clock.23-file golden pins migration bytes, root deps/scripts and v2 lock. Coding seat authoring migration2 via pnpm exec node-pg-migrate create <name> gets the CLI's default current timestamp prefix; that is authored product work, not a fresh scaffold generation and not this golden's scope. Primary CLI reference https://salsita.github.io/node-pg-migrate/cli . Existing v1 asset retained, no active controlled-1 references (git grep -n controlled-1 -- apps packages tools scripts gives no matches).",
+      "timestamp": "2026-09-06T10:07:15.002Z"
+    },
+    {
+      "id": "comment-33f141bf2fbb4b76ac9dd28156415c2a",
+      "author": "worker-b3d8772c",
+      "content": "DAEMON FOREIGN RED 1/3. Anchor: shared working tree during 10:05-10:36Z run, pnpm --filter @moe/daemon test, EXIT1. Paths below relative to apps/daemon; trailing numbers are line:column in named file. Errors quoted verbatim except large criterion payloads explicitly omitted. NO OWNED PATH appears. Contention timeouts are disclosed, not graded as regression evidence. The bootstrap filter error also originates at src/bootstrap/bootstrap-sequence.ts:109:38 and was repaired by foreign task04b3 at639574c8 after this run.\nsrc/daemon-main-activation-boot.test.ts | Error: daemon exited early with code 1 | 88:48, 99:32\nsrc/planning/expansion-release-selector.test.ts | Error: context selection refused: FOUNDATION_CONTEXT_STORE_UNAVAILABLE | 291:27\nsrc/daemon-command-registry-human-approver.test.ts | AssertionError: expected [ 'approval.decide', …(18) ] to have a length of 17 but got 19 | 333:40\nsrc/daemon-command-registry.test.ts | AssertionError: expected 56 to be 54 // Object.is equality | 911:32, 1809:33, 1831:36, 1863:41\nsrc/daemon-command-registry.test.ts | AssertionError: expected [ 'criterion_check.approve', …(55) ] to deeply equal [ 'criterion_check.approve', …(53) ] | 957:39\nsrc/daemon-store-dependencies.test.ts | AssertionError: expected { outcome: 'LOADED', …(15) } to deeply equal { outcome: 'LOADED', …(15) } | 769:32\nsrc/daemon-store-dependencies.test.ts | TypeError: Cannot read properties of undefined (reading 'filter') | src/http/affordance-read.ts:269:23, 1064:23\nsrc/daemon-v2-command-registry.test.ts | AssertionError: expected 55 to be 53 // Object.is equality | 271:35\nsrc/mcp-dispatch-port.test.ts | Error: Test timed out in 30000ms. | 141:3\nsrc/mcp-dispatch-port.test.ts | Error: Test timed out in 60000ms. | 416:3\nsrc/mcp-main.test.ts | AssertionError: expected 19 to be 17 // Object.is equality | 241:36\nsrc/mcp-tool-allowlist.test.ts | AssertionError: expected 19 to be 17 // Object.is equality | 147:47\nsrc/mcp-tool-allowlist.test.ts | TypeError: Cannot read properties of undefined (reading 'filter') | src/http/affordance-read.ts:269:23\nsrc/runtime-entrypoint.test.ts | AssertionError: expected { missing: [], …(2) } to deeply equal { missing: [], unexpected: [], …(1) } | 255:6\nsrc/bootstrap/bootstrap-durability.test.ts | AssertionError: expected 13 to be 15 // Object.is equality | 225:8\nsrc/bootstrap/bootstrap-services.test.ts | AssertionError: expected Set{ 'approval.decide', …(14) } to deeply equal Set{ 'approval.decide', …(12) } | 91:54\nsrc/criterion-evidence/criterion-integrated.test.ts | AssertionError: expected { outcome: 'CRITERION_EVIDENCE', …(8) } to match object { …(2) } | 66:19\nsrc/goals/goal-close-readiness.test.ts | TypeError: Cannot read properties of undefined (reading 'filter') | src/http/affordance-read.ts:269:23, 488:12, 505:12, 519:12\nsrc/goals/goal-live-evidence.test.ts | Error: scoped criterion execution did not prove all checks: [large CRITERION_EVIDENCE payload omitted] | 380:19\nsrc/goals/goal-services.test.ts | Error: scoped criterion execution did not prove all checks: [large CRITERION_EVIDENCE payload omitted] | 308:19\nsrc/goals/j1-command-path.test.ts | AssertionError: expected Set{ 'approval.decide', …(14) } to deeply equal Set{ 'approval.decide', …(12) } | 173:61\nsrc/goals/j1-command-path.test.ts | AssertionError: expected Set{ 'policy.install', …(13) } to deeply equal Set{ 'approval.decide', …(12) } | 184:8\nsrc/goals/j1-command-path.test.ts | Error: scoped criterion execution did not prove all checks: [large CRITERION_EVIDENCE payload omitted] | 198:19\nsrc/goals/j1-command-path.test.ts | Error: scoped criterion execution did not prove all checks: [large CRITERION_EVIDENCE payload omitted] | 253:43\nsrc/goals/j1-command-path.test.ts | Error: scoped criterion execution did not prove all checks: [large CRITERION_EVIDENCE payload omitted] | 302:19\nsrc/mcp-http/mcp-http-host.test.ts | AssertionError: expected 19 to be 17 // Object.is equality | 690:38, 664:5, 721:38, 707:5\nsrc/identity/genesis-first-boot.test.ts | AssertionError: expected { code: 1, …(1) } to deeply equal { code: +0, stderr: '' } | 333:52\nsrc/http/affordance-planning-offers.test.ts | AssertionError: expected Set{ 'planning.submit_decomposition' } to deeply equal Set{ 'design.submit' } | 400:8\nsrc/http/affordance-planning-offers.test.ts | AssertionError: expected { …(6) } to match object { commandKind: 'design.submit', …(2) } | 406:34",
+      "timestamp": "2026-09-06T10:48:05.943Z"
+    },
+    {
+      "id": "comment-be10054dae3443ddadbbbdcf41f6a0b1",
+      "author": "worker-b3d8772c",
+      "content": "DAEMON FOREIGN RED 2/3. Anchor: shared working tree during 10:05-10:36Z run, pnpm --filter @moe/daemon test, EXIT1. Paths below relative to apps/daemon; trailing numbers are line:column in named file. Errors quoted verbatim except large criterion payloads explicitly omitted. NO OWNED PATH appears. Contention timeouts are disclosed, not graded as regression evidence. The bootstrap filter error also originates at src/bootstrap/bootstrap-sequence.ts:109:38 and was repaired by foreign task04b3 at639574c8 after this run.\nsrc/http/affordance-planning-offers.test.ts | AssertionError: expected Set{ …(8) } to deeply equal Set{ 'approval.decide', …(8) } | 425:63\nsrc/http/affordance-planning-offers.test.ts | AssertionError: DRAFTING: expected [] to deeply equal [ 'goal-offers-1' ] | 447:26\nsrc/http/affordance-read-planning.test.ts | TypeError: Cannot read properties of undefined (reading 'filter') | src/http/affordance-read.ts:269:23, 148:31, 296:30, 329:32, 488:20, 502:12, 511:12, 546:12, 574:12, 717:35, 730:21, 743:21, 778:17, 805:35, 822:17, 834:34, 859:33, 867:25, 907:19, 944:28, 987:12, 997:12, 1007:12, 1016:12, 1047:12, 1085:12, 1109:12\nsrc/http/affordance-read-planning.test.ts | Error: plan.propose: UNKNOWN_ERROR (CORE_REDUCER) | 212:5\nsrc/http/affordance-read.test.ts | TypeError: Cannot read properties of undefined (reading 'filter') | src/http/affordance-read.ts:269:23, 138:12, 159:12, 184:12, 196:12, 230:12, 260:27, 429:18, 445:26, 495:20, 519:18, 563:18, 571:19, 648:18, 700:18, 721:18, 778:18, 880:12, 895:12, 904:12, 918:12, 926:12, 940:12, 957:12, 1049:18, 1072:18, 1085:18, 1093:18, 1176:19, 1204:19, 1246:19\nsrc/http/http-listener-read-dispatch.test.ts | AssertionError: expected [ '/affordances/read', …(29) ] to include '/repository/bootstrap/read' | 386:25\nsrc/http/http-listener-read-dispatch.test.ts | AssertionError: expected [ '/bootstrap', …(5) ] to strictly equal [ '/bootstrap', '/session/pair', …(3) ] | 407:70\nsrc/http/http-listener-read-dispatch.test.ts | AssertionError: expected [ '/budget/commitment/read', …(5) ] to strictly equal [ '/budget/commitment/read', …(6) ] | 417:32\nsrc/orchestrator/agent-provider-pause.test.ts | TypeError: Cannot read properties of undefined (reading 'filter') | src/http/affordance-read.ts:269:23\nsrc/orchestrator/agent-wrapper-retry.test.ts | TypeError: Cannot read properties of undefined (reading 'filter') | src/http/affordance-read.ts:269:23\nsrc/orchestrator/agent-wrapper.test.ts | TypeError: Cannot read properties of undefined (reading 'filter') | src/http/affordance-read.ts:269:23, 452:35, 1231:36, 1344:36, 1453:36, 1514:36, 1615:36\nsrc/orchestrator/agent-wrapper.test.ts | Error: nothing spawned | 204:38\nsrc/orchestrator/agent-wrapper-reclaim.test.ts | TypeError: Cannot read properties of undefined (reading 'filter') | src/http/affordance-read.ts:269:23, 560:20, 596:20\nsrc/orchestrator/agent-wrapper-repository-refusal.test.ts | TypeError: Cannot read properties of undefined (reading 'filter') | src/http/affordance-read.ts:269:23\nsrc/orchestrator/compiled-node-identity.test.ts | TypeError: Cannot read properties of undefined (reading 'filter') | src/http/affordance-read.ts:269:23, 73:8, 172:55\nsrc/planning/expansion-request-production-edge.test.ts | Error: context selection refused: FOUNDATION_CONTEXT_STORE_UNAVAILABLE | 148:25, 187:25, 216:25, 237:25, 267:25\nsrc/planning/graph-query-production-route.test.ts | AssertionError: {\"outcome\":\"FAILED\",\"code\":\"ERR_UNSUPPORTED_TYPESCRIPT_SYNTAX\",\"message\":\"TypeScript parameter property is not supported in strip-only mode\"}: expected 'FAILED' to be 'ANSWERED' // Object.is equality | 201:60, 231:60\nsrc/repository/goal-landing-facts.test.ts | TypeError: Cannot read properties of undefined (reading 'filter') | src/http/affordance-read.ts:269:23, 172:12, 178:12, 196:12, 205:12\nsrc/work/foundation-attempt-service.test.ts | Error: Test timed out in 30000ms. | 1215:3, 2133:3\nsrc/work/foundation-attempt-windows.test.ts | AssertionError: expected false to be true // Object.is equality | 860:24\nsrc/work/foundation-capture-lifecycle.test.ts | Error: Test timed out in 30000ms. | 446:3, 476:3, 502:3, 525:3\nsrc/work/foundation-capture-producer.test.ts | Error: Test timed out in 30000ms. | 278:25, 290:3, 310:3, 328:3, 344:3, 358:3, 395:20, 411:3, 432:3",
+      "timestamp": "2026-09-06T10:48:06.175Z"
+    },
+    {
+      "id": "comment-26bcfcf5ecc54be7b84665320d68dc4a",
+      "author": "worker-b3d8772c",
+      "content": "DAEMON FOREIGN RED 3/3. Anchor: shared working tree during 10:05-10:36Z run, pnpm --filter @moe/daemon test, EXIT1. Paths below relative to apps/daemon; trailing numbers are line:column in named file. Errors quoted verbatim except large criterion payloads explicitly omitted. NO OWNED PATH appears. Contention timeouts are disclosed, not graded as regression evidence. The bootstrap filter error also originates at src/bootstrap/bootstrap-sequence.ts:109:38 and was repaired by foreign task04b3 at639574c8 after this run.\nsrc/work/foundation-context-selection.test.ts | Error: assembly refused: FOUNDATION_CONTEXT_STORE_UNAVAILABLE (the durable store could not be read) | 530:27\nsrc/work/foundation-context-selection.test.ts | Error: assembly refused: FOUNDATION_CONTEXT_STORE_UNAVAILABLE | 616:12, 636:26, 673:27, 833:27, 909:27\nsrc/work/foundation-context-selection.test.ts | AssertionError: expected 'FOUNDATION_CONTEXT_STORE_UNAVAILABLE@…' to be 'CONTEXT_TOO_LARGE@CONTEXT_SELECTION' // Object.is equality | 820:5\nsrc/work/foundation-context-selection.test.ts | AssertionError: expected false to be true // Object.is equality | 875:22\nsrc/work/foundation-input-hydrator-residue.test.ts | Error: Test timed out in 30000ms. | 124:3",
+      "timestamp": "2026-09-06T10:48:06.412Z"
+    },
+    {
+      "id": "comment-7802de2fadfe49d89a8128c9ad95b6db",
+      "author": "worker-b3d8772c",
+      "content": "FINAL OWNED VERIFICATION (2026-09-06, shared working tree, final source; HEAD now fc6e594718fb03b6916fc6051f6903979d5bb8d5):\nWith MOE_SCAFFOLD_MIGRATE=1 and MOE_SCAFFOLD_BUILD=1:\npnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 src/repository/controlled-profile src/repository/repository-bootstrap-service.test.ts src/repository/deployment/deployment-infrastructure-generator.test.ts src/deployment/deploy-service.test.ts\nEXIT 0; Test Files 6 passed (6); Tests 102 passed (102); 58.54s. No skipped opt-in arms. Generated product (NOT moe-next gate counts): frozen install exit0/lock bytes identical; db:migrate exit0, public.app_metadata PRESENT and pgmigrations=1; db:migrate:down exit0, table ABSENT and pgmigrations=0. Child build harness install/typecheck/test/build exit0; child api 1 file/3 tests and web 1 file/1 test pass.\nFresh standalone pnpm typecheck EXIT0, apps/daemon typecheck: Done. pnpm verify:foundation EXIT0, Test Files 35 passed (35), Tests 756 passed (756), 45.50s. pnpm verify:store EXIT0, Test Files 52 passed (52), Tests 675 passed (675), 18.94s. Both wrappers also ran complete typecheck successfully.\n\nFull daemon run completed foreground/polled, EXIT1: Test Files 38 failed | 476 passed (514); Tests 180 failed | 9284 passed | 50 skipped (9514); 1755.82s. All 38 failing files and exact error/line anchors are in the three FOREIGN RED comments. NOT a green run. Unscheduled foreign full suites overlapped this governor-sanctioned 10:05-10:36Z run, so timeout failures are contention-affected and not admissible regression conclusions. The owned failing-path intersection is EMPTY, hence (AFTER minus BEFORE) intersect OWNED is empty regardless of the incomplete baseline. Baseline at 7be56433921b56cabefa1b3890e3688e2002c6ef: typecheck EXIT1 only bootstrap-sequence.ts:45 TS2739 and :109 TS7053; initial full daemon stopped on governor request, no full BEFORE roster claimed. Later transient preview/zz-probe.test.ts syntax errors also disappeared before the latest standalone typecheck0.\nruntime-entrypoint.test.ts:255 unexpected deployment\\\\deploy-target-contracts.js and repository\\\\deployment\\\\deployment-docker-probe.js are foreign/preexisting. Durable baseline probe: git ls-tree -r --name-only 7be56433921b56cabefa1b3890e3688e2002c6ef -- apps/daemon/src/repository/deployment/deployment-docker-probe.ts apps/daemon/src/repository/deployment/deployment-docker-probe.js apps/daemon/src/repository/deployment/deployment-docker-probe.test.ts (both production files tracked, no name-matched test). No production module/bridge added here.\n\nAGENTS-required root pnpm test has NOT run: resource full-suite-gate is busy; queued #2. No root-wide/apps-wide green claim. Local logs all in %TEMP%/moe-463f195e-*-worker-b3d8772c.log; no evidence artifacts committed. No live test sessions or migration containers remain.",
+      "timestamp": "2026-09-06T10:49:09.900Z"
+    },
+    {
+      "id": "comment-eb4d00d355f84b0487d92f7f45ea948b",
+      "author": "worker-b3d8772c",
+      "content": "STEP8 SELF-REVIEW (no edits): reviewed owned diff and complete new migration harness. Deterministic generator remains pure except pinned asset read; concurrent generations share no mutable state. Each expensive run uses random UUID container, mkdtemp tree and OS-assigned loopback port; no fixed port or shared product path. Invalid name/version refusal coverage preserved. No product name enters migration; two-product differing remains EXACTLY README.md/package.json. Child argv arrays use shell:false/executable pnpm; childEnv strips inherited npm_* filter and NODE_OPTIONS. Every started-container path, including child install/up/down failure, enters finally cleanup; cleanup confirms unique name absent and removes temp even on cleanup error. Four failure drills actually ran and left no containers; unavailable Docker fails opt-in rather than silently skipping it. No secrets minted or committed; trust-auth is disposable loopback test only, not generated production config. No real moe-next package.json/pnpm-lock diff; pnpm install NEVER ran in repo root. git diff --check owned paths0; full-tree controlled-1 census EMPTY; v1 lock asset preserved. Existing root template is316lines/package template267/generator156, all below400; no production module/bridge added. Peer dirt remains untouched outside the small consumer line changes already recorded.\nContracts for final completion summary: db:migrate:down is node-pg-migrate down 1 and reverts exactly ONE most-recent migration, not ALL and not an arbitrary last batch; deployment child must compose batch rollback if needed. MIGRATION_TOOL_MISSING is defined/type-pinned here with existing DAEMON_INGRESS layer, never raised by this emitter; missing-script detection/refusal is exercised by verifier and deployment migration children2/3, not invented here. Fixed migrations/1700000000000-initial.js and LF template bytes are stable by construction; authoring migration2 via node-pg-migrate create gets CLI timestamp naming unless that coding seat chooses another supported scheme, outside this scaffold golden. Only remaining work: acquire queued full-suite-gate, run AGENTS-required root pnpm test foreground, disclose foreign failures if any, refresh owned verification/typecheck for final turn, complete_step8 and complete_task. No implementation blocker or additional feature work.",
+      "timestamp": "2026-09-06T10:49:50.572Z"
+    },
+    {
+      "id": "comment-23fa1ce0664644269cf0f9f1ab1279d7",
+      "author": "worker-b3d8772c",
+      "content": "RESUMED FINAL EVIDENCE 2026-09-06 10:59Z (shared working tree, own bytes unchanged). Governor msg-e35611b7372a4108b45a95d3aaced56e explicitly ruled task463f evidence sufficient under path-attributed gate and directed completion without root pnpm test if no approved step names that lane. Re-read eight steps: daemon/typecheck only. Root pnpm test NOT RUN, no root/repo-wide green claim. My prior generic-root resource blocker was cleared; left full-suite-gate queue, no new full suite launched.\nFresh exact scoped command with MOE_SCAFFOLD_MIGRATE=1 and MOE_SCAFFOLD_BUILD=1:\npnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 src/repository/controlled-profile src/repository/repository-bootstrap-service.test.ts src/repository/deployment/deployment-infrastructure-generator.test.ts src/deployment/deploy-service.test.ts\nEXIT0; Test Files 6 passed (6); Tests 102 passed (102); 51.70s; NO skips. GENERATED PRODUCT frozen install0/lock byte-identical, up0 app_metadata PRESENT pgmigrations1, down0 app_metadata ABSENT pgmigrations0; generated typecheck/test/build0 (child api1file3tests, web1file1test). Docker moe-migrate-* census EMPTY after completion.\nFresh standalone pnpm typecheck EXIT1 with ONLY FOREIGN apps/daemon/src/mcp-tool-allowlist.test.ts(89,112) and (90,106): error TS2554: Expected 1 arguments, but got 2. Owner release54 notified, not edited. The earlier standalone full typecheck0 remains recorded but is NOT presented as latest green. Fresh strict scoped tsc of all six owned test files plus transitive production imports EXIT0, using same NodeNext/ES2024/strict/noUnused/exactOptional/noUnchecked flags as repo. Complete full-daemon run and all38 foreign failing paths/error lines remain in comments33f141/be10054/26bcfc; owned AFTER failures EMPTY. Previously executed foundation35files756tests0 and store52files675tests0 remain disclosed with original anchors. No extra scope changes on resume; self-review/diff-check unchanged and all nine paths already declared.",
+      "timestamp": "2026-09-06T11:00:45.064Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:47:55.345Z",
-  "updatedAt": "2026-09-06T07:49:48.110Z",
+  "updatedAt": "2026-09-06T11:03:15.496Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:32:05.225Z",
     "plannedStepCount": 8,
-    "plannedDistinctFileCount": 8
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 8
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-06T07:49:45.988Z",
   "planningNotes": {
@@ -155,16 +278,48 @@
   "planApprovedAt": "2026-09-06T07:49:48.110Z",
   "contextFetchedBy": [
     "worker-f72a1438",
-    "architect-aa54e231"
+    "architect-aa54e231",
+    "worker-b3d8772c",
+    "qa-4f771bb8"
   ],
   "workStartedAt": "2026-09-05T22:19:29.379Z",
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
   "blockedAt": null,
-  "priorBlockedReason": "UPDATED after governor22:26Z: HOST HALT is superseded and NOT a blocker. Remaining: mandatory real PostgreSQL up/table-present/down/table-absent proof unavailable—Windows dockerDesktopLinuxEngine pipe absent, service Stopped; running Ubuntu24.04 Docker socket absent; psql/pg_dump/pg_restore absent on both. Operator escalation is active. Architect controlled-2 retirement needs two unrostered consumer test updates (repository-bootstrap-service.test.ts:15 and deployment-infrastructure-generator.test.ts:56) plus explicit v2 lockfile asset. No edits; focused baseline2files32tests exit0. Governor confirmed park correctly shaped. Details comments ce3082e + ab57bd.",
+  "priorBlockedReason": "Waiting for shared resource full-suite-gate (queued #2) to execute the still-unrun AGENTS-required root pnpm test. Implementation and steps1-7 delivered; owned opt-in verification EXIT0 6 files/102 tests including real PostgreSQL up/down and generated build; fresh standalone typecheck0, foundation35files/756tests0, store52files/675tests0. Full daemon run completed EXIT1 with all38 failing paths foreign, exact errors/counts recorded, contention caveat explicit. Root gate must not start without governor-required lease and cannot be claimed green without running. No owned process/container remains. Resume step8 after lease grant, run root gate and release lease, refresh final owned verification/typecheck, then complete_task; no prerequisite task dependency or implementation gap.",
   "blockedOnTaskIds": null,
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
-  ]
+  ],
+  "declaredFiles": [
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-package-templates.ts",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+    "apps/daemon/src/repository/controlled-profile/assets/controlled-profile-v2-lock.yaml",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-migrate.test.ts",
+    "apps/daemon/src/repository/repository-bootstrap-service.test.ts",
+    "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts",
+    "apps/daemon/src/deployment/deploy-service.test.ts"
+  ],
+  "reviewStartedAt": "2026-09-06T11:02:44.804Z",
+  "verification": {
+    "command": "$env:MOE_SCAFFOLD_MIGRATE='1'; $env:MOE_SCAFFOLD_BUILD='1'; pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 src/repository/controlled-profile src/repository/repository-bootstrap-service.test.ts src/repository/deployment/deployment-infrastructure-generator.test.ts src/deployment/deploy-service.test.ts",
+    "exitCode": 0,
+    "outputTail": "GENERATED PRODUCT pnpm db:migrate -> 0\nGENERATED PRODUCT up: public.app_metadata PRESENT, pgmigrations=1\nGENERATED PRODUCT pnpm db:migrate:down -> 0\nGENERATED PRODUCT down: public.app_metadata ABSENT, pgmigrations=0\n Test Files  6 passed (6)\n      Tests  102 passed (102)\n   Start at  13:58:26\n   Duration  51.70s\nEXIT=0",
+    "reportedAt": "2026-09-06T11:02:44.804Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-package-templates.ts",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+    "apps/daemon/src/repository/controlled-profile/assets/controlled-profile-v2-lock.yaml",
+    "apps/daemon/src/repository/repository-bootstrap-service.test.ts",
+    "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts",
+    "apps/daemon/src/deployment/deploy-service.test.ts",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-migrate.test.ts"
+  ],
+  "completionSummary": "controlled-2 ships exact node-pg-migrate9.0.0 + pg8.23.0, migration scripts, deterministic initial app_metadata migration and v2 frozen lock; v1 asset preserved. Down uses down 1: exactly ONE most-recent migration, not all/last batch. MIGRATION_TOOL_MISSING defined/type-pinned at existing DAEMON_INGRESS here; verifier/deployment children2/3 own missing-script detection/refusal, no invented call site. Fixed1700000000000-initial.js/LF bytes; later CLI create timestamps coding-seat migrations. Golden identity/name-only difference preserved. Four drills RED at intended seams, SHA256 restores proved, no leaked containers. Fresh opt-in owned6files102tests EXIT0 (51.70s): GENERATED PRODUCT install/up/down/build0, table PRESENT then ABSENT, pgmigrations1 then0. Scoped strict tsc0. Latest full typecheck1 ONLY foreign mcp-tool-allowlist.test.ts89/90 TS2554; earlier typecheck0, foundation35files756tests0/store52files675tests0 recorded with original anchors. Full daemon1:38failed/476passed files,180failed/9284passed/50skipped tests; all failing paths foreign, exact lines and contention caveat in comments. Root NOT RUN per governor msg-e35611 (no approved step names it); no repo-wide green claim. Latest evidence comment23fa1ce0. Nine owned paths declared; no moe-next manifest changes/root install."
 }

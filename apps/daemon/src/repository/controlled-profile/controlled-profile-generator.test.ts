@@ -1,17 +1,18 @@
 import { createHash } from "node:crypto";
 
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
 import {
   BOOTSTRAP_PRODUCT_NAME_INVALID,
   BOOTSTRAP_PROFILE_VERSION_UNKNOWN,
   CONTROLLED_PROFILE_VERSION,
+  MIGRATION_TOOL_MISSING,
   generateControlledProfile,
 } from "./controlled-profile-generator.js";
-import type { ControlledProfileTree } from "./controlled-profile-generator.js";
+import type { ControlledProfileRefusal, ControlledProfileRefusalCode, ControlledProfileTree } from "./controlled-profile-generator.js";
 
 /**
- * The golden for profile version `controlled-1`.
+ * The golden for profile version `controlled-2`.
  *
  * THE EXPECTATIONS ARE LINE ARRAYS FOR THE SAME REASON THE TEMPLATES ARE: a multi-line template
  * literal in this file would capture THIS file's checkout line endings, so the golden would pass on
@@ -26,7 +27,7 @@ import type { ControlledProfileTree } from "./controlled-profile-generator.js";
 const lines = (parts: readonly string[]): string => `${parts.join("\n")}\n`;
 
 /** Pinned independently of the manifest: a dropped file must not be able to shrink both sides. */
-const GOLDEN_FILE_COUNT = 22;
+const GOLDEN_FILE_COUNT = 23;
 
 const GOLDEN_MANIFEST: readonly string[] = [
   ".env.example  79bcb754cd763c0996100e4be74218a0b32b5be9f6b0c5908b33ee6db266f280",
@@ -35,7 +36,8 @@ const GOLDEN_MANIFEST: readonly string[] = [
   "README.md  a3dcfc8a3e2983866c7837be7939f6b604f06d4804a30261c4a3437512f82844",
   "docker-compose.yml  288945fa1cb9987f9bd53988e947bbdb4b46007a59a86237f6efdb229f718a1b",
   "e2e/smoke.spec.ts  a95824a6d628fd30f3f36ce95c23cbd7a33001632871c437f71908a955fde76b",
-  "package.json  d5f81c82fd8aea2c87b56231699fbf1127ef915b0ea11fa5de1579b385685273",
+  "migrations/1700000000000-initial.js  e3e86d8ce26dba4f1f3f8bb69572d7a37a99fc8c39eb7e8b4d7fb814c9317a5e",
+  "package.json  636ff642a319817c158ed9a9094d479bf231546cec745ffc710b2004a77803b3",
   "packages/api/package.json  c65c030d218fb886c4fd5818741c2ecc285525c4c18803318aaf74d6da333aa2",
   "packages/api/src/server.test.ts  7cfc1d3be1727f619954179bb72e238568e9a2cd328bda3af1c39eb41b04d4eb",
   "packages/api/src/server.ts  4626961d3835c02df9a029cb0d33b00b63c7929d0dc8480511c3ed545ec508a4",
@@ -48,7 +50,7 @@ const GOLDEN_MANIFEST: readonly string[] = [
   "packages/web/tsconfig.json  5a197bd00fae5a7454418d37d81843d9e0d066c581e4a2d01e836080cf9450b9",
   "packages/web/vite.config.ts  cfda1f16ee2db7d7b934da70509324a71f00fc42075424d10b8d165ed806c2d6",
   "playwright.config.ts  ea00147846c56cde50ac6975f343838358066c842db859634bbcc7e220148484",
-  "pnpm-lock.yaml  a6178fdb912e8767544df933c864ca9ac71ace4a4a83f75a3e2c45574737c045",
+  "pnpm-lock.yaml  0963d16c8e4227942c882ed08bdba2f8a7e74d4339b92bc6e10952357c286265",
   "pnpm-workspace.yaml  10b63061ba3d21ebb4a606a5bfcd508ef5fb53443df768ee81c841cff1bbe97e",
   "tsconfig.base.json  d63e25fd53b460a59be94b9e4a784cb7f4cb36bab4df879893e15c8793cd1136",
 ];
@@ -69,7 +71,13 @@ const EXPECTED_ROOT_PACKAGE_JSON = lines([
   "    \"build\": \"pnpm --recursive build\",",
   "    \"e2e\": \"playwright test\",",
   "    \"db:up\": \"docker compose up -d\",",
-  "    \"db:down\": \"docker compose down -v\"",
+  "    \"db:down\": \"docker compose down -v\",",
+  "    \"db:migrate\": \"node-pg-migrate up\",",
+  "    \"db:migrate:down\": \"node-pg-migrate down 1\"",
+  "  },",
+  "  \"dependencies\": {",
+  "    \"node-pg-migrate\": \"9.0.0\",",
+  "    \"pg\": \"8.23.0\"",
   "  },",
   "  \"devDependencies\": {",
   "    \"@playwright/test\": \"1.62.1\",",
@@ -145,6 +153,31 @@ function tree(productName: string, profileVersion: string = CONTROLLED_PROFILE_V
 }
 
 describe("the controlled profile generator", () => {
+  it("defines the missing-tool vocabulary without inventing a workspace detector", () => {
+    expect(MIGRATION_TOOL_MISSING).toBe("MIGRATION_TOOL_MISSING");
+    expectTypeOf<typeof MIGRATION_TOOL_MISSING>().toMatchTypeOf<ControlledProfileRefusalCode>();
+    expectTypeOf<ControlledProfileRefusal["refusedBy"]>().toEqualTypeOf<"DAEMON_INGRESS">();
+  });
+
+  it("identifies the migration-capable profile with a new version", () => {
+    expect(CONTROLLED_PROFILE_VERSION).toBe("controlled-2");
+  });
+
+  it("ships a migration tool with both directions and a nonempty migration", () => {
+    const files = tree("alpha-product").files;
+    const manifest = JSON.parse(files.get("package.json") ?? "{}") as {
+      readonly scripts?: Readonly<Record<string, string>>;
+      readonly dependencies?: Readonly<Record<string, string>>;
+    };
+    expect.soft(manifest.scripts?.["db:migrate"]).toBe("node-pg-migrate up");
+    expect.soft(manifest.scripts?.["db:migrate:down"]).toBe("node-pg-migrate down 1");
+    expect.soft(manifest.dependencies?.["node-pg-migrate"]).toBe("9.0.0");
+    expect.soft(manifest.dependencies?.["pg"]).toBe("8.23.0");
+    const migrations = [...files].filter(([path]) => path.startsWith("migrations/"));
+    expect(migrations.map(([path]) => path)).toEqual(["migrations/1700000000000-initial.js"]);
+    expect(migrations[0]?.[1].trim().length).toBeGreaterThan(0);
+  });
+
   it("emits the pinned tree for the profile version", () => {
     const result = tree("alpha-product");
 

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { generateControlledProfile } from "./controlled-profile/controlled-profile-generator.js";
+import { CONTROLLED_PROFILE_VERSION, generateControlledProfile } from "./controlled-profile/controlled-profile-generator.js";
 import { nodeGitRunner } from "./git-landing-port.js";
 import { createBootstrapGitPort, createBootstrapGhPort, nodeTreeWriter } from "./repository-bootstrap-ports.js";
 import { bootstrapRefusal } from "./repository-bootstrap-contracts.js";
@@ -12,7 +12,7 @@ import * as contracts from "./repository-bootstrap-contracts.js";
 import * as service from "./repository-bootstrap-service.js";
 const sha = "a".repeat(40);
 const request = (dir: string): BootstrapRequest => ({
-  dir, projectId: "project-example", productName: "sample", profileVersion: "controlled-1",
+  dir, projectId: "project-example", productName: "sample", profileVersion: CONTROLLED_PROFILE_VERSION,
 });
 const github = { owner: "moe-example", name: "sample", visibility: "private" } as const;
 const refusal = (code: string, detail?: string) => ({ code, refusedBy: "DAEMON_INGRESS", ...(detail ? { detail } : {}) });
@@ -108,7 +108,7 @@ describe("bootstrap service", () => {
       const generated = generateControlledProfile(input);
       expect(generated.ok).toBe(true);
       if (!generated.ok) throw new Error(generated.code);
-      expect(generated.files.size).toBe(22);
+      expect(generated.files.size).toBe(23);
       for (const [path, bytes] of generated.files) expect(readFileSync(join(root, path), "utf8")).toBe(bytes);
       const bound = { dir: resolve(root), sha: result.sha, remoteUrl: null, projectId: input.projectId, productName: input.productName };
       expect(ports.bindRepository).toHaveBeenCalledExactlyOnceWith(bound);

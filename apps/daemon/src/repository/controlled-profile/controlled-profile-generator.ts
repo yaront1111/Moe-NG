@@ -10,7 +10,7 @@ import { controlledProfileRootFiles } from "./controlled-profile-root-templates.
  *
  * Determinism is the contract, not a nicety. Everything the loop claims downstream — the verifier
  * recipe, the deployment requirements, the migration tool — is written against what a product
- * STARTED as. If two bootstraps of `controlled-1` could differ, none of those claims hold across
+ * STARTED as. If two bootstraps of `controlled-2` could differ, none of those claims hold across
  * products, so the generator reads no clock, no random source, no cwd, no host tool version and no
  * `os.EOL`: its only input is this request, and its only file read is the pinned lockfile asset.
  *
@@ -23,7 +23,7 @@ import { controlledProfileRootFiles } from "./controlled-profile-root-templates.
  */
 
 /** The single source DoD 4 names. Everything else in the profile is an artifact of this string. */
-export const CONTROLLED_PROFILE_VERSION = "controlled-1" as const;
+export const CONTROLLED_PROFILE_VERSION = "controlled-2" as const;
 
 /** Raised when a caller asks for a profile version this build does not know how to emit. */
 export const BOOTSTRAP_PROFILE_VERSION_UNKNOWN = "BOOTSTRAP_PROFILE_VERSION_UNKNOWN" as const;
@@ -36,6 +36,13 @@ export const BOOTSTRAP_PROFILE_VERSION_UNKNOWN = "BOOTSTRAP_PROFILE_VERSION_UNKN
 export const BOOTSTRAP_PRODUCT_NAME_INVALID = "BOOTSTRAP_PRODUCT_NAME_INVALID" as const;
 
 /**
+ * Missing workspace `db:migrate` script. Defined here for the verifier and deployment migration
+ * consumers (children 2 and 3); THEY detect and raise it, not this deterministic emitter.
+ * Its refusal uses the existing DAEMON_INGRESS layer via ControlledProfileRefusal/BootstrapRefusedBy.
+ */
+export const MIGRATION_TOOL_MISSING = "MIGRATION_TOOL_MISSING" as const;
+
+/**
  * Lowercase, digit- or letter-initial, hyphen-joined, at most 64 characters: the intersection of a
  * legal npm package name, a legal directory name on every host, and a string that needs no JSON
  * escaping. No `/g` flag, so `.test()` holds no cursor between calls.
@@ -44,7 +51,8 @@ export const CONTROLLED_PROFILE_NAME_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/;
 
 export type ControlledProfileRefusalCode =
   | typeof BOOTSTRAP_PROFILE_VERSION_UNKNOWN
-  | typeof BOOTSTRAP_PRODUCT_NAME_INVALID;
+  | typeof BOOTSTRAP_PRODUCT_NAME_INVALID
+  | typeof MIGRATION_TOOL_MISSING;
 
 export interface ControlledProfileRequest {
   readonly productName: string;
@@ -82,7 +90,7 @@ export interface ControlledProfileRefusal {
 
 export type ControlledProfileResult = ControlledProfileTree | ControlledProfileRefusal;
 
-/** The one known version. A profile bump adds a branch here and re-mints the lockfile asset. */
+/** Only the current version is accepted; a profile bump retires its predecessor's requests. */
 export function isKnownProfileVersion(value: string): value is typeof CONTROLLED_PROFILE_VERSION {
   return value === CONTROLLED_PROFILE_VERSION;
 }
@@ -107,7 +115,7 @@ export function refuseControlledProfile(code: ControlledProfileRefusalCode): Con
  * asset would then carry them; emitting those bytes would make the generated tree host-dependent
  * and break the golden. Normalizing on READ keeps the emitted bytes identical on every host.
  */
-const LOCKFILE_ASSET = new URL("./assets/controlled-profile-v1-lock.yaml", import.meta.url);
+const LOCKFILE_ASSET = new URL("./assets/controlled-profile-v2-lock.yaml", import.meta.url);
 
 function lockfileBytes(): string {
   return readFileSync(LOCKFILE_ASSET, "utf8").replaceAll("\r\n", "\n");

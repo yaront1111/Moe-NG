@@ -232,9 +232,26 @@ const API_SERVER_TEST_TS = file([
   "});",
 ]);
 
-/** Package entries of the profile, keyed by forward-slash relative path. */
+// Fixed filename and bytes: the scaffold never invokes the CLI's timestamped `create` command.
+const INITIAL_MIGRATION = file([
+  '/** @param {import("node-pg-migrate").MigrationBuilder} pgm */',
+  "export function up(pgm) {",
+  '  pgm.createTable("app_metadata", {',
+  '    key: { type: "text", primaryKey: true },',
+  '    value: { type: "text", notNull: true },',
+  "  });",
+  "}",
+  "",
+  '/** @param {import("node-pg-migrate").MigrationBuilder} pgm */',
+  "export function down(pgm) {",
+  '  pgm.dropTable("app_metadata");',
+  "}",
+]);
+
+/** Package entries and the initial schema, keyed by forward-slash relative path. */
 export function controlledProfilePackageFiles(): ReadonlyMap<string, string> {
   return new Map([
+    ["migrations/1700000000000-initial.js", INITIAL_MIGRATION],
     ["packages/api/package.json", API_PACKAGE_JSON],
     ["packages/api/src/server.test.ts", API_SERVER_TEST_TS],
     ["packages/api/src/server.ts", API_SERVER_TS],

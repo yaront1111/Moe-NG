@@ -63,12 +63,12 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor re-plan hand-back at architect-b63fabf3's request (#architects 22:20Z). This row's approved plan rotated the shared runtime-contract digest itself (runtime-vocabulary.ts, generated-client.ts, runtime-contract.test.ts, generated-coverage.test.ts, data-adapter.test.ts, approve-plan.test.tsx). That publish now belongs to task-64d2757c, which adds deployment.rollback with the other four pending kinds in ONE rotation; dependsOn already points there. Re-plan WITHOUT any packages/contracts or generated-client step: keep only the daemon/consumer half (what this row does with deployment.rollback once published). Row was unassigned with 0/5 steps started; nothing in flight.",
+  "reopenReason": "SUPERSEDED - parked for archival on the human's ruling (2026-09-06), resolving the scope question I raised in comment-0f1c0661b20348d188c0ed9a78d3936d. Of the two options I put forward - archive as absorbed, or re-scope with a rewritten DoD - the human chose archive.\n\nWHY IT HAS NO REMAINING WORK. All six of its DoD items are contract-surface clauses, and task-64d2757c06494c1f9016c5e2ffdf19fc (DONE, order 29) satisfied every one by publishing all pending kinds in a single rotation. Measured at HEAD: runtime-vocabulary.ts carries \"deployment.rollback\" in sorted position and runtime-contract.test.ts's count literal is reconciled. Re-running the roster entry, the regeneration, the census or the mirror drill would rotate GENERATED_CONTRACT_DIGEST a second time and invalidate the mirrors of every kind that landed in that batch - the exact harm the batched rotation was filed to end.\n\nWHY NOT RE-SCOPE INSTEAD. Its reopenReason asked for \"the daemon/consumer half\", but its own rail 1 reads \"CONTRACT SURFACE ONLY ... wires no daemon command, defines no refusal code, fences no principal and renders no UI\", and the DoD was never rewritten to match. The daemon half is already owned: task-b22462cf (roster wiring), task-2ab7b462 (MCP fence and count pins), task-da60dc4b (the effect). Re-scoping would have meant taking work three live rows hold.\n\nDEPENDENT REPOINTED, NOT LEFT TO AUTO-SATISFY. task-b22462cf9d9e41cd9472415da2c1fb7d depended on this row for the contract publication; its dependsOn now names task-64d2757c directly, which is the row that actually published it. It reports dependsOnUnmet 0 and is claimable. Nothing is stranded.\n\nNot DONE, because this row delivered nothing - parked, then archived.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "HIGH",
@@ -83,7 +83,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:50:20.683Z",
-  "updatedAt": "2026-09-06T07:39:09.548Z",
+  "updatedAt": "2026-09-06T11:02:23.394Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:58:22.027Z",
     "plannedStepCount": 5,
@@ -112,12 +112,10 @@
   "dependsOn": [
     "task-64d2757c06494c1f9016c5e2ffdf19fc"
   ],
-  "blockedReason": "SCOPE RULING NEEDED - no remaining unique work, and the DoD contradicts the reopen instruction. Full measurement in comment-0f1c0661b20348d188c0ed9a78d3936d.\n\nTHE CONTRACT HALF IS DONE. task-64d2757c06494c1f9016c5e2ffdf19fc (DONE, order 29) published every pending kind in one rotation. At HEAD: runtime-vocabulary.ts:91 carries \"deployment.rollback\" in sorted position; runtime-contract.test.ts:109 reads toBe(118). This row's DoD 1-6 are ALL contract-surface clauses and every one is satisfied. Re-running them would rotate GENERATED_CONTRACT_DIGEST again and invalidate the four kinds that landed together - the exact failure task-64d2757c was filed to end.\n\nTHE DoD AND THE REOPEN INSTRUCTION ARE OPPOSITES. reopenReason says \"keep only the daemon/consumer half\". Rail 1 on disk says \"CONTRACT SURFACE ONLY ... wires no daemon command, defines no refusal code, fences no principal and renders no UI.\" The DoD was never rewritten. I will not pick one silently.\n\nTHE DAEMON HALF IS ALREADY OWNED. `git grep -c \"deployment.rollback\" -- apps/daemon/src` = 0, so it is genuinely undone - but by task-b22462cf (WORKING: family table, WiredCommandKind union, PAYLOAD_KEYS, OPERATOR_PRINCIPAL_KINDS, registry entry), task-2ab7b462 (WORKING: MCP fence + count pins) and task-da60dc4b (WORKING: the effect). Taking it here collides with two live rows in the shared worktree.\n\nTWO OPTIONS, both a governor's call: (a) ARCHIVE as absorbed by task-64d2757c plus those three rows; or (b) RE-SCOPE with a rewritten DoD naming work no other row holds. Inventing scope to fill a row is how a duplicate lands.\n\nRELATED, AND MINE: task-5a8c3166b98b4614952068242993bf2b is superseded by the same rotation - I filed it hours before the batching decision. Recommend archive (comment-53fcec6a77634f1494c3922fec3d800c). Its parent task-537320eed95348dc9bc3afc879dc0563 still declares dependsOn against it, so archiving without clearing that edge leaves the parent gated forever.\n\nNo files touched. Nothing in flight.",
-  "blockedOnTaskIds": [
-    "task-5a8c3166b98b4614952068242993bf2b",
-    "task-537320eed95348dc9bc3afc879dc0563"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-09-06T07:39:09.548Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "SCOPE RULING NEEDED - no remaining unique work, and the DoD contradicts the reopen instruction. Full measurement in comment-0f1c0661b20348d188c0ed9a78d3936d.\n\nTHE CONTRACT HALF IS DONE. task-64d2757c06494c1f9016c5e2ffdf19fc (DONE, order 29) published every pending kind in one rotation. At HEAD: runtime-vocabulary.ts:91 carries \"deployment.rollback\" in sorted position; runtime-contract.test.ts:109 reads toBe(118). This row's DoD 1-6 are ALL contract-surface clauses and every one is satisfied. Re-running them would rotate GENERATED_CONTRACT_DIGEST again and invalidate the four kinds that landed together - the exact failure task-64d2757c was filed to end.\n\nTHE DoD AND THE REOPEN INSTRUCTION ARE OPPOSITES. reopenReason says \"keep only the daemon/consumer half\". Rail 1 on disk says \"CONTRACT SURFACE ONLY ... wires no daemon command, defines no refusal code, fences no principal and renders no UI.\" The DoD was never rewritten. I will not pick one silently.\n\nTHE DAEMON HALF IS ALREADY OWNED. `git grep -c \"deployment.rollback\" -- apps/daemon/src` = 0, so it is genuinely undone - but by task-b22462cf (WORKING: family table, WiredCommandKind union, PAYLOAD_KEYS, OPERATOR_PRINCIPAL_KINDS, registry entry), task-2ab7b462 (WORKING: MCP fence + count pins) and task-da60dc4b (WORKING: the effect). Taking it here collides with two live rows in the shared worktree.\n\nTWO OPTIONS, both a governor's call: (a) ARCHIVE as absorbed by task-64d2757c plus those three rows; or (b) RE-SCOPE with a rewritten DoD naming work no other row holds. Inventing scope to fill a row is how a duplicate lands.\n\nRELATED, AND MINE: task-5a8c3166b98b4614952068242993bf2b is superseded by the same rotation - I filed it hours before the batching decision. Recommend archive (comment-53fcec6a77634f1494c3922fec3d800c). Its parent task-537320eed95348dc9bc3afc879dc0563 still declares dependsOn against it, so archiving without clearing that edge leaves the parent gated forever.\n\nNo files touched. Nothing in flight."
 }

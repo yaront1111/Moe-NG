@@ -8,6 +8,7 @@ import { dirname } from "node:path";
 
 import { closeStores, openStore, openRestartableStore } from "../review/review-test-fixtures.js";
 import { deploymentInfrastructureFiles } from "../repository/deployment/deployment-infrastructure-templates.js";
+import { CONTROLLED_PROFILE_VERSION } from "../repository/controlled-profile/controlled-profile-generator.js";
 import {
   DEPLOY_BUILD_FAILED, DEPLOY_DOCKER_UNAVAILABLE, DEPLOY_ENGINE_STAMP, DEPLOY_HEALTH_TIMEOUT,
   DEPLOY_TARGET_MISSING, deployImageTag,
@@ -41,7 +42,7 @@ const SHA = "0123456789abcdef0123456789abcdef01234567";
 const OTHER_SHA = "fedcba9876543210fedcba9876543210fedcba98";
 const CONTEXT = "/workspace/app";
 const INCUMBENT = "app";
-const PROXY_CONFIG = deploymentInfrastructureFiles("controlled-1", []).get("docker/Caddyfile") ?? "";
+const PROXY_CONFIG = deploymentInfrastructureFiles(CONTROLLED_PROFILE_VERSION, []).get("docker/Caddyfile") ?? "";
 const LOCAL: DeployTarget = { network: "moe-net", sshTarget: null, url: "https://app.example.test" };
 const REMOTE: DeployTarget = { ...LOCAL, sshTarget: "deployer@host.example.test" };
 
