@@ -63,7 +63,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "PLANNING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -73,10 +73,17 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 121.5,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-0f1c0661b20348d188c0ed9a78d3936d",
+      "author": "architect-fa3a3e17",
+      "content": "MEASURED BEFORE RE-PLANNING: THIS ROW HAS NO REMAINING UNIQUE WORK. Not narrowing anything - reporting what is on disk (architect-fa3a3e17, 2026-09-06).\n\n1. THE CONTRACT HALF IS DONE, BY task-64d2757c06494c1f9016c5e2ffdf19fc (DONE, order 29, \"One digest rotation: publish every pending command kind at once\"). Measured at HEAD:\n  packages/contracts/src/runtime/runtime-vocabulary.ts:91 -> `\"deployment.deploy\", \"deployment.migrate_down\", \"deployment.rollback\",`\n  :92 -> `\"deployment.set_target\", \"design.read\", \"design.submit\", ...`\n  :108 -> `..., \"project.set_agent_provider\",`\n  runtime-contract.test.ts:109 -> `expect(commands.size).toBe(118)`\nSo `deployment.rollback` is published in SORTED position with both coupled assertions reconciled. This row's DoD 1 through 6 - roster membership, the regeneration, the digest census, the mirror mutation drill, the six-file diff - are ALL contract-surface clauses and all of them are now satisfied by that row. Re-running them here would re-do a landed rotation and rotate the digest again for every sibling, which is the exact failure task-64d2757c was filed to end (three collisions on the same two mirrors in one day).\n\n2. THE DoD ON DISK CONTRADICTS THE REOPEN INSTRUCTION. The reopenReason says: \"Re-plan WITHOUT any packages/contracts or generated-client step: keep only the daemon/consumer half (what this row does with deployment.rollback once published).\" But the definitionOfDone was never rewritten - all six items are contract-surface, and rail 1 still reads \"CONTRACT SURFACE ONLY. This row publishes a string on a roster and carries through the digest consequences. It wires no daemon command, defines no refusal code, fences no principal and renders no UI.\" The rail and the reopen instruction are exact opposites. I am not going to pick one silently.\n\n3. THE DAEMON/CONSUMER HALF IS ALREADY OWNED, so there is nothing for this row to take:\n  task-b22462cf9d9e41cd9472415da2c1fb7d (WORKING) - DoD 1 verbatim: \"`deployment.rollback` is wired across the daemon roster: the family table, the WiredCommandKind union, PAYLOAD_KEYS (whose key ORDER is the served order), OPERATOR_PRINCIPAL_KINDS, and a registry entry.\"\n  task-2ab7b462ab5440d18fa294e4e69047e2 (WORKING) - the MCP fence, HUMAN_ONLY_STEPS and every count pin.\n  task-da60dc4b39c5409788246f6ed7fa932c (WORKING) - the effect.\n  `git grep -c \"deployment.rollback\" -- apps/daemon/src` = 0, so the daemon work is genuinely undone - but it is undone BY THOSE ROWS, and duplicating it here would collide with two live rows in the shared worktree.\n\nWHAT I DID INSTEAD OF PLANNING: reported this row BLOCKED for a governor scope ruling. The options I can see are (a) archive it as fully absorbed by task-64d2757c plus the three daemon rows, or (b) re-scope it with a rewritten DoD naming work no other row holds. I cannot tell from here which is intended, and inventing scope to fill a row is how a duplicate lands.\n\nSAME ISSUE ON A ROW I FILED MYSELF: task-5a8c3166b98b4614952068242993bf2b (\"Publish deployment.migrate_down in the shared runtime contract\") is superseded by the same rotation - `deployment.migrate_down` is at runtime-vocabulary.ts:91. I have commented there too. That one is mine and I got it wrong by filing it hours before the batching decision; it should almost certainly be archived.",
+      "timestamp": "2026-09-06T07:38:31.680Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T19:50:20.683Z",
-  "updatedAt": "2026-09-05T22:27:20.404Z",
+  "updatedAt": "2026-09-06T07:39:09.548Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:58:22.027Z",
     "plannedStepCount": 5,
@@ -104,5 +111,13 @@
   "planApprovedAt": "2026-09-05T20:01:14.509Z",
   "dependsOn": [
     "task-64d2757c06494c1f9016c5e2ffdf19fc"
-  ]
+  ],
+  "blockedReason": "SCOPE RULING NEEDED - no remaining unique work, and the DoD contradicts the reopen instruction. Full measurement in comment-0f1c0661b20348d188c0ed9a78d3936d.\n\nTHE CONTRACT HALF IS DONE. task-64d2757c06494c1f9016c5e2ffdf19fc (DONE, order 29) published every pending kind in one rotation. At HEAD: runtime-vocabulary.ts:91 carries \"deployment.rollback\" in sorted position; runtime-contract.test.ts:109 reads toBe(118). This row's DoD 1-6 are ALL contract-surface clauses and every one is satisfied. Re-running them would rotate GENERATED_CONTRACT_DIGEST again and invalidate the four kinds that landed together - the exact failure task-64d2757c was filed to end.\n\nTHE DoD AND THE REOPEN INSTRUCTION ARE OPPOSITES. reopenReason says \"keep only the daemon/consumer half\". Rail 1 on disk says \"CONTRACT SURFACE ONLY ... wires no daemon command, defines no refusal code, fences no principal and renders no UI.\" The DoD was never rewritten. I will not pick one silently.\n\nTHE DAEMON HALF IS ALREADY OWNED. `git grep -c \"deployment.rollback\" -- apps/daemon/src` = 0, so it is genuinely undone - but by task-b22462cf (WORKING: family table, WiredCommandKind union, PAYLOAD_KEYS, OPERATOR_PRINCIPAL_KINDS, registry entry), task-2ab7b462 (WORKING: MCP fence + count pins) and task-da60dc4b (WORKING: the effect). Taking it here collides with two live rows in the shared worktree.\n\nTWO OPTIONS, both a governor's call: (a) ARCHIVE as absorbed by task-64d2757c plus those three rows; or (b) RE-SCOPE with a rewritten DoD naming work no other row holds. Inventing scope to fill a row is how a duplicate lands.\n\nRELATED, AND MINE: task-5a8c3166b98b4614952068242993bf2b is superseded by the same rotation - I filed it hours before the batching decision. Recommend archive (comment-53fcec6a77634f1494c3922fec3d800c). Its parent task-537320eed95348dc9bc3afc879dc0563 still declares dependsOn against it, so archiving without clearing that edge leaves the parent gated forever.\n\nNo files touched. Nothing in flight.",
+  "blockedOnTaskIds": [
+    "task-5a8c3166b98b4614952068242993bf2b",
+    "task-537320eed95348dc9bc3afc879dc0563"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-06T07:39:09.548Z"
 }
