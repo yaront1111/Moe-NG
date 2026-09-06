@@ -32,8 +32,14 @@ export type {
 } from "./activation-receipts-ports.js";
 
 const MANIFEST_FILE = "MANIFEST-CLOSURE.txt";
-const BACKUP_DIRECTORY = ".moe-next";
-const BACKUP_LEAF = "backups";
+export const BACKUP_DIRECTORY = ".moe-next";
+export const BACKUP_LEAF = "backups";
+export const SCHEDULED_BACKUP_LEAF = "scheduled";
+export const PRE_MIGRATION_BACKUP_LEAF = "pre-migration";
+const backupCodeLayers = Object.freeze({ BACKUP_FAILED: "DAEMON_ACTIVATION_RECEIPTS" } as const);
+export const backupFailure = () => Object.freeze({
+  code: "BACKUP_FAILED" as const, layer: backupCodeLayers.BACKUP_FAILED,
+});
 
 export interface ActivationReceiptInput {
   readonly agentCommand: string;
@@ -230,21 +236,32 @@ async function measureBackup(
     return unmeasuredReceipt("backup", receiptDetail(String(error)));
   }
   if (!outcome.ok) return unmeasuredReceipt("backup", receiptDetail(outcome.detail));
-  pruneBackups(ports, directory, destination);
+  const pruning = pruneBackups(ports, directory, destination);
+  if (pruning.failedRefs.length > 0) return unmeasuredReceipt("backup", "backup retention failed");
   const ref = `${destination}@sha256:${outcome.sha256}`;
   return measuredReceipt("backup", ref, String(outcome.byteLength), outcome.sha256);
 }
 
 /** Every activation used to leave a full store copy behind for ever; this many stay. */
 export const BACKUP_RETENTION = 5;
-const BACKUP_FILE = /^\d{17}\.sqlite$/u;
+const BACKUP_FILE = /^\d{17}\.(?:sqlite|sql)$/u;
+
+export interface BackupPruneResult {
+  readonly removedRefs: readonly string[];
+  readonly failedRefs: readonly string[];
+  readonly failure: ReturnType<typeof backupFailure> | null;
+}
 
 /**
  * Keeps the newest BACKUP_RETENTION copies (the stamps sort chronologically) and removes the
- * rest, never the one just written. Housekeeping only: a listing or removal that fails leaves the
- * measured receipt exactly as measured — the backup that was taken is real either way.
+ * rest, never the one just written. Only direct stamped files are eligible; never recurse into
+ * another owner's subtree. Callers must report both successful removals and failed attempts.
  */
-function pruneBackups(ports: ActivationReceiptPorts, directory: string, keep: string): void {
+export function pruneBackups(
+  ports: Pick<ActivationReceiptPorts, "fs">, directory: string, keep: string,
+): BackupPruneResult {
+  const removedRefs: string[] = [];
+  const failedRefs: string[] = [];
   try {
     const stamped = ports.fs.list(directory).filter((name) => BACKUP_FILE.test(name)).sort();
     const stale = stamped.slice(0, Math.max(0, stamped.length - BACKUP_RETENTION));
@@ -253,9 +270,12 @@ function pruneBackups(ports: ActivationReceiptPorts, directory: string, keep: st
       if (path === keep) continue;
       try {
         ports.fs.remove(path);
-      } catch { /* best effort: the next activation prunes again */ }
+        removedRefs.push(path);
+      } catch { failedRefs.push(path); }
     }
-  } catch { /* an unlistable directory prunes nothing */ }
+  } catch { failedRefs.push(directory); }
+  return Object.freeze({ removedRefs: Object.freeze(removedRefs), failedRefs: Object.freeze(failedRefs),
+    failure: failedRefs.length > 0 ? backupFailure() : null });
 }
 
 const sha256Bytes = (bytes: Uint8Array): string => createHash("sha256").update(bytes).digest("hex");

@@ -18,7 +18,10 @@ import type {
   ActivationReceipt, ActivationReceiptMember, ActivationReceipts, MeasuredReceipt,
   UnmeasuredReceipt,
 } from "./activation-receipts.js";
-import { BACKUP_RETENTION, measureActivationReceipts, nodeActivationReceiptPorts } from "./activation-receipts-measure.js";
+import {
+  BACKUP_DIRECTORY, BACKUP_LEAF, BACKUP_RETENTION, PRE_MIGRATION_BACKUP_LEAF,
+  SCHEDULED_BACKUP_LEAF, measureActivationReceipts, nodeActivationReceiptPorts, pruneBackups,
+} from "./activation-receipts-measure.js";
 import type { ActivationReceiptInput } from "./activation-receipts-measure.js";
 import type { ActivationReceiptFs, ActivationReceiptPorts } from "./activation-receipts-ports.js";
 import type { GitRunResult } from "../repository/git-landing-port.js";
@@ -590,6 +593,36 @@ describe("activation receipt measurement", () => {
 });
 
 describe("backup retention", () => {
+  it("shares subtree names and reports every deletion and failure", () => {
+    expect([BACKUP_DIRECTORY, BACKUP_LEAF, SCHEDULED_BACKUP_LEAF, PRE_MIGRATION_BACKUP_LEAF])
+      .toEqual([".moe-next", "backups", "scheduled", "pre-migration"]);
+    const { ports } = healthyPorts();
+    const directory = join(PROJECT_ROOT, "scheduled");
+    const names = Array.from({ length: BACKUP_RETENTION + 2 }, (_, i) =>
+      `${String(i).padStart(17, "0")}.sql`);
+    const removed: string[] = [];
+    const result = pruneBackups({ fs: { ...ports.fs, list: () => names, remove: (path) => {
+      if (path === join(directory, names[1]!)) throw new Error("denied");
+      removed.push(path);
+    } } }, directory, join(directory, names.at(-1)!));
+    const failure = { code: "BACKUP_FAILED", layer: LAYER };
+    expect(result).toEqual({ removedRefs: removed, failedRefs: [join(directory, names[1]!)], failure });
+    expect(removed).toEqual([join(directory, names[0]!)]);
+    expect(pruneBackups({ fs: { ...ports.fs, list: () => { throw new Error("denied"); } } },
+      directory, "")).toEqual({ removedRefs: [], failedRefs: [directory], failure });
+  });
+
+  it("refuses activation with its stable code and layer when retention fails", async () => {
+    const { ports } = healthyPorts();
+    const receipts = await measureActivationReceipts(INPUT, {
+      ...ports, fs: { ...ports.fs, list: () => { throw new Error("denied"); } },
+    });
+    const refusal = refusalOf(receipts, "backup");
+    expect({ code: refusal.code, layer: refusal.layer, detail: refusal.detail }).toEqual({
+      code: "ACTIVATION_BACKUP_FAILED", layer: LAYER, detail: "backup retention failed",
+    });
+  });
+
   const roots: string[] = [];
   afterEach(() => {
     while (roots.length > 0) {
