@@ -12,6 +12,7 @@
  * into the new scoped execution subject.
  */
 import type { PlanningRunApprovalState } from "./planning-run-read.js";
+import type { DeployRefusalCode } from "../deployment/deploy-receipt-contracts.js";
 
 export const RUNS_READ_PATH = "/runs/read" as const;
 const LAYER = "RUNS_READ" as const;
@@ -102,7 +103,22 @@ export interface RunGoalPublish {
   readonly sha: string | null;
   readonly url: string | null;
 }
+/** Project-scoped observation, not evidence that this goal owns a deployment.
+ * Target exposes only network and host (SSH username withheld); never raw sshTarget,
+ * binding URLs or refusal diagnostics. url is the admitted last receipt URL only.
+ * Absent receipt means absent status/sha/time/code, not a fabricated never-deployed receipt.
+ */
+export interface RunDeploymentView {
+  readonly environment: string;
+  readonly target?: { readonly network: string; readonly host?: string };
+  readonly sha?: string;
+  readonly time?: string;
+  readonly url?: string;
+  readonly status?: "DEPLOYED" | "REFUSED";
+  readonly code?: DeployRefusalCode;
+}
 export interface RunGoalView {
+  readonly deployments: readonly RunDeploymentView[];
   readonly goalId: string;
   readonly lifecycle: string | null;
   readonly nodes: readonly RunNodeView[];

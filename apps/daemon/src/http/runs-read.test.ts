@@ -4,6 +4,7 @@
  * clock) are injected so each status arm flips exactly one of them; the default readers are
  * exercised by the empty-world arm, which walks the real ledgers.
  */
+import { randomUUID } from "node:crypto";
 import { decodeGraphContent } from "@moe/scheduler";
 import { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
@@ -16,6 +17,11 @@ import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js"
 import { compiledPlanAuthority } from "../planning/compiled-authority-bodies.js";
 import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
 import type { WorkClaimRecord } from "../work/work-claim-read-model.js";
+import { recordDeployReceipt } from "../deployment/deploy-ledger.js";
+import type { RecordDeployReceiptInput } from "../deployment/deploy-ledger.js";
+import { DEPLOY_ENGINE_PRINCIPAL_ID, DEPLOY_RECEIPT_COMMAND_KIND, deployAggregateId, deployReceiptId }
+  from "../deployment/deploy-receipt-contracts.js";
+import { DEPLOY_TARGET_BOUND_EVENT, deployTargetAggregateId } from "../deployment/deploy-target-contracts.js";
 import type { RunsView } from "./runs-read-contract.js";
 import { createRunsReadPort } from "./runs-read.js";
 import type { NodeReviewFacts, NodeReviews, RunsReadOptions } from "./runs-read.js";
@@ -67,6 +73,113 @@ const quiet: NodeReviewFacts = Object.freeze({
   accepted: undefined, escalated: false, lineage: { unsuccessfulRounds: 0 }, replanned: false, rounds: [],
   unreadable: false, version: 0,
 });
+
+const deploymentBytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
+const DEPLOY_SHA = "a".repeat(40);
+function bindTarget(store: SqliteEventStore, environment: string, id: string, target: Record<string, unknown>): void {
+  const aggregateId = deployTargetAggregateId(PROJECT_ID, environment), bytes = deploymentBytes(target);
+  const committed = store.commitExpectedVersionDecision({
+    commandKind: "deployment.set_target", committedResultBytes: bytes, correlationId: id, decidedAt: NOW,
+    expectedVersion: store.getAggregateVersion(aggregateId), targetAggregateId: aggregateId,
+    key: { commandId: id, principalId: "principal-1", projectId: PROJECT_ID },
+    requestBytes: deploymentBytes({ kind: "deployment.set_target", payload: { environment, ...target } }),
+    events: [{ eventId: `${id}-${DEPLOY_TARGET_BOUND_EVENT}`, eventType: DEPLOY_TARGET_BOUND_EVENT, payload: bytes }],
+  });
+  expect(committed.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+}
+function deployment(store: SqliteEventStore, environment: string, id: string, overrides: Partial<RecordDeployReceiptInput> = {}): void {
+  expect(recordDeployReceipt(store, { projectId: PROJECT_ID, environment, decisionId: id, decidedAt: NOW,
+    sha: DEPLOY_SHA, imageDigest: `sha256:${"b".repeat(64)}`, refusal: null, releaseDecision: null, url: null,
+    ...overrides }).ok).toBe(true);
+}
+function deploymentRows(store: SqliteEventStore) {
+  const view = runs(portFor(store).readRuns({ goalRef: GOAL_ID }));
+  expect(view.goals.length).toBe(1);
+  const rows = view.goals[0]?.deployments;
+  expect(Array.isArray(rows)).toBe(true);
+  if (rows === undefined) throw new Error("deployment array missing");
+  return rows;
+}
+function malformedDeploymentTip(store: SqliteEventStore, environment: string): void {
+  const receiptId = deployReceiptId(PROJECT_ID, environment, "malformed-newer"), aggregateId = deployAggregateId(PROJECT_ID, environment);
+  const committed = store.commitExpectedVersionDecision({
+    commandKind: DEPLOY_RECEIPT_COMMAND_KIND, committedResultBytes: deploymentBytes({}),
+    correlationId: "malformed-newer", decidedAt: NOW, expectedVersion: store.getAggregateVersion(aggregateId),
+    targetAggregateId: aggregateId, key: { commandId: receiptId, principalId: DEPLOY_ENGINE_PRINCIPAL_ID, projectId: PROJECT_ID },
+    requestBytes: deploymentBytes({ receiptId }), events: [{ eventId: `${receiptId}-DeployRecorded`,
+      eventType: "EnvironmentDeployed", payload: deploymentBytes({ environment, outcome: "DEPLOYED", receiptId, sha: DEPLOY_SHA }) }],
+  });
+  expect(committed.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+}
+
+it("unions three durable environments with omitted missing facts and detached target copies", () => {
+  const store = boundWorld();
+  bindTarget(store, "alpha", "alpha-bind", { network: "alpha-net", sshTarget: null, url: "https://binding-only.example" });
+  deployment(store, "bravo", "bravo-deploy", { url: "https://bravo.example" });
+  bindTarget(store, "charlie", "charlie-bind", { network: "charlie-net", sshTarget: "operator@charlie.example", url: null });
+  deployment(store, "charlie", "charlie-deploy");
+  const rows = deploymentRows(store);
+  expect([...rows].sort((a, b) => a.environment.localeCompare(b.environment))).toStrictEqual([
+    { environment: "alpha", target: { network: "alpha-net" } },
+    { environment: "bravo", sha: DEPLOY_SHA, time: NOW, url: "https://bravo.example", status: "DEPLOYED" },
+    { environment: "charlie", target: { network: "charlie-net", host: "charlie.example" },
+      sha: DEPLOY_SHA, time: NOW, status: "DEPLOYED" },
+  ]);
+  expect(Object.isFrozen(rows) && rows.every((row) => Object.isFrozen(row)
+    && (row.target === undefined || Object.isFrozen(row.target)))).toBe(true);
+  const again = deploymentRows(store);
+  expect(again.find((row) => row.environment === "alpha")?.target)
+    .not.toBe(rows.find((row) => row.environment === "alpha")?.target);
+});
+
+it.each(["DEPLOY_BUILD_FAILED", "DEPLOY_DOCKER_UNAVAILABLE", "DEPLOY_HEALTH_TIMEOUT", "DEPLOY_TARGET_MISSING"] as const)(
+  "carries the durable refusal code verbatim: %s", (code) => {
+    const store = boundWorld();
+    deployment(store, "refused", "refused-deploy", { imageDigest: null,
+      refusal: { code, detail: "not projected", layer: "DAEMON_DEPLOY_ENGINE" } });
+    expect(deploymentRows(store)).toStrictEqual([{ environment: "refused", sha: DEPLOY_SHA, time: NOW, status: "REFUSED", code }]);
+  },
+);
+
+it("takes the last durable receipt rather than the greatest timestamp", () => {
+  const store = boundWorld(), earlier = "2026-09-01T00:00:00.000Z", replacement = "c".repeat(40);
+  deployment(store, "updated", "old", { url: "https://old.example" });
+  deployment(store, "updated", "new", { decidedAt: earlier, sha: replacement, url: "https://new.example" });
+  expect(deploymentRows(store)).toStrictEqual([
+    { environment: "updated", sha: replacement, time: earlier, url: "https://new.example", status: "DEPLOYED" },
+  ]);
+});
+
+it("withholds target usernames, private fields, diagnostics and authenticated receipt URLs", () => {
+  const store = boundWorld(), privateUser = randomUUID(), privateMarker = randomUUID();
+  const authenticatedUrl = `https://${privateUser}:${privateMarker}@private.example`;
+  const target = { network: "safe-net", sshTarget: `${privateUser}@safe.example`,
+    url: "https://binding-only.example", privateField: privateMarker };
+  const userinfo = /:\/\/[^/@\s"]+@/u;
+  expect([userinfo.test(authenticatedUrl), JSON.stringify(target).includes(privateUser),
+    JSON.stringify(target).includes(privateMarker)]).toEqual([true, true, true]);
+  bindTarget(store, "guarded", "guarded-bind", target);
+  deployment(store, "guarded", "guarded-refusal", { imageDigest: null, url: authenticatedUrl,
+    refusal: { code: "DEPLOY_BUILD_FAILED", detail: privateMarker, layer: "DAEMON_DEPLOY_ENGINE" } });
+  const rows = deploymentRows(store), wire = JSON.stringify(rows);
+  // Boolean-only guard runs before structural assertions, so a regression cannot dump private values.
+  expect(wire.includes(privateUser) || wire.includes(privateMarker) || userinfo.test(wire)).toBe(false);
+  expect(rows).toStrictEqual([{ environment: "guarded", target: { network: "safe-net", host: "safe.example" },
+    sha: DEPLOY_SHA, time: NOW, status: "REFUSED", code: "DEPLOY_BUILD_FAILED" }]);
+});
+
+it.each(["target", "newer receipt"] as const)("drops only the environment with a malformed %s", (mode) => {
+  const store = boundWorld();
+  deployment(store, "healthy", "healthy-receipt");
+  deployment(store, "broken", "initial-valid-receipt");
+  if (mode === "target") {
+    bindTarget(store, "broken", "old-target", { network: "valid-net", sshTarget: null, url: null });
+    bindTarget(store, "broken", "bad-target", { network: "invalid network", sshTarget: null, url: null });
+  } else malformedDeploymentTip(store, "broken");
+  expect(deploymentRows(store)).toStrictEqual([
+    { environment: "healthy", sha: DEPLOY_SHA, time: NOW, status: "DEPLOYED" },
+  ]);
+});
 const round = (route: string, number = 1): NodeReviewFacts["rounds"][number] =>
   ({ round: number, routing: { route } } as unknown as NodeReviewFacts["rounds"][number]);
 const claim = (nodeKey: string, expiresAt: string, status: "OPEN" | "RELEASED" = "OPEN"): [string, WorkClaimRecord] =>
@@ -104,6 +217,12 @@ function runs(result: ReturnType<ReturnType<typeof portFor>["readRuns"]>): RunsV
 }
 
 describe("createRunsReadPort", () => {
+  it("always serves the deployment roster even when nothing is configured", () => {
+    const view = runs(createRunsReadPort({ projectId: PROJECT_ID, store: boundWorld() }).readRuns({}));
+    expect(view.goals).toHaveLength(1);
+    expect(view.goals[0]).toHaveProperty("deployments", []);
+  });
+
   it("carries the receipt's tested tree identity without exposing its internal binding", () => {
     const store = boundWorld();
     const receipt = { byteCount: 2, evidenceSha256: "e".repeat(64), exitCode: 0 as const,

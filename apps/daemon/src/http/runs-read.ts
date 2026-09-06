@@ -15,6 +15,11 @@
  * leaves the node READY, as the affordance surface does; `review.latestRoute` says so.
  */
 import type { SqliteEventStore } from "@moe/store";
+import { productionDeployPorts } from "../deployment/deploy-command.js";
+import { readDeployLedger } from "../deployment/deploy-ledger.js";
+import { admitDeployUrl, deployTargetAggregateId } from "../deployment/deploy-target-contracts.js";
+import { admitEnvironmentName, deployAggregateId } from "../deployment/deploy-receipt-contracts.js";
+import type { DeployReceiptV1 } from "../deployment/deploy-receipt-contracts.js";
 
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
@@ -36,7 +41,7 @@ import { createPlanningRunReadPort } from "./planning-run-read.js";
 import type { PlanningRunReadResult } from "./planning-run-read.js";
 import { runsRefused as refused } from "./runs-read-contract.js";
 import type {
-  RunGoalView, RunNodeFinding, RunNodeReview, RunNodeStatus, RunNodeView, RunsReadPort,
+  RunDeploymentView, RunGoalView, RunNodeFinding, RunNodeReview, RunNodeStatus, RunNodeView, RunsReadPort,
   RunsReadResult, RunsSelector, RunsView,
 } from "./runs-read-contract.js";
 
@@ -139,6 +144,56 @@ function statusOf(
   return "READY";
 }
 
+/** The ledger skips malformed newer decisions: never mislabel an older receipt as last. */
+function deployReceiptIsTip(store: SqliteEventStore, receipt: DeployReceiptV1): boolean {
+  const aggregateId = deployAggregateId(receipt.projectId, receipt.environment);
+  const version = store.getAggregateVersion(aggregateId);
+  if (version < 1) return false;
+  const page = store.readAggregateEvents(aggregateId, version - 1, 1);
+  const event = page.items[0];
+  if (page.hasMore || page.items.length !== 1 || event === undefined
+    || event.eventId !== `${receipt.receiptId}-DeployRecorded`
+    || event.aggregateId !== aggregateId || event.aggregateSequence !== version
+    || event.decisionTrace?.commandId !== receipt.receiptId
+    || event.eventType !== (receipt.outcome === "DEPLOYED" ? "EnvironmentDeployed" : "EnvironmentDeployRefused")) return false;
+  const payload: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(event.payload));
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return false;
+  const row = payload as Record<string, unknown>;
+  return Object.keys(row).length === 4 && row.environment === receipt.environment
+    && row.receiptId === receipt.receiptId && row.outcome === receipt.outcome && row.sha === receipt.sha
+    && store.getAggregateVersion(aggregateId) === version;
+}
+
+function deploymentsOf(store: SqliteEventStore, projectId: string): readonly RunDeploymentView[] {
+  const ledger = readDeployLedger(store, projectId);
+  const prefix = deployTargetAggregateId(projectId, "");
+  const bound = new Set(store.enumerateAggregateIdsByPrefix(prefix).map((id) => id.slice(prefix.length)));
+  const targetOf = productionDeployPorts(store, projectId).target;
+  const rows: RunDeploymentView[] = [];
+  // No binding and no receipt means no environment row; never invent a fixed roster.
+  for (const environment of [...new Set([...bound, ...ledger.keys()])].sort()) {
+    try {
+      if (admitEnvironmentName(environment) === null) continue;
+      const target = targetOf(environment);
+      const receipt = ledger.get(environment)?.current;
+      if ((bound.has(environment) && target === null)
+        || (receipt !== undefined && !deployReceiptIsTip(store, receipt))
+        || (receipt === undefined && store.getAggregateVersion(deployAggregateId(projectId, environment)) > 0)) continue;
+      if (target === null && receipt === undefined) continue;
+      const url = receipt === undefined ? null : admitDeployUrl(receipt.url);
+      rows.push(Object.freeze({
+        environment,
+        ...(target === null ? {} : { target: Object.freeze({ network: target.network,
+          ...(target.sshTarget === null ? {} : { host: target.sshTarget.split("@").at(-1)! }) }) }),
+        ...(receipt === undefined ? {} : { sha: receipt.sha, time: receipt.decidedAt, status: receipt.outcome }),
+        ...(receipt?.refusal == null ? {} : { code: receipt.refusal.code }),
+        ...(url === null ? {} : { url }),
+      }));
+    } catch { /* A malformed environment cannot blank the other goals/environments. */ }
+  }
+  return Object.freeze(rows);
+}
+
 export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
   const { projectId, store } = options;
   const clock = options.clock ?? ((): string => new Date().toISOString());
@@ -155,10 +210,12 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
     goal: BoundGoalRow, nodes: readonly SealedNode[], shared: ReadonlySet<string>,
     claims: ReadonlyMap<string, WorkClaimRecord>, reviews: NodeReviews,
     latest: ReadonlyMap<string, string>, now: string, publishes: ReadonlyMap<string, GoalPublishState>,
+    deployments: readonly RunDeploymentView[],
   ): RunGoalView => {
     const run = goal.planningRunRef === null ? null : readRun(store, projectId, goal.planningRunRef);
     const own = nodes.filter((node) => node.goalRef === goal.goalId);
     return Object.freeze({
+      deployments,
       goalId: goal.goalId,
       lifecycle: goal.lifecycle,
       nodes: Object.freeze(own.map((node): RunNodeView => {
@@ -227,7 +284,8 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
       const latest = lastDecidedAt(store, projectId, nodeKeys);
       const now = clock();
       const publishes = readPublish(store, projectId);
-      const views = goals.map((goal) => goalView(goal, nodes, shared, claims, reviews, latest, now, publishes));
+      const deployments = deploymentsOf(store, projectId);
+      const views = goals.map((goal) => goalView(goal, nodes, shared, claims, reviews, latest, now, publishes, deployments));
       const totals: Record<RunNodeStatus, number> = {
         ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0,
         IN_PROGRESS: 0, READY: 0, REPLANNED: 0, UNATTRIBUTABLE: 0,

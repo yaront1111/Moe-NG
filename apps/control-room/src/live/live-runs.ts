@@ -1,8 +1,7 @@
 /**
  * The RUNS & LEASES read client: POST /runs/read with EXACTLY `{}` and shape what the daemon
  * says - verbatim - into RUNS / REFUSED / ERROR. READS ONLY. Exact-key snapshots at every
- * level (the discipline of live-planning-run.ts); a nested row that drifts reddens the whole
- * answer, never a half-board.
+ * level; malformed project deployment observations drop only that environment.
  */
 
 const LIVE_RUNS_LAYER = "CONTROL_ROOM_LIVE_RUNS";
@@ -82,7 +81,19 @@ export interface RunGoalPublishView {
   readonly sha: string | null;
   readonly url: string | null;
 }
+const DEPLOY_CODES = ["DEPLOY_BUILD_FAILED", "DEPLOY_DOCKER_UNAVAILABLE", "DEPLOY_HEALTH_TIMEOUT", "DEPLOY_TARGET_MISSING"] as const;
+export interface RunDeploymentView {
+  readonly environment: string;
+  readonly target?: { readonly network: string; readonly host?: string };
+  readonly sha?: string;
+  readonly time?: string;
+  readonly url?: string;
+  readonly status?: "DEPLOYED" | "REFUSED";
+  readonly code?: (typeof DEPLOY_CODES)[number];
+}
 export interface RunGoalView {
+  /** Optional for existing view constructors; REQUIRED on the exact daemon wire. */
+  readonly deployments?: readonly RunDeploymentView[];
   readonly goalId: string;
   readonly lifecycle: string | null;
   readonly nodes: readonly RunNodeView[];
@@ -274,10 +285,41 @@ function publishOf(value: unknown): RunGoalPublishView | null {
   });
 }
 
+function deploymentOf(value: unknown): RunDeploymentView | null {
+  try {
+    if (typeof value !== "object" || value === null) return null;
+    const keys = ["environment", "target", "sha", "time", "url", "status", "code"];
+    const row = exactDataRecord(value, keys.filter((key) => Object.hasOwn(value, key)));
+    if (row === null || typeof row.environment !== "string" || !/^[a-z][a-z0-9-]{0,62}$/u.test(row.environment)) return null;
+    for (const key of ["sha", "time", "url", "status", "code"]) {
+      if (Object.hasOwn(row, key) && !nonEmptyString(row[key])) return null;
+    }
+    let target: RunDeploymentView["target"];
+    if (Object.hasOwn(row, "target")) {
+      const raw = row.target;
+      const item = exactDataRecord(raw, typeof raw === "object" && raw !== null && Object.hasOwn(raw, "host")
+        ? ["network", "host"] : ["network"]);
+      if (item === null || typeof item.network !== "string" || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/u.test(item.network)
+        || (Object.hasOwn(item, "host") && (typeof item.host !== "string" || !/^[a-zA-Z0-9_][a-zA-Z0-9._-]{0,253}$/u.test(item.host)))) return null;
+      target = Object.freeze({ network: item.network, ...(typeof item.host === "string" ? { host: item.host } : {}) });
+    }
+    if (row.status === undefined) {
+      if (target === undefined || row.sha !== undefined || row.time !== undefined || row.url !== undefined || row.code !== undefined) return null;
+    } else if ((row.status !== "DEPLOYED" && row.status !== "REFUSED")
+      || typeof row.sha !== "string" || !/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u.test(row.sha) || !nonEmptyString(row.time)
+      || (row.status === "REFUSED" ? !(DEPLOY_CODES as readonly unknown[]).includes(row.code) : row.code !== undefined)) return null;
+    if (typeof row.url === "string") {
+      const url = new URL(row.url);
+      if (row.url.length > 512 || !["http:", "https:"].includes(url.protocol) || url.username !== "" || url.password !== "") return null;
+    }
+    return Object.freeze({ ...row, ...(target === undefined ? {} : { target }) }) as unknown as RunDeploymentView;
+  } catch { return null; }
+}
+
 function goalOf(value: unknown): RunGoalView | null {
-  const record = exactDataRecord(value, ["goalId", "lifecycle", "nodes", "publish", "run", "title"]);
+  const record = exactDataRecord(value, ["deployments", "goalId", "lifecycle", "nodes", "publish", "run", "title"]);
   if (record === null || !nonEmptyString(record.goalId) || !nullableString(record.lifecycle)
-    || !nullableString(record.title)) return null;
+    || !nullableString(record.title) || !Array.isArray(record.deployments)) return null;
   const nodes = listOf(record.nodes, nodeOf);
   if (nodes === null) return null;
   let run: RunGoalView["run"] = null;
@@ -295,7 +337,9 @@ function goalOf(value: unknown): RunGoalView | null {
     publish = publishOf(record.publish);
     if (publish === null) return null;
   }
-  return Object.freeze({ goalId: record.goalId, lifecycle: record.lifecycle, nodes, publish, run, title: record.title });
+  const deployments = Object.freeze(record.deployments
+    .flatMap((value: unknown) => { const row = deploymentOf(value); return row === null ? [] : [row]; }));
+  return Object.freeze({ deployments, goalId: record.goalId, lifecycle: record.lifecycle, nodes, publish, run, title: record.title });
 }
 
 const TOTAL_KEYS = [...RUN_NODE_STATUSES, "goals", "nodes"] as const;
@@ -316,7 +360,6 @@ export function mapRunsAnswer(status: number, response: unknown): RunsOutcome {
   });
 }
 
-/** POSTs exactly `{}` and maps the reply; `post` is injectable for tests. */
 /** POSTs exactly `{}` (every goal) or `{ goalRef }` (one goal) and maps the reply; `post` is injectable for tests. */
 export async function readRuns(
   headers: Readonly<Record<string, string>>, post?: (body: string) => Promise<Response>, goalRef?: string,
