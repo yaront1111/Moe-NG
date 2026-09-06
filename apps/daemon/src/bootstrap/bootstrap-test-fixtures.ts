@@ -356,6 +356,9 @@ export function activatePayload(
 export const FIXTURE_ACTIVATION_RECEIPTS: ActivationReceipts = Object.freeze({
   distribution: Object.freeze({ kind: "SOURCE_CHECKOUT" as const, root: "/fixture/project" }),
   measuredAt: "2026-01-01T00:00:00.000Z",
+  // Not a witness key: the reading rides beside the receipts and is published on the read
+  // route, so a fixture that omitted it would not typecheck rather than silently shrink.
+  provider: Object.freeze({ command: "claude", version: "2.1.261" }),
   members: Object.freeze([
     measuredReceipt("repository", "repository//fixture/project", "fixture head"),
     measuredReceipt("provider", "provider-profile-1", "credential-1"),

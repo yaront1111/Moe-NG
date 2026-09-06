@@ -11,7 +11,9 @@ import { SQLITE_APPLICATION_ID } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { loginCredentialPath, providerFor } from "../orchestrator/moe-up-credentials.js";
-import { ACTIVATION_RECEIPT_CODES, ACTIVATION_RECEIPT_MEMBERS } from "./activation-receipts.js";
+import {
+  ACTIVATION_RECEIPT_CODES, ACTIVATION_RECEIPT_MEMBERS, PROVIDER_VERSION_UNKNOWN,
+} from "./activation-receipts.js";
 import type {
   ActivationReceipt, ActivationReceiptMember, ActivationReceipts, MeasuredReceipt,
   UnmeasuredReceipt,
@@ -41,6 +43,7 @@ interface FakeState {
   readonly existing: Set<string>;
   readonly gitCalls: GitCall[];
   mkdirError: string | null;
+  readonly versionCalls: string[];
 }
 
 function fakeFs(state: FakeState): ActivationReceiptFs {
@@ -61,9 +64,19 @@ function fakeFs(state: FakeState): ActivationReceiptFs {
 const gitOk = (stdout: string): GitRunResult => ({ code: 0, stderr: "", stdout: `${stdout}\n` });
 const gitFail = (code: number, stderr: string): GitRunResult => ({ code, stderr, stdout: "" });
 
+/**
+ * What `claude --version` actually prints on this host: the version FIRST, trailing prose after
+ * it. Transcribed from a real run rather than invented, because a parser proved against a shape
+ * nobody observed is the same defect in the test that this member exists to remove in production.
+ */
+const CLAUDE_VERSION_STDOUT = "2.1.261 (Claude Code)\n";
+/** And `codex --version`: the NAME first, the version second. The other real shape. */
+const CODEX_VERSION_STDOUT = "codex-cli 0.153.4\n";
+
 function healthyPorts(): { readonly ports: ActivationReceiptPorts; readonly state: FakeState } {
   const state: FakeState = {
     bytes: new Map(), existing: new Set([STORE_PATH]), gitCalls: [], mkdirError: null,
+    versionCalls: [],
   };
   const ports: ActivationReceiptPorts = {
     backup: () => Promise.resolve({ byteLength: 2048, ok: true as const, sha256: BACKUP_SHA }),
@@ -79,6 +92,10 @@ function healthyPorts(): { readonly ports: ActivationReceiptPorts; readonly stat
     },
     installedPolicySliceRefs: () => Promise.resolve([SLICE_A, SLICE_B]),
     now: () => new Date(CLOCK),
+    providerVersion: (command: string) => {
+      state.versionCalls.push(command);
+      return Promise.resolve({ code: 0, stderr: "", stdout: CLAUDE_VERSION_STDOUT });
+    },
     sqliteApplicationId: () => SQLITE_APPLICATION_ID,
   };
   return { ports, state };
@@ -154,7 +171,129 @@ describe("activation receipt measurement", () => {
     expect(receipts.repository).toEqual({ headSha: HEAD_SHA, toplevel: PROJECT_ROOT });
     expect(receipts.store).toEqual({ storePath: STORE_PATH });
     expect(receipts.distribution).toEqual({ kind: "SOURCE_CHECKOUT", root: ARTIFACT_ROOT });
+    expect(receipts.provider).toEqual({ command: "claude", version: "2.1.261" });
     expect(receipts.signing.ref).toBe("signing/unsigned-source-checkout");
+  });
+
+  it("reads the version out of BOTH real CLI shapes, from the command it will launch", async () => {
+    const { ports, state } = healthyPorts();
+    const claude = await measureActivationReceipts(INPUT, ports);
+    expect(claude.provider).toEqual({ command: "claude", version: "2.1.261" });
+    // Run against the CONFIGURED command, not a hard-coded "claude": a host set to codex must
+    // not have a claude reading attributed to it.
+    expect(state.versionCalls).toEqual(["claude"]);
+
+    const codex = await measureActivationReceipts({ ...INPUT, agentCommand: "codex" }, {
+      ...ports,
+      env: { CODEX_ACCESS_TOKEN: "sk-CANARY-placeholder" },
+      providerVersion: () => Promise.resolve({ code: 0, stderr: "", stdout: CODEX_VERSION_STDOUT }),
+    });
+    expect(codex.provider).toEqual({ command: "codex", version: "0.153.4" });
+    expect(measuredOf(codex, "provider").measured).toBe(true);
+  });
+
+  it("refuses the WHOLE provider member when the CLI cannot be run at all", async () => {
+    const { ports } = healthyPorts();
+    const receipts = await measureActivationReceipts(INPUT, {
+      ...ports,
+      providerVersion: () =>
+        Promise.resolve({ code: null, stderr: "spawn claude ENOENT", stdout: "" }),
+    });
+
+    const refusal = refusalOf(receipts, "provider");
+    expect(refusal.code).toBe("ACTIVATION_PROVIDER_UNMEASURED");
+    expect(refusal.layer).toBe(LAYER);
+    expect(refusal.detail).toBe("spawn claude ENOENT");
+    // No reading survives a refusal, and no OTHER member is dragged down with it.
+    expect(receipts.provider).toBeNull();
+    for (const other of ACTIVATION_RECEIPT_MEMBERS) {
+      if (other !== "provider") expect(measuredOf(receipts, other).measured).toBe(true);
+    }
+  });
+
+  it("names the command when a CLI that could not run said nothing about why", async () => {
+    const { ports } = healthyPorts();
+    const receipts = await measureActivationReceipts(INPUT, {
+      ...ports, providerVersion: () => Promise.resolve({ code: null, stderr: "   ", stdout: "" }),
+    });
+    expect(refusalOf(receipts, "provider").detail).toBe("claude --version could not be run");
+  });
+
+  it("turns a thrown provider runner into a refusal instead of a rejection", async () => {
+    const { ports } = healthyPorts();
+    const receipts = await measureActivationReceipts(INPUT, {
+      ...ports, providerVersion: () => { throw new Error("EPERM: spawn denied"); },
+    });
+    const refusal = refusalOf(receipts, "provider");
+    expect(refusal.code).toBe("ACTIVATION_PROVIDER_UNMEASURED");
+    expect(refusal.detail).toBe("Error: EPERM: spawn denied");
+  });
+
+  it.each([
+    ["prose with no version in it", 0, "Claude Code\n"],
+    ["empty output", 0, ""],
+    ["a CLI that ran and exited non-zero", 1, ""],
+  ])(
+    "records UNKNOWN rather than a guess when the CLI ANSWERED but said no version: %s",
+    async (_name, code, stdout) => {
+      const { ports } = healthyPorts();
+      const receipts = await measureActivationReceipts(INPUT, {
+        ...ports, providerVersion: () => Promise.resolve({ code, stderr: "", stdout }),
+      });
+
+      // MEASURED, not refused: the daemon took the reading and reports what it could not read.
+      expect(measuredOf(receipts, "provider").measured).toBe(true);
+      expect(receipts.provider).toEqual({ command: "claude", version: PROVIDER_VERSION_UNKNOWN });
+      expect(PROVIDER_VERSION_UNKNOWN).toBe("UNKNOWN");
+    },
+  );
+
+  /**
+   * The arms above drive the MEASURER through a fake port. This one drives the REAL port, so
+   * that "measured" is not a claim about a fake: a `providerVersion` that never launched a
+   * process would leave every arm above green while the daemon read nothing.
+   *
+   * `process.execPath` stands in for the agent CLI because it is a real executable that is
+   * certain to exist here and answers `--version` in the same shape (`v24.10.0`); the point
+   * under test is the SPAWN and its parse, not which binary answered.
+   */
+  it("runs a real process through the real port, and reports a real absence as one", async () => {
+    const ports = nodeActivationReceiptPorts();
+    const ran = await ports.providerVersion(process.execPath);
+    expect(ran.code).toBe(0);
+    expect(ran.stdout).toMatch(/^v?\d+\.\d+\.\d+/u);
+
+    const absent = await ports.providerVersion(`moe-no-such-cli-${randomUUID()}`);
+    // `code: null` is the discriminator the measurer refuses on. An exit code here would mean
+    // a process ran, and the refusal arm above would be unreachable in production.
+    expect(absent.code).toBeNull();
+    expect(absent.stderr).not.toBe("");
+  }, 120_000);
+
+  it("bounds a version a hostile or chatty CLI printed, rather than committing it whole", async () => {
+    const { ports } = healthyPorts();
+    const receipts = await measureActivationReceipts(INPUT, {
+      ...ports,
+      providerVersion: () => Promise.resolve({
+        code: 0, stderr: "", stdout: `1.2.3-${"a".repeat(4096)}\n`,
+      }),
+    });
+    const reading = receipts.provider;
+    expect(reading).not.toBeNull();
+    // This value is committed to the ledger and rendered on a card. `5` is `1.2.3` and the
+    // tail is capped at 48, so no CLI can push 4 KB of its own choosing into a receipt.
+    expect(reading?.version).toHaveLength(5 + 48);
+    expect(reading?.version.startsWith("1.2.3-")).toBe(true);
+  });
+
+  it("takes NO version reading of its own: the measurement module never spawns", () => {
+    const source = readFileSync(MODULE_SOURCE, "utf8");
+    // The refusal arms above are only worth anything if the port is the ONLY way out to a
+    // process. A direct spawn here would make them unreachable while they stayed green.
+    // Matched as CODE, not as prose: this module's own comments say "unspawnable".
+    expect(source).not.toMatch(/from\s+"node:child_process"/u);
+    expect(source).not.toMatch(/\b(?:execFile|execFileSync|execSync|spawn|spawnSync)\s*\(/u);
+    expect(source).toContain("ports.providerVersion(");
   });
 
   it.each(ACTIVATION_RECEIPT_MEMBERS)(
@@ -253,6 +392,9 @@ describe("activation receipt measurement", () => {
       nodeActivationReceiptPorts({
         committedProbeRef: fakes.committedProbeRef, git: fakes.git,
         installedPolicySliceRefs: fakes.installedPolicySliceRefs,
+        // The real filesystem is what these arms are measuring; the provider CLI is not, and
+        // leaving it live would spawn an external process per arm.
+        providerVersion: fakes.providerVersion,
       }),
     );
     const backup = measuredOf(receipts, "backup");
@@ -288,6 +430,9 @@ describe("activation receipt measurement", () => {
       nodeActivationReceiptPorts({
         committedProbeRef: fakes.committedProbeRef, git: fakes.git,
         installedPolicySliceRefs: fakes.installedPolicySliceRefs,
+        // The real filesystem is what these arms are measuring; the provider CLI is not, and
+        // leaving it live would spawn an external process per arm.
+        providerVersion: fakes.providerVersion,
       }),
     );
     const refusal = refusalOf(receipts, "backup");
@@ -308,7 +453,10 @@ describe("activation receipt measurement", () => {
       { ...INPUT, projectRoot, storePath },
       nodeActivationReceiptPorts({
         committedProbeRef: fakes.committedProbeRef, git: fakes.git,
-        installedPolicySliceRefs: fakes.installedPolicySliceRefs, now: fakes.now,
+        installedPolicySliceRefs: fakes.installedPolicySliceRefs,
+        // The real filesystem is what these arms are measuring; the provider CLI is not, and
+        // leaving it live would spawn an external process per arm.
+        providerVersion: fakes.providerVersion, now: fakes.now,
       }),
     );
     const refusal = refusalOf(receipts, "backup");
@@ -469,6 +617,9 @@ describe("backup retention", () => {
       nodeActivationReceiptPorts({
         committedProbeRef: fakes.committedProbeRef, git: fakes.git,
         installedPolicySliceRefs: fakes.installedPolicySliceRefs,
+        // The real filesystem is what these arms are measuring; the provider CLI is not, and
+        // leaving it live would spawn an external process per arm.
+        providerVersion: fakes.providerVersion,
       }),
     );
     const written = basename(measuredOf(receipts, "backup").ref.split("@sha256:")[0] ?? "");

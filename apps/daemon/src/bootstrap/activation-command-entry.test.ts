@@ -47,6 +47,11 @@ describe("the daemon's activation receipt ports read the durable store", () => {
       },
       git: () => Promise.resolve({ code: 0, stderr: "", stdout: `${"1".repeat(40)}\n` }),
       now: () => new Date("2026-09-04T09:15:00.123Z"),
+      // `fixture-agent` is not installed on any host, and the REAL reader would correctly
+      // refuse it ACTIVATION_PROVIDER_UNMEASURED. What these arms measure is the two DURABLE
+      // readers, so the CLI probe is faked out like every other non-durable port.
+      providerVersion: () =>
+        Promise.resolve({ code: 0, stderr: "", stdout: "fixture-agent 1.0.0\n" }),
       sqliteApplicationId: () => 1297040689,
     });
   }

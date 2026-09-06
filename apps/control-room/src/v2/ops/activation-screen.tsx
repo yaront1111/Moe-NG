@@ -3,7 +3,8 @@ import type { JSX } from "react";
 
 import { readActivation } from "../../live/live-activation.js";
 import type {
-  ActivationMember, ActivationReadOutcome, ActivationReceiptView, ActivationSigningView,
+  ActivationMember, ActivationProviderView, ActivationReadOutcome, ActivationReceiptView,
+  ActivationSigningView,
 } from "../../live/live-activation.js";
 import type { LiveSetup } from "../../live/live-config.js";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
@@ -53,7 +54,18 @@ export interface ActivationChainState {
 
 const kindWords = (kind: string): string => WORK_KIND_LABELS[kind]?.label ?? kind;
 
-function ReceiptRow({ receipt }: { readonly receipt: ActivationReceiptView }): JSX.Element {
+/**
+ * The provider CLI version the DAEMON read, rendered beside the member it belongs to and
+ * NOWHERE ELSE: this line is the operator's only sight of that reading, and a card that
+ * showed it while the provider receipt was missing would be asserting a measurement that
+ * did not stand. `version` is printed verbatim, `UNKNOWN` included — the daemon says that
+ * when the CLI answered something it could not read, and softening it here would put the
+ * browser back to describing a reading nobody took.
+ */
+function ReceiptRow({ reading, receipt }: {
+  readonly reading?: ActivationProviderView | null | undefined;
+  readonly receipt: ActivationReceiptView;
+}): JSX.Element {
   return (
     <li
       className="cr2-coverage-section"
@@ -66,6 +78,11 @@ function ReceiptRow({ receipt }: { readonly receipt: ActivationReceiptView }): J
       <span className="cr2-needs-detail" data-testid={`cr.activate.reason.${receipt.member}`}>
         {receipt.reason}
       </span>
+      {reading === undefined || reading === null ? null : (
+        <span className="cr2-approve-mono" data-testid="cr.activate.version">
+          {`${reading.command} --version ${MIDDOT} ${reading.version}`}
+        </span>
+      )}
       {receipt.measured ? null : (
         <span className="cr2-approve-mono" data-testid={`cr.activate.code.${receipt.member}`}>
           {`${receipt.code ?? ""} @ ${receipt.layer ?? ""}`}
@@ -143,7 +160,13 @@ export function ActivateScreen({ chain, outcome }: {
         {`Activate the project ${MIDDOT} ${String(measured)} of ${String(outcome.members.length)} receipts measured`}
       </p>
       <ul className="cr2-approve-obligations" data-testid="cr.activate.receipts">
-        {outcome.members.map((receipt) => <ReceiptRow key={receipt.member} receipt={receipt} />)}
+        {outcome.members.map((receipt) => (
+          <ReceiptRow
+            key={receipt.member}
+            reading={receipt.member === "provider" ? outcome.provider : undefined}
+            receipt={receipt}
+          />
+        ))}
       </ul>
       <SigningRow signing={outcome.signing} />
       {chain === undefined || chain.onActivate === null ? (

@@ -116,6 +116,7 @@ const UNMEASURED_RECEIPTS: ActivationReceipts = Object.freeze({
   distribution: null,
   measuredAt: "",
   members: Object.freeze([]),
+  provider: null,
   repository: null,
   schemaVersion: "moe-activation-receipts/1" as const,
   signing: signingReceipt(),

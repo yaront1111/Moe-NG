@@ -89,6 +89,7 @@ export const ACTIVATION_BODY = {
     },
   ],
   outcome: "ACTIVATION",
+  provider: { command: "claude", version: "2.1.261" },
   repository: { headSha: HEAD_SHA, toplevel: REPO_ROOT },
   schemaVersion: "moe-activation-receipts/1",
   signing: {

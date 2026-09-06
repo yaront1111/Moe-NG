@@ -51,9 +51,16 @@ on the Goals screen reads `POST /activation/read` and drives `project.register`,
 `project.bind_repository`, `provider.probe` and `project.activate` from a single
 button, so the browser alone takes an empty store to a created goal. The daemon
 mints each receipt from a MEASURED fact -- the repository row carries the real
-HEAD sha of the bound checkout -- and a receipt it cannot measure is rendered
-`UNKNOWN` with its code and layer rather than filled in, so the cards still block
-with their exact missing-authority reasons when a prerequisite genuinely fails.
+HEAD sha of the bound checkout, and the provider row carries the version the
+daemon read by running `<agent command> --version` on this host, shown on the
+provider row as `claude --version` beside `2.1.263` -- and a receipt it cannot measure is
+rendered `UNKNOWN` with its code and layer rather than filled in, so the cards
+still block with their exact missing-authority reasons when a prerequisite
+genuinely fails. Note the consequence: a host with no agent CLI on `PATH` now
+refuses activation with `ACTIVATION_PROVIDER_UNMEASURED` instead of activating
+against a provider nobody could reach. A CLI that runs but answers something the
+daemon cannot parse as a version is recorded `UNKNOWN`, which is a reading taken,
+not a gap.
 Development fixtures cannot clear those gates in a production build.
 
 The manager stores non-secret catalog metadata in

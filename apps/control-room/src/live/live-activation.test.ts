@@ -42,6 +42,7 @@ function frame(overrides: Readonly<Record<string, unknown>> = {}): Record<string
     measuredAt: "2026-09-05T05:00:00.000Z",
     members: ACTIVATION_MEMBERS.map((member) => measured(member)),
     outcome: "ACTIVATION",
+    provider: { command: "claude", version: "2.1.261" },
     repository: { headSha: "a".repeat(40), toplevel: "D:/projexts/moe-next" },
     schemaVersion: "moe-activation-receipts/1",
     signing: SIGNING,
@@ -56,7 +57,8 @@ describe("mapActivationAnswer", () => {
 
     expect(answer.status).toBe("ACTIVATION");
     if (answer.status !== "ACTIVATION") return;
-    expect(ACTIVATION_FRAME_KEYS).toHaveLength(9);
+    expect(ACTIVATION_FRAME_KEYS).toHaveLength(10);
+    expect(answer.provider).toEqual({ command: "claude", version: "2.1.261" });
     expect(answer.members.map((row) => row.member)).toEqual([...ACTIVATION_MEMBERS]);
     expect(answer.members.every((row) => row.measured)).toBe(true);
     expect(answer.members[0]?.reason).toBe("repository measured");
@@ -94,6 +96,35 @@ describe("mapActivationAnswer", () => {
     expect(answer.distribution).toBeNull();
     expect(answer.repository).toBeNull();
     expect(answer.store).toBeNull();
+  });
+
+  it("reads a null provider reading as NO READING, and keeps the daemon's UNKNOWN verbatim", () => {
+    const absent = mapActivationAnswer(200, frame({ provider: null }));
+    expect(absent.status).toBe("ACTIVATION");
+    if (absent.status !== "ACTIVATION") return;
+    expect(absent.provider).toBeNull();
+
+    // The daemon says UNKNOWN when the CLI ran and answered something it could not read.
+    // Softening that here would put the browser back to describing a reading nobody took.
+    const unreadable = mapActivationAnswer(200, frame({
+      provider: { command: "codex", version: "UNKNOWN" },
+    }));
+    expect(unreadable.status).toBe("ACTIVATION");
+    if (unreadable.status !== "ACTIVATION") return;
+    expect(unreadable.provider).toEqual({ command: "codex", version: "UNKNOWN" });
+  });
+
+  it("refuses a provider reading that is half a reading, at its own code and layer", () => {
+    for (const provider of [
+      { command: "claude" },
+      { command: "claude", version: "" },
+      { command: "", version: "2.1.261" },
+      { command: "claude", extra: 1, version: "2.1.261" },
+      "2.1.261",
+    ]) {
+      expect(mapActivationAnswer(200, frame({ provider })))
+        .toEqual({ code: "ACTIVATION_RESPONSE_INVALID", layer: LAYER, status: "ERROR" });
+    }
   });
 
   it("refuses a frame carrying one key more or one key fewer", () => {

@@ -1114,6 +1114,12 @@ describe("project.activate mints its own witness and refuses a caller-supplied o
       ),
       installedPolicySliceRefs: () => Promise.resolve([POLICY_SLICE_REF]),
       now: () => new Date(CLOCK),
+      // A KNOWN LITERAL like every other port here. The real reader would refuse
+      // `fixture-agent` ACTIVATION_PROVIDER_UNMEASURED — correctly, since no such CLI is
+      // installed anywhere — and these arms are about the WITNESS the daemon mints, not about
+      // which agent this host happens to have.
+      providerVersion: () =>
+        Promise.resolve({ code: 0, stderr: "", stdout: "fixture-agent 1.0.0\n" }),
       sqliteApplicationId: () => SQLITE_APPLICATION_ID,
     });
   }

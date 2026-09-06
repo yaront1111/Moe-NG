@@ -45,6 +45,11 @@ export const BOOTSTRAP_COMMAND_KINDS = Object.freeze([
   // prerequisite table below; its EFFECTS are asynchronous, so the registry serves it from an
   // async entry that admits through this surface first (daemon-command-registry.js).
   "repository.bootstrap",
+  // APPENDED, same rule. `deployment.set_target` is an ordinary synchronous write; the DEPLOY
+  // that follows it runs `docker` and `ssh`, so it admits through this surface and is then
+  // served asynchronously, exactly as `repository.bootstrap` above.
+  "deployment.set_target",
+  "deployment.deploy",
 ] as const satisfies readonly RuntimeCommandKind[]);
 
 export type BootstrapCommandKind = (typeof BOOTSTRAP_COMMAND_KINDS)[number];
@@ -59,6 +64,10 @@ export type BootstrapCommandKind = (typeof BOOTSTRAP_COMMAND_KINDS)[number];
  */
 export const ASYNC_SERVED_BOOTSTRAP_KINDS: readonly BootstrapCommandKind[] = Object.freeze([
   "repository.bootstrap",
+  // `docker build`, an optional `docker save | ssh docker load`, and a health poll that waits
+  // out docker's own start-period. `deployment.set_target`, its sibling, writes one durable
+  // binding and is a `BOOTSTRAP_HANDLERS` row like every other synchronous kind.
+  "deployment.deploy",
 ]);
 
 export const BOOTSTRAP_REQUEST_KEYS = Object.freeze([

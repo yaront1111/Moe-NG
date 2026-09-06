@@ -3,7 +3,9 @@
  * touches a node API. Keeping the node surface here is what lets
  * `activation-receipts-measure.ts` stay a pure function of its inputs: every test
  * arm drives fakes, and the only code that opens a database, spawns git or reads
- * the filesystem is in this file.
+ * the filesystem is in this file. The one exception is the agent-CLI version probe,
+ * which lives in `activation-provider-version.ts`: it is the only production spawn on
+ * this path and is worth being findable on its own.
  */
 
 import { createHash } from "node:crypto";
@@ -13,6 +15,8 @@ import {
 import { createRequire } from "node:module";
 import type { DatabaseSync } from "node:sqlite";
 
+import { readProviderVersion } from "./activation-provider-version.js";
+import type { ProviderVersionRun } from "./activation-provider-version.js";
 import { nodeGitRunner } from "../repository/git-landing-port.js";
 import type { GitRunner } from "../repository/git-landing-port.js";
 
@@ -38,6 +42,8 @@ export type ActivationBackupOutcome =
   | { readonly byteLength: number; readonly ok: true; readonly sha256: string }
   | { readonly detail: string; readonly ok: false };
 
+export type { ProviderVersionRun } from "./activation-provider-version.js";
+
 export interface ActivationReceiptPorts {
   readonly backup: (storePath: string, destination: string) => Promise<ActivationBackupOutcome>;
   readonly committedProbeRef: () => Promise<string | null>;
@@ -46,6 +52,7 @@ export interface ActivationReceiptPorts {
   readonly git: GitRunner;
   readonly installedPolicySliceRefs: () => Promise<readonly string[]>;
   readonly now: () => Date;
+  readonly providerVersion: (command: string) => Promise<ProviderVersionRun>;
   readonly sqliteApplicationId: (storePath: string) => number | null;
 }
 
@@ -187,6 +194,10 @@ const nodeFs: ActivationReceiptFs = Object.freeze({
  * to ABSENT rather than to a fabricated value: a caller that has not wired the
  * durable readers gets an honest ACTIVATION_PROVIDER_UNMEASURED /
  * ACTIVATION_POLICY_UNMEASURED, never an invented ref.
+ *
+ * `providerVersion` is the opposite case and defaults to the REAL reader: it needs
+ * no durable wiring, only a host, so an absent default would be a version nobody
+ * read wearing a measurement's clothes — the defect this member exists to remove.
  */
 export function nodeActivationReceiptPorts(
   overrides: Partial<ActivationReceiptPorts> = {},
@@ -199,6 +210,7 @@ export function nodeActivationReceiptPorts(
     git: nodeGitRunner,
     installedPolicySliceRefs: () => Promise.resolve([]),
     now: () => new Date(),
+    providerVersion: readProviderVersion,
     sqliteApplicationId: readApplicationId,
     ...overrides,
   });

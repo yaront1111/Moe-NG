@@ -81,11 +81,36 @@ export type ActivationReceipt = MeasuredReceipt | UnmeasuredReceipt;
 
 export type DistributionKind = "ARTIFACT" | "SOURCE_CHECKOUT";
 
+/**
+ * The version the CONFIGURED AGENT CLI reported when this daemon ran it, and the
+ * command it ran. Core's witness roster is exactly nine keys and both of the
+ * provider receipt's fields are already spent — `ref` is the committed probe
+ * envelope, compared for equality at `provider-profile-reader-checks.ts:192`, and
+ * `detail` is the credential PRESENCE ref — so the reading travels here, beside
+ * `repository`, `store` and `distribution`, which is where the other measured
+ * values in this set live too.
+ *
+ * `version` is `PROVIDER_VERSION_UNKNOWN` when the CLI RAN and answered something
+ * this daemon cannot read as a version. That is a measurement, not a gap: the
+ * daemon took the reading and reports what it could not interpret, which is what
+ * `demo-seed-policy.ts:106` does for the same fact and what the browser card must
+ * never do differently. A CLI that cannot be RUN AT ALL is not this shape — it
+ * refuses the provider member under ACTIVATION_PROVIDER_UNMEASURED.
+ */
+export interface ActivationProviderReading {
+  readonly command: string;
+  readonly version: string;
+}
+
+/** Never a version, never mistakable for one, and never invented. */
+export const PROVIDER_VERSION_UNKNOWN = "UNKNOWN";
+
 /** JSON-serialisable end to end: the Activate card renders this verbatim. */
 export interface ActivationReceipts {
   readonly distribution: { readonly kind: DistributionKind; readonly root: string } | null;
   readonly measuredAt: string;
   readonly members: readonly ActivationReceipt[];
+  readonly provider: ActivationProviderReading | null;
   readonly repository: { readonly headSha: string; readonly toplevel: string } | null;
   readonly schemaVersion: "moe-activation-receipts/1";
   readonly signing: SigningReceipt;

@@ -18,8 +18,83 @@
     "NO ROSTER EDITS. The vocabulary, payload keys and bootstrap lists already carry both kinds and eight rows are contending those files.",
     "NO DEPLOY EFFECT, NO JOURNEY, NO UI - all belong to the parent task-04b3ce7e349743c2a156d32ee5550ba5."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "READ THE ORPHAN BEFORE CHANGING IT, and confirm the two facts this plan rests on.\n\n`apps/daemon/src/deployment/deploy-target-contracts.ts` is 128 lines and COMPLETE - it is not a stub to finish. Read it end to end. Its surface: DEPLOYMENT_SET_TARGET_COMMAND_KIND/:24, DEPLOYMENT_DEPLOY_COMMAND_KIND/:25, the two PAYLOAD_KEYS constants at :30 and :37, DEPLOY_TARGET_BOUND_EVENT/:41, DEPLOY_TARGET_INVALID/:44, DEPLOY_ENVIRONMENT_UNBOUND/:46, the NETWORK_NAME and SSH_TARGET regexes at :49/:51, MAX_URL/:52, admitDeployUrl/:61, admitDeployNetwork/:74, admitSshTarget/:78, deployTargetAggregateId/:83, AdmittedDeployTarget/:87, admitDeployTargetPayload/:99, decodeDeployTarget/:117.\n\nCONFIRM:\n- `git status --porcelain apps/daemon/src/deployment/deploy-target-contracts.ts` shows `??` (untracked).\n- `git grep -c \"deploy-target-contracts\" -- apps/daemon/src` returns NOTHING (zero importers).\n- `grep -n \"DeployTarget\\|DeployTargetPort\" apps/daemon/src/deployment/deploy-ports.ts` - :33 declares the shape `decodeDeployTarget` returns, and :41 declares `DeployTargetPort` with the comment \"WRITTEN by `deployment.set_target`; only read here\". THIS ROW IS THAT WRITE.\n- `grep -n \"deployment.set_target\" apps/daemon/src/daemon-command-payload-keys.ts` - :165 holds the SAME keys as hand-written literals. Record both lists verbatim; step 5 asserts they agree.\n\nIF THE ORPHAN HAS BEEN DELETED OR ADOPTED BY SOMEONE ELSE since filing, stop and re-plan rather than re-creating it.\n\nDO NOT EDIT the roster files: daemon-command-vocabulary.ts, daemon-command-payload-keys.ts and bootstrap-contracts.ts already carry both kinds and eight rows are contending them.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/deploy-target-contracts.ts",
+        "apps/daemon/src/deployment/deploy-ports.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "ADOPT THE MODULE (DoD 1). Track it and give it the `.js` bridge the package convention requires.\n\n1. `git add apps/daemon/src/deployment/deploy-target-contracts.ts` so it stops being untracked. The wrapper commits by explicit pathspec, so an untracked file with no declared owner can be swept or lost.\n2. Create `apps/daemon/src/deployment/deploy-target-contracts.js` containing exactly `export * from \"./deploy-target-contracts.ts\";` - the measured convention in this package (every `.ts` has a tracked one-line `.js` bridge, and daemon modules import siblings by `.js`).\n3. `moe.declare_files` both paths so the completion commit attributes them.\n\nCHANGE THE MODULE'S CONTENT ONLY IF SOMETHING IS ACTUALLY WRONG. It is complete and its admission rules are the considered part; adoption means giving it a consumer and a test, not rewriting it. If you do change a rule, say which and why in the step note - the header explains these fields reach an argv and a rendered receipt.\n\nADOPTION IS NOT COMPLETE UNTIL SOMETHING IMPORTS IT (DoD 1): a tracked module with zero importers satisfies every existence grep while the feature does not exist. Steps 3 and 4 provide the importers; this step just stops it being invisible to git.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/deploy-target-contracts.ts",
+        "apps/daemon/src/deployment/deploy-target-contracts.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/deployment/deploy-target-contracts.js"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE DURABLE TARGET WRITE. Create `apps/daemon/src/deployment/deploy-target-ledger.ts` (+ its one-line `.js` bridge).\n\nIt writes the aggregate `deployTargetAggregateId(projectId, environment)` (:83) with the event `DEPLOY_TARGET_BOUND_EVENT` (:41), from an `AdmittedDeployTarget` (:87), and reads back through `decodeDeployTarget` (:117) so the write and the read share one codec rather than two hand-rolled shapes.\n\nSETTING A TARGET TWICE FOR ONE ENVIRONMENT REPLACES, IT DOES NOT ACCUMULATE (DoD 4). The aggregate id is keyed by (projectId, environment), so the second write supersedes the first; assert the read-back count is one in step 6. An accumulating ledger would make `DeployTargetPort` ambiguous about which target is current, and the deploy engine reads exactly one.\n\nSUPPLY THE READ SIDE TOO: a `DeployTargetPort` implementation `(environment) => DeployTarget | null` matching deploy-ports.ts:41, backed by this ledger. That is the edge that makes the module a real consumer rather than an exporter - the deploy engine already declares the port and waits for someone to write it.\n\n`DEPLOY_ENVIRONMENT_UNBOUND` (:46) is the answer when no target has been bound for an environment. Return it as a refusal with its layer, reusing an already-rostered layer literal - introduce no new `*_LAYER` constant, which would demand a security-roster backfill this row does not own.\n\nNo store construction, no clock, no spawn in this module beyond what the ledger seam already provides. `wc -l` and keep under 250.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/deploy-target-ledger.ts",
+        "apps/daemon/src/deployment/deploy-target-ledger.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/deployment/deploy-target-ledger.ts",
+        "apps/daemon/src/deployment/deploy-target-ledger.js"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "REGISTER THE SYNCHRONOUS HANDLER (DoD 2). Add ONE entry to `GOAL_HANDLERS` in `apps/daemon/src/goals/goal-services.ts`.\n\nAPPEND IT - do not insert alphabetically. The table's own comment at :198 reads \"Appended, never reordered: existing suites assert against this table's key order\", and the current order is goal.create, goal.close, goal.create_with_source, repository.publish. Re-read HEAD first: this file is contended by task-537320ee.\n\nThe handler is SYNCHRONOUS, matching `CommandHandler = (context: HandlerContext) => ServiceOutcome` (bootstrap-ledger-vocabulary.ts:253). It: reads the payload, calls `admitDeployTargetPayload` (:99), refuses `DEPLOY_TARGET_INVALID` (:44) with its layer when admission returns null, and otherwise commits through the step-3 ledger.\n\nDO NOT ADD IT TO THE ASYNC ENTRIES. `deployment.deploy` goes there because a deploy cannot be expressed synchronously; `deployment.set_target` is an ordinary durable write and bootstrap-contracts.ts:48 already records that distinction. Putting a sync write in the async seam would misrepresent it to every consumer that reasons about which kinds are long-running.\n\nThe registry composes GOAL_HANDLERS by spreading (daemon-command-registry.ts:194), so this needs NO registry edit - which matters, because that file is past its 400-line cap at the merge-base.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-services.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE ADMISSION ARMS (DoD 3) - `apps/daemon/src/deployment/deploy-target-contracts.test.ts`. This is the security half of the row and it is why the module was worth adopting rather than rewriting.\n\nEvery field is operator-typed text that reaches an argv (`--network <network>`, `ssh <sshTarget> docker ...`) or a rendered receipt. Assert each refusal with its CODE and its LAYER, never merely that it failed:\n- A `url` carrying `user:password@` is REFUSED. A credential in a target lands on EVERY receipt that target produces, and receipts are durable and rendered - this is the arm that matters most.\n- A `network` or `sshTarget` containing whitespace, a shell metacharacter, a newline or a NUL is REFUSED. The engine spawns with `shell: false` so a metacharacter cannot re-parse into a second command - say that in the note - but an unadmitted value still reaches a REMOTE HOST, which is the harm the regexes at :49/:51 guard.\n- A `url` past MAX_URL (:52, 512) is refused; boundary-test at exactly 512 and 513.\n- Assert the ACCEPTING cases too, or a regex that rejects everything passes every arm above.\n\nTHE PAYLOAD-KEY AGREEMENT ARM - the guard for the duplication this row cannot fix. `DEPLOYMENT_SET_TARGET_PAYLOAD_KEYS` (:30) and the hand-written literal in `apps/daemon/src/daemon-command-payload-keys.ts:165` are two sources for one fact. Assert SET EQUALITY between them by IMPORTING both - reading that file is not editing it, so this stays inside rail 4. Do the same for the deploy keys (:37 vs :166). Without this, the two drift silently and the first symptom is a rejected payload nobody can explain.\n\nRecord in the step note that converging them (making daemon-command-payload-keys.ts import the constants) is a FOLLOW-UP, deferred because eight rows contend that file.\n\nMUTATE AND CONFIRM RED: loosen `admitDeployUrl` to allow userinfo and confirm the credential arm reds; restore. The module is newly tracked, so prove the restore with `git diff -- <path>` once it is staged.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/deploy-target-contracts.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/deployment/deploy-target-contracts.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE ROUND TRIP (DoD 4) - `apps/daemon/src/deployment/deploy-target-ledger.test.ts`, against a REAL store.\n\nDispatch `deployment.set_target` through the registered handler and assert:\n(a) the target is READ BACK from a real store with EVERY member asserted - network, sshTarget (including the `null` case for a local daemon), url;\n(b) the read comes through `decodeDeployTarget` / the `DeployTargetPort`, not by reaching into the event payload - that is the path the deploy engine actually uses, and a test that bypasses it proves the store wrote something rather than that the engine can read it;\n(c) SETTING TWICE REPLACES: bind, bind again with different values, assert the read-back count is ONE and the values are the second binding's;\n(d) an unbound environment answers `DEPLOY_ENVIRONMENT_UNBOUND` with its code AND layer;\n(e) an invalid payload refuses `DEPLOY_TARGET_INVALID` with code AND layer and writes NOTHING - assert the store is unchanged by reading it back, not by trusting the return value.\n\nTeardown in a `finally`: every store handle and temp directory released on the throwing path too (epic rail 4).\n\nMUTATE AND CONFIRM RED for (c): make the write append instead of replacing, confirm the count arm reds, restore and prove it. That file is new and untracked until staged - back it up out of tree and prove the restore by SHA256 in a separate call if you drill before staging.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/deploy-target-ledger.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/deployment/deploy-target-ledger.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATES AND SELF-REVIEW (DoD 5 and 6).\n\nGATES - each standalone, each quoted with its `Test Files N passed` count line; an exit-0 leg with no count line RAN NOTHING:\n- `pnpm --filter @moe/daemon test` (@moe/daemon is apps/daemon - resolve by PACKAGE NAME).\n- `pnpm typecheck`.\nState that root `pnpm test` covers NO apps/** file, so it is not evidence for anything this row owns. Respect the host's one-full-suite-at-a-time rule; prefer the filtered leg.\n\nSCOPE EVIDENCE (DoD 5) - make it a command, not a sentence:\n`git status --porcelain -- apps/daemon/src/daemon-command-vocabulary.ts apps/daemon/src/daemon-command-payload-keys.ts apps/daemon/src/bootstrap/bootstrap-contracts.ts` must be EMPTY. Those already carry both kinds and eight rows are contending them; an edit here is a collision, not thoroughness. `goal-services.ts` IS touched by this row - re-read HEAD before your final commit in case task-537320ee landed meanwhile.\n\nADOPTION EVIDENCE (DoD 1): `git status --porcelain apps/daemon/src/deployment/deploy-target-contracts.ts` no longer shows `??`, and `git grep -c \"deploy-target-contracts\" -- apps/daemon/src` returns a NONZERO count from a NON-TEST module. Quote both.\n\nSELF-REVIEW:\n- Can a credential reach a receipt through any admitted field? Re-read `admitDeployUrl` and try `https://user:pass@host`, `https://user@host`, and a url with credentials in a query parameter - the last one the regex may not cover, and it is worth knowing which shapes are actually guarded.\n- Does an `sshTarget` that passes the regex still reach a host you did not intend - e.g. a bare hostname that resolves differently on the deploy host?\n- What happens if `projectId` is empty in `deployTargetAggregateId`? Two projects sharing an aggregate id would cross-bind targets.\n- Did anything import the module ONLY from a test? That is not adoption (DoD 1).\n\nPATH-ATTRIBUTED BASELINE: merge-base failures, HEAD failures, subtract, intersect with owned paths; complete only when EMPTY. Disclose foreign red verbatim with paths.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/goals/goal-services.ts",
+        "apps/daemon/src/deployment/deploy-target-ledger.ts",
+        "apps/daemon/src/deployment/deploy-target-contracts.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -32,5 +107,21 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T08:09:18.405Z",
-  "updatedAt": "2026-09-06T08:09:18.405Z"
+  "updatedAt": "2026-09-06T09:08:10.146Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-06T09:06:07.728Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 8
+  },
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-06T09:08:07.965Z",
+  "planningNotes": {
+    "approachesConsidered": "EDITING daemon-command-payload-keys.ts TO IMPORT THE ORPHAN'S CONSTANTS. This is the correct end state and it is deliberately NOT in this plan: eight rows are contending that file and this row's rail 4 forbids roster edits. Deferred with a guard (step 5's agreement arm) and a follow-up note, so the duplication cannot drift unnoticed while it waits.\n\nDELETING THE ORPHAN INSTEAD OF ADOPTING IT - the other half of the governor's either/or. Rejected on reading it: 128 lines of admission rules with regexes, bounds and an aggregate id, plus a decoder that already matches `DeployTarget` at deploy-ports.ts:33. Deleting it means rewriting it, and the security reasoning in its header is exactly what a rewrite would lose.\n\nPUTTING set_target IN THE ASYNC ENTRIES beside `deployment.deploy`. Rejected: it is an ordinary synchronous write, `CommandHandler` returns `ServiceOutcome`, and bootstrap-contracts.ts:48 already records the distinction in its own comment. The async seam is the parent's.\n\nINSERTING THE HANDLER ALPHABETICALLY into GOAL_HANDLERS. Rejected - the table's own comment says appended, never reordered, because existing suites assert its key order.\n\nSize: 8 files, 7 steps.",
+    "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-06.\n\nTHE ORPHAN IS COMPLETE, NOT A STUB - 128 lines, and it already holds everything this row needs. `apps/daemon/src/deployment/deploy-target-contracts.ts` (UNTRACKED, `??`, with ZERO importers):\n  :24-25  DEPLOYMENT_SET_TARGET_COMMAND_KIND / DEPLOYMENT_DEPLOY_COMMAND_KIND\n  :30,:37 DEPLOYMENT_SET_TARGET_PAYLOAD_KEYS / DEPLOYMENT_DEPLOY_PAYLOAD_KEYS\n  :41     DEPLOY_TARGET_BOUND_EVENT = \"EnvironmentDeployTargetBound\"\n  :44,:46 DEPLOY_TARGET_INVALID / DEPLOY_ENVIRONMENT_UNBOUND\n  :49,:51 NETWORK_NAME and SSH_TARGET regexes; :52 MAX_URL = 512\n  :61,:74,:78 admitDeployUrl / admitDeployNetwork / admitSshTarget\n  :83     deployTargetAggregateId(projectId, environment)\n  :87,:99 AdmittedDeployTarget and admitDeployTargetPayload(payload)\n  :117    decodeDeployTarget(value) -> DeployTarget | null\nSo this row is mostly ADOPTION and WIRING, not authoring. Read it before changing a line of it; the admission rules are the considered part and its header explains why they are a security boundary rather than tidiness.\n\nIT ALREADY FITS THE CONSUMER IT WAS WRITTEN FOR: `decodeDeployTarget` returns `DeployTarget` as declared at deploy-ports.ts:33 (`network`, `sshTarget: string | null`, `url: string | null`), and deploy-ports.ts:41 declares `DeployTargetPort = (environment) => DeployTarget | null` with the comment \"WRITTEN by `deployment.set_target`; only read here\". This row is that write.\n\nA DUPLICATION THIS ROW MUST NOT SILENTLY LEAVE UNGUARDED. The payload keys exist TWICE: as `DEPLOYMENT_SET_TARGET_PAYLOAD_KEYS` in the orphan (:30) and as hand-written literals in `apps/daemon/src/daemon-command-payload-keys.ts:165` (`[\"environment\",\"network\",\"sshTarget\",\"url\"]`). The governor's hand-back notes \"the literal hotfix does not import it\". Converging them by editing daemon-command-payload-keys.ts is the obvious fix and it is NOT available here: that file is contended by eight rows and this row's rail 4 forbids roster edits. The plan therefore ASSERTS THE TWO AGREE with a test - reading a file is not editing it - and records the convergence as a follow-up. A duplicated roster with a guard is survivable; a duplicated roster with nothing watching it is how the two silently diverge.\n\nGOAL_HANDLERS IS ORDER-SENSITIVE. apps/daemon/src/goals/goal-services.ts:199 carries the comment \"Appended, never reordered: existing suites assert against this table's key order\", and the table today is goal.create, goal.close, goal.create_with_source, repository.publish. APPEND; do not insert alphabetically. This file is contended by task-537320ee, so re-read HEAD before touching it.\n\nINCIDENTAL FINDING, not this row's work: deploy-ports.ts:60 `createProxyPort(run, network)` already exists and names `/etc/caddy/Caddyfile` and a `/tmp/moe-deploy-lock`. The flippable-upstream row task-db63dacc plans to CHOOSE a proxy - the choice is evidently already made and partly built. I am noting it on that row rather than acting on it here."
+  },
+  "planApprovedAt": "2026-09-06T09:08:10.146Z"
 }

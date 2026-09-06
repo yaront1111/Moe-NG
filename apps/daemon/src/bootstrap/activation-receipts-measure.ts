@@ -14,18 +14,21 @@ import { SQLITE_APPLICATION_ID } from "@moe/store";
 
 import { providerCredentials, providerFor } from "../orchestrator/moe-up-credentials.js";
 import {
-  ACTIVATION_RECEIPT_MEMBERS, measuredReceipt, sha256Hex, signingReceipt, unmeasuredReceipt,
+  ACTIVATION_RECEIPT_MEMBERS, PROVIDER_VERSION_UNKNOWN, measuredReceipt, sha256Hex, signingReceipt,
+  unmeasuredReceipt,
 } from "./activation-receipts.js";
 import type {
   ActivationReceipt, ActivationReceiptMember, ActivationReceipts, DistributionKind,
 } from "./activation-receipts.js";
 import { receiptDetail } from "./activation-receipts-ports.js";
-import type { ActivationBackupOutcome, ActivationReceiptPorts } from "./activation-receipts-ports.js";
+import type {
+  ActivationBackupOutcome, ActivationReceiptPorts, ProviderVersionRun,
+} from "./activation-receipts-ports.js";
 import type { GitRunResult } from "../repository/git-landing-port.js";
 
 export { nodeActivationReceiptPorts, receiptDetail } from "./activation-receipts-ports.js";
 export type {
-  ActivationBackupOutcome, ActivationReceiptFs, ActivationReceiptPorts,
+  ActivationBackupOutcome, ActivationReceiptFs, ActivationReceiptPorts, ProviderVersionRun,
 } from "./activation-receipts-ports.js";
 
 const MANIFEST_FILE = "MANIFEST-CLOSURE.txt";
@@ -104,21 +107,77 @@ function credentialRef(
   };
 }
 
+/**
+ * The FIRST semver-shaped token of the first non-empty line, wherever it sits.
+ * Written against the two CLIs this daemon actually launches, because a parser
+ * derived from a frozen constant cannot discover that the constant is wrong
+ * (mem:gotcha-provider-launch-flags-need-real-cli-precedence-probe):
+ *
+ *   claude --version  ->  `2.1.261 (Claude Code)`   version first, trailing text
+ *   codex  --version  ->  `codex-cli 0.153.4`       name first, version second
+ *
+ * A rule demanding a bare semver LINE — the doctor's, `doctor-version.node.ts:110` —
+ * would read neither. Returning null here is not a refusal: the CLI answered, so
+ * the reading was taken and reports UNKNOWN.
+ *
+ * The tail is BOUNDED. A CLI is free to print 64 KB on its first line, and this value is
+ * committed to the ledger and rendered on a card; 48 trailing characters is more than any
+ * real build stamp needs and less than anything that could bloat a receipt.
+ */
+const VERSION_TOKEN = /\d+\.\d+\.\d+[\w.+-]{0,48}/u;
+
+function parseProviderVersion(stdout: string): string | null {
+  const line = stdout.split(/\r?\n/u).map((text) => text.trim()).find((text) => text !== "");
+  return VERSION_TOKEN.exec(line ?? "")?.[0] ?? null;
+}
+
+type ProviderMeasurement =
+  { readonly provider: ActivationReceipts["provider"]; readonly receipt: ActivationReceipt };
+
+/**
+ * Three outcomes, and the difference between the last two is the whole point.
+ *
+ * The CLI COULD NOT BE RUN — absent from PATH, unspawnable, timed out, or an
+ * invocation this host refuses to build — is an UNMEASURABLE provider and refuses
+ * the entire activation under ACTIVATION_PROVIDER_UNMEASURED, because a witness
+ * that certifies a provider nobody could reach is the invented-reading defect in
+ * another costume. The CLI RAN AND SAID SOMETHING UNREADABLE is measured, with
+ * `PROVIDER_VERSION_UNKNOWN` recorded verbatim: the daemon took the reading and
+ * says what it could not interpret rather than asserting a snapshot.
+ */
 async function measureProvider(
   input: ActivationReceiptInput, ports: ActivationReceiptPorts,
-): Promise<ActivationReceipt> {
+): Promise<ProviderMeasurement> {
+  const refuse = (d: string) => ({ provider: null, receipt: unmeasuredReceipt("provider", d) });
   const credential = credentialRef(input, ports);
   let probeRef: string | null;
   try {
     probeRef = await ports.committedProbeRef();
   } catch (error) {
-    return unmeasuredReceipt("provider", receiptDetail(String(error)));
+    return refuse(receiptDetail(String(error)));
   }
-  if (probeRef === null || probeRef === "") {
-    return unmeasuredReceipt("provider", "no committed provider.probe");
+  if (probeRef === null || probeRef === "") return refuse("no committed provider.probe");
+  // An empty agent command already refused above: `credentialRef` answers it first, with the
+  // same words. There is deliberately no second guard here, because a second one would be
+  // unreachable and would read as though this branch could be entered with no command.
+  if (credential.ref === null) return refuse(credential.detail);
+  let run: ProviderVersionRun;
+  try {
+    run = await ports.providerVersion(input.agentCommand);
+  } catch (error) {
+    return refuse(receiptDetail(String(error)));
   }
-  if (credential.ref === null) return unmeasuredReceipt("provider", credential.detail);
-  return measuredReceipt("provider", probeRef, credential.ref);
+  if (run.code === null) {
+    const stderr = run.stderr.trim();
+    return refuse(receiptDetail(
+      stderr === "" ? `${input.agentCommand} --version could not be run` : stderr,
+    ));
+  }
+  const version = parseProviderVersion(run.stdout) ?? PROVIDER_VERSION_UNKNOWN;
+  return {
+    provider: Object.freeze({ command: input.agentCommand, version }),
+    receipt: measuredReceipt("provider", probeRef, credential.ref),
+  };
 }
 
 function measureStore(
@@ -258,13 +317,14 @@ export async function measureActivationReceipts(
   const distribution = await measureDistribution(input, ports);
   const policy = await measurePolicy(ports);
   const byMember: Readonly<Record<ActivationReceiptMember, ActivationReceipt>> = {
-    backup, distribution: distribution.receipt, policy, provider,
+    backup, distribution: distribution.receipt, policy, provider: provider.receipt,
     repository: repository.receipt, store: store.receipt,
   };
   return Object.freeze({
     distribution: distribution.distribution,
     measuredAt: measuredAt.toISOString(),
     members: Object.freeze(ACTIVATION_RECEIPT_MEMBERS.map((member) => byMember[member])),
+    provider: provider.provider,
     repository: repository.repository,
     schemaVersion: "moe-activation-receipts/1" as const,
     signing: signingReceipt(),

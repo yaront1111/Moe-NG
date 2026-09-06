@@ -60,6 +60,8 @@ function receiptsFixture(
       ? null : Object.freeze({ kind: "SOURCE_CHECKOUT" as const, root: "D:/repo" }),
     measuredAt: "2026-09-04T09:15:00.123Z",
     members: Object.freeze(members),
+    provider: broken.includes("provider")
+      ? null : Object.freeze({ command: "claude", version: "2.1.261" }),
     repository: broken.includes("repository")
       ? null : Object.freeze({ headSha: HEAD_SHA, toplevel: "D:/repo" }),
     schemaVersion: "moe-activation-receipts/1" as const,

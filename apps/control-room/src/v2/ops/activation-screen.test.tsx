@@ -4,7 +4,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { ACTIVATION_MEMBERS } from "../../live/live-activation.js";
 import type {
-  ActivationMember, ActivationReadOutcome, ActivationReceiptView,
+  ActivationMember, ActivationProviderView, ActivationReadOutcome, ActivationReceiptView,
 } from "../../live/live-activation.js";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import { ActivateScreen, LiveActivate } from "./activation-screen.js";
@@ -47,12 +47,14 @@ const missingRow = (
 function activationView(
   members: readonly ActivationReceiptView[],
   signingReason = SIGNING_REASON,
+  provider: ActivationProviderView | null = { command: "claude", version: "2.1.261" },
 ): ActivationReadOutcome {
   return Object.freeze({
     blocking: members.filter((row) => !row.measured).map((row) => row.member),
     distribution: { kind: "SOURCE_CHECKOUT", root: "D:/projexts/moe-next" },
     measuredAt: "2026-09-05T05:00:00.000Z",
     members,
+    provider,
     repository: { headSha: "a".repeat(40), toplevel: "D:/projexts/moe-next" },
     schemaVersion: "moe-activation-receipts/1",
     signing: {
@@ -83,6 +85,40 @@ describe("ActivateScreen renders the daemon's six receipts", () => {
     expect(screen.getByTestId("cr.activate.count").textContent).toContain("6 of 6 receipts measured");
     // Signing is NOT one of the counted rows.
     expect(screen.getByTestId("cr.activate.receipts").querySelectorAll("li")).toHaveLength(6);
+  });
+
+  it("shows the daemon's provider CLI reading on the provider row and NOWHERE else", () => {
+    render(<ActivateScreen outcome={allMeasured()} />);
+
+    const version = screen.getByTestId("cr.activate.version");
+    expect(version.textContent).toBe("claude --version · 2.1.261");
+    // One reading, on one row: a version rendered next to any other member would name a
+    // measurement that member never took.
+    expect(screen.getAllByTestId("cr.activate.version")).toHaveLength(1);
+    expect(screen.getByTestId("cr.activate.receipt.provider").textContent).toContain("2.1.261");
+    expect(screen.getByTestId("cr.activate.receipt.store").textContent).not.toContain("2.1.261");
+  });
+
+  it("prints the daemon's UNKNOWN verbatim, and shows no reading at all when it took none", () => {
+    render(<ActivateScreen outcome={activationView(
+      ACTIVATION_MEMBERS.map((member) => measuredRow(member, `${member} measured`)),
+      SIGNING_REASON,
+      { command: "codex", version: "UNKNOWN" },
+    )} />);
+    expect(screen.getByTestId("cr.activate.version").textContent).toBe("codex --version · UNKNOWN");
+    cleanup();
+
+    // A refused provider carries no reading, so the card states none rather than a stale one.
+    render(<ActivateScreen outcome={activationView([
+      measuredRow("store", "store measured"),
+      missingRow(
+        "provider", "claude --version could not be run",
+        "ACTIVATION_PROVIDER_UNMEASURED", "ACTIVATION_RECEIPTS",
+      ),
+    ], SIGNING_REASON, null)} />);
+    expect(screen.queryByTestId("cr.activate.version")).toBeNull();
+    expect(screen.getByTestId("cr.activate.code.provider").textContent)
+      .toBe("ACTIVATION_PROVIDER_UNMEASURED @ ACTIVATION_RECEIPTS");
   });
 
   it("shows a missing member with the daemon's reason VERBATIM and its own code @ layer", () => {

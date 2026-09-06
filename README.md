@@ -32,8 +32,12 @@ entry points, environment, and knobs.
   daemon's measured activation receipts and drives `project.register`,
   `project.bind_repository`, `provider.probe` and `project.activate` from one
   button, after which New goal is enabled. No seed script and no wrapper pass are
-  needed to take an empty store to a created goal. Unmeasurable receipts stay
-  `UNKNOWN` with their code and layer; the card never fabricates one.
+  needed to take an empty store to a created goal. Every receipt is minted by the
+  daemon from a fact it measured itself -- the repository's real HEAD sha, the
+  store's own driver, the backup's sha256, and the agent CLI's version read by
+  running `<agent command> --version` on the host. Unmeasurable receipts stay
+  `UNKNOWN` with their code and layer, an agent CLI that is not installed refuses
+  activation outright, and the card never fabricates one.
 
 - **PRD lane**: `goal.create_with_source` binds a PRD to a goal; a planning
   agent reads it (paged) and proposes a versioned Product Contract with

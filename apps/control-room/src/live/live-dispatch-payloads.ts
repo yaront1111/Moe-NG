@@ -132,8 +132,19 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
         capabilitySchemaDigest: hex64("ca9ab111"),
         concurrencyCeiling: 4,
         limits: { stderrBytes: 65_536, stdoutBytes: 131_072, tailBytes: 4_096, timeoutMs: 900_000 },
-        modelSnapshotEvidence: "claude --version reported a dated snapshot",
-        modelSnapshotKind: "DATED_SNAPSHOT",
+        // THE BROWSER TAKES NO READING, SO IT ASSERTS NONE. These two keys used to
+        // read `DATED_SNAPSHOT` / "claude --version reported a dated snapshot" and
+        // were committed to the real ledger as DAEMON_VERIFIED authority on the
+        // strength of a probe nobody ran -- less honest than the demo seed, which
+        // says UNKNOWN here for exactly this reason (demo-seed-policy.ts:106).
+        // The CLI version IS measured now, by the daemon, on the activation path:
+        // `measureProvider` runs `<agent command> --version` through the ports and
+        // publishes the reading at `/activation/read`.provider, where the Activate
+        // card renders it. A caller-supplied snapshot would still be accepted by
+        // `recordProbe` today, so this literal is the enforcement -- pinned in
+        // live-dispatch-production.test.ts, which fails if a reading reappears here.
+        modelSnapshotEvidence: "the browser ran no provider CLI probe",
+        modelSnapshotKind: "UNKNOWN",
         profileRevisionId: "profile-revision-1",
         provider: "claude",
         providerMinimumProfileRef: "provider-profile-1",

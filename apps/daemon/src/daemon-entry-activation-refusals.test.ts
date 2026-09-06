@@ -167,6 +167,9 @@ function receiptsLeaking(token: string): ActivationReceipts {
       `ref/${member}/${token}`,
       `fatal: env ANTHROPIC_AUTH_TOKEN=${token} rejected by remote`,
     ))),
+    // The reading is scrubbed on the read route like every other published text, so it carries
+    // the same held token these arms hunt for.
+    provider: Object.freeze({ command: `claude-${token}`, version: `1.0.0-${token}` }),
     repository: null,
     schemaVersion: "moe-activation-receipts/1" as const,
     signing: signingReceipt(),
@@ -201,7 +204,12 @@ it("scrubs held credential VALUES out of every reason and ref the wired port pub
     readonly members: readonly {
       readonly member: string; readonly reason: string; readonly ref: string | null;
     }[];
+    readonly provider: { readonly command: string; readonly version: string } | null;
   };
+  // The provider READING is a second published surface, not covered by the member rows: its
+  // text is an external CLI's stdout and a host-configured command, so both are scrubbed.
+  expect(view.provider)
+    .toEqual({ command: "claude-[redacted]", version: "1.0.0-[redacted]" });
   for (const row of view.members.filter((member) => member.member !== "backup")) {
     expect(row.reason).toBe("fatal: env ANTHROPIC_AUTH_TOKEN=[redacted] rejected by remote");
     expect(row.ref).toBe(`ref/${row.member}/[redacted]`);

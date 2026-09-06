@@ -186,11 +186,17 @@
       "author": "qa-4f771bb8",
       "content": "QA (qa-4f771bb8) APPROVE evidence + one follow-up for the epic-final hardening row.\n\nGATES I RE-RAN MYSELF (not the worker's transcript):\n- Owned scope, WIDER than the worker's own leg (I added deployment-image-build.test.ts): `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/deployment/ src/repository/deployment/ --maxWorkers=1` -> Test Files 4 passed (4), Tests 68 passed | 1 skipped (69).\n- `pnpm --filter @moe/daemon test` -> exit 1, Test Files 27 failed | 485 passed (512).\n- `pnpm typecheck` -> exit 1, exactly 2 errors.\n\nPATH ATTRIBUTION I MEASURED (the worker did not capture a merge-base baseline; I substituted a structural proof, which is stronger):\n- The 27 failing files contain ZERO under src/deployment/ or src/repository/deployment/. Cluster is command-registry / preview / bootstrap / orchestrator.\n- `grep -rn \"deploy-service|deploy-ports|deployment-infrastructure-templates\"` over apps/packages/tests/scripts returns NO importer outside the two deployment dirs, so this diff cannot structurally reach those 27 files.\n- Both typecheck errors are in apps/daemon/src/bootstrap/bootstrap-sequence.ts (missing deployment.deploy / deployment.set_target). That file AND packages/contracts/src/runtime/runtime-vocabulary.ts (which declares the kinds) are CLEAN in the working tree -> the error is baked into HEAD and identical at merge-base. This row is railed off command kinds and touches neither file.\n- apps/daemon/src/daemon-command-registry.ts is dirty with task-dd86f35e's preview.decide wiring. Peer dirt, correctly left alone by this row.\n\nMUTATION DRILL RUN BY ME, not accepted on report. Inserted a stop-before-flip into deploy-service.ts; both ordering properties went RED with the worker's exact quoted transitions:\n  AssertionError: transition 12: stop app: expected 0 to be greater than 0   (DoD 3)\n  AssertionError: expected 11 to be greater than 13                          (DoD 4, stop idx 11 < reload idx 13)\n9 arms red total. Restored from an out-of-tree %TEMP% backup in a SEPARATE call; SHA256 equality re-proven after restore: 46e5c60ec74eaa1d9a52e65a927f48aad462fe148cbe3970b393b10f3b107228, identical to pre-mutation and to the worker's declared delivered bytes. Owned gate re-run green after restore (4 files / 68 passed).\n\nSPAWN-PATH HANG I PROBED because deploy-ports.ts:runProcess was changed so child.on(\"error\") no longer settles the promise and instead defers to \"close\". If close never fired after an ENOENT, a deploy would hang forever. Probed on this host: `EVENTS: error -> close:-4058`. close DOES follow error, so finish(uncertain ? null : code) resolves code:null. Not a hang. The stdin/timeout halves of the same change are covered by the \"waits for close after %s uncertainty\" arm, which asserts settled===false until close.\n\nFOLLOW-UP FOR THE EPIC-FINAL HARDENING ROW (not a defect in this row's DoD, filed per the DELIVERY BIAS rail as a comment rather than a new row):\nThe generated override gives proxy `depends_on: app: condition: service_healthy`. After a successful deploy the compose service `app` is STOPPED and the public route points at a candidate container that compose does not own. Chained deploys are fine — acquireProxy resolves upstream to the actual container name and flips candidate->candidate correctly, which I traced — but a later bare `docker compose up` would gate on a stopped `app` service. Worth a decision on whether the candidate is adopted into the compose project or the depends_on condition is relaxed. Related residual limits the worker already disclosed in comment 6d349e (candidate env/restart-policy parity, stale-lease operator recovery).",
       "timestamp": "2026-09-06T08:55:08.204Z"
+    },
+    {
+      "id": "comment-19d1ea06249a4b87bb91afbd0b776869",
+      "author": "architect-fa3a3e17",
+      "content": "THE PROXY CHOICE IS ALREADY MADE AND PARTLY BUILT - CADDY. Found while planning task-358b6ec8; correcting my own plan's step 2, which told you to choose one (architect-fa3a3e17, 2026-09-06).\n\nMEASURED AT HEAD: `apps/daemon/src/deployment/deploy-ports.ts:60` already exports\n\n  export function createProxyPort(run: DockerRunner, network: string) {\n    const config = \"/etc/caddy/Caddyfile\";\n    const lock = \"/tmp/moe-deploy-lock\";\n    return { discover: (service: string) => run([\"ps\", \"--filter\", `label=com.docker.compose.service=${service}`, ...\n\nwith the header comment \"The same argv port locally and over SSH; never a shell command or HTTP authority in tests.\"\n\nWHAT THIS CHANGES IN MY PLAN FOR YOUR ROW:\n- Step 2 says \"CHOOSE A PROXY THAT RELOADS ITS UPSTREAM WITHOUT DROPPING ITS LISTENING SOCKET, and say which and why in the step note.\" The choice is Caddy and a port for it exists. Read `createProxyPort` FIRST and generate a compose service that matches what it already drives - a Caddyfile at `/etc/caddy/Caddyfile`, discovered by the compose service label. Generating a different proxy, or a Caddy config at a different path, would strand a port that is already written and tested against.\n- Step 4 says to add the proxy-reload port to deploy-ports.ts. Check whether `createProxyPort` already covers the rewrite and reload before adding anything - it may need only the compose service and the Caddyfile artifact from step 2, not a new port.\n- The `/tmp/moe-deploy-lock` constant suggests the flip is already intended to be serialised. Whatever that lock guards is relevant to my step 7's question about two concurrent deploys mid-flight; answer it against what the lock actually does rather than in the abstract.\n\nTHE PROPERTY MY PLAN NAMED STILL STANDS AND NOW HAS A CONCRETE SUBJECT: Caddy reloads its config without dropping its listening socket, which is exactly why it can be the atomic instant. Verify that for the reload command `createProxyPort` issues - if it restarts the container instead, the atomicity arm in my step 5 is asserting over a mechanism that cannot satisfy it, and that is a stop-and-report rather than something to work around.\n\nNOTE ON MY EARLIER MEASUREMENT: my planningNotes recorded `git grep -in -E \"nginx|traefik|caddy|start-first|docker service\" -- apps/daemon packages` as ZERO hits, which is what made \"there is nothing to flip\" true. That grep is now stale - either `createProxyPort` landed after I ran it, or it postdates the task description's own measurement. Re-run the grep at execution and treat whatever it returns as authoritative over both of us.",
+      "timestamp": "2026-09-06T09:08:26.431Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T01:48:48.638Z",
-  "updatedAt": "2026-09-06T08:56:56.837Z",
+  "updatedAt": "2026-09-06T09:08:26.431Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T07:29:33.645Z",
     "plannedStepCount": 7,
@@ -232,10 +238,50 @@
     "apps/daemon/src/deployment/deploy-service.ts",
     "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts",
     "apps/daemon/src/deployment/deploy-service.test.ts",
-    "apps/daemon/src/deployment/deploy-ports.ts"
+    "apps/daemon/src/deployment/deploy-ports.ts",
+    ".moe/tasks/task-db63dacc7cbe49cab9826e9b49c8669f.json"
   ],
   "completionSummary": "Generated Caddy proxy owns public3000; app internal, canonical writable upstream artifact and bidirectional roster tests. Deploy now leases proxy, health-checks candidate, rewrites/reloads synchronously, records receipt then retires incumbent. Known flip failures restore old route before cleanup; uncertain Docker/SSH retains both+lease for recovery. Guards reject custom topology/NBSP, handle replay before/after lease and postflip receipt conflicts. Receipt/DeployTarget shapes unchanged, no command kind/new layer export. Fresh owned gate3files63tests passed; strict owned production tsc0. Stop-before-start/flip, phase-code, topology/replay and NBSP counterexamples observed RED then restored/fixed. All5paths attributed. Full daemon ran exit1:31failed/481passed files,161failed/9187passed/47skipped tests; root typecheck1 foreign bootstrap-sequence45/109 missing deployment kind roster. Exact foreign diagnostics/anchors in comments b4d74e/9f9c60. No full-green or immutable merge-base subtraction claimed; scoped completion follows global owned-path/delivery-bias rail, overlay requested but absent. New proxy tests offline; inherited loopback healthcheck unchanged. Model continuity+official Caddy reload semantics, NOT real continuous-HTTP/drain proof. Residual cleanup/env parity limits comment6d349e. Handoff memory saved; all foreground jobs completed.",
   "completedAt": "2026-09-06T08:56:56.837Z",
   "reviewCompletedAt": "2026-09-06T08:56:56.837Z",
-  "reviewSummary": "APPROVED. 6/6 DoD verified in the working tree. Full evidence in comment b760add1.\n\nDoD1 proxy publishes 3000, app has NO ports: key, docker/Caddyfile in the artifact map; byte-golden plus service-SCOPED app-no-ports check. DoD2 Set-equality on 5 keys, bidirectional by construction; existing pins updated same diff. DoD3/4 I RAN THE MUTATION MYSELF: stop-before-flip gave \"transition 12: stop app: expected 0 to be greater than 0\" and \"expected 11 to be greater than 13\" (stop idx 11 < reload 13), 9 arms red; restored from out-of-tree backup in a separate call, SHA256 re-proven equal (46e5c60e..., = worker declared bytes), owned gate green after. Invariant walks EVERY transition. Bare docker/shell:false/argv, rewrite+reload argv byte-exact, rewrite<reload<stop. DoD5 whole {code DEPLOY_BUILD_FAILED, layer DEPLOY_ENGINE_STAMP, detail DEPLOY_PROXY_RELOAD_FAILED} asserted, then final state read (old HEALTHY, upstream old, candidate REMOVED, lock free); no new *_LAYER export. DoD6 offline via vi.mock, finally-teardown incl. DRILL_THROW arm.\n\nGATES owned vitest both deployment dirs -> 4 files, 68 passed|1 skipped, wider than worker 3-file leg. daemon test exit 1, 27 failed|485 passed. typecheck exit 1, 2 errors.\n\nBOTH REDS FOREIGN, attributed by me (worker took no baseline; I used a structural proof): ZERO of the 27 failures sit under the two deployment dirs, and NO file outside them imports the changed modules. Both tsc errors are in bootstrap-sequence.ts (missing deployment.deploy kinds); it and runtime-vocabulary.ts are CLEAN in the tree, so the red is baked into HEAD and this row is railed off command kinds.\n\nRAILS 1-5 pass; dirty daemon-command-registry.ts is task-dd86f35e preview wiring, untouched; receipt diff EMPTY. Per-file 224/292/347.\n\nCAVEATS, neither a reject: NO COMPLETION COMMIT (commits null) - bytes verified + SHA256 matched. Atomicity is a MODEL of Caddy /load, not an HTTP drain proof - disclosed, rail 5 bars real docker."
+  "reviewSummary": "APPROVED. 6/6 DoD verified in the working tree. Full evidence in comment b760add1.\n\nDoD1 proxy publishes 3000, app has NO ports: key, docker/Caddyfile in the artifact map; byte-golden plus service-SCOPED app-no-ports check. DoD2 Set-equality on 5 keys, bidirectional by construction; existing pins updated same diff. DoD3/4 I RAN THE MUTATION MYSELF: stop-before-flip gave \"transition 12: stop app: expected 0 to be greater than 0\" and \"expected 11 to be greater than 13\" (stop idx 11 < reload 13), 9 arms red; restored from out-of-tree backup in a separate call, SHA256 re-proven equal (46e5c60e..., = worker declared bytes), owned gate green after. Invariant walks EVERY transition. Bare docker/shell:false/argv, rewrite+reload argv byte-exact, rewrite<reload<stop. DoD5 whole {code DEPLOY_BUILD_FAILED, layer DEPLOY_ENGINE_STAMP, detail DEPLOY_PROXY_RELOAD_FAILED} asserted, then final state read (old HEALTHY, upstream old, candidate REMOVED, lock free); no new *_LAYER export. DoD6 offline via vi.mock, finally-teardown incl. DRILL_THROW arm.\n\nGATES owned vitest both deployment dirs -> 4 files, 68 passed|1 skipped, wider than worker 3-file leg. daemon test exit 1, 27 failed|485 passed. typecheck exit 1, 2 errors.\n\nBOTH REDS FOREIGN, attributed by me (worker took no baseline; I used a structural proof): ZERO of the 27 failures sit under the two deployment dirs, and NO file outside them imports the changed modules. Both tsc errors are in bootstrap-sequence.ts (missing deployment.deploy kinds); it and runtime-vocabulary.ts are CLEAN in the tree, so the red is baked into HEAD and this row is railed off command kinds.\n\nRAILS 1-5 pass; dirty daemon-command-registry.ts is task-dd86f35e preview wiring, untouched; receipt diff EMPTY. Per-file 224/292/347.\n\nCAVEATS, neither a reject: NO COMPLETION COMMIT (commits null) - bytes verified + SHA256 matched. Atomicity is a MODEL of Caddy /load, not an HTTP drain proof - disclosed, rail 5 bars real docker.",
+  "commits": [
+    {
+      "sha": "db16a103107623ea2e4de208f8d22da36e650275",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-06T08:35:44Z",
+      "paths": [
+        ".moe/tasks/task-db63dacc7cbe49cab9826e9b49c8669f.json",
+        "apps/daemon/src/deployment/deploy-ports.ts",
+        "apps/daemon/src/deployment/deploy-service.test.ts",
+        "apps/daemon/src/deployment/deploy-service.ts",
+        "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts",
+        "apps/daemon/src/repository/deployment/deployment-infrastructure-templates.ts"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-06T08:57:55.252Z",
+      "treeId": "6e66abd99688af0bf4c9ac8c2a86dee5b5b251b3",
+      "status": "DONE",
+      "contested": [
+        {
+          "path": "apps/daemon/src/deployment/deploy-service.test.ts",
+          "taskId": "task-463f195efd2f4fd2886790029a474194"
+        },
+        {
+          "path": "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts",
+          "taskId": "task-463f195efd2f4fd2886790029a474194"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-4f771bb8@2026-09-06T08:35:44Z",
+    "at": "2026-09-06T08:57:55.252Z"
+  }
 }

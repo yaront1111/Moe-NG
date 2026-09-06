@@ -953,6 +953,8 @@ const ACTIVATION_FRAME = Object.freeze({
     },
   ],
   outcome: "ACTIVATION",
+  // The provider member above is REFUSED, so the daemon publishes no reading with it.
+  provider: null,
   repository: { headSha: "b".repeat(40), toplevel: "D:/projexts/moe-next" },
   schemaVersion: "moe-activation-receipts/1",
   signing: {

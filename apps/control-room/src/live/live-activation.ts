@@ -22,9 +22,9 @@ export const ACTIVATION_MEMBERS = Object.freeze([
 ] as const);
 export type ActivationMember = (typeof ACTIVATION_MEMBERS)[number];
 
-/** The nine keys the daemon's ActivationView carries. */
+/** The ten keys the daemon's ActivationView carries. */
 export const ACTIVATION_FRAME_KEYS = [
-  "blocking", "distribution", "measuredAt", "members", "outcome", "repository",
+  "blocking", "distribution", "measuredAt", "members", "outcome", "provider", "repository",
   "schemaVersion", "signing", "store",
 ] as const;
 const RECEIPT_KEYS = ["code", "hash", "layer", "measured", "member", "reason", "ref"] as const;
@@ -54,6 +54,13 @@ export interface ActivationSigningView {
 
 export interface ActivationDistributionView { readonly kind: string; readonly root: string }
 export interface ActivationRepositoryView { readonly headSha: string; readonly toplevel: string }
+/**
+ * The agent CLI version the DAEMON read. `version` is the daemon's word verbatim,
+ * including its `UNKNOWN` when the CLI answered unreadably: rewriting that here into
+ * a friendlier phrase would put the browser back to describing a reading it did not
+ * take, which is the exact defect this member exists to remove.
+ */
+export interface ActivationProviderView { readonly command: string; readonly version: string }
 
 export type ActivationReadOutcome =
   | {
@@ -63,6 +70,7 @@ export type ActivationReadOutcome =
     readonly distribution: ActivationDistributionView | null;
     readonly measuredAt: string;
     readonly members: readonly ActivationReceiptView[];
+    readonly provider: ActivationProviderView | null;
     readonly repository: ActivationRepositoryView | null;
     readonly schemaVersion: string;
     readonly signing: ActivationSigningView;
@@ -196,6 +204,11 @@ const distributionOf = (value: unknown): ActivationDistributionView | null | und
     nonEmptyString(record.kind) && nonEmptyString(record.root)
       ? Object.freeze({ kind: record.kind, root: record.root }) : null);
 
+const providerOf = (value: unknown): ActivationProviderView | null | undefined =>
+  optionalRecord(value, ["command", "version"], (record) =>
+    nonEmptyString(record.command) && nonEmptyString(record.version)
+      ? Object.freeze({ command: record.command, version: record.version }) : null);
+
 const repositoryOf = (value: unknown): ActivationRepositoryView | null | undefined =>
   optionalRecord(value, ["headSha", "toplevel"], (record) =>
     nonEmptyString(record.headSha) && nonEmptyString(record.toplevel)
@@ -217,12 +230,13 @@ export function mapActivationAnswer(status: number, response: unknown): Activati
   const members = membersOf(record.members);
   const signing = signingOf(record.signing);
   const distribution = distributionOf(record.distribution);
+  const provider = providerOf(record.provider);
   const repository = repositoryOf(record.repository);
   const store = storeOf(record.store);
-  if (blocking === null || members === null || signing === null
-    || distribution === undefined || repository === undefined || store === undefined) return invalidResponse();
+  if (blocking === null || members === null || signing === null || distribution === undefined
+    || provider === undefined || repository === undefined || store === undefined) return invalidResponse();
   return Object.freeze({
-    blocking, distribution, measuredAt: record.measuredAt, members, repository,
+    blocking, distribution, measuredAt: record.measuredAt, members, provider, repository,
     schemaVersion: record.schemaVersion, signing, status: "ACTIVATION" as const, store,
   });
 }

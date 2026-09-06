@@ -137,6 +137,13 @@ test("a fresh project goes from empty store to a created goal, in the browser al
     await expect(repositoryReason).toBeVisible({ timeout: CARD_MS });
     await expect(repositoryReason).toContainText(expectedSha);
 
+    // NO PROVIDER READING YET, and that is the correct answer on an empty store: the provider
+    // receipt is bound to a COMMITTED provider.probe, and the card publishes the version only
+    // beside a provider it actually measured. A version rendered here would be one the daemon
+    // could not have taken.
+    await expect(page.getByTestId("cr.activate.version"), "no reading before the probe commits")
+      .toHaveCount(0);
+
     // NO ROW IS A PLACEHOLDER. `<projectId>-*` is what a stubbed receipt looks like, so its
     // absence is asserted over the whole list rather than per row — a placeholder that moved
     // to a different member would otherwise slip past.
@@ -210,6 +217,18 @@ test("a fresh project goes from empty store to a created goal, in the browser al
       await expect(step, `chain step ${kind} committed on THIS click`)
         .toContainText("accepted");
     }
+
+    // THE PROVIDER CLI VERSION IS READ, NOT DECLARED, and it appears only NOW — after the
+    // chain committed `provider.probe`. The browser asserts no snapshot at all
+    // (live-dispatch-payloads.ts sends `modelSnapshotKind: "UNKNOWN"`), so this line exists
+    // only because the DAEMON ran `<agent command> --version` on this host and published what
+    // it got back. A semver here cannot have come from a literal in the bundle, and the
+    // before/after pairing with the count-0 assertion above is what proves it was measured
+    // rather than rendered from something the page already held.
+    const version = page.getByTestId("cr.activate.version");
+    await expect(version, "the card shows the daemon's provider reading").toBeVisible({ timeout: CHAIN_MS });
+    expect(await version.innerText(), "the daemon read a version off the real CLI")
+      .toMatch(/^\S+ --version \S+ (?:\d+\.\d+\.\d+\S*|UNKNOWN)$/u);
 
     // THE POINT OF THE ROW: the SAME draft the daemon just refused now succeeds, with nothing
     // between the two attempts but the Activate click. That pairing is the proof — a create

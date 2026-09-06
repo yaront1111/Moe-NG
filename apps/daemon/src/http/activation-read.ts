@@ -77,6 +77,13 @@ export interface ActivationView {
   readonly measuredAt: string;
   readonly members: readonly ActivationReceiptRow[];
   readonly outcome: "ACTIVATION";
+  /**
+   * The agent CLI version THIS DAEMON read, or null when the provider member is
+   * unmeasured. Published rather than kept internal because a value the daemon
+   * measures and never shows is a value nobody can check: the card renders it, and
+   * `UNKNOWN` on the screen is the honest answer an operator can act on.
+   */
+  readonly provider: ActivationReceipts["provider"];
   readonly repository: ActivationReceipts["repository"];
   readonly schemaVersion: ActivationReceipts["schemaVersion"];
   readonly signing: ActivationSigningRow; readonly store: ActivationReceipts["store"];
@@ -159,6 +166,24 @@ function receiptRow(
   });
 }
 
+/**
+ * The reading, or null. Bound to the PROVIDER MEMBER's own verdict rather than
+ * published on its own: receipts reaching this function are not necessarily the
+ * ones this daemon measured, and a version rendered beside a refused provider would
+ * read as a measurement that stood. Scrubbed like every other published text —
+ * `command` is host configuration and the version is an external CLI's stdout.
+ */
+function providerReading(
+  receipts: ActivationReceipts, secrets: readonly string[],
+): ActivationReceipts["provider"] {
+  const reading = receipts.provider;
+  const member = receipts.members.find((receipt) => receipt.member === "provider");
+  if (reading === null || member === undefined || !member.measured) return null;
+  return Object.freeze({
+    command: scrub(reading.command, secrets), version: scrub(reading.version, secrets),
+  });
+}
+
 export function activationViewOf(
   receipts: ActivationReceipts, secrets: readonly string[] = [],
 ): ActivationView {
@@ -172,6 +197,7 @@ export function activationViewOf(
     measuredAt: receipts.measuredAt,
     members: Object.freeze(members),
     outcome: "ACTIVATION" as const,
+    provider: providerReading(receipts, secrets),
     repository: receipts.repository,
     schemaVersion: receipts.schemaVersion,
     signing: signingRow(receipts),
