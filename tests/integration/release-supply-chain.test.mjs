@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, test } from "node:test";
 
-import { RELEASE_COMPONENTS } from "../../scripts/release/release-subject.mjs";
+import { RELEASE_COMPONENTS, RELEASE_REFUSAL_REASONS } from "../../scripts/release/release-subject.mjs";
 
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
 const SOURCE_SHA = execFileSync("git", ["rev-parse", "HEAD"], {
@@ -1302,7 +1302,9 @@ describe("release package command", () => {
       expectReleaseRefusal(record, "TOOLCHAIN_OBSERVATION_FAILED");
       return;
     }
-    assert.equal(run.status, 0);
+    // The recorder may contain private observations. Report only a known refusal reason.
+    const reason = RELEASE_REFUSAL_REASONS.includes(record.reason) ? record.reason : "UNCLASSIFIED";
+    assert.equal(run.status, 0, `release evidence recorder refused: ${reason}`);
     assert.equal(record.componentCount, 6);
     assert.equal(record.reportCount, 3);
     assert.equal(record.sourceSha, SOURCE_SHA);

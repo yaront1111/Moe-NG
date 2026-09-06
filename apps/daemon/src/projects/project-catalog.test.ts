@@ -33,7 +33,7 @@ const UUID_TEMP = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 let scratch = "";
 
 beforeEach(async () => {
-  scratch = await mkdtemp(join(tmpdir(), "moe-project-catalog-"));
+  scratch = await realpath(await mkdtemp(join(tmpdir(), "moe-project-catalog-")));
 });
 
 afterEach(async () => {

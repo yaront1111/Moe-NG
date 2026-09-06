@@ -1,5 +1,5 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { request as httpRequest } from "node:http";
+import { request as httpRequest, Server } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -128,7 +128,8 @@ const mutation = (listener: ProjectManagerHttpListener, sessionCredential: strin
   method: "POST", origin: listener.origin, sessionCredential,
 });
 
-describe("manager plain-origin request/approve/claim", () => {
+// macOS does not configure the dedicated 127.0.0.2 loopback alias by default.
+describe.runIf(process.platform !== "darwin")("manager plain-origin request/approve/claim", () => {
   it("binds 127.0.0.2 and exposes no authority in its URL or bootstrap", async () => {
     await withListener(await options(), async (listener) => {
       expect(listener.origin).toBe(`http://127.0.0.2:${listener.port}`);
@@ -190,7 +191,7 @@ describe("manager plain-origin request/approve/claim", () => {
   });
 });
 
-describe("authenticated manager API", () => {
+describe.runIf(process.platform !== "darwin")("authenticated manager API", () => {
   const cookie = `moe_manager_session=${SESSION_SECRET}`;
 
   it("ignores a replayed cookie and lists only behind the explicit session header", async () => {
@@ -265,6 +266,25 @@ describe("authenticated manager API", () => {
       expect(denied.body).toMatchObject({ code: "PROJECT_MANAGER_ORIGIN_INVALID", ok: false });
     });
   });
+});
+
+it("refuses an unavailable loopback address without invoking manager operations", async () => {
+  const port = manager();
+  const configured = await options({ manager: port });
+  const listen = vi.spyOn(Server.prototype, "listen").mockImplementation(function (this: Server) {
+    queueMicrotask(() => this.emit("error", Object.assign(new Error("loopback address unavailable"), {
+      code: "EADDRNOTAVAIL",
+    })));
+    return this;
+  });
+  try {
+    expect(await startProjectManagerHttp(configured)).toEqual({
+      code: "PROJECT_MANAGER_BIND_FAILED", layer: PROJECT_MANAGER_HTTP_LAYER, ok: false,
+    });
+    expect(listen).toHaveBeenCalledOnce();
+    expect(listen).toHaveBeenCalledWith(0, "127.0.0.2", expect.any(Function));
+    for (const operation of Object.values(port)) expect(operation).not.toHaveBeenCalled();
+  } finally { listen.mockRestore(); }
 });
 
 it("refuses a bundle containing the only runtime session secret before binding", async () => {
