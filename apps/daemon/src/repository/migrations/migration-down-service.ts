@@ -5,7 +5,7 @@ import { backupFileHash } from "../../backups/backup-ports.js";
 import { MIGRATION_DOWN_NOT_LAST, MigrationDownError, nodeMigrationDownPorts,
   type MigrationDownPorts } from "./migration-down-ports.js";
 import { MIGRATION_RECEIPT_VERSION, migrationError, migrationReceiptId, migrationRefusal,
-  readMigrationReceipt, recordMigrationReceipt, type MigrationReceipt } from "./migration-receipt.js";
+  decodeMigrationReceiptBytes, readMigrationReceipt, recordMigrationReceipt, type MigrationReceipt } from "./migration-receipt.js";
 import { MIGRATION_LOCK_LEAF, migrationBackupDirectory } from "./migration-service.js";
 
 /**
@@ -42,13 +42,18 @@ type DownCode = "MIGRATION_DOWN_BATCH_UNKNOWN" | "MIGRATION_DOWN_NOT_LAST_BATCH"
  *  that sha's migrations created, so minting a second one would leave the pair unlinkable. */
 function baseReceipt(input: MigrationDownInput, sha: string): MigrationReceipt {
   const now = input.now ?? new Date();
-  if (!(now instanceof Date) || !Number.isFinite(now.getTime())) {
+  if (!(now instanceof Date) || !Number.isFinite(now.getTime())
+    || typeof input.toMigrationRequestId !== "string" || input.toMigrationRequestId.length === 0
+    || input.toMigrationRequestId.length > 4096) {
     throw migrationError("MIGRATION_RECEIPT_INVALID");
   }
-  return { version: MIGRATION_RECEIPT_VERSION, projectId: input.projectId, requestId: input.requestId,
+  const value: MigrationReceipt = { version: MIGRATION_RECEIPT_VERSION, projectId: input.projectId, requestId: input.requestId,
     receiptId: migrationReceiptId(input.projectId, input.requestId), environment: input.environment,
     sha, decidedAt: now.toISOString(), applied: [], backupRef: null,
     outcome: "REFUSED", refusal: migrationRefusal("MIGRATION_DOWN_BATCH_UNKNOWN", "no applied batch") };
+  const decoded = decodeMigrationReceiptBytes(new TextEncoder().encode(JSON.stringify(value)));
+  if (!decoded.ok) throw migrationError("MIGRATION_RECEIPT_INVALID");
+  return decoded.receipt;
 }
 
 const refused = (base: MigrationReceipt, code: DownCode, detail: string): MigrationReceipt =>
@@ -78,6 +83,9 @@ async function execute(
     await ports.dump(input.databaseUrl, path);
     backupRef = `${path}@sha256:${await backupFileHash(path)}`;
     const applied = await ports.revert(input.workspace, input.databaseUrl, batch);
+    if (applied.length !== batch.length || applied.some((name, index) => name !== batch[batch.length - 1 - index])) {
+      throw new MigrationDownError(null);
+    }
     return { ...base, applied, backupRef, outcome: "REVERTED", refusal: null };
   } catch (error) {
     // THE NAMED BATCH WAS NOT THE TAIL is reported under its own code with the schema untouched:
@@ -88,7 +96,7 @@ async function execute(
     if (backupRef === null && ownsFile && path !== null) {
       try { rmSync(path, { force: true }); } catch { throw migrationError("MIGRATION_BACKUP_FAILED"); }
     }
-    return refused(base, code, code);
+    return { ...refused(base, code, code), backupRef };
   }
 }
 
@@ -97,8 +105,21 @@ export async function revertLastBatch(
   store: SqliteEventStore, input: MigrationDownInput,
   ports: MigrationDownPorts = nodeMigrationDownPorts(),
 ): Promise<MigrationReceipt> {
+  baseReceipt(input, "0".repeat(40)); // Validate identity before reading receipts or performing effects.
   const replayed = readMigrationReceipt(store, input.projectId, input.requestId);
-  if (replayed !== null) return replayed;
+  if (replayed !== null) {
+    if (replayed.environment !== input.environment || replayed.outcome === "APPLIED") {
+      throw migrationError("MIGRATION_RECEIPT_CONFLICT");
+    }
+    if (replayed.outcome === "REVERTED") {
+      const source = batchOf(store, input);
+      if (source === null || source.sha !== replayed.sha
+        || JSON.stringify([...source.applied].reverse()) !== JSON.stringify(replayed.applied)) {
+        throw migrationError("MIGRATION_RECEIPT_CONFLICT");
+      }
+    }
+    return replayed;
+  }
   const source = batchOf(store, input);
   if (source === null) {
     // No source receipt means no sha to carry, so the refusal takes a syntactically valid

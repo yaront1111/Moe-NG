@@ -8,6 +8,7 @@ import { createDockerDouble } from "./deploy-ports.js";
 import { candidateContainerName } from "./deploy-service.js";
 import { deployReceiptId } from "./deploy-receipt-contracts.js";
 import { createRollbackCommandHandler } from "./rollback-command.js";
+import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 
 afterEach(closeStores);
 const clock = () => "2026-09-06T01:00:00.000Z";
@@ -100,7 +101,7 @@ it("replays engine refusal without converting it to command success", async () =
   expect(h.docker.calls).toEqual([]);
 });
 
-it("consumes the offered version before a distinct concurrent command can admit", async () => {
+it("reserves the environment before a distinct concurrent command can admit", async () => {
   const h = harness();
   let release!: () => void, entered!: () => void;
   const barrier = new Promise<void>(resolve => { release = resolve; });
@@ -111,7 +112,7 @@ it("consumes the offered version before a distinct concurrent command can admit"
   try {
     await started;
     await expect(h.handler({ ...h.input, envelope: { ...h.input.envelope, commandId: "concurrent-rollback" } }))
-      .rejects.toMatchObject({ code: "EXPECTED_VERSION_CONFLICT" });
+      .rejects.toMatchObject({ code: "DEPLOY_ROLLBACK_IN_PROGRESS" });
     expect(h.docker.calls).toEqual([]);
   } finally { release(); await first; }
   expect((await first).disposition).toBe("DECIDED");
@@ -119,9 +120,9 @@ it("consumes the offered version before a distinct concurrent command can admit"
 
 it("recovers the receipt after restart if the final command write was interrupted", async () => {
   const restartable = openRestartableStore(), h = harness(restartable.store);
-  const original = h.store.commitExpectedVersionDecision.bind(h.store);
+  const original = h.store.commitExpectedVersionDecisionLegs.bind(h.store);
   const interruptedStore = new Proxy(h.store, { get(target, property) {
-    if (property === "commitExpectedVersionDecision") return (input: Parameters<typeof original>[0]) => {
+    if (property === "commitExpectedVersionDecisionLegs") return (input: Parameters<typeof original>[0]) => {
       if (input.commandKind === "deployment.rollback") throw new Error("injected final write interruption");
       return original(input);
     };
@@ -144,4 +145,82 @@ it("keeps uncertain intent closed across a store restart", async () => {
   await expect(createRollbackCommandHandler({ ...h.options, store: reopen(restartable) })(h.input))
     .rejects.toMatchObject({ code: "DEPLOY_ROLLBACK_IN_PROGRESS" });
   expect(h.docker.calls).toEqual([]);
+});
+
+function projectWrite(store: ReturnType<typeof openStore>, commandId: string): void {
+  const payload = new TextEncoder().encode(JSON.stringify({ projectId: PROJECT_ID, marker: commandId }));
+  store.commitExpectedVersionDecision({ commandKind: "test.project-write", committedResultBytes: payload,
+    correlationId: commandId, decidedAt: clock(), key: { projectId: PROJECT_ID, principalId: "test", commandId },
+    requestBytes: payload, targetAggregateId: PROJECT_ID, expectedVersion: store.getAggregateVersion(PROJECT_ID),
+    events: [{ eventId: commandId, eventType: "TestProjectWritten", payload }] });
+}
+
+it("keeps project state and both versions unchanged through private rollback admission and completion", async () => {
+  const store = openStore();
+  projectWrite(store, "project-before-rollback");
+  const before = readDurableLedger(store, PROJECT_ID).aggregates.get(PROJECT_ID);
+  const h = harness(store);
+  const handler = createRollbackCommandHandler({ ...h.options, ports: { ...h.options.ports,
+    docker: async (args, stdin) => {
+      expect(store.getAggregateVersion(PROJECT_ID)).toBe(before?.currentVersion);
+      expect(readDurableLedger(store, PROJECT_ID).aggregates.get(PROJECT_ID)).toEqual(before);
+      return h.docker.docker(args, stdin);
+    } } });
+  await handler(h.input);
+  expect(store.getAggregateVersion(PROJECT_ID)).toBe(before?.currentVersion);
+  expect(readDurableLedger(store, PROJECT_ID).aggregates.get(PROJECT_ID)).toEqual(before);
+});
+
+it("completes and replays when an unrelated project writer wins immediately before terminal commit", async () => {
+  const restartable = openRestartableStore(), h = harness(restartable.store);
+  let raced = false;
+  const racedStore = new Proxy(h.store, { get(target, property) {
+    const value: unknown = Reflect.get(target, property, target);
+    if ((property === "commitExpectedVersionDecision" || property === "commitExpectedVersionDecisionLegs")
+      && typeof value === "function") return (input: { commandKind: string }) => {
+      if (input.commandKind === "deployment.rollback" && !raced) {
+        raced = true;
+        projectWrite(h.store, "unrelated-project-writer");
+      }
+      return value.call(target, input);
+    };
+    return typeof value === "function" ? value.bind(target) : value;
+  } });
+  const decided = await createRollbackCommandHandler({ ...h.options, store: racedStore })(h.input);
+  expect(raced).toBe(true);
+  expect(decided.disposition).toBe("DECIDED");
+  const calls = h.docker.calls.length;
+  const reopened = reopen(restartable);
+  expect(await createRollbackCommandHandler({ ...h.options, store: reopened })(h.input))
+    .toEqual({ ...decided, disposition: "REPLAYED" });
+  expect(h.docker.calls).toHaveLength(calls);
+  expect(readDurableLedger(reopened, PROJECT_ID).aggregates.get(PROJECT_ID)?.result)
+    .toEqual({ projectId: PROJECT_ID, marker: "unrelated-project-writer" });
+});
+
+it("holds the environment against a distinct command after uncertain execution and restart", async () => {
+  const restartable = openRestartableStore(), h = harness(restartable.store);
+  const handler = createRollbackCommandHandler({ ...h.options, ports: { ...h.options.ports,
+    target: () => { throw new Error("injected target interruption"); } } });
+  await expect(handler(h.input)).rejects.toThrow("injected target interruption");
+  const reopened = reopen(restartable);
+  await expect(createRollbackCommandHandler({ ...h.options, store: reopened })({ ...h.input,
+    envelope: { ...h.input.envelope, expectedVersion: reopened.getAggregateVersion(PROJECT_ID),
+      commandId: "different-command-after-crash" } })).rejects.toMatchObject({ code: "DEPLOY_ROLLBACK_IN_PROGRESS" });
+  expect(h.docker.calls).toEqual([]);
+});
+
+it("releases the environment after a receipt-backed refusal so a fresh command can be admitted", async () => {
+  const h = harness();
+  let calls = 0;
+  const handler = createRollbackCommandHandler({ ...h.options, ports: { ...h.options.ports,
+    docker: async () => { calls += 1; return { code: 1, stderr: "docker unavailable", stdout: "" }; } } });
+  await expect(handler(h.input)).rejects.toMatchObject({ code: "DEPLOY_DOCKER_UNAVAILABLE" });
+  const afterFirst = calls;
+  await expect(handler({ ...h.input, envelope: { ...h.input.envelope, commandId: "next-rollback" } }))
+    .rejects.toMatchObject({ code: "DEPLOY_DOCKER_UNAVAILABLE" });
+  expect(calls).toBeGreaterThan(afterFirst);
+  const afterSecond = calls;
+  await expect(handler(h.input)).rejects.toMatchObject({ code: "DEPLOY_DOCKER_UNAVAILABLE" });
+  expect(calls).toBe(afterSecond);
 });

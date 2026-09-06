@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { decodeBoundedJsonBytes } from "@moe/contracts";
 import { identifyReplayRequest } from "@moe/store";
 import type { CommandDecisionRecord } from "@moe/store";
 import { DomainRefusal } from "../daemon-command-dispatch.js";
@@ -37,8 +38,9 @@ function exactRequest({ envelope }: CommandHandlerInput): { environment: string;
   return { environment, receiptId, restore: payload["restoreDatabase"] };
 }
 
-function assertIdentity(record: CommandDecisionRecord, kind: string, requestBytes: Uint8Array): void {
-  if (record.commandKind !== kind || record.effectDisposition !== "EFFECTS_COMMITTED") {
+function assertIdentity(record: CommandDecisionRecord, kind: string, requestBytes: Uint8Array, aggregateId: string): void {
+  if (record.commandKind !== kind || record.effectDisposition !== "EFFECTS_COMMITTED"
+    || record.targetAggregateId !== aggregateId) {
     refuse("DEPLOY_ROLLBACK_COMMAND_ID_SPENT", undefined, 409);
   }
   if (identifyReplayRequest(record, requestBytes) !== record.replayRequestSha256) {
@@ -54,7 +56,8 @@ function outcome(record: CommandDecisionRecord, receipt: DeployReceiptV1, replay
     effectId: record.decisionId, resultCode: record.resultCode };
 }
 
-/** The immutable intent consumes the offered project version before any remote operation.
+/** The immutable intent checks the offered project version before any remote operation.
+ * A private environment stream has odd versions while reserved and even versions when free.
  * A process that dies without a receipt leaves a pending request, never permission to retry
  * uncertain effects. Receipt-backed recovery may finish only the already admitted request. */
 export function createRollbackCommandHandler(options: RollbackCommandOptions): AsyncCommandHandler {
@@ -73,11 +76,13 @@ export function createRollbackCommandHandler(options: RollbackCommandOptions): A
       targetAggregateId: envelope.targetAggregateId, expectedVersion: envelope.expectedVersion,
       payload: { environment: request.environment, toReceiptRef: request.receiptId, restoreDatabase: request.restore } });
     const key = { commandId: envelope.commandId, principalId: principal.principalId, projectId };
+    const aggregateId = `rollback-request:${createHash("sha256").update(bytes(key)).digest("hex")}`;
+    const guardId = `rollback-environment:${createHash("sha256").update(bytes({ projectId, environment: request.environment })).digest("hex")}`;
     const decided = store.getCommandDecision(key);
-    if (decided !== null) assertIdentity(decided, KIND, requestBytes);
+    if (decided !== null) assertIdentity(decided, KIND, requestBytes, aggregateId);
     const intentKey = { ...key, principalId: INTENT_PRINCIPAL };
     const intent = store.getCommandDecision(intentKey);
-    if (intent !== null) assertIdentity(intent, INTENT_KIND, requestBytes);
+    if (intent !== null) assertIdentity(intent, INTENT_KIND, requestBytes, aggregateId);
     // BackupPorts.restoreDatabase verifies a dump in a temporary isolated database.
     // It has no bound production restore destination and cannot satisfy this operation.
     if (request.restore) refuse(DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE,
@@ -107,21 +112,33 @@ export function createRollbackCommandHandler(options: RollbackCommandOptions): A
       refuse("DEPLOY_ROLLBACK_COMMAND_ID_SPENT", undefined, 409);
     }
     const decidedAt = clock();
+    let guardVersion: number;
     if (intent === null) {
-      const aggregateId = `rollback-request:${createHash("sha256").update(bytes(key)).digest("hex")}`;
+      const priorGuardVersion = store.getAggregateVersion(guardId);
+      if (priorGuardVersion % 2 !== 0) refuse("DEPLOY_ROLLBACK_IN_PROGRESS", undefined, 409);
+      guardVersion = priorGuardVersion + 1;
       const admitted = store.commitExpectedVersionDecisionLegs({ commandKind: INTENT_KIND,
-        committedResultBytes: requestBytes, correlationId: envelope.correlationId, decidedAt,
+        committedResultBytes: bytes({ guardVersion }), correlationId: envelope.correlationId, decidedAt,
         key: intentKey, requestBytes, legs: [
           { aggregateId, expectedVersion: 0, events: [{ eventId: `${aggregateId}-requested`,
             eventType: "EnvironmentRollbackRequested", payload: requestBytes }] },
-          { aggregateId: projectId, expectedVersion: envelope.expectedVersion,
-            events: [{ eventId: `${receiptId}-rollback-admitted`, eventType: "EnvironmentRollbackAdmitted", payload: requestBytes }] },
+          { aggregateId: projectId, expectedVersion: envelope.expectedVersion, events: [] },
+          { aggregateId: guardId, expectedVersion: priorGuardVersion,
+            events: [{ eventId: `${aggregateId}-reserved`, eventType: "EnvironmentRollbackReserved", payload: requestBytes }] },
         ] });
       if (admitted.decision.effectDisposition !== "EFFECTS_COMMITTED") {
         refuse(admitted.decision.resultCode, undefined, 409);
       }
       // Another process may have won admission after our read. It alone owns execution.
       if (admitted.disposition === "REPLAYED") refuse("DEPLOY_ROLLBACK_IN_PROGRESS", undefined, 409);
+    } else {
+      const decoded = decodeBoundedJsonBytes(intent.resultBytes);
+      const value = decoded.ok && decoded.value !== null && !Array.isArray(decoded.value)
+        && typeof decoded.value === "object" && "guardVersion" in decoded.value ? decoded.value.guardVersion : null;
+      if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1 || value % 2 !== 1) {
+        refuse("DEPLOY_ROLLBACK_RECEIPT_INVALID");
+      }
+      guardVersion = value;
     }
     let receipt: DeployReceiptV1;
     if (recovered.ok) {
@@ -140,10 +157,14 @@ export function createRollbackCommandHandler(options: RollbackCommandOptions): A
     }
     const result = bytes({ environment: request.environment, toReceiptRef: request.receiptId,
       receiptId: receipt.receiptId, outcome: receipt.outcome });
-    const committed = store.commitExpectedVersionDecision({ commandKind: KIND, committedResultBytes: result,
+    const committed = store.commitExpectedVersionDecisionLegs({ commandKind: KIND, committedResultBytes: result,
       correlationId: envelope.correlationId, decidedAt: clock(), key, requestBytes,
-      targetAggregateId: projectId, expectedVersion: store.getAggregateVersion(projectId),
-      events: [{ eventId: `${receipt.receiptId}-rollback-decided`, eventType: "EnvironmentRollbackDecided", payload: result }] });
+      legs: [
+        { aggregateId, expectedVersion: 1,
+          events: [{ eventId: `${receipt.receiptId}-rollback-decided`, eventType: "EnvironmentRollbackDecided", payload: result }] },
+        { aggregateId: guardId, expectedVersion: guardVersion,
+          events: [{ eventId: `${aggregateId}-released`, eventType: "EnvironmentRollbackReleased", payload: result }] },
+      ] });
     if (committed.decision.effectDisposition !== "EFFECTS_COMMITTED") refuse(committed.decision.resultCode, undefined, 409);
     return outcome(committed.decision, receipt, intent !== null || committed.disposition === "REPLAYED");
   };

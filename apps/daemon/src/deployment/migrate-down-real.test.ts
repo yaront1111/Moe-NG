@@ -130,7 +130,7 @@ it.runIf(RUN)("reverts the LAST batch against a live PostgreSQL and records it",
       deploymentDeploy: {
         buildContext: "/workspace/product", clock: (): string => DECIDED_AT,
         healthBudgetMs: 10, pollMs: 1, sleep: (): Promise<void> => Promise.resolve(),
-        ports: { docker: double.docker, releaseDecision: (): string | null => null,
+        ports: { build: double.build, docker: double.docker, releaseDecision: (): string | null => null,
           ssh: double.ssh, target: (): DeployTarget => LOCAL, transfer: double.transfer },
       },
       // THE REAL PORTS: no `ports` override, so the child runs the generated product's own

@@ -51,7 +51,7 @@ export class MigrationDownError extends Error {
  * guarded revert into an unguarded one. Every name is `migrationFilename`-validated first.
  */
 const revertScript = (batch: readonly string[]): string => String.raw`
-import { runner } from 'node-pg-migrate';
+import { runner, PG_MIGRATE_LOCK_ID } from 'node-pg-migrate';
 import pg from 'pg';
 import { basename, join } from 'node:path';
 const batch = ${JSON.stringify([...batch])};
@@ -66,18 +66,22 @@ const logger = { debug() {}, error() {}, info() {}, warn(message) {
 try {
   const client = new pg.Client({ connectionString: process.env.DATABASE_URL });
   await client.connect();
-  let tail;
   try {
-    tail = (await client.query('SELECT name FROM pgmigrations ORDER BY id DESC LIMIT $1', [batch.length])).rows.map(row => row.name);
+    // The library's public lock identity fences other up/down runners too. Its nested lock is
+    // reentrant on this SAME session; our outer lock remains until client.end() after the run.
+    const lock = await client.query('SELECT pg_try_advisory_lock($1) AS "lockObtained"', [PG_MIGRATE_LOCK_ID]);
+    if (lock.rows[0]?.lockObtained !== true) throw new Error('MIGRATION_LOCK_UNAVAILABLE');
+    const tail = (await client.query('SELECT name FROM public.pgmigrations ORDER BY run_on DESC, id DESC LIMIT $1', [batch.length])).rows.map(row => row.name);
+    const want = [...batch].reverse().map(bare);
+    if (tail.length !== want.length || want.some((name, index) => tail[index] !== name)) {
+      emit({ reverted: [], code: '${MIGRATION_DOWN_NOT_LAST}' }); process.exitCode = 1;
+    } else {
+      const undone = await runner({ dbClient: client, dir: join(process.cwd(), 'migrations'),
+        migrationsSchema: 'public', migrationsTable: 'pgmigrations', direction: 'down', count: batch.length,
+        singleTransaction: true, checkOrder: true, logger });
+      emit({ reverted: undone.map(item => basename(item.path)), code: null });
+    }
   } finally { await client.end(); }
-  const want = [...batch].reverse().map(bare);
-  if (tail.length !== want.length || want.some((name, index) => tail[index] !== name)) {
-    emit({ reverted: [], code: '${MIGRATION_DOWN_NOT_LAST}' }); process.exitCode = 1;
-  } else {
-    const undone = await runner({ databaseUrl: process.env.DATABASE_URL, dir: join(process.cwd(), 'migrations'),
-      migrationsTable: 'pgmigrations', direction: 'down', count: batch.length, singleTransaction: true, checkOrder: true, logger });
-    emit({ reverted: undone.map(item => basename(item.path)), code: null });
-  }
 } catch {
   emit({ reverted: [], code: '${MIGRATION_DOWN_FAILED_CODE}' }); process.exitCode = 1;
 }
@@ -104,7 +108,8 @@ async function revert(
     // a generic failure: NOT_LAST_BATCH and a broken down() are different incidents.
     if (result.exitCode !== 0) throw new MigrationDownError(value.code);
     if (!Array.isArray(value.reverted) || !value.reverted.every(migrationFilename)
-      || value.reverted.length !== batch.length) throw new MigrationDownError(null);
+      || value.reverted.length !== batch.length
+      || value.reverted.some((name, index) => name !== batch[batch.length - 1 - index])) throw new MigrationDownError(null);
     return Object.freeze([...value.reverted] as string[]);
   } catch (error) { throw error instanceof MigrationDownError ? error : new MigrationDownError(null); }
   finally { await runner.close(); }
