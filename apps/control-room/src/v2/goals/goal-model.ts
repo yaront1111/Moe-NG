@@ -18,7 +18,7 @@ import type { ProofRow } from "../shell/proof-context.js";
 /** The single dev goal the live affordance surface stands for. */
 export const LIVE_GOAL_ID = "goal-live-1";
 
-export type GoalStateLabel = "ACTIVE" | "BLOCKED" | "DRAFT";
+export type GoalStateLabel = "ACTIVE" | "BLOCKED" | "DRAFT" | "UNKNOWN";
 
 /** The coloured status dot beside a goal's one-line headline. */
 export type HeadlineTone = "accent" | "agent" | "danger" | "verified";

@@ -60,10 +60,17 @@ describe("deriveGoalCatalog", () => {
     expect(data.goals[0]).toMatchObject({
       budgetComingOnline: "No budget read is joined to the goal catalog yet.",
       needsYou: false,
-      state: "DRAFT",
+      state: "UNKNOWN",
       titleIsIdentifier: false,
     });
     expect(data.goals[0]?.progress).toBeUndefined();
+    for (const goal of data.goals) {
+      expect(goal.state).toBe("UNKNOWN");
+      expect(goal.comingOnlineFacts).toContainEqual({
+        label: "Current state",
+        reason: "The goal catalog does not include the current goal state.",
+      });
+    }
     expect(data.goals[0]?.facts).toContainEqual(expect.objectContaining({
       label: "Planning run",
       value: "run-alpha",

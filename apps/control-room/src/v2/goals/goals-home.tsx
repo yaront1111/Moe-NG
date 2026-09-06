@@ -117,6 +117,9 @@ export function GoalsHome({
   };
 
   const creationLocked = busy || retryUnchanged;
+  // A bound slot can be the result of this send. Keep its draft mounted until
+  // the answer is definitive so an ambiguous attempt can replay unchanged.
+  const showCreateForm = creating && (createDisabledReason === undefined || creationLocked);
 
   return (
     <section aria-label="Goals" className="cr2-goals" data-source={data.source} data-testid="cr.goals.home">
@@ -175,7 +178,7 @@ export function GoalsHome({
         )}
         <div className="cr2-goals-new">
           <ActionButton
-            ariaPressed={creating && createDisabledReason === undefined}
+            ariaPressed={showCreateForm}
             disabled={createDisabledReason !== undefined || creationLocked}
             onClick={createDisabledReason === undefined && !creationLocked
               ? () => setCreating((open) => !open)
@@ -195,7 +198,7 @@ export function GoalsHome({
         </p>
       )}
 
-      {creating && createDisabledReason === undefined ? (
+      {showCreateForm ? (
         <NewGoalForm
           busy={busy}
           onCancel={() => { if (!creationLocked) setCreating(false); }}

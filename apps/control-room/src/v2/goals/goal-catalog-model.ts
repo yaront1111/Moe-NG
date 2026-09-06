@@ -18,6 +18,10 @@ const SOURCE_ROW = Object.freeze({ k: "SOURCE", v: "POST /goals/read" });
 
 const COMING_ONLINE: readonly ComingOnlineFact[] = Object.freeze([
   Object.freeze({
+    label: "Current state",
+    reason: "The goal catalog does not include the current goal state.",
+  }),
+  Object.freeze({
     label: "Acceptance progress",
     reason: "Node acceptance is not joined to the goal catalog yet.",
   }),
@@ -101,7 +105,7 @@ function goalCard(entry: LiveGoalCatalogEntry): GoalCardModel {
     needsYou: false,
     progressComingOnline: "Node acceptance is not joined to the goal catalog yet.",
     planningRunRef: entry.planningRunRef,
-    state: "DRAFT",
+    state: "UNKNOWN",
     title: entry.brief?.title ?? entry.goalId,
     titleIsIdentifier: entry.brief === null,
   });
