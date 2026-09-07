@@ -185,7 +185,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T00:05:18.665Z",
-  "updatedAt": "2026-09-07T15:40:27.344Z",
+  "updatedAt": "2026-09-07T15:40:33.832Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T13:11:20.223Z",
     "plannedStepCount": 7,
@@ -224,5 +224,75 @@
     ]
   },
   "planApprovedAt": "2026-09-07T13:13:37.107Z",
-  "workStartedAt": "2026-09-07T15:16:12.982Z"
+  "workStartedAt": "2026-09-07T15:16:12.982Z",
+  "commits": [
+    {
+      "sha": "09c25cdf7a710409d7cc69a96d5d3bd89e31d5da",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-ca28be90@2026-09-07T15:15:37Z",
+      "paths": [
+        ".moe/tasks/task-a98b01a44ffd46cba9d9648fcb7001cb.json",
+        "apps/control-room/src/v2/ops/latency-sparkline.test.tsx",
+        "apps/control-room/src/v2/ops/latency-sparkline.tsx",
+        "apps/daemon/src/daemon-entry-deployments-health.test.ts",
+        "apps/daemon/src/http/deployments-health-read.ts"
+      ],
+      "recordedBy": "worker-ca28be90",
+      "recordedAt": "2026-09-07T15:40:33.832Z",
+      "treeId": "a62c94b8eb7ffa226b463386aace160418ac716a",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/control-room/src/live/live-deployments-health.test.ts",
+          "taskId": "task-620fb461689441d6bd1fed23ce62aff7"
+        },
+        {
+          "path": "apps/control-room/src/live/live-deployments-health.ts",
+          "taskId": "task-620fb461689441d6bd1fed23ce62aff7"
+        },
+        {
+          "path": "apps/control-room/src/v2/ops/environments-section.test.tsx",
+          "taskId": "task-620fb461689441d6bd1fed23ce62aff7"
+        },
+        {
+          "path": "apps/control-room/src/v2/ops/environments-section.tsx",
+          "taskId": "task-679cdaa380874f55978e8790d770e37a"
+        },
+        {
+          "path": "apps/control-room/src/v2/ops/live-environments.test.tsx",
+          "taskId": "task-620fb461689441d6bd1fed23ce62aff7"
+        },
+        {
+          "path": "apps/daemon/src/http/deployments-health-read.test.ts",
+          "taskId": "task-620fb461689441d6bd1fed23ce62aff7"
+        },
+        {
+          "path": "apps/daemon/src/http/deployments-health-read.ts",
+          "taskId": "task-620fb461689441d6bd1fed23ce62aff7"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-a98b01a44ffd46cba9d9648fcb7001cb.json",
+    "apps/control-room/src/v2/ops/latency-sparkline.test.tsx",
+    "apps/control-room/src/v2/ops/latency-sparkline.tsx",
+    "apps/daemon/src/daemon-entry-deployments-health.test.ts",
+    "apps/daemon/src/http/deployments-health-read.ts"
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/v2/ops/latency-sparkline.tsx",
+    "apps/control-room/src/v2/ops/latency-sparkline.test.tsx",
+    "apps/daemon/src/http/deployments-health-read.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-ca28be90@2026-09-07T15:15:37Z",
+    "at": "2026-09-07T15:40:33.832Z"
+  }
 }
