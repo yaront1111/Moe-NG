@@ -49,7 +49,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-80b93ae9",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -121,7 +121,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:45:42.652Z",
-  "updatedAt": "2026-09-06T22:09:04.524Z",
+  "updatedAt": "2026-09-07T00:01:59.525Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:06:22.019Z",
     "plannedStepCount": 3,
@@ -397,6 +397,15 @@
     "at": "2026-09-06T22:09:04.524Z"
   },
   "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-2 COMPLETED (child confirmations, recorded in comments; declared source paths porcelain-empty). Last checkpoint aee65ba4789b9e437da485a3be976d925855b96e, 1 path, PUSHED to moe/work-2026-09-04. Attribution work recorded in comment-dbdf54b295; evidence comment-dbdf54b2956e4fb1b1eea02a1e3c7550 plus a 19:52Z correction comment supersede the 19:39Z blocked reason.",
+      "whatRemains": "Step 3 only, and it is nothing but the three leased gate legs, each run STANDALONE and FOREGROUND (no pipe, no ';', no '&&'), quoting each 'Test Files N passed' count line: (1) `pnpm --filter @moe/daemon test` - this row's named complete_task verification command, (2) `pnpm --filter @moe/control-room test`, (3) `pnpm typecheck`.",
+      "pitfalls": "THE LEASE IS ALREADY YOURS - `full-suite-gate` is task-keyed to this row (granted 21:09:06Z, expires 2026-09-07T21:19:04Z). Do NOT call acquire_resource for a second one; run under the lease you inherit and release_resource when the legs are done. HEAD's daemon suite is RED for reasons outside this row: five disclosed files, all owned by task-0397287d (four win32 criterion-execution files + daemon-command-registry.test.ts:1211). complete_task hard-refuses exitCode != 0, so use the governor's 21:14Z COMPLETION FORM - pass the scoped owned-paths leg as `verification`, and put the leased full run plus the five-file disclosed roster in the summary. task-c851961b was graded this way and QA called it the model.",
+      "openQuestions": "None. If the daemon leg's failing set is anything other than those five disclosed files, stop and report it in #governors rather than completing - a sixth red file means the baseline roster moved.",
+      "releasedAt": "2026-09-07T00:01:59.521Z",
+      "releasedBy": "governor-c0820947",
+      "reason": "Governor 22:17Z, owner-approved. CONFIRMED CRASH, not idle time: two process-tree censuses five minutes apart (22:08Z, 22:13Z) find NO wrapper powershell and NO claude.exe for worker-80b93ae9, while every other registered seat maps to a live wrapper+CLI pair. Its wrapper printed `[launch-failure] Backing off 60s before relaunching (streak 1)` after landing aee65ba4 and then exited with its terminal tab. Pinged in #workers at 22:13Z; nothing can answer. Releasing in place so a live seat can resume — the row stays WORKING and keeps its steps."
+    },
     {
       "whatIsDone": "Steps 1-2 complete (confirmation-only, unaffected). Step 3 is gate legs only. Prior attribution work by me is recorded in comment-dbdf54b2956e4fb1b1eea02a1e3c7550 (gate sheet at HEAD 7d78aa19), comment-e7f97fc3b7e3497ab067bbac12873047 (cause B withdrawn), comment-cdabf40d3adc4481960af1792b3a58bc (FINAL ledger, sha-anchored). Net on the owner's 11-commit push: ONE file broken and since fixed at f213b41d, TWO fixed, four pre-existing.",
       "whatRemains": "The three gate legs under the lease worker-adefb11e already holds: `pnpm --filter @moe/daemon test` (this row's named complete_task verification command), `pnpm --filter @moe/control-room test`, `pnpm typecheck`. Each STANDALONE and FOREGROUND, each quoted with its `Test Files N passed` count line.",

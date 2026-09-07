@@ -33,9 +33,22 @@ export interface SessionsConcurrency {
   readonly configuredAgentLimit: number;
 }
 
+/**
+ * What the daemon STATED about the agent provider. `configured` is the provider this
+ * PROJECT is configured to staff seats with — the daemon's own env plus its durable
+ * project setting, never a measurement of what the wrapper actually spawned, and never a
+ * per-goal override (that read is project-scoped). `envOverride` says MOE_AGENT_COMMAND in
+ * the daemon's environment is what decided it. Shaped verbatim: no interpretation here.
+ */
+export interface SessionsAgentProvider {
+  readonly configured: string;
+  readonly envOverride: boolean;
+}
+
 export type SessionsOutcome =
   | {
     readonly status: "SESSIONS";
+    readonly agentProvider: SessionsAgentProvider;
     readonly concurrency: SessionsConcurrency;
     readonly readAt: string;
     readonly sessions: readonly SessionView[];
@@ -119,7 +132,7 @@ function sessionOf(value: unknown): SessionView | null {
  * daemon's own `SessionsView` members: this decode is EXACT-ARITY, so a member added on
  * one side and not the other does not degrade the Seats screen, it BLANKS it.
  */
-export const SESSIONS_FRAME_KEYS = ["concurrency", "outcome", "readAt", "sessions", "totals", "unreadable"] as const;
+export const SESSIONS_FRAME_KEYS = ["agentProvider", "concurrency", "outcome", "readAt", "sessions", "totals", "unreadable"] as const;
 
 /** Maps only an exact daemon SESSIONS frame; every other answer is REFUSED or ERROR. PURE. */
 export function mapSessionsAnswer(status: number, response: unknown): SessionsOutcome {
@@ -132,6 +145,10 @@ export function mapSessionsAnswer(status: number, response: unknown): SessionsOu
   if (totals === null || !count(totals.closed) || !count(totals.expired) || !count(totals.live) || !Array.isArray(record.sessions)) return invalidResponse();
   const concurrency = exactDataRecord(record.concurrency, ["activeSeats", "configuredAgentLimit"]);
   if (concurrency === null || !count(concurrency.activeSeats) || !count(concurrency.configuredAgentLimit)) return invalidResponse();
+  // `envOverride` is a FLAG, so it is type-checked as one: a truthiness test would let the
+  // string "false" through and render an override that the daemon never claimed.
+  const agentProvider = exactDataRecord(record.agentProvider, ["configured", "envOverride"]);
+  if (agentProvider === null || !nonEmptyString(agentProvider.configured) || typeof agentProvider.envOverride !== "boolean") return invalidResponse();
   const sessions: SessionView[] = [];
   for (const raw of record.sessions) {
     const session = sessionOf(raw);
@@ -139,6 +156,7 @@ export function mapSessionsAnswer(status: number, response: unknown): SessionsOu
     sessions.push(session);
   }
   return Object.freeze({
+    agentProvider: Object.freeze({ configured: agentProvider.configured, envOverride: agentProvider.envOverride }),
     concurrency: Object.freeze({ activeSeats: concurrency.activeSeats, configuredAgentLimit: concurrency.configuredAgentLimit }),
     readAt: record.readAt, sessions: Object.freeze(sessions), status: "SESSIONS" as const,
     totals: Object.freeze({ closed: totals.closed, expired: totals.expired, live: totals.live }), unreadable: record.unreadable,

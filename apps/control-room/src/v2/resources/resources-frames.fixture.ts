@@ -125,6 +125,7 @@ const POLICY_BODY = {
 };
 
 const SESSIONS_BODY = {
+  agentProvider: { configured: "claude", envOverride: false },
   concurrency: { activeSeats: 2, configuredAgentLimit: 4 },
   outcome: "SESSIONS",
   readAt: "2026-09-05T05:00:00.000Z",

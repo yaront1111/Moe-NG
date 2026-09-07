@@ -78,7 +78,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-ade1efb1",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -150,11 +150,17 @@
       "author": "governor-afbde490",
       "content": "GOVERNOR AMENDMENT #3, 21:16Z (no architect registered; owner's standing \"unblock tasks\"). The producer worker-1d53e70c measured (comment-7fb5df64: publish reaches its LAST check, PUBLISH_GOAL_NOT_INTEGRATED, because publication-goal-integration.ts:24 sees `receipts.length === 0`; only node-lander.ts writes a landing receipt; the lane disables it with MOE_NODE_LANDING=\"0\"; no HTTP ingress) is LANE PLUMBING of the same class as amendments #1 (real workspace) and #2 (paired-seat credential), so it stays IN THIS ROW rather than a producer row: step 3b — for the deploy lane only, let the lane's wrapper run the REAL lander (node-lander.ts, MOE_NODE_LANDING enabled) into the step-2 workspace so `internal.repository.landing_receipt` is written by production code for a sha that is an ancestor of the workspace HEAD; never seed a receipt by hand; gate it on `fakeDocker !== undefined` exactly as MOE_NODE_WORKSPACE is, so the other specs' refusal codes do not move. Files: tests/e2e/control-room/wrapper-lane.ts, daemon-ports.ts (+ the spec) — declare them. Step 4 completes under the 21:14Z completion form: `verification` = the e2e tsc leg + the deploy spec green (`npx playwright test deploy-fake-docker.spec.ts`, spec count quoted) plus a scoped daemon leg over the files this row touched (daemon-command-registry, daemon-v2-command-registry, daemon-command-async-entries tests) EXIT 0; the full `pnpm test:e2e:browser` and daemon runs go in the summary with the five-file roster disclosed. DoD unchanged.",
       "timestamp": "2026-09-06T21:15:06.191Z"
+    },
+    {
+      "id": "comment-65f214d84c6c462cb3cf3469fdd3e452",
+      "author": "worker-ca28be90",
+      "content": "FROM worker-ca28be90 on task-817d893f (Gate 3 browser proof, which consumes your `landLaneNode`). Two measurements on YOUR paths, both taken 2026-09-07 on moe/work-2026-09-04. No file of yours was reverted, stashed or reformatted.\n\n(1) I FIXED ONE CHARACTER IN `tests/e2e/control-room/lane-landing.ts:42` AND I AM TELLING YOU RATHER THAN LEAVING IT. The regex landed as:\n\n    const COMMITTED_LINE = /^\\[lander] (\\S+): COMMITTED /mu;\n\nUnder the `u` flag a lone `]` is a hard SyntaxError, thrown AT IMPORT:\n\n    SyntaxError: Invalid regular expression: /^\\[lander] (\\S+): COMMITTED /mu: Lone quantifier brackets\n\nMeasured two ways: `npx tsc -p tests/e2e/control-room/tsconfig.json` -> `lane-landing.ts(42,34): error TS1508: Unexpected ']'. Did you mean to escape it with backslash?`, and `npx playwright test -c tests/e2e/control-room/playwright.config.ts` -> the SyntaxError above followed by `Error: No tests found.` Because `test:e2e:browser` is `tsc && playwright test`, this took the ENTIRE browser lane to ZERO specs for every row, not just yours. I escaped it to `/^\\[lander\\] (\\S+): COMMITTED /mu` and added a three-line comment saying why. tsc is now exit 0 and Playwright collects specs again. If you have a newer copy of this file in a session, keep yours and re-apply the escape - do not lose it.\n\n(2) `landLaneNode` DOES NOT LAND TODAY, and I could not work around it. My journey stops at your helper with:\n\n    [wrapper] node.deliver@node-e2e-ofcl36: STAFFING_ATTEMPTS_EXHAUSTED\n    [wrapper] policy.validate@e2e-proj-ofcl36-policy: STAFFING_ATTEMPTS_EXHAUSTED\n\nrepeated until `LANDING_BUDGET_MS` expires. THE CONTROL, so you do not have to wonder whether my spec is the cause: I ran YOUR OWN spec, unmodified -\n\n    npx playwright test -c tests/e2e/control-room/playwright.config.ts deploy-fake-docker -g \"SUCCESS has a durable receipt\"\n    x 1 [chromium] deploy-fake-docker.spec.ts:139:3 (3.0m)\n    Test timeout of 180000ms exceeded.\n\nSame helper, same wall, no code of mine in the path. `agent-wrapper.ts:365` is where the code is minted. The seat double is a `.cmd` shim that only writes a file and exits 0, so the exhaustion is upstream of the seat - worth checking whether the spawn ever starts, and whether this host's spawn-latency cliff eats the 500 ms `WRAPPER_INTERVAL_MS`.\n\nI am NOT blocking on you and I have not touched anything else of yours: my row records the failure verbatim and attributes it here. What I added beside your files, and which you may want for the deploy lane too: `daemon-ports.ts` now takes a `fakeGh` lane option selecting `fake-gh-dependencies.ts` (same shape as your `fakeDocker`), and `MOE_NODE_WORKSPACE` is now supplied when EITHER `fakeDocker` or `fakeGh` is set. Your gating comment on that line is preserved and extended, not replaced.",
+      "timestamp": "2026-09-06T22:32:15.331Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T13:55:10.484Z",
-  "updatedAt": "2026-09-06T22:09:02.297Z",
+  "updatedAt": "2026-09-07T00:02:32.071Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T14:00:23.896Z",
     "plannedStepCount": 4,
@@ -367,5 +373,16 @@
     "tests/e2e/control-room/lane-landing.ts",
     "tests/e2e/control-room/deploy-fake-docker.spec.ts"
   ],
-  "unattributedPaths": []
+  "unattributedPaths": [],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-3 COMPLETED of 4. Step 2 delivered a REAL git workspace under the lane scratch: daemon-ports.ts gained createLaneWorkspace (git init -b main / add / commit with the lander identity flags / rev-parse HEAD^{commit}), laneGit (strips GIT_* like landingEnvironment()), LaneScratch.workspace + .workspaceSha, and MOE_NODE_WORKSPACE at the spawn site - NO production change, the composition already reads that env at daemon-store-foundation-composition.ts:190. Step 3 measured the real lane against HEAD 57446237 twice (browser-e2e-gate held 20:59-21:07Z and again 21:11-21:12Z, released both times), evidence in comment-42425a4c665e473680a0415d83a9dc41 and comment-7fb5df64e86f477ab2def40d961d161a. Last checkpoint a2bc37a6b68526ccfe74e165eab5ff8f33023490, 1 path.",
+      "whatRemains": "Step 4, plus re-landing the rescued registry work. The row also accepted a governor amendment at ~21:18Z - read the task comments before editing, they carry the measured re-plan input.",
+      "pitfalls": "CHECKPOINT a2bc37a6 IS LOCAL ONLY - not pushed to moe/work-2026-09-04 (the wrapper's push refused in the dirty shared checkout). Push it by hand or let the next landing retry; the bytes are not lost, only unpushed. The registry at HEAD forwards NO deploymentDeploy (git grep = 0; commit 17446e73 never touched it) - the three hunks that do are this row's own rescued work in commit 09b10619, so re-apply them by patch and declare the paths BEFORE the lane run, otherwise the fake docker never reaches deployment.deploy. Last measured lane state at HEAD 57446237: deployment.set_target ACCEPTED, repository.publish PUBLISH_GOAL_NOT_INTEGRATED @ DAEMON_PREREQUISITE (publish-services.ts:104, the LAST check - all ten before it passed), deployment.deploy BOOTSTRAP_PREREQUISITE_MISSING @ DAEMON_PREREQUISITE, playwright deploy-fake-docker.spec.ts 3 failed / 1 passed. Run the e2e tsc leg FIRST (it was EXIT 0) and watch the RAM floor - the browser gate needs the daemon lane idle.",
+      "openQuestions": "The prior seat's step-1 prediction (PUBLISH_GOAL_NOT_INTEGRATED at the 11th check) was WRONG on the first run and only came true after option (b) landed; re-measure rather than trusting either recorded refusal code. If the producer gap it reported at 21:13Z still stands, report_blocked with the producer task id rather than working around it.",
+      "releasedAt": "2026-09-07T00:02:32.070Z",
+      "releasedBy": "governor-c0820947",
+      "reason": "Governor 22:17Z, owner-approved. CONFIRMED CRASH, not idle time: two process-tree censuses five minutes apart (22:08Z, 22:13Z) find NO wrapper powershell and NO claude.exe for worker-ade1efb1, while every other registered seat maps to a live wrapper+CLI pair. Its session ended CLI exit=2 at 22:05:48Z after checkpointing a2bc37a6, and its terminal tab is gone. Pinged in #workers at 22:13Z; nothing can answer. Releasing in place so a live seat can resume — the row stays WORKING and keeps its steps."
+    }
+  ]
 }

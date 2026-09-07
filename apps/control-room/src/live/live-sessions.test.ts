@@ -17,10 +17,12 @@ const SESSION = {
   holding: ["node.deliver@node-a"], liveness: "LIVE", principalId: "sess-wrap-abc",
   sessionId: "sess-wrap-abc", status: "OPEN",
 };
-const frame = (concurrency: unknown): Record<string, unknown> => ({
-  concurrency, outcome: "SESSIONS", readAt: "2026-09-03T10:00:00.000Z",
+const PROVIDER = { configured: "claude", envOverride: false };
+const frame = (concurrency: unknown, agentProvider: unknown = PROVIDER): Record<string, unknown> => ({
+  agentProvider, concurrency, outcome: "SESSIONS", readAt: "2026-09-03T10:00:00.000Z",
   sessions: [SESSION], totals: { closed: 0, expired: 1, live: 1 }, unreadable: false,
 });
+const CONCURRENCY = { activeSeats: 2, configuredAgentLimit: 3 };
 
 describe("mapSessionsAnswer decodes the concurrency the daemon states", () => {
   it("exposes the stated limit and active seats on a full frame", () => {
@@ -72,5 +74,59 @@ describe("mapSessionsAnswer decodes the concurrency the daemon states", () => {
     const declared = [...body.matchAll(/^ {2}readonly (?<name>[A-Za-z]+)[?]?:/gmu)].map((match) => match.groups?.["name"]);
     expect(declared.length).toBeGreaterThan(0);
     expect([...declared].sort()).toEqual([...SESSIONS_FRAME_KEYS].sort());
+  });
+});
+
+/**
+ * THE AGENT PROVIDER MEMBER, decoded under the same exact-key rules as everything else.
+ * The daemon states which provider this project is CONFIGURED to staff seats with and
+ * whether MOE_AGENT_COMMAND overrode the durable setting; the browser shapes it verbatim
+ * and REFUSES anything that is not exactly that shape, by stable code and layer.
+ */
+describe("mapSessionsAnswer decodes the agent provider the daemon states", () => {
+  it("shapes the disclosed provider and the override flag verbatim", () => {
+    const outcome = mapSessionsAnswer(200, frame(CONCURRENCY, { configured: "codex", envOverride: true }));
+    if (outcome.status !== "SESSIONS") throw new Error(`expected SESSIONS, got ${outcome.code}`);
+    expect(outcome.agentProvider).toEqual({ configured: "codex", envOverride: true });
+    // Both halves of the flag are reachable, so a hard-coded `true` cannot pass.
+    const off = mapSessionsAnswer(200, frame(CONCURRENCY, { configured: "claude", envOverride: false }));
+    expect(off.status === "SESSIONS" && off.agentProvider).toEqual({ configured: "claude", envOverride: false });
+    // The rest of the frame still decodes: the new member displaced nothing.
+    expect(off.status === "SESSIONS" && off.concurrency).toEqual(CONCURRENCY);
+  });
+
+  it("REJECTS an EXTRA key on the provider member, by code and by layer", () => {
+    expect(mapSessionsAnswer(200, frame(CONCURRENCY, { configured: "codex", envOverride: true, extra: 1 })))
+      .toEqual({ code: "SESSIONS_RESPONSE_INVALID", layer: "CONTROL_ROOM_LIVE_SESSIONS", status: "ERROR" });
+  });
+
+  it("REJECTS a MISSING key on the provider member, rather than defaulting it", () => {
+    // A browser that quietly filled in `envOverride: false` would tell an operator no
+    // override is in force on a daemon that never said so.
+    for (const short of [{ configured: "codex" }, { envOverride: true }, {}]) {
+      expect(mapSessionsAnswer(200, frame(CONCURRENCY, short)))
+        .toEqual({ code: "SESSIONS_RESPONSE_INVALID", layer: "CONTROL_ROOM_LIVE_SESSIONS", status: "ERROR" });
+    }
+  });
+
+  it("REJECTS a WRONG-TYPED member: the flag is a boolean, not a truthy value", () => {
+    // `"false"` is the arm that catches a truthiness check — it is a non-empty string, so
+    // a `!x` guard would ACCEPT it and render an override the daemon never claimed.
+    for (const bad of [
+      { configured: "codex", envOverride: "false" }, { configured: "codex", envOverride: "true" },
+      { configured: "codex", envOverride: 1 }, { configured: "codex", envOverride: null },
+      { configured: 2, envOverride: true }, { configured: "", envOverride: true },
+      null, [],
+    ]) {
+      expect(mapSessionsAnswer(200, frame(CONCURRENCY, bad)))
+        .toEqual({ code: "SESSIONS_RESPONSE_INVALID", layer: "CONTROL_ROOM_LIVE_SESSIONS", status: "ERROR" });
+    }
+  });
+
+  it("REJECTS a stale daemon that omits the provider member entirely", () => {
+    const stale = frame(CONCURRENCY);
+    delete stale["agentProvider"];
+    expect(mapSessionsAnswer(200, stale))
+      .toEqual({ code: "SESSIONS_RESPONSE_INVALID", layer: "CONTROL_ROOM_LIVE_SESSIONS", status: "ERROR" });
   });
 });

@@ -24,6 +24,7 @@ const ACTIVITY: ActivityOutcome = {
   refusalsRecorded: false, scope: { goalId: "goal-1", targets: 3 }, status: "ACTIVITY", totalDecisions: 12,
 };
 const SESSIONS: SessionsOutcome = {
+  agentProvider: { configured: "claude", envOverride: false },
   concurrency: { activeSeats: 2, configuredAgentLimit: 2 },
   readAt: "2026-09-03T10:00:00.000Z",
   sessions: [
