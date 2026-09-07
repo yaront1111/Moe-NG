@@ -21,8 +21,82 @@
     "RETIRE BOTH CENSUS ENTRIES TOGETHER WITH THE PARENT'S COMMENT. Half a retirement leaves a served route recorded as unconsumed while a screen consumes it.",
     "ASCII-ONLY SOURCES, APOSTROPHE-FREE JSX TEXT, dev-proxy-paths pin for the read."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "READ THE PARENT'S LANDED SHAPE OFF DISK — no edits, and this step decides whether the row can proceed. At HEAD, record: (a) `git status --porcelain -- apps/control-room/src apps/daemon/src/http` — foreign dirt noted, never reverted; (b) the parent task-1f994315fd is DONE and what it landed — its route module, the served frame's EXACT key roster at every nesting level, its state vocabulary for the three restore-proof states, and its refusal envelope shape(s); read these from the landed source, and DO NOT restate or re-spell them (task rail 2). Measured at planning time the parent was still WORKING with `landing: null` and no backups route existed under `apps/daemon/src/http`, which is why this plan names no keys; (c) `grep -n 'UNPROXIED_SERVED_PATHS\\|UNCONSUMED_SERVED_ROUTES' -A6 apps/daemon/src/http/http-listener-read-dispatch.test.ts` — capture the parent's entry AND the comment naming this row, both of which step 6 deletes; (d) `wc -l apps/control-room/src/v2/ops/environments-section.tsx` (was 178). IF the parent has not landed, or its frame does not carry what DoD 2 and DoD 4 need, call `moe.report_blocked` against task-1f994315fd — do not decode around it, do not default a state, do not mint the value client-side (task rail 4).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+        "apps/control-room/src/v2/ops/environments-section.tsx"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE EXACT-KEY DECODER, copying the sibling's idiom rather than inventing one. New module in `apps/control-room/src/live/` beside `live-deployments-health.ts`, following its shape: an own-enumerable `exactDataRecord` snapshot at EVERY nesting level, module-scoped `LAYER` and `*_RESPONSE_INVALID` constants of its own (the sibling's are `CONTROL_ROOM_DEPLOYMENTS_HEALTH` / `DEPLOYMENTS_HEALTH_RESPONSE_INVALID` at :16-17), and a `refusalFrom` covering EVERY refusal envelope the parent's route can actually answer with — the sibling decodes THREE and its comment records that omitting the third is how a store refusal arrives with its cause erased, so read the parent's refusal shape rather than assuming two. Carry the null-vs-unreadable discipline from :159-165: each nested decoder answers null for both an absent and a malformed member, and the raw member is re-checked at the top, so a MALFORMED backup row can never read as an ABSENT one. Do NOT mint distinct codes for extra-key versus missing-key; both funnel to the module's one invalid-response code, which is what task rail 3 asks for.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-backups.ts",
+        "apps/control-room/src/live/live-deployments-health.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/live/live-backups.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE DECODER ARMS, WRITTEN SO THEY ARE NOT ONE ASSERTION TWICE — DoD 1. Both the EXTRA-key and MISSING-key cases will share the module's single code and layer, so asserting `status === \"ERROR\"` twice proves one thing twice. Each arm asserts the specific CODE and the LAYER (never merely that decoding failed) AND, crucially, that the decode FAILED CLOSED BY VALUE: no partial frame survives, no backup row is returned, and no restore-proof state leaks through. Add an arm per nesting level, since an extra key on a nested backup row is the likelier real defect than one at the top. Add the absent-member arms DoD 4 needs at this layer too: a malformed member must not read as an absent one. Then DoD 6's secret arm — on a FAILURE path, assert that no credential, connection string or secret-shaped literal reaches the decoder's output or its error value, and give it a POSITIVE CONTROL by running the same instrument over a literal that DOES contain a credential shape, so an arm that matches nothing cannot pass as an arm that found nothing.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-backups.test.ts",
+        "apps/control-room/src/live/live-backups.ts"
+      ],
+      "newFiles": [
+        "apps/control-room/src/live/live-backups.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "PIN THE READ AND FETCH IT. Add the parent's path to `DEV_PROXY_PATHS` in `apps/control-room/src/live/dev-proxy-paths.ts` WITH a comment naming this row as its consumer, matching the file's existing entries — its own text records that `/design/read` is deliberately NOT pinned, so a pin is not automatic and its reason must be written. Without the pin the dev server answers the route itself and the screen renders against Vite instead of a daemon. Then wire the fetch in `apps/control-room/src/v2/ops/live-environments.tsx` — the file that already imports `EnvironmentsSection` (:10) and renders it (:131), so no new mounting is needed. NOTE the path: it is under `v2/ops/`, NOT under `src/live/` as the row description implies. Feed the decoded frame down as props; keep the refusal path visible rather than collapsing it into an empty list, so a refused read never reads as 'no backups'.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/dev-proxy-paths.ts",
+        "apps/control-room/src/v2/ops/live-environments.tsx",
+        "apps/control-room/src/live/live-backups.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE THREE STATES, RENDERED AND DISTINGUISHABLE — DoD 2 and DoD 4. Render the backups list in `apps/control-room/src/v2/ops/environments-section.tsx` as DoD 2 names, following the file's existing testid convention (`cr.environments.*` and `${testId}.<part>`, :72-112) and confirming the new namespace is unused before taking it. Each row carries its restore-proof state in a `data-` attribute AND distinguishes the three states by MORE THAN COLOUR — text or shape, so the distinction survives a monochrome or colour-blind reading; a CSS class alone is not a distinction a reader can see. Render the absent case HONESTLY: a backup with no sha256 and no check time states absence as absence, never an empty string, a zero, a dash that reads as a value, or a defaulted 'proven'. LINE CAP: `wc -l` the file after the edit — it was 178 against a 250 target; if the list crosses it, extract the list into a sibling module in the same directory and say in the step note that you did and why. ASCII-only source, no apostrophe in any JSX text (task rail 6).",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/environments-section.tsx",
+        "apps/control-room/src/live/live-backups.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE SAFETY ARM AND ITS DRILL, PLUS THE CENSUS RETIREMENT. Assert each of the three states' rendered output BY VALUE — the `data-` attribute and the visible text — in separate arms, never by a row count, and assert the absent case separately from the present one. Then DoD 3's drill, this row's whole reason for existing: make NOT-YET-CHECKED render identically to PROVEN and show a NAMED arm goes RED BY VALUE; a count-based arm survives this mutation, which is exactly why the DoD forbids one. Quote the failing line and prove the restore — `git diff -- <path>` empty for TRACKED files, SHA256 equality against an out-of-tree backup for the NEW modules, taken in a call SEPARATE from the restore. In the SAME edit (task rail 5), retire BOTH census entries in `apps/daemon/src/http/http-listener-read-dispatch.test.ts`: the parent's path leaves `UNPROXIED_SERVED_PATHS` (:129) and `UNCONSUMED_SERVED_ROUTES` (:174), and the comment the parent left naming this row goes with them — the file's positive-control arm pins every member named in those comments, so a half-retirement reds.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/environments-section.test.tsx",
+        "apps/control-room/src/v2/ops/environments-section.tsx",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATES AND ADVERSARIAL SELF-REVIEW. Each leg FOREGROUND and STANDALONE; read the OUTPUT, not the exit code — no `Test Files N passed` line means nothing ran. Legs quoted with count lines: `pnpm --filter @moe/control-room test`, `pnpm --filter @moe/daemon test` (this row edits one daemon test file to retire the census), and `pnpm typecheck`. A bare root `pnpm test` covers NO `apps/**` file and is not evidence for anything here. Repo-wide legs are a PATH-ATTRIBUTED BASELINE: merge-base failures, HEAD failures, delta intersected with owned paths must be EMPTY; disclose foreign red verbatim, never waive it. Then read the diff as an attacker: can not-yet-checked reach the screen looking like proven by ANY path — a default, a fallthrough, an absent member, a refused read rendering as an empty list? Do the extra-key and missing-key arms assert anything beyond the same code twice? Does the secret arm's positive control actually match its planted credential shape? Did anything client-side derive or default a state the daemon owns (task rail 4)? Are BOTH census entries and the parent's comment gone? Are all sources ASCII with no apostrophe in JSX text? Is `environments-section.tsx` under the line target or extracted with a note? Report every touched path in `complete_step.modifiedFiles`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-backups.ts",
+        "apps/control-room/src/v2/ops/environments-section.tsx",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+        "apps/control-room/src/live/dev-proxy-paths.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -35,8 +109,39 @@
   ],
   "priority": "MEDIUM",
   "order": 132,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-27874a03b87649a3a42d687b47bf2365",
+      "author": "architect-6e49a205",
+      "content": "PLANNING MEASUREMENT. HEAD, 2026-09-07. One blocking fact, one path correction, one DoD reading worth pinning before a worker meets it.\n\n1. THE PARENT HAS NOT LANDED, so this plan deliberately names NO frame keys. `task-1f994315fd` is **WORKING**, `landing: null`, no `declaredFiles`, no completionSummary, and there is no backups read route under `apps/daemon/src/http` (the only `backup` hits are `activation-read`'s unrelated deferred rows). Consistent with that, neither census entry exists yet: `UNPROXIED_SERVED_PATHS` (:129) is `Object.freeze([])` and `UNCONSUMED_SERVED_ROUTES` (:174) carries only `/budget/commitment/read` and `/documents/ingest`.\n\nWriting key names into this plan would have invented the \"second spelling\" task rail 2 forbids, so step 1 reads the shape off the landed parent instead. `dependsOn` already gates WORKING claims, so this costs nothing and needs no block.\n\n2. PATH CORRECTION, and the claim it guards HOLDS. The description says the section is already wired through `live-environments.tsx` and asks that it be measured. It is wired — but the file is `apps/control-room/src/v2/ops/live-environments.tsx`, **not** under `src/live/` where the description's neighbouring references point. It imports `EnvironmentsSection` at :10 and renders it at :131, so no new mounting is needed and the fetch-and-feed goes there.\n\n3. DoD 1's \"the specific code\" IS SATISFIABLE WITH ONE CODE — and that creates the real hazard. Measured: `exactDataRecord` (live-deployments-health.ts:77-97) returns plain `null` for an extra key, a missing key, a prototype mismatch and an accessor descriptor alike, and the module funnels every malformation into one `errored(INVALID_RESPONSE_CODE, LAYER)` (:74, constants at :16-17). Task rail 3 says each case refuses \"with a code AND a layer\" — *a* code, not distinct ones — so the new module mints its own analogous pair and does **not** grow a per-shape code roster.\n\nThe consequence the worker must not walk into: the extra-key and missing-key arms will then share one code and one layer, so asserting `status === \"ERROR\"` twice proves one thing twice — global rail 1's vacuity shape exactly. The plan requires the distinguishing power to come from asserting FAIL-CLOSED **by value**: after each malformation, no partial frame survives, no backup row is returned, and no restore-proof state leaks through.\n\n4. TWO SIBLING DISCIPLINES WORTH COPYING RATHER THAN REDISCOVERING. `refusalFrom` (:105-123) decodes THREE distinct refusal envelopes, and its own comment records that omitting the third is how a store refusal arrives with its cause erased — so read the parent's refusal shape and cover it, do not assume two. And the null-vs-unreadable rule at :159-165 (each nested decoder answers null for both, raw member re-checked at the top) is precisely DoD 4's \"a malformed frame must not read as an absent one\", already expressed in this codebase's idiom.\n\n5. THE COUNT-BASED ARM SURVIVES THE DRILL, which is why DoD 3 rules it out explicitly. The three states share a row shape, so a test counting rows stays green when not-yet-checked is made to render as proven. Each state is asserted by value — the `data-` attribute and the visible text — and the drill must red a NAMED arm by value. Same reasoning behind \"more than colour\": a CSS class alone is not a distinction a reader can see, so text or shape carries it and the test asserts that carrier.\n\n6. LINE BUDGET. `environments-section.tsx` is 178 against a 250 target. DoD 2 names that file for the list, and a written DoD outranks pre-emptive tidying, so the plan renders it there and measures after — extracting to a sibling module only if it crosses, with a note saying so.",
+      "timestamp": "2026-09-07T13:39:41.893Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T13:13:46.957Z",
-  "updatedAt": "2026-09-07T13:13:46.957Z"
+  "updatedAt": "2026-09-07T13:39:41.893Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-07T13:36:23.477Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 8
+  },
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-07T13:39:20.407Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) NAME THE FRAME'S KEYS IN THIS PLAN. DELIBERATELY NOT DONE, and this is the plan's main self-restraint. The parent task-1f994315fd is still WORKING and its route is not on disk, so any key names I wrote here would be invented — exactly the 'second spelling' task rail 2 forbids. Step 1 reads the shape off the landed parent instead. `dependsOn` already gates WORKING claims on the parent reaching DONE, so this costs nothing.\n(2) MINT DISTINCT REFUSAL CODES FOR EXTRA-KEY vs MISSING-KEY. REJECTED after measuring the sibling: `exactDataRecord` (live-deployments-health.ts:77-97) returns plain `null` for BOTH, and the module funnels every malformation into one `errored(INVALID_RESPONSE_CODE, LAYER)`. DoD 1 and task rail 3 say each case refuses 'with a code AND a layer' — 'a code', not distinct ones. Minting a per-shape code would depart from the convention this row was told to copy and would add a layer/roster concern for nothing. See `risks` for what must carry the distinguishing power instead.\n(3) PUT THE BACKUPS LIST IN ITS OWN MODULE up front. NOT chosen as the default: DoD 2 names `environments-section.tsx` explicitly, and a written DoD gate outranks pre-emptive tidying. That file is 178 lines and three states plus the absent case lands it near 250, so step 5 MEASURES after the edit and extracts to a sibling only if it crosses the target — stating that it did.\n(4) DECODE AROUND A FRAME THAT LACKS WHAT THE SCREEN NEEDS, or mint the restore-proof state client-side. FORBIDDEN by task rail 4; the required move is `report_blocked` against the parent.",
+    "codebaseInsights": "MEASURED AT HEAD, 2026-09-07. Re-measured per global rail 6; three of the description's claims confirmed, one path corrected, one blocking fact found.\n\nTHE PARENT HAS NOT LANDED. `task-1f994315fd` is **WORKING**, `landing: null`, no `declaredFiles`, no completionSummary. There is NO backups read route under `apps/daemon/src/http` (the only `backup` hits are `activation-read`'s unrelated deferred-backup rows). So THE FRAME THIS ROW DECODES DOES NOT EXIST YET, and no key roster can be written into this plan. `dependsOn` already names the parent, so WORKING claims are gated automatically — planning proceeds, and step 1 reads the shape off disk when the seat opens.\n\nTHE CENSUS ENTRIES THIS ROW RETIRES DO NOT EXIST YET EITHER, which is consistent: `UNPROXIED_SERVED_PATHS` (http-listener-read-dispatch.test.ts:129) is currently `Object.freeze([])`, and `UNCONSUMED_SERVED_ROUTES` (:174) carries `/budget/commitment/read` and `/documents/ingest` but no backups path. The parent adds its entry plus the comment naming this row; this row deletes both plus that comment. The file's own history shows the pattern working twice — `/deployments/health/read` and `/environments/read` were each retired by their consumer, each with the comment removed alongside.\n\nTHE DECODER TO COPY, AND ITS EXACT REFUSAL CONTRACT. `exactDataRecord` (live-deployments-health.ts:77-97) is an own-enumerable exact-key snapshot returning `null` on a prototype mismatch, a key-count mismatch, an unexpected key, or a non-enumerable/accessor descriptor. Module-scoped constants at :16-17 are `LAYER = \"CONTROL_ROOM_DEPLOYMENTS_HEALTH\"` and `INVALID_RESPONSE_CODE = \"DEPLOYMENTS_HEALTH_RESPONSE_INVALID\"`, funnelled through `invalidResponse()` at :74 — so the new module mints its OWN analogous pair by convention, not a new roster entry. `refusalFrom` (:105-123) decodes THREE distinct daemon refusal envelopes (`{code,layer}`, `{code,layer,outcome}`, `{code,layer,ok:false}`); its comment records that omitting the third is how a store refusal would arrive with its cause erased — read the parent's refusal shape and cover it, do not assume two envelopes. The null-vs-unreadable discipline at :159-165 (each nested decoder answers null for both, the raw member re-checked at the top) is what keeps a MALFORMED member from reading as an ABSENT one — which is DoD 4's requirement in the sibling's own idiom.\n\nPATH CORRECTION, and the claim it guards holds. The description says the section is 'already wired through `live-environments.tsx` and LiveHealth' and tells me to measure it. It IS wired — but the file is `apps/control-room/src/v2/ops/live-environments.tsx`, NOT under `src/live/` where the description's neighbouring references point. It imports `EnvironmentsSection` at :10 and renders it at :131. No new mounting is needed; the fetch-and-feed for the new frame goes there.\n\nPINS AND CONVENTIONS: `dev-proxy-paths.ts` lists every proxied read with a comment naming its consumer row; its own text records that `/design/read` is deliberately NOT pinned, so a pin is not automatic and the new one needs its reason written. Testids in `environments-section.tsx` follow `cr.environments.*` and a `${testId}.<part>` pattern (:72-112).\n\nLINE BUDGET: `environments-section.tsx` is 178 lines against a 250 target.",
+    "risks": "THE TWO MALFORMED-FRAME ARMS WILL SHARE ONE CODE AND ONE LAYER, so they are near-duplicates and one added layer away from vacuous — the exact shape global rail 1 warns about. Their distinguishing power CANNOT come from the code. It must come from asserting FAIL-CLOSED BY VALUE: after an extra key and after a missing key, the decoder yields the failure and NO partial frame — specifically, no backup row and no restore-proof state survives into the rendered output. An arm that only asserts `status === \"ERROR\"` twice proves one thing twice.\n\nTHE ROW'S ONE SAFETY PROPERTY IS A MUTATION TARGET, not a rendering preference. NOT-YET-CHECKED rendering as PROVEN is the collapse the surface exists to prevent, and DoD 3 requires the drill. Because the three states will share a row shape, a count-based arm survives the mutation — the DoD says so outright. Assert each state's rendered output BY VALUE (the `data-` attribute and the visible text), and make the drill red a NAMED arm by value.\n\nMORE THAN COLOUR is a correctness requirement here, not styling: the distinction has to survive a monochrome or colour-blind reading, so text or shape carries it and the test asserts that carrier — a CSS class name alone is not a distinction a reader can see.\n\nTHE SECRET ARM CAN PASS VACUOUSLY, which is why DoD 6 demands a positive control: assert the absence of credential-shaped material on a FAILURE path, and prove the instrument works by running it over a literal that DOES contain a credential shape. Without the control, an arm that never matches anything looks identical to an arm that found nothing (`mem:gotcha-a-widening-grep-needs-a-positive-control`).\n\nIF THE PARENT'S FRAME LACKS WHAT THE SCREEN NEEDS, the required move is `moe.report_blocked` against task-1f994315fd — not decoding around it, not defaulting a state, not minting the value client-side (task rail 4). A defaulted 'proven' is the exact failure this row exists to prevent.\n\nHALF A RETIREMENT REDS: both census entries and the parent's comment go together (task rail 5), and a separate arm greps those comments. ASCII-only sources and apostrophe-free JSX text (task rail 6) — an apostrophe reds the scheduler package-boundary scan in a lane this row's own gates never run. Confirm the new testid namespace is unused before taking it.",
+    "keyFiles": [
+      "apps/control-room/src/live/live-deployments-health.ts",
+      "apps/control-room/src/live/dev-proxy-paths.ts",
+      "apps/control-room/src/v2/ops/environments-section.tsx",
+      "apps/control-room/src/v2/ops/live-environments.tsx",
+      "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-07T13:39:22.601Z"
 }

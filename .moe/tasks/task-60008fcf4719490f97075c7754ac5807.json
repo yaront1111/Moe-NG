@@ -89,16 +89,26 @@
     {
       "stepId": "step-6",
       "description": "**MUTATION DRILL, GATES, SELF-REVIEW.** Load `adversarial-self-review` first.\n\n**(a) RESTORE RULE, before any mutation** (global rail 13). `git status --porcelain` every path you will mutate and RECORD the output — peer paths are dirty in this shared checkout; note them, never revert or stash them, and never treat them as a stop condition. Back EVERY path up OUT OF TREE (%TEMP%, suffixed with your worker id). Restore FROM THE BACKUP — never `git checkout --` or `git restore`. Prove the restore by SHA256 equality in a call SEPARATE from the restore: a PowerShell copy can silently no-op and 'the command returned' is not evidence the bytes moved. An empty `git diff` on a path you know you mutated is a RED FLAG, not reassurance.\n\n**(b) TWO DRILLS, each quoted with its failing line.**\n  1. Make the resolver ignore its argument and return one host context for every environment — the pre-fix behaviour. Step 5(a) must go RED. This is the whole point of the row; if it stays green the isolation arm is vacuous.\n  2. Move the resolver call AFTER the engine read. Step 5(b) must go RED on 'schema unchanged'. This proves the refusal really precedes every effect rather than merely returning first.\n\n**(c) GATES (DoD 5).** RECORDED verification is the scoped owned command actually run, exit 0, with its `Test Files N passed` count line and every filter and env flag INSIDE the recorded string — an exit-0 leg with no count line ran NOTHING, and `pnpm --filter <pkg>` prints 'No projects matched' and exits 0 for a package that does not exist. DISCLOSE `pnpm --filter @moe/daemon test` and `pnpm typecheck` with exit codes, failing-file sets and the `(AFTER − BEFORE) ∩ owned = ∅` computation against the merge base. Root `pnpm test` covers no `apps/**` file — say that rather than quoting a bare root count line. State plainly whether the live arm ran with `MOE_MIGRATION_RESTORE=1` or did not, and which lanes you did not run.\n\n**(d) SELF-REVIEW.** Can any path reach an inherited `DATABASE_URL`? Can a browser-supplied URL, root or workspace reach the resolver? Does an unauthorised caller cause any resolution or decryption? Is any container or temp tree still alive after a REFUSED arm? Does the refusal message still name only the field? Would you be embarrassed if this shipped?",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/deployment/migrate-down-command.ts",
         "apps/daemon/src/deployment/migrate-down-real.test.ts"
       ],
-      "startedAt": "2026-09-07T13:18:48.944Z"
+      "modifiedFiles": [
+        "apps/daemon/src/deployment/migrate-down-command.ts",
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/deployment/migrate-down-test-fixtures.ts",
+        "apps/daemon/src/deployment/migrate-down-real.test.ts",
+        "apps/daemon/src/deployment/migrate-down-host-context.test.ts"
+      ],
+      "note": "STEP 6 — DRILLS (inherited, re-verified), GATES (all four green), SELF-REVIEW (measured). Full transcript in comment-93db2a6c; drills in comment-bfec008b. Resumed seat: worker-767c9887 did steps 1-5 and both drills, then parked on the lease at 13:37Z; the row held the `full-suite-gate` grant across the seat change and I executed under it.\n\n(a) RESTORE. I ran no new mutations, so no new backup window. I re-verified on disk that no drill mutant survives, rather than trusting the prior session (RESUME discipline): `migrate-down-test-fixtures.ts:188` still takes `environment: string` (drill 1 restored) and `migrate-down-command.ts:115-121` still resolves BEFORE `revertLastBatch` at :148 (drill 2 restored). Peer dirt censused and left alone: health-probe-ring.test.ts, agent-spawner.ts, agent-spawner.test.ts, preview-goal-landing.test.ts.\n\n(b) DRILLS: both already red with quoted failing lines in comment-bfec008b. Not re-run.\n\n(c) GATES, standalone/foreground, TRUE_EXIT unpiped:\n  pnpm --filter @moe/daemon test        Test Files 580 passed (580) / Tests 10383 passed | 7 skipped (10390)  EXIT 0\n  pnpm typecheck                        19/20 projects, all \"Done\"                                            EXIT 0\n  MOE_MIGRATION_RESTORE=1 ... migrate-down-real.test.ts   Test Files 1 (1) / Tests 2 passed (2)               EXIT 0\n  scoped gate (17 files)                Test Files 17 passed (17) / Tests 596 passed | 1 skipped (597)        EXIT 0\nRail-3 delta is EMPTY: the daemon leg has ZERO failing files at HEAD, so (AFTER − BEFORE) ∩ owned = ∅ with no foreign red to excuse.\n\n**NEW SINCE THE PRIOR SESSION AND THE POINT OF THIS ONE: DoD 4 now has real Docker evidence.** Every count line on this row before today ran with MOE_MIGRATION_RESTORE UNSET, so the live arm was SKIPPED and correctly labelled as not-Docker-evidence. `docker info` answered 29.6.2 here, so I ran it: 2 passed, ZERO skipped, and the arm printed its own \"REAL MIGRATE_DOWN: last batch reverted, first batch standing, receipt recorded\". Epic rail 4 teardown checked AFTER, in a separate call: `docker ps -a -q | wc -l` = 0, no leftover temp tree.\nLanes NOT run: root `pnpm test` (no `apps/**` in its include; this row is daemon-only), `pnpm --filter @moe/control-room test`, `pnpm test:e2e:browser`. Epic rail 1's control-room census does not fire — the row diff contains ZERO roster/capability/digest lines.\n\n(d) SELF-REVIEW, measured not asserted. Inherited DATABASE_URL is STRUCTURALLY unreachable: the engine child's env is the closed allowlist `RUNTIME_ENVIRONMENT_KEYS` (verifier-process-runner.ts:32), 12 keys, DATABASE_URL not among them; the only route is `delivered: { DATABASE_URL: connection }` carrying the resolved value. No payload value reaches the resolver — its sole argument is `identity.environment`. An unauthorised caller triggers no resolution: the 403 operator fence at :103-106 precedes the `options.hostContext` read at :115. All six offline arms tear down in `finally` plus a global `afterEach`. Refusal still names only the FIELD. One theoretical note for task-2db55fca: a THROWING resolver bypasses `thrownTerminal`, but `daemon-command-dispatch.ts:175` re-throws an unrecognised error rather than flattening it into a detail, so secrecy holds anyway.\n\nDELIVERY HAZARD FOUND AND FIXED — the most important thing in this note. Checkpoint 43355a9e SKIPPED `apps/daemon/src/daemon-command-registry.ts` as `Moe-Contested` with task-136cbab2, and that file is THE production wiring: without the ninth conditional spread the daemon never forwards `migrateDown` at all and production migrate_down refuses UNCONFIGURED forever. The row would have shipped compiling, green and hollow. The contest is a planning-claim overlap only — task-136cbab2 has ZERO commits and none of its bytes are in the tree; I filtered the hunks and every changed line is this row's. Hand-landed by explicit single pathspec as **f916e033** (standalone: MigrateDownSeams already at HEAD via 43355a9e), recorded via record_commit. `git show HEAD:...registry.ts | grep -c migrateDown` = 3. Not pushed.\n\nDISCLOSED, pre-existing: registry.ts is 585 lines, over the 400 split point; it was 577 before this row and I added 9. Splitting a shared registry is out of scope and task rail 2 forbids regenerating it. Other five paths: 160/364/250/205/355.",
+      "startedAt": "2026-09-07T13:18:48.944Z",
+      "completedAt": "2026-09-07T14:03:22.240Z"
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-97200064",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -123,23 +133,36 @@
       "author": "worker-767c9887",
       "content": "HANDOFF ADDENDUM — read this BEFORE running any mutation drill on this row's paths.\n\nSTATE AT 13:34Z: all six declared paths are COMMITTED and PUSHED in checkpoint 43355a9e. `git status --porcelain -- apps/daemon/src/deployment/` is EMPTY. The worktree copy of migrate-down-command.ts byte-equals the landed blob:\n  worktree sha256 647aa168949ced6e97568b7105fe07c2ab4785e277eeef722af7ee0e9a178b8b\n  HEAD blob  sha256 647aa168949ced6e97568b7105fe07c2ab4785e277eeef722af7ee0e9a178b8b\nSo nothing is unrestored and no drill mutant survives. QA's 13:24Z \"28 bytes smaller than my 13:20:57Z snapshot\" question is CLOSED as reading (a) — their snapshot caught a transient mid-edit state; the file settled at 9,973 bytes and that is what landed.\n\nHAZARD FOR WHOEVER RESUMES THIS ROW — a stale backup is sitting on the exact path a restore reaches for:\n  %TEMP%/moe-migrate-down-worker-767c9887.ts\n  mtime  2026-09-07T02:42:20Z      (ELEVEN HOURS before this row's 13:22Z drill window)\n  size   8365                       (vs 9973 on disk now)\n  sha256 798d0d0b95f4d9c782e2b0fd85b7503b89e21524e1073ec2c565e5ae630d30b7\n  == `git show 4710d60b:apps/daemon/src/deployment/migrate-down-command.ts`   <- the PRE-ROW bytes\nIt contains the file as it was BEFORE this row existed: no MigrateDownHostContext, no resolveHost, no hostContext seam — the old daemon-wide databaseUrl?/projectRoot?/workspace? triple. `diff` against the current file is 32 added / 9 removed: the entire row.\n\nWHY IT IS DANGEROUS AND WHY OUR PROOF CANNOT SEE IT: the backup path is keyed on the WORKER ID, and worker ids are reused across wrapper relaunches — one seat covers many rows in a day. A session that does `cp \"$B\" <target>` to restore and then `sha256sum \"$B\" <target>` in a separate call (exactly as the discipline prescribes) gets TWO IDENTICAL HASHES and a green restore-proof, because the check compares the restore to the backup and both are the stale bytes. The proof is self-consistent, correctly executed, and would certify that you had just deleted the whole row. This did NOT happen here — 647aa168 proves the 13:23Z restore reached the right bytes — but it was one `cp` away.\n\nTHE GUARD, from the next drill onwards: hash the backup AGAINST THE PRE-MUTATION FILE at window-open, before a byte moves, and put backup path + backup sha256 + that match in the announcement. Adding only the backup hash (QA's 13:30Z improvement) closes the transient-snapshot gap but NOT this one — a wrong-vintage backup passes a hash check by construction. Structural half: name backups `moe-<file>-<taskId>-<workerId>.ts` so they cannot collide across rows and a leftover announces its own staleness.\n\nI did NOT delete or rename the stale file: it is 11h old, I cannot prove no other session references it, and unilaterally mutating shared %TEMP% state is the same class of move as force-releasing a lease. Reported in chan-ced99359 at 13:34Z; governors can sweep it in a named call.\n\nFull write-up: `mem:gotcha-workerid-named-backup-collides-across-sessions`.\n\nWHAT REMAINS on this row is unchanged and small — under the full-suite-gate lease (queue position 1, task-keyed, survives this release): `pnpm --filter @moe/daemon test` and `pnpm typecheck` as the global-rail-3 disclosure legs with per-file attribution of any red against the six owned paths, then complete step 6 and complete_task with the scoped command as verification.",
       "timestamp": "2026-09-07T13:37:17.852Z"
+    },
+    {
+      "id": "comment-93db2a6c194649b28e3c6a5ea91ba87a",
+      "author": "worker-ca28be90",
+      "content": "STEP-6 EVIDENCE, PART 2 OF 2 — GATES, LIVE ARM, SELF-REVIEW. Resumed seat (worker-ca28be90) on the row worker-767c9887 parked at 13:37Z. Part 1 (comment-bfec008b) holds the two mutation drills, the restore proof and the tsc positive control; I re-verified on disk that no drill mutant survives (`migrate-down-test-fixtures.ts:188` still takes `environment: string`; `migrate-down-command.ts:115-121` still resolves BEFORE `revertLastBatch` at :148) and did not re-run them.\n\nFOUR LEGS, all standalone and foreground, TRUE_EXIT read unpiped:\n```\npnpm --filter @moe/daemon test\n  Test Files  580 passed (580)   Tests  10383 passed | 7 skipped (10390)   TRUE_EXIT=0\npnpm typecheck\n  19 of 20 workspace projects, every one \"Done\" (apps/daemon and apps/control-room included)  TRUE_EXIT=0\nMOE_MIGRATION_RESTORE=1 pnpm --filter @moe/daemon exec vitest run --root . --config package.json \\\n    --testTimeout=300000 src/deployment/migrate-down-real.test.ts\n  Test Files  1 passed (1)   Tests  2 passed (2)   TRUE_EXIT=0     <- THE LIVE ARM, NOT SKIPPED\npnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 \\\n    --testTimeout=30000 src/deployment/ src/daemon-command-async-entries.test.ts src/daemon-command-registry.test.ts\n  Test Files  17 passed (17)   Tests  596 passed | 1 skipped (597)   TRUE_EXIT=0\n```\n\nGLOBAL RAIL 3 ATTRIBUTION IS TRIVIAL HERE: the AFTER set is EMPTY. `pnpm --filter @moe/daemon test` reports **zero failing files** at HEAD, so (AFTER − BEFORE) ∩ owned = ∅ by construction and there is no foreign red to disclose — the node-authority `src/planning` reds @qa-97200064 measured gone at 12:31Z are indeed gone. Nothing is being excused; there is nothing to excuse.\n\n**DoD 4 IS NOW CLOSED WITH REAL DOCKER, and this is the material change from the earlier record.** Every count line quoted before today had `MOE_MIGRATION_RESTORE` UNSET, so `17 passed / 1 skipped` was NOT Docker evidence and was correctly labelled as such. `docker info` answered `29.6.2` on this seat, so I ran the arm: it went **2 passed, zero skipped** — `it.runIf(RUN)` actually executed, printing its own `REAL MIGRATE_DOWN: last batch reverted, first batch standing, receipt recorded`. Epic rail 4 teardown verified AFTER the run in a separate call: `docker ps -a -q | wc -l` = **0**, no `moe-migrate-down-live-*` temp tree left. The scoped leg's remaining `1 skipped` is that same arm with the flag unset — expected, not a hole.\n\nSELF-REVIEW (step 6(d)), each answered by measurement at the production surface, not by reading intent:\n- **Inherited `DATABASE_URL`? NO, and it is structurally impossible.** The engine runs in a child whose env is a CLOSED allowlist — `verifier-process-runner.ts:32` `RUNTIME_ENVIRONMENT_KEYS` = COMSPEC, LANG, LC_ALL, LC_CTYPE, PATH, PATHEXT, SYSTEMROOT, TEMP, TMP, TMPDIR, TZ, WINDIR. `DATABASE_URL` is not in it, so the daemon's own value cannot cross; the only route is `delivered: { DATABASE_URL: connection }` (`migration-down-ports.ts:96`) carrying the RESOLVED value. The `process.env.DATABASE_URL` hits a bare grep finds are inside `String.raw` CHILD-SCRIPT sources — they read what was delivered.\n- **Browser-supplied url/root/workspace? NO.** The resolver's only argument is `identity.environment` from the ADMITTED identity; `envelope.payload` is used solely for `bootstrapRequestBytes`.\n- **Unauthorised caller causes resolution/decryption? NO.** `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION` (403) at :103-106 fires before `options.hostContext` is even READ at :115.\n- **Container/temp alive after a REFUSED arm? NO.** All six arms in `migrate-down-host-context.test.ts` close in their own `finally`, plus a global `afterEach(closeStores)` for an arm that throws before its own cleanup.\n- **Refusal still names only the FIELD?** Yes — `no ${field} is configured on this daemon`, one helper at :34.\n- **THEORETICAL, not a defect, and useful to task-2db55fca:** a resolver that THREW would bypass `thrownTerminal` (that try wraps `revertLastBatch` only). I traced it: `daemon-command-dispatch.ts:175` **re-throws an unrecognised error rather than flattening it**, so no resolver message can reach a refusal detail or durable payload. Secrecy holds even for a badly-written future resolver.\n\nLANES NOT RUN, stated plainly: root `pnpm test` (its vitest include has no `apps/**`, and this row touches only `apps/daemon`), `pnpm --filter @moe/control-room test`, and `pnpm test:e2e:browser`. Epic rail 1's control-room census does not fire: this row adds NO command kind — grep of the whole row diff for `GENERATED_CONTRACT_DIGEST|requiredCapability|CAPABILITIES.|agentCapabilitiesFor|PAYLOAD_KEYS|OPERATOR_PRINCIPAL_KINDS|WiredCommandKind =` returns **zero lines**.\n\nDISCLOSED, pre-existing and not introduced here: `daemon-command-registry.ts` is 585 lines, over the 400 split point. It was 577 before this row; my contribution is +9. Splitting a shared registry is out of scope and task rail 2 forbids regenerating it. My five other paths are 160/364/250/205/355.\n\nPEER DIRT, noted and untouched (never reverted, stashed or staged): `apps/daemon/src/monitoring/health-probe-ring.test.ts`, `apps/daemon/src/orchestrator/agent-spawner.ts`, `apps/daemon/src/orchestrator/agent-spawner.test.ts`, `apps/daemon/src/preview/preview-goal-landing.test.ts`. They were in the tree for all four legs above, which were green regardless.",
+      "timestamp": "2026-09-07T14:02:51.028Z"
+    },
+    {
+      "id": "comment-87c6d512886642a28d2255672f93a328",
+      "author": "qa-97200064",
+      "content": "QA FULL EVIDENCE — APPROVED (qa-97200064, 2026-09-07 14:08Z). Two seats built this row; both halves verified.\n\n=== WHAT I RE-RAN MYSELF, ALL REPRODUCING EXACTLY ===\n(a) the recorded verification command, verbatim:\n    Test Files 17 passed (17) / Tests 596 passed | 1 skipped (597)   EXIT 0\n(b) DoD 4's LIVE arm — the clause that was impossible before docker came up at 12:21Z:\n    $ cd apps/daemon && MOE_MIGRATION_RESTORE=1 pnpm exec vitest run --root . --config package.json \\\n        --testTimeout=120000 src/deployment/migrate-down-real.test.ts\n    Test Files 1 passed (1) / Tests 2 passed (2)   ZERO SKIPPED   EXIT 0\n(c) teardown after my own run, separate call: `docker ps -a -q | wc -l` = 0.\nThe `1 skipped` in (a) IS that arm with the flag unset, exactly as the record says — so (a) and (b) together\nare the whole picture and neither is hiding the other.\n\n=== THE ROW'S REAL DEFECT WAS THE ONE THE CHECKPOINT ALMOST ATE ===\n`daemon-command-registry.ts` never forwarded `migrateDown` AT ALL, so production had always refused\nregardless of any value. That path was withheld from checkpoint 43355a9e as `Moe-Contested` with\ntask-136cbab2. The row would have shipped compiling, green and HOLLOW. Verified at HEAD now:\n    git show HEAD:.../daemon-command-registry.ts     | grep -c migrateDown   -> 3\n    git show HEAD:.../daemon-command-async-entries.ts| grep -c migrateDown   -> 2\nBoth ends wired. The single-pathspec hand-landing `f916e033` (`Moe-Kind: partial-landing`, 1 file,\n9(+)/1(-)) is exactly right and was done BEFORE the long daemon leg rather than after it — the window where\nthe only copy sat dirty ran 13:06:26Z to 14:02:03Z, most of it under a peer's full-suite lease.\nAll six declared production paths are now `clean` in the worktree and present in HEAD.\n\n=== DoD, ITEM BY ITEM ===\n1 MET. `hostContext?: (environment: string) => MigrateDownHostContext | null` called with\n  `identity.environment`; two-environment isolation asserted, and the resolver is reached through the\n  DEFAULT composition now that the registry forwards it — which is what makes clause 1 true rather than\n  aspirational.\n2 MET, and the secrecy half is structural rather than promised. `unconfigured(field)` builds\n  `no ${field} is configured on this daemon` from a FIELD NAME; the resolved `databaseUrl` appears only at\n  the `MigrationInput` construction (`:149`) and in the emptiness test (`:126`), never in a message. Absent,\n  null and partial all refuse `MIGRATE_DOWN_UNCONFIGURED @ DAEMON_COMMAND_SEAM`, 422, ahead of every store\n  read and engine effect.\n3 MET. Zero authority change — no roster entry, no capability, no digest line in the diff. The operator\n  fence stays at the handler entry.\n4 MET, and I reproduced it rather than accepting it — see (b). First Docker-backed run on this row; every\n  earlier count line had the flag unset and was CORRECTLY labelled not-Docker-evidence rather than quietly\n  counted. That labelling is why I trusted the rest of the record.\n5 MET. Teardown verified by the record and again by me. Focused daemon tests and typecheck carry nonzero\n  counts; the not-run legs are named with reasons (root `pnpm test`'s include has no `apps/**`;\n  control-room and browser are untouched by a daemon-only diff, and epic rail 1's control-room census does\n  not fire because the diff carries zero roster/capability/digest lines). Naming what was NOT run, with the\n  reason, is what makes a partial gate set admissible.\n\n=== TWO RECORD OBSERVATIONS, NEITHER CHARGEABLE ===\n1. `declaredPaths` carries 22 entries of which only 6 are this row's production paths. Three are scratch\n   (`.tmp-md-split.py`, `.tmp-md-arms.ts`, `.tmp-md-fix.py`) and thirteen are OTHER rows' `.moe/tasks/*.json`.\n   I checked the outcome rather than the list: all three scratch files are ABSENT from disk and from BOTH\n   recorded commits, and none of them is gitignored — so nothing leaked, but a sweep driven by that array\n   would have committed three temp scripts. Cause is almost certainly read-through attribution\n   (`mem:moe-filesmodified-includes-read-only-files`). Worth trimming the array before a future exit.\n2. `registry.ts` is 585 physical lines, over the 400 cap — DISCLOSED by the worker as pre-existing, and it\n   is: this row adds 9 lines to a file that was already 576. Not chargeable here, and splitting a shared\n   command roster mid-row would be scope creep with a large blast radius.\n\n=== ON THE HANDOFF ===\nThe row changed hands mid-flight (worker-767c9887 -> worker-ca28be90) and the second seat inherited dirty\nbytes, a contested path and a queue position. Both seats left evidence comments that read as one record\nrather than two, and the second seat's first act was to land the withheld path instead of running a gate\nagainst a tree it could lose. That ordering is the reason this is an approval and not a reject.",
+      "timestamp": "2026-09-07T14:05:59.067Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T19:16:23.587Z",
-  "updatedAt": "2026-09-07T13:37:37.422Z",
+  "updatedAt": "2026-09-07T14:05:59.067Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T20:03:48.019Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-06T20:07:58.371Z",
@@ -157,7 +180,9 @@
   },
   "planApprovedAt": "2026-09-06T20:08:00.517Z",
   "contextFetchedBy": [
-    "worker-767c9887"
+    "worker-767c9887",
+    "worker-ca28be90",
+    "qa-97200064"
   ],
   "workStartedAt": "2026-09-07T13:01:50.046Z",
   "declaredFiles": [
@@ -168,10 +193,10 @@
     "apps/daemon/src/deployment/migrate-down-real.test.ts",
     "apps/daemon/src/deployment/migrate-down-host-context.test.ts"
   ],
-  "blockedReason": "RESOURCE WAIT ONLY — the work is DONE and GREEN. Parks on a lease, not a defect. Governors: nothing to triage. Architects: nothing asked.\n\nSTEPS 1-5 COMPLETE on disk, six declared paths, scoped gate green WITH its count line:\n  pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/deployment/ src/daemon-command-async-entries.test.ts src/daemon-command-registry.test.ts\n  -> Test Files 17 passed (17) / Tests 596 passed | 1 skipped (597), EXIT 0\n  pnpm --filter @moe/daemon exec tsc --project tsconfig.json -> EXIT 0, with a PROVEN positive control (planted TS2322 in a NEW file under src/deployment/ gave exit 1 naming it).\nBaseline before this row was 16 files / 590: +1 file, +6 tests = exactly the six arms added. The 1 skipped is the live-PostgreSQL arm — MOE_MIGRATION_RESTORE was UNSET in every run quoted, so none of these numbers is Docker evidence.\n\nBOTH step-6 mutation drills already ran and went RED, restored from an out-of-tree backup, proved by SHA256 in a call SEPARATE from the restore (the new test file is UNTRACKED, so git diff would have certified nothing). Failing lines quoted in comment-bfec008b.\n\nLEFT: only the repo-wide DISCLOSURE legs global rail 3 requires — `pnpm --filter @moe/daemon test` and `pnpm typecheck`, with per-file attribution of any red against my six owned paths. Full suites, so they belong under this gate. I am #1 and alone in the queue; worker-ca28be90 has held since 12:57:59Z and is running `pnpm test:e2e:browser` under a separate browser-e2e-gate lease taken 13:12:28Z.\n\nNOT A FORCE REQUEST: the holder is demonstrably live (second lease 15 min ago), and I said at 13:23Z I would not run a full suite beside theirs. Keeping that.\n\nAuto-unblocks on grant. Next session: run the two legs, complete step-6, complete_task with the scoped command as verification.",
-  "blockedResourceId": "full-suite-gate",
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-07T13:27:07.451Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "commits": [
     {
       "sha": "43355a9e96755962271748a075977e232d11e0c0",
@@ -210,27 +235,30 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "f916e033",
+      "ref": "moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-ca28be90@2026-09-07T13:50:00Z",
+      "paths": [
+        "apps/daemon/src/daemon-command-registry.ts"
+      ],
+      "recordedBy": "worker-ca28be90",
+      "recordedAt": "2026-09-07T14:02:15.406Z",
+      "status": "WORKING",
+      "pushed": false,
+      "message": "Hand-landing of the ONE path checkpoint 43355a9e skipped as Moe-Contested with task-136cbab2. Without it production deployment.migrate_down never receives the migrateDown seams at all and refuses MIGRATE_DOWN_UNCONFIGURED forever — the row would have shipped compiling and hollow. Contest is a planning-claim overlap only: task-136cbab2 has zero commits and none of its bytes are in the tree; every changed line is this row's (verified by filtering the hunks). Standalone: MigrateDownSeams already at HEAD via 43355a9e. Not pushed."
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-078232fb9b9d4c06a5faf3c02adaf705.json",
-    ".moe/tasks/task-122b55fd2c284174876bd1d5573bdcc5.json",
-    ".moe/tasks/task-136cbab29b39465e93b60e923c4689d6.json",
-    ".moe/tasks/task-1f994315fd164a789424349cb7bba4ca.json",
-    ".moe/tasks/task-50aaab925e504819b85b932c9396c5b3.json",
-    ".moe/tasks/task-60008fcf4719490f97075c7754ac5807.json",
-    ".moe/tasks/task-620fb461689441d6bd1fed23ce62aff7.json",
-    ".moe/tasks/task-679cdaa380874f55978e8790d770e37a.json",
-    ".moe/tasks/task-749e585afc534762941d0cb6a54ec433.json",
-    ".moe/tasks/task-75bff0c9efc24daaad81ac81a373cd90.json",
-    ".moe/tasks/task-a98b01a44ffd46cba9d9648fcb7001cb.json",
-    ".moe/tasks/task-b7cdf265455d45c58010aa4d6f6c1544.json",
-    ".moe/tasks/task-da60dc4b39c5409788246f6ed7fa932c.json",
-    "apps/daemon/src/daemon-command-async-entries.ts",
     "apps/daemon/src/deployment/migrate-down-command.ts",
-    "apps/daemon/src/deployment/migrate-down-host-context.test.ts",
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/deployment/migrate-down-test-fixtures.ts",
     "apps/daemon/src/deployment/migrate-down-real.test.ts",
-    "apps/daemon/src/deployment/migrate-down-test-fixtures.ts"
+    "apps/daemon/src/deployment/migrate-down-host-context.test.ts"
   ],
   "touchedFiles": [
     ".tmp-md-split.py",
@@ -240,9 +268,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-767c9887@2026-09-07T13:00:36Z",
-    "at": "2026-09-07T13:27:46.014Z"
+    "kind": "completion",
+    "sessionId": "worker-ca28be90@2026-09-07T13:50:00Z",
+    "at": "2026-09-07T14:02:15.406Z"
   },
   "priorHandoffs": [
     {
@@ -254,5 +282,14 @@
       "releasedBy": "worker-767c9887",
       "reason": "Explicit handoff, not idleness. Row is BLOCKED as queue position 1 on full-suite-gate; the lease queue entry is task-keyed and survives this release. Freeing the seat so it can take claimable work instead of idling behind a resource wait, per the daemon's own nextAction."
     }
-  ]
+  ],
+  "blockedOnTaskIds": null,
+  "reviewStartedAt": "2026-09-07T14:03:55.684Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/deployment/ src/daemon-command-async-entries.test.ts src/daemon-command-registry.test.ts",
+    "exitCode": 0,
+    "outputTail": " RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  17 passed (17)\n      Tests  596 passed | 1 skipped (597)\n   Start at  16:59:57\n   Duration  9.24s (transform 15.28s, setup 0ms, import 26.08s, tests 7.02s, environment 1ms)\n\nTRUE_EXIT=0",
+    "reportedAt": "2026-09-07T14:03:55.684Z"
+  },
+  "completionSummary": "DELIVERED: production migrate_down resolves host context PER ADMITTED ENVIRONMENT instead of holding one daemon-wide database URL.\n\nSix paths. `MigrateDownCommandOptions`' three optional strings replaced by one `hostContext?: (environment: string) => MigrateDownHostContext | null`, called with `identity.environment`; absent/null/partial keeps the SAME MIGRATE_DOWN_UNCONFIGURED @ DAEMON_COMMAND_SEAM 422, still ahead of every store read and engine effect. Zero authority change — no roster entry, no capability, no digest line in the diff.\n\nTHE WIRING WAS THE REAL DEFECT: `daemon-command-registry.ts` never forwarded `migrateDown` AT ALL, so production had always refused regardless of any value. Ninth conditional spread added. That path was SKIPPED from checkpoint 43355a9e as Moe-Contested with task-136cbab2 (zero commits, none of its bytes in the tree) — the row would have shipped compiling, green and hollow. Hand-landed by explicit single pathspec as **f916e033**, recorded via record_commit. QA: `git show f916e033 -- apps/daemon/src/daemon-command-registry.ts`.\n\nGATES, all TRUE_EXIT 0:\n- `pnpm --filter @moe/daemon test` — 580 files / 10383 passed | 7 skipped. ZERO failing files, so global rail 3's (AFTER − BEFORE) ∩ owned = ∅ with no foreign red to disclose.\n- `pnpm typecheck` — 19/20 projects, all Done.\n- `MOE_MIGRATION_RESTORE=1` live arm — 2 passed, ZERO skipped. FIRST Docker-backed run on this row; every earlier count line had the flag unset and was correctly labelled not-Docker-evidence. Teardown verified after, separate call: `docker ps -a -q | wc -l` = 0, no temp tree left.\n- scoped (recorded above) — 17 files / 596 passed | 1 skipped; that 1 skip IS the live arm with the flag unset.\n\nNOT RUN, stated plainly: root `pnpm test` (its include has no `apps/**`; this row is daemon-only), `@moe/control-room`, browser e2e. Epic rail 1's control-room census does not fire — zero roster/capability/digest lines in the diff.\n\nDISCLOSED, pre-existing: registry.ts is 585 lines"
 }
