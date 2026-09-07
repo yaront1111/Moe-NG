@@ -142,7 +142,7 @@
       "completedAt": "2026-09-07T16:32:18.425Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -168,16 +168,24 @@
       "author": "worker-319873d7",
       "content": "ADVERSARIAL PASS (`adversarial-self-review` loaded), answering the five questions step 8 names, plus what it CHANGED.\n\nIT FOUND AND FIXED A REAL DEFECT — one the offline arms could never have seen, because a double never applies anything.\n`restoreDatabaseInto` as landed in step 2 COULD NOT RESTORE ONTO A LIVE DATABASE. `DUMP_ARGS` produces a PLAIN pg_dump with no DROP statements, so piping it at a destination that still holds its objects fails on the first CREATE. Measured with a standalone container probe, not reasoned: `ERROR:  relation \"app_metadata\" already exists`, psql exit 3, destination unchanged. FIX, confined to the new operation: psql now runs `-c <fixed reset literal> -f -` under the SAME `--single-transaction`. Probed BOTH properties before writing it: reset+restore onto a mutated DB -> exit 0, tables back with row values intact and the mutation gone; a deliberately failing artifact -> exit 3 and the destination STILL holds the objects the drop removed. `--clean` on the DUMP side was rejected because it would change the artifact `scheduled-backup.ts:62` verifies.\n\nAND A SECOND FIX FROM THE PASS ITSELF, found by reading the diff hostilely rather than by any test. `DROP SCHEMA public CASCADE` emits one \"drop cascades to ...\" NOTICE PER OBJECT, and `docker()` runs `execFileSync` under `maxBuffer: 65_536`. A production schema with enough objects would overflow the captured stream, kill the child, and REFUSE a restore that was about to succeed. The reset literal now begins `SET client_min_messages TO warning;`, which bounds that output. `warning`, not `error`, so a genuine warning still surfaces; `ON_ERROR_STOP=1` is what stops on failure regardless. Live arm re-run green after the change (`Tests 2 passed (2)`), `pnpm typecheck` exit 0, file 214 lines.\n\nTHE FIVE QUESTIONS:\n1. CAN THE CONNECTION VALUE REACH A LOG, RECEIPT, REFUSAL, ERROR OR FIXTURE? No path found. The connection is decomposed into PG* vars passed BY NAME on the argv (`--env PGPASSWORD`), never as a value; `docker()` logs no argv and no stderr and throws a fixed `BACKUP_FAILED`; `restoreDatabaseInto` is inside `sanitized()`, which collapses ANY throw — including a `new URL()` TypeError that would otherwise carry the input — to `BACKUP_FAILED`; `applyRollbackRestore` adds a second catch; every detail it mints comes from a FIXED table keyed by code with no interpolation; the success value carries a FILE PATH only. The new reset is a constant literal. Arm (e) asserts this with a POSITIVE CONTROL. RESIDUAL, disclosed: `ENV_*` refusals forwarded from `readEnvironmentDelivery` are minted by the environment slice, which this row does not own.\n2. CAN A RESTORE APPLY A DUMP OTHER THAN THE CURRENT DEPLOY'S PRE-MIGRATION ONE? No. The only path is `dumpToRestore(config, current.decisionId)` off `readCurrentDeployReceipt`, resolved by deterministic key lookup — no filename, hash, newest-file scan or arbitrary requestId — and the artifact's bytes are re-hashed against what the receipt sealed. Every miss REFUSES; nothing substitutes. THEORETICAL, NOT FIXED: a TOCTOU window between the hash and the apply — the file could be swapped in between. Same-UID, artifact directory created 0700, and it is the identical window `restoreDatabase(path)` has carried since task-95e68a8d. Closing it needs a single-pass hash-and-apply the docker-piped design cannot do without buffering the whole dump.\n3. CAN A NOT-REQUESTED ROLLBACK TOUCH THE DATABASE? No. `if (request.restore && intent === null)` is the ONLY call site and the port is not even constructed otherwise; the deploy service's rollback uses docker/ssh ports that have no database verb, and the not-requested arm additionally sweeps every recorded argv for restore verbs. Drill (ii) proves the zero-calls arm reds on a no-op invocation.\n4. PARTIAL APPLY OR RETRY ON FAILURE? Neither. One `docker run`, no loop; `--single-transaction` + `ON_ERROR_STOP=1` measured to leave the destination exactly as it was, drop included. The command refuses and never retries (arm 6d asserts call count === 1; drill (iv) proves it). Receipt-backed recovery (`intent !== null`) SKIPS the restore deliberately — recovery may finish an admitted request but never re-attempt an uncertain effect.\n5. TEARDOWN WHEN THE LIVE ARM THROWS? Verified by execution, not inspection: both live drills THREW, and `docker ps -aq` for `moe-backup-*` and `moe-verifier-*` was 0 afterwards. The port disposes its apply container in `finally` (beyond `--rm`); the arm's nested `finally`s release the recipe, await the operation, close the runner, remove the temp root, then assert no verifier container and no NEW `moe-backup-*` beyond a snapshot taken before the arm started — scoped so a peer seat's live backup cannot fail a clean teardown.\n\nTWO MORE FROM THE CHECKLIST, DISCLOSED NOT FIXED:\n- CONCURRENCY: the restore runs BEFORE the environment guard is reserved, so two concurrent restore-requests could each apply before either reserves. Both would apply the SAME dump (selected from the current deploy, not from the kept receipt) atomically, so the end state is one idempotent apply and the loser refuses DEPLOY_ROLLBACK_IN_PROGRESS. The alternative ordering is WORSE: a restore that cannot proceed would leave the guard reserved at an odd version and block the next command. Deliberate, and documented in the code.\n- SCHEMAS OUTSIDE `public`: the reset drops `public` only, so an object in another schema would survive and then collide on CREATE — refusing, i.e. failing closed. The controlled profile uses `public` only. Likewise, a role that does not own `public` fails the DROP, aborts the transaction and refuses. Both fail in the safe direction; noting them for the epic-final hardening row rather than widening this one.",
       "timestamp": "2026-09-07T16:31:46.138Z"
+    },
+    {
+      "id": "comment-214e44df1dd34f01b8b75e1f7d200ac0",
+      "author": "qa-eaa78526",
+      "content": "QA VERIFICATION RECORD (qa-eaa78526) — full detail; the reviewSummary is capped at 2000 so the load-bearing evidence lives here.\n\nGATES, MINE, foreground, one command per call:\n1. `pnpm --filter @moe/daemon test` -> EXIT 0, `Test Files 588 passed (588)` / `Tests 10492 passed | 8 skipped (10500)`, 352.41s. Higher than the worker's recorded 587/10474 because sibling rows landed between their run and mine.\n2. `npx tsc --noEmit --project apps/daemon/tsconfig.json` -> EXIT 0. PLANTED CONTROL, because a bare green is not evidence: appended `const QA_PLANTED_CONTROL: number = \"not a number\";` to `rollback-restore.ts` -> `apps/daemon/src/deployment/rollback-restore.ts(201,7): error TS2322: Type 'string' is not assignable to type 'number'.`, EXIT 1. So tsc genuinely covers the NEW module. Restored from an out-of-tree copy; proof in a SEPARATE call — `git status --porcelain` empty and `git diff -- <path>` empty (valid here because the path is TRACKED at HEAD, landed in f43b4bdb).\n3. SCOPED, flag unset: rollback-command + rollback-restore + rollback-production-wiring + rollback-restore-real + src/backups -> `Test Files 6 passed (6)` / `Tests 68 passed | 2 skipped (70)`. The 2 skips are exactly the two `runIf` live arms; the ALWAYS-RUNNING gate-pinner at rollback-restore-real.test.ts:104 executed, so this file cannot report green while proving nothing (global rail 8).\nRoot `pnpm test` reaches no `apps/**` file and is not quoted as evidence for anything here.\n\nMY OWN DRILL, independent of the worker's four, on the PRODUCTION surface (global rail 1):\nMutated `rollback-command.ts:139` `if (request.restore && intent === null)` -> `if (intent === null)`, i.e. made the not-requested path call the port anyway. Ran `npx vitest run --root . --config package.json src/deployment/rollback-command.test.ts --testTimeout=30000` (the explicit --testTimeout matters: narrowing the package script drops its flags).\nRED at the RIGHT assertion, not a collateral one:\n  × (b) records ZERO calls on the restore port when the operator did not request one\n  AssertionError: expected [ { …(2) } ] to deeply equal []\n`Test Files 1 failed (1)` / `Tests 14 failed | 13 passed (27)`.\nRESTORED and PROVEN in a separate call: `git status --porcelain -- <path>` empty, `git diff -- <path>` empty, and `grep -c \"if (request.restore && intent === null)\"` back to 1.\n\nCOMPOSITION CHAIN TRACED END TO END, because DoD 1 is hollow if the real root never supplies the credential — a seam that is declared and consumed but never threaded is a known failure mode on this board:\n  daemon-store-foundation-composition.ts:280 `environmentCredential: () => config.credential`\n  -> daemon-command-registry.ts:317-318\n  -> daemon-command-async-entries.ts:312-313\n  -> rollback-command.ts:141 `credential: options.environmentCredential`\nA real production dispatch therefore reaches a bound destination. `migrationWorkspace` rides the same host-scoped `DEPLOY_BUILD_CONTEXT_ENV_KEY` the deploy handler already uses — host config read once at the composition root, never a payload value, which is this file's established convention.\n\nDoD 2's \"the rollback receipt says so\", where I had to look hardest: the receipt shape carries no restore field. It is satisfied durably anyway — `restoreDatabase: request.restore` is inside `requestBytes` (rollback-command.ts:87-89), which is the payload of `EnvironmentRollbackRequested` and `EnvironmentRollbackReserved` and the requestBytes of the terminal decision. Since the restore is applied BEFORE admission and a failure prevents those writes entirely, a committed rollback decision carrying `restoreDatabase: true` is exactly the durable record that the restore applied.\n\nDoD 3 — NOTED DEVIATION, ACCEPTED, recorded so a later grader does not re-litigate it. The DoD says \"the receipt REFUSED with the failing step named\". The implementation writes NO receipt at all: the refusal precedes every durable write, and arms (c) and (d) assert `readDeployReceipt(...).ok === false`. That is the STRONGER untouched state, it is forced by this same clause's \"no partial apply\" plus step 5's resolve-before-any-irreversible-effect mandate (writing a REFUSED receipt would require reserving the environment guard first), and it matches how every other guard in this handler refuses. The failing step is still named with a stable code (DEPLOY_ROLLBACK_RESTORE_FAILED), the answering layer, and a fixed-table detail on the refusal surface. Substance delivered; literal wording deviated from for a reason the DoD itself supplies.\n\nPER-FILE CAPS (the cap is per production FILE, not per task): backup-ports 214, rollback-restore 199, rollback-command 206, daemon-command-async-entries 378 — all under 400. This row added 16 lines to the last one.\n\nSCOPE — no drift. The `migrateDown`/`hostContext`/`MigrateDownSeams` rework visible in `git diff 5f4f3675 HEAD` on daemon-command-async-entries.ts is a PEER's: `git diff f43b4bdb^ f43b4bdb` on that file has 0 hits for those identifiers.\n\nEPIC RAIL 1 DOES NOT FIRE. No command kind added — `deployment.rollback` already existed (task-b22462cf); this row adds two FIELDS to an existing entry. 0 `GENERATED_CONTRACT_DIGEST` hits in either of this row's commits. No control-room leg is owed.\n\nCOMMITS — completion 3a056078 carries backup-ports.ts, rollback-production-wiring.test.ts, rollback-restore-real.test.ts; the earlier six paths landed in checkpoint f43b4bdb. All 9 declaredFiles are present at HEAD and none of this row's paths is left dirty. Foreign dirt in the shared checkout (backup-restore-proof.ts/.js, preview-goal-landing.test.ts, .moe/*) is untouched and is referenced by nothing at HEAD, so it is not a dangling-import hazard.",
+      "timestamp": "2026-09-07T16:44:40.254Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T21:24:00.423Z",
-  "updatedAt": "2026-09-07T16:33:46.644Z",
+  "updatedAt": "2026-09-07T16:46:16.963Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T13:01:24.036Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-09-07T16:46:16.963Z",
+    "wallClockMs": 13492927
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -211,7 +219,8 @@
   "planApprovedAt": "2026-09-07T13:13:30.327Z",
   "contextFetchedBy": [
     "worker-fcbcfca9",
-    "worker-319873d7"
+    "worker-319873d7",
+    "qa-eaa78526"
   ],
   "workStartedAt": "2026-09-07T15:09:50.512Z",
   "commits": [
@@ -297,6 +306,25 @@
       "treeId": "d9a4212fc69e508f94d3f095101db9e328db2939",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "3a0560782ef0b6ca915e8507b46378afe208fb69",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-319873d7@2026-09-07T16:02:50Z",
+      "paths": [
+        ".moe/tasks/task-078232fb9b9d4c06a5faf3c02adaf705.json",
+        ".moe/tasks/task-b7cdf265455d45c58010aa4d6f6c1544.json",
+        "apps/daemon/src/backups/backup-ports.ts",
+        "apps/daemon/src/deployment/rollback-production-wiring.test.ts",
+        "apps/daemon/src/deployment/rollback-restore-real.test.ts"
+      ],
+      "recordedBy": "worker-319873d7",
+      "recordedAt": "2026-09-07T16:33:57.177Z",
+      "treeId": "79fc3b82975252794c440171965f9620d815f7fe",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -307,7 +335,9 @@
     "apps/daemon/src/deployment/rollback-restore.test.ts",
     "apps/daemon/src/daemon-command-async-entries.ts",
     "apps/daemon/src/deployment/rollback-production-wiring.test.ts",
-    "apps/daemon/src/deployment/rollback-restore-real.test.ts"
+    "apps/daemon/src/deployment/rollback-restore-real.test.ts",
+    ".moe/tasks/task-078232fb9b9d4c06a5faf3c02adaf705.json",
+    ".moe/tasks/task-b7cdf265455d45c58010aa4d6f6c1544.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/daemon-command-async-entries.ts",
@@ -319,14 +349,15 @@
     ".moe-step6b.py",
     "apps/daemon/src/deployment/rollback-command.ts",
     ".moe-step6c.py",
-    "apps/daemon/src/deployment/rollback-restore.test.ts"
+    "apps/daemon/src/deployment/rollback-restore.test.ts",
+    "apps/daemon/src/deployment/rollback-restore-real.test.ts"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-fcbcfca9@2026-09-07T15:48:25Z",
-    "at": "2026-09-07T15:48:35.369Z"
+    "kind": "completion",
+    "sessionId": "worker-319873d7@2026-09-07T16:02:50Z",
+    "at": "2026-09-07T16:33:57.177Z"
   },
   "declaredFiles": [
     "apps/daemon/src/backups/backup-ports.ts",
@@ -346,5 +377,8 @@
     "outputTail": " Test Files  587 passed (587)\n      Tests  10474 passed | 8 skipped (10482)\n   Start at  19:23:44\n   Duration  405.35s (transform 25.30s, setup 0ms, import 340.98s, tests 1171.47s, environment 30ms)\n\nDAEMON_TEST_EXIT=0",
     "reportedAt": "2026-09-07T16:33:46.644Z"
   },
-  "completionSummary": "Rollback's database restore reaches a bound production destination. The blanket refusal at rollback-command.ts:86 is gone; DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE (code + layer DAEMON_COMMAND_SEAM) now fires ONLY for an unbound environment.\n\nWHICH DUMP — the operator-settled choice, unchanged: the CURRENT deploy's PRE-migration dump. migrateWithBackup dumps BEFORE it applies, so the KEPT receipt's own backupRef is the schema before the KEPT deploy's own migration — restoring it would rewind one step too far and DISCARD schema the kept deploy applied. Reached by the durable join deploy.decisionId === migration.requestId (deploy-command.ts:267), a deterministic key lookup, never a filename/hash/newest-file scan. Drill (i) proves the arm reds on the wrong ref (rollback-restore.test.ts:186, `- current.sql / + kept.sql`).\n\nWHICH DATABASE — resolveDeployMigrationContext is COMPOSED, not reimplemented; no process.env, no payload URL. restoreDatabase(path) is UNTOUCHED, so scheduled-backup.ts:62 keeps its verify-in-an-isolated-container meaning; the new restoreDatabaseInto(connection, path) sits beside it.\n\nTHE LIVE ARM FOUND A REAL DEFECT the doubles could not: restoreDatabaseInto could not restore onto a live database at all — a plain pg_dump at a populated destination dies `relation \"app_metadata\" already exists` (psql exit 3). Fixed inside the new operation: the destination is reset in the SAME `--single-transaction` as the apply. Measured both ways — restore works; a failing artifact exits 3 leaving the schema exactly as it was, drop included (DoD 3 as a property, not a hope). The adversarial pass then caught that CASCADE's per-object NOTICEs could overflow docker()'s maxBuffer: 65_536 and refuse a good restore, so the reset leads with SET client_min_messages TO warning.\n\nDRILLS (i)-(iv) all red at the intended assertion, all restored (git diff empty for tracked, SHA256 equality for the rest); details + failing lines in comment-5f1b8ce4. Adversarial answers, inclu"
+  "completionSummary": "Rollback's database restore reaches a bound production destination. The blanket refusal at rollback-command.ts:86 is gone; DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE (code + layer DAEMON_COMMAND_SEAM) now fires ONLY for an unbound environment.\n\nWHICH DUMP — the operator-settled choice, unchanged: the CURRENT deploy's PRE-migration dump. migrateWithBackup dumps BEFORE it applies, so the KEPT receipt's own backupRef is the schema before the KEPT deploy's own migration — restoring it would rewind one step too far and DISCARD schema the kept deploy applied. Reached by the durable join deploy.decisionId === migration.requestId (deploy-command.ts:267), a deterministic key lookup, never a filename/hash/newest-file scan. Drill (i) proves the arm reds on the wrong ref (rollback-restore.test.ts:186, `- current.sql / + kept.sql`).\n\nWHICH DATABASE — resolveDeployMigrationContext is COMPOSED, not reimplemented; no process.env, no payload URL. restoreDatabase(path) is UNTOUCHED, so scheduled-backup.ts:62 keeps its verify-in-an-isolated-container meaning; the new restoreDatabaseInto(connection, path) sits beside it.\n\nTHE LIVE ARM FOUND A REAL DEFECT the doubles could not: restoreDatabaseInto could not restore onto a live database at all — a plain pg_dump at a populated destination dies `relation \"app_metadata\" already exists` (psql exit 3). Fixed inside the new operation: the destination is reset in the SAME `--single-transaction` as the apply. Measured both ways — restore works; a failing artifact exits 3 leaving the schema exactly as it was, drop included (DoD 3 as a property, not a hope). The adversarial pass then caught that CASCADE's per-object NOTICEs could overflow docker()'s maxBuffer: 65_536 and refuse a good restore, so the reset leads with SET client_min_messages TO warning.\n\nDRILLS (i)-(iv) all red at the intended assertion, all restored (git diff empty for tracked, SHA256 equality for the rest); details + failing lines in comment-5f1b8ce4. Adversarial answers, inclu",
+  "completedAt": "2026-09-07T16:46:16.963Z",
+  "reviewCompletedAt": "2026-09-07T16:46:16.963Z",
+  "reviewSummary": "APPROVED. Full evidence in comment-214e44df.\n\nGATES I RE-RAN: pnpm --filter @moe/daemon test EXIT 0, Test Files 588 passed (588) / Tests 10492 passed | 8 skipped. tsc -p apps/daemon EXIT 0 with a PLANTED CONTROL proving it covers the new module (rollback-restore.ts(201,7) TS2322, EXIT 1; restored, diff empty). Scoped 6 files / 68 passed | 2 skipped - skips are exactly the runIf live arms, gate-pinner ran, no vacuous green.\n\nMY DRILL: mutated rollback-command.ts:139 to `if (intent === null)`. Arm (b) RED at the right assertion, \"expected [ {...} ] to deeply equal []\". Restored; diff empty.\n\nDoD1: resolveDeployMigrationContext COMPOSED, not reimplemented. Traced the real chain foundation-composition:280 -> registry:317 -> async-entries:312 -> rollback-command:141; an unthreaded seam would make this hollow. Unbound refuses UNAVAILABLE with code AND layer.\nDoD2: arm (a) asserts ONE call, path == CURRENT deploy's pre-migration dump, connection == credential-seam URL, not.toBe the kept ref with both seeded DIFFERENT. Arm (b) asserts calls == [] on a port callable in (a). restoreDatabase rides in requestBytes and the restore precedes admission, so a committed decision is the receipt saying so.\nDoD3: --single-transaction + fixed reset makes no-partial-apply a property; call count 1 pins no-retry. DEVIATION accepted: no REFUSED receipt, refusal precedes every durable write - stronger untouched state, forced by the clause's own \"no partial apply\". Code+layer still name the failing step.\nDoD4: live arm on real disposable PostgreSQL through the production composition; information_schema compared byte for byte with an out-of-band mutation; nested finallys assert no container left.\n\nRAILS: per-FILE 214/199/206/378. Leak arm has a positive control. restoreDatabase(path) unchanged. No scope drift. Epic rail 1 does not fire."
 }
