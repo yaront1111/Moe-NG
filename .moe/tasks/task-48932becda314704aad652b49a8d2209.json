@@ -156,7 +156,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T17:24:27.654Z",
-  "updatedAt": "2026-09-07T01:09:59.447Z",
+  "updatedAt": "2026-09-07T01:25:05.617Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:10:11.926Z",
     "plannedStepCount": 7,
@@ -326,9 +326,10 @@
     "apps/daemon/src/orchestrator/agent-spawner.test.ts"
   ],
   "lastCommitOutcome": {
-    "outcome": "committed",
+    "outcome": "nothing",
     "kind": "checkpoint",
-    "sessionId": "worker-ca28be90@2026-09-07T01:09:51Z",
-    "at": "2026-09-07T01:09:59.447Z"
+    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
+    "sessionId": "worker-ca28be90@2026-09-07T01:25:00Z",
+    "at": "2026-09-07T01:25:05.617Z"
   }
 }
