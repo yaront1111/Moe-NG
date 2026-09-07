@@ -1,5 +1,6 @@
 import type { JSX } from "react";
 
+import type { ActivationReadOutcome } from "../../live/live-activation.js";
 import type { ActivityOutcome } from "../../live/live-activity.js";
 import type { SessionsOutcome, SessionView } from "../../live/live-sessions.js";
 import { OutcomeNote } from "../components/outcome-note.js";
@@ -8,6 +9,8 @@ import { readFailedSaid } from "../outcome-words.js";
 import { pauseSeatWords } from "../shell/pause-context.js";
 import type { ProviderPause } from "../shell/pause-context.js";
 import { agoWords, isSeatRecord, kindWords, principalWords, seatLimitWords, seatWords } from "./activity-words.js";
+import type { AgentProviderPort } from "./agent-provider-port.js";
+import { SeatDisclosure, SeatStartFacts } from "./seat-disclosure.js";
 
 /**
  * ACTIVITY and SESSIONS, the pure panels. Activity is the decision ledger in a person's
@@ -111,9 +114,17 @@ export interface SessionsPanelProps {
   readonly outcome: SessionsOutcome | null;
   /** The shell-wide provider pause, or null/absent when none is known. */
   readonly paused?: ProviderPause | null | undefined;
+  /** The activation read the credential SOURCE is composed from; absent means not read here. */
+  readonly activation?: ActivationReadOutcome | null | undefined;
+  /** The daemon's `project.set_agent_provider` offer, or null when it offered none. */
+  readonly providerOffer?: Readonly<Record<string, unknown>> | null | undefined;
+  readonly providerPort?: AgentProviderPort | null | undefined;
+  readonly onProviderChosen?: (() => void) | undefined;
 }
 
-export function SessionsPanel({ nowMs, outcome, paused }: SessionsPanelProps): JSX.Element {
+export function SessionsPanel({
+  activation, nowMs, onProviderChosen, outcome, paused, providerOffer, providerPort,
+}: SessionsPanelProps): JSX.Element {
   return (
     <section className="cr2-ops-panel" data-testid="cr.sessions.root">
       <h3 className="cr2-approve-heading">Seats</h3>
@@ -128,6 +139,16 @@ export function SessionsPanel({ nowMs, outcome, paused }: SessionsPanelProps): J
           {paused === undefined || paused === null ? null : (
             <p className="cr2-needs-note" data-testid="cr.sessions.paused">{pauseSeatWords(paused)}</p>
           )}
+          {/* WHICH provider, on WHAT credential, and whether the browser can still change it -
+              above the seat list, because it decides how to read every row below. */}
+          <SeatDisclosure
+            activation={activation ?? null}
+            agentProvider={outcome.agentProvider}
+            offer={providerOffer ?? null}
+            onChosen={onProviderChosen}
+            port={providerPort ?? null}
+            sessions={outcome.sessions}
+          />
           {/* Above the seat list: the reason a person is looking at fewer moving nodes
               than they expected. Only what the daemon stated, both numbers. */}
           <p className="cr2-needs-note" data-testid="cr.sessions.limit">{seatLimitWords(outcome.concurrency)}</p>
@@ -150,6 +171,7 @@ export function SessionsPanel({ nowMs, outcome, paused }: SessionsPanelProps): J
                   {`${seatWords(session.sessionId)}${session.holding.length === 0 ? "" : ` ${MIDDOT} working on ${session.holding.join(", ")}`}`}
                 </span>
                 <span className="cr2-approve-mono cr2-activity-target">{`${session.sessionId} ${MIDDOT} ${session.capabilities.join(" ")}`}</span>
+                <SeatStartFacts session={session} />
               </li>
             );
             return (

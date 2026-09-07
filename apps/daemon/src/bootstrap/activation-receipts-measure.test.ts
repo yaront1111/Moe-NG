@@ -10,7 +10,8 @@ import { fileURLToPath } from "node:url";
 import { SQLITE_APPLICATION_ID } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { loginCredentialPath, providerFor } from "../orchestrator/moe-up-credentials.js";
+import { loginCredentialPath, providerFor, refuseCredential } from "../orchestrator/moe-up-credentials.js";
+import type { CredentialProvider } from "../orchestrator/moe-up-credentials.js";
 import {
   ACTIVATION_RECEIPT_CODES, ACTIVATION_RECEIPT_MEMBERS, PROVIDER_VERSION_UNKNOWN,
 } from "./activation-receipts.js";
@@ -378,7 +379,19 @@ describe("activation receipt measurement", () => {
     const refusal = refusalOf(refused, "provider");
     expect(refusal.code).toBe("ACTIVATION_PROVIDER_UNMEASURED");
     expect(refusal.layer).toBe(LAYER);
-    expect(refusal.detail).toBe("no credential for claude");
+    // THE LAUNCHER'S ROSTER, VERBATIM, not a summary of it. This detail is carried to
+    // /activation/read as the provider row's `reason` and rendered on the Seats screen, and
+    // an operator whose seats will not start needs the variable NAMES - the fix is the one
+    // line they read. Asserted name by name so dropping one reds, and against
+    // `refuseCredential`'s own output so this can never become a second transcription.
+    expect(refusal.detail).toBe(refuseCredential(
+      providerFor("claude") as CredentialProvider,
+      loginCredentialPath(providerFor("claude") as CredentialProvider, {}),
+    ).message);
+    for (const name of ["CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_AUTH_TOKEN", "ANTHROPIC_API_KEY"]) {
+      expect(refusal.detail).toContain(name);
+    }
+    expect(refusal.detail).toContain("MOE_UP_ENV_MISSING");
   });
 
   it("copies a real store and returns the copy's own sha256", async () => {

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import { readActivation } from "../../live/live-activation.js";
+import type { ActivationReadOutcome } from "../../live/live-activation.js";
 import { readActivity } from "../../live/live-activity.js";
 import type { ActivityOutcome } from "../../live/live-activity.js";
 import { readHealth, readPolicy } from "../../live/live-ops.js";
@@ -12,6 +14,8 @@ import { readSessions } from "../../live/live-sessions.js";
 import type { SessionsOutcome } from "../../live/live-sessions.js";
 import { useProviderPause } from "../shell/pause-context.js";
 import { ActivityPanel, SessionsPanel } from "./activity-screens.js";
+import { AGENT_PROVIDER_COMMAND_KIND, createAgentProviderPort } from "./agent-provider-port.js";
+import type { AgentProviderPort } from "./agent-provider-port.js";
 import { LiveEnvironments } from "./live-environments.js";
 import { HealthScreen, PolicyScreen } from "./ops-screens.js";
 import type { PolicyInstallState } from "./ops-screens.js";
@@ -68,6 +72,7 @@ const POLICY_FAILURE: PolicyOutcome = Object.freeze({ code: "POLICY_READ_FAILED"
 export const HEALTH_FAILURE: HealthOutcome = Object.freeze({ code: "HEALTH_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
 const ACTIVITY_FAILURE: ActivityOutcome = Object.freeze({ code: "ACTIVITY_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
 const SESSIONS_FAILURE: SessionsOutcome = Object.freeze({ code: "SESSIONS_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
+const ACTIVATION_FAILURE: ActivationReadOutcome = Object.freeze({ code: "ACTIVATION_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
 export const REPOSITORY_REMOTE_FAILURE: RepositoryRemoteOutcome = Object.freeze({ code: "REPOSITORY_REMOTE_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
 
 /**
@@ -136,18 +141,61 @@ export function LiveHealth({ headers, onConnection, pollMs, read, readRemote, se
       <HealthScreen nowMs={nowMs} outcome={outcome} remote={remote} />
       <LiveEnvironments headers={headers} pollMs={pollMs} />
       {setup !== undefined && <LiveRepositoryRecovery setup={setup} />}
-      <LiveSessions headers={headers} pollMs={pollMs} />
+      <LiveSessions headers={headers} pollMs={pollMs} setup={setup} />
       <LiveActivity goalRef={null} headers={headers} pollMs={pollMs} scopeLabel="THIS PROJECT" />
     </>
   );
 }
 
-export function LiveSessions({ headers, pollMs, read }: LiveOpsProps<SessionsOutcome>): JSX.Element {
+export interface LiveSessionsProps extends LiveOpsProps<SessionsOutcome> {
+  /** The attached session; absent (fixtures, tests) means the screen can read but not choose. */
+  readonly setup?: LiveSetup | undefined;
+  /** Injectable for tests; the default spends the attached session's own wire. */
+  readonly providerPort?: AgentProviderPort | undefined;
+  /** Injectable for tests; the default reads the credential SOURCE off /activation/read. */
+  readonly readActivationOnce?: (() => Promise<ActivationReadOutcome>) | undefined;
+  /** Injectable for tests; the default reads the daemon's offers off /affordances/read. */
+  readonly readSurface?: (() => Promise<SurfaceFrame>) | undefined;
+}
+
+export function LiveSessions({
+  headers, pollMs, providerPort, read, readActivationOnce, readSurface, setup,
+}: LiveSessionsProps): JSX.Element {
   const [reader] = useState(() => read ?? ((): Promise<SessionsOutcome> => readSessions(headers)));
   const { nowMs, outcome } = useOpsRead(reader, SESSIONS_FAILURE, pollMs ?? POLL_MS, undefined);
   // The pause comes from the shell's one health poll, never a second one of this screen's own.
   const paused = useProviderPause();
-  return <SessionsPanel nowMs={nowMs} outcome={outcome} paused={paused} />;
+  // The CREDENTIAL SOURCE is an activation fact, not a sessions one, so it rides its own read
+  // on the same poller rather than widening the sessions frame - whose decoder is EXACT-KEY.
+  const [activationReader] = useState(() => readActivationOnce ?? ((): Promise<ActivationReadOutcome> => readActivation(headers)));
+  const activation = useOpsRead(activationReader, ACTIVATION_FAILURE, pollMs ?? POLL_MS, undefined).outcome;
+  const [port] = useState<AgentProviderPort | null>(() => providerPort ?? (setup === undefined ? null : createAgentProviderPort(setup)));
+  const [surfaceReader] = useState(() => readSurface ?? ((): Promise<SurfaceFrame> => readSurfaceOnce(headers)));
+  const [offer, setOffer] = useState<Readonly<Record<string, unknown>> | null>(null);
+  // The offer carries the aggregate's CURRENT version, so it is re-read on the same poll: a
+  // stale one is refused by the daemon rather than silently writing at the wrong version.
+  useEffect(() => {
+    let live = true;
+    const tick = (): void => {
+      void surfaceReader().then((surface) => {
+        if (!live) return;
+        setOffer(surface.offers.find((candidate) => candidate["commandKind"] === AGENT_PROVIDER_COMMAND_KIND) ?? null);
+      }, () => { if (live) setOffer(null); });
+    };
+    tick();
+    const timer = setInterval(tick, pollMs ?? POLL_MS);
+    return (): void => { live = false; clearInterval(timer); };
+  }, [pollMs, surfaceReader]);
+  return (
+    <SessionsPanel
+      activation={activation}
+      nowMs={nowMs}
+      outcome={outcome}
+      paused={paused}
+      providerOffer={offer}
+      providerPort={port}
+    />
+  );
 }
 
 export interface LiveActivityProps extends LiveOpsProps<ActivityOutcome> {

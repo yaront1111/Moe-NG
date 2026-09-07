@@ -121,6 +121,14 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
     },
   },
   "project.register": { owner: "operator-local" },
+  // THE OPERATOR'S PROVIDER CHOICE OVERLAYS `provider`; the other two keys are the whole
+  // caller half and belong here rather than at the toggle. `goalId: ""` is the command
+  // contract's PROJECT-DEFAULT SENTINEL, documented at agent-provider-store.ts:72 - an
+  // empty string is not a missing goal, it is the setting every goal inherits, and the
+  // browser writes the project default rather than a per-goal override. `provider` is
+  // spelled with the daemon's own first-named value so this body is valid on its own; a
+  // value outside KNOWN_PROVIDERS is refused AGENT_PROVIDER_UNKNOWN at the store.
+  "project.set_agent_provider": { base: "main", goalId: "", provider: "claude" },
   "provider.probe": {
     // The PROFILE is what the probe registers; an observation without one
     // refuses PROVIDER_PROFILE_INPUT_INVALID at the codec, which silently

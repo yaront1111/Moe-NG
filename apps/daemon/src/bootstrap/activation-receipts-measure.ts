@@ -12,7 +12,9 @@ import { basename, extname, join } from "node:path";
 
 import { SQLITE_APPLICATION_ID } from "@moe/store";
 
-import { providerCredentials, providerFor } from "../orchestrator/moe-up-credentials.js";
+import {
+  loginCredentialPath, providerCredentials, providerFor, refuseCredential,
+} from "../orchestrator/moe-up-credentials.js";
 import {
   ACTIVATION_RECEIPT_MEMBERS, PROVIDER_VERSION_UNKNOWN, measuredReceipt, sha256Hex, signingReceipt,
   unmeasuredReceipt,
@@ -106,7 +108,19 @@ function credentialRef(
   }
   const entries = providerCredentials(provider, ports.env, (path) => ports.fs.exists(path));
   const first = entries?.[0];
-  if (first === undefined) return { detail: `no credential for ${provider.leaf}`, ref: null };
+  // THE LAUNCHER'S OWN REFUSAL, NOT A SUMMARY OF IT. An operator whose seats will not start
+  // needs the variable NAMES and the sign-in path that was looked for - "no credential for
+  // claude", which this branch used to answer, sends them nowhere. `refuseCredential` is the
+  // launcher's existing formatter over the launcher's existing roster, so the names reaching
+  // the browser here are the same ones the gate actually checks: a second copy would drift
+  // and tell an operator to set a variable nothing reads. The message carries NAMES only; a
+  // credential VALUE cannot appear in it, and this branch is reached only when none is set.
+  if (first === undefined) {
+    return {
+      detail: refuseCredential(provider, loginCredentialPath(provider, ports.env)).message,
+      ref: null,
+    };
+  }
   return {
     detail: "",
     ref: `credential/${provider.leaf}/${first.secret ? `env:${first.name}` : "login-file"}`,
