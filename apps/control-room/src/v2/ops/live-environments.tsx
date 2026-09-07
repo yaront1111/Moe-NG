@@ -10,7 +10,7 @@ import type { DeploymentsHealthOutcome } from "../../live/live-deployments-healt
 import { readGoalCatalog } from "../../live/live-goal-catalog.js";
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
 import { EnvironmentsSection } from "./environments-section.js";
-import type { EnvironmentHealthRow } from "./environments-section.js";
+import type { EnvironmentHealthRow, EnvironmentsGap } from "./environments-section.js";
 
 /**
  * THE ENVIRONMENTS SECTION, ON THE WIRE. The Health screen is project-scoped and holds no goal,
@@ -31,8 +31,15 @@ import type { EnvironmentHealthRow } from "./environments-section.js";
  */
 
 const POLL_MS = 15_000;
-/** A bound on the fan-out: the catalog is unbounded and each goal costs one deployments read. */
-const MAX_GOALS = 12;
+/**
+ * How many goal reads are in flight at once. The catalog is DRAINED IN FULL - `readGoalCatalog`
+ * already pages to exhaustion and refuses `GOAL_CATALOG_DRAIN_BOUND_EXCEEDED` rather than
+ * truncating - so the fan-out is PACED in batches instead of bounded by dropping goals. Dropping
+ * them silently excluded every goal past the bound, and a project whose only deployment sat on a
+ * later goal read as "No environment deployed": a false empty, the one sentence this surface must
+ * never say without knowing it.
+ */
+const GOAL_READ_BATCH = 12;
 const LAYER = "CONTROL_ROOM_ENVIRONMENTS";
 
 /** Why the deployed set could not be assembled, one stable code per cause. */
@@ -42,6 +49,8 @@ export const ENVIRONMENTS_CATALOG_CODES = Object.freeze({
   UNREADABLE: "ENVIRONMENTS_CATALOG_UNREADABLE",
 } as const);
 export const ENVIRONMENTS_READ_FAILED = "ENVIRONMENTS_READ_FAILED";
+/** One goal read threw. Counted as a failed goal, never allowed to reject the whole sweep. */
+export const DEPLOYMENTS_READ_FAILED = "ENVIRONMENTS_DEPLOYMENTS_READ_FAILED";
 
 type SectionRefusal = { readonly code: string; readonly layer: string };
 
@@ -57,25 +66,64 @@ export interface LiveEnvironmentsProps {
   readonly readHealth?: ((environment: string) => Promise<DeploymentsHealthOutcome>) | undefined;
 }
 
-/** Every environment the daemon reports DEPLOYED, across the goals the catalog names, deduped. */
+/**
+ * What the goal sweep found, AND what it could not read. A goal read RESOLVES its failures - the
+ * outer catch below never sees them - so an enumeration that dropped them would report the goals
+ * it happened to read as though they were all of them.
+ */
+interface Enumeration {
+  readonly environments: readonly string[];
+  /** The first failure verbatim, so the code AND the layer that refused both stay visible. */
+  readonly failure: SectionRefusal | null;
+  readonly goalsFailed: number;
+  /** EVERY goal the catalog named, read or not - the denominator the gap note is stated against. */
+  readonly goalsTotal: number;
+}
+
+/** Runs `of` over every item, GOAL_READ_BATCH at a time. Nothing is dropped and nothing fans out
+ *  unbounded: both halves of this surface open one read per row and both are paced through here. */
+async function inBatches<In, Out>(
+  items: readonly In[], of: (item: In) => Promise<Out>,
+): Promise<readonly Out[]> {
+  const out: Out[] = [];
+  for (let start = 0; start < items.length; start += GOAL_READ_BATCH) {
+    out.push(...await Promise.all(items.slice(start, start + GOAL_READ_BATCH).map(of)));
+  }
+  return out;
+}
+
+/** Every environment the daemon reports DEPLOYED, across EVERY goal the catalog names, deduped. */
 async function deployedEnvironmentsOf(
   catalog: GoalCatalogFrame, readDeploys: (goalRef: string) => Promise<DeploymentsOutcome>,
-): Promise<readonly string[]> {
-  const answers = await Promise.all(
-    catalog.goals.slice(0, MAX_GOALS).map(async (goal) => readDeploys(goal.goalId)),
-  );
+): Promise<Enumeration> {
   const names = new Set<string>();
+  let failure: SectionRefusal | null = null;
+  let goalsFailed = 0;
+  // A goal read that THROWS is counted like one that refused, rather than rejecting the batch and
+  // blanking a surface that could still have shown the goals that did answer beside the gap. The
+  // code is this client own here because a throw carries none of the daemon vocabulary.
+  const answers = await inBatches(catalog.goals, async (goal) =>
+    readDeploys(goal.goalId).catch((): DeploymentsOutcome =>
+      ({ code: DEPLOYMENTS_READ_FAILED, layer: LAYER, status: "ERROR" })));
   for (const answer of answers) {
-    if (answer.status !== "DEPLOYMENTS") continue;
+    if (answer.status !== "DEPLOYMENTS") {
+      goalsFailed += 1;
+      failure ??= { code: answer.code, layer: answer.layer };
+      continue;
+    }
     for (const environment of answer.environments) {
       if (environment.outcome === "DEPLOYED") names.add(environment.environment);
     }
   }
-  return [...names].sort();
+  return { environments: [...names].sort(), failure, goalsFailed, goalsTotal: catalog.goals.length };
 }
 
 type Assembled =
-  | { readonly kind: "ROWS"; readonly rows: readonly EnvironmentHealthRow[] }
+  | {
+    readonly kind: "ROWS";
+    readonly gap: EnvironmentsGap | null;
+    readonly rows: readonly EnvironmentHealthRow[];
+  }
   | { readonly kind: "REFUSED"; readonly refusal: SectionRefusal };
 
 async function assemble(readers: {
@@ -89,19 +137,35 @@ async function assemble(readers: {
   if (catalog.outcome !== "GOALS") {
     return { kind: "REFUSED", refusal: { code: ENVIRONMENTS_CATALOG_CODES[catalog.outcome], layer: LAYER } };
   }
-  const environments = await deployedEnvironmentsOf(catalog, readers.deploys);
-  const rows = await Promise.all(environments.map(
+  const found = await deployedEnvironmentsOf(catalog, readers.deploys);
+  // EVERY goal read failed: nothing at all is known about what is deployed, so the section
+  // refuses in the FAILING READ's own vocabulary rather than rendering an empty list. The code
+  // and layer travel verbatim - which layer refused is the first thing an operator needs.
+  if (found.failure !== null && found.goalsFailed === found.goalsTotal) {
+    return { kind: "REFUSED", refusal: found.failure };
+  }
+  const rows = await inBatches(found.environments,
     async (environment): Promise<EnvironmentHealthRow> => ({
       environment, outcome: await readers.health(environment),
-    }),
-  ));
-  return { kind: "ROWS", rows };
+    }));
+  // SOME goals answered and some did not. The rows that WERE read still render - hiding them
+  // would be its own false report - but they are stated as INCOMPLETE beside the refusing code,
+  // because a partial list rendered as a whole one is how an operator concludes an environment
+  // they cannot see is not deployed.
+  const gap = found.failure === null
+    ? null
+    : {
+      code: found.failure.code, goalsFailed: found.goalsFailed,
+      goalsTotal: found.goalsTotal, layer: found.failure.layer,
+    };
+  return { gap, kind: "ROWS", rows };
 }
 
 export function LiveEnvironments({
   headers, pollMs, readBackupList, readCatalog, readDeploys, readHealth,
 }: LiveEnvironmentsProps): JSX.Element {
   const [rows, setRows] = useState<readonly EnvironmentHealthRow[] | null>(null);
+  const [gap, setGap] = useState<EnvironmentsGap | null>(null);
   const [refusal, setRefusal] = useState<SectionRefusal | null>(null);
   const [backups, setBackups] = useState<BackupsOutcome | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -120,6 +184,7 @@ export function LiveEnvironments({
     const settle = (next: Assembled): void => {
       if (generation.current !== run) return;
       setRefusal(next.kind === "REFUSED" ? next.refusal : null);
+      setGap(next.kind === "ROWS" ? next.gap : null);
       if (next.kind === "ROWS") setRows(next.rows);
       setNowMs(Date.now());
     };
@@ -159,5 +224,13 @@ export function LiveEnvironments({
     const timer = setInterval(tick, pollMs ?? POLL_MS);
     return (): void => { generation.current += 1; clearInterval(timer); };
   }, [pollMs, readers]);
-  return <EnvironmentsSection backups={backups} environments={rows} nowMs={nowMs} refusal={refusal} />;
+  return (
+    <EnvironmentsSection
+      backups={backups}
+      environments={rows}
+      incomplete={gap}
+      nowMs={nowMs}
+      refusal={refusal}
+    />
+  );
 }

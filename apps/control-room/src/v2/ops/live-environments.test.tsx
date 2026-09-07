@@ -9,10 +9,14 @@ import type { DeploymentsHealthOutcome } from "../../live/live-deployments-healt
 import { mapDeploymentsHealthAnswer } from "../../live/live-deployments-health.js";
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
 import { BACKUPS_READ_FAILED, LiveEnvironments } from "./live-environments.js";
+import { LiveHealth } from "./live-ops.js";
 
 /**
- * THE ENVIRONMENTS SECTION ON THE WIRE. Both served frames go through their PRODUCTION decoders
- * rather than being hand-built, so a daemon-side shape change on either route reds these arms.
+ * THE ENVIRONMENTS SECTION ON THE WIRE. Both bodies go through their PRODUCTION decoders rather
+ * than being hand-built view objects, so no arm asserts against a shape a decoder would refuse.
+ * The bodies themselves are written here; the durable link to what the DAEMON declares is
+ * `environments-daemon-frame.test.tsx`, and the enumeration arms are in
+ * `live-environments-enumeration.test.tsx`.
  */
 
 beforeAll(() => {
@@ -292,5 +296,26 @@ describe("the backups list is fetched and settled independently of the environme
     expect(gate.release).not.toBeNull();
     gate.release?.();
     await waitFor(() => expect(screen.getByTestId("cr.backups.empty")).toBeTruthy());
+  });
+});
+
+/**
+ * THE WIRING ITSELF. Every arm above renders `LiveEnvironments` directly, so all of them stay
+ * green if the element is deleted from the Health screen and the section reaches no operator at
+ * all. This arm mounts `LiveHealth` - what the Health route actually renders - and asserts the
+ * section is THERE. It is the only arm that reds on an unwiring.
+ */
+describe("the Health screen mounts the Environments section", () => {
+  it("renders the section root inside LiveHealth", async () => {
+    const failed = (): Promise<never> => Promise.reject(new Error("no daemon in this test"));
+    render(<LiveHealth
+      headers={{}}
+      pollMs={60_000}
+      read={failed}
+      readRemote={failed}
+    />);
+    // Every branch of the section renders this root - loading, empty, list and refusal alike -
+    // so the assertion is about being MOUNTED, not about which outcome the reads produced.
+    expect(await screen.findByTestId("cr.environments.root")).toBeTruthy();
   });
 });

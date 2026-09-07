@@ -10,10 +10,16 @@ import type { EnvironmentHealthRow } from "./environments-section.js";
 /**
  * THE ENVIRONMENTS SECTION.
  *
- * Every fixture below is a REAL SERVED FRAME put through the production decoder
- * `mapDeploymentsHealthAnswer` rather than a hand-built view object, so a daemon-side shape
- * change reds these arms instead of reaching production. `frameOf` throws rather than returning
- * a refusal, so a fixture that stops decoding cannot silently become a refusal arm.
+ * Every fixture below is a BODY WRITTEN HERE put through the production decoder
+ * `mapDeploymentsHealthAnswer` rather than a hand-built view object, so no arm can assert against
+ * a view shape the decoder would never produce. `frameOf` throws rather than returning a refusal,
+ * so a fixture that stops decoding cannot silently become a refusal arm.
+ *
+ * THE BODY IS WRITTEN HERE, WHICH IS THE LIMIT OF THIS FILE. A decoder arm cannot notice that the
+ * route renamed a member, because the body was written to match what the author believed the
+ * route serves. That link - the route declaration read off disk, the frame assembled from it -
+ * lives in `environments-daemon-frame.test.tsx`, and is where a daemon shape change reds. The
+ * arms here vary ONE member at a time to pin rendering, which that file deliberately does not.
  */
 
 beforeAll(() => {

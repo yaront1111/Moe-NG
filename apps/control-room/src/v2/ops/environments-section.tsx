@@ -6,6 +6,8 @@ import { OutcomeNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
 import { BackupsList } from "./backups-list.js";
+import { GapNote } from "./environments-gap.js";
+import type { EnvironmentsGap } from "./environments-gap.js";
 import { LatencySparkline } from "./latency-sparkline.js";
 
 /**
@@ -45,6 +47,8 @@ export interface EnvironmentHealthRow {
   readonly environment: string;
   readonly outcome: DeploymentsHealthOutcome | null;
 }
+
+export type { EnvironmentsGap };
 
 function ago(iso: string, nowMs: number): string {
   const at = Date.parse(iso);
@@ -140,11 +144,13 @@ function EnvironmentRow({ nowMs, row }: {
  * answered perfectly well, and hiding the restore-proof states behind an unrelated refusal is
  * how an operator comes to check a backup at the moment they cannot see it.
  */
-function EnvironmentsPart({ environments, nowMs, refusal }: {
+function EnvironmentsPart({ environments, incomplete, nowMs, refusal }: {
   readonly environments: readonly EnvironmentHealthRow[] | null;
+  readonly incomplete?: EnvironmentsGap | null | undefined;
   readonly nowMs: number;
   readonly refusal?: { readonly code: string; readonly layer: string } | null | undefined;
 }): JSX.Element {
+  const gap = incomplete ?? null;
   if (refusal !== null && refusal !== undefined) {
     return (
       <section className="cr2-ops" data-testid="cr.environments.root">
@@ -164,6 +170,16 @@ function EnvironmentsPart({ environments, nowMs, refusal }: {
       </section>
     );
   }
+  // AN INCOMPLETE ENUMERATION THAT FOUND NOTHING IS NOT AN EMPTY ONE. Rendering the empty state
+  // here would tell an operator this project has no environment deployed on the strength of goal
+  // reads that never answered - the precise false report the enumeration codes exist to prevent.
+  if (environments.length === 0 && gap !== null) {
+    return (
+      <section className="cr2-ops" data-testid="cr.environments.root">
+        <GapNote gap={gap} />
+      </section>
+    );
+  }
   if (environments.length === 0) {
     return (
       <section className="cr2-ops" data-testid="cr.environments.root">
@@ -180,8 +196,11 @@ function EnvironmentsPart({ environments, nowMs, refusal }: {
   return (
     <section className="cr2-ops" data-testid="cr.environments.root">
       <p className="cr2-slot-kicker" data-testid="cr.environments.kicker">
-        {`Environments ${MIDDOT} ${String(environments.length)} deployed`}
+        {gap === null
+          ? `Environments ${MIDDOT} ${String(environments.length)} deployed`
+          : `Environments ${MIDDOT} ${String(environments.length)} deployed, list incomplete`}
       </p>
+      {gap === null ? null : <GapNote gap={gap} />}
       <ul className="cr2-needs-list" data-testid="cr.environments.list">
         {environments.map((row) => <EnvironmentRow key={row.environment} nowMs={nowMs} row={row} />)}
       </ul>
@@ -189,7 +208,7 @@ function EnvironmentsPart({ environments, nowMs, refusal }: {
   );
 }
 
-export function EnvironmentsSection({ backups, environments, nowMs, refusal }: {
+export function EnvironmentsSection({ backups, environments, incomplete, nowMs, refusal }: {
   /**
    * The backups read, or null while it has not answered. Its own outcome, kept apart from the
    * environments read so neither can be reported as the other.
@@ -197,6 +216,8 @@ export function EnvironmentsSection({ backups, environments, nowMs, refusal }: {
   readonly backups?: BackupsOutcome | null | undefined;
   /** Null while the deployments read has not answered; empty when nothing is deployed. */
   readonly environments: readonly EnvironmentHealthRow[] | null;
+  /** Present when only SOME goals could be read, so `environments` is a partial list. */
+  readonly incomplete?: EnvironmentsGap | null | undefined;
   readonly nowMs: number;
   /**
    * Why the deployed set itself could not be assembled. It outranks every environments state: a
@@ -207,7 +228,12 @@ export function EnvironmentsSection({ backups, environments, nowMs, refusal }: {
 }): JSX.Element {
   return (
     <>
-      <EnvironmentsPart environments={environments} nowMs={nowMs} refusal={refusal} />
+      <EnvironmentsPart
+        environments={environments}
+        incomplete={incomplete}
+        nowMs={nowMs}
+        refusal={refusal}
+      />
       <BackupsList backups={backups ?? null} />
     </>
   );
