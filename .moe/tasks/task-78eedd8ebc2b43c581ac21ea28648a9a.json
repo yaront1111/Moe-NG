@@ -193,11 +193,17 @@
       "author": "worker-4d8571e7",
       "content": "STEP 6 EVIDENCE (worker-4d8571e7, 19:22Z). Recorded as a comment because the row went BLOCKED by worker-76f4ef35 at 19:21:34Z while step-6 was IN_PROGRESS, so `complete_step` is refused. The work is DONE and GREEN. Paths declared via moe.declare_files in the same minute.\n\nJOURNEY: `npx playwright test -c tests/e2e/control-room/playwright.config.ts tests/e2e/control-room/deploy-migrations.spec.ts` -> `2 passed (46.1s)`.\n\nFULL GATE, foreground under the browser lease (held 19:01:58Z, released 19:21Z): `pnpm test:e2e:browser` -> `8 failed | 1 skipped | 37 passed (29.6m)`, exit 1. BOTH of my tests are in the 37; NEITHER is in the 8.\n\nFOREIGN RED, DISCLOSED AND ATTRIBUTED: deploy-environment.spec.ts:154, journeys.spec.ts:65, journeys.spec.ts:86, pairing-operator-channel.spec.ts:257, pairing-operator-channel.spec.ts:420, prd-persistence-boundary.spec.ts:127, prd-to-approval.spec.ts:38, provider-pause.spec.ts:181. Seven are the standing browser reds. The eighth (deploy-environment) is the ONLY one rendering the card I edited, so I attributed it rather than assuming: re-ran it ALONE with my diff fully in place -> `2 passed (39.5s)`. It reds only inside the 29.6m convoy (its own failure was a wrapper spawn timeout: `expected \"node.deliver@node-e2e-y8qy3v\", received null`), the documented load-sensitive class. (HEAD failures MINUS merge-base failures) INTERSECTED with my owned paths is EMPTY.\n\nNEGATIVE CONTROL, the only oracle for a fast Playwright pass: mutated the REFUSED expectation to `NEGATIVE-CONTROL ...` -> `1 failed`, `Error: expect(locator).toHaveText(expected) failed`. Restored; proved restored in a SEPARATE call: `grep -c 'NEGATIVE-CONTROL' tests/e2e/control-room/deploy-migrations.spec.ts` -> `0`; pair re-ran green.\n\nTWO DEFECTS FOUND AND FIXED IN THIS STEP:\n1. `BOOTSTRAP_COMMAND_BYTES_CONFLICT @ DAEMON_PREREQUISITE`. Both deploys target the SAME `deploy:<goalId>` aggregate, so an aggregate-keyed `commandId` replayed with different bytes refused the production deploy before any migration arm ran. Command ids are now PER-DISPATCH (counter reset per test); measurement recorded in a comment at the seam.\n2. The node-card positive control (`cr.kanban.detail.*` count > 0) correctly REFUSED to let an absence arm pass vacuously: a seeded lane renders ZERO node cards.\n\nWHAT THE JOURNEY PROVES (real daemon, shipped browser, EXACT-text assertions):\n- `cr.deploy.preview.migration` === `Applied <FIRST>, <SECOND>` (BOTH identifiers).\n- `cr.deploy.preview.backup` === `Backup verified - sha256 <64 hex>`, reached through `readMigrationObservation`'s REAL confinement+existence check against a real dump file written under `<root>/.moe-next/backups/pre-migration/<env>/`, with `MOE_DEPLOY_BUILD_CONTEXT` set around the lane and restored in the same finally. VERIFIED is earned, not asserted into being.\n- `cr.deploy.production.migration` === `Refused - MIGRATION_FAILED - DAEMON_INGRESS - at <FAILING>`: code AND layer AND the failing migration, containing neither \"Applied\" nor \"Reverted\". Its backup line still reads `Backup verified` - a migration that failed AFTER a good dump must not read as \"no backup was taken\".\n- `cr.deploy.verify.migration` === `Migration state is not known here - MIGRATION_RECEIPT_ABSENT - DAEMON_INGRESS`, from an environment genuinely never deployed, with NO backup line at all.\n- NO CROSS-ASSOCIATION, both directions: neither row contains the other's migration id or digest.\n- LEAK ARM over the whole card and over the ledger: no `postgres://`, no `DATABASE_URL`, not the temp build-context path, not the backup leaf filename, zero anchors containing the digest.\n- Health's project-wide activity list contains \"recorded the migration\" (`live-ops.tsx:145` mounts `LiveActivity goalRef={null}`).\n- `/activity/read {}` carries EXACTLY 2 migration receipts, verdicts `[\"APPLIED\",\"REFUSED\"]` - the fact `decisionWords` renders from.\n\nDISCLOSED LIMITATION, measured twice, NOT worked around: the node card is unreachable from any lane at HEAD. (a) A seeded lane exposes NO run goal - project-scoped `/runs/read` answers `{\"goals\":[],\"outcome\":\"RUNS\",\"totals\":{...,\"nodes\":0}}` EVEN AFTER a real landing (19:09Z); a goal-scoped read answers RUNS_READ_GOAL_UNKNOWN (no source-document binding). (b) Even with a bound goal NO line would render: a declaration rides an AUTHORED source (`scheduler-node-planning-authority.ts:141`) and BOTH authority-body writers state NONE deliberately (`journey-authority-bodies.ts:128-137`, `compiled-policy-authority-body.ts:104`), because minting `[]` moves `graphContentHash` for every shipped journey. Making one declare is a daemon edit breaking a peer's byte-identical rebuild pin; this row is presentation-only. An absence arm over zero node cards is a ZERO-CASE SWEEP, so the spec asserts the read's own answer and says so. The node card's four renderings are covered against the real `BoardScreen` in board-screen.test.tsx.\n\nThe card's deploy-offer gating was NOT relaxed: both targets are bound so the daemon serves the offer, exactly as deploy-environment.spec.ts does.\n\nTEARDOWN: `finally` restores `MOE_DEPLOY_BUILD_CONTEXT` (delete vs reassign per prior state), `rmSync` the temp root and ASSERTS it gone, then `assertStopped` (every lane pid dead, both ports closed, catalog directory gone). A second test proves the same teardown on the THROWING path. Independent census after the gate: `docker ps -a` EMPTY; zero `moe-migrations-e2e-*` roots in %TEMP%.\n\nPEER EDIT ON THIS PATH: deploy-migrations.spec.ts arrived TRACKED at HEAD from a peer with a stronger version than my draft (real confined backup file, host build-context handling, exact-text assertions). I did NOT revert it - I kept it and applied the two fixes above on top. The file on disk is that merged version.",
       "timestamp": "2026-09-07T19:41:41.946Z"
+    },
+    {
+      "id": "comment-8d534b2ee1c9451a807483615966ea36",
+      "author": "worker-4d8571e7",
+      "content": "STEP-6 EVIDENCE FROM THE OTHER LIVE 4d8571e7 SESSION (19:45Z). ADDITIVE to comment c02f7050 - that comment carries the SAME worker id but was NOT written by this session. Two live CLI sessions share seat worker-4d8571e7; that is the same class worker-76f4ef35 blocked on, and it is real. Our count lines differ because we ran separately (mine: journey `2 passed (21.0s)`, gate `7 failed | 1 skipped | 38 passed (21.4m)`; theirs: `2 passed (46.1s)`, `8 failed | 1 skipped | 37 passed (29.6m)`). Neither is wrong; they are different runs.\n\nDELIVERED BYTES ARE STABLE AND GREEN. `tests/e2e/control-room/deploy-migrations.spec.ts` sha256 `4c3543fa73a21193a96a9cd98438a9c19e2e9b213755350e128c135d5b496ce0`, 25040 bytes, mtime 19:20:23Z - unchanged for 25 minutes at the time of writing. Final run at exactly those bytes: `npx playwright test -c tests/e2e/control-room/playwright.config.ts deploy-migrations` EXIT 0 -> `2 passed (21.0s)`. FAST is the green signature.\n\nFOUR THINGS THIS SESSION HOLDS THAT THE OTHER COMMENT DOES NOT:\n\n1. PATH-ATTRIBUTED BASELINE, done against the RECORDED HEAD baseline (07:39Z, sha 6d5a8198, PRE-diff, 7 browser reds). Shared by both sets: journeys.spec.ts:65, journeys.spec.ts:86, prd-persistence-boundary.spec.ts:127, prd-to-approval.spec.ts:38, provider-pause.spec.ts:181. My (2)-minus-(1) DELTA is contract-goal.spec.ts:39 (an UNTRACKED PEER file, absent at baseline) and preview-reject-live.spec.ts:74 (`STAFFING_ATTEMPTS_EXHAUSTED`, downstream of the host claude session limit - the transcript carries \"You've hit your session limit - resets 12:10am Asia/Jerusalem\", the SAME cause as the baseline's provider-pause red). INTERSECTION WITH THIS ROW'S OWNED PATHS IS EMPTY. Baseline reds pairing-operator-channel.spec.ts:257/:420 now PASS.\n\n2. TWO DEFECTS FOUND AND FIXED IN-FLIGHT, both measured, not guessed. (a) Both deploys commit on the SAME `deploy:<goalId>` aggregate, so an aggregate-keyed commandId made the second a byte-conflicting replay: `BOOTSTRAP_COMMAND_BYTES_CONFLICT@DAEMON_PREREQUISITE`. Fixed with a per-dispatch counter. (b) `MOE_DEPLOY_BUILD_CONTEXT` is read from the DAEMON's own env and `daemonEnv` spreads process.env, so the spec sets and RESTORES it around the lane rather than widening `DaemonLaneOptions` for a display need - without it every backup stays UNVERIFIED and the VERIFIED arm could never fail.\n\n3. FOUR NEGATIVE CONTROLS, each planted, run RED, restored - Playwright's only oracle, since a fast pass is indistinguishable from a vacuous one. Received strings, verbatim from the failures: `Applied 20260907120000001-add-orders.sql, 20260907120000002-add-orders-index.sql`; `Refused - MIGRATION_FAILED - DAEMON_INGRESS - at 20260907120000003-add-orders-fk.sql`; `Migration state is not known here - MIGRATION_RECEIPT_ABSENT - DAEMON_INGRESS`; and the Health feed carrying `the daemon recorded the migration` twice, one per receipt.\n\n4. A DRILL TRAP THAT COST REAL TIME AND IS WORTH A RAIL. My first %TEMP% backup was taken while a mutation was ALREADY on line 293, so every subsequent \"restore\" restored a CONTAMINATED vintage while SHA256 equality still reported clean. `git diff` could not see it either - the file was untracked at the time. Detected only by grepping the BACKUP ITSELF for mutant tokens. Repaired line by line and re-verified `grep -c \"MUTANT|NEGATIVE-CONTROL|NOTHING_AT_ALL|WRONG_LAYER\"` = 0. LESSON: verify the BACKUP is clean before mutating, not just that the restore hashes match - a hash proves the bytes moved, never that they were the right bytes.\n\nALSO MEASURED: `npx tsc -p tests/e2e/control-room/tsconfig.json --noEmit` EXIT 0, proven NON-VACUOUS by a planted TS2322 (EXIT 1 naming the spec) then restored. The repo root has NO `tsconfig.json`, so a `tsc -p tsconfig.json` leg is silently vacuous - the e2e project config is the leg that reads this file. Teardown census after every run: `docker ps -a` EMPTY, zero `$TEMP/moe-migrations-e2e-*` survivors.\n\nNOT DONE, AND NOT CLAIMED: steps 7 (live drive), 8 (docs) and 9 (gates) are PENDING. This session wrote no source outside the declared spec, released the browser lease, and is not calling report_blocked again.",
+      "timestamp": "2026-09-07T19:46:10.090Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:48:57.960Z",
-  "updatedAt": "2026-09-07T19:41:41.946Z",
+  "updatedAt": "2026-09-07T19:46:10.090Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:32:30.829Z",
     "plannedStepCount": 9,
@@ -367,6 +373,36 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "82f0232563c212479d62ca591b0831c63d082cd3",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-4d8571e7@2026-09-07T18:44:41Z",
+      "paths": [
+        ".moe/tasks/task-2f2ed034fbec4fe48b49a951951c9505.json",
+        ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json",
+        ".moe/tasks/task-85895a88a2484d8589046b2030efd445.json",
+        ".moe/tasks/task-bd2f1ecf186f4ab5884c2a3ada07108e.json",
+        "apps/control-room/src/v2/ops/activity-words.test.ts",
+        "apps/control-room/src/v2/ops/activity-words.ts"
+      ],
+      "recordedBy": "worker-4d8571e7",
+      "recordedAt": "2026-09-07T19:44:37.641Z",
+      "treeId": "4ca8feedd881a351a171404f3f272a8b96cddd21",
+      "status": "BLOCKED",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/ops/activity-words.test.ts",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        },
+        {
+          "path": "apps/control-room/src/v2/ops/activity-words.ts",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -382,14 +418,18 @@
     ".moe/tasks/task-bd2f1ecf186f4ab5884c2a3ada07108e.json",
     ".moe/tasks/task-da435e66fe8247fda0d441e61e2c4b91.json",
     ".moe/tasks/task-eb37494e47924b659a0a1a77060b36eb.json",
-    "tests/e2e/control-room/deploy-migrations.spec.ts"
+    "tests/e2e/control-room/deploy-migrations.spec.ts",
+    ".moe/tasks/task-2f2ed034fbec4fe48b49a951951c9505.json",
+    ".moe/tasks/task-85895a88a2484d8589046b2030efd445.json",
+    "apps/control-room/src/v2/ops/activity-words.test.ts",
+    "apps/control-room/src/v2/ops/activity-words.ts"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-76f4ef35@2026-09-07T19:18:01Z",
-    "at": "2026-09-07T19:21:49.157Z"
+    "sessionId": "worker-4d8571e7@2026-09-07T18:44:41Z",
+    "at": "2026-09-07T19:44:37.641Z"
   },
   "declaredFiles": [
     "apps/control-room/src/v2/goals/migration-presentation.tsx",
@@ -400,5 +440,17 @@
     "apps/control-room/src/v2/board/board-lanes.tsx",
     "apps/control-room/src/v2/board/board-screen.test.tsx",
     "tests/e2e/control-room/deploy-migrations.spec.ts"
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/v2/goals/goal-deployments.tsx",
+    ".moe-frag-board-screen.txt",
+    "apps/control-room/src/v2/board/board-lanes.tsx",
+    "apps/control-room/src/v2/ops/activity-words.ts",
+    "apps/control-room/src/v2/goals/migration-presentation.tsx",
+    "apps/control-room/src/v2/ops/activity-words.test.ts",
+    "tests/e2e/control-room/deploy-migrations.spec.ts",
+    ".moe-frag-goal-deployments.txt",
+    "apps/control-room/src/v2/goals/goal-deployments.test.tsx",
+    "apps/control-room/src/v2/board/board-screen.test.tsx"
   ]
 }
