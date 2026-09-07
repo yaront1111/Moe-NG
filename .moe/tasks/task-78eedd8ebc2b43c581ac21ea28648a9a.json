@@ -5,11 +5,11 @@
   "description": "SPIDR child 3 of task-8f86e10504c74e248ccfa6f427b41a15 (architect-20a6d1eb, 2026-09-05). dependsOn child 1 (task-463f195efd2f4fd2886790029a474194, the tool) and child 2 (task-ff41c5c9efa34494b7b91e6f0ddcb7c2, the disposable-database lifecycle this reuses). PROOF ROW: it owns the UI, the live drive and the docs (global rail 21).\n\nWHAT THIS ROW OWNS: applying pending migrations on deploy AFTER a `pg_dump` backup; the `moe-migration-receipt/1` record; the human-only `deployment.migrate_down`; the Deployments and node cards; and the live drive.\n\nBACKUP BEFORE MIGRATE IS THE ORDER, and it is the only thing standing between a bad migration and lost production data. The backup goes to `<project>/.moe-next/backups/<env>/<ts>.sql` with its sha256 in the receipt - note `.moe-next/backups` is an EXISTING convention (apps/daemon/src/bootstrap/activation-receipts-measure.ts:32-33 already defines BACKUP_DIRECTORY '.moe-next' and BACKUP_LEAF 'backups'), so reuse it rather than inventing a second location. MIGRATION_BACKUP_FAILED means NOTHING IS APPLIED - a migration that ran after a failed backup is the exact scenario this receipt exists to make impossible.\n\nCROSS-ROW COORDINATION, NOT A DEPENDENCY: 'applies on deploy' needs the deploy path, which belongs to task-5d30948435524c6fa2789e1c033aafe7 (containerized deployment) - a SIBLING feature row, and the parent rail forbids depending on one. Build the migration-on-deploy step so it composes with that row's deploy rather than duplicating it, and if the deploy path does not exist yet, land the migrate/backup/receipt machinery with its own entry point and say so in the record. Also: the environment's DATABASE_URL comes from the environments model (task-9ae492b373fa4e7aa6b1e91585f6e612's children) - same coordination, same rule.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04): no deploy path, no migration receipt, no backup-before-migrate anywhere.",
   "definitionOfDone": [
     "BACKUP-BEFORE-MIGRATE ORDERING is asserted through injectable docker/pg ports in an offline test: the `pg_dump` completes before the first migration runs, and MIGRATION_BACKUP_FAILED means ZERO migrations were applied - assert the schema is untouched on that path, not merely that a refusal was returned. This is the row's central safety property.",
-    "`moe-migration-receipt/1` records {environment, sha, applied[], backupRef, APPLIED|REFUSED(code)} and is read back from a real store with every member asserted; the backupRef carries the backup's sha256 and the file exists at `<project>/.moe-next/backups/<env>/<ts>.sql`, reusing the EXISTING `.moe-next/backups` convention (activation-receipts-measure.ts:32-33) rather than a second location.",
+    "`moe-migration-receipt/1` records {environment, sha, applied[], backupRef, APPLIED|REFUSED(code)|REVERTED} and is read back from a real store with every member asserted. backupRef is NULLABLE: a failed dump yields backupRef:null with REFUSED(MIGRATION_BACKUP_FAILED). When present it carries the backup's sha256 and the file exists at `<project>/.moe-next/backups/pre-migration/<env>/<ts>.sql` - the EXISTING pre-migration convention (task-0a56ecee), not a second location.",
     "`deployment.migrate_down` published HUMAN-ONLY and MCP-EXCLUDED with the full roster backfill and a bidirectional set-equality roster test; it reverts the last batch and its receipt records the revert. Assert the schema actually changed back, not merely that the command returned.",
     "THE RESTORE PATH: when a down-migration cannot revert, restoring the recorded backup is possible and its receipt says so. Assert a restore round trip against a real disposable PostgreSQL - a backup nobody has ever restored is a file, not a safety net.",
     "MIGRATION_BACKUP_FAILED and MIGRATION_FAILED (with the failing file) assert code + layer; MIGRATION_FAILED on deploy leaves the receipt REFUSED with the failing migration named.",
-    "The Deployments card shows migration state per environment (pending/applied, last backup) and a node card shows 'adds migration NNNN'; Runs shows migration receipts. Playwright against a REAL daemon; `pnpm test:e2e:browser` count line quoted.",
+    "The Deployments card shows migration state per environment (pending/applied, last backup), a node card shows 'adds migration NNNN', and Runs shows migration receipts - three surfaces, all CONSUMING producer rows: declared identifiers come ONLY through task-122b55fd's authority + `/runs/read` path; project/environment receipt observations come ONLY through task-8f1f15bc's bounded reads. 'Pending' requires an actual admitted environment/workspace/DB observation from those reads - never declaration-minus-receipt-history, never missing-evidence => none (missing is UNKNOWN). The environment column's UI source is board-lanes, not goal-nodes. This parent stays proof/presentation-only: no daemon or contract edits. Playwright against a REAL daemon; `pnpm test:e2e:browser` count line quoted.",
     "LIVE DRIVE: a real migration verified on a disposable PostgreSQL and applied to the PREVIEW environment - the receipt and the `\\dt` listing in a row comment under ~4500 chars. If no preview environment exists yet (the deployment row is a sibling and may not have landed), record that plainly and drive the verified half only. Runbook + README updated; gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`."
   ],
   "taskRails": [
@@ -91,7 +91,7 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -128,7 +128,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:48:57.960Z",
-  "updatedAt": "2026-09-06T20:06:59.339Z",
+  "updatedAt": "2026-09-07T15:16:50.252Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:32:30.829Z",
     "plannedStepCount": 8,
@@ -149,15 +149,10 @@
     "worker-f72a1438"
   ],
   "workStartedAt": "2026-09-06T19:07:29.782Z",
-  "blockedReason": "Governor-directed re-slice completed: exactly four measured PLANNING producer children filed with parentTaskId; four production gaps persist at reconciled7d78aa19. Parent12step/10path presentation/proof draft saved in Serena task-task-78eedd8ebc2b43c581ac21ea28648a9a-plan-draft, UNSUBMITTED. Runtime dependency writes refuse worker role even after authorized PLANNING claim (NOT_ALLOWED architect/governor required); parent still old4DONE deps and readchild no deps. Requested exact replacements in chat53481a5f. Need governor DoD corrections for pre-migration subtree, nullable REFUSED backup, REVERTED semantics, authoritative pending observation (not declaration-minus-history), project-scoped receipts and actual card/wrapper/test paths; chat437b7584. Do not promote old plan or fabricate proof while producers missing. Park on four real unlanded ids until field/DoD repair and leaf planning; zero source/tests modified, no gate/lease/process, all planning evidence durable.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-09-06T19:27:01.500Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "priorBlockedReason": "Approved UI-only proof scope conflicts with missing production prerequisites measured in step1, not a test/host wait. All four declared deps and card are DONE, but migrateWithBackup has zero production callers, migrateDown has no host configuration, NodeDefinition and Runs node DTO have no declared migration IDs (step3 expressly forbids filename inference), and activity/deployment reads expose no migration receipt/environment/backup payload. A real browser proof would need invented fixtures or upstream contract/composition edits outside approved scope. Need amended producer-owned composition + node declaration/read edges, not rebuilt engines or narrowed DoD. Also correct stale refusal assumption: REFUSED may have backupRef:null; actual pre-migration backup subtree must be preserved. Detailed fresh commands/anchors in latest row comment. Zero source/test edits, no leases/processes; all known dependency ids already DONE, so no already-satisfied blockedOnTaskIds supplied.",
-  "blockedOnTaskIds": [
-    "task-2db55fcaad604aa4861139b22941095f",
-    "task-60008fcf4719490f97075c7754ac5807",
-    "task-122b55fd2c284174876bd1d5573bdcc5",
-    "task-8f1f15bcb0ab40d88f07134a757630e4"
-  ]
+  "blockedOnTaskIds": null
 }

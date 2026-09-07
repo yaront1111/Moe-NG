@@ -49,8 +49,8 @@ import { readCommandTransportOrigin } from "./http/http-adapter.js";
 import {
   createCommandAuthorityGate, DomainRefusal, decisionOf, encoder,
 } from "./daemon-command-dispatch.js";
-import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type GraphMutationCommandKind,
-  type WiredCommandKind } from "./daemon-command-vocabulary.js";
+import { CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS,
+  type GraphMutationCommandKind, type WiredCommandKind } from "./daemon-command-vocabulary.js";
 import { createAsyncCommandEntries } from "./daemon-command-async-entries.js";
 import type { DeploymentDeploySeams, MigrateDownSeams, RepositoryBootstrapSeams,
   ReleaseDecideSeams } from "./daemon-command-async-entries.js";
@@ -354,17 +354,32 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           payload: envelope.payload, principalId: principal.principalId, projectId, store,
         });
       }
+      // `project.set_agent_provider` is the ONE widened kind that ALSO demands ADMIN
+      // explicitly, where the four beside it demand none: choosing which vendor CLI
+      // staffs every seat is an administrative act on the project, not an approval the
+      // paired human is already the subject of. This mirrors the SOFT_POLICY_WAIVER
+      // POLICY above (paired HUMAN *and* `project.admin`) rather than its module shape,
+      // so no new code and no new layer constant are minted. The check is deliberately
+      // redundant with the ingress capability gate -- defence in depth, and the thing a
+      // mutation drill removes to prove the arm is load-bearing. Owner-approved for THIS
+      // KIND ONLY (task-136cbab2, governor comment-b0d0a809, 2026-09-07 13:16Z).
+      const providerByPairedAdmin = kind === AGENT_PROVIDER_COMMAND_KIND
+        && principal.capabilities.includes(CAPABILITIES.ADMIN);
       if (OPERATOR_PRINCIPAL_KINDS.has(kind)
         && principal.principalId !== operatorPrincipalId
-        // TWO kinds are widened, not the seat: a session the operator approved
+        // The widening is by KIND and never by seat: a session the operator approved
         // at pairing (durable HUMAN principal, minted under the id it
-        // authenticates as) may dispatch the intent wire and ANSWER a material
-        // clarification — both are the paired human's own acts on the browser.
+        // authenticates as) may dispatch the intent wire, ANSWER a material
+        // clarification, and -- holding ADMIN -- choose the agent provider; all are
+        // the paired human's own acts on the browser.
         // Trustworthy on principal identity alone only while each kind stays
         // MCP-excluded — same contract as `approval.decide` (comment-4d026de3);
-        // operator ruling comment-18dc557c.
+        // operator ruling comment-18dc557c. `MCP_EXCLUDED_COMMAND_KINDS` is DERIVED
+        // from `OPERATOR_PRINCIPAL_KINDS`, so widening HERE is the narrow instrument
+        // and editing that roster would silently open the MCP fence too.
         && !((approvalIntent || criterion || kind === "repository.publish"
-          || kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND)
+          || kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND
+          || providerByPairedAdmin)
           && isDurableHumanPrincipal(store, principal.principalId))) {
         throw new DomainRefusal(
           "OPERATOR_PRINCIPAL_REQUIRED",

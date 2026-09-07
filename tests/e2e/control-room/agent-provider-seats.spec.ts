@@ -143,10 +143,9 @@ test("the browser chooses the agent provider and Seats discloses it from a real 
     const configured = page.getByTestId("cr.sessions.provider.configured");
     expect((await configured.textContent()) ?? "").toContain("claude");
 
-    // DoD-1'S WRITE PATH, DRIVEN AS FAR AS IT GOES, AND THE EXACT AUTHORITY THAT STOPS IT.
-    // This block replaced a parked `test.fixme` and an assertion that the control was
-    // DISABLED. Two different things stood between the browser and this setting, and only one
-    // of them is fixed:
+    // DoD-1'S WRITE PATH, END TO END. Two different authorities stood between a correctly
+    // paired browser and this setting, and BOTH are now fixed — which is why this block
+    // asserts a round trip where it previously asserted a refusal code:
     //
     // FIXED (task-96957529): `/affordances/read` minted no `project.set_agent_provider` offer,
     // so `commandBuilderFor` refused INPUT_INVALID at the BROWSER, the control was permanently
@@ -154,36 +153,39 @@ test("the browser chooses the agent provider and Seats discloses it from a real 
     // daemon now mints it (`affordance-agent-provider-offers.ts`). The first two assertions
     // are that fix: no unoffered note, and a LIVE control an operator can actually press.
     //
-    // NOT FIXED, AND DELIBERATELY NOT FIXED HERE: the kind is in `OPERATOR_PRINCIPAL_KINDS`,
-    // and that fence compares the authenticated principal against the daemon's CONFIGURED
-    // operator id. A paired browser is a session-ledger HUMAN, never that principal, so it is
-    // refused `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION` at dispatch. Admitting a
-    // paired HUMAN holding ADMIN is a SECURITY-BOUNDARY WIDENING; the precedent
-    // (task-6d5db404, `repository.bootstrap`, the typed SOFT_POLICY_WAIVER arm) is that such
-    // a widening is its own reviewed row and is never folded into a UI proof row, and this
-    // row's rail 2 forbids policy work outright. Greening this line by widening the fence
-    // would be a test greening itself.
+    // FIXED (task-136cbab2, the security-boundary row this journey waited on): the kind is in
+    // `OPERATOR_PRINCIPAL_KINDS`, whose fence compares the authenticated principal against the
+    // daemon's CONFIGURED operator id — an id that does not exist before pairing, so no
+    // browser could ever hold it and this click was refused `OPERATOR_PRINCIPAL_REQUIRED @
+    // DAEMON_AUTHORIZATION` at dispatch. That row widened the fence for THIS KIND ALONE, and
+    // only for a durable HUMAN principal that ALSO holds `project.admin` (production pairing
+    // mints `OPERATOR_CAPABILITIES`, so the paired browser does). A paired human WITHOUT
+    // ADMIN still gets the old refusal, and the kind stays MCP-unreachable; both are asserted
+    // in `daemon-command-registry-human-approver.test.ts`, at the seam where the fence
+    // answers rather than here, because the HTTP ingress refuses no-ADMIN callers
+    // `CAPABILITY_DENIED @ AUTHORIZE` before the fence is ever consulted.
     //
-    // SO THE ASSERTION IS THE REASON CODE, NOT THE OUTCOME. "The write did not happen" would
-    // pass identically for a missing offer, an unbuildable envelope, a dead click handler and
-    // this refusal — four defects with four different owners. Naming the code and the LAYER
-    // pins WHICH authority answered, and it is the one line that will change when the
-    // widening lands.
+    // THE ACCEPTANCE AND THE READ-BACK ARE ASSERTED TOGETHER, which is the same discipline the
+    // refusal arm used from the other side. `cr.sessions.provider.recorded` alone would pass
+    // for a click that rendered an optimistic note over a write that never landed; the
+    // CONFIGURED line alone could lag a failed click. Requiring the note, the ABSENCE of a
+    // refusal, and the daemon's own `/sessions/read` frame to come back saying codex is what
+    // makes this a durable write rather than a rendered one.
     await expect(page.getByTestId("cr.sessions.provider.unoffered")).toHaveCount(0);
     await expect(page.getByTestId("cr.sessions.provider.choose.codex")).toBeEnabled();
     await page.getByTestId("cr.sessions.provider.choose.codex").click({ timeout: CLICK_BUDGET_MS });
-    const refusal = page.getByTestId("cr.sessions.provider.refusal");
-    await expect(refusal).toBeVisible({ timeout: 30_000 });
-    await expect(refusal).toContainText("OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION");
-    // The refusing authority's OWN words, carried through offer-wire's `detail` rather than
-    // summarised — the field exists so an operator reads what to fix, not just that it broke.
-    await expect(page.getByTestId("cr.sessions.provider.refusal.detail"))
-      .toContainText("requires the configured operator principal");
-    // NO FALSE SUCCESS AND NO DURABLE MOVE. The acceptance note must be absent, and the
-    // CONFIGURED line — re-read from /sessions/read on the panel's own 5s poll — must still
-    // say claude, so a refusal that nevertheless wrote could not read as a pass.
-    await expect(page.getByTestId("cr.sessions.provider.recorded")).toHaveCount(0);
-    await expect(configured).toContainText("claude");
+    await expect(page.getByTestId("cr.sessions.provider.recorded"))
+      .toBeVisible({ timeout: 30_000 });
+    // NO SILENT REFUSAL. If the fence (or anything else) answered, the note above and this
+    // count cannot both hold, so the pair cannot be satisfied by a half-successful click.
+    await expect(page.getByTestId("cr.sessions.provider.refusal")).toHaveCount(0);
+    // THE DURABLE READ-BACK, off the panel's own 5s poll of /sessions/read — the daemon's
+    // frame, not the browser's memory of what it sent. It said claude a moment ago.
+    await expect(configured).toContainText("codex", { timeout: 30_000 });
+    // Same fact reaching the CONTROL and not only the copy: `aria-pressed` is derived from
+    // the polled `configured` value, so a stale frame would leave claude pressed.
+    await expect(page.getByTestId("cr.sessions.provider.choose.codex"))
+      .toHaveAttribute("aria-pressed", "true", { timeout: 30_000 });
 
     expect(await page.getByTestId("cr.banner.fixture").count()).toBe(0);
   } finally {
