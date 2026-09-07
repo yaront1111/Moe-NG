@@ -283,6 +283,8 @@ describe("claudeSpawner", () => {
       "--skip-git-repo-check",
       "--ephemeral",
       "--sandbox", "workspace-write",
+      "-c", "approval_policy=on-request",
+      "-c", "approvals_reviewer=auto_review",
       "-c", `mcp_servers.moe-next.url=${MCP_ORIGIN}`,
       "-c", "mcp_servers.moe-next.bearer_token_env_var=MOE_AGENT_MCP_BEARER",
       "-c", "mcp_servers.moe-next.disabled_tools=[]",
@@ -1462,6 +1464,77 @@ describe("keeps the codex spawn surface intact", () => {
     expect(child.options.env?.["TOTALLY_UNRELATED"]).toBeUndefined();
     child.emitter.emit("close", 0, null);
     await done;
+  });
+
+  /**
+   * THE ARGV THIS SURFACE EMITTED BEFORE the approval pair landed, stated literally so the
+   * control below cannot drift with the production file. Under codex-cli 0.153.4 an argv with
+   * NO approval setting takes the `never` default and REFUSES every MCP tool call with
+   * `MCP tool call requires approval, but approval policy is never` — so a codex seat could
+   * never reach `work_get_context`, and therefore could never submit or release.
+   */
+  const ARGV_BEFORE_THE_APPROVAL_PAIR: readonly string[] = Object.freeze([
+    "exec",
+    "--ignore-user-config",
+    "--skip-git-repo-check",
+    "--ephemeral",
+    "--sandbox", "workspace-write",
+    "-c", `mcp_servers.moe-next.url=${MCP_ORIGIN}`,
+    "-c", "mcp_servers.moe-next.bearer_token_env_var=MOE_AGENT_MCP_BEARER",
+    "-c", "mcp_servers.moe-next.disabled_tools=[]",
+    "-",
+  ]);
+
+  /** Every `-c <value>` pair on an argv, as the values codex actually receives. */
+  const overridesOf = (argv: readonly string[]): readonly string[] =>
+    argv.filter((_, index) => argv[index - 1] === "-c");
+
+  it("emits the approval policy as an adjacent -c pair on the argv codex receives", async () => {
+    // On the EMITTED argv, never on a value passed in: a `-c` value that is not preceded by
+    // `-c` is inert, so membership alone would not prove codex ever sees it.
+    const overrides = overridesOf(await codexArgv());
+    expect(overrides).toContain("approval_policy=on-request");
+    // Measured 2026-09-07 on codex-cli 0.153.4: `approval_policy` ALONE is accepted by the
+    // parser and then SILENTLY IGNORED — the banner still reads `never` and MCP calls are
+    // still refused. It only takes effect once a NON-INTERACTIVE reviewer is named, so
+    // dropping either half alone restores the defect while looking like a tidy-up.
+    expect(overrides).toContain("approvals_reviewer=auto_review");
+    // The value that produced the defect must not be what we emit.
+    expect(overrides).not.toContain("approval_policy=never");
+  });
+
+  it("CONTROL: the pre-change argv carried NO approval setting, which is why it defaulted to never", async () => {
+    // Half one — the control proper. The surface this row fixed emitted an argv on which no
+    // token names an approval policy or a reviewer at all. That ABSENCE is the whole defect:
+    // codex then takes its `never` default. Stated against the frozen historical array so the
+    // claim is checkable rather than asserted.
+    const before = overridesOf(ARGV_BEFORE_THE_APPROVAL_PAIR);
+    expect(before.some((value) => value.startsWith("approval_policy="))).toBe(false);
+    expect(before.some((value) => value.startsWith("approvals_reviewer="))).toBe(false);
+    // Half two — what makes half one non-vacuous. Today's argv must DIFFER from that historical
+    // one by exactly the approval pair and nothing else. Delete either `-c` pair from the
+    // spawner and today's argv collapses back onto the frozen array, and this goes red.
+    const today = await codexArgv();
+    expect(today).not.toEqual(ARGV_BEFORE_THE_APPROVAL_PAIR);
+    const isApproval = (value: string): boolean =>
+      value.startsWith("approval_policy=") || value.startsWith("approvals_reviewer=");
+    // Exactly the pair was added, in order — not one half, and nothing else approval-shaped.
+    expect(overridesOf(today).filter(isApproval))
+      .toEqual(["approval_policy=on-request", "approvals_reviewer=auto_review"]);
+    // ...and the rest of the surface is untouched: strip the pair from today's overrides and
+    // what remains is exactly what the historical argv carried, in order. So this arm reds both
+    // ways — on a dropped approval flag AND on a smuggled change to the rest of the surface.
+    expect(overridesOf(today).filter((value) => !isApproval(value))).toEqual(before);
+  });
+
+  it("keeps the approval pair on the CODEX branch only, and off the claude one", async () => {
+    // A near-miss on the provider selector runs the claude branch while still reporting codex,
+    // so the pair must be absent there — and the claude seat must be otherwise unchanged.
+    const claudeArgv = await argvFor({ workspace: "D:/ws/node-1" }, "claude");
+    expect(claudeArgv.some((token) => token.startsWith("approval_policy="))).toBe(false);
+    expect(claudeArgv.some((token) => token.startsWith("approvals_reviewer="))).toBe(false);
+    // The sweep must have found a claude surface, or the two negatives above are vacuous.
+    expect(claudeArgv).toContain("--strict-mcp-config");
   });
 
   it("keeps every -c value free of what the cmd fence refuses", async () => {
