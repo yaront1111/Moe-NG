@@ -141,7 +141,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T11:04:58.185Z",
-  "updatedAt": "2026-09-07T15:42:53.502Z",
+  "updatedAt": "2026-09-07T15:43:05.019Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T13:01:27.743Z",
     "plannedStepCount": 7,
@@ -170,5 +170,50 @@
   "contextFetchedBy": [
     "worker-c076bc6a"
   ],
-  "workStartedAt": "2026-09-07T15:11:19.761Z"
+  "workStartedAt": "2026-09-07T15:11:19.761Z",
+  "commits": [
+    {
+      "sha": "531145fafe007d631f737673ebc809d9a3616b94",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-c076bc6a@2026-09-07T15:42:54Z",
+      "paths": [
+        ".moe/tasks/task-75bff0c9efc24daaad81ac81a373cd90.json",
+        "apps/daemon/src/planning/compiled-policy-authority-body.ts",
+        "apps/daemon/src/planning/journey-authority-bodies.ts",
+        "apps/daemon/src/planning/v2-compiler/scheduler-node-planning-authority.test.ts",
+        "apps/daemon/src/planning/v2-compiler/scheduler-node-planning-authority.ts",
+        "packages/scheduler/src/node-authority/node-planning-source-codec.test.ts",
+        "packages/scheduler/src/node-authority/node-planning-source-codec.ts",
+        "packages/scheduler/src/node-authority/node-planning-source-format.ts",
+        "packages/scheduler/src/node-authority/node-planning-source-schema.js",
+        "packages/scheduler/src/node-authority/node-planning-source-schema.ts"
+      ],
+      "recordedBy": "worker-c076bc6a",
+      "recordedAt": "2026-09-07T15:43:05.019Z",
+      "treeId": "af805b8703cf21e3fc9517a6c976458367a0a8ff",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-75bff0c9efc24daaad81ac81a373cd90.json",
+    "apps/daemon/src/planning/compiled-policy-authority-body.ts",
+    "apps/daemon/src/planning/journey-authority-bodies.ts",
+    "apps/daemon/src/planning/v2-compiler/scheduler-node-planning-authority.test.ts",
+    "apps/daemon/src/planning/v2-compiler/scheduler-node-planning-authority.ts",
+    "packages/scheduler/src/node-authority/node-planning-source-codec.test.ts",
+    "packages/scheduler/src/node-authority/node-planning-source-codec.ts",
+    "packages/scheduler/src/node-authority/node-planning-source-format.ts",
+    "packages/scheduler/src/node-authority/node-planning-source-schema.js",
+    "packages/scheduler/src/node-authority/node-planning-source-schema.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-c076bc6a@2026-09-07T15:42:54Z",
+    "at": "2026-09-07T15:43:05.019Z"
+  }
 }
