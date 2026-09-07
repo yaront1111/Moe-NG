@@ -78,7 +78,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-767c9887",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -143,13 +143,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T14:02:47.010Z",
-  "updatedAt": "2026-09-07T00:12:52.352Z",
+  "updatedAt": "2026-09-07T03:01:51.939Z",
   "failedDodItems": [],
   "contextFetchedBy": [
     "architect-aa54e231",
     "worker-f78e0703",
     "worker-f72a1438",
-    "architect-dbe3631e"
+    "architect-dbe3631e",
+    "worker-767c9887"
   ],
   "metrics": {
     "firstClaimAt": "2026-09-06T14:08:56.103Z",
