@@ -108,12 +108,17 @@ function proxiedPaths(): ReadonlySet<string> {
  *
  * `/design/read` is now proxied and consumed by the opened-goal Design card.
  *
- * - `/environments/read`: recorded by task-ef76a7f4523d46f48a2f9eb19595e801, which owns the
- *   daemon half ONLY. Its task rail 4 forbids it touching apps/control-room at all, because the
- *   Environments screen -- exact-key client decoder plus the proxy pin -- is
- *   task-ba83b202265d40d1885d3091f009b0a2, which declares dependsOn against it. That row
- *   retires this entry in the same edit that adds the pin, exactly as task-e6000b57 and
- *   task-1c9587ed retired the two above.
+ * - `/environments/read` WAS listed here and is now RETIRED, exactly as its entry said it would
+ *   be: task-ef76a7f4523d46f48a2f9eb19595e801 landed the daemon half only, and
+ *   task-ba83b202265d40d1885d3091f009b0a2 -- the Environments screen -- landed the browser half,
+ *   adding the `dev-proxy-paths.ts` pin alongside the exact-key decoder in
+ *   apps/control-room/src/live/live-environment-variables.ts.
+ *
+ *   THE CENSUS IS NOW EMPTY, and that is the intended end state rather than a dead arm: every
+ *   served JSON route is proxied. The assertion still reds the moment a route is served without
+ *   its pin, which is the direction that matters. It also reds when a pin is added and this list
+ *   is not emptied with it -- which is exactly how this entry was caught, one landing late, by
+ *   the daemon leg rather than by the row's own control-room leg.
  *
  * - `/deployments/health/read` WAS listed here and is now RETIRED, exactly as its entry said it
  *   would be: task-509c6c1609174adb9228940bc002f5c3 landed the daemon half, and the Environments
@@ -121,9 +126,7 @@ function proxiedPaths(): ReadonlySet<string> {
  *   the `dev-proxy-paths.ts` pin alongside the exact-key decoder in
  *   apps/control-room/src/live/live-deployments-health.ts.
  */
-const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([
-  "/environments/read",
-]);
+const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([]);
 
 /**
  * JSON_ROUTES the browser production tree does not fetch. Frozen census, not a
@@ -171,9 +174,11 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([
 const UNCONSUMED_SERVED_ROUTES: readonly string[] = Object.freeze([
   "/budget/commitment/read",
   "/documents/ingest",
-  // Same pair as the proxy census above and retired by the same row: the daemon half landed
-  // here, the Environments screen that fetches it is task-ba83b202265d40d1885d3091f009b0a2.
-  "/environments/read",
+  // `/environments/read` was here and is RETIRED by task-ba83b202265d40d1885d3091f009b0a2,
+  // exactly as its own comment instructed: the Environments screen now fetches it.
+  // `live-environment-variables.ts` decodes the answer and `live-environment-variables.tsx` is
+  // reached from cordum-app.tsx through `goal-environments.tsx`, so the route is consumed from
+  // the production entry rather than only from a test.
   "/events/resume",
   // `/release/read` was here and is RETIRED by task-817d893fa1254a4d82d2888af1f87a47, exactly
   // as its own comment instructed: the Release card now fetches it. `live-release.ts` decodes

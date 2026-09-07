@@ -153,7 +153,9 @@ describe("transport axis — completeness against the roster and the no-admissio
     // 25 -> 26 on 2026-09-02 for GATE1_LAYER, the Gate 1 card's mapping of a daemon answer,
     // seen once the roster scanner became digit-aware; arms in recent-v2-cutover-hostile-cases.ts.
     // Three new browser receipt/activation/resource boundaries, each with all three arms.
-    expect(ROSTER_TRANSPORT).toHaveLength(29);
+    // 29 -> 30 on 2026-09-07 for ENVIRONMENT_WRITE_LAYER, the Environments screen's write port
+    // (task-ba83b202); its three arms are in recent-workflow-transport-hostile-cases.ts.
+    expect(ROSTER_TRANSPORT).toHaveLength(30);
     expect(new Set(ROSTER_TRANSPORT).size).toBe(ROSTER_TRANSPORT.length);
   });
 

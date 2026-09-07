@@ -208,7 +208,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:31:45.397Z",
-  "updatedAt": "2026-09-07T05:43:45.792Z",
+  "updatedAt": "2026-09-07T05:44:57.279Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T11:25:19.038Z",
     "plannedStepCount": 9,
@@ -492,6 +492,24 @@
       "status": "REVIEW",
       "pushed": false,
       "message": "fix(task-817d893fa1254a4d82d2888af1f87a47): land the RELEASE_LAYER roster backfill and the DoD-4 wiring the completion commit skipped"
+    },
+    {
+      "sha": "31a4c2b956ba23f7a31e69c18c72505eb2b83ce9",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-ca28be90@2026-09-07T05:31:12Z",
+      "paths": [
+        ".moe/tasks/task-5ef1a0a9010c4bfe872ff9b774068234.json",
+        ".moe/tasks/task-6bafd3b9439640cba358dd6e79329c9d.json",
+        ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+        "tests/e2e/control-room/release-approval.spec.ts"
+      ],
+      "recordedBy": "worker-ca28be90",
+      "recordedAt": "2026-09-07T05:44:57.279Z",
+      "treeId": "f0eda574967c7fc6c4057761541566d2e0b76263",
+      "status": "BLOCKED",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -507,18 +525,17 @@
     "docs/VISION.md",
     "docs/agent-stack-runbook.md",
     "tests/security/layer-visibility-cases.ts",
-    "tests/security/boundary-roster.security.ts"
+    "tests/security/boundary-roster.security.ts",
+    ".moe/tasks/task-5ef1a0a9010c4bfe872ff9b774068234.json",
+    ".moe/tasks/task-6bafd3b9439640cba358dd6e79329c9d.json",
+    ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json"
   ],
-  "unattributedPaths": [
-    "apps/control-room/src/v2/cordum-app.tsx",
-    "docs/agent-stack-runbook.md",
-    "apps/control-room/src/v2/ops/environment-variables-port.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-ca28be90@2026-09-07T03:58:00.000Z",
-    "at": "2026-09-07T04:19:26.850Z"
+    "kind": "checkpoint",
+    "sessionId": "worker-ca28be90@2026-09-07T05:31:12Z",
+    "at": "2026-09-07T05:44:57.279Z"
   },
   "reviewStartedAt": "2026-09-07T04:20:16.690Z",
   "verification": {

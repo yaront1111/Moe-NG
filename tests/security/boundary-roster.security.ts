@@ -148,8 +148,8 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * AXIS TOTALS FOR THE SIBLING SLICES, and this paragraph carries its own falsifier because
- * the previous one did not: transport 29, integrity 47, durable-store 22, runtime-provider
- * 33, scheduler-activation 48 — sums to 179, which must equal `EXPECTED_ROSTER_SIZE` below.
+ * the previous one did not: transport 30, integrity 47, durable-store 22, runtime-provider
+ * 33, scheduler-activation 48 — sums to 180, which must equal `EXPECTED_ROSTER_SIZE` below.
  * These tags, NOT the subset counts in the siblings' own descriptions, are the authority.
  *
  * WHICH NAMED ASSERTIONS RED IF THESE NUMBERS ROT. The five-way sum is asserted by "partitions
@@ -207,6 +207,12 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "EFFORT_COLLECTOR_LAYER", file: "apps/control-room/src/performance/effort-records.ts", axis: "transport" },
   { constant: "EFFORT_LAYERS", file: "apps/control-room/src/performance/effort-records.ts", axis: "transport" },
   { constant: "TIMELINE_REFUSAL_LAYERS", file: "apps/control-room/src/timeline/timeline-contract.ts", axis: "transport" },
+  // The Environments screen's WRITE port: it carries an operator-typed variable value from the
+  // browser to `environment.set_variable`/`unset_variable`. `transport` by SUBJECT — the port
+  // moves a command across the process seam and stamps the layer on the undelivered refusal; the
+  // value's own validation (name, size, scope, store key) is the daemon's ENVIRONMENT_LAYERS
+  // above, not this one. Rostered here because it is EXPORTED, so the live source scan sees it.
+  { constant: "ENVIRONMENT_WRITE_LAYER", file: "apps/control-room/src/v2/ops/environment-variables-port.ts", axis: "transport" },
   // The Gate 1 card's mapping of a daemon answer into the browser model: a UI surface
   // carrying authority between processes.
   { constant: "GATE1_LAYER", file: "apps/control-room/src/v2/goals/gate1-pending-contract.ts", axis: "transport" },
@@ -580,8 +586,14 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * services), two durable-store (delivery persistence and readers) and one transport
  * (the Gate 1 card mapping). Forty-eight arms across recent-delivery-v2-,
  * recent-product-contract-v2- and recent-v2-cutover-hostile-cases.ts.
+ *
+ * 179 -> 180 on 2026-09-07 for ENVIRONMENT_WRITE_LAYER, the Environments screen's browser-side
+ * write port (task-ba83b202). `transport` by SUBJECT. It is the reason this file exists as a
+ * gate: the declaring row's own package leg (`pnpm --filter @moe/control-room test`) is EXIT 0
+ * with the constant unrostered, and so is `pnpm typecheck` — only `pnpm test:security` sees it.
+ * A row that exports a layer constant owes this backfill in the same commit that exports it.
  */
-const EXPECTED_ROSTER_SIZE = 179;
+const EXPECTED_ROSTER_SIZE = 180;
 
 /**
  * The per-area split. A scanner that silently matched only one directory
@@ -595,7 +607,7 @@ const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
   "packages/core": 22,
   "packages/scheduler": 10,
   "packages/store": 5,
-  "apps/control-room": 14,
+  "apps/control-room": 15,
   "packages/contracts": 3,
   "adapters/ide-contract": 2,
   "packages/review": 1,
@@ -818,11 +830,11 @@ describe("scanner matches the annotated declaration form", () => {
  */
 /**
  * The invisible share, stated once so no arm re-derives it. WIDE numerator, WIDE denominator:
- * 75 module-private declarations against those 75 plus the 179 exported ones.
+ * 75 module-private declarations against those 75 plus the 180 exported ones.
  */
 const EXPECTED_INVISIBLE_NUMERATOR = EXPECTED_PRIVATE_COUNT;
-const EXPECTED_INVISIBLE_DENOMINATOR = 254;
-const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 295;
+const EXPECTED_INVISIBLE_DENOMINATOR = 255;
+const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 294;
 
 describe("TASK-LV module-private layer declarations are bounded", () => {
   it("TASK-LV scans a non-empty module-private population", () => {

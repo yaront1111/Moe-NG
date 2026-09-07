@@ -1,5 +1,9 @@
+import type { OfferWire } from "../../apps/control-room/src/v2/approvals/offer-wire.js";
 import { mapBootstrapReadAnswer } from "../../apps/control-room/src/live/live-bootstrap-receipt.js";
 import { driveActivationChain } from "../../apps/control-room/src/v2/ops/activation-port.js";
+import {
+  ENVIRONMENT_SET_KIND, ENVIRONMENT_UNSET_KIND, createEnvironmentVariablesPort,
+} from "../../apps/control-room/src/v2/ops/environment-variables-port.js";
 import { resourceSections } from "../../apps/control-room/src/v2/resources/resources-model.js";
 import type { ResourceReads } from "../../apps/control-room/src/v2/resources/resources-model.js";
 import { probeAfter, probeBefore, probeRacing } from "./hostile-harness.js";
@@ -33,6 +37,45 @@ function providerSource(ref: string | null): unknown {
   return state?.kind === "REFUSED" ? state.refusal : state;
 }
 
+/**
+ * THE ENVIRONMENTS WRITE PORT. `spendOffer` reaches `answerOf` only once the transport reports
+ * `delivered`, and an answer that is not a record is stamped OFFER_ANSWER_UNREADABLE at the
+ * CALLER's layer - here CONTROL_ROOM_ENVIRONMENT_WRITE. That is the property worth pinning: an
+ * unreadable daemon answer must not fall through as an ACCEPTED write, because the operator's
+ * only confirmation a write took is the fingerprint changing on the next read, and a silently
+ * accepted non-write leaves them staring at the old one believing it is the new one.
+ *
+ * BOTH KINDS ARE DRIVEN. A surface that refuses `set` and admits `unset` is exactly the
+ * half-covered seam a single-kind probe would miss.
+ *
+ * NO SECRET IS COMMITTED HERE (epic rail 3): the probe value is a literal marked as a placeholder,
+ * the refusal this asserts on carries `{code, layer}` only, and no value is read back from it.
+ */
+const PROBE_VALUE = "placeholder-not-a-secret";
+
+/**
+ * A wire whose builder succeeds and whose transport DELIVERS - the only route that reaches
+ * `answerOf`. Cast at the seam because `ControlRoomClientSurface["commands"]` is the full
+ * generated command roster and a probe needs exactly two of its members; the shape below is the
+ * `Builder`/`sendCommand` contract `offer-wire.ts` actually calls.
+ */
+function environmentWire(response: unknown): OfferWire {
+  const build = (): { readonly envelope: unknown; readonly ok: true } =>
+    ({ envelope: { commandId: "ui-env-probe" }, ok: true });
+  return {
+    client: { commands: { [ENVIRONMENT_SET_KIND]: build, [ENVIRONMENT_UNSET_KIND]: build } },
+    sessionCredential: "probe-session",
+    transport: { sendCommand: async (): Promise<unknown> => ({ delivered: true, response }) },
+  } as unknown as OfferWire;
+}
+
+const environmentWrite = async (kind: "set" | "unset", response: unknown): Promise<unknown> => {
+  const port = createEnvironmentVariablesPort(environmentWire(response));
+  return kind === "set"
+    ? await port.set("preview", "PROBE_NAME", PROBE_VALUE)
+    : await port.unset("preview", "PROBE_NAME");
+};
+
 interface Spec {
   readonly boundary: string;
   readonly expected: RefusalExpectation;
@@ -62,6 +105,14 @@ const specs: readonly Spec[] = [
     // No credential values or canaries are created, retained, or printed by this table.
     hostile: () => providerSource(null),
     observe: () => providerSource("not-a-source-reference"),
+  },
+  {
+    boundary: "ENVIRONMENT_WRITE_LAYER",
+    expected: { code: "OFFER_ANSWER_UNREADABLE", layer: "CONTROL_ROOM_ENVIRONMENT_WRITE" },
+    // A bare string answer on `set`, a null answer on `unset`: two unreadable shapes across the
+    // two kinds, one refusal. Neither can report the write as accepted.
+    hostile: () => environmentWrite("set", "accepted"),
+    observe: () => environmentWrite("unset", null),
   },
 ];
 
