@@ -302,7 +302,7 @@ test("migration journey: what the schema did, on the card, in the feed, and NOT 
         // "nothing to apply". An environment that was never deployed is the honest source of it.
         const unknownLine = page.getByTestId(`cr.deploy.${UNKNOWN_ENV}.migration`);
         await expect(unknownLine).toHaveText(
-          `Migration state is not known here ${MIDDOT} MIGRATION_RECEIPT_MUTANT ${MIDDOT} DAEMON_INGRESS`,
+          `Migration state is not known here ${MIDDOT} MIGRATION_RECEIPT_ABSENT ${MIDDOT} DAEMON_INGRESS`,
           { timeout: CARD_MS });
         // `backupState` is null while UNKNOWN, so there is NO backup sentence to render at all.
         await expect(page.getByTestId(`cr.deploy.${UNKNOWN_ENV}.backup`)).toHaveCount(0);
@@ -374,7 +374,7 @@ test("migration journey: what the schema did, on the card, in the feed, and NOT 
         await page.getByTestId("cr.nav.health").click();
         await expect(page.getByTestId("cr.activity.root")).toBeVisible({ timeout: CARD_MS });
         await expect(page.getByTestId("cr.activity.list")).toContainText(
-          "recorded the MUTANT migration", { timeout: CARD_MS });
+          "recorded the migration", { timeout: CARD_MS });
         const feed = (await page.getByTestId("cr.activity.root").textContent()) ?? "";
         expect(feed, "no connection string in the ledger either").not.toContain("postgres://");
         expect(feed).not.toContain("DATABASE_URL");
