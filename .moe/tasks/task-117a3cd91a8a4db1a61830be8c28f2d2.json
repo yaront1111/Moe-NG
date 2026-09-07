@@ -30,8 +30,11 @@
     {
       "stepId": "step-2",
       "description": "BRANCH A - THE QUOTA STILL REFUSES. THIS IS A COMPLETE AND CORRECT OUTCOME FOR THIS ROW, not a failure, and the row was carved out of task-c090faae precisely so that this outcome strands nothing else. Call `moe.report_blocked` with: the RESET DATE from the refusal line (a date the line states, not one you compute), the EXACT refusal line verbatim including its URL, the exit code, and the command you ran. Do NOT pass blockedOnTaskIds - the wait is on an external quota, not on a board row, and naming an unrelated row would make the runtime auto-unblock this on the wrong signal. Then STOP. Explicitly forbidden, and each of these has a tempting shape: substituting the scripted double from task-ae309e47 (it proves the wire, never the binary - that is why it is a separate row); running a CLAUDE seat and reporting it as codex; reporting a partial run - a seat that spawned and then hit the limit is a limit, not a delivery; and buying credits or changing the account to get past it, which is the operator's decision and not a worker's. ONE THING WORTH DOING IN THIS BRANCH, because it is free and it is real evidence: the refusal is exactly what the provider-limit path consumes, so note in the block reason that this host can still produce a REAL provider limit on demand (`mem:real-codex-limit-available-on-this-host` records the same measurement and its window). That is a fact a later row may need, and the block is the natural place to record that it still holds.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "BRANCH A DOES NOT APPLY. NOT EXECUTED, and deliberately so — recording that as the step's outcome rather than leaving it PENDING.\n\nStep-1 is the branch selector and it took **BRANCH B**. Re-measured THIS session, not inherited from the earlier note:\n\n```\n$ codex exec --ignore-user-config --skip-git-repo-check \"say hi\" </dev/null\nEXIT=0\nstdout: Hi!\nstderr banner: OpenAI Codex v0.153.4 / model: gpt-6-astra / provider: openai\n                approval: never / sandbox: read-only\n                session id: 01a07c84-528e-7873-bf42-c3f427816709\n```\nNo usage-limit line on either stream. The `Sep 8th, 2026 10:46 AM` reset the architect's plan-time refusal named is now in the past by the clock this host keeps; the quota answers.\n\n**Therefore `report_blocked` on quota is FORBIDDEN here, not merely unnecessary** — DoD-4 conditions the block on the quota refusing, and it does not. Filing a quota block now would be a fabricated premise, which is the exact failure mode step 2's own text warns against in the other direction.\n\nTWO THINGS DONE DIFFERENTLY FROM A BARE PROBE, both on purpose:\n\n1. **`--ignore-user-config` on the probe.** @qa-97200064 and @worker-ca28be90 measured that a bare `codex exec \"say hi\"` on this host loads the operator's `~/.codex/config.toml`, which carries a moe-next MCP server pointing at the LIVE board — and the seat then fires `moe.claim_next_task`, stranding a real row for the full 30-minute reap (`mem:codex-seats-launch-interactive-and-never-land`). `--ignore-user-config` keeps the host's MCP servers off the probe. A liveness probe must not be a board mutation.\n\n2. **The one free fact step 2 asks for, recorded even though the branch is not taken:** this host can no longer produce a real provider limit on demand. `mem:real-codex-limit-available-on-this-host` said to re-measure after 2026-09-08 because the window closes; it closed EARLY. Any row that needs a genuine provider-limit refusal must now find another source — that memory's window is spent, and I am updating it rather than leaving a successor to re-derive this.\n\nStep-2 records no files. Zero repo paths created or modified.",
+      "startedAt": "2026-09-07T15:36:44.057Z",
+      "completedAt": "2026-09-07T15:39:33.991Z"
     },
     {
       "stepId": "step-3",
@@ -62,7 +65,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-b1872f24",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -99,18 +102,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T18:18:48.193Z",
-  "updatedAt": "2026-09-07T14:29:13.982Z",
+  "updatedAt": "2026-09-07T15:39:33.991Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:26:35.957Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 0,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "stepsCompleted": [
     "step-1",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-2"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T18:29:22.418Z",
@@ -128,7 +132,8 @@
   },
   "planApprovedAt": "2026-09-05T18:29:24.589Z",
   "contextFetchedBy": [
-    "worker-ca28be90"
+    "worker-ca28be90",
+    "worker-b1872f24"
   ],
   "workStartedAt": "2026-09-07T10:00:01.713Z",
   "blockedReason": null,
