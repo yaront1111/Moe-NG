@@ -132,7 +132,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T20:13:42.297Z",
-  "updatedAt": "2026-09-07T00:30:35.509Z",
+  "updatedAt": "2026-09-07T00:53:38.524Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T22:05:31.612Z",
     "plannedStepCount": 7,
@@ -217,6 +217,26 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "a47f9e89ed48e0ef96479297af1e8e8ae19c3734",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-767c9887@2026-09-07T00:30:37Z",
+      "paths": [
+        ".moe/tasks/task-0397287d2e964e7b83c0b4c2be945364.json",
+        ".moe/tasks/task-3958769c73e1409183b36c538c5468ad.json",
+        ".moe/tasks/task-509c6c1609174adb9228940bc002f5c3.json",
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
+        ".moe/tasks/task-9aea412b10d141c084c9bfdb04c33a21.json",
+        ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json"
+      ],
+      "recordedBy": "worker-767c9887",
+      "recordedAt": "2026-09-07T00:53:38.524Z",
+      "treeId": "102dce6049c61a372fef20ba3fa653ec81e83e9d",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -230,14 +250,20 @@
     ".moe/tasks/task-e735fefa4c5f4b00adb364f7c9dcdab7.json",
     "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
     "apps/daemon/src/deployment/migrate-down-command.ts",
-    "apps/daemon/src/goals/goal-scoped-close-test-fixtures.ts"
+    "apps/daemon/src/goals/goal-scoped-close-test-fixtures.ts",
+    ".moe/tasks/task-509c6c1609174adb9228940bc002f5c3.json",
+    ".moe/tasks/task-9aea412b10d141c084c9bfdb04c33a21.json",
+    ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "tests/e2e/control-room/lane-landing-contract.ts",
+    "tests/e2e/control-room/lane-review-round.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-767c9887@2026-09-06T22:18:40Z",
-    "at": "2026-09-07T00:08:29.840Z"
+    "sessionId": "worker-767c9887@2026-09-07T00:30:37Z",
+    "at": "2026-09-07T00:53:38.524Z"
   },
   "workStartedAt": "2026-09-06T22:19:04.980Z",
   "declaredFiles": [
