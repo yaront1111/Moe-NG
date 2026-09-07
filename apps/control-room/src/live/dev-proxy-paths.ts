@@ -6,6 +6,11 @@ export const DEV_PROXY_PATHS = Object.freeze([
   "/activation/read",
   "/activity/read",
   "/affordances/read",
+  // The per-backup restore-proof read. Its consumer is the backups list on the Health screen
+  // (task-679cdaa380874f55978e8790d770e37a); without the pin the dev server answers it itself
+  // and the list renders against Vite instead of against a daemon - which for THIS surface
+  // means an operator reading a fabricated restore-proof state.
+  "/backups/read",
   "/bootstrap",
   "/budget/commitment/read",
   "/command",

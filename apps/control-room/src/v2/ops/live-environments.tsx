@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import { readBackups } from "../../live/live-backups.js";
+import type { BackupsOutcome } from "../../live/live-backups.js";
 import { readDeployments } from "../../live/live-deployments.js";
 import type { DeploymentsOutcome } from "../../live/live-deployments.js";
 import { readDeploymentsHealth } from "../../live/live-deployments-health.js";
@@ -43,10 +45,13 @@ export const ENVIRONMENTS_READ_FAILED = "ENVIRONMENTS_READ_FAILED";
 
 type SectionRefusal = { readonly code: string; readonly layer: string };
 
+export const BACKUPS_READ_FAILED = "BACKUPS_READ_FAILED";
+
 export interface LiveEnvironmentsProps {
   readonly headers: Readonly<Record<string, string>>;
   readonly pollMs?: number | undefined;
   /** Injectable for tests; the defaults spend the attached session's own headers. */
+  readonly readBackupList?: (() => Promise<BackupsOutcome>) | undefined;
   readonly readCatalog?: (() => Promise<GoalCatalogFrame>) | undefined;
   readonly readDeploys?: ((goalRef: string) => Promise<DeploymentsOutcome>) | undefined;
   readonly readHealth?: ((environment: string) => Promise<DeploymentsHealthOutcome>) | undefined;
@@ -94,12 +99,14 @@ async function assemble(readers: {
 }
 
 export function LiveEnvironments({
-  headers, pollMs, readCatalog, readDeploys, readHealth,
+  headers, pollMs, readBackupList, readCatalog, readDeploys, readHealth,
 }: LiveEnvironmentsProps): JSX.Element {
   const [rows, setRows] = useState<readonly EnvironmentHealthRow[] | null>(null);
   const [refusal, setRefusal] = useState<SectionRefusal | null>(null);
+  const [backups, setBackups] = useState<BackupsOutcome | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [readers] = useState(() => ({
+    backups: readBackupList ?? ((): Promise<BackupsOutcome> => readBackups(headers)),
     catalog: readCatalog ?? ((): Promise<GoalCatalogFrame> => readGoalCatalog({ headers })),
     deploys: readDeploys ?? ((goalRef: string): Promise<DeploymentsOutcome> => readDeployments(headers, goalRef)),
     health: readHealth
@@ -116,11 +123,35 @@ export function LiveEnvironments({
       if (next.kind === "ROWS") setRows(next.rows);
       setNowMs(Date.now());
     };
+    // THE BACKUPS READ IS INDEPENDENT of the deployed-set enumeration, and settles on its own.
+    // Folding them together would let a catalog refusal blank a backups list the daemon answered
+    // perfectly well - and, far worse in the other direction, let a backups refusal be reported
+    // as though the environments themselves could not be read.
+    //
+    // IT ALSO CARRIES ITS OWN IN-FLIGHT GATE rather than sharing the one below. `inFlight` is
+    // released when the ENUMERATION settles, so a backups read slower than the enumeration would
+    // otherwise have a second one started beside it, and whichever resolved LAST would win -
+    // which on this surface means an older restore-proof state overwriting a newer one. Only one
+    // backups read is ever outstanding.
+    let backupsInFlight = false;
+    const settleBackups = (next: BackupsOutcome): void => {
+      backupsInFlight = false;
+      if (generation.current !== run) return;
+      setBackups(next);
+    };
     const tick = (): void => {
+      // A thrown read is a FAILED read, never an empty one - here as much as below. An empty
+      // list would tell an operator this project has no backups, which is the one sentence a
+      // surface about restore-proof must never say without knowing it.
+      if (!backupsInFlight) {
+        backupsInFlight = true;
+        void readers.backups().then(settleBackups, (): void => {
+          settleBackups({ code: BACKUPS_READ_FAILED, layer: LAYER, status: "ERROR" });
+        });
+      }
       if (inFlight) return;
       inFlight = true;
       void assemble(readers).then(settle, (): void => {
-        // A thrown read is a FAILED read, never an empty one.
         settle({ kind: "REFUSED", refusal: { code: ENVIRONMENTS_READ_FAILED, layer: LAYER } });
       }).finally((): void => { inFlight = false; });
     };
@@ -128,5 +159,5 @@ export function LiveEnvironments({
     const timer = setInterval(tick, pollMs ?? POLL_MS);
     return (): void => { generation.current += 1; clearInterval(timer); };
   }, [pollMs, readers]);
-  return <EnvironmentsSection environments={rows} nowMs={nowMs} refusal={refusal} />;
+  return <EnvironmentsSection backups={backups} environments={rows} nowMs={nowMs} refusal={refusal} />;
 }

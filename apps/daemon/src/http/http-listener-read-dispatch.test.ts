@@ -126,16 +126,15 @@ function proxiedPaths(): ReadonlySet<string> {
  *   the `dev-proxy-paths.ts` pin alongside the exact-key decoder in
  *   apps/control-room/src/live/live-deployments-health.ts.
  *
- * - `/backups/read` is served by task-1f994315fd164a789424349cb7bba4ca (the durable per-backup
- *   restore-proof record) and is NOT YET PROXIED. That row deliberately lands the daemon half
- *   alone: its own DoD authorises splitting the browser half off rather than shipping a route
- *   nothing fetches, and the split row is task-679cdaa380874f55978e8790d770e37a - the
- *   Health-screen backups list - which adds the `dev-proxy-paths.ts` pin beside an exact-key
- *   decoder and RETIRES this entry together with the one in UNCONSUMED_SERVED_ROUTES below.
- *   Recorded here rather than hidden: this is the census that keeps a producer with no consumer
- *   visible in the daemon's own tests instead of silent.
+ * - `/backups/read` WAS listed here and is now RETIRED, exactly as its entry said it would be:
+ *   task-1f994315fd164a789424349cb7bba4ca landed the daemon half alone (the durable per-backup
+ *   restore-proof record and the route), and task-679cdaa380874f55978e8790d770e37a -- the
+ *   Health-screen backups list -- landed the browser half, adding the `dev-proxy-paths.ts` pin
+ *   alongside the exact-key decoder in apps/control-room/src/live/live-backups.ts. Both census
+ *   entries and this comment were retired in that one edit, since half a retirement leaves a
+ *   served route recorded as unconsumed while a screen consumes it.
  */
-const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze(["/backups/read"]);
+const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([]);
 
 /**
  * JSON_ROUTES the browser production tree does not fetch. Frozen census, not a
@@ -143,12 +142,6 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze(["/backups/read"
  * of a previously-consumed route reds. An entry with no reason is a hiding
  * place; the positive-control arm pins every member named in THIS comment.
  *
- * /backups/read: served by task-1f994315fd164a789424349cb7bba4ca, which lands the durable
- * restore-proof record, the route and the whole composition chain but NO browser consumer -
- * deliberately, and named here rather than hidden. Retired by
- * task-679cdaa380874f55978e8790d770e37a, the Health-screen backups list, which adds the
- * exact-key decoder beside live-deployments-health.ts, renders the three states in
- * v2/ops/environments-section.tsx, and clears this entry and the UNPROXIED one together.
  * /events/resume: client-transport.ts declares EVENT_PAGE_PATH (/events/read)
  * and EVENT_ACKNOWLEDGE_PATH (/events/ack) and not resume; generated-client.ts:28
  * states Cursor/resume semantics are TBD.
@@ -162,6 +155,15 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze(["/backups/read"
  * Environments section on the Health screen, whose live-deployments-health.ts is fetched from
  * the production entry. The Needs-you incident card (task-85895a88a2484d8589046b2030efd445)
  * is the second consumer and needs no census change.
+ * /backups/read WAS listed here and is now RETIRED, exactly as its entry said it would be:
+ * task-1f994315fd164a789424349cb7bba4ca landed the durable restore-proof record, the route and
+ * the whole composition chain but NO browser consumer -- deliberately, and named here rather
+ * than hidden -- and task-679cdaa380874f55978e8790d770e37a landed that consumer: the
+ * Health-screen backups list, whose exact-key decoder live-backups.ts is VALUE-imported by
+ * v2/ops/live-environments.tsx and so reached from the production entry, and whose three
+ * restore-proof states render through v2/ops/environments-section.tsx. The UNPROXIED entry
+ * above went in the same edit; half a retirement leaves a served route recorded as unconsumed
+ * while a screen consumes it.
  * /preview/read WAS listed here and is now RETIRED, exactly as the entry said it would be:
  * task-4a6e7bdbef9a4344829a7ce49c6fb378 landed the daemon receipt read and the capture-bytes
  * route, and task-33ceae56edc348e9864bc592430fa1d0 supplies the preview card that fetches
@@ -187,9 +189,10 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze(["/backups/read"
  * that is exactly the hole the reachability walk closed.
  */
 const UNCONSUMED_SERVED_ROUTES: readonly string[] = Object.freeze([
-  // Served by task-1f994315fd164a789424349cb7bba4ca; RETIRED by
-  // task-679cdaa380874f55978e8790d770e37a, which fetches it from the Health screen.
-  "/backups/read",
+  // `/backups/read` was here and is RETIRED by task-679cdaa380874f55978e8790d770e37a, exactly
+  // as its own comment instructed: the Health screen now fetches it. `live-backups.ts` decodes
+  // the answer and `v2/ops/live-environments.tsx` VALUE-imports it, so the route is reachable
+  // from main.tsx over the edges this walk follows and the consumption arm above counts it.
   "/budget/commitment/read",
   "/documents/ingest",
   // `/environments/read` was here and is RETIRED by task-ba83b202265d40d1885d3091f009b0a2,

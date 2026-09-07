@@ -1,9 +1,11 @@
 import type { JSX } from "react";
 
+import type { BackupsOutcome } from "../../live/live-backups.js";
 import type { DeploymentsHealthOutcome, EnvironmentHealthView } from "../../live/live-deployments-health.js";
 import { OutcomeNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
+import { BackupsList } from "./backups-list.js";
 import { LatencySparkline } from "./latency-sparkline.js";
 
 /**
@@ -132,15 +134,15 @@ function EnvironmentRow({ nowMs, row }: {
   return <EnvironmentCard nowMs={nowMs} view={row.outcome} />;
 }
 
-export function EnvironmentsSection({ environments, nowMs, refusal }: {
-  /** Null while the deployments read has not answered; empty when nothing is deployed. */
+/**
+ * The environments half. The backups list below is assembled from a SEPARATE read and is not
+ * gated on any of these outcomes: a catalog that refuses says nothing about backups the daemon
+ * answered perfectly well, and hiding the restore-proof states behind an unrelated refusal is
+ * how an operator comes to check a backup at the moment they cannot see it.
+ */
+function EnvironmentsPart({ environments, nowMs, refusal }: {
   readonly environments: readonly EnvironmentHealthRow[] | null;
   readonly nowMs: number;
-  /**
-   * Why the deployed set itself could not be assembled. It outranks every state below: a
-   * failed enumeration rendered as an empty list would tell an operator that nothing is
-   * deployed, which is the one sentence this surface must never say without knowing it.
-   */
   readonly refusal?: { readonly code: string; readonly layer: string } | null | undefined;
 }): JSX.Element {
   if (refusal !== null && refusal !== undefined) {
@@ -184,5 +186,29 @@ export function EnvironmentsSection({ environments, nowMs, refusal }: {
         {environments.map((row) => <EnvironmentRow key={row.environment} nowMs={nowMs} row={row} />)}
       </ul>
     </section>
+  );
+}
+
+export function EnvironmentsSection({ backups, environments, nowMs, refusal }: {
+  /**
+   * The backups read, or null while it has not answered. Its own outcome, kept apart from the
+   * environments read so neither can be reported as the other.
+   */
+  readonly backups?: BackupsOutcome | null | undefined;
+  /** Null while the deployments read has not answered; empty when nothing is deployed. */
+  readonly environments: readonly EnvironmentHealthRow[] | null;
+  readonly nowMs: number;
+  /**
+   * Why the deployed set itself could not be assembled. It outranks every environments state: a
+   * failed enumeration rendered as an empty list would tell an operator that nothing is
+   * deployed, which is the one sentence this surface must never say without knowing it.
+   */
+  readonly refusal?: { readonly code: string; readonly layer: string } | null | undefined;
+}): JSX.Element {
+  return (
+    <>
+      <EnvironmentsPart environments={environments} nowMs={nowMs} refusal={refusal} />
+      <BackupsList backups={backups ?? null} />
+    </>
   );
 }

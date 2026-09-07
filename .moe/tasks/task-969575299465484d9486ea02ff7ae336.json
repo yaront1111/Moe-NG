@@ -92,7 +92,7 @@
       "completedAt": "2026-09-07T12:56:15.286Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -130,7 +130,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:12:31.237Z",
-  "updatedAt": "2026-09-07T12:59:48.441Z",
+  "updatedAt": "2026-09-07T17:43:15.955Z",
   "dependsOn": [
     "task-8e793ae3c63f41189bcc05f6d7c15605",
     "task-df64aa204d6f4c35810376226980e4b7",
@@ -184,14 +184,11 @@
     "worker-b1872f24"
   ],
   "workStartedAt": "2026-09-07T10:00:06.002Z",
-  "blockedReason": "ALL 5 STEPS COMPLETE, every owned gate GREEN, but 2 of 5 DoD clauses need rows this seat does not own. QA ruled a row cannot be DONE with open clauses and has no \"approve with notes\", so this is a dependency wait, not a second identical completion. Evidence: step-3/4/5 notes + comment-3684f89a.\n\nDELIVERED (bytes land on this exit; paths in complete_step.modifiedFiles): the MISSING PRODUCER QA identified. /affordances/read now mints project.set_agent_provider via NEW apps/daemon/src/http/affordance-agent-provider-offers.ts (+ .js bridge), sibling of affordance-deploy-target-offers.ts. The toggle is ENABLED where it was permanently greyed; commandBuilderFor builds a real envelope. Rail-9 bidirectional set-equality at that seam, identity pinned to a REAL write, drilled twice with SHA256-proved restores. QA issue 3 closed. e2e unparked from test.fixme. README + runbook corrected off their overclaim. Also fixed a red I INTRODUCED, caught only by the rail-3 baseline: an http/ module importing orchestrator/agent-provider-store.js empties the registry's payloadKeys; fixed with a zero-import leaf.\n\nGATES: daemon 579 (579) / 10373 passed EXIT 0; control-room 194 (194) / 2466 EXIT 0; typecheck EXIT 0; test:e2e 19 passed EXIT 0; browser 6 failed | 35 passed, my spec in the 35; root pnpm test 1 failed = the unowned cutover-manifest red. Failing paths minus owned paths: EMPTY.\n\nOPEN 1 -> task-136cbab2 (filed by me, PLANNING): DoD 1's write half. A real daemon answers OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION; a paired browser is never the CONFIGURED operator principal. Widening that is a security boundary - rail 2 forbids policy work here.\n\nOPEN 2 -> task-117a3cd9: DoD 4. \"MCP tool call requires approval, but approval policy is never\" stops a codex seat before work_get_context. The quota discharge the DoD sanctions is UNAVAILABLE (codex exec EXIT 0 twice); no refusal line exists and I fabricated none. 117a3cd9 is itself BLOCKED.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-07T12:59:48.441Z",
-  "blockedOnTaskIds": [
-    "task-136cbab29b39465e93b60e923c4689d6",
-    "task-117a3cd91a8a4db1a61830be8c28f2d2"
-  ],
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null,
   "reviewStartedAt": "2026-09-07T10:49:27.435Z",
   "verification": {
     "command": "pnpm --filter @moe/daemon test",
@@ -200,7 +197,25 @@
     "reportedAt": "2026-09-07T10:49:27.435Z"
   },
   "filesModified": [
-    ".moe/tasks/task-969575299465484d9486ea02ff7ae336.json"
+    ".moe/tasks/task-969575299465484d9486ea02ff7ae336.json",
+    ".moe/tasks/task-117a3cd91a8a4db1a61830be8c28f2d2.json",
+    ".moe/tasks/task-136cbab29b39465e93b60e923c4689d6.json",
+    ".moe/tasks/task-2db55fcaad604aa4861139b22941095f.json",
+    ".moe/tasks/task-371677fc977948a597fa9b821b99f939.json",
+    ".moe/tasks/task-6ec875f4dd5f4f2ab97e46f71bf57b2b.json",
+    ".moe/tasks/task-8f1f15bcb0ab40d88f07134a757630e4.json",
+    ".moe/tasks/task-de65294bfa2649b99afc3aa4aa9399d0.json",
+    "apps/control-room/src/v2/ops/agent-provider-toggle.test.tsx",
+    "apps/daemon/src/http/affordance-agent-provider-offers.js",
+    "apps/daemon/src/http/affordance-agent-provider-offers.test.ts",
+    "apps/daemon/src/http/affordance-agent-provider-offers.ts",
+    "apps/daemon/src/http/affordance-read.test.ts",
+    "apps/daemon/src/http/affordance-read.ts",
+    "apps/daemon/src/orchestrator/agent-provider-command.ts",
+    "apps/daemon/src/orchestrator/agent-provider-contracts.js",
+    "apps/daemon/src/orchestrator/agent-provider-contracts.ts",
+    "apps/daemon/src/orchestrator/agent-provider-store.ts",
+    "tests/e2e/control-room/agent-provider-seats.spec.ts"
   ],
   "completionSummary": "THE ROW'S TITLE IS FALSE AT HEAD AND I AM NOT CLAIMING IT. No `codex exec` seat can deliver ANY node at d5b191be: the seat hits `MCP tool call requires approval, but approval policy is never`, so it never reaches work_get_context, review_submit or work_release. DoD 4 NOT delivered; I quote NO landing sha. task-117a3cd9's own words: \"the node did not land, no landing sha exists ... quoting [the baseline] would be fabrication.\"\n\nDoD 4'S SANCTIONED ESCAPE IS ALSO GONE. The plan allowed a Codex-quota refusal as a discharge. The quota is provably FINE — `codex exec \"say hi\"` EXIT 0, `Hi!`, codex 0.153.4, reset ~28h before its own earlier refusal named. mem:real-codex-limit-available-on-this-host is SUPERSEDED. Neither sanctioned disposition applies, so I wrote the third: a SPAWN-SURFACE block on task-117a3cd9 (BLOCKED 10:22:49Z, asks an architect for a still-unfiled row). I did NOT block this parent on it — that row has no auto-unblock signal, so blockedOnTaskIds would livelock rather than wait. No claude seat is reported as a codex one anywhere.\n\nDELIVERED, RE-MEASURED AT d5b191be RATHER THAN CITED: DoD 2 (`pnpm test:e2e` EXIT 0, 19 passed | 1 skipped / 172 passed | 1 skipped), DoD 3 (control-room 194 passed / 2465 passed — plus LIVE corroboration: six durable seat_start rows carrying codex-cli 0.153.4), DoD 1's daemon half (proven live: `project.set_agent_provider` HTTP 200 AGENT_PROVIDER_SET with MOE_AGENT_COMMAND UNSET). DoD 1's BROWSER TOGGLE still cannot write — /affordances/read never offers the kind; successor still unfiled.\n\nSIX GATE LEGS: daemon 577/577, control-room 194/2465, typecheck 19, e2e 19+1 — all EXIT 0. TWO RED, both attributed OFF this row by measurement: provider-pause.spec.ts:181 (a foreign delivery-gate refusal landed 2026-09-06, a day AFTER the spec's last edit; the spec's own transcript proves my blast radius works) and cutover ARM E (the checkout walks 10303 entries vs a hard 10000 bound; .serena/memories is 4122 of them). Detail in comment-62a",
   "reviewCompletedAt": "2026-09-07T11:15:13.093Z",
@@ -298,13 +313,60 @@
       "treeId": "314d012d7f0fba97db933b9f05a4123e37016fba",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "9e347a3a3f470b4d6075a0039bfe4e6b1e96d0db",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b1872f24@2026-09-07T11:34:08Z",
+      "paths": [
+        ".moe/tasks/task-117a3cd91a8a4db1a61830be8c28f2d2.json",
+        ".moe/tasks/task-136cbab29b39465e93b60e923c4689d6.json",
+        ".moe/tasks/task-2db55fcaad604aa4861139b22941095f.json",
+        ".moe/tasks/task-371677fc977948a597fa9b821b99f939.json",
+        ".moe/tasks/task-6ec875f4dd5f4f2ab97e46f71bf57b2b.json",
+        ".moe/tasks/task-8f1f15bcb0ab40d88f07134a757630e4.json",
+        ".moe/tasks/task-969575299465484d9486ea02ff7ae336.json",
+        ".moe/tasks/task-de65294bfa2649b99afc3aa4aa9399d0.json",
+        "apps/control-room/src/v2/ops/agent-provider-toggle.test.tsx",
+        "apps/daemon/src/http/affordance-agent-provider-offers.js",
+        "apps/daemon/src/http/affordance-agent-provider-offers.test.ts",
+        "apps/daemon/src/http/affordance-agent-provider-offers.ts",
+        "apps/daemon/src/http/affordance-read.test.ts",
+        "apps/daemon/src/http/affordance-read.ts",
+        "apps/daemon/src/orchestrator/agent-provider-command.ts",
+        "apps/daemon/src/orchestrator/agent-provider-contracts.js",
+        "apps/daemon/src/orchestrator/agent-provider-contracts.ts",
+        "apps/daemon/src/orchestrator/agent-provider-store.ts",
+        "tests/e2e/control-room/agent-provider-seats.spec.ts"
+      ],
+      "recordedBy": "worker-b1872f24",
+      "recordedAt": "2026-09-07T13:00:13.142Z",
+      "treeId": "8b584de22187599ee1785492f985e17c1bd4bf25",
+      "status": "BLOCKED",
+      "contested": [
+        {
+          "path": "docs/agent-stack-runbook.md",
+          "taskId": "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
+        },
+        {
+          "path": "README.md",
+          "taskId": "task-161b7e9d566b4c47b429490a54a6cca1"
+        }
+      ],
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-97200064@2026-09-07T11:06:10Z",
-    "at": "2026-09-07T11:16:10.123Z"
-  }
+    "sessionId": "worker-b1872f24@2026-09-07T11:34:08Z",
+    "at": "2026-09-07T13:00:13.142Z"
+  },
+  "touchedFiles": [
+    "apps/daemon/src/http/affordance-agent-provider-offers.test.ts",
+    "apps/daemon/src/http/affordance-agent-provider-offers.ts"
+  ]
 }

@@ -7,6 +7,7 @@ it("proxies the complete project-daemon v2 surface without manager authority", (
     "/activation/read",
     "/activity/read",
     "/affordances/read",
+    "/backups/read",
     "/bootstrap",
     "/budget/commitment/read",
     "/command",

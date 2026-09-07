@@ -1,12 +1,14 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import type { BackupsOutcome } from "../../live/live-backups.js";
+import { mapBackupsAnswer } from "../../live/live-backups.js";
 import type { DeploymentsOutcome } from "../../live/live-deployments.js";
 import { mapDeploymentsAnswer } from "../../live/live-deployments.js";
 import type { DeploymentsHealthOutcome } from "../../live/live-deployments-health.js";
 import { mapDeploymentsHealthAnswer } from "../../live/live-deployments-health.js";
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
-import { LiveEnvironments } from "./live-environments.js";
+import { BACKUPS_READ_FAILED, LiveEnvironments } from "./live-environments.js";
 
 /**
  * THE ENVIRONMENTS SECTION ON THE WIRE. Both served frames go through their PRODUCTION decoders
@@ -187,5 +189,108 @@ describe("the Environments section assembles its list from served reads", () => 
     await waitFor(() => expect(screen.getByTestId("cr.environments.refusal.production")).toBeTruthy());
     expect(screen.getByTestId("cr.environments.refusal.production").textContent)
       .toContain("PROBE_STORE_UNAVAILABLE @ DAEMON_INGRESS");
+  });
+});
+
+/**
+ * THE BACKUPS READ, ON THE WIRE. Its frame goes through the production decoder `mapBackupsAnswer`
+ * for the same reason the two above do, and it is asserted as its OWN outcome: the whole point of
+ * the separate read is that neither half can be reported as the other.
+ */
+describe("the backups list is fetched and settled independently of the environments", () => {
+  it("renders the restore-proof state the daemon served, by value", async () => {
+    render(<LiveEnvironments
+      headers={{}}
+      pollMs={60_000}
+      readBackupList={() => Promise.resolve(mapBackupsAnswer(200, {
+        backups: [{
+          checkedAt: null, environment: "staging", ref: "20260907070400000.sql",
+          restoreProof: "NOT_CHECKED", sha256: null,
+        }],
+        ok: true,
+      }))}
+      readCatalog={() => Promise.resolve(catalogOf("goal-1"))}
+      readDeploys={(goalRef) => Promise.resolve(deploymentsOf(goalRef, environmentRow("production", "DEPLOYED")))}
+      readHealth={(environment) => Promise.resolve(healthOf(environment, "UP"))}
+    />);
+
+    const row = await screen.findByTestId("cr.backups.row.staging.20260907070400000.sql");
+    expect(row.getAttribute("data-restore-proof")).toBe("NOT_CHECKED");
+    expect(screen.getByTestId("cr.backups.row.staging.20260907070400000.sql.proof").textContent)
+      .toBe("? Restore NOT CHECKED yet");
+  });
+
+  it("shows a REFUSED backups read as a refusal while the environments still render", async () => {
+    render(<LiveEnvironments
+      headers={{}}
+      pollMs={60_000}
+      readBackupList={() => Promise.resolve(mapBackupsAnswer(200, {
+        code: "BACKUP_PROOF_STORE_UNAVAILABLE", layer: "DAEMON_INGRESS", ok: false,
+      }))}
+      readCatalog={() => Promise.resolve(catalogOf("goal-1"))}
+      readDeploys={(goalRef) => Promise.resolve(deploymentsOf(goalRef, environmentRow("production", "DEPLOYED")))}
+      readHealth={(environment) => Promise.resolve(healthOf(environment, "UP"))}
+    />);
+
+    await waitFor(() => expect(screen.getByTestId("cr.backups.refusal")).toBeTruthy());
+    // The store's own code and layer, not this client's, and NOT an empty list.
+    expect(screen.getByTestId("cr.backups.refusal").textContent)
+      .toContain("BACKUP_PROOF_STORE_UNAVAILABLE @ DAEMON_INGRESS");
+    expect(screen.queryByTestId("cr.backups.empty")).toBeNull();
+    // The environments half is untouched by the backups refusal.
+    expect(screen.getByTestId("cr.environments.card.production")).toBeTruthy();
+  });
+
+  it("states a THROWN backups read as a failure, never as no backups recorded", async () => {
+    render(<LiveEnvironments
+      headers={{}}
+      pollMs={60_000}
+      readBackupList={() => Promise.reject(new Error("connect ECONNREFUSED"))}
+      readCatalog={() => Promise.resolve(catalogOf("goal-1"))}
+      readDeploys={(goalRef) => Promise.resolve(deploymentsOf(goalRef, environmentRow("production", "DEPLOYED")))}
+      readHealth={(environment) => Promise.resolve(healthOf(environment, "UP"))}
+    />);
+
+    await waitFor(() => expect(screen.getByTestId("cr.backups.refusal")).toBeTruthy());
+    expect(screen.getByTestId("cr.backups.refusal").textContent)
+      .toContain(`${BACKUPS_READ_FAILED} @ CONTROL_ROOM_ENVIRONMENTS`);
+    expect(screen.queryByTestId("cr.backups.empty")).toBeNull();
+    expect(screen.queryByTestId("cr.backups.list")).toBeNull();
+  });
+
+  /**
+   * ONE BACKUPS READ OUTSTANDING AT A TIME. The enumeration releases its own in-flight flag when
+   * IT settles, so a backups read that outlives the enumeration would otherwise have a second one
+   * started beside it - and the LAST to resolve would win, which on this surface means an older
+   * restore-proof state overwriting a newer one. The poll below fires while the first read is
+   * still pending; only one call may have been made.
+   */
+  it("never has two backups reads outstanding, so an older frame cannot win", async () => {
+    let calls = 0;
+    // Held in a one-slot box rather than a bare `let`: TypeScript narrows a `let` assigned only
+    // inside a callback to `null` at the call site, and `release?.()` then fails to compile.
+    const gate: { release: (() => void) | null } = { release: null };
+    render(<LiveEnvironments
+      headers={{}}
+      pollMs={1}
+      readBackupList={() => {
+        calls += 1;
+        return new Promise<BackupsOutcome>((resolve) => {
+          gate.release = (): void => { resolve(mapBackupsAnswer(200, { backups: [], ok: true })); };
+        });
+      }}
+      readCatalog={() => Promise.resolve(catalogOf("goal-1"))}
+      readDeploys={(goalRef) => Promise.resolve(deploymentsOf(goalRef, environmentRow("production", "DEPLOYED")))}
+      readHealth={(environment) => Promise.resolve(healthOf(environment, "UP"))}
+    />);
+
+    // The environments half completes and the 1 ms poll fires repeatedly meanwhile.
+    await waitFor(() => expect(screen.getByTestId("cr.environments.card.production")).toBeTruthy());
+    await new Promise((resolve) => { setTimeout(resolve, 30); });
+    expect(calls).toBe(1);
+
+    expect(gate.release).not.toBeNull();
+    gate.release?.();
+    await waitFor(() => expect(screen.getByTestId("cr.backups.empty")).toBeTruthy());
   });
 });

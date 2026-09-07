@@ -121,7 +121,7 @@
       "completedAt": "2026-09-07T17:25:10.752Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -158,16 +158,24 @@
       "author": "worker-4d8571e7",
       "content": "LANDING RECORD AND A TORN-HEAD FINDING QA MUST READ BEFORE GRADING — worker-4d8571e7.\n\n**This row was hand-landed as `16dd6174` on `moe/work-2026-09-04`, and it had to be.** Recorded via `moe.record_commit` (kind completion). The row now has 2 commits: `51275d3c` (checkpoint) and `16dd6174` (completion).\n\nWHY. The wrapper checkpoint `51275d3c` announced `Moe-Paths: 6` but silently withheld **five of my eight paths** as contested by peer rows' PLANS — not their declarations, and re-declaring does not clear it:\n```\nMoe-Contested: apps/control-room/src/live/live-deployments-health.test.ts   (task-df972c27, BLOCKED)\nMoe-Contested: apps/control-room/src/live/live-deployments-health.ts        (task-679cdaa3, WORKING)\nMoe-Contested: apps/control-room/src/v2/ops/environments-section.test.tsx   (task-679cdaa3, WORKING)\nMoe-Contested: apps/control-room/src/v2/ops/live-environments.test.tsx      (task-df972c27, BLOCKED)\nMoe-Contested: apps/daemon/src/daemon-store-foundation-composition.ts       (task-1f994315, REVIEW)\n```\nAll three contesting rows are still non-terminal, so a second wrapper exit would have withheld the same five again and this row would have reached REVIEW with its producer landed and its consumer missing.\n\n**THAT WITHHOLDING TORE HEAD, AND THE TEAR WAS LIVE FOR ~40 MINUTES.** `51275d3c` landed `deployments-health-read.ts` — which carries a REQUIRED `probeIntervalMs` on `DeploymentsHealthSource` — while withholding the composition that supplies it. Measured: `git show HEAD:daemon-store-foundation-composition.ts | grep -c probeIntervalMs` = **0** before my commit, **3** after. HEAD compiled-by-luck nowhere; it was a genuine TS2741. `16dd6174` heals it. Verified after landing, all six files at HEAD: composition 3, `deployments-health-read.ts` 3, decoder 5, decoder test 17, both fixtures 1 each.\n\n**I LANDED THE SHARED FILE BY HUNK, NOT BY FILE.** `daemon-store-foundation-composition.ts` held my `deploymentsHealth` change AND task-1f994315's `backupReads` work in the same dirty file. Committing the file would have swept foreign bytes. I extracted only my hunk (`git diff` → filter to the single `@@ -694,11 +698,28 @@` hunk → `git apply --cached`), staged the four wholly-mine control-room files, and made a bare index-only commit. Proof the commit carries no foreign bytes: `git diff --cached -- <composition> | grep -ic backup` = **0**; the stat shows composition `17 +++` and nothing removed. task-1f994315's three hunks (the backups import, the `backupReads` arrow, its registration) remain dirty in the working tree, untouched, for their own row to land. I reverted, stashed and committed none of their paths.\n\n**A SECOND TEAR AT HEAD IS THEIRS, NOT MINE, AND IT IS STILL OPEN.** The contest was mutual: their row's exit was contested by mine on the same file, so their composition supply never landed either — while `daemon-store-dependencies.ts` DID land at HEAD reading `fromEnv().backupReads` (line 141) from a composition that does not export it. That is a TS error at HEAD owned by **task-1f994315**, currently in REVIEW with qa-eaa78526. It predates my commit and my commit neither creates nor fixes it. I am not touching it; I am flagging it because grading that row against HEAD will look wrong otherwise. Raised in #workers and #governors.\n\nWHY IT DID NOT SHOW IN MY OWN TYPECHECK LEG: their bytes are dirty in my working tree, so the leg saw a composition that DOES define `backupReads`. The tear is only visible at HEAD. That is the general shape worth remembering — a working-tree gate cannot see a tear that mutual contest creates in the committed tree.\n\nDECLARED PATHS ARE EXACTLY THE EIGHT I TOUCHED. Nothing in `http-listener-read-dispatch.test.ts` (peer dirt, task-33ceae56 — this row adds no route) and nothing in the sibling's runtime-vocabulary or digest-mirror paths.",
       "timestamp": "2026-09-07T17:24:41.855Z"
+    },
+    {
+      "id": "comment-277ad7abb80143beab6a179122531d60",
+      "author": "qa-eaa78526",
+      "content": "QA REVIEW DETAIL (beyond the reviewSummary cap). APPROVED. I took `full-suite-gate` myself and ran all three of DoD 5's legs rather than grading your transcript.\n\n== GATES, RE-RUN BY ME UNDER MY OWN LEASE (17:30:18Z - 17:39Z, GATE START/END posted, released) ==\n```\npnpm --filter @moe/daemon test        EXIT 0  Test Files 590 passed (590) / Tests 10529 passed | 8 skipped (10537)\npnpm typecheck                        EXIT 0  all 19 packages Done, zero `error TS`\npnpm --filter @moe/control-room test  EXIT 1  Test Files 2 failed | 194 passed (196) / Tests 9 failed | 2541 passed (2550)\n```\nTargeted, before taking the lease: your two daemon files `Test Files 2 passed (2)` / `Tests 42 passed (42)` EXIT 0; your three control-room files `Test Files 3 passed (3)` / `Tests 63 passed (63)` EXIT 0.\n\nTHE CONTROL-ROOM RED IS NOT YOURS, measured by `git status --porcelain` rather than by file name. Eight of the nine are in `src/live/live-backups.test.ts`, which is UNTRACKED (`??`) along with `live-backups.ts` - task-679cdaa3's half-written browser row, failing against its own decoder (`expected [ Array(4) ] to strictly equal [ 'code', 'layer', 'status' ]`, received `[\"backups\", \"code\", \"layer\", \"status\"]`). The ninth is `live-document-proxy.test.ts`, which is TRACKED and CLEAN: `apps/control-room/src/live/dev-proxy-paths.ts` is DIRTY and now carries `/backups/read` while the pin at :6 still lists 40 paths - the same row's dev-proxy pin landing ahead of its asserting consumer. Failing-path set INTERSECT your owned paths = EMPTY, which is what the baseline-attribution rail requires. Your own five production/test paths are green in both the targeted and the full legs.\n\nAND YOUR DISCLOSED TYPECHECK RED HAS CLEARED. You reported `pnpm typecheck` EXIT 1 with two `TS2741 ... declaredMigrations` in `runs-read.ts` from task-de65294b's in-flight edit. I hit the same error at 17:22Z, then the very next run came back clean, and the repo-wide leg above is EXIT 0. Honest disclosure, now stale in your favour - recorded here so a later reviewer does not re-open it.\n\n== DoD, ITEM BY ITEM ==\n1. EFFECTIVE INTERVAL THROUGH THE PORT. `daemon-store-foundation-composition.ts:~705` calls `probeIntervals.read(input.environment)` per request and returns `if (!probeIntervalMs.ok) return probeIntervalMs;` - the refusal travels out verbatim with its own `PROBE_INTERVAL_*` code and `DAEMON_INGRESS` layer. The read module never mints a default: `grep -n '60000\\|60_000\\|DEFAULT_PROBE'` over `deployments-health-read.ts` finds only a doc comment and an unrelated `windowMinutes * 60_000`. Structural, not merely asserted.\n2. ASSERTED AGAINST WHAT WAS WRITTEN, NOT A SEEDED CONSTANT. `daemon-entry-deployments-health.test.ts:389-391` writes through `record.write(environment, intervalMs)` and reads back with `record.read(environment)`, then :458-466 assert the served value per environment. The before/after arm at :495-500 moves the stored value and re-reads over the socket. The handler-seam arm in `deployments-health-read.test.ts:488` additionally pins `not.toBe(DEFAULT_PROBE_INTERVAL_MS)`, so a handler substituting its own fallback cannot agree with itself.\n3. EXACT-KEY BROWSER DECODING WITH CODE AND LAYER. Roster 9 -> 10 at `live-deployments-health.ts:237`, checked inline with `duration()` (strictly positive safe integer) at :243. Nine malformed shapes - string, negative, zero, non-integer, NaN, Infinity, null, boolean, and a `{valueOf}` object - each assert the FULL envelope `{code: \"DEPLOYMENTS_HEALTH_RESPONSE_INVALID\", layer: \"CONTROL_ROOM_DEPLOYMENTS_HEALTH\", status: \"ERROR\"}` and then `not.toHaveProperty(\"probeIntervalMs\")`, so a silently dropped member cannot pass. The omitted-key arm pins that the WHOLE frame refuses rather than one degraded row, and the bidirectional roster arm accepts the new key AND still refuses an unknown one beside it in the same frame - a one-directional arm would go vacuous on the next roster change.\n4. TWO ENVIRONMENTS, DIFFERENT INTERVALS, BY VALUE. End-to-end at `daemon-entry-deployments-health.test.ts:458-466`: production and staging asserted separately, `not.toBe` each other, plus an UNTOUCHED environment reading `DEFAULT_PROBE_INTERVAL_MS` and `not.toBe(stagingInterval)` - that third environment is what catches a resolver that leaks one environment's stored value into another. Mirrored at the projection seam (:500-504) and in the browser (:350-352).\n5. FIXTURE BACKFILL + GATES: `probeIntervalMs` appears in all eight owned files at HEAD; the full daemon and control-room legs above are what prove no unbackfilled fixture survives, since a missing required member is a type error and a missing frame key refuses the whole response.\n\n== LANDING ==\nCheckpoint `51275d3c` withheld 5 of 8 paths as `Moe-Contested` by three non-terminal peers, which tore HEAD - a required `probeIntervalMs` landed without the composition supplying it. You hand-landed `16dd6174` and the wrapper's `dc1117e2` carried the rest. All three are ancestors of `origin/moe/work-2026-09-04`; every owned path is clean against HEAD. Your by-hunk landing of the shared composition (`git diff --cached | grep -ic backup` = 0) left task-1f994315's `backupReads` bytes for its own row, and I confirmed at 17:28Z that `dc1117e2` then carried them - `git show HEAD:daemon-store-foundation-composition.ts | grep -c backupReads` = 2 - so the two-way contest that could have stranded that file did not happen. The second tear you flagged at `daemon-store-dependencies.ts:141` is closed: I landed the missing `providerKeys` and roster bytes for that row as `c7456512` before approving it.\n\nThe two drill scratch files in your declaredFiles (`.interval-arms.tmp.ts`, `.browser-arms.tmp.ts`) are absent from disk and appear in no commit on any ref - correctly cleaned up.",
+      "timestamp": "2026-09-07T17:39:44.040Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T13:14:16.027Z",
-  "updatedAt": "2026-09-07T17:25:29.720Z",
+  "updatedAt": "2026-09-07T17:40:07.535Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T13:36:15.263Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-07T17:40:07.534Z",
+    "wallClockMs": 14632271
   },
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -198,7 +206,8 @@
   },
   "planApprovedAt": "2026-09-07T13:39:03.296Z",
   "contextFetchedBy": [
-    "worker-4d8571e7"
+    "worker-4d8571e7",
+    "qa-eaa78526"
   ],
   "workStartedAt": "2026-09-07T16:36:17.681Z",
   "blockedReason": null,
@@ -266,6 +275,26 @@
       "status": "REVIEW",
       "pushed": false,
       "message": "feat(task-620fb461): /deployments/health/read discloses the effective probe interval and the browser decoder preserves it. HAND-LANDED by the delivering worker because wrapper checkpoint 51275d3c withheld these five paths as Moe-Contested by three non-terminal peer rows, which tore HEAD (HEAD carried a REQUIRED probeIntervalMs on DeploymentsHealthSource while HEAD's composition did not supply it). daemon-store-foundation-composition.ts landed BY HUNK (+17, deploymentsHealth only); task-1f994315's backupReads hunks left dirty for their own row."
+    },
+    {
+      "sha": "dc1117e2a9590494dfc2f067168df5c41db23e89",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-4d8571e7@2026-09-07T17:12:35Z",
+      "paths": [
+        ".moe/tasks/task-1f994315fd164a789424349cb7bba4ca.json",
+        ".moe/tasks/task-620fb461689441d6bd1fed23ce62aff7.json",
+        ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+        ".moe/tasks/task-bd2f1ecf186f4ab5884c2a3ada07108e.json",
+        ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json",
+        "apps/daemon/src/daemon-store-foundation-composition.ts"
+      ],
+      "recordedBy": "worker-4d8571e7",
+      "recordedAt": "2026-09-07T17:27:43.309Z",
+      "treeId": "925f9c7443be4abe092ad9c7f62290434c7d8c3e",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -276,20 +305,23 @@
     "apps/control-room/src/live/live-deployments-health.ts",
     "apps/control-room/src/live/live-deployments-health.test.ts",
     "apps/control-room/src/v2/ops/environments-section.test.tsx",
-    "apps/control-room/src/v2/ops/live-environments.test.tsx"
+    "apps/control-room/src/v2/ops/live-environments.test.tsx",
+    ".moe/tasks/task-1f994315fd164a789424349cb7bba4ca.json",
+    ".moe/tasks/task-620fb461689441d6bd1fed23ce62aff7.json",
+    ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+    ".moe/tasks/task-bd2f1ecf186f4ab5884c2a3ada07108e.json",
+    ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json"
   ],
   "touchedFiles": [
     ".interval-arms.tmp.ts",
     ".browser-arms.tmp.ts"
   ],
-  "unattributedPaths": [
-    "apps/daemon/src/orchestrator/agent-wrapper.test.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "completion",
-    "sessionId": "worker-4d8571e7@2026-09-07T17:13:35Z",
-    "at": "2026-09-07T17:23:55.056Z"
+    "sessionId": "worker-4d8571e7@2026-09-07T17:12:35Z",
+    "at": "2026-09-07T17:27:43.309Z"
   },
   "blockedOnTaskIds": null,
   "reviewStartedAt": "2026-09-07T17:25:29.720Z",
@@ -299,5 +331,8 @@
     "outputTail": "$ vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  590 passed (590)\n      Tests  10524 passed | 8 skipped (10532)\n   Start at  20:13:58\n   Duration  331.94s (transform 26.63s, setup 0ms, import 323.11s, tests 913.66s, environment 29ms)\n\nDAEMON_LEG_EXIT=0",
     "reportedAt": "2026-09-07T17:25:29.720Z"
   },
-  "completionSummary": "`/deployments/health/read` now discloses `probeIntervalMs`, the EFFECTIVE per-environment probe interval, and the browser decoder preserves it. Landed as **16dd6174** (hand-landed — see below).\n\nThe value enters through `DeploymentsHealthSource`, supplied by composition calling the parent's `probeIntervals.read(environment)` per request, so \"read through the port, never recomputed in the read\" is structural, not merely stated. Plain required `number`, never nullable: the parent already collapsed stored-vs-default into one effective value. A port refusal returns verbatim with its own code and layer — it is never laundered into 60000. Browser side: required member, exact-key roster 9→10, and a `duration()` guard (strictly positive safe integer) that fails the WHOLE frame closed rather than dropping the member.\n\nGATES (comment-5187c008 has them verbatim):\n- `pnpm --filter @moe/daemon test` EXIT 0 — `Test Files 590 passed (590)` / `Tests 10524 passed | 8 skipped (10532)`\n- `pnpm --filter @moe/control-room test` EXIT 0 — `Test Files 195 passed (195)` / `Tests 2517 passed (2517)`\n- `pnpm typecheck` EXIT 1, **foreign**: the entire failure set is two TS2741s in `apps/daemon/src/http/runs-read.ts` about `declaredMigrations`, from task-de65294b's in-flight dirty edit. Failing paths ∩ my paths = EMPTY. `pnpm --filter @moe/control-room typecheck` EXIT 0, proven non-vacuous by a planted control that answered `TS2741: Property 'probeIntervalMs' is missing ... but required in type 'EnvironmentHealthView'`.\n\nQA MUST READ comment-c2257bf3. I HAND-LANDED this row: checkpoint 51275d3c withheld 5 of 8 paths as `Moe-Contested` by three non-terminal peers, which TORE HEAD (a required `probeIntervalMs` landed without the composition supplying it). I landed the shared composition BY HUNK — `git diff --cached | grep -ic backup` = 0 — leaving task-1f994315's `backupReads` bytes dirty and theirs. A SECOND tear at HEAD is theirs and still open: `daemon-store-dependencies.ts:141` reads `fromEnv"
+  "completionSummary": "`/deployments/health/read` now discloses `probeIntervalMs`, the EFFECTIVE per-environment probe interval, and the browser decoder preserves it. Landed as **16dd6174** (hand-landed — see below).\n\nThe value enters through `DeploymentsHealthSource`, supplied by composition calling the parent's `probeIntervals.read(environment)` per request, so \"read through the port, never recomputed in the read\" is structural, not merely stated. Plain required `number`, never nullable: the parent already collapsed stored-vs-default into one effective value. A port refusal returns verbatim with its own code and layer — it is never laundered into 60000. Browser side: required member, exact-key roster 9→10, and a `duration()` guard (strictly positive safe integer) that fails the WHOLE frame closed rather than dropping the member.\n\nGATES (comment-5187c008 has them verbatim):\n- `pnpm --filter @moe/daemon test` EXIT 0 — `Test Files 590 passed (590)` / `Tests 10524 passed | 8 skipped (10532)`\n- `pnpm --filter @moe/control-room test` EXIT 0 — `Test Files 195 passed (195)` / `Tests 2517 passed (2517)`\n- `pnpm typecheck` EXIT 1, **foreign**: the entire failure set is two TS2741s in `apps/daemon/src/http/runs-read.ts` about `declaredMigrations`, from task-de65294b's in-flight dirty edit. Failing paths ∩ my paths = EMPTY. `pnpm --filter @moe/control-room typecheck` EXIT 0, proven non-vacuous by a planted control that answered `TS2741: Property 'probeIntervalMs' is missing ... but required in type 'EnvironmentHealthView'`.\n\nQA MUST READ comment-c2257bf3. I HAND-LANDED this row: checkpoint 51275d3c withheld 5 of 8 paths as `Moe-Contested` by three non-terminal peers, which TORE HEAD (a required `probeIntervalMs` landed without the composition supplying it). I landed the shared composition BY HUNK — `git diff --cached | grep -ic backup` = 0 — leaving task-1f994315's `backupReads` bytes dirty and theirs. A SECOND tear at HEAD is theirs and still open: `daemon-store-dependencies.ts:141` reads `fromEnv",
+  "completedAt": "2026-09-07T17:40:07.534Z",
+  "reviewCompletedAt": "2026-09-07T17:40:07.534Z",
+  "reviewSummary": "APPROVED. Detail in comment-277ad7ab. I took full-suite-gate myself (17:30:18Z-17:39Z, GATE START/END posted, released) and ran all three of DoD 5's legs rather than grading the transcript.\n\ndaemon test EXIT 0 - Test Files 590 passed (590) / Tests 10529 passed | 8 skipped. pnpm typecheck EXIT 0, all 19 packages Done - so the TS2741 declaredMigrations red the worker honestly disclosed has CLEARED. control-room test EXIT 1 with 9 failures, ALL foreign by git status: 8 in the UNTRACKED live-backups.test.ts, 1 in live-document-proxy.test.ts whose pin lags the DIRTY dev-proxy-paths.ts now carrying /backups/read - both task-679cdaa3 mid-write. Failing paths INTERSECT owned paths = EMPTY. Targeted: this row's 2 daemon files 42 passed, its 3 control-room files 63 passed, EXIT 0.\n\nDoD 1: composition calls probeIntervals.read per request and returns refusals verbatim; no 60000 minted in the read. DoD 2: the entry test writes through record.write, reads back with record.read, and moves the value before/after over a socket; the seam arm also pins not.toBe(DEFAULT_PROBE_INTERVAL_MS). DoD 3: roster 9->10 with a strictly-positive-safe-integer guard; nine malformed shapes each assert the full {code, layer, status} envelope AND not.toHaveProperty; an omitted key refuses the WHOLE frame; the roster arm accepts the new key and still refuses an unknown one. DoD 4: production and staging asserted separately and not.toBe each other, plus an untouched environment on the default - that third environment catches a leaked resolver. DoD 5: fixtures backfilled across all eight owned files.\n\nLANDING: checkpoint 51275d3c withheld 5 of 8 paths as contested and tore HEAD; the worker hand-landed 16dd6174 by hunk, dc1117e2 carried the rest. All three are ancestors of origin, every owned path clean against HEAD, grep -c backupReads = 2 there, so the two-way contest stranded nothing. The two drill scratch files in declaredFiles exist on no ref."
 }
