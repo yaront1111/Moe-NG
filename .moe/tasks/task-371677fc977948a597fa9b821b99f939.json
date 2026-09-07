@@ -1,0 +1,33 @@
+{
+  "id": "task-371677fc977948a597fa9b821b99f939",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "The five multi-node foundation modules take their identity as a parameter, with today's constants as defaults",
+  "description": "LEAF split out of task-6bafd3b9439640cba358dd6e79329c9d by architect-6e49a205 on 2026-09-07, which is the CONSUMER and now declares dependsOn against this row. That row's DoD 2 is this row's whole job; the remaining clauses (the control-room lane helper, the landing, the negative arm) stay there.\n\nWHY IT IS ITS OWN ROW. Measured at HEAD: parameterising is a self-contained, defaults-preserving refactor whose proof is the foundation suite staying green, and it has NO dependency on the control-room lane. The consumer half needs three module directories, three wrapper passes with the multi-node agent, an in-process criterion service and a landing on a lane whose scratch writes exactly ONE node spec — a different problem with different failure modes and a 15-minute journey gate. Landing them together would make one 15-minute red indistinguishable from the other.\n\nTHE FIVE MODULES AND WHAT IS FIXED IN EACH (measured, `wc -l` and grep at HEAD):\n- multi-node-graph-harness.ts (186) — the identity block at :46-66: GOAL_CREATE_COMMAND_ID/GOAL_ID, PROJECT_ID \"moe-e2e-multi-node\", CONTRACT_ID, REVISION_ID, OPERATOR_CREDENTIAL, AGENT_SESSION/SECRET, HUMAN_SESSION/SECRET, plus node keys ALPHA/BETA/OMEGA and CRITERIA.\n- multi-node-journey.ts (166) — `sealMultiNodeGraph(scratch, origin, clock)` closes over eleven imported constants.\n- multi-node-world.ts (167) — `worldPrelude` and `mintHumanPrincipal` close over GOAL_ID, OMEGA, OPERATOR_PRINCIPAL, CORRELATION_ID.\n- multi-node-wire.ts (157) — `daemonWire(origin, credential)` already takes both, but the csrf header at :48 uses CSRF_TOKEN IMPORTED FROM j1-loop-harness.js. Add a parameter defaulting to it; DO NOT edit j1-loop-harness.ts, which many other journeys share.\n- multi-node-criteria.ts (57) — `approveAndRunCriteria`/`closeCompletedGoal` close over CRITERIA, GOAL_ID, HUMAN_SECRET.\n\nNOT IN SCOPE, MEASURED: `multi-node-reads.ts` (265) hard-codes NO identity — `grep -n \"GOAL_ID\\|PROJECT_ID\\|MULTI_NODE_KEYS\\|CRITERIA\"` returns zero hits; it already takes them as arguments. Leave it alone.\n\nDOWNSTREAM IMPORTERS THAT MUST KEEP COMPILING UNCHANGED (they import the CONSTANTS, so keeping the consts exported as the defaults is what makes this a no-op for them): codex-journey-harness.ts (ALPHA), codex-seat-loop.e2e.test.ts (daemonWire, readSurface), j5-plan-reject-harness.ts (harness + wire + world), j5-plan-reject-replan.e2e.test.ts (GOAL_ID, daemonWire, readSurface), multi-node-reads.ts, multi-node-graph.e2e.test.ts. If any of these needs an edit, the defaults are not actually preserved — stop and say so rather than editing them.\n\nTHE CONSUMER ALSO NEEDS A SIXTH DIMENSION THE PARENT'S DoD DOES NOT NAME, and it belongs here because it is a change to these modules: `worldPrelude` replays the shipped seed's prelude THROUGH `project.activate` (multi-node-world.ts:46-71). The control-room lane has ALREADY run the shipped demo seed and activated its project, so the consumer needs to seal a graph WITHOUT re-running the prelude. Make the prelude injectable or skippable — same defaults-preserving rule: the foundation suite keeps running exactly the prelude it runs today.",
+  "definitionOfDone": [
+    "The five modules (multi-node-graph-harness.ts, multi-node-journey.ts, multi-node-world.ts, multi-node-wire.ts, multi-node-criteria.ts) take project id, operator credential, csrf token, goal identity and node identity as parameters, with every one of today's constants as the DEFAULT. The existing exported consts stay exported so the six downstream importers compile untouched.",
+    "The prelude is injectable or skippable in multi-node-journey.ts / multi-node-world.ts, so a caller whose project is ALREADY activated can seal a graph without replaying `project.activate`. The foundation path keeps running today's prelude by default.",
+    "DEFAULTS ARE PROVEN, NOT ASSERTED: `pnpm test:e2e` runs green with its count line quoted and tests/e2e/foundation/multi-node-graph.e2e.test.ts NAMED in the output. Unchanged behaviour, not merely unchanged source. If a foundation assertion has to weaken to make a constant a parameter, STOP and report blocked rather than weakening it.",
+    "A committed arm proves the parameterisation is real and not decorative: seal a graph under a NON-DEFAULT project id, goal id and credential against a throwaway daemon, and assert the daemon answered on those identities. A parameter that is never passed a non-default value is untested plumbing.",
+    "None of the six downstream importers is edited (`git diff --name-only` shows only the five modules plus this row's new test arm); each of the five stays under 250 physical lines, and gates are quoted with count lines: `pnpm test:e2e`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "THE FOUNDATION SUITE MUST STAY GREEN AND MUST STAY AS STRONG. Parameterising is a defaults-preserving refactor; if a foundation assertion has to weaken to make a constant a parameter, stop and split instead.",
+    "PARAMETERISE, DO NOT FORK. A copied multi-node harness under tests/e2e/control-room/ is a second authority that will drift from the one the foundation suite proves.",
+    "DO NOT EDIT j1-loop-harness.ts. multi-node-wire.ts imports CSRF_TOKEN from it and many unrelated journeys share it; take the token as a parameter defaulting to that import instead."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 43.5,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-07T11:02:52.186Z",
+  "updatedAt": "2026-09-07T11:02:52.186Z"
+}

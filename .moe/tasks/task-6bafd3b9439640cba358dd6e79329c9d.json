@@ -15,8 +15,90 @@
     "THE FOUNDATION SUITE MUST STAY GREEN AND MUST STAY AS STRONG. Parameterising is a defaults-preserving refactor; if a foundation assertion has to weaken to make a constant a parameter, stop and split instead.",
     "PARAMETERISE, DO NOT FORK. A copied multi-node harness under tests/e2e/control-room/ is a second authority that will drift from the one the foundation suite proves."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE, AND CONFIRM THE LEAF ACTUALLY LANDED WHAT THIS ROW CONSUMES. No edits. Record verbatim: (a) `git status --porcelain -- tests/e2e/` — foreign dirt is noted and continued past, never reverted or committed; (b) the leaf task-371677fc reached DONE, and from `get_context.epicSiblings` its completionSummary/verification rather than re-measuring HEAD; (c) `grep -n 'worldPrelude' tests/e2e/foundation/multi-node-journey.ts` showing the prelude is now injectable or skippable, and `grep -n 'export function sealMultiNodeGraph' -A6` showing its identity parameter — if either is still the old fixed form the leaf did not deliver and you must report blocked naming task-371677fc, NOT re-implement it here; (d) `grep -n 'MOE_WRAPPER_MAX_AGENTS\\|MOE_NODE_SPECS_DIR' tests/e2e/control-room/wrapper-lane.ts` confirming the lane still sets max-agents 1 and no specs-dir override, which is why step 4 runs three passes. Record the HEAD sha.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/multi-node-journey.ts",
+        "tests/e2e/foundation/multi-node-world.ts",
+        "tests/e2e/control-room/wrapper-lane.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE WORKSPACE THE GRAPH WILL BE BUILT IN. New `tests/e2e/control-room/lane-multi-node-workspace.ts`, a sibling of `lane-landing.ts` and written in its documented style. Export a function that takes the lane's git workspace and writes the three module directories the sealed graph expects — one per `MULTI_NODE_KEYS` entry — each carrying the node's own `test.mjs`, and COMMITS them with the same `laneGit`-shaped invocation `lane-landing.ts` uses (identity flags on the command line, GIT_* stripped). `math.mjs` is deliberately NOT written: the seat has to produce it, and the verifier's exit code is the only thing that decides whether it did — the same rule `createJ1Scratch` documents. Also export the seat double for these nodes, following `landingSeatDouble`'s three-file shape (`.js` plus a `.cmd` for win32 and a `.sh` for posix, both delegating to the one `.js`, because `agent-spawn-invocation.ts` runs a win32 seat through cmd.exe as a command LINE). The seat writes the node's `math.mjs` and exits 0. Keep this module under 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/lane-multi-node-workspace.ts",
+        "tests/e2e/control-room/lane-landing.ts",
+        "tests/e2e/foundation/multi-node-graph-harness.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/control-room/lane-multi-node-workspace.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "SEAL THE GRAPH ON THE LANE, PRELUDE SKIPPED. Begin new `tests/e2e/control-room/lane-contract-goal.ts` — the ONE helper DoD 1 names. It takes a `DaemonLane` and calls the leaf's parameterised `sealMultiNodeGraph` with the LANE's identity: `lane.projectId`, `lane.credential`, the lane's csrf token, and a lane-scoped goal id and node keys, WITH THE PRELUDE SKIPPED — the lane has already run the shipped demo seed and activated its project, so replaying `project.activate` is the one thing that cannot work here. Import the foundation modules; do NOT copy them (task rail 3: a second harness under tests/e2e/control-room/ is a second authority that will drift). Assert the seal's own result — a `runId` matching `/^run-/` and the three sealed nodes with OMEGA depending on ALPHA and BETA — so a seal that silently sealed nothing cannot pass. Every leg throws with the daemon's own refusal frame, naming the fence that answered.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/lane-contract-goal.ts",
+        "tests/e2e/foundation/multi-node-journey.ts",
+        "tests/e2e/foundation/multi-node-wire.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/control-room/lane-contract-goal.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "DELIVER THE THREE NODES WITH THE REAL WRAPPER. Still in `lane-contract-goal.ts`: run the lane's `startWrapper` for THREE passes — ALPHA and BETA are independent and OMEGA is blocked until both land, and the lane sets `MOE_WRAPPER_MAX_AGENTS: \"1\"`, so one seat delivers one node per pass. Build the environment by SPREADING `wrapperEnv(scratch, seatCommand, WRAPPER_INTERVAL_MS, true)` and adding the three keys the foundation run sets: `MOE_NODE_SPECS_DIR: \"\"` so only COMPILED nodes are staffed (the lane's single operator spec is irrelevant — compiled missions come from the sealed graph), `MOE_NODE_TEST_COMMAND`, and `MOE_NODE_WORKSPACE` pointing at the lane's git workspace. Do NOT edit `wrapper-lane.ts` or `daemon-ports.ts` — both are task-cf2d91d9's declared paths and `wrapperEnv` already returns a plain record. Wait on the wrapper transcript the way `landLaneNode` does, and kill every wrapper in a `finally` on EVERY exit path including the throwing and timing-out ones; return each pid so the caller's teardown can prove no orphan survived. Assert after each pass that the expected node delivered and that OMEGA stayed undelivered until its producers landed — an assertion that only checks the final state cannot tell a working dependency gate from a broken one.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/lane-contract-goal.ts",
+        "tests/e2e/control-room/wrapper-lane.ts",
+        "tests/e2e/control-room/lane-multi-node-workspace.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "APPROVE THE CRITERIA, VERIFY, CLOSE, AND LAND. Finish `lane-contract-goal.ts` by calling the leaf's parameterised `approveAndRunCriteria` and `closeCompletedGoal` against the lane, then compose `landLaneNode` so the goal is LANDED — DoD 3 — asserting the returned sha with `/^[0-9a-f]{40}$/` and that it moved off `lane.workspaceSha`. If landing genuinely cannot compose here, DoD 3 permits stating exactly why in the module's own comment and what it does instead; state it plainly rather than implying it landed. Note in a comment that `approveAndRunCriteria` opens the store while the daemon holds the same file — that is the established WAL second-writer pattern `clearPause` already documents, not a hazard being introduced here. The helper RETURNS the goal, and its own arm asserts the three things DoD 1 names, read through the production readers: `readCriterionGoal` is ok, `readReleaseDossierInput` is non-null, and the criteria carry no gaps. NOTHING IS HAND-SEEDED: every durable fact came through a shipped command kind over the daemon's real HTTP edge, and a store row written directly here is fabricated authority that rejects the row.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/lane-contract-goal.ts",
+        "tests/e2e/control-room/lane-landing.ts",
+        "apps/daemon/src/criterion-evidence/criterion-goal.ts",
+        "apps/daemon/src/release/release-durable-facts.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE COMMITTED NEGATIVE ARM — DoD 4, and the arm that proves this row was needed at all. New `tests/e2e/control-room/contract-goal.spec.ts`. On a SHIPPED-SEED lane, assert `readCriterionGoal` refuses with code EXACTLY `COMPILED_CONTRACT_BINDING_ABSENT` AND layer EXACTLY `CRITERION_EVIDENCE` — both, per global rail 1; asserting only that it failed is one added refusal layer away from vacuous. On the helper's goal, assert it is ok. The two arms must run against genuinely different lanes, not the same lane read twice. Verify the negative arm by mutating the production surface until it goes red, then restore — and because these spec files are new and UNTRACKED, `git diff` is blind to them: `git status --porcelain` the exact paths before drilling and prove the restore by SHA256 equality against an out-of-tree backup in a call SEPARATE from the restore.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/contract-goal.spec.ts",
+        "tests/e2e/control-room/lane-contract-goal.ts",
+        "apps/daemon/src/criterion-evidence/criterion-goal.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/control-room/contract-goal.spec.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATES AND ADVERSARIAL SELF-REVIEW, one concentrated pass. Run each leg FOREGROUND and STANDALONE, reading the OUTPUT not the exit code — an exit-0 leg with no `Test Files N passed` count line RAN NOTHING. Legs, all quoted with their count lines: `npx tsc -p tests/e2e/control-room/tsconfig.json` FIRST (the browser script is `tsc && playwright test`, so a tsc failure means zero specs ran); `pnpm test:e2e` with `tests/e2e/foundation/multi-node-graph.e2e.test.ts` NAMED in the output, proving this row did not disturb the foundation journey; `pnpm --filter @moe/daemon test`; `pnpm typecheck`; and `pnpm test:e2e:browser` under the `browser-e2e-gate` lease with its SPEC COUNT quoted. One gate at a time. Record the merge-base and HEAD failure sets for the repo-wide legs and path-attribute the delta against this row's owned paths — that intersection must be EMPTY; disclose foreign red verbatim with its exact failing paths and never certify it green. Then read your own diff as an attacker: can any exit path leak a wrapper, a seat, the daemon or the dev server? Does the negative arm still fail if the refusal code is changed to a neighbouring one? Did anything get hand-seeded? Were `daemon-ports.ts` or `wrapper-lane.ts` touched (they must not be)? Are both new modules under 250 lines? Finally confirm `git status --porcelain` shows only paths you own plus the foreign dirt from step 1, and report every touched path in `complete_step.modifiedFiles`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/control-room/lane-contract-goal.ts",
+        "tests/e2e/control-room/lane-multi-node-workspace.ts",
+        "tests/e2e/control-room/contract-goal.spec.ts",
+        "tests/e2e/foundation/multi-node-graph.e2e.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -26,8 +108,48 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 35.5,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-5dab8da5ac324c88a8869c80676a144c",
+      "author": "architect-6e49a205",
+      "content": "SPLIT AT PLAN TIME, plus two corrections to the filed shape. Measured at HEAD, 2026-09-07.\n\n1. SPLIT. DoD 2 (parameterise the foundation modules) is now leaf row **task-371677fc977948a597fa9b821b99f939**, filed in PLANNING; this row's `dependsOn` names it and WORKING claims are gated until it is DONE. The remaining clauses (the lane helper, the landing, the negative arm, the gates) stay here.\n\nWHY, not as paperwork: the parameterisation is a defaults-preserving refactor whose whole proof is the foundation suite staying green, and it has zero dependency on the control-room lane. The helper needs three module directories, three wrapper passes with real seats, an in-process criterion service and a landing, on a lane whose scratch writes exactly ONE node spec. BOTH halves gate on ~15-minute journeys (`JOURNEY_TIMEOUT_MS = 900_000` in multi-node-graph.e2e.test.ts), so landing them together makes one long red indistinguishable from the other. Rail: name every consumer at plan time, and a split that would otherwise be discovered at step 5 is a plan-time split.\n\n2. CORRECTION — THE ROW SAYS FIVE MODULES; `multi-node-reads.ts` IS NOT ONE OF THEM AND NEEDS NO WORK. `grep -n \"GOAL_ID\\|PROJECT_ID\\|MULTI_NODE_KEYS\\|CRITERIA\" tests/e2e/foundation/multi-node-reads.ts` returns ZERO hits — it already takes identity as arguments. Related: `multi-node-wire.ts:23` does not define the csrf token, it IMPORTS `CSRF_TOKEN` from `j1-loop-harness.js`, which many unrelated journeys share — so the parameter defaults to that import and `j1-loop-harness.ts` is never edited. Both facts are recorded on the leaf row's description and rails.\n\n3. A SIXTH PARAMETER DIMENSION NOBODY NAMED, and it is why this row cannot start first. `sealMultiNodeGraph` opens with `for (const planned of worldPrelude(scratch, clock)) await send(wire, planned)`, and `worldPrelude` (multi-node-world.ts:46-71) replays the shipped seed's prelude **through `project.activate`**. The control-room lane has ALREADY run the shipped demo seed and activated its project. Sealing on the lane therefore needs the prelude SKIPPED, not merely re-identified. That is a change to the foundation modules, so it is a DoD clause on the leaf, not something this row can work around.\n\n4. THE LANE ENVIRONMENT NEEDS NO SHARED-FILE EDIT. `wrapperEnv` (wrapper-lane.ts:131) returns a plain frozen record, so the helper spreads it and adds the three keys the foundation run sets — `MOE_NODE_SPECS_DIR: \"\"` (so only COMPILED nodes are staffed; the lane's single operator spec is irrelevant because compiled missions come from the sealed graph), `MOE_NODE_TEST_COMMAND`, `MOE_NODE_WORKSPACE`. `daemon-ports.ts` and `wrapper-lane.ts` are task-cf2d91d9's declared paths and this plan edits NEITHER.\n\n5. THREE WRAPPER PASSES, NOT ONE. The lane sets `MOE_WRAPPER_MAX_AGENTS: \"1\"`, and ALPHA/BETA are independent while OMEGA depends on both — the same 2-producer-passes-plus-1-consumer-pass shape `multi-node-graph.e2e.test.ts` drives. The plan asserts OMEGA stayed undelivered until its producers landed, because an assertion that only checks the final state cannot distinguish a working dependency gate from a broken one.\n\n6. NO SHORTCUT TO \"criterion-verified\" EXISTS. `approveAndRunCriteria` refuses unless `ready.integratedArtifact !== null`, which only exists once nodes are delivered and landed. Anything lighter is hand-seeding, which this row's own rails forbid. Confirmed rather than assumed, so nobody re-litigates it mid-flight.",
+      "timestamp": "2026-09-07T11:05:17.722Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T05:41:06.478Z",
-  "updatedAt": "2026-09-07T05:41:06.478Z"
+  "updatedAt": "2026-09-07T11:05:17.722Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-07T11:00:16.539Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 12
+  },
+  "contextFetchedBy": [
+    "architect-6e49a205"
+  ],
+  "dependsOn": [
+    "task-371677fc977948a597fa9b821b99f939"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 12 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-07T11:04:57.210Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) PLAN ALL SIX DoD CLAUSES AS ONE ROW. REJECTED at plan time, which is where the rail says the split belongs. The parameterisation is a defaults-preserving refactor proven by the foundation suite; the helper needs three module directories, three wrapper passes, an in-process criterion service and a landing on a lane whose scratch writes exactly ONE node spec. Different failure modes, and BOTH gates are 15-minute journeys — landing them together makes one long red indistinguishable from the other. DoD 2 moved verbatim to the new leaf task-371677fc; this row's `dependsOn` now names it.\n(2) EDIT `wrapper-lane.ts` / `daemon-ports.ts` to give the lane a multi-node environment. REJECTED: both are task-cf2d91d9's declared paths, and `wrapperEnv` already returns a plain frozen record — the helper spreads it and adds `MOE_NODE_SPECS_DIR`/`MOE_NODE_TEST_COMMAND`/`MOE_NODE_WORKSPACE` locally, touching no shared lane file.\n(3) COMPOSE THE FOUNDATION `runWrapper`/`startDaemon` HARNESS. REJECTED: the control-room lane owns its own daemon and its own `startWrapper`, and `lane-landing.ts` already established the shape (seat double + real wrapper + `waitFor` on the transcript + kill in a `finally`). Copy that shape, not the foundation's process harness.\n(4) A LIGHTER PATH TO \"criterion-verified\" — approve criteria without delivering nodes. IMPOSSIBLE, measured: `approveAndRunCriteria` refuses unless `ready.integratedArtifact !== null`, which only exists once the nodes are delivered and landed. There is no shortcut that is not hand-seeding, which this row's own rails forbid.",
+    "codebaseInsights": "MEASURED AT HEAD, 2026-09-07, BY READING THE MODULES — the description's probe output is confirmed and its module claims are accurate except one, corrected below.\n\nTHE DESCRIPTION IS RIGHT ABOUT THE GAP. The lane seeds with the shipped demo seed, which drives `planning.create_draft`/`ready`/`claim`/`finalize_submission` and never reaches `runSubmitDecomposition`, the only place `compile-dispatcher.ts:290` mints the binding. So `readCriterionGoal` refuses `COMPILED_CONTRACT_BINDING_ABSENT` at layer `CRITERION_EVIDENCE` on the lane's `goal-live-1`. Both readers exist and are importable from an e2e spec: `readCriterionGoal` (apps/daemon/src/criterion-evidence/criterion-goal.ts:19) and `readReleaseDossierInput` (apps/daemon/src/release/release-durable-facts.ts:89). The TS6059 fear about importing apps/daemon from this directory is stale — `design-operator.spec.ts` already does it.\n\nONE CORRECTION TO THE FILED SHAPE: the row says \"the five foundation modules\", and `multi-node-reads.ts` (265 lines) is NOT among them and does NOT need parameterising — `grep -n \"GOAL_ID\\|PROJECT_ID\\|MULTI_NODE_KEYS\\|CRITERIA\"` on it returns ZERO hits; it already takes identity as arguments. Also `multi-node-wire.ts:23` imports `CSRF_TOKEN` from `j1-loop-harness.js` rather than defining it, so the csrf parameter defaults to that import and `j1-loop-harness.ts` (shared by many unrelated journeys) is never edited. Both facts are recorded on the leaf row.\n\nTHE SIXTH DIMENSION NOBODY NAMED, and the reason this row cannot start before the leaf lands: `sealMultiNodeGraph` opens with `for (const planned of worldPrelude(scratch, clock)) await send(wire, planned)`, and `worldPrelude` (multi-node-world.ts:46-71) replays the shipped seed's prelude THROUGH `project.activate`. The control-room lane has ALREADY run the shipped demo seed and activated its project. Sealing a graph on the lane therefore needs the prelude SKIPPED, not merely re-identified — which is why the leaf row carries a DoD clause for it.\n\nWHAT THE HELPER MUST DRIVE, read off `multi-node-graph.e2e.test.ts`: seal (HTTP) -> `MULTI_NODE_KEYS` = three nodes, ALPHA and BETA independent and OMEGA depending on both -> THREE wrapper passes, because `MOE_WRAPPER_MAX_AGENTS` is \"1\" on the lane and one seat delivers one node per pass -> `approveAndRunCriteria` (three approvals, one verify offer, then an in-process `createCriterionEvidenceService().advance()`) -> `closeCompletedGoal`. The foundation spec budgets `JOURNEY_TIMEOUT_MS = 900_000` for exactly this.\n\nTHE LANE ENVIRONMENT IS OVERRIDABLE WITHOUT TOUCHING A SHARED FILE. `wrapperEnv(scratch, command, intervalMs, landing)` (wrapper-lane.ts:131) returns a frozen plain record of `daemonEnv(scratch)` plus four knobs; the helper spreads it and adds the three the foundation sets (`MOE_NODE_SPECS_DIR: \"\"` so only COMPILED nodes are staffed, `MOE_NODE_TEST_COMMAND`, `MOE_NODE_WORKSPACE`). The lane's single operator node spec is irrelevant here — compiled nodes are resolved from the sealed graph, not from `nodeSpecsDir`.\n\nTHE SECOND-WRITER PATTERN IS ALREADY ESTABLISHED AND SAFE. `approveAndRunCriteria` opens `SqliteEventStore.openForProject(...)` while the daemon holds the same file; `clearPause` (wrapper-lane.ts:~160) does precisely this and documents why — SQLite is in WAL mode, so a second process may write while the wrapper polls.",
+    "risks": "THIS ROW CANNOT START UNTIL task-371677fc IS DONE. Its `dependsOn` enforces that. The prelude-skip and the identity parameters are that row's deliverables; a worker who finds them missing must NOT re-implement them here — that would fork the harness, which this row's own rail forbids.\n\nPROCESS LEAKS ARE THE REAL FAILURE MODE, and there are now more children than any previous lane row: the lane's daemon and dev server, up to three wrapper runs, the seats each spawns, and the landing wrapper. Every one must join the caller's `tracked` list and be killed in a `finally` on EVERY exit path including the refusing ones — copy `landLaneNode`'s shape exactly. A leaked wrapper keeps staffing against a store the lane deletes moments later, and a leaked process makes every later gate on this board inadmissible.\n\nTIME. The foundation journey budgets 900 s. This helper does the same work plus a landing, on a lane that also starts a browser. Budget generously and expect `pnpm test:e2e:browser` wall clock to grow substantially; run it under the `browser-e2e-gate` lease, one gate at a time.\n\nDO NOT WEAKEN A CONSUMER ASSERTION TO MAKE THE HELPER PASS. If the criterion chain refuses on the lane, the refusal IS the finding — report it with the daemon's own code and layer rather than narrowing the DoD. Equally, do not hand-seed: a store row written directly by the helper is fabricated authority and rejects the row by its own rail.\n\nSHARED CHECKOUT: `daemon-ports.ts` and `wrapper-lane.ts` are task-cf2d91d9's declared paths. This plan reads them and edits NEITHER. If a step finds it must, stop and report rather than taking the path.\n\nPER-FILE CAP: the helper is substantial. Split it across the two new modules named in the steps rather than letting either cross 250 lines.",
+    "keyFiles": [
+      "tests/e2e/control-room/lane-landing.ts",
+      "tests/e2e/control-room/daemon-ports.ts",
+      "tests/e2e/control-room/wrapper-lane.ts",
+      "tests/e2e/foundation/multi-node-journey.ts",
+      "tests/e2e/foundation/multi-node-criteria.ts",
+      "tests/e2e/foundation/multi-node-graph.e2e.test.ts",
+      "apps/daemon/src/criterion-evidence/criterion-goal.ts",
+      "apps/daemon/src/release/release-durable-facts.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-07T11:04:59.343Z"
 }

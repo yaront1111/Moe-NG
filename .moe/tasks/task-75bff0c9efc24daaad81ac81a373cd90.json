@@ -1,0 +1,40 @@
+{
+  "id": "task-75bff0c9efc24daaad81ac81a373cd90",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "A node author carries declared migration identifiers from authored planning source into the compiled node",
+  "description": "WRITER CHILD of task-122b55fd2c284174876bd1d5573bdcc5, filed by architect-dbe3631e 2026-09-07 under governor-afbde490's 20:30Z direction, which offered exactly this choice: \"bounded scope amendment (fields + recursion + writer path + version/compatibility policy per DoD 3) OR a writer child with corrected DoD/deps\". The writer child is the choice, because the authority half alone already occupies 9 files.\n\nTHE SPLIT, IN BUILD ORDER. task-122b55fd (this row's dependsOn) makes the durable node-authority format ABLE to carry a bounded migration declaration: the v3 roster member, its admission with duplicate REFUSAL, the version-scoped preimage so historical hashes never move, compose/project and the public export. THIS ROW makes an AUTHORED SOURCE able to state one and carry it through the compiler into that format. task-de65294bfa2649b99afc3aa4aa9399d0 then serves it over /runs/read and the browser decoder.\n\nTHE GAP, MEASURED AT HEAD 29f5d723 (re-measure before planning; global rail 6):\n- `packages/scheduler/src/node-authority/node-planning-source-format.ts` (232 lines) - NODE_PLANNING_SOURCE_SCHEMA_VERSION = 1 at :24, its own digest domain at :26, closed ENVELOPE_KEYS at :92 and DEPENDENCY_KEYS at :91. No migration member anywhere.\n- `packages/scheduler/src/node-authority/node-planning-source-codec.ts` (232 lines) - exact-key decode and reconstruction; `sameNodePlanningSourceBytes` at :229 is the byte-identity comparator.\n- `packages/scheduler/src/node-authority/node-planning-source-bounds.ts` (81 lines) - where a new bound belongs.\n- `apps/daemon/src/planning/v2-compiler/scheduler-node-planning-authority.ts` (122 lines) - `SOURCE_KEYS` at :15-18 is an EXACT four-name roster checked by `exact(snapshot.value, SOURCE_KEYS)` at :85, and the draft at :98-119 is written out FIELD BY FIELD. Both must carry the declaration or it is dropped between the authored source and the authority draft, silently.\n- `apps/daemon/src/planning/v2-compiler/authority-contracts.ts` (84 lines) - `V2CompilerNodeAuthorityRequest` carries no declaration.\n- `apps/daemon/src/delivery-v2/node-planning-source-record.ts` - forwards admitted encoded bytes wholesale (worker-f72a1438 measured :86-97, :130-147, persistence :99), so it needs no rewrite, but that claim needs a test rather than an assumption.\n\nAlso measured and NOT this row's to change: `compiled-policy-authority-body.ts:102-126` and `journey-authority-bodies.ts:126-144` write explicit drafts too. Decide at planning time whether they must forward the member or may legitimately declare none, and SAY WHICH - do not leave a second silent drop path.\n\nNOT IN SCOPE: the authority format itself (task-122b55fd owns the roster, the version policy, the preimage and the admission codes - consume them, do not redefine them), /runs/read and the browser decoder (task-de65294b), and the UI wording (task-78eedd8ebc2b43c581ac21ea28648a9a).",
+  "definitionOfDone": [
+    "An AUTHORED planning source can state zero, one or several bounded migration identifiers, and the source's own format version, canonical bytes, digest domain and bounds all account for the member. The exact-key decoder refuses an unknown key and a malformed member with a stable code AND the layer that refused; a source that states none is DISTINCT from a legacy source that states nothing, carrying task-122b55fd's UNKNOWN-vs-explicit-empty distinction rather than collapsing both.",
+    "THE COMPILER FORWARDS IT, ASSERTED END TO END: a declaration stated in authored source reaches the compiled NodeDefinition through the PRODUCTION path (`readNodePlanningDefinition`), asserted BY VALUE on the resulting definition - not on a hand-built draft and not by calling the authority codec directly. `SOURCE_KEYS` (scheduler-node-planning-authority.ts:15-18) and the explicit draft (:98-119) both name the member; a test proves the member survives the `exact(...)` roster check that would otherwise reject the wider source.",
+    "THE SILENT-DROP PATHS ARE CLOSED AND NAMED. Every site that writes an explicit NodeDefinition draft is enumerated whole-tree (`compiled-policy-authority-body.ts`, `journey-authority-bodies.ts`, `scheduler-node-planning-authority.ts` at minimum) with a verdict per site: forwards the declaration, or legitimately declares none and says why in a comment at the site. A site that neither forwards nor states its choice is the defect this clause exists to prevent.",
+    "TWO IDENTIFIERS BOTH SURVIVE the source codec, the compiler and the resulting definition, asserted by value AND by count - a path that keeps only the first passes every single-identifier fixture. DUPLICATES ARE REFUSED, not deduplicated: assert the specific code and layer, and confirm the refusal comes from the intended layer rather than from a second admission arm downstream.",
+    "BYTE IDENTITY AND FORWARDING ARE PROVED, NOT ASSUMED: `sameNodePlanningSourceBytes` still answers correctly across the new member, and `delivery-v2/node-planning-source-record.ts` forwarding admitted bytes wholesale is asserted by a test rather than claimed from a reading.",
+    "MUTATION DRILL, quoted with its failing line: drop the member from `SOURCE_KEYS` (or from the explicit draft) and confirm the end-to-end arm from DoD 2 goes RED. Restore per global rail 13 - `git status --porcelain` the mutated paths first, and prove an untracked path's restore by sha256 against an out-of-tree backup in a call separate from the restore.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/scheduler test` and `pnpm --filter @moe/daemon test` (this row spans both packages), plus `pnpm typecheck`. Root `pnpm test` covers no apps/** file, so say that rather than quoting a bare root count line. Any new runtime module needs its one-line tracked `.js` bridge, and any new cross-package import needs the manifest dependency plus the lockfile importer entry."
+  ],
+  "taskRails": [
+    "CONSUME task-122b55fd's AUTHORITY CONTRACT, DO NOT REDEFINE IT. The roster member name, its bound, its refusal codes, its layer and the UNKNOWN-vs-explicit-empty policy are that row's to set. If what landed does not fit this row's need, report blocked and have it amended - never mint a second spelling.",
+    "NO INFERENCE. A declaration is stated by the author or it does not exist. Never derive it from an objective, a filename, a diff, writeScopes or verifier output, and never default to an empty list at the output and call it authored (task-122b55fd rail 1).",
+    "ASSERT THROUGH THE PRODUCTION COMPILER PATH. `readNodePlanningDefinition` is the seam; a test that builds a draft by hand proves the authority codec works and proves nothing about the carrier this row exists to build.",
+    "DUPLICATES REFUSE, THEY DO NOT DEDUPLICATE. The generic scheduler list reader silently dedups and sorts (node-authority-fields.ts:76-77); do not reuse it for this member without confirming which behaviour task-122b55fd landed.",
+    "NO HISTORICAL REWRITE. An authored source that predates the member stays readable and keeps its bytes and its digest; do not migrate stored sources in place."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-122b55fd2c284174876bd1d5573bdcc5"
+  ],
+  "priority": "HIGH",
+  "order": 131,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-07T11:04:58.185Z",
+  "updatedAt": "2026-09-07T11:04:58.185Z"
+}
