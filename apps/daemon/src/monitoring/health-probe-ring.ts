@@ -215,20 +215,39 @@ export async function probeEnvironment(options: HealthProbeOptions): Promise<Hea
 }
 
 /** Composition owns the timer. A null durable path is not a license to create a cwd sidecar. */
-export function createHealthProbeJob(
-  options: Omit<HealthProbeOptions, "environment" | "ring" | "signal">,
-): (signal: AbortSignal) => Promise<void> {
+export type HealthProbeJobOptions = Omit<HealthProbeOptions, "environment" | "ring" | "signal">;
+type ProbeJob = (signal: AbortSignal) => Promise<void>;
+/** One ring, one abort contract, one failure code per tick; only the environment SOURCE differs. */
+function probeJob(options: HealthProbeJobOptions, environments: () => Iterable<string>): ProbeJob {
   const databasePath = options.store.getHealth().databasePath;
   if (databasePath === null) throw new Error("PROBE_STORE_UNAVAILABLE");
   const ring = createHealthProbeRing(`${databasePath}${HEALTH_PROBE_SIDECAR_SUFFIX}`, options.projectId);
   return async (signal) => {
     if (signal.aborted) return;
     let failure: HealthProbeCode | null = null;
-    for (const environment of readDeployLedger(options.store, options.projectId).keys()) {
+    for (const environment of environments()) {
       if (signal.aborted) return;
       const result = await probeEnvironment({ ...options, environment, ring, signal });
       if (!result.ok) failure = result.code;
     }
     if (!signal.aborted && failure !== null) throw new Error(failure);
   };
+}
+
+/** The sweep at the default rate. `dedicated` names environments that own a job at their own interval;
+ * probing them here as well would be the double schedule DoD 3 forbids. It is read PER TICK, so setting
+ * or clearing an interval needs no restart; empty by default, which is the shipped behaviour. */
+export function createHealthProbeJob(
+  options: HealthProbeJobOptions, dedicated: () => ReadonlySet<string> = () => new Set()): ProbeJob {
+  return probeJob(options, () => {
+    const skip = dedicated();
+    return [...readDeployLedger(options.store, options.projectId).keys()].filter((name) => !skip.has(name));
+  });
+}
+/** One environment, one schedule id, one interval; no receipt still refuses PROBE_RECEIPT_MISSING.
+ * `active` is read PER TICK: an arm whose interval record has been cleared probes NOTHING rather
+ * than racing the sweep that has already reclaimed the environment. */
+export function createEnvironmentHealthProbeJob(
+  options: HealthProbeJobOptions, environment: string, active: () => boolean = () => true): ProbeJob {
+  return probeJob(options, () => active() ? [environment] : []);
 }
