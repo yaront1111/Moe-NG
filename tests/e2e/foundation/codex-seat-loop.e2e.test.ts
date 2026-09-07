@@ -200,6 +200,13 @@ describe("the codex branch is what actually ran", () => {
       expect(record.argv).toContain("--skip-git-repo-check");
       expect(record.argv).toContain("--ephemeral");
       expect(record.argv).toContain("--sandbox");
+      // THE APPROVAL PAIR, on the argv the spawner actually handed the child. Without it,
+      // codex-cli 0.153.4 takes its `never` default and refuses every MCP tool call, so the
+      // seat can never reach work_get_context - measured 2026-09-07. Both halves are pinned
+      // because the policy is silently ignored unless a non-interactive reviewer is named.
+      expect(record.argv).toContain("approval_policy=on-request");
+      expect(record.argv).toContain("approvals_reviewer=auto_review");
+      expect(record.argv).not.toContain("approval_policy=never");
       expect(record.argv).toContain(
         "mcp_servers.moe-next.bearer_token_env_var=MOE_AGENT_MCP_BEARER",
       );

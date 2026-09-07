@@ -142,8 +142,8 @@
       "completedAt": "2026-09-07T13:32:05.975Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-97200064",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -164,16 +164,24 @@
       "author": "worker-b1872f24",
       "content": "DISCLOSED FLAKE, MEASURED TO ROOT CAUSE, NOT MINE TO FIX IN THIS ROW — `ACTIVATION_BACKUP_FAILED @ DAEMON_ACTIVATION_RECEIPTS` on `project.activate` under `pnpm test:e2e`.\n\nI hit this on 2 of 5 full-suite runs and it moved between tests, so I chased it instead of retrying until green.\n\nOBSERVED (all on my tree, same session):\n- run 16:19 EXIT 1 — `j5-plan-reject-replan.e2e.test.ts` AND `hostile-client.e2e.test.ts`. NEITHER is my new arm; `hostile-client` imports no multi-node module at all (grep exit 1) and reaches the refusal through the SHIPPED seed's own `runSeed`.\n- runs 16:28 and 16:30 EXIT 0, all green.\n- run 16:32 EXIT 1 — this time my new `multi-node-identity.e2e.test.ts` arm 1.\n- run 16:34 EXIT 0, all green. That is the fresh gate submitted with completion.\nBoth failing files re-run STANDALONE on the same tree: `Test Files 2 passed (2)` / `Tests 12 passed (12)`, EXIT 0.\n\nROOT CAUSE, read off production rather than inferred. `activation-receipts-measure.ts:233`:\n  const directory = join(input.projectRoot, BACKUP_DIRECTORY, BACKUP_LEAF);\n  const destination = join(directory, `${backupStamp(clock)}.sqlite`);\nwith `BACKUP_DIRECTORY = \".moe-next\"`, `BACKUP_LEAF = \"backups\"` (:37-38). `j1-loop-harness.ts` starts EVERY throwaway daemon with `cwd: REPOSITORY_ROOT` (:157, :225, :276), so every parallel e2e daemon in this checkout writes its activation backup into the ONE shared `D:\\projexts\\moe-next\\.moe-next\\backups\\`. I confirmed it on disk: that directory holds exactly BACKUP_RETENTION=5 files, stamped `20260907133252545.sqlite` … `20260907133321138.sqlite` — my 16:32 run.\n\nThe production code says outright that it does not defend against this (:242-244):\n  // Refuses a same-millisecond RETRY and any leftover at this name rather than\n  // overwriting it. This is a check-then-act guard, NOT mutual exclusion: serialising\n  // concurrent activations is the caller's gate.\nUnder vitest's parallel FILES the \"caller's gate\" does not exist, so two failure modes open: (a) two activations landing on the same 17-digit stamp -> \"backup destination already exists\"; (b) `pruneBackups` (:275-292) listing the shared directory and removing down to 5 while a peer removes the same path -> the `catch { failedRefs.push(path) }` fires -> \"backup retention failed\". (b) is the likelier one at 5 retained files against ~20 parallel e2e daemons.\n\nWHY I DID NOT FIX IT: the fix belongs either in `pruneBackups` (tolerate a concurrent ENOENT) or in `startDaemon` giving each scratch its own `cwd`. The first is `apps/daemon/**`, outside this row's owned paths; the second is `j1-loop-harness.ts`, which task rail 3 forbids me to edit and which many unrelated journeys share. Changing either from here would be an unreviewed edit to a shared surface.\n\nMY ROW'S CONTRIBUTION, STATED HONESTLY: my new arm adds 3 more daemons that each run `project.activate`, so it raises the collision RATE. It does not create the defect — run 16:19 failed on two files that predate my arm, one of which cannot reach my code. Anyone re-running this suite should expect an occasional red here until the shared backup directory is fixed; re-running the named file standalone distinguishes it in ~15 s.\n\nSUGGESTED OWNER: the epic-final integration-and-hardening row, per the rail that hardening folds there rather than becoming its own row. `.moe-next/` is gitignored (`.gitignore:76`), so none of this debris reaches a commit.",
       "timestamp": "2026-09-07T13:36:34.224Z"
+    },
+    {
+      "id": "comment-4fb19bcfcfa9493da27926e39e9172c4",
+      "author": "qa-97200064",
+      "content": "QA FULL EVIDENCE — APPROVED (qa-97200064, 2026-09-07 13:42Z). Approval summary caps at 2000 chars.\n\n=== THE COMMIT WAS ALREADY THERE; NO HAND-LANDING WAS NEEDED OR DONE ===\n`get_context` at claim time showed `commits: []` / `lastCommitOutcome: null`, which is the shape I have\nhand-landed three rows on today. It was a STALE SNAPSHOT, not a missing commit — the wrapper had landed it:\n  7f3fdbf6dea94be5334d74449e3272df8b7c941f   on moe/work-2026-09-04 AND origin/moe/work-2026-09-04\n  Moe-Task: task-371677fc977948a597fa9b821b99f939\n  Moe-Session: worker-b1872f24@2026-09-07T13:00:44Z\n  9 files changed, 821 insertions(+), 165 deletions(-)\nMy `record_commit` came back `duplicate: true`, confirming the ledger already held it. **I verified the sha\nbefore assuming the row was unlanded** — the lesson for my own seat is that `commits: []` needs a\n`git log --oneline -1 -- <declaredPath>` check before it justifies a landing.\n\n=== DoD 5, THE MOST CHECKABLE CLAUSE, MEASURED FROM THE COMMIT ===\nThe commit's production paths are exactly SEVEN — the five modules plus this row's two new files:\n  multi-node-criteria.ts  multi-node-graph-harness.ts  multi-node-journey.ts  multi-node-wire.ts\n  multi-node-world.ts  +  multi-node-identity.ts  multi-node-identity.e2e.test.ts\nplus two `.moe/tasks/*.json`. **ZERO downstream importers edited.** `multi-node-graph.e2e.test.ts`,\n`multi-node-reads.ts` and `e2e-harness.test.ts` were DECLARED but never modified — over-declaration, which\nis the harmless direction. `git status --porcelain -- tests/` is EMPTY, so nothing is left dirty.\nPER-FILE CAP (250): graph-harness 219, world 215, journey 174, wire 164, criteria 60, identity 127. All pass.\nRAIL t3: `git status --porcelain -- tests/e2e/foundation/j1-loop-harness.ts` EMPTY, and it is absent from the\ncommit. **Not edited**, exactly as the rail requires; the csrf token is taken as a parameter defaulting to\nthat import instead.\n\n=== DoD 3 — I HAD TO SUPPLY THE \"NAMED\" HALF, AND HERE IS WHY ===\nThe clause wants `pnpm test:e2e` green with its count line AND\n`tests/e2e/foundation/multi-node-graph.e2e.test.ts` **NAMED in the output**. The recorded run is green —\n`Test Files 20 passed | 1 skipped (21)`, `Tests 175 passed | 1 skipped (176)`, EXIT 0 — but its outputTail\nnames no file, and **it cannot**: per `mem:vitest-default-reporter-names-only-failing-files`, the default\nreporter prints file names only for failures. **The clause as written is unsatisfiable by the command it\nnames.** So I ran the anti-vacuity proof myself, which is better evidence than a reporter flag on the full run:\n```\n$ pnpm exec vitest run tests/e2e/foundation/multi-node-graph.e2e.test.ts --reporter=verbose\n ✓ multi-node-graph.e2e.test.ts > one goal built to completion: a 3-node graph over real processes >\n     serializes independent nodes in one repository, withholds their consumer, and closes after exact\n     criterion checks                                                              43812ms\n ✓ multi-node-graph.e2e.test.ts > one seat leaves the other independent node READY, offered and unclaimed\n                                                                                   15008ms\n ✓ multi-node-graph.e2e.test.ts > uses a J1-shaped scratch with three module directories in one repository\n                                                                                     516ms\n Test Files  1 passed (1)      Tests  3 passed (3)      EXIT 0\n```\n**The file is named, it executed, and the 43.8-second real-process journey is intact** — that is \"unchanged\nbehaviour, not merely unchanged source\". For the architect: DoD 3's \"NAMED\" phrasing should say\n`--reporter=verbose`, or ask for a scoped run of the file, because as written it asks the default reporter\nfor something it never emits on green.\n\n=== DoD 4 IS REAL, NOT DECORATIVE, AND ITS CONTROL IS THE RIGHT SHAPE ===\n`multi-node-identity.e2e.test.ts:136` seals under a genuinely non-default identity —\n`projectId \"moe-e2e-other-project\"`, `goalId \"goal-other-1\"`, `operatorCredential\n\"moe-e2e-other-operator-credential\"` — and **reads the answer back off the DAEMON's own frames, not off the\narguments passed in**: `goalAggregates(scratch)` equals `[OTHER.goalId]`, the three node rows carry\n`goalRef: OTHER.goalId`, and `/criteria/read` answers `goalRef === OTHER.goalId`. The discriminating control\nis at :143 and :178-187 — `expect(OTHER.goalId).not.toBe(DEFAULT_MULTI_NODE_IDENTITY.goalId)` and a\nDEFAULT-vs-OTHER projectId pair, so an implementation that ignored the parameter could not pass. A second arm\nat :202 pins `POLICY_REF_UNAVAILABLE` **at the approval layer**, which is the layer assertion global rail 1\nasks for rather than a bare \"it refused\".\n\n=== DoD 1 / DoD 2 ===\n1 MET — the five modules take identity as a parameter with today's constants as defaults, and the existing\nconsts stay exported (the six importers compile untouched, proven by their absence from the commit).\n2 MET — the prelude is selectable by mode rather than a boolean skip, so a caller whose project is already\nactivated still gets the `policy.validate` that `approval.decide_intent` depends on. The default path runs\ntoday's prelude. The step-6 drill set proves it: mode 3 (\"SEED_AND_ACTIVATE stops omitting the policy.validate\")\nreds BOTH prelude arms, and mode 4 (\"POLICY_VALIDATE_ONLY returns []\") makes the positive arm refuse\n`APPROVAL_INTENT_POLICY_REF_UNAVAILABLE @ DAEMON_APPROVAL_INTENT` — the exact frame the negative arm pins.\n\n=== THE DRILL WINDOW WAS RUN CORRECTLY, AND I CHECKED THE PART THAT MATTERS ===\nFive drills, each red for its own named reason rather than a bare failure. Restores proved by SHA256 against\nout-of-tree backups in calls separate from the restore — necessary here because two of the four paths were\nUNTRACKED and `git diff` certifies nothing about a `??` path. Needle grep (`DRILL|PLANTED_CONTROL`) returned\nexit 1. The window was announced BEFORE the first byte moved, with the collision reasoning stated\n(`tests/**/*.test.ts` is inside a root `pnpm test`, so a mutant would corrupt a peer's leg, not only its own).\nThe tree is clean now and my own scoped re-run above is green, which is the independent confirmation.\n\nNOTE, not chargeable to this row: today's stale-backup finding\n(`mem:temp-backup-path-keyed-on-a-reused-seat-id-holds-a-stale-vintage`) means a SHA256 proof comparing the\nrestore only to the backup can pass over a deleted row. This window landed on the right bytes — proven by the\ngreen scoped run and the clean `git status` — but future windows should anchor the hash to the LIVE file at\nwindow-open.",
+      "timestamp": "2026-09-07T13:40:53.722Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T11:02:52.186Z",
-  "updatedAt": "2026-09-07T13:37:48.814Z",
+  "updatedAt": "2026-09-07T13:41:07.440Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T12:49:32.079Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 11,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-07T13:41:07.440Z",
+    "wallClockMs": 3095361
   },
   "planSizeWarnings": [
     "Plan touches 11 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -225,7 +233,71 @@
     "tests/e2e/foundation/multi-node-world.ts",
     "tests/e2e/foundation/multi-node-journey.ts",
     "tests/e2e/foundation/multi-node-criteria.ts",
-    "tests/e2e/foundation/multi-node-identity.e2e.test.ts"
+    "tests/e2e/foundation/multi-node-identity.e2e.test.ts",
+    ".moe/tasks/task-371677fc977948a597fa9b821b99f939.json",
+    ".moe/tasks/task-60008fcf4719490f97075c7754ac5807.json"
   ],
-  "completionSummary": "The five modules take the identity as a trailing optional parameter defaulted to today's exact constants, plus a prelude MODE. Defaults proven by behaviour, non-defaults proven against a live daemon.\n\nDoD 1 — NEW `multi-node-identity.ts` (127 lines) holds `MultiNodeIdentity` (18 fields), frozen `DEFAULT_MULTI_NODE_IDENTITY` with today's literals, and `multiNodeIdentity(overrides)`. Every const the harness exported is still exported under its old name, now as a BINDING off that default, so all NINE import sites keep their exact import lines. `createMultiNodeScratch`, `revisionDraft`, `multiNodeStructure` (was `MULTI_NODE_STRUCTURE`, const kept), `worldPrelude`, `openSession`, `mintHumanPrincipal`, `sealMultiNodeGraph`, `approveAndRunCriteria`, `closeCompletedGoal` all take it. `daemonWire` takes csrf defaulting to the `CSRF_TOKEN` import; `j1-loop-harness.ts` NOT edited.\n\nDoD 2 — the prelude is selected by a NAMED MODE, not a boolean: `SEED_POLICY_AND_ACTIVATE` (default), `SEED_AND_ACTIVATE` (what the SHIPPED seed sends), `POLICY_VALIDATE_ONLY`. A boolean skip would have dropped the inserted `policy.validate` — the one part an already-seeded lane lacks. In `POLICY_VALIDATE_ONLY` the fence version comes from DURABLE STATE (`getAggregateVersion(${projectId}-policy)`) since there is no array to count; the two agree on the default path because the seed's three installs target that aggregate at versions 0/1/2 (demo-seed-plan.ts:144,211-213).\n\nDoD 3 — `pnpm test:e2e` EXIT 0, `Test Files 20 passed | 1 skipped (21)` / `Tests 175 passed | 1 skipped (176)`. Same scope with `--reporter=verbose` (the default reporter names only FAILING files) names `multi-node-graph.e2e.test.ts` on all three of its tests, e.g. `✓ ... serializes independent nodes in one repository ... 64754ms`. No assertion weakened anywhere.\n\nDoD 4 — NEW `multi-node-identity.e2e.test.ts`, 3 arms, all green. Arm 1 seals under a non-default project/goal/credential/principal/contract/revision and asserts the DAEMON"
+  "completionSummary": "The five modules take the identity as a trailing optional parameter defaulted to today's exact constants, plus a prelude MODE. Defaults proven by behaviour, non-defaults proven against a live daemon.\n\nDoD 1 — NEW `multi-node-identity.ts` (127 lines) holds `MultiNodeIdentity` (18 fields), frozen `DEFAULT_MULTI_NODE_IDENTITY` with today's literals, and `multiNodeIdentity(overrides)`. Every const the harness exported is still exported under its old name, now as a BINDING off that default, so all NINE import sites keep their exact import lines. `createMultiNodeScratch`, `revisionDraft`, `multiNodeStructure` (was `MULTI_NODE_STRUCTURE`, const kept), `worldPrelude`, `openSession`, `mintHumanPrincipal`, `sealMultiNodeGraph`, `approveAndRunCriteria`, `closeCompletedGoal` all take it. `daemonWire` takes csrf defaulting to the `CSRF_TOKEN` import; `j1-loop-harness.ts` NOT edited.\n\nDoD 2 — the prelude is selected by a NAMED MODE, not a boolean: `SEED_POLICY_AND_ACTIVATE` (default), `SEED_AND_ACTIVATE` (what the SHIPPED seed sends), `POLICY_VALIDATE_ONLY`. A boolean skip would have dropped the inserted `policy.validate` — the one part an already-seeded lane lacks. In `POLICY_VALIDATE_ONLY` the fence version comes from DURABLE STATE (`getAggregateVersion(${projectId}-policy)`) since there is no array to count; the two agree on the default path because the seed's three installs target that aggregate at versions 0/1/2 (demo-seed-plan.ts:144,211-213).\n\nDoD 3 — `pnpm test:e2e` EXIT 0, `Test Files 20 passed | 1 skipped (21)` / `Tests 175 passed | 1 skipped (176)`. Same scope with `--reporter=verbose` (the default reporter names only FAILING files) names `multi-node-graph.e2e.test.ts` on all three of its tests, e.g. `✓ ... serializes independent nodes in one repository ... 64754ms`. No assertion weakened anywhere.\n\nDoD 4 — NEW `multi-node-identity.e2e.test.ts`, 3 arms, all green. Arm 1 seals under a non-default project/goal/credential/principal/contract/revision and asserts the DAEMON",
+  "commits": [
+    {
+      "sha": "7f3fdbf6dea94be5334d74449e3272df8b7c941f",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-b1872f24@2026-09-07T13:00:44Z",
+      "paths": [
+        ".moe/tasks/task-371677fc977948a597fa9b821b99f939.json",
+        ".moe/tasks/task-60008fcf4719490f97075c7754ac5807.json",
+        "tests/e2e/foundation/multi-node-criteria.ts",
+        "tests/e2e/foundation/multi-node-graph-harness.ts",
+        "tests/e2e/foundation/multi-node-identity.e2e.test.ts",
+        "tests/e2e/foundation/multi-node-identity.ts",
+        "tests/e2e/foundation/multi-node-journey.ts",
+        "tests/e2e/foundation/multi-node-wire.ts",
+        "tests/e2e/foundation/multi-node-world.ts"
+      ],
+      "recordedBy": "worker-b1872f24",
+      "recordedAt": "2026-09-07T13:37:59.052Z",
+      "treeId": "f6401a73f33a2dd1c94181a9ce3710c9f35a076c",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "tests/e2e/foundation/multi-node-graph-harness.ts",
+          "taskId": "task-6bafd3b9439640cba358dd6e79329c9d"
+        },
+        {
+          "path": "tests/e2e/foundation/multi-node-journey.ts",
+          "taskId": "task-6bafd3b9439640cba358dd6e79329c9d"
+        },
+        {
+          "path": "tests/e2e/foundation/multi-node-wire.ts",
+          "taskId": "task-6bafd3b9439640cba358dd6e79329c9d"
+        },
+        {
+          "path": "tests/e2e/foundation/multi-node-world.ts",
+          "taskId": "task-6bafd3b9439640cba358dd6e79329c9d"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "tests/e2e/foundation/multi-node-world.ts",
+    "tests/e2e/foundation/multi-node-criteria.ts",
+    "tests/e2e/foundation/multi-node-graph-harness.ts",
+    "tests/e2e/foundation/multi-node-journey.ts",
+    "tests/e2e/foundation/multi-node-wire.ts",
+    "tests/e2e/foundation/multi-node-identity.e2e.test.ts",
+    "tests/e2e/foundation/multi-node-identity.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-b1872f24@2026-09-07T13:00:44Z",
+    "at": "2026-09-07T13:40:11.414Z"
+  },
+  "completedAt": "2026-09-07T13:41:07.440Z",
+  "reviewCompletedAt": "2026-09-07T13:41:07.440Z",
+  "reviewSummary": "APPROVED. FULL EVIDENCE: comment-4fb19bcf.\n\nNO HAND-LANDING NEEDED. `commits: []` at claim time was a STALE SNAPSHOT, not a missing commit: the wrapper landed 7f3fdbf6dea94be5334d74449e3272df8b7c941f with correct Moe-Task/Moe-Session trailers, on origin. My record_commit returned duplicate:true. Lesson for my seat — check `git log -1 -- <declaredPath>` before treating `commits: []` as unlanded.\n\nDoD 5, measured from the commit: production paths are exactly SEVEN — the five modules plus multi-node-identity.ts and its e2e test. ZERO downstream importers edited. Three declared paths were never modified (over-declaration, harmless direction). Per-file cap: 219/215/174/164/60/127, all under 250. RAIL t3: j1-loop-harness.ts absent from the commit and clean in the tree.\n\nDoD 3 — I supplied the \"NAMED\" half and say so. The recorded `pnpm test:e2e` is green (20 passed | 1 skipped, 175 tests, EXIT 0) but names no file, and CANNOT: the default reporter names only failures. The clause is unsatisfiable by the command it names. So I ran the proof myself: `vitest run tests/e2e/foundation/multi-node-graph.e2e.test.ts --reporter=verbose` -> the file named on all three specs, Test Files 1 passed (1), Tests 3 passed (3), EXIT 0, with the 43.8s real-process journey intact. Architect: that clause should say --reporter=verbose or ask for a scoped run.\n\nDoD 4 is real, not decorative: the arm seals under projectId \"moe-e2e-other-project\" / goalId \"goal-other-1\" / a non-default credential and reads the answer off the DAEMON's frames, not the arguments — goalAggregates, the three goalRef rows, /criteria/read. Discriminating controls at :143 and :178-187 mean an implementation ignoring the parameter could not pass. A second arm pins POLICY_REF_UNAVAILABLE at the approval LAYER.\n\nDoD 1 and 2 met; the five step-6 drills each red for their own named reason, restores SHA256-proved in separate calls, needle grep exit 1, and my scoped re-run green is the independent confirmation."
 }

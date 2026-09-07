@@ -1,0 +1,150 @@
+{
+  "id": "task-eb37494e47924b659a0a1a77060b36eb",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "The probe-interval command is dispatched and its handler writes through the interval store port",
+  "description": "SPIDR sibling cut off task-749e585afc534762941d0cb6a54ec433 by architect-dbe3631e on 2026-09-07, because that row's full scope measured TWENTY-TWO distinct files and moe.submit_plan hard-rejected it at the twenty-file cap.\n\nTHE CUT, ALONG THE INTERFACE/DATA AXIS AND IN BUILD ORDER:\n- task-749e585afc (this row's dependsOn) keeps the SURFACE and the FENCE: the kind on the shared runtime roster, the regenerated client, the digest mirrors, the two apps/control-room roster count pins, and BOTH human-only fences (mcp-tool-allowlist.ts and agent-spawn-contract.ts) with their arms. The fence lands WITH the advertisement deliberately, so the kind is never advertised unfenced.\n- THIS ROW takes the DISPATCH REGISTRATION and the HANDLER: the daemon vocabulary, payload keys and registry entry, the handler itself, and the bidirectional roster-coverage arm.\n- It also dependsOn task-078232fb9b9d4c06a5faf3c02adaf705, which owns the per-environment interval STORE PORT this handler writes through. A handler with nothing to write to is a producer with no consumer edge.\n\nPRECEDENT FOR THE SPLIT: the board already cut this exact shape in two. task-b3888068 (DONE) landed the environment kinds on the shared roster and the generated client; task-a2409cba (DONE) published them operator-only. Read both completion records.\n\nMEASURED AT HEAD 4710d60b by architect-dbe3631e (re-measure before editing; global rail 6). The registration sites for a deployment-family kind, read off `deployment.set_target`:\n- `apps/daemon/src/daemon-command-vocabulary.ts:73` (capability) and its family roster near :392.\n- `apps/daemon/src/daemon-command-payload-keys.ts:181` - the EXACT payload key roster; set_target's is [\"environment\",\"network\",\"sshTarget\",\"url\"]. This roster is what a browser dispatch must match exactly.\n- `apps/daemon/src/daemon-command-registry.ts` - the registry entry and its prerequisite layer; arm at `daemon-command-registry.test.ts:136`.\n- EXACT-LIST arms that enumerate deployment kinds and will red until updated: `daemon-command-registry.test.ts:390` and `:412`, `daemon-command-vocabulary.test.ts:310`.\n- `apps/daemon/src/daemon-store-dependencies.test.ts` enumerates provider keys and rosters by exact list; confirm whether it needs an entry.\n- WARNING measured: `deployment.set_target` is ALSO on `BOOTSTRAP_COMMAND_KINDS` (`bootstrap-contracts.ts:51`) and in `bootstrap-sequence.ts:46`, which is what puts it on the affordance offer surface. A probe-interval command is very likely NOT a bootstrap kind. MEASURE before copying that half - a wrong entry there mints an unplanned offer on the operator's surface.\n- THE BIDIRECTIONAL ARM TO COPY: `apps/daemon/src/http/affordance-read.test.ts:521-566` reads the served set off the PRODUCTION dispatch table and compares sorted arrays BOTH ways, with a control line proving the filter still discriminates.\n\nNOT IN SCOPE: the shared runtime roster, the generated client, the digest mirrors, the control-room count pins and the human-only fences (all task-749e585afc); the durable interval record, its store port, its bounds, the scheduler and boot re-registration (all task-078232fb); and the health-read disclosure.",
+  "definitionOfDone": [
+    "The kind is REGISTERED IN THE DAEMON DISPATCH - vocabulary capability and family, an exact payload-key roster naming the environment and the interval and nothing more, and a registry entry with its prerequisite layer. Every exact-list roster arm that enumerates deployment kinds is updated by ADDING the kind, never by loosening the assertion.",
+    "THE HANDLER WRITES THROUGH task-078232fb's INTERVAL STORE PORT - no second write path and no direct store access. Read that port's real signature off disk; if it does not carry what the handler needs, moe.report_blocked naming that row rather than writing a second path. BOUNDS AND REFUSALS ARE THE PORT'S: the handler re-implements neither, so the command and the scheduler cannot drift apart on what a legal interval is.",
+    "REFUSALS ASSERT CODE **AND** LAYER, for an out-of-range interval and for an unknown environment. The handler, the port and the store can each refuse; an arm that checks only a code cannot tell which one answered and stays green when the wrong layer starts answering first.",
+    "ROSTER COVERAGE IS BIDIRECTIONAL AND ASSERTED AS SET-EQUALITY, with the SERVED side enumerated from the DISPATCH SEAM'S HANDLED KINDS - never from the roster constant. Adding the kind to two lists and observing they match is a tautology. If no such arm exists for this kind's family, write one; if one exists but is subset-only, strengthen it and say which it was.",
+    "MUTATION DRILL, quoted with its failing line: remove the dispatch registration while leaving the kind advertised on the shared roster, and confirm the coverage arm reds ON THE SERVED SIDE. A subset-only arm stays green, which is exactly what this drill exists to expose. Restore per global rail 13 - prove any untracked path by sha256 against an out-of-tree backup in a call separate from the restore.",
+    "THE KIND IS NOT ADDED TO BOOTSTRAP_COMMAND_KINDS OR THE BOOTSTRAP SEQUENCE unless measurement shows it belongs there, and the measurement is recorded either way. A wrong entry mints an unplanned offer on the affordance surface.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test` and `pnpm typecheck`. A bare root `pnpm test` covers NO apps/** file and is not evidence here. Any new runtime module needs its one-line tracked `.js` bridge."
+  ],
+  "taskRails": [
+    "CONSUME THE PORT, DO NOT REDEFINE IT. task-078232fb owns the interval store port, its bounds and its refusal vocabulary. Re-implementing a bound here is a second source of truth that drifts from the scheduler's.",
+    "DO NOT TOUCH THE SHARED ROSTER, THE GENERATED CLIENT, THE DIGEST MIRRORS OR THE FENCES. task-749e585afc owns them and lands first; a second edit there collides with its owner in the shared worktree.",
+    "THE SERVED SIDE COMES FROM THE IMPLEMENTATION SEAM. A coverage arm that iterates the roster can only prove 'advertised implies served' and stays green while a served capability vanishes from the advertised surface.",
+    "ASSERT CODE AND LAYER ON EVERY REFUSAL. Several layers can refuse the same call; say which one did.",
+    "MEASURE BEFORE COPYING THE BOOTSTRAP HALF of deployment.set_target's registration. It is a bootstrap kind; this one very likely is not."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "READ BOTH DEPENDENCIES OFF DISK — no edits, and this step decides whether the row can proceed. Record verbatim: (a) `git status --porcelain -- apps/daemon/src` — note foreign dirt, never revert or commit it; two siblings are live in this worktree; (b) task-749e585afc is DONE and what it landed: the KIND CONSTANT and its exact spelling, and whether the kind is already present in BOTH `OPERATOR_ONLY` lists (`daemon-command-registry.test.ts:403` and `daemon-command-vocabulary.test.ts:~300`) — those are FENCE rosters it owns, not this row's, so if either lacks the kind, report against that row rather than editing its files; (c) task-078232fb is DONE and the interval store port's REAL SIGNATURE — the write function, its argument shape, its bounds and its refusal codes WITH their layers. Do not restate or re-spell either; if the port does not carry what the handler needs, `moe.report_blocked` naming task-078232fb (task rail 1). Measured at planning time BOTH were WORKING and `git grep -rn 'PROBE_INTERVAL\\|probe_interval\\|set_probe_interval' -- apps packages` returned NOTHING, which is why this plan names no literal. Record the HEAD sha.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "SETTLE THE BOOTSTRAP QUESTION FIRST, BECAUSE A WRONG ANSWER MINTS AN OFFER — DoD 6. `bootstrap-contracts.ts:44-56` states the membership criterion in its own comment: the roster holds kinds whose EFFECTS ARE ASYNCHRONOUS — `repository.bootstrap`, `deployment.set_target` (because the DEPLOY that follows runs docker and ssh), `deployment.deploy`, `deployment.migrate_down` (dumps a database) — each admitting through the bootstrap surface and then served asynchronously. Measure this kind against that criterion: a probe-interval write is an ordinary synchronous durable write with no external effect. RECORD THE MEASUREMENT EITHER WAY, including the negative, and do NOT add the kind to `BOOTSTRAP_COMMAND_KINDS` or to `bootstrap-sequence.ts` unless the measurement says it belongs. A wrong entry there puts an unplanned card on the operator's affordance surface. This determines step 5's scope: if the kind is NOT a bootstrap kind, the existing set-equality arm in `affordance-read.test.ts` does not cover it and a new arm must be written.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+        "apps/daemon/src/bootstrap/bootstrap-sequence.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "REGISTER THE KIND IN THE DAEMON DISPATCH. Three sites, following `deployment.set_target`: the capability and the family roster in `daemon-command-vocabulary.ts` (:73 and near :392); the EXACT payload-key roster in `daemon-command-payload-keys.ts` (:181) naming the environment and the interval AND NOTHING MORE — note the neighbouring comment's rule that `projectId` is absent BY CONSTRUCTION on every kind because it comes from the authenticated principal, so it must not appear here either; and the registry entry with its prerequisite layer in `daemon-command-registry.ts`. Update the DISPATCH roster arm `REGISTRATION_ORDER` (`daemon-command-registry.test.ts:369`) and the entry arm beside `:136` by ADDING the kind, never by loosening an assertion to a subset or a partial match. Do NOT touch either `OPERATOR_ONLY` list — those are task-749e585afc's fences (task rail 2), and it lands first, so the kind should already be in both.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE HANDLER, WHICH VALIDATES NOTHING IT DOES NOT OWN. New runtime module serving the kind: it decodes its exact payload, resolves the project from the AUTHENTICATED PRINCIPAL (never from the payload), and writes THROUGH task-078232fb's interval store port — no second write path and no direct store access (task rail 1). BOUNDS AND REFUSALS ARE THE PORT'S: do not re-implement a range check here, or the command and the scheduler acquire two different opinions about a legal interval. Forward the port's refusal outward carrying ITS code and ITS layer unrestamped, so a failing call names the layer that actually answered. Ship the one-line tracked `.js` bridge beside it (DoD 7) — without it plain node cannot load the module. Keep the module under 250 lines. Then its arms: the happy path writes through the port exactly once with the decoded values; an OUT-OF-RANGE interval and an UNKNOWN ENVIRONMENT each refuse with CODE **AND** LAYER asserted (DoD 3) — three layers can refuse this call, so an arm that checks only a code stays green the day a different one answers first.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployments/probe-interval-command.ts",
+        "apps/daemon/src/deployments/probe-interval-command.js",
+        "apps/daemon/src/deployments/probe-interval-command.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/deployments/probe-interval-command.ts",
+        "apps/daemon/src/deployments/probe-interval-command.js",
+        "apps/daemon/src/deployments/probe-interval-command.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE BIDIRECTIONAL COVERAGE ARM — DoD 4, and the row's real deliverable. Measured: the existing set-equality arm (`affordance-read.test.ts:552-558`) compares `SERVED_BOOTSTRAP_KINDS` against `BOOTSTRAP_COMMAND_KINDS` and therefore covers BOOTSTRAP kinds ONLY. If step 2 concluded this kind is not one, NO arm covers it and you must WRITE one; if an arm for this family exists but is subset-only, STRENGTHEN it and say in the note which it was. Copy the METHOD, not the roster: enumerate the SERVED side from the dispatch seam's handled kinds — the registry's own table — never from the roster constant, and assert sorted SET-EQUALITY both ways. Carry over the discriminating control line the template keeps beside its tautology-prone assertion (`expect([\"not.a.served.kind\"].filter(...)).toEqual([\"not.a.served.kind\"])`), because that control is what stops the new arm passing vacuously. Adding the kind to two lists and observing they match proves nothing.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/http/affordance-read.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE DRILL — DoD 5, the only proof step 5's arm is real. `git status --porcelain` the exact paths FIRST. Then REMOVE THE DISPATCH REGISTRATION while LEAVING the kind advertised on the shared roster, and confirm the coverage arm reds ON THE SERVED SIDE — a subset-only arm stays green under exactly this mutation, which is why the DoD names it. Quote the failing line verbatim. Restore per global rail 13: `git diff -- <path>` empty is a valid proof for TRACKED files ONLY; the handler module, its `.js` bridge and its test are NEW and therefore UNTRACKED, so prove each restore by SHA256 equality against an out-of-tree backup, taken in a call SEPARATE from the restore — a copy can silently no-op and 'the command returned' is not evidence the bytes moved. Also confirm `daemon-store-dependencies.test.ts` — which enumerates provider keys and rosters by exact list — either needs an entry or does not, and record which; a missing entry there reds a file this row did not name.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATES AND ADVERSARIAL SELF-REVIEW. Each leg FOREGROUND and STANDALONE; read the OUTPUT, not the exit code — no `Test Files N passed` line means nothing ran. Legs quoted with count lines: `pnpm --filter @moe/daemon test` and `pnpm typecheck`. A bare root `pnpm test` covers NO `apps/**` file and is not evidence here. Repo-wide legs are a PATH-ATTRIBUTED BASELINE: merge-base failures, HEAD failures, delta intersected with owned paths must be EMPTY; disclose foreign red verbatim with its failing paths, never waive it. Then read the diff as an attacker: does the coverage arm read its served side from the dispatch seam, or did it quietly become a roster-to-roster comparison? Did the drill actually redden it (step 6 — confirm the restores held, by SHA256 for the untracked files)? Was any exact-list assertion loosened rather than extended? Did either `OPERATOR_ONLY` list, the shared runtime roster, the generated client, a digest mirror or any file owned by task-078232fb get touched — all of which are out of scope and belong to live siblings? Does the payload roster carry `projectId` (it must not)? Does the handler re-implement any bound the port owns? Is the `.js` bridge tracked? Report every touched path in `complete_step.modifiedFiles`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/deployments/probe-interval-command.ts",
+        "apps/daemon/src/daemon-command-payload-keys.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-749e585afc534762941d0cb6a54ec433",
+    "task-078232fb9b9d4c06a5faf3c02adaf705"
+  ],
+  "priority": "MEDIUM",
+  "order": 133,
+  "comments": [
+    {
+      "id": "comment-9e6adb31305d4abe89893b9445998e84",
+      "author": "architect-6e49a205",
+      "content": "PLANNING MEASUREMENT. HEAD, 2026-09-07. One scope correction that would otherwise cause a collision with a live sibling, plus the bootstrap answer the DoD asks for.\n\n1. NEITHER DEPENDENCY HAS LANDED, so this plan names no kind literal and no port signature. `task-749e585afc` (surface + fences) is WORKING; `task-078232fb` (interval store port) is WORKING; `git grep -rn \"PROBE_INTERVAL\\|probe_interval\\|set_probe_interval\" -- apps packages` returns NOTHING. Step 1 reads both off disk. `dependsOn` already gates the WORKING claim on both, so nothing needs blocking.\n\n2. **SCOPE CORRECTION — two of the three \"exact-list arms\" the description names belong to the SIBLING, not here.** Measured what each list actually is:\n- `daemon-command-registry.test.ts:369` `REGISTRATION_ORDER` (contains the :390 line) — a DISPATCH roster. **This row owns it.**\n- `daemon-command-registry.test.ts:403` `OPERATOR_ONLY` (contains the :412 line) — a FENCE roster.\n- `daemon-command-vocabulary.test.ts:~300` `OPERATOR_ONLY` — also a FENCE roster.\n\nTask rail 2 assigns the human-only fences to task-749e585afc, which lands FIRST as this row's dependsOn — so by the time this row runs, the kind should already be in both `OPERATOR_ONLY` lists and neither will red here. If one does red, that means the sibling did not add it: report against task-749e585afc rather than editing its files. It is live in the shared worktree and a second edit there collides with its owner.\n\n3. THE BOOTSTRAP ANSWER, from the roster's own stated criterion (DoD 6). `bootstrap-contracts.ts:44-56` says membership is for kinds whose **EFFECTS ARE ASYNCHRONOUS** — `deployment.set_target` is there because the DEPLOY that follows runs docker and ssh; `migrate_down` because it dumps a database; each \"admits through this surface and is then served asynchronously\". A probe-interval write is an ordinary synchronous durable write with no external effect, so by that rule it does **not** belong on `BOOTSTRAP_COMMAND_KINDS` or in `bootstrap-sequence.ts`. The plan requires the measurement recorded either way, including the negative, because a wrong entry mints an unplanned card on the operator's affordance surface.\n\n4. THAT ANSWER DETERMINES DoD 4's BRANCH. The bidirectional arm the description points at (`affordance-read.test.ts:552-558`) compares `SERVED_BOOTSTRAP_KINDS` against `BOOTSTRAP_COMMAND_KINDS` — it covers **bootstrap kinds only**. If this kind is not one, no coverage arm covers it at all, and DoD 4's \"if no such arm exists for this kind's family, write one\" is the branch that fires. Copy that arm's METHOD, not its roster: served side off the dispatch seam's handled kinds, sorted set-equality both ways — and carry over its discriminating control line (`expect([\"not.a.served.kind\"].filter(...)).toEqual([\"not.a.served.kind\"])`), which the template keeps precisely because the assertion above it is a tautology while its exemption list is empty. Without that control the new arm can pass vacuously, and DoD 5's drill is the only thing that proves otherwise.\n\n5. ONE PAYLOAD-ROSTER RULE WORTH NOT REDISCOVERING. The comment beside `daemon-command-payload-keys.ts:181` records that `projectId` is absent BY CONSTRUCTION from every kind's roster — it comes from the authenticated principal. The new roster must name the environment and the interval and nothing more.\n\n6. RESTORE PROOF: the handler module, its `.js` bridge and its test are all NEW, so `git diff` is blind to them. DoD 5's drill restore must be proved by SHA256 against an out-of-tree backup, in a call separate from the restore (global rail 13). The `.js` bridge itself is required and must be tracked — without it plain node cannot load the module.",
+      "timestamp": "2026-09-07T13:45:22.420Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-07T13:41:19.368Z",
+  "updatedAt": "2026-09-07T13:45:22.420Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-07T13:42:33.882Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 12
+  },
+  "planSizeWarnings": [
+    "Plan touches 12 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-07T13:45:03.001Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) COPY `deployment.set_target`'S REGISTRATION WHOLESALE. REJECTED on the measurement the row asked for: `set_target` is on `BOOTSTRAP_COMMAND_KINDS` (bootstrap-contracts.ts:51) and the roster's OWN comment states the membership criterion — kinds whose EFFECTS ARE ASYNCHRONOUS (`deployment.deploy` runs docker and ssh; `migrate_down` dumps a database), which 'admit through this surface and are then served asynchronously'. A probe-interval write is an ordinary synchronous durable write with no external effect, so by the roster's own stated rule it does NOT belong there. Step 2 records the measurement either way, as DoD 6 requires.\n(2) UPDATE ALL THREE EXACT-LIST ARMS THE DESCRIPTION NAMES. REJECTED, and this is the plan's main scope correction — two of the three are FENCE rosters owned by the sibling. See codebaseInsights.\n(3) REUSE THE EXISTING BIDIRECTIONAL ARM at affordance-read.test.ts. NOT AVAILABLE: measured, that arm compares `SERVED_BOOTSTRAP_KINDS` against `BOOTSTRAP_COMMAND_KINDS` — it covers BOOTSTRAP kinds only. If this kind is not one (see 1), no coverage arm covers it at all, and DoD 4's 'if no such arm exists for this kind's family, write one' is the branch that fires. Copy its METHOD — served side off the handler seam, sorted set-equality both ways, plus the discriminating control line — not its roster.\n(4) HAVE THE HANDLER VALIDATE THE INTERVAL BOUNDS. FORBIDDEN by task rail 1: task-078232fb owns the bounds and the refusal vocabulary, and a second bound here drifts from the scheduler's. The handler passes through and forwards the port's refusal with its own code and layer.",
+    "codebaseInsights": "MEASURED AT HEAD, 2026-09-07, per global rail 6. Both dependencies are still open and one scope boundary in the description is wrong.\n\nNEITHER DEPENDENCY HAS LANDED. `task-749e585afc` (surface + fences) is **WORKING**; `task-078232fb` (interval store port) is **WORKING**. `git grep -rn 'PROBE_INTERVAL\\|probe_interval\\|set_probe_interval' -- apps packages` returns NOTHING, so the kind constant does not exist and neither does the port. This plan therefore names no kind literal and no port signature; step 1 reads both off disk. `dependsOn` already gates WORKING claims on both, so nothing is blocked by this.\n\nTHE SCOPE CORRECTION — TWO OF THE THREE 'EXACT-LIST ARMS' BELONG TO THE SIBLING, NOT HERE. The description names `daemon-command-registry.test.ts:390` and `:412` and `daemon-command-vocabulary.test.ts:310` as arms that 'will red until updated'. Measured, they are:\n- `daemon-command-registry.test.ts:369` `REGISTRATION_ORDER` (the list containing :390) — a DISPATCH roster. THIS ROW owns it.\n- `daemon-command-registry.test.ts:403` `OPERATOR_ONLY` (the list containing :412) — a FENCE roster.\n- `daemon-command-vocabulary.test.ts:~300` `OPERATOR_ONLY` — also a FENCE roster.\nTask rail 2 assigns the human-only fences to task-749e585afc, which lands FIRST as this row's dependsOn. So by the time this row runs, the kind should ALREADY be in both `OPERATOR_ONLY` lists and neither will red here. If one DOES red, that means the sibling did not add it — report against task-749e585afc rather than editing its files, because it is live in the shared worktree and a second edit there collides with its owner.\n\nTHE REGISTRATION SITES, CONFIRMED off `deployment.set_target`: capability at `daemon-command-vocabulary.ts:73` with the family roster near :392; the EXACT payload-key roster at `daemon-command-payload-keys.ts:181` (`set_target`'s is `[\"environment\",\"network\",\"sshTarget\",\"url\"]`, and the neighbouring comment records that `projectId` is absent BY CONSTRUCTION on every kind — it comes from the authenticated principal, so it must not appear in this kind's roster either); the registry entry with its prerequisite layer, whose arm is `daemon-command-registry.test.ts:136` (`kind: \"deployment.set_target\", layer: PREREQ_LAYER`).\n\nTHE BIDIRECTIONAL ARM TO COPY, AND WHAT IT ACTUALLY COVERS. `affordance-read.test.ts:552-558` asserts `[...SERVED_BOOTSTRAP_KINDS].sort()` equals `[...BOOTSTRAP_COMMAND_KINDS].sort()`, with its own comment recording exactly why the served side is read off the HANDLER SEAM and not the roster: 'an arm that iterated the roster could only ever prove advertised implies carded'. It also carries a deliberate discriminating control — `expect([\"not.a.served.kind\"].filter(...)).toEqual([\"not.a.served.kind\"])` — placed there because the line above it is a tautology while its exemption list is empty. Copy that control too; it is what stops the new arm passing vacuously.\n\nNEW RUNTIME MODULE = A TRACKED `.js` BRIDGE (DoD 7). Without it plain node cannot load the module — see `mem:gotcha-a-new-daemon-route-needs-a-js-bridge-or-plain-node-cannot-load-it`.",
+    "risks": "THE COVERAGE ARM IS THE ROW'S REAL DELIVERABLE, and it is the one thing that can be written so it proves nothing. DoD 4 says it outright: adding the kind to two lists and observing they match is a tautology. The served side MUST be enumerated from the dispatch seam's handled kinds — the registry's own table — never from the roster constant. DoD 5's drill is the only proof it worked: remove the dispatch registration while leaving the kind advertised, and the arm must red ON THE SERVED SIDE. A subset-only arm stays green, which is exactly what the drill exists to expose. If the drill does not redden, the arm is wrong — fix the arm, do not record a drill that proved nothing.\n\nTHREE LAYERS CAN REFUSE THE SAME CALL: the handler, the port, and the store beneath it. An arm asserting only a code cannot tell which answered and stays green the day a different layer starts answering first — the vacuity shape global rail 1 names. Every refusal arm asserts CODE **AND** LAYER, for the out-of-range interval and for the unknown environment.\n\nDO NOT RE-IMPLEMENT THE BOUNDS (task rail 1). If the port's landed signature does not carry what the handler needs, the required move is `moe.report_blocked` naming task-078232fb — not a second write path, not a local bound, not direct store access. A bound duplicated here drifts from the scheduler's silently.\n\nA WRONG BOOTSTRAP ENTRY MINTS AN UNPLANNED OFFER on the operator's affordance surface (DoD 6). The roster's own comment gives the criterion — asynchronous effects — so the measurement is cheap; record it either way, including the negative.\n\nSHARED WORKTREE, TWO LIVE SIBLINGS: task-749e585afc owns the shared roster, the generated client, the digest mirrors, the control-room count pins and both fences; task-078232fb owns the durable record, the port, the bounds, the scheduler and boot re-registration. This row edits NONE of those. `git status --porcelain` the paths first; foreign dirt is noted and continued past, never reverted, stashed or committed.\n\nEPIC RAIL 1 applies only if this row ends up touching `runtime-vocabulary.ts` — it should not, since the sibling owns the shared roster. If a step finds it must, STOP: that is the sibling's file and the four digest mirrors plus `pnpm --filter @moe/control-room test` come with it.",
+    "keyFiles": [
+      "apps/daemon/src/daemon-command-vocabulary.ts",
+      "apps/daemon/src/daemon-command-payload-keys.ts",
+      "apps/daemon/src/daemon-command-registry.ts",
+      "apps/daemon/src/daemon-command-registry.test.ts",
+      "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+      "apps/daemon/src/http/affordance-read.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-07T13:45:05.131Z"
+}

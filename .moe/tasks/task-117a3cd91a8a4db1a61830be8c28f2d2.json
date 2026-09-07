@@ -61,12 +61,12 @@
       "completedAt": "2026-09-07T10:19:42.193Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor 14:12Z — retiring a DOUBLE-HOLD, exactly as on task-8a6d6660 this morning. The codex spawn-surface gap is real and unchanged; it is now carried by dependsOn task-50aaab92 (the producer row I filed at 12:50Z), which gates every WORKING claim on this row on its own. Leaving the row BLOCKED as well achieves nothing and actively harms: BLOCKED with no blockedOnTaskIds and no blockedResourceId can never auto-unblock, so when task-50aaab92 lands this row would have stayed parked until a governor noticed by hand. It has already fired one dep-age alert against task-96957529 naming this row as an unmet BLOCKED prerequisite. dependsOn is the correct and sufficient gate; the row becomes claimable the moment its producer is DONE, with no governor in the loop. No DoD change, no plan change, no assignment. worker-b1872f24 claimed the producer task-50aaab92 at 13:38Z, so this is moving.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "dependsOn": [
@@ -99,7 +99,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T18:18:48.193Z",
-  "updatedAt": "2026-09-07T12:50:58.950Z",
+  "updatedAt": "2026-09-07T14:29:13.982Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:26:35.957Z",
     "plannedStepCount": 5,
@@ -131,8 +131,10 @@
     "worker-ca28be90"
   ],
   "workStartedAt": "2026-09-07T10:00:01.713Z",
-  "blockedReason": "SPAWN-SURFACE BLOCK, **NOT A QUOTA BLOCK**. Detail: comment-0daf2fcd, comment-e71b5ece, comment-cab9a6e3 on task-48932bec, step-1/3/4/5 notes.\n\nQUOTA ANSWERED (branch B): `codex exec \"say hi\"` EXIT 0, `Hi!`, codex 0.153.4 — reset ~28h BEFORE the `Sep 8th 2026 10:46 AM` its own refusal named. `mem:real-codex-limit-available-on-this-host` superseded: **this host can no longer produce a real provider limit on demand**; provider-pause.spec.ts's scripted double is right again.\n\nWORKED: fresh-store lane up; seed -> `READY node.deliver@node-live-livecodex2105097`. Provider chosen by the **DURABLE SETTING** (`project.set_agent_provider` -> HTTP 200 `AGENT_PROVIDER_SET`, `MOE_AGENT_COMMAND` verified UNSET) — positive evidence for task-8e793ae3/3a0478f5. DoD-3 met above bar: six durable `internal.wrapper.seat_start` rows carry `{\"agentVersion\":\"codex-cli 0.153.4\",\"provider\":\"codex\"}`, plus live argv (PID 53332; node 40484 -> cmd 61832 -> codex).\n\nTWO DEFECTS, both controlled:\n1. **MCP UNREACHABLE (load-bearing):** `MCP tool call requires approval, but approval policy is never`. The seat can never call `work_get_context`, so never `review_submit`/`work_release` — **no codex seat can deliver any node.**\n2. `--ignore-user-config` **silently downgrades** `--sandbox workspace-write` to `read-only` (codex-side, not a moe bug). Controls: user-config -> workspace-write; +ignore-user-config -> read-only; +ephemeral -> read-only (exonerated); danger-full-access -> honoured.\n\nDoD-1/2 **NOT MET — the node did not land, no landing sha exists.** Ledger after processes died: only `LandingBaselineRecorded | 1`, no `review.submit`. Baseline is written BEFORE a seat runs; quoting it would be fabrication.\n\nNO `blockedOnTaskIds` ON PURPOSE: findings sit on task-48932bec, already DONE — naming it would auto-unblock on a signal that fixes nothing. **ARCHITECT: a NEW row is needed on the codex spawn surface.** Recipe in `mem:task-task-117a3cd9-handoff`.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-07T10:22:49.736Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "SPAWN-SURFACE BLOCK, **NOT A QUOTA BLOCK**. Detail: comment-0daf2fcd, comment-e71b5ece, comment-cab9a6e3 on task-48932bec, step-1/3/4/5 notes.\n\nQUOTA ANSWERED (branch B): `codex exec \"say hi\"` EXIT 0, `Hi!`, codex 0.153.4 — reset ~28h BEFORE the `Sep 8th 2026 10:46 AM` its own refusal named. `mem:real-codex-limit-available-on-this-host` superseded: **this host can no longer produce a real provider limit on demand**; provider-pause.spec.ts's scripted double is right again.\n\nWORKED: fresh-store lane up; seed -> `READY node.deliver@node-live-livecodex2105097`. Provider chosen by the **DURABLE SETTING** (`project.set_agent_provider` -> HTTP 200 `AGENT_PROVIDER_SET`, `MOE_AGENT_COMMAND` verified UNSET) — positive evidence for task-8e793ae3/3a0478f5. DoD-3 met above bar: six durable `internal.wrapper.seat_start` rows carry `{\"agentVersion\":\"codex-cli 0.153.4\",\"provider\":\"codex\"}`, plus live argv (PID 53332; node 40484 -> cmd 61832 -> codex).\n\nTWO DEFECTS, both controlled:\n1. **MCP UNREACHABLE (load-bearing):** `MCP tool call requires approval, but approval policy is never`. The seat can never call `work_get_context`, so never `review_submit`/`work_release` — **no codex seat can deliver any node.**\n2. `--ignore-user-config` **silently downgrades** `--sandbox workspace-write` to `read-only` (codex-side, not a moe bug). Controls: user-config -> workspace-write; +ignore-user-config -> read-only; +ephemeral -> read-only (exonerated); danger-full-access -> honoured.\n\nDoD-1/2 **NOT MET — the node did not land, no landing sha exists.** Ledger after processes died: only `LandingBaselineRecorded | 1`, no `review.submit`. Baseline is written BEFORE a seat runs; quoting it would be fabrication.\n\nNO `blockedOnTaskIds` ON PURPOSE: findings sit on task-48932bec, already DONE — naming it would auto-unblock on a signal that fixes nothing. **ARCHITECT: a NEW row is needed on the codex spawn surface.** Recipe in `mem:task-task-117a3cd9-handoff`.",
+  "blockedOnTaskIds": null
 }

@@ -76,6 +76,39 @@ function spawnRuntime(
   // `-c` value as TOML and falls back to the raw literal, and that is what the cmd fence admits
   // (`UNQUOTABLE` in agent-spawn-invocation.ts refuses `"`). The roster value must be a TOML
   // SEQUENCE, so it uses single-quoted literals — agent-codex-roster.ts owns that measurement.
+  // THE APPROVAL PAIR (measured 2026-09-07, codex-cli 0.153.4, host Yaron-PC, graded on whether
+  // a real MCP server RECORDED a `tools/call` — the banner disagrees with argv here and grades
+  // nothing). Without it `exec` defaults to `approval_policy = never` and REFUSES every MCP tool
+  // call — `MCP tool call requires approval, but approval policy is never` — so no codex seat
+  // could reach `work_get_context`, hence none could deliver. `approval_policy=on-request` ALONE
+  // DOES NOT FIX IT: the parser accepts the key and the banner still reads `never`, because the
+  // policy is discarded until a NON-INTERACTIVE reviewer is named (`user | auto_review |
+  // guardian_subagent`). Narrower tiers were measured, not assumed: there is NO per-server
+  // approval knob (9 `mcp_servers.<name>.*` spellings answer `unknown configuration field` under
+  // `--strict-config`, which validates `-c` overrides — `enabled_tools` accepted in the same
+  // sweep proves the oracle discriminates), `--ask-for-approval` is not an `exec` flag, and
+  // `--approve-for-me` is this same mechanism but MUTUALLY EXCLUSIVE with `--sandbox`, so it
+  // would delete the role's sandbox from this argv.
+  //
+  // SECURITY NOTE — THIS WIDENS THE SEAT. Under `on-request` + `auto_review` the sandbox stops
+  // containing: a seat spawned `--sandbox read-only` was measured WRITING OUTSIDE ITS WORKSPACE,
+  // banner still `sandbox: read-only`. The model requests escalation, `auto_review` grants it
+  // with no human, and the escalated command runs unsandboxed — so `role.sandbox` below is now
+  // ADVISORY. Every tier that completes an MCP call also loses containment, so this is not a
+  // safe-vs-wide choice. `--ignore-user-config` still earns its place: it keeps the host's
+  // config and its MCP servers off the seat, which is what stops a seat reaching the real board.
+  //
+  // SEPARATE codex-cli 0.153.4 BEHAVIOUR, NOT A DEFECT IN THIS FILE — the flag is passed
+  // correctly, and reading "argv says workspace-write, banner says read-only" as a bug HERE is
+  // the obvious inference and it is FALSE; only the controls below separate the two. Measured:
+  // `--sandbox` CANNOT RAISE the mode above the `read-only` default when no config.toml supplies
+  // `sandbox_mode`. Controls: bare `--sandbox workspace-write` -> workspace-write; + `--ignore-
+  // user-config` -> read-only with NO error; + `--ephemeral` -> read-only (so `--ephemeral` is
+  // EXONERATED); + `danger-full-access` -> honoured. `--ignore-user-config` is NOT the cause
+  // either — a scratch CODEX_HOME with no config.toml downgrades identically; the host config
+  // sets `sandbox_mode = "danger-full-access"`, so control one was the flag NARROWING that.
+  // Moot for containment while the pair above makes the mode advisory anyway. Full table:
+  // `mem:gotcha-codex-exec-approval-pair-and-the-sandbox-mode-floor`.
   const attemptSpawn = (request: SpawnRequest): SpawnAttempt => {
     if (closed) throw new Error("AGENT_SPAWNER_CLOSED");
     const { codex: codexSeat, command } = spawnSeatFor(request.provider, options.command);
@@ -91,6 +124,10 @@ function spawnRuntime(
         "--skip-git-repo-check",
         "--ephemeral",
         "--sandbox", role.sandbox,
+        // BOTH halves or neither: the policy is discarded unless a non-interactive
+        // reviewer is named, and without the policy every MCP tool call is refused.
+        "-c", "approval_policy=on-request",
+        "-c", "approvals_reviewer=auto_review",
         "-c", `mcp_servers.moe-next.url=${trustedOrigin}`,
         "-c", `mcp_servers.moe-next.bearer_token_env_var=${CODEX_BEARER_VARIABLE}`,
         ...role.codexRosterArgs,

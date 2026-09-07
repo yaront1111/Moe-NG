@@ -107,8 +107,8 @@
       "completedAt": "2026-09-07T14:03:22.240Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-97200064",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -149,12 +149,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T19:16:23.587Z",
-  "updatedAt": "2026-09-07T14:05:59.067Z",
+  "updatedAt": "2026-09-07T14:06:20.215Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T20:03:48.019Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-07T14:06:20.215Z",
+    "wallClockMs": 64952196
   },
   "stepsCompleted": [
     "step-1",
@@ -250,6 +252,25 @@
       "status": "WORKING",
       "pushed": false,
       "message": "Hand-landing of the ONE path checkpoint 43355a9e skipped as Moe-Contested with task-136cbab2. Without it production deployment.migrate_down never receives the migrateDown seams at all and refuses MIGRATE_DOWN_UNCONFIGURED forever — the row would have shipped compiling and hollow. Contest is a planning-claim overlap only: task-136cbab2 has zero commits and none of its bytes are in the tree; every changed line is this row's (verified by filtering the hunks). Standalone: MigrateDownSeams already at HEAD via 43355a9e. Not pushed."
+    },
+    {
+      "sha": "f96b464e282a3712216c31a3fd01ede549cc4a8e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-ca28be90@2026-09-07T13:50:04Z",
+      "paths": [
+        ".moe/tasks/task-5d30948435524c6fa2789e1c033aafe7.json",
+        ".moe/tasks/task-60008fcf4719490f97075c7754ac5807.json",
+        ".moe/tasks/task-620fb461689441d6bd1fed23ce62aff7.json",
+        ".moe/tasks/task-679cdaa380874f55978e8790d770e37a.json",
+        ".moe/tasks/task-749e585afc534762941d0cb6a54ec433.json"
+      ],
+      "recordedBy": "worker-ca28be90",
+      "recordedAt": "2026-09-07T14:06:12.279Z",
+      "treeId": "108b98b73ceab2918748c1cb504f772805e66751",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -258,7 +279,12 @@
     "apps/daemon/src/daemon-command-registry.ts",
     "apps/daemon/src/deployment/migrate-down-test-fixtures.ts",
     "apps/daemon/src/deployment/migrate-down-real.test.ts",
-    "apps/daemon/src/deployment/migrate-down-host-context.test.ts"
+    "apps/daemon/src/deployment/migrate-down-host-context.test.ts",
+    ".moe/tasks/task-5d30948435524c6fa2789e1c033aafe7.json",
+    ".moe/tasks/task-60008fcf4719490f97075c7754ac5807.json",
+    ".moe/tasks/task-620fb461689441d6bd1fed23ce62aff7.json",
+    ".moe/tasks/task-679cdaa380874f55978e8790d770e37a.json",
+    ".moe/tasks/task-749e585afc534762941d0cb6a54ec433.json"
   ],
   "touchedFiles": [
     ".tmp-md-split.py",
@@ -269,8 +295,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "completion",
-    "sessionId": "worker-ca28be90@2026-09-07T13:50:00Z",
-    "at": "2026-09-07T14:02:15.406Z"
+    "sessionId": "worker-ca28be90@2026-09-07T13:50:04Z",
+    "at": "2026-09-07T14:06:12.279Z"
   },
   "priorHandoffs": [
     {
@@ -291,5 +317,8 @@
     "outputTail": " RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  17 passed (17)\n      Tests  596 passed | 1 skipped (597)\n   Start at  16:59:57\n   Duration  9.24s (transform 15.28s, setup 0ms, import 26.08s, tests 7.02s, environment 1ms)\n\nTRUE_EXIT=0",
     "reportedAt": "2026-09-07T14:03:55.684Z"
   },
-  "completionSummary": "DELIVERED: production migrate_down resolves host context PER ADMITTED ENVIRONMENT instead of holding one daemon-wide database URL.\n\nSix paths. `MigrateDownCommandOptions`' three optional strings replaced by one `hostContext?: (environment: string) => MigrateDownHostContext | null`, called with `identity.environment`; absent/null/partial keeps the SAME MIGRATE_DOWN_UNCONFIGURED @ DAEMON_COMMAND_SEAM 422, still ahead of every store read and engine effect. Zero authority change — no roster entry, no capability, no digest line in the diff.\n\nTHE WIRING WAS THE REAL DEFECT: `daemon-command-registry.ts` never forwarded `migrateDown` AT ALL, so production had always refused regardless of any value. Ninth conditional spread added. That path was SKIPPED from checkpoint 43355a9e as Moe-Contested with task-136cbab2 (zero commits, none of its bytes in the tree) — the row would have shipped compiling, green and hollow. Hand-landed by explicit single pathspec as **f916e033**, recorded via record_commit. QA: `git show f916e033 -- apps/daemon/src/daemon-command-registry.ts`.\n\nGATES, all TRUE_EXIT 0:\n- `pnpm --filter @moe/daemon test` — 580 files / 10383 passed | 7 skipped. ZERO failing files, so global rail 3's (AFTER − BEFORE) ∩ owned = ∅ with no foreign red to disclose.\n- `pnpm typecheck` — 19/20 projects, all Done.\n- `MOE_MIGRATION_RESTORE=1` live arm — 2 passed, ZERO skipped. FIRST Docker-backed run on this row; every earlier count line had the flag unset and was correctly labelled not-Docker-evidence. Teardown verified after, separate call: `docker ps -a -q | wc -l` = 0, no temp tree left.\n- scoped (recorded above) — 17 files / 596 passed | 1 skipped; that 1 skip IS the live arm with the flag unset.\n\nNOT RUN, stated plainly: root `pnpm test` (its include has no `apps/**`; this row is daemon-only), `@moe/control-room`, browser e2e. Epic rail 1's control-room census does not fire — zero roster/capability/digest lines in the diff.\n\nDISCLOSED, pre-existing: registry.ts is 585 lines"
+  "completionSummary": "DELIVERED: production migrate_down resolves host context PER ADMITTED ENVIRONMENT instead of holding one daemon-wide database URL.\n\nSix paths. `MigrateDownCommandOptions`' three optional strings replaced by one `hostContext?: (environment: string) => MigrateDownHostContext | null`, called with `identity.environment`; absent/null/partial keeps the SAME MIGRATE_DOWN_UNCONFIGURED @ DAEMON_COMMAND_SEAM 422, still ahead of every store read and engine effect. Zero authority change — no roster entry, no capability, no digest line in the diff.\n\nTHE WIRING WAS THE REAL DEFECT: `daemon-command-registry.ts` never forwarded `migrateDown` AT ALL, so production had always refused regardless of any value. Ninth conditional spread added. That path was SKIPPED from checkpoint 43355a9e as Moe-Contested with task-136cbab2 (zero commits, none of its bytes in the tree) — the row would have shipped compiling, green and hollow. Hand-landed by explicit single pathspec as **f916e033**, recorded via record_commit. QA: `git show f916e033 -- apps/daemon/src/daemon-command-registry.ts`.\n\nGATES, all TRUE_EXIT 0:\n- `pnpm --filter @moe/daemon test` — 580 files / 10383 passed | 7 skipped. ZERO failing files, so global rail 3's (AFTER − BEFORE) ∩ owned = ∅ with no foreign red to disclose.\n- `pnpm typecheck` — 19/20 projects, all Done.\n- `MOE_MIGRATION_RESTORE=1` live arm — 2 passed, ZERO skipped. FIRST Docker-backed run on this row; every earlier count line had the flag unset and was correctly labelled not-Docker-evidence. Teardown verified after, separate call: `docker ps -a -q | wc -l` = 0, no temp tree left.\n- scoped (recorded above) — 17 files / 596 passed | 1 skipped; that 1 skip IS the live arm with the flag unset.\n\nNOT RUN, stated plainly: root `pnpm test` (its include has no `apps/**`; this row is daemon-only), `@moe/control-room`, browser e2e. Epic rail 1's control-room census does not fire — zero roster/capability/digest lines in the diff.\n\nDISCLOSED, pre-existing: registry.ts is 585 lines",
+  "completedAt": "2026-09-07T14:06:20.215Z",
+  "reviewCompletedAt": "2026-09-07T14:06:20.215Z",
+  "reviewSummary": "APPROVED. FULL EVIDENCE: comment-87c6d512.\n\nRE-RAN MYSELF, ALL REPRODUCING: (a) the recorded verification command verbatim -> Test Files 17 passed (17) / Tests 596 passed | 1 skipped (597) EXIT 0. (b) DoD 4's LIVE arm, impossible before docker came up at 12:21Z -> `MOE_MIGRATION_RESTORE=1` on migrate-down-real.test.ts, Test Files 1 passed (1) / Tests 2 passed (2), ZERO SKIPPED, EXIT 0. (c) teardown after my own run, separate call: `docker ps -a -q | wc -l` = 0. The 1 skipped in (a) IS that arm with the flag unset, so the two together are the whole picture.\n\nTHE REAL DEFECT WAS THE PATH THE CHECKPOINT ALMOST ATE. `daemon-command-registry.ts` never forwarded `migrateDown` at all, so production had always refused regardless of any value — and it was withheld from checkpoint 43355a9e as Moe-Contested. The row would have shipped compiling, green and hollow. Now wired at both ends: `git show HEAD:` grep -c migrateDown gives 3 in the registry, 2 in async-entries. The single-pathspec landing f916e033 came BEFORE the long daemon leg, not after; all six declared paths are clean in the worktree and in HEAD.\n\nDoD 1-5 met. Secrecy is structural rather than promised: `unconfigured(field)` builds its message from a FIELD NAME, and the resolved databaseUrl reaches only the MigrationInput construction, never a refusal string. Zero authority change. The not-run legs are named with reasons, which is what makes a partial gate set admissible.\n\nTWO OBSERVATIONS, NEITHER CHARGEABLE: declaredPaths carries 22 entries of which 6 are real — 3 scratch `.tmp-md-*` files (absent from disk AND both commits, so nothing leaked, though not gitignored) and 13 other rows' task JSON. registry.ts is 585 lines, over cap, disclosed and pre-existing: this row adds 9 to a file already at 576.\n\nThe row changed hands mid-flight and the second seat's first act was to land the withheld path rather than gate a tree it could lose."
 }
