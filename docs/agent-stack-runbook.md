@@ -243,6 +243,130 @@ socket path — is evidence the CLI exists and could not reach a server, which i
 much closer to "stopped" than to "absent". **Try starting Docker Desktop before
 concluding the host lacks docker.**
 
+## Migrations: the backup comes first, and what each refusal means
+
+**A `pg_dump` runs BEFORE any migration, and a failed dump means NOTHING was
+applied.** That ordering is the whole point of the feature: it is the only thing
+standing between a bad migration and production data nobody can get back. If the
+dump cannot be taken the run is refused with `MIGRATION_BACKUP_FAILED` and the
+schema is left exactly as it was -- not "mostly applied", not "applied and then
+rolled back". A migration that ran after a failed backup is the precise scenario
+the receipt exists to make impossible.
+
+**Where the backup lives.**
+`<project>/.moe-next/backups/pre-migration/<environment>/<17-digit-timestamp>.sql`
+-- the same `.moe-next/backups` root the activation receipts already use, not a
+second location to search during an incident. The receipt carries the file's
+**sha256**; it does NOT carry the path, and the path deliberately never leaves
+the daemon module. The control room shows `Backup verified` plus the digest and
+offers no link, no href and no download: a database dump is a reference you
+quote to this runbook, never something a browser hands out.
+
+**The receipt.** Every run records exactly one `moe-migration-receipt/1`:
+`{version, projectId, requestId, receiptId, environment, sha, decidedAt,
+applied[], backupRef, outcome, refusal}` with `outcome` one of `APPLIED`,
+`REFUSED` or `REVERTED`. Read it back with `readMigrationReceipt(store,
+projectId, requestId)`; its verdict is served verbatim through
+`/activity/read`, so a refused migration reads differently from an applied one
+in the decision feed.
+
+**`backupRef` is NULLABLE, and a null backup is not a successful one.** A
+`MIGRATION_BACKUP_FAILED` receipt carries `backupRef: null` and `applied: []`.
+When `backupRef` IS present it is `<path>@sha256:<digest>`.
+
+**`REFUSED` alone does not tell you the schema's physical state -- read the
+code.** `MIGRATION_BACKUP_FAILED` means nothing ran. `MIGRATION_FAILED` means a
+migration file threw, and its `detail` NAMES THE FAILING FILE. All nine codes
+answer at layer `DAEMON_INGRESS`:
+
+- `MIGRATION_BACKUP_FAILED` -- the dump could not be taken (or its directory is
+  missing, is a symlink, or already holds that timestamp). Nothing was applied.
+- `MIGRATION_FAILED` -- a migration threw; `detail` is the file. Whatever ran
+  before it may have committed, which is why the backup is taken first.
+- `MIGRATION_IN_PROGRESS` -- another run holds `.migration.lock`. Wait; do not
+  delete the lock to force a second concurrent migration.
+- `MIGRATION_RECEIPT_INVALID` / `MIGRATION_RECEIPT_CONFLICT` /
+  `MIGRATION_RECEIPT_WRITE_FAILED` -- the record could not be decoded, collided
+  with a different record under the same id, or could not be persisted.
+- `MIGRATION_DOWN_BATCH_UNKNOWN` -- no such applied batch. **Nothing ran.**
+- `MIGRATION_DOWN_NOT_LAST_BATCH` -- the named batch is not the tail. **Nothing
+  ran**, checked before reverting rather than discovered half way.
+- `MIGRATION_DOWN_FAILED` -- a `down()` actually failed part way. This is the
+  one where the schema may now be in neither state, and it is the case the
+  restore paragraph below exists for.
+
+**`deployment.migrate_down` is HUMAN-ONLY.** It takes `{environment,
+toMigrationRequestId}`, dumps the database first (same ordering, same backup
+location), reverts the last batch, and records a `REVERTED` receipt -- or one of
+the three `MIGRATION_DOWN_*` refusals above. Like the other deployment commands
+it requires the CONFIGURED operator principal and is EXCLUDED from the MCP
+roster, so no agent session can reach it, for a sharper reason than the deploy
+fence: **reverting a production schema destroys the data the forward migration
+created, and only a human can weigh that loss.** The database URL comes from a
+per-environment host resolver configured on the daemon, never from the request
+payload; an unconfigured daemon REFUSES with `MIGRATE_DOWN_UNCONFIGURED` at the
+command seam rather than silently skipping the revert.
+
+**When a down-migration cannot revert: restore the recorded backup.** This is
+the paragraph you are reading during an incident, so these are the actual
+commands. Substitute the bracketed values from the receipt.
+
+Find the digest and confirm the file has not changed since it was written:
+
+```
+sha256sum <project>/.moe-next/backups/pre-migration/<env>/<ts>.sql
+# Windows: certutil -hashfile <project>\.moe-next\backups\pre-migration\<env>\<ts>.sql SHA256
+```
+
+It must equal the `sha256:` half of the receipt's `backupRef`. If it does not,
+STOP -- you are about to restore a file that is not the one the receipt
+describes.
+
+Then restore. Against a reachable database:
+
+```
+psql "<the environment's connection string>" -X -q -v ON_ERROR_STOP=1 \
+  -f <project>/.moe-next/backups/pre-migration/<env>/<ts>.sql
+```
+
+Against a database inside a container (the form driven on 2026-09-08):
+
+```
+docker exec -i <container> psql -X -q -U <user> -d <database> -v ON_ERROR_STOP=1 \
+  < <project>/.moe-next/backups/pre-migration/<env>/<ts>.sql
+```
+
+`-v ON_ERROR_STOP=1` is not optional: without it psql reports success after
+skipping statements that failed. `-X -q` suppresses the startup file and the
+banner, which is also what keeps connection parameters out of your terminal
+scrollback.
+
+**The dump is taken BEFORE the migration, so restoring it returns the schema to
+its PRE-migration state** -- it undoes the forward migration, it does not undo
+the failed `down()` back to the migrated state. That is the intended direction.
+
+**What has been driven, measured 2026-09-08.** Against a REAL disposable
+PostgreSQL (`postgres:17-alpine`, engine 29.6.2 linux/amd64): a migration
+created a table (`\dt` went from 2 relations to 3), the
+`moe-migration-receipt/1` was read back from the store byte-equal to what the
+call returned, the backup file was present at the path above and its sha256
+RECOMPUTED ON DISK equalled the digest in the receipt, `DROP SCHEMA public
+CASCADE` followed by restoring that dump returned the pre-migration schema at
+column level, and the `MIGRATION_BACKUP_FAILED` path left the SCHEMA -- not just
+the return value -- untouched. `MIGRATION_FAILED` named the failing file and
+left `pgmigrations` holding only the initial migration. Re-run it yourself with
+`MOE_MIGRATION_RESTORE=1` and the daemon package's own vitest config; the opt-in
+performs real work and FAILS rather than skipping when docker is unavailable.
+
+**What is NOT proven, stated rather than implied.** No preview environment
+exists on this host: there is no environments store, and this project's
+`.moe-next/backups` has no `pre-migration` leaf, so **no environment of this
+project has ever been migrated**. The machinery above is verified against a
+disposable database; applying it to a real preview environment waits on the
+environments model and the deploy path, which are sibling work. The deploy drive
+in the section above composed no `migrate` port, so **no migration has yet run
+as part of a deploy** either.
+
 ## Source development launcher
 
 From a clean checkout, with one agent credential exported and nothing else

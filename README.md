@@ -152,8 +152,35 @@ entry points, environment, and knobs.
   migration port, and the candidate ran with **no environment variables**, which
   a product needing a database would experience as a health timeout rather than
   as the configuration error it is. The other Stage 2 items (infrastructure
-  generation, database migrations, monitoring, backup and rollback) are NOT
-  claimed here.
+  generation, monitoring, backup and rollback) are NOT claimed here; database
+  migrations are claimed only to the extent the next bullet states.
+
+- **Database migrations** (VISION Stage 2, the migrations item only): a
+  `pg_dump` is taken BEFORE any migration runs, and a failed dump refuses the
+  whole run with `MIGRATION_BACKUP_FAILED @ DAEMON_INGRESS` leaving the schema
+  untouched -- nothing is applied after a backup that did not succeed. The dump
+  lands at
+  `<project>/.moe-next/backups/pre-migration/<env>/<timestamp>.sql`, reusing the
+  existing `.moe-next/backups` root rather than inventing a second location, and
+  every run records one `moe-migration-receipt/1` carrying `{environment, sha,
+  applied[], backupRef, outcome}` with `outcome` `APPLIED`, `REFUSED(code)` or
+  `REVERTED`. `backupRef` is nullable and carries the backup's **sha256, never
+  its path** -- the path stays inside the daemon module, and the Deployments
+  card renders the digest as a reference with no link and no download.
+  `deployment.migrate_down` reverts the last batch, is reserved to the
+  CONFIGURED operator principal and is EXCLUDED from the MCP roster, because
+  reverting a production schema destroys the data the forward migration created
+  and is never an agent's decision. **Measured 2026-09-08 against a real
+  disposable PostgreSQL** (`postgres:17-alpine`, engine 29.6.2): a migration
+  created a table, the receipt was read back from the store byte-equal to the
+  call's return, the backup's sha256 recomputed on disk equalled the digest in
+  the receipt, and `DROP SCHEMA public CASCADE` followed by restoring that dump
+  returned the pre-migration schema at column level -- the restore path is
+  exercised, not assumed. **What that does NOT prove**: no preview environment
+  exists on this host (no environments store, and no `pre-migration` leaf under
+  this project's `.moe-next/backups`), so **no environment of this project has
+  ever been migrated**, and the deploy drive composed no migration port, so no
+  migration has yet run as part of a deploy. Both wait on sibling work.
 
 - **Packages**: `contracts` (dependency-free types, limits, codecs), `core`,
   `scheduler` (zero-authority structural preview), `store` (durable event and
