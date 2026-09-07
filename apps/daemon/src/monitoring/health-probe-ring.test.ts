@@ -4,7 +4,7 @@ import { basename, isAbsolute, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { SqliteEventStore } from "@moe/store";
 import { expect, it } from "vitest";
-import { HEALTH_PROBE_RING_LIMIT, HEALTH_PROBE_VERSION } from "./health-probe-contracts.js";
+import { HEALTH_FAILURE_THRESHOLD, HEALTH_PROBE_RING_LIMIT, HEALTH_PROBE_VERSION } from "./health-probe-contracts.js";
 import type { HealthProbe } from "./health-probe-contracts.js";
 import { recordDeployReceipt } from "../deployment/deploy-ledger.js";
 
@@ -186,6 +186,62 @@ it("commits incident transitions with the real append and preserves them past ri
     expect(closed.value[0]).toEqual({ ...opened.value[0], closedAt: observation(4).at });
     for (let n = 5; n <= HEALTH_PROBE_RING_LIMIT + 4; n++) expect(ring.append(observation(n))).toMatchObject({ ok: true });
     expect(ring.incidents("preview")).toEqual(closed);
+  } finally { rmSync(root, { force: true, recursive: true }); }
+});
+
+/** Failures appended AFTER a card is already open. Ten separates all three wrong loops at once: a
+ *  per-probe raise reaches eleven cards, a re-raise every HEALTH_FAILURE_THRESHOLD failures reaches
+ *  four, and a close-and-silently-reopen holds the count at one but changes the row identity. One
+ *  extra failure would only catch the first of those. */
+const CONTINUED_FAILURES = 10;
+
+/** DoD 1 and task rail 1: ONE card per outage. Both directions are required — (a) alone is satisfied
+ *  by a ring that never opens a second incident for its whole lifetime, which loses the operator the
+ *  next outage entirely, and (b) alone is satisfied by a ring that opens one per failing probe. */
+it("raises one card per outage: continued failure adds none, and a later outage adds a second", async () => {
+  const { createHealthProbeRing } = await subject();
+  const root = directory();
+  try {
+    const ring = createHealthProbeRing(join(root, "health.sqlite"), "project-health");
+    // Every boundary is derived from HEALTH_FAILURE_THRESHOLD so raising the threshold moves the
+    // arm with production instead of silently testing a shorter outage than the one that opens a card.
+    const outageEnd = HEALTH_FAILURE_THRESHOLD, continuedEnd = outageEnd + CONTINUED_FAILURES;
+    const recovery = continuedEnd + 1, secondEnd = recovery + HEALTH_FAILURE_THRESHOLD;
+    for (let n = 1; n <= outageEnd; n++) {
+      expect(ring.append(observation(n, "preview", "FAILURE"))).toMatchObject({ ok: true });
+    }
+    const opened = ring.incidents("preview");
+    if (!opened.ok) throw new Error(opened.code);
+    expect(opened.value).toHaveLength(1);
+    expect(opened.value[0]?.closedAt).toBeNull();
+
+    // (a) TEN more consecutive failures, every status written EXPLICITLY rather than defaulted —
+    // the uncovered gap this arm exists for was a defaulted "SUCCESS" reading as a fourth failure.
+    for (let n = outageEnd + 1; n <= continuedEnd; n++) {
+      expect(ring.append(observation(n, "preview", "FAILURE"))).toMatchObject({ ok: true });
+    }
+    const during = ring.incidents("preview");
+    if (!during.ok) throw new Error(during.code);
+    // BY IDENTITY, not only by count: same id, same openedAt, same openingProbes, still closedAt null.
+    expect(during.value).toEqual(opened.value);
+
+    // (b) THE ANTI-VACUITY CONTROL. Recovery closes the card; a fresh outage must open a NEW one.
+    expect(ring.append(observation(recovery, "preview", "SUCCESS"))).toMatchObject({ ok: true });
+    for (let n = recovery + 1; n <= secondEnd; n++) {
+      expect(ring.append(observation(n, "preview", "FAILURE"))).toMatchObject({ ok: true });
+    }
+    const second = ring.incidents("preview");
+    if (!second.ok) throw new Error(second.code);
+    expect(second.value).toHaveLength(2);
+    expect(second.value[0]).toEqual({ ...opened.value[0], closedAt: observation(recovery).at });
+    expect(second.value[1]?.closedAt).toBeNull();
+    expect(second.value[1]?.openedAt).toBe(observation(secondEnd).at);
+    expect(second.value[1]?.id).not.toBe(opened.value[0]?.id);
+    // The second card's EVIDENCE is the second outage's own three failures — not the recovery that
+    // preceded them and not a probe carried over from the first. A card opened on stale evidence
+    // still counts as two cards and would pass every assertion above it.
+    expect(second.value[1]?.openingProbes).toEqual(Array.from({ length: HEALTH_FAILURE_THRESHOLD },
+      (_, index) => observation(secondEnd - HEALTH_FAILURE_THRESHOLD + 1 + index, "preview", "FAILURE")));
   } finally { rmSync(root, { force: true, recursive: true }); }
 });
 
