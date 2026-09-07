@@ -160,7 +160,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T13:55:10.484Z",
-  "updatedAt": "2026-09-07T00:09:38.635Z",
+  "updatedAt": "2026-09-07T00:59:42.121Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T14:00:23.896Z",
     "plannedStepCount": 4,
@@ -349,6 +349,27 @@
       "treeId": "f343ccb9c1a487f75d896f4adb77409aafef3000",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "f69cbaf62d8e05acdf36caf31b0f9f351af3b2c6",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b1872f24@2026-09-07T00:09:39Z",
+      "paths": [
+        ".moe/tasks/task-cf2d91d923ea4397a1145e0973ed2218.json"
+      ],
+      "recordedBy": "worker-b1872f24",
+      "recordedAt": "2026-09-07T00:59:42.121Z",
+      "treeId": "ca9fb1987433565b32e009692727ed5aa255dbb8",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "tests/e2e/control-room/daemon-ports.ts",
+          "taskId": "task-4cbaca29bb42486094e829c29bc7a17f"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -365,16 +386,20 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-ade1efb1@2026-09-06T22:08:56Z",
-    "at": "2026-09-06T22:09:02.297Z"
+    "sessionId": "worker-b1872f24@2026-09-07T00:09:39Z",
+    "at": "2026-09-07T00:59:42.121Z"
   },
   "touchedFiles": [
     "tests/e2e/control-room/wrapper-lane.ts",
     "tests/e2e/control-room/daemon-ports.ts",
     "tests/e2e/control-room/lane-landing.ts",
-    "tests/e2e/control-room/deploy-fake-docker.spec.ts"
+    "tests/e2e/control-room/deploy-fake-docker.spec.ts",
+    "tests/e2e/control-room/fake-docker-dependencies.ts"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "tests/e2e/control-room/lane-landing-contract.ts",
+    "tests/e2e/control-room/lane-review-round.ts"
+  ],
   "priorHandoffs": [
     {
       "whatIsDone": "Steps 1-3 COMPLETED of 4. Step 2 delivered a REAL git workspace under the lane scratch: daemon-ports.ts gained createLaneWorkspace (git init -b main / add / commit with the lander identity flags / rev-parse HEAD^{commit}), laneGit (strips GIT_* like landingEnvironment()), LaneScratch.workspace + .workspaceSha, and MOE_NODE_WORKSPACE at the spawn site - NO production change, the composition already reads that env at daemon-store-foundation-composition.ts:190. Step 3 measured the real lane against HEAD 57446237 twice (browser-e2e-gate held 20:59-21:07Z and again 21:11-21:12Z, released both times), evidence in comment-42425a4c665e473680a0415d83a9dc41 and comment-7fb5df64e86f477ab2def40d961d161a. Last checkpoint a2bc37a6b68526ccfe74e165eab5ff8f33023490, 1 path.",
