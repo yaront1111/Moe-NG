@@ -52,7 +52,8 @@ import {
 import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type GraphMutationCommandKind,
   type WiredCommandKind } from "./daemon-command-vocabulary.js";
 import { createAsyncCommandEntries } from "./daemon-command-async-entries.js";
-import type { DeploymentDeploySeams, RepositoryBootstrapSeams, ReleaseDecideSeams } from "./daemon-command-async-entries.js";
+import type { DeploymentDeploySeams, MigrateDownSeams, RepositoryBootstrapSeams,
+  ReleaseDecideSeams } from "./daemon-command-async-entries.js";
 import { runDesignSubmitEdge } from "./daemon-command-design.js";
 import { runEnvironmentEdge } from "./daemon-command-environment.js";
 import type { EnvironmentEdgeKind } from "./daemon-command-environment.js";
@@ -157,6 +158,11 @@ export interface DaemonCommandPortOptions {
    *  real manager catalog — production passes nothing. */
   readonly repositoryBootstrap?: RepositoryBootstrapSeams;
   readonly deploymentDeploy?: DeploymentDeploySeams;
+  /** `deployment.migrate_down`'s host authority, as a PER-ENVIRONMENT resolver rather than a
+   *  daemon-wide database URL. ABSENT is a REFUSING state (MIGRATE_DOWN_UNCONFIGURED @ the
+   *  command seam), never a skipped one, and the kind stays SERVED either way -- the roster
+   *  never depends on host configuration. Nothing here may be sourced from a request payload. */
+  readonly migrateDown?: MigrateDownSeams;
   readonly store: SqliteEventStore;
   /** The daemon-startup VERIFICATION catalog: the host-scoped argv authority the
    *  recipe seal derives its command from. OPTIONAL on the same terms as the
@@ -303,6 +309,8 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         ? {} : { repositoryBootstrap: options.repositoryBootstrap }),
       ...(options.deploymentDeploy === undefined
         ? {} : { deploymentDeploy: options.deploymentDeploy }),
+      ...(options.migrateDown === undefined
+        ? {} : { migrateDown: options.migrateDown }),
       // THE SAME credential thunk the environment edge below uses at :512, not a second reader:
       // the composed deploy migration must derive its seal from the daemon's one credential, and
       // a resolver-only change would leave every real migration ENV_STORE_KEY_UNAVAILABLE@KEY.
