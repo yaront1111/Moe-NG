@@ -115,15 +115,14 @@ function proxiedPaths(): ReadonlySet<string> {
  *   retires this entry in the same edit that adds the pin, exactly as task-e6000b57 and
  *   task-1c9587ed retired the two above.
  *
- * - `/deployments/health/read`: recorded by task-509c6c1609174adb9228940bc002f5c3, which owns
- *   the daemon half ONLY. Its task rail 5 forbids it touching apps/control-room ("NO UI, NO
- *   PROXY PIN, NO CLIENT DECODER"), because the two consumers -- the Needs-you incident card
- *   (task-85895a88a2484d8589046b2030efd445) and the Environments surface
- *   (task-df972c274f2a43eda3a9f57d2780c6f9) -- own the pin and the exact-key decoder. Whichever
- *   of those lands first retires this entry in the same edit that adds the pin.
+ * - `/deployments/health/read` WAS listed here and is now RETIRED, exactly as its entry said it
+ *   would be: task-509c6c1609174adb9228940bc002f5c3 landed the daemon half, and the Environments
+ *   surface (task-df972c274f2a43eda3a9f57d2780c6f9) landed first of its two consumers, adding
+ *   the `dev-proxy-paths.ts` pin alongside the exact-key decoder in
+ *   apps/control-room/src/live/live-deployments-health.ts.
  */
 const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([
-  "/deployments/health/read", "/environments/read",
+  "/environments/read",
 ]);
 
 /**
@@ -139,6 +138,12 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([
  * /v2/product-contract/pending/read (gate1-approval.ts), not current.
  * /session/challenge-operands/read: only named in dev-proxy-paths.ts, despite
  * that file commenting that the browser reads the operands.
+ * /deployments/health/read WAS listed here and is now RETIRED, exactly as its entry said it
+ * would be: task-509c6c1609174adb9228940bc002f5c3 landed the daemon half and
+ * task-df972c274f2a43eda3a9f57d2780c6f9 landed the first of its two consumers -- the
+ * Environments section on the Health screen, whose live-deployments-health.ts is fetched from
+ * the production entry. The Needs-you incident card (task-85895a88a2484d8589046b2030efd445)
+ * is the second consumer and needs no census change.
  * /preview/read WAS listed here and is now RETIRED, exactly as the entry said it would be:
  * task-4a6e7bdbef9a4344829a7ce49c6fb378 landed the daemon receipt read and the capture-bytes
  * route, and task-33ceae56edc348e9864bc592430fa1d0 supplies the preview card that fetches
@@ -165,12 +170,6 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([
  */
 const UNCONSUMED_SERVED_ROUTES: readonly string[] = Object.freeze([
   "/budget/commitment/read",
-  // `/deployments/health/read`: the daemon half landed with task-509c6c1609174adb9228940bc002f5c3,
-  // whose task rail 5 forbids it touching apps/control-room. Its two consumers own the client
-  // decoder and the proxy pin: the Needs-you incident card (task-85895a88a2484d8589046b2030efd445)
-  // and the Environments surface (task-df972c274f2a43eda3a9f57d2780c6f9). Whichever lands first
-  // retires this entry and its twin in the proxy census above, in the same edit.
-  "/deployments/health/read",
   "/documents/ingest",
   // Same pair as the proxy census above and retired by the same row: the daemon half landed
   // here, the Environments screen that fetches it is task-ba83b202265d40d1885d3091f009b0a2.

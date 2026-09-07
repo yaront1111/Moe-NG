@@ -12,6 +12,7 @@ import { readSessions } from "../../live/live-sessions.js";
 import type { SessionsOutcome } from "../../live/live-sessions.js";
 import { useProviderPause } from "../shell/pause-context.js";
 import { ActivityPanel, SessionsPanel } from "./activity-screens.js";
+import { LiveEnvironments } from "./live-environments.js";
 import { HealthScreen, PolicyScreen } from "./ops-screens.js";
 import type { PolicyInstallState } from "./ops-screens.js";
 import { createPolicyInstallPort, installStandardPolicy, readSurfaceOnce } from "./policy-install-port.js";
@@ -133,6 +134,7 @@ export function LiveHealth({ headers, onConnection, pollMs, read, readRemote, se
   return (
     <>
       <HealthScreen nowMs={nowMs} outcome={outcome} remote={remote} />
+      <LiveEnvironments headers={headers} pollMs={pollMs} />
       {setup !== undefined && <LiveRepositoryRecovery setup={setup} />}
       <LiveSessions headers={headers} pollMs={pollMs} />
       <LiveActivity goalRef={null} headers={headers} pollMs={pollMs} scopeLabel="THIS PROJECT" />

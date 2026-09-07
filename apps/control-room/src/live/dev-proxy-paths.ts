@@ -22,6 +22,10 @@ export const DEV_PROXY_PATHS = Object.freeze([
   "/goals/source/read",
   "/design/read",
   "/deployments/read",
+  // The deployment-environment health read. Its consumer is the Environments section on the
+  // Health screen (task-df972c274f2a43eda3a9f57d2780c6f9); without the pin the dev server
+  // answers it itself and the section renders against Vite instead of against a daemon.
+  "/deployments/health/read",
   "/health/read",
   "/graph/get",
   "/planning/run/read",
