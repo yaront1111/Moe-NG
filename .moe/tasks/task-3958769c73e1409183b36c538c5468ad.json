@@ -121,7 +121,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T14:53:41.401Z",
-  "updatedAt": "2026-09-07T00:03:16.627Z",
+  "updatedAt": "2026-09-07T00:03:45.659Z",
   "dependsOn": [
     "task-3a0478f57eec44579269b2ed27c91d92"
   ],
@@ -170,7 +170,74 @@
     "apps/control-room/src/v2/ops/activity-screens.test.tsx",
     "apps/control-room/src/v2/resources/resources-frames.fixture.ts",
     "apps/daemon/src/http/sessions-read.test.ts",
-    "apps/control-room/src/live/live-sessions.test.ts"
+    "apps/control-room/src/live/live-sessions.test.ts",
+    ".moe/tasks/task-3958769c73e1409183b36c538c5468ad.json",
+    ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
+    ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+    ".moe/tasks/task-cf2d91d923ea4397a1145e0973ed2218.json"
   ],
-  "completionSummary": "POST /sessions/read now discloses the agent provider. MEMBER: `SessionsView.agentProvider: SessionsAgentProvider`, exact keys `{ configured: string, envOverride: boolean }`.\n\nWHY `configured`, NOT `effective`. The daemon CANNOT observe what the wrapper resolved: they are SEPARATE PROCESSES, agreeing only because `moe up` spawns both from one child environment. A daemon started standalone, or beside a wrapper launched separately, reports an override no wrapper is applying — NOTHING HERE MEASURES THE WRAPPER. So the name carries the claim-limit, copying `configuredAgentLimit`'s precedent three declarations above in the same file, and the docblock states what a standalone daemon publishes (`envOverride: false` plus whatever its store says).\n\nSTATED LIMIT, not an oversight: this read is PROJECT-scoped (`createSessionsReadPort` takes projectId, no goal), so `configured` is the PROJECT default. A per-GOAL override exists in the durable store and outranks it at spawn; it is NOT disclosable here and the docblock says so. No goal parameter was invented.\n\nPrecedence is not re-derived — the orchestrator's own `resolveAgentProvider` (the one the wrapper spawns through) answers with no goalRef, so no second copy can drift.\n\nOFF-ROSTER RULE, pinned: a KNOWN command publishes the roster leaf (`C:\\tools\\codex.exe` -> `codex`); an UNKNOWN one publishes the configured value VERBATIM, full path included. Not collapsed to `claude` (what `pauseProviderOf` does deliberately for ledger keying, and what would show an operator a provider nobody configured), not basename'd either. My first test asserted the leaf, went RED, and the production code was right.\n\nLOCKSTEP DRILL, BOTH DIRECTIONS. Roster-only (daemon keeps member, key removed): pin RED `expected [ Array(7) ] to deeply equal [ 'concurrency', 'outcome', …(4) ]` (+ \"agentProvider\"), AND two decode arms red including the untouched concurrency happy path — the frame BLANKING, not degrading. Daemon-only (reverse): pin RED from the other "
+  "completionSummary": "POST /sessions/read now discloses the agent provider. MEMBER: `SessionsView.agentProvider: SessionsAgentProvider`, exact keys `{ configured: string, envOverride: boolean }`.\n\nWHY `configured`, NOT `effective`. The daemon CANNOT observe what the wrapper resolved: they are SEPARATE PROCESSES, agreeing only because `moe up` spawns both from one child environment. A daemon started standalone, or beside a wrapper launched separately, reports an override no wrapper is applying — NOTHING HERE MEASURES THE WRAPPER. So the name carries the claim-limit, copying `configuredAgentLimit`'s precedent three declarations above in the same file, and the docblock states what a standalone daemon publishes (`envOverride: false` plus whatever its store says).\n\nSTATED LIMIT, not an oversight: this read is PROJECT-scoped (`createSessionsReadPort` takes projectId, no goal), so `configured` is the PROJECT default. A per-GOAL override exists in the durable store and outranks it at spawn; it is NOT disclosable here and the docblock says so. No goal parameter was invented.\n\nPrecedence is not re-derived — the orchestrator's own `resolveAgentProvider` (the one the wrapper spawns through) answers with no goalRef, so no second copy can drift.\n\nOFF-ROSTER RULE, pinned: a KNOWN command publishes the roster leaf (`C:\\tools\\codex.exe` -> `codex`); an UNKNOWN one publishes the configured value VERBATIM, full path included. Not collapsed to `claude` (what `pauseProviderOf` does deliberately for ledger keying, and what would show an operator a provider nobody configured), not basename'd either. My first test asserted the leaf, went RED, and the production code was right.\n\nLOCKSTEP DRILL, BOTH DIRECTIONS. Roster-only (daemon keeps member, key removed): pin RED `expected [ Array(7) ] to deeply equal [ 'concurrency', 'outcome', …(4) ]` (+ \"agentProvider\"), AND two decode arms red including the untouched concurrency happy path — the frame BLANKING, not degrading. Daemon-only (reverse): pin RED from the other ",
+  "commits": [
+    {
+      "sha": "883eab0cb473b7eb1d0c74fe9f17a90f52b5e88a",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-ca28be90@2026-09-06T23:24:57Z",
+      "paths": [
+        ".moe/tasks/task-3958769c73e1409183b36c538c5468ad.json",
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
+        ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+        ".moe/tasks/task-cf2d91d923ea4397a1145e0973ed2218.json",
+        "apps/control-room/src/live/live-sessions.test.ts",
+        "apps/control-room/src/live/live-sessions.ts",
+        "apps/control-room/src/v2/ops/activity-screens.test.tsx",
+        "apps/control-room/src/v2/resources/resources-frames.fixture.ts",
+        "apps/daemon/src/http/sessions-read.test.ts",
+        "apps/daemon/src/http/sessions-read.ts"
+      ],
+      "recordedBy": "worker-ca28be90",
+      "recordedAt": "2026-09-07T00:03:45.659Z",
+      "treeId": "b4741b4f412b70f5c573331304c760d33555febb",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/live/live-sessions.test.ts",
+          "taskId": "task-adc4b229cae840c086cc1acc83fd4989"
+        },
+        {
+          "path": "apps/control-room/src/live/live-sessions.ts",
+          "taskId": "task-adc4b229cae840c086cc1acc83fd4989"
+        },
+        {
+          "path": "apps/control-room/src/v2/ops/activity-screens.test.tsx",
+          "taskId": "task-c090faae9fbe438b959e76a08b7dcfdb"
+        },
+        {
+          "path": "apps/daemon/src/http/sessions-read.test.ts",
+          "taskId": "task-adc4b229cae840c086cc1acc83fd4989"
+        },
+        {
+          "path": "apps/daemon/src/http/sessions-read.ts",
+          "taskId": "task-adc4b229cae840c086cc1acc83fd4989"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/http/sessions-read.ts",
+    "apps/control-room/src/v2/resources/resources-frames.fixture.ts",
+    "apps/daemon/src/http/sessions-read.test.ts",
+    "apps/control-room/src/live/live-sessions.test.ts",
+    "apps/control-room/src/v2/ops/activity-screens.test.tsx",
+    "apps/control-room/src/live/live-sessions.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-ca28be90@2026-09-06T23:24:57Z",
+    "at": "2026-09-07T00:03:45.659Z"
+  }
 }

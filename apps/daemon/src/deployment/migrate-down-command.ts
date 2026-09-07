@@ -90,13 +90,20 @@ export function createMigrateDownCommandHandler(options: MigrateDownCommandOptio
       throw new DomainRefusal("OPERATOR_PRINCIPAL_REQUIRED", "DAEMON_AUTHORIZATION",
         "this command requires the configured operator principal", 403);
     }
-    const identity = migrationCommandIdentity(input, projectId);
     const databaseUrl = options.databaseUrl ?? "", workspace = options.workspace ?? "";
     const projectRoot = options.projectRoot ?? "";
+    // Composition is settled before target admission, and only here. In every other case
+    // `migrationCommandIdentity` must answer first, because `targetAggregateId` decides WHICH
+    // aggregate this command's durable version claim is made against, and that has to be settled
+    // before any effect is reserved. But on a daemon with nothing composed there is no aggregate
+    // to revert at all: the operator's target is fine, so refusing it as MIGRATE_DOWN_TARGET_INVALID
+    // would be a substantively untrue reason for a true refusal. The operator-principal fence above
+    // still answers first, so an unauthenticated caller never observes UNCONFIGURED.
     if (databaseUrl.length === 0 || workspace.length === 0 || projectRoot.length === 0) {
       throw new DomainRefusal(MIGRATE_DOWN_UNCONFIGURED, DAEMON_COMMAND_SEAM,
         `no ${databaseUrl.length === 0 ? "database" : workspace.length === 0 ? "workspace" : "project root"} is configured on this daemon`, 422);
     }
+    const identity = migrationCommandIdentity(input, projectId);
     const history = migrationCommandHistory(store, identity);
     if (history.decided !== null) return answer(options, identity, readMigrationCommandTerminal(history.decided), true);
     const recovered = readMigrationReceipt(store, projectId, envelope.commandId);

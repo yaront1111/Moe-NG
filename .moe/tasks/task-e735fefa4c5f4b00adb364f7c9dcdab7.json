@@ -1,0 +1,158 @@
+{
+  "id": "task-e735fefa4c5f4b00adb364f7c9dcdab7",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "The real wrapper composition supplies designBrief, so compiler and node missions carry the goal's design (or its declared skip)",
+  "description": "Filed by the governor 20:22Z from worker-f78e0703's read-only roll-up of the design parent (task-8a6d6660, comment-f95b0ac3, anchor f213b41d). MEASURED: `git grep -n designBrief -- apps packages tests` has exactly three hits, all in apps/daemon/src/orchestrator/agent-wrapper.ts (:105 optional config callback, :283 codeMission argument, :296 compilerMission argument); NO caller supplies the callback. agent-wrapper-main.ts createAgentWrapper (:185) passes compilerGateRef, compilerInstructions and nodeMission but not designBrief, so every real compiler/node seat evaluates `undefined ?? null`: agent-mission-text.ts:123-150 compilerDesignLines(null) emits 'NO DESIGN ACCOMPANIES THIS BRIEF, and the operator has not declared that it plans without one' even when durable state is PRESENT or SKIPPED, and :154-155 nodeDesignLines(null) returns []. The design aggregate, the MCP read and real design-seat submission (task-f3409f9a) are real; this composition edge is the only missing link. Child evidence missed it because agent-mission-text.test.ts:128-144 and :200-206 hand-build a PRESENT brief and call compilerMission/codeMission directly. Same class as the releaseDecide / deploymentDeploy drops found today: a seam declared and consumed but never threaded from the production caller. task-de0598236 (DONE) owned the mission capability; it is NOT reopened — this row lands the edge and the parent task-8a6d6660 waits on it.",
+  "definitionOfDone": [
+    "agent-wrapper-main.ts's createAgentWrapper supplies `designBrief`: it resolves the goal's durable design state through the existing design read (PRESENT with entities/ref/screens, SKIPPED with the operator's declaration, ABSENT only when truly absent) for the step's goal - unreadable state is a refusal with code + layer, never collapsed into ABSENT.",
+    "The node/compiler design provenance is the design VERSION the plan was built on (task-f3409f9a's fold), not 'latest': a goal with two design versions yields the planned one in the mission bytes; asserted.",
+    "Composed-mission tests through the REAL wrapper composition (not a hand-built brief): PRESENT emits the design paragraph naming at least one real entity; SKIPPED emits the skip words and never the 'NO DESIGN ACCOMPANIES' sentence; ABSENT keeps today's sentence. Assert the actual mission bytes.",
+    "A live-ish trace: on a store with a submitted design (fixture-free), the compiler mission a real seat would receive contains the design ref; recorded in a row comment with the command used.",
+    "Fresh focused daemon tests (agent-mission-text, agent-wrapper, agent-wrapper-main and the new composition arm) + `pnpm typecheck` EXIT 0 with a planted-error control; broader gates per lease rules; paths declared; parent task-8a6d6660's DoD 2 and its trace/skip clauses become certifiable from this row's evidence."
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE, THEN CLAIM THE ROOM. No production edit in this step. Record verbatim in the step note: (a) `git status --porcelain -- apps/daemon/src/orchestrator/ apps/daemon/src/design/` — every dirty path is foreign, note it and continue, never revert or commit it; (b) `git grep -n designBrief -- apps packages tests` — expect THREE hits, all in `agent-wrapper.ts`; if a fourth appeared, a peer is threading this edge and you must stop and report rather than collide; (c) `wc -l` on `agent-wrapper-main.ts`, `agent-wrapper.ts`, `agent-mission-text.ts` — expect 400 / 399 / 394, which is WHY steps 2 and 4 move code out before adding any; (d) `git grep -ln 'compilerGateRef\\|compilerInstructions'` — expect exactly one code file, `agent-wrapper-main.test.ts` (`.moe/` JSON, chat logs and Serena memories are not asserters); if a second code file appears it must be added to this plan's paths or the plan split; (e) `grep -n 'planningRunRef' apps/daemon/src/design/design-store.ts` confirming the version fold already exists. Also record the HEAD sha.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper.ts",
+        "apps/daemon/src/orchestrator/agent-mission-text.ts",
+        "apps/daemon/src/design/design-store.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "MAKE ROOM IN THE MISSION TEXT, THEN ADD THE FOURTH OUTCOME. New module `apps/daemon/src/orchestrator/agent-mission-design.ts`. MOVE — verbatim, byte for byte — the `DesignBrief` type (agent-mission-text.ts:105-114) and both paragraph builders `compilerDesignLines` (:123-150) and `nodeDesignLines` (:154-~185), carrying their doc comments unchanged; the wording is read by a language model and each branch was deliberately phrased so no two share a phrase, so a paraphrase changes what every seat reads. Prove the move with `grep -Fxq` PER LINE against the original text, not by eye. Then ADD the fourth member `{outcome: \"UNREADABLE\", code: string, layer: string}` and its branch in BOTH builders: a paragraph that says the design state could not be read, naming the code and the layer, and explicitly telling the seat this is NOT the same as no design existing. In `agent-mission-text.ts`, delete the moved block, import what it still uses, and RE-EXPORT `DesignBrief` so its two existing importers (`agent-wrapper.ts:14`, `agent-mission-text.test.ts:12`) compile unchanged. Both files must end under 250 lines where possible and MUST end under 400 — `wc -l` both and record the numbers.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-mission-design.ts",
+        "apps/daemon/src/orchestrator/agent-mission-text.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/orchestrator/agent-mission-design.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE RESOLVER, in a new module `apps/daemon/src/orchestrator/wrapper-mission-inputs.ts`. Export `createDesignBriefResolver({store, projectId, compiled})` returning `(kind, target) => DesignBrief | null`, matching `AgentWrapperConfig.designBrief`'s signature exactly. Resolve the step's GOAL first: for a COMPILER step `target` IS the goalId; for a node step `target` is a nodeRef, so map it by calling `activeCompiledGraphs(store, projectId)` and `compiledExecutionRef(projectId, graph, nodeKey)` — the SAME two exported functions `sealedNodesOf` uses — and never by re-deriving the ref by hand. An unresolvable nodeRef returns `null`, which `nodeDesignLines` already documents as \"the caller knows nothing\"; that is the ONE legitimate null and it is not a collapse. THE TWO LANES READ DIFFERENTLY, and this is the plan's central decision: a COMPILER seat is staffed BEFORE a plan exists, so there is no compiled binding and it reads LATEST (call `readDesignRevision` with NO `planningRunRef`); a NODE seat is staffed after, so it reads the PLANNED version (pass `planningRunRef: refsOfGoal(goalId).planningRunRef`). Map the result BY CODE, never by `!ok`: `ok` -> `isDesignSkip(record.revision)` ? SKIPPED with the operator's reason : PRESENT with `ref` = `${goalRef}@v${record.version}`, `screens` = the flattened `screen` names of every journey (deduped, order preserved), `entities` = the `entity` names; `DESIGN_REVISION_ABSENT` -> ABSENT; EVERY OTHER CODE (`DESIGN_RECORD_MALFORMED`, store failures) -> UNREADABLE carrying that code and its layer. `!ok -> ABSENT` is the exact collapse DoD 1 forbids and must not appear.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/wrapper-mission-inputs.ts",
+        "apps/daemon/src/design/design-store.ts",
+        "apps/daemon/src/design/design-contracts.ts",
+        "apps/daemon/src/orchestrator/compiled-node-source.ts",
+        "apps/daemon/src/goals/goal-identity.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/orchestrator/wrapper-mission-inputs.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THREAD THE EDGE, AND PAY FOR IT FIRST. `agent-wrapper-main.ts` is EXACTLY 400 lines, so it cannot grow by even the wiring line — move the two existing mission-input closures `compilerGateRef` (:197-211) and `compilerInstructions` (:213-~230) VERBATIM into `wrapper-mission-inputs.ts` as exported factories beside the design resolver (same category of thing; the file's own comment at :211 already records that the rejection-instructions extraction is what keeps this call short). Then in `createAgentWrapper`'s options pass `designBrief: createDesignBriefResolver({store: verifierStore, projectId: config.projectId, compiled: <the same compiled source the node missions use>})` alongside the two now-imported resolvers. Guard the same way the moved closures do — a `verifierStore` that is `undefined` yields a resolver returning null rather than throwing at composition time. `wc -l apps/daemon/src/orchestrator/agent-wrapper-main.ts` MUST come out BELOW 400 and be recorded in the step note; if it does not, move a second closure rather than shipping a cap violation.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+        "apps/daemon/src/orchestrator/wrapper-mission-inputs.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "TESTS THROUGH THE REAL COMPOSITION, NOT A HAND-BUILT BRIEF — DoD 3 names this distinction because `agent-mission-text.test.ts:128-144` hand-builds a PRESENT brief and calling `compilerMission` directly is exactly the blind spot that let this edge ship unthreaded. New `apps/daemon/src/orchestrator/wrapper-mission-inputs.test.ts` drives `createDesignBriefResolver` against a REAL `SqliteEventStore` with real submitted design records, and asserts THE ACTUAL MISSION BYTES produced by `compilerMission`/`codeMission` fed from the resolver's output. Arms: PRESENT emits the design paragraph naming at least one REAL entity from the record, and the mission contains the design ref; SKIPPED emits the skip words WITH the operator's reason AND the bytes do NOT contain \"NO DESIGN ACCOMPANIES\"; ABSENT keeps today's sentence verbatim; UNREADABLE names its code and its layer and is DISTINGUISHABLE from ABSENT in the bytes. DoD 2's provenance arm: submit TWO design versions, compile a plan bound to version 1, and assert the NODE mission carries `@v1` and not `@v2` — this is the arm that proves the planned version rather than latest. Add one arm proving a nodeRef resolves to its goal through `activeCompiledGraphs`. Per the global rail, verify EVERY refusal and negative arm by mutating the production surface until it goes red, then restore; `git diff` is a valid restore proof only for TRACKED files, so for the new modules back up to %TEMP% and prove restoration by SHA256 equality in a SEPARATE call.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/wrapper-mission-inputs.test.ts",
+        "apps/daemon/src/orchestrator/agent-mission-design.ts",
+        "apps/daemon/src/orchestrator/wrapper-mission-inputs.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/orchestrator/wrapper-mission-inputs.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "FOLLOW THE MOVES IN THE EXISTING SUITES so the refactor is proven not to have changed behaviour. `agent-mission-text.test.ts`: repoint the `DesignBrief` import if the re-export is not used, and keep every existing assertion byte-identical — they are the regression proof that the moved paragraphs still read the same. `agent-wrapper-main.test.ts` is the ONE code asserter on the two moved closures (established in step 1): update it to the new import site and ADD the composition arm that `designBrief` is actually supplied to `createAgentWrapper` — assert on the seam, not on a spy that would pass if the callback were never invoked. Both files keep their current shape otherwise; do not rewrite tests you are only moving.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-mission-text.test.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-main.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "THE LIVE-ISH TRACE (DoD 4), fixture-free. On a store carrying a genuinely submitted design (drive `design.submit` through the real command path, or use an existing lane store that already holds one — do NOT hand-write a design record), produce the compiler mission a real seat would receive and show that it CONTAINS the design ref. Record in a row comment, under ~4500 chars: the exact command used, the store path, the goalRef, the design version, and the mission excerpt showing the ref. Comments truncate SILENTLY at 5000, so keep it to this one idea. If the design had to be submitted first, say so and give that command too — an unstated setup step makes the trace unreproducible.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/wrapper-mission-inputs.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "GATES AND ADVERSARIAL SELF-REVIEW, one pass at the end. From `apps/daemon`, run the focused leg in the form this row's prerequisite used and QA accepted: `npx vitest run --root . --config package.json src/orchestrator/agent-mission-text.test.ts src/orchestrator/agent-mission-design.test.ts src/orchestrator/agent-wrapper.test.ts src/orchestrator/agent-wrapper-main.test.ts src/orchestrator/wrapper-mission-inputs.test.ts` (drop a path only if you did not create that file) and QUOTE the `Test Files N passed` count line — a leg with no count line RAN NOTHING regardless of exit code. Then `pnpm typecheck` EXIT 0 with a PLANTED-ERROR CONTROL in a NEW file (an incremental tsc greens without one), the control removed and its removal shown. Broader daemon and repo-wide legs under the `full-suite-gate` lease, one gate at a time, evaluated as a PATH-ATTRIBUTED BASELINE: record failures at the merge-base, at HEAD, and the delta intersected with this row's owned paths — that intersection must be EMPTY; disclose foreign red verbatim with its exact failing paths and never certify it green. Then read your own diff as an attacker: is there any `!ok -> ABSENT` path left? Does the UNREADABLE arm still fail if you delete the code/layer from the paragraph? Do the moved paragraphs still match the originals line for line? Is every one of the three touched production files under 400 lines (`wc -l`)? Did any test end up asserting against a hand-built brief instead of the composition? Finally confirm `git status --porcelain` shows only paths you own plus the foreign dirt recorded in step 1, and report every touched path in `complete_step.modifiedFiles`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+        "apps/daemon/src/orchestrator/agent-mission-text.ts",
+        "apps/daemon/src/orchestrator/wrapper-mission-inputs.ts",
+        "apps/daemon/src/orchestrator/agent-mission-design.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "GOVERNOR",
+  "parentTaskId": "task-8a6d6660c31c4e119f962d13e6f1505d",
+  "dependsOn": [
+    "task-de0598236f3b4d95aa3b6098b9d56995"
+  ],
+  "priority": "HIGH",
+  "order": 61,
+  "comments": [
+    {
+      "id": "comment-d312f77a648e47c1b0d2ccdac1565eb7",
+      "author": "architect-6e49a205",
+      "content": "PLANNING MEASUREMENT — two decisions QA should grade against, both forced by measured state. HEAD f99114f7, 2026-09-07.\n\n1. THE GAP IS REAL, EXACTLY AS FILED. `git grep -n designBrief -- apps packages tests` = three hits, all in `agent-wrapper.ts` (:111, :289, :302). `createAgentWrapper` (agent-wrapper-main.ts:186) supplies nodeMission/projectId/payloadHint/compilerGateRef/compilerInstructions/affordances and NOT designBrief. Nothing to re-measure away.\n\n2. DoD 2's VERSION FOLD ALREADY EXISTS — the plan CALLS it, does not rebuild it. `readDesignRevision` (design-store.ts:192-202) takes an optional `planningRunRef`; given one it reads `readCompiledContractBinding(...).binding.designVersion` (the PLANNED version) and refuses `DESIGN_RECORD_MALFORMED` / `DESIGN_REVISION_ABSENT` with codes. Omitting it takes `records[records.length-1]` — LATEST.\n\n3. DECISION ONE — THE TWO LANES READ DIFFERENTLY, AND DoD 2 CANNOT MEAN OTHERWISE. A COMPILER seat is staffed BEFORE the plan exists, so there is no compiled binding and the planningRunRef fold can only ever refuse for it; a compiler seat plans FROM the current design, so it reads LATEST. A NODE seat is staffed after the plan, so it reads the PLANNED version via `refsOfGoal(goalId).planningRunRef`. DoD 2's assertion — \"a goal with two design versions yields the planned one\" — is therefore asserted on the NODE mission (step 5 submits two versions, binds the plan to v1, asserts `@v1` and not `@v2`). Grading DoD 2 as requiring the fold on the compiler lane too would require the plan to exist before the seat that writes it.\n\n4. DECISION TWO — DoD 1's \"refusal with code + layer, never collapsed into ABSENT\" NEEDS A FOURTH OUTCOME. Two alternatives were measured and rejected: returning `null` renders as ABSENT at agent-wrapper.ts:289/302 (`?? null`), and THROWING is worse than it looks — `failSetup` (agent-wrapper.ts:244-248) calls `uncoded(step.kind, failure.message, ...)`, discarding the code and layer. So `DesignBrief` gains `{outcome:\"UNREADABLE\", code, layer}` with its own paragraph, distinguishable from ABSENT in the mission bytes. Mapping is BY CODE: `DESIGN_REVISION_ABSENT` -> ABSENT; every other code -> UNREADABLE. `!ok -> ABSENT` is the collapse the clause forbids and must not appear in the diff.\n\n5. THE FILE MOVES ARE FORCED BY THE PER-FILE CAP, NOT SCOPE CREEP. `wc -l`: agent-wrapper-main.ts **400**, agent-wrapper.ts **399**, agent-mission-text.ts **394**. Two of the three must shrink before a line can be added. So `DesignBrief` + both design-paragraph builders move to a new `agent-mission-design.ts` (host drops to ~340, leaving room for the UNREADABLE branch), and `compilerGateRef`/`compilerInstructions` move to a new `wrapper-mission-inputs.ts` beside the design resolver so main can take the wiring line and end BELOW 400. Both moves must be verbatim — the mission wording is read by a language model and each branch was phrased so no two share a phrase; step 2 and 4 require `grep -Fxq` per line as the proof, not visual inspection. Source-text asserter sweep on the moved symbols found exactly one code file, `agent-wrapper-main.test.ts` (remaining hits are .moe/ board JSON, a chat log and a Serena memory — none compile).\n\n6. nodeRef -> goalRef is NOT exposed (`NodeSpec` carries only dependsOn/nodeRef/title; the private `SealedNode` has goalRef). Rebuilt in the new module from the two already-exported functions `sealedNodesOf` itself uses — `activeCompiledGraphs` and `compiledExecutionRef` — rather than adding a method to the shared `CompiledNodeSource` interface.\n\ntask-de0598236 (DONE) owns the mission capability and is NOT reopened; this row lands the composition edge only.",
+      "timestamp": "2026-09-07T00:06:01.627Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-06T20:19:59.070Z",
+  "updatedAt": "2026-09-07T00:06:01.627Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-07T00:01:03.716Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 12
+  },
+  "contextFetchedBy": [
+    "architect-6e49a205"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 12 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-07T00:05:38.333Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) ADD THE RESOLVER INLINE IN `agent-wrapper-main.ts`, next to `compilerGateRef`/`compilerInstructions`. IMPOSSIBLE: `wc -l` says that file is EXACTLY 400 lines and the cap is \"split before 400\". Even the 3-line `designBrief:` wiring breaches it. Something must come out, so the two existing mission-input closures move into the new module beside the design resolver — same category, and the file's own comment at :211 already says the rejection-instructions extraction \"is what keeps this file to one call\". The move is REQUIRED by the cap, not opportunistic.\n(2) PUT THE 4th `UNREADABLE` OUTCOME IN `agent-mission-text.ts`. Same wall: that file is 394 lines and a fourth branch plus its paragraph lands past 400. So `DesignBrief` and the two design-paragraph functions MOVE to a new `agent-mission-design.ts` (~55 lines out, dropping the host to ~340), which then has room for the branch. `agent-mission-text.ts` re-exports `DesignBrief` so its two importers keep compiling unchanged.\n(3) LET THE RESOLVER THROW ON UNREADABLE STATE and rely on the wrapper's existing catch. REJECTED, measured: `agent-wrapper.ts:244-248` `failSetup` calls `uncoded(step.kind, failure.message, ...)` — the design read's code and layer are DISCARDED. That is precisely the collapse DoD 1 forbids, wearing a different hat.\n(4) RETURN `null` ON UNREADABLE. REJECTED: `agent-wrapper.ts:289/302` reads `?? null`, and null renders as ABSENT for a compiler seat — the exact prohibited collapse.\n(5) ADD `goalOf(nodeRef)` TO `CompiledNodeSource`. REJECTED as a wider blast radius than needed: `activeCompiledGraphs` and `compiledExecutionRef` are BOTH already exported, so the new module reconstructs the nodeRef->goalRef map with the same two production functions `sealedNodesOf` uses, touching no shared interface.",
+    "codebaseInsights": "MEASURED AT HEAD f99114f7, 2026-09-07, BOTH DIRECTIONS.\n\nTHE GAP IS REAL AND EXACTLY AS DESCRIBED. `git grep -n designBrief -- apps packages tests` = THREE hits, all in `agent-wrapper.ts` (:111 optional config callback, :289 codeMission arg, :302 compilerMission arg). No caller supplies it; `createAgentWrapper` in `agent-wrapper-main.ts:186` passes nodeMission/projectId/payloadHint/compilerGateRef/compilerInstructions/affordances and NOT designBrief. So every real seat evaluates `undefined ?? null`.\n\nTHE VERSION FOLD DoD 2 ASKS FOR IS ALREADY IN PRODUCTION — DO NOT WRITE A SECOND ONE. `readDesignRevision` (design-store.ts:192-202) takes an optional `planningRunRef`; when given, it reads `readCompiledContractBinding(...).binding.designVersion` and refuses `DESIGN_RECORD_MALFORMED` on a mismatched/absent binding and `DESIGN_REVISION_ABSENT` when the version is null. Supplying `planningRunRef` is what makes a read the PLANNED version; omitting it takes `records[records.length - 1]`, i.e. LATEST. `refsOfGoal(goalId).planningRunRef` (goals/goal-identity.ts:35) is the former, and `agent-wrapper-main.ts:224` already calls it.\n\nBUT THE TWO LANES NEED DIFFERENT READS, AND THIS IS THE PLAN'S ONE REAL DESIGN CALL. A COMPILER seat is staffed BEFORE the plan exists, so there is no compiled binding and the planningRunRef fold can only refuse. A compiler seat plans FROM the current design, so it reads LATEST (no planningRunRef). A NODE seat is staffed AFTER the plan, so it reads the PLANNED version via planningRunRef — which is where DoD 2's \"two versions yield the planned one\" is assertable. Written that way, and disclosed in a row comment so QA grades the split rather than reading DoD 2 as demanding the fold on both lanes.\n\nnodeRef -> goalRef IS NOT EXPOSED, but is one derivation away. `CompiledNodeSource` serves only `mission(nodeRef)` and `nodes(): NodeSpec[]`, and `NodeSpec` (http/affordance-contract.ts:38) carries only dependsOn/nodeRef/title. The private `SealedNode` (compiled-node-source.ts:129-136) DOES carry `goalRef`. Both ingredients are exported: `activeCompiledGraphs(store, projectId)` (:93) yields `{content, goalRef, planningRunRef}`, and `compiledExecutionRef(projectId, graph, nodeKey)` (:9) is the same nodeRef former `sealedNodesOf` uses. Rebuild the map from those two, never by re-deriving the ref by hand.\n\nSKIPPED COMES OUT OF THE SAME READ, NOT A SECOND ONE. `DesignRecord.revision` is `DesignRevisionOrSkip` (design-records.ts:46) and `isDesignSkip(value)` (design-contracts.ts:135) narrows on the LITERAL `true`. One `readDesignRevision` serves PRESENT and SKIPPED.\n\nSHAPES FOR THE BRIEF: `DesignRevision.screens` is `DesignJourney[]` = `{journey, screens: {screen, states}[]}`; `dataModel` is `DesignEntity[]` = `{entity, fields, relations}`. `DesignBrief` wants `screens: string[]` / `entities: string[]`, so screens are the flattened `screen` names (deduped, order preserved) and entities the `entity` names. There is NO existing design-ref former — `designAggregateId` is an aggregate id, not a ref — so the brief's `ref` is minted here as `${goalRef}@v${record.version}`, which carries the provenance DoD 2 and DoD 4 both ask to see in the bytes.\n\nLINE BUDGETS, THE BINDING CONSTRAINT: agent-wrapper-main.ts 400, agent-wrapper.ts 399, agent-mission-text.ts 394. Two of the three must shrink before anything is added. `agent-wrapper.ts` is NOT edited by this plan — it already calls `config.designBrief?.(...)` — so it stays 399.\n\nSOURCE-TEXT ASSERTER SWEEP for the two moved symbols: `git grep -ln 'compilerGateRef\\|compilerInstructions'` finds exactly ONE code file, `agent-wrapper-main.test.ts`; the other hits are `.moe/` board JSON, a chat log and a Serena memory, none of which compile or assert.",
+    "risks": "THE ABSENT/UNREADABLE BOUNDARY IS WHERE THIS ROW CAN GO VACUOUSLY GREEN. `readDesignRevision` returns `DESIGN_REVISION_ABSENT` for BOTH \"this goal has no design events at all\" (truly absent) and \"the compiled binding says designVersion is null\". Only the first is ABSENT; a malformed record, a decode failure or a store failure is UNREADABLE and must carry the code AND the layer. Map by CODE explicitly — never by `!result.ok -> ABSENT`, which is the collapse DoD 1 names. Every refusal arm asserts the code and the layer, per the global rail, and each must be verified by mutating the production surface until it goes red.\n\nTHE MOVE IS THE OTHER RISK. Moving `compilerGateRef`/`compilerInstructions` and the two design-paragraph functions must be VERBATIM — same behaviour, same wording. The mission bytes are read by a language model and the existing branches were worded so no two share a phrase; a paraphrase during the move silently changes what every seat reads. Verify each moved block with `grep -Fxq` per line against the original, not by eye.\n\nDO NOT REOPEN task-de0598236 (DONE, owns the mission capability). This row lands the composition edge only.\n\nSHARED CHECKOUT: `apps/daemon/src/orchestrator/*` is hot. Before editing, `git status --porcelain` the exact paths and record foreign dirt; never revert, stash or commit it. The daemon suite is known red at HEAD for the criterion-evidence family — path-attribute the delta (merge-base vs HEAD, intersected with owned paths), disclose foreign red verbatim, never certify it.\n\nGATE SHAPE: `pnpm test` covers NO `apps/**`. The focused leg is the daemon-targeted vitest form the prerequisite row used and QA accepted: `npx vitest run --root . --config package.json <files>` from `apps/daemon`. Read the `Test Files N passed` count line, not the exit code. `pnpm typecheck` needs a planted-error control in a NEW file to prove it executed — an incremental tsc greens without one.\n\nDoD 3 says \"through the REAL wrapper composition (not a hand-built brief)\". `agent-mission-text.test.ts:128-144` hand-builds PRESENT and is exactly the blind spot that let this ship; do not add the new arms there. They belong in the composition tests, driving `createDesignBriefResolver` against a real store.",
+    "keyFiles": [
+      "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+      "apps/daemon/src/orchestrator/agent-wrapper.ts",
+      "apps/daemon/src/orchestrator/agent-mission-text.ts",
+      "apps/daemon/src/design/design-store.ts",
+      "apps/daemon/src/design/design-contracts.ts",
+      "apps/daemon/src/orchestrator/compiled-node-source.ts",
+      "apps/daemon/src/goals/goal-identity.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-07T00:05:40.467Z"
+}

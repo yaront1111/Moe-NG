@@ -1,0 +1,41 @@
+{
+  "id": "task-a98b01a44ffd46cba9d9648fcb7001cb",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "/deployments/health/read carries the last hour of the probe ring so a latency sparkline has a series to draw",
+  "description": "PREREQUISITE ROW spun out of task-df972c274f2a43eda3a9f57d2780c6f9 (the Environments surface) by worker-b1872f24 on 2026-09-07, which is BLOCKED on it. Parent id: task-df972c274f2a43eda3a9f57d2780c6f9.\n\nTHE GAP, MEASURED ON DISK, NOT INFERRED. The parent's DoD 1 requires \"a latency sparkline over the last hour, driven by a REAL daemon frame\". The served frame carries ONE point, not a series:\n - apps/daemon/src/http/deployments-health-read.ts:175-181 `lastProbeOf(probes)` returns `probes.at(-1)` only, and `DeploymentsHealthView.lastProbe` (:66-68) is `{at, latencyMs, status} | null`.\n - The FULL RING IS ALREADY AT THE PORT: `DeploymentsHealthSource.probes: readonly HealthProbe[]` (:86). The composition already supplies it. The view deliberately narrows it out.\nSo no new store read, no new route, no new composition edge is needed - this is a VIEW WIDENING plus its consumers.\n\nWHY THE PARENT DID NOT JUST DO IT. Widening `DeploymentsHealthView` changes a RETURNED SHAPE, and its asserting consumers are outside that row's owned-path roster: apps/daemon/src/http/deployments-health-read.test.ts (20 arms, exact-shape toEqual) and apps/daemon/src/daemon-entry-deployments-health.test.ts (6 arms). The global roster rail says a worker who finds an unnamed consumer mid-step stops and reports rather than taking the extra path.\n\nWHAT THIS ROW OWES. Project a BOUNDED, WINDOWED series - the last hour, not the whole 1440-row ring - so the browser is not handed 1440 points to draw 60. Name the window in the frame rather than leaving the client to infer it, or the client cannot assert it plotted the right span. The ring is bounded at 1440 rows per project/environment (task-cc05c473).\n\nTHE CONSUMER EDGE IS ALREADY BUILT AND WAITING. apps/control-room/src/live/live-deployments-health.ts decodes this frame EXACT-KEY at every level, so ADDING A KEY WILL RED IT - that is the property working as designed, and this row must update that decoder's key list and its test in the same edit, or the Environments section breaks. The renderer goes in apps/control-room/src/v2/ops/environments-section.tsx, which is already wired into the Health screen through live-environments.tsx and LiveHealth.\n\nTHE SPARKLINE ITSELF, per the parent's step 4 (unbuilt because it had no series): INLINE SVG, no charting dependency - `grep -rln 'sparkline|polyline' apps/control-room/src/v2 --include=*.tsx` finds no precedent, and a library for one sparkline is a bundle and a supply-chain edge for nothing. It must survive the degenerate inputs it meets on day one: ZERO points (a brand-new environment) renders an empty state and never an SVG with NaN coordinates; ONE point and all-identical latencies must not divide by a zero range. Give the SVG an accessible name and keep the numbers reachable as text or an attribute - a chart whose values exist only as path geometry cannot be asserted and cannot be read by a screen reader.\n\nDERIVE NOTHING FROM THE SERIES. The parent's rail 1 stands: UP/DEGRADED/DOWN is the daemon's, and the series arriving in the browser is exactly the temptation to recompute it. environments-section.test.tsx already carries the disagreeing-frame arm that catches this; do not weaken it.\n\nVERIFY: `pnpm --filter @moe/control-room test` AND `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/deployments-health-read.test.ts src/daemon-entry-deployments-health.test.ts`.",
+  "definitionOfDone": [
+    "`DeploymentsHealthView` carries a BOUNDED latency series windowed to the last hour, projected from `DeploymentsHealthSource.probes` which the port already supplies. The window is stated IN the frame, not inferred by the client. Assert the projection drops rows older than the window by feeding a ring that spans more than an hour and asserting the returned count and the oldest returned instant - a projection that returns the whole ring passes any test that only checks the newest point.",
+    "Both asserting consumers are updated in the same edit and stay exact-shape: apps/daemon/src/http/deployments-health-read.test.ts and apps/daemon/src/daemon-entry-deployments-health.test.ts. Quote the count lines.",
+    "The control-room decoder apps/control-room/src/live/live-deployments-health.ts gains the new key in its exact-key list and its nested decoder, and its test asserts the series by value plus an EXTRA-key refusal on the nested series row. Adding the key WITHOUT this edit reds live-deployments-health.test.ts; state that you saw it red before fixing it, since that is the proof the exact-key discipline is real.",
+    "The sparkline is INLINE SVG in apps/control-room/src/v2/ops/environments-section.tsx with NO dependency added (assert package.json is untouched). Its degenerate inputs are asserted SEPARATELY: zero points renders the empty state and emits no NaN in any SVG attribute; one point renders without a division-by-zero; all-identical latencies render without a zero-range divide. Assert the plotted point COUNT matches the window so a sparkline drawing the whole ring is caught.",
+    "The SVG has an accessible name and its values are reachable as text or attributes, not only as path geometry.",
+    "The existing no-client-derivation arm in environments-section.test.tsx (the disagreeing-frame fixture) still passes UNWEAKENED, and a drill that recomputes the state from the new series reds it. Quote the drill outcome with a restore proof.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/control-room test`, the two named daemon files, and `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "RENDER WHAT THE DAEMON STATES, DERIVE NOTHING. Handing the browser the probe series is exactly the temptation to recompute UP/DEGRADED/DOWN from it. The daemon owns one opinion about one ring.",
+    "WINDOW THE SERIES SERVER-SIDE AND STATE THE WINDOW IN THE FRAME. The ring is 1440 rows; the sparkline wants the last hour. A client that slices an unwindowed ring cannot assert it drew the right span.",
+    "ADDING A KEY TO THIS FRAME REDS apps/control-room/src/live/live-deployments-health.ts BY DESIGN. Update the decoder and its test in the same edit; never widen the client to a subset match to avoid the red.",
+    "INLINE SVG, NO CHARTING DEPENDENCY. There is no chart precedent in this app and one sparkline does not justify a bundle or a supply-chain edge.",
+    "ASCII-ONLY SOURCES, APOSTROPHE-FREE JSX TEXT - an apostrophe in JSX reds the scheduler package-boundary scan in a distant lane."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-cc05c47362dc41b0b2b416a70ad45b42",
+    "task-509c6c1609174adb9228940bc002f5c3"
+  ],
+  "priority": "MEDIUM",
+  "order": 121.85,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-07T00:05:18.665Z",
+  "updatedAt": "2026-09-07T00:05:18.665Z"
+}

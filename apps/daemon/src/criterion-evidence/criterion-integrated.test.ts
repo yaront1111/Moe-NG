@@ -68,6 +68,18 @@ it("records the native criterion outcome on the integrated Git SHA and invalidat
     await service.advance();
     const after = service.read(GOAL_ID);
     if (process.platform === "win32") {
+      // Name the execution port's own refusal before asserting the outcome, so a host whose broker
+      // cannot serve the check reports that code instead of an opaque mismatch. Order is
+      // load-bearing and was settled by drilling it: a refusing port makes the runner block after
+      // the FIRST criterion, so an exact-count assertion placed above the sweep fires first and
+      // hides the code behind "expected length 2, got 1". Guard non-vacuity only (a zero-length
+      // results list would make the sweep pass while proving nothing), then name the refusal, then
+      // pin the full roster.
+      expect(execution.mock.results.length).toBeGreaterThan(0);
+      const refusals = (await Promise.all(execution.mock.results.map(async (entry) =>
+        entry.type === "return" ? (await entry.value).refusal : null))).filter((row) => row !== null);
+      expect(refusals, "criterion execution port refused; scoped checks cannot complete").toEqual([]);
+      expect(execution.mock.results).toHaveLength(2);
       expect(after).toMatchObject({ run: { status: "COMPLETED", integratedSha: committed.receipt.sha },
         criteria: [{ evidence: { status: "PASSED", sha: committed.receipt.sha, byteCount: 16 } },
           { evidence: { status: "PASSED", sha: committed.receipt.sha, byteCount: 16 } }] });

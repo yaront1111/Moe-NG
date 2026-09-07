@@ -3,6 +3,8 @@ import { createHash } from "node:crypto";
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createCriterionCheckExecutor } from "@moe/runner";
+import type { CriterionCheckExecutionResult, CriterionCheckExecutor } from "@moe/runner";
 import { GOAL_ID, PROJECT_ID } from "../bootstrap/bootstrap-test-fixtures.js";
 import { createCriterionEvidenceService } from "../criterion-evidence/criterion-service.js";
 import { OPERATOR_CAPABILITIES } from "../daemon-command-vocabulary.js";
@@ -27,8 +29,24 @@ export async function createScopedCloseWorld() {
   const world = createScopedGoalWorld();
   const { store, graph } = world;
   const workspace = realpathSync(mkdtempSync(join(tmpdir(), "moe-scoped-close-")));
+  // The execution port already NAMES why a check did not complete; the run result carries
+  // refusal {code, layer}. Keep the last one so a failure below reports that reason instead of a
+  // bare "did not prove all checks" - an unnamed throw here is what cost this board a day when a
+  // stale broker answered PROCESS_BOUNDARY_BROKER_REFUSED / BROKER_PROTOCOL. close() must reach
+  // the inner port: criterion-runner is the only thing that closes it, and a dropped close leaks
+  // a broker process on every scoped-close test.
+  const port = createCriterionCheckExecutor();
+  const recorder: { refusal: CriterionCheckExecutionResult["refusal"] } = { refusal: null };
+  const executor: CriterionCheckExecutor = {
+    async run(input, onStarted) {
+      const result = await port.run(input, onStarted);
+      if (result.refusal !== null) recorder.refusal = result.refusal;
+      return result;
+    },
+    close: () => port.close(),
+  };
   const service = createCriterionEvidenceService({ store, projectId: PROJECT_ID,
-    storeId: `scoped-close-${workspace}`, workspace, clock: () => DECIDED_AT });
+    storeId: `scoped-close-${workspace}`, workspace, clock: () => DECIDED_AT, executor });
   const cleanup = async () => { await service.close(); rmSync(workspace, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); };
   try {
     git(workspace, ["init", "-b", "main"]);
@@ -91,7 +109,9 @@ export async function createScopedCloseWorld() {
     if (process.platform === "win32") {
       if (read.run?.status !== "COMPLETED" || read.criteria.some((row) => row.evidence?.status !== "PASSED"
         || row.evidence.sha !== committed.receipt.sha || row.evidence.byteCount !== row.criterionId.length)) {
-        throw new Error("scoped criterion execution did not prove all checks");
+        const { refusal } = recorder;
+        throw new Error(`scoped criterion execution did not prove all checks${refusal === null
+          ? "" : `; execution port refused ${refusal.code} at layer ${refusal.layer}`}`);
       }
     } else {
       const first = read.criteria[0]?.evidence;
