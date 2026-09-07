@@ -273,7 +273,8 @@ describe("claudeSpawner", () => {
     const done = spawner(request({ workspace: "D:/ws/node-1" }));
     const child = calls[0];
     if (child === undefined) throw new Error("nothing spawned");
-    // The measured codex-cli 0.151.0 surface: mission on stdin via `-`, host
+    // The measured codex-cli 0.153.4 surface (2026-09-07, host Yaron-PC; an earlier
+    // reading of 0.151.0 said the same): mission on stdin via `-`, host
     // config out, MCP as a streamable-HTTP override, sandbox from the seat kind.
     expect(child.file).toBe("codex");
     expect(child.args).toEqual([
@@ -284,6 +285,7 @@ describe("claudeSpawner", () => {
       "--sandbox", "workspace-write",
       "-c", `mcp_servers.moe-next.url=${MCP_ORIGIN}`,
       "-c", "mcp_servers.moe-next.bearer_token_env_var=MOE_AGENT_MCP_BEARER",
+      "-c", "mcp_servers.moe-next.disabled_tools=[]",
       "-",
     ]);
     // The scoped bearer rides the child's OWN environment, never argv or disk;
@@ -1214,5 +1216,265 @@ describe("seat output tee", () => {
     const report = await exit as { readonly tail: readonly string[] };
     expect(Buffer.concat(outChunks).equals(Buffer.concat([head, rest]))).toBe(true);
     expect(report.tail).toEqual(["€"]);
+  });
+});
+
+/**
+ * ROSTER PARITY BETWEEN PROVIDERS, asserted over the argv the spawner ACTUALLY composes.
+ *
+ * WHY THE RAW STRINGS ARE NOT COMPARED, and why a later reader must not "fix" this back to a
+ * raw comparison. The two providers name the same tools differently. Claude's roster is one
+ * comma-joined `--allowedTools` value using its own `mcp__<server>__<tool>` spelling; codex has
+ * no roster FLAG at all (measured on codex-cli 0.153.4: `codex exec --help` carries neither
+ * `--tools` nor `--allowedTools`) and takes its roster as a `-c` TOML override scoped under
+ * `mcp_servers.<server>`, where the entries are the SERVER's own tool names and codex applies
+ * its own prefix (`codex features list` reports `non_prefixed_mcp_tool_names` as under
+ * development / false). A set-equality assertion over raw strings would therefore fail for a
+ * correct implementation and pass for none. Both sides are normalized to the same GRANT
+ * IDENTITY instead: `<server>` for the server itself and `<server>:<tool>` for one tool, with
+ * `*` naming the whole-server grant.
+ */
+const grantsOf = (entries: readonly string[]): ReadonlySet<string> => new Set(entries);
+
+/** Claude: the value of `--allowedTools`. Builtins are not MCP grants and are skipped here. */
+const claudeMcpGrants = (argv: readonly string[]): ReadonlySet<string> => {
+  const value = argv[argv.indexOf("--allowedTools") + 1];
+  if (value === undefined) throw new Error("claude argv carries no --allowedTools value");
+  const grants: string[] = [];
+  for (const entry of value.split(",")) {
+    if (!entry.startsWith("mcp__")) continue;
+    const rest = entry.slice("mcp__".length);
+    const split = rest.indexOf("__");
+    grants.push(split === -1 ? rest : `${rest.slice(0, split)}:${rest.slice(split + 2)}`);
+  }
+  return grantsOf(grants);
+};
+
+/**
+ * Codex: every `-c` override. The server is granted by being CONFIGURED (its `.url`); the
+ * whole-server tool grant is `disabled_tools=[]` — nothing withheld. An `enabled_tools` list
+ * names tools one by one. A NON-EMPTY `disabled_tools` is deliberately not decoded: the
+ * derivation never emits one, and guessing a served set here would make the arm vacuous, so it
+ * yields an identity that can never match and the equality goes red.
+ */
+const codexMcpGrants = (argv: readonly string[]): ReadonlySet<string> => {
+  const grants: string[] = [];
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] !== "-c") continue;
+    const override = argv[index + 1] ?? "";
+    const match = /^mcp_servers\.([^.]+)\.([^=]+)=(.*)$/u.exec(override);
+    if (match === null) continue;
+    const [, server, key, value] = match as unknown as [string, string, string, string];
+    if (key === "url") grants.push(server);
+    else if (key === "disabled_tools") {
+      grants.push(value === "[]" ? `${server}:*` : `${server}:<withholds ${value}>`);
+    } else if (key === "enabled_tools") {
+      for (const tool of value.matchAll(/'([^']*)'/gu)) grants.push(`${server}:${tool[1] ?? ""}`);
+    }
+  }
+  return grantsOf(grants);
+};
+
+const sorted = (values: ReadonlySet<string>): readonly string[] => [...values].sort();
+
+const argvFor = async (
+  overrides: Partial<SpawnRequest>, command: string,
+): Promise<readonly string[]> => {
+  const { calls, spawn } = fakeSpawn();
+  const { made: spawner } = inSandbox(claudeSpawner, {
+    command, log: () => undefined, platform: "linux", spawn,
+  });
+  const done = spawner(request(overrides));
+  const child = calls[0];
+  if (child === undefined) throw new Error("nothing spawned");
+  child.emitter.emit("close", 0, null);
+  await done;
+  return child.args;
+};
+
+describe("grants a codex seat the same tool roster as a claude seat", () => {
+  /**
+   * BOTH STEP KINDS. The claude roster differs between them (CODING_TOOLS vs CHAIN_TOOLS), so a
+   * codex branch that ignored `workspace` would pass a single-kind test while handing a
+   * chain-step seat a coding seat's surface.
+   */
+  const KINDS = Object.freeze([
+    { name: "coding", workspace: "D:/ws/node-1" as string | null },
+    { name: "chain-step", workspace: null as string | null },
+  ]);
+
+  for (const kind of KINDS) {
+    it(`matches grant for grant on a ${kind.name} seat, in both directions`, async () => {
+      const claude = claudeMcpGrants(await argvFor({ workspace: kind.workspace }, "claude"));
+      const codex = codexMcpGrants(await argvFor({ workspace: kind.workspace }, "codex"));
+      // The sweep must have produced something: an empty pair would compare equal vacuously.
+      expect(claude.size).toBeGreaterThan(0);
+      expect(codex.size).toBeGreaterThan(0);
+      // SET-EQUALITY, not subset. Sorted-array equality reds on a grant present on either side
+      // alone, which is the direction a subset assertion silently loses.
+      expect(sorted(codex)).toEqual(sorted(claude));
+      expect([...claude].filter((grant) => !codex.has(grant))).toEqual([]);
+      expect([...codex].filter((grant) => !claude.has(grant))).toEqual([]);
+    });
+  }
+
+  it("carries the roster override as a quote-free, whitespace-free -c value", async () => {
+    const argv = await argvFor({ workspace: "D:/ws/node-1" }, "codex");
+    const overrides = argv.filter((_, index) => argv[index - 1] === "-c");
+    const roster = overrides.filter((value) => /\.(enabled|disabled)_tools=/u.test(value));
+    expect(roster).toEqual(["mcp_servers.moe-next.disabled_tools=[]"]);
+    // Every `-c` value, roster included, must survive the win32 cmd fence unchanged:
+    // agent-spawn-invocation refuses `"` outright, and whitespace would be re-quoted.
+    for (const value of overrides) {
+      for (const token of UNQUOTABLE_TOKENS) expect(value).not.toContain(token);
+      expect(value).not.toMatch(/\s/u);
+    }
+  });
+
+  /**
+   * RESULT SIZE: THE ABSENCE IS ASSERTED POSITIVELY, so a future diff that invents a knob has to
+   * argue with a measurement rather than slip past. codex-cli 0.153.4 recognizes NO MCP
+   * result-size configuration — `mcp_servers.<name>.tool_max_output_tokens`, `.max_output_tokens`,
+   * `.output_token_limit`, `tools.max_output_tokens` and `model_max_output_tokens` are every one
+   * rejected as unknown fields under `--strict-config`, and only the two TIMEOUT keys are
+   * accepted. `MAX_MCP_OUTPUT_TOKENS` is claude's variable and is inert on a codex seat; it is
+   * still delivered in the child's environment, which this arm pins so "no override on argv" is
+   * not confused with "the variable was dropped".
+   */
+  it("carries no result-size override on the codex argv, because codex has none", async () => {
+    const argv = await argvFor({ workspace: "D:/ws/node-1" }, "codex");
+    for (const argument of argv) {
+      expect(argument).not.toMatch(/max_output_tokens|output_token_limit|token_budget/u);
+      expect(argument).not.toContain("MAX_MCP_OUTPUT_TOKENS");
+    }
+    // Only the two keys codex DOES accept on a server could legitimately appear, and neither
+    // bounds size; nothing here emits them today, so no `_sec` key is on the argv either.
+    expect(argv.filter((value) => value.includes("_timeout_sec"))).toEqual([]);
+  });
+
+  /**
+   * THE BUILTIN HALF IS NOT A ROSTER PROBLEM. Claude's `--tools` grants Edit/Write/Read/Glob/
+   * Grep/Bash; codex has no roster for its own file and shell access, which its `--sandbox`
+   * mode governs. Both are decided by the SAME `workspace` flag, so the correspondence is
+   * pinned here rather than folded into the MCP set-equality above, where it would be false.
+   */
+  it("reaches builtin parity through the sandbox mode, per step kind", async () => {
+    const codingClaude = await argvFor({ workspace: "D:/ws/node-1" }, "claude");
+    const codingCodex = await argvFor({ workspace: "D:/ws/node-1" }, "codex");
+    expect(codingClaude[codingClaude.indexOf("--tools") + 1]).toBe("Edit,Write,Read,Glob,Grep,Bash");
+    expect(codingCodex[codingCodex.indexOf("--sandbox") + 1]).toBe("workspace-write");
+    const chainClaude = await argvFor({ workspace: null }, "claude");
+    const chainCodex = await argvFor({ workspace: null }, "codex");
+    expect(chainClaude[chainClaude.indexOf("--tools") + 1]).toBe("");
+    expect(chainCodex[chainCodex.indexOf("--sandbox") + 1]).toBe("read-only");
+    // The builtins never leak into the codex MCP roster: they are not moe-next tools.
+    expect(sorted(codexMcpGrants(codingCodex))).toEqual(["moe-next", "moe-next:*"]);
+  });
+});
+
+/**
+ * MISSION PARITY. The mission a seat receives must not depend on which binary reads it.
+ * agent-mission-text.ts takes no provider parameter and carries no codex branch (grep for
+ * "codex" or "provider" in that file returns nothing), so these arms are an ASSERTION that the
+ * property still holds — not a place to add a branch. If one of them ever reds, the mission
+ * surface changed under this file and the fix belongs there, not here.
+ */
+describe("hands a codex seat the same mission as a claude seat", () => {
+  const missionOf = async (command: string): Promise<string> => {
+    const { calls, spawn } = fakeSpawn();
+    const { made: spawner } = inSandbox(claudeSpawner, {
+      command, log: () => undefined, platform: "linux", spawn,
+    });
+    const done = spawner(request({ workspace: "D:/ws/node-1" }));
+    const child = calls[0];
+    if (child === undefined) throw new Error("nothing spawned");
+    const text = new Promise<string>((resolve) => {
+      let read = "";
+      child.stdin.on("data", (chunk: Buffer) => { read += chunk.toString("utf8"); });
+      child.stdin.on("end", () => { resolve(read); });
+    });
+    const bytes = await text;
+    child.emitter.emit("close", 0, null);
+    await done;
+    return bytes;
+  };
+
+  it("delivers the identical mission bytes to both providers for the same step", async () => {
+    const claude = await missionOf("claude");
+    const codex = await missionOf("codex");
+    // Load-bearing sentences first, so a failure names WHICH sentence moved rather than
+    // reporting one opaque string inequality.
+    for (const sentence of ["You hold the claim", "project.register@proj-1"]) {
+      expect(claude).toContain(sentence);
+      expect(codex).toContain(sentence);
+    }
+    expect(codex).toBe(claude);
+    expect(codex.length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * NON-EROSION. The cheapest way to make any codex arm pass is to relax the spawn surface, so
+ * each deliberate element is pinned on its own — a blob assertion would let one erode while the
+ * others carried the test.
+ */
+describe("keeps the codex spawn surface intact", () => {
+  const codexArgv = async (): Promise<readonly string[]> =>
+    argvFor({ workspace: "D:/ws/node-1" }, "codex");
+
+  it("keeps the host's own codex config out with --ignore-user-config", async () => {
+    // Its help states auth still uses CODEX_HOME, so this costs the seat no credential while
+    // keeping any MCP server the host names off the seat's surface.
+    expect(await codexArgv()).toContain("--ignore-user-config");
+  });
+
+  it("names the bearer's VARIABLE on argv and puts the credential only in the child env", async () => {
+    const { calls, spawn } = fakeSpawn();
+    const { configDir, made: spawner } = inSandbox(claudeSpawner, {
+      command: "codex", log: () => undefined, platform: "linux", spawn,
+    });
+    const done = spawner(request({ workspace: "D:/ws/node-1" }));
+    const child = calls[0];
+    if (child === undefined) throw new Error("nothing spawned");
+    // Half one: the argv names the variable...
+    expect(child.args).toContain("mcp_servers.moe-next.bearer_token_env_var=MOE_AGENT_MCP_BEARER");
+    // ...half two: the credential itself is in the child's env and NOWHERE on the command line,
+    // and no credential-bearing config file was written for a codex seat.
+    expect(child.options.env?.["MOE_AGENT_MCP_BEARER"]).toBe("agent-secret-0001");
+    expect(`${child.file} ${child.args.join(" ")}`).not.toContain("agent-secret-0001");
+    expect(readdirSync(configDir)).toEqual([]);
+    child.emitter.emit("close", 0, null);
+    await done;
+  });
+
+  it("keeps the provider env allowlist closed", async () => {
+    const { calls, spawn } = fakeSpawn();
+    const { made: spawner } = inSandbox(claudeSpawner, {
+      command: "codex", log: () => undefined, platform: "linux", spawn,
+      environment: { CODEX_HOME: "C:\codex", OPENAI_API_KEY: "sk-test", TOTALLY_UNRELATED: "no" },
+    });
+    const done = spawner(request({ workspace: "D:/ws/node-1" }));
+    const child = calls[0];
+    if (child === undefined) throw new Error("nothing spawned");
+    // Both directions: the CODEX_/OPENAI_ names arrive, and a name outside the roster does not.
+    expect(child.options.env?.["CODEX_HOME"]).toBe("C:\codex");
+    expect(child.options.env?.["OPENAI_API_KEY"]).toBe("sk-test");
+    expect(child.options.env?.["TOTALLY_UNRELATED"]).toBeUndefined();
+    child.emitter.emit("close", 0, null);
+    await done;
+  });
+
+  it("keeps every -c value free of what the cmd fence refuses", async () => {
+    const argv = await codexArgv();
+    const overrides = argv.filter((_, index) => argv[index - 1] === "-c");
+    // The sweep must have found overrides, or the loop below asserts nothing.
+    expect(overrides.length).toBeGreaterThanOrEqual(3);
+    for (const value of overrides) {
+      // NO DOUBLE QUOTE and NO WHITESPACE. Single quotes are the TOML literal-string spelling
+      // the roster needs (`enabled_tools` is sequence-typed and rejects a bare value), and the
+      // fence admits them; a double quote would be refused as SPAWN_ARGUMENT_UNQUOTABLE.
+      for (const token of UNQUOTABLE_TOKENS) expect(value).not.toContain(token);
+      expect(value).not.toMatch(/\s/u);
+    }
   });
 });
