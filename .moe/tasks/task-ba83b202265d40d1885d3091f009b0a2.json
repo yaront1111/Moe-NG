@@ -153,8 +153,8 @@
       "completedAt": "2026-09-07T06:35:30.871Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-97200064",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -192,18 +192,26 @@
       "author": "qa-97200064",
       "content": "CORRECTION TO MY REJECT — one sentence in it was wrong, and it would change what you do.\n\nI wrote: \"provider-pause.spec.ts:181 reds host-wide until 21:10Z today on the claude usage limit; not yours.\" **The \"until 21:10Z\" half is false and I withdraw it. Do not wait for that time to re-run the browser lane.**\n\nThe limit text is a TEST FIXTURE, not a real account state. `provider-pause.spec.ts:200` calls `seatDoubleFiles(scratch.root, LIMIT_LINE)`, and `wrapper-lane.ts:92-99` writes a seat double whose entire body is `writeSync(2, <line>); process.exit(1);`. The spec manufactures the limit because it is testing the pause mechanism. I read the string out of my log as a live provider fact without checking who wrote it.\n\nThe real cause is host timing. The failing assertion is step 1, before the pause is even meant to exist: `expect(staffed).toBe(\"node.deliver@node-e2e-<tag>\")` received `null` with `SPAWN_BUDGET_MS = 45_000` — the wrapper did not emit `SPAWNED` within 45 seconds. That is this box's spawn-latency cliff.\n\nWHAT IT MEANS FOR YOU: nothing expires at 21:10Z, so re-run whenever your fixes are ready. And because it is load-dependent rather than a standing fact, **if it reds inside your gate run, re-run that one spec alone before attributing it to anything** — it may well pass on a quieter box. The operative half of what I told you is unchanged: it is not yours and you owe no fix for it.\n\nEverything else in the reject stands: the security-roster backfill (comment-ca41bbb4) and the stale negative census in `http-listener-read-dispatch.test.ts` (comment-53438486) are both yours, both verified by me, and both should land in one commit.",
       "timestamp": "2026-09-07T05:20:35.267Z"
+    },
+    {
+      "id": "comment-7bc6ba3635c14f6cac136b220255337d",
+      "author": "qa-97200064",
+      "content": "QA ROUND-2 EVIDENCE (qa-97200064). Measured at HEAD 91f9f062; both fixes landed in `8b27734c` and the working tree is clean on every path involved. Both items I rejected are FIXED, and I re-ran the gates rather than reading the diff.\n\n**THE FLEET-WIDE RED IS CLEARED.** `pnpm test:security`:\n```\nBEFORE (09f0df39):  Test Files  2 failed | 10 passed (12)  /  Tests  6 failed | 994 passed (1000)   EXIT 1\nNOW    (91f9f062):  Test Files  12 passed (12)             /  Tests  1003 passed (1003)             EXIT 0\n```\nNote the total moved 1000 → **1003**, which is the arithmetic proof of your seventh-consequence work: one new `transport` boundary × BEFORE/AFTER/RACE = exactly three arms. A backfill that only bumped literals would have left the total at 1000.\n\n**DEFECT 2 IS CLEARED TOO.** `git show HEAD:apps/daemon/src/http/http-listener-read-dispatch.test.ts | grep -c '\"/environments/read\"'` is **0** — both frozen negative censuses retired. Scoped run: `Test Files 1 passed (1)` / `Tests 17 passed (17)` EXIT 0, against the file that was `1 failed` in @worker-b1872f24's GATE END.\n\n**YOUR NUMBERS MATCH WHAT THE LEG PRINTS, which is what I asked for.** `EXPECTED_ROSTER_SIZE = 180`, `EXPECTED_INVISIBLE_DENOMINATOR = 255`, `EXPECTED_INVISIBLE_SHARE_PER_MILLE = 294`, `EXPECTED_PRIVATE_COUNT = 75` — and 294 is `round(75/255*1000)`, so the share is derived rather than copied. You also caught `:833`'s prose 179→180, which nobody named including me.\n\n**THE SEVENTH CONSEQUENCE IS THE BEST WORK IN THIS ROUND AND I WANT IT ON THE RECORD.** Adding a `transport`-axis entry redded ten arms in two other files because that axis demands BEFORE/AFTER/RACE per boundary plus a length pin, and the tolerant `>0` shape belongs to scheduler-activation. **You could have moved the entry to a laxer axis and gone green.** Instead you wrote three real arms against the production port — `recent-workflow-transport-hostile-cases.ts:110-116`, `ENVIRONMENT_WRITE_LAYER` expecting `{code: \"OFFER_ANSWER_UNREADABLE\", layer: \"CONTROL_ROOM_ENVIRONMENT_WRITE\"}`, hostile = a bare `\"accepted\"` string on `set`, observe = `null` on `unset`: two unreadable shapes across both kinds, one refusal. I read them: they are genuine, and your reason is the right one — a silently-accepted non-write leaves the operator reading the OLD fingerprint as confirmation of a new value, which on this screen is the whole safety property. The table's comment also states that no credential values or canaries are created or printed, so epic rail 3 holds in the fixture too.\n\n**AND YOU FOUND DEFECT 2 YOURSELF \"by running the leg my row never ran.\"** That is exactly the lesson this board has been paying for all day in four separate shapes. Worth keeping as your own rule.\n\nGATES I RE-RAN AT THIS HEAD: `pnpm test:security` EXIT 0 (12/1003, above); `http-listener-read-dispatch.test.ts` EXIT 0 (1/17); `pnpm typecheck` EXIT 0, 19 projects, `apps/daemon typecheck: Done` — proven non-vacuous earlier this session with a planted `error TS2322` in a NEW file under `apps/control-room/src/v2/`. Round 1's greens stand unchanged: `vitest run src/v2/ops src/v2/goals` 47 files / 596 tests EXIT 0, DoD-2's sentinel arms with their real planted control at `:265-271`, DoD-6's proxy pin at `dev-proxy-paths.ts:33`.\n\nGATES NOT RE-RUN BY ME, disclosed rather than implied:\n- Full `pnpm --filter @moe/daemon test`: `full-suite-gate` is held by task-9aea412b / @worker-767c9887 since 06:27:45Z. This round's only daemon change is two deletions inside a single test file, and I ran that file scoped at 17/17. Not queuing behind a live lease for a leg that cannot reach further.\n- Full `pnpm --filter @moe/control-room test`: your own `188 passed (188)` / `2386 passed (2386)` EXIT 0 at 09:27:53 local, cited not certified. This round changed no control-room source.\n- **`pnpm test:e2e:browser`: I did NOT ask you to re-run it and you should NOT try right now.** It is broken at HEAD by a FOREIGN defect — task-e735fefa's `91f9f062` landed two modules without their `.js` bridges, so `node --experimental-transform-types apps/daemon/src/orchestrator/agent-wrapper-main.ts` dies with `ERR_MODULE_NOT_FOUND` on `agent-mission-design.js` and every lane reaching `landLaneNode` is dead. I rejected that row at 06:15Z. Nothing about it is yours, and a red you collect from it would attribute to the wrong seat.",
+      "timestamp": "2026-09-07T06:39:19.309Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:46:11.818Z",
-  "updatedAt": "2026-09-07T06:37:25.307Z",
+  "updatedAt": "2026-09-07T06:39:54.785Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:06:25.393Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 8,
     "executedStepCount": 18,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-09-07T06:39:54.785Z",
+    "wallClockMs": 128009392
   },
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -255,7 +263,10 @@
     "apps/control-room/src/v2/ops/environments-screen.test.tsx",
     "apps/control-room/src/v2/goals/goal-environments-card.tsx",
     "tests/e2e/control-room/environments-screen.spec.ts",
-    "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+    ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+    ".moe/tasks/task-ba83b202265d40d1885d3091f009b0a2.json",
+    ".moe/tasks/task-e735fefa4c5f4b00adb364f7c9dcdab7.json"
   ],
   "completionSummary": "REOPEN PASS. QA's one defect is fixed, and I found a SECOND of the same class and fixed that too. 4 files changed; the screen itself is untouched (QA graded DoD-1/2/3/6 as real work).\n\nDEFECT 1, QA's. `export const ENVIRONMENT_WRITE_LAYER` (environment-variables-port.ts:47) was unrostered. QA is right that EXPORTED = ROSTERED, not UNSCANNED_PRIVATE_LAYERS; task-817d893f's module-private shape does not transfer. Six edits in boundary-roster.security.ts, every number from MY OWN printed run: roster entry (axis transport), EXPECTED_ROSTER_SIZE 179->180, apps/control-room bucket 14->15, axis prose 29->30 / 179->180, EXPECTED_INVISIBLE_DENOMINATOR 254->255, share 295->294 (round(75/255*1000)), plus the :833 prose 179->180 nobody named.\n\nTHEN A SEVENTH CONSEQUENCE NOBODY PREDICTED: a `transport` entry redded TEN arms in two other files. transport-boundaries demands BEFORE/AFTER/RACE per boundary plus a length pin; completeness partitions on the axis. The tolerant `>0` shape belongs to scheduler-activation, not transport. So I wrote three REAL arms against the production port (`createEnvironmentVariablesPort` through `spendOffer`): an unreadable daemon answer must not fall through as an ACCEPTED write, driven on BOTH kinds. Property matters because the fingerprint is the operator's only confirmation, so a silently-accepted non-write leaves them reading the OLD fingerprint as the new one.\n\nDEFECT 2, MINE, found by running the leg my row never ran. My dev-proxy-paths.ts pin RETIRED two frozen negative censuses in apps/daemon/src/http/http-listener-read-dispatch.test.ts, and I never updated them - the prerequisite row had written the instruction into the file naming my task id. Printed: `expected [ \"/environments/read\" ] to strictly equal []`. Both censuses retired with the file's established prose form (required, not cosmetic: :500 pins every member to a comment).\n\nBoth defects were invisible to this row's named verification AND to typecheck. A control-room row that touches ",
   "commits": [
@@ -308,6 +319,37 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "8b27734cbf4dff008d82ebdecd6cf2c4550ab0fd",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-b1872f24@2026-09-07T05:42:48Z",
+      "paths": [
+        ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+        ".moe/tasks/task-ba83b202265d40d1885d3091f009b0a2.json",
+        ".moe/tasks/task-e735fefa4c5f4b00adb364f7c9dcdab7.json",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/recent-workflow-transport-hostile-cases.ts",
+        "tests/security/transport-boundaries.security.ts"
+      ],
+      "recordedBy": "worker-b1872f24",
+      "recordedAt": "2026-09-07T06:37:35.988Z",
+      "treeId": "d2a809386d64224c6b509c5d673e8d069ca80c87",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        },
+        {
+          "path": "tests/security/boundary-roster.security.ts",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        }
+      ],
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -327,16 +369,20 @@
     "apps/control-room/src/v2/ops/environment-variables-screen.test.tsx",
     "apps/control-room/src/v2/ops/environment-refusal-words.ts",
     "apps/control-room/src/v2/goals/goal-environments.tsx",
-    "apps/control-room/src/v2/goals/goal-environments.test.tsx"
+    "apps/control-room/src/v2/goals/goal-environments.test.tsx",
+    "tests/security/transport-boundaries.security.ts",
+    "tests/security/recent-workflow-transport-hostile-cases.ts",
+    "tests/security/boundary-roster.security.ts",
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "completion",
-    "sessionId": "worker-b1872f24@2026-09-07T03:46:40Z",
-    "at": "2026-09-07T04:32:49.095Z"
+    "sessionId": "worker-b1872f24@2026-09-07T05:42:48Z",
+    "at": "2026-09-07T06:37:35.988Z"
   },
-  "reviewCompletedAt": "2026-09-07T04:38:54.866Z",
+  "reviewCompletedAt": "2026-09-07T06:39:54.785Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD-7 gate clause: `pnpm test:security` is EXIT 1 at HEAD 09f0df39 (Test Files 2 failed | 10 passed (12) / Tests 6 failed | 994 passed (1000)) caused by this row's own landed `export const ENVIRONMENT_WRITE_LAYER` at apps/control-room/src/v2/ops/environment-variables-port.ts:47, which is absent from the security boundary roster. The lane was green on that arm before this row landed, and because the file is now TRACKED the red reaches every seat in the repository."
@@ -379,5 +425,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-09-07T06:39:54.785Z",
+  "reviewSummary": "APPROVED at HEAD 91f9f062. Both rejected items fixed and re-run by me. Full evidence: comment-7bc6ba36.\n\nFLEET-WIDE RED CLEARED. `pnpm test:security`:\n  BEFORE (09f0df39): Test Files 2 failed | 10 passed (12) / Tests 6 failed | 994 passed (1000)  EXIT 1\n  NOW    (91f9f062): Test Files 12 passed (12)            / Tests 1003 passed (1003)            EXIT 0\n1000 -> 1003 is arithmetic proof of the transport work: one new boundary x BEFORE/AFTER/RACE = three arms. A literal-only backfill would have stayed at 1000.\n\nDEFECT 2 CLEARED: `git show HEAD:http-listener-read-dispatch.test.ts | grep -c '\"/environments/read\"'` is 0; scoped run `Test Files 1 passed (1)` / `Tests 17 passed (17)` EXIT 0 — the file that was `1 failed` in b1872f24's GATE END.\n\nNumbers derived not copied: ROSTER_SIZE 180, DENOMINATOR 255, SHARE 294 = round(75/255*1000), PRIVATE_COUNT 75, plus the :833 prose nobody named.\n\nBEST WORK THIS ROUND: the transport axis redded ten arms elsewhere; they could have moved the entry to a laxer axis and gone green. Instead they wrote three real arms against the production port (OFFER_ANSWER_UNREADABLE @ CONTROL_ROOM_ENVIRONMENT_WRITE; bare \"accepted\" on set, null on unset). I read them — genuine, and the reason is right: a silently-accepted non-write leaves the operator reading the OLD fingerprint as confirmation. Fixture creates no credential values, so epic rail 3 holds. They also found defect 2 themselves \"by running the leg my row never ran\".\n\ntypecheck EXIT 0 / 19 projects (non-vacuous via planted TS2322 earlier). Round 1 greens stand: 47 files / 596 tests; sentinel control at :265-271; proxy pin at dev-proxy-paths.ts:33.\n\nNOT RE-RUN, disclosed: full daemon suite (gate held since 06:27:45Z; the only daemon change is two deletions in one test file, run scoped). Control-room cited from their 188/2386. `test:e2e:browser` deliberately not required — broken at HEAD by task-e735fefa's missing `.js` bridges."
 }

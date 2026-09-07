@@ -86,7 +86,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -115,7 +115,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T17:25:56.708Z",
-  "updatedAt": "2026-09-07T04:02:33.176Z",
+  "updatedAt": "2026-09-07T06:45:51.244Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:10:17.590Z",
     "plannedStepCount": 5,
@@ -148,10 +148,10 @@
     "worker-ca28be90"
   ],
   "workStartedAt": "2026-09-07T03:31:25.955Z",
-  "blockedReason": "RESOURCE WAIT ONLY — steps 1-4 COMPLETE and green; step 5's drills and adversarial pass are DONE; only the three LEASED gate legs remain. No conflict, no missing prerequisite, no ambiguity.\n\nDELIVERED (3 new files, untracked, no tracked path touched): tests/e2e/foundation/codex-agent.mjs (461 ln), codex-journey-harness.ts (270), codex-seat-loop.e2e.test.ts (240). fake-agent.mjs, writeAgentShim, both j5 modules and the e2e tsconfig are UNMODIFIED.\n\nGREEN, SCOPED, LEASE-FREE at HEAD 29722d40: `npx tsc -p tests/e2e/foundation/tsconfig.json` EXIT 0 (planted-error control proves the new .ts is in the type program); `npx vitest run tests/e2e/foundation/codex-seat-loop.e2e.test.ts` EXIT 0, `Test Files 1 passed (1)` / `Tests 5 passed (5)`, ~26 s. Three mutation drills red as required, all restored with SHA256 proofs in separate calls — transcript in comment-fe8a7e4ee25848f994aed93a3e96e9e7. I claim NO gate result, green or red.\n\nOWED, only under the lease: `pnpm test:e2e` (this row's NAMED verification command), `pnpm --filter @moe/daemon test`, `pnpm typecheck` — foreground, one per call, count lines quoted, the new test confirmed BY NAME in the e2e output.\n\nGATE STATE, measured. Holder task-5ef1a0a9 / worker-f78e0703 since 02:57:27Z; I queued 03:35:09Z at POSITION 3 behind task-8e793ae3 and task-9aea412b. A ~03:45Z census found NO pnpm/vitest process attributable to that lease and my ping did not route to worker-f78e0703, so it MAY be orphaned. NOT force-releasing: one census plus no reply is not attribution, and a release reaches the two rows ahead of me first. Ping posted in chan-388a290f.\n\nON RESUME: run the three legs foreground; attribute any red by failing paths minus baseline intersected with my three owned paths (new, imported by nothing else, so that intersection should be EMPTY); then complete_task on the fresh `pnpm test:e2e`. Detail in Serena `task-ae309e47-handoff`.",
-  "blockedResourceId": "full-suite-gate",
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-07T03:56:39.491Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "declaredFiles": [
     "tests/e2e/foundation/codex-agent.mjs",
     "tests/e2e/foundation/codex-journey-harness.ts",
@@ -167,5 +167,6 @@
       "releasedBy": "worker-ca28be90",
       "reason": "RESOURCE WAIT, not a stall — freeing my seat per claim_next_task.nextAction so I can work task-817d893f meanwhile. full-suite-gate queue entry for this row is UNTOUCHED (position 3, behind task-8e793ae3 and task-9aea412b); I am not releasing the resource entry, only the task assignment. The row stays BLOCKED with its blockedReason intact and auto-unblocks when the lease is granted."
     }
-  ]
+  ],
+  "blockedOnTaskIds": null
 }
