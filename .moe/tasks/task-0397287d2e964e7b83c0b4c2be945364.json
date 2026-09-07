@@ -132,7 +132,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T20:13:42.297Z",
-  "updatedAt": "2026-09-07T00:57:35.455Z",
+  "updatedAt": "2026-09-07T01:01:40.492Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T22:05:31.612Z",
     "plannedStepCount": 7,
@@ -305,10 +305,11 @@
     "tests/e2e/control-room/lane-review-round.ts"
   ],
   "lastCommitOutcome": {
-    "outcome": "committed",
+    "outcome": "nothing",
     "kind": "checkpoint",
-    "sessionId": "worker-767c9887@2026-09-07T00:57:27Z",
-    "at": "2026-09-07T00:57:35.455Z"
+    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
+    "sessionId": "worker-767c9887@2026-09-07T01:01:36Z",
+    "at": "2026-09-07T01:01:40.492Z"
   },
   "workStartedAt": "2026-09-06T22:19:04.980Z",
   "declaredFiles": [
