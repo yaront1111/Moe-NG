@@ -19,17 +19,20 @@
     {
       "stepId": "step-1",
       "description": "RE-MEASURE, AND CONFIRM THE LEAF ACTUALLY LANDED WHAT THIS ROW CONSUMES. No edits. Record verbatim: (a) `git status --porcelain -- tests/e2e/` — foreign dirt is noted and continued past, never reverted or committed; (b) the leaf task-371677fc reached DONE, and from `get_context.epicSiblings` its completionSummary/verification rather than re-measuring HEAD; (c) `grep -n 'worldPrelude' tests/e2e/foundation/multi-node-journey.ts` showing the prelude is now injectable or skippable, and `grep -n 'export function sealMultiNodeGraph' -A6` showing its identity parameter — if either is still the old fixed form the leaf did not deliver and you must report blocked naming task-371677fc, NOT re-implement it here; (d) `grep -n 'MOE_WRAPPER_MAX_AGENTS\\|MOE_NODE_SPECS_DIR' tests/e2e/control-room/wrapper-lane.ts` confirming the lane still sets max-agents 1 and no specs-dir override, which is why step 4 runs three passes. Record the HEAD sha.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/foundation/multi-node-journey.ts",
         "tests/e2e/foundation/multi-node-world.ts",
         "tests/e2e/control-room/wrapper-lane.ts"
-      ]
+      ],
+      "note": "HEAD/upstream 49aa399b289afebc4beeb4b10b8fe07ac312f643 on moe/work-2026-09-04. `git status --porcelain -- tests/e2e/` empty. Dependency task-371677fc DONE/landed=true; completion 7f3fdbf6dea94be5334d74449e3272df8b7c941f. epicSiblings verification pnpm test:e2e exit 0, summary 20 passed/1 skipped files, 175 passed/1 skipped tests; QA additionally scoped verbose multi-node 1 file/3 tests. journey.ts:91-98 accepts SealOptions.identity/preludeMode and calls worldPrelude(...identity,options.preludeMode). Leaf corrected skip to POLICY_VALIDATE_ONLY, retaining policy.validate while avoiding seed/reactivation. wrapper-lane.ts:140 MOE_WRAPPER_MAX_AGENTS=\"1\"; no MOE_NODE_SPECS_DIR override. Shared lane files remain read-only. Prior unattributed monitoring probe is not ours.",
+      "startedAt": "2026-09-07T18:37:36.495Z",
+      "completedAt": "2026-09-07T18:38:44.402Z"
     },
     {
       "stepId": "step-2",
       "description": "THE WORKSPACE THE GRAPH WILL BE BUILT IN. New `tests/e2e/control-room/lane-multi-node-workspace.ts`, a sibling of `lane-landing.ts` and written in its documented style. Export a function that takes the lane's git workspace and writes the three module directories the sealed graph expects — one per `MULTI_NODE_KEYS` entry — each carrying the node's own `test.mjs`, and COMMITS them with the same `laneGit`-shaped invocation `lane-landing.ts` uses (identity flags on the command line, GIT_* stripped). `math.mjs` is deliberately NOT written: the seat has to produce it, and the verifier's exit code is the only thing that decides whether it did — the same rule `createJ1Scratch` documents. Also export the seat double for these nodes, following `landingSeatDouble`'s three-file shape (`.js` plus a `.cmd` for win32 and a `.sh` for posix, both delegating to the one `.js`, because `agent-spawn-invocation.ts` runs a win32 seat through cmd.exe as a command LINE). The seat writes the node's `math.mjs` and exits 0. Keep this module under 250 lines.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/control-room/lane-multi-node-workspace.ts",
         "tests/e2e/control-room/lane-landing.ts",
@@ -37,12 +40,19 @@
       ],
       "newFiles": [
         "tests/e2e/control-room/lane-multi-node-workspace.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/e2e/control-room/lane-multi-node-workspace.ts",
+        "tests/e2e/control-room/contract-goal.spec.ts"
+      ],
+      "note": "Brought the planned step-6 spec forward for TDD: focused Playwright arm RED exact expected node-key roster vs [] (1 failed), then GREEN 1 passed/3.8s. New workspace module commits only test.mjs + each key/test.mjs via explicit pathspec with GIT_* stripped and command-local git identity; math.mjs absent until seat runs. Three launcher forms share JS; seat selects only its mission node; omega imports both producers. Tests run all three node checks and assert baseline SHA changed. No shared files edited.",
+      "startedAt": "2026-09-07T18:38:44.601Z",
+      "completedAt": "2026-09-07T18:41:27.290Z"
     },
     {
       "stepId": "step-3",
       "description": "SEAL THE GRAPH ON THE LANE, PRELUDE SKIPPED. Begin new `tests/e2e/control-room/lane-contract-goal.ts` — the ONE helper DoD 1 names. It takes a `DaemonLane` and calls the leaf's parameterised `sealMultiNodeGraph` with the LANE's identity: `lane.projectId`, `lane.credential`, the lane's csrf token, and a lane-scoped goal id and node keys, WITH THE PRELUDE SKIPPED — the lane has already run the shipped demo seed and activated its project, so replaying `project.activate` is the one thing that cannot work here. Import the foundation modules; do NOT copy them (task rail 3: a second harness under tests/e2e/control-room/ is a second authority that will drift). Assert the seal's own result — a `runId` matching `/^run-/` and the three sealed nodes with OMEGA depending on ALPHA and BETA — so a seal that silently sealed nothing cannot pass. Every leg throws with the daemon's own refusal frame, naming the fence that answered.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/control-room/lane-contract-goal.ts",
         "tests/e2e/foundation/multi-node-journey.ts",
@@ -50,17 +60,25 @@
       ],
       "newFiles": [
         "tests/e2e/control-room/lane-contract-goal.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/e2e/control-room/lane-contract-goal.ts",
+        "tests/e2e/control-room/contract-goal.spec.ts"
+      ],
+      "note": "Focused real seeded lane: RED expected /^run-/ vs empty stub (1 failed); GREEN 1 passed/8.3s. Helper consumes sealMultiNodeGraph with lane project/credential/CSRF and goal/node identities, POLICY_VALIDATE_ONLY. Reads sealedNodes through foundation durable reader, filters own goal, asserts exact three-node roster/dependency edges and run prefix. No foundation/daemon/shared-lane edits.",
+      "startedAt": "2026-09-07T18:41:27.627Z",
+      "completedAt": "2026-09-07T18:43:13.695Z"
     },
     {
       "stepId": "step-4",
       "description": "DELIVER THE THREE NODES WITH THE REAL WRAPPER. Still in `lane-contract-goal.ts`: run the lane's `startWrapper` for THREE passes — ALPHA and BETA are independent and OMEGA is blocked until both land, and the lane sets `MOE_WRAPPER_MAX_AGENTS: \"1\"`, so one seat delivers one node per pass. Build the environment by SPREADING `wrapperEnv(scratch, seatCommand, WRAPPER_INTERVAL_MS, true)` and adding the three keys the foundation run sets: `MOE_NODE_SPECS_DIR: \"\"` so only COMPILED nodes are staffed (the lane's single operator spec is irrelevant — compiled missions come from the sealed graph), `MOE_NODE_TEST_COMMAND`, and `MOE_NODE_WORKSPACE` pointing at the lane's git workspace. Do NOT edit `wrapper-lane.ts` or `daemon-ports.ts` — both are task-cf2d91d9's declared paths and `wrapperEnv` already returns a plain record. Wait on the wrapper transcript the way `landLaneNode` does, and kill every wrapper in a `finally` on EVERY exit path including the throwing and timing-out ones; return each pid so the caller's teardown can prove no orphan survived. Assert after each pass that the expected node delivered and that OMEGA stayed undelivered until its producers landed — an assertion that only checks the final state cannot tell a working dependency gate from a broken one.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "tests/e2e/control-room/lane-contract-goal.ts",
         "tests/e2e/control-room/wrapper-lane.ts",
         "tests/e2e/control-room/lane-multi-node-workspace.ts"
-      ]
+      ],
+      "startedAt": "2026-09-07T18:43:13.888Z"
     },
     {
       "stepId": "step-5",
@@ -98,8 +116,8 @@
       ]
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-2aa4ee52",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -114,28 +132,43 @@
       "author": "architect-6e49a205",
       "content": "SPLIT AT PLAN TIME, plus two corrections to the filed shape. Measured at HEAD, 2026-09-07.\n\n1. SPLIT. DoD 2 (parameterise the foundation modules) is now leaf row **task-371677fc977948a597fa9b821b99f939**, filed in PLANNING; this row's `dependsOn` names it and WORKING claims are gated until it is DONE. The remaining clauses (the lane helper, the landing, the negative arm, the gates) stay here.\n\nWHY, not as paperwork: the parameterisation is a defaults-preserving refactor whose whole proof is the foundation suite staying green, and it has zero dependency on the control-room lane. The helper needs three module directories, three wrapper passes with real seats, an in-process criterion service and a landing, on a lane whose scratch writes exactly ONE node spec. BOTH halves gate on ~15-minute journeys (`JOURNEY_TIMEOUT_MS = 900_000` in multi-node-graph.e2e.test.ts), so landing them together makes one long red indistinguishable from the other. Rail: name every consumer at plan time, and a split that would otherwise be discovered at step 5 is a plan-time split.\n\n2. CORRECTION — THE ROW SAYS FIVE MODULES; `multi-node-reads.ts` IS NOT ONE OF THEM AND NEEDS NO WORK. `grep -n \"GOAL_ID\\|PROJECT_ID\\|MULTI_NODE_KEYS\\|CRITERIA\" tests/e2e/foundation/multi-node-reads.ts` returns ZERO hits — it already takes identity as arguments. Related: `multi-node-wire.ts:23` does not define the csrf token, it IMPORTS `CSRF_TOKEN` from `j1-loop-harness.js`, which many unrelated journeys share — so the parameter defaults to that import and `j1-loop-harness.ts` is never edited. Both facts are recorded on the leaf row's description and rails.\n\n3. A SIXTH PARAMETER DIMENSION NOBODY NAMED, and it is why this row cannot start first. `sealMultiNodeGraph` opens with `for (const planned of worldPrelude(scratch, clock)) await send(wire, planned)`, and `worldPrelude` (multi-node-world.ts:46-71) replays the shipped seed's prelude **through `project.activate`**. The control-room lane has ALREADY run the shipped demo seed and activated its project. Sealing on the lane therefore needs the prelude SKIPPED, not merely re-identified. That is a change to the foundation modules, so it is a DoD clause on the leaf, not something this row can work around.\n\n4. THE LANE ENVIRONMENT NEEDS NO SHARED-FILE EDIT. `wrapperEnv` (wrapper-lane.ts:131) returns a plain frozen record, so the helper spreads it and adds the three keys the foundation run sets — `MOE_NODE_SPECS_DIR: \"\"` (so only COMPILED nodes are staffed; the lane's single operator spec is irrelevant because compiled missions come from the sealed graph), `MOE_NODE_TEST_COMMAND`, `MOE_NODE_WORKSPACE`. `daemon-ports.ts` and `wrapper-lane.ts` are task-cf2d91d9's declared paths and this plan edits NEITHER.\n\n5. THREE WRAPPER PASSES, NOT ONE. The lane sets `MOE_WRAPPER_MAX_AGENTS: \"1\"`, and ALPHA/BETA are independent while OMEGA depends on both — the same 2-producer-passes-plus-1-consumer-pass shape `multi-node-graph.e2e.test.ts` drives. The plan asserts OMEGA stayed undelivered until its producers landed, because an assertion that only checks the final state cannot distinguish a working dependency gate from a broken one.\n\n6. NO SHORTCUT TO \"criterion-verified\" EXISTS. `approveAndRunCriteria` refuses unless `ready.integratedArtifact !== null`, which only exists once nodes are delivered and landed. Anything lighter is hand-seeding, which this row's own rails forbid. Confirmed rather than assumed, so nobody re-litigates it mid-flight.",
       "timestamp": "2026-09-07T11:05:17.722Z"
+    },
+    {
+      "id": "comment-09631398066b492196e5ba08851cba20",
+      "author": "worker-76f4ef35",
+      "content": "WORKER HANDOFF / STEP 4 INCOMPLETE (2026-09-07). Owned NEW paths, all declared: tests/e2e/control-room/{lane-contract-goal.ts,lane-multi-node-workspace.ts,contract-goal.spec.ts}. No foundation, daemon-ports.ts, wrapper-lane.ts or lane-landing.ts edits. Start HEAD 49aa399b289afebc4beeb4b10b8fe07ac312f643, latest dfa0d9df8dce2b9a6393e7e2d7d3c8c60f4458ce; tests/e2e status only these 3 untracked files.\n\nSteps 1-3 completed with red/green evidence in step notes. Fresh workspace-only arm: `pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts contract-goal.spec.ts --grep 'multi-node workspace'` -> 1 passed (3.4s), exit 0. `npx tsc -p tests/e2e/control-room/tsconfig.json` exit 0. Earlier seal-only journey passed 1 spec/8.3s before adding delivery; THIS IS NOT proof that the current combined helper completes.\n\nStep-4 WIP: real single-seat wrapper passes with MOE_WRAPPER_ONCE=1; scripted seat reads mission from STDIN (not argv), writes only its node, waits for caller's HTTP review.submit acknowledgement before exit. Helper derives compiled refs with production reader, submits shape-only seat report (not verifier authority), verifies exact COMMITTED transcript/ref + real git commit body, checks omega remains blocked/unwritten, kills every wrapper in finally. None of the full three-pass path has yet passed end-to-end.\n\nThe required landLaneNode composition is attempted BEFORE our new graph exists: it retires the seeded spec and lands the legacy node so it cannot steal our seat; calling it AFTER criterion verification would move the verified SHA. This ordering is documented in source. However it intermittently fails before any new graph/test workspace/seat code runs. Latest full focused run: 1 passed, 1 failed (3.3m), exit 1, LANDING_BUDGET_SPENT with policy.validate STAFFING_ATTEMPTS_EXHAUSTED. Filed OUT-OF-SCOPE prerequisite bug task-da435e66fe8247fda0d441e61e2c4b91; precise evidence + runnable reduced probe source in its comment-6de16a94. Shared helper remains untouched. Dirty-baseline common cause is a hypothesis, not established.\n\nRESUME: recheck bug landing via epicSiblings, finish proving step 4. Steps 5-7 NOT STARTED: criterion approvals/service/closure and release readers/gaps/SHA not implemented; shipped-seed negative code+layer arm and mutation drill not implemented; broad gates not run. Do not complete this row from its early green arms. Keep consumer assertions intact. New specs deliberately retain failing assertions rather than fixme/skip. All verification processes completed; release browser-e2e-gate before parking.",
+      "timestamp": "2026-09-07T18:55:31.435Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T05:41:06.478Z",
-  "updatedAt": "2026-09-07T16:10:52.550Z",
+  "updatedAt": "2026-09-07T18:55:47.194Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T11:00:16.539Z",
     "plannedStepCount": 7,
-    "plannedDistinctFileCount": 12
+    "plannedDistinctFileCount": 12,
+    "executedStepCount": 3
   },
   "contextFetchedBy": [
     "architect-6e49a205",
     "worker-11abfebb",
-    "worker-2aa4ee52"
+    "worker-2aa4ee52",
+    "governor-9af9af37",
+    "architect-f362f7a6",
+    "worker-76f4ef35"
   ],
   "dependsOn": [
-    "task-371677fc977948a597fa9b821b99f939"
+    "task-371677fc977948a597fa9b821b99f939",
+    "task-da435e66fe8247fda0d441e61e2c4b91"
   ],
   "planSizeWarnings": [
     "Plan touches 12 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-07T11:04:57.210Z",
   "planningNotes": {
@@ -246,6 +279,21 @@
       "treeId": "f192b85899c263676a0d892b3538edee69bea0c5",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "dc89dccb50c36b8e12ed90a8b49f10579feca9b7",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-2aa4ee52@2026-09-07T16:11:23Z",
+      "paths": [
+        ".moe/tasks/task-6bafd3b9439640cba358dd6e79329c9d.json"
+      ],
+      "recordedBy": "worker-2aa4ee52",
+      "recordedAt": "2026-09-07T16:13:05.940Z",
+      "treeId": "f8cba8385594930ca1ff98320a033acd153dd70a",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -253,11 +301,26 @@
     ".moe/tasks/task-117a3cd91a8a4db1a61830be8c28f2d2.json",
     ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/daemon/src/monitoring/probe-interval-typecheck-control.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-2aa4ee52@2026-09-07T16:09:18Z",
-    "at": "2026-09-07T16:10:52.550Z"
-  }
+    "sessionId": "worker-2aa4ee52@2026-09-07T16:11:23Z",
+    "at": "2026-09-07T16:13:05.940Z"
+  },
+  "workStartedAt": "2026-09-07T18:37:36.495Z",
+  "declaredFiles": [
+    "tests/e2e/control-room/lane-multi-node-workspace.ts",
+    "tests/e2e/control-room/lane-contract-goal.ts",
+    "tests/e2e/control-room/contract-goal.spec.ts"
+  ],
+  "blockedReason": "Existing landLaneNode composition on a fresh SHIPPED fakeGh=SUCCESS lane intermittently returns LANDING_BUDGET_SPENT with policy.validate STAFFING_ATTEMPTS_EXHAUSTED BEFORE the helper prepares files or creates the contract graph. Another run led into BASELINE_WORKSPACE_DIRTY; exact race remains a hypothesis. Safe full delivery cannot be verified without fixing prerequisite bug task-da435e66fe8247fda0d441e61e2c4b91; no shared helper edits made. Latest focused run 1 passed/1 failed, exit 1 (3.3m); fresh workspace-only arm 1 passed, exit 0; browser tsc exit 0. Steps 1-3 complete; step 4 partial; 5-7 pending. All 3 new paths declared for wrapper checkpoint. Handoff comment-09631398, bug evidence comment-6de16a94. Browser lease released, all test processes polled to completion.",
+  "blockedOnTaskIds": [
+    "task-da435e66fe8247fda0d441e61e2c4b91"
+  ],
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-07T18:55:47.194Z"
 }
