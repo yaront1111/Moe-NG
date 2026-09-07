@@ -3,6 +3,8 @@ import { CRITERION_APPROVE, CRITERION_APPROVE_KEYS, CRITERION_VERIFY, CRITERION_
 import { EFFECT_ACTIVATE_COMMAND_KIND, EFFECT_ACTIVATE_PAYLOAD_KEYS }
   from "./activation/activation-ingress-contracts.js";
 import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
+import { PROBE_INTERVAL_COMMAND_KIND, PROBE_INTERVAL_PAYLOAD_KEYS }
+  from "./monitoring/probe-interval-command-contracts.js";
 import {
   ENVIRONMENT_COMMAND_KIND_SET, ENVIRONMENT_COMMAND_KIND_UNSET,
 } from "./environment/environment-store.js";
@@ -197,4 +199,14 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     "session.renew": ["expiresAt", "sessionId"],
     "work.claim": ["expiresAt", "workItemId"], "work.release": ["workItemId"],
     "work.renew": ["expiresAt", "workItemId"],
+    // APPENDED rather than filed beside the deployment kinds it reads like, for the reason
+    // `BOOTSTRAP_COMMAND_KINDS` gives for its own appends: this literal's KEY ORDER is the order
+    // `buildCommandRegistry` fills its Map in, and two suites transcribe that order by hand
+    // (`daemon-command-registry.test.ts`'s REGISTRATION_ORDER, `daemon-command-vocabulary.test.ts`'s
+    // ROWS). Inserting mid-table would rewrite both for no gain in meaning.
+    //
+    // The roster is the monitoring slice's own (`monitoring/probe-interval-command-contracts.js`),
+    // named there beside the edge that decodes it so the seam's allow-list and the decoder cannot
+    // name different fields. `projectId` is ABSENT BY CONSTRUCTION like every kind above.
+    [PROBE_INTERVAL_COMMAND_KIND]: [...PROBE_INTERVAL_PAYLOAD_KEYS],
   });

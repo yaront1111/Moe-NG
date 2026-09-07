@@ -362,9 +362,14 @@ describe("SOFT_POLICY_WAIVER over the real HTTP ingress", () => {
       // Asking for a product preview runs the product on the daemon's host, so it is the
       // operator's act and never an agent's. Derived from OPERATOR_PRINCIPAL_KINDS like the rest.
       "preview.start",
+      // task-eb37494e. Re-timing the production health probe is the operator's act. Derived from
+      // OPERATOR_PRINCIPAL_KINDS like every entry above, never typed into the allowlist -- which
+      // is exactly why this transcription grew by ADDING the kind rather than by relaxing the
+      // length pin: the pin is what proves the derivation moved when the vocabulary did.
+      "monitoring.set_probe_interval",
     ]);
-    expect(expectedExclusions).toHaveLength(25);
-    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(25);
+    expect(expectedExclusions).toHaveLength(26);
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(26);
     expect([...MCP_EXCLUDED_COMMAND_KINDS].sort()).toEqual([...expectedExclusions].sort());
     // Direction 1: the production registry SERVES the kind this branch composes into.
     expect(deps.registry.has("approval.decide")).toBe(true);

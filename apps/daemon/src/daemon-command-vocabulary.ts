@@ -22,6 +22,7 @@ import {
 import type { SessionCommandKind } from "./identity/session-contracts.js";
 import { EVENT_STREAM_RESUME_COMMAND_KIND } from "./http/event-resume-command.js";
 import { JOURNAL_APPEND_COMMAND_KIND } from "./journal/journal-contracts.js";
+import { PROBE_INTERVAL_COMMAND_KIND } from "./monitoring/probe-interval-command-contracts.js";
 
 import { PREVIEW_DECIDE_COMMAND_KIND, PREVIEW_START_COMMAND_KIND }
   from "./preview/preview-contracts.js";
@@ -177,6 +178,14 @@ export const CRITERION_FAMILY = Object.freeze({ [CRITERION_APPROVE]: CAPABILITIE
 export const REPOSITORY_RECOVERY_FAMILY = Object.freeze({ "repository.recover": CAPABILITIES.ADMIN });
 /** GOAL like `release.decide`: acts on the product a goal produced. REACH only -- OPERATOR_PRINCIPAL_KINDS below is the human gate. NOT a bootstrap kind. */
 export const ENV_EXAMPLE_SYNC_FAMILY = Object.freeze({ [ENV_EXAMPLE_SYNC_COMMAND_KIND]: CAPABILITIES.GOAL });
+
+/** ADMIN fences REACH, exactly as it does for `ENVIRONMENT_FAMILY` above and for the same
+ *  reason it is NOT the human gate: what makes this kind human-only is OPERATOR_PRINCIPAL_KINDS
+ *  below plus the MCP exclusion `mcp-tool-allowlist.js` DERIVES from that set. Setting how often
+ *  the daemon probes a production environment is an administrative act on the project: too fast
+ *  is a load generator aimed at production, too slow is not monitoring. The BOUNDS that decide
+ *  which is which are `probe-interval-record.js`'s and are never restated here. */
+export const MONITORING_FAMILY = Object.freeze({ [PROBE_INTERVAL_COMMAND_KIND]: CAPABILITIES.ADMIN });
 export const SETTINGS_FAMILY = Object.freeze({ [AGENT_PROVIDER_COMMAND_KIND]: CAPABILITIES.ADMIN });
 
 /** ADMIN fences REACH -- it keeps scoped agent sessions out. It is NOT the human gate: what
@@ -234,6 +243,7 @@ export type WiredCommandKind =
   | typeof PREVIEW_START_COMMAND_KIND
   | typeof CUTOVER_ACTIVATE_COMMAND_KIND
   | typeof ENVIRONMENT_COMMAND_KIND_SET | typeof ENVIRONMENT_COMMAND_KIND_UNSET
+  | typeof PROBE_INTERVAL_COMMAND_KIND
   | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
   | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
   | typeof EVENT_STREAM_RESUME_COMMAND_KIND
@@ -252,7 +262,7 @@ const FAMILY_TABLES: readonly Readonly<Record<string, string | undefined>>[] = O
   APPROVAL_INTENT_FAMILY, BOOTSTRAP_FAMILY, COMPILER_FAMILY, DESIGN_FAMILY, ENVIRONMENT_FAMILY,
   GRAPH_FAMILY,
   PREVIEW_FAMILY, RELEASE_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, WORK_FAMILY, CRITERION_FAMILY,
-  REPOSITORY_RECOVERY_FAMILY, SETTINGS_FAMILY, ENV_EXAMPLE_SYNC_FAMILY,
+  REPOSITORY_RECOVERY_FAMILY, SETTINGS_FAMILY, ENV_EXAMPLE_SYNC_FAMILY, MONITORING_FAMILY,
 ]);
 
 /** The capability the kind's family demands, or null when no family claims the kind. */
@@ -271,6 +281,10 @@ export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   // Human wire: never staffable, whatever its family capability says.
   if (kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND) return null;
   if (kind === PREVIEW_DECIDE_COMMAND_KIND || kind === PREVIEW_START_COMMAND_KIND) return null;
+  // Human wire, on the same terms as the environment pair: an agent that could re-time the
+  // production health probe could slow it until an outage stopped being visible, or speed it
+  // until the probe itself was the outage. Never staffable, whatever ADMIN reach says.
+  if (kind === PROBE_INTERVAL_COMMAND_KIND) return null;
   if (kind === "node.deliver") {
     return Object.freeze([CAPABILITIES.REVIEW, CAPABILITIES.WORK]);
   }
@@ -379,6 +393,15 @@ export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   // above -- is the fence; `agent-spawn-contract.js` HUMAN_ONLY_STEPS refuses the spawn side.
   ENVIRONMENT_COMMAND_KIND_SET,
   ENVIRONMENT_COMMAND_KIND_UNSET,
+  // AND AN AGENT MUST NEVER RE-TIME THE PRODUCTION HEALTH PROBE. This membership is what keeps
+  // the kind off the MCP roster (`mcp-tool-allowlist.js` DERIVES the exclusion from this set),
+  // which matters more here than the ADMIN capability above: the MCP port authenticates with the
+  // operator bootstrap credential, so an ADVERTISED operator kind is an agent arriving AS the
+  // operator and the capability gate would pass. `agent-spawn-contract.js` HUMAN_ONLY_STEPS
+  // refuses the spawn side and was landed with the advertisement by task-749e585afc; this entry
+  // is the half that could not exist until the kind was wired, and its absence is exactly what
+  // `mcp-tool-allowlist.test.ts`'s lockstep arm reds on.
+  PROBE_INTERVAL_COMMAND_KIND,
   // Publishing pushes the operator's repository to a remote they named; bootstrap CREATES one at
   // a path they supplied. Their own code, and MCP-unreachable like the approvals.
   "repository.publish", "repository.bootstrap",

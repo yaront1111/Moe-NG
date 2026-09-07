@@ -31,7 +31,8 @@ import { RESOURCE_RECONCILE_COMMAND_KIND } from "./work/resource-reconcile-comma
 import { STEP_LIFECYCLE_SCHEMA_VERSION } from "./work/step-lifecycle-contracts.js";
 import { WORK_CLAIM_SCHEMA_VERSION } from "./work/work-claim-contracts.js";
 import {
-  CAPABILITIES, DESIGN_FAMILY, ENVIRONMENT_FAMILY, GRAPH_FAMILY, REVIEW_FAMILY, SESSION_FAMILY,
+  CAPABILITIES, DESIGN_FAMILY, ENVIRONMENT_FAMILY, GRAPH_FAMILY, MONITORING_FAMILY,
+  REVIEW_FAMILY, SESSION_FAMILY,
   STEP_FAMILY,
   WORK_FAMILY, familyCapabilityOf, type WiredCommandKind,
 } from "./daemon-command-vocabulary.js";
@@ -76,6 +77,11 @@ export interface CommandFamilyFacts {
   /** One of the five graph MUTATION kinds, each answered by its own durable planning service. */
   readonly graph: boolean;
   readonly journal: boolean;
+  /** The OPERATOR-ONLY probe-interval write, answered by its own edge. It never reaches
+   *  `requestOf` for the same reason the environment pair does not: the interval record owns a
+   *  closed three-code refusal vocabulary, and the shared assembler would answer with a code
+   *  from a different roster, erasing which surface actually refused. */
+  readonly monitoring: boolean;
   /** The operator's product-preview verdict - REGISTERED-BUT-REFUSING until the runner lands. */
   readonly preview: boolean;
   /** The daemon-owned Gate 1 approval writer, answered by its own durable service. */
@@ -114,6 +120,7 @@ function membershipOf(kind: WiredCommandKind): Omit<
     eventResume: kind === EVENT_STREAM_RESUME_COMMAND_KIND,
     graph: kind in GRAPH_FAMILY,
     journal: kind === JOURNAL_APPEND_COMMAND_KIND,
+    monitoring: kind in MONITORING_FAMILY,
     // AN EQUALITY WIDENED TO A PAIR, not a set membership: both preview kinds are in this
     // family. Narrowing it back to one kind still COMPILES and reds only in the family arm.
     preview: kind === PREVIEW_DECIDE_COMMAND_KIND || kind === PREVIEW_START_COMMAND_KIND,

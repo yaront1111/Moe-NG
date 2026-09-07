@@ -231,6 +231,10 @@ describe("wiredMcpToolKinds command half", () => {
       "deployment.deploy", "deployment.migrate_down", "deployment.rollback", "deployment.set_target",
       "environment.set_variable", "environment.unset_variable", "goal.close",
       "graph.approve", "graph.supersede", "integration.accept_output",
+      // task-eb37494e wired the kind for dispatch, and the exclusion followed BY DERIVATION from
+      // OPERATOR_PRINCIPAL_KINDS -- precisely the movement the lockstep arm at the foot of this
+      // file exists to force. In SORTED position, because the derivation sorts.
+      "monitoring.set_probe_interval",
       "preview.decide", "preview.start", "product_contract.answer_clarification",
       "product_contract.sync_env_example", "project.set_agent_provider", "release.decide",
       "repository.bootstrap", "repository.publish", "repository.recover", "resource.confirm_released",
@@ -239,7 +243,7 @@ describe("wiredMcpToolKinds command half", () => {
     // EXACT, not `> 0`: a ONE-member roster satisfies `length > 0` while silently
     // re-admitting one approval kind to MCP, which is the precise regression this row exists
     // to prevent. Drilled by deletion in step 7 D3.
-    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(25);
+    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(26);
     expect(Object.isFrozen(MCP_EXCLUDED_COMMAND_KINDS)).toBe(true);
     // Every operator-only kind but the operator's own scoped-session mint is off the MCP roster:
     // the exclusion is the vocabulary's human-only class, so a kind that joins it leaves the
@@ -264,7 +268,7 @@ describe("wiredMcpToolKinds command half", () => {
       queries: MCP_SERVED_QUERY_KINDS.length,
       vocabulary: Object.keys(PAYLOAD_KEYS).length,
       wired: wiredMcpToolKinds().length,
-    }).toEqual({ excluded: 25, queries: 7, vocabulary: 62, wired: 44 });
+    }).toEqual({ excluded: 26, queries: 7, vocabulary: 63, wired: 44 });
   });
 
   it("is deterministic and frozen", () => {
@@ -687,38 +691,55 @@ describe("task-749e585a the probe-interval kind is unreachable over MCP", () => 
     }).toEqual({ excluded: true, operator: true, wired: true });
   });
 
-  it("is refused on the daemon's own command seam by code AND layer", async () => {
+  /**
+   * REWRITTEN BY task-eb37494e, WHICH IS THE COMMIT THIS ARM WAS WRITTEN TO OUTLIVE. Before the
+   * dispatch registration landed, the kind was refused at stage REGISTRY with INPUT_INVALID
+   * because the daemon served nothing for it. It is served now, so the OLD assertion could only
+   * be kept by leaving the kind unwired -- and the arm's subject was never "unserved", it was
+   * "MCP-UNREACHABLE". That property survives the wiring and is what is asserted here, on the
+   * stronger footing the wiring makes available: reached, fenced, and refused by the RECORD.
+   */
+  it("is served on the command seam and answers with the record's own code AND layer", async () => {
     const before = decisionsIn();
+    // A payload whose ENVIRONMENT cannot admit, so the call reaches the handler and is refused
+    // there -- proving reach WITHOUT writing a probe interval into this suite's store. The
+    // OPERATOR credential is used deliberately: it is the strongest principal the MCP port can
+    // present, so a refusal here is about the REQUEST, never about the caller being unworthy.
     const bytes = await port.dispatchCommandBytes(encoder.encode(JSON.stringify({
       commandId: "cmd-probe-interval-allowlist",
       commandKind: PROBE_INTERVAL,
       correlationId: "corr-probe-interval-allowlist",
       expectedVersion: 0,
-      payload: { environment: "production", intervalMs: 30_000 },
+      payload: { environment: "NOT A VALID ENVIRONMENT", intervalMs: 30_000 },
       requestDigest: "a".repeat(64),
       schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
       sessionCredential: CREDENTIAL,
       targetAggregateId: "agg-probe-interval-allowlist",
     })));
     const frame = JSON.parse(decoder.decode(bytes)) as Record<string, unknown>;
-    const error = frame["error"] as { code?: string } | undefined;
+    const refusal = frame["refusal"] as { code?: string; layer?: string } | undefined;
 
-    // CODE AND LAYER TOGETHER, and the layer is spelled `stage` on this seam -- the frame
-    // carries no `refusal.layer` member, so an arm that read `refusal?.layer` would compare
-    // `undefined` to `undefined` and pass while asserting nothing. MEASURED, not assumed.
-    // The OPERATOR credential is used deliberately: it is the strongest principal the MCP port
-    // can present, so REGISTRY here means the kind is UNSERVED rather than the caller unworthy.
-    expect({ code: error?.code, outcome: frame["outcome"], stage: frame["stage"] })
-      .toEqual({ code: "INPUT_INVALID", outcome: "REFUSED", stage: "REGISTRY" });
+    // CODE AND LAYER TOGETHER, and both are the INTERVAL RECORD's, forwarded unrestamped by the
+    // command edge. Three surfaces can refuse this call -- the seam's payload allow-list, the
+    // edge, and the record -- so an arm naming only the code would stay green the day the edge
+    // started answering first under a layer of its own.
+    expect({ code: refusal?.code, layer: refusal?.layer, outcome: frame["outcome"] }).toEqual({
+      code: "PROBE_INTERVAL_ENVIRONMENT_INVALID", layer: "DAEMON_INGRESS",
+      outcome: "PORT_REFUSED",
+    });
     expect(frame["ok"]).toBe(false);
-    // THE LAYER DISCRIMINATOR. Without it, `stage: "REGISTRY"` could be this seam's answer to
-    // everything. `deployment.rollback` IS served, so the same call shape on the same port
-    // under the same credential gets PAST the registry and is answered somewhere else -- which
-    // is what makes REGISTRY a statement about THIS kind. A single shared stage could not tell
-    // "not served" apart from "served and refused".
-    const servedBytes = await port.dispatchCommandBytes(encoder.encode(JSON.stringify({
+    // STAGE DISPATCH, NOT REGISTRY, and that is the whole delta this row landed: before the
+    // dispatch registration the seam answered REGISTRY/INPUT_INVALID for this kind. DISPATCH
+    // means the seam actually RAN the command.
+    expect(frame["stage"]).toBe("DISPATCH");
+    // THE DISCRIMINATOR THAT KEEPS `toBe("DISPATCH")` HONEST: the seam still answers REGISTRY
+    // for a kind it genuinely does not serve as a COMMAND, so the assertion above is a statement
+    // about THIS kind rather than about a stage the seam stopped using. `design.read` is the
+    // control because it is a REAL member of RUNTIME_COMMAND_KINDS -- an invented spelling would
+    // be refused earlier still, at DECODE, and prove nothing about the registry.
+    const unservedBytes = await port.dispatchCommandBytes(encoder.encode(JSON.stringify({
       commandId: "cmd-probe-interval-control",
-      commandKind: "deployment.rollback",
+      commandKind: "design.read",
       correlationId: "corr-probe-interval-control",
       expectedVersion: 0,
       payload: {},
@@ -727,9 +748,15 @@ describe("task-749e585a the probe-interval kind is unreachable over MCP", () => 
       sessionCredential: CREDENTIAL,
       targetAggregateId: "agg-probe-interval-control",
     })));
-    const servedFrame = JSON.parse(decoder.decode(servedBytes)) as Record<string, unknown>;
-    expect(servedFrame["stage"]).not.toBe("REGISTRY");
-    expect(servedFrame["ok"]).toBe(false);
+    const unservedFrame = JSON.parse(decoder.decode(unservedBytes)) as Record<string, unknown>;
+    expect({
+      code: (unservedFrame["error"] as { code?: string } | undefined)?.code,
+      stage: unservedFrame["stage"],
+    }).toEqual({ code: "INPUT_INVALID", stage: "REGISTRY" });
+    // AND THE MCP PROPERTY THE DESCRIBE BLOCK IS NAMED FOR, restated at the seam: reaching the
+    // kind here took a DIRECT dispatch of hand-built bytes. It is still off the advertised tool
+    // roster, so no MCP client can discover or call it.
+    expect(wiredMcpToolKinds()).not.toContain(PROBE_INTERVAL);
     // Nothing durable was written by either call.
     expect(decisionsIn().length).toBe(before.length);
   });

@@ -57,6 +57,8 @@ import type { DeploymentDeploySeams, MigrateDownSeams, RepositoryBootstrapSeams,
 import { runDesignSubmitEdge } from "./daemon-command-design.js";
 import { runEnvironmentEdge } from "./daemon-command-environment.js";
 import type { EnvironmentEdgeKind } from "./daemon-command-environment.js";
+import { runProbeIntervalCommand } from "./monitoring/probe-interval-command.js";
+import { createProbeIntervalRecord } from "./monitoring/probe-interval-record.js";
 import type { EnvironmentCredentialSource } from "./environment/environment-store.js";
 import { createActivationReceiptMeasurer } from "./bootstrap/activation-command-entry.js";
 import type { AsyncCommandHandler } from "./http/http-async-contract.js";
@@ -224,6 +226,12 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
   // Takes NO clock: the only moment a Gate 1 grant carries is the `decidedAt`
   // `requestOf` stamps below, so the authority cannot read one even by accident.
   const gate1Authority = createProductContractGate1Authority({ projectId, sessions, store });
+  // The interval PORT, built once for the same reason `sessions` is: it is a stateless facade
+  // that replays the aggregate on every call, so a second instance would only give two readers of
+  // one aggregate the chance to drift. `now` reads the daemon clock, never a payload.
+  const probeIntervals = createProbeIntervalRecord({
+    now: authorityClock, projectId, store,
+  });
 
   const requestOf = (
     kind: string,
@@ -337,7 +345,8 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
     }
     const { activation, approvalIntent, clarification, compilerDecompose, compilerPropose,
       confirmReleased, continuation, criterion, cutover, design, environment, eventResume,
-      graph, journal, preview, productContractGate1, reconcile, recovery, requiredCapability,
+      graph, journal, monitoring, preview, productContractGate1, reconcile, recovery,
+      requiredCapability,
       review, schemaVersion, session, step, work } = commandFamilyFacts(kind);
     const handler: CommandHandler = (input) => {
       const { envelope, principal } = input;
@@ -533,6 +542,17 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           principalId: principal.principalId,
           projectId,
           store,
+        });
+      }
+      // THE ONE PORT, SHARED. `probeIntervals` is constructed ONCE above against this registry's
+      // own store and project, so the edge holds no store of its own and there is no second write
+      // path to the interval aggregate. The project comes from the AUTHENTICATED principal's
+      // registry composition, never from the payload -- a caller-supplied one would re-time
+      // another project's production probe.
+      if (monitoring) {
+        return runProbeIntervalCommand({
+          envelope: { commandId: envelope.commandId, payload: envelope.payload },
+          intervals: probeIntervals,
         });
       }
       if (environment) {

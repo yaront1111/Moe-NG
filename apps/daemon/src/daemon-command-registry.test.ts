@@ -222,6 +222,16 @@ const ROWS: readonly Row[] = [
   { agent: [WORK], capability: WORK, code: "JOURNAL_REQUEST_MALFORMED", kind: "journal.append",
     layer: "DAEMON_JOURNAL_APPEND",
     payloadKeys: ["attemptAggregateId", "effectId", "entries"] },
+  // task-eb37494e. `agent` is null and the capability is ADMIN, which fences REACH only -- the
+  // OPERATOR_ONLY entry below is the human fence. An empty payload carries no `environment`, so
+  // the INTERVAL RECORD answers, and it answers with ENVIRONMENT rather than RANGE because the
+  // record checks the environment FIRST: a caller naming an environment that cannot exist is
+  // told that, not that its interval is out of range for a nonexistent target. Both the code and
+  // the layer are the RECORD's (`probe-interval-record.ts`), forwarded unrestamped by the edge --
+  // which is the point of transcribing them here rather than a code the edge could mint.
+  { agent: null, capability: ADMIN, code: "PROBE_INTERVAL_ENVIRONMENT_INVALID",
+    kind: "monitoring.set_probe_interval", layer: INGRESS,
+    payloadKeys: ["environment", "intervalMs"] },
   { agent: [PLANNING, WORK], capability: PLANNING, code: PREREQUISITE, kind: "plan.propose",
     layer: PREREQ_LAYER, payloadKeys: ["commands", "runId"] },
   // The compile DISPATCHER's own request codec answers an empty payload -- the Gate 1
@@ -392,6 +402,11 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "qualification.replan",
   "review.submit", "session.close", "session.open", "session.renew",
   "work.claim", "work.release", "work.renew",
+  // APPENDED, and appended for a reason this list already documents: the order here is
+  // `PAYLOAD_KEYS`' key order, and the probe-interval entry was appended THERE rather than filed
+  // beside the deployment kinds it reads like, so that neither this transcription nor the
+  // vocabulary's ROWS had to be rewritten mid-table.
+  "monitoring.set_probe_interval",
 ];
 
 /**
@@ -438,6 +453,11 @@ const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
   // a GitHub account the operator's own `gh` login owns. ADMIN fences reach; this set is what
   // makes it the operator's act.
   "repository.bootstrap",
+  // task-eb37494e. Re-timing the production health probe is the operator's act: too fast and the
+  // probe is the load it was meant to watch for, too slow and an outage ends before the signal
+  // arrives. ADMIN fences reach; this set fences the act, and the MCP exclusion derived from it
+  // is what keeps the kind off a surface the operator bootstrap credential authenticates.
+  "monitoring.set_probe_interval",
 ];
 
 const CREDENTIAL = "registry-operator-credential";
@@ -1088,8 +1108,8 @@ describe("registered command table", () => {
   it("serves exactly the characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(62);
-    expect(deps.registry.size).toBe(62);
+    expect(ROWS).toHaveLength(63);
+    expect(deps.registry.size).toBe(63);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
@@ -1178,7 +1198,7 @@ describe("registered command table", () => {
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(62);
+    expect(REGISTRATION_ORDER).toHaveLength(63);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -1349,8 +1369,8 @@ describe("authorization ordering under a real session", () => {
     });
 
     it("gates exactly the transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(26);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(26);
+      expect(OPERATOR_ONLY).toHaveLength(27);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(27);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
@@ -2031,7 +2051,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(62);
+    expect(ports.registry.size).toBe(63);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -2053,7 +2073,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(62);
+    expect(supplied.registry.size).toBe(63);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
@@ -2085,7 +2105,7 @@ describe("createDaemonCommandPorts", () => {
 
     const snapshotPorts = createDaemonCommandPorts(options);
     expect(reads).toBe(1);
-    expect(snapshotPorts.registry.size).toBe(62);
+    expect(snapshotPorts.registry.size).toBe(63);
     expect(reads).toBe(1);
 
     expect(() => createDaemonCommandPorts({

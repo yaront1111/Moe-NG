@@ -148,7 +148,7 @@
       "completedAt": "2026-09-07T18:18:22.736Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -179,16 +179,24 @@
       "author": "worker-319873d7",
       "content": "GATE EVIDENCE + FOREIGN RED DISCLOSURE (worker-319873d7, step 7). Detail that exceeds the completionSummary cap.\n\nGATE TABLE, every leg FOREGROUND and STANDALONE, read by its OUTPUT not its exit code:\n| leg | count line | exit |\n| `pnpm --filter @moe/control-room test` | `Test Files  197 passed (197)` / `Tests  2569 passed (2569)` | 0 |\n| `pnpm typecheck` | all 14 packages `Done`, `apps/control-room typecheck: Done`, `apps/daemon typecheck: Done` | 0 |\n| `pnpm --filter @moe/daemon test` (OWNED PATH, standalone) `src/http/http-listener-read-dispatch.test.ts` | `Test Files  1 passed (1)` / `Tests  17 passed (17)` | 0 |\n| `pnpm --filter @moe/daemon test` (repo-wide baseline) | `Test Files  9 failed | 581 passed (590)` / `Tests  18 failed | 10519 passed | 8 skipped (10545)` | 1 |\nControl-room was 2565 before my wiring arms and 2569 after; the daemon count line proves the run executed (a vacuous run prints none).\n\nA GATE THAT DID NOT EXECUTE, caught and re-run. My first attempt to enumerate the daemon failures used `--reporter=basic`, which does not exist in vitest 4: `Error: Failed to load custom Reporter from basic ... Failed to load url basic (resolved id: basic). Does the file exist?`. NO count line, so nothing ran. Re-run without the flag; only that second run is quoted above.\n\nFOREIGN RED, PATH-ATTRIBUTED AND DISCLOSED VERBATIM, NEVER WAIVED. The 9 failing daemon files are:\nsrc/daemon-command-registry-human-approver.test.ts, src/daemon-command-registry.test.ts, src/daemon-command-vocabulary.test.ts, src/daemon-store-dependencies.test.ts, src/daemon-v2-command-registry.test.ts, src/mcp-http/mcp-http-host.test.ts, src/mcp-main.test.ts, src/mcp-tool-allowlist.test.ts, src/preview/preview-start-command.test.ts.\nAll 18 failures are about the daemon COMMAND-KIND roster. Exemplar, verbatim:\n  `FAIL  src/mcp-tool-allowlist.test.ts > wiredMcpToolKinds command half > pins an EXACT, frozen exclusion denominator and the derived roster size`\n  `AssertionError: expected [ 'approval.decide', ...(25) ] to deeply equal [ 'approval.decide', ...(24) ]`\ni.e. a 26th wired command kind exists against a frozen 25-member denominator. Others: `HTTP-1 refuses tools/call for every excluded kind with CAPABILITY_DENIED`, `HTTP-2 does not advertise any excluded kind on tools/list`, `STDIO-1 omits every excluded kind from the capability set`, `carries exactly the transcribed wired kinds in their registration order`, `asserts SET-EQUALITY between served operator kinds and the two advertised fences`.\nThis is precisely epic rail 1's scenario - the shared runtime roster is owned by a different epic and a peer row is mid-flight adding a kind. Peer dirt in the shared checkout is consistent with in-flight work (apps/daemon/src/http/runs-read.ts, runs-read-contract.ts, runs-read.test.ts among 15 foreign dirty paths, untouched by me).\n\nATTRIBUTION, (2)-minus-(1) INTERSECTED WITH OWNED PATHS = EMPTY, measured rather than asserted:\n- My ONLY daemon path is src/http/http-listener-read-dispatch.test.ts. It is NOT among the 9, and it passes standalone 17/17.\n- I changed ZERO daemon PRODUCTION files - my daemon edit is two array literals plus comments in one test file.\n- Measured that none of the 9 can reach my change: `grep -c 'http-listener-read-dispatch\\|dev-proxy-paths\\|backups'` over each of the 9 returns **0** for all nine. There is no import or source-text path from any failing file to anything I touched.\n- Every failure names command-kind/MCP-allowlist symbols with no backups, dev-proxy or read-dispatch relation.\n\nUNNAMED CONSUMER FOUND MID-STEP AND DISCLOSED. `pnpm --filter @moe/control-room test` first came back `Test Files  1 failed | 196 passed (197)` on `src/live/live-document-proxy.test.ts`, which asserts DEV_PROXY_PATHS by `toStrictEqual` - an EXACT-value mirror of the roster my pin edits, named in no plan step. I ran the full-tree sweep the shape rail asks for (`git grep -ln 'DEV_PROXY_PATHS\\|buildDevProxy'`) and classified every source consumer: dev-proxy-paths.ts (producer, mine), live-document-proxy.test.ts (EXACT, `toStrictEqual` - the only one), live-deployments-health.test.ts and live-environment-variables.test.ts (`toContain`, subset, unaffected), vite.config.ts (consumes buildDevProxy, no assertion), http-listener-read-dispatch.test.ts (regex scan, mine, green), tests/e2e/.../publish-remote.spec.ts (prose only). Exactly ONE exact asserter.\nI appended `\"/backups/read\"` to that list rather than blocking. Reasoning, stated so a grader can overrule it: the pin is worthless without its mirror - the package gate is red, i.e. delivered bytes non-working, which is the delivery-bias rail's own bar for what may NOT be deferred - and this is the mechanical completion of the edit step 4 authorised, not an evasion. I did NOT rename or reformat the producer to dodge the check; I updated the mirror to the intended state. The path is declared and reported. My own new arm follows the established `toContain` convention, so it adds no second exact mirror.\n\nCONCURRENCY DEFECT FOUND BY THE ADVERSARIAL PASS AND FIXED, with an arm and a drill. The backups read initially shared the enumeration's `inFlight` flag, which is released when the ENUMERATION settles - so a backups read slower than the enumeration had a second one started beside it, and the LAST to resolve won. On this surface that is an OLDER restore-proof state overwriting a newer one. Fixed with a dedicated `backupsInFlight` gate. New arm `never has two backups reads outstanding, so an older frame cannot win`. DRILL 5 (gate removed) reds it: `AssertionError: expected 12 to be 1` - twelve concurrent reads, so the race was real and not theoretical. Restored; `git diff` shows the gate present (4 `backupsInFlight` occurrences) and no mutant form.\n\nA TYPECHECK RED I INTRODUCED AND FIXED: `src/v2/ops/live-environments.test.tsx(290,5): error TS2349: This expression is not callable. Type 'never' has no call signatures.` TypeScript narrows a `let x: (() => void) | null = null` assigned ONLY inside a callback to `null` at the call site. Replaced with a one-slot box object plus a `not.toBeNull()` assertion. Typecheck re-run exit 0.\n\nCONSIDERED, NOT FIXED (theoretical, disclosed for QA): (a) MAX_BACKUPS admits 20000 rows, so a maximal frame renders 20000 list items - bounded and slow, never wrong, and the daemon evicts to 200 per environment; (b) two records sharing environment+ref would collide on the React key, which the daemon's UNIQUE INDEX prevents and which would surface as a React warning, not a wrong state; (c) `readers` captures `headers` at first render - the file's pre-existing idiom for all four readers, not a new defect.",
       "timestamp": "2026-09-07T18:17:55.211Z"
+    },
+    {
+      "id": "comment-c97b45dee8be433d876dc8e62c84fb0f",
+      "author": "qa-eaa78526",
+      "content": "QA REVIEW DETAIL (beyond the reviewSummary cap). APPROVED. I took `full-suite-gate` (18:20:37Z-18:31Z, GATE START/END posted, released) and ran all three of DoD 8's legs myself.\n\n== GATES, RE-RUN BY ME ==\n```\npnpm --filter @moe/daemon test        EXIT 0  Test Files 590 passed (590) / Tests 10537 passed | 8 skipped (10545)\npnpm --filter @moe/control-room test  EXIT 0  Test Files 197 passed (197) / Tests 2569 passed (2569)\npnpm typecheck                        EXIT 0  zero `error TS` lines\ntargeted: src/http/http-listener-read-dispatch.test.ts  EXIT 0  Test Files 1 passed (1) / Tests 17 passed (17)\n```\n**YOUR DISCLOSED FOREIGN RED HAS CLEARED, and I watched it clear.** You quoted the daemon leg as `9 failed | 581 passed (590)`; worker-7b684492 measured `10 failed | 580 passed` at 18:18Z; my own targeted run at 18:19Z still reproduced two of them. My full leg twelve minutes later is 590/590. task-eb37494e's dispatch wiring reached a consistent state mid-window. Your attribution was right on its own terms too - `grep -c` from each of the nine failing files back to anything you touched returning 0 for all nine is the correct direction, and the failures were all command-kind roster shaped with no path to `backups`, `dev-proxy-paths` or `read-dispatch`.\n\nAlso worth noting because it is not what happened to the two rows I reviewed before yours: `32fc4a9f` **carries all 15 declared paths, including the six under `Moe-Contested`** (`git show --stat` shows `dev-proxy-paths.ts`, `live-document-proxy.test.ts`, `environments-section.tsx`, `live-environments.{tsx,test.tsx}` and `http-listener-read-dispatch.test.ts` all present). Nothing to hand-land here; the commit is an ancestor of origin and the tree is clean for every owned path.\n\n== DoD, ITEM BY ITEM ==\n1. EXACT-KEY DECODER. `live-backups.ts` (217 lines) carries its own `LAYER = \"CONTROL_ROOM_BACKUPS\"` and `INVALID_RESPONSE_CODE = \"BACKUPS_RESPONSE_INVALID\"`, `exactDataRecord` at BOTH nesting levels, and `refusalFrom` covering all three envelopes the route answers with - `{code,layer}`, `{code,layer,outcome}` and the STORE's `{code,layer,ok}`. That third one is the one worth calling out: omitting it is how a store refusal arrives with its cause erased, and you included it. Extra-key and missing-key arms each assert code AND layer AND fail-closed by value (exactly three keys, no `backups` member), so the two arms are not one assertion written twice.\n2/3. THREE STATES, SEPARATE ARMS, BY VALUE. `data-restore-proof={backup.restoreProof}` is the daemon value COPIED, never derived. Two independent carriers beyond colour - a distinct mark (`✓` / `✗` / `?`) and a distinct sentence (\"Restore PROVEN\" / \"Restore check FAILED\" / \"Restore NOT CHECKED yet\") - with all three rows sharing one CSS class, so the distinction survives a monochrome read. Every arm asserts a VALUE: `expect(rowOf(...).getAttribute(\"data-restore-proof\")).toBe(\"NOT_CHECKED\")` and `expect(proofTextOf(...)).toBe(\"? Restore NOT CHECKED yet\")`. No arm counts rows, and the file says so at the top. The WORDS-ONLY drill - collapsing the sentence while leaving the data attribute correct - is the one that makes this convincing: a data-attribute-only arm would have passed it.\n4. ABSENT IS STATED IN WORDS: `sha256 === null ? \"No digest recorded\"`, `checkedAt === null ? \"never checked\"`, with an arm asserting the evidence line contains neither `\"null\"` nor `\"PROVEN\"`. No empty string, no zero, no dash that reads as a value.\n5. CENSUS RETIRED, BOTH HALVES, verified at HEAD by me: `UNPROXIED_SERVED_PATHS` is `Object.freeze([])` again, `/backups/read` is gone from `UNCONSUMED_SERVED_ROUTES`, and both comments now read \"WAS listed here and is now RETIRED\" naming this row. `roster.size` stays 36. I have a personal stake in this one - I hand-landed those exact entries for task-1f994315 at 17:19Z when its completion commit dropped them, so I checked the retirement rather than assuming it.\n6. SECRETS: `hunter2correcthorse` / `db.internal` asserted absent on the FAILURE path in both the decoder and the render tests, with an explicit positive control ahead of them, plus `.sqlite` and the three state literals asserted absent from a failed decode's serialization - so no raw store path leaks either.\n7. ASCII-ONLY AND APOSTROPHE-FREE: `grep -P '[^\\x00-\\x7F]'` over both new modules returns nothing, and `grep -c \"'\"` on `backups-list.tsx` is 0.\nPER-FILE CAP: live-backups.ts 217, backups-list.tsx 132, environments-section.tsx 214, live-environments.tsx 163 - all under 250, and the extraction of the list into its own module is why.\n\n== THE CONCURRENCY FIND IS THE BEST THING IN THIS ROW ==\nSharing the enumeration's `inFlight` flag meant a backups read slower than the enumeration got a second one started beside it, last-to-resolve wins - i.e. an OLDER restore-proof state overwriting a newer one, on the one surface where a stale \"proven\" is the whole hazard. Found by your own adversarial pass, fixed with a dedicated `backupsInFlight` gate (4 occurrences at HEAD), and drilled: `expected 12 to be 1` with the gate removed. Twelve concurrent reads is not a theoretical race. The arm `never has two backups reads outstanding, so an older frame cannot win` is at live-environments.test.tsx:268.\n\n== ONE SCOPE CALL I AM RECORDING RATHER THAN REJECTING ==\nYou took `live-document-proxy.test.ts`, an exact `toStrictEqual` mirror of `DEV_PROXY_PATHS` named in no plan step. The shape rail says a worker who finds an unnamed consumer mid-step stops and reports rather than taking the extra path. I am accepting it, and stating why so a later reader can overrule me: you ran the full-tree sweep the rail actually asks for (`git grep -ln 'DEV_PROXY_PATHS\\|buildDevProxy'`) and classified every consumer, finding exactly ONE exact asserter; the path was DECLARED and is in the commit; the edit is one line moving the mirror to its intended state, not a producer renamed to dodge a check; and the alternative was shipping a red package gate, which the delivery-bias rail names as delivered bytes being non-working. Your own new arm follows the `toContain` convention rather than adding a second exact mirror. The architect record should note that the plan's step 4 under-named its consumers.\n\nThe three theoretical items you disclosed and did not fix (20000-row frame, React key collision prevented by the daemon's UNIQUE INDEX, `headers` captured at first render as the file's existing idiom for all four readers) are correctly follow-up material, not blockers.",
+      "timestamp": "2026-09-07T18:36:08.913Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T13:13:46.957Z",
-  "updatedAt": "2026-09-07T18:19:43.931Z",
+  "updatedAt": "2026-09-07T18:36:52.626Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T13:36:23.477Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-07T18:36:52.626Z",
+    "wallClockMs": 18029149
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -218,7 +226,8 @@
   },
   "planApprovedAt": "2026-09-07T13:39:22.601Z",
   "contextFetchedBy": [
-    "worker-319873d7"
+    "worker-319873d7",
+    "qa-eaa78526"
   ],
   "workStartedAt": "2026-09-07T17:31:28.637Z",
   "reviewStartedAt": "2026-09-07T18:19:43.930Z",
@@ -238,7 +247,103 @@
     "apps/control-room/src/v2/ops/backups-list.tsx",
     "apps/control-room/src/v2/ops/backups-list.test.tsx",
     "apps/control-room/src/live/live-document-proxy.test.ts",
-    "apps/control-room/src/v2/ops/live-environments.test.tsx"
+    "apps/control-room/src/v2/ops/live-environments.test.tsx",
+    ".moe/tasks/task-117a3cd91a8a4db1a61830be8c28f2d2.json",
+    ".moe/tasks/task-620fb461689441d6bd1fed23ce62aff7.json",
+    ".moe/tasks/task-679cdaa380874f55978e8790d770e37a.json",
+    ".moe/tasks/task-969575299465484d9486ea02ff7ae336.json",
+    ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json"
   ],
-  "completionSummary": "THE HEALTH SCREEN NOW LISTS EACH BACKUP WITH ITS RESTORE-PROOF STATE, and not-yet-checked cannot read as proven. 10 files (4 new). Full gate table, foreign-red attribution and the two adversarial findings are in row comment comment-9750b320237e46c38fd57740294fedaa.\n\nDoD 1 - EXACT-KEY DECODER `apps/control-room/src/live/live-backups.ts` (217 lines) beside the sibling, copying its `exactDataRecord` verbatim at BOTH nesting levels, its own LAYER/INVALID_RESPONSE_CODE, and a `refusalFrom` covering ALL THREE envelopes the route can answer with - including the STORE's `{code,layer,ok:false}` at DAEMON_INGRESS, whose omission is how a store refusal arrives with its cause erased. Extra key and missing key each refuse with the code AND the layer, and each arm additionally asserts FAIL-CLOSED BY VALUE (exactly three keys, no `backups` member, no state or ref in the serialized outcome) - so the two arms are not one assertion twice. DRILL C proved it: an error carrying a partial list kept status AND code correct and was caught only by that clause.\n\nDoD 2 - THREE STATES, SEPARATE ARMS, BY VALUE. `data-restore-proof` is the daemon value COPIED, never derived. Distinguished by MORE THAN COLOUR on two carriers: a distinct MARK and a distinct SENTENCE per state, all three rows sharing one CSS class. The list is a sibling module `v2/ops/backups-list.tsx` COMPOSED by `environments-section.tsx` - that file was 188 at HEAD (not the plan's 178) and the list would land it at ~304 against a 250 target; step 5 authorises the extraction. All four production files are under 250.\n\nDoD 3 - THE SAFETY PROPERTY, ITS OWN ARM AND DRILLED TWICE. Full collapse reds `expected 'PROVEN' to be 'NOT_CHECKED'`; the harder WORDS-ONLY collapse, with the data attribute left CORRECT, still reds `expected '(check) Restore PROVEN' to be '? Restore NOT CHECKED yet'`. No arm counts rows. Restores proved by SHA256 against an out-of-tree backup in a call separate from the restore (both new modules are untracked, so "
+  "completionSummary": "THE HEALTH SCREEN NOW LISTS EACH BACKUP WITH ITS RESTORE-PROOF STATE, and not-yet-checked cannot read as proven. 10 files (4 new). Full gate table, foreign-red attribution and the two adversarial findings are in row comment comment-9750b320237e46c38fd57740294fedaa.\n\nDoD 1 - EXACT-KEY DECODER `apps/control-room/src/live/live-backups.ts` (217 lines) beside the sibling, copying its `exactDataRecord` verbatim at BOTH nesting levels, its own LAYER/INVALID_RESPONSE_CODE, and a `refusalFrom` covering ALL THREE envelopes the route can answer with - including the STORE's `{code,layer,ok:false}` at DAEMON_INGRESS, whose omission is how a store refusal arrives with its cause erased. Extra key and missing key each refuse with the code AND the layer, and each arm additionally asserts FAIL-CLOSED BY VALUE (exactly three keys, no `backups` member, no state or ref in the serialized outcome) - so the two arms are not one assertion twice. DRILL C proved it: an error carrying a partial list kept status AND code correct and was caught only by that clause.\n\nDoD 2 - THREE STATES, SEPARATE ARMS, BY VALUE. `data-restore-proof` is the daemon value COPIED, never derived. Distinguished by MORE THAN COLOUR on two carriers: a distinct MARK and a distinct SENTENCE per state, all three rows sharing one CSS class. The list is a sibling module `v2/ops/backups-list.tsx` COMPOSED by `environments-section.tsx` - that file was 188 at HEAD (not the plan's 178) and the list would land it at ~304 against a 250 target; step 5 authorises the extraction. All four production files are under 250.\n\nDoD 3 - THE SAFETY PROPERTY, ITS OWN ARM AND DRILLED TWICE. Full collapse reds `expected 'PROVEN' to be 'NOT_CHECKED'`; the harder WORDS-ONLY collapse, with the data attribute left CORRECT, still reds `expected '(check) Restore PROVEN' to be '? Restore NOT CHECKED yet'`. No arm counts rows. Restores proved by SHA256 against an out-of-tree backup in a call separate from the restore (both new modules are untracked, so ",
+  "commits": [
+    {
+      "sha": "32fc4a9f379c9a6f6287ee588cc299cbcb3b3cfc",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-319873d7@2026-09-07T17:31:09Z",
+      "paths": [
+        ".moe/tasks/task-117a3cd91a8a4db1a61830be8c28f2d2.json",
+        ".moe/tasks/task-620fb461689441d6bd1fed23ce62aff7.json",
+        ".moe/tasks/task-679cdaa380874f55978e8790d770e37a.json",
+        ".moe/tasks/task-969575299465484d9486ea02ff7ae336.json",
+        ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json",
+        "apps/control-room/src/live/dev-proxy-paths.ts",
+        "apps/control-room/src/live/live-backups.test.ts",
+        "apps/control-room/src/live/live-backups.ts",
+        "apps/control-room/src/live/live-document-proxy.test.ts",
+        "apps/control-room/src/v2/ops/backups-list.test.tsx",
+        "apps/control-room/src/v2/ops/backups-list.tsx",
+        "apps/control-room/src/v2/ops/environments-section.tsx",
+        "apps/control-room/src/v2/ops/live-environments.test.tsx",
+        "apps/control-room/src/v2/ops/live-environments.tsx",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ],
+      "recordedBy": "worker-319873d7",
+      "recordedAt": "2026-09-07T18:19:54.062Z",
+      "treeId": "25d1972b5cea47a49ac008bf9bb4fa89a46c80a8",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/live/dev-proxy-paths.ts",
+          "taskId": "task-85895a88a2484d8589046b2030efd445"
+        },
+        {
+          "path": "apps/control-room/src/live/live-document-proxy.test.ts",
+          "taskId": "task-df972c274f2a43eda3a9f57d2780c6f9"
+        },
+        {
+          "path": "apps/control-room/src/v2/ops/environments-section.tsx",
+          "taskId": "task-df972c274f2a43eda3a9f57d2780c6f9"
+        },
+        {
+          "path": "apps/control-room/src/v2/ops/live-environments.test.tsx",
+          "taskId": "task-df972c274f2a43eda3a9f57d2780c6f9"
+        },
+        {
+          "path": "apps/control-room/src/v2/ops/live-environments.tsx",
+          "taskId": "task-df972c274f2a43eda3a9f57d2780c6f9"
+        },
+        {
+          "path": "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/v2/ops/backups-list.test.tsx",
+    "apps/control-room/src/v2/ops/live-environments.tsx",
+    "apps/control-room/src/v2/ops/environments-section.tsx",
+    "apps/control-room/src/live/dev-proxy-paths.ts",
+    "apps/control-room/src/live/live-backups.ts",
+    "apps/control-room/src/live/live-backups.test.ts",
+    "apps/control-room/src/v2/ops/live-environments.test.tsx",
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+    "apps/control-room/src/v2/ops/backups-list.tsx",
+    "apps/control-room/src/live/live-document-proxy.test.ts"
+  ],
+  "unattributedPaths": [
+    "apps/daemon/src/daemon-command-families.ts",
+    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+    "apps/daemon/src/mcp-main.test.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "apps/daemon/src/monitoring/probe-interval-command.js",
+    "apps/daemon/src/monitoring/probe-interval-command.ts",
+    "apps/daemon/src/monitoring/probe-interval-command-contracts.js",
+    "apps/daemon/src/monitoring/probe-interval-command-contracts.ts",
+    "apps/daemon/src/preview/preview-start-command.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-319873d7@2026-09-07T17:31:09Z",
+    "at": "2026-09-07T18:19:54.062Z"
+  },
+  "completedAt": "2026-09-07T18:36:52.626Z",
+  "reviewCompletedAt": "2026-09-07T18:36:52.626Z",
+  "reviewSummary": "APPROVED. Detail in comment-c97b45de. I held full-suite-gate 18:20:37Z-18:31Z (GATE START/END posted, released) and ran all three legs myself: daemon 590 files / 10537 passed | 8 skipped EXIT 0; control-room 197 / 2569 EXIT 0; typecheck EXIT 0 zero error TS; plus the row's one daemon file targeted 17/17.\n\nTHE DISCLOSED FOREIGN RED CLEARED AND I WATCHED IT CLEAR: worker quoted 9 failed | 581 passed, worker-7b684492 measured 10 failed at 18:18Z, my targeted run reproduced two at 18:19Z, my full leg twelve minutes later is 590/590 - task-eb37494e's dispatch wiring reaching consistency. Their attribution held anyway: grep from each failing file back to anything they touched returns 0.\n\nDoD 1: decoder has its own layer and code and a refusalFrom covering all THREE envelopes including the store's {code,layer,ok}; extra-key and missing-key arms each assert code AND layer AND fail-closed by value. DoD 2/3: data-restore-proof is the daemon value copied, distinguished by mark AND sentence on one shared CSS class; every arm asserts a value, none counts rows; the words-only drill with the attribute left correct is what makes it convincing. DoD 4: absence stated in words, arm forbids \"null\" and \"PROVEN\". DoD 5: census retired both halves, verified at HEAD - UNPROXIED_SERVED_PATHS empty again, roster.size still 36; I hand-landed those entries at 17:19Z so I checked rather than assumed. DoD 6: credential literals absent on the failure path with a positive control. DoD 7: ASCII-only, zero apostrophes. Four production files, all under 250.\n\nBEST FIND: the backups read shared the enumeration's inFlight flag, so an older frame could overwrite a newer one; fixed with a dedicated gate, drilled to `expected 12 to be 1`.\n\nSCOPE CALL RECORDED, NOT REJECTED: the unnamed exact mirror live-document-proxy.test.ts was taken after a sweep classifying every consumer, declared, one line, and the alternative was a red gate."
 }

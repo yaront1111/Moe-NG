@@ -4,7 +4,7 @@ import {
   APPROVAL_INTENT_FAMILY,
   CRITERION_FAMILY, ENV_EXAMPLE_SYNC_FAMILY, REPOSITORY_RECOVERY_FAMILY,
   BOOTSTRAP_FAMILY, CAPABILITIES, COMPILER_FAMILY, DESIGN_FAMILY, ENVIRONMENT_FAMILY,
-  GRAPH_FAMILY, SETTINGS_FAMILY,
+  GRAPH_FAMILY, MONITORING_FAMILY, SETTINGS_FAMILY,
   GRAPH_MUTATION_COMMAND_KINDS,
   OPERATOR_CAPABILITIES, OPERATOR_PRINCIPAL_KINDS,
   PAYLOAD_KEYS, PREVIEW_FAMILY, RELEASE_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY,
@@ -26,6 +26,7 @@ type Family =
   | "CRITERION" | "ENV_EXAMPLE_SYNC" | "REPOSITORY_RECOVERY"
   | "APPROVAL_INTENT" | "BOOTSTRAP" | "COMPILER" | "DESIGN" | "ENVIRONMENT" | "GRAPH"
   | "PREVIEW" | "RELEASE"
+  | "MONITORING"
   | "REVIEW" | "SESSION" | "SETTINGS" | "STANDALONE" | "STEP" | "WORK";
 
 interface VocabularyRow {
@@ -268,6 +269,12 @@ const ROWS: readonly VocabularyRow[] = [
     payloadKeys: ["workItemId"] },
   { agent: [WORK], capability: WORK, family: "WORK", kind: "work.renew",
     payloadKeys: ["expiresAt", "workItemId"] },
+  // task-eb37494e, and LAST because PAYLOAD_KEYS appends it: `agent` is null (an operator act,
+  // like the environment pair) while the capability is ADMIN, which fences REACH only. The two
+  // payload keys and NOTHING more -- no bound, no unit, no default, and no `projectId`, which
+  // comes from the authenticated principal.
+  { agent: null, capability: ADMIN, family: "MONITORING", kind: "monitoring.set_probe_interval",
+    payloadKeys: ["environment", "intervalMs"] },
 ];
 
 /** Views over the production maps, so a value here is always the shipped value. */
@@ -286,13 +293,15 @@ const FAMILY_MAPS: Readonly<Record<Exclude<Family, "STANDALONE">, ReadonlyMap<st
   SESSION: new Map(Object.entries(SESSION_FAMILY)),
   SETTINGS: new Map(Object.entries(SETTINGS_FAMILY)),
   GRAPH: new Map(Object.entries(GRAPH_FAMILY)),
+  MONITORING: new Map(Object.entries(MONITORING_FAMILY)),
   STEP: new Map(Object.entries(STEP_FAMILY)),
   WORK: new Map(Object.entries(WORK_FAMILY)),
 };
 
 const FAMILY_NAMES = [
   "CRITERION", "ENV_EXAMPLE_SYNC", "REPOSITORY_RECOVERY",
-  "APPROVAL_INTENT", "BOOTSTRAP", "COMPILER", "DESIGN", "ENVIRONMENT", "GRAPH", "PREVIEW",
+  "APPROVAL_INTENT", "BOOTSTRAP", "COMPILER", "DESIGN", "ENVIRONMENT", "GRAPH", "MONITORING",
+  "PREVIEW",
   "RELEASE", "REVIEW",
   "SESSION", "SETTINGS", "STEP", "WORK",
 ] as const;
@@ -324,14 +333,19 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
   // Deciding a rendered product preview is the operator's own verdict, and asking for one is
   // the same act: it spawns a dev server on the daemon's host and drives a browser at it.
   "preview.decide", "preview.start",
+  // task-eb37494e. Human-only on the same terms as the environment pair above: an agent that
+  // could re-time the production health probe could slow it until an outage stopped being
+  // visible. Fenced three ways -- here at dispatch, in HUMAN_ONLY_STEPS against the wrapper
+  // (landed by task-749e585afc), and out of the MCP roster the allowlist DERIVES from this set.
+  "monitoring.set_probe_interval",
 ];
 
 describe("command vocabulary", () => {
   it("carries exactly the transcribed wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(62);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(62);
+    expect(ROWS).toHaveLength(63);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(63);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -375,7 +389,7 @@ describe("command vocabulary", () => {
     // That is exactly how `preview.decide` was nearly transcribed as standalone.
     expect([...FAMILY_NAMES].sort()).toEqual(Object.keys(FAMILY_MAPS).sort());
     const declared = ROWS.filter((row) => row.family !== "STANDALONE");
-    expect(declared).toHaveLength(51);
+    expect(declared).toHaveLength(52);
     for (const name of FAMILY_NAMES) {
       expect([...FAMILY_MAPS[name].keys()].sort()).toEqual(
         declared.filter((row) => row.family === name).map((row) => row.kind).sort(),
@@ -434,8 +448,8 @@ describe("command vocabulary", () => {
   });
 
   it("gates exactly the transcribed kinds behind the operator principal", () => {
-    expect(OPERATOR_ONLY).toHaveLength(26);
-    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(26);
+    expect(OPERATOR_ONLY).toHaveLength(27);
+    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(27);
     // Both directions over every wired kind: a kind added to the set reddens on the
     // remaining kinds that must stay open, one dropped reddens on those that must not.
     for (const row of ROWS) {

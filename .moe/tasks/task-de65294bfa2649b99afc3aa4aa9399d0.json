@@ -154,7 +154,7 @@
       "completedAt": "2026-09-07T18:19:56.671Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -186,21 +186,30 @@
       "author": "worker-7b684492",
       "content": "EVIDENCE 2/2 — ADVERSARIAL PASS and the full drill table. Every drill in this row ran PROCESS-LOCAL (out-of-tree vitest config in %TEMP%, plugin rewrites the module in memory, throws on a missing anchor AND in buildEnd if never applied, per-mode cacheDir, package flags `--maxWorkers=4 --testTimeout=30000` restated by hand). ZERO bytes were written to the checkout, because `full-suite-gate` was held by a peer for most of this row. Method announced in #general (msg-556d81e1) before the first drill. Restore proof is therefore structural, not ceremonial: `git diff --stat` on the two production files shows runs-read.ts `9 insertions(+)` with ZERO deletions and live-runs.ts `11 insertions(+), 4 deletions(-)` (two re-wrapped lines), while every drill above requires a deletion; all five anchors are still present verbatim.\n\nDRILL TABLE — positive control first, so a red can never be the harness's fault.\n| # | mutation | result |\n|---|---|---|\n| control (daemon) | harness armed, unmutated | 24 passed (24), EXIT 0 |\n| D1 | `?? []` instead of `null` in `sealedNodesOf` | 3 failed \\| 21 passed — `expected [ [], [], [] ] to deeply equal [ null, null, null ]` |\n| D2 | key the projection on `nodeKey` across graphs | 2 failed \\| 23 passed — BOTH cross-goal arms, `expected [ 'migration-b', 'migration-a' ] to be null` and `expected [ 'migration-one' ] to deeply equal [ 'migration-two', 'migration-three' ]` |\n| D3 | `.sort()` the projected list | 2 failed \\| 22 passed — `expected [ 'migration-a', 'migration-b' ] to deeply equal [ 'migration-b', 'migration-a' ]` |\n| control (browser) | harness armed, unmutated | 56 passed (56), EXIT 0 |\n| D4 | drop the fail-closed clause `(declared !== null && declaredMigrations === null)` | 8 failed \\| 48 passed — ALL EIGHT malformed cases |\n| D5 | drop `\"declaredMigrations\"` from the exact-key roster | 6 failed — the 3 new arms PLUS 3 pre-existing ones (full-frame, tested-tree, landing) |\n| D6 | decode the member but omit it from the returned node | 7 failed — `expected undefined to deeply equal [ 'migration-b', 'migration-a' ]` |\nD2 is the one that matters most: it reds ONLY the cross-goal arms, which is exactly why DoD 2 is its own clause.\n\nADVERSARIAL QUESTIONS, each answered with a measurement rather than a reading.\n1. TWO GOALS SHARE A nodeKey AND BOTH DECLARE — does each row still serve its own? Now an arm of its own, with two DIFFERENT declarations so serving either goal the other's value reds. D2 confirms it reds.\n2. DOES A SCHEMA-2 BODY (predating the declaration) SERVE `null` RATHER THAN THROWING? Yes, and it is the dominant case, not a corner: every graph in the pre-existing runs-read suite comes from `compiledPlanAuthority`, whose bodies are all schema 2, and all 25 arms pass. The UNKNOWN-vs-NONE arm asserts it directly — `versionOf(\"dev-a\") === 2` on the very definition whose row serves `null`, against `versionOf(\"dev-b\") === 3` for the explicit `[]`.\n3. CAN A MALFORMED VALUE EVER PRODUCE A DECODED NODE WITH THE MEMBER QUIETLY MISSING? No: D4 and D6 both red. Eight malformed shapes are pinned to `RUNS_RESPONSE_INVALID` @ `CONTROL_ROOM_LIVE_RUNS` — the code AND the layer.\n4. DOES ANYTHING SORT, DEDUP OR DEFAULT ON EITHER SIDE? `git diff | grep -E \"\\.sort\\(|new Set|\\?\\?|\\.filter\\(\"` over the three production files matches only a doc COMMENT (\"never sorted or deduped\"). No production line.\n5. DID ANY ARM ASSERT ONLY A COUNT WHERE ORDER IS CONTENT? No — every identifier assertion is `toEqual([...])`; the count assertions are additions to a value assertion, never a substitute.\n\nCHECKLIST ITEMS WORTH RECORDING, none of them blocking:\n- CONCURRENCY: `sealedNodesOf` is a pure per-request projection over freshly read graphs, with no shared mutable state and no check-then-act. The member is copy-and-frozen (`Object.freeze([...])`), asserted with `not.toBe` against the durable array, so a caller cannot mutate authority content or observe another request's copy.\n- ENORMOUS INPUT: the daemon side is bounded upstream at `NODE_AUTHORITY_LIMITS.maxMigrationEntries = 64`, enforced in `node-authority-fields.ts:103`, so an unbounded list cannot reach the read. The browser decoder imposes no bound of its own — but neither do the sibling `criterionIds` / `dependsOn` on the same object, so this is the existing same-origin trust posture and not a class this row introduces. Noted, not changed.\n- SPARSE ARRAY, the one genuine sharp edge I found and then measured away: `Array.prototype.every` SKIPS HOLES, so `stringList([,\"a\"])` would answer true. It is unreachable from the wire because `mapRunsAnswer` only ever sees `JSON.parse` output and `JSON.stringify([,\"a\"])` is `[null,\"a\"]` — which `stringList` refuses, and which is one of the eight malformed cases I assert. `stringList` is a shared helper (criterionIds, dependsOn); changing it is another row's call.\n- PROTOTYPE POLLUTION: `exactDataRecord` rejects any non-`Object.prototype` prototype and builds an `Object.create(null)` snapshot; `{}` and `[[]]` are among the refused cases.\n- TASK RAILS: no `packages/scheduler` file touched (rail 1); ownership comes from `nodeRef` alone, never a filename or sha (rail 2); no nodeKey-keyed map exists anywhere (rail 3); no rendered string or wording added — board-lanes.tsx stays task-78eedd8e's (rail 4); exact-key decoding with a stable code AND layer (rail 5).",
       "timestamp": "2026-09-07T18:19:30.905Z"
+    },
+    {
+      "id": "comment-6d0aead6df14460ea04a664852187df7",
+      "author": "qa-eaa78526",
+      "content": "QA REVIEW DETAIL (beyond the reviewSummary cap). APPROVED, with one hand-landing that was load-bearing.\n\n== 1. TWO DECLARED PATHS WERE WITHHELD; I LANDED THEM AS 025ead39 ==\n`49aa399b` carried 15 of this row's 17 declared paths and withheld two under `Moe-Contested`:\n```\nMoe-Contested: apps/control-room/src/v2/approvals/needs-you-model.test.ts (task-817d893f)\nMoe-Contested: apps/control-room/src/v2/board/board-screen.test.tsx      (task-78eedd8e)\n```\nBoth are a one-line fixture backfill adding `declaredMigrations: null` to a `RunNodeView` literal. That member is REQUIRED at HEAD (`live-runs.ts:63`) and sits in the exact-key roster at `:239`, so without those two lines `apps/control-room typecheck` fails on both files - while the tree your gates ran against was green, because the lines were on disk uncommitted. Same shape as the three other rows torn this way in the last ninety minutes: the pins land, the producer or the backfill does not, and only HEAD is red.\n\nPer-path measurement before staging: each file's dirty diff is ONE replaced line whose only delta is `declaredMigrations: null`; nothing from task-817d893f or task-78eedd8e is in either diff, so the contest is declarative. Landed whole, recorded via `moe.record_commit` (task.commits now 2). Every one of the row's 17 declared paths is now clean against HEAD.\n\n== 2. GATES ==\nRan by me on this tree, after the hand-landing:\n```\ndaemon    src/http/runs-read.test.ts                          Test Files 1 passed (1) / Tests 25 passed (25)   EXIT 0\ncontrol-room  live-runs.test.ts + the two backfilled files    Test Files 3 passed (3) / Tests 84 passed (84)   EXIT 0\npnpm --filter @moe/control-room --filter @moe/daemon typecheck  both Done                                     EXIT 0\n```\nAnd the three full legs I ran twenty minutes earlier under my own `full-suite-gate` lease (18:20:37Z-18:31Z), on a tree that already carried every byte of this row including the two uncommitted lines: **daemon `Test Files 590 passed (590)` / `Tests 10537 passed | 8 skipped`, EXIT 0; control-room `197 passed (197)` / `2569 passed`, EXIT 0; `pnpm typecheck` EXIT 0 with zero `error TS`.** Your own recorded verification (control-room 197/2569 at 18:21:34Z) matches mine to the test.\n\nWorth recording for the epic: this row's in-flight state was the source of a foreign red I attributed twice today - `src/http/runs-read.ts(229,9): error TS2741: Property 'declaredMigrations' is missing ... but required in type 'RunNodeView'` - which I hit at 17:22Z, and which cleared on its own within a minute when you finished the edit. It cost nobody a reject because both affected rows disclosed it verbatim instead of owning it. That is the rail working.\n\n== 3. DoD, ITEM BY ITEM ==\n1. REAL AUTHORITY PATH. The member is sourced in `sealedNodesOf` off the same per-graph `definition` the loop already turns into `nodeRef`, and the arm asserts the served value is NOT the same object as the authority's (`not.toBe(...)`) - i.e. copy-and-frozen, not a shared reference. Reaching `createNodeDefinition` through `graph-query-test-fixtures.ts` rather than `compiledPlanAuthority` is the right call and you justified it on disk: the compiled-policy body deliberately declares none, so a fixture that minted the member would have been testing itself. `encodeGraphContent` re-deriving and refusing `GRAPH_CONTENT_AUTHORITY_DISAGREEMENT` closes the splice route.\n2. NO CROSS-GOAL BLEED, and stronger than the clause asks. Two arms, not one: the declarer serves `[\"migration-b\",\"migration-a\"]` while the sharer serves `null` on the SAME node key, and then the harder variant where BOTH goals declare different values and each serves its own. The second arm is what a nodeKey-keyed projection cannot fake - a first-writer-wins map passes the null case by accident. The structural claim (no nodeKey-keyed map exists) is what makes it a property rather than a coincidence, and drill D2 reddening both arms and nothing else is the evidence for it.\n3. TWO IDENTIFIERS BY VALUE AND ORDER: `toEqual([\"migration-b\",\"migration-a\"])` on both sides, with drill D3 (`.sort()`) reddening it. A first-only bug fails this; a set-comparison would not.\n4. DECODER: 8 malformed wire values each refuse `{code: \"RUNS_RESPONSE_INVALID\", layer: \"CONTROL_ROOM_LIVE_RUNS\", status: \"ERROR\"}` as a frozen whole-object comparison, and `declaredMigrations` is in the exact-key roster so a missing key refuses the frame. **The best thing in this row is the guard you did NOT ship:** the plan's `=== undefined` check would have been DEAD CODE because `stringList` never returns `undefined`. You measured that and shipped `(declared !== null && declaredMigrations === null)` against the RAW wire value instead. A dead guard passes every test and protects nothing; catching it at authoring time is exactly the adversarial pass earning its place.\n5. UNKNOWN vs EXPLICIT-EMPTY: asserted together as `[null, [], [\"migration-c\"]]` with an explicit `not.toEqual` between the null and the empty case, so the two cannot collapse silently.\n6. NO OWNERSHIP FROM A FILENAME OR SHA: the arm \"serves nothing for a graph whose definitions do not include the node\" is the refusal path the parent rail demands, asserted rather than assumed.\n\nNothing outstanding. The 12 control-room test files this row touched are fixture backfills for a newly required member, which is why the count is high; the production surface is four files.",
+      "timestamp": "2026-09-07T18:39:31.544Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T20:05:36.694Z",
-  "updatedAt": "2026-09-07T18:21:34.630Z",
+  "updatedAt": "2026-09-07T18:40:03.179Z",
   "contextFetchedBy": [
     "worker-f72a1438",
     "architect-5ac70ba8",
-    "worker-7b684492"
+    "worker-7b684492",
+    "qa-eaa78526"
   ],
   "metrics": {
     "firstClaimAt": "2026-09-07T12:49:38.146Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 16,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-07T18:40:03.179Z",
+    "wallClockMs": 21025033
   },
   "planSizeWarnings": [
     "Plan touches 16 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -256,7 +265,95 @@
     "apps/control-room/src/v2/goals/goal-nodes.test.tsx",
     "apps/control-room/src/v2/goals/goal-publish.test.tsx",
     "apps/control-room/src/v2/runs/live-runs.test.tsx",
-    "apps/control-room/src/v2/runs/runs-screen.test.tsx"
+    "apps/control-room/src/v2/runs/runs-screen.test.tsx",
+    ".moe/tasks/task-de65294bfa2649b99afc3aa4aa9399d0.json"
   ],
-  "completionSummary": "/runs/read serves `declaredMigrations` and the browser decoder preserves it. 16 paths: 4 daemon, 12 control-room. Full evidence in comment-407bc50f (gates + red attribution) and comment-7ebce840 (7-drill table + adversarial pass).\n\nCONTRACT: `declaredMigrations: readonly string[] | null`, REQUIRED and ALWAYS EMITTED on both sides. `null`=UNKNOWN, `[]`=declared none, array=authored order. Sourced in `sealedNodesOf` off the SAME per-graph `definition` the loop already turns into `nodeRef`, copy-and-frozen; NO nodeKey-keyed map exists anywhere, so cross-goal bleed is structurally impossible, not merely tested against.\n\nDoD 1 — driven through the parent's REAL authority path. `compiledPlanAuthority` cannot carry a declaration (compiled-policy-authority-body.ts:98-113 deliberately declares none), so I reached `createNodeDefinition` via `graph-query-test-fixtures.ts`, extended additively with an optional per-node declaration spread into the DRAFT — the same seam production's scheduler-node-planning-authority.ts:141 uses. The member is the codec's `project()` output, never assigned by a fixture. A splice is impossible: `encodeGraphContent` re-derives and refuses GRAPH_CONTENT_AUTHORITY_DISAGREEMENT.\nDoD 2 — TWO BOUND GOALS (`goal-${commandId}`), same nodeKey. One arm: declarer serves, other serves null. Second arm added by the adversarial pass: BOTH declare, different values, each serves its own. Drill D2 (nodeKey-keyed projection) reds both and NOTHING else.\nDoD 3 — `toEqual([\"migration-b\",\"migration-a\"])` by value and in order on both sides; drill D3 (`.sort()`) reds.\nDoD 4 — 8 malformed wire values each refuse `RUNS_RESPONSE_INVALID` @ `CONTROL_ROOM_LIVE_RUNS`. The plan's `=== undefined` guard would have been DEAD CODE (`stringList` never returns undefined); shipped guard tests the RAW wire value: `(declared !== null && declaredMigrations === null)`. Drill D4 reds all 8.\nDoD 5 — UNKNOWN vs explicit-empty asserted together, `[null, [], [\"migration-c\"]]`, plus schemaVersi"
+  "completionSummary": "/runs/read serves `declaredMigrations` and the browser decoder preserves it. 16 paths: 4 daemon, 12 control-room. Full evidence in comment-407bc50f (gates + red attribution) and comment-7ebce840 (7-drill table + adversarial pass).\n\nCONTRACT: `declaredMigrations: readonly string[] | null`, REQUIRED and ALWAYS EMITTED on both sides. `null`=UNKNOWN, `[]`=declared none, array=authored order. Sourced in `sealedNodesOf` off the SAME per-graph `definition` the loop already turns into `nodeRef`, copy-and-frozen; NO nodeKey-keyed map exists anywhere, so cross-goal bleed is structurally impossible, not merely tested against.\n\nDoD 1 — driven through the parent's REAL authority path. `compiledPlanAuthority` cannot carry a declaration (compiled-policy-authority-body.ts:98-113 deliberately declares none), so I reached `createNodeDefinition` via `graph-query-test-fixtures.ts`, extended additively with an optional per-node declaration spread into the DRAFT — the same seam production's scheduler-node-planning-authority.ts:141 uses. The member is the codec's `project()` output, never assigned by a fixture. A splice is impossible: `encodeGraphContent` re-derives and refuses GRAPH_CONTENT_AUTHORITY_DISAGREEMENT.\nDoD 2 — TWO BOUND GOALS (`goal-${commandId}`), same nodeKey. One arm: declarer serves, other serves null. Second arm added by the adversarial pass: BOTH declare, different values, each serves its own. Drill D2 (nodeKey-keyed projection) reds both and NOTHING else.\nDoD 3 — `toEqual([\"migration-b\",\"migration-a\"])` by value and in order on both sides; drill D3 (`.sort()`) reds.\nDoD 4 — 8 malformed wire values each refuse `RUNS_RESPONSE_INVALID` @ `CONTROL_ROOM_LIVE_RUNS`. The plan's `=== undefined` guard would have been DEAD CODE (`stringList` never returns undefined); shipped guard tests the RAW wire value: `(declared !== null && declaredMigrations === null)`. Drill D4 reds all 8.\nDoD 5 — UNKNOWN vs explicit-empty asserted together, `[null, [], [\"migration-c\"]]`, plus schemaVersi",
+  "commits": [
+    {
+      "sha": "49aa399b289afebc4beeb4b10b8fe07ac312f643",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-7b684492@2026-09-07T17:15:19Z",
+      "paths": [
+        ".moe/tasks/task-de65294bfa2649b99afc3aa4aa9399d0.json",
+        "apps/control-room/src/live/live-runs.test.ts",
+        "apps/control-room/src/live/live-runs.ts",
+        "apps/control-room/src/v2/approvals/live-needs-you.test.tsx",
+        "apps/control-room/src/v2/approvals/preview-rejection-invariants.test.tsx",
+        "apps/control-room/src/v2/approvals/replan-successor-port.test.ts",
+        "apps/control-room/src/v2/board/board-columns.test.ts",
+        "apps/control-room/src/v2/goals/goal-nodes.test.tsx",
+        "apps/control-room/src/v2/goals/goal-publish.test.tsx",
+        "apps/control-room/src/v2/runs/live-runs.test.tsx",
+        "apps/control-room/src/v2/runs/runs-screen.test.tsx",
+        "apps/daemon/src/http/runs-read.test.ts",
+        "apps/daemon/src/http/runs-read.ts",
+        "apps/daemon/src/http/runs-read-contract.ts",
+        "apps/daemon/src/planning/graph-query-test-fixtures.ts"
+      ],
+      "recordedBy": "worker-7b684492",
+      "recordedAt": "2026-09-07T18:22:01.279Z",
+      "treeId": "61750f3624a7d427c54bf71eabf948a078734f86",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/approvals/needs-you-model.test.ts",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        },
+        {
+          "path": "apps/control-room/src/v2/board/board-screen.test.tsx",
+          "taskId": "task-78eedd8ebc2b43c581ac21ea28648a9a"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "025ead39",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-eaa78526@2026-09-07T17:12:00Z",
+      "paths": [
+        "apps/control-room/src/v2/approvals/needs-you-model.test.ts",
+        "apps/control-room/src/v2/board/board-screen.test.tsx"
+      ],
+      "recordedBy": "qa-eaa78526",
+      "recordedAt": "2026-09-07T18:38:10.195Z",
+      "status": "REVIEW",
+      "pushed": false,
+      "message": "QA hand-landing of the two declared paths 49aa399b withheld as Moe-Contested. Each is a one-line fixture backfill adding the now-required declaredMigrations member to a RunNodeView literal; without them the control-room typecheck fails at HEAD while the working tree is green."
+    }
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/live/live-runs.test.ts",
+    "apps/daemon/src/planning/graph-query-test-fixtures.ts",
+    "apps/daemon/src/http/runs-read.ts",
+    "apps/daemon/src/http/runs-read-contract.ts",
+    "apps/daemon/src/http/runs-read.test.ts",
+    "apps/control-room/src/live/live-runs.ts"
+  ],
+  "unattributedPaths": [
+    "apps/daemon/src/daemon-command-families.ts",
+    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+    "apps/daemon/src/mcp-main.test.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "apps/daemon/src/monitoring/probe-interval-command.js",
+    "apps/daemon/src/monitoring/probe-interval-command.ts",
+    "apps/daemon/src/monitoring/probe-interval-command-contracts.js",
+    "apps/daemon/src/monitoring/probe-interval-command-contracts.ts",
+    "apps/daemon/src/preview/preview-start-command.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-eaa78526@2026-09-07T17:12:00Z",
+    "at": "2026-09-07T18:38:10.195Z"
+  },
+  "completedAt": "2026-09-07T18:40:03.179Z",
+  "reviewCompletedAt": "2026-09-07T18:40:03.179Z",
+  "reviewSummary": "APPROVED. Detail in comment-6d0aead6.\n\nHAND-LANDING: 49aa399b carried 15 of 17 declared paths and withheld two as Moe-Contested (task-817d893f, task-78eedd8e, neither holding bytes in either file). Both are a one-line fixture backfill adding `declaredMigrations: null` to a RunNodeView literal - REQUIRED at HEAD (live-runs.ts:63, exact-key roster :239) - so without them apps/control-room typecheck fails at HEAD while the tree the gates ran on was green. Each diff is one replaced line, no peer hunks; landed as 025ead39 and recorded. All 17 paths now clean against HEAD.\n\nGATES I RAN after the landing: daemon runs-read.test.ts 25/25 EXIT 0; control-room live-runs plus the two backfilled files, 3 files / 84 passed EXIT 0; control-room and daemon typecheck both Done. Earlier under my own full-suite-gate lease (18:20:37Z-18:31Z), on a tree carrying every byte of this row: daemon 590/590 / 10537 passed | 8 skipped EXIT 0; control-room 197/2569 EXIT 0; pnpm typecheck EXIT 0. Matches the worker's recorded 197/2569.\n\nDoD 1: member sourced off the same per-graph definition that yields nodeRef, with an arm asserting the served value is NOT the authority's object. DoD 2: two arms - declarer serves while the sharer serves null on the same nodeKey, AND both-declare-differently each serving its own; the second is what a nodeKey-keyed map cannot fake. DoD 3: toEqual by value and order, drill D3 (.sort()) reds it. DoD 4: 8 malformed wire values refuse code AND layer as a frozen whole-object compare - and the plan's `=== undefined` guard would have been DEAD CODE (stringList never returns undefined); the shipped guard tests the raw wire value. DoD 5: UNKNOWN vs explicit-empty asserted together with not.toEqual between them. DoD 6: \"serves nothing for a graph whose definitions do not include the node\" is asserted.\n\nThis row's in-flight state was the TS2741 red I attributed twice today; it cleared on its own and cost nobody a reject because the affected rows disclosed it verbatim."
 }
