@@ -22,26 +22,37 @@ import type { DaemonLane } from "./daemon-ports.js";
  *     and layer - so the decide edge this row's card spends is live and fenced, and the card
  *     is not offering a button that would 404.
  *
- * NOT REACHABLE FROM A BROWSER LANE, measured rather than assumed, both facts read out of the
- * daemon's own source and re-checkable:
- *  A. APPROVE NEEDS A LANDED GOAL. `runPreviewDecideEdge` (preview-daemon-edge.ts:239) refuses
- *     unless `readGoalLandingStatus(...).allLanded`, and landing is recorded by
- *     `internal.repository.landing_receipt` (landing-receipt-contracts.ts:22), which is NOT a
- *     `WiredCommandKind` and appears in no registry, async entry or PAYLOAD_KEYS roster. There
- *     is no HTTP ingress for it, so nothing a browser can do makes a goal landed.
- *     publish-remote.spec.ts:26-29 hit this exact wall and made the same call.
- *  B. A STARTED RECEIPT NEEDS A PREVIEW COMMAND IN THE BOUND WORKSPACE.
- *     `resolvePreviewCommand` refuses PREVIEW_COMMAND_MISSING unless the contract states one or
- *     the workspace `package.json` has a dev script, and the workspace is SERVER-HELD
- *     (preview-start-command.ts:93-99) - a caller cannot name it.
- *  Driving `preview.start` here anyway was considered and rejected on epic rail 4: if a lane's
- *  bound workspace DID resolve a dev script, the daemon would spawn a real dev server holding a
- *  real port, and this spec has no HTTP way to stop it again - `preview.decide` does not stop a
- *  process. A leaked preview server would make every later gate on this board inadmissible.
- *  That is a worse outcome than an honestly-reported gap.
+ * THE THREE WALLS THIS HEADER USED TO CALL PERMANENT ARE ALL GONE, and saying so here is the
+ * point: the paragraph they replaced was measured, correct at the time, and wrong now.
+ *  A. "APPROVE NEEDS A LANDED GOAL, AND NOTHING A BROWSER CAN DO MAKES ONE." Still true that
+ *     `internal.repository.landing_receipt` has no HTTP ingress — and no longer a wall, because
+ *     the lane does not need one. `landLaneNode` (lane-landing.ts) runs the REAL
+ *     `agent-wrapper-main.ts` against the lane's own board and the REAL `node-lander` commits
+ *     into the lane's git workspace. The receipt is written by production code, from a real
+ *     commit, with git's own sha. Nothing is seeded: `seedLandingReceipt`'s literal sha and
+ *     `D:/fixture-workspace` path are the fabricated authority this epic's rails forbid.
+ *  B. "A STARTED RECEIPT NEEDS A PREVIEW COMMAND IN THE BOUND WORKSPACE." Still true, and now
+ *     satisfied: the workspace is SERVER-HELD, but it is the LANE'S OWN git tree, so
+ *     `writePreviewScaffold` (lane-preview.ts) commits a `package.json` with a `dev` script and
+ *     a `node:http` server into it BEFORE the landing. `resolvePreviewCommand` then finds it the
+ *     ordinary way. No production seam was widened to allow this.
+ *  C. "`preview.decide` DOES NOT STOP A PROCESS", which was the leak fear that made driving
+ *     `preview.start` here look reckless. It is simply false: `runPreviewDecideEdge` ends with
+ *     `port.release(receipt.receiptId, payload.decision)` (preview-daemon-edge.ts:304), AFTER the
+ *     commit and on APPROVE and REJECT alike, and the supervisor's `stop()` is memoised and
+ *     idempotent. The live arms still carry their own `finally`, because a throw BETWEEN start
+ *     and decide reaches neither.
  *
- * The start -> card -> approve leg therefore belongs to the LIVE DRIVE (DoD 6), where a real
- * landed product exists, and is reported as such rather than simulated here.
+ * SO THE LIVE LEG IS NO LONGER DEFERRED - IT IS DRIVEN, in `preview-approve-live.spec.ts` and
+ * `preview-reject-live.spec.ts`: a real landing, a real dev server, a real APPROVE and a real
+ * REJECT, each verdict read back out of `/activity/read`. Those two live in their own files
+ * purely for the per-file line cap; this spec keeps the surface and refusal arms below.
+ *
+ * WHAT IS STILL NOT TRUE, AND IS ASSERTED THERE RATHER THAN ASSUMED HERE: the Gate-2 card's own
+ * Approve BUTTON cannot commit. `preview.decide` is operator-only (OPERATOR_PRINCIPAL_KINDS) and
+ * the shipped browser pairs into a non-operator credential, and separately `preview-port.ts` sends
+ * the preview AGGREGATE id where the edge expects the RECEIPT id. Both are pinned by code AND
+ * layer in the live specs; neither is worked around.
  */
 
 const JOURNEY_MS = 300_000;

@@ -151,13 +151,31 @@ graph, the parallel staffing, the `depends:` gate and the coverage close are
 exercised over real daemon, wrapper and agent processes in
 `tests/e2e/foundation/multi-node-graph.e2e.test.ts`, and the coverage close and
 its negative arm are proven only there, not on the lane; there is
-Gate 2 is WIRED BUT NOT YET DRIVEN END TO END - `preview.start` is a published
-async command, the daemon serves the preview receipt and its captured
-screenshots over authenticated read routes, and the browser renders the running
-product with Approve and send-it-back controls - but no preview has been run
-against a real landed product, because a landed goal is recorded by
-`internal.repository.landing_receipt`, which has no HTTP ingress, so nothing a
-browser can do makes one. Gate 3 EXISTS AND IS WIRED, AND IS BLOCKED BEHIND THE
+Gate 2 IS NOW DRIVEN END TO END AGAINST A REAL LANDED PRODUCT, WITH ONE PART
+STILL BROKEN, AND BOTH HALVES ARE MEASURED (2026-09-07):
+`tests/e2e/control-room/preview-approve-live.spec.ts` and
+`preview-reject-live.spec.ts` commit a preview scaffold into a lane's own git
+workspace, land it through the REAL wrapper and the REAL `node-lander` (nothing
+is seeded), start a REAL `preview.start` that spawns a REAL dev server on
+loopback, and then commit an APPROVE and a REJECT whose verdicts are read back
+out of `/activity/read` - so a decision that never reached the daemon cannot
+pass. The old claim that this was unreachable, because a landed goal is recorded
+by `internal.repository.landing_receipt` and that kind has no HTTP ingress, was
+true of a BROWSER but never of the lane: the wrapper lands without HTTP. WHAT IS
+STILL BROKEN IS THE BUTTON. The Gate-2 card renders against a really-running
+product, but its Approve control cannot commit, for two independent reasons,
+each asserted by code AND layer in those specs: `preview.decide` is operator-only
+(`OPERATOR_PRINCIPAL_KINDS`) while the shipped browser pairs into a non-operator
+credential, so a paired human is refused `OPERATOR_PRINCIPAL_REQUIRED @
+DAEMON_AUTHORIZATION`; and `preview-port.ts` sends the preview AGGREGATE id where
+the decide edge spends a RECEIPT id, which refuses `PREVIEW_GOAL_NOT_LANDED @
+GOAL_AUTHORITY` even past the first wall. The verdicts above are therefore
+committed by the CONFIGURED OPERATOR, not by a click. A REAL PREVIEW HAS BEEN
+SERVED AND SCREENSHOTTED, but against the lane's own scaffold app, NOT against
+UnAI: `D:/projexts/UnAI/package.json` declares only `test` and `typecheck`, so it
+resolves no `preview`, `dev` or `start` script and `resolvePreviewCommand`
+refuses it `PREVIEW_COMMAND_MISSING`.
+Gate 3 EXISTS AND IS WIRED, AND IS BLOCKED BEHIND THE
 SAME MISSING LANDING (measured 2026-09-07): `release.decide` is a published,
 operator-fenced command with a closed three-code refusal vocabulary, the daemon
 builds the evidence dossier and serves it over an authenticated read route, the
