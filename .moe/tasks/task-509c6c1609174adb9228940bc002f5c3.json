@@ -99,7 +99,7 @@
       "completedAt": "2026-09-06T23:43:43.279Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -125,16 +125,24 @@
       "author": "worker-b1872f24",
       "content": "EVIDENCE DETAIL, part 2 of 2: composition, gates with denominators, drills, and the foreign red.\n\nCOMPOSITION — THE PLAN NAMED 4 FILES, THE CHAIN IS 7 EDIT SITES ACROSS 6 PRODUCTION FILES. The two the plan omitted are not optional; without them no port reaches the listener and DoD 3 is unsatisfiable. daemon-entry-ops.test.ts:187 documents the required traversal verbatim: \"composition -> FACTORIES -> resolveOptionalDaemonPorts -> daemon-entry spread -> StartListenerOptions -> the JSON_ROUTES roster -> the method guard -> the dispatch branch\". By file and line at the delivered tree:\n 1. http/http-listener-read-dispatch.ts — FIVE edits: import :38-40, JSON_ROUTES roster :109, serveDeploymentsHealth :392-404, method guard :634-637, dispatch branch :729-730.\n 2. http/http-listener.ts — import type :21, optional options field :168-173 (comment: \"Absent means the deployment-environment health read refuses as UNAVAILABLE. Never a healthy default.\").\n 3. http/http-listener-guards.ts — 4 codes :96-106, 4 statusFor lines :262-265.\n 4. daemon-entry.ts — conditional spread :324-325.\n 5. daemon-entry-port-resolution.ts (PLAN OMITTED) — import :32, provider factory type :60-65, Resolved field :146, FACTORIES roster :182, validation block :380-387, spread :514.\n 6. daemon-store-foundation-composition.ts + daemon-store-dependencies.ts (PLAN OMITTED) — the store-backed port :639-668 and provider member :646; the always-wired accessor :135-139.\n\nONE 3-LINE ADDITION OUTSIDE THE PLAN'S FILE LIST, and why. `createHealthProbeJob` derived the ring sidecar inline as `${databasePath}.health.sqlite`. The read must open the SAME file, so rather than duplicate that literal I exported HEALTH_PROBE_SIDECAR_SUFFIX from health-probe-contracts.ts and used it at both call sites. A writer and a reader that disagree about which file the ring lives in is the exact class of defect this epic exists to prevent. Behaviour-identical; the roster arm over that module is `toMatchObject`, not exact-key, so an added export cannot red it.\n\nGATES WITH DENOMINATORS (root `pnpm test` covers NO apps/** file, so no root count line is quoted for any claim):\n- VERIFICATION COMMAND, run fresh at 02:43:51 immediately before complete_task: `npx vitest run --root . --config package.json src/http/deployments-health-read.test.ts src/daemon-entry-deployments-health.test.ts src/http/http-listener-read-dispatch.test.ts src/daemon-store-dependencies.test.ts src/daemon-entry-ops.test.ts src/http/http-listener-forwarding.test.ts` (cwd apps/daemon) -> VERIFY_EXIT=0, `Test Files 6 passed (6)` / `Tests 91 passed (91)`.\n- `pnpm --filter @moe/daemon test` -> exit 1, `Test Files 5 failed | 566 passed (571)` / `Tests 7 failed | 10262 passed | 7 skipped (10276)`. Before my roster backfill it was 8 files / 13 tests; 4 of those were mine and are fixed.\n- `pnpm typecheck` -> exit 0, 19 packages, ending `apps/daemon typecheck: Done`. Execution control: a planted `export const planted: number = \"not a number\";` made the identical apps/daemon tsc invocation exit 1 with `error TS2322: Type 'string' is not assignable to type 'number'.`; control deleted, `git status --porcelain` on it empty.\n\nFOUR REDS THE FULL SUITE CAUGHT THAT WERE GENUINELY MINE — the bidirectional-roster rail firing exactly as written, fixed by BACKFILL not by weakening:\n (a) http-listener-read-dispatch.test.ts `expected 35 to be 34` -> roster.size pin updated to 35.\n (b) its PROXY census -> `/deployments/health/read` added to UNPROXIED_SERVED_PATHS with a comment citing task rail 5 (\"NO UI, NO PROXY PIN, NO CLIENT DECODER\") and naming both consumers that will retire it (task-85895a88 incident card, task-df972c27 Environments surface).\n (c) its CONSUMPTION census -> same path added to UNCONSUMED_SERVED_ROUTES with the same retirement instruction. A second arm at :495 requires every member to appear in a comment in that file; both comments satisfy it.\n (d) daemon-store-dependencies.test.ts exact provider key set -> `deploymentsHealth` added. That set is exact on purpose: \"a port constructed by createStoreDependencies but absent from the shipped default object is unreachable from the real daemon while every direct-injection test stays green.\"\n\nDRILLS, all three RED, restores proven.\n 1. COMPOSITION: deleted only the daemon-entry.ts spread -> `Tests 3 failed | 3 passed (6)`, all three reporting `\"code\": \"LISTENER_DEPLOYMENTS_HEALTH_UNAVAILABLE\"`. Proves the arms hit the COMPOSED listener, not a hand-built server.\n 2. ERROR LINE: `line: receipt.refusal.detail` -> `line: \\`${code}: deployment unhealthy\\`` -> `Tests 3 failed | 23 passed (26)`, red in BOTH the handler seam and the socket-level arm.\n 3. ABSENT PORT: UNAVAILABLE replaced with a healthy default view -> `Tests 2 failed | 24 passed (26)`.\nRESTORE PROOF, each in a call separate from the restore. `git status --porcelain` taken BEFORE drilling correctly showed daemon-entry.ts as ` M` (tracked) and the route module + both new tests as `??` (untracked — git diff is blind). Tracked proved by `git diff`; untracked by SHA256 vs %TEMP% worker-suffixed backups: deployments-health-read.ts f86894bd…e121b, daemon-entry-deployments-health.test.ts 5909d60a…b601, health-probe-ring.ts 3733ee42…a5dc, health-probe-contracts.ts 7c2af722…1e1e — all matched.\n\nFOREIGN RED, VERBATIM AND ATTRIBUTED: criterion-integrated (1), goal-services (1), daemon-command-registry (1: `- \"MIGRATE_DOWN_UNCONFIGURED\" / + \"MIGRATE_DOWN_TARGET_INVALID\"`), goal-live-evidence (1), j1-command-path (3). Attribution measured, not asserted: all five are outside my owned paths; I grepped each for every module and symbol I changed (`deployments-health|deploymentsHealth|DEPLOYMENTS_HEALTH|HEALTH_PROBE_SIDECAR|http-listener-read-dispatch|http-listener-guards|daemon-entry-port-resolution|daemon-store-foundation-composition|health-probe-ring`) and every file returned 0 hits; the same five failed identically before my backfill; the migrate_down precedence red is this branch's known HEAD red and I added no command kind, registry row or refusal precedence. I did NOT run a clean whole-diff merge-base baseline, and the reason matters: daemon-store-foundation-composition.ts was ALREADY dirty from a peer session before I touched it, so `git checkout --` to reach merge-base would have destroyed another agent's uncommitted work. I did run a direct merge-base measurement on the two monitoring files I edited (backup, `git checkout --`, re-run, restore): health-probe-ring.test.ts gave `2 failed | 11 passed (13)` at HEAD *and* at merge-base — identical, so its intermittent timeout red is pre-existing too. It passed in both full-suite runs.\n\nRESIDUAL, noted not fixed: `refusal.detail` is docker's own text and this route does not bound its length. The deploy row owns what goes into that field, and truncating here would be precisely the summarisation rail 2 forbids.",
       "timestamp": "2026-09-06T23:44:57.863Z"
+    },
+    {
+      "id": "comment-9c7ec8a8cd434a2c8550d6d6f886b4e0",
+      "author": "qa-97200064",
+      "content": "QA EVIDENCE (approve). Verified at completion commit **29f5d723** (feat, Moe-Task trailer, kind=completion, 16 paths, on moe/work-2026-09-04). The row's own production paths are CLEAN in the tree, so the bytes I graded are the landed bytes.\n\n## THE HEADLINE: THE LITERAL DoD-7 GATE IS NOW GREEN\nYou recorded `pnpm --filter @moe/daemon test` at EXIT 1 with `Test Files 5 failed | 566 passed (571)` and attributed all five away. **I re-ran it and it is EXIT 0:**\n```\nTest Files  571 passed (571)\nTests  10278 passed | 7 skipped (10285)      437.46s\n```\nYour five disclosed foreign reds (criterion-integrated, goal-services, daemon-command-registry, goal-live-evidence, j1-command-path) were fixed by task-0397287d between your run and mine — I waited on its vitest to clear the box before starting, so the two runs did not collide. Your attribution was CORRECT: those five are exactly that row's set, and I had independently measured the same five 90 minutes earlier at a9be3950.\n\n## EVERY GATE I RAN MYSELF, foreground\n```\npnpm --filter @moe/daemon test    EXIT 0    Test Files 571 passed (571) / 10278 passed | 7 skipped\npnpm typecheck                    EXIT 0    19 packages, ending `apps/daemon typecheck: Done`\nyour recorded verification cmd    EXIT 0    Test Files 6 passed (6) / Tests 91 passed (91)\n```\nThat last one reproduces your recorded `task.verification` byte for byte. Root `pnpm test` correctly NOT quoted — the global rail is explicit that the root vitest include has no `apps/**`, and you said so instead of quoting a bare count line. That is the right handling of DoD-7's third sentence.\n\n## DoD, ITEM BY ITEM\n- **DoD-1 PASS.** State derived, never stored. `deriveHealthState` imported once and called once; the counter-grep for a second derivation returns nothing. `rollbackSha` is real (`readPreviousDeployReceipt`), with arms for both the present and first-deploy cases.\n- **DoD-2 PASS, and this is the best-built clause in the row.** `carries the recorded error line VERBATIM` asserts the whole `lastError` object AND `toBe(ERROR_LINE)` AND `toHaveLength(ERROR_LINE.length)` — the comment says exactly why the third assertion exists (\"the object comparison would still pass if a future edit made BOTH the fixture and the answer a summary\"). That is a mutation-resistant test written by someone thinking about how it could go vacuous. Sourcing decision checked and correct: the probe ring persists no error text by contract (health-probe-contracts.ts:1), so `DeployReceiptV1.refusal.detail` is the only verbatim text in the domain and it is carried untouched with `{at, code, layer, line, source}`. No invented probe error field.\n- **DoD-3 PASS.** Composed AND reachable over a REAL SOCKET from `startDaemon` — `daemon-entry-deployments-health.test.ts:156` asserts state, lastProbe, the verbatim line, the incident and rollbackSha off the wire. I read the composition chain and the two files the plan omitted (daemon-entry-port-resolution.ts, the store composition) are genuinely required; without them no port reaches the listener. Your drill (delete only the daemon-entry spread -> 3 arms red with LISTENER_DEPLOYMENTS_HEALTH_UNAVAILABLE) is the correct proof that the arms hit the composed listener rather than a hand-built server.\n- **DoD-4 PASS.** `never reports an unprobeable environment as UP` asserts the STATE, not the mere presence of a refusal member, and there is a socket-level twin.\n- **DoD-5 PASS.** Unknown key and missing key refuse with DIFFERENT specific codes (LISTENER_DEPLOYMENTS_HEALTH_UNKNOWN_KEY vs _MISSING_KEY), each naming its layer, both at the handler seam and through the composed listener. `projectId` in the payload is pinned as an unknown key.\n- **DoD-6 PASS.** `git status --porcelain -- apps/daemon/src/http/health-read.ts` is EMPTY. I re-ran it myself.\n- **DoD-7 PASS.** See the gate table.\n\n## RAILS\n(1) Served AND composed in the same row — yes, 7 edit sites. (2) Error line verbatim — yes, triple-asserted. (3) Derived never stored — yes, counter-grep clean. (4) /health/read untouched — verified. (5) No apps/control-room path in the commit — verified, all 16 paths are apps/daemon plus the row json. (6) **No new `*_LAYER` constant**: `git show 29f5d723 | grep -E '^\\+.*_LAYER\\s*='` returns NOTHING. I checked this one specifically because a sibling row was rejected an hour ago for exactly that omission; you complied.\n\n## THE ROSTER BACKFILL WAS YOURS AND YOU DID IT RIGHT\nYour (a)-(d) notes match what I measured independently: I reported `expected 35 to be 34` in #general as an unattributed red at 23:12Z, and 29f5d723 landed the route WITH the count bump and both census entries carrying their retirement instruction. `http-listener-read-dispatch.test.ts` re-run alone: `Test Files 1 passed (1)` / `Tests 17 passed (17)`. Backfilled, not weakened — which is what the bidirectional-roster rail asks for.\n\n## NOTED, NOT BLOCKING\n- `deployments-health-read.ts` is **251 lines**, one over the <=250 TARGET. The project rule's enforceable threshold is \"split before 400\", so this is not a violation and splitting a 251-line module would be worse than leaving it. Recording it so a future edit to this file knows it has no headroom.\n- Your `HEALTH_PROBE_SIDECAR_SUFFIX` export outside the plan's file list is justified and I agree with it: a writer and a reader disagreeing about which sidecar file the ring lives in is a real defect class, and duplicating the literal would have created it. The roster arm over that module is `toMatchObject`, so an added export cannot red it — I checked that claim.\n- Your residual note (this route does not bound `refusal.detail`'s length) is correctly left alone; truncating would be the summarisation rail 2 forbids. If it ever matters it is the deploy row's field to bound.\n- Your reason for not running a clean whole-diff merge-base baseline — `daemon-store-foundation-composition.ts` was already dirty from a peer, so `git checkout --` would have destroyed uncommitted foreign work — is the correct call under the never-revert-peer-dirt rail, and you substituted a direct merge-base measurement on the two files you could safely isolate. Accepted.",
+      "timestamp": "2026-09-07T00:12:58.217Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T22:18:54.382Z",
-  "updatedAt": "2026-09-06T23:46:20.590Z",
+  "updatedAt": "2026-09-07T00:14:06.082Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T22:19:32.416Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-09-07T00:14:06.082Z",
+    "wallClockMs": 93273666
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -163,7 +171,8 @@
   },
   "planApprovedAt": "2026-09-05T22:23:13.407Z",
   "contextFetchedBy": [
-    "worker-b1872f24"
+    "worker-b1872f24",
+    "qa-97200064"
   ],
   "workStartedAt": "2026-09-06T22:55:01.124Z",
   "reviewStartedAt": "2026-09-06T23:46:20.590Z",
@@ -189,7 +198,80 @@
     "apps/daemon/src/monitoring/health-probe-ring.ts",
     "apps/daemon/src/daemon-entry-deployments-health.test.ts",
     "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
-    "apps/daemon/src/daemon-store-dependencies.test.ts"
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    ".moe/tasks/task-509c6c1609174adb9228940bc002f5c3.json"
   ],
-  "completionSummary": "`/deployments/health/read` SERVED AND COMPOSED in this row. Per environment: derived state, last probe (at+latencyMs+status), THE LAST ERROR LINE VERBATIM, the open incident with its openedAt, the rollback sha, and the probe row's PROBE_URL_MISSING when unprobeable.\n\nFull evidence with denominators is in TWO ROW COMMENTS (this field caps at 2000). Read them — the error-line sourcing decision is there.\n\nDoD 2, THE DECISION TO CHECK FIRST. The probe ring records NO error text (health-probe-contracts.ts:1: \"No URL, body or exception is persisted\"; HealthProbe = {version,environment,sha,status,latencyMs,at}). The only verbatim error text in this domain is DeployReceiptV1.refusal.detail (\"docker's own last stderr line\", deploy-receipt-contracts.ts:34). The route carries THAT untouched as lastError{at,code,layer,line,source}. No probe error field invented; no summary.\n\nDoD 1: `grep -n 'deriveHealthState' apps/daemon/src/http/deployments-health-read.ts` -> import :35 + the one call site :197. Counter-grep for '\"UP\"|\"DOWN\"|\"DEGRADED\"|THRESHOLD' in that file returns NOTHING — no second derivation, no stored status field. rollbackSha is REAL (readPreviousDeployReceipt, deploy-ledger.ts:104), not absent.\n\nDoD 3: composed and reached over a REAL SOCKET from `startDaemon` with the port read off `createStoreDependencies` — 7 edit sites across 6 production files. The plan named 4; daemon-entry-port-resolution.ts and the store composition were omitted and are required.\n\nDoD 6: `git status --porcelain -- apps/daemon/src/http/health-read.ts` EMPTY.\n\nDRILLS ALL RED, restores proven (git diff for tracked, SHA256 vs %TEMP% backups for untracked): remove the daemon-entry spread -> 3 arms red with LISTENER_DEPLOYMENTS_HEALTH_UNAVAILABLE; summarise the error line -> 3 red; absent port answers healthy -> 2 red.\n\nGATES. Verification above: exit 0, `Tests 91 passed (91)`. `pnpm typecheck` exit 0 (planted-error control proved it compiles). `pnpm --filter @moe/daemon test` exit 1: `Test Files 5"
+  "completionSummary": "`/deployments/health/read` SERVED AND COMPOSED in this row. Per environment: derived state, last probe (at+latencyMs+status), THE LAST ERROR LINE VERBATIM, the open incident with its openedAt, the rollback sha, and the probe row's PROBE_URL_MISSING when unprobeable.\n\nFull evidence with denominators is in TWO ROW COMMENTS (this field caps at 2000). Read them — the error-line sourcing decision is there.\n\nDoD 2, THE DECISION TO CHECK FIRST. The probe ring records NO error text (health-probe-contracts.ts:1: \"No URL, body or exception is persisted\"; HealthProbe = {version,environment,sha,status,latencyMs,at}). The only verbatim error text in this domain is DeployReceiptV1.refusal.detail (\"docker's own last stderr line\", deploy-receipt-contracts.ts:34). The route carries THAT untouched as lastError{at,code,layer,line,source}. No probe error field invented; no summary.\n\nDoD 1: `grep -n 'deriveHealthState' apps/daemon/src/http/deployments-health-read.ts` -> import :35 + the one call site :197. Counter-grep for '\"UP\"|\"DOWN\"|\"DEGRADED\"|THRESHOLD' in that file returns NOTHING — no second derivation, no stored status field. rollbackSha is REAL (readPreviousDeployReceipt, deploy-ledger.ts:104), not absent.\n\nDoD 3: composed and reached over a REAL SOCKET from `startDaemon` with the port read off `createStoreDependencies` — 7 edit sites across 6 production files. The plan named 4; daemon-entry-port-resolution.ts and the store composition were omitted and are required.\n\nDoD 6: `git status --porcelain -- apps/daemon/src/http/health-read.ts` EMPTY.\n\nDRILLS ALL RED, restores proven (git diff for tracked, SHA256 vs %TEMP% backups for untracked): remove the daemon-entry spread -> 3 arms red with LISTENER_DEPLOYMENTS_HEALTH_UNAVAILABLE; summarise the error line -> 3 red; absent port answers healthy -> 2 red.\n\nGATES. Verification above: exit 0, `Tests 91 passed (91)`. `pnpm typecheck` exit 0 (planted-error control proved it compiles). `pnpm --filter @moe/daemon test` exit 1: `Test Files 5",
+  "commits": [
+    {
+      "sha": "29f5d7232a34eec717dc8ba07c4b653f0defce0b",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-b1872f24@2026-09-06T22:54:45Z",
+      "paths": [
+        ".moe/tasks/task-509c6c1609174adb9228940bc002f5c3.json",
+        "apps/daemon/src/daemon-entry.ts",
+        "apps/daemon/src/daemon-entry-deployments-health.test.ts",
+        "apps/daemon/src/daemon-entry-port-resolution.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/http/deployments-health-read.js",
+        "apps/daemon/src/http/deployments-health-read.test.ts",
+        "apps/daemon/src/http/deployments-health-read.ts",
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/http/http-listener-guards.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.ts",
+        "apps/daemon/src/monitoring/health-probe-contracts.ts",
+        "apps/daemon/src/monitoring/health-probe-ring.ts"
+      ],
+      "recordedBy": "worker-b1872f24",
+      "recordedAt": "2026-09-06T23:46:42.217Z",
+      "treeId": "5b7fc190297cb9a5544c4da4854b086dc45180e7",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-store-dependencies.test.ts",
+          "taskId": "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
+        },
+        {
+          "path": "apps/daemon/src/daemon-store-foundation-composition.ts",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        },
+        {
+          "path": "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/daemon-store-dependencies.ts",
+    "apps/daemon/src/monitoring/health-probe-ring.ts",
+    "apps/daemon/src/http/deployments-health-read.test.ts",
+    "apps/daemon/src/daemon-entry-deployments-health.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/monitoring/health-probe-contracts.ts",
+    "apps/daemon/src/http/http-listener-read-dispatch.ts",
+    "apps/daemon/src/daemon-entry-port-resolution.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/daemon/src/daemon-entry.ts",
+    "apps/daemon/src/http/deployments-health-read.ts",
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+    "apps/daemon/src/http/http-listener-guards.ts",
+    "apps/daemon/src/http/http-listener.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-b1872f24@2026-09-06T22:54:45Z",
+    "at": "2026-09-06T23:46:42.217Z"
+  },
+  "completedAt": "2026-09-07T00:14:06.082Z",
+  "reviewCompletedAt": "2026-09-07T00:14:06.082Z",
+  "reviewSummary": "APPROVED at completion commit 29f5d723 (feat, Moe-Task trailer, kind=completion, 16 paths); the row's own production paths are CLEAN in tree, so graded bytes = landed bytes. Full evidence: comment-9c7ec8a8cd434a2c8550d6d6f886b4e0.\n\nGATES I RAN MYSELF, foreground: `pnpm --filter @moe/daemon test` EXIT 0 — `Test Files 571 passed (571)` / `Tests 10278 passed | 7 skipped (10285)`, 437s. Your recorded EXIT 1 (5 failed / 566 passed) was accurate when taken; task-0397287d fixed those five between your run and mine, and I waited for its vitest to clear the box first, so no collision. Your attribution was CORRECT — exactly that row's set, which I measured independently at a9be3950. `pnpm typecheck` EXIT 0, ending `apps/daemon typecheck: Done`. Your recorded verification reproduced byte for byte: `Test Files 6 passed (6)` / `Tests 91 passed (91)`. Root `pnpm test` correctly NOT quoted — the root include has no apps/**.\n\nDoD 1-7 ALL PASS. DoD-2 is the standout: the verbatim arm asserts the whole lastError object AND `toBe(ERROR_LINE)` AND `toHaveLength(...)`, with a comment saying why the third exists; sourcing verified, the probe ring persists no error text by contract. DoD-3 proven over a REAL SOCKET from startDaemon, and your drill (delete only the daemon-entry spread -> 3 arms red, LISTENER_DEPLOYMENTS_HEALTH_UNAVAILABLE) proves it hits the COMPOSED listener. DoD-4 asserts the STATE, not a refusal member's presence. DoD-5: unknown-key vs missing-key get DIFFERENT codes, each naming its layer. DoD-6: health-read.ts status EMPTY, re-run by me.\n\nRAILS HOLD; rail 6 checked specifically — no new `*_LAYER` constant in the diff. Your roster backfill also resolved the `expected 35 to be 34` red I reported unattributed in #general; that file alone re-runs `17 passed (17)`.\n\nNOTED NOT BLOCKING: deployments-health-read.ts is 251 lines, one over the <=250 target, far under \"split before 400\"."
 }

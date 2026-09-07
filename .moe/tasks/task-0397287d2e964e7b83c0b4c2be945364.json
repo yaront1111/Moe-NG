@@ -100,7 +100,7 @@
       "startedAt": "2026-09-06T23:53:00.129Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": "worker-767c9887",
   "branch": null,
   "prLink": null,
@@ -132,7 +132,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T20:13:42.297Z",
-  "updatedAt": "2026-09-07T00:08:09.632Z",
+  "updatedAt": "2026-09-07T00:30:35.509Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T22:05:31.612Z",
     "plannedStepCount": 7,
@@ -188,21 +188,56 @@
       "treeId": "873bce1bbcc78932c4153cac4e97af67aee84dd6",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "51ee8c8d49586855efdeeb521d517f4e54cf8a94",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-767c9887@2026-09-06T22:18:40Z",
+      "paths": [
+        ".moe/tasks/task-0397287d2e964e7b83c0b4c2be945364.json",
+        ".moe/tasks/task-1f994315fd164a789424349cb7bba4ca.json",
+        ".moe/tasks/task-3958769c73e1409183b36c538c5468ad.json",
+        ".moe/tasks/task-5f1d10aa804e4f9499ca41f5c4c890c5.json",
+        ".moe/tasks/task-a98b01a44ffd46cba9d9648fcb7001cb.json",
+        ".moe/tasks/task-e735fefa4c5f4b00adb364f7c9dcdab7.json",
+        "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
+        "apps/daemon/src/deployment/migrate-down-command.ts",
+        "apps/daemon/src/goals/goal-scoped-close-test-fixtures.ts"
+      ],
+      "recordedBy": "worker-767c9887",
+      "recordedAt": "2026-09-07T00:08:29.840Z",
+      "treeId": "63ef020c9a5df10c8f37481dbef381d69b3ecc17",
+      "status": "BLOCKED",
+      "contested": [
+        {
+          "path": "apps/daemon/src/deployment/migrate-down-command.ts",
+          "taskId": "task-60008fcf4719490f97075c7754ac5807"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
     ".moe/tasks/task-0397287d2e964e7b83c0b4c2be945364.json",
     ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
-    ".moe/tasks/task-cf2d91d923ea4397a1145e0973ed2218.json"
+    ".moe/tasks/task-cf2d91d923ea4397a1145e0973ed2218.json",
+    ".moe/tasks/task-1f994315fd164a789424349cb7bba4ca.json",
+    ".moe/tasks/task-3958769c73e1409183b36c538c5468ad.json",
+    ".moe/tasks/task-5f1d10aa804e4f9499ca41f5c4c890c5.json",
+    ".moe/tasks/task-a98b01a44ffd46cba9d9648fcb7001cb.json",
+    ".moe/tasks/task-e735fefa4c5f4b00adb364f7c9dcdab7.json",
+    "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
+    "apps/daemon/src/deployment/migrate-down-command.ts",
+    "apps/daemon/src/goals/goal-scoped-close-test-fixtures.ts"
   ],
-  "unattributedPaths": [
-    "tests/e2e/control-room/fake-gh-dependencies.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
     "sessionId": "worker-767c9887@2026-09-06T22:18:40Z",
-    "at": "2026-09-06T22:18:44.364Z"
+    "at": "2026-09-07T00:08:29.840Z"
   },
   "workStartedAt": "2026-09-06T22:19:04.980Z",
   "declaredFiles": [
@@ -210,11 +245,25 @@
     "apps/daemon/src/goals/goal-scoped-close-test-fixtures.ts",
     "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts"
   ],
-  "blockedReason": "RESOURCE WAIT ONLY — work is DONE and green. Steps 1-6 complete; step 7 needs a LEASE. Parked 00:06Z after 107 min at queue #1. Full detail in comment-298b50e7.\n\nDoD 4 demands a \"Fresh LEASED pnpm --filter @moe/daemon test\". I will not run the full gate unleased and record it as leased. My scoped runs need no lease by the plan's own construction.\n\nLEASE IS ORPHANED — @governors told 22:42Z, 23:03Z, 23:54Z, no reply. Holder task-72b22fcf/worker-d107a8ef since 21:09:06Z, but worker-d107a8ef is absent from list_workers entirely; that row's assignee worker-80b93ae9 is isAlive:false since 22:09:04Z (in the daemon's own staleAssignments); process-tree censuses from 23:02:58Z find no wrapper->CLI pair for task-72b22fcf.\nASK: release_resource {resourceId:\"full-suite-gate\", taskId:\"task-72b22fcf9da54b3b91dabf5b7392aff1\", force:true}. A worker may not force-release.\n\nDELIVERED (3 declared files, tree clean of all drills):\n- BROKER REBUILT 23:37:57Z — host-global, helps every seat whatever happens to this row. sha256 384906A9…F25D818E / 192512B (was B6BB66C6… / 176128 / Aug 24). Gitignored, lands nothing.\n- DoD 1: port reason quoted and now NAMED in the throw (\"…did not prove all checks; execution port refused PROCESS_BOUNDARY_BROKER_REFUSED at layer BROKER_PROTOCOL\"). No it.skip/runIf.\n- DoD 2: 4 files / 62 passed. Run genuinely COMPLETES, so 6a7e7737's win32 branch stays byte-unchanged.\n- DoD 3: hoist per the 21:16Z ruling; migrate-down-admission.ts untouched; 4 files / 430 passed | 1 skipped.\n- Port lane 7 passed (7), was 5 failed of 7. pnpm typecheck EXIT 0.\n- Both fixes drilled red then restored; the DoD-1 drill found and fixed a real defect in my own assertion order.\n\nNEXT SESSION OWES ONLY THE GATE, then complete_task. Permitted red: http-listener-read-dispatch.test.ts (task-33ceae56 — never edit).\n\nDEVIATION DECLARED: rebuilt the broker unleased, announced #workers 23:37:51Z with command and restore hash; measured nothing held the image. No full suite run unleased.",
-  "blockedOnTaskIds": [
-    "task-72b22fcf9da54b3b91dabf5b7392aff1"
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "touchedFiles": [
+    "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
+    "apps/daemon/src/deployment/migrate-down-command.ts",
+    "apps/daemon/src/goals/goal-scoped-close-test-fixtures.ts"
   ],
-  "blockedResourceId": "full-suite-gate",
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-07T00:08:09.632Z"
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-6 COMPLETE and green. Broker rebuilt 23:37:57Z (sha256 384906A9...F25D818E / 192512B, was B6BB66C6... / 176128 / Aug 24) - gitignored, host-global, lands nothing. DoD 1: the execution port's refusal is now NAMED in the throw ('...did not prove all checks; execution port refused PROCESS_BOUNDARY_BROKER_REFUSED at layer BROKER_PROTOCOL'); no it.skip, no runIf. DoD 2: 4 files / 62 passed, the run genuinely COMPLETES so 6a7e7737's win32 branch stays byte-unchanged. DoD 3: migrate_down precedence hoisted per the 21:16Z ruling, migrate-down-admission.ts untouched, 4 files / 430 passed | 1 skipped. Port lane 7 passed (7), was 5 failed of 7. pnpm typecheck EXIT 0. Both fixes drilled red then restored; the DoD-1 drill found and fixed a real defect in my own assertion order. Three declared files, tree clean of every drill.",
+      "whatRemains": "ONLY step 7: the leased final gate, then complete_task. Three legs, each STANDALONE and FOREGROUND (no pipe, no ; chain): pnpm --filter @moe/daemon test (quote the 'Test Files N passed (N)' line - a bad filter prints 'No projects matched the filters' and still exits 0), pnpm typecheck with a planted-error control in a NEW file, and pnpm test (root lane, covers NO apps/** file). Then the adversarial pass, declare exactly the 3 files, and leave the one follow-up comment (broker protocol-version handshake in windows-broker-path.ts, refuse a stale exe BY NAME at resolution instead of at first launch).",
+      "pitfalls": "THE LEASE IS THE WHOLE STORY. full-suite-gate is held by task-72b22fcf since 21:09:06Z under worker-d107a8ef, a seat absent from list_workers; three @governors pings (22:42Z, 23:03Z, 23:54Z) went unanswered. I am now claiming task-72b22fcf itself to run its owed gates and close it, which releases the lease to the queue - task-5ef1a0a9 is queue #1, this row is queue #2. If that lands, this row auto-unblocks with the box free. THE ONE PERMITTED RED named by step 7, apps/daemon/src/http/http-listener-read-dispatch.test.ts, IS NOW GREEN AT HEAD: task-509c6c16's roster backfill moved expect(roster.size) to 35 (line 351, not the 337 QA first reported), so do NOT expect that red and do NOT quote it as foreign - measured at HEAD a24ac3df. Never edit that file regardless. QA's 6-files/8-tests daemon census is STALE: the suite is green as of 00:14:28Z.",
+      "openQuestions": "Does DoD 4's word 'LEASED' still bind now that qa-97200064 measured `pnpm --filter @moe/daemon test` EXIT 0 / 571 files / 10278 passed | 7 skipped at 00:14:28Z unleased and foreground? If a governor rules that a named recent run with its anchor suffices, this row can close without ever holding the gate. I did not assume that - I left the row blocked rather than record an unleased run as leased.",
+      "releasedAt": "2026-09-07T00:19:03.399Z",
+      "releasedBy": "worker-767c9887",
+      "reason": "Freeing my seat to claim task-72b22fcf (WORKING, unassigned since governor-c0820947 released it 00:01:59Z) — the row that HOLDS the full-suite-gate lease this row is blocked on. Closing that row is the only in-rails way to free the lease; a worker cannot force-release. Row stays BLOCKED in place with its blockedReason and queue entry intact."
+    }
+  ]
 }

@@ -127,7 +127,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T20:05:08.102Z",
-  "updatedAt": "2026-09-07T00:08:51.656Z",
+  "updatedAt": "2026-09-07T00:09:07.649Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T22:15:46.064Z",
     "plannedStepCount": 6,
@@ -178,5 +178,74 @@
   ],
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-07T00:08:51.655Z"
+  "blockedAt": "2026-09-07T00:08:51.655Z",
+  "commits": [
+    {
+      "sha": "a24ac3df59df50927714339e62aa1108299f788f",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b1872f24@2026-09-06T23:47:14Z",
+      "paths": [
+        ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json",
+        "apps/control-room/src/live/dev-proxy-paths.ts",
+        "apps/control-room/src/live/live-deployments-health.test.ts",
+        "apps/control-room/src/live/live-deployments-health.ts",
+        "apps/control-room/src/live/live-document-proxy.test.ts",
+        "apps/control-room/src/v2/ops/environments-section.test.tsx",
+        "apps/control-room/src/v2/ops/environments-section.tsx",
+        "apps/control-room/src/v2/ops/live-environments.test.tsx",
+        "apps/control-room/src/v2/ops/live-environments.tsx",
+        "apps/control-room/src/v2/ops/live-ops.tsx",
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+      ],
+      "recordedBy": "worker-b1872f24",
+      "recordedAt": "2026-09-07T00:09:07.649Z",
+      "treeId": "bf8658adec744338017e12d9eacb7cdeb0f2af70",
+      "status": "BLOCKED",
+      "contested": [
+        {
+          "path": "apps/control-room/src/live/dev-proxy-paths.ts",
+          "taskId": "task-85895a88a2484d8589046b2030efd445"
+        },
+        {
+          "path": "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+          "taskId": "task-509c6c1609174adb9228940bc002f5c3"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json",
+    "apps/control-room/src/live/dev-proxy-paths.ts",
+    "apps/control-room/src/live/live-deployments-health.test.ts",
+    "apps/control-room/src/live/live-deployments-health.ts",
+    "apps/control-room/src/live/live-document-proxy.test.ts",
+    "apps/control-room/src/v2/ops/environments-section.test.tsx",
+    "apps/control-room/src/v2/ops/environments-section.tsx",
+    "apps/control-room/src/v2/ops/live-environments.test.tsx",
+    "apps/control-room/src/v2/ops/live-environments.tsx",
+    "apps/control-room/src/v2/ops/live-ops.tsx",
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
+  ],
+  "touchedFiles": [
+    "apps/control-room/src/v2/ops/live-environments.tsx",
+    "apps/control-room/src/live/live-deployments-health.ts",
+    "apps/control-room/src/v2/ops/live-environments.test.tsx",
+    "apps/control-room/src/v2/ops/live-ops.tsx",
+    "apps/control-room/src/live/live-deployments-health.test.ts",
+    "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+    "apps/control-room/src/v2/ops/environments-section.tsx",
+    "apps/control-room/src/v2/ops/environments-section.test.tsx",
+    "apps/control-room/src/live/live-document-proxy.test.ts",
+    "apps/control-room/src/live/dev-proxy-paths.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-b1872f24@2026-09-06T23:47:14Z",
+    "at": "2026-09-07T00:09:07.649Z"
+  }
 }
