@@ -234,6 +234,7 @@ export interface GeneratedCommandBuilders {
   readonly ["lease.confirm_revoke"]: CommandBuilder<"lease.confirm_revoke">;
   readonly ["lease.extend"]: CommandBuilder<"lease.extend">;
   readonly ["lease.mark_suspect"]: CommandBuilder<"lease.mark_suspect">;
+  readonly ["monitoring.set_probe_interval"]: CommandBuilder<"monitoring.set_probe_interval">;
   readonly ["plan.propose"]: CommandBuilder<"plan.propose">;
   readonly ["planning.cancel"]: CommandBuilder<"planning.cancel">;
   readonly ["planning.claim"]: CommandBuilder<"planning.claim">;
@@ -358,6 +359,7 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["lease.confirm_revoke"]: commandBuilderFor("lease.confirm_revoke"),
     ["lease.extend"]: commandBuilderFor("lease.extend"),
     ["lease.mark_suspect"]: commandBuilderFor("lease.mark_suspect"),
+    ["monitoring.set_probe_interval"]: commandBuilderFor("monitoring.set_probe_interval"),
     ["plan.propose"]: commandBuilderFor("plan.propose"),
     ["planning.cancel"]: commandBuilderFor("planning.cancel"),
     ["planning.claim"]: commandBuilderFor("planning.claim"),
@@ -936,7 +938,7 @@ export interface GeneratedContractPins {
   readonly queryEnvelopeVersion: typeof RUNTIME_QUERY_ENVELOPE_VERSION;
 }
 
-export const GENERATED_CONTRACT_DIGEST = "9f578ae0a875d498cce7b9da03252daaa2655f825263c0963b4899971001e1ca";
+export const GENERATED_CONTRACT_DIGEST = "daafa7872670d05bd428a3037b1afea1ce357d83bea8f434623080356d26a025";
 
 export const GENERATED_CONTRACT_PINS: GeneratedContractPins = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,

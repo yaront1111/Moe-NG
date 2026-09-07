@@ -49,7 +49,8 @@ const EXPECTED_COMMAND_KINDS = [
   "graph.release_preparation", "graph.request_expansion", "graph.supersede",
   "integration.accept_output", "integration.resolve_finding", "integration.seal",
   "integration.start", "integration.submit_finding", "journal.append", "lease.confirm_revoke",
-  "lease.extend", "lease.mark_suspect", "plan.propose", "planning.cancel", "planning.claim",
+  "lease.extend", "lease.mark_suspect", "monitoring.set_probe_interval",
+  "plan.propose", "planning.cancel", "planning.claim",
   "planning.recover_absent", "planning.release", "planning.submit_decomposition",
   "policy.install", "policy.validate", "preview.decide", "preview.start",
   "product_contract.answer_clarification", "product_contract.approve_gate_1",
@@ -106,9 +107,16 @@ describe("runtime vocabulary is closed and disjoint", () => {
       expect(commands.has(kind)).toBe(false);
     }
     expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS);
-    // Literal 119, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
-    expect(commands.size).toBe(120);
+    // Literal 121, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
+    // The comment read 119 against an assertion of 120 at 3a056078 — a prior addition bumped the
+    // number and left the prose behind. Repaired here rather than grown, so the next reader can
+    // trust it.
+    expect(commands.size).toBe(121);
     expect(RUNTIME_COMMAND_KINDS).toContain("plan.propose");
+    // task-749e585a: the operator's per-environment health-probe interval. Named here as well as
+    // in EXPECTED_COMMAND_KINDS so a mistranscription of the hand-written roster above cannot
+    // silently drop the kind while the count literal still adds up.
+    expect(RUNTIME_COMMAND_KINDS).toContain("monitoring.set_probe_interval");
     expect(RUNTIME_COMMAND_KINDS).toContain("graph.prepare_supersession");
     expect(RUNTIME_COMMAND_KINDS).toContain("foundation.dispatch");
     expect(RUNTIME_COMMAND_KINDS).toContain("foundation.verification");

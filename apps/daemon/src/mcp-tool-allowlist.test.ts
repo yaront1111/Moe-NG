@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
+import { RUNTIME_COMMAND_ENVELOPE_VERSION, RUNTIME_COMMAND_KINDS } from "@moe/contracts";
 import { STDIO_TOOL_INDEX, allowlistedToolEntries, createHttpMcpAdapter, toolLabelForKind } from "@moe/mcp";
 import type { HttpDispatchPort } from "@moe/mcp";
 import { SqliteEventStore } from "@moe/store";
@@ -623,6 +623,114 @@ describe("task-5f883e4e preview.decide is fenced to the operator", () => {
     expect(frame["ok"]).toBe(false);
     // A refused decision commits nothing, so the exclusion cannot be read as "harmless
     // because the command is inert" — it is a real seam that would have run.
+    expect(decisionsIn().length).toBe(before.length);
+  });
+});
+
+/**
+ * task-749e585a: `monitoring.set_probe_interval` is ADVERTISED on the shared runtime contract by
+ * this row and DISPATCHED by task-eb37494e. Between the two commits the kind exists in
+ * `RUNTIME_COMMAND_KINDS` and in the generated client while the daemon serves nothing for it,
+ * and these arms are what make that interval safe rather than merely brief.
+ *
+ * WHY THE KIND IS NOT IN `MCP_EXCLUDED_COMMAND_KINDS` HERE, which is the first thing a reader
+ * will suspect is an omission. That roster is DERIVED from `OPERATOR_PRINCIPAL_KINDS`
+ * (`mcp-tool-allowlist.ts:94`), which is typed `ReadonlySet<WiredCommandKind>` — a union built
+ * from `PAYLOAD_KEYS`. A kind absent from `PAYLOAD_KEYS` cannot be named there without a type
+ * error, and `wiredMcpToolKinds()` is itself computed by FILTERING `PAYLOAD_KEYS`, so the
+ * arithmetic arm above (`|wired| === |PAYLOAD_KEYS| - |excluded| + |queries|`) reds for such a
+ * kind too. The kind is therefore MCP-unreachable at this commit for a STRONGER reason than
+ * exclusion: nothing advertises it at all.
+ *
+ * THE RISK THAT CREATES, and the one these arms actually guard: when task-eb37494e adds the
+ * `PAYLOAD_KEYS` entry, the kind becomes advertised BY DERIVATION unless the same commit also
+ * adds it to `OPERATOR_PRINCIPAL_KINDS`. The MCP port dispatches under the operator bootstrap
+ * credential, so an advertised operator kind is an agent arriving AS the operator and a
+ * capability gate would pass. The implication arm below is written to red in exactly that
+ * commit, and it is NOT vacuous today because it pins the current state on both sides.
+ */
+describe("task-749e585a the probe-interval kind is unreachable over MCP", () => {
+  const PROBE_INTERVAL = "monitoring.set_probe_interval";
+
+  it("is on the shared runtime roster and in the generated client, but off the MCP surface", () => {
+    // THE SUBJECT EXISTS. Without this the two negatives below would pass for a misspelling.
+    expect(RUNTIME_COMMAND_KINDS).toContain(PROBE_INTERVAL);
+    expect(wiredMcpToolKinds()).not.toContain(PROBE_INTERVAL);
+    expect(allowlistedToolEntries(wiredMcpToolKinds()).map((entry) => entry.kind))
+      .not.toContain(PROBE_INTERVAL);
+    // The surviving control: a staffable kind of the same shape IS advertised, so "advertises
+    // nothing" cannot green this arm.
+    expect(wiredMcpToolKinds()).toContain("goal.create");
+  });
+
+  it("keeps the dispatch entry and the operator fence in lockstep, in both directions", () => {
+    // NOT AN `if`. Both sides are read from production and compared, so the arm states a real
+    // equality today (false === false) and reds the moment ONE side moves. An `if (wired)`
+    // guard would silently test nothing until task-eb37494e lands.
+    const wiredForDispatch = Object.hasOwn(PAYLOAD_KEYS, PROBE_INTERVAL);
+    const operatorOnly: ReadonlySet<string> = OPERATOR_PRINCIPAL_KINDS;
+    expect({
+      excluded: MCP_EXCLUDED_COMMAND_KINDS.includes(PROBE_INTERVAL),
+      operator: operatorOnly.has(PROBE_INTERVAL),
+    }).toEqual({ excluded: wiredForDispatch, operator: wiredForDispatch });
+    // AND THE INVARIANT THAT MUST HOLD IN BOTH WORLDS: advertised-and-fenced, or not
+    // advertised. Never advertised-and-unfenced.
+    expect(wiredMcpToolKinds()).not.toContain(PROBE_INTERVAL);
+    // The DISCRIMINATOR that keeps the equality above honest: a kind that IS wired for
+    // dispatch reads `true` on all three, so the shape is not trivially satisfiable by
+    // `false === false` alone.
+    const rollbackWired = Object.hasOwn(PAYLOAD_KEYS, "deployment.rollback");
+    expect({
+      excluded: MCP_EXCLUDED_COMMAND_KINDS.includes("deployment.rollback"),
+      operator: operatorOnly.has("deployment.rollback"),
+      wired: rollbackWired,
+    }).toEqual({ excluded: true, operator: true, wired: true });
+  });
+
+  it("is refused on the daemon's own command seam by code AND layer", async () => {
+    const before = decisionsIn();
+    const bytes = await port.dispatchCommandBytes(encoder.encode(JSON.stringify({
+      commandId: "cmd-probe-interval-allowlist",
+      commandKind: PROBE_INTERVAL,
+      correlationId: "corr-probe-interval-allowlist",
+      expectedVersion: 0,
+      payload: { environment: "production", intervalMs: 30_000 },
+      requestDigest: "a".repeat(64),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: CREDENTIAL,
+      targetAggregateId: "agg-probe-interval-allowlist",
+    })));
+    const frame = JSON.parse(decoder.decode(bytes)) as Record<string, unknown>;
+    const error = frame["error"] as { code?: string } | undefined;
+
+    // CODE AND LAYER TOGETHER, and the layer is spelled `stage` on this seam -- the frame
+    // carries no `refusal.layer` member, so an arm that read `refusal?.layer` would compare
+    // `undefined` to `undefined` and pass while asserting nothing. MEASURED, not assumed.
+    // The OPERATOR credential is used deliberately: it is the strongest principal the MCP port
+    // can present, so REGISTRY here means the kind is UNSERVED rather than the caller unworthy.
+    expect({ code: error?.code, outcome: frame["outcome"], stage: frame["stage"] })
+      .toEqual({ code: "INPUT_INVALID", outcome: "REFUSED", stage: "REGISTRY" });
+    expect(frame["ok"]).toBe(false);
+    // THE LAYER DISCRIMINATOR. Without it, `stage: "REGISTRY"` could be this seam's answer to
+    // everything. `deployment.rollback` IS served, so the same call shape on the same port
+    // under the same credential gets PAST the registry and is answered somewhere else -- which
+    // is what makes REGISTRY a statement about THIS kind. A single shared stage could not tell
+    // "not served" apart from "served and refused".
+    const servedBytes = await port.dispatchCommandBytes(encoder.encode(JSON.stringify({
+      commandId: "cmd-probe-interval-control",
+      commandKind: "deployment.rollback",
+      correlationId: "corr-probe-interval-control",
+      expectedVersion: 0,
+      payload: {},
+      requestDigest: "a".repeat(64),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: CREDENTIAL,
+      targetAggregateId: "agg-probe-interval-control",
+    })));
+    const servedFrame = JSON.parse(decoder.decode(servedBytes)) as Record<string, unknown>;
+    expect(servedFrame["stage"]).not.toBe("REGISTRY");
+    expect(servedFrame["ok"]).toBe(false);
+    // Nothing durable was written by either call.
     expect(decisionsIn().length).toBe(before.length);
   });
 });

@@ -286,6 +286,22 @@ describe("createAgentWrapper", () => {
         kind: "preview.decide",
         missing: [], status: "READY", version: 5,
       },
+      // task-749e585a: `monitoring.set_probe_interval` is fenced here BEFORE it exists as
+      // daemon vocabulary, exactly as the environment kinds were above. That ordering is the
+      // point of the row: the kind reaches the SHARED runtime roster in the same commit, so a
+      // window in which it is advertised but unfenced would otherwise open for as long as
+      // task-eb37494e takes to land. It is asserted through `runOnce()` rather than by reading
+      // the set, because the wrapper's loop is the production consumer and a
+      // `HUMAN_ONLY_STEPS.has()` call would only restate the constant.
+      //
+      // NOTE FOR WHOEVER WIRES THE DISPATCH: unlike `preview.decide`, this kind has NO
+      // `agentCapabilitiesFor` entry to fall back on yet, so at this commit the roster below is
+      // not defence in depth -- it is the only thing between this surface and a seat.
+      {
+        aggregateId: "probe-human-1", claim: null, claimAggregateVersion: 0,
+        kind: "monitoring.set_probe_interval",
+        missing: [], status: "READY", version: 6,
+      },
     ];
     const forbidden = createAgentWrapper({
       affordances: {
@@ -329,6 +345,21 @@ describe("createAgentWrapper", () => {
     expect(humanOnlySteps.filter((step) =>
       step.kind === "preview.decide" && step.status === "READY" && step.claim === null))
       .toHaveLength(1);
+    // task-749e585a, same two-part shape and for the same reason: the id, then the control that
+    // proves the id was offered. `workItemIdFor()` is computed INSIDE the loop AFTER the
+    // HUMAN_ONLY_STEPS check, so the id appears here only if the fence stopped skipping.
+    expect(report.spawned.map((entry) => entry.workItemId))
+      .not.toContain("monitoring.set_probe_interval@probe-human-1");
+    expect(humanOnlySteps.filter((step) =>
+      step.kind === "monitoring.set_probe_interval" && step.status === "READY"
+      && step.claim === null)).toHaveLength(1);
+    // AND THE LAYER, which is what makes this arm say WHICH fence answered rather than only
+    // that nothing spawned. The wrapper's `deps`, `mintSecret` and `spawnAgent` above all
+    // THROW; a kind that got past HUMAN_ONLY_STEPS and was then refused one gate later by
+    // `agentCapabilitiesFor` would still be reported, as `preview.decide` measurably is when
+    // its roster entry is removed (see the comment on that step). An empty `spawned` array is
+    // therefore only reachable by the STAFFING fence, never by the capability gate.
+    expect(report.spawned).toEqual([]);
   });
 
   it("revokes the scoped session as soon as its agent exits", async () => {
