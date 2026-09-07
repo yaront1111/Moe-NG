@@ -103,17 +103,22 @@
     {
       "stepId": "step-7",
       "description": "GATES (DoD 5), ADVERSARIAL REVIEW (Skill `adversarial-self-review`), AND PATH DECLARATION.\n\nRun the focused legs first and quote their `Test Files N passed` count lines — exit 0 is not evidence, and a filter matching nothing also exits 0:\n- `pnpm --filter @moe/daemon test` (the row's owning package leg).\n- `pnpm typecheck` — EXIT 0 with a planted-error control in a NEW file to prove the leg is not short-circuiting; delete the planted file and show the clean re-run.\nAcquire `full-suite-gate` for the full daemon leg (one full suite at a time on this host), announce GATE START/END with the UTC window, and release on EVERY exit path including failure. Every drill in steps 3-6 happens OUTSIDE the lease — they mutate shared files on disk. The root lane covers no `apps/**` file, so do not quote a bare root `pnpm test` count line as evidence here.\n\nVERIFY THE BRIDGE ACTUALLY LOADS: run plain `node` against the new `.js` bridge and confirm it resolves the module's exports. A bridge that exists but does not load satisfies a grep and nothing else.\n\nCONFIRM THE SIBLING IS UNDISTURBED: task-6ec875f4 is WORKING and certifies the shipped default-interval behaviour. Its arms must be green and UNEDITED — `git diff` its files and show no change. If one of its arms contradicts per-environment job ids, STOP and report rather than editing it.\n\nAdversarial pass: does the boot path read the stored interval BEFORE registering, or is the default already persisted by then? If two environments share a stored interval, does the dedup at `arm()` collapse them into one job? What happens when an environment is removed from the deploy ledger between boots — is its persisted record orphaned forever? Does any test leave an interval armed? Is any drilled mutation still on disk (`git diff` every production file you touched, and SHA256 every untracked one against its %TEMP% backup)?\n\nDeclare EXACTLY the files changed via complete_step.modifiedFiles / moe.declare_files. Do not touch the two children's paths (task-749e585a: runtime-vocabulary and the digest mirrors; task-620fb461: the health read and the browser client).",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-store-foundation-composition.ts",
         "apps/daemon/src/monitoring/health-probe-ring.ts",
         "apps/daemon/src/monitoring/health-probe-contracts.ts"
       ],
-      "startedAt": "2026-09-07T15:37:48.658Z"
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-store-foundation-composition.ts"
+      ],
+      "note": "Gates green, adversarial pass found and fixed one real defect. Full evidence in comment-cf4d4d80.\n\nGATES (lease `full-suite-gate` held 16:04Z-17:05Z, GATE START/END announced in #general, released and granted on to task-75bff0c9; every drill in steps 3-6 happened OUTSIDE the lease):\n- `pnpm --filter @moe/daemon test` -> `Test Files 587 passed (587)` / `Tests 10474 passed | 8 skipped (10482)`, exit 0.\n- `pnpm typecheck` -> every package `Done` incl. apps/daemon and apps/control-room, exit 0. Positive control: a planted `probe-interval-typecheck-control.ts` reded with `error TS2322: Type 'number' is not assignable to type 'string'.` naming the file, exit 1; deleted, clean re-run exit 0. The leg is not short-circuiting.\n- focused: `Test Files 5 passed (5)` / `Tests 104 passed (104)`, exit 0, run with the package script's own flags so no arm loses its 30 s timeout.\nNo bare root `pnpm test` count line is quoted anywhere - the root lane covers no apps/** file.\n\nBRIDGE: plain `node` import of `probe-interval-record.js` printed all five exports; it loads, not merely exists.\n\nSIBLING task-6ec875f4 UNDISTURBED: `git diff --stat` empty for its three test files, and none appears in any commit of this row. Its `daemon-store-dependencies.test.ts:1260` arm filters to the SWEEP id and expects 60000, which is exactly what composition still registers - no contradiction with per-environment ids, so nothing needed reporting.\n\nADVERSARIAL PASS FOUND A REAL DEFECT AND IT IS FIXED: `resolveProbe` rebuilt a RESTORED per-environment job with the bare factory (`active = () => true`) while a freshly registered one carried the per-tick `dedicated()` predicate. A record cleared after restore would have left the restored arm probing an environment the sweep had already reclaimed - the double schedule DoD 3 forbids, sneaking back in through the boot path. Now `dedicatedJob(environment)`. All counts above are POST-fix.\nOther three questions: boot reads the record BEFORE any per-environment register and the sweep owns a separate id, so the default can never clobber a stored value; `arm()` dedups per ID not per interval, so two environments sharing an interval keep two handles; an environment dropped from the deploy ledger leaves an orphaned record whose job would refuse PROBE_RECEIPT_MISSING each tick - unreachable today since this row ships no clear surface, disclosed for child task-749e585a rather than filed as a row.\n\nDISK: no drilled mutant survives - `git status --porcelain` over the row's paths is empty, both temporary files are gone, monitoring sources match landed 6c7c3b40.\n\nCONTESTED PATH, and why this step reports only one file: `daemon-store-foundation-composition.ts` is withheld from the wrapper's exit commit by task-1f994315's plan (`Moe-Contested` on 7f11c751), so the row's core DoD-3 fix would never have reached the branch. Hand-landed as b1f9c269 after reading its full diff to confirm HEAD + this row's bytes only, then moe.record_commit. The other six paths landed earlier at 6c7c3b40. Children's paths (task-749e585a runtime-vocabulary/digest mirrors, task-620fb461 health read/browser client) were not touched.\n\nFOREIGN, TRANSIENT, BOTH FIXED BY THEIR OWNERS AND GREEN IN THE FINAL RUN: `backups/backup-ports.ts` was uncommitted-broken (`TS1160 Unterminated template literal`), which masks ALL semantic tsc errors repo-wide and breaks oxc transform for every test importing composition; `deployment/rollback-production-wiring.test.ts` failed on a line present only in its owner's uncommitted diff. Neither intersects this row's owned paths, so the delta of failing paths attributable to this diff is EMPTY.",
+      "startedAt": "2026-09-07T15:37:48.658Z",
+      "completedAt": "2026-09-07T16:25:33.003Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-767c9887",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-eaa78526",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -152,20 +157,28 @@
       "author": "worker-767c9887",
       "content": "STEP 6 DRILL SHEET — 5 mutations across the composition wiring and the ring, all RED, restore proven. Window 15:35:14Z-15:36:29Z UTC, NO lease held, announced in chat before the first byte moved.\n\nPRE-WINDOW CENSUS. Three of the four targets are TRACKED AND DIRTY, which inverts this morning's instrument: `git checkout -- <path>` on any of them destroys this row.\n```\n M apps/daemon/src/daemon-store-foundation-composition.ts\n M apps/daemon/src/monitoring/health-probe-contracts.ts\n M apps/daemon/src/monitoring/health-probe-ring.ts\n?? apps/daemon/src/monitoring/health-probe-schedule.test.ts\n```\nBackup: %TEMP%\\moe-task-078232fb-step6, task-id keyed. Anchor verified in a SEPARATE call - backup hashes equal to LIVE at window-open.\n\nTHE DRILLS.\n```\nDA  reconcile registers at the DEFAULT instead of the stored interval  -> 5 red   (the DoD 3 defect, re-armed)\nDB  healthProbeJobId collapses to ONE shared id for all environments   -> 3 red\nDC  sweep exclusion removed (dedicated environments swept as well)     -> 5 red   (the double schedule)\nDD  reconcile removed from the sweep tick                              -> 1 red   ONLY the no-restart arm\nDE  `active` predicate forced true (cleared record keeps probing)      -> 1 red   ONLY the cleared-record arm\n```\nDD and DE each reddening EXACTLY ONE arm is the sheet's precision result: the \"change takes effect without a restart\" behaviour and the \"cleared record hands back to the sweep\" behaviour each have exactly one arm that can see them, and that arm sees nothing else.\n\nDA IS THE STEP-1 DEFECT RE-ARMED IN THE NEW DESIGN. Step 1's red was `register(id, cb)` with no interval clobbering a stored 30 s. The equivalent defect here is reconcile passing `DEFAULT_PROBE_INTERVAL_MS` instead of the value it just read. It reds all five arms, and specifically reds `registrations(store).filter(id === healthProbeJobId(\"staging\"))` which pins `{intervalMs: 10_000}` by exact array equality - so a clobbered value cannot hide behind a plausible-looking rate.\n\nDC IS WORTH READING TWICE. Dropping the `dedicated` argument is a ONE-TOKEN change that compiles, typechecks and leaves every environment still probed - and it silently doubles the probe rate for every environment that has its own interval. It reds five arms because the counts are asserted per environment, not merely as \"was probed\".\n\nRESTORE PROOF, separate call, all four byte-identical to the anchor:\n```\n07a6e4f01e5717bc…a1942b17  daemon-store-foundation-composition.ts\n0a3d8fdce28a1d44…2e59fe51  health-probe-ring.ts\n628ff9f6036c58a8…a13c35ea  health-probe-contracts.ts\n46126ed94f18358c…f66e636b  health-probe-schedule.test.ts\nneedle grep (shared`|mutant|DRILL|PLANTED) -> no matches\n```\nPOST-RESTORE GREEN: `src/monitoring/ src/daemon-store-dependencies.test.ts` -> `Test Files 6 passed (6)` / `Tests 126 passed (126)` EXIT 0; `tsc --project tsconfig.json` EXIT 0.\n\nTWO ASSERTIONS I DELIBERATELY DID NOT WRITE, with the reason:\n1. The probe count in the window that CONTAINS the reconcile. Re-arming clears the old handle at the instant it was due, so that window is one probe short (11, not 12). Baking 11 in would pin a tie-break in my own fake timer rather than a production behaviour. The arm asserts the armed intervals in that window and the COUNT in the next full one.\n2. \"One live handle per environment\" by job id. `ScheduleTimer.set(tick, intervalMs)` is not given an id, so the timer ledger cannot name one. The arm measures it two other ways instead: `liveIntervals()` (set minus clear) equal before and after the restart, and the per-environment probe COUNT equal across the two windows - a double schedule doubles the count and cannot survive either.",
       "timestamp": "2026-09-07T15:37:19.345Z"
+    },
+    {
+      "id": "comment-cf4d4d80249f4a93aacf5091cbe4ea95",
+      "author": "worker-7b684492",
+      "content": "STEP 7 EVIDENCE (worker-7b684492, gates run 2026-09-07T16:04Z-17:05Z under the `full-suite-gate` lease, announced GATE START/END in #general; released, granted on to task-75bff0c9).\n\nGATES, all at the delivered tree, all EXIT 0, each with its executed-count line:\n| leg | result |\n| `pnpm --filter @moe/daemon test` | `Test Files 587 passed (587)` / `Tests 10474 passed \\| 8 skipped (10482)`, 309.33s, exit 0 |\n| `pnpm typecheck` (repo-wide) | every package `Done` incl. `apps/daemon` and `apps/control-room`, exit 0 |\n| focused | `Test Files 5 passed (5)` / `Tests 104 passed (104)`, exit 0 — probe-interval-record.test.ts, health-probe-schedule.test.ts, health-probe-ring.test.ts, health-probe-io.test.ts, daemon-store-dependencies.test.ts, run with the package script's own flags (`--root . --config package.json --maxWorkers=4 --testTimeout=30000`) so no arm loses its timeout |\n\nTYPECHECK POSITIVE CONTROL (the leg is not short-circuiting): planted `apps/daemon/src/monitoring/probe-interval-typecheck-control.ts` with `export const control: string = DEFAULT_PROBE_INTERVAL_MS;` -> `pnpm --filter @moe/daemon typecheck` reported `src/monitoring/probe-interval-typecheck-control.ts(3,14): error TS2322: Type 'number' is not assignable to type 'string'.`, exit 1. Deleted it; `pnpm typecheck` then exit 0 with every package `Done`. File confirmed absent by `test -e` and by `git status --porcelain`.\n\nBRIDGE LOADS (not merely exists): `node -e \"import('./probe-interval-record.js')\"` from `apps/daemon/src/monitoring` printed `EXPORTS: DEFAULT_PROBE_INTERVAL_MS,MAX_PROBE_INTERVAL_MS,MIN_PROBE_INTERVAL_MS,admitProbeInterval,createProbeIntervalRecord`. Bridge body is exactly `export * from \"./probe-interval-record.ts\";`, byte-matching the `health-probe-contracts.js` convention.\n\nSIBLING task-6ec875f4 UNDISTURBED: `git diff --stat` empty for health-probe-ring.test.ts, health-probe-io.test.ts and daemon-store-dependencies.test.ts; none appears in any commit of this row. Its arm `daemon-store-dependencies.test.ts:1260` asserts `registrations.filter(id === HEALTH_PROBE_JOB_ID)` equals `[{id, intervalMs: 60000}]` — it filters to the SWEEP id, so per-environment ids cannot break it, and composition registers that id at `DEFAULT_PROBE_INTERVAL_MS` (60000). Green in both the focused and the 587-file run.\n\nADVERSARIAL PASS (Skill adversarial-self-review), answering the plan's four questions:\n1. Boot ORDER — the stored record is read before any per-environment register; the sweep is registered on its OWN id at the default, so it can never clobber a per-environment stored value. Verified by the health-probe-schedule.test.ts boot arm.\n2. Two environments with the SAME stored interval — `arm()` dedups per ID, not per interval, so two ids yield two live handles. No collapse.\n3. Environment removed from the deploy ledger between boots — its interval record is orphaned and its job would refuse `PROBE_RECEIPT_MISSING` each tick. Not reachable today (this row ships no clear/delete surface; the operator command is child task-749e585a), disclosed here as a follow-up for that child rather than filed as a row.\n4. Leaked timers — the schedule arms release in `finally` and assert the injected timer's `clear` fired for every handle it created.\n\nDEFECT FOUND AND FIXED IN THIS PASS: `resolveProbe` rebuilt a restored per-environment job with the bare factory, i.e. `active = () => true`, while a freshly registered one carried the per-tick `dedicated()` predicate. A record cleared AFTER restore would have left the restored arm probing an environment the sweep had already reclaimed — the double schedule DoD 3 forbids, reintroduced through the boot path. Now `dedicatedJob(environment)`. Re-verified after the fix (the 587/104 counts above are post-fix).\n\nDISK HYGIENE: no drilled mutant survives. `git status --porcelain` over the row's paths shows nothing outstanding; the two temporary files (`tsconfig.task078232.json`, the typecheck control) are gone; the monitoring sources match their landed commit 6c7c3b40 byte-for-byte.\n\nCONTESTED PATH: `apps/daemon/src/daemon-store-foundation-composition.ts` is withheld from the wrapper's exit commit by task-1f994315's plan (`Moe-Contested` trailer on 7f11c751), so it was hand-landed as b1f9c269 after reading its full diff to confirm HEAD + this row's bytes only, and recorded via moe.record_commit.\n\nTRANSIENT FOREIGN REDS seen mid-window, both since fixed by their owners and green in the final 587-file run: `backups/backup-ports.ts` was uncommitted-broken (`TS1160 Unterminated template literal`), which masked ALL semantic tsc errors repo-wide and broke oxc transform for every test importing composition; and `deployment/rollback-production-wiring.test.ts` failed on a `deploy receipt seed refused: DEPLOY_RECEIPT_INVALID` line present only in its owner's uncommitted diff. Neither intersects this row's owned paths.",
+      "timestamp": "2026-09-07T16:25:13.259Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T20:09:19.797Z",
-  "updatedAt": "2026-09-07T15:44:20.057Z",
+  "updatedAt": "2026-09-07T16:26:14.136Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T13:11:13.062Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-5ac70ba8",
-    "worker-767c9887"
+    "worker-767c9887",
+    "worker-7b684492",
+    "qa-eaa78526"
   ],
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -176,7 +189,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-07T13:16:55.983Z",
@@ -286,17 +300,54 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "7f11c751f64e33c167affe1bf22271182d090d9e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-767c9887@2026-09-07T15:48:23Z",
+      "paths": [
+        ".moe/tasks/task-078232fb9b9d4c06a5faf3c02adaf705.json",
+        ".moe/tasks/task-117a3cd91a8a4db1a61830be8c28f2d2.json",
+        ".moe/tasks/task-a98b01a44ffd46cba9d9648fcb7001cb.json"
+      ],
+      "recordedBy": "worker-767c9887",
+      "recordedAt": "2026-09-07T15:48:31.469Z",
+      "treeId": "6d93c980f6d5f7a71ca2bcde460d106ca1fc8550",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-store-foundation-composition.ts",
+          "taskId": "task-1f994315fd164a789424349cb7bba4ca"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "b1f9c269",
+      "ref": "moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-7b684492@2026-09-07T16:25Z",
+      "paths": [
+        "apps/daemon/src/daemon-store-foundation-composition.ts"
+      ],
+      "recordedBy": "worker-7b684492",
+      "recordedAt": "2026-09-07T16:24:45.118Z",
+      "status": "WORKING",
+      "pushed": false,
+      "message": "Hand-landed by the deliverer: the path is contested by task-1f994315fd164a789424349cb7bba4ca's plan, so the wrapper's exit commit withheld it (Moe-Contested trailer on 7f11c751) and the row's core DoD-3 fix would otherwise never reach the branch. Working tree for this file was HEAD + this row's diff only, verified by reading the full `git diff` before committing; no foreign bytes ride along. The row's other paths landed earlier at 6c7c3b40."
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-078232fb9b9d4c06a5faf3c02adaf705.json",
-    ".moe/tasks/task-136cbab29b39465e93b60e923c4689d6.json",
-    "apps/daemon/src/monitoring/health-probe-contracts.ts",
-    "apps/daemon/src/monitoring/health-probe-ring.ts",
-    "apps/daemon/src/monitoring/health-probe-schedule.test.ts",
+    "apps/daemon/src/monitoring/probe-interval-record.ts",
     "apps/daemon/src/monitoring/probe-interval-record.js",
     "apps/daemon/src/monitoring/probe-interval-record.test.ts",
-    "apps/daemon/src/monitoring/probe-interval-record.ts"
+    "apps/daemon/src/monitoring/health-probe-contracts.ts",
+    "apps/daemon/src/monitoring/health-probe-ring.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/daemon/src/monitoring/health-probe-schedule.test.ts"
   ],
   "touchedFiles": [
     "apps/daemon/src/monitoring/health-probe-schedule.test.ts"
@@ -304,8 +355,16 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-767c9887@2026-09-07T15:44:09Z",
-    "at": "2026-09-07T15:44:20.057Z"
-  }
+    "kind": "completion",
+    "sessionId": "worker-7b684492@2026-09-07T16:25Z",
+    "at": "2026-09-07T16:24:45.118Z"
+  },
+  "reviewStartedAt": "2026-09-07T16:25:56.264Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": " Test Files  587 passed (587)\n      Tests  10474 passed | 8 skipped (10482)\n   Duration  309.33s (transform 22.25s, setup 0ms, import 276.34s, tests 890.58s, environment 28ms)\nPIPESTATUS0=0",
+    "reportedAt": "2026-09-07T16:25:56.264Z"
+  },
+  "completionSummary": "Per-environment health-probe interval is now a durable setting the scheduler honours. Full evidence: comment-cf4d4d80 (gates, controls, adversarial pass) and the step-7 note.\n\nSHIPPED\n- `monitoring/probe-interval-record.ts` (+ one-line `.js` bridge): store port over event `moe.probe-interval.set`. `read` resolves the EFFECTIVE interval (stored, else the single exported `DEFAULT_PROBE_INTERVAL_MS = 60_000`), `write` replaces rather than accumulates, `stored()` returns only environments carrying a value. Bounds 5_000..3_600_000 INCLUSIVE, deliberately tighter than the scheduler's `validInterval`, with refusals `PROBE_INTERVAL_OUT_OF_RANGE` / `PROBE_INTERVAL_ENVIRONMENT_INVALID` / `PROBE_INTERVAL_STORE_FAILED`, each frozen at layer `DAEMON_INGRESS`. Environment admitted via the deployment side's own `admitEnvironmentName`, so the two cannot drift. `ScheduleCode` was NOT widened and no new `*_LAYER` constant was added.\n- `healthProbeJobId` / `healthProbeJobEnvironment` derived FROM `HEALTH_PROBE_JOB_ID` (kept exported, unchanged), and `createEnvironmentHealthProbeJob` beside the still-working `createHealthProbeJob`. No new scheduler: `DurableSchedule` was already per-id, persisted and restart-safe.\n- Composition: reads the record BEFORE any per-environment register, keeps the sweep on its own id at the default, registers each stored environment at its own value, and reconciles per tick so a change takes effect without a restart. DoD 3's live defect — `register(HEALTH_PROBE_JOB_ID, healthProbe)` with no interval persisting 60 s over an operator's value every boot — was reproduced RED in step 1 before being fixed.\n\nVERIFICATION (all exit 0, post-fix): `pnpm --filter @moe/daemon test` 587/587 files, 10474 tests; `pnpm typecheck` every package Done, proven non-vacuous by a planted TS2322 control that reded and was then deleted; focused 5/5 files, 104 tests. Bridge loads under plain node with all five exports.\n\nADVERSARIAL PASS FOUND AND FIXED a real defect: a RESTORED per-e"
 }

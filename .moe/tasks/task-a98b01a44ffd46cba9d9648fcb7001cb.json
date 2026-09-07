@@ -191,7 +191,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T00:05:18.665Z",
-  "updatedAt": "2026-09-07T16:20:19.990Z",
+  "updatedAt": "2026-09-07T16:21:05.388Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T13:11:20.223Z",
     "plannedStepCount": 7,
@@ -426,6 +426,21 @@
       "status": "REVIEW",
       "pushed": false,
       "message": "QA hand-landing of the six paths the wrapper withheld as contested by task-620fb461 / task-679cdaa3 plans. Measured per path: zero removed lines, every hunk a pure addition of this row's latencySeries/sparkline vocabulary; no peer bytes staged."
+    },
+    {
+      "sha": "2ea5b692b2a40962fe71e0877a93f4973a3066ba",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-eaa78526@2026-09-07T16:15:19Z",
+      "paths": [
+        ".moe/tasks/task-a98b01a44ffd46cba9d9648fcb7001cb.json"
+      ],
+      "recordedBy": "qa-eaa78526",
+      "recordedAt": "2026-09-07T16:21:05.387Z",
+      "treeId": "94c94bba4b5b6985277ba02ad8ed7d4f280b0c14",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -449,9 +464,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "qa-eaa78526@2026-09-07T19:16:00Z",
-    "at": "2026-09-07T16:18:45.495Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-eaa78526@2026-09-07T16:15:19Z",
+    "at": "2026-09-07T16:21:05.387Z"
   },
   "completedAt": "2026-09-07T16:20:19.990Z",
   "reviewCompletedAt": "2026-09-07T16:20:19.990Z",
