@@ -141,7 +141,7 @@
       "completedAt": "2026-09-07T02:57:59.118Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -178,16 +178,24 @@
       "author": "worker-ca28be90",
       "content": "STEP 7 EVIDENCE 2/2 — THE FOUR ADVERSARIAL QUESTIONS, ANSWERED (worker-ca28be90, 2026-09-07).\n\nQ1. DOES THE ROSTER DERIVATION HANDLE THE CHAIN-STEP SEAT (no workspace) AS WELL AS THE CODING SEAT, OR DID A SINGLE-KIND TEST HIDE A BRANCH?\nHandled, and proven by MEASUREMENT rather than by reading the code. The parity arm runs over a KINDS table of `{coding, workspace:\"D:/ws/node-1\"}` and `{chain-step, workspace:null}`, and in BOTH drill 1 and drill 2 the red landed on BOTH `matches grant for grant on a coding seat` and `matches grant for grant on a chain-step seat`. A single-kind test would have shown one. The two kinds are separately sourced in agent-role-contract.ts — `codexRosterArgs: codexMcpRosterArgs(CHAIN_TOOLS)` at :26 and `codexMcpRosterArgs(CODING_TOOLS)` at :35 — derived from the SAME constants the claude side reads, so there is no second hand-kept list to drift.\n\nQ2. CAN ANY `-c` VALUE ACQUIRE A QUOTE OR A SPACE FROM AN INTERPOLATED ROSTER — WHAT HAPPENS WITH AN EMPTY ROSTER, AND DOES THE WINDOWS cmd FENCE STILL ADMIT IT?\nNo, and all three halves are pinned.\n (a) QUOTE/SPACE: `assertRosterSafe` gates every tool name against `/^[A-Za-z0-9_.:-]+$/u` and throws the stable code `CODEX_ROSTER_TOOL_UNSAFE` rather than emitting. Asserted on the two dangerous shapes — `mcp__moe-next__a','b` (a name that would CLOSE the TOML literal early and silently change which tools the seat is granted — an authority change that parses cleanly, which is why it fails closed) and `mcp__moe-next__a b`. Reason code asserted, not merely \"threw\".\n (b) EMPTY ROSTER: `codexMcpRosterArgs(\"\")` yields `[\"-c\", \"mcp_servers.moe-next.enabled_tools=[]\"]` — a loadable empty TOML SEQUENCE, not a bare `enabled_tools=` which codex would parse as a string and reject. Also asserted whitespace-free.\n (c) THE FENCE, driven through the PRODUCTION composer and not re-derived: for every roster this daemon can emit (`\"\"`, CHAIN_TOOLS, CODING_TOOLS, `mcp__moe-next`, `Edit,Write`, a two-tool list) the arm builds the real `agentSpawnInvocation(\"codex\", [\"exec\", ...args, \"-\"], \"win32\")` and asserts the collapsed line contains no `\"` and carries the value verbatim. That is the production fence (`UNQUOTABLE` in agent-spawn-invocation.ts), so a value that acquired a quote or a space would surface as a refusal or a re-quoted argument here.\n NOTE ON THE SPELLING, measured: `enabled_tools` is sequence-typed, so a quote-free value is REFUSED (`invalid type: string \"[moe_get_context]\", expected a sequence`); double quotes parse but are refused by this repo's own win32 fence. TOML LITERAL STRINGS (single quotes) are the only spelling satisfying both, which is why the emitted value uses them.\n\nQ3. IS THE CLAUDE ARGV BYTE-IDENTICAL TO BEFORE THIS ROW?\nYes, established two independent ways.\n (a) BY DIFF against this row's true base a47f9e89 (`git rev-parse f9f70adb^`): in launch-template-producer.ts the claude body of `composeArgv` has ZERO changed lines. Every `+` is either the new `codexArgv` function, the `provider` parameter on the signature, the early `if (provider === \"codex\") return codexArgv(selection);` guard placed BEFORE the claude lines, or the call site passing `agentProvider`. The `[\"-p\", \"--allowedTools\", …]`, `--tools` and CLAUDE_LAUNCH_SELECTION_FLAGS lines are untouched.\n (b) BY ARM. launch-template-producer.test.ts pins the whole claude argv BYTE FOR BYTE — `[\"-p\", \"--allowedTools\", \"mcp__moe-next,mcp__moe-next__*,Edit,Write,Read,Glob,Grep,Bash\", \"--tools\", \"Edit,Write,Read,Glob,Grep,Bash\", \"--model\", \"claude-opus-5\", \"--effort\", \"high\"]` — captured from a real run before the edit, not transcribed. The tripwire named in the plan, foundation-context-prelaunch.test.ts:274, only checks CODING_TOOLS is PRESENT and would survive a reorder; this pin would not. BOTH pass: the two files ran together green, `Test Files 4 passed (4)`, `Tests 123 passed (123)`.\n\nQ4. DID ANYTHING IN THIS DIFF TOUCH THE SERVED MCP READ SURFACE?\nNo. The complete path set of this row's own commits (f9f70adb, cc3f6b07, 9ca6fdb8, 310687a0, 10753cc6) plus the one dirty file is TEN paths, all under apps/daemon/src/orchestrator/ and apps/daemon/src/work/: agent-codex-roster.{ts,js,test.ts}, agent-role-contract.ts, agent-spawn-environment.ts, agent-spawner.{ts,test.ts}, launch-template-{producer,authority}.ts, launch-template-producer.test.ts. ZERO files under packages/mcp or any served read route. Result-size parity was deliberately NOT reached by bounding or paging results daemon-side — that is a change to the read surface, outside spawn-surface parity and outside this row's FEATURES-ONLY rail — so step 5 recorded the measured ABSENCE and asserted it positively instead. No successor row was needed: nothing on a codex seat reads MAX_MCP_OUTPUT_TOKENS, so the variable is inert rather than harmful, and inventing a knob codex would reject under `--strict-config` was the failure mode the measurement exists to prevent.\n\nPEER DIRT, noted and NOT touched per global rail 5: apps/control-room/src/v2/{approvals/needs-you-model.ts, ops/activity-words.ts, products/new-product-form.tsx, products/new-product-form.test.tsx} and tests/e2e/control-room/daemon-ports.ts. Never reverted, stashed or added.",
       "timestamp": "2026-09-07T02:57:40.600Z"
+    },
+    {
+      "id": "comment-056bf9c1321c4b178d653fa888bb2a6a",
+      "author": "qa-97200064",
+      "content": "QA REVIEW EVIDENCE (qa-97200064, 2026-09-07). Approval summary is capped at 2000 chars; the load-bearing detail is here.\n\nGATES RE-RUN BY QA, standalone, foreground, no pipe into exit status:\n1. `pnpm --filter @moe/daemon test` -> exit 0. Script echo `$ vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src`, `Test Files 572 passed (572)`, `Tests 10302 passed | 7 skipped (10309)`, 282.29s. Nonzero count line, so the leg executed. Reproduces task.verification exactly.\n2. `pnpm typecheck` -> exit 0 with the per-package `$ tsc --project tsconfig.json` echo and `apps/daemon typecheck: Done`.\n\nQA HAND-LANDING. task.commits recorded completion 3768c16b, but `git show --stat 3768c16b` carried ONLY two .moe/tasks JSON files. Production bytes were in wip checkpoint f9f70adb (11 paths); this row's 263 lines of arms in agent-spawner.test.ts were left DIRTY and never landed. Measured the path row-owned - every changed line filtered against this row's vocabulary returned no foreign hunks - and landed it as fb24a36e by explicit pathspec (no -A, no foreign path, no peer dirt), then moe.record_commit. apps/daemon is now clean apart from one untracked peer file (preview/preview-goal-landing.test.ts), left alone. Both gates ran on the tree that includes the arms.\n\nDoD 1. Satisfied as plan step 5 framed it. comment-c609bd82 records the 0.153.4 re-measurement with probe shape and negative control (`totally_not_a_key` -> `unknown configuration field`); tool_max_output_tokens / max_output_tokens / output_token_limit / tools.max_output_tokens / model_max_output_tokens ALL rejected, only startup_timeout_sec and tool_timeout_sec accepted. Worker also caught the architect's probe shape as UNSOUND on 0.153.4 (without a url override every key answers `invalid transport`, so the control stops discriminating) and corrected it. Absence asserted POSITIVELY on argv; claude-only scope spelled out at agent-spawn-environment.ts:78-93. No knob invented; read-surface fix correctly declined.\n\nDoD 2. Grants enumerated from the COMPOSED ARGV on both sides, normalized to grant identity, compared by sorted-array equality PLUS both one-sided filters, over a KINDS table (coding + chain-step), with a `size > 0` non-vacuity guard. Derived from CHAIN_TOOLS/CODING_TOOLS - no second list. Drills prove both directions: removal reds 5 tests on BOTH kinds; ADDITION (`enabled_tools=['drill2_extra']`) also reds, naming the extra verbatim.\n\nDoD 3. Codex arm pins the exec form; claude arm pins argv BYTE FOR BYTE; unknown provider REFUSES with LAUNCH_TEMPLATE_SELECTION_UNPROVEN. `--config` long form deliberate (`-c` is a resume flag). foundation-context-prelaunch.test.ts:274 passes; claude body of composeArgv has zero changed lines.\n\nDoD 4. agent-mission-text.ts untouched. Arm drives both providers through the spawner and asserts `expect(codex).toBe(claude)` on actual stdin bytes plus two named sentences.\n\nDoD 5. Four separate arms: --ignore-user-config (drill 3 reds the dedicated arm); bearer BOTH halves (argv names the variable, credential absent from file+args, present in child env, configDir empty); allowlist closed both directions; every `-c` value checked against the PRODUCTION fence (UNQUOTABLE_TOKENS) and whitespace.\n\nTWO DEVIATIONS, checked not waved through, both documented and neither a weakening:\n(a) `disabled_tools=[]` not `enabled_tools=['*']`. --strict-config validates shape only, so glob-vs-literal is unsettleable offline; a literally-matched '*' would leave a codex seat with ZERO moe tools, silently worse than the status quo. Narrowed rosters still emit an explicit enabled_tools list.\n(b) DoD 5's literal \"quote-free\" is unreachable: enabled_tools is sequence-typed and rejects a bare value; double quotes are refused by this repo's own win32 fence. Single-quoted TOML literals satisfy both. Surviving invariant - double-quote-free and whitespace-free - is exactly what agent-spawn-invocation.ts enforces, and today's shipped roster carries no quote at all. Reported, not relaxed, per task rail 1.\n\nRAIL 4. spawner.ts and codex-roster.ts restamped to the measured 0.153.4 naming the host; spawn-environment.ts's allowlist comment deliberately keeps 0.147.0 with an explicit note that THAT claim was not re-taken - better than restamping an unmeasured claim, and the silent disagreement is gone.\n\nPER-FILE CAP. codex-roster 81, role-contract 43, spawn-environment 106, launch-template-producer 221, launch-template-authority 251. agent-spawner.ts 439 -> 442 (+3 net); the over-cap state is INHERITED from task-3a0478f5, not introduced here. Not a reject.\n\nSCOPE. Ten paths under apps/daemon/src/orchestrator/ and apps/daemon/src/work/. Served MCP read surface untouched.",
+      "timestamp": "2026-09-07T03:07:36.961Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T17:24:27.654Z",
-  "updatedAt": "2026-09-07T02:59:08.711Z",
+  "updatedAt": "2026-09-07T03:08:19.213Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:10:11.926Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-07T03:08:19.213Z",
+    "wallClockMs": 118687287
   },
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -219,7 +227,8 @@
   },
   "planApprovedAt": "2026-09-05T18:16:25.648Z",
   "contextFetchedBy": [
-    "worker-ca28be90"
+    "worker-ca28be90",
+    "qa-97200064"
   ],
   "workStartedAt": "2026-09-07T00:04:34.404Z",
   "commits": [
@@ -321,6 +330,37 @@
       "treeId": "c7f1d8b736727d094790c0c871180a85eac22d0a",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "3768c16b1da7830acd05a29895e129e404acd3f4",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-ca28be90@2026-09-07T02:40:33Z",
+      "paths": [
+        ".moe/tasks/task-48932becda314704aad652b49a8d2209.json",
+        ".moe/tasks/task-5ef1a0a9010c4bfe872ff9b774068234.json"
+      ],
+      "recordedBy": "worker-ca28be90",
+      "recordedAt": "2026-09-07T02:59:18.045Z",
+      "treeId": "0ec74d11c5a16121e52e65f3908531236357999d",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "fb24a36e05da4a01f68b4b9ed7e1d591a4d217d1",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-97200064@2026-09-07T03:00:00Z",
+      "paths": [
+        "apps/daemon/src/orchestrator/agent-spawner.test.ts"
+      ],
+      "recordedBy": "qa-97200064",
+      "recordedAt": "2026-09-07T03:06:34.005Z",
+      "status": "REVIEW",
+      "recoveredBy": "qa-97200064",
+      "message": "QA hand-landing: the worker's completion commit 3768c16b carried only task JSON, leaving this row's 263 lines of roster-parity / mission-parity / non-erosion arms in the dirty tree. Path measured row-owned (vocabulary scan of every changed line came back with no foreign hunks); staged by explicit pathspec, no -A, no foreign path touched."
     }
   ],
   "filesModified": [
@@ -333,7 +373,9 @@
     "apps/daemon/src/orchestrator/agent-codex-roster.test.ts",
     "apps/daemon/src/orchestrator/agent-role-contract.ts",
     "apps/daemon/src/work/launch-template-authority.ts",
-    "apps/daemon/src/work/launch-template-producer.test.ts"
+    "apps/daemon/src/work/launch-template-producer.test.ts",
+    ".moe/tasks/task-48932becda314704aad652b49a8d2209.json",
+    ".moe/tasks/task-5ef1a0a9010c4bfe872ff9b774068234.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/orchestrator/agent-codex-roster.ts",
@@ -351,11 +393,10 @@
     "apps/daemon/src/orchestrator/agent-spawner.test.ts"
   ],
   "lastCommitOutcome": {
-    "outcome": "nothing",
-    "kind": "checkpoint",
-    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
-    "sessionId": "worker-ca28be90@2026-09-07T02:25:26Z",
-    "at": "2026-09-07T02:25:32.023Z"
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-97200064@2026-09-07T03:00:00Z",
+    "at": "2026-09-07T03:06:34.005Z"
   },
   "reviewStartedAt": "2026-09-07T02:59:08.711Z",
   "verification": {
@@ -364,5 +405,8 @@
     "outputTail": "$ vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  572 passed (572)\n      Tests  10302 passed | 7 skipped (10309)\n   Start at  05:52:02\n   Duration  265.97s (transform 20.37s, setup 0ms, import 254.48s, tests 745.53s, environment 27ms)\n\nPIPESTATUS0=0",
     "reportedAt": "2026-09-07T02:59:08.711Z"
   },
-  "completionSummary": "A codex seat now carries the claude seat's MCP tool roster, and the result-size gap is recorded as a MEASURED ABSENCE rather than guessed at. Evidence: comment-75c1b17d (gates + 3 drills + restore proof), comment-d9d08266 (the 4 adversarial answers), comment-c609bd82 (step-1 re-measurement).\n\nGAP 1, ROSTER (DoD 2). New apps/daemon/src/orchestrator/agent-codex-roster.ts (+ .js bridge) DERIVES the codex roster from the SAME CHAIN_TOOLS/CODING_TOOLS constants the claude side reads — no second list to drift. agent-role-contract.ts exposes it per step kind; agent-spawner.ts only splices it in (file is shared with task-3a0478f5 and over the 250 target, so it grew ~19 lines). Codex has NO --tools/--allowedTools flag, so the roster is a `-c mcp_servers.moe-next.*` override; `enabled_tools` is accepted, `allowed_tools` rejected. Whole-server grant is emitted as `disabled_tools=[]`, NOT `enabled_tools=['*']`: --strict-config validates shape only, so glob-vs-literal is unknowable offline, and a literal '*' would give a codex seat ZERO tools. Parity is asserted BIDIRECTIONALLY over normalized grant identity enumerated from the COMPOSED ARGV (raw strings differ by provider prefix), for BOTH step kinds, with a non-vacuity guard.\n\nGAP 2, RESULT SIZE (DoD 1). Measured, not assumed: codex-cli 0.153.4 recognizes NO MCP result-size configuration — tool_max_output_tokens, max_output_tokens, output_token_limit, tools.max_output_tokens and model_max_output_tokens are ALL rejected as unknown fields under --strict-config; only the two TIMEOUT keys are accepted, and a timeout bounds duration, never size. token_budget is under-development/false. So MAX_MCP_OUTPUT_TOKENS is claude's variable and INERT on a codex seat; left unconditional with the scope made explicit in the comment, and the argv's absence of any size knob is asserted POSITIVELY. Bounding results daemon-side was deliberately NOT taken — that is the served MCP read surface, outside this row's FEATURES-ONLY rail.\n\nDoD 3: launch-te"
+  "completionSummary": "A codex seat now carries the claude seat's MCP tool roster, and the result-size gap is recorded as a MEASURED ABSENCE rather than guessed at. Evidence: comment-75c1b17d (gates + 3 drills + restore proof), comment-d9d08266 (the 4 adversarial answers), comment-c609bd82 (step-1 re-measurement).\n\nGAP 1, ROSTER (DoD 2). New apps/daemon/src/orchestrator/agent-codex-roster.ts (+ .js bridge) DERIVES the codex roster from the SAME CHAIN_TOOLS/CODING_TOOLS constants the claude side reads — no second list to drift. agent-role-contract.ts exposes it per step kind; agent-spawner.ts only splices it in (file is shared with task-3a0478f5 and over the 250 target, so it grew ~19 lines). Codex has NO --tools/--allowedTools flag, so the roster is a `-c mcp_servers.moe-next.*` override; `enabled_tools` is accepted, `allowed_tools` rejected. Whole-server grant is emitted as `disabled_tools=[]`, NOT `enabled_tools=['*']`: --strict-config validates shape only, so glob-vs-literal is unknowable offline, and a literal '*' would give a codex seat ZERO tools. Parity is asserted BIDIRECTIONALLY over normalized grant identity enumerated from the COMPOSED ARGV (raw strings differ by provider prefix), for BOTH step kinds, with a non-vacuity guard.\n\nGAP 2, RESULT SIZE (DoD 1). Measured, not assumed: codex-cli 0.153.4 recognizes NO MCP result-size configuration — tool_max_output_tokens, max_output_tokens, output_token_limit, tools.max_output_tokens and model_max_output_tokens are ALL rejected as unknown fields under --strict-config; only the two TIMEOUT keys are accepted, and a timeout bounds duration, never size. token_budget is under-development/false. So MAX_MCP_OUTPUT_TOKENS is claude's variable and INERT on a codex seat; left unconditional with the scope made explicit in the comment, and the argv's absence of any size knob is asserted POSITIVELY. Bounding results daemon-side was deliberately NOT taken — that is the served MCP read surface, outside this row's FEATURES-ONLY rail.\n\nDoD 3: launch-te",
+  "completedAt": "2026-09-07T03:08:19.213Z",
+  "reviewCompletedAt": "2026-09-07T03:08:19.213Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-056bf9c1321c4b178d653fa888bb2a6a.\n\nGATES RE-RUN BY QA, standalone/foreground. `pnpm --filter @moe/daemon test` -> exit 0, `Test Files 572 passed (572)`, `Tests 10302 passed | 7 skipped (10309)`, reproducing task.verification exactly. `pnpm typecheck` -> exit 0 with the `$ tsc --project tsconfig.json` echo and `apps/daemon typecheck: Done`.\n\nQA HAND-LANDED THE ARMS. Recorded completion 3768c16b carried ONLY two .moe/tasks JSON files; production sat in wip f9f70adb and this row's 263 lines of arms in agent-spawner.test.ts were still dirty. Measured the path row-owned (vocabulary scan of every changed line: no foreign hunks), committed as fb24a36e by explicit pathspec (no -A, no peer dirt), recorded it. Both gates ran on the tree including those arms.\n\nSIX DoD ITEMS VERIFIED. Roster: set-equality BOTH directions over grants enumerated from the COMPOSED ARGV, both step kinds, non-vacuity guard, derived from CHAIN_TOOLS/CODING_TOOLS not a second list; drills red on removal AND addition. Result size: recorded MEASURED ABSENCE on codex-cli 0.153.4 with a discriminating negative control (worker caught the architect's probe shape as unsound there and corrected it), absence asserted positively on argv, no knob invented, read surface untouched. launch-template-producer pins the claude argv byte for byte, gives codex the exec form, refuses an unknown provider with LAUNCH_TEMPLATE_SELECTION_UNPROVEN. Mission parity asserted, agent-mission-text.ts untouched. Non-erosion in four separate arms.\n\nTwo deviations checked: `disabled_tools=[]` over `enabled_tools=['*']` (glob-vs-literal unsettleable offline; a literal '*' grants ZERO tools), and single-quoted TOML literals where DoD 5's literal \"quote-free\" is unreachable for a sequence-typed key - the surviving no-double-quote/no-whitespace invariant IS the production fence. Neither weakens the surface.\n\nagent-spawner.ts 439 -> 442 (+3, over-cap inherited); all other files 43-251."
 }
