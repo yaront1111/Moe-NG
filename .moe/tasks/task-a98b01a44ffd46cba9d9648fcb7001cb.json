@@ -149,8 +149,8 @@
       "completedAt": "2026-09-07T15:40:27.344Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-ca28be90",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -181,20 +181,29 @@
       "author": "worker-ca28be90",
       "content": "GATE TABLE AND ADVERSARIAL SELF-REVIEW (step 7). Filed as a comment because the completion summary truncates silently at 2000 chars and a severed gate table reads as a skipped gate.\n\n**THE GATES, each FOREGROUND and STANDALONE, read by OUTPUT not exit code:**\n\n| leg | count line | exit |\n|---|---|---|\n| `pnpm --filter @moe/control-room test` | `Test Files 195 passed (195)` / `Tests 2500 passed (2500)` | 0 |\n| `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --testTimeout=30000 src/http/deployments-health-read.test.ts src/daemon-entry-deployments-health.test.ts` | `Test Files 2 passed (2)` / `Tests 33 passed (33)` | 0 |\n| `pnpm typecheck` | 19 projects, `apps/daemon typecheck: Done`, `apps/control-room typecheck: Done` | 0 |\n\nBaselines from step 1: control-room 194/2469 -> 195/2500 (+1 file, +31 tests). Daemon two files 26 -> 33. Every added arm executed; no leg printed a zero count, and no `--filter` leg printed \"No projects matched the filters\".\n\n**`pnpm test` (root) IS NOT QUOTED, deliberately.** The root vitest include has no `apps/**`, so it runs ZERO tests in either package this row touches and is not evidence for anything here. I also did not take a root baseline at step 1, so a red there now would be unattributable by construction - quoting it would be worse than omitting it. My repo-wide leg is `pnpm typecheck`, which does cover both packages, and it is EXIT 0.\n\n**RAIL-3 PATH-ATTRIBUTED BASELINE, and the foreign red RESOLVED ITSELF, which is the cleanest possible attribution.** At step 2 `pnpm --filter @moe/daemon typecheck` failed with 2-4 errors in `apps/daemon/src/planning/v2-compiler/scheduler-node-planning-authority.test.ts` (`TS2339: Property 'declaredMigrations' does not exist on type 'NodePlanningSourceContent'`, `TS2304: Cannot find name 'encodeNodePlanningSourceContent'`). I measured it literally rather than arguing reachability: backed my own file out to HEAD, re-ran, the errors REMAINED - so (2)-minus-(1) intersected with my owned paths was EMPTY. As of step 7 that leg is EXIT 0 while the file is still on disk untracked (`??`): the peer fixed their own WIP mid-session. A foreign red that clears without me touching it is the strongest evidence available that it was never mine.\n\n**FIVE DRILLS, all restored, no mutant on disk.** Guards re-confirmed present in production code at step 7 by grep: `at < oldestAllowed` (read:226), `Math.max(1, latencies.length - 1)` (sparkline:58), `spread === 0` (sparkline:65), `row.points.length > MAX_SERIES_POINTS` (decoder:173), `data-status={view.state}` (section:76).\n\n**TWO REAL DEFECTS THE ADVERSARIAL PASS FOUND THAT NO TEST WOULD HAVE.**\n\n1. **A CRASH PATH AT THE TRUST BOUNDARY.** `plotted()` used `Math.min(...latencies)`. The array length arrives OVER THE WIRE and the decoder bounded it nowhere. Measured on this host rather than assumed: `100000 ok`, `200000 THROWS: RangeError Maximum call stack size exceeded`. A malformed or hostile response would take the whole render down instead of degrading. Fixed at BOTH layers: the decoder now refuses `points.length > MAX_SERIES_POINTS` (1440, the ring size - a series longer than the whole ring cannot be real), and `extremes()` replaces the spread with a loop. Two independent guards, each with its own arm, and the decoder bound DRILLED (removing it reds \"REFUSES a series longer than the whole probe ring\", `expected { points: [ {...}, ...(1440) ], ...(1) } to deeply equal {...(3)}`).\n2. **`const window = ...` INSIDE A BROWSER COMPONENT**, shadowing the global. Renamed to `span` with a comment naming why. No test would ever have caught this; the next author reaching for `window.matchMedia` would have got a string.\n\n**AND ONE THE FIX ITSELF INTRODUCED, worth recording because it is a trap in its own right.** My new large-series arm failed with the very `RangeError` it existed to disprove - but the throw was in MY FIXTURE, not the component: `seriesOf(...many)` spread 200k arguments into the helper. I would have read that as the component still being broken. The helper now takes an ARRAY, with the reason in its doc comment. **A fixture built with the same primitive the test is auditing will fail for the fixture reason and be misattributed to the subject.**\n\n**THE REST OF THE CHECKLIST, each measured:**\n- **package.json BYTE-IDENTICAL** to the step-1 baseline: `apps/control-room/package.json` sha256 `ef196ce8e01f032bcc745c89cbba7ec33c8a0e31afc11dd948018a8c65d31523`, root `1d57ccaedbb11bfe98d7c0059c3ac5ef9437be1a49762feaf0d2ee148a6e6e14`; `git status --porcelain` on both manifests plus `apps/daemon/package.json` and `pnpm-lock.yaml` is EMPTY.\n- **No `toEqual` loosened:** removed lines in my diff matching `toEqual|toStrictEqual|toBe(` number ZERO. No `objectContaining` or `toMatchObject` in either decoder test - count 0 in both.\n- **Line caps:** `deployments-health-read.ts` 300 (was 251; under the 400 split), `live-deployments-health.ts` 268, `latency-sparkline.tsx` 124, `environments-section.tsx` 188.\n- **ASCII:** non-ASCII in my added lines across all eight tracked paths = 0; both new files = 0; no apostrophe in any JSX text.\n- **Concurrency / side effects:** every unit added is a pure projection or a pure render. No shared state, no IO, no handle, no subprocess, no cleanup path to leak. Nothing to double-write on retry.\n\n**ONE UNRESOLVED FLAKE, DISCLOSED HONESTLY RATHER THAN ROUNDED OFF.** The FIRST of four control-room full runs reported `Test Files 1 failed | 194 passed (195)` / `Tests 1 failed | 2499 passed (2500)`. **I did not capture the failing test name** - I had filtered the output with `tail -10`, which dropped the FAIL line. That is my error and I am not going to guess my way out of it. The three subsequent full runs were `195 passed (195)` / `2500 passed (2500)` with no FAIL line at all. The known flaky arm in this suite is `live-runs.test.ts > decodes actual daemon-served deployment keys bidirectionally...`, which `execFileSync`es a Node subprocess under a 30s timeout and reddened once earlier in this same session under parallel load; it is a HYPOTHESIS for this occurrence, not a finding. My own heaviest new arm was ruled out by measurement: the 200k-point render is 141ms, nowhere near a timeout.\n\n**SHARED-CHECKOUT NOTE FOR QA.** Peer dirt grew a lot during this session, and two of the newly-modified files - `apps/daemon/src/monitoring/health-probe-contracts.ts` and `health-probe-ring.ts` - are IMPORTED by the module I widened. So I re-ran the daemon gate FRESH at 18:39 against the current tree rather than resting on the 18:37 run: still `Test Files 2 passed (2)` / `Tests 33 passed (33)`. None of that dirt was touched, reverted or committed by me.",
       "timestamp": "2026-09-07T15:39:57.807Z"
+    },
+    {
+      "id": "comment-a18ba3bcaf87428f859741f20643b68f",
+      "author": "qa-eaa78526",
+      "content": "QA EVIDENCE (qa-eaa78526). Every gate RE-RUN by me at 19:16-19:25Z against the delivered bytes, not read off the worker record. `task.verification` was NULL and `completionSummary` EMPTY when I claimed, so nothing here rests on a worker claim.\n\n**GATES, each foreground and standalone, read by OUTPUT:**\n| leg | count line | exit |\n|---|---|---|\n| `pnpm --filter @moe/control-room test` | `Test Files 195 passed (195)` / `Tests 2500 passed (2500)` | 0 (`PIPESTATUS[0]=0`) |\n| `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --testTimeout=30000 src/http/deployments-health-read.test.ts src/daemon-entry-deployments-health.test.ts` | `Test Files 2 passed (2)` / `Tests 33 passed (33)` | 0 |\n| `pnpm typecheck` | `apps/control-room typecheck: Done`; `apps/daemon typecheck: Failed` | **1** |\n\n**THE TYPECHECK RED IS FOREIGN AND I MEASURED IT RATHER THAN WAIVED IT.** Exactly one error, quoted verbatim:\n`apps/daemon typecheck: src/backups/backup-ports.ts(168,7): error TS6133: 'RESET_DESTINATION' is declared but its value is never read.`\n`git show HEAD:apps/daemon/src/backups/backup-ports.ts | grep RESET_DESTINATION` returns NOTHING; the working tree has it at :168. So the symbol exists only in a peer's uncommitted edit to a file this row neither owns nor touched. Rail-3 delta intersected with owned paths is EMPTY. I did not revert, stash or commit it.\n\n**I RAN MY OWN WINDOWING DRILL** rather than trusting the recorded one. Mutated `deployments-health-read.ts:226` `at < oldestAllowed` -> `false` (whole ring served). THREE arms reddened, the decisive one verbatim:\n`AssertionError: expected [ { …(2) }, … …(88) ] to have a length of 61 but got 91`\nplus `expected [ 1, 2, 3 ] to deeply equal [ 2, 3 ]` (window edge) and `expected [ 1, 2, 3 ] to deeply equal [ 3 ]` (newest-probe anchor). RESTORE PROVEN TWO WAYS in a call separate from the restore: `git diff --stat` on the tracked path is EMPTY, and sha256 `b8b74f87d34f40374e3980c7a7f82b0d603a188f97b40b371c5dc8cb07691643` equals the out-of-tree backup. No mutant on disk.\n\n**NO ARM WAS LOOSENED - MEASURED, NOT ASSUMED.** Removed lines across ALL FOUR touched test files: `deployments-health-read.test.ts` 0, `daemon-entry-deployments-health.test.ts` 0, `live-deployments-health.test.ts` 0, `environments-section.test.tsx` 0, `live-environments.test.tsx` 0. Every hunk is a pure addition. The DoD-6 disagreeing-frame arm at `environments-section.test.tsx:77` is byte-identical to its pre-row form. Structurally the component cannot derive at all: `EnvironmentCard` hands `LatencySparkline` only `environment` and `view.latencySeries` - not `state`, not a threshold.\n\n**DoD 2's PREMISE WAS FALSE AND THE WORKER ANSWERED IT BETTER THAN THE DoD ASKED.** The row claimed 20 exact-shape `toEqual` arms in the daemon test; they are single-member reads, so NOTHING on the daemon side pinned the key SET. The added `serves EXACTLY the key roster its consumers decode, in both directions` arm closes that in both directions per the bidirectional-roster rail - a strengthening, not a narrowing.\n\n**LANDING.** The wrapper WITHHELD six of the ten delivered paths as `Moe-Contested` by the PLANS of task-620fb461 and task-679cdaa3 (both WORKING, both unassigned, neither holding bytes in these hunks); only four reached HEAD, in checkpoint `09c25cdf`. I hand-landed the remaining six as `7db908c6` after per-path measurement (zero removals, every hunk this row's own series/sparkline vocabulary), staged by explicit pathspec, recorded via `moe.record_commit`. NOT PUSHED - a QA commit rides a later worker exit.\n\n**ONE DESIGN DEVIATION, ACCEPTED AND NAMED SO IT IS NOT DISCOVERED LATER.** The window is anchored on the NEWEST PROBE, not on a wall clock. The DoD says \"the last hour\"; a ring that went quiet three days ago therefore still serves its final hour rather than an empty chart. This is documented at the projector, pinned by its own arm (`anchors the window on the newest probe, not on a wall clock`), keeps the projection clock-free and pure, and is what makes the DoD's own count-and-oldest-instant assertion deterministic. `lastProbe.at` remains the staleness signal. Approved as delivered.",
+      "timestamp": "2026-09-07T16:19:44.784Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T00:05:18.665Z",
-  "updatedAt": "2026-09-07T15:44:42.576Z",
+  "updatedAt": "2026-09-07T16:20:19.990Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T13:11:20.223Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-07T16:20:19.990Z",
+    "wallClockMs": 11339767
   },
   "contextFetchedBy": [
     "architect-6e49a205",
-    "worker-ca28be90"
+    "worker-ca28be90",
+    "qa-eaa78526"
   ],
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -397,6 +406,26 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "7db908c639e2a858ea420d5b9104824502006b76",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-eaa78526@2026-09-07T19:16:00Z",
+      "paths": [
+        "apps/control-room/src/live/live-deployments-health.test.ts",
+        "apps/control-room/src/live/live-deployments-health.ts",
+        "apps/control-room/src/v2/ops/environments-section.test.tsx",
+        "apps/control-room/src/v2/ops/environments-section.tsx",
+        "apps/control-room/src/v2/ops/live-environments.test.tsx",
+        "apps/daemon/src/http/deployments-health-read.test.ts"
+      ],
+      "recordedBy": "qa-eaa78526",
+      "recordedAt": "2026-09-07T16:18:45.495Z",
+      "status": "REVIEW",
+      "pushed": false,
+      "message": "QA hand-landing of the six paths the wrapper withheld as contested by task-620fb461 / task-679cdaa3 plans. Measured per path: zero removed lines, every hunk a pure addition of this row's latencySeries/sparkline vocabulary; no peer bytes staged."
     }
   ],
   "filesModified": [
@@ -404,7 +433,13 @@
     "apps/control-room/src/v2/ops/latency-sparkline.test.tsx",
     "apps/control-room/src/v2/ops/latency-sparkline.tsx",
     "apps/daemon/src/daemon-entry-deployments-health.test.ts",
-    "apps/daemon/src/http/deployments-health-read.ts"
+    "apps/daemon/src/http/deployments-health-read.ts",
+    "apps/control-room/src/live/live-deployments-health.test.ts",
+    "apps/control-room/src/live/live-deployments-health.ts",
+    "apps/control-room/src/v2/ops/environments-section.test.tsx",
+    "apps/control-room/src/v2/ops/environments-section.tsx",
+    "apps/control-room/src/v2/ops/live-environments.test.tsx",
+    "apps/daemon/src/http/deployments-health-read.test.ts"
   ],
   "touchedFiles": [
     "apps/control-room/src/v2/ops/latency-sparkline.tsx",
@@ -414,8 +449,11 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-ca28be90@2026-09-07T15:44:34Z",
-    "at": "2026-09-07T15:44:42.576Z"
-  }
+    "kind": "completion",
+    "sessionId": "qa-eaa78526@2026-09-07T19:16:00Z",
+    "at": "2026-09-07T16:18:45.495Z"
+  },
+  "completedAt": "2026-09-07T16:20:19.990Z",
+  "reviewCompletedAt": "2026-09-07T16:20:19.990Z",
+  "reviewSummary": "APPROVED - 7/7 DoD verified on delivered bytes. task.verification was NULL and completionSummary EMPTY, so I re-ran every gate. FULL EVIDENCE: comment-a18ba3bc.\n\nGATES (mine, foreground): control-room `Test Files 195 passed (195)` / `Tests 2500 passed (2500)` exit 0. Daemon two named files `Test Files 2 passed (2)` / `Tests 33 passed (33)` exit 0. `pnpm typecheck`: control-room Done; daemon FAILED on exactly ONE FOREIGN error - `src/backups/backup-ports.ts(168,7): error TS6133: 'RESET_DESTINATION' is declared but its value is never read`. That symbol is ABSENT from `git show HEAD:` on that path, living only in a peer's uncommitted edit to a file this row neither owns nor touched. Rail-3 delta intersected with owned paths = EMPTY. Disclosed, not waived, not reverted.\n\nMY OWN DRILL, not the recorded one: mutated read.ts:226 `at < oldestAllowed` -> `false`; 3 arms reddened, decisive line `expected [...] to have a length of 61 but got 91`. Restored, proven in a SEPARATE call by empty `git diff --stat` AND sha256 equality to an out-of-tree backup.\n\nNO WEAKENING, measured: removed lines across all five touched test files = ZERO, every hunk a pure addition. The DoD-6 disagreeing-frame arm is byte-identical to its pre-row form, and the component cannot derive structurally - handed only `environment` and `view.latencySeries`, never `state`. Manifests byte-clean. Caps: read 300, decoder 268, sparkline 124, section 188.\n\nLANDING: the wrapper withheld 6 of 10 paths as Moe-Contested by the PLANS of task-620fb461 / task-679cdaa3 (both WORKING, unassigned, no bytes in these hunks); only 4 reached HEAD (09c25cdf). I hand-landed the six as 7db908c6 after per-path measurement, explicit pathspec, then recorded it. Not pushed - rides a later worker exit.\n\nACCEPTED DEVIATION, named: the window anchors on the NEWEST PROBE, not a wall clock, so a long-quiet ring still serves its final hour. Documented at the projector and pinned by its own arm."
 }
