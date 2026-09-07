@@ -30,6 +30,7 @@ import {
   compiledPlanDecisions,
   createCodexScratch,
   decisionsOfKind,
+  isVersionProbe,
   missionsOfKind,
   readDeliveryView,
   runCodexPass,
@@ -175,8 +176,21 @@ describe("the codex branch is what actually ran", () => {
    */
   it("proves the CODEX branch ran, from the spawn surface, not the shim's filename", async () => {
     const run = await driveCodexJourney({}, false);
-    const records = spawnRecords(run.scratch);
-    // A sweep that yields zero cases passes silently, so the sweep itself is asserted first.
+    // The wrapper's one-per-provider `--version` probe reaches the double through the same
+    // invocation path as a seat, so it lands in this sweep without being a seat. It is REMOVED
+    // rather than tolerated: relaxing the assertions below to accommodate it would stop them
+    // pinning the codex spawn surface, which is the only thing this arm exists to prove.
+    const swept = spawnRecords(run.scratch);
+    const probes = swept.filter(isVersionProbe);
+    const records = swept.filter((record) => !isVersionProbe(record));
+    // A filter is only safe if it cannot swallow a real seat: every excluded record is asserted
+    // to be a probe on its own terms, and nothing excluded carries the seat's stdin marker.
+    for (const probe of probes) {
+      expect(probe.argv.at(-1)).toBe("--version");
+      expect(probe.argv).not.toContain("-");
+    }
+    // A sweep that yields zero cases passes silently, so the sweep is asserted AFTER the filter -
+    // before it, the guard would be satisfied by a run whose only record was the probe.
     expect(records.length).toBeGreaterThanOrEqual(1);
     for (const record of records) {
       // A filename assertion would be circular - it proves only what the harness wrote. This is

@@ -175,6 +175,20 @@ export function spawnRecords(scratch: CodexScratch): readonly SpawnRecord[] {
     .map((text) => JSON.parse(text) as SpawnRecord);
 }
 
+/**
+ * The wrapper's own `<command> --version` probe, which is an invocation but not a SEAT.
+ *
+ * `orchestrator/seat-start-recorder.ts` measures each provider's CLI once per wrapper process,
+ * deliberately through the SAME `agentSpawnInvocation` the spawner uses so the reading is of the
+ * image a seat actually gets. The double therefore records that probe alongside the seats it
+ * doubles for, and a sweep that treats every record as a seat grades the probe against the seat
+ * surface. Discriminated by the trailing `--version` the probe passes, which is the mirror of
+ * the trailing `-` that carries a codex seat's mission on stdin - never by the filename.
+ */
+export function isVersionProbe(record: SpawnRecord): boolean {
+  return record.argv.at(-1) === "--version";
+}
+
 /** Every mission a double was actually handed, in the order it echoed them. */
 export function echoedMissions(scratch: CodexScratch): readonly string[] {
   return slotsOf(scratch.echoDir, "mission-", ".txt");
