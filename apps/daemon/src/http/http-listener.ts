@@ -19,6 +19,7 @@ import type { RepositoryRemoteReadPort } from "./repository-remote-read.js";
 import type { RepositoryWorkflowReadPort } from "./repository-workflow-read.js";
 import type { GoalSourceReadPort } from "../documents/document-source-full-read.js";
 import type { DeploymentsHealthReadPort } from "./deployments-health-read.js";
+import type { BackupsReadPort } from "./backups-read.js";
 import type { DesignReadPort } from "./design-read.js";
 import type { EnvironmentsReadPort } from "./environments-read.js";
 import type { PreviewCapturePort } from "./preview-capture-route.js";
@@ -171,6 +172,14 @@ export interface StartListenerOptions {
    * for all of them is the most dangerous output a health route has.
    */
   readonly deploymentsHealth?: DeploymentsHealthReadPort;
+  /**
+   * Absent means the durable backup restore-proof read refuses as UNAVAILABLE. Never an empty
+   * list and never a state: a daemon composed without this port has seen no backup at all, so
+   * an empty answer would read as "no backups exist", and anything a caller could mistake for
+   * PROVEN is the most dangerous output a restore-proof route has - a backup nobody checked,
+   * believed at the one moment the difference matters.
+   */
+  readonly backupReads?: BackupsReadPort;
   /**
    * Absent means the preview receipt read refuses as unavailable rather than answering ABSENT:
    * an unwired daemon must not tell a card "this goal has no preview".

@@ -6,7 +6,8 @@ import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import { SQLITE_APPLICATION_ID } from "@moe/store";
-import { BACKUP_RETENTION, nodeActivationReceiptPorts } from "../bootstrap/activation-receipts-measure.js";
+import { BACKUP_DIRECTORY, BACKUP_LEAF, BACKUP_RETENTION, SCHEDULED_BACKUP_LEAF, nodeActivationReceiptPorts } from "../bootstrap/activation-receipts-measure.js";
+import { BACKUP_RESTORE_PROOF_SIDECAR_SUFFIX, createBackupRestoreProofStore } from "./backup-restore-proof.js";
 import { backupFileHash, nodeBackupPorts } from "./backup-ports.js";
 import { runScheduledBackup } from "./scheduled-backup.js";
 
@@ -228,4 +229,112 @@ describe.runIf(RUN_POSTGRES_RESTORE)("real PostgreSQL backup restore", () => {
       expect(readdirSync(tmpdir()).filter(name => name.startsWith("moe-backup-restore-")).sort()).toEqual(temporaryBefore);
     }
   }, 120_000);
+});
+
+/**
+ * THE WRITE EDGE (DoD 1). `runScheduledBackup` returned a receipt to its caller and nothing
+ * persisted it - a fact computed and reaching nothing. Every arm below reads the persisted state
+ * back through the RECORD MODULE'S OWN READER rather than through the writer's return value, so
+ * what is asserted is what a later read route would actually serve.
+ *
+ * The `proofs` parameter is ADDITIVE and optional: the arms above this block call
+ * `runScheduledBackup` without it and are untouched, which is the property that keeps
+ * `ScheduledBackupResult` and `ScheduledBackupReceipt` the delivered contract they already were.
+ */
+describe("the scheduled run persists a durable restore-proof record", () => {
+  const proofStore = (input: ReturnType<typeof fixture>) =>
+    createBackupRestoreProofStore(
+      `${input.storePath}${BACKUP_RESTORE_PROOF_SIDECAR_SUFFIX}`, "proj-0001",
+    );
+  const lockDirectory = (input: ReturnType<typeof fixture>, environment: string) =>
+    join(input.projectRoot, BACKUP_DIRECTORY, BACKUP_LEAF, SCHEDULED_BACKUP_LEAF, environment);
+  const readAll = (store: ReturnType<typeof proofStore>) => {
+    const read = store.read();
+    if (!read.ok) throw new Error(`restore-proof read refused: ${read.code}`);
+    return read.value;
+  };
+
+  it("records PROVEN with the run's own sha256 when the restore check verified", async () => {
+    const input = fixture();
+    const store = proofStore(input);
+    const receipt = await runScheduledBackup(input, nodeBackupPorts(),
+      nodeActivationReceiptPorts().fs, store);
+    const backup = receipt.backups[0]!;
+    expect(backup.status).toBe("VERIFIED");
+
+    const records = readAll(store);
+    expect(records).toHaveLength(1);
+    // BY VALUE, and read back through the reader - not the writer's answer.
+    expect(records[0]).toEqual({
+      checkedAt: clock.toISOString(), environment: "store", kind: "STORE",
+      ref: basename(backup.ref), restoreProof: "PROVEN", sha256: backup.sha256,
+      version: "moe-backup-restore-proof/1",
+    });
+    // The digest is the RUN's, not a second hash taken here, and it is a real one.
+    expect(records[0]?.sha256).toBe(fileHash(backup.ref));
+    expect(records[0]?.restoreProof).not.toBe("NOT_CHECKED");
+  });
+
+  it("records FAILED - never PROVEN - when the backup write itself failed", async () => {
+    const input = fixture();
+    const store = proofStore(input);
+    const real = nodeBackupPorts();
+    const ports = { ...real, store: async () => { throw new Error("BACKUP_FAILED"); } };
+    const receipt = await runScheduledBackup(input, ports, nodeActivationReceiptPorts().fs, store);
+    expect(receipt.backups[0]).toMatchObject({ status: "FAILED", stage: "WRITE" });
+
+    const records = readAll(store);
+    expect(records).toHaveLength(1);
+    expect(records[0]?.restoreProof).toBe("FAILED");
+    expect(records[0]?.restoreProof).not.toBe("PROVEN");
+    // No proof, so no digest - null rather than an empty string.
+    expect(records[0]?.sha256).toBeNull();
+    expect(records[0]?.checkedAt).toBe(clock.toISOString());
+
+    // THE FAILURE PATH OWNS ITS TEARDOWN (epic rail 4): the environment lock is released and no
+    // half-written artifact survives, with the persistence write sitting after both.
+    expect(readdirSync(lockDirectory(input, "store"))).toEqual([]);
+    expect(existsSync(receipt.backups[0]!.ref)).toBe(false);
+  });
+
+  it("persists NOTHING for an environment skipped as DATABASE_ABSENT", async () => {
+    const input = fixture();
+    const store = proofStore(input);
+    const receipt = await runScheduledBackup(
+      { ...input, environments: [{ databaseUrl: null, name: "production" }] },
+      nodeBackupPorts(), nodeActivationReceiptPorts().fs, store,
+    );
+    expect(receipt.skipped).toEqual([{ environment: "production", reason: "DATABASE_ABSENT" }]);
+
+    // Exactly the store's own row and no row for `production`. A NOT_CHECKED row here would
+    // later read as a backup somebody took and nobody verified, which is a worse lie than
+    // the absence: no artifact was ever written for it.
+    const records = readAll(store);
+    expect(records.map((record) => record.environment)).toEqual(["store"]);
+    expect(records.some((record) => record.environment === "production")).toBe(false);
+  });
+
+  it("behaves identically when no proof writer is supplied", async () => {
+    const input = fixture();
+    const store = proofStore(input);
+    const receipt = await runScheduledBackup(input);
+    expect(receipt.backups[0]?.status).toBe("VERIFIED");
+    // The sidecar was never created, so the reader answers EMPTY rather than refusing.
+    expect(store.read()).toEqual({ ok: true, value: [] });
+  });
+
+  it("does not abort the run when the record refuses the write", async () => {
+    const input = fixture();
+    const store = proofStore(input);
+    // `Uppercase_Env` satisfies the filesystem guard and NOT the served surface's environment
+    // vocabulary, so the record refuses. The backup itself must still complete and report.
+    const environments = [{ databaseUrl: "postgresql://127.0.0.1/absent", name: "Uppercase_Env" }];
+    const receipt = await runScheduledBackup({ ...input, environments }, nodeBackupPorts(),
+      nodeActivationReceiptPorts().fs, store);
+    expect(receipt.backups).toHaveLength(2);
+    expect(receipt.backups[0]?.status).toBe("VERIFIED");
+
+    const records = readAll(store);
+    expect(records.map((record) => record.environment)).toEqual(["store"]);
+  });
 });

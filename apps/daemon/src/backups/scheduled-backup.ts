@@ -1,5 +1,5 @@
 import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, rmdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   BACKUP_DIRECTORY, BACKUP_LEAF, SCHEDULED_BACKUP_LEAF, backupFailure,
   nodeActivationReceiptPorts, pruneBackups,
@@ -7,6 +7,7 @@ import {
 import type { ActivationReceiptFs } from "../bootstrap/activation-receipts-ports.js";
 import { backupFileHash, nodeBackupPorts } from "./backup-ports.js";
 import type { BackupPorts, BackupProof } from "./backup-ports.js";
+import type { BackupRestoreProofStore } from "./backup-restore-proof.js";
 
 export interface ScheduledBackupInput {
   readonly projectRoot: string;
@@ -114,10 +115,53 @@ async function backupOne(
   return Object.freeze({ ...state, status: state.failure === null ? "VERIFIED" : "FAILED" });
 }
 
-/** Callable by the daemon's scheduler; never arms a competing timer or returns a connection value. */
+/** The write half of the durable restore-proof record. Narrowed to the one method this module
+ * needs, so a caller cannot be handed a reader it has no business calling. */
+export type ScheduledBackupProofWriter = Pick<BackupRestoreProofStore, "recordChecked">;
+
+/**
+ * ONE RESTORE-PROOF RECORD PER ATTEMPT THAT NAMED A DESTINATION.
+ *
+ * Deliberately AFTER every attempt has returned: `backupOne` releases its lock and removes its
+ * own material in its `finally` before it hands a result back, so nothing here can leak a
+ * directory, a lock or a temp artifact on any exit path - including the failure ones.
+ *
+ * NOTHING HERE RE-DERIVES THE STATE. `result.status` travels into the record module's exhaustive
+ * bridge untouched; a second mapping of one fact is how the two drift, and the drift would land
+ * on PROVEN. Because the bridge's parameter is `"VERIFIED" | "FAILED"`, a future widening of
+ * `ScheduledBackupResult.status` fails to compile HERE, at the call site, rather than silently
+ * mapping a new outcome onto a proof.
+ *
+ * WHAT IS DELIBERATELY NOT RECORDED. A SKIPPED environment (`DATABASE_ABSENT`) never reaches
+ * this loop: no artifact was written, and a NOT_CHECKED row for it would later read as a backup
+ * somebody took and nobody verified. An attempt that failed before naming a destination carries
+ * `ref === ""` and has no key to record against.
+ *
+ * A REFUSED RECORD NEVER FAILS THE RUN. The record admits a stricter environment name than the
+ * filesystem guard above does (the served surface shares one environment vocabulary with the
+ * deploy and health reads), so a write can refuse. Aborting a backup that already succeeded
+ * because its proof row would not store is strictly worse than the missing row, and this
+ * function's behaviour is a delivered contract that must not change.
+ */
+function persistRestoreProofs(
+  backups: readonly ScheduledBackupResult[], proofs: ScheduledBackupProofWriter, checkedAt: string,
+): void {
+  for (const result of backups) {
+    if (result.ref === "") continue;
+    proofs.recordChecked({
+      checkedAt, environment: result.environment, kind: result.kind,
+      ref: basename(result.ref), sha256: result.sha256, status: result.status,
+    });
+  }
+}
+
+/** Callable by the daemon's scheduler; never arms a competing timer or returns a connection value.
+ * `proofs` is ADDITIVE and optional: absent, the run behaves exactly as it did before this
+ * parameter existed, which is what keeps the delivered receipt contract intact. */
 export async function runScheduledBackup(
   input: ScheduledBackupInput, ports: BackupPorts = nodeBackupPorts(),
   fs: ActivationReceiptFs = nodeActivationReceiptPorts().fs,
+  proofs?: ScheduledBackupProofWriter,
 ): Promise<ScheduledBackupReceipt> {
   const retention: Retention = { prunedRefs: [], pruneFailedRefs: [] };
   const run = { ...input, now: input.now ?? new Date() };
@@ -130,6 +174,7 @@ export async function runScheduledBackup(
       backups.push(await backupOne(run, environment.name, "POSTGRES", environment.databaseUrl ?? "", ports, fs, retention));
     }
   }
+  if (proofs !== undefined) persistRestoreProofs(backups, proofs, run.now.toISOString());
   return Object.freeze({ schemaVersion: "moe-scheduled-backup/1", backups: Object.freeze(backups),
     skipped: Object.freeze(skipped), prunedRefs: Object.freeze(retention.prunedRefs),
     pruneFailedRefs: Object.freeze(retention.pruneFailedRefs) });

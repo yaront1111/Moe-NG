@@ -101,6 +101,17 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   // keeps its usual meaning — a non-POST, an undecodable body, a non-object, or an environment
   // that is not a usable string. UNAVAILABLE covers a daemon composed without the health port,
   // which must refuse rather than answer a healthy default for environments it cannot see.
+  // The durable backup restore-proof read (`/backups/read`). THREE codes rather than the
+  // health read's four: this body is exact-key with NO keys at all, so there is no missing-key
+  // mistake to distinguish - UNKNOWN_KEY names any key the route does not serve (including an
+  // `environment` filter it does not honour, which silently ignored would let a caller believe
+  // it was looking at one environment's backups). REQUEST_INVALID keeps its usual meaning: a
+  // non-POST, an undecodable body, or a non-object. UNAVAILABLE covers a daemon composed
+  // without the port, which must refuse rather than answer an empty list that would read as
+  // "no backups exist" - or, worse, anything a caller could mistake for a proven one.
+  "LISTENER_BACKUPS_REQUEST_INVALID",
+  "LISTENER_BACKUPS_UNAVAILABLE",
+  "LISTENER_BACKUPS_UNKNOWN_KEY",
   "LISTENER_DEPLOYMENTS_HEALTH_MISSING_KEY",
   "LISTENER_DEPLOYMENTS_HEALTH_REQUEST_INVALID",
   "LISTENER_DEPLOYMENTS_HEALTH_UNAVAILABLE",
@@ -260,6 +271,9 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_GOAL_SOURCE_UNAVAILABLE") return 503;
   if (code === "LISTENER_DESIGN_REQUEST_INVALID") return 400;
   if (code === "LISTENER_DESIGN_UNAVAILABLE") return 503;
+  if (code === "LISTENER_BACKUPS_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_BACKUPS_UNKNOWN_KEY") return 400;
+  if (code === "LISTENER_BACKUPS_UNAVAILABLE") return 503;
   if (code === "LISTENER_DEPLOYMENTS_HEALTH_MISSING_KEY") return 400;
   if (code === "LISTENER_DEPLOYMENTS_HEALTH_REQUEST_INVALID") return 400;
   if (code === "LISTENER_DEPLOYMENTS_HEALTH_UNKNOWN_KEY") return 400;

@@ -323,6 +323,7 @@ export async function startDaemon(options: DaemonStartOptions): Promise<DaemonSt
         ? {} : { environmentReads: resolved.environmentReads }),
       ...(resolved.deploymentsHealth === undefined
         ? {} : { deploymentsHealth: resolved.deploymentsHealth }),
+      ...(resolved.backupReads === undefined ? {} : { backupReads: resolved.backupReads }),
       ...(resolved.previewReads === undefined ? {} : { previewReads: resolved.previewReads }),
       ...(resolved.releaseReads === undefined ? {} : { releaseReads: resolved.releaseReads }),
       ...(resolved.previewCaptures === undefined ? {} : { previewCaptures: resolved.previewCaptures }),

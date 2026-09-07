@@ -36,6 +36,9 @@ import { CRITERIA_READ_PATH, REPOSITORY_RECOVERY_READ_PATH, REPOSITORY_BOOTSTRAP
 import { GOAL_SOURCE_READ_PATH, handleGoalSourceReadRequest } from "./goal-source-read.js";
 import { DESIGN_READ_PATH, handleDesignReadRequest } from "./design-read.js";
 import {
+  BACKUPS_READ_PATH, handleBackupsReadRequest,
+} from "./backups-read.js";
+import {
   DEPLOYMENTS_HEALTH_READ_PATH, handleDeploymentsHealthReadRequest,
 } from "./deployments-health-read.js";
 import { PREVIEW_READ_PATH, handlePreviewReadRequest } from "./preview-read.js";
@@ -76,6 +79,7 @@ import type { StartListenerOptions } from "./http-listener.js";
 /** The JSON surface. Anything else is either a hosted asset or an unknown route. */
 export const JSON_ROUTES: readonly string[] = Object.freeze([
   AFFORDANCE_PATH,
+  BACKUPS_READ_PATH,
   BUDGET_COMMITMENT_READ_PATH,
   COMMAND_PATH,
   DOCUMENT_COVERAGE_READ_PATH,
@@ -415,6 +419,21 @@ function serveDeploymentsHealth(
 }
 
 /**
+ * The durable per-backup restore-proof records. The listener refusal carries the DECODER'S OWN
+ * code: `/backups/read` tells a body it could not decode apart from one that named a key this
+ * route does not serve, and collapsing them here would undo that distinction on the wire.
+ */
+function serveBackupsRead(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleBackupsReadRequest({
+    authenticator: options.deps.authenticator, backupReads: options.backupReads,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
+/**
  * The per-environment variable table. The port answer travels VERBATIM at 200 for the same
  * reason the design read's does: reshaping here is where a field nobody named would come from,
  * and on this route that field could carry a secret.
@@ -637,6 +656,10 @@ export async function serveReadDispatch(
     refuseRequest(response, "LISTENER_DEPLOYMENTS_HEALTH_REQUEST_INVALID");
     return;
   }
+  if (path === BACKUPS_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_BACKUPS_REQUEST_INVALID");
+    return;
+  }
   if (path === PREVIEW_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_PREVIEW_REQUEST_INVALID");
     return;
@@ -727,6 +750,8 @@ export async function serveReadDispatch(
     serveDesign(response, request, options, body);
   } else if (path === DEPLOYMENTS_HEALTH_READ_PATH) {
     serveDeploymentsHealth(response, request, options, body);
+  } else if (path === BACKUPS_READ_PATH) {
+    serveBackupsRead(response, request, options, body);
   } else if (path === ENVIRONMENTS_READ_PATH) {
     serveEnvironments(response, request, options, body);
   } else if (path === PREVIEW_READ_PATH) {

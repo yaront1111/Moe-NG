@@ -137,6 +137,11 @@ const provider: DaemonDependencyProvider & Pick<
     if (port === undefined) throw new Error("unreachable: the deployment health reader is always wired");
     return port();
   },
+  backupReads: () => {
+    const port = fromEnv().backupReads;
+    if (port === undefined) throw new Error("unreachable: the backup restore-proof reader is always wired");
+    return port();
+  },
   previewReads: () => {
     const port = fromEnv().previewReads;
     if (port === undefined) throw new Error("unreachable: the preview reader is always wired");
