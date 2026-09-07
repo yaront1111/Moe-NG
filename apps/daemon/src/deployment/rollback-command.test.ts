@@ -1,5 +1,8 @@
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import { afterEach, expect, it } from "vitest";
+import { DAEMON_COMMAND_SEAM } from "../http/http-async-contract.js";
 import type { CommandHandlerInput } from "../http/http-contract.js";
 import { closeStores, openStore, openRestartableStore, reopen, PROJECT_ID } from "../review/review-test-fixtures.js";
 import { deploymentInfrastructureFiles } from "../repository/deployment/deployment-infrastructure-templates.js";
@@ -44,13 +47,22 @@ it("returns a durable receipt-backed decision and replays after handler recreati
   expect(h.docker.calls).toHaveLength(count);
 });
 
+// Each row pins the LAYER as well as the code: more than one layer can refuse
+// this handler, and a code that migrated between layers would otherwise keep a
+// code-only assertion green. `OPERATOR_PRINCIPAL_REQUIRED` proves the column is
+// load-bearing — it is stamped DAEMON_AUTHORIZATION at rollback-command.ts:69,
+// not DAEMON_COMMAND_SEAM like the rest.
 it.each([
-  ["principal", "OPERATOR_PRINCIPAL_REQUIRED"], ["project", "DEPLOY_ROLLBACK_PROJECT_MISMATCH"],
-  ["target", "DEPLOY_ROLLBACK_TARGET_INVALID"], ["version", "EXPECTED_VERSION_CONFLICT"],
-  ["restore", "DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE"], ["extra", "DEPLOY_ROLLBACK_REQUEST_INVALID"],
-  ["missing", "DEPLOY_ROLLBACK_REQUEST_INVALID"], ["receipt", "DEPLOY_ROLLBACK_RECEIPT_INVALID"],
-  ["environment", "DEPLOY_ROLLBACK_RECEIPT_INVALID"],
-])("refuses %s before Docker effects", async (mutation, code) => {
+  ["principal", "OPERATOR_PRINCIPAL_REQUIRED", "DAEMON_AUTHORIZATION"],
+  ["project", "DEPLOY_ROLLBACK_PROJECT_MISMATCH", DAEMON_COMMAND_SEAM],
+  ["target", "DEPLOY_ROLLBACK_TARGET_INVALID", DAEMON_COMMAND_SEAM],
+  ["version", "EXPECTED_VERSION_CONFLICT", DAEMON_COMMAND_SEAM],
+  ["restore", "DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE", DAEMON_COMMAND_SEAM],
+  ["extra", "DEPLOY_ROLLBACK_REQUEST_INVALID", DAEMON_COMMAND_SEAM],
+  ["missing", "DEPLOY_ROLLBACK_REQUEST_INVALID", DAEMON_COMMAND_SEAM],
+  ["receipt", "DEPLOY_ROLLBACK_RECEIPT_INVALID", DAEMON_COMMAND_SEAM],
+  ["environment", "DEPLOY_ROLLBACK_RECEIPT_INVALID", DAEMON_COMMAND_SEAM],
+])("refuses %s before Docker effects", async (mutation, code, layer) => {
   const h = harness();
   const payload = { ...h.input.envelope.payload };
   let envelope = { ...h.input.envelope, payload }, principal = { ...h.input.principal };
@@ -63,8 +75,62 @@ it.each([
   if (mutation === "missing") delete payload["restoreDatabase"];
   if (mutation === "receipt") payload["toReceiptRef"] = "f".repeat(64);
   if (mutation === "environment") payload["environment"] = "production";
-  await expect(h.handler({ envelope, principal })).rejects.toMatchObject({ code });
+  await expect(h.handler({ envelope, principal })).rejects.toMatchObject({ code, layer });
   expect(h.docker.calls).toEqual([]);
+});
+
+// DoD 3. THE MEASURED SHAPE OF THIS SEAM: there is no injectable backup port to
+// record against. `RollbackCommandOptions = Omit<DeployCommandOptions, "buildContext">`
+// carries none, and rollback-command.ts's only mention of BackupPorts is the
+// comment at :86 explaining why the operation refuses. So "the not-requested path
+// records no restore call" is asserted three ways, none of which trusts the flag:
+// the request really ran, no injected port recorded a restore verb, and the module
+// has no restore surface to call. The third is what distinguishes "port never
+// called" from "port never wired" — here it is provably the latter.
+
+/** Every verb that would move database bytes back into a live destination. */
+const RESTORE_VERBS: readonly string[] = ["pg_restore", "psql", "mysql", "mongorestore", "restore", "pg_dump"];
+const rollbackCommandSource = (): string =>
+  readFileSync(fileURLToPath(new URL("./rollback-command.ts", import.meta.url)), "utf8");
+
+it("restores no database when the operator did not request one", async () => {
+  const h = harness();
+  expect(h.input.envelope.payload["restoreDatabase"]).toBe(false);
+  const decision = await h.handler(h.input);
+  // Asserted FIRST: an arm that silently ran no rollback would satisfy every
+  // "nothing happened" clause below for the wrong reason.
+  expect(decision.disposition).toBe("DECIDED");
+  const receipt = readDeployReceipt(h.store, PROJECT_ID, deployReceiptId(PROJECT_ID, environment, h.input.envelope.commandId));
+  expect(receipt.ok && receipt.receipt.imageDigest).toBe(digest);
+
+  // READ THE RECORDED CALLS, never the flag: sweep every argv the injected ports saw.
+  expect(h.docker.calls.length).toBeGreaterThan(0);
+  const swept = [...h.docker.calls, ...h.docker.sshCalls].flatMap(argv => [...argv]);
+  expect(swept.filter(token => RESTORE_VERBS.includes(token))).toEqual([]);
+});
+
+it("binds no database restore surface at the rollback seam at all", () => {
+  const source = rollbackCommandSource();
+  // A call site, not the payload key `restoreDatabase` nor the explanatory comment.
+  expect(source).not.toMatch(/\.restoreDatabase\s*\(/u);
+  expect(source).not.toMatch(/from "[^"]*backups\//u);
+  expect(source).not.toMatch(/nodeBackupPorts/u);
+  // Non-vacuity: the file really was read and really is the module under test.
+  expect(source).toMatch(/DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE/u);
+});
+
+it("refuses a requested database restore before reading the receipt or touching Docker", async () => {
+  const h = harness();
+  const envelope = { ...h.input.envelope, payload: { ...h.input.envelope.payload, restoreDatabase: true } };
+  await expect(h.handler({ ...h.input, envelope })).rejects.toMatchObject({
+    code: "DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE", layer: DAEMON_COMMAND_SEAM,
+  });
+  // rollback-command.ts:88 refuses AHEAD of readDeployReceipt, so nothing was
+  // started and nothing durable was minted.
+  expect(h.docker.calls).toEqual([]);
+  expect(h.docker.sshCalls).toEqual([]);
+  expect(readDeployReceipt(h.store, PROJECT_ID,
+    deployReceiptId(PROJECT_ID, environment, h.input.envelope.commandId)).ok).toBe(false);
 });
 
 it("refuses changed receipt bytes under an already decided command id", async () => {
