@@ -135,17 +135,25 @@ entry points, environment, and knobs.
   are reserved to the CONFIGURED operator principal: a paired browser is a
   durable human and is still refused `OPERATOR_PRINCIPAL_REQUIRED @
   DAEMON_AUTHORIZATION`, and the refused dispatch writes no receipt.
-  **Measured 2026-09-07, and the limit stated rather than implied**: the
-  machinery above was driven against a REAL daemon with a faked container
-  runtime -- composition, admission, the operator fence, the durable receipt,
-  `/activity/read` carrying its verdict and the browser rendering the url. **No
-  container has been started.** A live drive on this host recorded
-  `DEPLOY_DOCKER_UNAVAILABLE`: the docker CLI is installed (29.6.2) but its
-  engine was not running, so `docker version` -- the same probe the deploy makes
-  first -- exits non-zero. A live container deploy is pending a docker host;
-  nothing in the code needs to change for it. The other Stage 2 items
-  (infrastructure generation, database migrations, monitoring, backup and
-  rollback) are NOT claimed here.
+  **Measured 2026-09-07, and the limits stated rather than implied**: the
+  machinery above was driven against a REAL daemon -- composition, admission,
+  the operator fence, the durable receipt, `/activity/read` carrying its verdict
+  and the browser rendering the url -- with a faked container runtime. **A
+  separate drive on the same day used a REAL docker engine (29.6.2
+  linux/amd64)**: an image was built from the generated Dockerfile, a candidate
+  container ran, `GET /health` answered `200 {"status":"ok"}`, the proxy flipped
+  to the candidate and the incumbent was stopped only afterwards. A container
+  has been started and the url served bytes. **What that drive does NOT prove**:
+  it went through the deploy service directly, so the OPERATOR path -- the same
+  deploy dispatched as a command from the goal -- is still unproven. It is
+  refused here with `BOOTSTRAP_PREREQUISITE_MISSING @ DAEMON_PREREQUISITE`:
+  `deployment.deploy` requires a `repository.publish` whose effects are
+  committed, and no goal here is publication-integrated yet. It also composed no
+  migration port, and the candidate ran with **no environment variables**, which
+  a product needing a database would experience as a health timeout rather than
+  as the configuration error it is. The other Stage 2 items (infrastructure
+  generation, database migrations, monitoring, backup and rollback) are NOT
+  claimed here.
 
 - **Packages**: `contracts` (dependency-free types, limits, codecs), `core`,
   `scheduler` (zero-authority structural preview), `store` (durable event and
@@ -211,7 +219,24 @@ and NO PULL REQUEST HAS BEEN OPENED BY THE PRODUCT: the `gh` path was driven as
 far as GitHub itself on 2026-09-07 - the head proof, the production argv and an
 authenticated answer from github.com - but the run that would create one needs a
 landed goal and an owner-named target repository. A Codex seat is wired but was
-last proven only to reach the API; and
+last proven only to reach the API. **What IS proven about provider choice
+(measured 2026-09-07)**: the agent provider is a durable project setting the
+wrapper resolves per spawn; the browser CAN NOW REACH IT -- `/affordances/read`
+offers `project.set_agent_provider`, so the toggle builds a real envelope and
+dispatches it -- but the WRITE IS STILL REFUSED, and that limit is stated rather
+than implied: the kind is in `OPERATOR_PRINCIPAL_KINDS`, a paired browser is a
+session-ledger HUMAN and never the daemon's configured operator principal, so a
+real daemon answers `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION`.
+Admitting a paired HUMAN holding ADMIN is task-136cbab2, mirroring the
+`repository.bootstrap` widening; the durable write path itself is proven live
+over the command edge. The Seats screen discloses, per seat, the provider and
+agent CLI version the WRAPPER measured at spawn, plus WHERE the credential comes
+from -- a sign-in file, or an environment variable NAME, never a value -- and
+names `MOE_AGENT_COMMAND` when a launcher override is quietly ignoring the
+browser choice; and a SCRIPTED codex double drives the real MCP wire to verifier
+`ACCEPTED` and lander `COMMITTED`. **The REAL-BINARY drive is still outstanding**
+-- no `codex exec` process has delivered a node -- and it is task-117a3cd9, not
+this work. The clause above stands until that row runs; and
 the verifier is a trusted-workspace shell recipe, not an adversarial boundary. The design's Phase 0
 freeze manifest and independent `FREEZE_READY` decision are not recorded; the
 `node:sqlite` driver decision in

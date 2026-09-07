@@ -208,14 +208,40 @@ in Needs you as ready to deploy while the card's buttons are disabled under
 "Nothing is landed to deploy yet." That is not a broken card: publish the goal
 to a reachable remote and the buttons enable.
 
-**What has been driven, measured 2026-09-07.** Everything above except the
-container runtime: a real daemon composed the deploy port, admitted the command,
-enforced the operator fence, wrote a durable `DEPLOYED` receipt, carried its
-verdict through `/activity/read`, and the browser rendered the receipt's url.
-The container runtime itself was FAKED for that run. A live drive on this host
-recorded `DEPLOY_DOCKER_UNAVAILABLE` — docker 29.6.2 installed, engine not
-running — so **no container has yet been started by this path**. The machinery
-is verified; a live container deploy is pending a docker host.
+**What has been driven, measured 2026-09-07.** Everything above, including the
+container runtime. Two drives, and they prove different halves:
+
+- **Over the command edge, with a FAKED container runtime**: a real daemon
+  composed the deploy port, admitted the command, enforced the operator fence,
+  wrote a durable `DEPLOYED` receipt, carried its verdict through
+  `/activity/read`, and the browser rendered the receipt's url.
+- **Against a REAL docker engine (2026-09-07, engine 29.6.2 linux/amd64)**: an
+  image was built from the generated Dockerfile, a candidate container ran, and
+  it answered `GET /health` with `200 {"status":"ok"}`. The proxy flipped to the
+  candidate and the incumbent was stopped only afterwards. So **a container has
+  now been started by this path** and the url served bytes.
+
+**What is still NOT proven, stated rather than implied.** The live drive was
+driven through the deploy service directly. The OPERATOR path — the same deploy
+dispatched as a command from the goal — is refused on this host with
+`BOOTSTRAP_PREREQUISITE_MISSING @ DAEMON_PREREQUISITE`, because
+`deployment.deploy` requires a `repository.publish` whose effects are committed
+and no goal here is publication-integrated yet. The engine is proven; the
+goal-lineage gate in front of it is not. That drive also composed no `migrate`
+port, so no migration ran, and the candidate started with **no environment
+variables at all**: `docker run` is invoked with no `-e` and no `--env-file`, so
+a product that needs a `DATABASE_URL` would fail its health probe and the
+operator would read `DEPLOY_HEALTH_TIMEOUT` — a refusal naming HEALTH when the
+real cause is CONFIGURATION. Supplying them is a separate row.
+
+**The three days this cost, so nobody repeats it.** `DEPLOY_DOCKER_UNAVAILABLE`
+collapses two different states: docker *not installed* (needs a host change) and
+docker *installed with the engine stopped* (needs the application started, and
+any seat can do it). Three seats over three days read the second as the first
+and left the clause unmet. A refusal that names a transport — `npipe:…`, a
+socket path — is evidence the CLI exists and could not reach a server, which is
+much closer to "stopped" than to "absent". **Try starting Docker Desktop before
+concluding the host lacks docker.**
 
 ## Source development launcher
 
@@ -328,6 +354,66 @@ Re-probe after a CLI upgrade; this landscape moves.
 The two gates are independent: a `codex` command holding only Claude variables
 is refused naming the Codex roster, and vice versa. Neither gate reads the
 other's names.
+
+#### Choosing the provider from the browser, and reading it back
+
+`MOE_AGENT_COMMAND` is no longer the only way to pick a provider. The agent
+provider is a DURABLE PROJECT SETTING (`project.set_agent_provider`), and a
+paired operator sets it from **Health -> Seats**. The setting is
+operator-fenced and MCP-excluded: an agent seat cannot change which provider
+staffs the fleet, only a human at a paired browser can.
+
+Seats then discloses, so a fleet is readable without reading the launcher's
+console:
+
+- **Per seat, what the WRAPPER measured at spawn** -- the provider and the agent
+  CLI version, both named `...AtStart` because they are second-hand facts about
+  the past, not a live probe. A seat that has never been measured says so in
+  words rather than printing a bare `UNKNOWN`.
+- **WHERE the credential comes from** -- a signed-in credential file on this
+  host, or the NAME of the environment variable that carries it. **Never the
+  value.** The screen builds that sentence only from a closed grammar over the
+  daemon's credential ref, so a value substituted for the source renders as
+  `RESOURCES_CREDENTIAL_SOURCE_UNRECOGNISED` instead of as itself.
+- **When the chosen provider has NO credential**, the launcher's own
+  `MOE_UP_ENV_MISSING` line above is repeated VERBATIM, naming every accepted
+  variable and the sign-in path that was looked for. It is the launcher's single
+  roster, carried through `/activation/read`, not a second copy in the browser.
+- **`MOE_AGENT_COMMAND` when it is overriding the choice.** The environment wins
+  at spawn, so the screen names the variable rather than silently flipping a
+  label -- a browser choice that is being ignored is otherwise unreadable.
+
+A seat keeps the provider it started under; the setting applies to the next one,
+and Seats says so when a running seat disagrees with it.
+
+**Measured 2026-09-07, and the limit stated rather than implied:** the toggle,
+the disclosure and the credential-source fence were driven against a REAL daemon
+in the browser lane -- and the WRITE reaches the daemon and is REFUSED there, by
+name: a paired operator clicks `codex`, the envelope is built from the daemon's
+own offer, and the answer is `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION`
+("this command requires the configured operator principal"). The kind is in
+`OPERATOR_PRINCIPAL_KINDS` and a paired browser is a session-ledger HUMAN, never
+the daemon's CONFIGURED operator principal -- it cannot be, that id does not
+exist before pairing. Admitting a paired HUMAN holding ADMIN is task-136cbab2,
+mirroring the `repository.bootstrap` widening (task-6d5db404); the journey
+(`tests/e2e/control-room/agent-provider-seats.spec.ts`) asserts that refusal CODE
+today and flips to the round trip when that row lands. A
+**real `codex exec` binary has still never delivered a node** -- what has been
+driven end to end is a SCRIPTED codex double over the real MCP wire. The
+real-binary drive is task-117a3cd9.
+
+**If the toggle is greyed out with "cannot change the provider", read
+`/affordances/read`, not the pairing.** The browser can only dispatch a kind the
+daemon has OFFERED it: `commandBuilderFor` reads `commandId`, `expectedVersion`
+and `targetAggregateId` off the affordance and refuses `INPUT_INVALID` without
+one. `project.set_agent_provider` is minted by
+`apps/daemon/src/http/affordance-agent-provider-offers.ts`, which withholds the
+offer only when the setting's own scope check refuses -- so an absent offer means
+`AGENT_PROVIDER_SCOPE_INVALID` or `AGENT_PROVIDER_STORE_UNREADABLE` on the
+daemon, never an unpaired browser. Being registered, capability-bound and
+MCP-excluded is NOT enough for a browser to reach a command; the offer is. And
+the offer is not enough either: an `OPERATOR_PRINCIPAL_KINDS` member also needs
+the principal fence widened, which is the second half described above.
 
 The daemon binds an EPHEMERAL port on purpose, so read the printed origin rather
 than assuming `39123`. Ctrl-C in this console stops both children; either child
