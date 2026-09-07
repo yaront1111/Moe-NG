@@ -139,7 +139,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T21:24:00.423Z",
-  "updatedAt": "2026-09-07T15:32:49.142Z",
+  "updatedAt": "2026-09-07T15:40:47.870Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T13:01:24.036Z",
     "plannedStepCount": 8,
@@ -176,5 +176,60 @@
   "contextFetchedBy": [
     "worker-fcbcfca9"
   ],
-  "workStartedAt": "2026-09-07T15:09:50.512Z"
+  "workStartedAt": "2026-09-07T15:09:50.512Z",
+  "commits": [
+    {
+      "sha": "f43b4bdb174931c3ed1e86209b7fd8c4c14ea5e0",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-fcbcfca9@2026-09-07T15:08:58Z",
+      "paths": [
+        ".moe/tasks/task-b7cdf265455d45c58010aa4d6f6c1544.json",
+        "apps/daemon/src/backups/backup-ports.ts",
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/deployment/rollback-command.test.ts",
+        "apps/daemon/src/deployment/rollback-command.ts",
+        "apps/daemon/src/deployment/rollback-production-wiring.test.ts",
+        "apps/daemon/src/deployment/rollback-restore.js",
+        "apps/daemon/src/deployment/rollback-restore.test.ts",
+        "apps/daemon/src/deployment/rollback-restore.ts"
+      ],
+      "recordedBy": "worker-fcbcfca9",
+      "recordedAt": "2026-09-07T15:40:15.845Z",
+      "treeId": "599552f54337d5209603ef670fac529cd785bed8",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-b7cdf265455d45c58010aa4d6f6c1544.json",
+    "apps/daemon/src/backups/backup-ports.ts",
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    "apps/daemon/src/deployment/rollback-command.test.ts",
+    "apps/daemon/src/deployment/rollback-command.ts",
+    "apps/daemon/src/deployment/rollback-production-wiring.test.ts",
+    "apps/daemon/src/deployment/rollback-restore.js",
+    "apps/daemon/src/deployment/rollback-restore.test.ts",
+    "apps/daemon/src/deployment/rollback-restore.ts"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    ".moe-step6-patch.py",
+    ".moe-step6e.py",
+    "apps/daemon/src/backups/backup-ports.ts",
+    ".moe-step6d.py",
+    "apps/daemon/src/deployment/rollback-restore.ts",
+    ".moe-step6b.py",
+    "apps/daemon/src/deployment/rollback-command.ts",
+    ".moe-step6c.py",
+    "apps/daemon/src/deployment/rollback-restore.test.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-fcbcfca9@2026-09-07T15:08:58Z",
+    "at": "2026-09-07T15:40:15.845Z"
+  }
 }
