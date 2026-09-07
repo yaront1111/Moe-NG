@@ -115,6 +115,10 @@ import { HEALTH_PROBE_JOB_ID, HEALTH_PROBE_SIDECAR_SUFFIX, healthProbeJobEnviron
 import { DEFAULT_PROBE_INTERVAL_MS, createProbeIntervalRecord } from "./monitoring/probe-interval-record.js";
 import { readDeployLedger } from "./deployment/deploy-ledger.js";
 import type { DeploymentsHealthReadPort } from "./http/deployments-health-read.js";
+import {
+  BACKUP_RESTORE_PROOF_SIDECAR_SUFFIX, createBackupRestoreProofStore,
+} from "./backups/backup-restore-proof.js";
+import type { BackupsReadPort } from "./http/backups-read.js";
 
 export interface StoreDependencyConfig {
   readonly deploymentDeploy?: DeploymentDeploySeams;
@@ -739,6 +743,32 @@ export function createStoreDependencies(
     const environment = healthProbeJobEnvironment(id);
     return environment !== null && dedicated().has(environment) ? dedicatedJob(environment) : null;
   };
+  /**
+   * The operator-facing read over the durable restore-proof records. It opens the SAME sidecar
+   * the scheduled backup run writes - one shared suffix constant, so the writer and the reader
+   * cannot come to disagree about which file the records live in - and it derives NOTHING: the
+   * three states travel off the stored rows exactly as written.
+   *
+   * The project is bound HERE, never from a request: the rows are project-scoped and a
+   * route-supplied project would let a caller read another project's backups. A store with no
+   * durable path refuses as BACKUP_PROOF_STORE_UNAVAILABLE rather than answering an empty list,
+   * which would read as "no backups exist" on a daemon that can see none of them.
+   */
+  const backupReads = (): BackupsReadPort => {
+    const databasePath = store.getHealth().databasePath;
+    const records = databasePath === null ? null
+      : createBackupRestoreProofStore(
+        `${databasePath}${BACKUP_RESTORE_PROOF_SIDECAR_SUFFIX}`, config.projectId,
+      );
+    return Object.freeze({
+      read: () => records === null
+        ? Object.freeze({
+          code: "BACKUP_PROOF_STORE_UNAVAILABLE" as const,
+          layer: "DAEMON_INGRESS" as const, ok: false as const,
+        })
+        : records.read(),
+    });
+  };
   const schedules = createDurableSchedule({ ...config.schedule, store, projectId: config.projectId, now: epochClock,
     resolve: (id) => resolveProbe(id) ?? config.schedule?.resolve?.(id) ?? null });
   const close = (): void => { schedules.release(); subscriptionDatabase?.close(); store.close(); };
@@ -760,6 +790,7 @@ export function createStoreDependencies(
     activation,
     activity,
     affordances,
+    backupReads,
     budgetCommitment,
     close,
     commandAuthorityPlane,

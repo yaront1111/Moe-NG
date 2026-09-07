@@ -190,8 +190,8 @@
       "completedAt": "2026-09-07T17:13:59.872Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-eaa78526",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -215,16 +215,24 @@
       "author": "worker-7b684492",
       "content": "GATES, DRILLS AND THE FOREIGN-RED EPISODE (detail over the completionSummary cap).\n\n== GATES, all three quoted with their count lines, standalone, foreground, one command per call ==\n`pnpm --filter @moe/daemon test`  -> EXIT 0. `Test Files 590 passed (590)` / `Tests 10524 passed | 8 skipped (10532)`. 583.90s.\n`pnpm typecheck`                  -> EXIT 0. `apps/daemon typecheck: Done`, all 12 packages Done.\n`pnpm --filter @moe/control-room test` -> EXIT 0. `Test Files 195 passed (195)` / `Tests 2517 passed (2517)`. Run because DoD 7 names it; THIS ROW TOUCHES NO CONTROL-ROOM FILE - the browser half is task-679cdaa3.\nA bare root `pnpm test` is NOT quoted anywhere: the root vitest include has no `apps/**`, so it covers zero files this row changed.\n\n== THE FOREIGN-RED EPISODE, disclosed in full because my first full leg was RED ==\nFirst run (19:53-19:59Z) came back `Test Files 2 failed | 588 passed (590)`, EXIT 1:\n  FAIL src/http/preview-read.test.ts > ... > serves the captured bytes over the socket, byte for byte, and only for a credential -- `Error: the real run captured nothing`\n  FAIL src/orchestrator/agent-wrapper.test.ts > createAgentWrapper > never staffs the human approval, goal-closure or environment-variable actions -- `AssertionError: expected { active: +0, ...(2) } to deeply equal { active: +0, spawned: [], ...(1) }`\nNeither is among this row's 18 owned paths, so the (HEAD-failures minus merge-base-failures) INTERSECT owned-paths set is EMPTY.\n\nAttribution, measured rather than assumed. `agent-wrapper.test.ts` was DIRTY (` M`, +31 lines) with a peer's uncommitted arms for **task-749e585a** fencing `monitoring.set_probe_interval`; their own comment says \"this kind has NO `agentCapabilitiesFor` entry to fall back on yet\". Re-running the two files standalone at 20:01Z gave a DIFFERENT and louder failure - `Error: command kind has no capability family: monitoring.set_probe_interval`, thrown from `daemon-command-families.ts:190` through `createStoreDependencies` - which by then was also breaking SIX of my own arms. `git status` had grown from 5 dirty source paths at session start to 27, including `packages/contracts/src/runtime/runtime-vocabulary.ts`, `apps/daemon/src/daemon-command-payload-keys.ts` and `apps/daemon/src/orchestrator/agent-spawn-contract.ts`: a peer had put the kind in the shared vocabulary before its capability family, so every composition-touching test threw at import.\n\nI did not touch, revert or repair any of it. I re-ran my owned scope minutes later - `Test Files 6 passed (6)` / `Tests 101 passed | 1 skipped` with ZERO occurrences of that error - which showed the peer had completed their edit, and then re-ran the FULL leg, which came back 590/590 EXIT 0. So both original reds were transient peer state, and the green above is a real green rather than a narrowed one.\n\nFor `preview-read.test.ts` specifically I also proved my diff CANNOT reach it: the only file it imports that I touched is `http-listener.ts`, and my entire edit there is TYPE-ONLY - one `import type` and one `readonly backupReads?:` field on an interface, both erased at compile time, zero runtime bytes. `git diff -- apps/daemon/src/http/http-listener.ts` is 10 added lines, all of them a type import, a doc comment and an optional field.\n\n== DRILLS: PROCESS-LOCAL, NO ON-DISK MUTATION AT ANY POINT ==\n`full-suite-gate` was held by worker-4d8571e7 when I reached this step, so an on-disk window would have poisoned their run. I used an out-of-tree vitest config in %TEMP% (named with BOTH my worker id and the task id) whose `transform` plugin rewrites the target in memory at import and THROWS if its anchor is missing, so a drill can never silently no-op.\n\nRESTORE PROOF. Six of this row's files are untracked and `git diff` certifies nothing for them - but nothing was ever mutated on disk, so the admissible proof is CONTENT, not byte movement. All four anchors verified intact after the drills: `backup-restore-proof.ts:152` (`checkedAt, environment, kind, ref, restoreProof, sha256, version: ...`), `backups-read.ts:153` (`restoreProof: record.restoreProof,`), `http-listener-read-dispatch.ts:754` (`serveBackupsRead(response, request, options, body);`), `backup-restore-proof.ts:262` (`return refusal(\"BACKUP_PROOF_RECORD_INVALID\");`, no `detail`). Negative control: `grep -rn '? \"PROVEN\" :\\|detail: input.ref'` over all three files -> EXIT 1, zero hits.\n\n(i) COLLAPSE, store side. Store arm reds on the VALUE: `expected 'PROVEN' to be 'NOT_CHECKED'` (backup-restore-proof.test.ts). The WIRE arm also red - but at the WRONG ASSERTION, `TypeError: Cannot read properties of undefined (reading '0')`, because the record store's own state/evidence coupling refused the read before the arm's value assertion could run. That is the \"one layer away from vacuous\" shape, so I did two things rather than accept it.\n(i-b) COLLAPSE, route side, so no second layer can answer first. BOTH the wire arm and the handler arm red on the VALUE: `expected 'PROVEN' to be 'NOT_CHECKED'` at daemon-entry-backups.test.ts:230 and backups-read.test.ts:104. And I strengthened the wire arm with `expect(status).toBe(200)` + `expect(Array.isArray(...)).toBe(true)` ahead of the indexing, so it names its own failure instead of throwing.\n(ii) COMPOSITION. Dispatch branch removed: `daemon-entry-backups.test.ts` reds 6 of 8 arms, `expected 503 to be 200`. IMPORTANT: `http-listener-read-dispatch.test.ts` stayed GREEN under this drill - its roster/branch set-equality arm is a SOURCE-TEXT asserter (readFileSync + regex) and cannot see a process-local transform. It reds only on an on-disk removal. Recorded so nobody quotes a process-local drill as evidence that a source-scanning arm bites.\n(iii) SECRET. Refusal made to echo its input: reds on the SECRET itself - `expected '{\"code\":\"BACKUP_PROOF_RECORD_INVALID\"...' not to contain 'Sup3rS3cr3t-pw'`, received `{\"code\":\"BACKUP_PROOF_RECORD_INVALID\",\"detail\":\"postgres://moe_admin:Sup3rS3cr3t-pw@db.internal.example:5432/moe_prod\",...}`. I reordered that arm to put `not.toContain(PASSWORD)` AHEAD of the `toStrictEqual`, because on the first pass it red on a key count instead.",
       "timestamp": "2026-09-07T17:13:03.806Z"
+    },
+    {
+      "id": "comment-2c89d4080f6c49fba0a8fdbca47b5d98",
+      "author": "qa-eaa78526",
+      "content": "QA REVIEW DETAIL (beyond the reviewSummary cap). APPROVED. Three things a later reader needs: what I re-ran, what I had to land, and one gap that is NOT this row's defect but is now measured.\n\n== 1. WHAT I RE-RAN MYSELF, on the delivered working tree ==\n`pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000` over this row's six owned test files -> `Test Files 6 passed (6)` / `Tests 101 passed | 1 skipped (102)`, EXIT 0 (7.23s). Flags spelled out deliberately: narrowing `pnpm --filter @moe/daemon test` to a path DROPS the script's `--testTimeout=30000` and the two heaviest daemon arms then red `Test timed out in 5000ms` on a clean tree - a fake red I refuse to author.\n`pnpm --filter @moe/daemon typecheck` -> EXIT 0, zero `error TS` lines.\nI did NOT re-run the full `pnpm --filter @moe/daemon test` leg: worker-4d8571e7 holds `full-suite-gate` (task-620fb461, acquired 17:12:31.530Z) and posted GATE START 17:13:35Z. Concurrent full suites on this host hit the mtkbtsvc handle leak and red both runs. The row's own full leg is recorded in task.verification at 590/590 files, 10524 passed / 8 skipped, EXIT 0.\n\nA TRANSIENT RED I SAW AND CLEARED, recorded so it is not rediscovered as this row's: my first typecheck attempt returned `src/http/runs-read.ts(229,9): error TS2741: Property 'declaredMigrations' is missing ... but required in type 'RunNodeView'`. Attributed by measurement, not assumption: `declaredMigrations` has ZERO occurrences at `HEAD:apps/daemon/src/http/runs-read-contract.ts` and is a required field only in the DIRTY copy, which belongs to task-de65294b (WORKING, /runs/read declared migrations). None of this row's files import runs-read, and runs-read imports nothing of this row. The peer completed their edit within the window and the very next run was 0 errors / EXIT 0. Same shape as the `agent-wrapper.test.ts` / `preview-read.test.ts` episode the worker disclosed: peer mid-edit state, not a defect here.\n\n== 2. HEAD WAS RED AND I LANDED THE REPAIR: c7456512 ==\nThe completion commit b1da2cb9 (18 paths, 1969+/29-, `Moe-Paths: 18`, pushed) SKIPPED three declared paths as contested:\n```\nMoe-Contested: apps/daemon/src/daemon-store-dependencies.test.ts (task-6cbcf5ff)\nMoe-Contested: apps/daemon/src/daemon-store-foundation-composition.ts (task-620fb461)\nMoe-Contested: apps/daemon/src/http/http-listener-read-dispatch.test.ts (task-679cdaa3)\n```\nThat is the \"HEAD compiles but the row is torn\" shape, and here it was worse than cosmetic: `http-listener-read-dispatch.ts` landed a 36th route while `HEAD:http-listener-read-dispatch.test.ts:356` still pinned `expect(roster.size).toBe(35)`, and `daemon-store-dependencies.ts:140` landed the `backupReads` provider while the exact `providerKeys` list at HEAD had zero occurrences of it. Both are set-equality/count arms: red at HEAD, green in the tree the worker tested.\n\nI measured each contested path with `git diff -- <path> | grep '^[+-]' | grep -v '^[+-][+-]'` and filtered out this row's vocabulary. Residue EMPTY on two of them (22 changed lines in the dispatch test, all `/backups/read` census + roster pin; 3 lines in the dependencies test, all `backupReads`), so those are this row's own bytes and I hand-landed them as **c7456512**, recorded via moe.record_commit (task.commits now 2).\n\n`daemon-store-foundation-composition.ts` I EXCLUDED WHOLE and deliberately: its 48 dirty lines carry task-620fb461's `probeIntervalMs` hunks alongside this row's `backupReads` arrow. The rail is that a peer-mixed path is excluded and the peer's own landing carries it. CONSEQUENCE, and the one open risk on this row: until worker-4d8571e7's exit commit lands that file, `daemon-entry-backups.test.ts` is red at HEAD (`open.composed.backupReads?.()` resolves undefined and the arm refuses to proceed - correctly, it was written not to pass silently). If their wrapper skips it symmetrically as contested against THIS row, the file lands from neither side. I warned them in #workers (msg-b110ff94) with the check (`git show <sha> --stat`, grep `Moe-Contested`) and the hand-landing recipe. Approving this row also removes it as a contest source.\n\n== 3. THE GAP I MEASURED THAT IS NOT THIS ROW'S DEFECT ==\n`grep -rn 'runScheduledBackup' --include=*.ts apps packages` returns ONLY `scheduled-backup.test.ts`. There is still no production caller, and `proofs` is an optional 4th parameter (`if (proofs !== undefined) persistRestoreProofs(...)`). So on a live daemon `/backups/read` answers an empty list until some row schedules the run AND passes the proof writer. This row's DoD does not ask for that wiring - DoD 1 is the durable record, DoD 2 the served route, both delivered and drilled - and the missing scheduler caller predates it (task-95e68a8d, DONE). Recording it as a follow-up for the epic-final hardening row rather than filing a new row, per the delivery-bias rail. The write path itself is correct: `recordWritten` derives `NOT_CHECKED` with `sha256: null, checkedAt: null`, and `persistRestoreProofs` never fails the run when a proof row refuses.\n\n== 4. DoD, ITEM BY ITEM ==\n1. THREE VALUES: `BackupRestoreProofState = \"PROVEN\" | \"FAILED\" | \"NOT_CHECKED\"` (backup-restore-proof.ts:60), REQUIRED on the record (:87), `restoreProofOfRunStatus` an exhaustive switch with no `default:` (:116-120) over a LOCAL `BackupRunStatus`, and `proofShapeOf` couples state to evidence both directions on write and read (:130-135, :150). Negative control re-run: `grep -rn '?? \"PROVEN\"\\|? \"PROVEN\"\\|| \"PROVEN\"'` over the three files -> only the doc comment at :15, zero code sites. Arms assert by VALUE (`toBe(\"NOT_CHECKED\")` at backups-read.test.ts:104, daemon-entry-backups.test.ts:230) plus `toContain('\"restoreProof\":\"NOT_CHECKED\"')` on the raw frame at :236 - a row count could not pass these.\n2. THROUGH THE PRODUCTION LISTENER: `daemon-entry-backups.test.ts` imports `startDaemon`, `createStoreDependencies` and `node:http`/`node:net`, takes the port off the composition (not hand-built) and fetches over a real socket. Codes are stable and layered: `LISTENER_BACKUPS_REQUEST_INVALID` 400, `LISTENER_BACKUPS_UNKNOWN_KEY` 400, `LISTENER_BACKUPS_UNAVAILABLE` 503 (http-listener-guards.ts:112-114, 274-276); no new layer literal - `CONTROL_ROOM_LISTENER_LAYER` reused, store refusals travel verbatim with `DAEMON_INGRESS`.\n3. ROSTER BACKFILLS: all four present and green - `roster.size` 35->36, `UNPROXIED_SERVED_PATHS` and `UNCONSUMED_SERVED_ROUTES` each with a comment naming this row AND task-679cdaa3 as the retiring consumer (the :505 arm greps those comments), and `\"backupReads\"` in the exact providerKeys list. Landed by me in c7456512.\n4/5. BROWSER HALF: split to task-679cdaa380874f55978e8790d770e37a (WORKING, `dependsOn: [\"task-1f994315fd164a789424349cb7bba4ca\"]` verified on disk), exactly as DoD 4 authorises. This row correctly touches zero control-room files.\n6. SECRETS: fixture is credential-shaped (`postgres://moe_admin:Sup3rS3cr3t-pw@db.internal.example:5432/moe_prod`) with a POSITIVE control proving the needle is findable before the `not.toContain` arms; refusal, record and frame paths all asserted clean (backup-restore-proof.test.ts:348-350, :361, :375-376; backups-read.test.ts:199-207, which also refuses `/` and `\\` so no raw path can leak).\n7. GATES: all three quoted with count lines in the worker's comment; two re-run by me above.\n\nDiff size is not a rejection reason on this board (globalRails customRule 2: no per-task net-LOC budget). Per-FILE cap respected on the new production sources: backup-restore-proof.ts 293 lines and backups-read.ts 213, both under the 400 split threshold.",
+      "timestamp": "2026-09-07T17:22:50.858Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T00:06:02.887Z",
-  "updatedAt": "2026-09-07T17:14:36.428Z",
+  "updatedAt": "2026-09-07T17:23:17.031Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T13:11:36.644Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 18,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-09-07T17:23:17.031Z",
+    "wallClockMs": 15100387
   },
   "planSizeWarnings": [
     "Plan touches 18 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -277,7 +285,98 @@
     "apps/daemon/src/daemon-store-foundation-composition.ts",
     "apps/daemon/src/daemon-store-dependencies.ts",
     "apps/daemon/src/daemon-store-dependencies.test.ts",
-    "apps/daemon/src/daemon-entry-backups.test.ts"
+    "apps/daemon/src/daemon-entry-backups.test.ts",
+    ".moe/tasks/task-117a3cd91a8a4db1a61830be8c28f2d2.json",
+    ".moe/tasks/task-1f994315fd164a789424349cb7bba4ca.json",
+    ".moe/tasks/task-eb37494e47924b659a0a1a77060b36eb.json"
   ],
-  "completionSummary": "Backups are readable: a durable per-backup restore-proof record in THREE states, persisted from the scheduled run and served over HTTP at `/backups/read` through the production listener. 18 files (7 new). Detail beyond this cap is in comment-1abf195102e041a08acd47010beae8f6.\n\nTHE THIRD VALUE is a new required member in a NEW vocabulary - `restoreProof: \"PROVEN\" | \"FAILED\" | \"NOT_CHECKED\"` on a new durable record - NOT a widened `ScheduledBackupResult.status`. That field is task-95e68a8d's delivered contract and answers the RUN's outcome, a different question from \"is this artifact known to restore\"; one field answering two is how they collapse. Three mechanisms make PROVEN unreachable by fallback rather than merely discouraged: (1) the field is REQUIRED, so no `?? \"PROVEN\"` site can exist; (2) `restoreProofOfRunStatus` is an EXHAUSTIVE SWITCH with no `default:` and no `??`/`||`, over a LOCALLY declared `BackupRunStatus` - local so the module stays a leaf and a widened run status becomes a type error at the CALL SITE; (3) `proofShapeOf` couples state to evidence BOTH ways on write AND on read, so a row hand-edited into the sidecar cannot claim an unearned PROVEN.\n\nSTORAGE, measured first as the plan required: `packages/store` has ZERO backup tables, so a new sidecar sqlite at `${storePath}.backups.sqlite`, copying `monitoring/health-probe-ring.ts` wholesale.\n\nTHE COMPOSITION CHAIN, all 7 files / 16 sites, applied by patches that abort on a missing or ambiguous anchor: dispatch (import, JSON_ROUTES, serve fn, method guard, dispatch branch), guards (3 codes + status map), http-listener (optional port + ABSENT comment), port-resolution (6 sites), daemon-entry (conditional spread), foundation-composition (store-backed port), store-dependencies (provider thunk). Proven end to end by `daemon-entry-backups.test.ts`, which reads the port off `createStoreDependencies` and fetches over a real socket.\n\nROSTER BACKFILLS all done: `roster.size` 35 -> 36 (the plan said 37; it was "
+  "completionSummary": "Backups are readable: a durable per-backup restore-proof record in THREE states, persisted from the scheduled run and served over HTTP at `/backups/read` through the production listener. 18 files (7 new). Detail beyond this cap is in comment-1abf195102e041a08acd47010beae8f6.\n\nTHE THIRD VALUE is a new required member in a NEW vocabulary - `restoreProof: \"PROVEN\" | \"FAILED\" | \"NOT_CHECKED\"` on a new durable record - NOT a widened `ScheduledBackupResult.status`. That field is task-95e68a8d's delivered contract and answers the RUN's outcome, a different question from \"is this artifact known to restore\"; one field answering two is how they collapse. Three mechanisms make PROVEN unreachable by fallback rather than merely discouraged: (1) the field is REQUIRED, so no `?? \"PROVEN\"` site can exist; (2) `restoreProofOfRunStatus` is an EXHAUSTIVE SWITCH with no `default:` and no `??`/`||`, over a LOCALLY declared `BackupRunStatus` - local so the module stays a leaf and a widened run status becomes a type error at the CALL SITE; (3) `proofShapeOf` couples state to evidence BOTH ways on write AND on read, so a row hand-edited into the sidecar cannot claim an unearned PROVEN.\n\nSTORAGE, measured first as the plan required: `packages/store` has ZERO backup tables, so a new sidecar sqlite at `${storePath}.backups.sqlite`, copying `monitoring/health-probe-ring.ts` wholesale.\n\nTHE COMPOSITION CHAIN, all 7 files / 16 sites, applied by patches that abort on a missing or ambiguous anchor: dispatch (import, JSON_ROUTES, serve fn, method guard, dispatch branch), guards (3 codes + status map), http-listener (optional port + ABSENT comment), port-resolution (6 sites), daemon-entry (conditional spread), foundation-composition (store-backed port), store-dependencies (provider thunk). Proven end to end by `daemon-entry-backups.test.ts`, which reads the port off `createStoreDependencies` and fetches over a real socket.\n\nROSTER BACKFILLS all done: `roster.size` 35 -> 36 (the plan said 37; it was ",
+  "commits": [
+    {
+      "sha": "b1da2cb9d88515dcfce1046d0cac0a0eaeed01de",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-7b684492@2026-09-07T16:27:39Z",
+      "paths": [
+        ".moe/tasks/task-117a3cd91a8a4db1a61830be8c28f2d2.json",
+        ".moe/tasks/task-1f994315fd164a789424349cb7bba4ca.json",
+        ".moe/tasks/task-eb37494e47924b659a0a1a77060b36eb.json",
+        "apps/daemon/src/backups/backup-restore-proof.js",
+        "apps/daemon/src/backups/backup-restore-proof.test.ts",
+        "apps/daemon/src/backups/backup-restore-proof.ts",
+        "apps/daemon/src/backups/scheduled-backup.test.ts",
+        "apps/daemon/src/backups/scheduled-backup.ts",
+        "apps/daemon/src/daemon-entry.ts",
+        "apps/daemon/src/daemon-entry-backups.test.ts",
+        "apps/daemon/src/daemon-entry-port-resolution.ts",
+        "apps/daemon/src/daemon-store-dependencies.ts",
+        "apps/daemon/src/http/backups-read.js",
+        "apps/daemon/src/http/backups-read.test.ts",
+        "apps/daemon/src/http/backups-read.ts",
+        "apps/daemon/src/http/http-listener.ts",
+        "apps/daemon/src/http/http-listener-guards.ts",
+        "apps/daemon/src/http/http-listener-read-dispatch.ts"
+      ],
+      "recordedBy": "worker-7b684492",
+      "recordedAt": "2026-09-07T17:14:48.212Z",
+      "treeId": "9594083d1f589604bdde1a209315929a81d25851",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-store-dependencies.test.ts",
+          "taskId": "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
+        },
+        {
+          "path": "apps/daemon/src/daemon-store-foundation-composition.ts",
+          "taskId": "task-620fb461689441d6bd1fed23ce62aff7"
+        },
+        {
+          "path": "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+          "taskId": "task-679cdaa380874f55978e8790d770e37a"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "c7456512",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-eaa78526@2026-09-07T17:12:00Z",
+      "paths": [
+        "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "recordedBy": "qa-eaa78526",
+      "recordedAt": "2026-09-07T17:19:12.600Z",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-store-foundation-composition.ts",
+          "taskId": "task-620fb461689441d6bd1fed23ce62aff7"
+        }
+      ],
+      "pushed": false,
+      "message": "QA hand-landing of the two contested paths b1da2cb9 skipped that carry only this row's bytes (roster.size 35->36 + census entries; backupReads in providerKeys). Third contested path excluded whole: it also carries task-620fb461's probeIntervalMs hunks."
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/daemon-entry-backups.test.ts",
+    "apps/daemon/src/http/backups-read.ts",
+    "apps/daemon/src/backups/backup-restore-proof.ts",
+    "apps/daemon/src/backups/backup-restore-proof.test.ts",
+    "apps/daemon/src/http/backups-read.test.ts",
+    "apps/daemon/src/backups/scheduled-backup.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-eaa78526@2026-09-07T17:12:00Z",
+    "at": "2026-09-07T17:19:12.600Z"
+  },
+  "completedAt": "2026-09-07T17:23:17.031Z",
+  "reviewCompletedAt": "2026-09-07T17:23:17.031Z",
+  "reviewSummary": "APPROVED. Full detail in comment-2c89d4080f.\n\nRE-RUN MYSELF on the delivered tree: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000` over the six owned test files -> Test Files 6 passed (6) / Tests 101 passed | 1 skipped, EXIT 0. `pnpm --filter @moe/daemon typecheck` -> EXIT 0, zero `error TS`. Full daemon leg NOT re-run: worker-4d8571e7 holds full-suite-gate (GATE START 17:13:35Z); the row's own leg is 590/590, 10524 passed, EXIT 0. A transient TS2741 on runs-read.ts was measured to task-de65294b's dirty contract (declaredMigrations absent at HEAD) and cleared next run.\n\nDoD: (1) restoreProof PROVEN|FAILED|NOT_CHECKED, REQUIRED, exhaustive switch no default, evidence coupled both directions; arms assert by VALUE and on the raw frame; grep for a \"PROVEN\" fallback finds only the doc comment. (2) reached through startDaemon over a real socket, port off createStoreDependencies; codes 400/400/503 rostered, no new layer. (3) all four roster backfills with the comments naming this row and its retiring consumer. (4/5) browser half split to task-679cdaa3 (WORKING, dependsOn verified on disk). (6) credential fixture with a positive control before every not.toContain. (7) three gates quoted.\n\nHAND-LANDING: b1da2cb9 skipped three declared paths as Moe-Contested, leaving HEAD RED (roster.size pinned 35 against 36 routes; providerKeys missing backupReads). Per-path measurement showed two carry only this row's bytes; landed as c7456512 and recorded. daemon-store-foundation-composition.ts excluded whole - it also carries task-620fb461's probeIntervalMs hunks, and until their landing carries it daemon-entry-backups.test.ts stays red at HEAD. Warned them in #workers (msg-b110ff94) with the check and recipe.\n\nFOLLOW-UP, not a defect here: runScheduledBackup still has no non-test caller and `proofs` is optional, so /backups/read serves an empty list on a live daemon until a scheduler row wires it."
 }

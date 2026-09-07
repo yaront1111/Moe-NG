@@ -102,7 +102,7 @@
       "completedAt": "2026-09-07T00:04:36.687Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -127,7 +127,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T20:05:08.102Z",
-  "updatedAt": "2026-09-07T00:09:07.649Z",
+  "updatedAt": "2026-09-07T17:23:17.220Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T22:15:46.064Z",
     "plannedStepCount": 6,
@@ -171,14 +171,11 @@
     "apps/control-room/src/v2/ops/live-ops.tsx",
     "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
   ],
-  "blockedReason": "STEP 4 CANNOT BE BUILT: two DoD clauses need daemon facts NO SERVED FRAME CARRIES. Steps 1,2,3,5,6 are DONE and GREEN, bytes on disk, 10 paths declared. Full evidence in comment-854c8110ba12414ea3422878783bac5e. A WAIT, not a terminal.\n\nGAP 1, DoD 1 SPARKLINE: the route projects ONE point - lastProbeOf (deployments-health-read.ts:175-181) returns probes.at(-1). The ring IS at the port (DeploymentsHealthSource.probes, :86) and is narrowed out at the view. One point is not an hour. Widening changes a RETURNED SHAPE whose asserting consumers (deployments-health-read.test.ts 20 arms, daemon-entry-deployments-health.test.ts 6 arms) sit outside this row's roster, so the roster rail says stop and report. Filed task-a98b01a4.\n\nGAP 2, DoD 3 BACKUPS: nothing is served. scheduled-backup.ts has the fact (status VERIFIED|FAILED :21, sha256 :23, proof :24) but grep outside its own directory returns ZERO importers - no port, no route, no composition, and no backups path in the served roster (http-listener-read-dispatch.ts:78-110). Also only TWO-valued, so \"not yet checked\" cannot be expressed. Filed task-1f994315. So the plan's DRILL 2 was NOT RUN and is NOT claimed - drilling a surface that does not exist would be fabricated.\n\nI did not narrow the DoD, invent a field, mock a frame or reimplement authority. Step 1 mandates exactly this.\n\nDELIVERED: exact-key client live-deployments-health.ts (216 ln, 13 arms), environments-section.tsx (178 ln, 9 arms), live-environments.tsx (132 ln, 9 arms), dev-proxy pin, two roster pins, both daemon censuses retired, live-ops.tsx +2. Retires DoD 2, 4, 5, 6 and DoD 1 minus the sparkline. ops-screens.tsx UNTOUCHED, 238 before and after vs 250.\n\nGATES: control-room test EXIT 0, Test Files 185 passed (185) / Tests 2321 passed (2321); typecheck EXIT 0, 19 Done; daemon dispatch test EXIT 0, Tests 17 passed (17). Drills 1 and 3 RED as required, restored by SHA256 against out-of-tree backups.",
-  "blockedOnTaskIds": [
-    "task-a98b01a44ffd46cba9d9648fcb7001cb",
-    "task-1f994315fd164a789424349cb7bba4ca"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-07T00:08:51.655Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "commits": [
     {
       "sha": "a24ac3df59df50927714339e62aa1108299f788f",

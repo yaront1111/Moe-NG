@@ -1,0 +1,61 @@
+{
+  "id": "task-bd2f1ecf186f4ab5884c2a3ada07108e",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "Gate 3 release authorization for a paired browser (owner-gated)",
+  "description": "Production prerequisite of task-817d893fa1254a4d82d2888af1f87a47, filed by architect-f362f7a6 after owner ruling comment-933e6a7c preserved the FULL evidence -> browser approve -> PR-link proof. Measurement in parent comment-4157b81a24544fab8ca45702d1843fd5 at b1da2cb9d88515dcfce1046d0cac0a0eaeed01de. This is NOT the missing contract-bound lane helper; that remains independently owned by task-6bafd3b9439640cba358dd6e79329c9d.\n\nOBJECTIVE: resolve and enforce the exact browser identity allowed to spend release.decide without opening MCP, impersonating the configured operator, or changing evidence/admission/replay authority. This row is OWNER-GATED before any production authority change. Candidate for the owner's decision: a release-only authorization arm for a currently authenticated, project-bound durable HUMAN with ADMIN, retaining its own principal id; configured operator behavior remains unchanged. The candidate is NOT approved by the parent's preserve-scope ruling. The owner may instead require an explicit operator step-up design; if that requires a new command/wire, split its producer work before implementation under the epic rails.\n\nMEASURED GAP: main.tsx:75-76/114+ uses real pairing and live-handshake.ts:170-185 carries its minted credential; http-listener-pairing-principal.test.ts:109-134 pins a HUMAN/session id distinct from the configured operator. daemon-command-registry.ts:330-336 selects the ASYNC release entry before the sync paired-human waiver. daemon-command-async-entries.ts:275-285 composes createReleaseDecideHandler. release-decide-command.ts:32-35 and release-decide-service.ts:118-120 both require exact operatorPrincipalId; the unconfigured fallback is separately fenced at async-entries.ts:186-190. OPERATOR_PRINCIPAL_KINDS includes release and MCP_EXCLUDED_COMMAND_KINDS derives from it at mcp-tool-allowlist.ts:94. Changing only the synchronous waiver does nothing; deleting the roster entry also opens MCP and is forbidden.\n\nFRESH CONTROL: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/release/release-decide-wiring.test.ts -t \"fences a non-operator principal even when fully composed\"` EXIT 0; Test Files 1 passed (1); Tests 1 passed | 5 skipped (6), 4.71s. This production-registry arm confirms OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION. It does not claim a live browser pass.\n\nDELIVERABLE after explicit owner approval: one focused release authorization policy composed at every reachable release entry, with positive/negative tests and unchanged command identity, evidence checks, durable receipts and MCP exclusion. Expected implementation envelope is <=8 named files, with production modules <=250 lines; pin exact files when policy is approved. No new command kind is assumed.\n\nNOT IN SCOPE: completing the contract-goal harness, editing the browser proof to use configured credentials, replacing a click with direct operator dispatch, hand-seeding evidence, changing the operator/MCP roster, live PR creation, main integration, or unrelated gate widening. No source edits before the owner's specific ruling is recorded.\n\nEXACT focused verification command: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/release`. Run fresh foreground, nonzero count lines required. The owning plan also names the existing MCP exclusion test and full daemon regression. Parent task-817d893f retains full live-browser acceptance and the existing epic-final task-6cbcf5ff retains whole-epic hardening; do not create a separate evidence row.",
+  "definitionOfDone": [
+    "Before production edits, an owner-authored or explicitly attributed owner ruling in a row comment selects the exact release-only authorization instrument and resolves its compatibility with the epic's operator-only rail. The plan has an explicit STOP before authority-changing steps. If not approved, remain blocked; neither scope preservation nor SPEED auto-approval supplies this authorization.",
+    "The approved policy is composed at every reachable release admission layer, including the durable command wrapper, service and unconfigured branch where applicable. Authenticated actor identity remains the actual caller; no operator impersonation, browser credential injection or parallel authorization implementation. Existing configured-operator behavior is preserved.",
+    "Production-surface tests prove the approved browser principal reaches release admission while agent, unknown/non-current session, wrong-project and insufficient-capability principals refuse with exact code AND layer before dossier, publication or PR effects; assert zero side-effect calls on refused arms and include replay/actor-identity coverage.",
+    "release.decide remains in the operator/human-only classification and excluded from MCP, with bidirectional served/excluded roster assertions. No other command's authorization changes; tests include a non-release operator kind as a negative control.",
+    "Focused `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/release` and the plan's MCP/daemon gates run fresh foreground with nonzero test counts and exit statuses. Record one bounded mutation proving the chosen authorization predicate is load-bearing, prove exact restoration, and disclose path-attributed foreign failures rather than calling them green."
+  ],
+  "taskRails": [
+    "OWNER APPROVAL IS A HARD STOP before production authorization edits. The parent's scope ruling is not a waiver of operator-only authority and does not choose this policy.",
+    "Do not remove release.decide from OPERATOR_PRINCIPAL_KINDS or alter derived MCP exclusions; do not substitute the configured operator credential/principal into browser requests.",
+    "The async release path bypasses the synchronous registry waiver. Trace and test the actual command wrapper plus service; no one-line sync waiver claimed as a fix.",
+    "Keep this a focused production authorization slice with its own tests. The parent owns end-to-end release proof and the existing epic-final owns full integration hardening."
+  ],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-817d893fa1254a4d82d2888af1f87a47",
+  "dependsOn": [
+    "task-54b74b8041c64bc2868435bcbdac6dd6",
+    "task-f961dc899a13488da8f119abdc37631f"
+  ],
+  "priority": "HIGH",
+  "order": 42.8,
+  "comments": [
+    {
+      "id": "comment-3b2b9a18bd90442aaa0abb80529b2d46",
+      "author": "architect-f362f7a6",
+      "content": "OWNER QUESTION / HARD STOP (durable on this row): Which principal/authorization instrument may approve release.decide from the browser? Proposed narrow option for explicit approval: current project-bound durable HUMAN holding ADMIN, limited to release.decide, actual actor id retained, MCP exclusion unchanged. Alternative: a distinct operator step-up design; do not guess its contract or implement it without approval. The existing exact-operator refusal is correct until this decision is made. Parent DoD-5 remains full browser release proof, not a direct configured-operator request.\n\nThe create_task meta warning is a title heuristic, not this row's subject: this row must DELIVER the missing production authorization behavior and its own tests, not audit/harden another row. No evidence-only row was filed. The existing epic-final task-6cbcf5ff retains whole-epic gates and the parent task-817d893f retains the browser/live-PR acceptance. The epic has 41 non-archived rows after this measured production gap; broad epic restructuring is not mixed into this narrow repair. Checked all 42 previous epic rows including archived and both pages of the 811-row non-archived title census: no existing paired-browser release authorization owner was identified.\n\nThe consumer edge is already registered: task-817d893f dependsOn now includes this row plus the separate contract-goal helper and all three original DONE dependencies. Please do not submit a SPEED plan with an implicit authorization edit before the owner answers.",
+      "timestamp": "2026-09-07T17:18:45.804Z"
+    },
+    {
+      "id": "comment-2ebc58d2998743e4a765c01cdaf45dea",
+      "author": "architect-f362f7a6",
+      "content": "Claimed for planning; read full context and moe-planning/explore-before-assume/systematic-debugging guidance. Asked the owner directly in the REPL: 'Do you approve allowing a currently authenticated, project-bound HUMAN with ADMIN to use release.decide, while retaining their identity and keeping MCP access blocked?' No answer has arrived as of this note; no plan submitted and no source edited.\n\nAdditional bounded exploration for the next architect: `isDurableHumanPrincipal` exists at apps/daemon/src/identity/human-approver.ts:22-28, reads readPrincipalRecord, and checks ONLY FOUND + kind HUMAN. It does NOT itself prove current authentication, project binding or ADMIN, so do not claim those properties from that predicate. Preserve the authentication boundary and separately enforce the approved capability/project checks. Current production lengths: release-decide-command.ts 165, release-decide-service.ts 226, daemon-command-async-entries.ts 378. A policy change should stay in a focused module; the service has little room below 250 and async entries is close to the 400 split rail. No new schema, runtime command, roster or shared-type change is assumed.\n\nVerification precision: the 1-passed focused test used an agent-shaped non-operator input against createAsyncCommandEntries. It proves the configured async entry's tested non-operator refusal, NOT a real pairing/browser run. The additional paired-HUMAN refusal inference is from the production guard's exact principalId inequality, combined with the separately tested handshake identity. A future positive test must prove actual authorized browser identity through the production ingress rather than relabel the agent arm or mint an operator-shaped fixture.",
+      "timestamp": "2026-09-07T17:20:59.926Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-07T17:18:12.578Z",
+  "updatedAt": "2026-09-07T17:21:00.234Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-07T17:19:37.645Z"
+  },
+  "contextFetchedBy": [
+    "architect-f362f7a6"
+  ],
+  "blockedReason": "OWNER AUTHORIZATION DECISION REQUIRED before planning authority-changing production steps. The configured async release command wrapper and service currently require exact operatorPrincipalId; the real browser pairs as a distinct durable HUMAN. The epic explicitly says operator-only principal. A narrow current/project-bound HUMAN+ADMIN release-only arm is proposed, NOT approved; an operator step-up alternative would have different implementation and contract scope. Asked the owner directly in the REPL, with the same question preserved on the row (comment-3b2b9a1); no answer received. The earlier parent ruling preserves the full browser release proof but does not select or authorize this instrument. Preserve both operator and MCP classifications, actual actor identity, and all evidence/replay fences. No source changes or plan submission; current code and the bounded non-operator test measurement are recorded on the row. Resume after an explicit owner ruling; do not let SPEED auto-approval act as authority.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-07T17:21:00.234Z"
+}
