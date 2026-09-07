@@ -4,7 +4,11 @@ import type { SqliteEventStore } from "@moe/store";
 
 export const MIGRATION_RECEIPT_VERSION = "moe-migration-receipt/1";
 const principal = "daemon:migration-engine";
-const kind = "internal.repository.migration_receipt";
+/** The command kind every migration receipt commits under. EXPORTED so a reader that has to
+ *  recognise the kind — the activity feed's verdict roster — names the same constant this module
+ *  writes, rather than retyping the string and drifting from it silently. */
+export const MIGRATION_RECEIPT_COMMAND_KIND = "internal.repository.migration_receipt" as const;
+const kind: string = MIGRATION_RECEIPT_COMMAND_KIND;
 const codeLayers = Object.freeze({ MIGRATION_BACKUP_FAILED: "DAEMON_INGRESS",
   MIGRATION_FAILED: "DAEMON_INGRESS", MIGRATION_IN_PROGRESS: "DAEMON_INGRESS", MIGRATION_RECEIPT_INVALID: "DAEMON_INGRESS",
   MIGRATION_RECEIPT_CONFLICT: "DAEMON_INGRESS", MIGRATION_RECEIPT_WRITE_FAILED: "DAEMON_INGRESS",

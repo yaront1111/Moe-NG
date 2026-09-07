@@ -12,6 +12,7 @@ import type { SqliteEventStore } from "@moe/store";
 
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
 import { DEPLOY_RECEIPT_COMMAND_KIND } from "../deployment/deploy-receipt-contracts.js";
+import { MIGRATION_RECEIPT_COMMAND_KIND } from "../repository/migrations/migration-receipt.js";
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
@@ -53,7 +54,8 @@ export interface ActivityEntry {
   /**
    * WHAT the decision decided, when its committed result carries a word for it: the route a
    * `review.submit` round took (`routing.route`), the `escalation.decide` answer (`decision`),
-   * the deploy receipt's `outcome` (DEPLOYED or REFUSED).
+   * the deploy receipt's `outcome` (DEPLOYED or REFUSED), the migration receipt's `outcome`
+   * (APPLIED, REFUSED or REVERTED).
    * Null for every other kind and for a conflict; the browser puts the words on.
    */
   readonly verdict: string | null;
@@ -86,8 +88,13 @@ const VERDICT_KINDS: ReadonlySet<string> = new Set([
   // The deploy receipt is the ONE kind here whose word is an `outcome` rather than a
   // `decision`: DEPLOYED and REFUSED are the distinction an operator scans the feed for, and
   // without this entry both render as the kind's own words and a refused deploy is invisible.
+  // The migration receipt is read the same way and for the same reason. APPLIED, REFUSED and
+  // REVERTED are three different things to have happened to a schema, and a feed that rendered
+  // all three as the bare kind would say a migration was DECIDED while never saying whether the
+  // database moved. The row stays a PROJECT observation: the receipt carries no goalRef or
+  // nodeRef, and nothing here attaches one.
   "approval.decide", "approval.decide_intent", "escalation.decide", "preview.decide",
-  "review.submit", DEPLOY_RECEIPT_COMMAND_KIND,
+  "review.submit", DEPLOY_RECEIPT_COMMAND_KIND, MIGRATION_RECEIPT_COMMAND_KIND,
 ]);
 
 /** A REJECT commits the run record with `decision` on it, so the word is READ. An APPROVE commits
@@ -113,7 +120,7 @@ export function verdictOf(commandKind: string, resultBytes: Uint8Array): string 
   // READ BEFORE `decisionWord`, and only for this kind. `outcome` is a common member of
   // committed results across this daemon (a publish receipt carries PUSHED), so offering it to
   // every kind would start captioning unrelated records with a deploy word.
-  if (commandKind === DEPLOY_RECEIPT_COMMAND_KIND) {
+  if (commandKind === DEPLOY_RECEIPT_COMMAND_KIND || commandKind === MIGRATION_RECEIPT_COMMAND_KIND) {
     const outcome = record["outcome"];
     return typeof outcome === "string" && outcome.length > 0 ? outcome : null;
   }

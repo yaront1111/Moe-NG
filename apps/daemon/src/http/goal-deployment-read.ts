@@ -6,6 +6,9 @@ import { ENVIRONMENT_NAMES } from "../environment/environment-contracts.js";
 import { readPublishLedger } from "../repository/publish-ledger.js";
 import { readReleaseReceipt } from "../release/release-receipt-ledger.js";
 import { releaseReceiptId } from "../release/release-receipt-contracts.js";
+import { DEPLOY_BUILD_CONTEXT_ENV_KEY } from "../deployment/deploy-command.js";
+import { readMigrationObservation } from "../deployment/migration-observation.js";
+import type { MigrationObservation } from "../deployment/migration-observation.js";
 import { record } from "./affordance-planning-offers.js";
 import { readRunGoalPublication } from "./run-goal-publication.js";
 
@@ -19,6 +22,14 @@ export interface DeploymentEnvironmentRead {
   readonly code: string | null;
   readonly detail: string | null;
   readonly releaseDecision: string | null;
+  /**
+   * WHAT THE SCHEMA DID under this environment's current deploy, bounded by
+   * `migration-observation.ts`: a PROJECT/ENVIRONMENT observation, never node or goal ownership,
+   * carrying no path, no connection value and no download affordance. ALWAYS PRESENT — an
+   * environment with no deploy or no readable receipt carries the UNKNOWN form, because omitting
+   * the member or handing back an empty migration list would read as "nothing to apply".
+   */
+  readonly migration: MigrationObservation;
 }
 export type GoalDeploymentRead = Readonly<{ outcome: "DEPLOYMENTS"; goalRef: string;
   sha: string | null; releaseDecision: string | null; environments: readonly DeploymentEnvironmentRead[] }>
@@ -37,6 +48,10 @@ export function readGoalDeployments(store: SqliteEventStore, projectId: string, 
     if (release !== null && !release.ok && release.code !== "RELEASE_RECEIPT_NOT_FOUND") return refused(release.code);
     const deployments = readDeployLedger(store, projectId);
     const targets = productionDeployPorts(store, projectId).target;
+    // The host-scoped build context the deploy composition itself reads. It is the root whose
+    // confined pre-migration directory a backup reference has to sit in; unset means the backup
+    // stays UNVERIFIED rather than being promoted to one that exists.
+    const backupRoot = process.env[DEPLOY_BUILD_CONTEXT_ENV_KEY] ?? null;
     return { outcome: "DEPLOYMENTS", goalRef, sha,
       releaseDecision: release?.ok === true ? release.receipt.receiptId : null,
       environments: ENVIRONMENT_NAMES.map((environment) => {
@@ -45,7 +60,8 @@ export function readGoalDeployments(store: SqliteEventStore, projectId: string, 
           url: receipt?.url ?? target?.url ?? null, outcome: receipt?.outcome ?? null,
           sha: receipt?.sha ?? null, time: receipt?.decidedAt ?? null,
           code: receipt?.refusal?.code ?? null, detail: receipt?.refusal?.detail ?? null,
-          releaseDecision: receipt?.releaseDecision ?? null };
+          releaseDecision: receipt?.releaseDecision ?? null,
+          migration: readMigrationObservation(store, projectId, environment, receipt ?? null, { backupRoot }) };
       }),
     };
   } catch { return refused("DEPLOYMENTS_READ_UNREADABLE"); }

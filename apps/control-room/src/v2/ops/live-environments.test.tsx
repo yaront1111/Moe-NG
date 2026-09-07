@@ -35,6 +35,14 @@ const environmentRow = (environment: string, outcome: "DEPLOYED" | "REFUSED"): R
   code: outcome === "REFUSED" ? "DEPLOY_BUILD_FAILED" : null,
   detail: null,
   environment,
+  // The migration observation rides every environment row on the wire. A deployed environment
+  // whose schema evidence was never written is UNKNOWN, not "nothing to apply".
+  migration: {
+    backupSha256: null, backupState: null, environment, migrations: null, outcome: null,
+    receiptId: null, refusalCode: null, refusalFile: null, refusalLayer: null,
+    state: "UNKNOWN", subject: "PROJECT_ENVIRONMENT",
+    unknownCode: "MIGRATION_RECEIPT_ABSENT", unknownLayer: "DAEMON_INGRESS",
+  },
   outcome,
   releaseDecision: null,
   sha: outcome === "DEPLOYED" ? "c".repeat(40) : null,

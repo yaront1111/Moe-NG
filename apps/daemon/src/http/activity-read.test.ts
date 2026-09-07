@@ -3,11 +3,18 @@
  * entry is a decision record's own facts; the goal scope is proven by a second goal whose
  * decisions must not leak into the first goal's list.
  */
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
   GOAL_CREATE_COMMAND_ID, GOAL_ID, PROJECT_ID, closeStores, driveThrough, envelope, openStore, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { MIGRATION_RECEIPT_COMMAND_KIND, migrationReceiptId } from "../repository/migrations/migration-receipt.js";
+import { revertLastBatch } from "../repository/migrations/migration-down-service.js";
+import { migrateWithBackup } from "../repository/migrations/migration-service.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
 import { DEPLOY_RECEIPT_COMMAND_KIND } from "../deployment/deploy-receipt-contracts.js";
 import { activitySelectorOf, createActivityReadPort, handleActivityReadRequest, isSeatRecord, verdictOf } from "./activity-read.js";
@@ -217,6 +224,18 @@ describe("verdictOf", () => {
     expect(verdictOf("integration.accept_output", bytes({ outcome: "DEPLOYED" }))).toBeNull();
     expect(verdictOf("approval.decide", bytes({ outcome: "DEPLOYED" }))).toBeNull();
     expect(verdictOf("internal.repository.publish_receipt", bytes({ outcome: "PUSHED" }))).toBeNull();
+    // The migration branch shares the deploy branch's scoping and must not widen it either: a
+    // publish receipt's PUSHED is not a migration word.
+    expect(verdictOf("internal.repository.publish_receipt", bytes({ outcome: "APPLIED" }))).toBeNull();
+    expect(verdictOf("integration.accept_output", bytes({ outcome: "REVERTED" }))).toBeNull();
+    expect(verdictOf("approval.decide", bytes({ outcome: "REFUSED" }))).toBeNull();
+    expect(verdictOf(MIGRATION_RECEIPT_COMMAND_KIND, bytes({}))).toBeNull();
+    expect(verdictOf(MIGRATION_RECEIPT_COMMAND_KIND, bytes({ outcome: "" }))).toBeNull();
+    expect(verdictOf(MIGRATION_RECEIPT_COMMAND_KIND, bytes({ outcome: 7 }))).toBeNull();
+    expect(verdictOf(MIGRATION_RECEIPT_COMMAND_KIND, bytes({ decision: "APPROVE" }))).toBeNull();
+    expect(verdictOf(MIGRATION_RECEIPT_COMMAND_KIND, bytes({ lifecycle: "EXECUTION_ENABLED" }))).toBeNull();
+    expect(verdictOf(MIGRATION_RECEIPT_COMMAND_KIND, encoder.encode("{not json"))).toBeNull();
+    expect(verdictOf(MIGRATION_RECEIPT_COMMAND_KIND, new Uint8Array())).toBeNull();
     expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, bytes({}))).toBeNull();
     expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, bytes({ outcome: "" }))).toBeNull();
     expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, bytes({ outcome: 7 }))).toBeNull();
@@ -290,5 +309,98 @@ describe("approval verdicts over a real store", () => {
     approvePlan(store, sealed.runId);
     expect(rowsFor({ store }).map((row) => `${row.commandKind}=${row.verdict ?? "null"}`))
       .toEqual(["approval.decide_intent=APPROVE"]);
+  });
+});
+
+/**
+ * MIGRATION RECEIPTS IN THE FEED, over receipts written by the PRODUCTION engines rather than
+ * hand-built bytes. Three outcomes, three words: a feed that rendered APPLIED, REFUSED and
+ * REVERTED identically would say a migration was decided while never saying whether the schema
+ * moved. The row is a PROJECT observation and must stay out of every goal-filtered read.
+ */
+describe("migration receipt verdicts over a real store", () => {
+  const roots: string[] = [];
+  afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+  const BATCH = ["1700000000001-first.js"];
+  const at = (hour: number) => new Date(`2026-09-06T0${hour}:00:00.000Z`);
+
+  async function seeded() {
+    const projectRoot = mkdtempSync(join(tmpdir(), "moe-activity-migration-")); roots.push(projectRoot);
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    const bound = send(store, envelope("goal.create_with_source", 0, {
+      instructions: "Build it.", source: { displayPath: "docs/prd.md", mediaType: "text/markdown", text: PRD },
+      title: "Watched goal",
+    }, GOAL_CREATE_COMMAND_ID));
+    if (!bound.ok) throw new Error(`fixture bind refused: ${bound.code}`);
+    const base = { projectRoot, workspace: projectRoot, projectId: PROJECT_ID,
+      environment: "production", databaseUrl: "postgresql://localhost/fixture" };
+    const dump = async (_connection: string, path: string) => { writeFileSync(path, "fixture backup"); };
+    const applied = await migrateWithBackup(store, { ...base, requestId: "m-applied", sha: "a".repeat(40), now: at(1) },
+      { dump, apply: async () => BATCH });
+    const refused = await migrateWithBackup(store, { ...base, requestId: "m-refused", sha: "a".repeat(40), now: at(2) },
+      { dump: async () => { throw new Error("unavailable"); }, apply: async () => BATCH });
+    const reverted = await revertLastBatch(store, { ...base, requestId: "m-reverted",
+      toMigrationRequestId: "m-applied", now: at(3) },
+      { dump, revert: async (_workspace, _connection, batch) => [...batch].reverse() });
+    return { applied, refused, reverted, store };
+  }
+
+  const migrationRows = (store: ReturnType<typeof openStore>, selector: { readonly goalRef: string } | Record<never, never>) =>
+    activity(createActivityReadPort({ projectId: PROJECT_ID, store, readActive: () => [] }).readActivity(selector))
+      .entries.filter((entry) => entry.commandKind === MIGRATION_RECEIPT_COMMAND_KIND);
+
+  it("renders each outcome as its own word on the project feed", async () => {
+    const world = await seeded();
+    expect([world.applied.outcome, world.refused.outcome, world.reverted.outcome])
+      .toEqual(["APPLIED", "REFUSED", "REVERTED"]);
+    const rows = migrationRows(world.store, {});
+    // Keyed by the receipt's own aggregate so a shared default word cannot pass this.
+    expect(new Map(rows.map((row) => [row.targetAggregateId, row.verdict]))).toEqual(new Map([
+      [`migration:${world.applied.receiptId}`, "APPLIED"],
+      [`migration:${world.refused.receiptId}`, "REFUSED"],
+      [`migration:${world.reverted.receiptId}`, "REVERTED"],
+    ]));
+    expect(rows.every((row) => row.principalId === "daemon:migration-engine")).toBe(true);
+  });
+
+  it("keeps migration rows out of a GOAL-filtered read", async () => {
+    const world = await seeded();
+    // Asserted directly, not inferred: `migration:<receiptId>` is in no goal's target set, and a
+    // goal-scoped read that started returning these rows would be exactly the bleed DoD 2 forbids.
+    expect(migrationRows(world.store, {})).not.toHaveLength(0);
+    expect(migrationRows(world.store, { goalRef: GOAL_ID })).toEqual([]);
+    const scoped = activity(createActivityReadPort({ projectId: PROJECT_ID, store: world.store, readActive: () => [] })
+      .readActivity({ goalRef: GOAL_ID }));
+    expect(scoped.entries.some((entry) => entry.targetAggregateId.startsWith("migration:"))).toBe(false);
+  });
+
+  it("carries a migration row in the SAME seven members every other kind uses", async () => {
+    const world = await seeded();
+    const row = migrationRows(world.store, {})
+      .find((entry) => entry.targetAggregateId === `migration:${world.applied.receiptId}`);
+    // The browser decodes this feed with an exact-key roster, so an eighth member added here
+    // would be refused there rather than rendered. Pin the key set so that cannot happen quietly.
+    expect(Object.keys(row ?? {}).toSorted()).toEqual([
+      "commandKind", "decidedAt", "disposition", "principalId", "targetAggregateId", "verdict", "version",
+    ]);
+  });
+
+  it("degrades a corrupt migration decision to no word instead of throwing", async () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    const id = migrationReceiptId(PROJECT_ID, "m-broken");
+    const bytes = encoder.encode('{"version":"moe-migration-receipt/1"}');
+    const response = store.commitExpectedVersionDecision({ commandKind: MIGRATION_RECEIPT_COMMAND_KIND,
+      committedResultBytes: bytes, correlationId: "m-broken", decidedAt: "2026-09-06T05:00:00.000Z",
+      events: [{ eventId: `${id}-recorded`, eventType: "MigrationRecorded", payload: bytes }],
+      expectedVersion: 0, key: { commandId: id, principalId: "daemon:migration-engine", projectId: PROJECT_ID },
+      requestBytes: bytes, targetAggregateId: `migration:${id}` });
+    if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") throw new Error("fixture corruption refused");
+    // `verdictOf` never throws by contract: a record with no readable outcome is a row with no
+    // word, never a propagated failure that would take the whole feed down with it.
+    const rows = migrationRows(store, {});
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ targetAggregateId: `migration:${id}`, verdict: null });
   });
 });

@@ -980,7 +980,13 @@ function renderWiredApp(
     if (input === "/deployments/read") return Promise.resolve(jsonResponse({
       outcome: "DEPLOYMENTS", goalRef: DURABLE.goalRef, sha: "a".repeat(40), releaseDecision: null,
       environments: [{ environment: "staging", target: "local Docker (moe-test)", url: null,
-        code: null, detail: null, outcome: null, releaseDecision: null, sha: null, time: null }],
+        code: null, detail: null, outcome: null, releaseDecision: null, sha: null, time: null,
+        // The migration observation is REQUIRED on the wire; UNKNOWN is what a never-deployed
+        // environment carries, and omitting it would be refused rather than rendered empty.
+        migration: { subject: "PROJECT_ENVIRONMENT", environment: "staging", state: "UNKNOWN",
+          receiptId: null, outcome: null, migrations: null, backupState: null, backupSha256: null,
+          refusalCode: null, refusalLayer: null, refusalFile: null,
+          unknownCode: "MIGRATION_RECEIPT_ABSENT", unknownLayer: "DAEMON_INGRESS" } }],
     }));
     if (input === "/affordances/read") {
       return Promise.resolve(jsonResponse({
