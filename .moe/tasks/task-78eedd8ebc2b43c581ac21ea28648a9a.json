@@ -191,7 +191,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:48:57.960Z",
-  "updatedAt": "2026-09-07T19:21:34.038Z",
+  "updatedAt": "2026-09-07T19:21:49.157Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:32:30.829Z",
     "plannedStepCount": 9,
@@ -335,6 +335,32 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "f75cc63d5c82914240e6fceec2dc27d33907d665",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-76f4ef35@2026-09-07T19:18:01Z",
+      "paths": [
+        ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json",
+        "tests/e2e/control-room/deploy-migrations.spec.ts"
+      ],
+      "recordedBy": "worker-76f4ef35",
+      "recordedAt": "2026-09-07T19:21:49.157Z",
+      "treeId": "625cb1d001c82f41e42e93807ca57a6f8abb25ba",
+      "status": "BLOCKED",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/ops/activity-words.test.ts",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        },
+        {
+          "path": "apps/control-room/src/v2/ops/activity-words.ts",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -357,6 +383,6 @@
     "outcome": "committed",
     "kind": "checkpoint",
     "sessionId": "worker-76f4ef35@2026-09-07T19:18:01Z",
-    "at": "2026-09-07T19:18:14.467Z"
+    "at": "2026-09-07T19:21:49.157Z"
   }
 }

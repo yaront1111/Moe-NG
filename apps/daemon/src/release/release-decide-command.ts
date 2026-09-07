@@ -4,6 +4,8 @@ import type { JsonObject } from "@moe/contracts";
 import { identifyReplayRequest } from "@moe/store";
 import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 import { DomainRefusal } from "../daemon-command-dispatch.js";
+import { CAPABILITIES } from "../daemon-command-vocabulary.js";
+import { isDurableHumanPrincipal } from "../identity/human-approver.js";
 import { DAEMON_COMMAND_SEAM } from "../http/http-async-contract.js";
 import type { AsyncCommandHandler } from "../http/http-async-contract.js";
 import type { CommandHandlerInput, DurableDecision } from "../http/http-contract.js";
@@ -29,12 +31,66 @@ function refuse(code: string, status = 422): never {
   throw new DomainRefusal(code, DAEMON_COMMAND_SEAM, code, status);
 }
 
-function admittedInput(input: CommandHandlerInput, options: Options): CommandHandlerInput {
-  if (input.principal.principalId !== options.operatorPrincipalId) {
+/** Exactly the options the fence reads. Narrower than `Options` so the assertion cannot
+ *  reach the clock, and so every release entry can pass what it already holds. */
+export type ReleasePrincipalOptions = Pick<Options,
+  "operatorPrincipalId" | "projectId" | "store">;
+
+/**
+ * WHO MAY SPEND `release.decide`. The ONE authorization fence for this kind, composed at
+ * every release entry so the async path cannot bypass it the way it bypasses the registry's
+ * synchronous waiver.
+ *
+ * Owner ruling comment-e9ecfd4c (2026-09-07) approved exactly one widening beside the
+ * configured operator: a CURRENTLY AUTHENTICATED, PROJECT-BOUND, durable HUMAN principal
+ * holding ADMIN, acting under ITS OWN id. It is the third instance of the shape
+ * `daemon-command-registry.ts` already carries for `approval.decide` and
+ * `project.set_agent_provider` -- a disjunct composed BEFORE the operator fence, minting no
+ * new code, layer or roster entry. `OPERATOR_PRINCIPAL_KINDS` is deliberately untouched:
+ * `MCP_EXCLUDED_COMMAND_KINDS` is DERIVED from it, so shrinking that roster to open this
+ * path would silently open the MCP fence too.
+ *
+ * TRUST CONTRACT, and the reason the four conjuncts are separate. AUTHENTICATION IS NOT
+ * PERFORMED HERE: `authenticateHttpRequest` has already run at the ingress and no principal
+ * reaches this function unauthenticated, so `principal.principalId` is a CURRENT identity by
+ * construction. `isDurableHumanPrincipal` proves only that a durable record under that id
+ * spells HUMAN -- it proves neither authentication, nor project binding, nor ADMIN -- so the
+ * project comparison and the ADMIN capability are each checked here in their own right. The
+ * capability check is deliberately redundant with the ingress capability gate; that is
+ * defence in depth, and it is what a mutation drill removes to prove the arm load-bearing.
+ *
+ * FAIL CLOSED. A durable read that throws is a refusal, never an admission: the widening
+ * disjunct is the only thing the throw can cost, and the operator branch is unaffected.
+ */
+export function assertReleasePrincipal(
+  input: CommandHandlerInput, options: ReleasePrincipalOptions,
+): void {
+  const { principal } = input;
+  if (principal.principalId !== options.operatorPrincipalId
+    && !releaseByPairedAdmin(input, options)) {
     throw new DomainRefusal("OPERATOR_PRINCIPAL_REQUIRED", "DAEMON_AUTHORIZATION",
       "this command requires the configured operator principal", 403);
   }
-  if (input.principal.projectId !== options.projectId) refuse("RELEASE_PROJECT_MISMATCH", 403);
+  if (principal.projectId !== options.projectId) refuse("RELEASE_PROJECT_MISMATCH", 403);
+}
+
+function releaseByPairedAdmin(
+  input: CommandHandlerInput, options: ReleasePrincipalOptions,
+): boolean {
+  const { envelope, principal } = input;
+  if (envelope.commandKind !== KIND || principal.projectId !== options.projectId
+    || !principal.capabilities.includes(CAPABILITIES.ADMIN)) {
+    return false;
+  }
+  try {
+    return isDurableHumanPrincipal(options.store, principal.principalId);
+  } catch {
+    return false;
+  }
+}
+
+function admittedInput(input: CommandHandlerInput, options: Options): CommandHandlerInput {
+  assertReleasePrincipal(input, options);
   const decoded = decodeRuntimeCommandEnvelopeBytes(bytes(input.envelope));
   if (!decoded.ok) refuse(decoded.error.code);
   const envelope = decoded.envelope, payload = envelope.payload;

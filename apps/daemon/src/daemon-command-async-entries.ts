@@ -7,9 +7,11 @@ import { createFoundationVerificationHandler }
 import { FOUNDATION_VERIFICATION_COMMAND_KIND }
   from "./evidence/foundation-verification-contracts.js";
 import type { CommandRegistryEntry } from "./http/http-contract.js";
-import { DomainRefusal, domainRefusalOf } from "./daemon-command-dispatch.js";
+import { domainRefusalOf } from "./daemon-command-dispatch.js";
 import { RELEASE_DECIDE_COMMAND_KIND, releaseRefusal }
   from "./release/release-decide-contracts.js";
+import { assertReleasePrincipal } from "./release/release-decide-command.js";
+import type { ReleasePrincipalOptions } from "./release/release-decide-command.js";
 import { createReleaseDecideHandler } from "./release/release-decide-service.js";
 import type {
   ReleaseDossierFactsPort, ReleasePublisher,
@@ -178,15 +180,18 @@ export interface ReleaseDecideSeams {
   readonly workspace?: string | null;
 }
 
-/** Async entries bypass the registry's synchronous fence, so release fences at entry. */
+/**
+ * Async entries bypass the registry's synchronous fence, so release fences at entry -- and
+ * on the SAME assertion the composed handler spends, so an unconfigured daemon can never
+ * admit someone the configured one would refuse. The membership check stays: it is what says
+ * out loud that this kind is fenced because it is operator-classified.
+ */
 function unconfiguredReleaseHandler(
-  operatorPrincipalId: string,
+  options: ReleasePrincipalOptions,
 ): NonNullable<CommandRegistryEntry["asyncHandler"]> {
   return async (input) => {
-    if (OPERATOR_PRINCIPAL_KINDS.has(RELEASE_DECIDE_COMMAND_KIND)
-      && input.principal.principalId !== operatorPrincipalId) {
-      throw new DomainRefusal("OPERATOR_PRINCIPAL_REQUIRED", "DAEMON_AUTHORIZATION",
-        "this command requires the configured operator principal", 403);
+    if (OPERATOR_PRINCIPAL_KINDS.has(RELEASE_DECIDE_COMMAND_KIND)) {
+      assertReleasePrincipal(input, options);
     }
     throw domainRefusalOf(releaseRefusal("RELEASE_PR_FAILED",
       "no release port is composed for this daemon"));
@@ -284,7 +289,9 @@ export function createAsyncCommandEntries(
         // is a DIFFERENT thing from an absent key, and only the absent key means "real clock".
         ...(releaseSeams.clock === undefined ? {} : { clock: releaseSeams.clock }),
       })
-      : unconfiguredReleaseHandler(options.operatorPrincipalId);
+      : unconfiguredReleaseHandler({
+        operatorPrincipalId: options.operatorPrincipalId, projectId, store,
+      });
   const startPreviewCommand = createPreviewStartHandler({
     operatorPrincipalId: options.operatorPrincipalId, projectId, store,
     // Spread rather than assigned: under exactOptionalPropertyTypes an explicit `undefined` is a

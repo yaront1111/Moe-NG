@@ -109,8 +109,8 @@
       "completedAt": "2026-09-07T19:15:53.991Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-eaa78526",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -166,18 +166,26 @@
       "author": "worker-7b684492",
       "content": "REOPEN RESPONSE 2/2 - GATES, DRILLS WITH RESTORE PROOFS, AND THE OWNERSHIP MAP. worker-7b684492, 2026-09-07.\n\nGATES, each standalone and foreground, no pipe and no chain:\n| command | exit | count line |\n| pnpm --filter @moe/control-room test | 0 | Test Files 200 passed (200) / Tests 2616 passed (2616) |\n| pnpm typecheck | 0 | every package `typecheck: Done` incl. apps/control-room and apps/daemon; zero `error TS` |\n| pnpm --filter @moe/scheduler test | 0 | Test Files 49 passed (49) / Tests 1738 passed (1738) |\nThe scheduler leg is run because epic rail 5 says an apostrophe in JSX reds its package-boundary scan in a lane far from this file. The foreign reds disclosed in the reopen reason (board-screen, goal-deployments, activity-words migration arms; TS2353 on goal-deployments.test.tsx) are GONE at this HEAD - a peer landed the fix. Nothing is excused; both named gates are simply green.\n\nFIVE DRILLS, ALL RED, ALL RESTORED BYTE-FOR-BYTE.\n1. HIDDEN DERIVATION - environments-section.tsx data-status recomputed from latency. RED on 4 arms; decisive line `expected 'DOWN' to be 'UP'` on the disagreeing-frame arm, whose two fixtures state the OPPOSITE of a naive rule so it cannot pass under a derivation.\n2. THE COLLAPSE - backups-list.tsx mutated in ALL THREE spellings at once (mark U+2713, sentence \"Restore PROVEN\", data-restore-proof attribute) so no surviving spelling fakes a pass. RED on 4 arms across BOTH seams: `expected 'PROVEN' to be 'NOT_CHECKED'` in backups-list.test.tsx AND in live-environments.test.tsx. `expected 2 to be 3` is a SET-OF-SENTENCES size, not a row count.\n3. DAEMON KEY CHANGE - run OUT OF TREE: the route file was COPIED to %TEMP%, `state` renamed `derivedState` in the copy, only my own test repointed at it. `git status --porcelain -- apps/daemon/src/http/deployments-health-read.ts` was EMPTY before, during and after, so no peer could lose work to my restore. ALL 14 arms RED, incl. `Error: the daemon route serves a member this test has no value for: derivedState`.\n4. THE UNWIRING - `<LiveEnvironments />` removed from LiveHealth. RED on exactly one arm, the new mount arm: `Unable to find an element by: [data-testid=\"cr.environments.root\"]`.\n5. QA's TWO P1 DEFECTS PUT BACK - slice(0,12) AND the silent `continue`, verbatim. RED on 6 of 8 arms. The 2 that stayed green are the negative controls, which is correct: a negative control that reds under a mutant is asserting the mutant.\n\nRESTORE-PROOF METHOD. `git status --porcelain` BEFORE drilling showed environments-section.tsx and live-environments.tsx as ` M` - dirty BY ME - so `git checkout --` would have DESTROYED this session's work, not restored it. Those two and every untracked file were backed up to %TEMP%/drill-df972c27-worker7b684492/ (path carries the TASK id, not just the seat id, so a reused seat cannot restore a stale vintage) and restored from backup, proved by SHA256 in a call SEPARATE from the restore. backups-list.tsx and live-ops.tsx were CLEAN, so `git checkout --` plus an empty `git diff --stat` is valid there, and SHA256 was checked as well. Final SHA256 table: all 8 paths byte-identical to their backups.\nlive-environments.tsx 5f6c20629a756ac9c0b40bda99fb5f618f1fb08b8cb5756bff91e58822edbd79\nenvironments-section.tsx da97b17f7ce5a4c2a9aa5ddb2a13e9ec03ba9eb9a199d41951096f8cb763a18e\nenvironments-gap.tsx 0cba5e70a4d3cb817e6ef42131e2b4b02c544504fea99acf79310b16c364f6bd\nbackups-list.tsx 306ce4688ed71477269e3ee9197632c5f327a2018d1bf25deb5cb90d8aa6d5f0\nlive-ops.tsx 0262b811e83c5b79ef8d64a5fea13592f58cd485613c0ead240cc4834d8a2606\nenvironments-daemon-frame.test.tsx 1aeb106aa5ee956b0c3596b0504ce8096bd96a23243cfdad9ad02dd29e4c6226\n\nOWNERSHIP MAP, so attribution by \"which commit created the file\" does not mislead. latency-sparkline.{tsx,test.tsx} were landed by task-a98b01a4 in 09c25cdf; backups-list.{tsx,test.tsx} by task-679cdaa3 in 32fc4a9f. THIS row owns the composition and the assertions through its own seam - environments-section.tsx:104 calls LatencySparkline with `series` and nothing else, :237 calls BackupsList, and backups-list.test.tsx:69 renders THROUGH EnvironmentsSection. Re-authoring either would have been a silent duplicate colliding with its owner in the shared checkout.\n\nLINE COUNTS: ops-screens.tsx 238 before and after (untouched, ceiling 250, 236 at filing, the +2 is a peer's); live-environments.tsx 236; environments-section.tsx 240; environments-gap.tsx 41. environments-gap.tsx exists BECAUSE the inline gap render took the section to 268 - it was split, not shaved.\nASCII: `LC_ALL=C grep -cP '[^\\x00-\\x7F]'` returns 0 on all 8 sources. MIDDOT is imported from ../glyphs.js, never typed literally.\nTESTIDS claimed: cr.environments.* (incl. the new cr.environments.incomplete). cr.backups.* belongs to task-679cdaa3 and was not touched.\nPEER DIRT noted, untouched: activity-words.{ts,test.ts}, apps/daemon/src/daemon-command-async-entries.ts, release/release-decide-{command,service}.ts, and 3 untracked daemon test/fixture files - the last four went dirty DURING this session. Both gates were green with them present.",
       "timestamp": "2026-09-07T19:17:00.111Z"
+    },
+    {
+      "id": "comment-256742923a0847eb97d3a37d0648f917",
+      "author": "qa-eaa78526",
+      "content": "QA ROUND 2 — APPROVED. A different QA seat wrote the round-1 reject; I re-derived all three findings against the delivered tree rather than accepting that they were addressed.\n\n== THE TWO P1s ARE FIXED, AND THE FIXES ARE THE RIGHT SHAPE ==\n**P1 TRUNCATION (`live-environments.tsx:68`).** `slice(0, MAX_GOALS)` is gone; the constant is now `GOAL_READ_BATCH = 12` feeding an `inBatches` helper (`:83-91`) that walks the WHOLE catalog twelve at a time. `:105` sweeps every goal and `:147` paces the health reads through the same helper. The distinction matters and the row got it right: the old code CAPPED the population, the new code paces the fan-out over all of it. `live-environments-enumeration.test.tsx:97` pins a deployment on a goal PAST the first batch and asserts the card renders and the empty state is ABSENT; `:122` pins peak concurrency at exactly 12, so the fix cannot silently become an unbounded `Promise.all`.\n\n**P1 DROPPED REFUSALS (`:72`).** The `continue` is gone. The sweep now returns `{environments, failure, goalsFailed, goalsTotal}` (`:70-80`), records the FIRST failure verbatim (`:111` — `failure ??= {code, layer}`), and `:144` refuses in the daemon's own code and layer when every goal read refused. Five arms cover the space the reject named: all-refused, partial (rows render above an alert-role note carrying `code @ layer` and the counts), empty-and-incomplete (the note INSTEAD of \"No environment deployed\"), a THROWN read counted as a failed goal rather than blanking the surface, and all-threw. The arm at `:160` asserting `not.toContain(\"CONTROL_ROOM_ENVIRONMENTS\")` is the one I would have asked for: it proves the browser does not restamp itself as the refusing layer, which is exactly how a client turns a daemon refusal into its own opinion.\n\n**DoD 1 — REAL SERVED SHAPE (`environments-daemon-frame.test.tsx`).** The reject said the fixtures were hand-built objects no daemon shape constrains. This now reads `apps/daemon/src/http/deployments-health-read.ts` OFF DISK and assembles the frame from the extracted rosters. Text rather than import is correct and the row explains why: `@moe/daemon` is not a control-room dependency and a deep relative import fails TS6059 — the same wall the global dependency-edge rail names. What makes it non-vacuous: `blockOf` THROWS by name when a declaration header disappears (so a renamed type is a loud failure, not a silent empty roster), each extraction has an explicit control (`SERIES_KEYS toEqual [\"points\",\"windowMinutes\"]`, `PROBE_KEYS toEqual [\"at\",\"latencyMs\",\"status\"]`, `POINT_KEYS toEqual [\"at\",\"latencyMs\"]`), `Object.keys(VALUE_BY_KEY).sort() toEqual VIEW_KEYS` catches a member added on the daemon side, and `it.each(VIEW_KEYS)` generates one drop arm per member asserting `DEPLOYMENTS_HEALTH_RESPONSE_INVALID @ CONTROL_ROOM_DEPLOYMENTS_HEALTH`. A daemon key change does break this test. The `lastProbe` inline-union comment (`:67-71`) documents a real extraction bug the controls caught — a one-name roster from stopping at the first semicolon — which is the sort of thing that only shows up when you actually run your own extractor against its controls.\n\n== GATES, RE-RUN BY ME UNDER MY OWN LEASE (19:34:05Z-19:37Z, posted both ends, released) ==\n```\npnpm --filter @moe/control-room test   EXIT 0   Test Files 200 passed (200) / Tests 2616 passed (2616)\npnpm typecheck                         EXIT 0   19 packages Done, zero `error TS`\ntargeted: src/v2/ops                   EXIT 0   Test Files 19 passed (19) / Tests 233 passed (233)\n```\nMy control-room numbers match the row's recorded verification exactly (200/2616).\n\n**AND THE ROUND-1 FOREIGN REDS HAVE CLEARED.** The rejecting seat disclosed control-room EXIT 1 (`3 failed | 194 passed`, 14 failing in board-screen / goal-deployments / activity-words migration arms) and typecheck EXIT 1 on `goal-deployments.test.tsx` TS2353 — correctly attributed to peers and NOT charged to this row. Both are green in my run. That disclosure was the right call and it cost this row nothing.\n\n== LANDING ==\nNo hand-landing needed, which makes this row the exception tonight. `11dd3dbb` carries all NINE paths — the four modified (`live-environments.{tsx,test.tsx}`, `environments-section.{tsx,test.tsx}`) and the four new (`environments-daemon-frame.test.tsx`, `environments-gap.{tsx,test.tsx}`, `live-environments-enumeration.test.tsx`) plus the task JSON — with NO `Moe-Contested` trailer and nothing withheld. I had staged those exact eight source paths to hand-land them and `git add` found nothing to stage, because the wrapper's landing beat me to it by about a minute. Every owned path is clean against HEAD.\n\nI deliberately did NOT land `apps/control-room/src/v2/ops/activity-words.{ts,test.ts}`, which are dirty in the tree: their diff is migration-receipt wording (`internal.repository.migration_receipt`, APPLIED / REFUSED / REVERTED sentences) belonging to task-78eedd8e. Not this row's bytes, so not this row's to carry.\n\n== REMAINING DoD ==\n`ops-screens.tsx` is **238 lines**, under the 250 ceiling (236 at filing, so +2). Sources are ASCII-only — `grep -P '[^\\x00-\\x7F]'` over the three production files returns nothing. The single apostrophe in `environments-gap.tsx` is at `:14`, inside a block comment, not JSX text. No new read is introduced, so no new `dev-proxy-paths` pin is owed: this surface consumes `/deployments/health/read` and `/backups/read`, both pinned by their own rows (task-620fb461 and task-679cdaa3, each approved earlier tonight). The three restore-proof states render through `backups-list.tsx`, which I graded on task-679cdaa3 — mark AND sentence per state, `data-restore-proof` copied not derived, and the words-only collapse drilled.",
+      "timestamp": "2026-09-07T19:35:33.064Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T20:05:08.102Z",
-  "updatedAt": "2026-09-07T19:18:02.919Z",
+  "updatedAt": "2026-09-07T19:36:13.268Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T22:15:46.064Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3,
     "executedStepCount": 12,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-09-07T19:36:13.268Z",
+    "wallClockMs": 163227204
   },
   "stepsCompleted": [
     "step-1",
@@ -317,6 +325,29 @@
       "treeId": "48f24e0aadab1b09c691767b6a9e5472786a4196",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "11dd3dbb0db072b67b25b1a2886dc362718d866f",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-7b684492@2026-09-07T18:57:08Z",
+      "paths": [
+        ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json",
+        "apps/control-room/src/v2/ops/environments-daemon-frame.test.tsx",
+        "apps/control-room/src/v2/ops/environments-gap.test.tsx",
+        "apps/control-room/src/v2/ops/environments-gap.tsx",
+        "apps/control-room/src/v2/ops/environments-section.test.tsx",
+        "apps/control-room/src/v2/ops/environments-section.tsx",
+        "apps/control-room/src/v2/ops/live-environments.test.tsx",
+        "apps/control-room/src/v2/ops/live-environments.tsx",
+        "apps/control-room/src/v2/ops/live-environments-enumeration.test.tsx"
+      ],
+      "recordedBy": "worker-7b684492",
+      "recordedAt": "2026-09-07T19:19:10.208Z",
+      "treeId": "1dadff95422ee4840c9f74cfb421b1fe94c6e4a7",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -330,7 +361,8 @@
     "apps/control-room/src/v2/ops/environments-section.test.tsx",
     "apps/control-room/src/v2/ops/environments-section.tsx",
     "apps/control-room/src/v2/ops/environments-gap.tsx",
-    "apps/control-room/src/v2/ops/environments-gap.test.tsx"
+    "apps/control-room/src/v2/ops/environments-gap.test.tsx",
+    ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json"
   ],
   "touchedFiles": [
     "apps/control-room/src/v2/ops/live-environments.tsx",
@@ -342,17 +374,17 @@
     "apps/control-room/src/v2/ops/environments-section.tsx",
     "apps/control-room/src/v2/ops/environments-section.test.tsx",
     "apps/control-room/src/live/live-document-proxy.test.ts",
-    "apps/control-room/src/live/dev-proxy-paths.ts"
+    "apps/control-room/src/live/dev-proxy-paths.ts",
+    "apps/control-room/src/v2/ops/environments-gap.test.tsx",
+    "apps/control-room/src/v2/ops/environments-daemon-frame.test.tsx",
+    "apps/control-room/src/v2/ops/live-environments-enumeration.test.tsx"
   ],
-  "unattributedPaths": [
-    "apps/daemon/src/release/release-authorization-fixtures.ts",
-    "apps/daemon/src/release/release-decide-authorization.test.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-dbfde2ce@2026-09-07T18:49:26Z",
-    "at": "2026-09-07T18:58:12.728Z"
+    "kind": "completion",
+    "sessionId": "worker-7b684492@2026-09-07T18:57:08Z",
+    "at": "2026-09-07T19:19:10.208Z"
   },
   "reviewStartedAt": "2026-09-07T19:17:55.163Z",
   "verification": {
@@ -362,7 +394,7 @@
     "reportedAt": "2026-09-07T19:17:55.163Z"
   },
   "completionSummary": "All three rejection items fixed. Detail in comment-d7cc6b61 (items) and comment-80b8e28c (gates, drills, restore SHAs, ownership map).\n\nP1 TRUNCATION (live-environments.tsx:68): `slice(0, MAX_GOALS)` gone. Every goal is read, paced GOAL_READ_BATCH=12 at a time through a new `inBatches` helper. Arm: 13 goals, deployment on the LAST, card renders, all 13 asked, empty state ABSENT; a second arm pins peak concurrency at exactly 12.\n\nP1 DROPPED REFUSALS (:72): the `continue` is gone. The sweep returns {environments, failure, goalsFailed, goalsTotal}. ALL goals failed -> REFUSED in the DAEMON code and layer; SOME failed -> the read rows render above an alert-role note with the origin code @ layer and the counts, kicker \"N deployed, list incomplete\"; empty AND incomplete -> the note INSTEAD of \"No environment deployed.\" One arm asserts CONTROL_ROOM_ENVIRONMENTS is ABSENT from the text, so the refusing layer cannot become this client. 6 arms at the wire seam + 5 at the section seam.\n\nDoD 1: environments-daemon-frame.test.tsx reads apps/daemon/src/http/deployments-health-read.ts off disk, extracts the served roster from the route declarations, and ASSEMBLES the frame from it - text, not import, because @moe/daemon is not a dependency and a deep relative import fails TS6059. Bidirectional: set-equality catches a removed member, `servedFrame` throws by name on an added one. it.each(VIEW_KEYS) generates 10 drop arms asserting DEPLOYMENTS_HEALTH_RESPONSE_INVALID @ CONTROL_ROOM_DEPLOYMENTS_HEALTH. Render arm pins data-status, the probe sentence, data-window-minutes against the ROUTE constant, and the latencies. Every extraction has a control (one caught a real one-name roster bug). \"REAL SERVED FRAME\" overclaims corrected in two files.\n\nADVERSARIAL REVIEW landed 3 more fixes: health reads were still an unbounded Promise.all (now paced through the same helper); a THROWN goal read blanked the surface (now counted as a failed goal under ENVIRONMENTS_DEPLOYMENTS_READ_FAILED, 2 new ar",
-  "reviewCompletedAt": "2026-09-07T18:57:02.556Z",
+  "reviewCompletedAt": "2026-09-07T19:36:13.268Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 1: real daemon-produced frame coverage and rendering deployed environments.",
@@ -419,5 +451,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-09-07T19:36:13.268Z",
+  "reviewSummary": "APPROVED at round 2. Detail in comment-25674292. A different QA seat wrote the reject; I re-derived all three findings on the delivered tree.\n\nP1 TRUNCATION FIXED: slice(0, MAX_GOALS) is gone. GOAL_READ_BATCH=12 feeds an inBatches helper walking the WHOLE catalog twelve at a time - the old code capped the population, the new one paces the fan-out over all of it. Arms: a deployment on a goal PAST the first batch renders with the empty state ABSENT, and peak concurrency pinned at exactly 12 so it cannot regress into an unbounded Promise.all.\n\nP1 DROPPED REFUSALS FIXED: the sweep returns {environments, failure, goalsFailed, goalsTotal}, keeps the FIRST failure verbatim, and refuses in the daemon's own code and layer when every read refused. Five arms: all-refused, partial-with-incomplete-note, empty-and-incomplete, a THROWN read counted as a failed goal, all-threw. The arm asserting CONTROL_ROOM_ENVIRONMENTS is ABSENT from the text is the one that matters - the browser never restamps itself as the refusing layer.\n\nDoD 1: environments-daemon-frame.test.tsx reads the daemon route source off disk and builds the frame from the extracted rosters (text, not import - TS6059 blocks the deep relative). Non-vacuous: blockOf THROWS by name on a renamed declaration, every extraction has a literal control, key-set equality catches an added member, and it.each(VIEW_KEYS) drops each member asserting code AND layer.\n\nGATES under my lease (19:34:05Z-19:37Z, both ends posted, released): control-room 200 files / 2616 passed EXIT 0, matching the row's record, and typecheck EXIT 0 across 19 packages. Targeted src/v2/ops 19 files / 233 passed. The round-1 foreign reds have cleared.\n\nLANDING: none needed - 11dd3dbb carries all nine paths, no Moe-Contested trailer. I left activity-words.{ts,test.ts} dirty: migration wording owned by task-78eedd8e.\n\nops-screens.tsx 238 lines, under the ceiling; ASCII-only; the one apostrophe is in a comment, not JSX."
 }

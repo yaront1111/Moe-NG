@@ -14,7 +14,8 @@ import { dossierSha256, releaseReceiptId } from "./release-receipt-contracts.js"
 import { readReleaseReceipt, recordReleaseReceipt } from "./release-receipt-ledger.js";
 import type { ReleasePrPort } from "./release-pr-port.js";
 import type { SqliteEventStore } from "@moe/store";
-import { createReleaseDecideCommand } from "./release-decide-command.js";
+import { assertReleasePrincipal, createReleaseDecideCommand }
+  from "./release-decide-command.js";
 
 /**
  * `release.decide`: push the goal's branch through the EXISTING publisher, then open a
@@ -109,16 +110,16 @@ function pushedBranchOf(
 }
 
 export function createReleaseDecideHandler(options: ReleaseDecideOptions): AsyncCommandHandler {
-  const { dossierFacts, operatorPrincipalId, prPort, projectId, publisher, store } = options;
+  const { dossierFacts, prPort, projectId, publisher, store } = options;
   const clock = options.clock ?? ((): string => new Date().toISOString());
 
-  const execute = async ({ envelope, principal }: CommandHandlerInput): Promise<DurableDecision> => {
+  const execute = async (input: CommandHandlerInput): Promise<DurableDecision> => {
+    const { envelope } = input;
     // FENCED AT ENTRY. Async entries bypass the registry's synchronous fence, so this is
-    // the only operator check that will ever run for this kind.
-    if (principal.principalId !== operatorPrincipalId) {
-      throw new DomainRefusal("OPERATOR_PRINCIPAL_REQUIRED", "DAEMON_AUTHORIZATION",
-        "this command requires the configured operator principal", 403);
-    }
+    // the only authorization check that will ever run for this kind on the inner service.
+    // It is the SAME assertion the durable command wrapper spends, never a second policy:
+    // one predicate means the two layers cannot drift into disagreeing about who may release.
+    assertReleasePrincipal(input, options);
     const intent = decodeIntent(envelope.payload);
     const { base, goalId, sha } = intent;
     const decidedAt = clock();
