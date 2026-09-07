@@ -236,6 +236,100 @@ it("reports no last probe before an environment has been probed", () => {
   expect(viewOf(source())["lastProbe"]).toBeNull();
 });
 
+/**
+ * THE SERVED KEY ROSTER, PINNED WHERE IT IS PRODUCED. Measured on 2026-09-07: every other arm in
+ * this file and in `daemon-entry-deployments-health.test.ts` asserts ONE member off a
+ * `Record<string, unknown>`, so nothing on the daemon side pinned the frame's key SET at all -
+ * the exact-key discipline existed only in the control-room decoder. A key added here and
+ * forgotten in that decoder reaches production as a refused frame, and a key REMOVED here breaks
+ * a consumer no daemon arm would notice. Set-equality in BOTH directions, sorted so the literal
+ * cannot pass by accident of insertion order.
+ */
+it("serves EXACTLY the key roster its consumers decode, in both directions", () => {
+  expect(Object.keys(viewOf(source())).sort()).toEqual([
+    "environment", "incident", "lastError", "lastProbe", "latencySeries", "ok", "probeRefusal",
+    "rollbackSha", "state",
+  ]);
+  expect(Object.keys(viewOf(source())["latencySeries"] as object).sort())
+    .toEqual(["points", "windowMinutes"]);
+});
+
+/**
+ * DoD 1, AND THE ONLY ARM THAT CATCHES AN UNWINDOWED RING. The ring below spans NINETY MINUTES,
+ * one probe a minute. A projection that returned the whole ring would satisfy any assertion about
+ * the NEWEST point, so this asserts the returned COUNT and the OLDEST RETURNED INSTANT - the two
+ * values that differ between a windowed series and a whole one. 61 points, not 60: the window is
+ * inclusive of its far edge, so both endpoints of a closed hour are carried.
+ */
+it("drops probes older than the stated window rather than serving the whole ring", () => {
+  const base = Date.parse("2026-09-06T10:00:00.000Z");
+  const ring = Array.from({ length: 91 }, (_, index) =>
+    probe("SUCCESS", new Date(base + (index * 60_000)).toISOString(), index));
+  expect(ring).toHaveLength(91);
+  const series = viewOf(source({ probes: ring }))["latencySeries"] as {
+    readonly points: readonly { readonly at: string; readonly latencyMs: number }[];
+    readonly windowMinutes: number;
+  };
+  expect(series.windowMinutes).toBe(60);
+  expect(series.points).toHaveLength(61);
+  expect(series.points[0]).toEqual({ at: "2026-09-06T10:30:00.000Z", latencyMs: 30 });
+  expect(series.points.at(-1)).toEqual({ at: "2026-09-06T11:30:00.000Z", latencyMs: 90 });
+  // Newest LAST, matching `lastProbe`, so the two members cannot disagree about which end is new.
+  expect((viewOf(source({ probes: ring }))["lastProbe"] as { readonly at: string }).at)
+    .toBe(series.points.at(-1)?.at);
+});
+
+/** The far edge is INCLUSIVE: a probe at exactly newest-minus-the-window is carried, not dropped. */
+it("carries a probe sitting exactly on the window edge, and drops the one a millisecond older", () => {
+  const series = viewOf(source({
+    probes: [
+      probe("SUCCESS", "2026-09-06T10:59:59.999Z", 1),
+      probe("SUCCESS", "2026-09-06T11:00:00.000Z", 2),
+      probe("SUCCESS", "2026-09-06T12:00:00.000Z", 3),
+    ],
+  }))["latencySeries"] as { readonly points: readonly { readonly latencyMs: number }[] };
+  expect(series.points.map((point) => point.latencyMs)).toEqual([2, 3]);
+});
+
+/**
+ * DEGENERATE RINGS STILL STATE THE WINDOW. An empty series with no window would leave a consumer
+ * unable to say what span it failed to plot, and a NULL member would make "no probes yet"
+ * indistinguishable from "the series could not be read" at the client's exact-key gate.
+ */
+it("serves an empty series - never null - for an empty ring, with the window still stated", () => {
+  expect(viewOf(source())["latencySeries"]).toEqual({ points: [], windowMinutes: 60 });
+});
+
+it("serves a single-probe ring as a one-point series", () => {
+  expect(viewOf(source({ probes: [probe("FAILURE", "2026-09-06T11:00:00.000Z", 404)] }))["latencySeries"])
+    .toEqual({ points: [{ at: "2026-09-06T11:00:00.000Z", latencyMs: 404 }], windowMinutes: 60 });
+});
+
+/**
+ * A ring whose every row predates the window CANNOT occur while the window is anchored on the
+ * newest probe - the newest row is always its own anchor. This arm pins that: a ring older than
+ * any wall clock still serves its final hour rather than an empty chart, which is what makes the
+ * anchor choice observable rather than an implementation detail.
+ */
+it("anchors the window on the newest probe, not on a wall clock, so an old ring still plots", () => {
+  const series = viewOf(source({
+    probes: [
+      probe("SUCCESS", "2019-01-01T00:00:00.000Z", 1),
+      probe("SUCCESS", "2019-01-01T00:30:00.000Z", 2),
+      probe("SUCCESS", "2019-01-01T02:00:00.000Z", 3),
+    ],
+  }))["latencySeries"] as { readonly points: readonly { readonly latencyMs: number }[] };
+  expect(series.points.map((point) => point.latencyMs)).toEqual([3]);
+});
+
+/** No point may carry a per-point status: that is the material a client would re-derive from. */
+it("carries only the instant and the latency per point, never a per-point status", () => {
+  const series = viewOf(source({ probes: [probe("FAILURE", "2026-09-06T11:00:00.000Z", 9)] }))["latencySeries"] as {
+    readonly points: readonly Record<string, unknown>[];
+  };
+  expect(series.points.map((point) => Object.keys(point).sort())).toEqual([["at", "latencyMs"]]);
+});
+
 /** DoD 6 for the incident: a healthy answer omits it rather than fabricating an empty object. */
 it("reports the open incident with its opened-at, and null when none is open", () => {
   expect(viewOf(source({

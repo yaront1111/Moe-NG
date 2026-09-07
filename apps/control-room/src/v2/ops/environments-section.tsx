@@ -4,6 +4,7 @@ import type { DeploymentsHealthOutcome, EnvironmentHealthView } from "../../live
 import { OutcomeNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
+import { LatencySparkline } from "./latency-sparkline.js";
 
 /**
  * THE ENVIRONMENTS SECTION on the Health screen: one card per deployed environment, carrying
@@ -14,6 +15,10 @@ import { readFailedSaid } from "../outcome-words.js";
  * latency or a probe status this component can see. The daemon owns one probe ring and one
  * opinion about it; a second opinion here is the one an operator would read when the two
  * disagree, and it would be the wrong one.
+ *
+ * THE SPARKLINE IS THE SHARPEST VERSION OF THAT TEMPTATION, which is why it is handed
+ * `view.latencySeries` and NOTHING ELSE - not the state, not a threshold. The series the daemon
+ * windowed is drawn; the verdict beside it stays the daemon own answer, read off `view.state`.
  *
  * FOUR OUTCOMES ARE DISTINCT AND ALL REAL ON DAY ONE: still reading, nothing deployed, the
  * read refused, and deployed but unprobeable. An operator looking at a blank section cannot
@@ -90,6 +95,11 @@ function EnvironmentCard({ nowMs, view }: {
       {view.lastError === null ? null : (
         <p className="cr2-approve-mono" data-testid={`${testId}.error`}>{view.lastError.line}</p>
       )}
+      <LatencySparkline
+        environment={view.environment}
+        series={view.latencySeries}
+        testId={`${testId}.latency`}
+      />
     </li>
   );
 }

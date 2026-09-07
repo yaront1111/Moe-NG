@@ -30,6 +30,16 @@ export interface EnvironmentProbeView {
   readonly latencyMs: number;
   readonly status: EnvironmentProbeStatus;
 }
+/** One plotted observation. NO per-point status: the daemon owns the one opinion, `state`. */
+export interface EnvironmentLatencyPointView {
+  readonly at: string;
+  readonly latencyMs: number;
+}
+/** The bounded series and the window the DAEMON took it over, newest LAST. */
+export interface EnvironmentLatencySeriesView {
+  readonly points: readonly EnvironmentLatencyPointView[];
+  readonly windowMinutes: number;
+}
 /** The deploy tool's own last line, carried beside the code and layer that recorded it. */
 export interface EnvironmentErrorLineView {
   readonly at: string;
@@ -54,6 +64,12 @@ export interface EnvironmentHealthView {
   readonly incident: EnvironmentIncidentView | null;
   readonly lastError: EnvironmentErrorLineView | null;
   readonly lastProbe: EnvironmentProbeView | null;
+  /**
+   * The series a sparkline draws, with the window it was taken over carried BESIDE it. The window
+   * is read, never inferred from the instants: an empty series has none to infer from, and a
+   * consumer that guessed could not assert it plotted the span the daemon actually windowed.
+   */
+  readonly latencySeries: EnvironmentLatencySeriesView;
   readonly probeRefusal: EnvironmentProbeRefusalView | null;
   readonly rollbackSha: string | null;
   readonly state: EnvironmentHealthState;
@@ -102,6 +118,15 @@ const count = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 
 /**
+ * The most series points this client will accept. The daemon windows the series to an hour out
+ * of a ring bounded at 1440 rows, so anything longer than the WHOLE ring cannot be a real answer
+ * and is refused rather than rendered. This is a crash guard, not a style rule: the sparkline
+ * takes `Math.min(...latencies)`, and spreading an array of a few hundred thousand elements
+ * throws `RangeError: Maximum call stack size exceeded` and takes the render down with it.
+ */
+const MAX_SERIES_POINTS = 1440;
+
+/**
  * The three refusal envelopes this route can answer with. The third, `{code, layer, ok:false}`,
  * is the probe store's own shape and is NOT matched by the shared `effectRefusal` helper, whose
  * key lists stop at `{code, layer}` and `{outcome, code, layer}`. Omitting it here is how
@@ -129,6 +154,30 @@ function probeOf(value: unknown): EnvironmentProbeView | null {
   if (row === null || !text(row.at) || !count(row.latencyMs)) return null;
   if (row.status !== "FAILURE" && row.status !== "SUCCESS" && row.status !== "UNPROBEABLE") return null;
   return Object.freeze({ at: row.at, latencyMs: row.latencyMs, status: row.status });
+}
+
+/**
+ * THE SERIES, AND ITS ONE DIFFERENCE FROM EVERY OTHER NESTED MEMBER HERE. `latencySeries` is
+ * never null on the wire: the daemon serves an EMPTY `points` for an environment with no history
+ * rather than omitting the member. So a null answer from this decoder means UNREADABLE ONLY, and
+ * the top-level check refuses the whole frame - an unreadable series narrowed to "no points yet"
+ * would draw an empty chart for an environment whose history simply failed to decode.
+ *
+ * A single malformed point refuses the WHOLE series rather than being dropped: silently skipping
+ * it would plot a gap the operator was never told about. An OVERLONG series is refused for the
+ * same fail-closed reason and one concrete one: see `MAX_SERIES_POINTS`.
+ */
+function latencySeriesOf(value: unknown): EnvironmentLatencySeriesView | null {
+  const row = exactDataRecord(value, ["points", "windowMinutes"]);
+  if (row === null || !count(row.windowMinutes) || row.windowMinutes === 0) return null;
+  if (!Array.isArray(row.points) || row.points.length > MAX_SERIES_POINTS) return null;
+  const points: EnvironmentLatencyPointView[] = [];
+  for (const raw of row.points as readonly unknown[]) {
+    const point = exactDataRecord(raw, ["at", "latencyMs"]);
+    if (point === null || !text(point.at) || !count(point.latencyMs)) return null;
+    points.push(Object.freeze({ at: point.at, latencyMs: point.latencyMs }));
+  }
+  return Object.freeze({ points: Object.freeze(points), windowMinutes: row.windowMinutes });
 }
 
 function errorLineOf(value: unknown): EnvironmentErrorLineView | null {
@@ -167,7 +216,8 @@ export function mapDeploymentsHealthAnswer(
   const refusal = refusalFrom(body);
   if (refusal !== null) return refusal;
   const row = exactDataRecord(body, [
-    "environment", "incident", "lastError", "lastProbe", "ok", "probeRefusal", "rollbackSha", "state",
+    "environment", "incident", "lastError", "lastProbe", "latencySeries", "ok", "probeRefusal",
+    "rollbackSha", "state",
   ]);
   if (status !== 200 || row === null || row.ok !== true || !text(row.environment)
     || !nullableText(row.rollbackSha)) return invalidResponse();
@@ -176,11 +226,13 @@ export function mapDeploymentsHealthAnswer(
   const lastError = errorLineOf(row.lastError);
   const incident = incidentOf(row.incident);
   const probeRefusal = probeRefusalOf(row.probeRefusal);
+  // `latencySeries` has no legitimate null, so ANY null answer refuses the frame outright.
+  const latencySeries = latencySeriesOf(row.latencySeries);
   if ((lastProbe === null && row.lastProbe !== null) || (lastError === null && row.lastError !== null)
-    || (incident === null && row.incident !== null)
+    || (incident === null && row.incident !== null) || latencySeries === null
     || (probeRefusal === null && row.probeRefusal !== null)) return invalidResponse();
   return Object.freeze({
-    environment: row.environment, incident, lastError, lastProbe, probeRefusal,
+    environment: row.environment, incident, lastError, lastProbe, latencySeries, probeRefusal,
     rollbackSha: row.rollbackSha, state: row.state, status: "DEPLOYMENTS_HEALTH" as const,
   });
 }

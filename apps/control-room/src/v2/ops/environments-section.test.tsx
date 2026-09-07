@@ -30,6 +30,14 @@ function frameOf(overrides: Record<string, unknown>): EnvironmentHealthView {
     incident: null,
     lastError: null,
     lastProbe: { at: "2026-09-07T09:55:00.000Z", latencyMs: 91, status: "SUCCESS" },
+    latencySeries: {
+      points: [
+        { at: "2026-09-07T09:53:00.000Z", latencyMs: 80 },
+        { at: "2026-09-07T09:54:00.000Z", latencyMs: 85 },
+        { at: "2026-09-07T09:55:00.000Z", latencyMs: 91 },
+      ],
+      windowMinutes: 60,
+    },
     ok: true,
     probeRefusal: null,
     rollbackSha: null,
@@ -170,3 +178,90 @@ describe("the Environments section keeps its four outcomes distinct", () => {
     expect(screen.queryByTestId("cr.environments.card.staging")).toBeNull();
   });
 });
+
+/**
+ * THE SPARKLINE ON THE CARD. The arms below assert the PLOTTED COUNT, not that an SVG appeared:
+ * an SVG that rendered is no evidence it rendered the right span, and a sparkline handed the
+ * whole 1440-row ring looks perfectly healthy to a test that only checks the element exists.
+ */
+describe("the Environments card plots the windowed latency series the daemon sent", () => {
+  /** A ring spanning more than the window, windowed the way the daemon windows it. */
+  function windowed(windowMinutes: number, spanMinutes: number): {
+    readonly points: readonly { readonly at: string; readonly latencyMs: number }[];
+    readonly windowMinutes: number;
+  } {
+    const newest = Date.parse("2026-09-07T09:55:00.000Z");
+    const oldestAllowed = newest - (windowMinutes * 60_000);
+    const points = Array.from({ length: spanMinutes + 1 }, (_, index) => ({
+      at: new Date(newest - ((spanMinutes - index) * 60_000)).toISOString(),
+      latencyMs: 50 + index,
+    })).filter((point) => Date.parse(point.at) >= oldestAllowed);
+    return { points, windowMinutes };
+  }
+
+  it("plots exactly the points the frame carries, never the whole ring behind them", () => {
+    const series = windowed(60, 240);
+    // The fixture must actually EXERCISE the window, or this arm asserts nothing.
+    expect(series.points).toHaveLength(61);
+    render(<EnvironmentsSection environments={rowsOf(frameOf({ latencySeries: series }))} nowMs={NOW} />);
+    const svg = screen.getByTestId("cr.environments.card.production.latency.svg");
+    expect(svg.getAttribute("data-point-count")).toBe("61");
+    expect((svg.getAttribute("points") ?? svg.querySelector("polyline")?.getAttribute("points") ?? "")
+      .trim().split(/\s+/)).toHaveLength(61);
+    expect(svg.getAttribute("data-window-minutes")).toBe("60");
+  });
+
+  it("follows the window the FRAME states rather than a span of its own", () => {
+    const series = windowed(15, 240);
+    expect(series.points).toHaveLength(16);
+    render(<EnvironmentsSection environments={rowsOf(frameOf({ latencySeries: series }))} nowMs={NOW} />);
+    const svg = screen.getByTestId("cr.environments.card.production.latency.svg");
+    expect(svg.getAttribute("data-point-count")).toBe("16");
+    expect(svg.getAttribute("data-window-minutes")).toBe("15");
+  });
+
+  /** DAY ONE: a brand-new environment has no probes, and the card must still be readable. */
+  it("renders the empty state and no chart for an environment with no probes yet", () => {
+    render(<EnvironmentsSection environments={rowsOf(frameOf({
+      latencySeries: { points: [], windowMinutes: 60 }, lastProbe: null, state: "DEGRADED",
+    }))} nowMs={NOW} />);
+    expect(screen.getByTestId("cr.environments.card.production.latency.empty").textContent)
+      .toContain("No latency recorded yet");
+    expect(screen.queryByTestId("cr.environments.card.production.latency.svg")).toBeNull();
+  });
+
+  /**
+   * DoD 6 AT THE CARD. The frame states UP while its series is uniformly terrible, and the frame
+   * states DOWN while its series is uniformly fast. A card that coloured, worded or labelled
+   * anything off the SERIES would disagree with `data-status` here; a consistent fixture would
+   * pass either way, which is why both fixtures are deliberately contradictory.
+   */
+  it("keeps the stated status even when the SERIES it plots argues the other way", () => {
+    render(<EnvironmentsSection environments={rowsOf(
+      frameOf({
+        environment: "production", state: "UP",
+        latencySeries: { points: [
+          { at: "2026-09-07T09:54:00.000Z", latencyMs: 30_000 },
+          { at: "2026-09-07T09:55:00.000Z", latencyMs: 45_000 },
+        ], windowMinutes: 60 },
+      }),
+      frameOf({
+        environment: "staging", state: "DOWN",
+        latencySeries: { points: [
+          { at: "2026-09-07T09:54:00.000Z", latencyMs: 2 },
+          { at: "2026-09-07T09:55:00.000Z", latencyMs: 3 },
+        ], windowMinutes: 60 },
+      }),
+    )} nowMs={NOW} />);
+    expect(statusOf("production")).toBe("UP");
+    expect(statusOf("staging")).toBe("DOWN");
+    expect(screen.getByTestId("cr.environments.card.production.state").textContent).toContain("Up");
+    expect(screen.getByTestId("cr.environments.card.staging.state").textContent).toContain("Down");
+    // The chart still plots the material verbatim - refusing to derive is not refusing to draw.
+    expect(screen.getByTestId("cr.environments.card.production.latency.svg")
+      .getAttribute("data-latencies")).toBe("30000,45000");
+    expect(screen.getByTestId("cr.environments.card.staging.latency.svg")
+      .getAttribute("data-latencies")).toBe("2,3");
+  });
+});
+
