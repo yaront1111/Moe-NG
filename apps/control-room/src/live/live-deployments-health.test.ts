@@ -3,7 +3,8 @@
  *
  * The frames below are the shape `projectDeploymentsHealth` in
  * apps/daemon/src/http/deployments-health-read.ts actually serves - exact keys
- * `environment, incident, lastError, lastProbe, ok, probeRefusal, rollbackSha, state` - so a
+ * `environment, incident, lastError, lastProbe, latencySeries, ok, probeIntervalMs,
+ * probeRefusal, rollbackSha, state` - so a
  * daemon-side shape change reds this file rather than reaching production as a blank card.
  */
 
@@ -35,6 +36,7 @@ const FRAME = {
     windowMinutes: 60,
   },
   ok: true,
+  probeIntervalMs: 5_000,
   probeRefusal: null,
   rollbackSha: "b".repeat(40),
   state: "DOWN",
@@ -44,7 +46,7 @@ const healthy = (): Record<string, unknown> => ({
   environment: "staging", incident: null, lastError: null,
   lastProbe: { at: "2026-09-07T09:04:00.000Z", latencyMs: 88, status: "SUCCESS" },
   latencySeries: { points: [{ at: "2026-09-07T09:04:00.000Z", latencyMs: 88 }], windowMinutes: 60 },
-  ok: true, probeRefusal: null, rollbackSha: null, state: "UP",
+  ok: true, probeIntervalMs: 900_000, probeRefusal: null, rollbackSha: null, state: "UP",
 });
 
 const replyOf = (status: number, body: unknown): (() => Promise<Response>) =>
@@ -74,6 +76,7 @@ describe("the deployment-health read client decodes the served frame", () => {
         ],
         windowMinutes: 60,
       },
+      probeIntervalMs: 5_000,
       probeRefusal: null,
       rollbackSha: "b".repeat(40),
       state: "DOWN",
@@ -310,5 +313,151 @@ describe("the deployment-health read is pinned and scoped to one environment", (
       layer: "CONTROL_ROOM_DEPLOYMENTS_HEALTH",
       status: "ERROR",
     });
+  });
+});
+
+/**
+ * THE EFFECTIVE PROBE INTERVAL, AT THE DECODER SEAM.
+ *
+ * WHY THE ARMS BELOW ASSERT THE WHOLE ROW AND NOT JUST THE MEMBER. `exactDataRecord` refuses on a
+ * key-COUNT mismatch, so a frame missing this key does not lose one field - the ENTIRE environment
+ * row fails to decode and the card goes blank. That is exactly why the daemon emits the key on
+ * every row and why the member is required rather than optional here: there is no optional-key
+ * path in that helper to encode "unset" through. "Unset" is carried IN BAND, as the daemon's
+ * default value, never as an absent key.
+ */
+describe("the deployment-health read client preserves the effective probe interval", () => {
+  it("carries a well-formed interval across by value, without re-defaulting it", () => {
+    const answer = mapDeploymentsHealthAnswer(200, { ...FRAME });
+    expect(answer.status).toBe("DEPLOYMENTS_HEALTH");
+    expect(answer.status === "DEPLOYMENTS_HEALTH" ? answer.probeIntervalMs : null).toBe(5_000);
+    // Not the daemon's 60000 default: a decoder substituting a fallback of its own would agree
+    // with a fixture that happened to state the default, and this frame deliberately does not.
+    expect(answer.status === "DEPLOYMENTS_HEALTH" ? answer.probeIntervalMs : null).not.toBe(60_000);
+  });
+
+  /**
+   * DoD 4 on the browser side. Two environments carrying DIFFERENT intervals both survive with
+   * their OWN value. A decoder that read the member once into shared state - or that hard-coded
+   * one - passes every single-frame arm above and fails only here.
+   */
+  it("keeps each environment's own interval when two frames are decoded", () => {
+    const fast = mapDeploymentsHealthAnswer(200, { ...FRAME });
+    const slow = mapDeploymentsHealthAnswer(200, healthy());
+    if (fast.status !== "DEPLOYMENTS_HEALTH" || slow.status !== "DEPLOYMENTS_HEALTH") {
+      throw new Error("both fixtures must decode for this arm to mean anything");
+    }
+    expect(fast.probeIntervalMs).toBe(5_000);
+    expect(slow.probeIntervalMs).toBe(900_000);
+    expect(fast.probeIntervalMs).not.toBe(slow.probeIntervalMs);
+    // The environments really are distinct, so the two values cannot be one frame read twice.
+    expect(fast.environment).not.toBe(slow.environment);
+  });
+
+  /**
+   * MALFORMED FAILS CLOSED (DoD 3). Every case refuses the WHOLE frame with the specific code AND
+   * the layer that refused - never a decoded row with the member quietly dropped, which is what
+   * would put a plausible card in front of an operator with an interval nobody served.
+   *
+   * `0` and `-1` are here because a plain `typeof === "number"` check admits both, and a zero
+   * probe interval rendered as a rate reads as a real setting. `1.5`, `NaN` and `Infinity` are
+   * here because `Number.isInteger` is what rules them out, and a bare comparison would not.
+   */
+  it.each([
+    ["a string", "60000"],
+    ["a negative interval", -1],
+    ["zero", 0],
+    ["a non-integer", 1.5],
+    ["NaN", Number.NaN],
+    ["Infinity", Number.POSITIVE_INFINITY],
+    ["null", null],
+    ["a boolean", true],
+    ["a numeric-looking object", { valueOf: () => 60_000 }],
+  ])("refuses %s as the interval rather than dropping the member", (_label, probeIntervalMs) => {
+    const answer = mapDeploymentsHealthAnswer(200, { ...FRAME, probeIntervalMs });
+    expect(answer).toEqual({
+      code: "DEPLOYMENTS_HEALTH_RESPONSE_INVALID",
+      layer: "CONTROL_ROOM_DEPLOYMENTS_HEALTH",
+      status: "ERROR",
+    });
+    // The member was not merely absent from an otherwise-decoded row.
+    expect(answer.status).not.toBe("DEPLOYMENTS_HEALTH");
+    expect(answer).not.toHaveProperty("probeIntervalMs");
+  });
+
+  /**
+   * THE OMITTED-KEY FAILURE MODE, PINNED. This is the reason the daemon must emit the key on
+   * EVERY row: `exactDataRecord` compares key COUNT first, so omitting the member does not
+   * degrade one field - the whole environment row decodes to a refusal and the card blanks. The
+   * symptom then points at the read rather than at the new field, which is what makes it
+   * expensive to diagnose in production.
+   */
+  it("refuses the WHOLE frame when the interval key is omitted, never a row missing one member", () => {
+    const { probeIntervalMs: _omitted, ...withoutKey } = { ...FRAME };
+    expect(Object.keys(withoutKey)).not.toContain("probeIntervalMs");
+    expect(mapDeploymentsHealthAnswer(200, withoutKey)).toEqual({
+      code: "DEPLOYMENTS_HEALTH_RESPONSE_INVALID",
+      layer: "CONTROL_ROOM_DEPLOYMENTS_HEALTH",
+      status: "ERROR",
+    });
+  });
+
+  /**
+   * THE ROSTER, BOTH DIRECTIONS (global rail). A one-directional arm goes vacuous the next time
+   * the roster changes: an arm that only proves the new key is ACCEPTED still passes when the
+   * decoder stops refusing unknown keys altogether, and an arm that only proves an unknown key is
+   * refused still passes when the new key was never added. Both, against one frame.
+   */
+  it("accepts the new key AND still refuses an unknown one beside it", () => {
+    const accepted = mapDeploymentsHealthAnswer(200, { ...FRAME });
+    expect(accepted.status).toBe("DEPLOYMENTS_HEALTH");
+    expect(accepted.status === "DEPLOYMENTS_HEALTH" ? accepted.probeIntervalMs : null).toBe(5_000);
+
+    expect(mapDeploymentsHealthAnswer(200, { ...FRAME, probeIntervalSeconds: 5 })).toEqual({
+      code: "DEPLOYMENTS_HEALTH_RESPONSE_INVALID",
+      layer: "CONTROL_ROOM_DEPLOYMENTS_HEALTH",
+      status: "ERROR",
+    });
+  });
+
+  /**
+   * THE INTERVAL RECORD'S OWN REFUSALS REACH THE BROWSER AS REFUSALS, with the DAEMON's code and
+   * layer rather than this client's generic invalid-response. Their envelope is `{code, layer,
+   * ok:false}` - the probe store's shape - which `refusalFrom` matches at its third branch. That
+   * branch exists because the shared `effectRefusal` key lists stop at `{code, layer}` and
+   * `{outcome, code, layer}`, so without it a PROBE_INTERVAL_STORE_FAILED would arrive as
+   * DEPLOYMENTS_HEALTH_RESPONSE_INVALID and the cause would be erased on the way to the screen.
+   *
+   * This is asserted rather than assumed: the daemon widened its port to carry these codes, and
+   * "the existing branch already handles it" is a premise until a test runs the bytes through.
+   */
+  it.each([
+    "PROBE_INTERVAL_ENVIRONMENT_INVALID",
+    "PROBE_INTERVAL_STORE_FAILED",
+    "PROBE_INTERVAL_OUT_OF_RANGE",
+  ])("surfaces %s with the daemon's own code and layer, not a generic invalid response", (code) => {
+    expect(mapDeploymentsHealthAnswer(200, { code, layer: "DAEMON_INGRESS", ok: false })).toEqual({
+      code, layer: "DAEMON_INGRESS", status: "REFUSED",
+    });
+  });
+
+  /**
+   * THE SERVED ROSTER AS A SET, so a key SILENTLY REMOVED from the daemon frame reds here too.
+   * The arms above all add or corrupt a key; none of them notices a member that stops being
+   * served, because a shrunken frame simply refuses and an arm expecting a refusal would pass.
+   */
+  it("decodes exactly the ten members the daemon serves, no more and no fewer", () => {
+    const answer = mapDeploymentsHealthAnswer(200, { ...FRAME });
+    if (answer.status !== "DEPLOYMENTS_HEALTH") throw new Error("the frame must decode");
+    expect(Object.keys(answer).sort()).toEqual([
+      "environment", "incident", "lastError", "lastProbe", "latencySeries", "probeIntervalMs",
+      "probeRefusal", "rollbackSha", "state", "status",
+    ]);
+    // The WIRE roster, stated separately: `ok` is consumed and replaced by `status`, so the two
+    // rosters differ by exactly that one substitution and neither can be derived from the other.
+    expect(Object.keys(FRAME).sort()).toEqual([
+      "environment", "incident", "lastError", "lastProbe", "latencySeries", "ok",
+      "probeIntervalMs", "probeRefusal", "rollbackSha", "state",
+    ]);
   });
 });

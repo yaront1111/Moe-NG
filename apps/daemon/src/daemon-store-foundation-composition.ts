@@ -694,11 +694,28 @@ export function createStoreDependencies(
         if (!probes.ok) return probes;
         const incidents = ring.incidents(input.environment);
         if (!incidents.ok) return incidents;
+        /**
+         * THE EFFECTIVE INTERVAL, RESOLVED BY THE RECORD THAT OWNS IT — the SAME `probeIntervals`
+         * the scheduler reconciles against above, so the rate an operator is shown and the rate
+         * the daemon actually probes at cannot come to disagree. `read` answers the stored value
+         * or `DEFAULT_PROBE_INTERVAL_MS`; this composition never applies a default of its own.
+         *
+         * A REFUSAL IS RETURNED, NEVER LAUNDERED INTO THE DEFAULT. Serving 60000 for an
+         * environment whose interval record could not be read would show an operator a rate
+         * nobody stored, indistinguishable from one deliberately left unset. It travels out
+         * verbatim with its own `PROBE_INTERVAL_*` code and its `DAEMON_INGRESS` layer.
+         *
+         * It is consulted AFTER the ring, because the ring's history is what this read is ABOUT:
+         * an unreadable ring is the more fundamental fault and answers first.
+         */
+        const probeIntervalMs = probeIntervals.read(input.environment);
+        if (!probeIntervalMs.ok) return probeIntervalMs;
         return Object.freeze({
           ok: true as const,
           value: Object.freeze({
             deploys: readDeployLedger(store, config.projectId).get(input.environment) ?? null,
             incidents: incidents.value,
+            probeIntervalMs: probeIntervalMs.value,
             probes: probes.value,
           }),
         });

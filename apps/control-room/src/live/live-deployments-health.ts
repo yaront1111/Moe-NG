@@ -70,6 +70,14 @@ export interface EnvironmentHealthView {
    * consumer that guessed could not assert it plotted the span the daemon actually windowed.
    */
   readonly latencySeries: EnvironmentLatencySeriesView;
+  /**
+   * The EFFECTIVE health-probe interval the daemon is running this environment at: its stored
+   * value, or the daemon default when none is stored. ALWAYS PRESENT and never null - the daemon
+   * resolves stored-or-default before serving, so this client never re-applies a default of its
+   * own. Required, not optional: an optional member would let a fixture omit what production
+   * always sends, and the fixture would then stop testing the wire.
+   */
+  readonly probeIntervalMs: number;
   readonly probeRefusal: EnvironmentProbeRefusalView | null;
   readonly rollbackSha: string | null;
   readonly state: EnvironmentHealthState;
@@ -116,6 +124,15 @@ const text = (value: unknown): value is string => typeof value === "string" && v
 const nullableText = (value: unknown): value is string | null => value === null || text(value);
 const count = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+/**
+ * A DURATION, so STRICTLY positive. `count` admits 0, and a zero probe interval rendered as a
+ * rate is a busy loop an operator would read as a real setting. `Number.isSafeInteger` already
+ * rules out NaN, Infinity and 1.5, so this adds only the lower bound. It deliberately does NOT
+ * re-assert the daemon's 5s..1h admission range: that record is the one authority on what an
+ * operator may store, and a second copy of the bounds here would refuse a widened range as
+ * malformed the day the daemon widened it.
+ */
+const duration = (value: unknown): value is number => count(value) && value > 0;
 
 /**
  * The most series points this client will accept. The daemon windows the series to an hour out
@@ -216,11 +233,14 @@ export function mapDeploymentsHealthAnswer(
   const refusal = refusalFrom(body);
   if (refusal !== null) return refusal;
   const row = exactDataRecord(body, [
-    "environment", "incident", "lastError", "lastProbe", "latencySeries", "ok", "probeRefusal",
-    "rollbackSha", "state",
+    "environment", "incident", "lastError", "lastProbe", "latencySeries", "ok",
+    "probeIntervalMs", "probeRefusal", "rollbackSha", "state",
   ]);
+  // `probeIntervalMs` is checked HERE rather than through a nested decoder because it has no
+  // legitimate null: a malformed one must refuse the whole frame, never be dropped to leave a
+  // view whose interval silently disappeared.
   if (status !== 200 || row === null || row.ok !== true || !text(row.environment)
-    || !nullableText(row.rollbackSha)) return invalidResponse();
+    || !duration(row.probeIntervalMs) || !nullableText(row.rollbackSha)) return invalidResponse();
   if (row.state !== "DEGRADED" && row.state !== "DOWN" && row.state !== "UP") return invalidResponse();
   const lastProbe = probeOf(row.lastProbe);
   const lastError = errorLineOf(row.lastError);
@@ -232,7 +252,8 @@ export function mapDeploymentsHealthAnswer(
     || (incident === null && row.incident !== null) || latencySeries === null
     || (probeRefusal === null && row.probeRefusal !== null)) return invalidResponse();
   return Object.freeze({
-    environment: row.environment, incident, lastError, lastProbe, latencySeries, probeRefusal,
+    environment: row.environment, incident, lastError, lastProbe, latencySeries,
+    probeIntervalMs: row.probeIntervalMs, probeRefusal,
     rollbackSha: row.rollbackSha, state: row.state, status: "DEPLOYMENTS_HEALTH" as const,
   });
 }

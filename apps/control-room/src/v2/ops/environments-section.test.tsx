@@ -39,6 +39,7 @@ function frameOf(overrides: Record<string, unknown>): EnvironmentHealthView {
       windowMinutes: 60,
     },
     ok: true,
+    probeIntervalMs: 60_000,
     probeRefusal: null,
     rollbackSha: null,
     state: "UP",
