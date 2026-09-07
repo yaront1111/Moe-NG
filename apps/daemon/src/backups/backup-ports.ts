@@ -146,19 +146,48 @@ async function restoreDatabase(path: string): Promise<BackupProof> {
 }
 
 /**
- * Applies a dump to the NAMED destination. Same env-only credential handling and same container
- * disposal as `dumpDatabase` — the connection is decomposed into PG* variables passed by NAME on
- * the argv (`--env PGPASSWORD`), so the value itself never appears in an argument vector that a
- * crash dump or a process listing could carry.
+ * THE DESTINATION IS RESET INSIDE THE SAME TRANSACTION AS THE APPLY, and it has to be.
+ *
+ * MEASURED, not assumed: `DUMP_ARGS` produces a PLAIN dump with no DROP statements, so piping it
+ * at a live database that still holds the objects fails on the first `CREATE TABLE` —
+ * `ERROR: relation "app_metadata" already exists`, psql exit 3. A restore that can only ever
+ * succeed against an EMPTY destination is not a restore; it is the verification
+ * `restoreDatabase(path)` already performs. Adding `--clean` on the DUMP side instead would have
+ * changed the artifact `scheduled-backup.ts` verifies, so the reset belongs HERE.
+ *
+ * `--single-transaction` makes the drop and the apply ONE unit, which is what keeps DoD 3 true:
+ * measured against a deliberately failing artifact, psql exits 3 and the destination still holds
+ * the objects the drop had removed. There is no window in which the schema is gone and the dump
+ * has not landed, and a failure is a failure rather than a half-restored schema.
+ *
+ * Same env-only credential handling and same container disposal as `dumpDatabase` — the
+ * connection is decomposed into PG* variables passed by NAME on the argv (`--env PGPASSWORD`), so
+ * the value itself never appears in an argument vector that a crash dump or a process listing
+ * could carry. The reset is a FIXED literal with nothing interpolated into it.
  */
+/**
+ * `client_min_messages` FIRST, and it is not cosmetic. `DROP SCHEMA ... CASCADE` emits one
+ * "drop cascades to ..." NOTICE PER OBJECT, and `docker()` runs under `maxBuffer: 65_536`: a
+ * production schema with enough objects would overflow the captured stream, kill the child and
+ * refuse a restore that was about to succeed. Silencing NOTICEs bounds that output. `warning`,
+ * not `error`: a real warning still reaches the operator, and `ON_ERROR_STOP=1` is what stops on
+ * failure regardless of this setting.
+ */
+const RESET_DESTINATION =
+  "SET client_min_messages TO warning; DROP SCHEMA public CASCADE; CREATE SCHEMA public;";
+
 function restoreIntoDatabase(connection: string, source: string, network?: string): void {
   const env = pgEnvironment(connection, network);
   const name = `moe-backup-apply-${randomUUID()}`;
   const input = openSync(source, "r");
   try {
+    // `-c` then `-f -`: psql runs them in the order given, so the reset precedes the dump read
+    // from stdin, and `-f -` (not a bare redirect) is what keeps the artifact's `\restrict`
+    // meta-commands executable rather than being fed to the SQL parser.
     docker(["run", "--rm", "-i", "--name", name, ...(network ? ["--network", network] : []),
       ...Object.keys(env).flatMap(key => ["--env", key]), IMAGE,
-      "psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "--single-transaction"], env, input);
+      "psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "--single-transaction",
+      "-c", RESET_DESTINATION, "-f", "-"], env, input);
   } finally { try { closeSync(input); } finally { disposeContainer(name); } }
 }
 

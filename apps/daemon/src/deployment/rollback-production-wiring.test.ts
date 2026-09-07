@@ -2,11 +2,13 @@ import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SqliteEventStore } from "@moe/store";
 import { afterEach, expect, it } from "vitest";
 import { createAsyncCommandEntries } from "../daemon-command-async-entries.js";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { closeStores, openStore, PROJECT_ID } from "../review/review-test-fixtures.js";
 import { deploymentInfrastructureFiles } from "../repository/deployment/deployment-infrastructure-templates.js";
+import { DEPLOY_BUILD_CONTEXT_ENV_KEY } from "./deploy-command.js";
 import { recordDeployReceipt } from "./deploy-ledger.js";
 import { createDockerDouble } from "./deploy-ports.js";
 import type { CommandHandlerInput } from "../http/http-contract.js";
@@ -47,25 +49,37 @@ it("routes production rollback to receipt resolution before any Docker effect", 
  */
 it("routes a requested restore through the real credential seam, not a blanket refusal", async () => {
   const directory = mkdtempSync(join(tmpdir(), "moe-rollback-restore-wiring-"));
+  const storePath = join(directory, "store.sqlite");
   const previous = process.env[DEPLOY_BUILD_CONTEXT_ENV_KEY];
+  // The workspace the rollback resolves the destination against is HOST-SCOPED and reaches the
+  // seam only through this key -- the provider never takes it as a field, so an arm that omits
+  // it measures `DEPLOY_MIGRATION_WORKSPACE_UNCONFIGURED` and never reaches the credential read.
   process.env[DEPLOY_BUILD_CONTEXT_ENV_KEY] = directory;
   const provider = createStoreDependencies({
     credential: randomUUID(), principalId: "operator-1", projectId: "project-1",
-    repositoryWorkspace: directory, storePath: join(directory, "store.sqlite"),
+    repositoryWorkspace: directory, storePath,
   });
   try {
-    const store = provider.provide().store;
     // A REAL deploy receipt, so the request survives the receipt guard and reaches the restore.
-    const source = recordDeployReceipt(store, { decidedAt: "2026-09-06T00:00:00.000Z",
-      decisionId: "wiring-deploy-1", environment: "staging", imageDigest: `sha256:${"b".repeat(64)}`,
-      projectId: "project-1", refusal: null, releaseDecision: null, sha: "a".repeat(40), url: null });
-    expect(source).toMatchObject({ code: "DEBUG_SHOW_CODE", ok: true });
-    if (!source.ok) throw new Error(source.code);
+    // Written through a SECOND short-lived handle on the same file and closed immediately: the
+    // provider exposes no store (`provide()` returns authenticator/decisions/streams/registry),
+    // and seeding BEFORE it would make genesis refuse RECOVERY_INITIAL_INSTALL_HISTORY_PRESENT.
+    const seed = SqliteEventStore.openForProject(storePath, "project-1");
+    let source: ReturnType<typeof recordDeployReceipt>;
+    try {
+      source = recordDeployReceipt(seed, { decidedAt: "2026-09-06T00:00:00.000Z",
+        decisionId: "wiring-deploy-1", environment: "staging", imageDigest: `sha256:${"b".repeat(64)}`,
+        projectId: "project-1", refusal: null, releaseDecision: null, sha: "a".repeat(40), url: null });
+    } finally { seed.close(); }
+    // Named-code throw: a silently refused seed would leave every assertion below vacuous, and
+    // `toMatchObject({ ok: true })` hides WHICH code refused.
+    if (!source.ok) throw new Error(`deploy receipt seed refused: ${source.code}`);
     const handler = provider.provide().registry.get("deployment.rollback")?.asyncHandler;
     expect(handler).toBeTypeOf("function");
+    // `expectedVersion: 0` is admissible here for the same reason the arm above passes it: the
+    // refusal we measure happens before any durable commit, so no version check has run yet.
     const input = { envelope: { commandId: "rollback-restore-1", commandKind: "deployment.rollback",
-      targetAggregateId: "project-1", expectedVersion: store.getAggregateVersion("project-1"),
-      correlationId: "rollback-restore-1",
+      targetAggregateId: "project-1", expectedVersion: 0, correlationId: "rollback-restore-1",
       payload: { environment: "staging", toReceiptRef: source.receipt.receiptId, restoreDatabase: true },
     }, principal: { principalId: "operator-1", projectId: "project-1", capabilities: [] } } as unknown as CommandHandlerInput;
 
