@@ -225,7 +225,7 @@ describe("deriveNeedsYou", () => {
       goals: [{
         goalId: "goal-a", lifecycle: "EXECUTION_ENABLED",
         nodes: [{
-          accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-x", nodeRef: "execution-node-x",
+          accepted: null, claim: null, criterionIds: [], declaredMigrations: null, dependsOn: [], lastActivityAt: null, nodeKey: "node-x", nodeRef: "execution-node-x",
           objective: "o", landing: null, receipt: null, review: { escalated: false, findings: [], latestRoute: "REJECT_PLAN", rounds: 3, unreadable: false, unsuccessfulRounds: 3, version: 4 }, sharedKey: false,
           status: "ESCALATION_REQUIRED",
         }],

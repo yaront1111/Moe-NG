@@ -23,7 +23,7 @@ const RUN = "run-1";
 
 function node(nodeKey: string, status: RunNodeView["status"], extra: Partial<RunNodeView> = {}): RunNodeView {
   return {
-    accepted: null, claim: null, criterionIds: [], dependsOn: [], landing: null, lastActivityAt: null, nodeKey, nodeRef: `execution-${nodeKey}`,
+    accepted: null, claim: null, criterionIds: [], declaredMigrations: null, dependsOn: [], landing: null, lastActivityAt: null, nodeKey, nodeRef: `execution-${nodeKey}`,
     objective: `Objective of ${nodeKey}`, receipt: null,
     review: { escalated: false, findings: [], latestRoute: null, rounds: 0, unreadable: false, unsuccessfulRounds: 0, version: 0 },
     sharedKey: false, status, ...extra,
