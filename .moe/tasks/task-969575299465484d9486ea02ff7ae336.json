@@ -128,7 +128,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:12:31.237Z",
-  "updatedAt": "2026-09-07T18:44:45.959Z",
+  "updatedAt": "2026-09-07T18:44:49.744Z",
   "dependsOn": [
     "task-8e793ae3c63f41189bcc05f6d7c15605",
     "task-df64aa204d6f4c35810376226980e4b7",
@@ -194,7 +194,8 @@
     "apps/control-room/src/v2/ops/agent-provider-toggle.test.tsx",
     "tests/e2e/control-room/agent-provider-seats.spec.ts",
     "README.md",
-    "docs/agent-stack-runbook.md"
+    "docs/agent-stack-runbook.md",
+    ".moe/tasks/task-969575299465484d9486ea02ff7ae336.json"
   ],
   "completionSummary": "ROUND 2. Both clauses QA left open are CLOSED BY LANDED, QA-APPROVED ROWS. Detail: comment-900c214c + the step notes.\n\nREAD THIS RECORD, NOT WHAT YOU MAY HAVE SEEN AT 18:37Z. A daemon restart fired WORKER_DISCONNECTED (reason \"startup-worker-purge\") mid-session and released this row to REVIEW unassigned, still carrying the ROUND-1 REJECTED record (verification 577 files @ d5b191be; summary opening \"THE ROW'S TITLE IS FALSE AT HEAD\"). I flipped it back to WORKING solely to overwrite that — reopen #2 is that flip, not new rejected work — which reset all 5 steps, so I re-walked them with current measurements.\n\nDoD 1 CLOSED. The offer QA named as ROOT CAUSE is on the branch (affordance-agent-provider-offers.ts + .js + .test.ts; affordance-read.ts:34/:456; wip 9e347a3a; git status EMPTY on all nine paths). Rail-9 bidirectional set-equality enumerated from two INDEPENDENT production modules; the seam arm at affordance-read.test.ts:162-175 records why 41/41 passed blind (this kind has NO bootstrap chain step, so the offer roster was its only home). The toggle fixture is now built through buildNextAllowedCommands so it cannot drift from the daemon's real offer. The WRITE itself is no longer refused: task-136cbab2, commit cb494e27.\n\nDoD 4 CLOSED BY THE REAL DRIVE, not a quota discharge — `codex exec` exits 0 on this host, so that escape was unavailable and unused. task-117a3cd9: landing sha ca4abc80a37e80aff51f1600d58afffb6e57b818, review.submit x1 EFFECTS_COMMITTED, three seat_start rows all provider codex / codex-cli 0.153.4, MOE_AGENT_COMMAND <UNSET> so the DURABLE SETTING chose it. QA re-read the sqlite store itself.\n\nI WROTE PROSE ONLY. README.md + docs/agent-stack-runbook.md still asserted three things those rows made false, and the runbook described a Playwright spec that no longer exists (agent-provider-seats.spec.ts:174-187 already asserts the round trip).\n\nMY OWN ADVERSARIAL PASS FOUND A DEFECT IN MY DIFF AND I FIXED IT FIRST: I had written that a paired session wi",
   "rejectionDetails": {
@@ -334,18 +335,47 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "2ac509687098f6599976b8f938f5373756d153fb",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-319873d7@2026-09-07T18:20:29Z",
+      "paths": [
+        ".moe/tasks/task-969575299465484d9486ea02ff7ae336.json",
+        "docs/agent-stack-runbook.md",
+        "README.md"
+      ],
+      "recordedBy": "worker-319873d7",
+      "recordedAt": "2026-09-07T18:44:49.744Z",
+      "treeId": "ebc8fad96863793579173329a8996c59df5378f0",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "docs/agent-stack-runbook.md",
+          "taskId": "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
+        },
+        {
+          "path": "README.md",
+          "taskId": "task-161b7e9d566b4c47b429490a54a6cca1"
+        }
+      ],
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-b1872f24@2026-09-07T11:34:08Z",
-    "at": "2026-09-07T13:00:13.142Z"
+    "kind": "completion",
+    "sessionId": "worker-319873d7@2026-09-07T18:20:29Z",
+    "at": "2026-09-07T18:44:49.744Z"
   },
   "touchedFiles": [
     "apps/daemon/src/http/affordance-agent-provider-offers.test.ts",
-    "apps/daemon/src/http/affordance-agent-provider-offers.ts"
+    "apps/daemon/src/http/affordance-agent-provider-offers.ts",
+    "docs/agent-stack-runbook.md",
+    "README.md"
   ],
   "declaredFiles": [
     "README.md",

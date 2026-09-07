@@ -23,18 +23,22 @@
     {
       "stepId": "step-1",
       "description": "MEASURE THE PRODUCERS, EDIT NOTHING. Every earlier plan on this row hard-stopped on absent machinery; at f5382b06 (2026-09-07T18:48Z) nine of the ten dependencies are DONE and the surfaces exist. This step records the EXACT member names you will render, because rendering a guessed field is how this row was rejected before.\n\nRecord, from disk, not from a sibling's DoD:\n- `sed -n '9,34p' apps/control-room/src/live/live-deployments.ts` — `DeploymentMigration`, the browser-decoded observation. THIRTEEN members: subject('PROJECT_ENVIRONMENT'), environment, state('OBSERVED'|'UNKNOWN'), receiptId, outcome('APPLIED'|'REFUSED'|'REVERTED'|null), migrations(string[]|null), backupState('NONE'|'UNVERIFIED'|'VERIFIED'|null), backupSha256, refusalCode, refusalLayer, refusalFile, unknownCode, unknownLayer. It hangs off `DeploymentEnvironment.migration?` (:33), REQUIRED on the wire (MIGRATION_KEYS :43) and optional in the type.\n- `grep -n 'declaredMigrations' apps/control-room/src/live/live-runs.ts` — the member step 5 renders. It arrives with task-de65294bfa2649b99afc3aa4aa9399d0 (dependsOn). Record its EXACT name, nullability and UNKNOWN-vs-known-none convention from the landed `RunNodeView`; do NOT infer it from the scheduler's `NODE_DEFINITION_KEYS`, which is a different layer.\n- `grep -n 'MIGRATION_RECEIPT_COMMAND_KIND =' apps/daemon/src/repository/migrations/migration-receipt.ts` — the literal is `internal.repository.migration_receipt`, and `activity-read.ts:97` admits it into VERDICT_KINDS so `verdictOf` serves the receipt's `outcome` verbatim (:123-126).\n\nTHREE SEMANTIC RULES THAT DECIDE EVERY LATER ASSERTION, all sourced above:\n1. `migrations` NULL means UNKNOWN; `[]` means known-none. NEVER collapsed. `state:'UNKNOWN'` carries `unknownCode` (MIGRATION_RECEIPT_ABSENT | MIGRATION_RECEIPT_INVALID) and NULL for every observation member.\n2. THERE IS NO `pending` MEMBER anywhere in these reads — verify that with the grep above. DoD 6 forbids deriving pending from declaration-minus-receipt-history and forbids missing-evidence meaning none. So an environment with no admitted pending observation renders UNKNOWN, and you say so in your step note. Do not invent a pending count, and do not subtract a node's `declaredMigrations` from an environment's `migrations` — those are different subjects (node declaration vs PROJECT_ENVIRONMENT observation) and joining them is exactly the false attribution 8f1f15bc refused to build.\n3. backupState VERIFIED is the ONLY state carrying `backupSha256`; the path never leaves the daemon module. NONE and UNVERIFIED must not read as 'a backup exists'.\n\nNo file edits in this step. Record the greps and their output in your step note.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "MEASURED, NO EDITS. HEAD = 2ac509687098f6599976b8f938f5373756d153fb (plan anchored f5382b06; peers landed since — measurements below are FRESH at 2ac50968).\n\n(1) `sed -n '1,60p' apps/control-room/src/live/live-deployments.ts` — `DeploymentMigration` at :17-30, THIRTEEN members exactly as planned: subject('PROJECT_ENVIRONMENT'), environment, state('OBSERVED'|'UNKNOWN'), receiptId, outcome('APPLIED'|'REFUSED'|'REVERTED'|null), migrations(readonly string[]|null), backupState('NONE'|'UNVERIFIED'|'VERIFIED'|null), backupSha256, refusalCode, refusalLayer, refusalFile, unknownCode, unknownLayer. `DeploymentEnvironment.migration?` at :39 with the comment \"REQUIRED ON THE WIRE, optional here\". MIGRATION_KEYS at :43-44 lists all 13.\n\n(2) `grep -n 'declaredMigrations' apps/control-room/src/live/live-runs.ts` — LANDED (task-de65294b): `:63  readonly declaredMigrations: readonly string[] | null;` inside `RunNodeView` (:58-74), with its own doc comment \"Authored order. `null` is UNKNOWN (the node declares nothing); `[]` is declared none.\" Also :239 (exact-key roster), :249-253 (fail-closed decode), :277 (returned). EXACT NAME = `declaredMigrations`. Nullability = `readonly string[] | null`, REQUIRED member (never `undefined`). Convention: null=UNKNOWN, []=declared-none, array=authored order. NOT inferred from the scheduler's NODE_DEFINITION_KEYS.\n\n(3) `grep -n 'MIGRATION_RECEIPT_COMMAND_KIND =' apps/daemon/src/repository/migrations/migration-receipt.ts` -> `:10:export const MIGRATION_RECEIPT_COMMAND_KIND = \"internal.repository.migration_receipt\" as const;`. activity-read.ts VERDICT_KINDS includes it (:97) and verdictOf :122-126 branches `commandKind === DEPLOY_RECEIPT_COMMAND_KIND || commandKind === MIGRATION_RECEIPT_COMMAND_KIND` and returns `record[\"outcome\"]` VERBATIM.\n\nTHREE SEMANTIC RULES CONFIRMED FROM SOURCE:\n1. `migrations` null=UNKNOWN, []=known-none. The decoder ENFORCES the pairing at :76-79: `observed !== (migrations !== null)` refuses a frame that mixes them, and UNKNOWN forces receiptId/outcome/migrations/backupState ALL null while unknownCode/unknownLayer are non-null. So state:'UNKNOWN' + any observation member is unrepresentable.\n2. NO `pending` MEMBER. `grep -rn 'pending' live-deployments.ts apps/daemon/src/deployment/migration-observation.ts` returns ONE hit, a comment at migration-observation.ts:200 (\"no pending work\" an empty answer would be read as). Zero member declarations. So an environment with no admitted pending observation renders UNKNOWN; I will not mint a pending count and will not subtract a node's declaredMigrations from an environment's `migrations` (different subjects).\n3. backupSha256 rides VERIFIED ONLY — decoder :81 `if ((row.backupSha256 !== null) !== (row.backupState === \"VERIFIED\")) return null;`. NONE/UNVERIFIED carry no hash and must not read as \"a backup exists\". No path member exists anywhere in the browser type.\n\nEXTRA MEASUREMENT NOT IN THE PLAN, load-bearing for step 6: `environmentOf` (:92-107) calls `migrationOf(row.migration)` and returns null when it is null (`if (migration === null || migration.environment !== row.environment) return null;`). So on the LIVE wire the member is mandatory and cross-environment observations are refused at decode. The view-level \"absent member renders nothing\" arm (step 2/4) is still real — `DeploymentEnvironmentView` is the card's own type and its test factory can omit it — but the journey cannot produce that state through the daemon.\n\nSTEP-3 ROUTE QUESTION ANSWERED: the verdict-aware feed is NOT on the Runs route. `runs-screen.tsx` imports BoardLanes + GoalSection only (:4-7) and renders no feed. `decisionWords` is consumed by `board-feed.tsx:85`; `BoardFeed` is rendered by `board-screen.tsx:136`; `BoardScreen`'s only live host is `LiveBoard` in the same file (:234), imported by `cordum-app.tsx:38` and opened by the per-goal BOARD route (`boardRoute`, shell-routes.js, \"Open board\"). RECORDED: the migration receipt's words render on the per-goal BOARD route's decision feed. I will not attach the receipt to a goal to make a Runs route match (it carries no goalRef/nodeRef).\n\nSIZES (`wc -l`): goal-deployments.tsx 250 (AT the cap), activity-words.ts 206, board-lanes.tsx 165, goal-deployments.test.tsx 607, activity-words.test.ts 137, board-screen.test.tsx 234, deploy-environment.spec.ts 259. Confirms the plan; the extraction into migration-presentation.tsx is required, not optional.\n\nDOCKER: `docker version --format '{{.Server.Version}}'` -> `29.6.2`. The stale DEPLOY_DOCKER_UNAVAILABLE premise stays dead; step 7's disposable-PostgreSQL half is expected to run.\n\nPEER DIRT at step-1 (`git status --porcelain`, do not revert/stage): the five apps/control-room paths the plan listed are now CLEAN (peers landed them). Currently dirty and foreign: `apps/daemon/src/daemon-store-dependencies.test.ts` (staged M), `apps/daemon/src/preview/preview-goal-landing.test.ts` (??), `tests/e2e/control-room/contract-goal.spec.ts` + `lane-contract-goal.ts` + `lane-m",
+      "startedAt": "2026-09-07T18:45:02.160Z",
+      "completedAt": "2026-09-07T18:46:34.843Z"
     },
     {
       "stepId": "step-2",
       "description": "RED FIRST, all three surfaces, before a line of presentation. Extend the EXISTING suites; add no new test file (a new path here would let a helper be asserted without its real consumer ever rendering it).\n\n`apps/control-room/src/v2/ops/activity-words.test.ts` (137 lines) — the Runs/decision-feed words. Model on the deploy-receipt block already there (:110-131): assert `decisionWords('internal.repository.migration_receipt', v)` for APPLIED, REFUSED and REVERTED yields THREE DISTINCT sentences that share no leading word, that an unrostered verdict prints VERBATIM rather than reading as success, and that `verdict === null` falls back to `kindWords`. Extend the existing apostrophe/ASCII loop (:124-135) with the new strings — the scheduler package-boundary scan reds on an apostrophe in JSX.\n\n`apps/control-room/src/v2/goals/goal-deployments.test.tsx` (607 lines) — the Deployments card. Its `environment()` factory (:62) takes `Partial<DeploymentEnvironmentView>`, so add cases through it. Assert, per environment: OBSERVED+APPLIED renders the applied identifiers; OBSERVED+REFUSED renders code AND layer and does NOT render an applied state; REVERTED is distinct from both; `state:'UNKNOWN'` renders UNKNOWN (not zero, not 'none pending') and names `unknownCode`; `backupState:'NONE'` and `'UNVERIFIED'` do NOT say a backup exists while `'VERIFIED'` shows the sha256; TWO environments each show their OWN row and never cross-associate; and the absent `migration` member renders no migration line at all rather than an empty one. NEGATIVE ARM, load-bearing: assert the rendered subtree contains no `postgres://`, no `DATABASE_URL`, no absolute path and no `<a href>` for the backup — it is a reference, never a download.\n\n`apps/control-room/src/v2/board/board-screen.test.tsx` (234 lines) — the node card. It already asserts `cr.kanban.detail.*`/`cr.kanban.card.*`, which is why the arm lives here rather than in a new file. Assert: a node declaring ONE migration renders the line; a node declaring TWO renders BOTH identifiers (not one, not a truncation); a node declaring an empty list and a node with the member ABSENT both render NO line, asserted by querying the testid and finding null. Absence, not an empty label.\n\nCapture the intended RED. Do not touch the peer-dirty files listed in your session preamble.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/v2/ops/activity-words.test.ts",
         "apps/control-room/src/v2/goals/goal-deployments.test.tsx",
         "apps/control-room/src/v2/board/board-screen.test.tsx"
-      ]
+      ],
+      "startedAt": "2026-09-07T18:46:40.127Z"
     },
     {
       "stepId": "step-3",
@@ -141,17 +145,20 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:48:57.960Z",
-  "updatedAt": "2026-09-07T18:44:40.321Z",
+  "updatedAt": "2026-09-07T18:46:40.127Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:32:30.829Z",
     "plannedStepCount": 9,
-    "plannedDistinctFileCount": 10
+    "plannedDistinctFileCount": 10,
+    "executedStepCount": 1
   },
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 10 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-07T16:06:15.743Z",
   "planningNotes": {
@@ -183,5 +190,32 @@
   "blockedFromStatus": null,
   "blockedAt": null,
   "priorBlockedReason": "Approved UI-only proof scope conflicts with missing production prerequisites measured in step1, not a test/host wait. All four declared deps and card are DONE, but migrateWithBackup has zero production callers, migrateDown has no host configuration, NodeDefinition and Runs node DTO have no declared migration IDs (step3 expressly forbids filename inference), and activity/deployment reads expose no migration receipt/environment/backup payload. A real browser proof would need invented fixtures or upstream contract/composition edits outside approved scope. Need amended producer-owned composition + node declaration/read edges, not rebuilt engines or narrowed DoD. Also correct stale refusal assumption: REFUSED may have backupRef:null; actual pre-migration backup subtree must be preserved. Detailed fresh commands/anchors in latest row comment. Zero source/test edits, no leases/processes; all known dependency ids already DONE, so no already-satisfied blockedOnTaskIds supplied.",
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": null,
+  "commits": [
+    {
+      "sha": "1f59b624e65cdc5e61ad9f9d2489bd5dff7ab0e5",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-4d8571e7@2026-09-07T18:44:41Z",
+      "paths": [
+        ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json"
+      ],
+      "recordedBy": "worker-4d8571e7",
+      "recordedAt": "2026-09-07T18:44:45.694Z",
+      "treeId": "f484099d5ba7e830651e233f2e75e8a324bfad81",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-4d8571e7@2026-09-07T18:44:41Z",
+    "at": "2026-09-07T18:44:45.694Z"
+  }
 }

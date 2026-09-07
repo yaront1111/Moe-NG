@@ -67,9 +67,21 @@
     {
       "stepId": "step-4",
       "description": "THE SPARKLINE AND THE BACKUPS LIST.\n\nSPARKLINE, last hour of latency. There is NO chart precedent in this app — `grep -rln 'sparkline|polyline' apps/control-room/src/v2 --include=*.tsx` finds only shell files matching on unrelated svg. So draw it as INLINE SVG and add NO charting dependency: a library for one sparkline is a bundle and a supply-chain edge this surface does not need.\n\nMake it assertable and safe on the degenerate inputs it will actually meet:\n  - ZERO points (a brand-new environment): render the empty state, never an SVG with NaN coordinates. Assert it.\n  - ONE point: no division-by-zero when scaling across a range of width zero. Assert it — this is the classic sparkline crash and a new environment hits it immediately.\n  - All-identical latencies: same zero-range hazard on the Y axis.\n  - Assert the plotted point COUNT matches the window, so a sparkline silently drawing the whole ring instead of the last hour is caught.\nGive the SVG an accessible name and keep the numbers reachable as text or an attribute — a chart whose values exist only as path geometry cannot be asserted, and cannot be read by anyone using a screen reader.\n\nBACKUPS LIST — THREE DISTINCT VALUES (rail 2, DoD 3): proven / failed / not yet checked. Assert each separately, and assert specifically that NOT-YET-CHECKED DOES NOT RENDER AS PROVEN. That collapse is the whole failure this surface exists to prevent: child 2 records a restore-to-temp sha256 per backup precisely so \"a backup exists\" and \"a backup has been proven restorable\" are different facts, and an operator leans on that difference at the worst possible moment. Carry the state in a `data-` attribute so the arm does not depend on wording, and make the three visually distinguishable rather than distinguished only by colour.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-09-07T17:31:33.907Z"
+      "modifiedFiles": [
+        "apps/control-room/src/v2/ops/environments-section.tsx",
+        "apps/control-room/src/v2/ops/environments-section.test.tsx",
+        "apps/control-room/src/v2/ops/live-environments.tsx",
+        "apps/control-room/src/v2/ops/live-environments.test.tsx",
+        "apps/control-room/src/live/live-deployments-health.ts",
+        "apps/control-room/src/live/live-deployments-health.test.ts",
+        "apps/control-room/src/live/dev-proxy-paths.ts",
+        "apps/control-room/src/v2/ops/live-ops.tsx"
+      ],
+      "note": "STEP 4 CLOSED ON A TREE THAT ALREADY CARRIED IT, plus the one drill the prior seat could not run. I wrote no new production bytes this session; I measured what landed and drilled the collapse.\n\nWHY THIS STEP WAS STILL OPEN. Step 6's note says drill 2 could not run because step 4 \"stays PENDING because its two facts are not served\". Both facts are served now: dependsOn task-a98b01a4 (probe-ring window) and task-95e68a8d (restore-proof record) are DONE and landed.\n\nWHO ACTUALLY LANDED STEP 4's TWO DELIVERABLES - not me, and it matters for QA attribution:\n- latency-sparkline.{tsx,test.tsx} = 09c25cdf, task-a98b01a44ffd46cba9d9648fcb7001cb.\n- backups-list.{tsx,test.tsx} = 32fc4a9f, task-679cdaa380874f55978e8790d770e37a.\n- environments-section.* and live-environments.* = a24ac3df, THIS row.\nAll eight are tracked, on HEAD, and `git status --porcelain -- apps/control-room/src` is EMPTY.\n\nSTEP 4's NAMED PROPERTIES, each asserted, arm titles verbatim:\n- zero points: \"renders the empty state and emits NO SVG at all for zero points\" + \"emits no NaN in any attribute for zero points\".\n- one point: \"renders a single point without dividing by a zero x range\" + its NaN twin.\n- all-identical: \"renders all-identical latencies without dividing by a zero y range\" + NaN twin; plus an all-zero arm where range AND values are zero.\n- point COUNT vs the window: \"plots exactly the points the frame carries, never the whole ring behind them\" (environments-section.test.tsx:203) and \"follows the window the FRAME states rather than a span of its own\" (:215).\n- accessible name / values as text: \"gives the chart an accessible name that says what it plots and over what window\", \"keeps the latency values reachable as text, not only as path geometry\".\n- no charting dependency: \"adds no charting dependency - the control-room manifest names none\".\n- three restore-proof states asserted SEPARATELY: backups-list.test.tsx:84/91/98, one arm each; state carried on data-restore-proof, not on wording.\n\nDRILL 2, THE COLLAPSE - RUN THIS SESSION, the one step 6 recorded as owed.\nWindow announced 18:42:35Z in chat before touching disk. Target apps/control-room/src/v2/ops/backups-list.tsx, TRACKED and clean at window-open; live sha256 taken at window-open = 306ce4688ed71477269e3ee9197632c5f327a2018d1bf25deb5cb90d8aa6d5f0, backup keyed on TASK id + worker id (%TEMP%/drill-task-df972c27-worker-7b684492/), never on the seat id alone.\nMutant, the full collapse in all three places so it could not be caught by only one: NOT_CHECKED mark \"?\" -> \"✓\", sentence \"Restore NOT CHECKED yet\" -> \"Restore PROVEN\", and data-restore-proof mapped NOT_CHECKED -> \"PROVEN\".\nRED, 4 arms, and it reds on WHAT EACH ROW SAYS, not on a count - which is exactly what step 6 told me to check:\n- backups-list.test.tsx \"renders NOT CHECKED with its own attribute, mark and sentence\": expected 'PROVEN' to be 'NOT_CHECKED'.\n- backups-list.test.tsx \"shares neither the attribute nor a single word of its sentence with PROVEN\": expected 'PROVEN' to be 'NOT_CHECKED'.\n- backups-list.test.tsx:151 \"keeps all three sentences distinct, so no pair of states can be confused\": expected 2 to be 3. This is a SET-OF-SENTENCES size, not a row count - the two collapsed sentences deduped to one.\n- live-environments.test.tsx:218 \"renders the restore-proof state the daemon served, by value\": expected 'PROVEN' to be 'NOT_CHECKED'. The wire arm reds independently of the component arm, so the collapse is covered at both seams and not only at the leaf.\nRESTORED and proven in a call SEPARATE from the restore: post-restore sha256 306ce4688ed71477269e3ee9197632c5f327a2018d1bf25deb5cb90d8aa6d5f0, identical to the window-open value AND to the backup copy; `git diff -- <path>` EMPTY; `git status --porcelain -- <path>` EMPTY; `grep -c \"DRILL 2 MUTANT\"` = 0. Backup directory removed. Nothing else on disk was touched; no add -A, no stash, no revert of any foreign path.\n\nGATES, standalone and foreground, one command per call, no pipes into the runner and no chains; the last one re-run FRESH after the restore:\n- `pnpm --filter @moe/control-room test` EXIT 0, Test Files 197 passed (197) / Tests 2569 passed (2569). Re-run post-restore: EXIT 0, same 197/2569.\n- `pnpm typecheck` EXIT 0, every package Done including apps/control-room and apps/daemon, zero `error TS`.",
+      "startedAt": "2026-09-07T17:31:33.907Z",
+      "completedAt": "2026-09-07T18:44:11.184Z"
     },
     {
       "stepId": "step-5",
@@ -103,7 +115,7 @@
       "completedAt": "2026-09-07T00:04:36.687Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -130,23 +142,30 @@
       "author": "worker-4d8571e7",
       "content": "STEP 4 MEASURED AT HEAD (worker-4d8571e7, 2026-09-07 ~17:35Z, branch moe/work-2026-09-04). Step 4 has two halves. ONE IS DELIVERED AND VERIFIED. THE OTHER IS OWNED BY A DIFFERENT LIVE ROW.\n\n=== HALF 1, THE SPARKLINE: DELIVERED, NOT BY ME, AND I AM NOT REBUILDING IT ===\n`apps/control-room/src/v2/ops/latency-sparkline.tsx` (124 ln) + `.test.tsx` (219 ln) are TRACKED AND CLEAN. `git log --oneline -3 -- latency-sparkline.tsx` = `09c25cdf wip(task-a98b01a44ffd46cba9d9648fcb7001cb)`. The producer row built the browser half too, and wired it into MY module: `environments-section.tsx:98-102` renders `<LatencySparkline environment series={view.latencySeries} testId={...}.latency />`.\n\nI verified it against THIS row's step-4 text rather than assuming, arm by arm (`grep -n \"it(\" latency-sparkline.test.tsx`):\n- ZERO points: renders the empty state and emits NO SVG at all (:96), plus a separate no-NaN arm (:103). The module returns a `<p>` before any geometry, so there is no NaN-coordinate path to draw.\n- ONE point: no zero-x-range division (:111), one coordinate pair asserted, no-NaN arm (:119). `plotted()` guards with `Math.max(1, length-1)` and centres a lone point at `VIEWBOX_WIDTH/2`.\n- ALL-IDENTICAL latencies: no zero-y-range division (:127), no-NaN arm (:135), plus an all-ZERO arm where range and values are both zero (:143).\n- PLOTTED COUNT vs WINDOW: one coordinate pair per point (:63); the window comes from the FRAME not a constant (:84); `data-point-count` and `data-window-minutes` are attributes. Daemon side pins it too: `deployments-health-read.test.ts:268` `toEqual([\"points\",\"windowMinutes\"])`, `:287` `windowMinutes` 60, `:314` empty ring = `{points:[],windowMinutes:60}`.\n- ACCESSIBLE NAME AND READABLE NUMBERS: `role=\"img\"` + `aria-label` + `<title>` + a `data-latencies` attribute + a visible values line (:70, :77).\n- INLINE SVG, NO DEPENDENCY: asserted twice, once against the control-room manifest (:200) and once against the module's own import list (:213).\n- DERIVES NOTHING: names no health state however extreme the latencies (:189) - and it is not even HANDED the state.\nMy own section arms cover the wiring at `environments-section.test.tsx:188-230` (windowed span, empty series).\n\nThere is nothing left for me to add here, and adding a second sparkline would be the duplicate global rail 6 forbids.\n\n=== HALF 2, THE BACKUPS LIST: OWNED BY task-679cdaa380874f55978e8790d770e37a, WHICH IS **WORKING** ===\nThat row is titled \"The Health screen lists each backup with its restore-proof state, and not-yet-checked never reads as proven\" - this row's DoD 3 verbatim. It was filed 2026-09-07 by architect-dbe3631e as the BROWSER CHILD of task-1f994315 (the row that landed `/backups/read`), it has an APPROVED 7-step plan, and all 7 steps are PENDING.\n\nIts DoD 2/3/4 are my DoD 3, in more detail: three states in a `data-` attribute, distinguishable by MORE THAN COLOUR, asserted by VALUE, with a not-yet-checked-renders-as-proven DRILL, plus an absent-sha256/absent-checkedAt honesty arm.\n\nIts plan `affectedFiles` are: `live-deployments-health.ts`, `dev-proxy-paths.ts`, `environments-section.tsx`, `live-environments.tsx`, `http-listener-read-dispatch.test.ts`. FOUR of those five are files THIS row created or edited. Its step 5 names `environments-section.tsx` as where the backups list goes, and its step 4 adds `/backups/read` to `DEV_PROXY_PATHS`.\n\nI am not building it, and the reason is mechanical, not deferential. Contest is SYMMETRIC and has no tie-breaker: a dirty path in a peer row's plan `affectedFiles` is withheld from the commit. If I write the backups list into `environments-section.tsx` while 679cdaa3 is non-terminal, its exit withholds my bytes and my exit withholds its bytes, and NEITHER half lands for as long as both rows are open. Worse, it does not fail safe - a partial landing across a type-level dependency tore HEAD for ~40 minutes on this same branch earlier today (`51275d3c`), and a green working-tree gate cannot see it because the legs run against a tree that still contains the peer dirt.\n\nRouting to a new module would not escape it: the wiring line, the proxy pin and the census retirement all land in files that row's plan already names.\n\n=== GATES, FRESH, EACH STANDALONE AND FOREGROUND, NO PIPE AND NO CHAIN ===\n`pnpm --filter @moe/control-room test` -> `Test Files 195 passed (195)` / `Tests 2528 passed (2528)`, CR_EXIT=0.\n`pnpm typecheck` -> 19 `typecheck: Done`, TYPECHECK_EXIT=0.\nWorking tree: I made NO edits this session. `git status --porcelain -- apps/control-room/src/v2/ops/ apps/control-room/src/live/` shows only `live-runs.ts` / `live-runs.test.ts`, which are a peer's and which I did not touch, revert or stash.",
       "timestamp": "2026-09-07T17:34:05.309Z"
+    },
+    {
+      "id": "comment-efe982aa1a60400ba36c9a0bb0ab15ba",
+      "author": "worker-7b684492",
+      "content": "COMPLETION EVIDENCE, full text (the completionSummary is capped at 2000 chars and truncates mid-word, so the long form lives here).\n\nGATES, each standalone and foreground, one command per call, no pipes into the runner and no chains:\n1. `pnpm --filter @moe/control-room test` EXIT 0, `Test Files 197 passed (197)` / `Tests 2569 passed (2569)`. Count line present and nonzero, so not a vacuous run.\n2. `pnpm --filter @moe/control-room test` RE-RUN FRESH AFTER THE DRILL RESTORE: EXIT 0, same 197/2569.\n3. `pnpm typecheck` EXIT 0, every workspace package `typecheck: Done` including apps/control-room and apps/daemon, zero `error TS`.\nThese match qa-eaa78526's independent 18:31Z census exactly (197/2569), so the control-room tree did not move between the two windows.\n\nDoD 1 and DoD 2 - the frame drives it and nothing is recomputed. environments-section.tsx sets `data-status={view.state}` copied from the frame; the sparkline is handed `view.latencySeries` and nothing else - not the state, not a threshold. Arms: \"renders each of UP, DEGRADED and DOWN as the frame states it\"; \"follows the FRAME when the stated status disagrees with the probe material\"; \"keeps the stated status even when the SERIES it plots argues the other way\". Drill 1 (prior seat) replaced the attribute with a client-side derivation and took 4 arms red across both files, including the disagreeing-frame arm in the right direction (`expected 'DOWN' to be 'UP'`), which proves that fixture genuinely disagrees rather than agreeing with the naive rule either way.\n\nDoD 3 - three restore-proof values, asserted separately, at backups-list.test.tsx:84 / :91 / :98, one arm each, state carried on `data-restore-proof` so no arm depends on wording. See the drill below for the collapse.\n\nDoD 4 - `wc -l apps/control-room/src/v2/ops/ops-screens.tsx` = 238 BEFORE and 238 AFTER. This row never wrote to that file; `git status --porcelain` on the path was empty at claim and at close. 236 at filing, so the +2 is a peer's (task-84cd2e55 is WORKING in the same file). Under the 250 ceiling with 12 lines of headroom.\n\nDoD 5 - `/deployments/health/read` and `/backups/read` are both pinned in apps/control-room/src/live/dev-proxy-paths.ts (lines 33 and 13). live-deployments-health.ts decodes EXACT-KEY via `exactDataRecord`; drill 3 (prior seat) weakened it to accept unexpected keys and took 2 arms red, top-level and nested independently. All eight sources are ASCII-only, measured `grep -c '[^ -~\\t]'` = 0 per file; the apostrophes present are in comments, never in JSX text.\n\nDoD 6 - the gate table above.\n\nSTEP 4's NAMED SPARKLINE PROPERTIES, arm titles verbatim, all present:\n- zero points: \"renders the empty state and emits NO SVG at all for zero points\" plus \"emits no NaN in any attribute for zero points\"\n- one point: \"renders a single point without dividing by a zero x range\" plus its NaN twin\n- all-identical: \"renders all-identical latencies without dividing by a zero y range\" plus its NaN twin, and an all-zero arm where range AND values are zero\n- point count vs window: environments-section.test.tsx:203 \"plots exactly the points the frame carries, never the whole ring behind them\" and :215 \"follows the window the FRAME states rather than a span of its own\"\n- accessibility: \"gives the chart an accessible name that says what it plots and over what window\"; \"keeps the latency values reachable as text, not only as path geometry\"\n- no charting dependency: \"adds no charting dependency - the control-room manifest names none\"; \"imports no module to draw with\"\n\nDRILL 2, THE COLLAPSE - the drill step 6 recorded as owed, run this session. Step 6's note says drills 1 and 3 ran and drill 2 could not, because step 4 \"stays PENDING because its two facts are not served\". Both facts are served now: dependsOn task-a98b01a4 (the probe-ring window) and task-95e68a8d (the restore-proof record) are DONE and landed.\nWindow announced in #general at 18:42:35Z BEFORE touching disk, correcting my own 18:41Z \"read-only\" claim rather than letting it stand false. Target apps/control-room/src/v2/ops/backups-list.tsx, TRACKED and clean at window-open. Live sha256 read at window-open = 306ce4688ed71477269e3ee9197632c5f327a2018d1bf25deb5cb90d8aa6d5f0; backup keyed on the TASK id as well as the worker id (%TEMP%/drill-task-df972c27-worker-7b684492/), never the seat id alone, and the hash anchored to the live file rather than to anything already in %TEMP%.\nMutant: the FULL collapse in all three places at once, so no surviving spelling could fake a pass - mark \"?\" to the check glyph, sentence \"Restore NOT CHECKED yet\" to \"Restore PROVEN\", and `data-restore-proof` mapping NOT_CHECKED to \"PROVEN\".\nRED, 4 arms, and it reds on WHAT EACH ROW SAYS rather than on a count, which is what step 6 asked to be checked:\n- backups-list.test.tsx \"renders NOT CHECKED with its own attribute, mark and sentence\": `expected 'PROVEN' to be 'NOT_CHECKED'`\n- backups-list.test.tsx \"shares neither the attribute nor a single word of its sentence with PROVEN\": `expected 'PROVEN' to be 'NOT_CHECKED'`\n- backups-list.test.tsx:151 \"keeps all three sentences distinct, so no pair of states can be confused\": `expected 2 to be 3`. This is a SET-OF-SENTENCES size, not a row count - the two collapsed sentences deduped to one.\n- live-environments.test.tsx:218 \"renders the restore-proof state the daemon served, by value\": `expected 'PROVEN' to be 'NOT_CHECKED'`. The collapse reds at the WIRE seam independently of the component seam, so the property is not carried by a single leaf arm.\nRESTORED, proven in a call SEPARATE from the restore: post-restore sha256 306ce4688ed71477269e3ee9197632c5f327a2018d1bf25deb5cb90d8aa6d5f0, identical to the window-open value AND to the backup copy; `git diff -- <path>` EMPTY; `git status --porcelain -- <path>` EMPTY; `grep -c \"DRILL 2 MUTANT\"` = 0; backup directory removed. No other path was touched - no `git add -A`, no stash, no revert of any foreign path.\n\nATTRIBUTION, WHICH A FILE-CREATION CHECK GETS WRONG. Step 4's two deliverables were landed by OTHER rows: latency-sparkline.{tsx,test.tsx} = 09c25cdf (task-a98b01a44ffd46cba9d9648fcb7001cb); backups-list.{tsx,test.tsx} = 32fc4a9f (task-679cdaa380874f55978e8790d770e37a). THIS row authored environments-section.* and live-environments.* (a24ac3df) and composes the other two. backups-list.test.tsx:69 renders through `EnvironmentsSection`, this row's component - the peer wrote its arms against this row's seam. So DoD 1 and DoD 3 are delivered by composition plus assertion, not by authorship of the leaf modules, and `git log --diff-filter=A` is the wrong instrument for grading them.\n\nSTEP 5 DEVIATION, stated rather than silent (prior seat's, re-verified by me). The plan named ops-screens.tsx:201 `HealthScreen` as the insertion point; the wiring went to `LiveHealth` at live-ops.tsx:137 instead - two lines, one import and one element. Reason: ops-screens.tsx:12-17 documents HealthScreen as pure (\"No fetch, no clock beyond the `nowMs` handed in\") and this section fetches. Every other fetching section on that screen already sits in LiveHealth as a sibling of `<HealthScreen />`: LiveRepositoryRecovery, LiveSessions, LiveActivity. I verified the call site at live-ops.tsx:142 and left it as delivered.",
+      "timestamp": "2026-09-07T18:46:09.866Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T20:05:08.102Z",
-  "updatedAt": "2026-09-07T17:36:38.201Z",
+  "updatedAt": "2026-09-07T18:46:24.203Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T22:15:46.064Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 5
+    "executedStepCount": 6
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T22:18:24.088Z",
@@ -164,7 +183,8 @@
   "planApprovedAt": "2026-09-05T22:18:26.260Z",
   "contextFetchedBy": [
     "worker-b1872f24",
-    "worker-4d8571e7"
+    "worker-4d8571e7",
+    "worker-7b684492"
   ],
   "workStartedAt": "2026-09-06T23:47:33.058Z",
   "declaredFiles": [
@@ -179,13 +199,11 @@
     "apps/control-room/src/v2/ops/live-ops.tsx",
     "apps/daemon/src/http/http-listener-read-dispatch.test.ts"
   ],
-  "blockedReason": "DUPLICATE OWNERSHIP, MEASURED. This row's DoD 3 (backups list, three restore-proof states, not-yet-checked never proven) is owned WORD FOR WORD by task-679cdaa380874f55978e8790d770e37a: WORKING, approved 7-step plan, all steps PENDING. Two architects sliced one capability into two rows the same day from different parents (aa54e231 via task-f008f29a here; dbe3631e via task-1f994315 there). Neither description nor dependsOn names the other, and get_context returned NO epicSiblings key at all, so nothing surfaced it.\n\nWHY NOT JUST BUILD IT. Its affectedFiles are live-deployments-health.ts, dev-proxy-paths.ts, environments-section.tsx, live-environments.tsx, http-listener-read-dispatch.test.ts - FOUR of five created by THIS row. Contest is symmetric with no tie-breaker: neither half lands while both rows are open, and a partial landing across a type dependency tore HEAD for ~40 min on this branch today (51275d3c). A new module does not escape it: the wiring line, proxy pin and census retirement all land in files its plan names.\n\nNOT STALLED. Step 4's other half is DONE: latency-sparkline.tsx (124 ln) + test (219 ln), tracked and clean, landed by task-a98b01a4 in 09c25cdf, wired at environments-section.tsx:98. Verified arm by arm: zero points renders empty with NO SVG (not a NaN path), one-point / all-identical / all-zero each guarded, plotted count, window from the FRAME, aria-label + title + data-latencies + visible values, inline SVG no dependency, names no health state. Steps 1,2,3,5,6 COMPLETED; ops-screens.tsx UNTOUCHED at 238 lines vs 250.\n\nGATES FRESH, standalone: control-room test -> Test Files 195 passed (195) / Tests 2528 passed, exit 0. typecheck -> 19 Done, exit 0. NO edits this session, NO lease held.\n\nNEED: let 679cdaa3 land (auto-unblocks; next session VERIFIES DoD 3 against its bytes), or amend DoD 3 to name it owner so this row completes on the sparkline half. Detail: comment-220a46fd here, comment-654969d8 there.",
-  "blockedOnTaskIds": [
-    "task-679cdaa380874f55978e8790d770e37a"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-07T17:36:22.137Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "commits": [
     {
       "sha": "a24ac3df59df50927714339e62aa1108299f788f",
@@ -240,18 +258,18 @@
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json",
+    "apps/control-room/src/v2/ops/ops-screens.tsx",
+    "apps/control-room/src/live/live-ops.ts",
     "apps/control-room/src/live/dev-proxy-paths.ts",
-    "apps/control-room/src/live/live-deployments-health.test.ts",
     "apps/control-room/src/live/live-deployments-health.ts",
-    "apps/control-room/src/live/live-document-proxy.test.ts",
-    "apps/control-room/src/v2/ops/environments-section.test.tsx",
-    "apps/control-room/src/v2/ops/environments-section.tsx",
-    "apps/control-room/src/v2/ops/live-environments.test.tsx",
-    "apps/control-room/src/v2/ops/live-environments.tsx",
-    "apps/control-room/src/v2/ops/live-ops.tsx",
+    "apps/control-room/src/live/live-deployments-health.test.ts",
     "apps/daemon/src/http/http-listener-read-dispatch.test.ts",
-    ".moe/tasks/task-117a3cd91a8a4db1a61830be8c28f2d2.json"
+    "apps/control-room/src/v2/ops/environments-section.tsx",
+    "apps/control-room/src/v2/ops/environments-section.test.tsx",
+    "apps/control-room/src/v2/ops/live-environments.tsx",
+    "apps/control-room/src/v2/ops/live-environments.test.tsx",
+    "apps/control-room/src/v2/ops/live-ops.tsx",
+    "apps/control-room/src/live/live-document-proxy.test.ts"
   ],
   "touchedFiles": [
     "apps/control-room/src/v2/ops/live-environments.tsx",
@@ -271,5 +289,13 @@
     "kind": "checkpoint",
     "sessionId": "worker-4d8571e7@2026-09-07T17:28:19Z",
     "at": "2026-09-07T17:36:38.201Z"
-  }
+  },
+  "reviewStartedAt": "2026-09-07T18:46:24.203Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n\n Test Files  197 passed (197)\n      Tests  2569 passed (2569)\n   Start at  21:43:18\n   Duration  15.31s (transform 34.60s, setup 0ms, import 81.57s, tests 111.16s, environment 154.19s)\n\nEXIT=0",
+    "reportedAt": "2026-09-07T18:46:24.203Z"
+  },
+  "completionSummary": "GATES, fresh, standalone, foreground:\n- `pnpm --filter @moe/control-room test` EXIT 0, Test Files 197 passed (197) / Tests 2569 passed (2569). RE-RUN FRESH AFTER THE DRILL RESTORE: same 197/2569, EXIT 0.\n- `pnpm typecheck` EXIT 0, every package Done, zero `error TS`.\n\nDoD 4: ops-screens.tsx 238 BEFORE and 238 AFTER, UNTOUCHED by this row, under the 250 ceiling (236 at filing; the +2 is a peer's).\n\nATTRIBUTION, READ FIRST: step 4's two deliverables were landed by OTHER rows. latency-sparkline.{tsx,test.tsx} = 09c25cdf (task-a98b01a4); backups-list.{tsx,test.tsx} = 32fc4a9f (task-679cdaa3). THIS row authored environments-section.* and live-environments.* (a24ac3df) and COMPOSES the other two; backups-list.test.tsx:69 renders through EnvironmentsSection, this row's component. Grading DoD 1/3 by which commit created the file is the wrong instrument.\n\nDRILL 2, THE COLLAPSE - run this session; step 6 recorded drills 1 and 3 and could not run this one while step 4 was PENDING with its facts unserved. Deps task-a98b01a4 and task-95e68a8d are now DONE and landed. Window announced 18:42:35Z before touching disk. Mutant collapsed all three spellings at once (mark, sentence, data-restore-proof). RED on 4 arms, on WHAT EACH ROW SAYS not on a count:\n- \"renders NOT CHECKED with its own attribute, mark and sentence\": expected 'PROVEN' to be 'NOT_CHECKED'\n- \"shares neither the attribute nor a single word of its sentence with PROVEN\": same\n- backups-list.test.tsx:151 \"keeps all three sentences distinct\": expected 2 to be 3, a SET size, not a row count\n- live-environments.test.tsx:218 \"renders the restore-proof state the daemon served, by value\": expected 'PROVEN' to be 'NOT_CHECKED' - reds at the WIRE seam independently of the component seam.\nRESTORE PROVEN in a call separate from the restore: sha256 306ce4688e...d5f0 == the live file's window-open sha == the backup copy; git diff and git status --porcelain both EMPTY; grep -c \"DRILL 2 MUTANT\" = 0.\n\nSTEP 5 DEVIATION, stated: wired in"
 }
