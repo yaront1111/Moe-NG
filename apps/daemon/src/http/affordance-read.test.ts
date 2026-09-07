@@ -8,7 +8,7 @@ import { afterAll, describe, expect, it } from "vitest";
 import { ASYNC_SERVED_BOOTSTRAP_KINDS, BOOTSTRAP_COMMAND_KINDS }
   from "../bootstrap/bootstrap-contracts.js";
 import {
-  humanReviewWitness, missingPrerequisites, readDurableLedger,
+  humanReviewWitness, missingPrerequisites, readDurableLedger, versionOf,
 } from "../bootstrap/bootstrap-ledger.js";
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
 import {
@@ -25,7 +25,9 @@ import {
   acceptancePayload,
   closeStores as closeBootstrapStores,
   driveThrough,
+  envelope,
   openStore as openBootstrapStore,
+  send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { readApprovedNodeScope } from "../goals/goal-close-prerequisite.js";
 import { seedReviewAcceptance } from "../goals/goal-closure-test-fixtures.js";
@@ -53,6 +55,7 @@ import { runWorkClaimCommand } from "../work/work-claim-services.js";
 import { affordanceProjectMismatch, readAffordanceRequest } from "./affordance-contract.js";
 import type { NodeSpec } from "./affordance-contract.js";
 import type { DeployTarget } from "../deployment/deploy-ports.js";
+import { deployTargetAggregateId } from "../deployment/deploy-target-contracts.js";
 import { ENVIRONMENT_NAMES } from "../environment/environment-contracts.js";
 import {
   DEFAULT_SESSION_SUBJECT, DEFAULT_SUBJECTS, createAffordancePort,
@@ -1295,6 +1298,26 @@ describe("the offer roster and the step projection agree on a browser-approved g
  * believed it had offered something. Every arm below reads the PRODUCTION surface; a
  * hand-built frame would only prove the matcher string.
  */
+/**
+ * The `deployment.set_target` offers a surface read made, reduced to the two fields the
+ * consuming control actually spends. Read off the PRODUCTION surface result, in emission
+ * ORDER, so an arm can compare an exact ordered list rather than a set: a card matches on
+ * `targetAggregateId` by value, and an id that merely looks right renders nothing.
+ */
+function setTargetTuples(
+  offers: readonly {
+    readonly commandKind: string;
+    readonly expectedVersion: number;
+    readonly targetAggregateId: string;
+  }[],
+): readonly { readonly expectedVersion: number; readonly targetAggregateId: string }[] {
+  return offers
+    .filter((entry) => entry.commandKind === "deployment.set_target")
+    .map((entry) => ({
+      expectedVersion: entry.expectedVersion, targetAggregateId: entry.targetAggregateId,
+    }));
+}
+
 describe("deployment.deploy is offered per goal at deploy:<goalId> (task-2cedb26a)", () => {
   let deployMints = 0;
 
@@ -1366,11 +1389,19 @@ describe("deployment.deploy is offered per goal at deploy:<goalId> (task-2cedb26
     const goalId = goalOf(read);
     // THE SET, not a `not.toContain`: "offers nothing for deploy" and "offers something else
     // named differently" are one assertion. `deployment.set_target` is the sibling that must
-    // still be offered -- withholding the deploy must not withhold the way to fix it.
+    // still be offered -- withholding the deploy must not withhold the way to fix it. It is
+    // offered ONE PER ENVIRONMENT (task-9aea412b), so the set is pinned as the exact ordered
+    // {targetAggregateId, expectedVersion} tuple list rather than as a list of kinds: a
+    // cardinality-blind kind list would let the wrong axis back in without going red.
     expect(read.nextAllowedCommands
       .map((entry) => entry.commandKind)
-      .filter((kind) => kind.startsWith("deployment."))
-      .sort()).toEqual(["deployment.set_target"]);
+      .filter((kind) => kind.startsWith("deployment.") && kind !== "deployment.set_target"))
+      .toEqual([]);
+    expect(setTargetTuples(read.nextAllowedCommands)).toEqual(
+      ENVIRONMENT_NAMES.map((environment) => ({
+        expectedVersion: 0,
+        targetAggregateId: deployTargetAggregateId(BOOTSTRAP_PROJECT, environment),
+      })));
     // ABSENT, not disabled: the consumer's card renders nothing rather than a dead button.
     expect(cardMatches(read.nextAllowedCommands, goalId)).toEqual([]);
     // And the absence is NAMED, so the surface says which command would restore the offer.
@@ -1395,5 +1426,171 @@ describe("deployment.deploy is offered per goal at deploy:<goalId> (task-2cedb26
     const read = surfaceWithTargets(["preview"]);
     expect(cardMatches(read.nextAllowedCommands, goalOf(read))).toHaveLength(1);
     expect(ENVIRONMENT_NAMES.includes("production")).toBe(true);
+  });
+});
+
+/**
+ * task-9aea412b: the affordance surface offers `deployment.set_target`, so the binding
+ * control has something to spend.
+ *
+ * DoD 2 -- THE GRANULARITY DECISION, ASSERTED. ONE OFFER PER ENVIRONMENT, each carrying
+ * `deployTargetAggregateId(projectId, environment)` -- the aggregate `setDeployTarget`
+ * actually fences (deploy-target-command.ts:15) -- and that aggregate's own version. The
+ * offered aggregate and the fenced aggregate are therefore the SAME OBJECT, so the payload's
+ * `environment` and the CAS fence cannot disagree. The rationale for choosing this axis over
+ * a goal-scoped offer lives at the offer site (affordance-deploy-target-offers.ts).
+ *
+ * DoD 3 -- THE WITHHOLDING RULE, AND IT IS NOT THE DEPLOY OFFER'S INVERTED. `deployment.deploy`
+ * is withheld while NO target is bound; `deployment.set_target` is what an operator needs
+ * precisely then, so bound-ness withholds NOTHING here. The offer is withheld ONLY while the
+ * bootstrap prerequisite `project.activate` is unmet -- and nothing ADDITIONAL withholds it
+ * once that is satisfied. In particular an already-bound environment KEEPS its offer, because
+ * rebinding is legitimate: `never bound` is the first arm below, `already bound` is the rebind
+ * arm, and both must offer.
+ */
+describe("deployment.set_target is offered per environment (task-9aea412b)", () => {
+  afterAll(closeBootstrapStores);
+
+  let setTargetMints = 0;
+
+  function setTargetPort(worldStore: SqliteEventStore) {
+    // No `deployTarget` injection: the production reader is the composition under test.
+    return createAffordancePort({
+      mintId: (kind: string) => `afford-set-target-${kind}-${String(setTargetMints += 1)}`,
+      projectId: BOOTSTRAP_PROJECT,
+      store: worldStore,
+    });
+  }
+
+  /** A world driven to `project.activate` and read through the PRODUCTION composition. */
+  function setTargetWorld() {
+    const worldStore = openBootstrapStore();
+    driveThrough(worldStore, "goal.create");
+    return { port: setTargetPort(worldStore), store: worldStore };
+  }
+
+  function readOf(worldPort: ReturnType<typeof setTargetPort>) {
+    const result = worldPort.readSurface();
+    if (result.outcome !== "SURFACE") throw new Error(`surface refused: ${result.code}`);
+    return result;
+  }
+
+  /** One real binding through the SHIPPED dispatch, so the setter derives its own aggregate. */
+  function bind(
+    worldStore: SqliteEventStore, environment: string, expectedVersion: number,
+    network: string, commandId: string,
+  ): void {
+    const outcome = send(worldStore, envelope("deployment.set_target", expectedVersion, {
+      environment, network, sshTarget: null, url: null,
+    }, commandId));
+    // The REASON CODE, not merely "did not succeed": a refusal must name itself and its layer,
+    // and this is the exact line the falsified design died on (EXPECTED_VERSION_CONFLICT @
+    // DURABLE_STORE, comment-96a950d1).
+    expect(outcome.ok ? "ok" : `${outcome.code}@${outcome.refusedBy}`).toBe("ok");
+  }
+
+  it("offers one per environment BY VALUE, at the aggregate the setter fences", () => {
+    const read = surface();
+    // BY VALUE against the production surface read, as an EXACT ORDERED list -- not a shape
+    // match and not `toContain`. The literals are spelled out so the arm cannot drift with the
+    // helper it is guarding.
+    expect(setTargetTuples(read.nextAllowedCommands)).toEqual([
+      { expectedVersion: 0, targetAggregateId: `deploy-target:${PROJECT}:preview` },
+      { expectedVersion: 0, targetAggregateId: `deploy-target:${PROJECT}:production` },
+      { expectedVersion: 0, targetAggregateId: `deploy-target:${PROJECT}:verify` },
+    ]);
+    // And the same ids the CONSUMER will construct: the card builds
+    // `deployTargetAggregateId(projectId, environment)` for the row it renders and spends THAT
+    // offer, so agreement here is agreement with the control.
+    expect(setTargetTuples(read.nextAllowedCommands).map((row) => row.targetAggregateId))
+      .toEqual(ENVIRONMENT_NAMES
+        .map((environment) => deployTargetAggregateId(PROJECT, environment)));
+    // THE SET, not a subset: no stale PROJECT-targeted offer survives beside the real ones.
+    // Two offers for one kind is what makes a surface bug read as a UI bug -- the card would
+    // match an offer that has never been spendable.
+    expect(read.nextAllowedCommands.filter((entry) =>
+      entry.commandKind === "deployment.set_target"
+      && entry.targetAggregateId === PROJECT)).toEqual([]);
+  });
+
+  it("carries each environment's OWN version, and the offer it makes SPENDS", () => {
+    const world = setTargetWorld();
+    const previewKey = deployTargetAggregateId(BOOTSTRAP_PROJECT, "preview");
+    const first = setTargetTuples(readOf(world.port).nextAllowedCommands)
+      .find((row) => row.targetAggregateId === previewKey);
+    expect(first).toEqual({ expectedVersion: 0, targetAggregateId: previewKey });
+
+    // FIRST BIND spends the offer the surface just made, at the version it just carried.
+    bind(world.store, "preview", first!.expectedVersion, "moe-preview", "cmd-set-target-first");
+
+    const after = setTargetTuples(readOf(world.port).nextAllowedCommands);
+    const ledgerAfterFirst = readDurableLedger(world.store, BOOTSTRAP_PROJECT);
+
+    // THE SPEND COMES FIRST, DELIBERATELY, and it is the primary evidence. REBINDING IS
+    // LEGITIMATE, so an already-bound environment still offers and that offer must still SPEND.
+    // Ordering the dispatch ahead of the number assertions is what keeps this arm strictly
+    // stronger than the bug it guards: a resolver sourcing its version from any aggregate the
+    // setter does not fence fails HERE, naming EXPECTED_VERSION_CONFLICT @ DURABLE_STORE, rather
+    // than on a comparison. The falsified design passed a numbers-only arm because that arm
+    // compared the offer against a value derived the same wrong way.
+    bind(world.store, "preview", after[0]!.expectedVersion, "moe-preview-2",
+      "cmd-set-target-rebind");
+
+    // INDEPENDENT VERSIONS ON ONE SURFACE: preview moved, its siblings did not. A single
+    // goal-scoped scalar cannot express this, which is why the goal-scoped design was falsified.
+    // Asserted on the pre-rebind read captured above, so the spend above could run first.
+    expect(after).toEqual([
+      { expectedVersion: 1, targetAggregateId: previewKey },
+      { expectedVersion: 0,
+        targetAggregateId: deployTargetAggregateId(BOOTSTRAP_PROJECT, "production") },
+      { expectedVersion: 0,
+        targetAggregateId: deployTargetAggregateId(BOOTSTRAP_PROJECT, "verify") },
+    ]);
+    // Read, never fabricated: the offered version IS `versionOf` on the fenced aggregate, read
+    // through the PRODUCTION ledger reader against the PRODUCTION key — never a value the
+    // resolver could have derived the same wrong way.
+    expect(after[0]!.expectedVersion).toBe(versionOf(ledgerAfterFirst, previewKey));
+    expect(setTargetTuples(readOf(world.port).nextAllowedCommands)[0])
+      .toEqual({ expectedVersion: 2, targetAggregateId: previewKey });
+  });
+
+  it("offers an OUT-OF-ROSTER environment that was durably bound, after the roster", () => {
+    // The union leg is load-bearing, not decorative: `setDeployTarget` admits environments by
+    // REGEX (deploy-receipt-contracts.ts:139 `ENVIRONMENT_NAME`), NOT by `ENVIRONMENT_NAMES`
+    // -- `isEnvironmentName` is a different function and is not on the setter's path. So a name
+    // outside the closed roster is durably bindable, and without the durable leg its rebind
+    // offer would vanish the moment it was created.
+    const world = setTargetWorld();
+    const stagingKey = deployTargetAggregateId(BOOTSTRAP_PROJECT, "staging");
+    expect((ENVIRONMENT_NAMES as readonly string[]).includes("staging")).toBe(false);
+    expect(setTargetTuples(readOf(world.port).nextAllowedCommands)
+      .some((row) => row.targetAggregateId === stagingKey)).toBe(false);
+
+    bind(world.store, "staging", 0, "moe-staging", "cmd-set-target-staging");
+
+    // ORDER IS PART OF THE CONTRACT: roster order first, then durable-only extras ascending.
+    expect(setTargetTuples(readOf(world.port).nextAllowedCommands)).toEqual([
+      { expectedVersion: 0,
+        targetAggregateId: deployTargetAggregateId(BOOTSTRAP_PROJECT, "preview") },
+      { expectedVersion: 0,
+        targetAggregateId: deployTargetAggregateId(BOOTSTRAP_PROJECT, "production") },
+      { expectedVersion: 0,
+        targetAggregateId: deployTargetAggregateId(BOOTSTRAP_PROJECT, "verify") },
+      { expectedVersion: 1, targetAggregateId: stagingKey },
+    ]);
+    // And it spends: the durable-only offer is a real rebind affordance, not a listing.
+    bind(world.store, "staging", 1, "moe-staging-2", "cmd-set-target-staging-rebind");
+  });
+
+  it("withholds every offer before project.activate, and NAMES the prerequisite", () => {
+    // The withholding rule, PREREQUISITE-QUALIFIED. This is the only thing that withholds it;
+    // bound-ness never does.
+    const worldStore = openBootstrapStore();
+    const read = readOf(setTargetPort(worldStore));
+    expect(setTargetTuples(read.nextAllowedCommands)).toEqual([]);
+    const steps = read.steps.filter((entry) => entry.kind === "deployment.set_target");
+    // ONE step, not "at least one": the per-environment splice must not run while blocked.
+    expect(steps).toHaveLength(1);
+    expect(steps[0]).toMatchObject({ missing: ["project.activate"], status: "BLOCKED" });
   });
 });

@@ -31,6 +31,7 @@ import { activeClaim, readWorkClaimLedger } from "../work/work-claim-services.js
 import type { WorkClaimLedger } from "../work/work-claim-services.js";
 import { AFFORDANCE_SURFACE_LAYER, NODE_DELIVER_KIND } from "./affordance-contract.js";
 import { createCompilerLanePort } from "./affordance-compiler-lane.js";
+import { resolveDeployTargetOffers } from "./affordance-deploy-target-offers.js";
 import { resolvePlanningAuthorities } from "./affordance-planning-authorities.js";
 import { planReviewable, resolvePlanningOffers } from "./affordance-planning-offers.js";
 import type {
@@ -324,8 +325,12 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       const version = versionOf(ledger, aggregateId);
       // Planning offers are emitted per durable goal below. These steps remain
       // the demo seed chain's compatibility status until R3-10b scopes the board.
+      // `deployment.set_target` is excluded too: it is minted PER ENVIRONMENT below, at the
+      // aggregate `setDeployTarget` fences. Leaving the generic PROJECT-targeted offer beside
+      // those would let the card match an offer that has never been spendable.
       if (kind !== "plan.propose" && kind !== "approval.decide" && kind !== "goal.close"
-        && kind !== "repository.publish" && kind !== "deployment.deploy") {
+        && kind !== "repository.publish" && kind !== "deployment.deploy"
+        && kind !== "deployment.set_target") {
         offers.push(offer(kind, aggregateId, version, BOOTSTRAP_SCHEMA_VERSION));
       }
       return Object.freeze({
@@ -414,6 +419,32 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     }
     if (deploymentSteps.length > 0) {
       steps.splice(steps.findIndex((step) => step.kind === "deployment.deploy"), 1, ...deploymentSteps);
+    }
+    // Binding a target is a per-(project, environment) act, so it gets ONE OFFER PER
+    // ENVIRONMENT at the aggregate the setter fences — see affordance-deploy-target-offers.ts
+    // for why that axis and not the goal-scoped one. WITHHELD ONLY BY THE PREREQUISITE: the
+    // generic step is the ORACLE for that rule rather than a second reading of
+    // `missingPrerequisites`, so BLOCKED means no offer and its single step names what is
+    // missing. Anything else — READY, or COMMITTED once a first bind has landed — still offers,
+    // because REBINDING IS LEGITIMATE and the COMMITTED branch above re-offers only
+    // `policy.install`. Once per surface read, never inside a goal loop: the resolver's
+    // enumeration is a payload-free indexed range scan and per-goal is the hot-path shape.
+    const setTargetIndex = steps.findIndex((step) => step.kind === "deployment.set_target");
+    const setTargets = setTargetIndex >= 0 && steps[setTargetIndex]?.status !== "BLOCKED"
+      ? resolveDeployTargetOffers({ ledger, projectId: config.projectId, store: config.store }).offers
+      : [];
+    // AN OFFER AND ITS STEP ARE PUSHED TOGETHER OR NOT AT ALL. The offered-kind array and the
+    // READY-step array are compared WITH CARDINALITY, so emitting offers on a path that could
+    // skip the splice would desync them; resolving the list first makes that unrepresentable.
+    if (setTargets.length > 0) {
+      steps.splice(setTargetIndex, 1, ...setTargets.map((entry) => {
+        offers.push(offer("deployment.set_target", entry.aggregateId, entry.version, BOOTSTRAP_SCHEMA_VERSION));
+        return Object.freeze({
+          aggregateId: entry.aggregateId,
+          ...claimFields(claims, "deployment.set_target", entry.aggregateId, now),
+          kind: "deployment.set_target", missing: [], status: "READY" as const, version: entry.version,
+        });
+      }));
     }
     // Compiler-lane steps: what makes the WRAPPER staff a planning agent onto a
     // source-bound goal. READY at the goal aggregate's own version — the offer
