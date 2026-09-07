@@ -59,11 +59,39 @@ export interface DeploymentsHealthErrorLine {
   readonly source: "DEPLOY_RECEIPT";
 }
 
+/** How much of the probe ring a latency series carries. The ring holds 1440 rows; a sparkline
+ * wants the recent shape, so the projection bounds it here rather than handing a browser 1440
+ * points to draw sixty. Stated IN the frame below, never left for a consumer to infer. */
+export const DEPLOYMENTS_HEALTH_SERIES_WINDOW_MINUTES = 60;
+
+/**
+ * One plotted observation. The instant and the latency ONLY: a per-point `status` repeated down
+ * the series is precisely the material a client would recompute UP/DEGRADED/DOWN from, and the
+ * daemon owns exactly one opinion about one ring. That opinion is `state`.
+ */
+export interface DeploymentsHealthSeriesPoint {
+  readonly at: string;
+  readonly latencyMs: number;
+}
+
 export interface DeploymentsHealthView {
   readonly environment: string;
   /** The open incident, or null. A healthy environment has no incident member to fabricate. */
   readonly incident: { readonly id: number; readonly openedAt: string } | null;
   readonly lastError: DeploymentsHealthErrorLine | null;
+  /**
+   * The bounded latency history a sparkline draws, newest LAST so it cannot disagree with
+   * `lastProbe` about which end is newest. `windowMinutes` travels WITH the points because an
+   * empty series has no instants to infer a span from, so a consumer could not otherwise assert
+   * it plotted the right window. The window is anchored on the NEWEST PROBE, not on a wall
+   * clock: this projection reads durable material and owns no clock, and a ring that went quiet
+   * three days ago still shows its final hour rather than an empty chart - `lastProbe.at` is
+   * what says how stale that hour is.
+   */
+  readonly latencySeries: {
+    readonly points: readonly DeploymentsHealthSeriesPoint[];
+    readonly windowMinutes: typeof DEPLOYMENTS_HEALTH_SERIES_WINDOW_MINUTES;
+  };
   readonly lastProbe:
     | { readonly at: string; readonly latencyMs: number; readonly status: HealthProbe["status"] }
     | null;
@@ -182,6 +210,26 @@ function lastProbeOf(probes: readonly HealthProbe[]): DeploymentsHealthView["las
     : Object.freeze({ at: probe.at, latencyMs: probe.latencyMs, status: probe.status });
 }
 
+/**
+ * The windowed series, anchored on the newest probe and INCLUSIVE of the far edge. Source order
+ * is preserved rather than re-sorted, so newest-last holds exactly as it does for `lastProbe`.
+ * An instant this cannot parse is DROPPED rather than carried: a NaN travelling into a chart
+ * renders as nothing, which looks the same as a gap nobody recorded.
+ */
+function latencySeriesOf(probes: readonly HealthProbe[]): DeploymentsHealthView["latencySeries"] {
+  const windowMinutes = DEPLOYMENTS_HEALTH_SERIES_WINDOW_MINUTES;
+  const newestAt = Date.parse(probes.at(-1)?.at ?? "");
+  if (Number.isNaN(newestAt)) return Object.freeze({ points: Object.freeze([]), windowMinutes });
+  const oldestAllowed = newestAt - (windowMinutes * 60_000);
+  const points = probes.flatMap((probe): readonly DeploymentsHealthSeriesPoint[] => {
+    const at = Date.parse(probe.at);
+    return Number.isNaN(at) || at < oldestAllowed
+      ? []
+      : [Object.freeze({ at: probe.at, latencyMs: probe.latencyMs })];
+  });
+  return Object.freeze({ points: Object.freeze(points), windowMinutes });
+}
+
 /** Projection only: every value below is read off the durable material or derived by its owner. */
 export function projectDeploymentsHealth(
   environment: string, source: DeploymentsHealthSource,
@@ -191,6 +239,7 @@ export function projectDeploymentsHealth(
     incident: openIncidentOf(source.incidents),
     lastError: errorLineOf(source.deploys),
     lastProbe: lastProbeOf(source.probes),
+    latencySeries: latencySeriesOf(source.probes),
     ok: true as const,
     probeRefusal: probeRefusalOf(source.deploys),
     rollbackSha: source.deploys?.previous?.sha ?? null,

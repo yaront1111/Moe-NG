@@ -178,6 +178,10 @@ it("serves environment state, the verbatim error line and the open incident from
       // invented DOWN. This is `deriveHealthState`'s answer for an empty history.
       expect(view["state"]).toBe("DEGRADED");
       expect(view["lastProbe"]).toBeNull();
+      // An environment with no probes yet still states the window it has no points for: an
+      // absent member would make "brand new" indistinguishable from "unreadable" at the
+      // control-room decoder's exact-key gate, which is the day-one input for this surface.
+      expect(view["latencySeries"]).toEqual({ points: [], windowMinutes: 60 });
       expect(view["incident"]).toBeNull();
       expect(view["ok"]).toBe(true);
     } finally {
@@ -211,6 +215,22 @@ it("serves environment state, the verbatim error line and the open incident from
       expect(view["incident"]).toEqual({ id: 1, openedAt: "2026-09-06T11:02:00.000Z" });
       expect(view["rollbackSha"]).toBe(SHA);
       expect(view["rollbackSha"]).not.toBe(ROLLBACK_SHA);
+      // THE WINDOWED SERIES, OVER THE SOCKET, off the SAME production ring writer that fed
+      // `lastProbe` above - not a hand-built source object. Three probes inside one hour, so the
+      // whole ring and the window agree here; the arm that separates them (a ring spanning more
+      // than an hour) is at the projection seam in `http/deployments-health-read.test.ts`, where
+      // 90 rows can be seeded without 90 socket round-trips.
+      expect(view["latencySeries"]).toEqual({
+        points: [
+          { at: "2026-09-06T11:00:00.000Z", latencyMs: 11 },
+          { at: "2026-09-06T11:01:00.000Z", latencyMs: 11 },
+          { at: "2026-09-06T11:02:00.000Z", latencyMs: 431 },
+        ],
+        windowMinutes: 60,
+      });
+      // Newest LAST and identical to `lastProbe`: two members of one frame reading one ring.
+      expect(((view["latencySeries"] as { readonly points: readonly { readonly at: string }[] })
+        .points.at(-1))?.at).toBe((view["lastProbe"] as { readonly at: string }).at);
     } finally {
       await started.shutdown();
     }
