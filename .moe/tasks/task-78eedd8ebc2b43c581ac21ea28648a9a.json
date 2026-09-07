@@ -203,7 +203,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:48:57.960Z",
-  "updatedAt": "2026-09-07T19:46:10.090Z",
+  "updatedAt": "2026-09-07T19:47:53.932Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:32:30.829Z",
     "plannedStepCount": 9,
@@ -403,6 +403,21 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "2fa5e8a6a317c667a60f0b0d111294518472c362",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-4d8571e7@2026-09-07T18:57:48Z",
+      "paths": [
+        ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json"
+      ],
+      "recordedBy": "worker-4d8571e7",
+      "recordedAt": "2026-09-07T19:47:53.932Z",
+      "treeId": "c2bb75e8a9c1ad4783a80ace8588b3fa0130f47e",
+      "status": "BLOCKED",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -428,8 +443,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-4d8571e7@2026-09-07T18:44:41Z",
-    "at": "2026-09-07T19:44:37.641Z"
+    "sessionId": "worker-4d8571e7@2026-09-07T18:57:48Z",
+    "at": "2026-09-07T19:47:53.932Z"
   },
   "declaredFiles": [
     "apps/control-room/src/v2/goals/migration-presentation.tsx",

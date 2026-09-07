@@ -1,0 +1,29 @@
+{
+  "id": "task-0bd37766500c427aacf4f59abbd6dad1",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "bug: foundation-attempt-windows.test.ts:861 reds the whole daemon leg once src reaches 592 test files",
+  "description": "Filed by worker-319873d7 from task-bd2f1ecf186f4ab5884c2a3ada07108e (Gate 3 release authorization). NOT a defect in that row's diff — measured, see the control below. Out of that row's owned paths, so filed rather than fixed inline.\n\nSYMPTOM. `pnpm --filter @moe/daemon test` (which is `vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src`) exits 1 with exactly one failure:\n  src/work/foundation-attempt-windows.test.ts:861:24  expect(outcome.ok).toBe(true)  -> received false\n  Test Files 1 failed | 591 passed (592). Tests 1 failed | 10571 passed | 8 skipped (10580).\nReproduced twice, back to back (733.80s and 414.69s runs). Not a random flake.\n\nMEASUREMENT, four runs, all foreground on the same host and tree:\n1. src (592 files), maxWorkers=4 -> EXIT 1, the failure above.\n2. src (592 files), maxWorkers=4, repeat -> EXIT 1, identical failure.\n3. The failing file ALONE, `--testTimeout=30000` passed explicitly (the package script's flag is dropped when you narrow) -> EXIT 0, Test Files 1 passed (1), Tests 8 passed (8), 171.40s.\n4a. src with `--exclude \"**/release-decide-authorization.test.ts\"` (591 files) -> EXIT 0, 591 passed (591), 10553 passed | 8 skipped.\n4b. THE CONTROL: src with `--exclude \"**/release-decide-wiring.test.ts\"` (591 files), the new authorization file KEPT and its 19 arms executing (10566 passed vs 10553) -> EXIT 0, 591 passed (591).\n\n4b is the decisive one. Removing a DIFFERENT file clears the red just as well as removing the new one, so the trigger is the suite reaching 592 files under maxWorkers=4, not any particular file's content. The new authorization file's own test time is 289ms, far too small to be load.\n\nLIKELY CAUSE, from the failing arm's OWN comment at :836-842: it launches a REAL provider session child (\"the produced argv is a real provider session rather than `--version`, so the child's latency is the provider's: observed at 100s and 122s on this host, which made the old 120_000 bound a coin flip. 240_000 keeps a real bound\"). The bound was already documented as marginal. At 592 files under 4 workers the co-scheduling shifts enough that the launch exceeds it, and settlement never releases the worktree, so `outcome.ok` is false.\n\nWHY THIS MATTERS BEYOND ONE ROW. The daemon leg is the owned-package gate for every row touching apps/daemon. As written it fails for the NEXT row that adds a test file, whoever that is, and the failure names a file that row never touched — so each one pays the same multi-run attribution cost this row just paid. The bound is a host-latency coin flip that the file count decides.\n\nSUGGESTED DIRECTIONS (not a prescription): raise or remove the 240_000 provider bound on that arm; or make the arm's provider launch a fake on the parallel lane and keep the real one behind an opt-in; or pin the arm to its own worker/sequence so co-scheduling cannot move it. Whoever takes it should re-run the control above rather than trusting this record.\n\nNOT IN SCOPE HERE: the release authorization change. Its own primary gate `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/release` is EXIT 0, 13 files / 135 tests, and the failing file imports nothing that row touched (grep-verified per file: no reference to release-decide-command.ts, release-decide-service.ts or daemon-command-async-entries.ts).",
+  "definitionOfDone": [
+    "Reproduce the red at 592 daemon test files under --maxWorkers=4, then re-run BOTH controls from the description (exclude the authorization file; exclude a different file) and confirm each returns 591 passed EXIT 0 — the file-count trigger must be re-measured, not assumed from this record.",
+    "Name the actual mechanism with evidence (child-process latency against the 240_000 bound, worker co-scheduling, or worktree settlement), quoting the measured launch duration rather than inferring it from the arm's comment.",
+    "Land a fix that makes `pnpm --filter @moe/daemon test` EXIT 0 at the CURRENT file count AND at count+1: add one throwaway trivial test file, prove the leg still exits 0, then remove it. A fix that only greens today's count re-arms for the next row.",
+    "The arm keeps asserting what it asserts today: settlement released the worktree, the boundary was actually reached, and the launch was a real provider session on whichever lane still runs it. Weakening the assertion or deleting the arm is not a fix.",
+    "Record the fresh foreground count lines and exit codes for the daemon leg, and disclose any foreign red with path attribution rather than calling it green."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 73,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-07T19:51:40.083Z",
+  "updatedAt": "2026-09-07T19:51:40.083Z"
+}
