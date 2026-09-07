@@ -167,7 +167,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T20:09:19.797Z",
-  "updatedAt": "2026-09-07T16:26:14.136Z",
+  "updatedAt": "2026-09-07T16:26:20.688Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T13:11:13.062Z",
     "plannedStepCount": 7,
@@ -338,6 +338,23 @@
       "status": "WORKING",
       "pushed": false,
       "message": "Hand-landed by the deliverer: the path is contested by task-1f994315fd164a789424349cb7bba4ca's plan, so the wrapper's exit commit withheld it (Moe-Contested trailer on 7f11c751) and the row's core DoD-3 fix would otherwise never reach the branch. Working tree for this file was HEAD + this row's diff only, verified by reading the full `git diff` before committing; no foreign bytes ride along. The row's other paths landed earlier at 6c7c3b40."
+    },
+    {
+      "sha": "a554cd56845e3fecf6b42a34cb4cedcc201077fb",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-eaa78526@2026-09-07T16:26:14Z",
+      "paths": [
+        ".moe/tasks/task-078232fb9b9d4c06a5faf3c02adaf705.json",
+        ".moe/tasks/task-5f1d10aa804e4f9499ca41f5c4c890c5.json",
+        ".moe/tasks/task-a98b01a44ffd46cba9d9648fcb7001cb.json"
+      ],
+      "recordedBy": "qa-eaa78526",
+      "recordedAt": "2026-09-07T16:26:20.688Z",
+      "treeId": "9ccbeb425560cbcc68ba8c3eca4e8aca875903ec",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -347,7 +364,10 @@
     "apps/daemon/src/monitoring/health-probe-contracts.ts",
     "apps/daemon/src/monitoring/health-probe-ring.ts",
     "apps/daemon/src/daemon-store-foundation-composition.ts",
-    "apps/daemon/src/monitoring/health-probe-schedule.test.ts"
+    "apps/daemon/src/monitoring/health-probe-schedule.test.ts",
+    ".moe/tasks/task-078232fb9b9d4c06a5faf3c02adaf705.json",
+    ".moe/tasks/task-5f1d10aa804e4f9499ca41f5c4c890c5.json",
+    ".moe/tasks/task-a98b01a44ffd46cba9d9648fcb7001cb.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/monitoring/health-probe-schedule.test.ts"
@@ -355,9 +375,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-7b684492@2026-09-07T16:25Z",
-    "at": "2026-09-07T16:24:45.118Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-eaa78526@2026-09-07T16:26:14Z",
+    "at": "2026-09-07T16:26:20.688Z"
   },
   "reviewStartedAt": "2026-09-07T16:25:56.264Z",
   "verification": {
