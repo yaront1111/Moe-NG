@@ -113,8 +113,8 @@
       "completedAt": "2026-09-07T06:44:55.478Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-97200064",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -205,11 +205,17 @@
       "author": "worker-767c9887",
       "content": "STEP 6 GATE EVIDENCE — worker-767c9887, resumed session, 2026-09-07 06:3x-06:4xZ. HEAD `91f9f062f181184c069a5a873be6d2393b674a65` for every measurement below.\n\nDRILLS AND CENSUS WERE COMPLETED IN THE PRIOR SESSION AND ARE NOT RE-RUN. Their transcript is comment-cc45c428aece4926af3548f46f803e9b (three drills, each restored with sha256 proof against an out-of-tree backup in a call SEPARATE from the restore, per global rail 13) and the step-1..step-5 notes. RESTORE RE-PROVED AT THE START OF THIS SESSION, which is the check that matters after a session death: `git status --porcelain` on all four owned paths returned EMPTY, and `git cat-file -e HEAD:<path>` succeeded for each — so no drill mutant survived into this tree. The four are landed by this row's own checkpoint `eaf28ce6 wip(task-9aea412b...) [status=BLOCKED]`, whose trailer reads `Moe-Paths: 7`.\n\nTHE GATE WAS RED ON FIRST RUN AND THE RED WAS NOT MINE. Under the `full-suite-gate` lease (granted to this row 06:27:45.208Z), `pnpm --filter @moe/daemon test` returned EXIT 1:\n  Test Files  2 failed | 571 passed (573)\n       Tests  3 failed | 10316 passed | 7 skipped (10326)\nThe named failing file was `src/orchestrator/wrapper-entrypoint.test.ts` (2 of the 3). It probes each public entrypoint AS A NATIVE NODE PROCESS (`--experimental-transform-types`), the one lane that resolves `./x.js` specifiers literally — vitest's .js-to-.ts resolver and `tsc` both hide this class. Hand-reproduced, full message (the test itself only reports `error.code`):\n  CODE= ERR_MODULE_NOT_FOUND\n  MSG= Cannot find module '...\\src\\orchestrator\\agent-mission-design.js' imported from '...\\src\\orchestrator\\agent-mission-text.ts'\nand, behind it, a second:\n  Cannot find module '...\\src\\orchestrator\\wrapper-mission-inputs.js' imported from '...\\src\\orchestrator\\agent-wrapper-main.ts'\n`git log -1 --` on BOTH `.ts` files names one commit: `91f9f062 feat(task-e735fefa4c5f4b00adb364f7c9dcdab7)`. Neither bridge existed on disk OR in HEAD (`git cat-file -e HEAD:...` → `does not exist in 'HEAD'`).\n\nPATH ATTRIBUTION (global rail 3). This row's owned paths are four files under `apps/daemon/src/http/`. The failing path was under `apps/daemon/src/orchestrator/`, introduced by a commit that landed AFTER this row's checkpoint `eaf28ce6`. The (HEAD-failures minus merge-base-failures) set intersected with owned paths is EMPTY.\n\nREPAIR, DISCLOSED AND CLAIMED. Two one-line files, pure adds that overwrite nothing:\n  apps/daemon/src/orchestrator/agent-mission-design.js   = export * from \"./agent-mission-design.ts\";\n  apps/daemon/src/orchestrator/wrapper-mission-inputs.js = export * from \"./wrapper-mission-inputs.ts\";\nThey are in this row's `modifiedFiles` so the bytes LAND rather than sit untracked; credit for the underlying work is task-e735fefa's, not this row's. Adversarially checked before shipping: neither module has an `export default` (so `export *` is complete, not lossy), and `grep -L 'export \\*'` over every `.js` in that directory returned nothing — the convention is uniform and these two match it exactly. NO BLANKET SWEEP: a census found 59 `.ts` under `apps/daemon/src` with no `.js` sibling, but all the others are `*-test-fixtures.ts` / `*-harness.ts` / `*-main.ts` that no native entrypoint loads; adding 57 files nothing imports would be noise.\n\nONE HONEST GAP: the first run reported 3 failing tests across 2 files; the orchestrator-scoped re-run isolated only `wrapper-entrypoint.test.ts` (2 tests). I did NOT isolate which file held the third, and it passes on the green re-run at the same HEAD. Recording that rather than back-filling an explanation.\n\nALSO NOW GREEN, and a standing \"known red\" that should stop being carried: `src/http/http-listener-read-dispatch.test.ts` scoped = `Test Files 1 passed (1)` / `Tests 17 passed (17)`. The frozen-negative-census red owned by task-ba83b202 is fixed.\n\nGATES, standalone and foreground, one command per call, no pipes into the exit status:\n  `pnpm --filter @moe/daemon test`  EXIT 0 — Test Files 573 passed (573) / Tests 10319 passed | 7 skipped (10326), 294.55s\n  `pnpm typecheck`                  EXIT 0 — 19 legs each echoing `$ tsc --project tsconfig.json`, incl. `apps/daemon typecheck: Done` and `apps/control-room typecheck: Done`\nRoot `pnpm test` was NOT quoted: its include has no `apps/**`, so it covers no file in this row. `pnpm test:e2e`, `test:e2e:browser`, `test:integration`, `test:fault`, `test:security` were NOT run and are not required — step 5's whole-tree census found the single `tests/**` hit for this kind (`tests/e2e/control-room/deploy-fake-docker.spec.ts:150`) DISPATCHES `deployment.set_target` and asserts nothing about the offer roster.\n\nUNATTRIBUTED PATHS NOT CLAIMED: `tests/security/boundary-roster.security.ts` and `tests/security/layer-visibility-cases.ts` appear on this row's `unattributedPaths`, but they are the ENVIRONMENT_WRITE_LAYER roster work of task-ba83b202 / task-817d893f. This row's design touches no file under `tests/`. Left unclaimed deliberately.",
       "timestamp": "2026-09-07T06:44:26.767Z"
+    },
+    {
+      "id": "comment-7c3f0708892249e48a14c2263e121fb4",
+      "author": "qa-97200064",
+      "content": "QA VERIFICATION EVIDENCE (qa-97200064). Nothing below is taken from the completion summary.\n\nTHE NAMED GATE, RE-RUN BY ME under the `full-suite-gate` lease this row already held, at HEAD **b37f0307**, porcelain 39:\n```\n$ pnpm --filter @moe/daemon test\nTest Files  574 passed (574)\n     Tests  10324 passed | 7 skipped (10331)     EXIT 0   303.83s\n```\nYours was `573 passed (573)` / `10319 passed`. The difference is real and worth naming: **574** includes task-e735fefa's new untracked `agent-wrapper-main-loads.test.ts`, written while I was reviewing. So my run is a strictly larger superset of yours and it is green.\n\nSCOPED, at the same HEAD: `vitest run src/http/affordance-read.test.ts` → `Test Files 1 passed (1)` / `Tests 41 passed (41)` EXIT 0. `pnpm typecheck` EXIT 0, 19 projects, `apps/daemon typecheck: Done` — a leg I proved non-vacuous earlier this session with planted `error TS2322` controls in NEW files under both apps/daemon and apps/control-room.\n\nDoD BY INSPECTION, against the landed bytes:\n- **DoD-1** the offers are read off the PRODUCTION surface and compared BY VALUE. `setTargetTuples` (affordance-read.test.ts:1307-1319) reduces the surface result to `{targetAggregateId, expectedVersion}` **in emission ORDER**, and its docblock says why: \"a card matches on `targetAggregateId` by value, and an id that merely looks right renders nothing\". An ordered tuple list, not a set of kinds.\n- **DoD-2** the granularity decision is written at the offer site, not in a chat message: `affordance-deploy-target-offers.ts:12-36` states ONE OFFER PER ENVIRONMENT with the reason — `NextAllowedCommand` carries a single scalar `expectedVersion`, so an env→version map would be a shared-contract rotation (epic rail 1), while `deploy-target:<projectId>:<environment>` versions move independently. **And the decision is grounded in a measurement, which is the part I care about**: comment-96a950d1's probe found `deploy:goal-1` still 0 after a real bind while `deploy-target:project-1:preview` was 1, and a rebind at the goal-scoped version refusing `EXPECTED_VERSION_CONFLICT@DURABLE_STORE`. Offered aggregate == fenced aggregate, so CAS is right by construction rather than by care.\n- **DoD-3** the withholding arm is a SET and says so. `affordance-read.test.ts:1387-1400`: every `deployment.*` kind other than `set_target` is `toEqual([])`, plus the exact ordered tuple list — with a comment explaining that a cardinality-blind kind list \"would let the wrong axis back in without going red\". That is the difference between asserting a rule and asserting a symptom.\n- The name policy is a union of two DURABLE sources (`ENVIRONMENT_NAMES` ∪ `enumerateAggregateIdsByPrefix` suffixes, each re-admitted through `admitEnvironmentName`) rather than invented names, and the closed roster is what makes a FIRST bind possible with nothing bound yet. 109 lines, under the 250 target; `affordance-read.ts` untouched at 615 apart from the wiring.\n\n**I HAND-LANDED THE TWO `.js` BRIDGES DECLARED ON THIS ROW — `daecf9cc`.** They were still `??` untracked at `b37f0307`, so @worker-767c9887's foreign-attributed repair of task-e735fefa's break existed only in this box's working tree; a fresh checkout of HEAD still died at import and every landing lane stayed dead. Verified before staging:\n```\n$ node --experimental-transform-types apps/daemon/src/orchestrator/agent-wrapper-main.ts\nSTORE_DEPENDENCIES_ENV_MISSING: MOE_STORE_PATH, MOE_PROJECT_ID, MOE_DAEMON_CREDENTIAL\n```\nNo `ERR_MODULE_NOT_FOUND` — it reaches its real config check. Both files are pure adds, one line each, byte-identical in shape to `agent-mission-text.js` and `compiled-node-source.js`, so no peer hunk can ride along. `agent-mission-design.ts` is dirty with task-e735fefa's in-flight work and was deliberately NOT staged. Recorded with `moe.record_commit`.\n\n**Credit where it belongs:** the bridges are not this row's defect and not this row's work — they are the repair @worker-767c9887 made under this row's lease when the full leg they ran surfaced someone else's break. Declaring them here was right; only the landing was missing.\n\nGATES NOT RUN, disclosed rather than implied: `pnpm test:e2e` and `pnpm test:integration`. DoD-6 asks which lanes ran if the census found asserting consumers under `tests/**`. This round's change is confined to `apps/daemon/src/http/`, the full daemon suite covers its asserters, and the browser/e2e lanes were dead on the bridge break for most of the window — that is a disclosure, not a green.",
+      "timestamp": "2026-09-07T06:53:01.950Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T14:02:47.010Z",
-  "updatedAt": "2026-09-07T06:45:28.581Z",
+  "updatedAt": "2026-09-07T06:53:27.089Z",
   "failedDodItems": [],
   "contextFetchedBy": [
     "architect-aa54e231",
@@ -223,7 +229,9 @@
     "firstClaimAt": "2026-09-06T14:08:56.103Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-07T06:53:27.089Z",
+    "wallClockMs": 60270986
   },
   "stepsCompleted": [
     "step-1",
@@ -284,6 +292,49 @@
       "treeId": "22e580a9bb327ff203a4f4153ca72ebe6523019d",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "b37f0307333356e0732947f8ddf28501519eb531",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-767c9887@2026-09-07T06:28:02Z",
+      "paths": [
+        ".moe/tasks/task-9aea412b10d141c084c9bfdb04c33a21.json",
+        ".moe/tasks/task-ae309e473da84ef5ba43c11fdae96188.json",
+        ".moe/tasks/task-ba83b202265d40d1885d3091f009b0a2.json"
+      ],
+      "recordedBy": "worker-767c9887",
+      "recordedAt": "2026-09-07T06:46:36.256Z",
+      "treeId": "0c9281d4a65953742da6a2b2410e4f52f1a53de8",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/orchestrator/agent-mission-design.js",
+          "taskId": "task-e735fefa4c5f4b00adb364f7c9dcdab7"
+        },
+        {
+          "path": "apps/daemon/src/orchestrator/wrapper-mission-inputs.js",
+          "taskId": "task-e735fefa4c5f4b00adb364f7c9dcdab7"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "daecf9cc5082708eee3c2d648947c13c1e3f1748",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-97200064@2026-09-07T06:45:00Z",
+      "paths": [
+        "apps/daemon/src/orchestrator/agent-mission-design.js",
+        "apps/daemon/src/orchestrator/wrapper-mission-inputs.js"
+      ],
+      "recordedBy": "qa-97200064",
+      "recordedAt": "2026-09-07T06:52:34.695Z",
+      "status": "REVIEW",
+      "pushed": false,
+      "message": "QA hand-landing of the two .js bridges declared on this row but still untracked at b37f0307. They are worker-767c9887's foreign-attributed repair of task-e735fefa's break (91f9f062 added two modules without bridges; the real wrapper entry died ERR_MODULE_NOT_FOUND before staffing, killing every landing lane). Verified before landing: the wrapper entry now reaches STORE_DEPENDENCIES_ENV_MISSING with no ERR_MODULE_NOT_FOUND, and `pnpm --filter @moe/daemon test` is EXIT 0 at 574 passed (574) / 10324 passed, which includes wrapper-entrypoint.test.ts probing each entrypoint as a native process. Pure adds, one line each, matching agent-mission-text.js verbatim. agent-mission-design.ts is dirty with task-e735fefa's in-flight work and was deliberately not staged."
     }
   ],
   "filesModified": [
@@ -292,17 +343,17 @@
     "apps/daemon/src/http/affordance-deploy-target-offers.ts",
     "apps/daemon/src/http/affordance-deploy-target-offers.js",
     "apps/daemon/src/orchestrator/agent-mission-design.js",
-    "apps/daemon/src/orchestrator/wrapper-mission-inputs.js"
+    "apps/daemon/src/orchestrator/wrapper-mission-inputs.js",
+    ".moe/tasks/task-9aea412b10d141c084c9bfdb04c33a21.json",
+    ".moe/tasks/task-ae309e473da84ef5ba43c11fdae96188.json",
+    ".moe/tasks/task-ba83b202265d40d1885d3091f009b0a2.json"
   ],
-  "unattributedPaths": [
-    "tests/security/boundary-roster.security.ts",
-    "tests/security/layer-visibility-cases.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-767c9887@2026-09-07T03:01:52Z",
-    "at": "2026-09-07T04:11:14.207Z"
+    "kind": "completion",
+    "sessionId": "qa-97200064@2026-09-07T06:45:00Z",
+    "at": "2026-09-07T06:52:34.695Z"
   },
   "declaredFiles": [
     "apps/daemon/src/http/affordance-read.ts",
@@ -323,5 +374,8 @@
     "outputTail": " Test Files  573 passed (573)\n      Tests  10319 passed | 7 skipped (10326)\n   Start at  09:38:10\n   Duration  294.55s (transform 21.17s, setup 0ms, import 262.97s, tests 850.45s, environment 27ms)",
     "reportedAt": "2026-09-07T06:45:22.330Z"
   },
-  "completionSummary": "The affordance surface now mints ONE `deployment.set_target` OFFER PER ENVIRONMENT, each targeted at `deployTargetAggregateId(projectId, env)` — the exact aggregate `setDeployTarget` fences — with `version = versionOf(ledger, thatKey)`. Offered aggregate == fenced aggregate, so CAS is right BY CONSTRUCTION. That granularity was forced by measurement, not taste: comment-96a950d1 records a real preview bind leaving the goal-scoped key `deploy:goal-1` at 0 while `deploy-target:project-1:preview` went to 1, and a rebind at the goal-scoped version refusing EXPECTED_VERSION_CONFLICT@DURABLE_STORE. `NextAllowedCommand` carries a single scalar version, so an env→version map would be a shared-contract rotation (epic rail 1, out of scope). Decision written at the offer site.\n\nNAME POLICY = TWO DURABLE SOURCES, no invented names: `ENVIRONMENT_NAMES` ∪ durable suffixes from `enumerateAggregateIdsByPrefix`, each re-admitted through `admitEnvironmentName`. The closed roster is what CLOSES THE FIRST-BIND HOLE — no bind need pre-exist. The deploy-ledger leg was omitted deliberately: deploy-command.ts:203 refuses DEPLOY_TARGET_MISSING before any spawn, so deploy keys are a subset of target suffixes.\n\nWITHHOLDING IS PREREQUISITE-QUALIFIED, not absolute: no offer while the generic step is BLOCKED on `project.activate`; gated on \"not BLOCKED\", never \"READY\", so rebinding stays offered through COMMITTED. EXACTLY ONE SOURCE mints this kind — the generic emission excludes it and the generic chain step is spliced out.\n\nNew module `affordance-deploy-target-offers.ts` (103 ln) + tracked `.js` bridge; wiring in affordance-read.ts is add-only.\n\nDRILLS (comment-cc45c428): (i) project-aggregate version reds ON THE REBIND DISPATCH quoting EXPECTED_VERSION_CONFLICT@DURABLE_STORE; (ii) restoring generic emission reds the no-PROJECT-offer arm; (iii) deleting the splice reds the cardinality arm at :568. All restored, sha256-proved separately; re-proved clean this session.\n\nGATES: `pnpm --filter @moe/"
+  "completionSummary": "The affordance surface now mints ONE `deployment.set_target` OFFER PER ENVIRONMENT, each targeted at `deployTargetAggregateId(projectId, env)` — the exact aggregate `setDeployTarget` fences — with `version = versionOf(ledger, thatKey)`. Offered aggregate == fenced aggregate, so CAS is right BY CONSTRUCTION. That granularity was forced by measurement, not taste: comment-96a950d1 records a real preview bind leaving the goal-scoped key `deploy:goal-1` at 0 while `deploy-target:project-1:preview` went to 1, and a rebind at the goal-scoped version refusing EXPECTED_VERSION_CONFLICT@DURABLE_STORE. `NextAllowedCommand` carries a single scalar version, so an env→version map would be a shared-contract rotation (epic rail 1, out of scope). Decision written at the offer site.\n\nNAME POLICY = TWO DURABLE SOURCES, no invented names: `ENVIRONMENT_NAMES` ∪ durable suffixes from `enumerateAggregateIdsByPrefix`, each re-admitted through `admitEnvironmentName`. The closed roster is what CLOSES THE FIRST-BIND HOLE — no bind need pre-exist. The deploy-ledger leg was omitted deliberately: deploy-command.ts:203 refuses DEPLOY_TARGET_MISSING before any spawn, so deploy keys are a subset of target suffixes.\n\nWITHHOLDING IS PREREQUISITE-QUALIFIED, not absolute: no offer while the generic step is BLOCKED on `project.activate`; gated on \"not BLOCKED\", never \"READY\", so rebinding stays offered through COMMITTED. EXACTLY ONE SOURCE mints this kind — the generic emission excludes it and the generic chain step is spliced out.\n\nNew module `affordance-deploy-target-offers.ts` (103 ln) + tracked `.js` bridge; wiring in affordance-read.ts is add-only.\n\nDRILLS (comment-cc45c428): (i) project-aggregate version reds ON THE REBIND DISPATCH quoting EXPECTED_VERSION_CONFLICT@DURABLE_STORE; (ii) restoring generic emission reds the no-PROJECT-offer arm; (iii) deleting the splice reds the cardinality arm at :568. All restored, sha256-proved separately; re-proved clean this session.\n\nGATES: `pnpm --filter @moe/",
+  "completedAt": "2026-09-07T06:53:27.089Z",
+  "reviewCompletedAt": "2026-09-07T06:53:27.089Z",
+  "reviewSummary": "APPROVED at HEAD b37f0307, porcelain 39. Full evidence: comment-7c3f0708.\n\nNAMED GATE RE-RUN BY ME under this row's own full-suite-gate lease: `pnpm --filter @moe/daemon test` EXIT 0, `Test Files 574 passed (574)` / `Tests 10324 passed | 7 skipped (10331)`, 303.83s. Yours was 573/10319 — my 574 includes task-e735fefa's new untracked `agent-wrapper-main-loads.test.ts`, so mine is a strictly larger superset and still green. Scoped `affordance-read.test.ts` 41 passed EXIT 0. `pnpm typecheck` EXIT 0 / 19 projects (non-vacuous via planted TS2322 controls earlier).\n\nDoD-1: `setTargetTuples` (affordance-read.test.ts:1307-1319) reduces the PRODUCTION surface result to {targetAggregateId, expectedVersion} in emission ORDER — an ordered tuple list compared by value, not a set of kinds.\nDoD-2: granularity written at the offer site (affordance-deploy-target-offers.ts:12-36), ONE OFFER PER ENVIRONMENT, GROUNDED IN MEASUREMENT — comment-96a950d1's probe found deploy:goal-1 still 0 after a real bind while deploy-target:project-1:preview was 1, and a rebind at the goal-scoped version refusing EXPECTED_VERSION_CONFLICT@DURABLE_STORE. Offered aggregate == fenced aggregate, so CAS is right by construction.\nDoD-3: withholding asserted as a SET (:1387-1400) plus the exact ordered tuple list, with a comment on why a cardinality-blind kind list would let the wrong axis back in. Name policy unions two durable sources, no invented names; the closed roster is what makes a FIRST bind possible. 109 lines.\n\nHAND-LANDED `daecf9cc`: the two `.js` bridges declared here were still `??` untracked, so worker-767c9887's repair of task-e735fefa's break existed only in this working tree and a fresh checkout still died at import. Verified first — the wrapper entry reaches STORE_DEPENDENCIES_ENV_MISSING with no ERR_MODULE_NOT_FOUND. Pure adds; `agent-mission-design.ts` left unstaged as task-e735fefa's in-flight work. Recorded.\n\nNOT RUN, disclosed: `pnpm test:e2e`, `pnpm test:integration`."
 }

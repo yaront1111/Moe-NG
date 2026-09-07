@@ -19,7 +19,10 @@ import { DESIGN_SECTION_KEYS } from "../design/design-contracts.js";
  * to read".
  */
 /**
- * WHAT A MISSION KNOWS ABOUT A GOAL'S DESIGN — three outcomes, and the third is the point.
+ * WHAT A MISSION KNOWS ABOUT A GOAL'S DESIGN — FOUR outcomes, and the two that are not
+ * PRESENT are the point. The count is stated here because it is the denominator every
+ * distinguishability sweep must use; a fifth member added without widening those sweeps
+ * is a silently uncovered branch.
  *
  * A seat that simply receives no design section cannot tell "the operator decided to plan
  * without one" from "the read failed", and a seat that cannot tell will guess. Modelling the

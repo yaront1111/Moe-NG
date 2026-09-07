@@ -5,6 +5,10 @@
  * NEVER carries a suggested development payload (the demo `payloadFor` hint
  * proposing a hard-coded graph against a real PRD is the race it retires).
  */
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { describe, expect, it } from "vitest";
 
 import { COMPILED_NODE_KEY_MAX_CHARS } from "../planning/compiled-authority-contracts.js";
@@ -183,6 +187,36 @@ describe("the design outcome the compiler seat is handed", () => {
     expect(absent).not.toContain("A DESIGN EXISTS for this goal");
     expect(present).not.toContain("NO DESIGN");
     expect(present).not.toContain("SKIPPED");
+  });
+
+  /**
+   * THE SAME PROMISE, WITH A DERIVED DENOMINATOR. The arm above freezes the roster at three
+   * briefs and a literal `3`; a FOURTH outcome (UNREADABLE) was added to `DesignBrief` and that
+   * sweep did not widen, so it kept passing while one branch went unswept. The epic forbids a
+   * frozen roster count for exactly this reason, so the roster here is read off the production
+   * type's own members: a fifth outcome added without a case below fails on set-equality rather
+   * than shrinking this loop silently.
+   */
+  it("keeps EVERY outcome the production type declares mutually distinguishable", () => {
+    const source = readFileSync(
+      join(dirname(fileURLToPath(import.meta.url)), "agent-mission-design.ts"), "utf8",
+    );
+    const declared = new Set(
+      [...source.matchAll(/readonly outcome: "([A-Z]+)"/gu)].map(([, tag]) => tag),
+    );
+    const cases: Readonly<Record<string, DesignBrief>> = {
+      ABSENT: { outcome: "ABSENT" },
+      PRESENT,
+      SKIPPED,
+      UNREADABLE: { code: "DESIGN_RECORD_MALFORMED", layer: "LEDGER", outcome: "UNREADABLE" },
+    };
+
+    // Both directions: no declared outcome goes unswept, and no case names a dead outcome.
+    expect(new Set(Object.keys(cases))).toStrictEqual(declared);
+    expect(declared.size).toBeGreaterThan(3);
+    // The bytes themselves, not the tags: two branches sharing a paragraph would collide here.
+    const rendered = Object.values(cases).map((brief) => decomposition(brief));
+    expect(new Set(rendered).size).toBe(declared.size);
   });
 });
 
