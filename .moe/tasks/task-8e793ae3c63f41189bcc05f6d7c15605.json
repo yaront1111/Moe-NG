@@ -51,7 +51,7 @@
     }
   ],
   "status": "BLOCKED",
-  "assignedWorkerId": "worker-ca28be90",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -76,7 +76,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:39:23.042Z",
-  "updatedAt": "2026-09-07T03:03:38.705Z",
+  "updatedAt": "2026-09-07T03:30:29.136Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:45:22.654Z",
     "plannedStepCount": 4,
@@ -124,5 +124,43 @@
   ],
   "blockedResourceId": "full-suite-gate",
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-07T03:03:38.705Z"
+  "blockedAt": "2026-09-07T03:03:38.705Z",
+  "commits": [
+    {
+      "sha": "18def7221c8f25cf98c117167515120ed4d51500",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-ca28be90@2026-09-07T02:59:49Z",
+      "paths": [
+        ".moe/tasks/task-8e793ae3c63f41189bcc05f6d7c15605.json"
+      ],
+      "recordedBy": "worker-ca28be90",
+      "recordedAt": "2026-09-07T03:04:07.706Z",
+      "treeId": "eebf932f6153748c0462aa461f3e04603cc6638c",
+      "status": "BLOCKED",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-8e793ae3c63f41189bcc05f6d7c15605.json"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-ca28be90@2026-09-07T02:59:49Z",
+    "at": "2026-09-07T03:04:07.706Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1 and 2 COMPLETE. All six dependsOn satisfied (dependsOnUnmet: 0). Zero production paths owned, zero files modified by this row to date — the tree carries nothing from it, so there is no half-landed state to reconcile.",
+      "whatRemains": "Step 3: six verification legs, all FOREGROUND and all under a held full-suite-gate lease — `pnpm --filter @moe/daemon test` (this row's NAMED completion verification command, exit 0 required by complete_task), `pnpm --filter @moe/control-room test`, and the root `pnpm test` lane among them. Then step 4, then complete_task. Do not run any of these unleased.",
+      "pitfalls": "1) DO NOT force-release full-suite-gate. The holder is task-5ef1a0a9 / worker-f78e0703, acquired 2026-09-07T02:57:27.327Z, and process-tree attribution at 03:0xZ showed the suite genuinely running (pid 10960 `pnpm.exe --filter @moe/daemon test`, vitest parent 24968, four live worker forks). Census in comment-867d796fccbc43fe94d2cc8261e8292e. 2) This row sits at full-suite-gate queue position #1 registered under worker-ca28be90; a different seat resuming it should re-check `moe.list_resources` before assuming it must re-queue, and re-queue only if the entry is gone. 3) The 571/571 daemon-suite figure is RETIRED by both worker-ca28be90 and qa-97200064 — it was taken on a24ac3df plus unreachable WIP bytes and is not reproducible. Do not cite it as a baseline. 4) Per QA agreement in chan-ced99359: every posted green must carry `Test Files N passed` verbatim, the HEAD sha, and the porcelain count from the same moment; QA re-runs the named command at review-time HEAD regardless, and rejects on the delta.",
+      "openQuestions": "None. No conflict, no missing prerequisite, no ambiguity — the only gate is the full-suite-gate lease grant.",
+      "releasedAt": "2026-09-07T03:30:29.135Z",
+      "releasedBy": "worker-ca28be90",
+      "reason": "RESOURCE WAIT ONLY — freeing the seat while task-8e793ae3 waits at full-suite-gate queue position #1. Not a refusal, not a crash, no progress lost: steps 1-2 are COMPLETE, all six dependencies satisfied, blockedReason preserved verbatim. Board has multiple unassigned WORKING rows with dependsOnUnmet:0, so holding a pinned seat against a live legitimate lease (task-5ef1a0a9 / worker-f78e0703 since 02:57:27Z) wastes a worker for the lease duration."
+    }
+  ]
 }

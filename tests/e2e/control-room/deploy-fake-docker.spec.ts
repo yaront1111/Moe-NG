@@ -30,13 +30,24 @@ import { resolveRepositoryExecutionIdentity } from "../../../apps/daemon/src/rep
 import { lanePids, mintLaneOperatorSeat, readWireProtocolVersion, survivingPids,
   withDaemonBackedControlRoom } from "./daemon-ports.js";
 import type { DaemonLane, DaemonLaneOptions, LaneOperatorSeat } from "./daemon-ports.js";
-import { landLaneNode } from "./lane-landing.js";
+import { LANDING_BUDGET_MS, landLaneNode } from "./lane-landing.js";
 import { readGoalCatalogOverHttp } from "./prd-boundary-readers.js";
 
 /** Admitted by `admitRemoteUrl`; the lane never reaches a network with it. */
 const REMOTE_URL = "https://github.com/moe-lane/deploy-fake-docker.git";
 const ENVIRONMENT = "staging";
 const target = { environment: ENVIRONMENT, network: "lane-network", sshTarget: null, url: "https://lane.test" };
+
+/**
+ * STRICTLY LONGER THAN `LANDING_BUDGET_MS`, and that is the whole point of naming it here.
+ *
+ * The config's 180 s default is the SAME number as the landing budget, so a landing that spent
+ * its budget was killed by Playwright at the same instant `landLaneNode` was composing its
+ * refusal - every failure read "Test timeout of 180000ms exceeded" and the wrapper transcript
+ * that names the actual cause was never printed. The lane also boots a daemon, a dev server and
+ * a browser before the landing starts, so the budget is a floor, not the cost.
+ */
+const LANE_TIMEOUT_MS = LANDING_BUDGET_MS + 240_000;
 
 /** Every pid this spec is answerable for: the lane's own, plus any wrapper it started. */
 const wrapperPids: number[] = [];
@@ -137,6 +148,7 @@ async function assertStopped(lane: DaemonLane | undefined): Promise<void> {
 
 for (const mode of ["SUCCESS", "DEPLOY_DOCKER_UNAVAILABLE"] as const) {
   test(`real daemon fake docker: ${mode} has a durable receipt`, async () => {
+    test.setTimeout(LANE_TIMEOUT_MS);
     let started: DaemonLane | undefined;
     wrapperPids.length = 0;
     try {
@@ -197,6 +209,7 @@ for (const mode of ["SUCCESS", "DEPLOY_DOCKER_UNAVAILABLE"] as const) {
  * can never be mistaken for the operator's own.
  */
 test("real daemon fake docker: a paired human publishes the lane's own landed commit", async ({ page }) => {
+  test.setTimeout(LANE_TIMEOUT_MS);
   let started: DaemonLane | undefined;
   wrapperPids.length = 0;
   try {

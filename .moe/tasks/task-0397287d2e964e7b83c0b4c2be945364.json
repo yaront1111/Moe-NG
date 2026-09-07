@@ -151,7 +151,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T20:13:42.297Z",
-  "updatedAt": "2026-09-07T03:15:33.841Z",
+  "updatedAt": "2026-09-07T03:16:27.636Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T22:05:31.612Z",
     "plannedStepCount": 7,
@@ -395,13 +395,30 @@
       "treeId": "04084774a5188bd584a1048b5e3b6e195ccb8583",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "29722d4075cd3d2035168006ca912c50db628144",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-97200064@2026-09-07T03:09:37Z",
+      "paths": [
+        ".moe/tasks/task-0397287d2e964e7b83c0b4c2be945364.json",
+        ".moe/tasks/task-4d77ba041223441a804cc85a7edd9652.json"
+      ],
+      "recordedBy": "qa-97200064",
+      "recordedAt": "2026-09-07T03:16:27.636Z",
+      "treeId": "369a1e5db5ddac7645d5de3a0dcb18f250b18165",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
     "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
     "apps/daemon/src/goals/goal-scoped-close-test-fixtures.ts",
     "apps/daemon/src/deployment/migrate-down-command.ts",
-    ".moe/tasks/task-0397287d2e964e7b83c0b4c2be945364.json"
+    ".moe/tasks/task-0397287d2e964e7b83c0b4c2be945364.json",
+    ".moe/tasks/task-4d77ba041223441a804cc85a7edd9652.json"
   ],
   "unattributedPaths": [
     "tests/e2e/control-room/lane-landing-contract.ts",
@@ -409,9 +426,9 @@
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-767c9887@2026-09-07T02:40:28Z",
-    "at": "2026-09-07T03:01:20.934Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-97200064@2026-09-07T03:09:37Z",
+    "at": "2026-09-07T03:16:27.636Z"
   },
   "workStartedAt": "2026-09-06T22:19:04.980Z",
   "declaredFiles": [

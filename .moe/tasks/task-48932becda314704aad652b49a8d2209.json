@@ -188,7 +188,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T17:24:27.654Z",
-  "updatedAt": "2026-09-07T03:08:19.213Z",
+  "updatedAt": "2026-09-07T03:09:05.957Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:10:11.926Z",
     "plannedStepCount": 7,
@@ -361,6 +361,21 @@
       "status": "REVIEW",
       "recoveredBy": "qa-97200064",
       "message": "QA hand-landing: the worker's completion commit 3768c16b carried only task JSON, leaving this row's 263 lines of roster-parity / mission-parity / non-erosion arms in the dirty tree. Path measured row-owned (vocabulary scan of every changed line came back with no foreign hunks); staged by explicit pathspec, no -A, no foreign path touched."
+    },
+    {
+      "sha": "736fe272adadf2a18478b2eaefea786bd65195e6",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-97200064@2026-09-07T02:59:30Z",
+      "paths": [
+        ".moe/tasks/task-48932becda314704aad652b49a8d2209.json"
+      ],
+      "recordedBy": "qa-97200064",
+      "recordedAt": "2026-09-07T03:09:05.957Z",
+      "treeId": "f4c968f23c34b3ce36bcb4507da45286ce424c24",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -389,14 +404,13 @@
   ],
   "unattributedPaths": [
     "tests/e2e/control-room/lane-landing-contract.ts",
-    "tests/e2e/control-room/lane-review-round.ts",
-    "apps/daemon/src/orchestrator/agent-spawner.test.ts"
+    "tests/e2e/control-room/lane-review-round.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "qa-97200064@2026-09-07T03:00:00Z",
-    "at": "2026-09-07T03:06:34.005Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-97200064@2026-09-07T02:59:30Z",
+    "at": "2026-09-07T03:09:05.957Z"
   },
   "reviewStartedAt": "2026-09-07T02:59:08.711Z",
   "verification": {

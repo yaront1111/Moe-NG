@@ -69,16 +69,25 @@
     {
       "stepId": "step-4",
       "description": "DRILLS AND GATES (steps 7-8).\n\nDRILLS - PROCESS-LOCAL, per the row's own instruction. Prove the two things this row now rests on:\n(a) remove the `MOE_NODE_WORKSPACE` the lane supplies and confirm the publish returns to PUBLISH_WORKSPACE_UNCONFIGURED@DAEMON_PREREQUISITE - that proves the workspace is what unblocked it, not something incidental;\n(b) point the deploy at a sha the lane did NOT commit and confirm it refuses rather than silently deploying - the fake double never inspects a landing receipt, so nothing else would catch a wrong sha.\nQuote the failing line for each. Restore per global rail 13: `git status --porcelain` the exact paths FIRST, back every mutated path up OUT OF TREE (%TEMP%, suffixed by your worker id), restore FROM THE BACKUP rather than `git checkout --`, and prove by sha256 in a call SEPARATE from the restore. The new spec is UNTRACKED, so `git diff` certifies nothing for it.\n\nGATES - each standalone, each quoted with its `Test Files N passed` count line; an exit-0 leg with no count line RAN NOTHING:\n- `pnpm test:e2e:browser` - THE BROWSER LANE NEEDS THE browser-e2e GATE (this row's own note). Acquire it, post START/END in #general, and do not hold it longer than the run.\n- `pnpm --filter @moe/daemon test` - the production seam and unit arms from steps 1-5 must still be green.\n- `pnpm typecheck`.\nRoot `pnpm test` covers no apps/** file - say so.\n\nSCOPE EVIDENCE: `git status --porcelain -- apps/daemon/src/daemon-command-registry.ts apps/daemon/src/daemon-v2-command-registry.ts` must be EMPTY. Both are contended (task-c851961b, task-df64aa20) and steps 1-5 already landed whatever this row needed there.\n\nSELF-REVIEW: does the lane leak a git tree or a daemon child on the failing path? Does any spec output carry a host path or credential (epic rail 3)? And does the completion record separate \"dispatched to the double\" from \"a container ran\"?",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/control-room/deploy-fake-docker.spec.ts",
         "tests/e2e/control-room/daemon-ports.ts"
       ],
-      "startedAt": "2026-09-06T21:19:12.453Z"
+      "modifiedFiles": [
+        "tests/e2e/control-room/lane-landing.ts",
+        "tests/e2e/control-room/lane-landing-contract.ts",
+        "tests/e2e/control-room/lane-review-round.ts",
+        "tests/e2e/control-room/fake-docker-dependencies.ts",
+        "tests/e2e/control-room/deploy-fake-docker.spec.ts"
+      ],
+      "note": "DRILLS AND GATES DONE, and closing the step needed three real fixes first — step 3 had left the spec RED. Full evidence: comment-572a58ca (defects + drills) and comment-c01190b0 (gates + leak census).\n\nTHE SPEC IS NOW GREEN: `pnpm test:e2e:browser deploy-fake-docker.spec.ts` -> 4 passed, exit 0, tsc leg echoed.\n\nTHREE FIXES (each measured, not guessed):\n1. playwright timeout 180_000 == LANDING_BUDGET_MS, so every landing failure was reported as a Playwright timeout and the wrapper transcript never printed. Spec now sets LANE_TIMEOUT_MS = LANDING_BUDGET_MS + 240_000.\n2. The seat double never reported a round -> facts stayed READY -> coordinator re-RESERVED -> STAFFING_ATTEMPTS_EXHAUSTED. Wired the already-present-but-never-imported lane-review-round.ts into landLaneNode (+ attempts 20, agents 2).\n3. The seeded SPEC node's bare key IS the compiled graph's nodeKey, so staffing it made the key LEGACY (`legacy=node-e2e-en6ggq`, measured) — which empties publication-goal-integration's ref set AND quarantines the compiled node (NODE_BRIEF_MISSING). retireSpecNode + MOE_NODE_WORKSPACE/MOE_NODE_TEST_COMMAND for the wrapper + laneCompiledNodeRef now land the COMPILED ref. Publish went ACCEPTED and the deploy reached the double.\n\nLEAK HAZARD CLOSED: fake-docker-dependencies.ts spread `...authority`, leaving `build: nodeDeployBuild` — a REAL `docker build` spawn, masked only by the git preflight refusing first. Drill (b) then caught my FIRST fix as wrong (replacing the whole port dropped the preflight; a bogus sha returned DEPLOYED). Final shape keeps createDeploymentImageBuilder and intercepts only its `docker` spawn, so the git preflight and `git archive` still really run.\n\nDRILLS: (a) no MOE_NODE_WORKSPACE -> PUBLISH_WORKSPACE_UNCONFIGURED@DAEMON_PREREQUISITE; (b) unknown sha -> DEPLOY_BUILD_FAILED / DEPLOY_COMMIT_UNAVAILABLE @ DAEMON_DEPLOY_ENGINE. Disk mutations (the daemon is a child process, so process-local was not available), under the browser-e2e lease I hold, backed up to %TEMP%/moe-drill-worker-b1872f24 and sha256-restored in calls SEPARATE from the restore.\n\nGATES: typecheck exit 0 (19 projects). `pnpm --filter @moe/daemon test` exit 0 on re-run, `Test Files 572 passed (572)` / 10306 passed; its first run's single red was foundation-attempt-windows.test.ts, untouched by this session and green isolated (8/8) — a --maxWorkers=4 flake. FULL `pnpm test:e2e:browser`: 36 executed, 30 passed, 6 failed; all four of mine passed. 5 of the 6 reds reach none of my files; the 6th (release-approval.spec.ts) imports landLaneNode and I measured it both ways — at HEAD it fails EARLIER at the landing, with my change it gets past and fails on the peer's release-evidence read (task-817d893f). Disclosed, not hidden.\n\nLEAK DELTA ZERO: cleared 10 scratch dirs my failing debug runs had left, then 0->0 deploy-fingerprint dirs, 43->43 total, 0 build temps, 4->4 node processes (all four created 9/5-9/6, predating this session).\n\nFILES: lane-landing.ts (modified); lane-landing-contract.ts and lane-review-round.ts (previously UNTRACKED WIP of this row, now imported and load-bearing — claimed here so they are committed); fake-docker-dependencies.ts (modified); deploy-fake-docker.spec.ts (modified).\n\nNOT LISTED ON PURPOSE: tests/e2e/control-room/daemon-ports.ts. This session made NO net edit to it (my step-2 work is already in HEAD); it is dirty ONLY with a PEER's fakeGh / MOE_E2E_RELEASE_MODE hunks for task-817d893f, and listing it would sweep foreign bytes into this row's commit. Its bytes are sha256-identical to the pre-drill state (5787fde7...). Other peer dirt noted and left alone: apps/daemon/src/http/affordance-read.ts(+test), apps/daemon/src/http/affordance-deploy-target-offers.*, apps/control-room/**, .moe/**. Both contended registries are clean.",
+      "startedAt": "2026-09-06T21:19:12.453Z",
+      "completedAt": "2026-09-07T03:44:05.010Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-b1872f24",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-97200064",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -156,16 +165,28 @@
       "author": "worker-ca28be90",
       "content": "FROM worker-ca28be90 on task-817d893f (Gate 3 browser proof, which consumes your `landLaneNode`). Two measurements on YOUR paths, both taken 2026-09-07 on moe/work-2026-09-04. No file of yours was reverted, stashed or reformatted.\n\n(1) I FIXED ONE CHARACTER IN `tests/e2e/control-room/lane-landing.ts:42` AND I AM TELLING YOU RATHER THAN LEAVING IT. The regex landed as:\n\n    const COMMITTED_LINE = /^\\[lander] (\\S+): COMMITTED /mu;\n\nUnder the `u` flag a lone `]` is a hard SyntaxError, thrown AT IMPORT:\n\n    SyntaxError: Invalid regular expression: /^\\[lander] (\\S+): COMMITTED /mu: Lone quantifier brackets\n\nMeasured two ways: `npx tsc -p tests/e2e/control-room/tsconfig.json` -> `lane-landing.ts(42,34): error TS1508: Unexpected ']'. Did you mean to escape it with backslash?`, and `npx playwright test -c tests/e2e/control-room/playwright.config.ts` -> the SyntaxError above followed by `Error: No tests found.` Because `test:e2e:browser` is `tsc && playwright test`, this took the ENTIRE browser lane to ZERO specs for every row, not just yours. I escaped it to `/^\\[lander\\] (\\S+): COMMITTED /mu` and added a three-line comment saying why. tsc is now exit 0 and Playwright collects specs again. If you have a newer copy of this file in a session, keep yours and re-apply the escape - do not lose it.\n\n(2) `landLaneNode` DOES NOT LAND TODAY, and I could not work around it. My journey stops at your helper with:\n\n    [wrapper] node.deliver@node-e2e-ofcl36: STAFFING_ATTEMPTS_EXHAUSTED\n    [wrapper] policy.validate@e2e-proj-ofcl36-policy: STAFFING_ATTEMPTS_EXHAUSTED\n\nrepeated until `LANDING_BUDGET_MS` expires. THE CONTROL, so you do not have to wonder whether my spec is the cause: I ran YOUR OWN spec, unmodified -\n\n    npx playwright test -c tests/e2e/control-room/playwright.config.ts deploy-fake-docker -g \"SUCCESS has a durable receipt\"\n    x 1 [chromium] deploy-fake-docker.spec.ts:139:3 (3.0m)\n    Test timeout of 180000ms exceeded.\n\nSame helper, same wall, no code of mine in the path. `agent-wrapper.ts:365` is where the code is minted. The seat double is a `.cmd` shim that only writes a file and exits 0, so the exhaustion is upstream of the seat - worth checking whether the spawn ever starts, and whether this host's spawn-latency cliff eats the 500 ms `WRAPPER_INTERVAL_MS`.\n\nI am NOT blocking on you and I have not touched anything else of yours: my row records the failure verbatim and attributes it here. What I added beside your files, and which you may want for the deploy lane too: `daemon-ports.ts` now takes a `fakeGh` lane option selecting `fake-gh-dependencies.ts` (same shape as your `fakeDocker`), and `MOE_NODE_WORKSPACE` is now supplied when EITHER `fakeDocker` or `fakeGh` is set. Your gating comment on that line is preserved and extended, not replaced.",
       "timestamp": "2026-09-06T22:32:15.331Z"
+    },
+    {
+      "id": "comment-572a58cacf2341afabdfc18a2d68f0e4",
+      "author": "worker-b1872f24",
+      "content": "STEP-4 EVIDENCE (worker-b1872f24). Step 3 left the spec RED; it is now green, and closing it needed three real defects fixed, not just drills.\n\nWHY THE LANE WAS RED, measured one layer at a time:\n1. `playwright.config.ts:35 timeout: 180_000` == `LANDING_BUDGET_MS` 180_000. Every failure read \"Test timeout of 180000ms exceeded\" and the wrapper transcript naming the cause was never printed. Fixed: spec sets `LANE_TIMEOUT_MS = LANDING_BUDGET_MS + 240_000`.\n2. The seat double never reported a round, so `readRepositoryDeliveryFacts` stayed READY, `repository-delivery-coordinator.ts:141-146` returned the reservation to RESERVED, and `agent-wrapper.ts:363` charged an attempt each pass -> STAFFING_ATTEMPTS_EXHAUSTED (verbatim, for both `node.deliver@node-e2e-<tag>` and `policy.validate@...-policy`). Fixed by wiring the already-written-but-never-imported `lane-review-round.ts` into `landLaneNode`, plus MOE_WRAPPER_MAX_ITEM_ATTEMPTS=20 and MAX_AGENTS=2.\n3. THE ONE THAT MATTERED. With the landing succeeding, publish still refused PUBLISH_GOAL_NOT_INTEGRATED@DAEMON_PREREQUISITE. Cause, measured with a temporary in-spec probe: the seeded SPEC node's bare key IS the compiled graph's nodeKey, so staffing it writes `wrapper-staffing/<sha256(node.deliver@<key>)>` and `legacyCompiledNodeKeys` quarantines the key. Probe output verbatim: `graphs=1 bearing=[[\"node-e2e-en6ggq\"]] legacy=node-e2e-en6ggq`. A legacy key is DROPPED from `publication-goal-integration.ts:21`'s ref set (so the ref set is empty and `receipts.length===0`) AND blocked out of `createCompiledNodeSource` (the compiled node answered NODE_BRIEF_MISSING). Fixed by `retireSpecNode` (remove the spec json after the seed, before the wrapper) + giving the wrapper MOE_NODE_WORKSPACE and MOE_NODE_TEST_COMMAND so the COMPILED node is the one delivered, and targeting the round at `laneCompiledNodeRef` (which asks `createCompiledNodeSource`, the same call the composition makes, rather than recomputing the hash).\n\nA REAL LEAK HAZARD FOUND AND CLOSED (epic rail 4, DoD 1). `fake-docker-dependencies.ts` spread `...authority` and overrode only docker/ssh/transfer, leaving `build: nodeDeployBuild` — the SHIPPED builder, which spawns a REAL `docker build`. It was invisible only because the builder's own git preflight refused DEPLOY_COMMIT_UNAVAILABLE first (the buildContext was the scratch root, not a repository). A lane whose context WAS a repository would have reached real docker.\n\nAND THE FIRST FIX FOR IT WAS WRONG — DRILL (b) CAUGHT IT. Replacing the whole build PORT also discarded the production git preflight: deploying `\"b\".repeat(40)`, a sha the lane never committed, returned outcome DEPLOYED. Final shape keeps `createDeploymentImageBuilder` and intercepts ONLY its `docker` spawn, so `rev-parse --verify <sha>^{commit}`, the alternates setup and `git archive` all still really run.\n\nDRILLS (both process-local was impossible — the daemon is a child process — so both were disk mutations under the browser-e2e lease I hold, backed up out of tree and sha256-restored in a SEPARATE call, per global rail 13; `deploy-fake-docker.spec.ts` is TRACKED but was dirty, so sha256 not `git diff` was used):\n(a) MOE_NODE_WORKSPACE removed from the daemon spawn -> publish returns to `PUBLISH_WORKSPACE_UNCONFIGURED` / layer `DAEMON_PREREQUISITE` (422, PORT_REFUSED, stage DISPATCH). Proves the workspace is what unblocked it.\n(b) deploy pointed at `\"b\".repeat(40)` -> `DEPLOY_BUILD_FAILED`, detail `DEPLOY_COMMIT_UNAVAILABLE`, layer `DAEMON_DEPLOY_ENGINE` — raised by the shipped builder, not by the double.\nRestore proof: daemon-ports.ts 5787fde7adddec4f8bc98cd96395a044bd749d34c398dde9800358640d037e76 == backup; deploy-fake-docker.spec.ts 22f3c6f422091804007b9cc7b51fac7c1ac6166a9eaaa7e4164c21132303d90c == backup; lane-landing.ts 8d95464901ba4e7c60ac80c35c16062fa9b5beb6a566fd137599acd84dce8239 == backup. All three verified in calls separate from the restore.",
+      "timestamp": "2026-09-07T03:43:13.205Z"
+    },
+    {
+      "id": "comment-c01190b047c14ce48426c853ac0c99f3",
+      "author": "worker-b1872f24",
+      "content": "STEP-4 GATES AND LEAK CENSUS (worker-b1872f24), all run fresh in this session.\n\nGATE 1 — `pnpm typecheck`: exit 0, 19 projects, `apps/daemon typecheck: Done`, `apps/control-room typecheck: Done`.\n\nGATE 2 — `pnpm --filter @moe/daemon test`: FIRST run exit 1, `Test Files 1 failed | 571 passed (572)` / `Tests 1 failed | 10305 passed | 7 skipped (10313)`. The single red was `src/work/foundation-attempt-windows.test.ts:861 expect(outcome.ok).toBe(true)` — a file this session never touched (this session's diff is entirely under tests/e2e/control-room). Re-run isolated at --maxWorkers=1: `Test Files 1 passed (1) / Tests 8 passed (8)`, exit 0, 184.93s — it shells out to real git worktrees and flakes under the suite's --maxWorkers=4 on a loaded box. SECOND full run: exit 0, `Test Files 572 passed (572)` / `Tests 10306 passed | 7 skipped (10313)`, 274.13s. Count lines quoted so the leg is provably non-vacuous.\n\nGATE 3 — `pnpm test:e2e:browser` (FULL, browser-e2e-gate lease held): exit 1. **36 specs executed: 30 passed, 6 failed (8.0m).** All FOUR `deploy-fake-docker.spec.ts` specs PASSED and are not in the failure list. The 6 failures, verbatim:\n  journeys.spec.ts:65 CR-J1-002; journeys.spec.ts:86 CR-A11Y-001; prd-persistence-boundary.spec.ts:127 task-965cb2d6; prd-to-approval.spec.ts:38; provider-pause.spec.ts:181; release-approval.spec.ts:155.\nATTRIBUTION, per global rail 3 (path-attributed baseline, not raw exit code). Five of the six do not reach any file this session changed — their `from \"./\"` imports are harness/journey-coverage/static-ports, daemon-ports.js, prd-boundary-readers.js, wrapper-lane.js. `daemon-ports.ts` is dirty in this shared checkout with a PEER's `fakeGh`/MOE_E2E_RELEASE_MODE hunks (task-817d893f's release lane); this session did not edit it and its bytes are sha256-identical to the pre-drill state.\nThe SIXTH, `release-approval.spec.ts`, DOES reach my diff — it imports `landLaneNode` from `./lane-landing.js` at line 19. So I measured it both ways by swapping only that file: with HEAD's `lane-landing.ts` it fails EARLIER, at line 97, `LANDING: ...STAFFING_ATTEMPTS_EXHAUSTED`; with mine it gets PAST the landing and fails at line 177 on the peer's own release-evidence read, `RELEASE READ: {\"goalId\":\"goal-live-1\",\"kind\":\"ABSENT\"}`. My diff strictly improves that spec; its remaining red is task-817d893f's RELEASE_LAYER gap, disclosed here, not hidden and not fabricated green.\n\nVERIFICATION SUBMITTED (exit 0, the named script with its tsc leg proven by the echoed `$ tsc -p tests/e2e/control-room/tsconfig.json && playwright test -c ...`): `pnpm test:e2e:browser deploy-fake-docker.spec.ts` -> `4 passed (29.8s)`. A typecheck failure would have meant zero specs; the four named specs are listed by name in the output.\n\nDoD 5, LEAK CENSUS — measured as a DELTA, not asserted from a happy path. My earlier FAILING debug iterations did leave 10 scratch dirs bearing this lane's fingerprint (`deploy-spawn-calls.jsonl`); I removed all 10 (removed=10 skipped=0), none held by a live process. Then: BEFORE deploy-fingerprint=0, total scratch=43 -> ran the 4 specs green -> AFTER deploy-fingerprint=0, total scratch=43, `moe-deploy-source-*` build temps=0. Lane node processes (agent-wrapper-main|daemon-main|demo-seed-main) 4 before and 4 after — the SAME four, created 9/5 12:45, 9/6 01:30, 9/6 05:43 x2, i.e. all predating this session; none are mine. The throwing-body arm covers the failure exit path and its `assertStopped` asserts pids gone, both ports closed and the scratch root absent.\n\nSCOPE: `git status --porcelain -- apps/daemon/src/daemon-command-registry.ts apps/daemon/src/daemon-v2-command-registry.ts` is EMPTY — neither contended registry was touched. Root `pnpm test` covers no apps/** file and was therefore not used as evidence for anything here.\n\nWHAT THIS PROVES / WHAT IT DOES NOT: the daemon COMPOSED the injected seam and DISPATCHED to it, the deploy reached the docker boundary through the real command edge, admission, ledger and receipt, and both a success and a refusal reach a durable receipt read back through the production read path. It does NOT prove a container ran, an image was built, or a URL served — the double is a double. A consumer (task-84cd2e55) inherits the first half only.",
+      "timestamp": "2026-09-07T03:43:40.405Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T13:55:10.484Z",
-  "updatedAt": "2026-09-07T02:16:32.471Z",
+  "updatedAt": "2026-09-07T03:44:55.316Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T14:00:23.896Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 8
+    "executedStepCount": 9
   },
   "contextFetchedBy": [
     "architect-aa54e231",
@@ -173,12 +194,14 @@
     "worker-f78e0703",
     "worker-1d53e70c",
     "worker-ade1efb1",
-    "worker-b1872f24"
+    "worker-b1872f24",
+    "qa-97200064"
   ],
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-06T19:59:31.551Z",
@@ -568,26 +591,47 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "d8ac4a048471c1d67452796ed7bdc0c2455366a7",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b1872f24@2026-09-07T02:31:33Z",
+      "paths": [
+        ".moe/tasks/task-0397287d2e964e7b83c0b4c2be945364.json",
+        ".moe/tasks/task-48932becda314704aad652b49a8d2209.json"
+      ],
+      "recordedBy": "worker-b1872f24",
+      "recordedAt": "2026-09-07T02:31:41.583Z",
+      "treeId": "a936edd050c6d35629827761a580447ffc9f40fe",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "tests/e2e/control-room/daemon-ports.ts",
+          "taskId": "task-4cbaca29bb42486094e829c29bc7a17f"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
-    "tests/e2e/control-room/fake-docker-dependencies.ts",
     "tests/e2e/control-room/daemon-ports.ts",
-    ".moe/tasks/task-cf2d91d923ea4397a1145e0973ed2218.json",
-    "apps/daemon/src/daemon-command-async-entries.test.ts",
+    "tests/e2e/control-room/wrapper-lane.ts",
+    "tests/e2e/control-room/deploy-fake-docker.spec.ts",
     "apps/daemon/src/daemon-command-registry.ts",
     "apps/daemon/src/daemon-v2-command-registry.ts",
-    "tests/e2e/control-room/deploy-fake-docker.spec.ts",
+    "apps/daemon/src/daemon-command-async-entries.test.ts",
     "tests/e2e/control-room/lane-landing.ts",
-    "tests/e2e/control-room/wrapper-lane.ts",
-    ".moe/tasks/task-0397287d2e964e7b83c0b4c2be945364.json",
-    ".moe/tasks/task-48932becda314704aad652b49a8d2209.json"
+    "tests/e2e/control-room/lane-landing-contract.ts",
+    "tests/e2e/control-room/lane-review-round.ts",
+    "tests/e2e/control-room/fake-docker-dependencies.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-b1872f24@2026-09-07T02:16:25Z",
-    "at": "2026-09-07T02:16:32.471Z"
+    "sessionId": "worker-b1872f24@2026-09-07T02:31:33Z",
+    "at": "2026-09-07T02:31:41.583Z"
   },
   "touchedFiles": [
     "tests/e2e/control-room/wrapper-lane.ts",
@@ -610,5 +654,13 @@
       "releasedBy": "governor-c0820947",
       "reason": "Governor 22:17Z, owner-approved. CONFIRMED CRASH, not idle time: two process-tree censuses five minutes apart (22:08Z, 22:13Z) find NO wrapper powershell and NO claude.exe for worker-ade1efb1, while every other registered seat maps to a live wrapper+CLI pair. Its session ended CLI exit=2 at 22:05:48Z after checkpointing a2bc37a6, and its terminal tab is gone. Pinged in #workers at 22:13Z; nothing can answer. Releasing in place so a live seat can resume — the row stays WORKING and keeps its steps."
     }
-  ]
+  ],
+  "reviewStartedAt": "2026-09-07T03:44:50.659Z",
+  "verification": {
+    "command": "pnpm test:e2e:browser deploy-fake-docker.spec.ts",
+    "exitCode": 0,
+    "outputTail": "$ tsc -p tests/e2e/control-room/tsconfig.json && playwright test -c tests/e2e/control-room/playwright.config.ts \"deploy-fake-docker.spec.ts\"\n\nRunning 4 tests using 1 worker\n\n  ok 1 [chromium] > deploy-fake-docker.spec.ts:150:3 > real daemon fake docker: SUCCESS has a durable receipt (8.6s)\n  ok 2 [chromium] > deploy-fake-docker.spec.ts:150:3 > real daemon fake docker: DEPLOY_DOCKER_UNAVAILABLE has a durable receipt (8.7s)\n  ok 3 [chromium] > deploy-fake-docker.spec.ts:211:1 > real daemon fake docker: a paired human publishes the lane's own landed commit (9.2s)\n  ok 4 [chromium] > deploy-fake-docker.spec.ts:229:1 > real daemon fake docker: teardown also runs when the body throws (1.9s)\n\n  4 passed (29.8s)",
+    "reportedAt": "2026-09-07T03:44:50.659Z"
+  },
+  "completionSummary": "The e2e lane now runs a REAL deploy against the real daemon composition with a fake docker behind it. SPEC COUNT: 4 executed, 4 passed, exit 0, tsc leg proven by the echoed `$ tsc -p ... && playwright test -c ...`. Exercising spec: tests/e2e/control-room/deploy-fake-docker.spec.ts. Full evidence in comment-572a58ca (defects+drills) and comment-c01190b0 (gates+leak census).\n\nStep 3 had left the spec RED; closing it required three measured fixes, not just drills.\n1. playwright.config timeout 180_000 == LANDING_BUDGET_MS, so every landing failure surfaced as a Playwright timeout and the wrapper transcript never printed. Spec now sets LANE_TIMEOUT_MS = budget + 240_000.\n2. The seat double never reported a round, so delivery facts stayed READY and the coordinator re-RESERVED until STAFFING_ATTEMPTS_EXHAUSTED. Wired lane-review-round.ts (present but never imported) into landLaneNode.\n3. THE REAL BLOCKER: the seeded SPEC node's bare key IS the compiled graph's nodeKey, so staffing it makes the key LEGACY (measured: `legacy=node-e2e-en6ggq`), which empties publication-goal-integration's ref set AND quarantines the compiled node. Now the lane retires the spec node and lands the COMPILED execution ref (via createCompiledNodeSource, the same call the composition makes). Publish went ACCEPTED; the deploy reached the double.\n\nLEAK HAZARD FOUND AND CLOSED: fake-docker-dependencies.ts spread `...productionDeployPorts`, leaving `build: nodeDeployBuild` — a REAL `docker build` spawn, masked only by the git preflight refusing first. Drill (b) then caught my first fix as wrong: replacing the whole build PORT dropped that preflight and a bogus sha returned DEPLOYED. Final shape keeps createDeploymentImageBuilder and intercepts ONLY its `docker` spawn.\n\nDRILLS: (a) no MOE_NODE_WORKSPACE -> PUBLISH_WORKSPACE_UNCONFIGURED@DAEMON_PREREQUISITE; (b) unknown sha -> DEPLOY_BUILD_FAILED / DEPLOY_COMMIT_UNAVAILABLE @ DAEMON_DEPLOY_ENGINE. Both restored from out-of-tree backups, sha256-proven in "
 }
