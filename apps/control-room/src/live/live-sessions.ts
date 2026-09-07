@@ -12,15 +12,30 @@ const REQUEST_TIMEOUT_MS = 15_000;
 export const SESSION_LIVENESS = ["CLOSED", "EXPIRED", "LIVE"] as const;
 export type SessionLiveness = (typeof SESSION_LIVENESS)[number];
 
+/**
+ * What the daemon STATED about ONE seat. `providerAtStart` and `agentVersionAtStart` are what
+ * the WRAPPER measured when it spawned this seat and wrote down — second-hand facts about the
+ * past, never a live reading, which is why both names end in `AtStart`. Either can be the
+ * daemon's stated unknown; the browser shapes them verbatim and never substitutes a default.
+ */
 export interface SessionView {
+  readonly agentVersionAtStart: string;
   readonly capabilities: readonly string[];
   readonly expiresAt: string;
   readonly holding: readonly string[];
   readonly liveness: SessionLiveness;
   readonly principalId: string;
+  readonly providerAtStart: string;
   readonly sessionId: string;
   readonly status: "CLOSED" | "OPEN";
 }
+
+/**
+ * THE ONE STATED UNKNOWN the daemon publishes when nobody measured a seat's start, mirrored
+ * here so a screen can ask "is this a reading or an absence?" without matching a bare literal.
+ * Kept in step with `SEAT_FACT_UNMEASURED` in apps/daemon/src/orchestrator/seat-start-contracts.ts.
+ */
+export const SEAT_FACT_UNMEASURED = "UNKNOWN";
 
 /**
  * What the daemon STATED about concurrency. `configuredAgentLimit` is the agent limit the
@@ -113,17 +128,32 @@ const count = (value: unknown): value is number => typeof value === "number" && 
 const stringList = (value: unknown): readonly string[] | null =>
   Array.isArray(value) && value.every((entry) => typeof entry === "string") ? Object.freeze([...(value as string[])]) : null;
 
+/**
+ * ONE SEAT, key for key. Exported for the same reason `SESSIONS_FRAME_KEYS` is: this decode is
+ * EXACT-ARITY too, so a PER-SEAT member added on the daemon and not here does not degrade the
+ * Seats screen, it BLANKS it — `sessionOf` returns null and the whole frame becomes an ERROR.
+ */
+export const SESSION_KEYS = [
+  "agentVersionAtStart", "capabilities", "expiresAt", "holding", "liveness", "principalId",
+  "providerAtStart", "sessionId", "status",
+] as const;
+
 function sessionOf(value: unknown): SessionView | null {
-  const record = exactDataRecord(value, ["capabilities", "expiresAt", "holding", "liveness", "principalId", "sessionId", "status"]);
+  const record = exactDataRecord(value, SESSION_KEYS);
+  // `providerAtStart` and `agentVersionAtStart` are STRINGS, checked as strings: a truthiness
+  // test would accept `0`, `false` or `[]` and render an absence as if it were a reading. The
+  // daemon states its unknown as a word, so "empty" is never a value this decode may accept.
   if (record === null || !nonEmptyString(record.expiresAt) || !nonEmptyString(record.principalId) || !nonEmptyString(record.sessionId)
+    || !nonEmptyString(record.providerAtStart) || !nonEmptyString(record.agentVersionAtStart)
     || (record.status !== "CLOSED" && record.status !== "OPEN") || typeof record.liveness !== "string"
     || !(SESSION_LIVENESS as readonly string[]).includes(record.liveness)) return null;
   const capabilities = stringList(record.capabilities);
   const holding = stringList(record.holding);
   if (capabilities === null || holding === null) return null;
   return Object.freeze({
-    capabilities, expiresAt: record.expiresAt, holding, liveness: record.liveness as SessionLiveness,
-    principalId: record.principalId, sessionId: record.sessionId, status: record.status,
+    agentVersionAtStart: record.agentVersionAtStart, capabilities, expiresAt: record.expiresAt,
+    holding, liveness: record.liveness as SessionLiveness, principalId: record.principalId,
+    providerAtStart: record.providerAtStart, sessionId: record.sessionId, status: record.status,
   });
 }
 

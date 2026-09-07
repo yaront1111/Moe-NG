@@ -12,6 +12,8 @@ import { readSessionLedger } from "../identity/session-read-model.js";
 import type { SessionLedger } from "../identity/session-read-model.js";
 import { agentProviderFact, resolveAgentProvider } from "../orchestrator/agent-provider-resolve.js";
 import { providerFor } from "../orchestrator/moe-up-credentials.js";
+import { SEAT_START_UNKNOWN, readSeatStartLedger } from "../orchestrator/seat-start-ledger.js";
+import type { SeatStartLedger } from "../orchestrator/seat-start-ledger.js";
 import { readWorkClaimLedger } from "../work/work-claim-read-model.js";
 import type { WorkClaimLedger } from "../work/work-claim-read-model.js";
 import { activeClaim } from "../work/work-claim-services.js";
@@ -85,13 +87,50 @@ export interface SessionsAgentProvider {
   /** True when `MOE_AGENT_COMMAND` in THIS daemon's environment is what decided it. */
   readonly envOverride: boolean;
 }
+/**
+ * WHAT THIS SEAT WAS STARTED WITH — a THIRD kind of fact, and neither of the two above.
+ *
+ * `activeSeats` IS measured, by this read, from ledgers it folds itself. `configuredAgentLimit`
+ * is CONFIGURED and never observed. These two are MEASURED BUT SECOND-HAND: the WRAPPER measured
+ * them, in the wrapper's own process, at the instant it spawned this seat's child, and wrote them
+ * to a durable record (`orchestrator/seat-start-ledger.ts`). This read is quoting that note. It is
+ * not observing a live process, and the daemon could not: the daemon and the wrapper are separate
+ * processes and the daemon cannot see a child it did not spawn. That limit is why both names end
+ * in `AtStart` — a `provider` or `agentVersion` here would claim a present-tense observation
+ * nothing performs.
+ *
+ * WHAT A READER MAY THEREFORE CONCLUDE. These say what this seat WAS ACTUALLY STARTED WITH, which
+ * is the useful answer and NOT a stale one: after `project.set_agent_provider` changes the setting,
+ * a seat still running from before keeps reporting what it really runs, while the frame-level
+ * `agentProvider` reports what the NEXT seat would get. The two disagreeing is the disclosure
+ * working — it is exactly the window in which an operator needs to see both.
+ *
+ * WHAT THEY DO NOT SAY: nothing about now. A seat whose CLI was upgraded on disk mid-run still
+ * reports the version measured at its start, because that is the version its running process
+ * loaded. Nothing here re-probes.
+ */
 export interface SessionView {
+  /**
+   * The version this seat's agent CLI reported to `--version` when the wrapper started it, or
+   * `SEAT_FACT_UNMEASURED` — never an empty string and never a plausible default. Four causes
+   * collapse to that one token on purpose: no start record (every session opened before this
+   * ledger existed, and every paired browser that never had a seat), an unreadable record, a
+   * probe that failed or timed out, and output that was not shaped like a version.
+   */
+  readonly agentVersionAtStart: string;
   readonly capabilities: readonly string[];
   readonly expiresAt: string;
   /** Work items this seat holds an OPEN, unexpired claim on, at the daemon's clock. */
   readonly holding: readonly string[];
   readonly liveness: SessionLiveness;
   readonly principalId: string;
+  /**
+   * The agent command the wrapper ACTUALLY spawned this seat with, as a roster name where the
+   * command maps to a known provider and verbatim where it does not — the same rule
+   * `agentProvider.configured` uses, so the two never disagree about what to call one command.
+   * `SEAT_FACT_UNMEASURED` under the same one-unknown rule as the version beside it.
+   */
+  readonly providerAtStart: string;
   readonly sessionId: string;
   readonly status: "CLOSED" | "OPEN";
 }
@@ -133,6 +172,12 @@ export interface SessionsReadOptions {
   readonly projectId: string;
   readonly readClaims?: (store: SqliteEventStore, projectId: string) => WorkClaimLedger;
   /**
+   * The wrapper's seat-start notes, defaulted to the production fold exactly as `readSessions`
+   * and `readClaims` are, so the port stays drivable without sqlite. A default cannot publish an
+   * untold value here: absent notes ARE the fact `SEAT_FACT_UNMEASURED` states.
+   */
+  readonly readSeatStarts?: (store: SqliteEventStore, projectId: string) => SeatStartLedger;
+  /**
    * The durable agent-provider setting for one scope, defaulted to the production store
    * read exactly as `readSessions`/`readClaims` are. A default here cannot publish an
    * untold value the way a defaulted `configuredAgentLimit` would: the default IS the
@@ -164,6 +209,7 @@ export function createSessionsReadPort(options: SessionsReadOptions): SessionsRe
   const clock = options.clock ?? ((): string => new Date().toISOString());
   const readSessions = options.readSessions ?? readSessionLedger;
   const readClaims = options.readClaims ?? readWorkClaimLedger;
+  const readSeatStarts = options.readSeatStarts ?? readSeatStartLedger;
   const readProvider = options.readProvider ?? agentProviderFact;
   const envAgentCommand = "envAgentCommand" in options
     ? options.envAgentCommand : process.env["MOE_AGENT_COMMAND"];
@@ -172,6 +218,17 @@ export function createSessionsReadPort(options: SessionsReadOptions): SessionsRe
       const now = clock();
       const ledger = readSessions(store, projectId);
       const claims = readClaims(store, projectId);
+      // A SEAT-START READ MAY NEVER WEDGE THIS READ. The session and claim folds are load
+      // bearing — a Seats screen without them says nothing true — but a note about which
+      // version a seat started with is decoration on top of them. A reader that throws
+      // degrades every seat to the stated unknown instead of refusing the whole frame, which
+      // is the same answer the read gives for every seat opened before this ledger existed.
+      let seatStarts: SeatStartLedger;
+      try {
+        seatStarts = readSeatStarts(store, projectId);
+      } catch {
+        seatStarts = new Map();
+      }
       const holdings = new Map<string, string[]>();
       for (const record of claims.claims.values()) {
         if (activeClaim(record, now) === null) continue;
@@ -191,12 +248,17 @@ export function createSessionsReadPort(options: SessionsReadOptions): SessionsRe
         // browser holds nothing and an expired seat is not working, so neither is a seat
         // the wrapper could have staffed instead.
         if (liveness === "LIVE" && holding.length > 0) activeSeats += 1;
+        // No note for this seat is the NORMAL case, not an error, so it takes the same stated
+        // unknown a failed probe takes rather than a second vocabulary.
+        const started = seatStarts.get(record.sessionId) ?? SEAT_START_UNKNOWN;
         sessions.push(Object.freeze({
+          agentVersionAtStart: started.agentVersion,
           capabilities: record.capabilities,
           expiresAt: record.expiresAt,
           holding,
           liveness,
           principalId: record.principalId,
+          providerAtStart: started.provider,
           sessionId: record.sessionId,
           status: record.status,
         }));

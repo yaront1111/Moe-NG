@@ -35,6 +35,7 @@ import { VerifierProcessCancelledError } from "./verifier-process-runner.js";
 import { createVerifierDatabaseRunner } from "./verifier-database.js";
 import type { VerifierProcessRunner } from "./verifier-process-runner.js";
 import { providerFor } from "./moe-up-credentials.js";
+import { createSeatStartRecorder } from "./seat-start-recorder.js";
 import { readWrapperKnobs } from "./wrapper-knobs.js";
 
 export {
@@ -153,6 +154,10 @@ async function main(): Promise<void> {
     const staffingFence = createAgentSessionFence({
       isProcessAlive: probeProcessAlive, projectId: config.projectId, store: verifierStore,
     });
+    const seatStart = createSeatStartRecorder({
+      log: (line) => { process.stdout.write(`${line}\n`); },
+      projectId: config.projectId, store: verifierStore,
+    });
     const verifierDelivered = launchDelivery({
       credential: () => config.credential, now: () => new Date().toISOString(),
       projectId: config.projectId, store: verifierStore }, "VERIFIER");
@@ -217,9 +222,15 @@ async function main(): Promise<void> {
       mintSecret: () => randomUUID().replaceAll("-", ""),
       operatorCredential: config.credential,
       sessionTtlMs: knobs.sessionTtlMs,
+      // THE SEAT-START RECORD IS WRITTEN HERE, AFTER ADMISSION AND NOWHERE ELSE. A wrapper that
+      // dies between deciding to staff and getting a child must not leave a note claiming a seat
+      // ran; `started.ok` is the first instant a child exists. Fire-and-forget on purpose: the
+      // write never rejects, and a spawn must not wait on a ledger commit to return.
       spawnAgent: delivery.start(async (request) => {
         if (secureSpawn === null) throw new Error("MCP_HTTP_HOST_NOT_STARTED");
-        return secureSpawn(request);
+        const started = await secureSpawn(request);
+        if (started.ok) void seatStart.record(request);
+        return started;
       }),
       // Durable per-scope setting, read per staffed seat: NO provider is frozen at process
       // start. `provider` below is only a fallback for a caller that resolved none.

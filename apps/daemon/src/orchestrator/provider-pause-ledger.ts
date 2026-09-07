@@ -57,8 +57,12 @@ function clip(line: string | null): string | null {
   return line === null ? null : line.slice(0, LAST_LINE_MAX_CHARS);
 }
 
-/** The decision this command id already produced, decoded, or null while there is none to replay. */
-function existing(
+/**
+ * The decision this command id already produced, decoded, or null while there is none to replay.
+ * EXPORTED for the seat-START ledger beside this one: two wrapper-fact modules replaying against
+ * two copies of this lookup is how one of them silently stops deduping.
+ */
+export function existing(
   store: SqliteEventStore, projectId: string, commandId: string,
 ): Uint8Array | null {
   let decision;
@@ -73,7 +77,7 @@ function existing(
   return decision.resultBytes;
 }
 
-interface CommitInput {
+export interface CommitInput {
   readonly aggregateId: string;
   readonly commandId: string;
   readonly commandKind: string;
@@ -85,7 +89,7 @@ interface CommitInput {
 }
 
 /** The internal-kind commit the publish and verifier receipts already use. Never the registry. */
-function commit(store: SqliteEventStore, input: CommitInput): boolean {
+export function commit(store: SqliteEventStore, input: CommitInput): boolean {
   const event: EventDraft = {
     eventId: `${input.commandId}-${input.eventType}`,
     eventType: input.eventType,
