@@ -66,14 +66,16 @@ function spawnRuntime(
   let closing: Promise<void> | undefined;
   // EACH SEAT's PROVIDER decides its own invocation shape, resolved per spawn from
   // the request (see agent-provider-resolve.ts). `codex exec` (measured
-  // against codex-cli 0.151.0): the mission arrives on stdin via `-`, the MCP server
-  // is a streamable-HTTP config override, and the scoped bearer travels through an
-  // env var codex reads by name (`bearer_token_env_var`) — never through argv or a
-  // file. `--ignore-user-config` keeps the HOST's codex
-  // config (and any MCP servers it names) out, the parallel of claude's
-  // `--strict-mcp-config`; its help states auth still uses CODEX_HOME.
-  // Config values stay QUOTE-FREE on purpose: codex parses each `-c` value as TOML and
-  // falls back to the raw literal, and a quote-free arg is what the cmd quoting fence admits.
+  // 2026-09-07 against codex-cli 0.153.4 on host Yaron-PC, superseding an earlier reading of
+  // 0.151.0 — this surface is unchanged between them): the mission arrives on stdin via `-`,
+  // the MCP server is a streamable-HTTP config override, and the scoped bearer travels through
+  // an env var codex reads by name (`bearer_token_env_var`) — never through argv or a file.
+  // `--ignore-user-config` keeps the HOST's codex config (and any MCP servers it names) out,
+  // the parallel of claude's `--strict-mcp-config`; its help states auth still
+  // uses CODEX_HOME. Config values carry NO DOUBLE QUOTE AND NO WHITESPACE: codex parses each
+  // `-c` value as TOML and falls back to the raw literal, and that is what the cmd fence admits
+  // (`UNQUOTABLE` in agent-spawn-invocation.ts refuses `"`). The roster value must be a TOML
+  // SEQUENCE, so it uses single-quoted literals — agent-codex-roster.ts owns that measurement.
   const attemptSpawn = (request: SpawnRequest): SpawnAttempt => {
     if (closed) throw new Error("AGENT_SPAWNER_CLOSED");
     const { codex: codexSeat, command } = spawnSeatFor(request.provider, options.command);
@@ -91,6 +93,7 @@ function spawnRuntime(
         "--sandbox", role.sandbox,
         "-c", `mcp_servers.moe-next.url=${trustedOrigin}`,
         "-c", `mcp_servers.moe-next.bearer_token_env_var=${CODEX_BEARER_VARIABLE}`,
+        ...role.codexRosterArgs,
         "-",
       ] : [
         "-p",

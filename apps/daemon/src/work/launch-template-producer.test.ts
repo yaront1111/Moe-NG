@@ -1069,3 +1069,79 @@ describe("produceLaunchTemplateFields - a planted prototype cannot forge a resul
     expect(fields.renderedContext).toEqual(RENDERED);
   });
 });
+
+/**
+ * PROVIDER-SHAPED ARGV. The template is composed from the DURABLE capability answer, so the
+ * provider is read off that same server-derived record — never proposed by a caller, which this
+ * module refuses on every path.
+ */
+describe("shapes argv for the seat's provider", () => {
+  /**
+   * BYTE FOR BYTE, captured from a real run before this row's edit rather than transcribed.
+   * foundation-context-prelaunch.test.ts:274 only checks that CODING_TOOLS is PRESENT, so it
+   * would stay green through a reorder or a reshape; this pin would not.
+   */
+  it("leaves the claude argv exactly as it was", () => {
+    expect(produced()["argv"]).toEqual([
+      "-p",
+      "--allowedTools", "mcp__moe-next,mcp__moe-next__*,Edit,Write,Read,Glob,Grep,Bash",
+      "--tools", "Edit,Write,Read,Glob,Grep,Bash",
+      "--model", "claude-opus-5",
+      "--effort", "high",
+    ]);
+  });
+
+  const codexFields = (): Record<string, unknown> => produceLaunchTemplateFields({
+    capabilities: { ...capabilities() as Record<string, unknown>, provider: "codex" },
+    mission: MISSION,
+    renderedContext: RENDERED,
+    runtimeObservation: RUNTIME_FACTS,
+  }) as unknown as Record<string, unknown>;
+
+  /**
+   * The codex form of the same three facts. Measured on codex-cli 0.153.4:
+   * - `exec` is the non-interactive subcommand, standing where claude's `-p` stands;
+   * - `--model` is accepted on `exec`;
+   * - effort has no flag, so it travels as `--config model_reasoning_effort=<effort>`, which
+   *   `--strict-config` accepts.
+   * `--config` is the LONG form on purpose: `-c` is a member of CLAUDE_LAUNCH_RESUME_FLAGS, and
+   * this producer refuses any argv carrying one (LAUNCH_TEMPLATE_ARGV_RESUMES).
+   */
+  it("gives a codex seat the exec form with its config overrides", () => {
+    expect(codexFields()["argv"]).toEqual([
+      "exec",
+      "--model", "claude-opus-5",
+      "--config", "model_reasoning_effort=high",
+    ]);
+  });
+
+  /**
+   * NO ROSTER HERE, and the reason is measured rather than an omission. A roster override names
+   * a server, and codex rejects a server with no transport:
+   *   `codex exec --strict-config --config mcp_servers.moe-next.disabled_tools=[]`
+   *   -> `Error loading config.toml: invalid transport in mcp_servers.moe-next`
+   * The template holds no MCP origin and no bearer — the spawner does, and it passes the roster
+   * together with the `.url` that makes it loadable. A roster emitted here would produce an argv
+   * codex refuses to start on.
+   */
+  it("carries no MCP server override, which needs a transport this template does not hold", () => {
+    for (const argument of codexFields()["argv"] as readonly string[]) {
+      expect(argument).not.toContain("mcp_servers.");
+    }
+  });
+
+  it("still refuses an argv that would attach to a prior session", () => {
+    // `-c` is a resume flag; the codex branch must reach for `--config` or die on this gate.
+    expect((codexFields()["argv"] as readonly string[])).not.toContain("-c");
+  });
+
+  it("refuses a provider it does not know rather than launching claude flags", () => {
+    const refused = produceLaunchTemplateFields({
+      capabilities: { ...capabilities() as Record<string, unknown>, provider: "gemini" },
+      mission: MISSION,
+      renderedContext: RENDERED,
+      runtimeObservation: RUNTIME_FACTS,
+    }) as unknown as Record<string, unknown>;
+    expectRefusal(refused, "LAUNCH_TEMPLATE_SELECTION_UNPROVEN");
+  });
+});

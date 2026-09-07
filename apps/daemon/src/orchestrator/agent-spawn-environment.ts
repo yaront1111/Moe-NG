@@ -20,7 +20,9 @@ const RUNTIME_ENVIRONMENT_KEYS: ReadonlySet<string> = new Set([
 ]);
 /**
  * Sorted and CLOSED. `CODEX_` and `OPENAI_` carry the codex cli's auth surface,
- * measured 2026-08-20 against codex-cli 0.147.0: CODEX_HOME (the state dir
+ * measured 2026-08-20 against codex-cli 0.147.0 — the host now runs 0.153.4 (2026-09-07,
+ * Yaron-PC) and THIS PARTICULAR CLAIM WAS NOT RE-TAKEN against it, so the version it was
+ * actually measured on is left standing rather than restamped: CODEX_HOME (the state dir
  * holding a ChatGPT subscription seat — `codex exec --help` says "auth still
  * uses `CODEX_HOME`"), CODEX_ACCESS_TOKEN, OPENAI_API_KEY, CODEX_API_KEY. No
  * `CHATGPT_` prefix is listed because the binary honors no such variable.
@@ -76,6 +78,19 @@ export function agentEnvironment(
   // (25000 tokens) spills a PRD-sized answer to disk, where an MCP-only planning seat
   // cannot follow it (measured 2026-09-03 on UnAI's ~121 KB PRD). The operator's own
   // setting wins when present.
+  //
+  // CLAUDE-ONLY, AND DELIBERATELY INERT ON A CODEX SEAT rather than an oversight. codex-cli
+  // 0.153.4 (measured 2026-09-07, host Yaron-PC) recognizes NO result-size configuration at
+  // all: `mcp_servers.<name>.tool_max_output_tokens`, `.max_output_tokens`,
+  // `.output_token_limit`, `tools.max_output_tokens` and `model_max_output_tokens` are every
+  // one REJECTED as unknown fields under `--strict-config`. The only per-server keys it
+  // accepts are `startup_timeout_sec` and `tool_timeout_sec`, and a timeout bounds DURATION,
+  // never result size; `codex features list` reports `token_budget` as under development /
+  // false, which is not a shipped lever. There is therefore nothing to mirror this variable
+  // to. It stays UNCONDITIONAL because removing it for a codex seat changes nothing a seat
+  // reads while touching the allowlist this builder is pinned on. Bounding the result
+  // daemon-side is the real remedy and is a change to the SERVED MCP READ SURFACE, not to
+  // the spawn surface — a separate row, not a knob to invent here.
   environment["MAX_MCP_OUTPUT_TOKENS"] = source["MAX_MCP_OUTPUT_TOKENS"] ?? DEFAULT_MCP_OUTPUT_TOKENS;
   // Claude honors standard proxy variables. Force its loopback MCP connection
   // around any enterprise proxy so the scoped bearer never leaves this host.

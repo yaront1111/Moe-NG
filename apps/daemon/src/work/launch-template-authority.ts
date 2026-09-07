@@ -51,7 +51,14 @@ export interface LaunchTemplateRefused {
   readonly upstream: LaunchTemplateUpstream | null;
 }
 
+/** The seat providers this daemon shapes an argv for. CLOSED: anything else is unproven. */
+export type SeatProvider = "claude" | "codex";
+const SEAT_PROVIDERS: ReadonlySet<string> = new Set<string>(["claude", "codex"] as const);
+
 export interface AdmittedCapabilities {
+  /** Which argv shape this seat takes, off the same durable answer as the rest. NOT
+   *  `selection.provider`, typed as the literal `"claude"` in a package this seam does not own. */
+  readonly agentProvider: SeatProvider;
   readonly capabilitySchemaDigest: string;
   readonly limits: unknown;
   readonly selection: ClaudeLaunchSelection;
@@ -149,6 +156,14 @@ export function admitCapabilities(
   if (digest === null) {
     return refuse("LAUNCH_TEMPLATE_SELECTION_UNPROVEN", "capabilitySchemaDigest has no value");
   }
+  // ABSENT means claude — what this seam hard-coded before a second provider existed — so records
+  // already in flight keep producing the identical template. A PRESENT but unknown provider
+  // REFUSES rather than falling back: handing an unrecognised seat claude's flags is the exact
+  // failure a provider-shaped argv exists to prevent.
+  const named = record["provider"] ?? "claude";
+  if (typeof named !== "string" || !SEAT_PROVIDERS.has(named)) {
+    return refuse("LAUNCH_TEMPLATE_SELECTION_UNPROVEN", "provider is not a seat this daemon shapes");
+  }
   // Built field by NAME, never spread: a capabilities record carrying an extra key — an `argv`
   // a caller planted on it, say — contributes nothing, because nothing copies what is not named.
   const selection = Object.freeze({
@@ -163,7 +178,8 @@ export function admitCapabilities(
     reasoningEffort: record["reasoningEffort"],
     selectedModelId: record["selectedModelId"],
   }) as unknown as ClaudeLaunchSelection;
-  return { capabilitySchemaDigest: digest, limits: record["limits"], selection };
+  return { agentProvider: named as SeatProvider, capabilitySchemaDigest: digest,
+    limits: record["limits"], selection };
 }
 
 /** Element-wise: both sides are `readonly number[]`, and `===` would pass a substituted copy. */
