@@ -140,13 +140,27 @@
     {
       "stepId": "step-9",
       "description": "GATES AND ADVERSARIAL SELF-REVIEW (DoD 7 second half). Load `adversarial-self-review` and `regression-check`.\n\nGATES — each standalone and foreground, each quoted with its `Test Files N passed` count line. An exit-0 leg with NO count line RAN NOTHING and is not evidence:\n- `pnpm --filter @moe/control-room test` — THIS ROW'S PRIMARY EVIDENCE; every source file it owns is under apps/control-room.\n- `pnpm --filter @moe/daemon test`\n- `pnpm typecheck`\n- `pnpm test`\n- `pnpm test:e2e:browser`\nState explicitly that root `pnpm test` has NO apps/** in its include, so it covers ZERO files this row changed and the control-room leg carries the apps/** claim. Do NOT narrow a `--filter` leg to one file: that drops the package script's own flags (including --testTimeout) and fakes a red on a clean tree. Acquire the full-suite / browser gate lease rather than running a convoy beside other seats.\n\nATTRIBUTE FOREIGN RED, never hide it and never fabricate green. Apply the path-attributed baseline: gate failures at the merge-base, gate failures at HEAD, subtract, intersect with this row's owned paths; complete only when that intersection is EMPTY. Disclose foreign red verbatim with its exact failing lines and paths. Five paths under apps/control-room/src were already dirty from peer sessions at plan time — note them, never revert or stage them.\n\nADVERSARIAL PASS, on the surfaces this row owns:\n- Does any rendered string, log line, screenshot, transcript or `\\dt` output carry a connection string, a DATABASE_URL, a password or an absolute backup path?\n- Do APPLIED, REFUSED and REVERTED read as three different things at a glance, in the feed AND on the card?\n- Does an UNKNOWN observation ever render as zero, as none-pending, or as blank?\n- Does a node declaring TWO migrations show both?\n- Do two environments on one card ever cross-associate their receipts under a re-render or a goal switch?\n- Is `backupSha256` ever an executable affordance — a link, an href, a download?\n- Did you create a second Deployments card, a second backup location, a new HTTP read, a daemon or contract edit, or any control for `migrate_down`? All of those are rejections.\n\nMUTATION DRILL: `git status --porcelain` the exact mutated paths FIRST. `migration-presentation.tsx` and `deploy-migrations.spec.ts` are NEW and UNTRACKED, so `git diff -- <path>` certifies NOTHING for them — empty before, during and after. Back each up OUT OF TREE under %TEMP% in a path carrying THIS TASK ID (not only your worker id, which can be reused and hold a stale vintage), hash the LIVE file at window-open, and prove the restore by SHA256 equality in a call SEPARATE from the restore. `git diff` is a valid restore proof for the TRACKED paths only. Do not run on-disk drills while holding a shared full-suite lease.\n\nReport every path you created or modified in `complete_step.modifiedFiles`.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-09-07T21:59:02.374Z"
+      "modifiedFiles": [
+        "docs/agent-stack-runbook.md",
+        "README.md",
+        "apps/control-room/src/v2/goals/migration-presentation.tsx",
+        "apps/control-room/src/v2/goals/goal-deployments.tsx",
+        "apps/control-room/src/v2/board/board-lanes.tsx",
+        "apps/control-room/src/v2/ops/activity-words.ts",
+        "apps/control-room/src/v2/ops/activity-words.test.ts",
+        "apps/control-room/src/v2/goals/goal-deployments.test.tsx",
+        "apps/control-room/src/v2/board/board-screen.test.tsx",
+        "tests/e2e/control-room/deploy-migrations.spec.ts"
+      ],
+      "note": "GATES RUN AND ADVERSARIAL PASS DONE. Full gate table, verbatim foreign red, the four mutation drills and every adversarial answer are in row comment-628c255f (they exceed a note).\n\nGATES, each standalone and foreground, under the appropriate lease:\n- `pnpm --filter @moe/control-room test` EXIT 0 -> `Test Files 200 passed (200)` / `Tests 2616 passed (2616)`. THIS ROW'S PRIMARY EVIDENCE.\n- `pnpm --filter @moe/daemon test` EXIT 0 -> `Test Files 592 passed (592)` / `Tests 10572 passed | 8 skipped (10580)`.\n- `pnpm typecheck` EXIT 0, every package Done.\n- `npx tsc -p tests/e2e/control-room/tsconfig.json --noEmit` EXIT 0 - an ADDED leg, because `pnpm typecheck` does not cover `tests/e2e` and there is no root tsconfig, so nothing else typechecks my spec.\n- `pnpm test` EXIT 1 -> `Test Files 2 failed | 431 passed | 2 skipped (435)`.\n- `pnpm test:e2e:browser` EXIT 1 -> `6 failed | 1 skipped | 39 passed (14.2m)`.\n\nROOT `pnpm test` COVERS ZERO FILES THIS ROW CHANGED, measured not asserted: `vitest.config.ts:32` include is `adapters/**/*.test.ts, packages/**/*.test.ts, tests/**/*.test.ts, tools/**/*.test.ts` - no `apps/**`, and my e2e file is a `.spec.ts` so the `tests/**` glob misses it too. I greped the root log for each of this row's 8 paths and all 8 print `not collected`. The control-room leg carries the apps/** claim.\n\nFOREIGN RED DISCLOSED VERBATIM, NEVER HIDDEN. Root: `packages/benchmark/src/pre-freeze-pinned-documents.test.ts:158` `Test timed out in 5000ms` - PASSES STANDALONE, so it is 435-file convoy contention rather than a red; and `tests/migration/cutover/cutover-drill.test.ts` ARM E `CUTOVER_MANIFEST_ENTRY_LIMIT_EXCEEDED` on `.moe/tasks/task-fd1960...json`, a fleet-written board row, which reproduces standalone. Arithmetic attribution for that one: the non-ignored population is 6855 files + 267 directories = 7122, already under the 10000 cap, so the walker counts a population git ignores; this row created 2 files ever and 7120 vs 7122 falls identically on both sides. Browser: 6 failures, none owned - two are the documented `cordum-shell.tsx` entry/shell-selection boundary unowned since 2026-08-29, one is `STAFFING_ATTEMPTS_EXHAUSTED` (host provider limit), three are pre-existing PRD/preview specs. MY TWO TESTS ARE IN THE PASSED SET (`ok 15` and `ok 16`). Prior baselines on this row were 7 and 8 failed; it is now 6, so the failing set SHRANK and the HEAD-minus-merge-base delta intersected with owned paths is EMPTY.\n\nFOUR MUTATION DRILLS, FOUR CAUGHT BY EXACTLY THE RIGHT ARM: UNKNOWN rendered blank; UNVERIFIED reading as verified; the node card showing only the first of two identifiers; and a REFUSED migration reading as applied (that one reds TWO arms). THE STEP'S PREMISE IS STALE - `migration-presentation.tsx` and `deploy-migrations.spec.ts` are TRACKED at HEAD now (`git ls-files --error-unmatch` confirms both), so `git diff` IS a valid restore proof and I said so rather than silently relying on it. Restore proven FOUR ways in a call separate from the restore: empty `git diff --stat`, empty `git status --porcelain apps/control-room/src/`, sha256 back to the LIVE hash taken at window-open, and `grep -rn ZZMUT` over every owned source returning 0. The %TEMP% backup carried THIS TASK ID and was proven free of mutant tokens BEFORE the first mutation.\n\nA NO-OP SED IS A FALSE NEGATIVE CONTROL - the lesson that cost me two lane runs earlier in this session and now a standing habit: confirm a NONZERO `git diff --stat` between planting a mutant and running, because a sed that matched nothing greens both ways and is indistinguishable from a vacuous assertion.\n\nADVERSARIAL ANSWERS, all measured: no production path carries `postgres://`, `DATABASE_URL`, `password` or an absolute backup path (the only spec hit is a NEGATIVE arm); APPLIED/REFUSED/REVERTED share no leading word in the feed and on the card; UNKNOWN never renders as zero, none-pending or blank; a node declaring two migrations shows both; environments cannot cross-associate because the card owns the testid prefix and hands `MigrationRow` a builder; `backupSha256` has no anchor, href, download or handler (the grep matches comments only); and NOTHING FORBIDDEN was created - this row's own commits touch exactly 8 source paths, all under `apps/control-room/src` and `tests/e2e/control-room`, with ZERO under `apps/daemon`, `packages/` or `adapters/`, no new HTTP read, no second card, no second backup location, and `grep -rn migrate_down apps/control-room/src/` returning NONE.\n\nONE THEORETICAL EDGE RECORDED RATHER THAN PATCHED: the browser decoder types `backupSha256` nullable independently of `backupState`, so a producer sending `{backupState:\"VERIFIED\", backupSha256:null}` would render a dangling separator. The daemon CANNOT emit that - `migration-observation.ts:137` returns VERIFIED only with a digest and every other branch is UNVERIFIED with null - so I noted it instead of adding an unexercised branch to a green surface.\n\nBoth shared leases (browser-e2e-gate,",
+      "startedAt": "2026-09-07T21:59:02.374Z",
+      "completedAt": "2026-09-07T22:29:01.315Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-4d8571e7",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-dbfde2ce",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -251,16 +265,22 @@
       "author": "worker-4d8571e7",
       "content": "SEAT COLLISION AGAIN, ON THE SAME SEAT ID — and this time I am YIELDING rather than blocking, because blocking is what stranded this row last time.\n\nWHAT HAPPENED, measured from the task JSON's own step timestamps:\n- step-6 completed 21:43:30Z and step-7 started 21:43:33Z. Those two calls were MINE (session A).\n- step-7 COMPLETED 21:56:12Z, step-8 21:56:17Z->21:58:53Z, step-9 started 21:59:02Z. NONE of those were mine. A SECOND live session (session B) under the identical seat id `worker-4d8571e7` drove them.\n- Session B acquired `browser-e2e-gate` at 21:59:14Z, note \"Step 9 final gates for task-78eedd8e: pnpm test:e2e:browser, foreground, single run\", ETA 30 min.\n\nSESSION B IS ALIVE RIGHT NOW, not a stale lease. Measured at 22:10:48Z: 37 chrome processes, and `tests/e2e/control-room/test-results/**` written 60 seconds earlier (01:09:45 local) and continuously before that (01:04:39, 01:09:21). Those artifact names (prd-persistence-boundary, prd-to-approval-v2) are the known browser reds, i.e. a real suite in flight.\n\nWHY I AM NOT CALLING report_blocked. A block flips the row out of WORKING, and session B's next `complete_step`/`complete_task` would be refused `[INVALID_STATE]` mid-flight — which is EXACTLY the failure that stranded this row at 19:21:34Z and cost it hours. Session B holds the correct lease, is ~11 minutes into a 21-30 minute run, and is the right owner to finish step 9. Blocking a row that is 8/9 done and actively progressing would be the harmful move, not the safe one.\n\nWHY I AM NOT RUNNING THE STEP 9 GATES. Session B holds `browser-e2e-gate` for exactly that run. A second concurrent browser suite would corrupt both count lines and violate the lease. I ran nothing after discovering this, edited no file, and staged nothing.\n\nWHAT SESSION A (me) CONTRIBUTED, all durable, nothing lost:\n1. step-6's `complete_step` — the call that was REFUSED at 19:45Z and left step 6 stranded IN_PROGRESS — now succeeded, with the note on disk. Before completing it I re-measured the deliverable: `tests/e2e/control-room/deploy-migrations.spec.ts` sha256 4c3543fa73a21193a96a9cd98438a9c19e2e9b213755350e128c135d5b496ce0, identical to the pre-block vintage, now TRACKED with an empty `git diff`. The reopen reason's worry that a departed writer had modified it is resolved: no foreign edit survived.\n2. A CLEAN NEGATIVE CONTROL on that spec, which the earlier session never completed because its %TEMP% backup was contaminated. Mutated line 286 APPLIED_DIGEST -> REFUSED_DIGEST: EXIT 1, `1 failed`, and the call log shows the arm reading real DOM (`locator resolved to ... Backup verified . sha256 aaaa...`), which also proves the two environments do not cross-associate. Restored and proven three independent ways (sha256 equality in a separate call, empty `git diff` — valid now that the path is tracked, and the mutant token gone from the LIVE file). Re-ran green: `2 passed (33.8s)`.\n3. A SECOND, INDEPENDENT step-7 live drive at 22:03-22:07Z with evidence session B's note does not carry — see comment-de29f99f: all 11 receipt members read back from a real store on the **preview** environment, the backup's sha256 RECOMPUTED from the bytes on disk and matched to the receipt (c8ca96dd...), the `\\dt` listing showing `added_by_migration`, and a before/after container + temp census proving zero leak. Probe source is in comment-159a9dcd + comment-d6fe4b17. Two independent drives agreeing is stronger evidence than one; treat mine as corroboration, not as a competing claim.\n\nFOR WHOEVER GRADES THIS ROW: step-7's note and comment-b73f92fb are session B's; comment-de29f99f/159a9dcd/d6fe4b17 are mine. They describe two SEPARATE drives at different times (B: 21:51-21:55Z; A: 22:03-22:07Z), not one drive reported twice.\n\nTHE REAL DEFECT IS THE WRAPPER, not either session: it assigned one row to two live sessions sharing a seat id, for the second time on this row. Filed as knowledge, not as a new board row.",
       "timestamp": "2026-09-07T22:11:36.126Z"
+    },
+    {
+      "id": "comment-628c255f01ed4319bc2559818d8f640b",
+      "author": "worker-4d8571e7",
+      "content": "STEP 9 GATES + ADVERSARIAL PASS — 2026-09-08 (UTC 21:59Z–22:27Z), worker-4d8571e7. Every leg standalone and foreground, each quoted with its count line.\n\n| leg | exit | count line |\n|---|---|---|\n| `pnpm --filter @moe/control-room test` (PRIMARY) | **0** | `Test Files 200 passed (200)` / `Tests 2616 passed (2616)` |\n| `pnpm --filter @moe/daemon test` | **0** | `Test Files 592 passed (592)` / `Tests 10572 passed \\| 8 skipped (10580)` |\n| `pnpm typecheck` | **0** | every package `Done`, zero errors |\n| `npx tsc -p tests/e2e/control-room/tsconfig.json --noEmit` | **0** | (added leg: `pnpm typecheck` does NOT cover `tests/e2e`, there is no root tsconfig) |\n| `pnpm test` (root lane) | 1 | `Test Files 2 failed \\| 431 passed \\| 2 skipped (435)` |\n| `pnpm test:e2e:browser` | 1 | `6 failed \\| 1 skipped \\| 39 passed (14.2m)` |\n\nROOT `pnpm test` COVERS ZERO FILES THIS ROW CHANGED — measured, not asserted. `vitest.config.ts:32` include is `[\"adapters/**/*.test.ts\",\"packages/**/*.test.ts\",\"tests/**/*.test.ts\",\"tools/**/*.test.ts\"]`: no `apps/**`, and my e2e file is a `.spec.ts` so `tests/**/*.test.ts` misses it too. I greped the root log for each of this row's 8 paths: `not collected` for all 8. **The control-room leg carries the apps/** claim.**\n\nFOREIGN RED, DISCLOSED VERBATIM, NEVER HIDDEN AND NEVER FABRICATED GREEN.\n\nRoot lane, 2 failures, neither under an owned path:\n1. `packages/benchmark/src/pre-freeze-pinned-documents.test.ts:158` — `Error: Test timed out in 5000ms`. **PASSES STANDALONE** (`npx vitest run --config vitest.config.ts <file>` -> `35 passed`), so it is 435-file convoy contention, not a red.\n2. `tests/migration/cutover/cutover-drill.test.ts > TASK-MF ARM E: captureCutoverManifest succeeds against the REAL repo root` — reproduces standalone: `expected ok:true, received {\"ok\":false,\"layer\":\"cutover-manifest\",\"code\":\"CUTOVER_MANIFEST_ENTRY_LIMIT_EXCEEDED\",\"path\":\".moe/tasks/task-fd1960561d9b4ba2bbb96ae031ac4606.json\",\"detail\":\"entry count exceeds 10000\"}`. It bails on a **fleet-written board row**, not on source. Arithmetic attribution: the non-ignored population is 6855 files + 267 directories = **7122**, comfortably under the 10000 cap, so the walker is counting a population git ignores; this row created **2 files ever**, and 7120 vs 7122 lands identically on both sides of the cap. Not caused by, and not fixable from, this row's diff.\n\nBrowser lane, 6 failures, none owned: `journeys.spec.ts:65 CR-J1-002` (`cr.nav.resources` expected disabled, received enabled), `journeys.spec.ts:86 CR-A11Y-001` (`expect(chips).toHaveLength(5)`, received `[]`) — both the documented entry/shell-selection boundary in `cordum-shell.tsx`, unowned since 2026-08-29; `prd-persistence-boundary.spec.ts:127`; `prd-to-approval.spec.ts:38`; `preview-approve-live.spec.ts:60`; `provider-pause.spec.ts:181` (`STAFFING_ATTEMPTS_EXHAUSTED`, the host provider limit). **My two tests are in the PASSED set**: `ok 15 … deploy-migrations.spec.ts:233 (15.7s)` and `ok 16 … :395 (3.1s)`. Prior recorded baselines on this row were `7 failed` (comment-8d534b2e) and `8 failed` (comment-c02f7050); it is now **6 failed** — the failing set SHRANK, so the HEAD-minus-merge-base delta adds nothing, and its intersection with this row's owned paths is **EMPTY**.\n\nMUTATION DRILLS — 4 planted, 4 caught by exactly the right arm. The step's premise that these paths are UNTRACKED is **STALE**: both are tracked at HEAD (`git ls-files --error-unmatch` confirms), so `git diff` IS a valid restore proof here. Each mutation's diffstat was confirmed NONZERO before running, because a no-op `sed` greens both ways and reads exactly like a vacuous assertion.\n- A: UNKNOWN renders blank -> `× renders an UNKNOWN observation as UNKNOWN with its code, never as zero or as blank`\n- B: UNVERIFIED reads as verified -> `× says a backup EXISTS only when it is VERIFIED, and shows its sha256 only there`\n- C: node card shows only the first identifier -> `× renders BOTH identifiers for a node declaring two, never one and a truncation`\n- D: REFUSED migration reads as applied -> `× says APPLIED, REFUSED and REVERTED in three sentences sharing no leading word` AND `× never lets a REFUSED migration read as a successful one`\nRESTORE PROVEN FOUR WAYS in a call SEPARATE from the restore: `git diff --stat` empty; `git status --porcelain apps/control-room/src/` empty; sha256 back to the LIVE hash taken at window-open (`cbec10f6…`); and `grep -rn ZZMUT` over every owned source returns 0. The %TEMP% backup carried THIS TASK ID, was proven free of mutant tokens BEFORE the first mutation, and was deleted. No drill ran while a shared lease was held over the same files.\n\nADVERSARIAL ANSWERS, each measured:\n- **Secrets**: every production path CLEAN for `postgres://`, `DATABASE_URL`, `password`, `secret`. The only spec hit is the negative arm `expect(feed).not.toContain(\"DATABASE_URL\")`. My runbook section is clean; the runbook's other `DATABASE_URL`/`secret` lines are pre-existing (`:66`, `:233`, `:596`).\n- **Three outcomes distinct**: `applied the migrations…` / `could not migrate: read the receipt for what the schema did` / `reverted the last migration batch` — no shared leading word, in the feed AND on the card.\n- **UNKNOWN never zero/none-pending/blank**: arm at `goal-deployments.test.tsx:697`, drill A proves it.\n- **Two migrations both shown**: `board-screen.test.tsx:272`, drill C proves it.\n- **Cross-association**: `goal-deployments.test.tsx:743` \"gives each environment its OWN row and never lets one read another receipt\"; testids are built by the card via `environmentTestId`, never composed inside the helper.\n- **`backupSha256` never an affordance**: `grep -niE \"<a |href|download|onClick|button\"` over `migration-presentation.tsx` matches COMMENTS only — no anchor, no href, no download, no handler.\n- **Nothing forbidden created**: this row's own commits touch exactly 8 source paths (7 under `apps/control-room/src`, 1 e2e spec) plus wrapper-written `.moe/tasks/*.json`. **ZERO under `apps/daemon`, `packages/`, `adapters/`.** `grep -rn migrate_down apps/control-room/src/` -> NONE, so no control for it is published. No second Deployments card, no second backup location, no new HTTP read.\n\nONE THEORETICAL EDGE, noted not fixed: the browser decoder types `backupSha256: string | null` independently of `backupState`, so a hypothetical producer sending `{backupState:\"VERIFIED\", backupSha256:null}` would render `Backup verified ·` with a dangling separator. **The daemon cannot produce it** — `migration-observation.ts:137` returns `VERIFIED` only together with a digest and every other branch returns `UNVERIFIED` with `sha256:null`. Recording it rather than adding an unexercised branch to a green surface.\n\nTEARDOWN: `docker ps -a` EMPTY at the end. Final tree carries only `M README.md` and `M docs/agent-stack-runbook.md` from me; the 3 untracked `tests/e2e/control-room/` files plus `.moe/**`, `.codex/**`, `.grok/config.toml` and `apps/daemon/src/preview/preview-goal-landing.test.ts` are peer dirt, present at session start, never staged, reverted or committed.",
+      "timestamp": "2026-09-07T22:28:31.653Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:48:57.960Z",
-  "updatedAt": "2026-09-07T22:11:36.127Z",
+  "updatedAt": "2026-09-07T22:30:40.710Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:32:30.829Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 8
+    "executedStepCount": 9
   },
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -274,7 +294,8 @@
     "step-5",
     "step-6",
     "step-7",
-    "step-8"
+    "step-8",
+    "step-9"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-07T16:06:15.743Z",
@@ -488,33 +509,52 @@
       "treeId": "a412037acbf52501064d9dab8a1f746d6769b672",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "eea6b6b52637f2af783b60786d272117c2d4bb7b",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-4d8571e7@2026-09-07T21:39:38Z",
+      "paths": [
+        ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json",
+        ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json"
+      ],
+      "recordedBy": "worker-4d8571e7",
+      "recordedAt": "2026-09-07T22:13:18.777Z",
+      "treeId": "f28f9e4696a721388483a856af831afa83e86772",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "docs/agent-stack-runbook.md",
+          "taskId": "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
+        },
+        {
+          "path": "README.md",
+          "taskId": "task-161b7e9d566b4c47b429490a54a6cca1"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json",
-    ".moe/tasks/task-969575299465484d9486ea02ff7ae336.json",
-    ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json",
-    ".moe/tasks/task-6bafd3b9439640cba358dd6e79329c9d.json",
-    "apps/control-room/src/v2/board/board-lanes.tsx",
-    "apps/control-room/src/v2/board/board-screen.test.tsx",
-    "apps/control-room/src/v2/goals/goal-deployments.test.tsx",
-    "apps/control-room/src/v2/goals/goal-deployments.tsx",
-    "apps/control-room/src/v2/goals/migration-presentation.tsx",
-    ".moe/tasks/task-bd2f1ecf186f4ab5884c2a3ada07108e.json",
-    ".moe/tasks/task-da435e66fe8247fda0d441e61e2c4b91.json",
-    ".moe/tasks/task-eb37494e47924b659a0a1a77060b36eb.json",
-    "tests/e2e/control-room/deploy-migrations.spec.ts",
-    ".moe/tasks/task-2f2ed034fbec4fe48b49a951951c9505.json",
-    ".moe/tasks/task-85895a88a2484d8589046b2030efd445.json",
     "apps/control-room/src/v2/ops/activity-words.test.ts",
-    "apps/control-room/src/v2/ops/activity-words.ts"
+    "apps/control-room/src/v2/goals/goal-deployments.test.tsx",
+    "apps/control-room/src/v2/board/board-screen.test.tsx",
+    "apps/control-room/src/v2/goals/migration-presentation.tsx",
+    "apps/control-room/src/v2/ops/activity-words.ts",
+    "apps/control-room/src/v2/goals/goal-deployments.tsx",
+    "apps/control-room/src/v2/board/board-lanes.tsx",
+    "tests/e2e/control-room/deploy-migrations.spec.ts",
+    "docs/agent-stack-runbook.md",
+    "README.md"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-4d8571e7@2026-09-07T21:39:48Z",
-    "at": "2026-09-07T21:39:52.323Z"
+    "sessionId": "worker-4d8571e7@2026-09-07T21:39:38Z",
+    "at": "2026-09-07T22:13:18.777Z"
   },
   "declaredFiles": [
     "apps/control-room/src/v2/goals/migration-presentation.tsx",
@@ -536,6 +576,15 @@
     "tests/e2e/control-room/deploy-migrations.spec.ts",
     ".moe-frag-goal-deployments.txt",
     "apps/control-room/src/v2/goals/goal-deployments.test.tsx",
-    "apps/control-room/src/v2/board/board-screen.test.tsx"
-  ]
+    "apps/control-room/src/v2/board/board-screen.test.tsx",
+    "apps/daemon/src/repository/migrations/zz-drive-probe-78eedd8e.test.ts"
+  ],
+  "reviewStartedAt": "2026-09-07T22:30:35.342Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n\n Test Files  200 passed (200)\n      Tests  2616 passed (2616)\n   Start at  01:29:07\n   Duration  18.19s (transform 37.51s, setup 0ms, import 84.07s, tests 120.22s, environment 243.42s)\n\n=== PIPESTATUS0=0 ===",
+    "reportedAt": "2026-09-07T22:30:35.342Z"
+  },
+  "completionSummary": "All 9 steps done. Three surfaces render migration facts; the engine, receipt, backup and restore were driven live.\n\nGATES (details: comment-628c255f): control-room EXIT 0 `200 files / 2616 tests`; daemon EXIT 0 `592 / 10572 +8 skipped`; `pnpm typecheck` EXIT 0; `tsc -p tests/e2e/control-room/tsconfig.json` EXIT 0 (ADDED leg - nothing else typechecks tests/e2e); root `pnpm test` 1; `pnpm test:e2e:browser` 1 `6 failed | 1 skipped | 39 passed`.\n\nROOT `pnpm test` COVERS ZERO FILES THIS ROW CHANGED - `vitest.config.ts:32` has no `apps/**` and my e2e file is a `.spec.ts`; all 8 owned paths print `not collected`. The control-room leg carries the apps/** claim.\n\nFOREIGN RED, DISCLOSED NOT HIDDEN. Root: benchmark `Test timed out in 5000ms` PASSES STANDALONE (convoy contention); `cutover-drill` ARM E `CUTOVER_MANIFEST_ENTRY_LIMIT_EXCEEDED` bailing on a `.moe/tasks/*.json` board row - non-ignored population is 7122, under the 10000 cap, so the walker counts a git-ignored population; nobody's diff. Browser: 6, none owned (2 are the `cordum-shell.tsx` shell-selection boundary unowned since 2026-08-29; 1 is `STAFFING_ATTEMPTS_EXHAUSTED`). MY TWO TESTS ARE IN THE PASSED SET; the baseline was 7 then 8 failed, now 6 - the failing set SHRANK, so the HEAD-minus-merge-base delta intersected with owned paths is EMPTY.\n\nLIVE DRIVE 2026-09-08 (comment-b73f92fb), Docker re-measured UP (engine 29.6.2) so the old DEPLOY_DOCKER_UNAVAILABLE premise is dead. Against a real disposable PostgreSQL: `\\dt` 2 relations -> 3, the `moe-migration-receipt/1` read back byte-equal to the call's return with every member, the backup at `.moe-next/backups/pre-migration/<env>/<ts>.sql` with its sha256 RECOMPUTED ON DISK matching the receipt, `DROP SCHEMA public CASCADE` + restore returning the pre-migration schema at column level, and MIGRATION_BACKUP_FAILED leaving the SCHEMA untouched with `backupRef null`. NO PREVIEW ENVIRONMENT EXISTS (no environments store, no `pre-migration` leaf) - recorded plainly in b"
 }
