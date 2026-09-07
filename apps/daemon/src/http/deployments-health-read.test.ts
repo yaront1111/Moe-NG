@@ -19,6 +19,8 @@ import {
   DEPLOYMENTS_HEALTH_READ_PATH, deploymentsHealthReadBodyOf, handleDeploymentsHealthReadRequest,
 } from "./deployments-health-read.js";
 import type { DeploymentsHealthSource } from "./deployments-health-read.js";
+import { DEFAULT_PROBE_INTERVAL_MS } from "../monitoring/probe-interval-record.js";
+import type { ProbeIntervalRefusal } from "../monitoring/probe-interval-record.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import { GOOD_CREDENTIAL, authenticator, bytes } from "./http-test-fixtures.js";
 
@@ -75,9 +77,17 @@ function incident(id: number, openedAt: string, closedAt: string | null): Health
   return Object.freeze({ closedAt, environment: ENVIRONMENT, id, openedAt, openingProbes: [] });
 }
 
+/**
+ * DELIBERATELY NOT 60000. Every arm that does not care about the interval still has to state one,
+ * and stating the DEFAULT here would make a read that hard-codes `DEFAULT_PROBE_INTERVAL_MS`
+ * agree with this fixture by accident. A value no default could produce keeps those arms honest.
+ */
+const FIXTURE_INTERVAL_MS = 15_000;
+
 function source(overrides: Partial<DeploymentsHealthSource> = {}): DeploymentsHealthSource {
   return Object.freeze({
-    deploys: deploys([receipt()]), incidents: [], probes: [], ...overrides,
+    deploys: deploys([receipt()]), incidents: [], probeIntervalMs: FIXTURE_INTERVAL_MS,
+    probes: [], ...overrides,
   });
 }
 
@@ -212,10 +222,14 @@ it("returns the existing derivation's answer, not a plausible one", () => {
  * answer tracks the history rather than anything persisted beside it. */
 it("derives the state from the ring rather than from a stored field", () => {
   const deployState = deploys([receipt()]);
-  expect(viewOf({ deploys: deployState, incidents: [], probes: [probe("SUCCESS", "2026-09-06T11:00:00.000Z")] })["state"]).toBe("UP");
+  expect(viewOf({
+    deploys: deployState, incidents: [], probeIntervalMs: FIXTURE_INTERVAL_MS,
+    probes: [probe("SUCCESS", "2026-09-06T11:00:00.000Z")],
+  })["state"]).toBe("UP");
   expect(viewOf({
     deploys: deployState,
     incidents: [],
+    probeIntervalMs: FIXTURE_INTERVAL_MS,
     probes: [
       probe("FAILURE", "2026-09-06T11:00:00.000Z"), probe("FAILURE", "2026-09-06T11:01:00.000Z"),
       probe("FAILURE", "2026-09-06T11:02:00.000Z"),
@@ -247,8 +261,8 @@ it("reports no last probe before an environment has been probed", () => {
  */
 it("serves EXACTLY the key roster its consumers decode, in both directions", () => {
   expect(Object.keys(viewOf(source())).sort()).toEqual([
-    "environment", "incident", "lastError", "lastProbe", "latencySeries", "ok", "probeRefusal",
-    "rollbackSha", "state",
+    "environment", "incident", "lastError", "lastProbe", "latencySeries", "ok",
+    "probeIntervalMs", "probeRefusal", "rollbackSha", "state",
   ]);
   expect(Object.keys(viewOf(source())["latencySeries"] as object).sort())
     .toEqual(["points", "windowMinutes"]);
@@ -460,4 +474,74 @@ it("refuses an unauthenticated caller without asking the port", () => {
   });
   expect(result.kind).toBe("REPLY");
   expect(asked).toBe(false);
+});
+
+
+/**
+ * THE INTERVAL SURVIVES THE PROJECTION UNTOUCHED. The value the PORT supplied is the value the
+ * frame carries: not clamped, not defaulted, not re-derived. `FIXTURE_INTERVAL_MS` is not a value
+ * any default could mint, so a handler that quietly substituted `DEFAULT_PROBE_INTERVAL_MS` for
+ * what it was handed reds here rather than agreeing with its own fallback.
+ */
+it("carries the port's effective probe interval into the frame without re-resolving it", () => {
+  const view = viewOf(source());
+  expect(view["probeIntervalMs"]).toBe(FIXTURE_INTERVAL_MS);
+  expect(view["probeIntervalMs"]).not.toBe(DEFAULT_PROBE_INTERVAL_MS);
+});
+
+/**
+ * DoD 4 AT THIS SEAM: two environments carrying DIFFERENT intervals are projected separately.
+ * A projection that resolved the interval ONCE and reused it - the shape a memoised or
+ * module-scoped resolver would produce - passes every single-environment arm above and fails
+ * only here. The end-to-end version, over a real socket and a real durable record, is in
+ * `daemon-entry-deployments-health.test.ts`; this arm pins the projection itself.
+ */
+it("projects a different interval for each environment rather than one value for all", () => {
+  const fast = viewOf(source({ probeIntervalMs: 5_000 }));
+  const slow = viewOf(source({ probeIntervalMs: 900_000 }));
+  expect(fast["probeIntervalMs"]).toBe(5_000);
+  expect(slow["probeIntervalMs"]).toBe(900_000);
+  expect(fast["probeIntervalMs"]).not.toBe(slow["probeIntervalMs"]);
+});
+
+/**
+ * A SETTINGS FAULT IS NOT LAUNDERED INTO THE DEFAULT (DoD 1 and DoD 3's fail-closed clause).
+ * The interval record refuses in its OWN vocabulary - `PROBE_INTERVAL_*` codes are deliberately
+ * absent from `HealthProbeCode` - and the handler carries that refusal out verbatim rather than
+ * serving 60000. Serving the default here would show an operator a rate nobody stored,
+ * indistinguishable from one deliberately left unset.
+ *
+ * BOTH the code AND the layer are asserted, and the frame is asserted NOT to be a 200 view: an
+ * arm that only checked "did not succeed" would pass if the handler answered the capability
+ * refusal, the listener refusal, or the ring's own `PROBE_STORE_UNAVAILABLE` instead.
+ */
+it.each([
+  "PROBE_INTERVAL_ENVIRONMENT_INVALID",
+  "PROBE_INTERVAL_STORE_FAILED",
+  "PROBE_INTERVAL_OUT_OF_RANGE",
+] as const)("carries the interval record's %s out verbatim instead of serving the default", (code) => {
+  const refusal: ProbeIntervalRefusal = Object.freeze({
+    code, layer: "DAEMON_INGRESS" as const, ok: false as const,
+  });
+  const result = handleDeploymentsHealthReadRequest({
+    authenticator: authenticator(["goal.write"]),
+    deploymentsHealth: { read: () => refusal },
+  }, {
+    body: bytes({ environment: ENVIRONMENT }), credential: GOOD_CREDENTIAL,
+    protocolVersion: WIRE_PROTOCOL_VERSION,
+  });
+  if (result.kind !== "REPLY") throw new Error(`expected a REPLY, got ${result.code}`);
+  expect(result.body).toEqual({ code, layer: "DAEMON_INGRESS", ok: false });
+  // Not a view at all: no `probeIntervalMs`, and certainly not the default standing in for one.
+  expect(result.body).not.toHaveProperty("probeIntervalMs");
+  expect(result.body).not.toHaveProperty("ok", true);
+});
+
+/**
+ * THE REFUSAL'S OWN NEGATIVE CONTROL. The three arms above would be satisfied by a handler that
+ * refused EVERYTHING, so this pins that the very same request shape succeeds when the port
+ * accepts - the refusal is attributable to the port's answer, not to the request.
+ */
+it("serves the frame for the same request shape when the interval record accepts", () => {
+  expect(viewOf(source())["ok"]).toBe(true);
 });

@@ -33,6 +33,7 @@ import type {
   HealthIncident, HealthProbe, HealthProbeRefusal, HealthProbeResult, HealthState,
 } from "../monitoring/health-probe-contracts.js";
 import { deriveHealthState } from "../monitoring/health-probe-ring.js";
+import type { ProbeIntervalRefusal } from "../monitoring/probe-interval-record.js";
 import { authenticateHttpRequest } from "./http-command-ingress.js";
 import type { Authenticator, HttpPortRefused, HttpRefused } from "./http-contract.js";
 import { CONTROL_ROOM_LISTENER_LAYER } from "./http-listener-guards.js";
@@ -96,6 +97,14 @@ export interface DeploymentsHealthView {
     | { readonly at: string; readonly latencyMs: number; readonly status: HealthProbe["status"] }
     | null;
   readonly ok: true;
+  /**
+   * The EFFECTIVE health-probe interval for this environment: the operator's stored value when
+   * one is set, `DEFAULT_PROBE_INTERVAL_MS` when none is. ALWAYS A NUMBER, never null and never
+   * absent - the distinction between "stored" and "defaulted" is closed by the interval record
+   * before this projection sees it, so a consumer never re-applies a default of its own. This
+   * route does not resolve it; the port hands it over already resolved.
+   */
+  readonly probeIntervalMs: number;
   /** The probe row's own refusal when this environment cannot be probed at all. */
   readonly probeRefusal: HealthProbeRefusal | null;
   /** The sha of the receipt the current deploy replaced — the rollback target, or null. */
@@ -111,11 +120,31 @@ export interface DeploymentsHealthView {
 export interface DeploymentsHealthSource {
   readonly deploys: EnvironmentDeployState | null;
   readonly incidents: readonly HealthIncident[];
+  /**
+   * The EFFECTIVE probe interval, RESOLVED BY THE PORT. It enters as durable material like every
+   * other member here precisely so this module never owns a second copy of the stored-or-default
+   * rule: `probe-interval-record.ts` is the one place that answers it, and a `??` in this file
+   * would be the second answer that drifts the first time either moved.
+   */
+  readonly probeIntervalMs: number;
   readonly probes: readonly HealthProbe[];
 }
 
+/**
+ * WHY THIS PORT CAN REFUSE IN TWO VOCABULARIES. The probe ring speaks `HealthProbeCode`; the
+ * durable interval record speaks `ProbeIntervalCode`, and its codes are deliberately NOT members
+ * of `HealthProbeCode` - an interval that cannot be read is a settings fault, not a probing one.
+ * Widening the shared monitoring union to launder one into the other would make every consumer of
+ * `HealthProbeCode` handle a code the ring can never mint. So the PORT's result carries both, each
+ * refusal travelling verbatim with the code and layer its own owner stamped. Both already stamp
+ * layer `DAEMON_INGRESS`, so no new layer constant is minted here.
+ */
+export type DeploymentsHealthSourceResult =
+  | HealthProbeResult<DeploymentsHealthSource>
+  | ProbeIntervalRefusal;
+
 export interface DeploymentsHealthReadPort {
-  read(input: { readonly environment: string }): HealthProbeResult<DeploymentsHealthSource>;
+  read(input: { readonly environment: string }): DeploymentsHealthSourceResult;
 }
 
 const refused = (
@@ -241,6 +270,8 @@ export function projectDeploymentsHealth(
     lastProbe: lastProbeOf(source.probes),
     latencySeries: latencySeriesOf(source.probes),
     ok: true as const,
+    // Straight through, deliberately. No `??`, no clamp, no re-resolution: see the member's doc.
+    probeIntervalMs: source.probeIntervalMs,
     probeRefusal: probeRefusalOf(source.deploys),
     rollbackSha: source.deploys?.previous?.sha ?? null,
     state: deriveHealthState(source.probes),
@@ -251,7 +282,7 @@ export type DeploymentsHealthReadDispatch =
   | {
     readonly body:
       | DeploymentsHealthView | DeploymentsHealthReadRefused | HealthProbeRefusal
-      | HttpPortRefused | HttpRefused;
+      | HttpPortRefused | HttpRefused | ProbeIntervalRefusal;
     readonly httpStatus: number;
     readonly kind: "REPLY";
   }

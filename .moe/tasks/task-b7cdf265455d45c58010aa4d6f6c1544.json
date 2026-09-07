@@ -178,7 +178,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T21:24:00.423Z",
-  "updatedAt": "2026-09-07T16:46:16.963Z",
+  "updatedAt": "2026-09-07T16:47:03.482Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T13:01:24.036Z",
     "plannedStepCount": 8,
@@ -325,6 +325,22 @@
       "treeId": "79fc3b82975252794c440171965f9620d815f7fe",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "3b63e2f7856b5180f9ea31080ff8f41ea3429ba6",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-eaa78526@2026-09-07T16:34:05Z",
+      "paths": [
+        ".moe/tasks/task-75bff0c9efc24daaad81ac81a373cd90.json",
+        ".moe/tasks/task-b7cdf265455d45c58010aa4d6f6c1544.json"
+      ],
+      "recordedBy": "qa-eaa78526",
+      "recordedAt": "2026-09-07T16:47:03.482Z",
+      "treeId": "0ffa8266cdcf4bc6adff3978bfeb090de292c39b",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -337,7 +353,8 @@
     "apps/daemon/src/deployment/rollback-production-wiring.test.ts",
     "apps/daemon/src/deployment/rollback-restore-real.test.ts",
     ".moe/tasks/task-078232fb9b9d4c06a5faf3c02adaf705.json",
-    ".moe/tasks/task-b7cdf265455d45c58010aa4d6f6c1544.json"
+    ".moe/tasks/task-b7cdf265455d45c58010aa4d6f6c1544.json",
+    ".moe/tasks/task-75bff0c9efc24daaad81ac81a373cd90.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/daemon-command-async-entries.ts",
@@ -355,9 +372,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-319873d7@2026-09-07T16:02:50Z",
-    "at": "2026-09-07T16:33:57.177Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-eaa78526@2026-09-07T16:34:05Z",
+    "at": "2026-09-07T16:47:03.482Z"
   },
   "declaredFiles": [
     "apps/daemon/src/backups/backup-ports.ts",

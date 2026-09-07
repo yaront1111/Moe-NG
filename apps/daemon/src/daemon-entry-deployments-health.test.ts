@@ -33,6 +33,9 @@ import { DEPLOY_ENGINE_STAMP } from "./deployment/deploy-receipt-contracts.js";
 import { HEALTH_PROBE_SIDECAR_SUFFIX, HEALTH_PROBE_VERSION } from "./monitoring/health-probe-contracts.js";
 import type { HealthProbe } from "./monitoring/health-probe-contracts.js";
 import { createHealthProbeRing } from "./monitoring/health-probe-ring.js";
+import {
+  DEFAULT_PROBE_INTERVAL_MS, createProbeIntervalRecord,
+} from "./monitoring/probe-interval-record.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import { GOOD_CREDENTIAL, authenticator } from "./http/http-test-fixtures.js";
 
@@ -367,3 +370,167 @@ it("rejects a module-loaded provider whose deployments-health factory is not cal
   expect(isDependencyProvider({ ...base, deploymentsHealth: () => port })).toBe(true);
   expect(isDependencyProvider({ ...base, deploymentsHealth: port })).toBe(false);
 });
+
+/**
+ * Writes an interval through the PARENT ROW'S OWN PRODUCTION PORT, into the same store the
+ * composition reads, on a short-lived handle. Nothing here hand-appends an event: the shape,
+ * the aggregate id and the admission rules are `probe-interval-record.ts`'s, so what the route
+ * reads back is a durable record rather than a fixture the composition was handed.
+ *
+ * It returns the value READ BACK THROUGH THE PORT, never the number passed in - DoD 2. Comparing
+ * the served frame against the literal this test seeded would pass even if the read ignored the
+ * record entirely and both sides happened to agree; comparing it against the record's own answer
+ * cannot.
+ */
+function writeInterval(open: World, environment: string, intervalMs: number): number {
+  const store = SqliteEventStore.openForProject(open.storePath, PROJECT);
+  try {
+    const record = createProbeIntervalRecord({ projectId: PROJECT, store });
+    const written = record.write(environment, intervalMs);
+    if (!written.ok) throw new Error(`fixture write refused: ${written.code}`);
+    const readBack = record.read(environment);
+    if (!readBack.ok) throw new Error(`fixture read-back refused: ${readBack.code}`);
+    return readBack.value;
+  } finally {
+    store.close();
+  }
+}
+
+/** The effective interval as the record answers it, for an environment nothing was written for. */
+function readInterval(open: World, environment: string): number {
+  const store = SqliteEventStore.openForProject(open.storePath, PROJECT);
+  try {
+    const readBack = createProbeIntervalRecord({ projectId: PROJECT, store }).read(environment);
+    if (!readBack.ok) throw new Error(`fixture read refused: ${readBack.code}`);
+    return readBack.value;
+  } finally {
+    store.close();
+  }
+}
+
+/**
+ * DoD 1, 2 AND 4 OVER A REAL SOCKET, through the production composition.
+ *
+ * The interval is WRITTEN through `createProbeIntervalRecord().write` - the parent row's own
+ * durable port - and every assertion below compares the served frame against what that port
+ * READS BACK, never against the literal seeded here. That is the difference between proving the
+ * read consults the record and proving only that two constants in one file agree.
+ *
+ * TWO ENVIRONMENTS WITH DIFFERENT STORED INTERVALS, plus a THIRD with none, are read in the same
+ * boot. A composition that resolved the interval once and reused it, or that returned a global
+ * value, passes every single-environment arm and fails this one - which is exactly why the
+ * third environment is here too: it separates "per-environment" from "whatever was stored last".
+ */
+it("discloses each environment's own effective probe interval, written through the durable record", async () => {
+  const open = world("deployments-health-intervals");
+  const staging = "staging";
+  const untouched = "canary";
+  try {
+    seed(open, [
+      { ...RECEIPT_BASE, decidedAt: "2026-09-06T09:00:00.000Z", decisionId: "d-0", sha: SHA },
+      {
+        ...RECEIPT_BASE, decidedAt: "2026-09-06T09:05:00.000Z", decisionId: "d-1",
+        environment: staging, sha: SHA,
+      },
+      {
+        ...RECEIPT_BASE, decidedAt: "2026-09-06T09:10:00.000Z", decisionId: "d-2",
+        environment: untouched, sha: SHA,
+      },
+    ]);
+    // Deliberately DIFFERENT, and neither is the default: if either equalled 60000 this arm
+    // could not tell a per-environment read from one that always answers the fallback.
+    const productionInterval = writeInterval(open, ENVIRONMENT, 5_000);
+    const stagingInterval = writeInterval(open, staging, 900_000);
+    expect(productionInterval).not.toBe(stagingInterval);
+    expect(productionInterval).not.toBe(DEFAULT_PROBE_INTERVAL_MS);
+    expect(stagingInterval).not.toBe(DEFAULT_PROBE_INTERVAL_MS);
+
+    const started = await boot(open);
+    try {
+      const productionView = (await post(started, PATH, { environment: ENVIRONMENT }))
+        .body as Record<string, unknown>;
+      const stagingView = (await post(started, PATH, { environment: staging }))
+        .body as Record<string, unknown>;
+      const untouchedView = (await post(started, PATH, { environment: untouched }))
+        .body as Record<string, unknown>;
+
+      // Each environment's OWN value, compared against the record's read-back.
+      expect(productionView["probeIntervalMs"]).toBe(productionInterval);
+      expect(stagingView["probeIntervalMs"]).toBe(stagingInterval);
+      // ... and they are genuinely distinct in the SERVED frames, not merely in the fixtures.
+      expect(productionView["probeIntervalMs"]).not.toBe(stagingView["probeIntervalMs"]);
+      // An environment with NOTHING stored gets the record's default, read from the record - not
+      // a 60000 retyped here, and not the interval of whichever environment was written last.
+      expect(untouchedView["probeIntervalMs"]).toBe(readInterval(open, untouched));
+      expect(untouchedView["probeIntervalMs"]).toBe(DEFAULT_PROBE_INTERVAL_MS);
+      expect(untouchedView["probeIntervalMs"]).not.toBe(stagingInterval);
+      // The rest of the frame still decodes: the new member displaced nothing.
+      expect(productionView["ok"]).toBe(true);
+      expect(productionView["environment"]).toBe(ENVIRONMENT);
+    } finally {
+      await started.shutdown();
+    }
+  } finally {
+    teardown(open);
+  }
+}, 60_000);
+
+/**
+ * A CHANGED INTERVAL IS DISCLOSED, not cached. The composition builds the health port per call
+ * and reads the record inside it; a port that captured the interval at boot would serve the first
+ * value forever, and an operator who had just widened a probe rate would be shown the old one.
+ *
+ * The second value is read back through the record, so this is not two literals agreeing either.
+ */
+it("discloses a rewritten interval on the next read rather than a value captured at boot", async () => {
+  const open = world("deployments-health-interval-rewrite");
+  try {
+    seed(open, [
+      { ...RECEIPT_BASE, decidedAt: "2026-09-06T09:00:00.000Z", decisionId: "d-0", sha: SHA },
+    ]);
+    const before = writeInterval(open, ENVIRONMENT, 5_000);
+    const started = await boot(open);
+    try {
+      expect(((await post(started, PATH, { environment: ENVIRONMENT }))
+        .body as Record<string, unknown>)["probeIntervalMs"]).toBe(before);
+      // Rewritten WHILE THE DAEMON IS UP, through the same production port.
+      const after = writeInterval(open, ENVIRONMENT, 900_000);
+      expect(after).not.toBe(before);
+      expect(((await post(started, PATH, { environment: ENVIRONMENT }))
+        .body as Record<string, unknown>)["probeIntervalMs"]).toBe(after);
+    } finally {
+      await started.shutdown();
+    }
+  } finally {
+    teardown(open);
+  }
+}, 60_000);
+
+/**
+ * WHICH LAYER REFUSES AN INADMISSIBLE ENVIRONMENT NAME, pinned because it is NOT the one the
+ * plan expected. The interval record refuses such a name with PROBE_INTERVAL_ENVIRONMENT_INVALID,
+ * but the composition consults the probe RING first and `createHealthProbeRing().read` applies
+ * `admitEnvironmentName` too - so the ring's PROBE_RECORD_INVALID answers first and the interval
+ * record is never reached. Asserting merely "it refused" here would hide that entirely.
+ *
+ * The load-bearing part is the last two assertions: whatever refuses, the frame is NOT a 200 view
+ * carrying a fabricated 60000 for an environment that cannot exist.
+ */
+it("refuses an inadmissible environment name at the ring, never as a defaulted interval", async () => {
+  const open = world("deployments-health-interval-badname");
+  try {
+    const started = await boot(open);
+    try {
+      const answer = await post(started, PATH, { environment: "Production" });
+      expect(answer.body).toEqual({
+        code: "PROBE_RECORD_INVALID", layer: "DAEMON_INGRESS", ok: false,
+      });
+      expect(answer.body).not.toHaveProperty("probeIntervalMs");
+      expect(answer.body).not.toHaveProperty("ok", true);
+    } finally {
+      await started.shutdown();
+    }
+  } finally {
+    teardown(open);
+  }
+}, 60_000);

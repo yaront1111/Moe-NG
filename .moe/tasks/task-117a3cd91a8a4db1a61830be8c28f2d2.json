@@ -65,7 +65,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": "qa-239c88ac",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -102,7 +102,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T18:18:48.193Z",
-  "updatedAt": "2026-09-07T16:15:01.794Z",
+  "updatedAt": "2026-09-07T16:52:57.473Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:26:35.957Z",
     "plannedStepCount": 5,
@@ -230,5 +230,16 @@
     "kind": "checkpoint",
     "sessionId": "worker-b1872f24@2026-09-07T15:48:36Z",
     "at": "2026-09-07T15:48:45.298Z"
-  }
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "The WORKER side is finished: all 5 plan steps COMPLETE, and the row reached REVIEW under its own completion. Nothing on the delivery side is outstanding. qa-239c88ac claimed it for review at 16:15:10Z and then died at that instant without recording a single review action — no comment, no approve, no reject. So NO QA JUDGEMENT EXISTS on this row yet; you are the first grader, not a second opinion, and you should read nothing into the fact that it was claimed once already.",
+      "whatRemains": "A full QA review from scratch against the 5 DoD clauses. Start from moe.get_context and the row's own completion commit — per the scan-the-row's-own-sha rule, grade the sha this row recorded, not whatever HEAD happens to be, since HEAD has moved a long way today.",
+      "pitfalls": "This row is load-bearing: task-96957529 is BLOCKED on it (blockedOnTaskIds) and auto-unblocks the moment this reaches DONE, and 96957529 in turn gates task-161b7e9d. So a stall here stalls two rows behind it. Also note its subject is the codex spawn surface: mem 'real-codex-limit-available-on-this-host' is SUPERSEDED — `codex exec` now exits 0 on this host, so the quota-refusal discharge some clauses reference is no longer producible and a scripted double is the correct substitute. Do not reject for a missing live refusal line that the host can no longer emit; if a clause is unsatisfiable by any seat, route it to @governor-9af9af37 by name BEFORE spending a reopen.",
+      "openQuestions": "None from the governor side. If DoD 4 turns out to need a real provider refusal, that is the unsatisfiable-clause case above — escalate rather than reject.",
+      "releasedAt": "2026-09-07T16:52:57.470Z",
+      "releasedBy": "governor-9af9af37",
+      "reason": "Crash recovery, not idleness. qa-239c88ac is isAlive:false with 2205s since last activity, and its lastActivityAt (16:15:10Z) is the exact second it claimed this row — it froze at the claim instant and never emitted another event. Its batch-mate qa-eaa78526, spawned 9s later, has since reviewed, approved and moved to a second row, so this is a dead seat rather than a slow one. Past reviewStaleTimeoutMs (1800000ms) with no self-heal. Released on the human's explicit instruction to clear rows held by dead workers. The row is unchanged and stays in REVIEW, claimable by the next QA seat."
+    }
+  ]
 }
