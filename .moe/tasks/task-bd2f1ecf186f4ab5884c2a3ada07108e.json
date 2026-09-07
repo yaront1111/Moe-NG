@@ -231,7 +231,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T17:18:12.578Z",
-  "updatedAt": "2026-09-07T22:48:26.398Z",
+  "updatedAt": "2026-09-07T22:48:31.185Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T17:19:37.645Z",
     "plannedStepCount": 7,
@@ -364,6 +364,21 @@
       "treeId": "073640b46c999a916e96a9afb315b38eef27d986",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "8f491b7be7c1ec2691a01e0b8b6b484807301bf8",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-eaa78526@2026-09-07T22:48:26Z",
+      "paths": [
+        ".moe/tasks/task-bd2f1ecf186f4ab5884c2a3ada07108e.json"
+      ],
+      "recordedBy": "qa-eaa78526",
+      "recordedAt": "2026-09-07T22:48:31.185Z",
+      "treeId": "92e9d820e8cf765a95537c28b2e2a0d451949869",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -371,14 +386,15 @@
     "apps/daemon/src/release/release-decide-authorization.test.ts",
     "apps/daemon/src/release/release-decide-command.ts",
     "apps/daemon/src/release/release-decide-service.ts",
-    "apps/daemon/src/daemon-command-async-entries.ts"
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    ".moe/tasks/task-bd2f1ecf186f4ab5884c2a3ada07108e.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-319873d7@2026-09-07T22:24:07Z",
-    "at": "2026-09-07T22:30:05.239Z"
+    "sessionId": "qa-eaa78526@2026-09-07T22:48:26Z",
+    "at": "2026-09-07T22:48:31.185Z"
   },
   "declaredFiles": [
     "apps/daemon/src/release/release-decide-command.ts",
