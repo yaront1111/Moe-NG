@@ -15,8 +15,85 @@
     "PARAMETERISE, DO NOT FORK. A copied multi-node harness under tests/e2e/control-room/ is a second authority that will drift from the one the foundation suite proves.",
     "DO NOT EDIT j1-loop-harness.ts. multi-node-wire.ts imports CSRF_TOKEN from it and many unrelated journeys share it; take the token as a parameter defaulting to that import instead."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE, THEN FREEZE THE CONSTRAINTS IN A STEP NOTE. No edits. Record verbatim: (a) `git status --porcelain -- tests/e2e/foundation/` — note foreign dirt and continue; (b) `wc -l` on the five modules (expect 186 / 166 / 167 / 157 / 57) so the per-file cap can be checked at the end; (c) `sed -n '115,120p' tests/e2e/foundation/e2e-harness.test.ts` showing the four forbidden needles `Math.random`, `Date.now`, `new Date(`, `performance.now` — these bind the new module too; (d) `git grep -n 'from \"./multi-node-graph-harness.js\"\\|from \"./multi-node-wire.js\"\\|from \"./multi-node-world.js\"' -- tests` listing the six downstream importers and WHICH symbols each takes, because keeping exactly those exports is what makes this a no-op for them; (e) `grep -n 'GOAL_ID\\|PROJECT_ID\\|MULTI_NODE_KEYS\\|CRITERIA' tests/e2e/foundation/multi-node-reads.ts` returning nothing, confirming it stays out of scope. Record the HEAD sha.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/multi-node-graph-harness.ts",
+        "tests/e2e/foundation/multi-node-wire.ts",
+        "tests/e2e/foundation/e2e-harness.test.ts",
+        "tests/e2e/foundation/multi-node-reads.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "ONE IDENTITY, ONE DEFAULT. New `tests/e2e/foundation/multi-node-identity.ts` exporting a `MultiNodeIdentity` interface and a frozen `DEFAULT_MULTI_NODE_IDENTITY` carrying TODAY'S EXACT VALUES: node keys ALPHA/BETA/OMEGA and their `MULTI_NODE_KEYS`/`CRITERIA`, `GOAL_CREATE_COMMAND_ID`/`GOAL_ID`, `PROJECT_ID`, `CONTRACT_ID`, `REVISION_ID`, `OPERATOR_CREDENTIAL`, `AGENT_SESSION`/`AGENT_SECRET`, `HUMAN_SESSION`/`HUMAN_SECRET`, `CORRELATION_ID`, `OPERATOR_PRINCIPAL`, and the csrf token defaulting to the `CSRF_TOKEN` imported from `j1-loop-harness.js`. It lives in its own module for the per-file cap: the harness is already 186 lines and step 3 turns three of its closures into functions. NO CLOCK AND NO RANDOM SOURCE — `e2e-harness.test.ts:117` scans this file too. This module imports nothing from the harness; the dependency runs one way only.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/multi-node-identity.ts",
+        "tests/e2e/foundation/j1-loop-harness.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/foundation/multi-node-identity.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THREAD THE HARNESS, AND KEEP ITS EXPORT SURFACE BYTE-COMPATIBLE. In `multi-node-graph-harness.ts`, take the constants from `DEFAULT_MULTI_NODE_IDENTITY` and RE-EXPORT every name it exports today (ALPHA, BETA, OMEGA, MULTI_NODE_KEYS, CRITERIA, GOAL_ID, GOAL_CREATE_COMMAND_ID, PROJECT_ID, CONTRACT_ID, REVISION_ID, OPERATOR_CREDENTIAL, AGENT_SESSION, AGENT_SECRET, HUMAN_SESSION, HUMAN_SECRET, PRD_TEXT) so the six downstream importers keep their exact import lines. Then give the three closures an optional trailing `identity: MultiNodeIdentity = DEFAULT_MULTI_NODE_IDENTITY`: `createMultiNodeScratch`, `revisionDraft`, and `MULTI_NODE_STRUCTURE` — the last becomes a FUNCTION of the identity, with the existing frozen const kept and exported as the default's value so `multi-node-journey.ts` and any asserter still read the same object. Uniqueness stays `mkdtempSync`; no clock, no random source.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/multi-node-graph-harness.ts",
+        "tests/e2e/foundation/multi-node-identity.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THREAD THE TRANSPORT AND THE WORLD. `multi-node-wire.ts`: `daemonWire` takes the csrf token as a parameter defaulting to the `CSRF_TOKEN` import — DO NOT edit `j1-loop-harness.ts`, which many unrelated journeys share. `multi-node-world.ts`: `worldPrelude`, `openSession` and `mintHumanPrincipal` take the identity, defaulted; `CORRELATION_ID` and `OPERATOR_PRINCIPAL` stay exported at their current values as the default's fields. Behaviour must be unchanged for every existing caller — the only new capability is that a caller MAY pass something else.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/multi-node-wire.ts",
+        "tests/e2e/foundation/multi-node-world.ts",
+        "tests/e2e/foundation/multi-node-identity.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE PRELUDE, IN THREE PARTS — the one piece of real logic in this row, and the clause this row's DoD 2 states too coarsely. `worldPrelude` today does NOT merely replay the shipped seed: it slices the seed's plan at `goal.create` by kind and INSERTS its own `policy.validate` before `project.activate`. That command is NOT in the shipped seed, and `approval.decide_intent` depends on it — without a `PolicyEvaluated` row the approval refuses APPROVAL_INTENT_POLICY_REF_UNAVAILABLE @ DAEMON_APPROVAL_INTENT (the function's own header records this as measured against a live daemon). So a caller whose project is ALREADY activated — the control-room lane, which ran the shipped seed — must still get the `policy.validate`, and only the seed prefix and the activate are skipped. Make the selection explicit (e.g. a mode naming which parts run) rather than a boolean skip, which would silently drop it. ITS FENCE ALSO CHANGES: `policyValidate` passes `expectedVersion: installs` counted from the prelude array; a caller that skips the prefix has no array to count, so in that mode the expected version must be resolved from DURABLE STATE — the policy aggregate's own version — and the command must still ride after every install and before the activate. Thread the identity through `sealMultiNodeGraph`, `approveAndRunCriteria` and `closeCompletedGoal` in the same pass. The default path keeps running exactly today's prelude, today's order, today's payloads.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/multi-node-world.ts",
+        "tests/e2e/foundation/multi-node-journey.ts",
+        "tests/e2e/foundation/multi-node-criteria.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "PROVE THE PARAMETER IS REAL — DoD 4. A parameter that is never passed a non-default value is untested plumbing that will break the moment the consumer row uses it. Add a committed arm that seals a graph under a NON-DEFAULT project id, goal id and operator credential against a throwaway daemon, and asserts the DAEMON answered on those identities — read the goal and the run back off the daemon's own frames, not off the arguments you passed in. Add a second arm for the prelude mode from step 5: with the seed prefix skipped, the `policy.validate` still lands, and `approval.decide_intent` succeeds rather than refusing APPROVAL_INTENT_POLICY_REF_UNAVAILABLE — assert the CODE and its LAYER on the negative control, per global rail 1. Verify each arm by mutating the production surface until it goes red, then restore; the new modules are UNTRACKED, so `git diff` is blind to them — `git status --porcelain` the exact paths first and prove the restore by SHA256 equality against an out-of-tree backup, in a call SEPARATE from the restore.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/multi-node-identity.test.ts",
+        "tests/e2e/foundation/multi-node-journey.ts",
+        "tests/e2e/foundation/multi-node-world.ts"
+      ],
+      "newFiles": [
+        "tests/e2e/foundation/multi-node-identity.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATES AND ADVERSARIAL SELF-REVIEW. Run each leg FOREGROUND and STANDALONE and read the OUTPUT, not the exit code — no `Test Files N passed` count line means nothing ran. Legs: `pnpm test:e2e` with `tests/e2e/foundation/multi-node-graph.e2e.test.ts` NAMED in the output and its count line quoted (this is the ONLY proof that defaults were preserved — unchanged behaviour, not merely unchanged source; budget for the 900 s journey timeout), and `pnpm typecheck`. Repo-wide legs are evaluated as a path-attributed baseline: merge-base failures, HEAD failures, and the delta intersected with this row's owned paths must be EMPTY; disclose foreign red verbatim and never certify it. Then read your own diff as an attacker: does `git diff --name-only` show ONLY the five modules plus the two new files — any downstream importer in that list means the defaults were NOT preserved and the row is not done? Is each of the five still under 250 physical lines? Did any of the four scanned needles (`Math.random`, `Date.now`, `new Date(`, `performance.now`) enter a non-test module in this directory? Did a foundation assertion weaken anywhere to make a constant a parameter — if so, STOP and report blocked rather than shipping it. Is the identity module free of any import from the harness? Report every touched path in `complete_step.modifiedFiles`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/multi-node-graph.e2e.test.ts",
+        "tests/e2e/foundation/multi-node-identity.ts",
+        "tests/e2e/foundation/multi-node-graph-harness.ts",
+        "tests/e2e/foundation/multi-node-journey.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -26,8 +103,41 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 43.5,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-32812f866e1e4f788b6e053694716203",
+      "author": "architect-6e49a205",
+      "content": "CORRECTION TO THIS ROW'S OWN DoD 2, found while planning it. I filed this row an hour ago and wrote \"the prelude is injectable or skippable\"; measuring `worldPrelude` shows that phrasing is too coarse and a literal reading would ship a broken consumer. The plan implements the corrected version; QA should grade against this.\n\nTHE PRELUDE HAS THREE PARTS, NOT TWO. `worldPrelude` (multi-node-world.ts:46-71) does not merely replay the shipped seed. It takes `buildDemoSeedPlan`'s output, slices it at `goal.create` BY KIND, and **inserts a `policy.validate` command of its own** before `project.activate`:\n\n```\n[...prelude.slice(0, activateAt), policyValidate(scratch, prelude), ...prelude.slice(activateAt)]\n```\n\nThat command is NOT in the shipped seed. `policyValidate`'s own header records why, measured against a live daemon rather than reasoned: `approval.decide_intent` reads `applicablePolicyRef` off the newest replay-verified `PolicyEvaluated` row (`approval-policy-ref.ts:63`), nothing writes that row but `policy.validate`, and without it the approval refuses **APPROVAL_INTENT_POLICY_REF_UNAVAILABLE @ DAEMON_APPROVAL_INTENT**.\n\nCONSEQUENCE FOR THE CONSUMER (task-6bafd3b9). The control-room lane ran the SHIPPED demo seed, so it has (a) the seed prefix and (c) `project.activate` — but it has NEVER run (b) `policy.validate`, because the shipped seed does not contain it. A boolean `skipPrelude` would drop exactly the one part the lane needs and the consumer's `approval.decide_intent` would refuse. The parameter must therefore select WHICH parts run, not toggle the whole thing.\n\nAND THE FENCE CANNOT BE COUNTED THE OLD WAY. `policyValidate` passes `expectedVersion: installs`, counted from the prelude array the caller is skipping, and must ride AFTER every `policy.install` and BEFORE the activate. A caller that skips the prefix has no array to count, so in that mode the expected version has to be resolved from durable state — the policy aggregate's own version. That is the single piece of genuinely new logic in this row; everything else is threading an identity record.\n\nDoD 2 should be read as: *a caller whose project is already activated can seal a graph without replaying the seed prefix or `project.activate`, while still landing the `policy.validate` that `approval.decide_intent` depends on, with its expectedVersion resolved from durable state. The default path keeps running today's prelude, order and payloads unchanged.* The plan's step 5 implements exactly that, and step 6 asserts the negative control by code AND layer.\n\nTWO OTHER MEASURED CONSTRAINTS the plan carries:\n- `e2e-harness.test.ts:117` scans every non-test module in `tests/e2e/foundation/` for `Math.random`, `Date.now`, `new Date(` and `performance.now` by plain substring. The new identity module is subject to it, so no minted ids and no clock — uniqueness stays `mkdtempSync` and caller-supplied values.\n- The identity type and default go in a NEW `multi-node-identity.ts` rather than the harness: the harness is already 186 lines and step 3 turns `MULTI_NODE_STRUCTURE`, `revisionDraft` and `createMultiNodeScratch` into functions of the identity. The harness re-exports every constant it exports today, which is what keeps the six downstream importers untouched — and `git diff --name-only` naming any of them at the end means the defaults were not actually preserved.",
+      "timestamp": "2026-09-07T12:51:56.855Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T11:02:52.186Z",
-  "updatedAt": "2026-09-07T11:02:52.186Z"
+  "updatedAt": "2026-09-07T12:51:56.855Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-07T12:49:32.079Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 11
+  },
+  "planSizeWarnings": [
+    "Plan touches 11 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-07T12:51:37.952Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) ADD ONE PARAMETER PER IDENTITY (projectId, credential, csrf, goalId, nodeKeys...) TO EACH FUNCTION. REJECTED: five modules times six-plus values is a signature explosion, and every downstream caller would have to pass them positionally in the right order. ONE `MultiNodeIdentity` record with ONE frozen default is a single seam that every module takes as its last optional argument.\n(2) PUT `MultiNodeIdentity` IN `multi-node-graph-harness.ts`. REJECTED on the per-file cap: that module is already 186 lines, and turning `MULTI_NODE_STRUCTURE`, `revisionDraft` and `createMultiNodeScratch` into functions of the identity adds more. A new `multi-node-identity.ts` holds the type and the default; the harness imports it and RE-EXPORTS today's constants, so the six downstream importers keep their exact import lines.\n(3) MAKE THE PRELUDE A BOOLEAN `skipPrelude`. REJECTED, and this is the plan's central correction — see codebaseInsights. A boolean skip silently drops `policy.validate`, which is NOT part of the shipped seed and is what `approval.decide_intent` depends on. The prelude therefore has THREE parts, not two, and the caller needs the middle one even when the project is already activated.\n(4) MINT THE NEW IDENTITIES WITH `randomUUID`/`Date.now` FOR UNIQUENESS. FORBIDDEN by a landed test — `e2e-harness.test.ts:117` scans every non-test module in this directory for `Math.random`, `Date.now`, `new Date(` and `performance.now` by plain substring. Uniqueness comes from `mkdtempSync` and from values the CALLER passes, exactly as today.",
+    "codebaseInsights": "MEASURED AT HEAD, 2026-09-07, by reading all five modules end to end.\n\nTHE CORRECTION THAT MATTERS MOST — \"SKIP THE PRELUDE\" IS TOO COARSE, AND A BOOLEAN SKIP WOULD SHIP A BROKEN CONSUMER. `worldPrelude` (multi-node-world.ts:46-71) does not merely replay the shipped seed: it takes the seed's plan, slices it at `goal.create` BY KIND, and INSERTS a `policyValidate` command of its own before `project.activate`. That command is NOT in the shipped seed. Its own header states why, measured against a live daemon rather than reasoned: `approval.decide_intent` reads `applicablePolicyRef` off the newest replay-verified `PolicyEvaluated` row (`approval-policy-ref.ts:63`), nothing writes that row but `policy.validate`, and without it the approval refuses APPROVAL_INTENT_POLICY_REF_UNAVAILABLE @ DAEMON_APPROVAL_INTENT.\n\nSo the prelude has THREE parts, and a caller whose project is already activated (the control-room lane, which ran the SHIPPED seed) needs the MIDDLE one: (a) the seed prefix up to `project.activate` — already done on such a lane; (b) `policy.validate` — NEVER done, because the shipped seed does not contain it; (c) `project.activate` and the rest — already done. The parameter must therefore select WHICH parts run, not toggle the whole thing.\n\nAND ITS FENCE CANNOT BE COUNTED THE SAME WAY. `policyValidate` passes `expectedVersion: installs`, counted from the prelude array the caller is skipping. It also must ride AFTER every install and BEFORE the activate. A caller that skips (a) and (c) has no array to count, so the expected version has to come from durable state — the policy aggregate's own version — rather than from a prelude it never built. That is the one genuinely new line of logic in this row; everything else is threading.\n\nWHAT IS FIXED, PER MODULE:\n- multi-node-graph-harness.ts (186): the identity block at :24-66 (ALPHA/BETA/OMEGA, MULTI_NODE_KEYS, CRITERIA, GOAL_CREATE_COMMAND_ID/GOAL_ID, PROJECT_ID, CONTRACT_ID, REVISION_ID, OPERATOR_CREDENTIAL, AGENT_SESSION/SECRET, HUMAN_SESSION/SECRET), plus three closures over it: `createMultiNodeScratch` (:105-145), `MULTI_NODE_STRUCTURE` (:148-172) and `revisionDraft` (:175-186).\n- multi-node-journey.ts (166): `sealMultiNodeGraph` closes over eleven imported constants.\n- multi-node-world.ts (167): `CORRELATION_ID`, `OPERATOR_PRINCIPAL`, `worldPrelude`, `policyValidate`, `openSession`, `mintHumanPrincipal`.\n- multi-node-wire.ts (157): `daemonWire(origin, credential)` already takes both; the csrf header at :48 uses `CSRF_TOKEN` IMPORTED from `j1-loop-harness.js`.\n- multi-node-criteria.ts (57): CRITERIA, GOAL_ID, HUMAN_SECRET.\n\nNOT IN SCOPE, RE-CONFIRMED: `multi-node-reads.ts` (265) hard-codes no identity — `grep -n \"GOAL_ID\\|PROJECT_ID\\|MULTI_NODE_KEYS\\|CRITERIA\"` returns ZERO hits.\n\nTHE SCAN THAT CONSTRAINS EVERY EDIT: `e2e-harness.test.ts:117` rejects `Math.random`, `Date.now`, `new Date(` and `performance.now` in every non-test module in this directory. The new identity module is subject to it too.",
+    "risks": "THE FOUNDATION SUITE IS THE ONLY REAL PROOF, AND IT COSTS 15 MINUTES. `JOURNEY_TIMEOUT_MS` is 900_000. Budget for it, run it once at the end rather than after each step, and read the count line — an exit-0 run with no `Test Files N passed` line ran nothing.\n\nDEFAULTS-PRESERVING MEANS EXACTLY THAT. If any of the six downstream importers (codex-journey-harness.ts, codex-seat-loop.e2e.test.ts, j5-plan-reject-harness.ts, j5-plan-reject-replan.e2e.test.ts, multi-node-reads.ts, multi-node-graph.e2e.test.ts) needs an edit, the defaults are NOT preserved — stop and say so rather than editing them into compliance. `git diff --name-only` at the end is the check.\n\nDO NOT EDIT `j1-loop-harness.ts`. `multi-node-wire.ts` imports `CSRF_TOKEN` from it and many unrelated journeys share it; take the token as a parameter defaulting to that import.\n\nA PARAMETER NEVER PASSED A NON-DEFAULT VALUE IS UNTESTED PLUMBING, which is why DoD 4 exists. The non-default arm must actually exercise a different project id, goal id and credential and assert the DAEMON answered on those identities — not merely that the function accepted the argument.\n\nCIRCULAR IMPORTS: the identity module must not import the harness. One direction only — harness imports identity and re-exports.\n\nSHARED CHECKOUT: `git status --porcelain` the paths before editing; foreign dirt is noted and continued past, never reverted, stashed or committed.",
+    "keyFiles": [
+      "tests/e2e/foundation/multi-node-graph-harness.ts",
+      "tests/e2e/foundation/multi-node-journey.ts",
+      "tests/e2e/foundation/multi-node-world.ts",
+      "tests/e2e/foundation/multi-node-wire.ts",
+      "tests/e2e/foundation/multi-node-criteria.ts",
+      "tests/e2e/foundation/multi-node-graph.e2e.test.ts",
+      "tests/e2e/foundation/e2e-harness.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-07T12:51:40.073Z"
 }

@@ -1,0 +1,32 @@
+{
+  "id": "task-136cbab29b39465e93b60e923c4689d6",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "A paired browser HUMAN holding ADMIN can write project.set_agent_provider, through the typed waiver arm",
+  "description": "Filed 2026-09-07 by worker-b1872f24 from parent task-969575299465484d9486ea02ff7ae336 (the Codex/provider roll-up), which is BLOCKED on this row.\n\nMEASURED, NOT INFERRED. At HEAD ea822b90 the browser half of the provider toggle is now COMPLETE and LIVE: task-96957529 landed apps/daemon/src/http/affordance-agent-provider-offers.ts, so `/affordances/read` mints the `project.set_agent_provider` offer, `commandBuilderFor` builds a real envelope and the control is enabled. Driven end to end against a REAL daemon in the browser lane (tests/e2e/control-room/agent-provider-seats.spec.ts, 1 passed), a paired operator clicks `codex` and the daemon answers, verbatim from the rendered refusal:\n\n    OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION\n    this command requires the configured operator principal\n\nWHY. `AGENT_PROVIDER_COMMAND_KIND` is in `OPERATOR_PRINCIPAL_KINDS` (daemon-command-vocabulary.ts:348), and the fence at daemon-command-registry.ts:349-360 compares the authenticated principal against the daemon's CONFIGURED `operatorPrincipalId`, widening only for approvalIntent / criterion / `repository.publish` / PRODUCT_CONTRACT_ANSWER_CLARIFICATION when `isDurableHumanPrincipal` holds. A paired browser is a session-ledger HUMAN minted at pairing; it is NEVER the configured operator principal, and it cannot be — the id does not exist before pairing. So NO browser can write this setting today, however correct its caller half.\n\nTHIS IS THE task-6d5db404 SHAPE EXACTLY. That row (DONE) admitted `repository.bootstrap` for a paired browser HUMAN holding ADMIN through the typed SOFT_POLICY_WAIVER composition, after the same measurement on task-80322112's journey. The standing ruling from that escalation (mem:repository-bootstrap-browser-widening-decision-2026-09-06) is that a security-boundary widening is NEVER folded into a UI proof row; it is its own reviewed row that the UI row depends on. task-96957529 also carries a rail forbidding policy work outright, which is why its worker landed the offer and stopped here rather than greening its own e2e by widening a fence.\n\nSCOPE: the narrowest widening already in the tree, mirroring 6d5db404 arm for arm. A paired HUMAN WITHOUT ADMIN must still get OPERATOR_PRINCIPAL_REQUIRED. `MCP_EXCLUDED_COMMAND_KINDS`, `wiredMcpToolKinds()` and the MCP count pins stay byte-identical — the kind's trustworthiness on principal identity alone depends on it staying MCP-unreachable. The operator-credential path is unchanged. Nothing about the offer, the store, the payload roster or the wrapper's spawn resolution needs to move; they are landed and green.\n\nWHEN THIS LANDS, ONE LINE UNPARKS THE PROOF: tests/e2e/control-room/agent-provider-seats.spec.ts asserts the refusal code today and says so in its comment. Flip it to the round trip — click codex, expect `cr.sessions.provider.recorded`, expect the `cr.sessions.provider.configured` line to come back saying codex on the panel's own 5s poll from /sessions/read. The durable write path itself is already proven live (HTTP 200 AGENT_PROVIDER_SET over the real command edge, mem:task-task-117a3cd9-handoff), so this row moves authorization only.",
+  "definitionOfDone": [
+    "`project.set_agent_provider` is admitted for a paired browser HUMAN holding ADMIN through the typed SOFT_POLICY_WAIVER composition, mirroring task-6d5db404; a paired HUMAN WITHOUT ADMIN still refuses OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION, asserted by code and layer.",
+    "A drill removing the ADMIN check goes RED, recorded with the mutated path, the arm that reddened, and a SHA256-proved restore.",
+    "MCP stays closed: the kind remains in MCP_EXCLUDED_COMMAND_KINDS, `wiredMcpToolKinds()` and every MCP roster count pin are byte-identical, asserted bidirectionally (global rail 9).",
+    "tests/e2e/control-room/agent-provider-seats.spec.ts is flipped from the refusal assertion to the WRITE round trip against a real daemon: click codex, `cr.sessions.provider.recorded` visible, `cr.sessions.provider.refusal` absent, and the configured line reads codex on the next /sessions/read poll. Count line quoted.",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, and the single browser spec above."
+  ],
+  "taskRails": [
+    "SECURITY-BOUNDARY ROW: this is the ONLY row in this epic permitted to move an authorization fence, and it moves exactly one kind. Widening any second kind, relaxing the ADMIN requirement, or touching the MCP exclusion is out of scope and must be refused.",
+    "The owner's provenance for this class of widening is recorded on task-6d5db404 and in mem:repository-bootstrap-browser-widening-decision-2026-09-06 (owner answered a specific security escalation with a generic 'unblock more tasks', taken as the nod for the NARROWEST shape). Re-state that provenance in the completion record rather than treating it as settled precedent."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 73.6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-07T11:51:09.142Z",
+  "updatedAt": "2026-09-07T11:51:09.142Z"
+}

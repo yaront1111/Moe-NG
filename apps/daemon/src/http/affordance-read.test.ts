@@ -159,6 +159,21 @@ describe("createAffordancePort", () => {
     expect(offered).not.toContain("goal.create");
   });
 
+  it("offers the operator-only settings kind, which has no chain step to be found by", () => {
+    // THE DEFECT THIS FILE COULD NOT SEE (QA reject on task-96957529). Every arm here read the
+    // bootstrap chain, and `project.set_agent_provider` has no chain step — so a surface that
+    // offered it to nobody passed 41 of 41 tests while the browser's toggle was permanently
+    // disabled. `step()` throws for this kind BY DESIGN; the offer roster is the only place it
+    // can appear, which is exactly why its absence was invisible.
+    const offered = surface().nextAllowedCommands.map((command) => command.commandKind);
+    expect(offered).toContain("project.set_agent_provider");
+    expect(surface().steps.map((entry) => entry.kind)).not.toContain("project.set_agent_provider");
+    // Set-equality against the served capability table, the identity pinned to a real write,
+    // the contracts-parser round trip and the scope refusal live in the sibling suite
+    // `affordance-agent-provider-offers.test.ts`; this arm exists so the seam QA anchored on
+    // is not silent about the kind.
+  });
+
   it("moves a committed kind to COMMITTED and unblocks its dependents", () => {
     commitBootstrap("project.register", { owner: "operator-local" });
     expect(step("project.register")).toMatchObject({ status: "COMMITTED", version: 1 });

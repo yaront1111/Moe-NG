@@ -2,7 +2,10 @@ import { DomainRefusal } from "../daemon-command-dispatch.js";
 import type { DurableDecision } from "../http/http-contract.js";
 import type { AgentProviderStoreConfig, setAgentProvider } from "./agent-provider-store.js";
 
-export const AGENT_PROVIDER_COMMAND_KIND = "project.set_agent_provider";
+// Declared in the zero-import leaf so a surface read can name the kind without importing this
+// module's dispatch edge; re-exported here because the registry, the vocabulary and the payload
+// roster have always imported it from this module.
+export { AGENT_PROVIDER_COMMAND_KIND } from "./agent-provider-contracts.js";
 export const AGENT_PROVIDER_PAYLOAD_KEYS = Object.freeze(["base", "goalId", "provider"] as const);
 
 interface ProviderCommandContext extends AgentProviderStoreConfig {

@@ -31,6 +31,7 @@ import { activeClaim, readWorkClaimLedger } from "../work/work-claim-services.js
 import type { WorkClaimLedger } from "../work/work-claim-services.js";
 import { AFFORDANCE_SURFACE_LAYER, NODE_DELIVER_KIND } from "./affordance-contract.js";
 import { createCompilerLanePort } from "./affordance-compiler-lane.js";
+import { resolveAgentProviderOffers } from "./affordance-agent-provider-offers.js";
 import { resolveDeployTargetOffers } from "./affordance-deploy-target-offers.js";
 import { resolvePlanningAuthorities } from "./affordance-planning-authorities.js";
 import { planReviewable, resolvePlanningOffers } from "./affordance-planning-offers.js";
@@ -445,6 +446,18 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
           kind: "deployment.set_target", missing: [], status: "READY" as const, version: entry.version,
         });
       }));
+    }
+    // CHOOSING THE AGENT CLI FOR THIS PROJECT, from the browser: one offer per project per
+    // poll, at the aggregate `setAgentProvider` commits to and at the version read off it.
+    // Rationale — the setter's own gate, and why this kind mints NO ChainStep — lives in
+    // affordance-agent-provider-offers.ts. Minted for every reader because this surface holds
+    // no caller principal: OPERATOR_PRINCIPAL_REQUIRED is the registry's refusal at dispatch,
+    // where it already lives for every operator-only kind this surface offers.
+    for (const entry of resolveAgentProviderOffers({
+      projectId: config.projectId, store: config.store,
+    }).offers) {
+      offers.push(offer(
+        entry.kind, entry.aggregateId, entry.version, entry.inputSchemaVersion));
     }
     // Compiler-lane steps: what makes the WRAPPER staff a planning agent onto a
     // source-bound goal. READY at the goal aggregate's own version — the offer

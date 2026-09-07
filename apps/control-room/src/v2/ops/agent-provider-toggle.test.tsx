@@ -1,3 +1,4 @@
+import { RUNTIME_COMMAND_ENVELOPE_VERSION, buildNextAllowedCommands } from "@moe/contracts";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -12,7 +13,44 @@ beforeAll(() => {
 afterEach(cleanup);
 
 const CONFIGURED: SessionsAgentProvider = { configured: "claude", envOverride: false };
-const OFFER = Object.freeze({ commandKind: "project.set_agent_provider", expectedVersion: 7 });
+
+/**
+ * THE FIXTURE IS BUILT BY THE PRODUCTION PARSER, not typed as a literal (QA reject on
+ * task-96957529, issue 3). The earlier two-key literal exercised a branch production could
+ * not reach: the daemon minted NO `project.set_agent_provider` offer at all, so the only arm
+ * production ever took was `offer={null}` and this suite proved the dead branch worked.
+ *
+ * The daemon now mints it (`affordance-agent-provider-offers.ts`). `buildNextAllowedCommands`
+ * is the contracts admission the browser's own affordance roster runs — exact key set, known
+ * command kind, non-empty identity strings, safe-count version — and it collapses the whole
+ * list to the empty set on any drift. So the assertion below is not decoration: an offer this
+ * suite could build but the daemon could not mint would fail it, and the control room cannot
+ * import apps/daemon to compare literals (no workspace edge; a deep relative import is TS6059).
+ *
+ * `agent-provider/<projectId>` is the aggregate `setAgentProvider` fences, spelled here the
+ * way live-sessions.test.ts pins the sessions frame: pinned by round trip, not by faith.
+ */
+const [BUILT_OFFER] = buildNextAllowedCommands({ aggregate: "PROJECT", state: "READY" }, [{
+  commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+  commandId: "afford-project.set_agent_provider-7",
+  commandKind: "project.set_agent_provider",
+  expectedVersion: 7,
+  inputSchemaVersion: "moe-agent-provider/1",
+  targetAggregateId: "agent-provider/project-1",
+}]);
+/** Spread rather than cast: `NextAllowedCommand` is an interface and has no index signature,
+ *  so `as Readonly<Record<string, unknown>>` is TS2352 under `pnpm typecheck` while passing
+ *  vitest, which does not typecheck. The toggle's prop is the loose record the surface frame
+ *  hands it, so spreading is also what production does. */
+const OFFER: Readonly<Record<string, unknown>> = { ...BUILT_OFFER };
+
+it("is a fixture the contracts parser admits, so it cannot drift from the daemon's offer", () => {
+  expect(OFFER).toMatchObject({
+    commandKind: "project.set_agent_provider",
+    expectedVersion: 7,
+    targetAggregateId: "agent-provider/project-1",
+  });
+});
 
 interface Sent {
   readonly affordance: Readonly<Record<string, unknown>>;

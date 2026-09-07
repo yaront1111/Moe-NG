@@ -143,15 +143,47 @@ test("the browser chooses the agent provider and Seats discloses it from a real 
     const configured = page.getByTestId("cr.sessions.provider.configured");
     expect((await configured.textContent()) ?? "").toContain("claude");
 
-    // AND IT IS CORRECTLY REFUSED, WHICH IS THE MEASURED TRUTH OF THIS TREE - see the fixme
-    // below. The daemon does not offer `project.set_agent_provider` on /affordances/read at
-    // all, so there is no version to write at and the control fails CLOSED: both buttons
-    // disabled, and a sentence saying WHY rather than a dead control. That is a property
-    // worth pinning on its own - a toggle that silently did nothing would be worse than one
-    // that says it cannot act.
-    await expect(page.getByTestId("cr.sessions.provider.choose.codex")).toBeDisabled();
-    expect((await page.getByTestId("cr.sessions.provider.unoffered").textContent()) ?? "")
-      .toContain("cannot change the provider");
+    // DoD-1'S WRITE PATH, DRIVEN AS FAR AS IT GOES, AND THE EXACT AUTHORITY THAT STOPS IT.
+    // This block replaced a parked `test.fixme` and an assertion that the control was
+    // DISABLED. Two different things stood between the browser and this setting, and only one
+    // of them is fixed:
+    //
+    // FIXED (task-96957529): `/affordances/read` minted no `project.set_agent_provider` offer,
+    // so `commandBuilderFor` refused INPUT_INVALID at the BROWSER, the control was permanently
+    // greyed, and the copy beside it blamed a correctly-paired operator for not pairing. The
+    // daemon now mints it (`affordance-agent-provider-offers.ts`). The first two assertions
+    // are that fix: no unoffered note, and a LIVE control an operator can actually press.
+    //
+    // NOT FIXED, AND DELIBERATELY NOT FIXED HERE: the kind is in `OPERATOR_PRINCIPAL_KINDS`,
+    // and that fence compares the authenticated principal against the daemon's CONFIGURED
+    // operator id. A paired browser is a session-ledger HUMAN, never that principal, so it is
+    // refused `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION` at dispatch. Admitting a
+    // paired HUMAN holding ADMIN is a SECURITY-BOUNDARY WIDENING; the precedent
+    // (task-6d5db404, `repository.bootstrap`, the typed SOFT_POLICY_WAIVER arm) is that such
+    // a widening is its own reviewed row and is never folded into a UI proof row, and this
+    // row's rail 2 forbids policy work outright. Greening this line by widening the fence
+    // would be a test greening itself.
+    //
+    // SO THE ASSERTION IS THE REASON CODE, NOT THE OUTCOME. "The write did not happen" would
+    // pass identically for a missing offer, an unbuildable envelope, a dead click handler and
+    // this refusal — four defects with four different owners. Naming the code and the LAYER
+    // pins WHICH authority answered, and it is the one line that will change when the
+    // widening lands.
+    await expect(page.getByTestId("cr.sessions.provider.unoffered")).toHaveCount(0);
+    await expect(page.getByTestId("cr.sessions.provider.choose.codex")).toBeEnabled();
+    await page.getByTestId("cr.sessions.provider.choose.codex").click({ timeout: CLICK_BUDGET_MS });
+    const refusal = page.getByTestId("cr.sessions.provider.refusal");
+    await expect(refusal).toBeVisible({ timeout: 30_000 });
+    await expect(refusal).toContainText("OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION");
+    // The refusing authority's OWN words, carried through offer-wire's `detail` rather than
+    // summarised — the field exists so an operator reads what to fix, not just that it broke.
+    await expect(page.getByTestId("cr.sessions.provider.refusal.detail"))
+      .toContainText("requires the configured operator principal");
+    // NO FALSE SUCCESS AND NO DURABLE MOVE. The acceptance note must be absent, and the
+    // CONFIGURED line — re-read from /sessions/read on the panel's own 5s poll — must still
+    // say claude, so a refusal that nevertheless wrote could not read as a pass.
+    await expect(page.getByTestId("cr.sessions.provider.recorded")).toHaveCount(0);
+    await expect(configured).toContainText("claude");
 
     expect(await page.getByTestId("cr.banner.fixture").count()).toBe(0);
   } finally {
@@ -159,32 +191,4 @@ test("the browser chooses the agent provider and Seats discloses it from a real 
     try { rmSync(scratch.root, { force: true, recursive: true }); } catch { /* scratch leftover */ }
   }
   expect(await survivingPids(pids), "the lane must leave no orphan daemon").toEqual([]);
-});
-
-/**
- * DoD-1's WRITE HALF, parked as an executable statement of what is missing rather than
- * deleted or quietly weakened.
- *
- * THE BROWSER SIDE IS COMPLETE AND UNIT-PROVEN: the port builds the daemon's exact
- * three-key payload, overlays only the operator's choice, and spends an offer through the
- * generated builder (agent-provider-port.test.ts, agent-provider-toggle.test.tsx). What is
- * missing is on the DAEMON: `/affordances/read` never offers `project.set_agent_provider`.
- * Measured 2026-09-07 at HEAD 6dbdbe69 - `affordance-read.ts` builds its offer array by
- * mapping `BOOTSTRAP_COMMAND_KINDS` (bootstrap-contracts.ts:30), plus the planning and
- * deploy-target resolvers, and the kind is in NONE of them. `commandBuilderFor`
- * (generated-client.ts:119) refuses without an affordance - `AFFORDANCE_REQUIRED_ERROR` -
- * because it reads `commandId`, `expectedVersion` and `targetAggregateId` off the offer. So
- * no browser can write this setting today, however correct its caller half.
- *
- * IT IS PARKED RATHER THAN FIXED HERE BECAUSE IT IS A REBUILD, NOT A PROOF (this row's rail
- * 3). `BOOTSTRAP_COMMAND_KINDS` is order-asserted by existing suites - its own comment says
- * so - and has ten non-test consumers including the bootstrap ledger, the cutover service,
- * the session contracts and the command graph contracts. Adding a kind there also adds a
- * `ChainStep` every consumer of the chain array reads.
- *
- * UNPARK IT by removing `.fixme` once the daemon offers the kind. Nothing else here changes.
- */
-test.fixme("the chosen provider round-trips through the daemon and back", async () => {
-  // Body intentionally empty: the assertions cannot be written honestly against a surface
-  // that offers nothing, and a body full of skipped expectations would read as coverage.
 });

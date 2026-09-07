@@ -1,10 +1,14 @@
 import { randomUUID } from "node:crypto";
 import type { SqliteEventStore } from "@moe/store";
 import { KNOWN_PROVIDERS } from "../http/health-read.js";
+import {
+  AGENT_PROVIDER_SCHEMA_VERSION, AGENT_PROVIDER_SCOPE_INVALID,
+  AGENT_PROVIDER_STORE_UNREADABLE, agentProviderAggregateId,
+} from "./agent-provider-contracts.js";
 
 type AgentProvider = (typeof KNOWN_PROVIDERS)[number];
-type ProviderCode = "AGENT_PROVIDER_UNKNOWN" | "AGENT_PROVIDER_SCOPE_INVALID"
-  | "AGENT_PROVIDER_STORE_UNREADABLE";
+type ProviderCode = "AGENT_PROVIDER_UNKNOWN" | typeof AGENT_PROVIDER_SCOPE_INVALID
+  | typeof AGENT_PROVIDER_STORE_UNREADABLE;
 interface ProviderRefusal {
   readonly ok: false;
   readonly code: ProviderCode;
@@ -16,7 +20,7 @@ export type AgentProviderWriteResult = ProviderRefusal | Readonly<{
   ok: true; commandId: string; disposition: "COMMITTED" | "REPLAYED";
 }>;
 interface ProviderState { readonly ok: true; readonly values: ReadonlyMap<string, AgentProvider> }
-const VERSION = "moe-agent-provider/1";
+const VERSION = AGENT_PROVIDER_SCHEMA_VERSION;
 const EVENT_TYPE = "agent_provider.set";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
@@ -43,36 +47,40 @@ function isProvider(value: unknown): value is AgentProvider {
   return typeof value === "string" && (KNOWN_PROVIDERS as readonly string[]).includes(value);
 }
 
-function aggregateId(projectId: string): string {
-  return `agent-provider/${encodeURIComponent(projectId)}`;
-}
+/** The leaf facts travel on, so a consumer of the store needs no second import — and so a
+ *  consumer that must NOT import the store (see agent-provider-contracts.ts) can take them
+ *  from the leaf without either side holding a duplicate literal. */
+export {
+  AGENT_PROVIDER_SCHEMA_VERSION, AGENT_PROVIDER_SCOPE_INVALID,
+  AGENT_PROVIDER_STORE_UNREADABLE, agentProviderAggregateId,
+} from "./agent-provider-contracts.js";
 
 function readState(config: AgentProviderStoreConfig): ProviderState | ProviderRefusal {
   try {
     if (typeof config.projectId !== "string" || config.projectId.length === 0
       || config.store.getHealth().projectId !== config.projectId) {
-      return refused("AGENT_PROVIDER_SCOPE_INVALID");
+      return refused(AGENT_PROVIDER_SCOPE_INVALID);
     }
     const values = new Map<string, AgentProvider>();
-    for (const event of config.store.readEvents(aggregateId(config.projectId))) {
+    for (const event of config.store.readEvents(agentProviderAggregateId(config.projectId))) {
       const body: unknown = JSON.parse(decoder.decode(event.payload));
       if (event.eventType !== EVENT_TYPE || typeof body !== "object" || body === null
         || Array.isArray(body) || Object.keys(body).length !== 3
         || !("version" in body) || body.version !== VERSION
         || !("goalId" in body) || typeof body.goalId !== "string"
         || !("provider" in body) || !isProvider(body.provider)) {
-        return refused("AGENT_PROVIDER_STORE_UNREADABLE");
+        return refused(AGENT_PROVIDER_STORE_UNREADABLE);
       }
       values.set(body.goalId, body.provider);
     }
     return { ok: true, values };
-  } catch { return refused("AGENT_PROVIDER_STORE_UNREADABLE"); }
+  } catch { return refused(AGENT_PROVIDER_STORE_UNREADABLE); }
 }
 
 /** Empty goalId is the existing command contract's project-default sentinel, not a real goal.
  * Keep it explicit instead of inventing a nullable field incompatible with that wire shape. */
 export function readAgentProvider(config: AgentProviderStoreConfig, goalId: string): AgentProviderReadResult {
-  if (typeof goalId !== "string") return refused("AGENT_PROVIDER_SCOPE_INVALID");
+  if (typeof goalId !== "string") return refused(AGENT_PROVIDER_SCOPE_INVALID);
   const state = readState(config);
   if (!state.ok) return state;
   return Object.freeze({ ok: true, provider: state.values.get(goalId) ?? state.values.get("") ?? "claude" });
@@ -84,10 +92,10 @@ export function readAgentProvider(config: AgentProviderStoreConfig, goalId: stri
 export function setAgentProvider(config: AgentProviderStoreConfig,
   input: SetAgentProviderInput): AgentProviderWriteResult {
   if (!isProvider(input.provider)) return refused("AGENT_PROVIDER_UNKNOWN");
-  if (typeof input.goalId !== "string") return refused("AGENT_PROVIDER_SCOPE_INVALID");
+  if (typeof input.goalId !== "string") return refused(AGENT_PROVIDER_SCOPE_INVALID);
   const state = readState(config);
   if (!state.ok) return state;
-  const aggregate = aggregateId(config.projectId);
+  const aggregate = agentProviderAggregateId(config.projectId);
   const result = config.store.commit({
     aggregateId: aggregate,
     commandBytes: encoder.encode(JSON.stringify({ kind: "project.set_agent_provider",
