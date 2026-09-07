@@ -386,21 +386,36 @@ console:
 A seat keeps the provider it started under; the setting applies to the next one,
 and Seats says so when a running seat disagrees with it.
 
-**Measured 2026-09-07, and the limit stated rather than implied:** the toggle,
-the disclosure and the credential-source fence were driven against a REAL daemon
-in the browser lane -- and the WRITE reaches the daemon and is REFUSED there, by
-name: a paired operator clicks `codex`, the envelope is built from the daemon's
-own offer, and the answer is `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION`
-("this command requires the configured operator principal"). The kind is in
-`OPERATOR_PRINCIPAL_KINDS` and a paired browser is a session-ledger HUMAN, never
-the daemon's CONFIGURED operator principal -- it cannot be, that id does not
-exist before pairing. Admitting a paired HUMAN holding ADMIN is task-136cbab2,
-mirroring the `repository.bootstrap` widening (task-6d5db404); the journey
-(`tests/e2e/control-room/agent-provider-seats.spec.ts`) asserts that refusal CODE
-today and flips to the round trip when that row lands. A
-**real `codex exec` binary has still never delivered a node** -- what has been
-driven end to end is a SCRIPTED codex double over the real MCP wire. The
-real-binary drive is task-117a3cd9.
+**Measured 2026-09-07, and the remaining limit stated rather than implied:** the
+toggle, the disclosure and the credential-source fence were driven against a REAL
+daemon in the browser lane, and THE WRITE NOW COMPLETES: a paired operator clicks
+`codex`, the envelope is built from the daemon's own offer, and the daemon
+answers `AGENT_PROVIDER_SET`. The journey
+(`tests/e2e/control-room/agent-provider-seats.spec.ts`) asserts that round trip
+-- no refusal element, the toggle enabled, the configured provider reading
+`codex` -- rather than the refusal code it pinned before task-136cbab2 landed.
+THE FENCE IS NARROWED, NOT REMOVED. The kind stays in
+`OPERATOR_PRINCIPAL_KINDS`; what was widened is one disjunct inside
+`isDurableHumanPrincipal`, for this ONE kind, requiring `ADMIN`.
+
+**Two independent layers refuse it, with DIFFERENT codes, and which one you see
+tells you where you stopped.** `SETTINGS_FAMILY` binds the kind's required
+capability to `ADMIN`, so `http-command-ingress.ts` answers
+`CAPABILITY_DENIED @ AUTHORIZE` FIRST for any caller lacking `ADMIN` -- that
+caller never reaches the operator fence, which is exactly why an HTTP-only test
+stays green even with the `ADMIN` check deleted, and why the two layers are
+pinned by separate arms. A caller that DOES hold `ADMIN` but is not a durably
+paired HUMAN -- a non-human principal, say -- gets
+`OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION` ("this command requires the
+configured operator principal") at the handler seam instead. The gate is pairing
+PLUS `ADMIN`, never `ADMIN` alone.
+A **real `codex exec` binary HAS now delivered a node** (task-117a3cd9,
+codex-cli 0.153.4): three `seat_start` rows reporting provider `codex`, the
+`codex exec` argv captured from the OS while the process was alive, and lander
+`COMMITTED` at `ca4abc80a37e80aff51f1600d58afffb6e57b818` on a fresh lane
+project, with `MOE_AGENT_COMMAND` `<UNSET>` so the DURABLE SETTING chose it. The
+quota-free path -- a SCRIPTED codex double over the real MCP wire -- still runs
+offline in `pnpm test:e2e`. Not yet driven: a multi-node goal, or UnAI.
 
 **If the toggle is greyed out with "cannot change the provider", read
 `/affordances/read`, not the pairing.** The browser can only dispatch a kind the

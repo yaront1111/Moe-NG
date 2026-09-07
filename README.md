@@ -218,25 +218,35 @@ No release has been driven against a real landed product for the reason above,
 and NO PULL REQUEST HAS BEEN OPENED BY THE PRODUCT: the `gh` path was driven as
 far as GitHub itself on 2026-09-07 - the head proof, the production argv and an
 authenticated answer from github.com - but the run that would create one needs a
-landed goal and an owner-named target repository. A Codex seat is wired but was
-last proven only to reach the API. **What IS proven about provider choice
-(measured 2026-09-07)**: the agent provider is a durable project setting the
-wrapper resolves per spawn; the browser CAN NOW REACH IT -- `/affordances/read`
-offers `project.set_agent_provider`, so the toggle builds a real envelope and
-dispatches it -- but the WRITE IS STILL REFUSED, and that limit is stated rather
-than implied: the kind is in `OPERATOR_PRINCIPAL_KINDS`, a paired browser is a
-session-ledger HUMAN and never the daemon's configured operator principal, so a
-real daemon answers `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION`.
-Admitting a paired HUMAN holding ADMIN is task-136cbab2, mirroring the
-`repository.bootstrap` widening; the durable write path itself is proven live
-over the command edge. The Seats screen discloses, per seat, the provider and
-agent CLI version the WRAPPER measured at spawn, plus WHERE the credential comes
-from -- a sign-in file, or an environment variable NAME, never a value -- and
-names `MOE_AGENT_COMMAND` when a launcher override is quietly ignoring the
-browser choice; and a SCRIPTED codex double drives the real MCP wire to verifier
-`ACCEPTED` and lander `COMMITTED`. **The REAL-BINARY drive is still outstanding**
--- no `codex exec` process has delivered a node -- and it is task-117a3cd9, not
-this work. The clause above stands until that row runs; and
+landed goal and an owner-named target repository. **A REAL `codex exec` SEAT HAS
+DELIVERED A NODE** (measured 2026-09-07, superseding "wired but last proven only
+to reach the API"): codex-cli 0.153.4, argv read from the OS while the process
+was alive, three `seat_start` rows reporting provider `codex`, and the lander
+committing `ca4abc80a37e80aff51f1600d58afffb6e57b818` on a fresh lane project --
+read back from the durable store after both processes were dead, and re-read
+independently at review. It was the DURABLE SETTING, not `MOE_AGENT_COMMAND`,
+that chose the provider: the override printed `<UNSET>` at wrapper launch.
+**Provider choice from the browser (measured 2026-09-07)**: the agent provider is
+a durable project setting the wrapper resolves per spawn; `/affordances/read`
+offers `project.set_agent_provider`, the toggle builds a real envelope from that
+offer, and A PAIRED BROWSER HUMAN HOLDING `ADMIN` NOW COMPLETES THE WRITE
+end to end against a real daemon. The fence that refused it is narrowed, not
+removed, and the remaining limit is stated rather than implied -- TWO
+INDEPENDENT LAYERS, which refuse with DIFFERENT codes depending on how far the
+caller gets. The kind's required capability is `ADMIN`, so over HTTP a caller
+without it is refused `CAPABILITY_DENIED @ AUTHORIZE` at ingress and never
+reaches the operator fence at all. A caller that DOES hold `ADMIN` but is not a
+durably paired HUMAN -- a non-human principal, for instance -- is then refused
+`OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION` at the handler seam, because
+the kind stays in `OPERATOR_PRINCIPAL_KINDS`. The gate is pairing PLUS `ADMIN`,
+never `ADMIN` alone. The Seats screen discloses, per seat,
+the provider and agent CLI version the WRAPPER measured at spawn, plus WHERE the
+credential comes from -- a sign-in file, or an environment variable NAME, never a
+value -- and names `MOE_AGENT_COMMAND` when a launcher override is quietly
+ignoring the browser choice; a SCRIPTED codex double also drives the real MCP
+wire to verifier `ACCEPTED` and lander `COMMITTED`, offline and quota-free. What
+remains unproven for Codex is BREADTH, not capability: one node on one lane
+project, never a multi-node goal and never UnAI; and
 the verifier is a trusted-workspace shell recipe, not an adversarial boundary. The design's Phase 0
 freeze manifest and independent `FREEZE_READY` decision are not recorded; the
 `node:sqlite` driver decision in
