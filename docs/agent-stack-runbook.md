@@ -649,6 +649,76 @@ under the same decision; decide again to retry. The card reads the runs read's
 `publish` state: waiting for the wrapper, pushed with the branch link (GitHub
 remotes get a browse link), or refused with the code.
 
+### Environment variables (what is set, never what it is)
+
+A goal carries an **Environments** section listing the three environments every
+project has — `preview`, `production` and `verify`. That roster is closed: the
+daemon refuses any other name `ENV_ENVIRONMENT_UNKNOWN` @ `SCOPE`. They exist
+from the moment the project does, so you can set `preview` variables before
+anything has ever been deployed.
+
+**The required names come from the APPROVED CONTRACT, not from a config file.**
+A Gate 1 deployment requirement may name the environment variables it needs
+(`environmentVariableNames`); the union of those names, deduped and sorted, is
+what the screen calls Required. A variable that is set but the contract does not
+name is still listed, marked Extra — you should be able to see what is actually
+in the environment. If the contract names nothing, or could not be read, the
+unset-count card is ABSENT rather than reading zero.
+
+**`N required variables unset for <environment>`** is the card, one per
+environment, linking down to the table. It is what stops a deploy failing for a
+reason nobody can see. It names the environment because `preview` and
+`production` are different facts and fixing the wrong one is easy.
+
+**A VALUE IS NEVER READABLE BACK. Not by you, not by the screen, not by any
+read.** `POST /environments/read` answers four fields per variable — `name`,
+`isSet`, `fingerprintSha256`, `updatedAt` — and there is no field a value could
+occupy. The store seals each value under a key derived from the daemon's own
+credential and drops the plaintext after fingerprinting it. Read this sentence
+before you type a secret into a browser: **if you lose the value, it is gone,
+and the only thing you can do is set it again.**
+
+**The fingerprint is your only confirmation an update took.** It is the full
+sha256 of the stored bytes, and the screen shows the first 12 characters of it
+labelled `sha256 fingerprint`. It is NOT a truncated value and no part of your
+secret is in it. Set a variable, watch the fingerprint change, and that is the
+update landing — there is nothing else to check, which is why it is rendered at
+all. A variable that is not set shows `Not set` rather than an empty
+fingerprint.
+
+**Typing one.** `Set` (or `Replace` on a variable that is already set) opens one
+field, `type="password"` and `autocomplete="off"` so a password manager does not
+capture it. The browser spends `environment.set_variable`; `Unset` spends
+`environment.unset_variable`. Both are operator-only and never reachable over
+MCP. **The screen never echoes the value back — including after a refusal.** A
+rejected submit clears the field, so correcting a typo means typing the whole
+value again; that is deliberate, because a repopulated field is how a secret
+ends up in a screenshot.
+
+The four refusals, each at the layer that answered:
+
+| Code | Layer | What to do |
+| --- | --- | --- |
+| `ENV_ENVIRONMENT_UNKNOWN` | `SCOPE` | Pick one of `preview`, `production`, `verify`. |
+| `ENV_NAME_INVALID` | `NAME` | Names are an uppercase letter, then uppercase letters, digits or underscores. |
+| `ENV_VALUE_TOO_LARGE` | `VALUE` | The value must be under 4096 bytes. The daemon never states your value or its size. |
+| `ENV_STORE_KEY_UNAVAILABLE` | `KEY` | The daemon could not derive its store key. Check the daemon credential is set, restart it, and try again — nothing was stored. |
+
+None of these messages contains what you submitted. The daemon's refusal details
+are fixed prose keyed by code and are asserted to contain no digits at all, so
+an interpolated `value X is too large` cannot creep in; the limit above is
+stated by the browser from a constant.
+
+**Writing needs the configured operator principal — a paired browser cannot.**
+Both kinds sit in `OPERATOR_PRINCIPAL_KINDS`, and unlike `repository.publish`
+they are NOT in the widening that lets a paired browser session act. A paired
+session holds ADMIN, so it READS the table fine; a `Set` or `Unset` from it is
+refused `OPERATOR_PRINCIPAL_REQUIRED` @ `DAEMON_AUTHORIZATION` and the screen
+says so in those words. Set variables from the daemon host. The fence is
+deliberate — an agent that could write a variable could write one the deploy
+then delivers to a production process — and widening it to paired humans is an
+authority decision nobody has taken yet.
+
 ### Replan (when a review is exhausted)
 
 After three unsuccessful review rounds the review kernel refuses every further

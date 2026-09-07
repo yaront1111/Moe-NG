@@ -1166,8 +1166,13 @@ describe("CordumApp wires the durable run and the daemon's approval grant", () =
       .toContain("reported current at the last read");
     expect(screen.getByTestId("cr.gate1.current-slot").textContent)
       .toContain(BOOTSTRAP.projectId);
-    // The V2 plane reads the `/2` route, and only that route.
-    expect(app.pendingReads).toEqual([
+    // The V2 plane reads the `/2` route, and only that route. Asserted as the DISTINCT route
+    // set rather than the call list: two surfaces on this page need the approved contract (the
+    // Gate 1 card and the environments section, task-ba83b202265d40d1885d3091f009b0a2), and how
+    // many times they each read it is not the property this arm exists to hold. The exclusivity
+    // is, and set-equality keeps it exactly - a stray `/product-contract/pending/read` still
+    // reds here, and the V1 arm below holds the mirror direction.
+    expect([...new Set(app.pendingReads)]).toEqual([
       `/v2/product-contract/pending/read ${JSON.stringify({ goalRef: DURABLE.goalRef })}`,
     ]);
   });

@@ -16,6 +16,7 @@ import { ApprovePlan } from "./goals/approve-plan.js";
 import type { PlanApprovalSurface } from "./goals/approve-plan-gate.js";
 import { createGate1ApprovalPort, readPendingContract } from "./goals/gate1-approval.js";
 import { Gate1Card } from "./goals/gate1-card.js";
+import { LiveGoalEnvironments } from "./goals/goal-environments.js";
 import { createGate1ApprovalPortV1, readPendingContractV1 } from "./goals/gate1-v1-approval.js";
 import { Gate1CardV1 } from "./goals/gate1-v1-card.js";
 import { BoardStub } from "./goals/board-stub.js";
@@ -303,6 +304,10 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
             title={open.title}
           />
           <LiveGoalDeployments setup={attached} goalRef={open.goalId} frame={boardFrame} />
+          {/* What the approved contract REQUIRES of each environment, what is actually set, and
+              the one place a value is typed. Above the deploy fold on purpose: a deploy that
+              fails on a missing variable fails for a reason nobody can see. */}
+          <LiveGoalEnvironments goalId={open.goalId} setup={attached} />
           <LiveGoalRelease frame={boardFrame} goalId={open.goalId} setup={attached} />
           <div id={GOAL_SECTION_IDS.contract}>
             {gate1Read !== null && gate1Port !== null ? (

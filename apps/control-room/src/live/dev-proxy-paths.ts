@@ -26,6 +26,11 @@ export const DEV_PROXY_PATHS = Object.freeze([
   // Health screen (task-df972c274f2a43eda3a9f57d2780c6f9); without the pin the dev server
   // answers it itself and the section renders against Vite instead of against a daemon.
   "/deployments/health/read",
+  // The per-environment variable table. Its consumer is the Environments screen
+  // (task-ba83b202265d40d1885d3091f009b0a2); without the pin the dev server answers it itself
+  // and the screen renders against Vite instead of against a daemon. Note `/design/read` above
+  // is deliberately NOT pinned, so a pin is not automatic for every route.
+  "/environments/read",
   "/health/read",
   "/graph/get",
   "/planning/run/read",

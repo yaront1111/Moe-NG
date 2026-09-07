@@ -32,8 +32,12 @@ export const STAGE_WORDS: Readonly<Record<GoalStatus["stage"], string>> = Object
 
 /** The page anchors the opened goal's sections carry; the strip links, the page owns the ids. */
 export const GOAL_SECTION_IDS = Object.freeze({
-  activity: "cr-goal-activity", board: "cr-goal-board", contract: "cr-goal-contract", plan: "cr-goal-plan",
-  publish: "cr-goal-publish",
+  activity: "cr-goal-activity", board: "cr-goal-board", contract: "cr-goal-contract",
+  // The anchor the unset-variables card links to. It is an ANCHOR, not a strip stage: the strip
+  // states where the GOAL stands, and unset variables are a fact about an environment rather
+  // than a lifecycle position - see the note on STAGE_WORDS above.
+  environments: "cr-goal-environments",
+  plan: "cr-goal-plan", publish: "cr-goal-publish",
 });
 
 export interface GoalStatusStripProps {
