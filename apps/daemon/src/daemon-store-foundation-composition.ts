@@ -106,10 +106,13 @@ import type { StreamAcknowledgeRequest, StreamPageRequest, StreamReseatRequest,
 import { enrollDecisionLedgerMemo } from "./decision-ledger-memo.js";
 import { createRepositoryWorkflowWiring } from "./daemon-repository-workflow-wiring.js";
 import { createDurableSchedule } from "./orchestrator/durable-schedule.js";
+import type { ScheduleRefusal } from "./orchestrator/durable-schedule.js";
 import type { DurableSchedule, ScheduleConfig } from "./orchestrator/durable-schedule.js";
-import { createHealthProbeJob, createHealthProbeRing } from "./monitoring/health-probe-ring.js";
+import { createEnvironmentHealthProbeJob, createHealthProbeJob, createHealthProbeRing } from "./monitoring/health-probe-ring.js";
 import type { HealthHttpPort } from "./monitoring/health-probe-ring.js";
-import { HEALTH_PROBE_JOB_ID, HEALTH_PROBE_SIDECAR_SUFFIX } from "./monitoring/health-probe-contracts.js";
+import { HEALTH_PROBE_JOB_ID, HEALTH_PROBE_SIDECAR_SUFFIX, healthProbeJobEnvironment, healthProbeJobId }
+  from "./monitoring/health-probe-contracts.js";
+import { DEFAULT_PROBE_INTERVAL_MS, createProbeIntervalRecord } from "./monitoring/probe-interval-record.js";
 import { readDeployLedger } from "./deployment/deploy-ledger.js";
 import type { DeploymentsHealthReadPort } from "./http/deployments-health-read.js";
 
@@ -629,8 +632,44 @@ export function createStoreDependencies(
     store,
   });
 
-  const healthProbe = createHealthProbeJob({ store, projectId: config.projectId, clock,
-    ...(config.healthProbeHttp === undefined ? {} : { http: config.healthProbeHttp }) });
+  const probeOptions = { store, projectId: config.projectId, clock,
+    ...(config.healthProbeHttp === undefined ? {} : { http: config.healthProbeHttp }) };
+  const probeIntervals = createProbeIntervalRecord({ store, projectId: config.projectId, now: epochClock });
+  /**
+   * The environments an operator has given their OWN probe interval. Read from the durable record
+   * on every call rather than captured once, so setting or clearing an interval takes effect on the
+   * next tick instead of at the next restart. A store that cannot answer yields the EMPTY set, which
+   * hands every environment back to the sweep at the default rate — never no probing at all.
+   */
+  const dedicated = (): ReadonlySet<string> => {
+    const intervals = probeIntervals.stored();
+    return new Set(intervals.ok ? intervals.value.keys() : []);
+  };
+  const dedicatedJob = (environment: string): ReturnType<typeof createHealthProbeJob> =>
+    createEnvironmentHealthProbeJob(probeOptions, environment, () => dedicated().has(environment));
+  /**
+   * Brings the armed schedules in line with the durable record. `register` is idempotent - an
+   * unchanged interval neither re-persists (durable-schedule.ts:93) nor re-arms (`arm()` :77) - so
+   * this is safe to run on every sweep tick, and running it there is what makes a NEW or CHANGED
+   * interval take effect WITHOUT a daemon restart. A CLEARED one needs no drop: its job's `active`
+   * predicate goes false on the same tick the sweep reclaims the environment, so neither probes twice.
+   */
+  const reconcileProbeSchedules = (): ScheduleRefusal | null => {
+    const intervals = probeIntervals.stored();
+    if (!intervals.ok) return null;
+    for (const [environment, intervalMs] of intervals.value) {
+      const armed = schedules.register(healthProbeJobId(environment), dedicatedJob(environment), intervalMs);
+      if (!armed.ok) return armed;
+    }
+    return null;
+  };
+  const sweepProbe = createHealthProbeJob(probeOptions, dedicated);
+  /** Reconcile BEFORE sweeping, so an environment that just gained its own interval is excluded
+   * from this very tick rather than being probed twice on the way to being right. */
+  const healthProbe = async (signal: AbortSignal): Promise<void> => {
+    reconcileProbeSchedules();
+    await sweepProbe(signal);
+  };
   /**
    * The operator-facing read over what the probe job WRITES. It opens the SAME sidecar the job
    * does — one shared suffix constant, so the writer and the reader cannot come to disagree about
@@ -666,11 +705,40 @@ export function createStoreDependencies(
       },
     });
   };
+  /**
+   * Rebinds a job id persisted by a previous boot. A per-environment id whose interval record has
+   * since been cleared resolves to NOTHING on purpose: the scheduler then refuses
+   * SCHEDULE_TARGET_UNRESOLVED and drops the arm, and the sweep reclaims that environment at the
+   * default rate. Manufacturing a callback here would leave a second job probing at a rate no
+   * operator can still see.
+   *
+   * The rebound job carries the SAME per-tick `active` predicate as a freshly registered one
+   * (`dedicatedJob`, not a bare factory). Resolution happens once, at restore; a record cleared
+   * AFTER that would otherwise leave a restored arm probing an environment the sweep has already
+   * reclaimed — the double schedule this row exists to prevent, reintroduced through the boot path.
+   */
+  const resolveProbe = (id: string): ReturnType<typeof createHealthProbeJob> | null => {
+    if (id === HEALTH_PROBE_JOB_ID) return healthProbe;
+    const environment = healthProbeJobEnvironment(id);
+    return environment !== null && dedicated().has(environment) ? dedicatedJob(environment) : null;
+  };
   const schedules = createDurableSchedule({ ...config.schedule, store, projectId: config.projectId, now: epochClock,
-    resolve: (id) => id === HEALTH_PROBE_JOB_ID ? healthProbe : config.schedule?.resolve?.(id) ?? null });
+    resolve: (id) => resolveProbe(id) ?? config.schedule?.resolve?.(id) ?? null });
   const close = (): void => { schedules.release(); subscriptionDatabase?.close(); store.close(); };
-  const registered = schedules.register(HEALTH_PROBE_JOB_ID, healthProbe);
-  if (!registered.ok) { close(); throw new Error(`${registered.code}@${registered.layer}`); }
+  /**
+   * ORDER IS LOAD-BEARING, and getting it wrong is the defect DoD 3 names. The stored intervals are
+   * read BEFORE any register call: `durable-schedule.ts:93` persists whenever the incoming interval
+   * differs from the stored one, so registering first would write the default over an operator's
+   * value and a read afterwards would only see the default it had just clobbered.
+   *
+   * The sweep is always registered, at the record's own default, so an environment that appears for
+   * the first time between boots is still probed. Environments with a stored interval get their own
+   * id at that value — re-persisting it unchanged, which `:93` then skips.
+   */
+  const sweep = schedules.register(HEALTH_PROBE_JOB_ID, healthProbe, DEFAULT_PROBE_INTERVAL_MS);
+  if (!sweep.ok) { close(); throw new Error(`${sweep.code}@${sweep.layer}`); }
+  const boot = reconcileProbeSchedules();
+  if (boot !== null) { close(); throw new Error(`${boot.code}@${boot.layer}`); }
   return Object.freeze({
     activation,
     activity,
