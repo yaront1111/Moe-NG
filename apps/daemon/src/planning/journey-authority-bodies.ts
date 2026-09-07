@@ -125,6 +125,18 @@ function nodePlanning(input: JourneyAuthorityInput, nodeKey: string): Record<str
 function nodeDefinitionOf(input: JourneyAuthorityInput, nodeKey: string): NodeDefinition {
   const built = createNodeDefinition({
     ...nodePlanning(input, nodeKey),
+    // VERDICT ON `declaredMigrations`: THIS BODY LEGITIMATELY DECLARES NONE, and the
+    // member is therefore ABSENT rather than `[]`.
+    //
+    // Every field of this draft is minted by this module from a `JourneyAuthorityInput`
+    // that carries only an author ref and an id prefix. There is no authored planning
+    // source behind it and no author to state a declaration, so ABSENT — which means
+    // UNKNOWN — is the true answer and `[]` would assert something nobody said.
+    //
+    // The consequence is concrete here, not theoretical: an explicit `[]` mints a
+    // schema-3 body (node-authority-codec.ts:127), which would move `graphContentHash`
+    // for all three shipped journeys this file produces and break the byte-identical
+    // rebuild the demo seed and the cross-app parity pin depend on.
     draft: {
       admissionAmounts: [...ADMISSION_PURPOSES].sort().map((purpose, index) => ({
         meter: NODE_METER, purpose, quantity: index + 1,
