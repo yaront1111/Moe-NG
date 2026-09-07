@@ -15,9 +15,10 @@
  * so the read is `stateOf(readDurableLedger(store, projectId), rejectedRunId)` - which is why this
  * takes a `projectId` the run walk does not need. Same shape as `sealedSubmissionHash`:70.
  *
- * WHY A SEPARATE MODULE. The only production caller is `compilerInstructions` in
- * `agent-wrapper-main.ts`, already 483 lines - over the per-file cap - with three rows serialised
- * behind it; here the composition costs that file one call and is testable without a wrapper.
+ * WHY A SEPARATE MODULE. The only production caller is `compilerInstructions`, which lived in
+ * `agent-wrapper-main.ts` when that file was over the per-file cap with three rows serialised
+ * behind it, and moved to `../orchestrator/wrapper-mission-inputs.ts` when the design edge was
+ * threaded; here the composition costs its host one call and is testable without a wrapper.
  *
  * IT NEVER THROWS. It sits on the STAFFING path: a throw here would take down the spawn of a seat
  * rather than merely omitting a sentence from its mission, so every failure degrades to `null`.

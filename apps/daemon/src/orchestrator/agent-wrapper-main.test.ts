@@ -240,26 +240,72 @@ describe("wrapper binary staffing wiring", () => {
       .toThrow();
   });
 
+  // The two compiler-lane closures MOVED to ./wrapper-mission-inputs.ts when the design edge was
+  // threaded: this file stood at exactly the 400-line split threshold and could not take the
+  // wiring line. The claims below did not change, only where each half is measured — the binary
+  // is still asserted to WIRE them, and the composition is still asserted to be the right one.
+  const INPUTS = readFileSync(
+    new URL("./wrapper-mission-inputs.ts", import.meta.url), "utf8",
+  );
+
+  it("wires both compiler-lane mission inputs from the real store in the production call", () => {
+    const call = wrapperCall(SOURCE);
+    expect(call).toContain("compilerGateRef: missionInputs.compilerGateRef,");
+    expect(call).toContain("compilerInstructions: missionInputs.compilerInstructions,");
+    expect(call).not.toContain("compilerInstructions: undefined");
+    // The factory is built from the REAL store, not from a placeholder.
+    const built = SOURCE.slice(SOURCE.indexOf("const missionInputs = createCompilerMissionInputs({"));
+    expect(built.slice(0, built.indexOf("});"))).toContain("store: verifierStore");
+  });
+
   it("composes the operator's rejection reason into compilerInstructions", () => {
     // The composer is unit-tested to death next door, but "the composer works" and "the binary
     // calls it" are separate claims. Before this pin, `compilerInstructions` answered the goal's
     // catalog brief and nothing else, so a re-staffed compiler seat received a mission byte-
     // identical to the one whose plan had just been rejected.
-    const call = wrapperCall(SOURCE);
-    expect(call).toContain("compilerInstructions: (goalId) =>");
+    expect(INPUTS).toContain("compilerInstructions: (goalId) =>");
     // EXACTLY ONCE: two call sites would mean one of them is dead, and a `toContain` cannot tell.
-    expect(call.split("composeCompilerInstructions(brief, latestRejectionReason(").length - 1)
+    expect(INPUTS.split("composeCompilerInstructions(brief, latestRejectionReason(").length - 1)
       .toBe(1);
     // Pins the ARGUMENTS, not merely the call: `latestRejectionReason(store, projectId, <the
     // GOAL id>)` would walk an aggregate that has no run history and answer null forever, while
     // every assertion that only looked for the call name stayed green.
-    expect(call).toContain("laneStore, config.projectId, refsOfGoal(goalId).planningRunRef,");
+    expect(INPUTS).toContain("laneStore, config.projectId, refsOfGoal(goalId).planningRunRef,");
   });
 
   it("scans a compilerInstructions slice that can actually fail (positive control)", () => {
-    const unwired = SOURCE.replace("composeCompilerInstructions(brief, latestRejectionReason(", "");
-    expect(() => expect(wrapperCall(unwired))
+    const unwired = INPUTS.replace("composeCompilerInstructions(brief, latestRejectionReason(", "");
+    expect(unwired).not.toBe(INPUTS);
+    expect(() => expect(unwired)
       .toContain("composeCompilerInstructions(brief, latestRejectionReason(")).toThrow();
+  });
+
+  it("supplies designBrief from the real store, so a seat reads its goal's actual design", () => {
+    // THE DEFECT THIS ROW CLOSED. `designBrief` was declared on AgentWrapperConfig and consumed
+    // at two call sites, and no caller ever supplied it — so every live compiler seat evaluated
+    // `undefined ?? null` and was told "NO DESIGN ACCOMPANIES THIS BRIEF" over a goal whose
+    // design was durably present. `wrapper-mission-inputs.test.ts` proves the resolver's
+    // BEHAVIOUR against a real store; this arm proves the binary actually passes it.
+    const call = wrapperCall(SOURCE);
+    expect(call).toContain("designBrief: createDesignBriefResolver({");
+    expect(call).not.toContain("designBrief: undefined");
+    const start = call.indexOf("designBrief: createDesignBriefResolver({");
+    const block = call.slice(start, call.indexOf("      }),", start));
+    expect(block).toContain("store: verifierStore");
+    expect(block).toContain("projectId: config.projectId");
+  });
+
+  it("scans a designBrief slice that can actually fail (positive control)", () => {
+    const unwired = SOURCE.replace("designBrief: createDesignBriefResolver({", "");
+    expect(unwired).not.toBe(SOURCE);
+    expect(() => expect(wrapperCall(unwired))
+      .toContain("designBrief: createDesignBriefResolver({")).toThrow();
+  });
+
+  it("still passes the offer surface the wrapper watches", () => {
+    // `affordances,` sat BETWEEN the two moved closures; the extraction that made room for
+    // designBrief deleted it once. An unwired offer surface staffs nothing at all.
+    expect(wrapperCall(SOURCE)).toMatch(/^\s+affordances,\r?$/mu);
   });
 
   it("tells the operator which provider is paused and until when", () => {

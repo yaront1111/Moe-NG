@@ -7,11 +7,6 @@ import {
   createStoreDependencies,
   readStoreDependencyEnv,
 } from "../daemon-store-dependencies.js";
-import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
-import { createCompilerLanePort } from "../http/affordance-compiler-lane.js";
-import { decodeGoalCatalogEntry } from "../http/goal-catalog-entry.js";
-import { refsOfGoal } from "../goals/goal-identity.js";
-import { composeCompilerInstructions, latestRejectionReason } from "../planning/rejection-instructions.js";
 import { createMcpHttpHost } from "../mcp-http/mcp-http-host.js";
 import { createProductContractReadPort } from "../product-contract/product-contract-read-port.js";
 import {
@@ -28,6 +23,8 @@ import { runReclaimPass } from "./agent-wrapper-reclaim.js";
 import { createCompiledNodeSource } from "./compiled-node-source.js";
 import { createRepositoryDeliveryRuntime } from "./repository-delivery-runtime.js";
 import { createWrapperNodeMissions } from "./wrapper-node-missions.js";
+import { createCompilerMissionInputs, createDesignBriefResolver }
+  from "./wrapper-mission-inputs.js";
 import {
   createWrapperStopSignal,
   probeProcessAlive,
@@ -183,6 +180,13 @@ async function main(): Promise<void> {
       },
     });
 
+    // The mission inputs that read durable state, all three from one scope. They live in
+    // ./wrapper-mission-inputs.ts because this file stood at exactly the 400-line split
+    // threshold: the design edge below could not be wired until the first two moved out.
+    const missionInputs = createCompilerMissionInputs({
+      projectId: config.projectId, store: verifierStore,
+    });
+
     let secureSpawn: AgentSpawnStart | null = null;
     wrapper = createAgentWrapper({
       nodeMission,
@@ -191,39 +195,16 @@ async function main(): Promise<void> {
       projectId: config.projectId,
       payloadHint: (kind, target) =>
         (hintModule?.payloadFor?.(kind, target) ?? null) as never,
-      // The dispatcher mission's Gate 1 triple, resolved fresh per staffing from
-      // the same durable state the offer ladder read. Convenience, not
-      // authority: the compile dispatcher re-verifies every submit.
-      compilerGateRef: (goalId) => {
-        const laneStore = verifierStore;
-        if (goalId === null || laneStore === undefined) return null;
-        const facts = createCompilerLanePort({
-          ledger: readDurableLedger(laneStore, config.projectId),
-          projectId: config.projectId,
-          store: laneStore,
-        }).factsFor(goalId);
-        return facts.lane === "COMPILER" && facts.approvedGateRef !== null
-          ? { ...facts.approvedGateRef }
-          : null;
-      },
+      compilerGateRef: missionInputs.compilerGateRef,
       affordances,
-      // The goal's operator instructions: its durable catalog brief, plus - for a RE-STAFFED seat
-      // - why the operator rejected the last plan. That composition is pure and lives in
-      // ../planning/rejection-instructions.ts, which is what keeps this file to one call.
-      compilerInstructions: (goalId) => {
-        const laneStore = verifierStore;
-        if (goalId === null || laneStore === undefined) return null;
-        const event: unknown = laneStore.readAggregateEvents(goalId, 0, 1).items[0];
-        if (event === undefined) return null;
-        const decoded = decodeGoalCatalogEntry(
-          event as Parameters<typeof decodeGoalCatalogEntry>[0], config.projectId,
-        );
-        const brief = decoded.ok && decoded.entry.goalId === goalId
-          ? decoded.entry.brief?.instructions ?? null : null;
-        return composeCompilerInstructions(brief, latestRejectionReason(
-          laneStore, config.projectId, refsOfGoal(goalId).planningRunRef,
-        ));
-      },
+      compilerInstructions: missionInputs.compilerInstructions,
+      // THE GOAL'S DESIGN, threaded for real. Declared and consumed since the design row landed
+      // but never SUPPLIED, so every live compiler seat evaluated `undefined ?? null` and read
+      // "NO DESIGN ACCOMPANIES THIS BRIEF" even where a design was submitted. A compiler seat
+      // reads the LATEST design; a node seat reads the version its plan was compiled against.
+      designBrief: createDesignBriefResolver({
+        projectId: config.projectId, store: verifierStore,
+      }),
       // Both horizons come from the knobs, where the bearer TTL is derived from
       // the agent lifetime: a session bound to the claim TTL expired under a
       // long task that was still renewing its claim, and the exit-path release

@@ -122,7 +122,7 @@ describe("latestRejectionReason over a real store", () => {
   });
 
   it("is reachable from a GOAL id through refsOfGoal, the wrapper's own derivation", () => {
-    // agent-wrapper-main.ts's `compilerInstructions` holds a goalId, not a run ref, and derives
+    // wrapper-mission-inputs.ts's `compilerInstructions` holds a goalId, not a run ref, and derives
     // the ref with `refsOfGoal` - the SAME function goal-create-with-source.ts:76 uses to WRITE
     // it. This arm pins that coupling: if either side stopped deriving, the wrapper would walk an
     // aggregate with no history and every re-staffed seat would silently read no rejection, with

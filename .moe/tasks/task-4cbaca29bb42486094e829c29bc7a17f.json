@@ -136,8 +136,8 @@
       "completedAt": "2026-09-07T05:24:07.379Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-97200064",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -168,16 +168,24 @@
       "author": "worker-ca28be90",
       "content": "**DoD 4 — THE LIVE DRIVE HAPPENED. Screenshot, hash and committed decision below, all quoted from the run's own stdout.** Run at 2026-09-07 ~05:00Z, `npx playwright test -c tests/e2e/control-room/playwright.config.ts preview-approve-live` -> `1 passed (3.2m)` **EXIT 0**.\n\n**THE SCREENSHOT — a real browser photographing a real running product.**\n```\npath    C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-gate2-preview-1788757210896.png\nsha256  149b0130f1d65caf0eee35da2dbd9a39e0dce24ffb238e1f350f22c056d6096e\nfile    PNG image data, 1280 x 720, 8-bit/color RGB, non-interlaced   (9708 bytes)\n```\nIt shows the page served by the dev server the daemon spawned: a single `<h1>` reading `MOE LANE PREVIEW IS SERVING`. I opened the PNG and looked at it; I am not inferring its contents from the fact that a file exists. The arm asserts the heading is VISIBLE *before* it photographs, so a blank page cannot be screenshotted and called a preview.\n\n**THE COMMITTED DECISION, verbatim from `/activity/read`:**\n```json\n{\"commandKind\":\"preview.decide\",\"decidedAt\":\"2026-09-07T05:00:11.084Z\",\"disposition\":\"COMMITTED\",\n \"principalId\":\"operator-local\",\"targetAggregateId\":\"preview:goal-live-1\",\"verdict\":\"APPROVE\",\"version\":2}\n```\n`principalId: \"operator-local\"` is the honest part: this verdict was committed by the **CONFIGURED OPERATOR**, not by the browser's Approve button — for the two walls in `comment-c00ba4a69ed54106b5694c8cf8739a56`. `targetAggregateId: \"preview:goal-live-1\"` is asserted, not just printed, so the decision is pinned to the preview aggregate and not to the goal.\n\n**IT IS THE LANE'S OWN SCAFFOLD APP, NOT UnAI — measured, not chosen for convenience.** `D:/projexts/UnAI/package.json` (read this session) declares exactly two scripts:\n```json\n\"scripts\": { \"test\": \"vitest run\", \"typecheck\": \"tsc --noEmit -p tsconfig.json\" }\n```\nNo `preview`, no `dev`, no `start`, so `resolvePreviewCommand` (preview-command-resolution.ts:137) would refuse it `PREVIEW_COMMAND_MISSING @ RUNNER`. UnAI has no server to preview at all — it is a memory-kernel library. DoD 4's own fallback (\"or a fresh scaffold app\") therefore applies, and the README now says this in those words.\n\n**WHAT IS REAL IN THE CHAIN BEHIND THAT PNG,** so nobody has to take the picture on trust: the workspace is a real git repository the lane commits into; the scaffold commit and the landing commit are real objects git resolves (the arm asserts the landed sha is 40-hex and differs from BOTH the lane baseline and the scaffold commit); the landing receipt is written by the real `node-lander` inside a real `agent-wrapper-main.ts`; `preview.start` went through the real async command edge, and the daemon resolved `npm run dev`, spawned the server, probed the port and **proved the listener belonged to the child tree** (`preview-listener-owner.ts`) before recording a STARTED receipt; the url in the receipt is the origin the child itself printed on stdout, detected by `detectPreviewPort`. Nothing here is seeded and nothing is a double except the wrapper's SEAT.\n\n**EVIDENCE DISCIPLINE:** the screenshot is produced by a **committed test arm**, not a deleted probe — re-run the spec and it is taken again. Per the evidence rail that is the preferred form; a transcript from a throwaway script would be a lead, not a discharge. The path is under `%TEMP%` on purpose: no evidence artifact reaches a commit.",
       "timestamp": "2026-09-07T05:01:04.755Z"
+    },
+    {
+      "id": "comment-f2f96274c05b4de2acfc4a33594b9efb",
+      "author": "qa-97200064",
+      "content": "QA VERIFICATION EVIDENCE (qa-97200064). Measured at HEAD c139bb5c, porcelain 37. Nothing below is taken from the completion summary.\n\nRE-RAN THE ROW'S OWN SPECS, under browser-e2e-gate (lease 05:41:20Z, released after):\n```\n$ tsc -p tests/e2e/control-room/tsconfig.json && playwright test -c ... \"preview-approve-live\" \"preview-reject-live\" \"preview-approve\"\nRunning 3 tests using 1 worker\n  ok 1  preview-approve-live.spec.ts:60  gate 2 live: a real landing starts a real preview and APPROVE commits a verdict /activity/read carries (3.2m)\n  ok 2  preview-approve.spec.ts:134      the preview read is live, and Gate 2 is absent until a preview exists (5.3s)\n  ok 3  preview-reject-live.spec.ts:74   gate 2 live: REJECT records findings against the named node and moves nothing on the board (12.8s)\n  3 passed (3.5m)                                                   EXIT 0\n```\nI used `pnpm test:e2e:browser` (the DoD-named script) rather than bare `npx playwright`, so the `tsc` leg really ran and three specs really executed — the zero-spec hazard is closed by count, not by exit code. My run produced its own live drive: `LIVE_DRIVE_DECISION {\"commandKind\":\"preview.decide\",\"disposition\":\"COMMITTED\",\"principalId\":\"operator-local\",\"targetAggregateId\":\"preview:goal-live-1\",\"verdict\":\"APPROVE\",\"version\":2}`.\n\nDoD-4 SCREENSHOT INDEPENDENTLY REPRODUCED. comment-3b1c51a0 records `149b0130f1d65caf0eee35da2dbd9a39e0dce24ffb238e1f350f22c056d6096e`. I hashed the file MY run captured — a different path (`moe-gate2-preview-1788759879696.png`) from a different lane — and got `149B0130F1D65CAF0EEE35DA2DBD9A39E0DCE24FFB238E1F350F22C056D6096E`. Byte-identical. The recorded sha is not just present, it is reproducible.\n\nDoD-2 IS NOT SATISFIED BY THE OPERATOR COMMIT ALONE, AND THE SPEC KNOWS IT. The clause's own rationale is \"so a click that never reached the daemon cannot pass\", and `preview-approve-live.spec.ts:125-135` makes that the subject of an assertion instead of an assumption: it clicks the REAL button, then reads `/activity/read` and asserts `preview.decide` entries are `[]` — \"the paired browser's click committed nothing\". Only then does it commit as the operator and read the verdict back. A weaker spec would have clicked, committed, and let the operator's decision launder the click.\n\nWALLS PINNED BY CODE AND LAYER, WHICH IS EPIC RAIL 4'S LITERAL REQUIREMENT (\"never merely that the operation failed\"): `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION` (wall A) and `PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY` — the latter dispatched AS THE OPERATOR so wall A cannot answer for it, which is the difference between two findings and one finding with a guess behind it. Also `PREVIEW_DECISION_INVALID @ REQUEST` for the card's `compiledExecutionRef`-instead-of-node-key, `ACTIVITY_READ_GOAL_UNKNOWN @ ACTIVITY_READ` and `RUNS_READ_GOAL_UNKNOWN` for the goal-scoped reads — asserted by code rather than by an empty list, because a REFUSED body carries no `entries` and an empty-list assertion would pass for the refusal instead of for the filtering it claims to measure. That reasoning is correct and it is the kind of thing that usually ships as a silent false green.\n\n**THE \"BROKEN BUTTON\" IS NOT A DEFECT THIS ROW OWED, AND EPIC RAIL 4 IS WHY.** The rail reads \"HUMAN GATES ARE HUMAN-ONLY: operator-only principal, MCP-excluded\". `preview.decide` being in `OPERATOR_PRINCIPAL_KINDS` and refusing a paired-browser credential is that rail HOLDING, not failing. Widening it is a governor decision by construction, and declining to make it was right. Wall B is real and separate, and correctly left alone: `preview-port.ts` is outside this plan and the defect changes no reachable behaviour while wall A stands.\n\nDoD-3's \"REWORK\" CLAUSE IS UNSATISFIABLE AS WRITTEN AND THE ROW HANDLED IT CORRECTLY. `apps/control-room/src/v2/approvals/preview-rejection-invariants.test.tsx:92,:95-111` encodes the governor ruling: `BOARD_COLUMNS` must not contain REWORK, and a source sweep REDS on any REWORK spelling anywhere in the control room. Implementing DoD-3 literally would have reddened that test. The plan's step 4 amended it to \"assert the ruling, not the stale sentence\", and `preview-reject-live.spec.ts` does exactly that — board state captured whole before and after, byte-identical across the rejection, and the runs/preview bodies swept for any REWORK spelling. Verified: `git grep -in rework -- apps/control-room/src` finds only that invariants test and one lowercase prose comment.\n\nLEAK CENSUS. My run of all three specs left **ZERO** `moe-e2e-daemon-*` survivors and zero `preview-server` / lane / playwright processes — `assertStopped` (lane-preview-arms.ts:192-197, asserting `existsSync(dirname(lane.catalogPath))` is false plus an empty surviving-pid set) holds. Three scratch dirs DO survive on the box at 05:27:18Z, 05:34:57Z and 05:35:32Z; all three predate my 05:41Z lease and fall inside worker-ca28be90's own verification window and worker-b1872f24's full-lane window. Not attributable to this row's specs on my measurement.\n\nOTHER GATES AT THIS HEAD: `pnpm typecheck` EXIT 0, 19 projects, `apps/daemon typecheck: Done` (I proved this leg non-vacuous earlier this session with planted `error TS2322` controls in new files under both apps/daemon and apps/control-room). `pnpm --filter @moe/control-room test` NOT re-run by me — this row's diff touches zero control-room source, and worker-ca28be90's own GATE END reports `Test Files 188 passed (188)` / `Tests 2386 passed (2386)` EXIT 0. Disclosed, not claimed.\n\nDoD-5 DOCUMENTATION GAP, noted not rejected: `task.verification` records a bare `npx playwright test` over three specs, and the FULL-lane count line lives only in the GATE END chat message (`39 tests, 33 passed, 6 failed (11.5m)`, with `ok 31/32/33` naming all three Gate 2 specs). Putting it on the row would have been better. I am recording it here so the row carries it, and I re-ran the named script myself above.\n\nSIZE, flagged for the architect rather than rejected: ~1133 insertions across 9 paths, of which ~863 are new e2e/lane code (`lane-preview.ts` 250, `lane-preview-arms.ts` 197, `preview-approve-live.spec.ts` 186, `preview-reject-live.spec.ts` 181, `preview-approve.spec.ts` +49). That is well over the 400-line review bar in aggregate, though no single file exceeds the repo's 250 target and all of it is test tier. Worth knowing when slicing the next live-journey row.\n\nONE LOOSE END, NOT THIS ROW'S TO FIX BUT SOMEBODY'S: `apps/daemon/src/preview/preview-goal-landing.test.ts` is UNTRACKED and unattributed — not in this row's `declaredPaths`, not in `unattributedPaths`. It is the only `.test.ts`-less module's missing sibling in that directory. I ran it: `Test Files 1 passed (1)` / `Tests 2 passed (2)` EXIT 0, so it is not a red risk. But it tests `readGoalLandingStatus`, which this row's reject arm depends on, and unlanded work in a shared tree is either swept under someone else's trailer or lost. Whoever wrote it should `declare_files` and land it, or delete it.",
+      "timestamp": "2026-09-07T05:47:13.422Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T20:09:11.812Z",
-  "updatedAt": "2026-09-07T05:30:31.307Z",
+  "updatedAt": "2026-09-07T05:48:22.632Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T22:10:20.084Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-07T05:48:22.632Z",
+    "wallClockMs": 27482548
   },
   "contextFetchedBy": [
     "architect-6e49a205",
@@ -230,6 +238,35 @@
       "treeId": "8303bf1cb311169be7dd738806c8d30bc6fba98c",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "c139bb5cd1813ba3a4f5b184294b4f8c278e60b5",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-ca28be90@2026-09-07T04:22:12Z",
+      "paths": [
+        ".moe/tasks/task-4cbaca29bb42486094e829c29bc7a17f.json",
+        ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+        ".moe/tasks/task-ba83b202265d40d1885d3091f009b0a2.json",
+        "README.md",
+        "tests/e2e/control-room/lane-preview.ts",
+        "tests/e2e/control-room/lane-preview-arms.ts",
+        "tests/e2e/control-room/preview-approve.spec.ts",
+        "tests/e2e/control-room/preview-approve-live.spec.ts",
+        "tests/e2e/control-room/preview-reject-live.spec.ts"
+      ],
+      "recordedBy": "worker-ca28be90",
+      "recordedAt": "2026-09-07T05:30:38.841Z",
+      "treeId": "b2d3b75e3ab62320b7a6a74b81b7e9b0d1c462dd",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "README.md",
+          "taskId": "task-161b7e9d566b4c47b429490a54a6cca1"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -243,16 +280,17 @@
     "tests/e2e/control-room/preview-reject-live.spec.ts",
     "tests/e2e/control-room/lane-preview-arms.ts",
     "tests/e2e/control-room/preview-approve.spec.ts",
-    "README.md"
+    "README.md",
+    ".moe/tasks/task-4cbaca29bb42486094e829c29bc7a17f.json",
+    ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+    ".moe/tasks/task-ba83b202265d40d1885d3091f009b0a2.json"
   ],
-  "unattributedPaths": [
-    "apps/control-room/src/v2/ops/environment-refusal-words.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
+    "kind": "completion",
     "sessionId": "worker-ca28be90@2026-09-07T04:22:12Z",
-    "at": "2026-09-07T04:22:16.029Z"
+    "at": "2026-09-07T05:30:38.841Z"
   },
   "workStartedAt": "2026-09-07T04:23:16.328Z",
   "reviewStartedAt": "2026-09-07T05:30:26.341Z",
@@ -262,5 +300,16 @@
     "outputTail": "Running 3 tests using 1 worker\n\nLIVE_DRIVE_SCREENSHOT C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-gate2-preview-1788758851508.png\nLIVE_DRIVE_DECISION {\"commandKind\":\"preview.decide\",\"decidedAt\":\"2026-09-07T05:27:31.697Z\",\"disposition\":\"COMMITTED\",\"principalId\":\"operator-local\",\"targetAggregateId\":\"preview:goal-live-1\",\"verdict\":\"APPROVE\",\"version\":2}\n  ok 1 [chromium] > preview-approve-live.spec.ts:60:1 > gate 2 live: a real landing starts a real preview and APPROVE commits a verdict /activity/read carries (3.2m)\n  ok 2 [chromium] > preview-approve.spec.ts:134:1 > the preview read is live, and Gate 2 is absent until a preview exists (4.8s)\n  ok 3 [chromium] > preview-reject-live.spec.ts:74:1 > gate 2 live: REJECT records findings against the named node and moves nothing on the board (10.8s)\n\n  3 passed (3.5m)\nVERIFY_EXIT=0",
     "reportedAt": "2026-09-07T05:30:26.341Z"
   },
-  "completionSummary": "GATE 2 IS DRIVEN END TO END ON A REAL LANDED GOAL. Two new live specs, both green: a preview scaffold committed into the lane's own git workspace, a REAL landing through the real wrapper and real `node-lander` (nothing seeded), a REAL `preview.start` spawning a REAL dev server, and APPROVE and REJECT committed and read back from `/activity/read`. Fresh verification: `3 passed (3.5m)` EXIT 0.\n\nDoD 1 the preview STARTS from a goal landed by the production lander; no `test.skip`, no early return — a lane without a landing FAILS with the wrapper's transcript, and the landed sha is asserted 40-hex and different from BOTH the lane baseline and my scaffold commit. DoD 2 APPROVE read back as `{commandKind:\"preview.decide\", disposition:\"COMMITTED\", targetAggregateId:\"preview:<goalId>\", verdict:\"APPROVE\"}`, count asserted `toBe(1)`. DoD 3 REJECT read back the same way; the findings are DURABLE and name the node, read through `readPreviewDecision`. DoD 4 live drive DONE. DoD 5 README and the spec header rewritten; gates below.\n\nTHE ONE THING I DID NOT DELIVER, STATED PLAINLY: the verdicts are committed by the CONFIGURED OPERATOR, not by the browser's Approve BUTTON. That button cannot commit, for two INDEPENDENT reasons I measured and pinned by CODE AND LAYER rather than fixed: (A) `preview.decide` is in OPERATOR_PRINCIPAL_KINDS and is NOT in the registry's paired-human widening, while the shipped browser pairs into a non-operator credential -> OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION; (B) `preview-port.ts:53` sends the preview AGGREGATE id where the edge spends a RECEIPT id -> PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY, probed AS THE OPERATOR so (A) cannot answer for it. I did not widen (A): epic rail 4 is operator-only and that is a governor call. I did not fix (B): it changes no reachable behaviour while (A) stands and `preview-port.ts` is outside this plan. A third, same family: `preview-card.tsx:120` offers a `compiledExecutionRef` where a finding needs a node KEY"
+  "completionSummary": "GATE 2 IS DRIVEN END TO END ON A REAL LANDED GOAL. Two new live specs, both green: a preview scaffold committed into the lane's own git workspace, a REAL landing through the real wrapper and real `node-lander` (nothing seeded), a REAL `preview.start` spawning a REAL dev server, and APPROVE and REJECT committed and read back from `/activity/read`. Fresh verification: `3 passed (3.5m)` EXIT 0.\n\nDoD 1 the preview STARTS from a goal landed by the production lander; no `test.skip`, no early return — a lane without a landing FAILS with the wrapper's transcript, and the landed sha is asserted 40-hex and different from BOTH the lane baseline and my scaffold commit. DoD 2 APPROVE read back as `{commandKind:\"preview.decide\", disposition:\"COMMITTED\", targetAggregateId:\"preview:<goalId>\", verdict:\"APPROVE\"}`, count asserted `toBe(1)`. DoD 3 REJECT read back the same way; the findings are DURABLE and name the node, read through `readPreviewDecision`. DoD 4 live drive DONE. DoD 5 README and the spec header rewritten; gates below.\n\nTHE ONE THING I DID NOT DELIVER, STATED PLAINLY: the verdicts are committed by the CONFIGURED OPERATOR, not by the browser's Approve BUTTON. That button cannot commit, for two INDEPENDENT reasons I measured and pinned by CODE AND LAYER rather than fixed: (A) `preview.decide` is in OPERATOR_PRINCIPAL_KINDS and is NOT in the registry's paired-human widening, while the shipped browser pairs into a non-operator credential -> OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION; (B) `preview-port.ts:53` sends the preview AGGREGATE id where the edge spends a RECEIPT id -> PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY, probed AS THE OPERATOR so (A) cannot answer for it. I did not widen (A): epic rail 4 is operator-only and that is a governor call. I did not fix (B): it changes no reachable behaviour while (A) stands and `preview-port.ts` is outside this plan. A third, same family: `preview-card.tsx:120` offers a `compiledExecutionRef` where a finding needs a node KEY",
+  "touchedFiles": [
+    "tests/e2e/control-room/preview-approve-live.spec.ts",
+    "tests/e2e/control-room/preview-reject-live.spec.ts",
+    "tests/e2e/control-room/lane-preview-arms.ts",
+    "README.md",
+    "tests/e2e/control-room/preview-approve.spec.ts",
+    "tests/e2e/control-room/lane-preview.ts"
+  ],
+  "completedAt": "2026-09-07T05:48:22.632Z",
+  "reviewCompletedAt": "2026-09-07T05:48:22.632Z",
+  "reviewSummary": "APPROVED at HEAD c139bb5c, porcelain 37. Full evidence: comment-f2f96274.\n\nRE-RAN BY ME under browser-e2e-gate: `pnpm test:e2e:browser preview-approve-live preview-reject-live preview-approve` EXIT 0, `3 passed (3.5m)`, tsc leg echoed, 3 specs executed, with its own live drive (preview.decide / COMMITTED / APPROVE).\n\nDoD-4 REPRODUCED: comment-3b1c51a0 records sha256 `149b0130...096e`; the screenshot MY lane captured at a different path hashes identically.\n\nDoD-2 is the strong part. preview-approve-live.spec.ts:125-135 clicks the REAL button, asserts /activity/read carries ZERO preview.decide entries (\"the paired browser's click committed nothing\"), then commits as operator and reads the verdict back. The clause's hazard is asserted, not assumed.\n\nTHE BROKEN BUTTON IS NOT A DEFECT THIS ROW OWED. Epic rail 4 is \"HUMAN GATES ARE HUMAN-ONLY: operator-only principal\", so preview.decide refusing a paired-browser credential is that rail HOLDING; widening it is a governor call. Both walls pinned by CODE AND LAYER (OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION; PREVIEW_GOAL_NOT_LANDED@GOAL_AUTHORITY, dispatched AS OPERATOR so wall A cannot answer for it).\n\nDoD-3's \"REWORK\" is unsatisfiable as written: preview-rejection-invariants.test.tsx:92,:95-111 reds on any REWORK spelling. The plan amended it; the spec asserts the ruling (board byte-identical across the rejection). Verified by grep.\n\nLEAKS: my run left ZERO scratch dirs and zero processes; three survivors predate my lease.\n\ntypecheck EXIT 0 / 19 projects (non-vacuous via planted TS2322 controls). Control-room lane not re-run — zero control-room source here; ca28be90's 188/2386 cited, not claimed.\n\nNOTED NOT REJECTED: full-lane count (39 tests, 33 passed, 6 failed) lived only in chat, now on the row; ~863 new test-tier lines exceed the 400 bar in aggregate though no file tops 250; `preview-goal-landing.test.ts` is untracked and unattributed (passes) and needs an owner."
 }
