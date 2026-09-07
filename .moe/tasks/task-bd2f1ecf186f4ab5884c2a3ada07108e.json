@@ -94,25 +94,37 @@
     {
       "stepId": "step-6",
       "description": "ONE FINAL VERIFICATION STEP (DoD 5). Primary complete_task verification command, from repository root, EXACTLY: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/release`. Fresh foreground output must name the new authorization test and show nonzero Test Files/Tests counts and exit 0; the positive pairing case cannot be skipped. In this same final step, run each companion leg separately and foreground, retaining exit status/counts: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/mcp-tool-allowlist.test.ts src/identity/session-authenticator.test.ts`; `pnpm --filter @moe/daemon test`; `pnpm typecheck`; `pnpm test`; `pnpm verify:foundation`; `pnpm verify:store`. Honor shared full-suite/browser leases where applicable; never force-release another holder, run full suites concurrently, pipe away a failing status, or count a vacuous filter as green. Compare required repo-wide failures to the merge-base baseline under the path-attribution rail, disclose exact foreign failing paths and lines, and require no new owned-path failures. Root pnpm test excludes apps/** and is not evidence for this daemon change. No schema/runtime command is added, so no digest regeneration or new Control Room gate is implied. Record any permitted foreign baseline red honestly; use the focused release command's fresh successful output as complete_task evidence.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-09-07T22:29:47.821Z"
+      "note": "ALL SEVEN LEGS RUN FRESH AND FOREGROUND THIS SESSION, serially, each with its own exit status read from ${PIPESTATUS[0]} (never a piped tail's status, never a `;`-chain).\n\n| leg | exit | count line |\n|---|---|---|\n| PRIMARY `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/release` | 0 | Test Files 13 passed (13) / Tests 136 passed (136), 7.02s, start 01:29:52 |\n| `... src/mcp-tool-allowlist.test.ts src/identity/session-authenticator.test.ts` | 0 | Test Files 2 passed (2) / Tests 40 passed (40), 7.43s |\n| `pnpm --filter @moe/daemon test` | **1** | Test Files 1 failed \\| 591 passed (592) / Tests 1 failed \\| 10571 passed \\| 8 skipped (10580), 356.31s |\n| `pnpm typecheck` | 0 | all 19 projects \"Done\" (apps/daemon Done last) |\n| `pnpm test` (root) | **1** | Test Files 1 failed \\| 432 passed \\| 2 skipped (435) / Tests 1 failed \\| 10387 passed \\| 46 skipped (10434), 224.71s |\n| `pnpm verify:foundation` | 0 | Test Files 35 passed (35) / Tests 756 passed (756) |\n| `pnpm verify:store` | 0 | Test Files 53 passed (53) / Tests 677 passed (677) |\n\nEvery count line is NONZERO, so no leg was vacuous: the `--filter` legs resolve @moe/daemon by PACKAGE NAME and printed real executed counts, not \"No projects matched the filters\"/\"No test files found\" at exit 0. The primary run names the new spec and its positive pairing case is executed, not skipped (0 skipped in that leg; 19/19 green in the isolated file run).\n\nLEASE DISCIPLINE. full-suite-gate was HELD by worker-4d8571e7/task-78eedd8e when I first asked (queued #1 at 22:30:05Z). I did NOT force-release, did NOT run a full suite concurrently, and did NOT drill on disk while their gate was live. I polled the lease file in the foreground and was GRANTED at 22:34:17Z, then ran everything serially. The lease is still mine for step 7's drill and is released at the end of that step.\n\nTWO FOREIGN REDS, DISCLOSED VERBATIM, NEITHER ON AN OWNED PATH:\n1. `apps/daemon/src/work/foundation-attempt-windows.test.ts:861` > \"observes a real exited provider process and files it in the ledger\" — `AssertionError: expected false to be true // Object.is equality`, Expected true / Received false, at `expect(outcome.ok).toBe(true)`.\n2. `tests/migration/cutover/cutover-drill.test.ts:536` (via assertOk at :73) > \"TASK-MF ARM E: captureCutoverManifest succeeds against the REAL repo root\" — `Error: expected ok:true, received {\"ok\":false,\"layer\":\"cutover-manifest\",\"code\":\"CUTOVER_MANIFEST_ENTRY_LIMIT_EXCEEDED\",\"path\":\".moe/tasks/task-fdcfe1ca00a74932a94f3b4ef3fe768c.json\",\"detail\":\"entry count exceeds 10000\"}` — i.e. the board's own growing `.moe/tasks/*.json` population trips a walker limit; it names a `.moe/tasks` path, not a source path.\n\nPATH ATTRIBUTION (global rail): failures at HEAD = {work/foundation-attempt-windows.test.ts, tests/migration/cutover/cutover-drill.test.ts}; failures at the recorded merge-base baseline = the SAME two, same assertions, same counts (1 failed | 591 passed and 1 failed | 432 passed | 2 skipped, reproduced twice by the prior session and once here). (HEAD) minus (baseline) = EMPTY, so the intersection with this row's five owned paths is EMPTY. Owned-package legs are exit 0. No red is claimed green and none is hidden; the daemon-suite red is already filed as task-0bd37766500c427aacf4f59abbd6dad1.\n\nRoot `pnpm test` excludes apps/** (the root vitest include has no apps/**), so it is disclosed here but is NOT evidence for this daemon change; the daemon package leg is. No schema or runtime command kind was added, so no digest regeneration and no Control Room gate is implied — apps/control-room is untouched by this row.\n\ncomplete_task evidence will be the PRIMARY command's fresh EXIT 0 output, re-run once more in step 7 on post-drill restored bytes so the completion evidence is newer than the mutation.",
+      "startedAt": "2026-09-07T22:29:47.821Z",
+      "completedAt": "2026-09-07T22:45:25.959Z"
     },
     {
       "stepId": "step-7",
       "description": "ONE ADVERSARIAL REVIEW / QA HANDOFF, LAST (DoD 1-5). Read the owned diff as an attacker: can an agent or stale/cross-project session masquerade as a durable HUMAN; can a capability omission be hidden by a different earlier refusal; can replay run before authentication; can the unconfigured branch admit more than configured release; can any other kind use the disjunct; did any actor id, roster, evidence rule or release effect change? Perform ONE bounded production mutation removing the ADMIN conjunct, with no peer gate running on those bytes: the HUMAN-with-GOAL-without-ADMIN arm must go RED at its exact authorization assertion, not fail in setup. Restore immediately in finally and prove restoration in a separate call (tracked baseline diff/byte backup, SHA equality for any untracked mutation target); then rerun the primary verification command fresh on restored final bytes so completion evidence is newer than the drill. Confirm listener/store teardown, no secrets in logs, no scratch files left, all three production file caps, and unchanged classification/MCP roster. Cite the exact owner ruling, test count lines, deliberate mutant failure, restore evidence, actual-actor/replay assertions and the unchanged parent dependsOn consumer edge in a row comment under 4500 chars. Report only the five owned paths in complete_step.modifiedFiles; no manual commit/push/merge/rebase. Complete via Moe with the fresh primary command output; QA grades delivered wrapper-attributed bytes, not a dirty-tree-only success. This row certifies authorization, never the parent's still-pending live release journey.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/release/release-decide-command.ts",
         "apps/daemon/src/release/release-decide-service.ts",
         "apps/daemon/src/daemon-command-async-entries.ts",
         "apps/daemon/src/release/release-browser-authorization-fixtures.ts",
         "apps/daemon/src/release/release-browser-authorization.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/release/release-decide-command.ts",
+        "apps/daemon/src/release/release-decide-service.ts",
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/release/release-decide-authorization.test.ts",
+        "apps/daemon/src/release/release-authorization-fixtures.ts"
+      ],
+      "note": "Full detail in row comment-2153eeeb675d4cd7a4151c10543cede3 (adversarial pass, drill, restore, caps, consumer edge) and comment-a93ac5eb2a2b491bac40c45dce06ce3f (point-by-point response to the QA reject, including the pushback).\n\nDRILL: removed the ADMIN conjunct at release-decide-command.ts:82 while I HELD full-suite-gate (granted 22:34:17Z after queuing behind worker-4d8571e7; never force-released, no concurrent full suite, no drill while their gate was live). GOAL-without-ADMIN arm went RED at its exact authorization assertion (test:150), 1 failed | 18 skipped (19): the mutant admits an unauthorized human, `- OPERATOR_PRINCIPAL_REQUIRED/DAEMON_AUTHORIZATION/403` vs `+ RELEASE_REMOTE_MISSING/PROJECT_REDUCER/422`. Restored; proved in a SEPARATE call by SHA256 d42103a6… equality, EMPTY `git diff` vs HEAD (target is tracked), conjunct present at :82, EMPTY `git status --porcelain` on all owned paths. Both %TEMP% backups deleted, no repo scratch.\n\nPOST-DRILL PRIMARY on restored final bytes: EXIT 0, Test Files 13 passed (13), Tests 136 passed (136), start 01:46:35 — newer than the mutation, and this is the complete_task evidence.\n\nWRAPPER ATTRIBUTION NOTE for QA: a wrapper checkpoint commit b3c2f61f (correctly stamped Moe-Task task-bd2f1ecf, status=WORKING) already landed this session's spec edits on moe/work-2026-09-04, so `git show HEAD:…release-decide-authorization.test.ts | grep -c DAEMON_COMMAND_SEAM` = 2 and the owned-path working tree is CLEAN. Delivered bytes are on the branch, not dirty-tree-only: 4ee9efe1 is the original delivery, b3c2f61f the QA-fix delta (+8/-5, one test file). Peer dirt in the shared checkout was left untouched throughout.\n\nCAPS: 221 / 227 / 385 production; 377 / 242 tests. Classification and MCP roster diff EMPTY vs the row's merge-base. Consumer edge intact: task-817d893f still lists this row in dependsOn.\n\nNo manual commit, push, merge or rebase. All five owned paths reported here.",
+      "startedAt": "2026-09-07T22:45:31.604Z",
+      "completedAt": "2026-09-07T22:47:37.853Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-319873d7",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-eaa78526",
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -203,21 +215,34 @@
       "author": "worker-319873d7",
       "content": "WORKER RESPONSE to QA reject comment-7e45a889 (reopenCount 1). Item 1 accepted and fixed; item 2 pushed back with a rail citation, not silently ignored and not silently implemented.\n\nITEM 1 — DoD 3/4 LAYER GAPS: CORRECT, and my prior step-5 note's \"EVERY REFUSAL pins its layer\" claim was FALSE. Withdrawn and replaced with an accurate tier-by-tier statement. I verified each of the three sites against production before touching the spec:\n• RELEASE_PROJECT_MISMATCH — release-decide-command.ts:74 `refuse(\"RELEASE_PROJECT_MISMATCH\", 403)` via the local helper at :30-32, which throws with DAEMON_COMMAND_SEAM. Spec :258 now pins layer AND httpStatus.\n• RELEASE_COMMAND_BYTES_CONFLICT — release-decide-command.ts:109, same helper. Spec :343-346 now pins `stage: \"DISPATCH\"` and `refusal.layer: \"DAEMON_COMMAND_SEAM\"`.\n• goal.close negative control — daemon-command-registry.ts:393-398. Spec :370-372 now asserts the shared FENCED constant, i.e. the IDENTICAL fence release spends: 403 + PORT_REFUSED + DISPATCH + {OPERATOR_PRINCIPAL_REQUIRED, DAEMON_AUTHORIZATION}. It reds if the widening leaks to another operator kind or the layer regresses.\n• Also added httpStatus 403 to the :245-249 command-boundary arm for symmetry.\n\nONE THING I DID NOT DO, deliberately: I did NOT add a `layer` to the AUTHENTICATE/AUTHORIZE arms. Those bodies have no layer key — http-command-ingress.ts:73 `refuse(stage, error)` builds HttpRefused from stage + RuntimeError only — so `stage` IS the boundary identifier there and asserting a layer would be fabricated authority. QA's phrasing (\"Pin DISPATCH on HTTP refusal arms\") reads as the dispatch-tier arms, which is what I pinned; flagging the reading explicitly so it can be corrected if meant otherwise.\n\nLOAD-BEARING PROOF, test-tier negative control (separate from step 7's production drill): flipped both DAEMON_COMMAND_SEAM literals to NEGATIVE_CONTROL_LAYER -> EXIT 1, \"Tests 2 failed | 17 passed (19)\", `expected 'DAEMON_COMMAND_SEAM' to be 'NEGATIVE_CONTROL_LAYER'` plus the HTTP body diff `- \"layer\": \"NEGATIVE_CONTROL_LAYER\" / + \"layer\": \"DAEMON_COMMAND_SEAM\"`. Restored from a %TEMP% backup; restoration proved in a SEPARATE call by SHA256 equality (2a3322c7…) with grep counts 0 mutant / 2 seam. Fresh green after restore: 1 file / 19 tests, EXIT 0.\n\nITEM 2 — REJECT-AS-OVERSIZED AT +680 NET LOC: PUSHING BACK, no split, no compaction. Project global rail 2 is explicit and binding on this board: \"The 250/400 line cap is PER PRODUCTION FILE, not per task… There is no per-task net-LOC budget… QA: task-level net LOC is never a rejection reason, at plan time or post-commit.\" QA recorded the same conflict itself and notified @architect-f362f7a6 in msg-9db4bdab, and stated this is \"NOT a claimed production-size defect\". Measured per-file at HEAD: release-decide-command.ts 221, release-decide-service.ts 227 (both <=250), daemon-command-async-entries.ts 385 (<400, was 378), plus two test-tier files 377 and 242 which the cap does not govern. No per-file violation exists. As the worker I will not resolve a generated-instruction-vs-board-rail conflict by unilaterally re-slicing an approved plan under an owner-gated authorization ruling — that is an architect/governor call, and the same rail forbids compacting source or deleting security tests to hit a line count. Requesting @architect-f362f7a6 / @governors reconcile the session QA instruction with global rail 2 and record which governs.",
       "timestamp": "2026-09-07T22:29:44.390Z"
+    },
+    {
+      "id": "comment-2153eeeb675d4cd7a4151c10543cede3",
+      "author": "worker-319873d7",
+      "content": "STEP 7 ADVERSARIAL REVIEW + DRILL + QA HANDOFF (reopen 1 fix round).\n\nOWNER RULING CITED: comment-e9ecfd4c3cef4a438ba4873e5627742e — a currently authenticated, PROJECT-BOUND, durable HUMAN holding ADMIN may reach release.decide, actual identity retained, MCP exclusion unchanged, operator step-up NOT selected, OPERATOR_PRINCIPAL_KINDS must not shrink. Implementation predates nothing: ruling first, code second.\n\nATTACKS RUN AGAINST THE OWNED DIFF, each answered by a production-surface arm:\n• Agent masquerading as durable HUMAN — the session.open path writes no principal record, so the durable-HUMAN conjunct is the only thing between an agent and release. Arm :167 FENCED.\n• Stale / cross-project session — authentication is a SEPARATE ingress boundary (http-command-ingress authenticateHttpRequest before dispatch); unknown/CLOSED/at-exact-expiry/foreign-project credentials all refuse AUTHENTICATION_FAILED @ stage AUTHENTICATE, 401. The disjunct ALSO re-checks projectId itself.\n• Capability omission masked by an earlier refusal — deliberately avoided twice: the GOAL-without-ADMIN arm HOLDS GOAL so it clears the ingress capability gate and can only be answered by DAEMON_AUTHORIZATION, and the goal.close negative control HOLDS GOAL for the same reason.\n• Replay before authentication — impossible; the expiry arm replays the SAME credential+commandId and lands at AUTHENTICATE, never a cached decision. A second minted HUMAN cannot inherit the first's record: 409 RELEASE_COMMAND_BYTES_CONFLICT @ DAEMON_COMMAND_SEAM, and no decision under its own key.\n• Unconfigured branch admitting more — it always throws; authorization runs first, proven both ways.\n• Another kind using the disjunct — `releaseByPairedAdmin` returns false unless commandKind === release.decide; goal.close proves it at HTTP with the identical FENCED shape.\n• Actor id / roster / evidence / effects — decision keys are the ACTUAL paired id (operator key asserted null); NO_EFFECTS on every refusal; `git diff 4ee9efe1~1 -- daemon-command-vocabulary.ts mcp-tool-allowlist.ts daemon-command-registry.ts` EMPTY.\n\nTHEORETICAL ONLY, disclosed not fixed: a hand-built CommandHandlerInput violating its own type with `capabilities: undefined` would TypeError inside the conjunct chain (outside the try, which wraps only the durable read). Unreachable through production ingress — capabilities come from the session ledger as an array — and it still fails closed in the security sense (500, nothing admitted). Not hardened, to keep this row a focused authorization slice.\n\nMUTATION DRILL, one bounded production mutation, no peer gate live (I HELD full-suite-gate throughout; granted 22:34:17Z after queuing, never force-released). Removed the ADMIN conjunct from release-decide-command.ts:82. Target was TRACKED and clean, backup SHA256 d42103a6… taken at window open and grep-proved to still contain the conjunct BEFORE planting. Result: `Tests 1 failed | 18 skipped (19)`, RED at the arm's exact authorization assertion (test:150), not in setup — `- \"code\": \"OPERATOR_PRINCIPAL_REQUIRED\" / - \"layer\": \"DAEMON_AUTHORIZATION\" / - \"httpStatus\": 403` vs `+ \"RELEASE_REMOTE_MISSING\" / + \"PROJECT_REDUCER\" / + 422`. The mutant ADMITS an unauthorized GOAL-only human past the fence, which is exactly what the conjunct prevents.\nRESTORE, proved in a SEPARATE call: SHA256 d42103a6… on both sides, `git diff -- <file>` EMPTY vs HEAD, conjunct back at :82, `git status --porcelain` on all owned paths EMPTY. Both %TEMP% backups deleted; no scratch file in the repo.\n\nPOST-DRILL PRIMARY, newer than the mutation: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/release` EXIT 0, Test Files 13 passed (13), Tests 136 passed (136), start 01:46:35.\n\nFILE CAPS: 221 / 227 / 385 production (<=250, <=250, <400); tests 377 and 242. Teardown drains listener+store in afterEach on pass, refusal and throw alike. No credential, hash or bearer-bearing frame is logged or snapshotted.\n\nCONSUMER EDGE UNCHANGED: task-817d893fa1254a4d82d2888af1f87a47 still lists task-bd2f1ecf in dependsOn (5 ids). This row certifies AUTHORIZATION ONLY — reaching RELEASE_REMOTE_MISSING is the oracle, never a completed release; the parent retains the live browser/PR journey.",
+      "timestamp": "2026-09-07T22:47:21.321Z"
+    },
+    {
+      "id": "comment-e31fb9b640274b8d97f6e401feba46c9",
+      "author": "worker-319873d7",
+      "content": "COMPLETION-SUMMARY TRUNCATION NOTICE (2000-char cap). task.completionSummary is cut mid-sentence at \"…SHA256 d42103a6 \". The gate table survived intact above the cut; the severed tail was only:\n\n\"…equality + empty git diff proved in a separate call. Details: comment-2153eeeb, comment-a93ac5eb.\n\nAuthorization only — RELEASE_REMOTE_MISSING is the oracle, not a release. Parent task-817d893f keeps the live browser/PR proof.\"\n\nNothing load-bearing is lost: the full drill, restore proof, adversarial pass, caps and consumer-edge evidence are in comment-2153eeeb675d4cd7a4151c10543cede3, and the point-by-point QA response (including the rail-2 pushback on the sizing item) is in comment-a93ac5eb2a2b491bac40c45dce06ce3f.\n\nFOR THE REVIEWER, two things worth checking directly rather than taking from prose:\n1. Delivered bytes are on the branch, not dirty-tree-only. 4ee9efe1 is the original delivery; b3c2f61f is this round's delta (+8/-5, one test file), a wrapper checkpoint correctly stamped Moe-Task task-bd2f1ecf. `git show HEAD:apps/daemon/src/release/release-decide-authorization.test.ts | grep -c DAEMON_COMMAND_SEAM` = 2, and `git status --porcelain -- apps/daemon/src/release apps/daemon/src/daemon-command-async-entries.ts` is EMPTY.\n2. The two foreign reds reproduce at baseline and neither names an owned path. If you re-run the repo-wide legs, please attribute by path before treating either as this row's.\n\nfull-suite-gate released back to task-78eedd8e immediately after the drill.",
+      "timestamp": "2026-09-07T22:48:19.690Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T17:18:12.578Z",
-  "updatedAt": "2026-09-07T22:29:47.821Z",
+  "updatedAt": "2026-09-07T22:48:26.398Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T17:19:37.645Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 12,
+    "executedStepCount": 14,
     "rejectCount": 1,
     "reopenCount": 1
   },
   "contextFetchedBy": [
-    "worker-319873d7"
+    "worker-319873d7",
+    "qa-eaa78526"
   ],
   "blockedReason": null,
   "blockedResourceId": null,
@@ -230,7 +255,9 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [
     {
@@ -321,6 +348,22 @@
       "treeId": "368f305cef943a2d026bc953c413f9e454099415",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "b3c2f61fc7658f30049b3372bfb498629b01116c",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-319873d7@2026-09-07T22:24:07Z",
+      "paths": [
+        ".moe/tasks/task-bd2f1ecf186f4ab5884c2a3ada07108e.json",
+        "apps/daemon/src/release/release-decide-authorization.test.ts"
+      ],
+      "recordedBy": "worker-319873d7",
+      "recordedAt": "2026-09-07T22:30:05.239Z",
+      "treeId": "073640b46c999a916e96a9afb315b38eef27d986",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -334,8 +377,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-319873d7@2026-09-07T18:50:56Z",
-    "at": "2026-09-07T19:58:07.511Z"
+    "sessionId": "worker-319873d7@2026-09-07T22:24:07Z",
+    "at": "2026-09-07T22:30:05.239Z"
   },
   "declaredFiles": [
     "apps/daemon/src/release/release-decide-command.ts",
@@ -349,14 +392,14 @@
     "apps/daemon/src/release/release-authorization-fixtures.ts",
     "apps/daemon/src/release/release-decide-command.ts"
   ],
-  "reviewStartedAt": "2026-09-07T22:20:12.847Z",
+  "reviewStartedAt": "2026-09-07T22:48:04.369Z",
   "verification": {
     "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/release",
     "exitCode": 0,
-    "outputTail": "RUN v4.1.10 D:/projexts/moe-next/apps/daemon\nTest Files 13 passed (13)\nTests 136 passed (136)\nStart at 01:16:34\nDuration 21.62s (transform 19.33s, setup 0ms, import 27.28s, tests 29.18s, environment 1ms)",
-    "reportedAt": "2026-09-07T22:20:12.847Z"
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  13 passed (13)\n      Tests  136 passed (136)\n   Start at  01:46:35\n   Duration  7.52s (transform 19.50s, setup 0ms, import 27.70s, tests 5.32s, environment 1ms)\n\nEXIT=0",
+    "reportedAt": "2026-09-07T22:48:04.369Z"
   },
-  "completionSummary": "Evidence-only closeout of owner-approved release authorization (ruling comment-e9ecfd4c; governor reopen comment-e5ecc429). One release-only, project-bound ADMIN+durable-HUMAN assertion is composed at command admission, inner service and unconfigured entry; production ingress authenticates, actual actor/replay identity remains unchanged, operator/MCP roster untouched. No source edits in this session; five owned sources match checkpoint4ee9efe1 exactly. Final HEAD eea6b6b5 differs from resume d064df2e only in two task metadata paths.\nMY FRESH FOREGROUND: exact primary release gate EXIT0,13files/136tests; MCP-exclusion+session-authenticator EXIT0,2/40; verbose authorization spec EXIT0,1/19, all named positive/refusal/replay controls executed. Adversarial reread and explicit-path diff/status checks clean. Prior ADMIN mutation/independent restore proof is CITED from comment-052151fe, not repeated during peer gates.\nBROAD RESULTS CITED, not rerun here: historical daemon EXIT1 twice at foundation-attempt-windows.test.ts:861; root EXIT1 cutover-drill.test.ts:536 CUTOVER_MANIFEST_ENTRY_LIMIT_EXCEEDED. Newer architect msg-8c7ed9d reports unchanged-d064 full daemon EXIT0,592files/10572tests,370.34s; deterministic file-count causation is unproven. Prior typecheck19projects/foundation35-756/store53-677 passed. No repo-wide-green claim; root excludes apps. Governor discharged foreign-red block; full evidence and corrected lease-race disclosure in step6 and comments2d31165a/abcb1041.\nParent817d893f still dependsOn this row and owns pending live browser/PR proof; this row proves authorization, NOT successful release. Five actual source paths reaffirmed in step7. Wrapper completion landing and independent QA remain next; checkpoint is not mislabelled completion.",
+  "completionSummary": "QA reject round 1 fixed. Owner ruling comment-e9ecfd4c: a currently authenticated, project-bound durable HUMAN holding ADMIN may reach release.decide, own identity retained, MCP exclusion unchanged.\n\nQA ITEM 1 (DoD 3/4 layer gaps) ACCEPTED AND FIXED. Three refusal arms asserted a code without its layer; my prior \"EVERY REFUSAL\" claim was false and is withdrawn. Now pinned against production: :258 RELEASE_PROJECT_MISMATCH + DAEMON_COMMAND_SEAM + 403 (command.ts:74/:30-32); :343-346 RELEASE_COMMAND_BYTES_CONFLICT + DAEMON_COMMAND_SEAM + DISPATCH (:109); :370-372 goal.close now asserts the shared FENCED shape 403/PORT_REFUSED/DISPATCH/OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION (registry:393-398); plus 403 on the :245 boundary arm. AUTHENTICATE/AUTHORIZE arms keep stage, not layer: ingress bodies have no layer key (http-command-ingress.ts:73), so a layer there would be fabricated.\n\nQA ITEM 2 (+680 net LOC = oversized) PUSHED BACK, not actioned — global rail 2 says task-level net LOC is never a rejection reason; QA logged the same conflict and paged the architect. Per-file: 221/227/385 production, 377/242 tests. No compaction, no test deletion.\n\nGATES, all fresh foreground this session, ${PIPESTATUS[0]} captured:\nprimary src/release EXIT 0, 13 files/136 tests (post-drill, restored bytes)\nmcp-allowlist+session-authenticator EXIT 0, 2/40\ndaemon test EXIT 1, 1 failed|591 passed (592)\ntypecheck EXIT 0 (19 projects)\nroot pnpm test EXIT 1, 1 failed|432 passed|2 skipped\nverify:foundation EXIT 0, 35/756; verify:store EXIT 0, 53/677\nBoth reds are FOREIGN and present at baseline: work/foundation-attempt-windows.test.ts:861 and tests/migration/cutover/cutover-drill.test.ts (CUTOVER_MANIFEST_ENTRY_LIMIT_EXCEEDED on .moe/tasks). HEAD-minus-baseline intersected with owned paths = EMPTY. Filed: task-0bd37766.\n\nDRILL under my own full-suite-gate lease: ADMIN conjunct removed -> GOAL-without-ADMIN arm RED at test:150 (mutant admits an unauthorized human). Restored; SHA256 d42103a6 ",
   "reviewCompletedAt": "2026-09-07T22:24:04.988Z",
   "rejectionDetails": {
     "failedDodItems": [
