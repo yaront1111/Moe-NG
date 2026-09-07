@@ -156,7 +156,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T17:24:27.654Z",
-  "updatedAt": "2026-09-07T00:25:55.383Z",
+  "updatedAt": "2026-09-07T00:53:47.001Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:10:11.926Z",
     "plannedStepCount": 7,
@@ -194,5 +194,80 @@
   "contextFetchedBy": [
     "worker-ca28be90"
   ],
-  "workStartedAt": "2026-09-07T00:04:34.404Z"
+  "workStartedAt": "2026-09-07T00:04:34.404Z",
+  "commits": [
+    {
+      "sha": "f9f70adb140f41bc96ca469b86372238d0a4a20d",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-ca28be90@2026-09-07T00:04:17Z",
+      "paths": [
+        ".moe/tasks/task-48932becda314704aad652b49a8d2209.json",
+        ".moe/tasks/task-4d77ba041223441a804cc85a7edd9652.json",
+        "apps/daemon/src/orchestrator/agent-codex-roster.js",
+        "apps/daemon/src/orchestrator/agent-codex-roster.test.ts",
+        "apps/daemon/src/orchestrator/agent-codex-roster.ts",
+        "apps/daemon/src/orchestrator/agent-role-contract.ts",
+        "apps/daemon/src/orchestrator/agent-spawn-environment.ts",
+        "apps/daemon/src/orchestrator/agent-spawner.ts",
+        "apps/daemon/src/work/launch-template-authority.ts",
+        "apps/daemon/src/work/launch-template-producer.test.ts",
+        "apps/daemon/src/work/launch-template-producer.ts"
+      ],
+      "recordedBy": "worker-ca28be90",
+      "recordedAt": "2026-09-07T00:53:47.001Z",
+      "treeId": "10e5108cb4ba03a7c371c24a7d094d5f02945d5c",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/orchestrator/agent-spawn-environment.ts",
+          "taskId": "task-df64aa204d6f4c35810376226980e4b7"
+        },
+        {
+          "path": "apps/daemon/src/orchestrator/agent-spawner.ts",
+          "taskId": "task-df64aa204d6f4c35810376226980e4b7"
+        },
+        {
+          "path": "apps/daemon/src/work/launch-template-producer.ts",
+          "taskId": "task-df64aa204d6f4c35810376226980e4b7"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-48932becda314704aad652b49a8d2209.json",
+    ".moe/tasks/task-4d77ba041223441a804cc85a7edd9652.json",
+    "apps/daemon/src/orchestrator/agent-codex-roster.js",
+    "apps/daemon/src/orchestrator/agent-codex-roster.test.ts",
+    "apps/daemon/src/orchestrator/agent-codex-roster.ts",
+    "apps/daemon/src/orchestrator/agent-role-contract.ts",
+    "apps/daemon/src/orchestrator/agent-spawn-environment.ts",
+    "apps/daemon/src/orchestrator/agent-spawner.ts",
+    "apps/daemon/src/work/launch-template-authority.ts",
+    "apps/daemon/src/work/launch-template-producer.test.ts",
+    "apps/daemon/src/work/launch-template-producer.ts"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/orchestrator/agent-codex-roster.ts",
+    "apps/daemon/src/work/launch-template-producer.ts",
+    "apps/daemon/src/orchestrator/agent-spawner.test.ts",
+    "apps/daemon/src/orchestrator/agent-spawn-environment.ts",
+    "apps/daemon/src/work/launch-template-authority.ts",
+    "apps/daemon/src/orchestrator/agent-codex-roster.test.ts",
+    "apps/daemon/src/orchestrator/agent-role-contract.ts",
+    "apps/daemon/src/orchestrator/agent-spawner.ts"
+  ],
+  "unattributedPaths": [
+    "tests/e2e/control-room/lane-landing-contract.ts",
+    "tests/e2e/control-room/lane-review-round.ts",
+    "apps/daemon/src/orchestrator/agent-spawner.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-ca28be90@2026-09-07T00:04:17Z",
+    "at": "2026-09-07T00:53:47.001Z"
+  }
 }
