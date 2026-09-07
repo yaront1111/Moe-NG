@@ -246,6 +246,7 @@ describe("release.decide refuses everything the ruling did not approve", () => {
       })));
       expect(refusal.code).toBe("OPERATOR_PRINCIPAL_REQUIRED");
       expect(refusal.layer).toBe("DAEMON_AUTHORIZATION");
+      expect(refusal.httpStatus).toBe(403);
     }, 30_000);
 
   it("keeps RELEASE_PROJECT_MISMATCH for the CONFIGURED operator on a wrong project",
@@ -256,6 +257,8 @@ describe("release.decide refuses everything the ruling did not approve", () => {
         projectId: "project-somewhere-else",
       })));
       expect(refusal.code).toBe("RELEASE_PROJECT_MISMATCH");
+      expect(refusal.layer).toBe("DAEMON_COMMAND_SEAM");
+      expect(refusal.httpStatus).toBe(403);
     }, 30_000);
 
   it("fails CLOSED when the durable principal read throws", async () => {
@@ -341,8 +344,8 @@ describe("release.decide replay keeps the actual actor's identity", () => {
     // The mismatch is the point: request identity is derived from the ACTUAL caller, so a
     // second human can neither inherit the first's answer nor overwrite its record.
     expect((await harness.send(second.credential, { commandId })).body).toMatchObject({
-      httpStatus: 409, outcome: "PORT_REFUSED",
-      refusal: { code: "RELEASE_COMMAND_BYTES_CONFLICT" },
+      httpStatus: 409, outcome: "PORT_REFUSED", stage: "DISPATCH",
+      refusal: { code: "RELEASE_COMMAND_BYTES_CONFLICT", layer: "DAEMON_COMMAND_SEAM" },
     });
     expect(decisionFor(harness, commandId, second.principalId)).toBe(null);
   }, 30_000);
@@ -367,8 +370,8 @@ describe("release.decide classification is untouched by this widening", () => {
       closureWitness: "release-authorization-witness", goalId: GOAL_ID,
       zeroAuthorityWitness: "release-authorization-zero-authority",
     }, { targetAggregateId: GOAL_ID });
-    expect(reply.body).toMatchObject({
-      httpStatus: 403, refusal: { code: "OPERATOR_PRINCIPAL_REQUIRED" },
-    });
+    // The SAME fence shape release spends -- code, layer and stage -- so this arm goes red if
+    // the widening ever leaks to another operator kind, or if the layer regresses.
+    expect(reply.body).toMatchObject(FENCED);
   }, 30_000);
 });
