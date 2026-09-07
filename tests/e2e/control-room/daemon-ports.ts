@@ -37,6 +37,7 @@ import { createOperatorSessionHandshakePort, OPERATOR_SESSION_TTL_MS }
   from "../../../apps/daemon/src/identity/session-handshake.js";
 import { freePort, killTree, spawnNode, survivingChildren } from "./daemon-children.js";
 import type { FakeDockerMode } from "./fake-docker-dependencies.js";
+import type { FakeGhMode } from "./fake-gh-contract.js";
 
 /**
  * The operator principal id the lane's minted seat is bound to.
@@ -464,9 +465,11 @@ interface StartedChild {
 async function startDaemon(
   root: string, scratch: LaneScratch, approval: LaneApprovalMode, tracked: ChildProcess[],
   operatorChannel: true | undefined, fixedDemoGoal: true | undefined,
-  fakeDocker: FakeDockerMode | undefined,
+  fakeDocker: FakeDockerMode | undefined, fakeGh: FakeGhMode | undefined,
 ): Promise<LaneRefused | StartedChild> {
-  const dependencies = fakeDocker !== undefined
+  const dependencies = fakeGh !== undefined
+    ? `${root}/tests/e2e/control-room/fake-gh-dependencies.ts`
+    : fakeDocker !== undefined
     ? `${root}/tests/e2e/control-room/fake-docker-dependencies.ts`
     : fixedDemoGoal === true
     ? `${root}/tests/e2e/control-room/fixed-demo-goal-dependencies.ts`
@@ -486,6 +489,7 @@ async function startDaemon(
   ], root, {
     ...daemonEnv(scratch, approval),
     MOE_E2E_DEPLOY_MODE: fakeDocker,
+    MOE_E2E_RELEASE_MODE: fakeGh,
     // The composition reads MOE_NODE_WORKSPACE at daemon-store-foundation-composition.ts:190 when
     // `config.repositoryWorkspace` is undefined, so the publish candidate reader measures the
     // lane's own repository instead of refusing PUBLISH_WORKSPACE_UNCONFIGURED.
@@ -494,7 +498,10 @@ async function startDaemon(
     // other spec on this daemon - PUBLISH_WORKSPACE_UNCONFIGURED becomes PUBLISH_GOAL_NOT_INTEGRATED
     // once a workspace exists - and this row has not run those specs to show none of them read it.
     // Ungating is a one-line change once that measurement exists; guessing is not.
-    MOE_NODE_WORKSPACE: fakeDocker === undefined ? undefined : scratch.workspace,
+    // THE RELEASE LANE NEEDS IT FOR A SECOND REASON: `createProductionReleaseSeams` takes the
+    // same workspace, and a null one leaves `release.decide` on the fail-closed stub that
+    // refuses RELEASE_PR_FAILED before any of this row's chain runs.
+    MOE_NODE_WORKSPACE: fakeDocker === undefined && fakeGh === undefined ? undefined : scratch.workspace,
   });
   // Held on an object because a spawn error arrives on a later turn: a plain
   // `let` assigned only inside the listener reads as never-assigned here.
@@ -587,6 +594,8 @@ export interface DaemonLaneOptions {
   readonly fixedDemoGoal?: true;
   /** Replace only deploy spawns; omitted retains the production provider. */
   readonly fakeDocker?: FakeDockerMode;
+  /** Replace only the release edge's `gh pr create` spawn; omitted spawns the real `gh`. */
+  readonly fakeGh?: FakeGhMode;
   /** ABSENT serves the same bundle with no credentials, for the refusal arm. */
   readonly liveCredentials: LiveCredentialMode;
   /**
@@ -606,11 +615,12 @@ async function openLane<T>(
   root: string, options: DaemonLaneOptions, tracked: ChildProcess[], scratchRoots: string[],
   body: (lane: DaemonLane) => Promise<T>,
 ): Promise<LaneOutcome<T>> {
-  const scratch = createLaneScratch(options.fakeDocker !== undefined);
+  const scratch = createLaneScratch(options.fakeDocker !== undefined || options.fakeGh !== undefined);
   const approval = options.approval ?? "SPEED";
   scratchRoots.push(scratch.root);
   const daemon = await startDaemon(
-    root, scratch, approval, tracked, options.operatorChannel, options.fixedDemoGoal, options.fakeDocker,
+    root, scratch, approval, tracked, options.operatorChannel, options.fixedDemoGoal,
+    options.fakeDocker, options.fakeGh,
   );
   if ("ok" in daemon) return daemon;
   // NULL is "no seed child was ever spawned", which is a different fact from

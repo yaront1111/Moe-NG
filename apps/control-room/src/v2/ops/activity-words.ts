@@ -16,6 +16,8 @@ const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
   "goal.create_with_source": "created a goal from a PRD",
   "integration.accept_output": "accepted the delivered work",
   "internal.integration.verifier_receipt": "recorded the verifier's receipt",
+  "internal.release.dossier": "recorded the release evidence",
+  "internal.release.receipt": "recorded the release",
   "internal.repository.landing_receipt": "landed the accepted work as a commit",
   "internal.repository.publish_receipt": "recorded the publish",
   "plan.propose": "proposed a plan",
@@ -32,6 +34,7 @@ const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
   "project.register": "registered the project",
   "provider.probe": "probed the provider",
   "qualification.replan": "requested a re-plan",
+  "release.decide": "decided the release",
   "repository.publish": "asked to publish the landed commits",
   "review.submit": "submitted a review round",
   "session.close": "closed a seat",
@@ -71,6 +74,13 @@ export function decisionWords(commandKind: string, verdict: string | null): stri
     if (verdict === "APPROVE") return "approved the running product";
     if (verdict === "REJECT") return "sent the running product back with findings";
     return `decided the preview: ${verdict}`;
+  }
+  if (commandKind === "release.decide") {
+    // The only two the command admits (`release-decide-command.ts:46` refuses anything else),
+    // and a third would still print the verdict rather than swallow it.
+    if (verdict === "APPROVE") return "released the work to users";
+    if (verdict === "REJECT") return "held the release back";
+    return `decided the release: ${verdict}`;
   }
   if (commandKind === "approval.decide" || commandKind === "approval.decide_intent") {
     return verdict === "APPROVE" ? "approved the plan" : verdict === "REJECT" ? "rejected the plan" : kindWords(commandKind);

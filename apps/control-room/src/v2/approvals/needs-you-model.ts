@@ -2,16 +2,19 @@ import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import type { GoalCatalogFrame, LiveGoalCatalogEntry } from "../../live/live-goal-catalog.js";
 import type { PreviewReadOutcome } from "../../live/live-preview.js";
+import type { ReleaseOutcome } from "../../live/live-release.js";
 import type { RunsOutcome } from "../../live/live-runs.js";
-import { ROUTE_WORDS } from "../board/board-columns.js";
 import { MIDDOT } from "../glyphs.js";
 import { currentRunOf, planSentBack } from "../goals/plan-run-resolution.js";
+import { escalationItems } from "./needs-you-escalation.js";
 import { previewOfferFor } from "./needs-you-preview.js";
 import type { PreviewFacts } from "./needs-you-preview.js";
+import { releaseOfferFor } from "./needs-you-release.js";
+import type { ReleaseFacts } from "./needs-you-release.js";
 
 /**
  * NEEDS YOU: every decision across the project that is waiting on a human, derived only
- * from things the daemon already states. Six kinds of item:
+ * from things the daemon already states. Seven kinds of item:
  *
  *  - PLAN_APPROVAL: the affordance surface OFFERS `approval.decide_intent` for a goal's
  *    planning run. The offer is the daemon's own statement that the run is in review and
@@ -29,6 +32,10 @@ import type { PreviewFacts } from "./needs-you-preview.js";
  *    STARTED. That is Gate 2 - the operator looks at their product actually running and
  *    says whether it is good enough. `needs-you-preview.ts` states the four facts that
  *    must all hold; a goal with no receipt yields NO item rather than a dead control.
+ *  - RELEASE: the surface OFFERS `release.decide` for a goal whose release read has no
+ *    RELEASED receipt. That is Gate 3 - the operator says whether the evidence is strong
+ *    enough to expose the work to users. `needs-you-release.ts` states which facts must
+ *    hold, and why the RECEIPT rather than the offer is what clears the item.
  *  - GATE_1: the coverage read says a Product Contract citing the goal's PRD is still
  *    PENDING at Gate 1 (the same fact the goal card's "Needs you" flag rests on).
  *  - READY_TO_CLOSE: every criterion the contract states is VERIFIED, every citing contract
@@ -40,7 +47,8 @@ import type { PreviewFacts } from "./needs-you-preview.js";
  */
 
 export const NEEDS_YOU_KINDS = [
-  "PLAN_APPROVAL", "PLAN_REJECTED", "PREVIEW", "ESCALATION", "GATE_1", "READY_TO_CLOSE",
+  "PLAN_APPROVAL", "PLAN_REJECTED", "PREVIEW", "RELEASE", "ESCALATION", "GATE_1",
+  "READY_TO_CLOSE",
 ] as const;
 export type NeedsYouKind = (typeof NEEDS_YOU_KINDS)[number];
 
@@ -70,6 +78,8 @@ export interface NeedsYouItem {
   readonly planningRunRef: string;
   /** Present only for a PREVIEW item: the running url, its captures and the offer. */
   readonly preview?: PreviewFacts | undefined;
+  /** Present only for a RELEASE item: the evidence counts and the offer. */
+  readonly release?: ReleaseFacts | undefined;
   readonly title: string;
 }
 
@@ -85,13 +95,15 @@ export interface NeedsYouInput {
   readonly coverage: ReadonlyMap<string, DocumentCoverageOutcome>;
   /** One preview read per goal, keyed by goalId; absent means the read has not answered. */
   readonly previews?: ReadonlyMap<string, PreviewReadOutcome> | undefined;
+  /** One release evidence read per goal, keyed by goalId; absent means it has not answered. */
+  readonly releases?: ReadonlyMap<string, ReleaseOutcome> | undefined;
   readonly runs?: RunsOutcome | null | undefined;
   readonly surface: SurfaceFrame | null;
 }
 
 const KIND_ORDER: Readonly<Record<NeedsYouKind, number>> = Object.freeze({
-  PLAN_APPROVAL: 0, PLAN_REJECTED: 1, PREVIEW: 2, ESCALATION: 3, GATE_1: 4,
-  READY_TO_CLOSE: 5,
+  PLAN_APPROVAL: 0, PLAN_REJECTED: 1, PREVIEW: 2, RELEASE: 3, ESCALATION: 4, GATE_1: 5,
+  READY_TO_CLOSE: 6,
 });
 const OPEN_LIFECYCLES: readonly string[] = Object.freeze(["EXECUTION_ENABLED", "CLOSING"]);
 
@@ -108,6 +120,7 @@ function itemsFor(
   coverage: DocumentCoverageOutcome | undefined,
   surface: SurfaceFrame | null,
   previews: NeedsYouInput["previews"],
+  releases: NeedsYouInput["releases"],
   runs: RunsOutcome | null | undefined,
 ): NeedsYouItem[] {
   const title = entry.brief?.title ?? entry.goalId;
@@ -148,6 +161,13 @@ function itemsFor(
       headline: preview.headline, kind: "PREVIEW", preview: preview.facts,
     }));
   }
+  const release = releaseOfferFor(entry.goalId, releases?.get(entry.goalId), surface);
+  if (release !== null) {
+    items.push(Object.freeze({
+      ...base, actionLabel: release.actionLabel, detail: release.detail,
+      headline: release.headline, kind: "RELEASE", release: release.facts,
+    }));
+  }
   if (coverage?.status === "COVERAGE") {
     const pending = coverage.contracts.filter((contract) => contract.gate1 === "PENDING");
     for (const contract of pending) {
@@ -183,40 +203,8 @@ function itemsFor(
   return items;
 }
 
-/** One item per escalation.decide the daemon offers, joined to its goal through the runs read. */
-function escalationItems(
-  surface: SurfaceFrame | null, runs: RunsOutcome | null | undefined, catalog: GoalCatalogFrame,
-): NeedsYouItem[] {
-  if (surface === null || surface.outcome !== "SURFACE") return [];
-  const items: NeedsYouItem[] = [];
-  for (const offer of surface.offers) {
-    if (offer["commandKind"] !== "escalation.decide" || typeof offer["targetAggregateId"] !== "string") continue;
-    const nodeRef = offer["targetAggregateId"];
-    const goal = runs?.status === "RUNS"
-      ? runs.goals.find((row) => row.nodes.some((node) => node.nodeRef === nodeRef)) : undefined;
-    const node = goal?.nodes.find((row) => row.nodeRef === nodeRef);
-    const nodeKey = node?.nodeKey ?? nodeRef;
-    const entry = goal === undefined ? undefined : catalog.goals.find((row) => row.goalId === goal.goalId);
-    const rounds = node?.review.unsuccessfulRounds ?? null;
-    const route = node?.review.latestRoute ?? null;
-    items.push(Object.freeze({
-      actionLabel: "Open the goal",
-      detail: `${node?.objective === undefined || node.objective === "" ? "This work" : node.objective} failed review ${rounds === null ? "three or more" : String(rounds)} times`
-        + (route === null ? "" : ` (last: ${ROUTE_WORDS[route] ?? route})`)
-        + ". Allow more attempts, or replan the work into a successor goal that carries these findings.",
-      escalation: Object.freeze({ affordance: offer, latestRoute: route, nodeKey, unsuccessfulRounds: rounds }),
-      goalId: goal?.goalId ?? "",
-      headline: "A node's review is exhausted",
-      kind: "ESCALATION",
-      planningRunRef: entry?.planningRunRef ?? goal?.run?.runId ?? "",
-      title: goal?.title ?? entry?.brief?.title ?? `node ${nodeKey}`,
-    }));
-  }
-  return items;
-}
-
 export function deriveNeedsYou(input: NeedsYouInput): NeedsYouData {
-  const { catalog, coverage, previews, runs, surface } = input;
+  const { catalog, coverage, previews, releases, runs, surface } = input;
   if (catalog === null) {
     return Object.freeze({
       countLabel: "Waiting for goals", items: Object.freeze([]),
@@ -231,7 +219,7 @@ export function deriveNeedsYou(input: NeedsYouInput): NeedsYouData {
   }
   const items = [
     ...catalog.goals.flatMap((entry) =>
-      itemsFor(entry, coverage.get(entry.goalId), surface, previews, runs)),
+      itemsFor(entry, coverage.get(entry.goalId), surface, previews, releases, runs)),
     ...escalationItems(surface, runs, catalog),
   ].sort((left, right) => KIND_ORDER[left.kind] - KIND_ORDER[right.kind]
       || left.title.localeCompare(right.title) || left.goalId.localeCompare(right.goalId));

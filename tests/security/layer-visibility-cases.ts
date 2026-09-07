@@ -148,13 +148,17 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
 }
 
 /**
- * Stated at the WIDE pattern width (`[A-Z0-9_]+`). The narrow `[A-Z_]+` width measures 62 at
- * this HEAD; the single wide-only name is PRODUCT_CONTRACT_GATE_1_READ_LAYER, hidden twice
- * over — module-private AND digit-bearing. Quoting a private count against an exported count
- * of a DIFFERENT width is the recurring error in this area, so every ratio built on this
- * constant must name the width it measures.
+ * Stated at the WIDE pattern width (`[A-Z0-9_]+`). The narrow `[A-Z_]+` width measures 73 at
+ * this HEAD; the TWO wide-only names are PRODUCT_CONTRACT_GATE_1_READ_LAYER and
+ * LIVE_GATE_1_LAYER, each hidden twice over — module-private AND digit-bearing. Quoting a
+ * private count against an exported count of a DIFFERENT width is the recurring error in this
+ * area, so every ratio built on this constant must name the width it measures.
+ *
+ * These two prose numbers are NOT asserted by any arm, so they go stale in silence while the
+ * lane stays green; both were re-measured against the tree when RELEASE_LAYER was added rather
+ * than carried forward.
  */
-const EXPECTED_PRIVATE_COUNT = 74;
+const EXPECTED_PRIVATE_COUNT = 75;
 
 /**
  * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
@@ -164,7 +168,7 @@ const EXPECTED_PRIVATE_COUNT = 74;
  * to make the population a number that cannot move without an arm going red.
  */
 const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
-  // Browser-only answer stamps: five live read decoders, two offer consumers, and
+  // Browser-only answer stamps: five live read decoders, three offer consumers, and
   // the advanced read-frame adapter. Enumerated individually; no scanner exemption.
   { constant: "LIVE_ACTIVATION_LAYER", file: "apps/control-room/src/live/live-activation.ts" },
   { constant: "LIVE_GRAPH_GET_LAYER", file: "apps/control-room/src/live/live-graph-get.ts" },
@@ -173,6 +177,7 @@ const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
   { constant: "LIVE_REPOSITORY_REMOTE_LAYER", file: "apps/control-room/src/live/live-repository-remote.ts" },
   { constant: "PREVIEW_LAYER", file: "apps/control-room/src/v2/approvals/preview-port.ts" },
   { constant: "DEPLOY_LAYER", file: "apps/control-room/src/v2/goals/deploy-port.ts" },
+  { constant: "RELEASE_LAYER", file: "apps/control-room/src/v2/goals/release-port.ts" },
   { constant: "ADVANCED_FRAMES_LAYER", file: "apps/control-room/src/v2/shell/advanced-frames.ts" },
   { constant: "ACTIVATION_RECEIPTS_LAYER", file: "apps/daemon/src/bootstrap/activation-receipts.ts" },
   { constant: "ADMISSION_GATE_LAYER", file: "apps/daemon/src/activation/admission-gate-resolver.ts" },
