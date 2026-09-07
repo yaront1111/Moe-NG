@@ -102,6 +102,14 @@ export const MISSING_TOKENS: Readonly<Record<string, string>> = Object.freeze({
     "the reviewer calibration slice (moe-reviewer-calibration/1) an operator installs with policy.install",
   "verifier-policy":
     "the host verifier policy slice (moe-verifier-policy/1) an operator installs with policy.install",
+  // affordance-read.ts:418 and its surfaceMissing arm - nothing is bound for the environment,
+  // so a deploy has no host to reach. Phrased as the ABSENCE rather than as the command kind:
+  // the daemon reports the token "deployment.set_target", and an operator told "STILL NEEDS
+  // deployment.set_target" has been handed an internal name to decode. Kept deliberately in
+  // step with the Deployments card's own DEPLOY_TARGET_MISSING words ("No target is bound for
+  // this environment, so there is nowhere to deploy") - the same absence is described in two
+  // places and they must not read as two different problems.
+  "deployment.set_target": "a deploy target bound for an environment, so a deploy has somewhere to go",
 });
 
 export interface KindReading {

@@ -34,8 +34,25 @@ const OFFER = Object.freeze({
   commandKind: "deployment.deploy", expectedVersion: 3,
   inputSchemaVersion: "moe-bootstrap-command/1", targetAggregateId: `deploy:${GOAL}`,
 });
+const PROJECT = "proj-1";
+/**
+ * The daemon serves ONE set_target offer PER ENVIRONMENT, at the aggregate its setter fences
+ * (affordance-deploy-target-offers.ts). Spelled out per environment here, with its own
+ * expectedVersion, because a single project-wide offer is the shape that DOES NOT exist -- an
+ * arm built on one would pass against a fixture the surface never produces.
+ */
+function setTargetOfferFor(environment: string, expectedVersion: number): Record<string, unknown> {
+  return Object.freeze({
+    commandEnvelopeVersion: "moe-runtime-command/1", commandId: `cmd-set-${environment}`,
+    commandKind: "deployment.set_target", expectedVersion,
+    inputSchemaVersion: "moe-bootstrap-command/1",
+    targetAggregateId: `deploy-target:${PROJECT}:${environment}`,
+  });
+}
 const FRAME = {
-  connection: "LIVE", offers: [OFFER], outcome: "SURFACE", steps: [],
+  connection: "LIVE",
+  offers: [OFFER, setTargetOfferFor("preview", 0), setTargetOfferFor("production", 2)],
+  outcome: "SURFACE", steps: [],
 } as unknown as SurfaceFrame;
 const NO_OFFER = {
   connection: "LIVE", offers: [], outcome: "SURFACE", steps: [],
@@ -60,6 +77,17 @@ const PRODUCTION = environment({
   url: "https://app.example.test",
 });
 
+/**
+ * A `bindTarget` that is NEVER expected on a deploy arm, and THROWS rather than answering.
+ *
+ * A benign stub would be the worse choice: `DeployPort` now carries two decisions, and a card
+ * that dispatched a BIND from a deploy click would keep every deploy arm green while doing
+ * something the operator never asked for. Throwing makes that arm red at the call.
+ */
+const NEVER_BINDS: Pick<DeployPort, "bindTarget"> = {
+  bindTarget: (): never => { throw new Error("bindTarget dispatched from a deploy-only arm"); },
+};
+
 /** A port that RECORDS its calls and never resolves until the arm says so, so an arm can assert
  *  that a click dispatched NOTHING without racing an in-flight promise. */
 function recordingPort(answer: Awaited<ReturnType<DeployPort["submit"]>> = { commandId: "c", ok: true }): {
@@ -68,6 +96,7 @@ function recordingPort(answer: Awaited<ReturnType<DeployPort["submit"]>> = { com
 } {
   const calls: { readonly environment: string; readonly sha: string }[] = [];
   const port: DeployPort = {
+    ...NEVER_BINDS,
     submit: async (_affordance, environmentName, sha) => {
       calls.push({ environment: environmentName, sha });
       return answer;
@@ -117,6 +146,7 @@ function renderCard(props: Partial<Parameters<typeof GoalDeployments>[0]> = {}):
       frame={props.frame ?? FRAME}
       goalId={GOAL}
       port={props.port ?? recorder.port}
+      projectId={props.projectId === undefined ? PROJECT : props.projectId}
       releaseDecision={props.releaseDecision ?? null}
       sha={props.sha === undefined ? SHA : props.sha}
     />,
@@ -244,26 +274,58 @@ describe("the four refusals render as operator words (DoD 5)", () => {
       .toContain("DEPLOY_SOMETHING_NEW");
   });
 
-  it("DEPLOY_TARGET_MISSING names the prerequisite, the command that binds it, and that this "
-    + "screen cannot; the others say nothing", () => {
+  it("DEPLOY_TARGET_MISSING now offers A WAY TO SET ONE, and the honest-limit prose is RETIRED",
+    () => {
+      renderCard({ environments: [
+        environment({ code: "DEPLOY_TARGET_MISSING", environment: "preview", outcome: "REFUSED" }),
+        environment({ code: "DEPLOY_HEALTH_TIMEOUT", environment: "production", outcome: "REFUSED" }),
+      ] });
+
+      // (J) THE CONTROL IS THERE, in the exact place the absence is reported.
+      expect(screen.getByTestId("cr.deploy.bind.preview.root")).toBeTruthy();
+      expect(screen.getByTestId("cr.deploy.bind.preview.heading").textContent ?? "")
+        .toContain("preview");
+      // The absence itself still reads as words; the control is the answer to it, not a
+      // replacement for saying what is wrong.
+      expect(screen.getByTestId("cr.deploy.preview.refusal").textContent ?? "")
+        .toContain("No target is bound for this environment");
+
+      // (J, second half) THE RETIREMENT IS PINNED BY TEXT, so the sentence cannot creep back.
+      // Asserting only that the control exists would stay green beside the stale paragraph,
+      // and that paragraph tells the operator the screen CANNOT do what it now does.
+      const card = screen.getByTestId("cr.deploy.root").textContent ?? "";
+      expect(card).not.toContain("cannot bind one yet");
+      expect(card).not.toContain("bound outside the");
+      expect(screen.queryByTestId("cr.deploy.preview.settarget")).toBeNull();
+
+      // (K) IT BELONGS TO THE MISSING-TARGET CASE ONLY. `production` refused for a different
+      // reason and must not grow a binding control.
+      expect(screen.queryByTestId("cr.deploy.bind.production.root")).toBeNull();
+    });
+
+  it("shows NO binding control for a row that did not refuse DEPLOY_TARGET_MISSING", () => {
+    // (K) The whole roster of other refusals, plus the never-deployed row, in one sweep. Each
+    // case is named so a sweep that silently produced zero rows cannot pass: the count is
+    // asserted against the roster it was built from.
+    const others = ["DEPLOY_BUILD_FAILED", "DEPLOY_DOCKER_UNAVAILABLE", "DEPLOY_HEALTH_TIMEOUT"];
+    const rows = [
+      ...others.map((code, index) =>
+        environment({ code, environment: `env${String(index)}`, outcome: "REFUSED" as const })),
+      environment({ environment: "envnever" }),
+    ];
+    expect(rows).toHaveLength(others.length + 1);
+    renderCard({ environments: rows });
+
+    for (const view of rows) {
+      expect(screen.queryByTestId(`cr.deploy.bind.${view.environment}.root`)).toBeNull();
+    }
+    // POSITIVE CONTROL: the same render DOES produce a control when the code is the one that
+    // warrants it, so the loop above cannot be passing because the testid scheme is wrong.
+    cleanup();
     renderCard({ environments: [
       environment({ code: "DEPLOY_TARGET_MISSING", environment: "preview", outcome: "REFUSED" }),
-      environment({ code: "DEPLOY_HEALTH_TIMEOUT", environment: "production", outcome: "REFUSED" }),
     ] });
-
-    const note = screen.getByTestId("cr.deploy.preview.settarget").textContent ?? "";
-    expect(note).toContain("Bind a target");
-    // THE ENVIRONMENT, since one wording serves every row and a target is bound per environment.
-    expect(note).toContain("preview");
-    // THE COMMAND THAT ACTUALLY BINDS ONE. Naming the prerequisite without naming the means is
-    // what QA rejected here; the operator has to be able to carry this somewhere.
-    expect(note).toContain("deployment.set_target");
-    // AND THE HONEST LIMIT. The daemon offers no set_target affordance on any frame, so this
-    // screen cannot bind one. The note must not imply a retry here will start working -- it
-    // must NOT read as "then deploy again", which sends the operator round the same loop.
-    expect(note).toContain("cannot bind one yet");
-    expect(note).not.toContain("then deploy again");
-    expect(screen.queryByTestId("cr.deploy.production.settarget")).toBeNull();
+    expect(screen.getByTestId("cr.deploy.bind.preview.root")).toBeTruthy();
   });
 
   it("DEPLOY_BUILD_FAILED carries the tool's OWN last stderr line", () => {
@@ -349,6 +411,7 @@ describe("the adversarial pass, on this diff only", () => {
   it("NAMES THE ENVIRONMENT in the refusal note, since one note serves both rows", async () => {
     const calls: { readonly environment: string; readonly sha: string }[] = [];
     const port: DeployPort = {
+      ...NEVER_BINDS,
       submit: async (_affordance, environmentName, sha) => {
         calls.push({ environment: environmentName, sha });
         return { code: "DEPLOY_TARGET_MISSING", layer: "DAEMON_DEPLOY_ENGINE", ok: false };
@@ -378,6 +441,7 @@ describe("the adversarial pass, on this diff only", () => {
     const calls: { readonly environment: string; readonly sha: string }[] = [];
     const inFlight: (() => void)[] = [];
     const port: DeployPort = {
+      ...NEVER_BINDS,
       submit: async (_affordance, environmentName, sha) => {
         calls.push({ environment: environmentName, sha });
         await new Promise<void>((resolve) => { inFlight.push(resolve); });
@@ -408,6 +472,7 @@ describe("the adversarial pass, on this diff only", () => {
       const calls: { readonly environment: string; readonly sha: string }[] = [];
       const inFlight: (() => void)[] = [];
       const port: DeployPort = {
+        ...NEVER_BINDS,
         submit: async (_affordance, environmentName, sha) => {
           calls.push({ environment: environmentName, sha });
           await new Promise<void>((resolve) => { inFlight.push(resolve); });

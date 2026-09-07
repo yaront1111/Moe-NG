@@ -94,8 +94,8 @@
       "completedAt": "2026-09-07T07:44:56.682Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-97200064",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -131,16 +131,24 @@
       "author": "worker-b1872f24",
       "content": "EVIDENCE 2/2 - THE DISCLOSED FOREIGN RED, MEASURED TO ROOT CAUSE (worker-b1872f24).\n\nWHAT HAPPENED. 2 of 4 full-parallelism `tests/e2e` runs went red, on a DIFFERENT foreign file each time, never on mine:\n  FAIL tests/e2e/foundation/j4-replan-handoff.e2e.test.ts > J4 rejection, re-plan and safe handoff over real processes > rejects a failing attempt, classifies the delta, and leaves exactly one owner\n    Error: seed failed (1): (node:43660) ExperimentalWarning: Transform Types is an experimental feature and might change at any time\n  FAIL tests/e2e/foundation/j5-plan-reject-replan.e2e.test.ts > J5 plan rejection and re-plan over real processes > puts the operator's rejection reason in the re-staffed compiler seat's mission\n    Error: project.activate demo-seed-project.activate was not ACCEPTED: {\"httpStatus\":422,\"ok\":false,\"outcome\":\"PORT_REFUSED\",\"refusal\":{\"code\":\"ACTIVATION_BACKUP_FAILED\",\"detail\":\"ACTIVATION_BACKUP_FAILED\",\"httpStatus\":422,\"layer\":\"DAEMON_ACTIVATION_RECEIPTS\"},\"stage\":\"DISPATCH\"}\n     > accepted tests/e2e/foundation/multi-node-wire.ts:77:11\n     > preludeThroughGate1 tests/e2e/foundation/j5-plan-reject-harness.ts:207:55\n     > tests/e2e/foundation/j5-plan-reject-replan.e2e.test.ts:90:7\n\nROOT CAUSE, MEASURED IN PRODUCTION SOURCE, NOT GUESSED. apps/daemon/src/bootstrap/activation-receipts-measure.ts:\n  :211  const backupStamp = (clock: Date): string => clock.toISOString().replaceAll(/\\D/gu, \"\");\n  :219  const directory = join(input.projectRoot, BACKUP_DIRECTORY, BACKUP_LEAF);\n  :220  const destination = join(directory, `${backupStamp(clock)}.sqlite`);\n  :227  // Refuses a same-millisecond RETRY and any leftover at this name rather than\n  :228  // overwriting it. This is a check-then-act guard, NOT mutual exclusion:\n  :229  // serialising concurrent activations is the caller's gate.\n  :230  if (ports.fs.exists(destination)) return unmeasuredReceipt(\"backup\", \"backup destination already exists\");\nBACKUP_DIRECTORY is `.moe-next` (:35), BACKUP_LEAF is `backups` (:36). Every e2e daemon is spawned with `cwd: REPOSITORY_ROOT` (j1-loop-harness.ts:225), so EVERY journey in the suite writes its activation backup into the ONE shared `<repo>/.moe-next/backups/` directory under a name that is only a millisecond timestamp - verified on disk, 5 files present, e.g. `20260907073823225.sqlite`. The root vitest config runs `fileParallelism: true` with maxWorkers up to 8 and supplies no such gate. Production names this hazard itself; nothing here is inferred.\n\nCONTROL THAT CONFIRMS THE MECHANISM. `VITEST_MAX_WORKERS=1 pnpm test:e2e` -> EXIT 0, `Test Files 19 passed | 1 skipped (20)` / `Tests 172 passed | 1 skipped (173)`. Serialize the files and the race disappears entirely, my five arms included. `j4-replan-handoff.e2e.test.ts` re-run standalone -> EXIT 0, `Test Files 1 passed (1)`, and it greps clean for `codex`, so my diff is nowhere in its import closure.\n\nATTRIBUTION PER GLOBAL RAIL 3, done the way the rail specifies.\n (1) merge-base: my three untracked files physically moved out of the tree -> `pnpm test:e2e` EXIT 0 twice, `Test Files 18 passed | 1 skipped (19)` / `Tests 167 passed | 1 skipped (168)`.\n (2) HEAD: failing paths observed were j4-replan-handoff.e2e.test.ts and j5-plan-reject-replan.e2e.test.ts.\n (2) minus (1), intersected with this row's owned paths {codex-agent.mjs, codex-journey-harness.ts, codex-seat-loop.e2e.test.ts} = EMPTY. My own file is green 4/4 at every parallelism tried, and the final named gate is EXIT 0.\n\nTHE HONEST CAVEAT, STATED RATHER THAN BURIED. Baseline sampled 2/2 green; with my diff, 2/4 green at default parallelism. My journey adds 4 `project.activate` calls (one per world) into that shared millisecond-keyed directory, roughly +21% activations, so this row RAISES THE ODDS of a pre-existing race it does not own and did not introduce. I did not distort the tests to hide it: collapsing my four worlds into fewer would cost exactly the arm separation DoD-4 depends on (arm 3 stands alone precisely so an upstream `beforeAll` failure cannot SKIP it into a false green).\n\nFOLLOW-UP FOR THE EPIC-FINAL HARDENING ROW, filed here as a comment rather than as a new row, per the rail against evidence rows. The real fix is not in this row's scope and is one of: give `measureBackup` a per-project or per-store discriminator in the backup filename instead of a bare millisecond; or have the e2e harness point `projectRoot` at each journey's own scratch so the shared `.moe-next/backups/` directory stops being shared; or serialize the e2e lane. The first is the product fix - the current name is globally unique only if no two projects on a host ever activate in the same millisecond, which is a real-deployment hazard, not merely a test one.\n\nPEER DIRT NOTED AND UNTOUCHED: apps/daemon/src/environment/environment-composed-canary.test.ts and apps/daemon/src/preview/preview-goal-landing.test.ts are `??` and foreign. Never reverted, stashed, added or committed.",
       "timestamp": "2026-09-07T07:45:57.146Z"
+    },
+    {
+      "id": "comment-1d5f985cbe5a4fc09afa657793d9f512",
+      "author": "qa-97200064",
+      "content": "QA VERIFICATION EVIDENCE (qa-97200064). Nothing below is taken from the completion summary.\n\nTHE NAMED COMMAND, RE-RUN BY ME under a `full-suite-gate` lease I acquired at 07:48:07Z after reading the gate free in the same turn (released after):\n```\n$ tsc -p tests/e2e/foundation/tsconfig.json && vitest run tests/e2e     (HEAD 4ec94b24, porcelain 33)\nTest Files  19 passed | 1 skipped (20)\n     Tests  172 passed | 1 skipped (173)                                EXIT 0\n```\nThe `$ tsc …` echo is present, so the type leg really ran and a zero-spec pass is excluded by the count.\n\n**THE FIVE ARMS EXECUTE, PROVEN BY NAME rather than inferred from a total.** The default reporter prints nothing for passing files, so a 19-file green says nothing about whether your file ran. Targeted verbose run:\n```\n✓ … reaches planning.submit_decomposition, verifier ACCEPTED and lander COMMITTED        54ms\n✓ … releases its own work item on the first try, with an EFFECTS_COMMITTED decision      25ms\n✓ … proves the CODEX branch ran, from the spawn surface, not the shim's filename       3696ms\n✓ … fails a double that exits 0 having submitted nothing                               3631ms\n✓ … runs the CLAUDE branch under agent-codex.cmd, so a rename cannot silently revert    3510ms\nTest Files  1 passed (1)  /  Tests  5 passed (5)                                        EXIT 0\n```\n\nDoD BY INSPECTION OF THE LANDED BYTES:\n- **DoD-3 asserts the decision, not the absence of a throw**: `:128-129` and `:160-161` pin BOTH `effectDisposition` and `resultCode` to `EFFECTS_COMMITTED`. \"It returned\" and \"it did not throw\" are exactly the non-assertions the clause called out, and neither appears.\n- **DoD-4 is proven from the SPAWN SURFACE, which is the whole point of that clause**: `:184-192` asserts `record.argv` contains `exec`, `--ignore-user-config`, `--skip-git-repo-check`, `--ephemeral`, `--sandbox`, the `mcp_servers.moe-next.bearer_token_env_var=MOE_AGENT_MCP_BEARER` config, and that `argv.at(-1)` is `-`. Not one assertion on the shim's filename. A rename cannot silently revert this journey to testing the claude seat, which is precisely the failure the clause exists to prevent.\n- **DoD-2's negative arm is real and it is the one that matters**: \"fails a double that exits 0 having submitted nothing\" at 3631ms — a real spawn, not a stub — and the file header states every verdict is read from the durable store after the processes are dead.\n- The fifth arm is yours, not the DoD's, and it is the best one: running the CLAUDE branch under `agent-codex.cmd` pins the regex boundary from the other side. Your reasoning is checkable — `agent-spawner.ts`'s `/(?:^|[\\\\/])codex(?:\\.[a-z]+)?$/iu` cannot match `agent-codex.cmd` because the character before \"codex\" is a hyphen — and rather than assert that in prose you made the claude branch actually run under that name. That is why `writeAgentShim` could not be reused and why a new writer was correct.\n\n`pnpm typecheck` EXIT 0, 19 projects, `apps/daemon typecheck: Done` — a leg I proved non-vacuous earlier this session with planted `error TS2322` controls in NEW files under two different packages.\n\n**LANDING: all three files are IN HEAD and byte-identical to what I tested.** They were untracked when I claimed the row — I was preparing to hand-land them, since three declared files that are the row's entire deliverable sitting untracked is the shape that has lost bytes twice today. They landed during my review instead. `git diff HEAD --stat -- tests/e2e/foundation/` is EMPTY, so the bytes I ran are the bytes in HEAD.\n\n**THE V2 BRANCH DECISION IS RECORDED IN THE RIGHT PLACE.** `daemon-v2-command-registry.ts:211` withholds `planning.submit_decomposition`, but the v2 plane is entered only through the durable cutover marker and nothing in `tests/e2e/foundation` activates it, so a fresh store serves V1 and the withheld set never applies. You put that in the test file's own header with the instruction to re-aim at the exact roster refusal — **never relax** — if a future world here activates the marker. A reader of the test learns why the arm asserts COMMITTED without having to find this row.\n\nNOT RUN BY ME, disclosed: `pnpm --filter @moe/daemon test`. This row adds three NEW files under `tests/e2e/foundation/` and modifies nothing; the daemon package's vitest does not collect them, so that leg is a baseline check rather than a change check here. I ran the two legs that reach these bytes.",
+      "timestamp": "2026-09-07T07:50:18.493Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T17:25:56.708Z",
-  "updatedAt": "2026-09-07T07:47:31.012Z",
+  "updatedAt": "2026-09-07T07:50:52.285Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:10:17.590Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-09-07T07:50:52.285Z",
+    "wallClockMs": 135634695
   },
   "stepsCompleted": [
     "step-1",
@@ -167,7 +175,8 @@
   "planApprovedAt": "2026-09-05T18:14:13.587Z",
   "contextFetchedBy": [
     "worker-ca28be90",
-    "worker-b1872f24"
+    "worker-b1872f24",
+    "qa-97200064"
   ],
   "workStartedAt": "2026-09-07T03:31:25.955Z",
   "blockedReason": null,
@@ -201,7 +210,42 @@
   "filesModified": [
     "tests/e2e/foundation/codex-agent.mjs",
     "tests/e2e/foundation/codex-journey-harness.ts",
-    "tests/e2e/foundation/codex-seat-loop.e2e.test.ts"
+    "tests/e2e/foundation/codex-seat-loop.e2e.test.ts",
+    ".moe/tasks/task-8a6d6660c31c4e119f962d13e6f1505d.json",
+    ".moe/tasks/task-8e793ae3c63f41189bcc05f6d7c15605.json",
+    ".moe/tasks/task-ae309e473da84ef5ba43c11fdae96188.json"
   ],
-  "completionSummary": "THREE NEW FILES, nothing else touched: tests/e2e/foundation/codex-agent.mjs (461), codex-journey-harness.ts (270), codex-seat-loop.e2e.test.ts (240). Five arms, all green, every verdict read from the DURABLE STORE after the processes are dead.\n\nSHIM BASENAME AND WHY. Exactly `codex.cmd` / `codex.sh`, in its own directory under the scratch root. agent-spawner.ts selects the codex branch with `/(?:^|[\\\\/])codex(?:\\.[a-z]+)?$/iu`; `agent-codex.cmd` does NOT match (the char before \"codex\" is a hyphen, neither a path separator nor start-of-string), so the existing writeAgentShim - which emits `agent-${arm}.cmd` - CANNOT produce a codex-selecting shim. Hence a new writer; writeAgentShim was not touched. A bare `codex.cmd` has no arm suffix to disambiguate it, so each arm gets its own scratch root and seat directory.\n\nTHE V2 QUESTION, SETTLED BY MEASUREMENT (step 1c). daemon-v2-command-registry.ts:211 withholds `planning.submit_decomposition` from the v2 roster, but the v2 plane is entered only through the durable cutover marker and NOTHING in tests/e2e/foundation activates it (grep: three comment mentions, no dispatch). A fresh e2e store therefore serves the V1 registry and the withheld set never applies. BRANCH TAKEN: the happy arm asserts the submit COMMITTED. Named in the test file's own header, not only here, with the instruction to re-aim at the exact roster refusal - never relax - if a future world here activates the marker.\n\nTHE CREDENTIAL INVERSION, which is why this could not be an arm on fake-agent.mjs. A claude seat gets origin AND bearer in a JSON file at `--mcp-config`; a codex seat gets NEITHER. This double reads its bearer from `process.env.MOE_AGENT_MCP_BEARER` (injected after agentEnvironment()'s scrub) and parses its origin off the argv pair `-c mcp_servers.moe-next.url=<origin>` - the exact inverse of fake-agent.mjs, whose header states it treats argv flags as NON-evidence. Folding them together makes both stop proving what they were written for. Node b"
+  "completionSummary": "THREE NEW FILES, nothing else touched: tests/e2e/foundation/codex-agent.mjs (461), codex-journey-harness.ts (270), codex-seat-loop.e2e.test.ts (240). Five arms, all green, every verdict read from the DURABLE STORE after the processes are dead.\n\nSHIM BASENAME AND WHY. Exactly `codex.cmd` / `codex.sh`, in its own directory under the scratch root. agent-spawner.ts selects the codex branch with `/(?:^|[\\\\/])codex(?:\\.[a-z]+)?$/iu`; `agent-codex.cmd` does NOT match (the char before \"codex\" is a hyphen, neither a path separator nor start-of-string), so the existing writeAgentShim - which emits `agent-${arm}.cmd` - CANNOT produce a codex-selecting shim. Hence a new writer; writeAgentShim was not touched. A bare `codex.cmd` has no arm suffix to disambiguate it, so each arm gets its own scratch root and seat directory.\n\nTHE V2 QUESTION, SETTLED BY MEASUREMENT (step 1c). daemon-v2-command-registry.ts:211 withholds `planning.submit_decomposition` from the v2 roster, but the v2 plane is entered only through the durable cutover marker and NOTHING in tests/e2e/foundation activates it (grep: three comment mentions, no dispatch). A fresh e2e store therefore serves the V1 registry and the withheld set never applies. BRANCH TAKEN: the happy arm asserts the submit COMMITTED. Named in the test file's own header, not only here, with the instruction to re-aim at the exact roster refusal - never relax - if a future world here activates the marker.\n\nTHE CREDENTIAL INVERSION, which is why this could not be an arm on fake-agent.mjs. A claude seat gets origin AND bearer in a JSON file at `--mcp-config`; a codex seat gets NEITHER. This double reads its bearer from `process.env.MOE_AGENT_MCP_BEARER` (injected after agentEnvironment()'s scrub) and parses its origin off the argv pair `-c mcp_servers.moe-next.url=<origin>` - the exact inverse of fake-agent.mjs, whose header states it treats argv flags as NON-evidence. Folding them together makes both stop proving what they were written for. Node b",
+  "commits": [
+    {
+      "sha": "4ec94b249bb9a82f86911f23fd7f4472c75b2028",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-b1872f24@2026-09-07T07:20:11Z",
+      "paths": [
+        ".moe/tasks/task-8a6d6660c31c4e119f962d13e6f1505d.json",
+        ".moe/tasks/task-8e793ae3c63f41189bcc05f6d7c15605.json",
+        ".moe/tasks/task-ae309e473da84ef5ba43c11fdae96188.json",
+        "tests/e2e/foundation/codex-agent.mjs",
+        "tests/e2e/foundation/codex-journey-harness.ts",
+        "tests/e2e/foundation/codex-seat-loop.e2e.test.ts"
+      ],
+      "recordedBy": "worker-b1872f24",
+      "recordedAt": "2026-09-07T07:47:35.990Z",
+      "treeId": "980828b1163213ca86662eebb3eeec2a844ccc22",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-b1872f24@2026-09-07T07:20:11Z",
+    "at": "2026-09-07T07:47:35.990Z"
+  },
+  "completedAt": "2026-09-07T07:50:52.285Z",
+  "reviewCompletedAt": "2026-09-07T07:50:52.285Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-1d5f985c.\n\nNAMED COMMAND RE-RUN BY ME under a full-suite-gate lease acquired 07:48:07Z after reading the gate free in the same turn, released after: `pnpm test:e2e` EXIT 0, `Test Files 19 passed | 1 skipped (20)` / `Tests 172 passed | 1 skipped (173)` at HEAD 4ec94b24, porcelain 33. The `$ tsc -p tests/e2e/foundation/tsconfig.json` echo is present.\n\nTHE FIVE ARMS EXECUTE, PROVEN BY NAME not inferred from a total — the default reporter prints nothing for passing files, so a 19-file green says nothing about whether their file ran. Targeted verbose run: all five ✓ by name, `Test Files 1 passed (1)` / `Tests 5 passed (5)` EXIT 0.\n\nDoD-3 asserts the decision, not the absence of a throw: :128-129 and :160-161 pin BOTH effectDisposition and resultCode to EFFECTS_COMMITTED — \"it returned\" and \"it did not throw\" are the non-assertions the clause named, and neither appears.\n\nDoD-4 is proven from the SPAWN SURFACE: :184-192 asserts record.argv contains exec, --ignore-user-config, --skip-git-repo-check, --ephemeral, --sandbox, the bearer_token_env_var config, and argv.at(-1) === \"-\". Zero assertions on the shim filename, so a rename cannot silently revert the journey to the claude seat.\n\nDoD-2's negative arm is real (3631ms, a real spawn): \"fails a double that exits 0 having submitted nothing\".\n\nTheir fifth arm is beyond the DoD and is the best one: running the CLAUDE branch under `agent-codex.cmd` pins the regex boundary from the other side instead of asserting in prose.\n\n`pnpm typecheck` EXIT 0 / 19 projects (non-vacuous via planted TS2322 controls earlier).\n\nLANDING: all three files were UNTRACKED when I claimed — the shape that lost bytes twice today, and I was preparing to hand-land them. They landed during review; `git diff HEAD --stat -- tests/e2e/foundation/` is EMPTY, so tested bytes == landed bytes.\n\nNOT RUN, disclosed: `pnpm --filter @moe/daemon test` — three NEW files the daemon vitest does not collect."
 }

@@ -106,6 +106,7 @@ describe("work-labels mirrors the daemon's emitted command kinds", () => {
     // is a louder signal than either alone.
     expect(new Set(Object.keys(MISSING_TOKENS))).toEqual(new Set([
       "escalation", "replan", "verification", "verifier-calibration", "verifier-policy",
+      "deployment.set_target",
     ]));
   });
 });
@@ -209,9 +210,25 @@ const AFFORDANCE_READ = readFileSync(
   resolve(process.cwd(), "..", "daemon", "src", "http", "affordance-read.ts"), "utf8",
 );
 
-/** The body of every `missing: [ ... ]` step field the surface writes. */
+/**
+ * The VALUE EXPRESSION of every `missing:` step field, then every array body inside it.
+ *
+ * NOT `/missing: \[...\]/`, which is what this scanner used to be. That regex requires the
+ * `[` to sit IMMEDIATELY after `missing: `, so it read
+ * `missing: deployBound ? [] : ["deployment.set_target"]` (affordance-read.ts:418) as
+ * containing no tokens at all -- and that blindness is exactly how `deployment.set_target`
+ * reached an operator as a raw command kind, the same class of hole this suite's header
+ * describes for `replan`. A scanner that cannot see an emission site cannot guard it.
+ *
+ * The value expression is cut at the next SIBLING KEY rather than at end of line, because
+ * :418 continues `, status: deployBound ? "READY" : "BLOCKED"` on the same line and a
+ * line-greedy capture would harvest "READY" and "BLOCKED" as prerequisite tokens.
+ */
+const MISSING_FIELD_VALUE = /missing: ([^\n]*?)(?=, (?:status|version|kind|aggregateId)\b|\n)/gu;
+
 function missingFieldArrays(source: string): readonly string[] {
-  return [...source.matchAll(/missing: \[([^\]]*)\]/gu)].map((match) => match[1] ?? "");
+  return [...source.matchAll(MISSING_FIELD_VALUE)]
+    .flatMap((match) => [...(match[1] ?? "").matchAll(/\[([^\]]*)\]/gu)].map((body) => body[1] ?? ""));
 }
 
 /** Quoted literals inside a `missing: [ ... ]` step field. */
@@ -253,6 +270,11 @@ describe("every prerequisite token the daemon emits has a reading, and every rea
     // set comparison below trivially true.
     expect(AFFORDANCE_READ.length).toBeGreaterThan(1000);
     expect(missingFieldTokens(AFFORDANCE_READ).length).toBeGreaterThan(0);
+    // THE CONDITIONAL SHAPE IS REACHED, not just the literal one. Named by value, because
+    // the broadened scanner is only worth anything if it sees the site the old one missed:
+    // strip this token from the scan and the set-equality arm below goes red rather than
+    // quietly agreeing with a map that lost an entry.
+    expect(missingFieldTokens(AFFORDANCE_READ)).toContain("deployment.set_target");
     expect(verificationTokens(AFFORDANCE_READ).length).toBeGreaterThan(0);
     expect(tokenPrefixes(AFFORDANCE_READ).length).toBeGreaterThan(0);
   });
@@ -264,6 +286,7 @@ describe("every prerequisite token the daemon emits has a reading, and every rea
     // Independently spelled, so a scanner that drifted cannot quietly agree with itself.
     expect(emitted).toEqual(new Set([
       "escalation", "replan", "verification", "verifier-calibration", "verifier-policy",
+      "deployment.set_target",
     ]));
     // DIRECTION 1 — every emitted token has a reading that is not the raw token.
     for (const token of emitted) {

@@ -7,6 +7,7 @@ import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
 import { writeFailedSaid } from "../outcome-words.js";
 import type { OfferOutcome } from "../approvals/offer-wire.js";
+import { DeployTargetForm } from "./deploy-target-form.js";
 import type { DeployPort } from "./deploy-port.js";
 
 /**
@@ -58,6 +59,8 @@ export interface GoalDeploymentsProps {
   readonly frame: SurfaceFrame | null;
   readonly goalId: string;
   readonly port: DeployPort | null;
+  /** Keys the binding; null renders no binding control rather than an id against "null". */
+  readonly projectId?: string | null | undefined;
   /** The release decision on the goal NOW, as the daemon stated it; null when it carries none. */
   readonly releaseDecision?: string | null | undefined;
   /** The landed sha a deploy would build. Absent means nothing is landed to deploy. */
@@ -130,7 +133,7 @@ function environmentTestId(environment: string, part: string): string {
 }
 
 export function GoalDeployments({
-  environments, frame, goalId, port, releaseDecision, sha,
+  environments, frame, goalId, port, projectId, releaseDecision, sha,
 }: GoalDeploymentsProps): JSX.Element | null {
   const [armed, setArmed] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
@@ -185,13 +188,10 @@ export function GoalDeployments({
                 </p>
               )}
               {view.code !== "DEPLOY_TARGET_MISSING" ? null : (
-                // NAMES THE PREREQUISITE, THE COMMAND THAT BINDS IT, AND THE HONEST LIMIT: no
-                // set_target affordance is offered, so a control here would have none to spend.
-                <p className="cr2-slot-kicker" data-testid={environmentTestId(view.environment, "settarget")}>
-                  {`Bind a target for ${view.environment} first, with deployment.set_target.`
-                    + " This screen cannot bind one yet, so it has to be bound outside the"
-                    + " browser before a deploy here can go through."}
-                </p>
+                // THE WAY TO SET ONE, in the exact place the absence is reported. It renders
+                // only if the daemon served THIS environment a set_target offer to spend.
+                <DeployTargetForm
+                  environment={view.environment} frame={frame} port={port} projectId={projectId} />
               )}
               {!isArmed || view.environment !== PRODUCTION ? null : (
                 <p className="cr2-approve-mono" data-testid={environmentTestId(view.environment, "release")}>

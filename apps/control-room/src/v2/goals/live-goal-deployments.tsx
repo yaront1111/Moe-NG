@@ -17,14 +17,25 @@ export function LiveGoalDeployments({ setup, goalRef, frame }: {
   const { outcome, refresh } = useEffectRead(reader, FAILURE);
   const port = useMemo(() => {
     const wire = createDeployPort(setup);
-    return { submit: async (...args: Parameters<typeof wire.submit>) => {
-      const result = await wire.submit(...args); refresh(); return result;
-    } };
+    // BOTH decisions re-read after they answer, for the same reason: a bind that landed and a
+    // deploy that landed each change what this card is showing, and an operator who cannot see
+    // their own act land re-does it.
+    return {
+      bindTarget: async (...args: Parameters<typeof wire.bindTarget>) => {
+        const result = await wire.bindTarget(...args); refresh(); return result;
+      },
+      submit: async (...args: Parameters<typeof wire.submit>) => {
+        const result = await wire.submit(...args); refresh(); return result;
+      },
+    };
   }, [setup, refresh]);
   if (deployOffer(frame, goalRef) === null) return null;
   if (outcome === null) return <p className="cr2-needs-note">Reading deployment targets and receipts...</p>;
   if (outcome.status !== "DEPLOYMENTS") return <OutcomeNote code={outcome.code} layer={outcome.layer}
     said="Deployment targets and receipts could not be read right now." testId="cr.deploy.read-refusal" />;
+  // `setup.projectId` is what lets the card CONSTRUCT `deploy-target:<projectId>:<environment>`
+  // and match the offer the daemon served for that row. It is `string | null`; with no project
+  // the card renders no binding control rather than constructing an id against "null".
   return <GoalDeployments key={`${goalRef}:${outcome.sha ?? ""}`} frame={frame} goalId={goalRef} environments={outcome.environments}
-    port={port} releaseDecision={outcome.releaseDecision} sha={outcome.sha} />;
+    port={port} projectId={setup.projectId} releaseDecision={outcome.releaseDecision} sha={outcome.sha} />;
 }
