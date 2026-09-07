@@ -8,6 +8,8 @@ import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
 import type { LiveSetup } from "../../live/live-config.js";
 import { readPreview } from "../../live/live-preview.js";
 import type { PreviewReadOutcome } from "../../live/live-preview.js";
+import { readDeployments } from "../../live/live-deployments.js";
+import type { DeploymentsOutcome } from "../../live/live-deployments.js";
 import { readRelease } from "../../live/live-release.js";
 import type { ReleaseOutcome } from "../../live/live-release.js";
 import { readRuns } from "../../live/live-runs.js";
@@ -58,6 +60,8 @@ export interface LiveNeedsYouProps {
   readonly readPreview?: ((goalId: string) => Promise<PreviewReadOutcome>) | undefined;
   /** Injectable for tests; the default spends the attached session's own wire. */
   readonly previewPort?: PreviewPort | undefined;
+  /** Injectable for tests; the default reads POST /deployments/read with the session headers. */
+  readonly readDeployments?: ((goalId: string) => Promise<DeploymentsOutcome>) | undefined;
   /** Injectable for tests; the default reads POST /release/read with the session headers. */
   readonly readRelease?: ((goalId: string) => Promise<ReleaseOutcome>) | undefined;
   /** Injectable for tests; the default reads POST /runs/read with the session's headers. */
@@ -67,7 +71,8 @@ export interface LiveNeedsYouProps {
 
 export function LiveNeedsYou({
   closePort, escalationPort, onConnection, onCount, onOpenBoard, previewPort, readCoverage,
-  readPreview: readPreviewProp, readRelease: readReleaseProp, readRuns: readRunsProp, setup,
+  readDeployments: readDeploymentsProp, readPreview: readPreviewProp,
+  readRelease: readReleaseProp, readRuns: readRunsProp, setup,
   successorPort,
 }: LiveNeedsYouProps): JSX.Element {
   const [surface, setSurface] = useState<SurfaceFrame | null>(null);
@@ -82,6 +87,8 @@ export function LiveNeedsYou({
     ?? ((goalId: string): Promise<PreviewReadOutcome> => readPreview(goalId, setup.headers)));
   const [releaseReader] = useState(() => readReleaseProp
     ?? ((goalId: string): Promise<ReleaseOutcome> => readRelease(setup.headers, goalId)));
+  const [deploymentsReader] = useState(() => readDeploymentsProp
+    ?? ((goalId: string): Promise<DeploymentsOutcome> => readDeployments(setup.headers, goalId)));
 
   const feed = useMemo(() => createBoardFeed({
     headers: setup.headers,
@@ -113,9 +120,12 @@ export function LiveNeedsYou({
   const coverage = useGoalCoverage(catalog, readCoverage);
   const previews = useGoalReads(catalog, previewReader);
   const releases = useGoalReads(catalog, releaseReader);
+  // The SAME authority `goal-deployments.tsx` reads. `/runs/read` carries deployment rows too,
+  // but they are project-scoped and its goal list skips any goal with no document binding.
+  const deployments = useGoalReads(catalog, deploymentsReader);
   const data = useMemo(
-    () => deriveNeedsYou({ catalog, coverage, previews, releases, runs, surface }),
-    [catalog, coverage, previews, releases, runs, surface],
+    () => deriveNeedsYou({ catalog, coverage, deployments, previews, releases, runs, surface }),
+    [catalog, coverage, deployments, previews, releases, runs, surface],
   );
   const surfaceRef = useRef<SurfaceFrame | null>(null);
   surfaceRef.current = surface;

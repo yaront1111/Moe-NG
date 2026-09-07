@@ -123,6 +123,30 @@ entry points, environment, and knobs.
   only when the ledger does. Frozen fixtures are available only from the Vite
   development server behind `?fixtures=1`.
 
+- **Deploying an environment** (VISION Stage 2, the deployment item only): a
+  target is bound per (project, environment) with `deployment.set_target`, and
+  `deployment.deploy` builds an image from a landed sha, starts a candidate,
+  probes it and records ONE receipt -- `DEPLOYED` with the image digest and the
+  url, or `REFUSED` with the tool's own last stderr line. The Deployments card
+  renders that receipt per environment and arms before it confirms; Needs you
+  lists a goal the daemon offers a deploy for and stops listing it once a
+  `DEPLOYED` receipt exists; Runs distinguishes a refused deploy from a
+  successful one rather than reading both as "deployed". Both deploy commands
+  are reserved to the CONFIGURED operator principal: a paired browser is a
+  durable human and is still refused `OPERATOR_PRINCIPAL_REQUIRED @
+  DAEMON_AUTHORIZATION`, and the refused dispatch writes no receipt.
+  **Measured 2026-09-07, and the limit stated rather than implied**: the
+  machinery above was driven against a REAL daemon with a faked container
+  runtime -- composition, admission, the operator fence, the durable receipt,
+  `/activity/read` carrying its verdict and the browser rendering the url. **No
+  container has been started.** A live drive on this host recorded
+  `DEPLOY_DOCKER_UNAVAILABLE`: the docker CLI is installed (29.6.2) but its
+  engine was not running, so `docker version` -- the same probe the deploy makes
+  first -- exits non-zero. A live container deploy is pending a docker host;
+  nothing in the code needs to change for it. The other Stage 2 items
+  (infrastructure generation, database migrations, monitoring, backup and
+  rollback) are NOT claimed here.
+
 - **Packages**: `contracts` (dependency-free types, limits, codecs), `core`,
   `scheduler` (zero-authority structural preview), `store` (durable event and
   decision storage, subscriptions, snapshots, recovery), `runner`,

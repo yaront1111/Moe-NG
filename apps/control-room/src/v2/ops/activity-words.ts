@@ -10,11 +10,14 @@ const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
   OPEN_SESSION: "paired a browser seat",
   "approval.decide": "decided the plan",
   "approval.decide_intent": "approved the plan",
+  "deployment.deploy": "asked to deploy an environment",
+  "deployment.set_target": "bound where an environment deploys to",
   "escalation.decide": "decided an exhausted review",
   "goal.close": "closed the goal",
   "goal.create": "created a goal",
   "goal.create_with_source": "created a goal from a PRD",
   "integration.accept_output": "accepted the delivered work",
+  "internal.deployment.deploy_receipt": "recorded the deploy",
   "internal.integration.verifier_receipt": "recorded the verifier's receipt",
   "internal.release.dossier": "recorded the release evidence",
   "internal.release.receipt": "recorded the release",
@@ -44,6 +47,10 @@ const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
   "work.release": "released a work item",
   "work.renew": "renewed a work item",
 });
+
+/** The daemon's own receipt kind (`deploy-receipt-contracts.ts`), matched here rather than
+ *  imported: this package must not take a build dependency on the daemon's sources. */
+const DEPLOY_RECEIPT_KIND = "internal.deployment.deploy_receipt";
 
 export function kindWords(commandKind: string): string {
   return KIND_WORDS[commandKind] ?? commandKind;
@@ -81,6 +88,15 @@ export function decisionWords(commandKind: string, verdict: string | null): stri
     if (verdict === "APPROVE") return "released the work to users";
     if (verdict === "REJECT") return "held the release back";
     return `decided the release: ${verdict}`;
+  }
+  if (commandKind === DEPLOY_RECEIPT_KIND) {
+    // A REFUSED deploy left the environment untouched, and saying so is the point: an operator
+    // scanning this feed after an incident needs to know whether what is serving changed. The
+    // two sentences share no leading word, so they stay distinguishable when the row is
+    // truncated. An unrecognised outcome still prints rather than reading as a success.
+    if (verdict === "DEPLOYED") return "deployed the product to the environment";
+    if (verdict === "REFUSED") return "could not deploy: the environment was left as it was";
+    return `${kindWords(commandKind)}: ${verdict}`;
   }
   if (commandKind === "approval.decide" || commandKind === "approval.decide_intent") {
     return verdict === "APPROVE" ? "approved the plan" : verdict === "REJECT" ? "rejected the plan" : kindWords(commandKind);

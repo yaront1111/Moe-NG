@@ -11,6 +11,7 @@ import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
+import { DEPLOY_RECEIPT_COMMAND_KIND } from "../deployment/deploy-receipt-contracts.js";
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
@@ -51,7 +52,8 @@ export interface ActivityEntry {
   readonly targetAggregateId: string;
   /**
    * WHAT the decision decided, when its committed result carries a word for it: the route a
-   * `review.submit` round took (`routing.route`), the `escalation.decide` answer (`decision`).
+   * `review.submit` round took (`routing.route`), the `escalation.decide` answer (`decision`),
+   * the deploy receipt's `outcome` (DEPLOYED or REFUSED).
    * Null for every other kind and for a conflict; the browser puts the words on.
    */
   readonly verdict: string | null;
@@ -81,8 +83,11 @@ const VERDICT_KINDS: ReadonlySet<string> = new Set([
   // aggregate (preview/preview-daemon-edge.ts), so `decisionWord` reads its word off the same
   // `decision` member the approval kinds carry. Without the kind here the operator's own
   // product verdict would read back as a decision with nothing decided.
+  // The deploy receipt is the ONE kind here whose word is an `outcome` rather than a
+  // `decision`: DEPLOYED and REFUSED are the distinction an operator scans the feed for, and
+  // without this entry both render as the kind's own words and a refused deploy is invisible.
   "approval.decide", "approval.decide_intent", "escalation.decide", "preview.decide",
-  "review.submit",
+  "review.submit", DEPLOY_RECEIPT_COMMAND_KIND,
 ]);
 
 /** A REJECT commits the run record with `decision` on it, so the word is READ. An APPROVE commits
@@ -105,6 +110,13 @@ export function verdictOf(commandKind: string, resultBytes: Uint8Array): string 
   const result: unknown = decoded.value;
   if (typeof result !== "object" || result === null || Array.isArray(result)) return null;
   const record = result as Record<string, unknown>;
+  // READ BEFORE `decisionWord`, and only for this kind. `outcome` is a common member of
+  // committed results across this daemon (a publish receipt carries PUSHED), so offering it to
+  // every kind would start captioning unrelated records with a deploy word.
+  if (commandKind === DEPLOY_RECEIPT_COMMAND_KIND) {
+    const outcome = record["outcome"];
+    return typeof outcome === "string" && outcome.length > 0 ? outcome : null;
+  }
   const word = commandKind === "review.submit"
     ? typeof record["routing"] === "object" && record["routing"] !== null && !Array.isArray(record["routing"])
       ? (record["routing"] as Record<string, unknown>)["route"] : undefined

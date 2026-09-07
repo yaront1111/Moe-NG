@@ -1,4 +1,5 @@
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
+import type { DeploymentsOutcome } from "../../live/live-deployments.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import type { GoalCatalogFrame, LiveGoalCatalogEntry } from "../../live/live-goal-catalog.js";
 import type { PreviewReadOutcome } from "../../live/live-preview.js";
@@ -6,6 +7,8 @@ import type { ReleaseOutcome } from "../../live/live-release.js";
 import type { RunsOutcome } from "../../live/live-runs.js";
 import { MIDDOT } from "../glyphs.js";
 import { currentRunOf, planSentBack } from "../goals/plan-run-resolution.js";
+import { deployOfferFor } from "./needs-you-deploy.js";
+import type { DeployFacts } from "./needs-you-deploy.js";
 import { escalationItems } from "./needs-you-escalation.js";
 import { previewOfferFor } from "./needs-you-preview.js";
 import type { PreviewFacts } from "./needs-you-preview.js";
@@ -47,7 +50,7 @@ import type { ReleaseFacts } from "./needs-you-release.js";
  */
 
 export const NEEDS_YOU_KINDS = [
-  "PLAN_APPROVAL", "PLAN_REJECTED", "PREVIEW", "RELEASE", "ESCALATION", "GATE_1",
+  "PLAN_APPROVAL", "PLAN_REJECTED", "PREVIEW", "RELEASE", "DEPLOY", "ESCALATION", "GATE_1",
   "READY_TO_CLOSE",
 ] as const;
 export type NeedsYouKind = (typeof NEEDS_YOU_KINDS)[number];
@@ -76,6 +79,8 @@ export interface NeedsYouItem {
   readonly headline: string;
   readonly kind: NeedsYouKind;
   readonly planningRunRef: string;
+  /** Present only for a DEPLOY item: the sha, the bound environments and the offer. */
+  readonly deploy?: DeployFacts | undefined;
   /** Present only for a PREVIEW item: the running url, its captures and the offer. */
   readonly preview?: PreviewFacts | undefined;
   /** Present only for a RELEASE item: the evidence counts and the offer. */
@@ -93,6 +98,8 @@ export interface NeedsYouData {
 export interface NeedsYouInput {
   readonly catalog: GoalCatalogFrame | null;
   readonly coverage: ReadonlyMap<string, DocumentCoverageOutcome>;
+  /** One deployment read per goal, keyed by goalId; absent means it has not answered. */
+  readonly deployments?: ReadonlyMap<string, DeploymentsOutcome> | undefined;
   /** One preview read per goal, keyed by goalId; absent means the read has not answered. */
   readonly previews?: ReadonlyMap<string, PreviewReadOutcome> | undefined;
   /** One release evidence read per goal, keyed by goalId; absent means it has not answered. */
@@ -101,9 +108,10 @@ export interface NeedsYouInput {
   readonly surface: SurfaceFrame | null;
 }
 
+// DEPLOY sits directly after RELEASE: it continues the release the operator just approved.
 const KIND_ORDER: Readonly<Record<NeedsYouKind, number>> = Object.freeze({
-  PLAN_APPROVAL: 0, PLAN_REJECTED: 1, PREVIEW: 2, RELEASE: 3, ESCALATION: 4, GATE_1: 5,
-  READY_TO_CLOSE: 6,
+  PLAN_APPROVAL: 0, PLAN_REJECTED: 1, PREVIEW: 2, RELEASE: 3, DEPLOY: 4, ESCALATION: 5,
+  GATE_1: 6, READY_TO_CLOSE: 7,
 });
 const OPEN_LIFECYCLES: readonly string[] = Object.freeze(["EXECUTION_ENABLED", "CLOSING"]);
 
@@ -119,9 +127,8 @@ function itemsFor(
   entry: LiveGoalCatalogEntry,
   coverage: DocumentCoverageOutcome | undefined,
   surface: SurfaceFrame | null,
-  previews: NeedsYouInput["previews"],
-  releases: NeedsYouInput["releases"],
-  runs: RunsOutcome | null | undefined,
+  previews: NeedsYouInput["previews"], releases: NeedsYouInput["releases"],
+  runs: RunsOutcome | null | undefined, deployments: DeploymentsOutcome | undefined,
 ): NeedsYouItem[] {
   const title = entry.brief?.title ?? entry.goalId;
   const base = { goalId: entry.goalId, planningRunRef: entry.planningRunRef, title };
@@ -168,6 +175,11 @@ function itemsFor(
       headline: release.headline, kind: "RELEASE", release: release.facts,
     }));
   }
+  const deploy = deployOfferFor(entry.goalId, deployments, surface);
+  if (deploy !== null) {
+    items.push(Object.freeze({ ...base, actionLabel: deploy.actionLabel, deploy: deploy.facts,
+      detail: deploy.detail, headline: deploy.headline, kind: "DEPLOY" }));
+  }
   if (coverage?.status === "COVERAGE") {
     const pending = coverage.contracts.filter((contract) => contract.gate1 === "PENDING");
     for (const contract of pending) {
@@ -204,7 +216,7 @@ function itemsFor(
 }
 
 export function deriveNeedsYou(input: NeedsYouInput): NeedsYouData {
-  const { catalog, coverage, previews, releases, runs, surface } = input;
+  const { catalog, coverage, deployments, previews, releases, runs, surface } = input;
   if (catalog === null) {
     return Object.freeze({
       countLabel: "Waiting for goals", items: Object.freeze([]),
@@ -219,7 +231,8 @@ export function deriveNeedsYou(input: NeedsYouInput): NeedsYouData {
   }
   const items = [
     ...catalog.goals.flatMap((entry) =>
-      itemsFor(entry, coverage.get(entry.goalId), surface, previews, releases, runs)),
+      itemsFor(entry, coverage.get(entry.goalId), surface, previews, releases, runs,
+        deployments?.get(entry.goalId))),
     ...escalationItems(surface, runs, catalog),
   ].sort((left, right) => KIND_ORDER[left.kind] - KIND_ORDER[right.kind]
       || left.title.localeCompare(right.title) || left.goalId.localeCompare(right.goalId));

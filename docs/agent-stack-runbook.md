@@ -150,6 +150,73 @@ Two things people mistake for a broken `gh`, both from earlier in the chain:
 `RELEASE_REMOTE_MISSING @ PROJECT_REDUCER` is the third and last code: no remote
 is bound to the project at all. Bind one, publish, then release.
 
+## Deploying: binding a target and what each refusal means
+
+A deploy takes a landed, published sha, builds an image from it, starts a
+candidate container and probes it. It records exactly ONE receipt per decision —
+`DEPLOYED` with the image digest and the url, or `REFUSED` with the tool's own
+last stderr line — so an attempt survives a restart either way.
+
+**Bind a target first.** `deployment.set_target` binds one target per
+(project, environment): a network, an optional ssh target, and the url the
+environment answers on. Until a target is bound the daemon offers no deploy at
+all, and the Deployments card renders `DEPLOY_TARGET_MISSING` in words with a
+control to set one — an absent card, not a dead button.
+
+**Then deploy from the goal.** The Deployments card lists every environment with
+its target, the last deploy's sha, time, url and status. The Deploy button ARMS
+first and only the second click on the SAME row dispatches, so arming preview can
+never fire production; the confirm names the environment it is about to deploy
+to. A PRODUCTION deploy additionally states its release standing — it cites the
+release decision id when the goal has a `RELEASED` receipt for that commit, and
+says so plainly when it has none. That citation is real: the command handler
+binds `releaseDecision` to the admitted goal and requested sha and reads the
+release receipt (`deploy-command.ts`), so the line is produced by the product
+rather than by a test double.
+
+**Both deploy commands are the operator's, not an agent's and not the
+browser's.** `deployment.set_target` and `deployment.deploy` require the
+CONFIGURED operator principal. A paired browser session is a durable HUMAN
+principal and is still refused `OPERATOR_PRINCIPAL_REQUIRED` at layer
+`DAEMON_AUTHORIZATION`, and that refusal writes no receipt — nothing is
+half-committed. Both kinds are also excluded from the MCP roster, so an agent
+holding the operator bootstrap credential cannot reach them.
+
+**The four refusal codes, and what to do about each.** All four are recorded on
+a REFUSED receipt at layer `DAEMON_DEPLOY_ENGINE` and render verbatim on the
+card:
+
+- `DEPLOY_TARGET_MISSING` — no target is bound for that environment. Bind one;
+  nothing was attempted.
+- `DEPLOY_DOCKER_UNAVAILABLE` — the daemon could not talk to docker at all. The
+  detail carries docker's own last stderr line. **Check with `docker version`,
+  never `docker --version`**: the second only proves the CLI is installed, and
+  an installed CLI with a stopped engine is the common case. Nothing was built
+  and no container was started — the probe runs before anything else.
+- `DEPLOY_BUILD_FAILED` — `docker build` refused, and the detail is docker's own
+  last stderr line so the failure is diagnosable from the browser without
+  shelling into the host.
+- `DEPLOY_HEALTH_TIMEOUT` — the candidate started but never reported healthy
+  inside the budget. The environment was left as it was; this is a candidate
+  that failed its probe, not a half-replaced environment.
+
+**Where the surfaces disagree, as of 2026-09-07.** The offer surface advertises
+`deployment.deploy` as soon as a goal has a publish REQUEST, while
+`/deployments/read` reports a deployable sha only once that publish has PUSHED.
+On a project whose remote is unreachable you will therefore see the goal listed
+in Needs you as ready to deploy while the card's buttons are disabled under
+"Nothing is landed to deploy yet." That is not a broken card: publish the goal
+to a reachable remote and the buttons enable.
+
+**What has been driven, measured 2026-09-07.** Everything above except the
+container runtime: a real daemon composed the deploy port, admitted the command,
+enforced the operator fence, wrote a durable `DEPLOYED` receipt, carried its
+verdict through `/activity/read`, and the browser rendered the receipt's url.
+The container runtime itself was FAKED for that run. A live drive on this host
+recorded `DEPLOY_DOCKER_UNAVAILABLE` — docker 29.6.2 installed, engine not
+running — so **no container has yet been started by this path**. The machinery
+is verified; a live container deploy is pending a docker host.
+
 ## Source development launcher
 
 From a clean checkout, with one agent credential exported and nothing else

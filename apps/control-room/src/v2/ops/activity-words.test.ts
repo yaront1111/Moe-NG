@@ -98,3 +98,40 @@ describe("preview decisions, as operator words", () => {
     expect(kindWords("internal.release.dossier")).toBe("recorded the release evidence");
   });
 });
+
+describe("deploy receipts, as operator words", () => {
+  const RECEIPT = "internal.deployment.deploy_receipt";
+
+  it("says DEPLOYED and REFUSED in words that cannot be mistaken for each other", () => {
+    // The whole point of the deploy verdict: a feed that rendered both as "recorded the deploy"
+    // would hide the only event an operator is scanning this list for. Asserted as a DIFFERENCE
+    // as well as by value, so a future edit that collapses the two reds here rather than
+    // shipping a feed in which a failed deploy looks like a successful one.
+    const deployed = decisionWords(RECEIPT, "DEPLOYED");
+    const refused = decisionWords(RECEIPT, "REFUSED");
+    expect(deployed).toBe("deployed the product to the environment");
+    expect(refused).toBe("could not deploy: the environment was left as it was");
+    expect(deployed).not.toBe(refused);
+  });
+
+  it("prints an unknown verdict rather than swallowing it, and falls back to the kind words", () => {
+    expect(decisionWords(RECEIPT, "PARTIAL")).toBe("recorded the deploy: PARTIAL");
+    expect(decisionWords(RECEIPT, null)).toBe("recorded the deploy");
+    expect(kindWords(RECEIPT)).toBe("recorded the deploy");
+    expect(kindWords("deployment.deploy")).toBe("asked to deploy an environment");
+    expect(kindWords("deployment.set_target")).toBe("bound where an environment deploys to");
+  });
+
+  it("carries no apostrophe, so the scheduler boundary scan cannot red on these strings", () => {
+    // Every other word in this table is read straight into JSX; the scan reds on an apostrophe
+    // there, so the constraint is asserted rather than left to review.
+    for (const words of [
+      decisionWords(RECEIPT, "DEPLOYED"), decisionWords(RECEIPT, "REFUSED"),
+      decisionWords(RECEIPT, null), kindWords("deployment.deploy"), kindWords("deployment.set_target"),
+    ]) {
+      expect(words).not.toContain("'");
+      // eslint-disable-next-line no-control-regex
+      expect(/^[\x20-\x7e]+$/u.test(words)).toBe(true);
+    }
+  });
+});

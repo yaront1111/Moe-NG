@@ -5,6 +5,7 @@ import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
 import { mapReleaseAnswer } from "../../live/live-release.js";
 import type { ReleaseOutcome } from "../../live/live-release.js";
+import type { DeploymentEnvironment, DeploymentsOutcome } from "../../live/live-deployments.js";
 import type { RunsOutcome } from "../../live/live-runs.js";
 import { deriveNeedsYou } from "./needs-you-model.js";
 
@@ -397,5 +398,76 @@ describe("deriveNeedsYou and Gate 3", () => {
       surface: surface([releaseOffer("goal-other")]),
     });
     expect(otherGoal.items).toEqual([]);
+  });
+});
+
+const DEPLOY_SHA = "e".repeat(40);
+const deployOffer = (goalId: string): Record<string, unknown> => ({
+  commandEnvelopeVersion: "moe-runtime-command/1", commandId: `cmd-deploy-${goalId}`,
+  commandKind: "deployment.deploy", expectedVersion: 2,
+  inputSchemaVersion: "moe-bootstrap-command/1", targetAggregateId: `deploy:${goalId}`,
+});
+const environmentRow = (
+  over: Partial<DeploymentEnvironment> & { environment: string },
+): DeploymentEnvironment => ({
+  code: null, detail: null, outcome: null, releaseDecision: null, sha: null, target: "local",
+  time: null, url: null, ...over,
+});
+const deploymentsFor = (
+  goalId: string, environments: readonly DeploymentEnvironment[],
+): ReadonlyMap<string, DeploymentsOutcome> => new Map([[goalId, {
+  environments, goalRef: goalId, releaseDecision: null, sha: DEPLOY_SHA,
+  status: "DEPLOYMENTS" as const,
+}]]);
+
+describe("deriveNeedsYou and deploying", () => {
+  const base = {
+    catalog: catalog([entry("goal-a", "Alpha")]), coverage: new Map(),
+    surface: surface([deployOffer("goal-a")]),
+  };
+
+  it("lists a published goal ready to deploy, and STOPS listing it once it is deployed", () => {
+    // DoD 4 needs BOTH halves through the real derivation, not the helper: an item that appears
+    // correctly but never clears leaves a permanent false to-do, and a test asserting only
+    // appearance stays green through exactly that defect.
+    const listed = deriveNeedsYou({
+      ...base, deployments: deploymentsFor("goal-a", [environmentRow({ environment: "preview" })]),
+    });
+    expect(listed.items.map((item) => item.kind)).toContain("DEPLOY");
+    const item = listed.items.find((row) => row.kind === "DEPLOY");
+    expect(item?.headline).toBe("Your published work is ready to deploy");
+    expect(item?.deploy?.sha).toBe(DEPLOY_SHA);
+    expect(item?.goalId).toBe("goal-a");
+
+    const cleared = deriveNeedsYou({
+      ...base,
+      deployments: deploymentsFor("goal-a", [environmentRow({
+        environment: "preview", outcome: "DEPLOYED", sha: DEPLOY_SHA,
+        time: "2026-09-07T09:05:00.000Z", url: "http://127.0.0.1:8080/",
+      })]),
+    });
+    expect(cleared.items.map((row) => row.kind)).not.toContain("DEPLOY");
+  });
+
+  it("keeps the goal listed after a REFUSED deploy and names the code", () => {
+    const data = deriveNeedsYou({
+      ...base,
+      deployments: deploymentsFor("goal-a", [environmentRow({
+        code: "DEPLOY_HEALTH_TIMEOUT", environment: "preview", outcome: "REFUSED",
+        sha: DEPLOY_SHA, time: "2026-09-07T09:05:00.000Z",
+      })]),
+    });
+    const item = data.items.find((row) => row.kind === "DEPLOY");
+    expect(item?.headline).toBe("A deploy was refused and needs you again");
+    expect(item?.detail).toContain("DEPLOY_HEALTH_TIMEOUT");
+  });
+
+  it("lists no deploy item without the daemon's offer", () => {
+    const data = deriveNeedsYou({
+      catalog: base.catalog, coverage: new Map(),
+      deployments: deploymentsFor("goal-a", [environmentRow({ environment: "preview" })]),
+      surface: surface([]),
+    });
+    expect(data.items.map((row) => row.kind)).not.toContain("DEPLOY");
   });
 });

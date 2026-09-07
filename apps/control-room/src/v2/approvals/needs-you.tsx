@@ -45,6 +45,7 @@ export interface NeedsYouProps {
 }
 
 const KIND_EYEBROW: Readonly<Record<NeedsYouKind, string>> = Object.freeze({
+  DEPLOY: "Deploy",
   ESCALATION: "Review exhausted",
   GATE_1: "Product contract",
   PLAN_APPROVAL: "Plan",

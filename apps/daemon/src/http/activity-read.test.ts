@@ -9,6 +9,7 @@ import {
   GOAL_CREATE_COMMAND_ID, GOAL_ID, PROJECT_ID, closeStores, driveThrough, envelope, openStore, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
+import { DEPLOY_RECEIPT_COMMAND_KIND } from "../deployment/deploy-receipt-contracts.js";
 import { activitySelectorOf, createActivityReadPort, handleActivityReadRequest, isSeatRecord, verdictOf } from "./activity-read.js";
 import type { ActivityReadPort, ActivityView } from "./activity-read.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
@@ -189,6 +190,40 @@ describe("verdictOf", () => {
     expect(verdictOf("approval.decide_intent", bytes({
       goalId: "goal-1", lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-1",
     }))).toBe("APPROVE");
+  });
+
+  it("reads DEPLOYED and REFUSED off the deploy receipt, from the receipt's OWN durable shape", () => {
+    // A deploy receipt carries `outcome`, never `decision` or `lifecycle`, so without its own
+    // branch this kind reads back as a decision with nothing decided and the feed renders a
+    // REFUSED deploy exactly like a DEPLOYED one - the one distinction an operator scans for.
+    // Asserted against the shape `deploy-ledger.ts` actually commits (a whole DeployReceiptV1),
+    // not a `{ outcome }` stub, so a decoder that only tolerates the minimal record still reds.
+    const receipt = {
+      decidedAt: "2026-09-07T09:00:00.000Z", decisionId: "cmd-1", environment: "preview",
+      imageDigest: `sha256:${"a".repeat(64)}`, outcome: "DEPLOYED", projectId: "proj-1",
+      receiptId: "receipt-1", refusal: null, releaseDecision: null, sha: "b".repeat(40),
+      url: "http://127.0.0.1:8080/", version: "moe-deploy-receipt/1",
+    };
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, bytes(receipt))).toBe("DEPLOYED");
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, bytes({
+      ...receipt, imageDigest: null, outcome: "REFUSED", url: null,
+      refusal: { code: "DEPLOY_BUILD_FAILED", detail: "docker said no", layer: "DAEMON_DEPLOY_ENGINE" },
+    }))).toBe("REFUSED");
+  });
+
+  it("does not let the deploy branch leak `outcome` into any other kind, and answers null when the receipt carries no outcome", () => {
+    // `outcome` is a common member across this codebase's committed results, so a branch that
+    // read it for every kind would start captioning unrelated records with a deploy word.
+    expect(verdictOf("integration.accept_output", bytes({ outcome: "DEPLOYED" }))).toBeNull();
+    expect(verdictOf("approval.decide", bytes({ outcome: "DEPLOYED" }))).toBeNull();
+    expect(verdictOf("internal.repository.publish_receipt", bytes({ outcome: "PUSHED" }))).toBeNull();
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, bytes({}))).toBeNull();
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, bytes({ outcome: "" }))).toBeNull();
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, bytes({ outcome: 7 }))).toBeNull();
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, bytes({ decision: "APPROVE" }))).toBeNull();
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, bytes({ lifecycle: "EXECUTION_ENABLED" }))).toBeNull();
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, encoder.encode("{not json"))).toBeNull();
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, new Uint8Array())).toBeNull();
   });
 
   it("answers null for an approval result that carries neither a decision nor a lifecycle", () => {
