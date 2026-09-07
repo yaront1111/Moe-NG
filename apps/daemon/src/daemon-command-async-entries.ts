@@ -111,6 +111,10 @@ export interface RepositoryBootstrapSeams {
   readonly gh?: BootstrapGhPort;
 }
 
+/** `deployment.migrate_down`'s injectable half. `hostContext` is the ONLY route to the database,
+ *  project root and workspace: they are host authority, never payload values. */
+export type MigrateDownSeams = Pick<MigrateDownCommandOptions, "clock" | "hostContext" | "ports">;
+
 export interface AsyncCommandEntryOptions {
   /** ABSENT means production: the real docker and ssh runners, and the build context this
    *  daemon was configured with. */
@@ -144,11 +148,12 @@ export interface AsyncCommandEntryOptions {
    *  the runner reads `<workspace>/package.json` and spawns a script out of it, so a
    *  caller-supplied path would be arbitrary command execution on this host. ABSENT refuses. */
   readonly previewWorkspace?: string | null;
-  /** The revert's injectable half plus its three HOST-SCOPED settings. ABSENT is a REFUSING
+  /** The revert's injectable half plus its PER-REQUEST host authority. ABSENT is a REFUSING
    *  state (MIGRATE_DOWN_UNCONFIGURED @ the command seam), never a skipped one: a daemon that was
-   *  never told which database and workspace to revert must not guess either. */
-  readonly migrateDown?: Pick<MigrateDownCommandOptions,
-    "clock" | "databaseUrl" | "ports" | "projectRoot" | "workspace">;
+   *  never told which database and workspace to revert must not guess either. The three host
+   *  values are no longer daemon-wide statics -- `hostContext` resolves them per ADMITTED
+   *  environment, so one daemon serving two environments cannot apply one database to both. */
+  readonly migrateDown?: MigrateDownSeams;
   /** ABSENT means production: the real `gh` CLI and the real manager catalog on this host. */
   readonly repositoryBootstrap?: RepositoryBootstrapSeams;
   /** ABSENT, or missing a publisher/facts/workspace, leaves release.decide fail-closed. */

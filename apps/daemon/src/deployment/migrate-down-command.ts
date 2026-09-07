@@ -20,16 +20,31 @@ export const MIGRATE_DOWN_UNCONFIGURED = "MIGRATE_DOWN_UNCONFIGURED" as const;
 export const ENVIRONMENT_MIGRATE_DOWN_DECIDED_EVENT = "EnvironmentMigrateDownDecided" as const;
 export const DEPLOYMENT_MIGRATE_DOWN_COMMAND_KIND = MIGRATE_DOWN_KIND;
 
+/** The three HOST-SCOPED values ONE environment's revert needs, resolved together or not at all.
+ *  Host authority only: connection values never enter command bytes, receipt bytes, a log line or
+ *  a refusal message, and not one of the three may be read off a caller-supplied payload. */
+export interface MigrateDownHostContext {
+  readonly databaseUrl: string;
+  readonly projectRoot: string;
+  readonly workspace: string;
+}
+
+/** The refusal a daemon that cannot resolve host authority owes, naming the FIELD and never the
+ *  value: a resolved connection string must not reach a refusal message (secrecy). */
+const unconfigured = (field: string): DomainRefusal => new DomainRefusal(
+  MIGRATE_DOWN_UNCONFIGURED, DAEMON_COMMAND_SEAM, `no ${field} is configured on this daemon`, 422);
+
 export interface MigrateDownCommandOptions {
   readonly clock?: () => string;
-  /** Host authority only; connection values never enter command or receipt bytes. */
-  readonly databaseUrl?: string;
+  /** PER-REQUEST host authority, resolved against the ADMITTED environment rather than held as a
+   *  daemon-wide constant: a daemon serving two environments must not apply one database to both.
+   *  ABSENT, a `null` answer, or any empty field is a REFUSING state (MIGRATE_DOWN_UNCONFIGURED @
+   *  the command seam), never a skipped one and never a fallback to an inherited DATABASE_URL. */
+  readonly hostContext?: (environment: string) => MigrateDownHostContext | null;
   readonly operatorPrincipalId: string;
   readonly ports?: MigrationDownPorts;
   readonly projectId: string;
-  readonly projectRoot?: string;
   readonly store: SqliteEventStore;
-  readonly workspace?: string;
 }
 const unreachableHandler: CommandHandler = context =>
   refuse(context.request.kind, "BOOTSTRAP_COMMAND_UNKNOWN", "DAEMON_INGRESS");
@@ -90,8 +105,6 @@ export function createMigrateDownCommandHandler(options: MigrateDownCommandOptio
       throw new DomainRefusal("OPERATOR_PRINCIPAL_REQUIRED", "DAEMON_AUTHORIZATION",
         "this command requires the configured operator principal", 403);
     }
-    const databaseUrl = options.databaseUrl ?? "", workspace = options.workspace ?? "";
-    const projectRoot = options.projectRoot ?? "";
     // Composition is settled before target admission, and only here. In every other case
     // `migrationCommandIdentity` must answer first, because `targetAggregateId` decides WHICH
     // aggregate this command's durable version claim is made against, and that has to be settled
@@ -99,11 +112,21 @@ export function createMigrateDownCommandHandler(options: MigrateDownCommandOptio
     // to revert at all: the operator's target is fine, so refusing it as MIGRATE_DOWN_TARGET_INVALID
     // would be a substantively untrue reason for a true refusal. The operator-principal fence above
     // still answers first, so an unauthenticated caller never observes UNCONFIGURED.
-    if (databaseUrl.length === 0 || workspace.length === 0 || projectRoot.length === 0) {
-      throw new DomainRefusal(MIGRATE_DOWN_UNCONFIGURED, DAEMON_COMMAND_SEAM,
-        `no ${databaseUrl.length === 0 ? "database" : workspace.length === 0 ? "workspace" : "project root"} is configured on this daemon`, 422);
-    }
+    const resolveHost = options.hostContext;
+    if (resolveHost === undefined) throw unconfigured("database");
     const identity = migrationCommandIdentity(input, projectId);
+    // RESOLVED ONCE PER DISPATCH, against the environment THIS request admitted. The indirection
+    // is NOT a new fallback: absence above and a `null` or partial answer here keep the SAME
+    // MIGRATE_DOWN_UNCONFIGURED the composition seam has always raised, still ahead of every
+    // store read and every engine effect. Nothing here reads an inherited DATABASE_URL, and the
+    // environment comes from the ADMITTED identity, never raw off the payload.
+    const host = resolveHost(identity.environment);
+    const databaseUrl = host?.databaseUrl ?? "", workspace = host?.workspace ?? "";
+    const projectRoot = host?.projectRoot ?? "";
+    if (databaseUrl.length === 0 || workspace.length === 0 || projectRoot.length === 0) {
+      throw unconfigured(databaseUrl.length === 0
+        ? "database" : workspace.length === 0 ? "workspace" : "project root");
+    }
     const history = migrationCommandHistory(store, identity);
     if (history.decided !== null) return answer(options, identity, readMigrationCommandTerminal(history.decided), true);
     const recovered = readMigrationReceipt(store, projectId, envelope.commandId);

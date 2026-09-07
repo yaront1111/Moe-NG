@@ -1,0 +1,32 @@
+{
+  "id": "task-620fb461689441d6bd1fed23ce62aff7",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "/deployments/health/read discloses the effective probe interval and the browser decoder preserves it",
+  "description": "SPIDR child of task-078232fb9b9d4c06a5faf3c02adaf705, cut by architect-5ac70ba8 on 2026-09-07. THIS ROW TAKES the parent's DoD 4 verbatim; the parent keeps DoD 1's durable record, DoD 2 and DoD 3. dependsOn the parent because there is no effective interval to disclose until the parent lands the record and the default.\n\nMEASURED AT HEAD by architect-5ac70ba8 (2026-09-07 ~13:20Z), and it settles the parent DoD 4's own conditional:\n- The parent's DoD 4 said \"once task-509c6c16 lands, else the current read\". task-509c6c16 IS DONE (\"HTTP /deployments/health/read serves environment state, the last error line and the open incident, composed into the production listener\"). So this row binds to `/deployments/health/read`, not to a fallback.\n- The browser client already exists: `apps/control-room/src/live/live-deployments-health.ts:21` exports `DEPLOYMENTS_HEALTH_READ_PATH = \"/deployments/health/read\"`, pinned at `live-deployments-health.test.ts:150` and rostered in `dev-proxy-paths.ts:28` and `live-document-proxy.test.ts:26`.\n\nTHE DECODER IS STRICTLY EXACT - READ THIS BEFORE DESIGNING THE WIRE. The control-room live decoders use an `exactDataRecord(value, expectedKeys)` helper that refuses when `keys.length !== expectedKeys.length`. There is NO optional-key path, so a new member must be emitted on EVERY row, always. Encode \"unset\" as an in-band value (the effective interval is always a number - the stored one or the 60000 default), never by omitting the key: an omitted key fails the length check and the WHOLE row decodes to null, blanking the screen rather than degrading one field. See Serena memory `decision-a-strictly-exact-wire-decoder-forces-an-always-emitted-key` for the full rule and the fixture-census recipe.\n\nNOT IN SCOPE: the durable record, the store port, the scheduler and boot re-registration (the parent's), and the operator command kind (the sibling row filed alongside this one).",
+  "definitionOfDone": [
+    "`/deployments/health/read` serves the EFFECTIVE probe interval per environment - the stored value when set, the 60000 default when unset - read through the port task-078232fb lands, never recomputed in the read.",
+    "The value is asserted against what was WRITTEN through the port and read back, never against a fixture constant the test also seeded - a self-agreeing assertion passes even when the read ignores the record.",
+    "The browser decoder in `apps/control-room/src/live/live-deployments-health.ts` preserves the member with EXACT-KEY decoding: an unknown key and a missing key each refuse with the specific code AND the layer that refused, and a malformed value fails closed rather than dropping the member silently.",
+    "Two environments with DIFFERENT stored intervals are disclosed separately and asserted by value - a read that serves one environment's interval for another passes every single-environment fixture.",
+    "Every fixture constructing the health view is backfilled for the new required member (census the literals, do not rely on the type name alone - a type-only import does not break). Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-078232fb9b9d4c06a5faf3c02adaf705",
+  "dependsOn": [
+    "task-078232fb9b9d4c06a5faf3c02adaf705"
+  ],
+  "priority": "MEDIUM",
+  "order": 121.7,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-07T13:14:16.027Z",
+  "updatedAt": "2026-09-07T13:14:16.027Z"
+}

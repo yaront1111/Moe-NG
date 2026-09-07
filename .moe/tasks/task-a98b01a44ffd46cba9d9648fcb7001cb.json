@@ -19,8 +19,81 @@
     "INLINE SVG, NO CHARTING DEPENDENCY. There is no chart precedent in this app and one sparkline does not justify a bundle or a supply-chain edge.",
     "ASCII-ONLY SOURCES, APOSTROPHE-FREE JSX TEXT - an apostrophe in JSX reds the scheduler package-boundary scan in a distant lane."
   ],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE BEFORE EDITING. No changes. Record verbatim: (a) `git status --porcelain -- apps/daemon/src/http apps/control-room/src` — note foreign dirt and continue; (b) `sed -n '62,78p' apps/daemon/src/http/deployments-health-read.ts` (the view) and `sed -n '178,182p'` (`lastProbeOf` returning `probes.at(-1)`), confirming the narrowing is where the row says and that `DeploymentsHealthSource.probes` at :86 already supplies the ring — if the view already carries a series, STOP: the gap is closed and the row must not build a duplicate; (c) `sed -n '166,186p' apps/control-room/src/live/live-deployments-health.ts` capturing the top-level exact-key list and the null-vs-unreadable discipline at :159-165; (d) `wc -l` on all six files, recording that `deployments-health-read.ts` is ALREADY at 251 against a 250 target, so step 2 must stay small; (e) read `apps/control-room/src/v2/shell/status-strip.tsx` around :12 — it CALLS something a sparkline without using SVG; see how it renders before inventing a look. Record the HEAD sha.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/deployments-health-read.ts",
+        "apps/control-room/src/live/live-deployments-health.ts",
+        "apps/control-room/src/v2/shell/status-strip.tsx",
+        "apps/control-room/src/v2/ops/environments-section.tsx"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "WIDEN THE FRAME, WINDOWED SERVER-SIDE, WITH THE WINDOW STATED IN IT. Add ONE new member to `DeploymentsHealthView` carrying the bounded series plus the window it was taken over — the window is a VALUE in the frame, not something the client infers, because that is what makes \"it plotted the last hour\" assertable at all (task rail 2). Project it from `source.probes`, which the port already supplies; add no store read, no route and no composition edge. Each point carries only what a sparkline needs (the instant and the latency) — do NOT copy `status` onto every point: the daemon owns exactly one opinion about the ring and repeating a per-point status invites the client to recompute the state from it (task rail 1). Keep the projection small and pure: `deployments-health-read.ts` is already 251 lines against a 250 target, so if the windowing needs more than a compact helper, put the helper beside it rather than growing this file toward 400. Newest-last ordering must match `lastProbeOf`'s `at(-1)` convention so the two members cannot disagree about which end is newest.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/deployments-health-read.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE DAEMON ARMS, INCLUDING THE ONE THAT CATCHES AN UNWINDOWED RING. Update both exact-shape consumers in the same edit — `deployments-health-read.test.ts` (20 exact-shape arms) and `daemon-entry-deployments-health.test.ts` (6) — keeping them EXACT-shape rather than loosening any `toEqual` to a partial match. Then add the arm DoD 1 specifies: feed a ring SPANNING MORE THAN AN HOUR and assert BOTH the returned point COUNT and the OLDEST RETURNED INSTANT, because a projection that returns the whole ring passes any test that only checks the newest point. Add the boundary arms too: a probe exactly at the window edge, an EMPTY ring yielding an empty series with the window still stated, and a ring entirely older than the window yielding an empty series rather than a null member. Verify the windowing arm by mutating the projection to return the whole ring and confirming it goes RED, then restore.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/deployments-health-read.test.ts",
+        "apps/daemon/src/daemon-entry-deployments-health.test.ts",
+        "apps/daemon/src/http/deployments-health-read.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "SEE THE CLIENT RED, THEN FIX IT — DoD 3 asks for the observation, not just the fix. With step 2 landed and the decoder untouched, run `pnpm --filter @moe/control-room test` and RECORD `live-deployments-health.test.ts` FAILING, with the failing line quoted: that red is the exact-key discipline working, and seeing it is the only evidence the discipline is real rather than asserted. THEN update `live-deployments-health.ts`: add the key to the top-level `exactDataRecord` list at :169-171 and add a nested decoder for the series following the file's own shape — including the null-vs-unreadable rule at :159-165, where each nested decoder answers null for both and the raw member is re-checked at the top, so a MALFORMED series cannot read as an ABSENT one. Never widen the decoder to a subset match to avoid the red (task rail 3). In its test, assert the series BY VALUE and add an EXTRA-key refusal arm on the nested series row, so a row carrying an unexpected member is refused rather than silently accepted.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-deployments-health.ts",
+        "apps/control-room/src/live/live-deployments-health.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "THE SPARKLINE, INLINE SVG, IN ITS OWN MODULE. New component module beside `environments-section.tsx` — not inline in it, because that file is 178 lines and an SVG with its degenerate branches lands it near 250, and a separate module gives the degenerate-input arms a seam to test directly. NO dependency is added; `package.json` must be untouched and asserted so. It renders the series the frame carries and NOTHING derived from it: no state, no colour keyed off a threshold the client invented (task rail 1). Handle the three degenerate inputs explicitly, because the first is day one: ZERO points renders the empty state and emits NO SVG at all rather than one with NaN coordinates; ONE point renders without dividing by a zero range; ALL-IDENTICAL latencies hit the same zero-range divide by a different route and must render too. Give the SVG an accessible name, and keep the values reachable as text or attributes — a chart whose numbers exist only as path geometry can be neither asserted nor read by a screen reader. ASCII-only source and NO apostrophe in any JSX text (task rail 5) — an apostrophe reds a scan in a distant lane this row's gates will not run.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/environments-latency-sparkline.tsx",
+        "apps/control-room/src/v2/ops/environments-section.tsx",
+        "package.json"
+      ],
+      "newFiles": [
+        "apps/control-room/src/v2/ops/environments-latency-sparkline.tsx"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "WIRE IT IN AND PROVE NOTHING IS DERIVED — DoD 4's count assertion and DoD 6's drill. Render the sparkline from `environments-section.tsx` off the decoded frame. Assert the PLOTTED POINT COUNT matches the window the frame states, so a sparkline drawing the whole ring is caught — an SVG that rendered is not evidence it rendered the right span. Assert the three degenerate inputs SEPARATELY against the new module (zero / one / all-identical), checking the SVG ATTRIBUTE VALUES contain no `NaN`, since a NaN in a `points` or `d` attribute renders as nothing and passes a test that only asserts the element exists. Then DoD 6: confirm the existing disagreeing-frame arm in `environments-section.test.tsx` still passes UNWEAKENED, and DRILL it — make the component recompute the state from the new series and confirm that arm goes RED. Record the mutated path, the arm that reddened with its failure line, and the restore proof: `git diff -- <path>` empty for TRACKED files, SHA256 equality against an out-of-tree backup for the NEW module, taken in a call SEPARATE from the restore. A drill that does not redden means the guard is not load-bearing — fix the arm rather than recording a drill that proved nothing.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/environments-section.tsx",
+        "apps/control-room/src/v2/ops/environments-section.test.tsx",
+        "apps/control-room/src/v2/ops/environments-latency-sparkline.tsx"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "GATES AND ADVERSARIAL SELF-REVIEW. Each leg FOREGROUND and STANDALONE; read the OUTPUT, not the exit code — no `Test Files N passed` line means nothing ran. Legs, quoted with count lines: `pnpm --filter @moe/control-room test`; the two named daemon files via `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/http/deployments-health-read.test.ts src/daemon-entry-deployments-health.test.ts`; and `pnpm typecheck`. Note that `pnpm test` covers NO `apps/**`, so it is not evidence for anything in this row. Repo-wide legs are a PATH-ATTRIBUTED BASELINE: merge-base failures, HEAD failures, delta intersected with owned paths must be EMPTY; disclose foreign red verbatim, never waive it. Then read the diff as an attacker: does the windowing arm still fail if the projection returns the whole ring (step 3 proved it — confirm the restore held)? Does any SVG attribute contain NaN for zero, one, or all-identical points? Is `package.json` byte-identical? Did any exact-shape `toEqual` get loosened to a partial match, or the client decoder to a subset? Is the state still read from the frame and never recomputed? Are all touched sources ASCII with no apostrophe in JSX text? Is `deployments-health-read.ts` still under 400 and the new component under 250? Report every touched path in `complete_step.modifiedFiles`.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/deployments-health-read.ts",
+        "apps/control-room/src/live/live-deployments-health.ts",
+        "apps/control-room/src/v2/ops/environments-latency-sparkline.tsx",
+        "apps/control-room/src/v2/ops/environments-section.tsx"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -34,8 +107,43 @@
   ],
   "priority": "MEDIUM",
   "order": 121.85,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-278a20dd7f9c4fb68fda6834825d47ed",
+      "author": "architect-6e49a205",
+      "content": "PLANNING MEASUREMENT. The row's core claims all hold on disk; two notes for the worker and one small grep correction. HEAD, 2026-09-07.\n\n1. CONFIRMED, BY READING. `deployments-health-read.ts:178-181` `lastProbeOf` returns `probes.at(-1)` only; `DeploymentsHealthView.lastProbe` (:66-68) is the single point; `DeploymentsHealthSource.probes` (:86) already carries the full ring. So this is a view widening plus consumers — no store read, no route, no composition edge. Both dependencies (task-cc05c473, task-509c6c16) are DONE.\n\n2. THE DECODER RED IS REAL, and its lists are these: `live-deployments-health.ts:169-171` pins the top level to `[\"environment\", \"incident\", \"lastError\", \"lastProbe\", \"ok\", \"probeRefusal\", \"rollbackSha\", \"state\"]`; the nested probe decoder at :128 pins `[\"at\", \"latencyMs\", \"status\"]`. Worth carrying into the new nested decoder: the file's :159-165 discipline makes a NULL member and an UNREADABLE member deliberately different — each nested decoder answers null for both, and the raw member is re-checked at the top. Without that, a malformed series would read as an absent one.\n\n3. GREP CORRECTION — the conclusion stands, the stated command does not. The description says `grep -rln 'sparkline|polyline' apps/control-room/src/v2 --include=*.tsx` finds no precedent. It actually returns TWO files (`status-strip.tsx` and its test), but the match is the WORD \"sparkline\" in a doc comment at status-strip.tsx:12, not an implementation. Measured separately: `grep -rn polyline apps/control-room/src/v2 --include=*.tsx` returns NOTHING, and `<svg` appears only in `context-bar.tsx` and `nav-rail.tsx` (icons). So there is genuinely no chart precedent and no library is warranted — the rail is right. This is the `mem:gotcha-a-widening-grep-needs-a-positive-control` corollary at file level: a grep result line cannot tell an implementation from a comment using the same word.\n\nUSEFUL LEAD from that same file, and the plan tells the worker to look: `status-strip.tsx` renders something it CALLS a sparkline with NO SVG at all. Read how before inventing a look — there may be an idiom worth matching for visual consistency.\n\n4. TWO LINE BUDGETS ARE TIGHT, which shapes the plan. `deployments-health-read.ts` is ALREADY 251 lines against the 250 target (hard split at 400), so the windowing projection must stay compact or move to a helper beside it. `environments-section.tsx` is 178, and an inline SVG with its degenerate branches would land it near 250 — so the sparkline goes in its own module. That is not only cap arithmetic: a separate module gives the three degenerate-input arms a seam to test directly instead of through the whole section.\n\n5. ONE DESIGN CALL WORTH STATING. Each series point carries only the instant and the latency — deliberately NOT a per-point `status`. The daemon owns exactly one opinion about the ring (task rail 1), and repeating a status on every point is precisely the material a client would recompute UP/DEGRADED/DOWN from. DoD 6's drill exists to catch that; do not hand it the ammunition.\n\n6. THE TWO TESTS THAT PASS WHILE THE FEATURE IS BROKEN, both already named in the DoD and both carried into the plan as explicit arms: a projection returning the WHOLE ring passes any test that only checks the newest point (so the arm feeds a ring spanning more than an hour and asserts the count AND the oldest returned instant), and an SVG with `NaN` in a `points` or `d` attribute renders as nothing while passing a test that only asserts the element exists (so the degenerate arms assert the ATTRIBUTE VALUES, and all three cases are asserted separately).",
+      "timestamp": "2026-09-07T13:13:55.451Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T00:05:18.665Z",
-  "updatedAt": "2026-09-07T00:05:18.665Z"
+  "updatedAt": "2026-09-07T13:13:55.451Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-07T13:11:20.223Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 10
+  },
+  "contextFetchedBy": [
+    "architect-6e49a205"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 10 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-07T13:13:34.980Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) SEND THE WHOLE 1440-ROW RING AND LET THE CLIENT SLICE. REJECTED by task rail 2 and by DoD 1's own test design: a client that slices an unwindowed ring cannot assert it drew the right span, and the frame would carry 1440 points to draw 60.\n(2) SEND THE SERIES WITH NO STATED WINDOW. REJECTED: the client would have to infer the span from the timestamps, so \"it plotted the last hour\" becomes unassertable. The window is a value in the frame, which is also what lets the count assertion in DoD 4 mean anything.\n(3) ADD A CHARTING DEPENDENCY. REJECTED by task rail 4, and the row is right that there is no precedent — see the grep correction in codebaseInsights. One sparkline does not justify a bundle or a supply-chain edge.\n(4) PUT THE SPARKLINE INLINE IN `environments-section.tsx`. REJECTED on the per-file cap: that file is 178 lines and an SVG with its degenerate-input branches lands it near 250. The sparkline goes in its own module, which also gives its three degenerate-input arms a seam to test directly rather than through the whole section.\n(5) WIDEN THE CLIENT DECODER TO A SUBSET MATCH so adding the key does not red it. EXPLICITLY FORBIDDEN by task rail 3, and it would destroy the property that makes this frame safe. The red is the design working; DoD 3 requires the worker to SEE it before fixing it.",
+    "codebaseInsights": "MEASURED AT HEAD, 2026-09-07. The row's core claims are CONFIRMED on disk; one stated grep is imprecise and one file is already at the line target.\n\nTHE NARROWING IS EXACTLY WHERE THE ROW SAYS. `deployments-health-read.ts:175-181` `lastProbeOf(probes)` returns `probes.at(-1)` only, and `DeploymentsHealthView.lastProbe` (:66-68) is `{at, latencyMs, status} | null`. The full ring IS already at the port — `DeploymentsHealthSource.probes: readonly HealthProbe[]` (:86) — so this is a VIEW WIDENING and its consumers. No new store read, no new route, no new composition edge. Confirmed by reading, not inferred.\n\nBOTH DEPENDENCIES ARE DONE: task-cc05c473 (the 1440-row ring bound) and task-509c6c16.\n\nTHE DECODER RED IS REAL AND ITS EXACT LISTS ARE THESE. `live-deployments-health.ts:169-171` pins the top level to `[\"environment\", \"incident\", \"lastError\", \"lastProbe\", \"ok\", \"probeRefusal\", \"rollbackSha\", \"state\"]` via `exactDataRecord`; the nested probe decoder at :128 pins `[\"at\", \"latencyMs\", \"status\"]`. Adding a top-level key reds the first list — that is the property DoD 3 wants observed before it is fixed. Note the discipline at :159-181: a NULL member and an UNREADABLE member are deliberately different, each nested decoder answering null for both and the raw member re-checked at the top. The new series decoder must follow that same shape or a malformed series would read as an absent one.\n\nA GREP CORRECTION, small but worth stating so nobody re-runs it and thinks the row was wrong. The description says `grep -rln 'sparkline|polyline' apps/control-room/src/v2 --include=*.tsx` finds NO precedent. It actually returns TWO files — `status-strip.tsx` and its test — but the match is the WORD \"sparkline\" in a doc comment (status-strip.tsx:12), not an implementation. Measured separately: `grep -rn polyline apps/control-room/src/v2 --include=*.tsx` returns NOTHING, and `<svg` appears only in `context-bar.tsx` and `nav-rail.tsx` (icons). So the row's CONCLUSION is correct — there is no chart precedent and no library is warranted. This is the `mem:gotcha-a-widening-grep-needs-a-positive-control` corollary at the file level: a grep result line cannot tell an implementation from a comment using the same word. USEFUL LEAD, not a correction: `status-strip.tsx` renders something it CALLS a sparkline WITHOUT any SVG — read how before inventing a look, both for visual consistency and in case a reusable idiom already exists.\n\nLINE BUDGETS, and one is already tight: `deployments-health-read.ts` is 251 lines — ALREADY past the 250 target (the hard split is 400), so the windowing projection must stay small or move to a helper; `environments-section.tsx` is 178, which is why the sparkline gets its own module; the two daemon test files are 369 and 349, and `live-deployments-health.ts` is 216.",
+    "risks": "THE TEST THAT PASSES WHILE THE WINDOW IS BROKEN. DoD 1 names this precisely: a projection that returns the WHOLE ring passes any test that only checks the newest point. The windowing arm must feed a ring SPANNING MORE THAN AN HOUR and assert BOTH the returned COUNT and the OLDEST RETURNED INSTANT. The same trap on the client side is why DoD 4 asks for the plotted point count — a sparkline drawing 1440 points looks fine to a test that only checks that an SVG rendered.\n\nDEGENERATE INPUTS ARE DAY-ONE INPUTS, not edge cases: a brand-new environment has ZERO probes. Zero points must render the empty state and emit NO NaN in any SVG attribute (a NaN in a `points` or `d` attribute renders as nothing and passes a test that only asserts the element exists — assert the ATTRIBUTE VALUES). One point must not divide by a zero range, and neither must all-identical latencies, which is the same divide reached by a different route. Assert the three SEPARATELY as DoD 4 requires; one combined arm cannot say which broke.\n\nTHE DERIVATION TEMPTATION IS THE POINT OF THE ROW'S FIRST RAIL. Handing the browser a latency series is exactly what invites recomputing UP/DEGRADED/DOWN from it. The existing disagreeing-frame arm in `environments-section.test.tsx` is the guard; it must pass UNWEAKENED, and DoD 6's drill (recompute the state from the new series) must RED it. If the drill does not redden, the guard is not load-bearing and the arm needs fixing before the row can complete.\n\nADDING THE KEY REDS THE CLIENT DECODER BY DESIGN. Do not reach for a subset match (task rail 3). DoD 3 requires stating that the red was SEEN before the fix, because that observation is the only evidence the exact-key discipline is real rather than asserted.\n\nASCII-ONLY, APOSTROPHE-FREE JSX TEXT (task rail 5): an apostrophe in JSX reds the scheduler package-boundary scan in a distant lane, so it will not be caught by this row's own gates.\n\nSHARED CHECKOUT: `git status --porcelain` the paths first; foreign dirt is noted and continued past, never reverted or committed.",
+    "keyFiles": [
+      "apps/daemon/src/http/deployments-health-read.ts",
+      "apps/daemon/src/http/deployments-health-read.test.ts",
+      "apps/daemon/src/daemon-entry-deployments-health.test.ts",
+      "apps/control-room/src/live/live-deployments-health.ts",
+      "apps/control-room/src/v2/ops/environments-section.tsx",
+      "apps/control-room/src/v2/shell/status-strip.tsx"
+    ]
+  },
+  "planApprovedAt": "2026-09-07T13:13:37.107Z"
 }

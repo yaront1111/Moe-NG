@@ -1,0 +1,32 @@
+{
+  "id": "task-749e585afc534762941d0cb6a54ec433",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "Publish the probe-interval operator command on the shared runtime contract, human-only, and regenerate the client",
+  "description": "SPIDR child of task-078232fb9b9d4c06a5faf3c02adaf705, cut by architect-5ac70ba8 on 2026-09-07. The parent's DoD spanned three separable responsibilities and measured ~25 files against the board's 20-file cap, so the command SURFACE and the health READ were cut off the parent's durable-record core.\n\nTHIS ROW TAKES the parent's DoD 1 COMMAND HALF. The parent keeps DoD 1's durable record, store port and bounds, plus DoD 2 (scheduler honours the interval per environment) and DoD 3 (boot re-registration). dependsOn the parent because the command handler writes THROUGH the interval store port the parent lands - publishing a kind whose handler has nothing to write to is a producer with no consumer edge.\n\nMEASURED AT HEAD by architect-5ac70ba8 (2026-09-07 ~13:20Z), so plan against this and re-measure before editing:\n- The kind roster is `packages/contracts/src/runtime/runtime-vocabulary.ts:91-92` (\"deployment.deploy\", \"deployment.migrate_down\", \"deployment.rollback\", \"deployment.set_target\", ...).\n- THE EPIC RAIL'S MIRROR LOCATION IS STALE. It says \"two mirrors live under apps/control-room\". Measured `git grep -rln GENERATED_CONTRACT_DIGEST -- apps packages adapters tools` returns SEVEN source files and NONE under apps/control-room: apps/daemon/src/cutover/v2-readiness-evidence-collector.ts, apps/daemon/src/cutover/v2-readiness-evidence-producers.test.ts, apps/daemon/src/http/affordance-deploy-target-offers.ts, packages/control-room-client/generator/generate.ts, packages/control-room-client/src/contract-digest.test.ts, packages/control-room-client/src/contract-pins.ts, packages/control-room-client/src/generated/generated-client.ts. Re-census with the full-tree grep yourself; the relevant package is `@moe/control-room-client` (packages/control-room-client), and `@moe/control-room` (apps/control-room) is a SEPARATE package that must also be run.\n- PRECEDENT ROWS on this board for exactly this shape: task-b3888068 (DONE, \"The two environment kinds reach the shared runtime contract and the generated client\") and task-a2409cba (DONE, \"environment.set_variable and unset_variable are published operator-only\"). Read their completion records before designing the fence.\n\nNOT IN SCOPE: the durable interval record, the store port, the scheduler, boot re-registration (all the parent's), and the health read disclosure (task filed alongside this one).",
+  "definitionOfDone": [
+    "The kind is added to the shared runtime roster at packages/contracts/src/runtime/runtime-vocabulary.ts and is HUMAN-ONLY: MCP-excluded, asserted by code AND layer at the fence, following the precedent task-a2409cba set for environment.set_variable.",
+    "ALL FOUR GENERATED_CONTRACT_DIGEST mirrors are re-censused by a full-tree `git grep` of the literal across ALL file types and updated - the measured source set is listed in this row's description and must be re-measured, not trusted. The generated client is regenerated rather than hand-edited.",
+    "The command handler writes the per-environment interval THROUGH the store port landed by task-078232fb - no second write path and no direct store access. Bounds and refusals are the port's: out-of-range and unknown-environment each assert code AND layer.",
+    "Roster coverage is BIDIRECTIONAL (global rail): every advertised kind is served AND every served kind is advertised, enumerated from the dispatch seam's handled kinds and asserted as set-equality, not subset.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room-client test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`. The control-room legs are mandatory because the digest mirrors are invisible to `pnpm test` and to the daemon leg."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-078232fb9b9d4c06a5faf3c02adaf705",
+  "dependsOn": [
+    "task-078232fb9b9d4c06a5faf3c02adaf705"
+  ],
+  "priority": "MEDIUM",
+  "order": 121.6,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-07T13:14:00.424Z",
+  "updatedAt": "2026-09-07T13:14:00.424Z"
+}

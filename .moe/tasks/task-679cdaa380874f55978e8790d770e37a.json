@@ -1,0 +1,42 @@
+{
+  "id": "task-679cdaa380874f55978e8790d770e37a",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "The Health screen lists each backup with its restore-proof state, and not-yet-checked never reads as proven",
+  "description": "BROWSER CHILD of task-1f994315fd164a789424349cb7bba4ca, filed by architect-dbe3631e 2026-09-07. That row's own DoD 4 authorises this split verbatim: \"If this breaches the file ceiling, split the browser half into its own row named in dependsOn - do not ship a route nothing fetches.\"\n\nWHY IT BREACHED. I measured the real cost of a daemon read route from the landed precedent rather than from the parent's estimate. task-509c6c16 (`/deployments/health/read`, commit 29f5d723) touched FIFTEEN source files for the daemon half ALONE - the parent row says six. Adding the durable record and the three-state mapping puts the parent at eighteen. The browser half does not fit beside it.\n\nTHIS ROW CLOSES THE CONSUMER EDGE, which is the parent's rail 2 (\"a producer with no consumer edge is the gap this row exists to close\") discharged rather than deferred. The parent lands the route and registers itself in the daemon's own UNCONSUMED_SERVED_ROUTES census with a comment naming THIS ROW as the consumer that retires it; this row retires that entry and the UNPROXIED_SERVED_PATHS entry in the same edit. Both live in `apps/daemon/src/http/http-listener-read-dispatch.test.ts` (:129 and :174), so this row edits one daemon test file - that is expected and is how the census is designed to close.\n\nTHE ONE PROPERTY THIS ROW EXISTS FOR: NOT-YET-CHECKED MUST NEVER RENDER AS PROVEN. A backup that was written but whose restore check has not run is common - the write is cheap and the check is not - and an operator leans on that difference at the worst possible moment. Three states, visually distinguishable by more than colour, asserted SEPARATELY and by VALUE.\n\nMEASURED AT HEAD 4710d60b (re-measure before planning; global rail 6):\n- `apps/control-room/src/live/dev-proxy-paths.ts` - every read path is pinned here; a new read without its pin is not reachable in the dev lane.\n- `apps/control-room/src/live/live-deployments-health.ts` is the exact-key decoder sibling to copy; the `live-*.ts` directory is the convention.\n- `apps/control-room/src/v2/ops/environments-section.tsx` renders the Health screen section and is already wired through `live-environments.tsx` and LiveHealth, so no new mounting is needed - measure that claim before relying on it.\n- The parent's served shape is whatever task-1f994315fd lands. Read it off disk; do not restate it here and do not mint a second spelling.\n\nNOT IN SCOPE: the durable record, the three-state mapping, the route and its composition (all task-1f994315fd), and anything that changes what the daemon serves. If the served shape does not carry what this screen needs, report blocked against the parent rather than decoding around it.",
+  "definitionOfDone": [
+    "AN EXACT-KEY CLIENT DECODER beside `apps/control-room/src/live/live-deployments-health.ts` decodes the parent's served frame. It refuses an EXTRA key AND a MISSING key, each with the specific code asserted AND the layer that refused - not merely that decoding failed. A malformed frame fails closed rather than dropping the restore-proof state silently.",
+    "THE THREE STATES RENDER SEPARATELY AND ARE ASSERTED SEPARATELY - proven, failed, not yet checked - in the backups list in `apps/control-room/src/v2/ops/environments-section.tsx`, with the state in a `data-` attribute and the three distinguishable by MORE THAN COLOUR (text or shape, so the distinction survives a monochrome or colour-blind reading). Assert each state's rendered output by value, never by a row count.",
+    "NOT-YET-CHECKED DOES NOT RENDER AS PROVEN, asserted as its own arm and DRILLED: make not-yet-checked render identically to proven and show the arm goes RED BY VALUE, not by a count. Quote the drill's failing line and its restore proof. This is the row's one safety property; an arm that only counts rows passes the mutation.",
+    "A BACKUP WITH NO SHA256 AND NO CHECK TIME RENDERS HONESTLY - absent is stated as absent, never as an empty string, a zero, a dash that reads as a value, or a defaulted 'proven'. Assert the absent case separately from the present one.",
+    "THE TWO CENSUS ENTRIES ARE RETIRED IN THE SAME EDIT: the parent's path leaves `UNPROXIED_SERVED_PATHS` (http-listener-read-dispatch.test.ts:129) and `UNCONSUMED_SERVED_ROUTES` (:174), and the comment the parent left naming this row goes with them. A separate arm greps those comments, so a half-retirement reds.",
+    "NO SECRET, CREDENTIAL, CONNECTION STRING OR RAW PATH THAT LEAKS ONE reaches the decoder, the rendered output, a log line, an error path or a committed fixture (epic rail 3). Assert it on a FAILURE path, with a positive control over a literal containing a credential shape so the arm cannot pass vacuously.",
+    "ASCII-only sources and apostrophe-free JSX text (the scheduler package-boundary scan reds on an apostrophe in JSX); confirm any new testid namespace is free before using it, following the sibling section's existing convention.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/control-room test` and `pnpm --filter @moe/daemon test` (this row edits one daemon test file to retire the census), plus `pnpm typecheck`. A bare root `pnpm test` covers NO apps/** file and is not evidence here."
+  ],
+  "taskRails": [
+    "NOT-YET-CHECKED IS NEVER PROVEN. That collapse is the entire failure this surface exists to prevent. Assert it by value and drill it.",
+    "READ THE PARENT'S SHAPE OFF DISK, DO NOT RESTATE IT. task-1f994315fd owns the served frame, its state vocabulary and its refusal codes. A second spelling in the browser is how the two drift apart.",
+    "DECODE EXACT-KEY, FAIL CLOSED. An extra key and a missing key each refuse with a code AND a layer; never drop an unknown member silently and never substitute a default for an absent one.",
+    "DO NOT CHANGE WHAT THE DAEMON SERVES. If the frame lacks what the screen needs, report blocked against the parent rather than decoding around it or minting the value client-side.",
+    "RETIRE BOTH CENSUS ENTRIES TOGETHER WITH THE PARENT'S COMMENT. Half a retirement leaves a served route recorded as unconsumed while a screen consumes it.",
+    "ASCII-ONLY SOURCES, APOSTROPHE-FREE JSX TEXT, dev-proxy-paths pin for the read."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-1f994315fd164a789424349cb7bba4ca"
+  ],
+  "priority": "MEDIUM",
+  "order": 132,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-07T13:13:46.957Z",
+  "updatedAt": "2026-09-07T13:13:46.957Z"
+}

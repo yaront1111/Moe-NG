@@ -23,6 +23,7 @@ import type { DeployTarget } from "./deploy-ports.js";
 import { candidateContainerName } from "./deploy-service.js";
 import { DEPLOYMENT_DEPLOY_COMMAND_KIND } from "./deploy-target-contracts.js";
 import { DEPLOYMENT_MIGRATE_DOWN_COMMAND_KIND } from "./migrate-down-command.js";
+import type { MigrateDownHostContext } from "./migrate-down-command.js";
 
 /**
  * THE REAL REVERT: `deployment.migrate_down` against a live PostgreSQL, through the REGISTERED
@@ -134,8 +135,15 @@ it.runIf(RUN)("reverts the LAST batch against a live PostgreSQL and records it",
           ssh: double.ssh, target: (): DeployTarget => LOCAL, transfer: double.transfer },
       },
       // THE REAL PORTS: no `ports` override, so the child runs the generated product's own
-      // installed `node-pg-migrate` against the live database.
-      migrateDown: { clock: (): string => REVERT_AT, databaseUrl: url, projectRoot: root, workspace: root },
+      // installed `node-pg-migrate` against the live database. And the host authority is
+      // RESOLVED against the admitted environment rather than handed over as a constant --
+      // DoD 1 names an entry built with a hardcoded `databaseUrl` as inadmissible evidence.
+      migrateDown: {
+        clock: (): string => REVERT_AT,
+        hostContext: (environment: string): MigrateDownHostContext | null =>
+          environment === ENVIRONMENT
+            ? { databaseUrl: url, projectRoot: root, workspace: root } : null,
+      },
     });
     const deploy = entries[DEPLOYMENT_DEPLOY_COMMAND_KIND].asyncHandler;
     const revert = entries[DEPLOYMENT_MIGRATE_DOWN_COMMAND_KIND].asyncHandler;

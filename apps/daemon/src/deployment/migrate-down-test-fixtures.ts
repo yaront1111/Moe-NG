@@ -23,6 +23,7 @@ import { candidateContainerName } from "./deploy-service.js";
 import { DEPLOYMENT_DEPLOY_COMMAND_KIND } from "./deploy-target-contracts.js";
 import { DEPLOYMENT_MIGRATE_DOWN_COMMAND_KIND }
   from "./migrate-down-command.js";
+import type { MigrateDownHostContext } from "./migrate-down-command.js";
 
 /**
  * `deployment.migrate_down` END TO END THROUGH THE REGISTERED COMMAND (DoD 5).
@@ -178,8 +179,15 @@ export function world(options: WorldOptions = {}): World {
       },
     },
     migrateDown: {
-      clock: (): string => REVERT_AT, databaseUrl: DATABASE_URL, ports,
-      projectRoot: root, workspace: root,
+      clock: (): string => REVERT_AT, ports,
+      // KEYED BY THE ADMITTED ENVIRONMENT, deliberately NOT a constant-returning function: a
+      // resolver that ignored its argument would make every isolation arm vacuous, and that is
+      // exactly the daemon-wide-static defect this seam replaces. Any OTHER environment resolves
+      // null -- a composed daemon holding no authority for the named environment still refuses
+      // MIGRATE_DOWN_UNCONFIGURED rather than reaching for the one database it does know.
+      hostContext: (environment: string): MigrateDownHostContext | null =>
+        environment === ENVIRONMENT
+          ? { databaseUrl: DATABASE_URL, projectRoot: root, workspace: root } : null,
     },
   });
   // The SAME store, composed with NO migrateDown seams: an unconfigured daemon, not a mocked one.
