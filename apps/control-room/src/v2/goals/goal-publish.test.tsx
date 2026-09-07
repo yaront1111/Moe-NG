@@ -44,7 +44,7 @@ const UNBOUND: RepositoryRemoteOutcome = Object.freeze({
 const goal = (overrides: Partial<RunGoalView> = {}): RunGoalView => ({
   goalId: "goal-1", lifecycle: "EXECUTION_ENABLED",
   nodes: [{
-    accepted: { verifierReceiptId: "r" }, claim: null, criterionIds: [], dependsOn: [],
+    accepted: { verifierReceiptId: "r" }, claim: null, criterionIds: [], declaredMigrations: null, dependsOn: [],
     landing: { branch: "main", code: null, files: ["src/a.ts"], outcome: "COMMITTED", sha: "a".repeat(40) },
     lastActivityAt: null, nodeKey: "node-a", nodeRef: "node-a", objective: "o", receipt: null,
     review: { escalated: false, findings: [], latestRoute: "ACCEPT", rounds: 1, unreadable: false, unsuccessfulRounds: 0, version: 2 },

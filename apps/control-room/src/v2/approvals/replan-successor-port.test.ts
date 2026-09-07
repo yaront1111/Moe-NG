@@ -4,7 +4,7 @@ import type { NeedsYouItem } from "./needs-you-model.js";
 import { replanInstructions } from "./replan-successor-port.js";
 
 const node = (nodeRef: string, detail: string): RunNodeView => ({
-  accepted: null, claim: null, criterionIds: [], dependsOn: [], landing: null, lastActivityAt: null,
+  accepted: null, claim: null, criterionIds: [], declaredMigrations: null, dependsOn: [], landing: null, lastActivityAt: null,
   nodeKey: "api", nodeRef, objective: "Implement API", receipt: null,
   review: { escalated: true, findings: [{ detail, round: 3, ruleId: "check", severity: "MAJOR", subject: "API" }],
     latestRoute: "REJECT_PLAN", rounds: 3, unreadable: false, unsuccessfulRounds: 3, version: 4 },

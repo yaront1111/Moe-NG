@@ -39,6 +39,7 @@ const NODE: RunNodeView = {
   accepted: null,
   claim: null,
   criterionIds: [],
+  declaredMigrations: null,
   dependsOn: [],
   landing: null,
   lastActivityAt: null,

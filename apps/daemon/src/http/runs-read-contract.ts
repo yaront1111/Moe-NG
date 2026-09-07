@@ -77,6 +77,9 @@ export interface RunNodeView {
   readonly accepted: { readonly verifierReceiptId: string } | null;
   readonly claim: RunNodeClaim | null;
   readonly criterionIds: readonly string[];
+  /** Authored order, never sorted or deduped. `null` means the node's authority body
+   * declares nothing at all (UNKNOWN); `[]` means the author declared none. */
+  readonly declaredMigrations: readonly string[] | null;
   readonly dependsOn: readonly string[];
   /** The git landing of the accepted delivery, when the lander recorded one. */
   readonly landing: RunNodeLanding | null;

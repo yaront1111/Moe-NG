@@ -14,7 +14,7 @@ import { mapRunsAnswer, readRuns } from "./live-runs.js";
 const NODE = Object.freeze({
   accepted: { verifierReceiptId: "receipt-a" },
   claim: { active: false, claimedBy: "sess-wrap-1", expiresAt: "2026-09-02T21:00:00.000Z", status: "RELEASED" },
-  criterionIds: ["crit-1"], dependsOn: [], lastActivityAt: "2026-09-02T19:00:00.000Z",
+  criterionIds: ["crit-1"], declaredMigrations: null, dependsOn: [], lastActivityAt: "2026-09-02T19:00:00.000Z",
   nodeKey: "node-a", nodeRef: "execution-node-a", objective: "Keep fields.",
   landing: null,
   receipt: { byteCount: 120, exitCode: 0, outputSha256: "o".repeat(64), test: "pnpm test", testedTreeSha: null, workspace: "D:/unai" },
@@ -85,6 +85,56 @@ describe("mapRunsAnswer", () => {
     expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE, review: { ...NODE.review, findings: [{ detail: 1 }] } }] }] })).toStrictEqual(invalid);
     expect(mapRunsAnswer(200, { ...RUNS, goals: [{ ...GOAL, run: { ...GOAL.run, approval: "MAYBE" } }] })).toStrictEqual(invalid);
     expect(mapRunsAnswer(200, { ...RUNS, totals: { ...TOTALS, extra: 1 } })).toStrictEqual(invalid);
+  });
+});
+
+describe("mapRunsAnswer preserves a node's declared migration identifiers", () => {
+  const INVALID = Object.freeze({ code: "RUNS_RESPONSE_INVALID", layer: "CONTROL_ROOM_LIVE_RUNS", status: "ERROR" });
+  const frameWith = (node: unknown) => ({ ...RUNS, goals: [{ ...GOAL, nodes: [node] }] });
+  const declaring = (declaredMigrations: unknown) => frameWith({ ...NODE, declaredMigrations });
+  const decodedNode = (declaredMigrations: unknown) => {
+    const outcome = mapRunsAnswer(200, declaring(declaredMigrations));
+    if (outcome.status !== "RUNS") throw new Error(`expected RUNS, got ${outcome.status} ${outcome.code}`);
+    return outcome.goals[0]?.nodes[0];
+  };
+
+  it("keeps two identifiers by value and in the author's order", () => {
+    // By value AND in order: a decoder that kept only the first, or that sorted, passes a count.
+    expect(decodedNode(["migration-b", "migration-a"])?.declaredMigrations)
+      .toEqual(["migration-b", "migration-a"]);
+    expect(decodedNode(["migration-b", "migration-a"])?.declaredMigrations?.length).toBe(2);
+  });
+
+  it("distinguishes UNKNOWN from a declared-none, and decodes the WHOLE node either way", () => {
+    const unknown = decodedNode(null);
+    const none = decodedNode([]);
+    expect([unknown?.declaredMigrations, none?.declaredMigrations]).toEqual([null, []]);
+    // Not merely the member. If UNKNOWN were ever encoded by OMITTING the key, the node would
+    // fail `exactDataRecord` outright and the whole Runs read would go dark, not just this field.
+    expect(unknown).toStrictEqual({ ...NODE, declaredMigrations: null });
+    expect(none).toStrictEqual({ ...NODE, declaredMigrations: [] });
+  });
+
+  it.each([7, ["a", 3], "a", [[]], {}, [null], true, ["a", undefined]] as readonly unknown[])(
+    "refuses a malformed declaration at its own layer rather than dropping the member: %j",
+    (value) => {
+      // Never a decoded node with the member quietly missing: `stringList` answers null for
+      // "not an array" and UNKNOWN is also null, so this is the arm that pins them apart.
+      expect(mapRunsAnswer(200, declaring(value))).toStrictEqual(INVALID);
+    },
+  );
+
+  it("serves exactly the keys the wire advertises: the new one accepted, an extra or missing one refused", () => {
+    // FORWARD: the advertised key is served, and the decoded node's key set equals the wire's.
+    const decoded = decodedNode(["migration-a"]);
+    expect(decoded?.declaredMigrations).toEqual(["migration-a"]);
+    expect(Object.keys(decoded ?? {}).sort())
+      .toEqual(Object.keys({ ...NODE, declaredMigrations: ["migration-a"] }).sort());
+    // REVERSE: an extra key still refuses, so the roster did not merely grow permissive.
+    expect(mapRunsAnswer(200, frameWith({ ...NODE, unexpected: true }))).toStrictEqual(INVALID);
+    // And an ABSENT key refuses too — production always emits it, so absence is drift.
+    const { declaredMigrations: _omitted, ...withoutKey } = NODE;
+    expect(mapRunsAnswer(200, frameWith(withoutKey))).toStrictEqual(INVALID);
   });
 });
 

@@ -12,7 +12,7 @@ afterEach(cleanup);
 
 const NOW = Date.parse("2026-09-02T20:00:00.000Z");
 const node = (overrides: Partial<RunNodeView> = {}): RunNodeView => ({
-  accepted: null, claim: null, criterionIds: ["crit-1"], dependsOn: [], lastActivityAt: null,
+  accepted: null, claim: null, criterionIds: ["crit-1"], declaredMigrations: null, dependsOn: [], lastActivityAt: null,
   nodeKey: "node-a", nodeRef: "node-a", objective: "Keep fields.",
   landing: null, receipt: null, review: { escalated: false, findings: [], latestRoute: null, rounds: 0, unreadable: false, unsuccessfulRounds: 0, version: 0 }, sharedKey: false,
   status: "READY", ...overrides,

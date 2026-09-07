@@ -15,6 +15,8 @@ import {
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
 import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import { compiledPlanAuthority } from "../planning/compiled-authority-bodies.js";
+import { baseSnapshot, revisionContentFor } from "../planning/graph-query-test-fixtures.js";
+import type { MigrationDeclarations } from "../planning/graph-query-test-fixtures.js";
 import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
 import type { WorkClaimRecord } from "../work/work-claim-read-model.js";
 import { recordDeployReceipt } from "../deployment/deploy-ledger.js";
@@ -67,6 +69,38 @@ function activeGraphFor(goalRef: string, keys: readonly [string, string] = ["nod
   const decoded = decodeGraphContent(Buffer.from(compiled.graphContentBytesBase64, "base64"));
   if (!decoded.ok) throw new Error("fixture graph did not decode");
   return Object.freeze({ content: decoded.value.content, goalRef });
+}
+
+/**
+ * A graph whose node authority GENUINELY CARRIES a migration declaration. The identifiers ride
+ * the DRAFT into `createNodeDefinition` (@moe/scheduler), which is the same seam production's
+ * `scheduler-node-planning-authority.ts:141` spreads them into; the member on the resulting
+ * definition is that codec's own `project()` output, never assigned by a fixture. A nodeKey
+ * absent from `declared` declares NOTHING (schema-2 body, member absent); a present `[]` is a
+ * stated declared-none (schema 3). `compiledPlanAuthority` cannot be used here: its draft
+ * deliberately declares none (`compiled-policy-authority-body.ts:98-113`).
+ */
+function declaringGraphFor(goalRef: string, declared?: MigrationDeclarations): ActiveCompiledGraph {
+  return Object.freeze({ content: revisionContentFor(`human:${goalRef}`, baseSnapshot(), declared), goalRef });
+}
+
+/** Rows keyed by the local nodeKey, so an arm reads the member of the node it names. */
+function migrationsByKey(view: RunsView, goalId: string): Map<string, readonly string[] | null> {
+  const goal = view.goals.find((candidate) => candidate.goalId === goalId);
+  if (goal === undefined) throw new Error(`goal ${goalId} is absent from the view`);
+  return new Map(goal.nodes.map((node) => [node.nodeKey, node.declaredMigrations]));
+}
+
+/** A SECOND bound goal, so two goals' rows are both visible in one read. Goal identity is
+ *  `goal-${commandId}` (`goal-identity.ts:27`), so a distinct command id is a distinct goal. */
+const OTHER_GOAL_ID = "goal-2";
+function bindSecondGoal(store: SqliteEventStore): void {
+  const outcome = send(store, envelope("goal.create_with_source", 0, {
+    instructions: "Build the other PRD.",
+    source: { displayPath: "docs/other.md", mediaType: "text/markdown", text: `${PRD}\nOther.\n` },
+    title: "Other goal",
+  }, "2"));
+  if (!outcome.ok) throw new Error(`second goal bind refused: ${outcome.code}`);
 }
 
 const quiet: NodeReviewFacts = Object.freeze({
@@ -387,6 +421,88 @@ describe("createRunsReadPort", () => {
       readClaims: () => new Map([claim("node-a", "2026-09-02T21:00:00.000Z", "RELEASED")]),
     }).readRuns({}));
     expect(released.goals[0]?.nodes[0]).toMatchObject({ claim: { active: false, status: "RELEASED" }, status: "READY" });
+  });
+
+  it("serves a node's declared identifiers by value, in authored order, on its own execution identity", () => {
+    const store = boundWorld();
+    const graph = declaringGraphFor(GOAL_ID, new Map([["dev-a", ["migration-b", "migration-a"]]]));
+    const view = runs(portFor(store, { readActive: () => [graph] }).readRuns({ goalRef: GOAL_ID }));
+    // BY VALUE AND IN ORDER, never a count: a reversing or deduping read passes `toHaveLength`.
+    expect(migrationsByKey(view, GOAL_ID).get("dev-a")).toEqual(["migration-b", "migration-a"]);
+    // The declaration is served on the row whose nodeRef IS this graph's node — the execution
+    // identity, not the local key. Nothing here is matched by filename or by sha.
+    const declaring = view.goals[0]?.nodes.find((node) => node.declaredMigrations !== null);
+    expect(declaring?.nodeRef).toBe(compiledExecutionRef(PROJECT_ID, graph, "dev-a"));
+    expect(declaring?.nodeKey).toBe("dev-a");
+    // The read hands out a copy, not the durable authority array.
+    expect(declaring?.declaredMigrations).not.toBe(graph.content.nodeAuthority.definitions
+      .find((definition) => definition.nodeKey === "dev-a")?.declaredMigrations);
+  });
+
+  it("keeps one goal's declaration off another goal's run that shares the same node key", () => {
+    const store = boundWorld();
+    bindSecondGoal(store);
+    // Both graphs carry dev-a/dev-b/dev-c. Only the FIRST goal's author declared anything, so a
+    // read keyed on nodeKey alone would serve goal-1's identifiers on goal-2's dev-a row.
+    const view = runs(portFor(store, {
+      readActive: () => [
+        declaringGraphFor(GOAL_ID, new Map([["dev-a", ["migration-b", "migration-a"]]])),
+        declaringGraphFor(OTHER_GOAL_ID),
+      ],
+    }).readRuns({}));
+    expect(view.goals.map((goal) => goal.goalId)).toEqual([GOAL_ID, OTHER_GOAL_ID]);
+    expect(migrationsByKey(view, GOAL_ID).get("dev-a")).toEqual(["migration-b", "migration-a"]);
+    expect(migrationsByKey(view, OTHER_GOAL_ID).get("dev-a")).toBeNull();
+    // Both goals really did surface the shared key, so the assertion above is not vacuous.
+    expect([...migrationsByKey(view, OTHER_GOAL_ID).keys()]).toEqual(["dev-a", "dev-b", "dev-c"]);
+  });
+
+  it("gives each goal its OWN declaration when both goals declare on the same node key", () => {
+    const store = boundWorld();
+    bindSecondGoal(store);
+    // The null-vs-value arm above could pass an implementation that served the FIRST graph's
+    // value everywhere and happened to read null for the second. Here both declare, and the
+    // two values are different, so serving either goal the other's declaration reds.
+    const view = runs(portFor(store, {
+      readActive: () => [
+        declaringGraphFor(GOAL_ID, new Map([["dev-a", ["migration-one"]]])),
+        declaringGraphFor(OTHER_GOAL_ID, new Map([["dev-a", ["migration-two", "migration-three"]]])),
+      ],
+    }).readRuns({}));
+    expect(migrationsByKey(view, GOAL_ID).get("dev-a")).toEqual(["migration-one"]);
+    expect(migrationsByKey(view, OTHER_GOAL_ID).get("dev-a"))
+      .toEqual(["migration-two", "migration-three"]);
+  });
+
+  it("distinguishes a node that declared NOTHING from one that declared NONE", () => {
+    const store = boundWorld();
+    // dev-a: absent from the map, so its authority body states no member at all -> UNKNOWN.
+    // dev-b: an explicit empty declaration, a stated fact -> [].
+    // dev-c: one identifier, so the arm cannot pass by collapsing everything to null.
+    const graph = declaringGraphFor(GOAL_ID, new Map([["dev-b", []], ["dev-c", ["migration-c"]]]));
+    const byKey = migrationsByKey(
+      runs(portFor(store, { readActive: () => [graph] }).readRuns({ goalRef: GOAL_ID })), GOAL_ID,
+    );
+    expect([byKey.get("dev-a"), byKey.get("dev-b"), byKey.get("dev-c")])
+      .toEqual([null, [], ["migration-c"]]);
+    // The two are different VALUES, not merely different-looking: `?? []` collapses them.
+    expect(byKey.get("dev-a")).not.toEqual(byKey.get("dev-b"));
+    // And the distinction is real one layer down: the codec mints a different schema version.
+    const versionOf = (nodeKey: string) => graph.content.nodeAuthority.definitions
+      .find((definition) => definition.nodeKey === nodeKey)?.schemaVersion;
+    expect([versionOf("dev-a"), versionOf("dev-b")]).toEqual([2, 3]);
+  });
+
+  it("serves nothing for a graph whose definitions do not include the node", () => {
+    const store = boundWorld();
+    // A declaration for a key this graph's authority does not define is not served ANYWHERE:
+    // ownership comes from the per-graph definition list, never from a name that merely matches.
+    const graph = declaringGraphFor(GOAL_ID, new Map([["dev-absent", ["migration-x"]]]));
+    const byKey = migrationsByKey(
+      runs(portFor(store, { readActive: () => [graph] }).readRuns({ goalRef: GOAL_ID })), GOAL_ID,
+    );
+    expect([...byKey.keys()]).toEqual(["dev-a", "dev-b", "dev-c"]);
+    expect([...byKey.values()]).toEqual([null, null, null]);
   });
 
   it("carries a refused planning-run read as a null run and a thrown walk as UNREADABLE", () => {

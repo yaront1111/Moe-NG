@@ -59,6 +59,8 @@ export interface RunNodeView {
   readonly accepted: { readonly verifierReceiptId: string } | null;
   readonly claim: RunNodeClaimView | null;
   readonly criterionIds: readonly string[];
+  /** Authored order. `null` is UNKNOWN (the node declares nothing); `[]` is declared none. */
+  readonly declaredMigrations: readonly string[] | null;
   readonly dependsOn: readonly string[];
   readonly landing: RunNodeLandingView | null;
   readonly lastActivityAt: string | null;
@@ -234,17 +236,22 @@ function reviewOf(value: unknown): RunNodeReviewView | null {
 
 function nodeOf(value: unknown): RunNodeView | null {
   const record = exactDataRecord(value, [
-    "accepted", "claim", "criterionIds", "dependsOn", "landing", "lastActivityAt", "nodeKey", "nodeRef", "objective", "receipt",
-    "review", "sharedKey", "status",
+    "accepted", "claim", "criterionIds", "declaredMigrations", "dependsOn", "landing", "lastActivityAt", "nodeKey", "nodeRef",
+    "objective", "receipt", "review", "sharedKey", "status",
   ]);
   if (record === null || !nonEmptyString(record.nodeKey) || !nonEmptyString(record.nodeRef) || typeof record.objective !== "string"
     || !nullableString(record.lastActivityAt) || typeof record.status !== "string"
     || typeof record.sharedKey !== "boolean"
     || !(RUN_NODE_STATUSES as readonly string[]).includes(record.status)) return null;
   const criterionIds = stringList(record.criterionIds);
+  // UNKNOWN is null on the wire and `stringList` also answers null for "not an array": branch on
+  // the literal null FIRST, so a malformed value refuses instead of decoding as UNKNOWN.
+  const declared = record.declaredMigrations;
+  const declaredMigrations = declared === null ? null : stringList(declared);
   const dependsOn = stringList(record.dependsOn);
   const review = reviewOf(record.review);
-  if (criterionIds === null || dependsOn === null || review === null) return null;
+  if (criterionIds === null || (declared !== null && declaredMigrations === null)
+    || dependsOn === null || review === null) return null;
   let accepted: RunNodeView["accepted"] = null;
   if (record.accepted !== null) {
     const row = exactDataRecord(record.accepted, ["verifierReceiptId"]);
@@ -267,7 +274,7 @@ function nodeOf(value: unknown): RunNodeView | null {
     if (landing === null) return null;
   }
   return Object.freeze({
-    accepted, claim, criterionIds, dependsOn, landing, lastActivityAt: record.lastActivityAt,
+    accepted, claim, criterionIds, declaredMigrations, dependsOn, landing, lastActivityAt: record.lastActivityAt,
     nodeKey: record.nodeKey, nodeRef: record.nodeRef, objective: record.objective, receipt, review, sharedKey: record.sharedKey,
     status: record.status as RunNodeStatus,
   });

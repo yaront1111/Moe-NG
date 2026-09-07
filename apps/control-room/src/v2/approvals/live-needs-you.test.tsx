@@ -87,7 +87,7 @@ describe("LiveNeedsYou", () => {
     }));
     const runs: RunsOutcome = {
       goals: [{ goalId: "goal-plan", lifecycle: "EXECUTION_ENABLED", nodes: [{
-        accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-x", nodeRef: "node-x", objective: "o",
+        accepted: null, claim: null, criterionIds: [], declaredMigrations: null, dependsOn: [], lastActivityAt: null, nodeKey: "node-x", nodeRef: "node-x", objective: "o",
         landing: null, receipt: null, review: { escalated: false, findings: [], latestRoute: "REJECT_PLAN", rounds: 3, unreadable: false, unsuccessfulRounds: 3, version: 4 }, sharedKey: false,
         status: "ESCALATION_REQUIRED" }], publish: null, run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-plan" }, title: "Plan me" }],
       status: "RUNS",
@@ -115,7 +115,7 @@ describe("LiveNeedsYou", () => {
     }));
     const runs: RunsOutcome = {
       goals: [{ goalId: "goal-plan", lifecycle: "EXECUTION_ENABLED", nodes: [{
-        accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-x", nodeRef: "node-x", objective: "o",
+        accepted: null, claim: null, criterionIds: [], declaredMigrations: null, dependsOn: [], lastActivityAt: null, nodeKey: "node-x", nodeRef: "node-x", objective: "o",
         landing: null, receipt: null, review: { escalated: false, findings: [], latestRoute: "REJECT_PLAN", rounds: 3, unreadable: false, unsuccessfulRounds: 3, version: 4 }, sharedKey: false,
         status: "ESCALATION_REQUIRED" }], publish: null, run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-plan" }, title: "Plan me" }],
       status: "RUNS",

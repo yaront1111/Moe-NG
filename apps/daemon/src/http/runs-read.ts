@@ -77,6 +77,8 @@ export interface RunsReadOptions {
 
 interface SealedNode {
   readonly criterionIds: readonly string[];
+  /** UNKNOWN (`null`) is the authority body's absence, distinct from a declared-none `[]`. */
+  readonly declaredMigrations: readonly string[] | null;
   readonly dependsOn: readonly string[];
   readonly goalRef: string;
   readonly nodeKey: string;
@@ -93,6 +95,12 @@ function sealedNodesOf(projectId: string, graphs: readonly ActiveCompiledGraph[]
       if (!bearing.has(definition.nodeKey)) continue;
       nodes.push(Object.freeze({
         criterionIds: definition.criterionBindings.map((binding) => binding.criterionId),
+        // Read off the SAME `definition` this per-graph loop already turns into `nodeRef`, so
+        // the declaration and the execution identity cannot come apart. A nodeKey-keyed lookup
+        // would serve one goal's declaration on another goal's run; keys are shared across goals.
+        // Copied and frozen rather than aliased: a read may not hand out durable content.
+        declaredMigrations: definition.declaredMigrations === undefined
+          ? null : Object.freeze([...definition.declaredMigrations]),
         dependsOn: edges.filter((edge) => edge.consumerNodeKey === definition.nodeKey)
           .map((edge) => edge.producerNodeKey),
         goalRef: graph.goalRef,
@@ -233,6 +241,7 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
             active, claimedBy: record.claimedBy, expiresAt: record.expiresAt, status: record.status,
           }),
           criterionIds: node.criterionIds,
+          declaredMigrations: node.declaredMigrations,
           dependsOn: node.dependsOn,
           landing: landing === undefined ? null : Object.freeze({
             branch: landing.commit?.branch ?? null,
