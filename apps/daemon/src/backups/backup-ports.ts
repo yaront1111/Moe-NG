@@ -12,6 +12,23 @@ export interface BackupPorts {
   database(connection: string, destination: string): Promise<void>;
   restoreStore(path: string): Promise<BackupProof>;
   restoreDatabase(path: string): Promise<BackupProof>;
+  /**
+   * THE DESTINATION-BOUND RESTORE, and the reason it takes a connection at all.
+   *
+   * `restoreDatabase(path)` above is a VERIFICATION: it loads the dump into a throwaway
+   * `--network none` container, re-dumps it and returns a proof. It writes to no database anyone
+   * named, which is exactly right for the scheduled backup's weekly check and exactly wrong for a
+   * rollback that has to put a schema back. The dump side already takes a connection
+   * (`database(connection, destination)`); the missing counterpart is this one, and that asymmetry
+   * is what made `deployment.rollback` refuse every restore outright.
+   *
+   * ONE ATTEMPT, NO PARTIAL APPLY: a single `psql -v ON_ERROR_STOP=1 --single-transaction`
+   * invocation, no retry loop and no recovery pass. `--single-transaction` is what makes "no
+   * partial apply" a property of the operation rather than a hope — plain `pg_dump` output is NOT
+   * wrapped in a transaction, so without it a statement failing half way leaves a half-restored
+   * schema behind. With it, a failure is a failure and the schema is as it was.
+   */
+  restoreDatabaseInto(connection: string, path: string): Promise<void>;
 }
 const IMAGE = "postgres:17-alpine";
 const DUMP_ARGS = ["--no-owner", "--no-privileges", "--no-comments", "--no-password"];
@@ -128,6 +145,23 @@ async function restoreDatabase(path: string): Promise<BackupProof> {
   }
 }
 
+/**
+ * Applies a dump to the NAMED destination. Same env-only credential handling and same container
+ * disposal as `dumpDatabase` — the connection is decomposed into PG* variables passed by NAME on
+ * the argv (`--env PGPASSWORD`), so the value itself never appears in an argument vector that a
+ * crash dump or a process listing could carry.
+ */
+function restoreIntoDatabase(connection: string, source: string, network?: string): void {
+  const env = pgEnvironment(connection, network);
+  const name = `moe-backup-apply-${randomUUID()}`;
+  const input = openSync(source, "r");
+  try {
+    docker(["run", "--rm", "-i", "--name", name, ...(network ? ["--network", network] : []),
+      ...Object.keys(env).flatMap(key => ["--env", key]), IMAGE,
+      "psql", "-X", "-q", "-v", "ON_ERROR_STOP=1", "--single-transaction"], env, input);
+  } finally { try { closeSync(input); } finally { disposeContainer(name); } }
+}
+
 /** Network is an operator-supplied Docker network; credentials are inherited environment only. */
 export function nodeBackupPorts(options: { readonly network?: string } = {}): BackupPorts {
   return Object.freeze({
@@ -138,5 +172,14 @@ export function nodeBackupPorts(options: { readonly network?: string } = {}): Ba
     database: (connection: string, destination: string) => sanitized(() => dumpDatabase(connection, destination, options.network)),
     restoreStore: (path: string) => sanitized(() => restoreStore(path)),
     restoreDatabase: (path: string) => sanitized(() => restoreDatabase(path)),
+    // FAIL CLOSED BEFORE THE FIRST BYTE MOVES. `backupFileHash` streams the artifact and throws
+    // on a zero-length one, so an absent, empty or unreadable dump refuses here instead of
+    // "restoring nothing successfully" against a live destination. Inside `sanitized()` like
+    // every other member: a thrown pg message can echo a connection value, and this is the one
+    // operation that is holding one.
+    restoreDatabaseInto: (connection: string, path: string) => sanitized(async () => {
+      await backupFileHash(path);
+      restoreIntoDatabase(connection, path, options.network);
+    }),
   });
 }

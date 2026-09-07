@@ -1,7 +1,16 @@
-import { readFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import { afterEach, expect, it } from "vitest";
+import { backupFileHash } from "../backups/backup-ports.js";
+import { setEnvironmentVariable } from "../environment/environment-store.js";
+import { MIGRATION_RECEIPT_VERSION, migrationReceiptId, recordMigrationReceipt }
+  from "../repository/migrations/migration-receipt.js";
+import type { MigrationReceipt } from "../repository/migrations/migration-receipt.js";
+import { DEPLOY_MIGRATION_DATABASE_VARIABLE } from "./deploy-migration-context.js";
+import { ROLLBACK_RESTORE_DETAILS, ROLLBACK_RESTORE_STAMP } from "./rollback-restore.js";
 import { DAEMON_COMMAND_SEAM } from "../http/http-async-contract.js";
 import type { CommandHandlerInput } from "../http/http-contract.js";
 import { closeStores, openStore, openRestartableStore, reopen, PROJECT_ID } from "../review/review-test-fixtures.js";
@@ -15,7 +24,11 @@ import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 
 afterEach(closeStores);
 const clock = () => "2026-09-06T01:00:00.000Z";
-const environment = "staging", sha = "a".repeat(40), digest = `sha256:${"b".repeat(64)}`;
+// "production", not "staging": `ENVIRONMENT_NAMES` (environment-contracts.ts:29) is CLOSED to
+// {preview, production, verify}, so only those three can ever carry a bound restore
+// destination. A suite pinned to "staging" could seed no destination at all and every bound
+// arm below would have proved the unbound path twice under two different names.
+const environment = "production", sha = "a".repeat(40), digest = `sha256:${"b".repeat(64)}`;
 function harness(store = openStore()) {
   const source = recordDeployReceipt(store, { projectId: PROJECT_ID, environment, sha,
     imageDigest: digest, decisionId: "original", decidedAt: clock(), refusal: null, releaseDecision: null, url: null });
@@ -74,19 +87,22 @@ it.each([
   if (mutation === "extra") payload["buildContext"] = "/tmp";
   if (mutation === "missing") delete payload["restoreDatabase"];
   if (mutation === "receipt") payload["toReceiptRef"] = "f".repeat(64);
-  if (mutation === "environment") payload["environment"] = "production";
+  if (mutation === "environment") payload["environment"] = "staging";
   await expect(h.handler({ envelope, principal })).rejects.toMatchObject({ code, layer });
   expect(h.docker.calls).toEqual([]);
 });
 
-// DoD 3. THE MEASURED SHAPE OF THIS SEAM: there is no injectable backup port to
-// record against. `RollbackCommandOptions = Omit<DeployCommandOptions, "buildContext">`
-// carries none, and rollback-command.ts's only mention of BackupPorts is the
-// comment at :86 explaining why the operation refuses. So "the not-requested path
-// records no restore call" is asserted three ways, none of which trusts the flag:
-// the request really ran, no injected port recorded a restore verb, and the module
-// has no restore surface to call. The third is what distinguishes "port never
-// called" from "port never wired" — here it is provably the latter.
+// DoD 2/3. THE SEAM NOW HAS A REAL RESTORE PORT, so "the not-requested path records
+// no restore call" is finally FALSIFIABLE rather than merely unfalsified: `boundHarness`
+// injects a `restoreDatabaseInto` double that appends to `calls`, and the not-requested
+// arm asserts that list is EMPTY. Before this row there was no injectable port at all
+// (see `mem:gotcha-asserting-a-port-was-not-called-when-no-port-is-wired`), which is why
+// the older form of these arms had to prove the ABSENCE of the surface instead.
+//
+// Three independent assertions still stand behind the claim, none trusting the flag:
+// the request really ran (DECIDED + a minted receipt carrying the digest), no injected
+// port recorded a restore — neither the backup port nor a restore verb on any docker or
+// ssh argv — and the module binds the surface it is supposed to bind and no other.
 
 /** Every verb that would move database bytes back into a live destination. */
 const RESTORE_VERBS: readonly string[] = ["pg_restore", "psql", "mysql", "mongorestore", "restore", "pg_dump"];
@@ -109,28 +125,168 @@ it("restores no database when the operator did not request one", async () => {
   expect(swept.filter(token => RESTORE_VERBS.includes(token))).toEqual([]);
 });
 
-it("binds no database restore surface at the rollback seam at all", () => {
-  const source = rollbackCommandSource();
-  // A call site, not the payload key `restoreDatabase` nor the explanatory comment.
-  expect(source).not.toMatch(/\.restoreDatabase\s*\(/u);
-  expect(source).not.toMatch(/from "[^"]*backups\//u);
-  expect(source).not.toMatch(/nodeBackupPorts/u);
-  // Non-vacuity: the file really was read and really is the module under test.
-  expect(source).toMatch(/DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE/u);
+it("binds the DESTINATION-BOUND restore surface across the seam and its binding, and only that one", () => {
+  // THE SEAM SUPPLIES THE PORT; THE BINDING CALLS IT. Asserting the call site on the command
+  // alone would red for the wrong reason, and asserting it on the binding alone would leave the
+  // production default (`nodeBackupPorts()`) unpinned -- a seam that only ever received an
+  // injected double would pass every offline arm while no real dispatch could restore anything.
+  const command = rollbackCommandSource();
+  expect(command).toMatch(/from "[^"]*backups\/backup-ports\.js"/u);
+  expect(command).toMatch(/nodeBackupPorts\s*\(\)/u);
+  expect(command).toMatch(/applyRollbackRestore\s*\(/u);
+
+  const binding = readFileSync(fileURLToPath(new URL("./rollback-restore.ts", import.meta.url)), "utf8");
+  expect(binding).toMatch(/\.restoreDatabaseInto\s*\(/u);
+
+  // AND ONLY THAT ONE, on BOTH files. `restoreDatabase(path)` verifies a dump inside a throwaway
+  // `--network none` container and writes to no database anyone named, so a caller of it would
+  // report a rollback as restored while the production schema never moved. Anchored on a CALL,
+  // which the `restoreDatabaseInto` call site above cannot satisfy.
+  expect(command).not.toMatch(/\.restoreDatabase\s*\(/u);
+  expect(binding).not.toMatch(/\.restoreDatabase\s*\(/u);
+  // Non-vacuity: both files really were read and really are the modules under test.
+  expect(command).toMatch(/createRollbackCommandHandler/u);
+  expect(binding).toMatch(/DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE/u);
 });
 
-it("refuses a requested database restore before reading the receipt or touching Docker", async () => {
+it("refuses a requested restore on an UNWIRED daemon, before Docker and before any durable write", async () => {
+  // This daemon has no environment credential at all, so no environment on it has a bound
+  // destination. The refusal, its code and its LAYER are unchanged from before this row --
+  // what changed is that the case is now the UNBOUND one rather than every restore.
   const h = harness();
   const envelope = { ...h.input.envelope, payload: { ...h.input.envelope.payload, restoreDatabase: true } };
   await expect(h.handler({ ...h.input, envelope })).rejects.toMatchObject({
     code: "DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE", layer: DAEMON_COMMAND_SEAM,
   });
-  // rollback-command.ts:88 refuses AHEAD of readDeployReceipt, so nothing was
-  // started and nothing durable was minted.
+  // The seam refuses AHEAD of the environment guard reservation and of the rollback effect, so
+  // nothing was started and nothing durable was minted.
   expect(h.docker.calls).toEqual([]);
   expect(h.docker.sshCalls).toEqual([]);
   expect(readDeployReceipt(h.store, PROJECT_ID,
     deployReceiptId(PROJECT_ID, environment, h.input.envelope.commandId)).ok).toBe(false);
+});
+
+/**
+ * A BOUND ENVIRONMENT, assembled the way production assembles one (DoD 1, 2, 3).
+ *
+ * The CURRENT deploy is a SECOND receipt, distinct from the one the rollback targets, and its
+ * migration receipt names the dump to restore. That separation is the point: an arm where the
+ * current and the kept receipt are the same row cannot tell the correct dump from the one that
+ * rewinds a migration too far.
+ */
+const CREDENTIAL = "rollback-command-environment-credential";
+/** Credential-shaped ON PURPOSE, so a leak into any surface would be findable. */
+const DATABASE_URL = "postgres://app:r0llback-s3cr3t@db.internal:5432/app";
+const CURRENT_DECISION = "current-deploy";
+const CURRENT_SHA = "d".repeat(40);
+const roots: string[] = [];
+
+afterEach(() => {
+  while (roots.length > 0) {
+    const root = roots.pop();
+    if (root === undefined) continue;
+    try { rmSync(root, { force: true, recursive: true }); }
+    catch { /* a held handle on Windows must not mask a test failure */ }
+  }
+});
+
+async function boundHarness(options: { readonly bind?: boolean; readonly fail?: boolean } = {}) {
+  const h = harness();
+  const root = mkdtempSync(join(tmpdir(), "moe-rollback-command-"));
+  roots.push(root);
+  const dump = join(root, "pre-migration.sql");
+  writeFileSync(dump, "-- the schema the kept deploy ran against\nCREATE TABLE kept();\n");
+  const current = recordDeployReceipt(h.store, { projectId: PROJECT_ID, environment, sha: CURRENT_SHA,
+    imageDigest: `sha256:${"e".repeat(64)}`, decisionId: CURRENT_DECISION, decidedAt: clock(),
+    refusal: null, releaseDecision: null, url: null });
+  expect(current).toMatchObject({ ok: true });
+  const receipt: MigrationReceipt = {
+    applied: ["1700000000002_current.js"], backupRef: `${dump}@sha256:${await backupFileHash(dump)}`,
+    decidedAt: clock(), environment, outcome: "APPLIED", projectId: PROJECT_ID,
+    receiptId: migrationReceiptId(PROJECT_ID, CURRENT_DECISION), refusal: null,
+    requestId: CURRENT_DECISION, sha: CURRENT_SHA, version: MIGRATION_RECEIPT_VERSION,
+  };
+  recordMigrationReceipt(h.store, receipt);
+  const credential = (): string => CREDENTIAL;
+  if (options.bind !== false) {
+    // A silently refused seed would make every later assertion vacuous.
+    expect(setEnvironmentVariable({ credential, now: clock, projectId: PROJECT_ID, store: h.store },
+      { environment, name: DEPLOY_MIGRATION_DATABASE_VARIABLE, value: DATABASE_URL })).toMatchObject({ ok: true });
+  }
+  const calls: { connection: string; path: string }[] = [];
+  const bound = { ...h.options, environmentCredential: credential, migrationWorkspace: root,
+    backupPorts: { restoreDatabaseInto: async (connection: string, path: string): Promise<void> => {
+      calls.push({ connection, path });
+      // The real port collapses every thrown message to `BACKUP_FAILED`; the double mirrors it.
+      if (options.fail === true) throw new Error("BACKUP_FAILED");
+    } } };
+  const envelopeFor = (restore: boolean): CommandHandlerInput["envelope"] => ({ ...h.input.envelope,
+    expectedVersion: h.store.getAggregateVersion(PROJECT_ID),
+    payload: { ...h.input.envelope.payload, restoreDatabase: restore } });
+  return { ...h, calls, dump, envelopeFor, handler: createRollbackCommandHandler(bound) };
+}
+
+it("(a) applies the CURRENT deploy's recorded dump to the resolved destination, exactly once", async () => {
+  const b = await boundHarness();
+
+  const decision = await b.handler({ ...b.input, envelope: b.envelopeFor(true) });
+
+  // The rollback really ran: without this every "it was applied" clause below could be satisfied
+  // by a command that refused for an unrelated reason and never reached the restore at all.
+  expect(decision.disposition).toBe("DECIDED");
+  // READ THE PORT'S RECORDED CALLS. Once, with the dump the CURRENT deploy's migration recorded
+  // and the destination the environment credential seam resolved -- neither taken from the payload.
+  expect(b.calls).toHaveLength(1);
+  expect(b.calls[0]?.path).toBe(b.dump);
+  expect(b.calls[0]?.connection).toBe(DATABASE_URL);
+});
+
+it("(b) records ZERO calls on the restore port when the operator did not request one", async () => {
+  const b = await boundHarness();
+  const envelope = b.envelopeFor(false);
+  expect(envelope.payload["restoreDatabase"]).toBe(false);
+
+  const decision = await b.handler({ ...b.input, envelope });
+
+  // The command really ran -- otherwise "no restore happened" is true for the wrong reason.
+  expect(decision.disposition).toBe("DECIDED");
+  expect(b.docker.calls.length).toBeGreaterThan(0);
+  // THE EMPTY LIST IS THE ASSERTION, on a port that is wired, bound and demonstrably callable in
+  // arm (a) above. Not "nothing failed", not "no error was thrown": no invocation was recorded,
+  // and not a no-op one with a null argument either.
+  expect(b.calls).toEqual([]);
+});
+
+it("(c) still refuses UNAVAILABLE with code and layer when the bound environment has no database", async () => {
+  const b = await boundHarness({ bind: false });
+
+  await expect(b.handler({ ...b.input, envelope: b.envelopeFor(true) })).rejects.toMatchObject({
+    code: "DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE", layer: DAEMON_COMMAND_SEAM,
+  });
+  // Zero calls, and no rollback receipt: the schema and the deployment are both untouched.
+  expect(b.calls).toEqual([]);
+  expect(b.docker.calls).toEqual([]);
+  expect(readDeployReceipt(b.store, PROJECT_ID,
+    deployReceiptId(PROJECT_ID, environment, b.input.envelope.commandId)).ok).toBe(false);
+});
+
+it("(d) a FAILING restore refuses with code and layer, attempts exactly once, and rolls back nothing", async () => {
+  const b = await boundHarness({ fail: true });
+
+  await expect(b.handler({ ...b.input, envelope: b.envelopeFor(true) })).rejects.toMatchObject({
+    code: "DEPLOY_ROLLBACK_RESTORE_FAILED", detail: ROLLBACK_RESTORE_DETAILS.DEPLOY_ROLLBACK_RESTORE_FAILED,
+    layer: ROLLBACK_RESTORE_STAMP,
+  });
+  // NO AUTOMATIC RETRY. Invisible to an arm that only checks the outcome: a handler that retried
+  // three times and then refused would satisfy every other assertion here.
+  expect(b.calls).toHaveLength(1);
+  // AND NOTHING ELSE MOVED. The refusal happens before the environment guard is reserved and
+  // before any Docker effect, so the deployment is not half-rolled-back and the operator can
+  // retry once the destination is fixed.
+  expect(b.docker.calls).toEqual([]);
+  expect(b.docker.sshCalls).toEqual([]);
+  expect(readDeployReceipt(b.store, PROJECT_ID,
+    deployReceiptId(PROJECT_ID, environment, b.input.envelope.commandId)).ok).toBe(false);
 });
 
 it("refuses changed receipt bytes under an already decided command id", async () => {

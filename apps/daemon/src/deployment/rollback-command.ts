@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import { identifyReplayRequest } from "@moe/store";
 import type { CommandDecisionRecord } from "@moe/store";
+import { nodeBackupPorts } from "../backups/backup-ports.js";
+import type { BackupPorts } from "../backups/backup-ports.js";
 import { DomainRefusal } from "../daemon-command-dispatch.js";
 import { DAEMON_COMMAND_SEAM } from "../http/http-async-contract.js";
 import type { AsyncCommandHandler } from "../http/http-async-contract.js";
@@ -12,8 +14,18 @@ import { readDeployReceipt } from "./deploy-ledger.js";
 import { admitEnvironmentName, deployReceiptId } from "./deploy-receipt-contracts.js";
 import type { DeployReceiptV1 } from "./deploy-receipt-contracts.js";
 import { createDeployService } from "./deploy-service.js";
+import { applyRollbackRestore } from "./rollback-restore.js";
 
-export type RollbackCommandOptions = Omit<DeployCommandOptions, "buildContext">;
+export type RollbackCommandOptions = Omit<DeployCommandOptions, "buildContext"> & {
+  /** THE DESTINATION-BOUND RESTORE PORT. ABSENT means the real one, so a production dispatch
+   *  reaches `nodeBackupPorts()` and not only an injected double. */
+  readonly backupPorts?: Pick<BackupPorts, "restoreDatabaseInto">;
+  /** WHERE THIS HOST'S MIGRATIONS LIVE, host-scoped and forwarded from the composition root.
+   *  `buildContext` stays omitted above because a rollback never BUILDS; this is the same
+   *  directory under a name that says what the rollback actually needs it for — resolving which
+   *  database the environment means, through the shared deploy-migration resolver. */
+  readonly migrationWorkspace?: string;
+};
 export const DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE = "DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE" as const;
 const KIND = "deployment.rollback" as const;
 const INTENT_KIND = "internal.deployment.rollback_requested";
@@ -83,10 +95,6 @@ export function createRollbackCommandHandler(options: RollbackCommandOptions): A
     const intentKey = { ...key, principalId: INTENT_PRINCIPAL };
     const intent = store.getCommandDecision(intentKey);
     if (intent !== null) assertIdentity(intent, INTENT_KIND, requestBytes, aggregateId);
-    // BackupPorts.restoreDatabase verifies a dump in a temporary isolated database.
-    // It has no bound production restore destination and cannot satisfy this operation.
-    if (request.restore) refuse(DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE,
-      "no database restoration port is bound to the selected deployment environment");
     const selected = readDeployReceipt(store, projectId, request.receiptId);
     if (!selected.ok || selected.receipt.environment !== request.environment
       || selected.receipt.outcome !== "DEPLOYED" || selected.receipt.imageDigest === null) {
@@ -110,6 +118,33 @@ export function createRollbackCommandHandler(options: RollbackCommandOptions): A
     if (intent !== null && !recovered.ok) refuse("DEPLOY_ROLLBACK_IN_PROGRESS", undefined, 409);
     if (intent === null && (recovered.ok || recovered.code !== "DEPLOY_RECEIPT_NOT_FOUND")) {
       refuse("DEPLOY_ROLLBACK_COMMAND_ID_SPENT", undefined, 409);
+    }
+    /**
+     * THE DATABASE ARM, and its position is the whole of its safety.
+     *
+     * HERE, because every read-only guard above has now admitted the request and NOTHING durable
+     * has been written yet: a restore that cannot resolve refuses without having reserved the
+     * environment guard, and one that fails refuses without having half-rolled-back the
+     * deployment. Earlier — where the blanket refusal used to sit — a request naming an invalid
+     * receipt would have had its database restored and then been refused for the receipt.
+     *
+     * `intent === null` is the exact test for "this call performs the effect". A non-null intent
+     * is receipt-backed RECOVERY of an already-admitted request, and the header above says
+     * recovery may finish an admitted request but never retry uncertain effects — re-applying a
+     * dump whose first attempt may have succeeded is precisely such a retry.
+     *
+     * NOT REQUESTED MEANS NOT CALLED: when `request.restore` is false nothing below runs, the
+     * port is never even constructed, and it therefore records nothing at all.
+     */
+    if (request.restore && intent === null) {
+      const restored = await applyRollbackRestore({
+        credential: options.environmentCredential, now: clock, projectId,
+        projectRoot: options.migrationWorkspace, store, workspace: options.migrationWorkspace,
+      }, request.environment, options.backupPorts ?? nodeBackupPorts());
+      // The binding's code and the LAYER THAT ANSWERED, forwarded unchanged: an unbound
+      // environment still refuses DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE at this seam, and
+      // a refusal the environment slice or the deploy resolver minted keeps its own layer.
+      if (!restored.ok) throw new DomainRefusal(restored.code, restored.layer, restored.detail, 422);
     }
     const decidedAt = clock();
     let guardVersion: number;

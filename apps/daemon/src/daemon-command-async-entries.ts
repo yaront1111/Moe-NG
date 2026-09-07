@@ -296,8 +296,22 @@ export function createAsyncCommandEntries(
   });
   return Object.freeze({
     "deployment.rollback": Object.freeze({
+      /**
+       * THE ROLLBACK'S DATABASE ARM NEEDS TWO THINGS THE SPREAD ABOVE NEVER CARRIED. Measured,
+       * not assumed: `...deploySeams` forwards buildContext/clock/ports/timing only, so before
+       * this the rollback seam had NO environment credential at all and would have resolved every
+       * restore to "no destination bound" on a fully wired daemon. `environmentCredential` is
+       * what opens the environment store, and `migrationWorkspace` is the SAME host-scoped
+       * directory the deploy handler receives as `buildContext` — including its
+       * DEPLOY_BUILD_CONTEXT_ENV_KEY fallback, which the raw spread would have dropped.
+       */
       asyncHandler: createRollbackCommandHandler({ ...deploySeams,
-        operatorPrincipalId: options.operatorPrincipalId, projectId, store }),
+        operatorPrincipalId: options.operatorPrincipalId, projectId, store,
+        // Spread rather than assigned: under exactOptionalPropertyTypes an explicit `undefined`
+        // is a DIFFERENT thing from an absent key, and only the absent key means "unwired".
+        ...(options.environmentCredential === undefined
+          ? {} : { environmentCredential: options.environmentCredential }),
+        ...(buildContext === undefined ? {} : { migrationWorkspace: buildContext }) }),
       handler: foundationSyncHandler, kind: "deployment.rollback",
       payloadKeys: PAYLOAD_KEYS["deployment.rollback"], requiredCapability: CAPABILITIES.GOAL,
     }),
