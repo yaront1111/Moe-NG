@@ -218,6 +218,24 @@ export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
   // an agent reaching the kind over a transport, this one stops the wrapper minting a
   // session to take it.
   "environment.set_variable", "environment.unset_variable",
+  // HOW OFTEN PRODUCTION IS PROBED IS THE OPERATOR'S JUDGEMENT, not an agent's. The interval is
+  // a trade between monitoring cost and alert noise on the operator's own product, and an agent
+  // able to widen it could quietly silence the surface that reports an outage -- the failure
+  // would not look like a refusal, it would look like nothing happening. The damage is the
+  // ABSENCE of a signal, which is the one kind of harm no later gate can notice.
+  //
+  // THIS IS THE ONLY FENCE THE KIND CAN CARRY AT THIS COMMIT, and that is deliberate rather
+  // than an omission. `mcp-tool-allowlist.ts` holds the transport half for every other kind
+  // here, but its `MCP_EXCLUDED_COMMAND_KINDS` is DERIVED from `OPERATOR_PRINCIPAL_KINDS`
+  // (daemon-command-vocabulary.ts), which is typed by `WiredCommandKind` and therefore cannot
+  // name a kind before `PAYLOAD_KEYS` does. Until task-eb37494e wires the dispatch, the kind is
+  // MCP-unreachable for the stronger reason that the advertisement itself derives from
+  // `PAYLOAD_KEYS` and does not contain it; `mcp-tool-allowlist.test.ts` asserts that
+  // unreachability against the production allowlist AND reds if the dispatch lands without the
+  // operator-roster entry. The entry HERE is what stops the wrapper staffing the kind in the
+  // meantime, and it is a staffing decision rather than a capability fact, so it keeps applying
+  // whatever `agentCapabilitiesFor` later returns.
+  "monitoring.set_probe_interval",
   // Provider selection chooses which vendor receives source and session credentials. MCP
   // exclusion blocks transport access; this fence also forbids staffing that human decision.
   "project.set_agent_provider",
