@@ -1,0 +1,32 @@
+{
+  "id": "task-2f2ed034fbec4fe48b49a951951c9505",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "bug: the affordance surface never offers deployment.rollback or exposes its receipt selection",
+  "description": "Found during parent task-85895a88a2484d8589046b2030efd445 step 1 at HEAD 4ee9efe1. `git grep -n 'deployment.rollback' -- apps/daemon/src/http apps/daemon/src/bootstrap/bootstrap-contracts.ts` returns no matches; createAffordancePort iterates BOOTSTRAP_COMMAND_KINDS then explicit providers, none offering rollback, although the async registry serves it.\nThe handler requires project target plus environment/toReceiptRef/restoreDatabase; `git grep -n 'toReceiptRef' -- apps/daemon/src/http apps/control-room/src` also returns no matches, while health/read exposes rollbackSha only. The incident UI cannot spend a daemon offer or identify the matching immutable receipt without fabricating authority. Ship the production offer/read binding before the parent card consumer.",
+  "definitionOfDone": [
+    "The composed production affordance read emits deployment.rollback only when the daemon can identify a valid prior DEPLOYED receipt with image digest for the environment; missing/unverifiable receipt yields no rollback control authority. Exact project target and expectedVersion come from the handler's durable authority, not browser inference.",
+    "Expose a coherent daemon-owned environment, target receipt reference and SHA binding that the parent incident card can carry into confirmation and payload; explicitly define refresh/stale-binding behavior. Preserve exact-key readers and all affected shape consumers.",
+    "A production read-to-command round trip spends the emitted offer through the real command registry with environment/toReceiptRef/restoreDatabase, and asserts stable code/layer on refusal paths; human-only and MCP exclusion remain intact.",
+    "Run fresh focused daemon tests with nonzero executed counts, pnpm typecheck, and the control-room package gate when served read or decoder shape changes. Parent task-85895a88a2484d8589046b2030efd445 is the concrete consumer and must depend on this row."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-85895a88a2484d8589046b2030efd445",
+  "dependsOn": [
+    "task-b22462cf9d9e41cd9472415da2c1fb7d",
+    "task-509c6c1609174adb9228940bc002f5c3"
+  ],
+  "priority": "HIGH",
+  "order": 123.15,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-07T19:38:54.771Z",
+  "updatedAt": "2026-09-07T19:38:54.771Z"
+}

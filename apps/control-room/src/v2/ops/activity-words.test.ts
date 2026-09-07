@@ -135,3 +135,81 @@ describe("deploy receipts, as operator words", () => {
     }
   });
 });
+
+/**
+ * MIGRATION RECEIPTS ON THE DECISION FEED. The kind is transcribed BY HAND here
+ * (`migration-receipt.ts:10`) for the same reason the deploy kind is: this package must not take
+ * a build dependency on the daemon's sources, so the literal is the contract.
+ *
+ * APPLIED, REFUSED and REVERTED are three different things to have happened to a schema. A feed
+ * that rendered all three as the kind's own words would say a migration was RECORDED while never
+ * saying whether the database moved - which is the one question an operator has after an incident.
+ */
+describe("migration receipts, as operator words", () => {
+  const RECEIPT = "internal.repository.migration_receipt";
+
+  it("says APPLIED, REFUSED and REVERTED in three sentences sharing no leading word", () => {
+    const applied = decisionWords(RECEIPT, "APPLIED");
+    const refused = decisionWords(RECEIPT, "REFUSED");
+    const reverted = decisionWords(RECEIPT, "REVERTED");
+    expect(applied).toBe("applied the migrations to this environment");
+    expect(refused).toBe("could not migrate: read the receipt for what the schema did");
+    expect(reverted).toBe("reverted the last migration batch");
+    // Pairwise DISTINCT, so a future edit collapsing any two reds here rather than shipping a
+    // feed in which a refused migration reads like an applied one.
+    expect(new Set([applied, refused, reverted]).size).toBe(3);
+    // And distinct at a GLANCE: a truncated row shows the leading word, so three receipts that
+    // all began "recorded" would be indistinguishable in exactly the place they are scanned.
+    const leading = [applied, refused, reverted].map((words) => words.split(" ")[0]);
+    expect(new Set(leading).size).toBe(3);
+  });
+
+  it("never lets a REFUSED migration read as a successful one", () => {
+    const refused = decisionWords(RECEIPT, "REFUSED");
+    // The failure this arm exists for: a refusal sentence that still contains the applied word
+    // would be read as success by someone scanning the column.
+    expect(refused).not.toContain("applied");
+    expect(refused).not.toContain("reverted");
+    expect(decisionWords(RECEIPT, "APPLIED")).not.toContain("could not");
+  });
+
+  it("prints an unrostered verdict VERBATIM rather than swallowing it", () => {
+    // The daemon can mint a fourth outcome without this file being edited; it must still print,
+    // and it must NOT fall through to a success phrase.
+    expect(decisionWords(RECEIPT, "PARTIAL")).toBe("recorded the migration: PARTIAL");
+    expect(decisionWords(RECEIPT, "PARTIAL")).toContain("PARTIAL");
+    expect(decisionWords(RECEIPT, "SOMETHING_NEW")).toBe("recorded the migration: SOMETHING_NEW");
+  });
+
+  it("falls back to the kind's own words when the record carries no verdict", () => {
+    expect(decisionWords(RECEIPT, null)).toBe("recorded the migration");
+    expect(kindWords(RECEIPT)).toBe("recorded the migration");
+    // Not an echo of the raw kind: an unworded kind is what this table exists to prevent.
+    expect(kindWords(RECEIPT)).not.toBe(RECEIPT);
+  });
+
+  it("carries no apostrophe, so the scheduler boundary scan cannot red on these strings", () => {
+    for (const words of [
+      decisionWords(RECEIPT, "APPLIED"), decisionWords(RECEIPT, "REFUSED"),
+      decisionWords(RECEIPT, "REVERTED"), decisionWords(RECEIPT, "PARTIAL"),
+      decisionWords(RECEIPT, null), kindWords(RECEIPT),
+    ]) {
+      expect(words).not.toContain("'");
+      // eslint-disable-next-line no-control-regex
+      expect(/^[\x20-\x7e]+$/u.test(words)).toBe(true);
+    }
+  });
+
+  it("names no connection value, no database url and no backup path", () => {
+    // Epic rail 3 at the one seam where a receipt's words are composed: the feed says WHAT
+    // happened to WHICH environment and nothing that could carry a credential or a filesystem
+    // location, so a screenshot of the board is never a leak.
+    for (const verdict of ["APPLIED", "REFUSED", "REVERTED", "PARTIAL", null]) {
+      const words = decisionWords(RECEIPT, verdict);
+      expect(words).not.toContain("postgres://");
+      expect(words).not.toContain("DATABASE_URL");
+      expect(words).not.toContain(".moe-next");
+      expect(words).not.toMatch(/[A-Za-z]:\|\//u);
+    }
+  });
+});

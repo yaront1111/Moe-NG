@@ -22,6 +22,7 @@ const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
   "internal.release.dossier": "recorded the release evidence",
   "internal.release.receipt": "recorded the release",
   "internal.repository.landing_receipt": "landed the accepted work as a commit",
+  "internal.repository.migration_receipt": "recorded the migration",
   "internal.repository.publish_receipt": "recorded the publish",
   "plan.propose": "proposed a plan",
   "planning.submit_decomposition": "submitted a compiled plan",
@@ -51,6 +52,8 @@ const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
 /** The daemon's own receipt kind (`deploy-receipt-contracts.ts`), matched here rather than
  *  imported: this package must not take a build dependency on the daemon's sources. */
 const DEPLOY_RECEIPT_KIND = "internal.deployment.deploy_receipt";
+/** The migration receipt kind (`migration-receipt.ts:10`), matched here for the same reason. */
+const MIGRATION_RECEIPT_KIND = "internal.repository.migration_receipt";
 
 export function kindWords(commandKind: string): string {
   return KIND_WORDS[commandKind] ?? commandKind;
@@ -96,6 +99,19 @@ export function decisionWords(commandKind: string, verdict: string | null): stri
     // truncated. An unrecognised outcome still prints rather than reading as a success.
     if (verdict === "DEPLOYED") return "deployed the product to the environment";
     if (verdict === "REFUSED") return "could not deploy: the environment was left as it was";
+    return `${kindWords(commandKind)}: ${verdict}`;
+  }
+  if (commandKind === MIGRATION_RECEIPT_KIND) {
+    // THREE DIFFERENT THINGS TO HAVE HAPPENED TO A SCHEMA. A feed rendering all three as the
+    // kind's own words would say a migration was RECORDED while never saying whether the
+    // database moved, which is the one question an operator has after an incident. The three
+    // sentences share no leading word, so they stay distinguishable when the row truncates.
+    // REFUSED deliberately does NOT claim the schema is untouched: MIGRATION_BACKUP_FAILED
+    // applies nothing, but MIGRATION_FAILED can stop partway, so the sentence sends the reader
+    // to the receipt rather than offering a reassurance the verdict alone cannot support.
+    if (verdict === "APPLIED") return "applied the migrations to this environment";
+    if (verdict === "REFUSED") return "could not migrate: read the receipt for what the schema did";
+    if (verdict === "REVERTED") return "reverted the last migration batch";
     return `${kindWords(commandKind)}: ${verdict}`;
   }
   if (commandKind === "approval.decide" || commandKind === "approval.decide_intent") {

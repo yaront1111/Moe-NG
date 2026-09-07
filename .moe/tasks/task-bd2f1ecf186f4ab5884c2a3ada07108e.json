@@ -160,7 +160,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T17:18:12.578Z",
-  "updatedAt": "2026-09-07T19:36:05.188Z",
+  "updatedAt": "2026-09-07T19:36:31.775Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T17:19:37.645Z",
     "plannedStepCount": 7,
@@ -219,17 +219,46 @@
       "treeId": "714129dde928c2f206824dacced307d140f9b7bc",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "4ee9efe117416bad9f673df9bd6cf2cdb747724a",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-319873d7@2026-09-07T18:50:36Z",
+      "paths": [
+        ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json",
+        ".moe/tasks/task-bd2f1ecf186f4ab5884c2a3ada07108e.json",
+        ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json",
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/release/release-authorization-fixtures.ts",
+        "apps/daemon/src/release/release-decide-authorization.test.ts",
+        "apps/daemon/src/release/release-decide-command.ts",
+        "apps/daemon/src/release/release-decide-service.ts"
+      ],
+      "recordedBy": "worker-319873d7",
+      "recordedAt": "2026-09-07T19:36:31.775Z",
+      "treeId": "977b84e7d85afafedd9ade9e094f5b759fa6c44f",
+      "status": "BLOCKED",
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-bd2f1ecf186f4ab5884c2a3ada07108e.json"
+    ".moe/tasks/task-bd2f1ecf186f4ab5884c2a3ada07108e.json",
+    ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json",
+    ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json",
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    "apps/daemon/src/release/release-authorization-fixtures.ts",
+    "apps/daemon/src/release/release-decide-authorization.test.ts",
+    "apps/daemon/src/release/release-decide-command.ts",
+    "apps/daemon/src/release/release-decide-service.ts"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-319873d7@2026-09-07T18:50:56Z",
-    "at": "2026-09-07T18:51:21.777Z"
+    "sessionId": "worker-319873d7@2026-09-07T18:50:36Z",
+    "at": "2026-09-07T19:36:31.775Z"
   },
   "declaredFiles": [
     "apps/daemon/src/release/release-decide-command.ts",
@@ -237,5 +266,10 @@
     "apps/daemon/src/daemon-command-async-entries.ts",
     "apps/daemon/src/release/release-authorization-fixtures.ts",
     "apps/daemon/src/release/release-decide-authorization.test.ts"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/release/release-decide-authorization.test.ts",
+    "apps/daemon/src/release/release-authorization-fixtures.ts",
+    "apps/daemon/src/release/release-decide-command.ts"
   ]
 }
