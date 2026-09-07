@@ -26,6 +26,13 @@ import {
 import type { ExpansionPlanningHoldState, PlanningExpansionHoldBinding } from "@moe/core";
 
 import * as scheduler from "@moe/scheduler";
+
+import * as nodeAuthorityBudget from "./node-authority/node-authority-budget.js";
+import * as nodeAuthorityCodec from "./node-authority/node-authority-codec.js";
+import * as nodeAuthorityCompose from "./node-authority/node-authority-compose.js";
+import * as nodeAuthorityContract from "./node-authority/node-authority-contract.js";
+import * as nodeAuthorityFields from "./node-authority/node-authority-fields.js";
+import * as nodeAuthorityRecursion from "./node-authority/node-authority-recursion.js";
 import type {
   AuthorityErrorCode, AuthorityIssue, AuthorityOutcome, AuthorityProof, AuthorityRejection,
   ClockObservation, Fenced, LeaseKind, LeaseRecord, LeaseState, RejectionSecurityRecord,
@@ -178,7 +185,8 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
   ["NODE_AUTHORITY_LIMITS", "record"],
   ["NODE_AUTHORITY_RECURSION_CODES", "array"], ["NODE_AUTHORITY_RECURSION_LAYERS", "array"],
   ["NODE_AUTHORITY_SCHEMA_TAG", "string"],
-  ["NODE_AUTHORITY_SCHEMA_VERSION", "number"], ["NODE_DEFINITION_KEYS", "array"],
+  ["NODE_AUTHORITY_SCHEMA_VERSION", "number"],
+  ["NODE_AUTHORITY_SUPPORTED_SCHEMA_VERSIONS", "array"], ["NODE_DEFINITION_KEYS", "array"],
   ["NODE_JOIN_ROLES", "array"], ["NODE_PLANNING_SOURCE_CODES", "array"],
   ["NODE_PLANNING_SOURCE_DIGEST_DOMAIN", "string"],
   ["NODE_PLANNING_SOURCE_SCHEMA_VERSION", "number"], ["NODE_PROPERTY_FACT_KINDS", "array"],
@@ -234,7 +242,7 @@ const EXPECTED_EXPORTS: readonly (readonly [string, ExportKind])[] = [
 const surface: Readonly<Record<string, unknown>> = scheduler;
 
 it("generates one expectation per published root export", () => {
-  expect(EXPECTED_EXPORTS.length).toBe(144);
+  expect(EXPECTED_EXPORTS.length).toBe(145);
 });
 
 /**
@@ -302,29 +310,66 @@ it("withholds the wire mechanics that would let a consumer mint content identity
 });
 
 /**
- * The 22 node-authority bindings the six modules export and the root deliberately
- * withholds. Publishing 19 of the 41 leaves exactly these: the preimage and
+ * The 27 node-authority bindings the six modules export and the root deliberately
+ * withholds. Publishing 21 of the 48 leaves exactly these: the preimage and
  * canonical-text mechanics (canonicalText, nodeBodyDigest, canonicalEnvelopeJson)
  * would let a consumer mint a body digest for a definition the codec never
- * admitted; draftNodeAuthority yields an IDENTITY-LESS draft that looks like a
- * definition and is not one; and the compose/field/budget readers are internal
- * halves of admission whose partial verdicts mean nothing outside it.
+ * admitted; the two version mechanics (isNodeAuthoritySchemaVersion,
+ * nodeAuthoritySchemaTag) are the framing half of those primitives;
+ * NODE_AUTHORITY_UNDECLARED_SCHEMA_VERSION is the MINT-SIDE compatibility policy
+ * and minting happens only inside this package -- a reader distinguishes an
+ * undeclared node by the member's ABSENCE, never by comparing its version, so
+ * publishing it would advertise a decision no consumer has to make;
+ * draftNodeAuthority yields an IDENTITY-LESS draft that looks like a definition and
+ * is not one; and the compose/field/budget readers are internal halves of admission
+ * whose partial verdicts mean nothing outside it.
  *
- * BIDIRECTIONAL BY CONSTRUCTION: 19 published + 22 withheld = the 41 runtime
- * bindings those modules export, so a name added to the public module without
- * review lands in neither list and the set-equality above names it.
+ * BIDIRECTIONAL BY MEASUREMENT, not by hand-count: the case below enumerates the
+ * served set from the six modules and pins 21 published + 26 withheld = 47. The
+ * previous docblock claimed 19 + 22 = 41 and was stale in all three numbers —
+ * `composePlanningEdges` and `readDirectHardDependencies` were served and withheld
+ * and named in neither list, which the old count-plus-no-leak arm could not see.
  */
 const WITHHELD_NODE_AUTHORITY_NAMES: readonly string[] = [
   "draftNodeAuthority", "readDraftFields", "readText", "normalizeScope",
   "forbiddenKeyRefusal", "forbiddenBudgetKeyRefusal", "readNodeAuthorityBudget",
   "ok", "refuse", "passthrough", "compareStrings", "deepFreeze",
   "canonicalText", "nodeBodyDigest", "canonicalEnvelopeJson",
-  "pick", "admitPlanning", "applicable", "composeEdges", "requirementsOf",
-  "readDerived", "project",
+  "isNodeAuthoritySchemaVersion", "nodeAuthoritySchemaTag",
+  "pick", "admitPlanning", "applicable", "composeEdges", "composePlanningEdges",
+  "requirementsOf", "readDerived", "readDirectHardDependencies", "project",
+  "NODE_AUTHORITY_UNDECLARED_SCHEMA_VERSION",
 ];
 
+/**
+ * The ONLY relative specifiers in this file, and they are what makes the claim
+ * above checkable rather than hand-counted. Every other assertion here proves what
+ * the package root REACHES, which the bare root can show; this one proves what it
+ * WITHHOLDS, and the root cannot show a name it does not publish. Enumerating the
+ * served set from the implementation seam is what global rail 9 requires.
+ */
+const NODE_AUTHORITY_MODULES: readonly Readonly<Record<string, unknown>>[] = [
+  nodeAuthorityContract, nodeAuthorityBudget, nodeAuthorityFields,
+  nodeAuthorityCompose, nodeAuthorityCodec, nodeAuthorityRecursion,
+];
+
+it("closes the node-authority surface both ways: every served name is published or withheld", () => {
+  const served = new Set(NODE_AUTHORITY_MODULES.flatMap((module) => Object.keys(module)));
+  const published = new Set(Object.keys(scheduler));
+  const advertised = [...served].filter((name) => published.has(name));
+  // DIRECTION 1 — nothing is served in silence: every module export the root does
+  // not publish is named in the withheld roster, by name and not merely by count.
+  expect([...served].filter((name) => !published.has(name)).sort())
+    .toStrictEqual([...WITHHELD_NODE_AUTHORITY_NAMES].sort());
+  // DIRECTION 2 — nothing is withheld in name only: a roster entry for a name no
+  // module serves is a stale claim, and it would hide a real leak behind a count.
+  expect(WITHHELD_NODE_AUTHORITY_NAMES.filter((name) => !served.has(name))).toStrictEqual([]);
+  expect(advertised.length + WITHHELD_NODE_AUTHORITY_NAMES.length).toBe(served.size);
+  expect([advertised.length, served.size]).toStrictEqual([21, 48]);
+});
+
 it("withholds the node-authority internals that would bypass the admission authority", () => {
-  expect(WITHHELD_NODE_AUTHORITY_NAMES.length).toBe(22);
+  expect(WITHHELD_NODE_AUTHORITY_NAMES.length).toBe(27);
   const published = new Set(Object.keys(scheduler));
   expect(WITHHELD_NODE_AUTHORITY_NAMES.filter((name) => published.has(name)))
     .toStrictEqual([]);

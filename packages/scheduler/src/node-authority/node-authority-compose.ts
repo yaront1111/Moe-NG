@@ -27,14 +27,14 @@ import {
   hasOnlyOwnStringKeys, isPlainArray, isPlainRecord, readOwnDataProperty,
 } from "../runtime-shape.js";
 import {
-  NODE_AUTHORITY_LIMITS, NODE_AUTHORITY_SCHEMA_VERSION, canonicalText, compareStrings,
+  NODE_AUTHORITY_LIMITS, canonicalText, compareStrings,
   deepFreeze, ok, passthrough, refuse,
 } from "./node-authority-contract.js";
 import { readDirectHardDependencies, readText } from "./node-authority-fields.js";
 import type { MonotonicPredicateRegistryEntry } from "../dependencies/dependency-contract.js";
 import type {
-  NodeAuthorityDraft, NodeAuthorityRefusal, NodeCriterionBinding, NodeDefinition,
-  NodeDependencyEntry, Read,
+  NodeAuthorityDraft, NodeAuthorityRefusal, NodeAuthoritySchemaVersion, NodeCriterionBinding,
+  NodeDefinition, NodeDependencyEntry, Read,
 } from "./node-authority-contract.js";
 
 const PROOF_KEYS: readonly string[] = ["parameterSchema", "predicateRef", "proofRationale",
@@ -228,22 +228,33 @@ export function readDerived(value: Record<string, unknown>): Read<DerivedIdentit
   return ok({ criteria: Object.freeze(criteria), planExecutionContentDigest: digest });
 }
 
-/** Assembled in declared key order so `Object.keys` is stable for any reader. */
+/**
+ * Assembled in declared key order so `Object.keys` is stable for any reader.
+ *
+ * The version is HANDED IN, never read off this module: a fresh body is minted at
+ * the current version, a re-read body keeps its OWN. `declaredMigrations` is spread
+ * in only when the draft carries it and is NEVER defaulted to `[]` — that would
+ * mint a declaration nobody authored and move every stored body's bytes.
+ */
 export function project(
   draft: NodeAuthorityDraft, identity: DerivedIdentity, edges: ComposedEdges,
+  schemaVersion: NodeAuthoritySchemaVersion,
 ): NodeDefinition {
   return deepFreeze<NodeDefinition>({
     admissionAmounts: draft.admissionAmounts,
     admissionGatePolicy: draft.admissionGatePolicy,
     capability: draft.capability,
     completionLinkage: draft.completionLinkage, constraints: draft.constraints,
-    criterionBindings: identity.criteria, directHardDependencies: edges.entries,
+    criterionBindings: identity.criteria,
+    ...(draft.declaredMigrations === undefined
+      ? {} : { declaredMigrations: draft.declaredMigrations }),
+    directHardDependencies: edges.entries,
     joinRole: draft.joinRole, monotonicPredicateProofs: edges.proofs, nodeKey: draft.nodeKey,
     objective: draft.objective,
     planExecutionContentDigest: identity.planExecutionContentDigest,
     policySliceHash: draft.policySliceHash, readScopes: draft.readScopes,
     repositoryBaseTree: draft.repositoryBaseTree, resources: draft.resources,
-    schemaVersion: NODE_AUTHORITY_SCHEMA_VERSION,
+    schemaVersion,
     verificationRecipeRevisions: draft.verificationRecipeRevisions,
     writeScopes: draft.writeScopes,
   });

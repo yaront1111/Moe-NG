@@ -60,6 +60,8 @@ const PREIMAGE_KEYS: readonly string[] = Object.freeze([
   "criterionBindings", "joinRole", "objective", "planExecutionContentDigest", "policySliceHash",
   "readScopes", "repositoryBaseTree", "resources", "verificationRecipeRevisions", "writeScopes",
 ]);
+/** The one OPTIONAL preimage member; projected only when the author stated it. */
+const DECLARED_MIGRATIONS_KEY = "declaredMigrations";
 
 const refuse = (code: NodeAuthorityRecursionCode, message: string): NodeAuthorityRecursionResult =>
   Object.freeze({
@@ -199,10 +201,25 @@ function agree(graph: ValidatedGraph, byKey: Map<string, NodeDefinition>,
   return null;
 }
 
+/**
+ * The roster is selected by PRESENCE, not by version. `declaredMigrations` is the
+ * one OPTIONAL member, and a schema-3 body that declares nothing legitimately omits
+ * it — ABSENT is UNKNOWN. An unconditional roster would project `undefined` for
+ * every such body and for every schema-2 body, and `canonicalText` THROWS on
+ * undefined rather than skipping it, so widening the list outright does not merely
+ * rewrite historical hashes: it makes every legacy graph throw.
+ *
+ * A declaration-free body therefore hashes IDENTICALLY at either schema version —
+ * `schemaVersion` rides the domain tag and is not projected — which is what keeps
+ * every stored execution ref, claim, receipt and approval binding what it bound.
+ */
 function preimage(definition: NodeDefinition, incoming: readonly string[]): string {
   const body = definition as unknown as Record<string, unknown>;
   const projected: Record<string, unknown> = {};
   for (const key of PREIMAGE_KEYS) projected[key] = body[key];
+  if (Object.hasOwn(body, DECLARED_MIGRATIONS_KEY)) {
+    projected[DECLARED_MIGRATIONS_KEY] = body[DECLARED_MIGRATIONS_KEY];
+  }
   return `${RECURSION_DIGEST_DOMAIN}\n${frame(canonicalText(projected))}${incoming.join("")}`;
 }
 

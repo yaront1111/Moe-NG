@@ -85,6 +85,12 @@ export type {
  * lets a consumer validate its own input BEFORE calling, instead of copying the
  * rosters and drifting from them.
  *
+ * The supported-version SET is published for the same reason as the rosters: a
+ * consumer can tell a body it can read from one it cannot BEFORE calling. The two
+ * version MECHANICS stay private — `nodeAuthoritySchemaTag` is framing machinery
+ * for `canonicalEnvelopeJson`, and `isNodeAuthoritySchemaVersion` is the admission
+ * gate's own predicate; publishing either widens the identity-minting hole below.
+ *
  * WITHHELD from this same module: the preimage and canonical-text mechanics
  * (`canonicalText`, `nodeBodyDigest`, `canonicalEnvelopeJson`), because a
  * consumer holding them could mint a body digest for a definition the codec
@@ -105,6 +111,7 @@ export {
   NODE_AUTHORITY_LIMITS,
   NODE_AUTHORITY_SCHEMA_TAG,
   NODE_AUTHORITY_SCHEMA_VERSION,
+  NODE_AUTHORITY_SUPPORTED_SCHEMA_VERSIONS,
   NODE_DEFINITION_KEYS,
   NODE_JOIN_ROLES,
 } from "./node-authority-contract.js";
@@ -120,6 +127,7 @@ export type {
   NodeAuthorityIssueCode,
   NodeAuthorityLayer,
   NodeAuthorityRefusal,
+  NodeAuthoritySchemaVersion,
   NodeCriterionBinding,
   NodeDefinition,
   NodeDefinitionKey,

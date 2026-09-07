@@ -14,12 +14,12 @@ import {
 import { forbiddenBudgetKeyRefusal, readNodeAuthorityBudget } from "./node-authority-budget.js";
 import {
   NODE_AUTHORITY_DRAFT_KEYS, NODE_AUTHORITY_EXCLUDED_STATE_KEYS,
-  NODE_AUTHORITY_FORBIDDEN_IDENTITY_KEYS, NODE_AUTHORITY_LIMITS, NODE_JOIN_ROLES,
-  compareStrings, deepFreeze, ok, refuse,
+  NODE_AUTHORITY_FORBIDDEN_IDENTITY_KEYS, NODE_AUTHORITY_LIMITS, NODE_AUTHORITY_SCHEMA_VERSION,
+  NODE_JOIN_ROLES, compareStrings, deepFreeze, ok, refuse,
 } from "./node-authority-contract.js";
 import type {
   NodeAuthorityCode, NodeAuthorityDraft, NodeAuthorityDraftResult, NodeAuthorityEdgeInput,
-  NodeAuthorityLayer, NodeAuthorityRefusal, NodeJoinRole, Read,
+  NodeAuthorityLayer, NodeAuthorityRefusal, NodeAuthoritySchemaVersion, NodeJoinRole, Read,
 } from "./node-authority-contract.js";
 
 const HEX_64 = /^[0-9a-f]{64}$/u;
@@ -86,6 +86,35 @@ const idList = (value: unknown, field: string): Read<readonly string[]> => readL
 const scopeList = (value: unknown, field: string): Read<readonly string[]> => readList(
   value, field, NODE_AUTHORITY_LIMITS.maxScopeEntries, normalizeScope,
   "NODE_AUTHORITY_SCOPE_INVALID", "NODE_AUTHORITY_SCOPES");
+
+/**
+ * NOT `idList`, and that is the whole point: `readList` silently DEDUPS and SORTS,
+ * which is right for `constraints`/`resources`, where the value is a SET. A
+ * migration declaration is neither. AUTHORED ORDER IS PRESERVED — migrations apply
+ * in sequence, so reordering would restate what the author declared — and a
+ * DUPLICATE REFUSES rather than collapsing. Nothing is left to normalize, so two
+ * admissible spellings differ only in an order that is content, which the digest binds.
+ */
+function readDeclaredMigrations(value: unknown): Read<readonly string[]> {
+  if (!isPlainArray(value)) {
+    return refuse("NODE_AUTHORITY_FIELD_INVALID", "NODE_AUTHORITY_ADMISSION",
+      "declaredMigrations is not a list");
+  }
+  if (value.length > NODE_AUTHORITY_LIMITS.maxMigrationEntries) {
+    return refuse("NODE_AUTHORITY_LIMIT_EXCEEDED", "NODE_AUTHORITY_LIMITS",
+      "declaredMigrations exceeds its bound");
+  }
+  const declared: string[] = [];
+  for (const entry of value) {
+    const identifier = asId(entry);
+    if (identifier === null) return refuse("NODE_AUTHORITY_FIELD_INVALID",
+      "NODE_AUTHORITY_ADMISSION", "declaredMigrations holds an inadmissible entry");
+    if (declared.includes(identifier)) return refuse("NODE_AUTHORITY_DUPLICATE_MIGRATION",
+      "NODE_AUTHORITY_ADMISSION", "declaredMigrations states one identifier twice");
+    declared.push(identifier);
+  }
+  return ok(Object.freeze(declared));
+}
 
 /**
  * Edge order is normative and is REFUSED rather than repaired: the recursive-hash
@@ -168,6 +197,7 @@ export function forbiddenKeyRefusal(value: object): NodeAuthorityRefusal | null 
  */
 export function readDraftFields(
   value: unknown, allowed: readonly string[] = NODE_AUTHORITY_DRAFT_KEYS,
+  version: NodeAuthoritySchemaVersion = NODE_AUTHORITY_SCHEMA_VERSION,
 ): NodeAuthorityDraftResult {
   if (!isPlainRecord(value)) {
     return refuse("NODE_AUTHORITY_MALFORMED", "NODE_AUTHORITY_ADMISSION",
@@ -182,6 +212,19 @@ export function readDraftFields(
   const read = new Map<string, unknown>();
   for (const key of NODE_AUTHORITY_DRAFT_KEYS) {
     const property = readOwnDataProperty(value, key);
+    if (key === "declaredMigrations") {
+      // THE COMPATIBILITY POLICY: the only member whose absence is admissible. The
+      // decode path states every roster key, so a body that never declared arrives
+      // PRESENT with `undefined`; both spellings are ABSENT and neither reaches the
+      // map, so `undefined` never reaches `canonicalText`, which throws on it.
+      if (!property.ok) return refuse("NODE_AUTHORITY_MALFORMED",
+        "NODE_AUTHORITY_ADMISSION", "declaredMigrations is not a data property");
+      if (!property.present || property.value === undefined) continue;
+      if (version < 3) return refuse("NODE_AUTHORITY_SCHEMA_MISMATCH",
+        "NODE_AUTHORITY_SCHEMA", "a schema-2 body states a declaration it cannot carry");
+      read.set(key, property.value);
+      continue;
+    }
     if (!property.ok || !property.present) {
       return refuse("NODE_AUTHORITY_MALFORMED", "NODE_AUTHORITY_ADMISSION",
         `${key} is absent or not a data property`);
@@ -201,6 +244,9 @@ function assembleDraft(read: ReadonlyMap<string, unknown>): NodeAuthorityDraftRe
   const readScopes = scopeList(read.get("readScopes"), "readScopes");
   const writeScopes = scopeList(read.get("writeScopes"), "writeScopes");
   const edges = readDirectHardDependencies(read.get("directHardDependencies"));
+  // `has`, never `get`: an absent declaration and an empty one are different facts.
+  const declared = read.has("declaredMigrations")
+    ? readDeclaredMigrations(read.get("declaredMigrations")) : null;
   if (!objective.ok) return objective;
   if (!constraints.ok) return constraints;
   if (!resources.ok) return resources;
@@ -208,6 +254,9 @@ function assembleDraft(read: ReadonlyMap<string, unknown>): NodeAuthorityDraftRe
   if (!readScopes.ok) return readScopes;
   if (!writeScopes.ok) return writeScopes;
   if (!edges.ok) return edges;
+  // LAST of the list readers, deliberately: inserting it earlier would re-order the
+  // refusal precedence every existing arm was written against.
+  if (declared?.ok === false) return declared;
   const budget = readNodeAuthorityBudget(
     read.get("admissionAmounts"), read.get("admissionGatePolicy"),
   );
@@ -238,6 +287,9 @@ function assembleDraft(read: ReadonlyMap<string, unknown>): NodeAuthorityDraftRe
       admissionGatePolicy: budget.value.admissionGatePolicy,
       capability: read.get("capability") as string,
       completionLinkage: linkage as string | null, constraints: constraints.value,
+      // Spread, never `declaredMigrations: undefined`: an assigned undefined is
+      // still an own key to `Object.keys`.
+      ...(declared === null ? {} : { declaredMigrations: declared.value }),
       directHardDependencies: edges.value, joinRole: role as NodeJoinRole, nodeKey,
       objective: objective.value, policySliceHash, readScopes: readScopes.value,
       repositoryBaseTree, resources: resources.value, verificationRecipeRevisions: recipes.value,
