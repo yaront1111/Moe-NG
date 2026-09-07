@@ -232,3 +232,79 @@ describe("LiveBoard", () => {
     expect(screen.getByTestId("cr.kanban.next").textContent).toBe("Watch the board");
   });
 });
+
+/**
+ * WHAT A NODE ADDS TO THE SCHEMA (DoD 6, second surface). The identifiers come from the node's
+ * OWN declaration - `RunNodeView.declaredMigrations`, served by `/runs/read` - and from nowhere
+ * else. Not from a diff, not from `landing.files`, not from a filename, not from a receipt's
+ * applied list: a receipt is a PROJECT_ENVIRONMENT observation and hanging it on a node is a
+ * false attribution the producer rows deliberately refused to build.
+ */
+describe("a node card names the migrations the node declares", () => {
+  const ONE = "20260907120000-add-receipts.sql";
+  const TWO = "20260907120500-add-index.sql";
+
+  // Spelled out rather than spread from RUNS: a spread of the RunsOutcome union inside a nested
+  // scope loses the discriminant narrowing and would only typecheck by widening the fixture.
+  function boardWith(nodes: readonly RunNodeView[]): RunsOutcome {
+    return {
+      goals: [{
+        goalId: GOAL, lifecycle: "EXECUTION_ENABLED", nodes, publish: null,
+        run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: RUN },
+        title: "Evidence ledger",
+      }],
+      status: "RUNS",
+      totals: {
+        ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0,
+        IN_PROGRESS: 0, READY: nodes.length, REPLANNED: 0, UNATTRIBUTABLE: 0,
+        goals: 1, nodes: nodes.length,
+      },
+    };
+  }
+
+  it("renders the line for a node declaring ONE migration", () => {
+    render(<BoardScreen activity={null} brief={null} coverage={null} goalId={GOAL} nowMs={NOW} runId={RUN}
+      runs={boardWith([node("n-one", "READY", { declaredMigrations: [ONE] })])} surface={null} title="t" />);
+
+    expect(screen.getByTestId("cr.kanban.migrations.n-one").textContent).toContain(ONE);
+  });
+
+  it("renders BOTH identifiers for a node declaring two, never one and a truncation", () => {
+    render(<BoardScreen activity={null} brief={null} coverage={null} goalId={GOAL} nowMs={NOW} runId={RUN}
+      runs={boardWith([node("n-two", "READY", { declaredMigrations: [ONE, TWO] })])} surface={null} title="t" />);
+
+    const said = screen.getByTestId("cr.kanban.migrations.n-two").textContent ?? "";
+    // A card that showed the first and hid the second is a schema change an operator cannot see.
+    expect(said).toContain(ONE);
+    expect(said).toContain(TWO);
+  });
+
+  it("renders NO line at all for a node that declares none and for one that declares nothing", () => {
+    render(<BoardScreen activity={null} brief={null} coverage={null} goalId={GOAL} nowMs={NOW} runId={RUN}
+      runs={boardWith([
+        node("n-empty", "READY", { declaredMigrations: [] }),
+        node("n-unknown", "READY", { declaredMigrations: null }),
+      ])} surface={null} title="t" />);
+
+    // ABSENCE, not an empty label. A rendered "Migrations:" with nothing after it reads as a
+    // measured none; only the row being gone says the card has nothing to state.
+    expect(screen.queryByTestId("cr.kanban.migrations.n-empty")).toBeNull();
+    expect(screen.queryByTestId("cr.kanban.migrations.n-unknown")).toBeNull();
+    // The cards themselves still render, so this arm cannot pass by the board being empty.
+    expect(screen.getByTestId("cr.kanban.detail.n-empty")).toBeTruthy();
+    expect(screen.getByTestId("cr.kanban.detail.n-unknown")).toBeTruthy();
+  });
+
+  it("keeps each node's declaration on its own card", () => {
+    render(<BoardScreen activity={null} brief={null} coverage={null} goalId={GOAL} nowMs={NOW} runId={RUN}
+      runs={boardWith([
+        node("n-a", "READY", { declaredMigrations: [ONE] }),
+        node("n-b", "READY", { declaredMigrations: [TWO] }),
+      ])} surface={null} title="t" />);
+
+    expect(screen.getByTestId("cr.kanban.migrations.n-a").textContent).toContain(ONE);
+    expect(screen.getByTestId("cr.kanban.migrations.n-a").textContent).not.toContain(TWO);
+    expect(screen.getByTestId("cr.kanban.migrations.n-b").textContent).toContain(TWO);
+    expect(screen.getByTestId("cr.kanban.migrations.n-b").textContent).not.toContain(ONE);
+  });
+});

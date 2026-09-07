@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { JSX } from "react";
 
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
+import type { DeploymentMigration } from "../../live/live-deployments.js";
+import { MigrationRow } from "./migration-presentation.js";
 import { OutcomeNote } from "../components/outcome-note.js";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
@@ -44,6 +46,10 @@ export interface DeploymentEnvironmentView {
   readonly environment: string;
   /** docker's last stderr line for a build failure, so a failure is diagnosable here. */
   readonly detail: string | null;
+  /** What the schema did here, as the daemon observed it. OPTIONAL to match
+   *  `DeploymentEnvironment.migration?` exactly, so the live host passes `outcome.environments`
+   *  straight through unchanged; absent renders no migration line at all, never an empty one. */
+  readonly migration?: DeploymentMigration;
   readonly outcome: "DEPLOYED" | "REFUSED" | null;
   /** The release decision the last deploy cited, when it cited one. */
   readonly releaseDecision: string | null;
@@ -179,6 +185,7 @@ export function GoalDeployments({
               <span className="cr2-approve-step-body">{view.environment}</span>
               <p className="cr2-slot-kicker" data-testid={environmentTestId(view.environment, "target")}>{targetLine(view)}</p>
               <p className="cr2-needs-detail" data-testid={environmentTestId(view.environment, "state")}>{deploymentLine(view)}</p>
+              <MigrationRow migration={view.migration} testId={(part): string => environmentTestId(view.environment, part)} />
               {view.url === null ? null : (
                 <a className="cr2-link" data-testid={environmentTestId(view.environment, "url")} href={view.url} rel="noreferrer" target="_blank">{view.url}</a>
               )}

@@ -1,6 +1,7 @@
 import type { JSX } from "react";
 
 import type { RunNodeView } from "../../live/live-runs.js";
+import { declaredMigrationsWords } from "../goals/migration-presentation.js";
 import { MIDDOT } from "../glyphs.js";
 import { agoWords, seatWords } from "../ops/activity-words.js";
 import { STATUS_WORDS } from "../runs/run-words.js";
@@ -23,10 +24,12 @@ export interface BoardLanesProps {
   readonly nowMs: number;
 }
 
-function Field({ label, value }: { readonly label: string; readonly value: string | null }): JSX.Element | null {
+function Field({ label, testId, value }: {
+  readonly label: string; readonly testId?: string; readonly value: string | null;
+}): JSX.Element | null {
   if (value === null || value === "") return null;
   return (
-    <div className="cr2-kanban-field">
+    <div className="cr2-kanban-field" data-testid={testId}>
       <dt className="cr2-kanban-field-label">{label}</dt>
       <dd className="cr2-kanban-field-value">{value}</dd>
     </div>
@@ -84,6 +87,16 @@ function CardDetails({ card, criterionStatement, nowMs }: {
         <Field label="Verifier" value={receiptWords(node)} />
         <Field label="Accepted" value={node.accepted === null ? null : "the daemon accepted this work"} />
         <Field label="Landing" value={landingWords(node)} />
+        {/* WHAT THIS NODE ADDS TO THE SCHEMA, from the node's OWN declaration and nowhere else.
+            Never derived from a diff, a landed file list, a filename or a receipt's applied list:
+            a receipt is a PROJECT_ENVIRONMENT observation, and hanging one on a node is a false
+            attribution. Absent when the node declares none, so an empty label never reads as a
+            measured "this node changes no schema". */}
+        <Field
+          label="Migrations"
+          testId={`cr.kanban.migrations.${node.nodeKey}`}
+          value={declaredMigrationsWords(node.declaredMigrations)}
+        />
         <Field label="Legacy execution" value={node.sharedKey ? "earlier execution has no scoped identity" : null} />
       </dl>
       {criteria.length === 0 ? null : (

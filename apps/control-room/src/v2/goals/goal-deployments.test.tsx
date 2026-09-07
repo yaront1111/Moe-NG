@@ -7,6 +7,7 @@ import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
+import type { DeploymentMigration } from "../../live/live-deployments.js";
 import { GoalDeployments, deployOffer, deploymentLine, releaseLine, targetLine }
   from "./goal-deployments.js";
 import type { DeploymentEnvironmentView } from "./goal-deployments.js";
@@ -603,5 +604,191 @@ describe("the card dispatches through the REAL deploy port (DoD 1)", () => {
         .toContain("OFFER_KIND_UNBUILDABLE");
     });
     expect(built).toHaveLength(0);
+  });
+});
+
+/**
+ * WHAT THE SCHEMA DID, per environment (DoD 6, first surface). Every arm below drives the REAL
+ * card with a `DeploymentMigration` shaped exactly as `live-deployments.ts` decodes one, because
+ * the failure this feature invites is not a missing string - it is a reassuring one. An UNKNOWN
+ * observation rendered as a blank reads as "nothing to apply"; a claimed-but-unconfirmed backup
+ * rendered as "a backup exists" reads as a safety net that was never checked.
+ */
+const OBSERVED = Object.freeze({
+  backupSha256: null, backupState: "NONE", environment: "preview", migrations: [],
+  outcome: "APPLIED", receiptId: "a".repeat(64), refusalCode: null, refusalFile: null,
+  refusalLayer: null, state: "OBSERVED", subject: "PROJECT_ENVIRONMENT", unknownCode: null,
+  unknownLayer: null,
+} as const satisfies DeploymentMigration);
+
+function migration(overrides: Partial<DeploymentMigration> = {}): DeploymentMigration {
+  return { ...OBSERVED, ...overrides };
+}
+
+const BACKUP_SHA = "b".repeat(64);
+const ONE_MIGRATION = "20260907120000-add-receipts.sql";
+const TWO_MIGRATIONS = ["20260907120000-add-receipts.sql", "20260907120500-add-index.sql"] as const;
+
+function migrationText(environmentName: string): string {
+  return screen.getByTestId(`cr.deploy.${environmentName}.migration`).textContent ?? "";
+}
+
+describe("the Deployments card shows what the schema did (DoD 6)", () => {
+  it("names the applied identifiers when the observation is OBSERVED and APPLIED", () => {
+    renderCard({ environments: [environment({
+      environment: "preview",
+      migration: migration({ migrations: TWO_MIGRATIONS, outcome: "APPLIED" }),
+    })] });
+
+    const said = migrationText("preview");
+    // BOTH identifiers, never one and a truncation: a schema change an operator cannot see in
+    // full is a schema change they cannot audit.
+    expect(said).toContain(TWO_MIGRATIONS[0]);
+    expect(said).toContain(TWO_MIGRATIONS[1]);
+    expect(said).toContain("Applied");
+  });
+
+  it("renders a REFUSED observation with its code AND its layer, and no applied state", () => {
+    renderCard({ environments: [environment({
+      environment: "preview",
+      migration: migration({
+        migrations: [], outcome: "REFUSED", refusalCode: "MIGRATION_BACKUP_FAILED",
+        refusalLayer: "DAEMON_MIGRATION_ENGINE",
+      }),
+    })] });
+
+    const said = migrationText("preview");
+    expect(said).toContain("MIGRATION_BACKUP_FAILED");
+    // THE LAYER, not just the code: more than one layer can refuse a migration, and a line that
+    // names only the word leaves an operator unable to tell which one answered.
+    expect(said).toContain("DAEMON_MIGRATION_ENGINE");
+    expect(said).not.toContain("Applied");
+    expect(said).not.toContain("Reverted");
+  });
+
+  it("names the failing migration when MIGRATION_FAILED carries one", () => {
+    renderCard({ environments: [environment({
+      environment: "preview",
+      migration: migration({
+        migrations: [], outcome: "REFUSED", refusalCode: "MIGRATION_FAILED",
+        refusalFile: ONE_MIGRATION, refusalLayer: "DAEMON_MIGRATION_ENGINE",
+      }),
+    })] });
+
+    const said = migrationText("preview");
+    expect(said).toContain("MIGRATION_FAILED");
+    expect(said).toContain("DAEMON_MIGRATION_ENGINE");
+    expect(said).toContain(ONE_MIGRATION);
+  });
+
+  it("reads REVERTED as neither applied nor refused", () => {
+    renderCard({ environments: [environment({
+      environment: "preview",
+      migration: migration({ migrations: [ONE_MIGRATION], outcome: "REVERTED" }),
+    })] });
+
+    const said = migrationText("preview");
+    expect(said).toContain("Reverted");
+    expect(said).toContain(ONE_MIGRATION);
+    expect(said).not.toContain("Applied");
+    expect(said).not.toContain("Refused");
+  });
+
+  it("renders an UNKNOWN observation as UNKNOWN with its code, never as zero or as blank", () => {
+    renderCard({ environments: [environment({
+      environment: "preview",
+      migration: migration({
+        backupState: null, migrations: null, outcome: null, receiptId: null, state: "UNKNOWN",
+        unknownCode: "MIGRATION_RECEIPT_ABSENT", unknownLayer: "DAEMON_MIGRATION_OBSERVATION",
+      }),
+    })] });
+
+    const said = migrationText("preview");
+    // THE WHOLE POINT. "We could not read it" must never render as "nothing to apply": DoD 6
+    // forbids missing evidence meaning none, and a blank line is exactly that reading.
+    expect(said).toContain("MIGRATION_RECEIPT_ABSENT");
+    expect(said.trim()).not.toBe("");
+    expect(said).not.toContain("0 pending");
+    expect(said).not.toContain("Applied");
+    expect(said).not.toContain("nothing to apply");
+    expect(said.toLowerCase()).toContain("not known");
+  });
+
+  it("says a backup EXISTS only when it is VERIFIED, and shows its sha256 only there", () => {
+    renderCard({ environments: [environment({
+      environment: "preview",
+      migration: migration({ backupSha256: BACKUP_SHA, backupState: "VERIFIED", migrations: [ONE_MIGRATION] }),
+    })] });
+    const verified = screen.getByTestId("cr.deploy.preview.backup").textContent ?? "";
+    expect(verified).toContain("Backup verified");
+    expect(verified).toContain(BACKUP_SHA);
+    cleanup();
+
+    for (const state of ["NONE", "UNVERIFIED"] as const) {
+      renderCard({ environments: [environment({
+        environment: "preview",
+        migration: migration({ backupSha256: null, backupState: state, migrations: [ONE_MIGRATION] }),
+      })] });
+      const said = screen.getByTestId("cr.deploy.preview.backup").textContent ?? "";
+      // Neither NONE nor UNVERIFIED may read as a backup that exists: a claimed-but-unconfirmed
+      // dump is a file nobody has found, and NONE is no file at all. Pinned as an ABSENCE of the
+      // affirmative sentence AND of any digest, so a rewording cannot quietly reintroduce either.
+      expect(said, state).not.toContain("Backup verified");
+      expect(said, state).not.toMatch(/[0-9a-f]{64}/u);
+      expect(said.trim(), state).not.toBe("");
+      cleanup();
+    }
+  });
+
+  it("gives each environment its OWN row and never lets one read another receipt", () => {
+    renderCard({ environments: [
+      environment({ environment: "preview", migration: migration({
+        environment: "preview", migrations: [ONE_MIGRATION], outcome: "APPLIED",
+      }) }),
+      environment({ environment: "production", migration: migration({
+        environment: "production", migrations: [], outcome: "REFUSED",
+        refusalCode: "MIGRATION_BACKUP_FAILED", refusalLayer: "DAEMON_MIGRATION_ENGINE",
+      }) }),
+    ] });
+
+    // CROSS-ASSOCIATION IS THE FAILURE: a card that rendered one environment's receipt under the
+    // other would tell an operator production migrated when preview did.
+    expect(migrationText("preview")).toContain(ONE_MIGRATION);
+    expect(migrationText("preview")).not.toContain("MIGRATION_BACKUP_FAILED");
+    expect(migrationText("production")).toContain("MIGRATION_BACKUP_FAILED");
+    expect(migrationText("production")).not.toContain(ONE_MIGRATION);
+  });
+
+  it("renders NO migration line at all when the environment carries no observation", () => {
+    renderCard({ environments: [environment({ environment: "preview" })] });
+
+    // Absence, not an empty label: a blank migration row is a claim that there is nothing to say.
+    expect(screen.queryByTestId("cr.deploy.preview.migration")).toBeNull();
+    expect(screen.queryByTestId("cr.deploy.preview.backup")).toBeNull();
+  });
+
+  it("carries no connection value, no DATABASE_URL, no path and no download affordance", () => {
+    renderCard({ environments: [environment({
+      environment: "preview", url: "https://preview.example.test",
+      migration: migration({ backupSha256: BACKUP_SHA, backupState: "VERIFIED", migrations: [ONE_MIGRATION] }),
+    })] });
+
+    const said = screen.getByTestId("cr.deploy.preview.row").textContent ?? "";
+    // Epic rail 3. The backup is a REFERENCE an operator quotes to the runbook, never a thing to
+    // click: the daemon deliberately keeps the file path inside its own module, and a link here
+    // would both reconstruct one and turn a database dump into a browser download.
+    expect(said).not.toContain("postgres://");
+    expect(said).not.toContain("DATABASE_URL");
+    expect(said).not.toContain(".moe-next");
+    expect(said).not.toContain("/backups/");
+    expect(said).not.toMatch(/[A-Za-z]:\\/u);
+    const backup = screen.getByTestId("cr.deploy.preview.backup");
+    expect(backup.querySelector("a")).toBeNull();
+    expect(backup.querySelector("[download]")).toBeNull();
+    expect(screen.getByTestId("cr.deploy.preview.migration").querySelector("a")).toBeNull();
+    // The ONE link the row is allowed stays the environment url the card already rendered, so
+    // this arm cannot pass by the row having lost every anchor.
+    expect(screen.getByTestId("cr.deploy.preview.url").getAttribute("href"))
+      .toBe("https://preview.example.test");
   });
 });
