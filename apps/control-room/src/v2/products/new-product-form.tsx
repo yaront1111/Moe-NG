@@ -73,12 +73,12 @@ export function newProductWords(run: NewProductRun | null): OutcomeWords | null 
     + " and is bound to this project.";
   const stopped = downstreamFailure(run);
   if (bootstrap.state === "PARTIAL_SUCCESS") {
-    const { code, detail } = bootstrap.githubRefusal;
+    const { code, detail, refusedBy } = bootstrap.githubRefusal;
     return {
-      detail: `${where} Keep it. ${stopped === "" ? "Only the" : "The"} GitHub half did not happen: the daemon reported`
-        + ` ${code} (${detail}). You can add a remote later; nothing local needs redoing.${stopped === "" ? "" : ` ${stopped}`}`,
-      headline: "Product created here. GitHub was not reached.",
-      state: "PARTIAL",
+      detail: `${where} Keep it. The GitHub step did not complete: the daemon reported`
+        + ` ${code} (${detail}) @ ${refusedBy}. A repository may already exist under your GitHub account;`
+        + ` check before retrying. Nothing local needs redoing.${stopped === "" ? "" : ` ${stopped}`}`,
+      headline: "Product created here. The GitHub step did not complete.", state: "PARTIAL",
     };
   }
   return {

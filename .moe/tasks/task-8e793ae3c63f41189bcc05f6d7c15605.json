@@ -50,7 +50,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -76,7 +76,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:39:23.042Z",
-  "updatedAt": "2026-09-07T03:30:29.136Z",
+  "updatedAt": "2026-09-07T04:42:58.026Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T14:45:22.654Z",
     "plannedStepCount": 4,
@@ -118,13 +118,11 @@
   },
   "planApprovedAt": "2026-09-05T14:55:05.171Z",
   "workStartedAt": "2026-09-07T03:00:07.949Z",
-  "blockedReason": "RESOURCE WAIT ONLY — step 3 needs the full-suite-gate lease to run `pnpm --filter @moe/daemon test` (also this row's named completion verification command) plus `pnpm --filter @moe/control-room test` and the root `pnpm test` lane. No conflict, no missing prerequisite, no ambiguity: steps 1 and 2 are COMPLETE and all six dependencies are satisfied.\n\nTHE LEASE IS LIVE AND LEGITIMATE — DO NOT FORCE RELEASE. Held by task-5ef1a0a9010c4bfe872ff9b774068234 / worker-f78e0703 since 2026-09-07T02:57:27Z. Process-tree attribution (the only proof that counts per mem:gotcha-an-orphaned-full-suite-gate-lease-outlives-every-seat) shows the suite actually running: pid 10960 `pnpm.exe --filter @moe/daemon test` with vitest parent pid 24968 and four live worker forks (72784/5832/7164/51652). Free RAM 5479 MB of 62756 MB, which is exactly the floor this gate protects. Full census in comment-867d796fccbc43fe94d2cc8261e8292e.\n\nRan nothing unleased and claimed no gate result, green or red. Skipped even scoped legs because a full suite is mid-run and would contend. This row owns zero production paths and modified zero files.\n\nAuto-unblock on grant returns the seat to me; on resume, run step 3's six legs foreground with their `Test Files N passed` count lines, then step 4, then complete_task.",
-  "blockedOnTaskIds": [
-    "task-5ef1a0a9010c4bfe872ff9b774068234"
-  ],
-  "blockedResourceId": "full-suite-gate",
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-07T03:03:38.705Z",
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "commits": [
     {
       "sha": "18def7221c8f25cf98c117167515120ed4d51500",

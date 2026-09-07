@@ -244,26 +244,26 @@ it.each(["activation", "goal"])("retains local success but reports the exact dow
 
 /** A GitHub refusal must never tell an operator to discard the committed local repository. */
 describe("BOOTSTRAP_GH_UNAVAILABLE renders as a partial success, never a failure", () => {
-  it("says the repository exists and is bound, shows the code, and never says it failed", () => {
+  it.each(["GH_EXECUTABLE_ABSENT", "GH_EXECUTION_FAILED", "GITHUB_REFUSED"])("keeps local success and unknown remote completion for %s", (reason) => {
     stubFetchThatMustNotBeCalled();
+    const refusal = { ...GH_REFUSAL, detail: reason };
     render(<NewProductForm onCreate={() => undefined} run={runOf({
-      githubRefusal: GH_REFUSAL, receipt: { ...RECEIPT, githubRefusal: GH_REFUSAL },
+      githubRefusal: refusal, receipt: { ...RECEIPT, githubRefusal: refusal },
       state: "PARTIAL_SUCCESS",
     })} />);
 
     const headline = screen.getByTestId("cr.newproduct.outcome.headline").textContent ?? "";
     const detail = screen.getByTestId("cr.newproduct.outcome.detail").textContent ?? "";
     expect(screen.getByTestId("cr.newproduct.outcome").getAttribute("data-state")).toBe("PARTIAL");
-
-    // The repository is there, and the screen says so in those words.
     expect(detail).toContain("The repository at D:/projects/demo exists");
     expect(detail).toContain("is bound to this project");
     expect(detail).toContain("Keep it");
-    // The code is shown ALONGSIDE the words, verbatim, with its detail.
     expect(detail).toContain("BOOTSTRAP_GH_UNAVAILABLE");
-    expect(detail).toContain("GH_EXECUTABLE_ABSENT");
-    // And the wording that would make an operator delete it is absent from BOTH lines. The
-    // same matcher fired on the hard-refusal branch above, so this absence is not vacuous.
+    expect(detail).toContain("DAEMON_INGRESS");
+    expect(detail).toContain(reason);
+    expect(headline).toBe("Product created here. The GitHub step did not complete.");
+    expect(detail).toContain("A repository may already exist under your GitHub account");
+    expect(`${headline} ${detail}`).not.toMatch(/did not happen|was not reached/iu);
     expect(DESTRUCTIVE_WORDING.test("the bootstrap failed")).toBe(true);
     expect(`${headline} ${detail}`).not.toMatch(DESTRUCTIVE_WORDING);
   });
