@@ -6,7 +6,7 @@ import {
 } from "./deploy-receipt-contracts.js";
 import type { DeployReceiptV1, DeployRefusal, DeployRefusalCode } from "./deploy-receipt-contracts.js";
 import { createProxyPort, DEPLOY_HEALTH_BUDGET_MS, DEPLOY_HEALTH_POLL_MS, lastStderrLine } from "./deploy-ports.js";
-import type { DeployPorts, DeployRunResult, DeployTarget } from "./deploy-ports.js";
+import type { DeployMigrationResult, DeployPorts, DeployRunResult, DeployTarget } from "./deploy-ports.js";
 import { readDeployReceipt, recordDeployReceipt } from "./deploy-ledger.js";
 import { deploymentInfrastructureFiles } from "../repository/deployment/deployment-infrastructure-templates.js";
 
@@ -137,6 +137,36 @@ async function flipProxy(port: ProxyPort, lease: ProxyLease, name: string) {
   return { detail: recovered ? detail : "DEPLOY_PROXY_RECOVERY_REQUIRED", recoveryRequired: !recovered };
 }
 
+/**
+ * The migration attempt, flattened to `null` (proceed) or the DETAIL a deploy refusal carries.
+ *
+ * A THROWN migration is still a refused deploy, never an exception escaping mid-sequence:
+ * `migrateWithBackup` THROWS for MIGRATION_IN_PROGRESS, MIGRATION_RECEIPT_CONFLICT and
+ * MIGRATION_RECEIPT_WRITE_FAILED, which are ordinary concurrency outcomes rather than bugs, and it
+ * RETURNS a REFUSED receipt for a failed apply. Handling only one of the two shapes would leak the
+ * other as a crash, past the durable trace this file exists to guarantee.
+ *
+ * ONLY A CODE AND A LAYER ARE READ OFF THE THROWN VALUE, never its message. The detail built here
+ * reaches the deploy receipt, which is durable and operator-visible; relaying free text from an
+ * arbitrary error is how a connection value gets there (epic rail 3).
+ */
+async function migrateFor(
+  ports: DeployPorts, environment: string, sha: string, decisionId: string,
+): Promise<string | null> {
+  if (ports.migrate === undefined) return null;
+  let outcome: DeployMigrationResult;
+  try {
+    outcome = await ports.migrate(environment, sha, decisionId);
+  } catch (error) {
+    const thrown = error as { code?: unknown; layer?: unknown };
+    return typeof thrown.code === "string" && typeof thrown.layer === "string"
+      ? `${thrown.code}@${thrown.layer}` : "MIGRATION_UNAVAILABLE";
+  }
+  if (outcome.ok) return null;
+  return outcome.detail === ""
+    ? `${outcome.code}@${outcome.layer}` : `${outcome.code}@${outcome.layer}: ${outcome.detail}`;
+}
+
 function readReplay(config: DeployServiceConfig, request: DeployRequest, expectedDigest?: string): DeployReport | null {
   const { environment, sha } = request;
   const historical = readDeployReceipt(config.store, config.projectId,
@@ -264,6 +294,22 @@ export function createDeployService(config: DeployServiceConfig) {
       const digest = inspected.stdout.trim();
       if (inspected.code !== 0 || !/^sha256:[0-9a-f]{64}$/u.test(digest) || (rollbackImage !== undefined && digest !== rollbackImage)) {
         return refuse(target, DEPLOY_BUILD_FAILED, rollbackImage === undefined ? "DEPLOY_IMAGE_DIGEST_UNAVAILABLE" : DEPLOY_ROLLBACK_IMAGE_UNAVAILABLE);
+      }
+      // THE MIGRATION RUNS HERE, AND BOTH NEIGHBOURS ARE WRONG. Before the build, a migration
+      // could move the schema and then fail to produce an image, leaving the schema ahead of the
+      // code with no image to roll back to. After `startCandidate`, the candidate boots against
+      // the OLD schema. So it runs once the image is PROVEN to exist and before anything starts —
+      // the same principle as :229-232: an effect with no durable trace is worse than a refusal.
+      const migrated = await migrateFor(ports, environment, sha, request.decisionId);
+      if (migrated !== null) {
+        // The AUTHORITATIVE code and layer are on the migration receipt the engine persisted; this
+        // records that the DEPLOY refused, carrying the migration's own `code@layer` in the detail.
+        // `DEPLOY_REFUSAL_CODES` admits four codes and `DeployRefusal.layer` is
+        // DAEMON_DEPLOY_ENGINE, so a MIGRATION_* code cannot BE a deploy refusal code without a
+        // cast; this file already uses DEPLOY_BUILD_FAILED as the bucket with the precise cause in
+        // the detail — :246 a proxy lease, :256, :266 — and this follows that convention.
+        // Nothing is started and nothing is flipped: the `finally` below has no candidate to stop.
+        return refuse(target, DEPLOY_BUILD_FAILED, migrated);
       }
       candidateStarted = true;
       const started = await startCandidate(target, name, tag);

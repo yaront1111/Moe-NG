@@ -23,6 +23,7 @@ import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifec
 import { FOUNDATION_DISPATCH_COMMAND_KIND } from "./work/foundation-attempt-contracts.js";
 import { LAUNCH_RUNTIME_PIN_ROOT_ENV_KEY } from "./work/launch-runtime-section.js";
 import { CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
+import type { EnvironmentCredentialSource } from "./environment/environment-projection.js";
 import { createDeployCommandHandler, DEPLOY_BUILD_CONTEXT_ENV_KEY }
   from "./deployment/deploy-command.js";
 import type { DeployPorts } from "./deployment/deploy-ports.js";
@@ -114,6 +115,15 @@ export interface AsyncCommandEntryOptions {
   /** ABSENT means production: the real docker and ssh runners, and the build context this
    *  daemon was configured with. */
   readonly deploymentDeploy?: DeploymentDeploySeams;
+  /**
+   * THE DAEMON CREDENTIAL THAT OPENS THE ENVIRONMENT STORE, forwarded from the registry so the
+   * composed deploy migration can derive its seal. It is threaded rather than read from
+   * `process.env` here: this module's own rule for the build context above is that host-scoped
+   * configuration is read ONCE at the composition root and passed down raw, and a second reader
+   * of the credential would be a second place it could diverge. Without this seam every real
+   * `deployment.deploy` migration refuses ENV_STORE_KEY_UNAVAILABLE@KEY.
+   */
+  readonly environmentCredential?: EnvironmentCredentialSource;
   /** The daemon-startup workspace catalog, shared with the capture lifecycle so the
    *  dispatch-time derivation resolves the SAME repository scope authority. */
   readonly foundationCatalogSource?: () => unknown;
@@ -231,6 +241,8 @@ export function createAsyncCommandEntries(
   const buildContext = deploySeams.buildContext ?? process.env[DEPLOY_BUILD_CONTEXT_ENV_KEY];
   const deployEnvironment = createDeployCommandHandler({
     operatorPrincipalId: options.operatorPrincipalId, projectId, store,
+    ...(options.environmentCredential === undefined
+      ? {} : { environmentCredential: options.environmentCredential }),
     // Spread rather than assigned: under exactOptionalPropertyTypes an explicit `undefined` is a
     // DIFFERENT thing from an absent key, and only the absent key means "unconfigured".
     ...(buildContext === undefined ? {} : { buildContext }),

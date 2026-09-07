@@ -16,7 +16,10 @@ import { readReleaseReceipt } from "../release/release-receipt-ledger.js";
 import { bootstrapRequestBytes } from "../repository/repository-bootstrap-command.js";
 import { readPublishLedger } from "../repository/publish-ledger.js";
 import { nodeDockerRunner, nodeImageTransfer, nodeSshRunner } from "./deploy-ports.js";
-import type { DeployPorts } from "./deploy-ports.js";
+import type { DeployMigrationResult, DeployPorts } from "./deploy-ports.js";
+import { resolveDeployMigrationContext } from "./deploy-migration-context.js";
+import type { EnvironmentCredentialSource } from "../environment/environment-projection.js";
+import { migrateWithBackup } from "../repository/migrations/migration-service.js";
 import { createDeployService } from "./deploy-service.js";
 import { nodeDeployBuild } from "./deploy-image-build.js";
 import type { DeployReport, DeployRequest } from "./deploy-service.js";
@@ -77,6 +80,14 @@ export interface DeployCommandOptions {
    *  alone would leave this kind dispatchable by any GOAL-capable session — including an agent's,
    *  since the MCP port authenticates with the operator bootstrap credential. */
   readonly operatorPrincipalId: string;
+  /**
+   * THE DAEMON CREDENTIAL THAT OPENS THE ENVIRONMENT STORE, forwarded from the registry rather
+   * than read from `process.env` here. Without it every real migration refuses
+   * ENV_STORE_KEY_UNAVAILABLE@KEY, because the seal is underivable — so this is not an optional
+   * nicety, it is what makes the composed migration reachable at all. ABSENT reads as an unwired
+   * daemon, matching `daemon-command-registry.ts`'s own `?? (() => null)` default.
+   */
+  readonly environmentCredential?: EnvironmentCredentialSource;
   /** ABSENT means production: the real docker and ssh runners on this host. */
   readonly ports?: DeployPorts;
   readonly pollMs?: number;
@@ -220,6 +231,54 @@ export function createDeployCommandHandler(options: DeployCommandOptions): Async
 
     const ports = options.ports ?? {
       ...productionDeployPorts(store, projectId),
+      /**
+       * COMPOSED ONLY WHEN THE DAEMON HAS AN ENVIRONMENT CREDENTIAL, and that condition is a
+       * WIRING fact rather than a per-request escape hatch. A daemon with no environment store has
+       * no database to migrate, so composing a port there would make EVERY deploy on it refuse
+       * ENV_STORE_KEY_UNAVAILABLE@KEY — a regression, not a safeguard. The real composition root
+       * always supplies it (`daemon-store-foundation-composition.ts:277`
+       * `environmentCredential: () => config.credential`), so a production daemon always migrates;
+       * only an explicitly unwired composition does not, which is the case
+       * `daemon-command-environment.test.ts:702` already names.
+       *
+       * THE REAL MIGRATION, IN THE REQUEST-SCOPED POSITION and never inside
+       * `productionDeployPorts()`, which has no access to the admitted environment, sha or the
+       * host's build context. There is NO no-op fallback: when no `ports` option is supplied —
+       * which is what every production `deployment.deploy` does — this member is always the real
+       * `migrateWithBackup` behind the real resolver. A silent no-op here would let every
+       * production deploy skip its migration while reporting DEPLOYED.
+       *
+       * THE WORKSPACE IS THE BUILD CONTEXT, not a payload key: the same host-scoped directory the
+       * image is built from is the tree whose migrations belong to this sha. A caller-supplied
+       * path would let any operator-authenticated request migrate a directory nobody named, and
+       * an unconfigured daemon already refuses the deploy under DEPLOY_BUILD_CONTEXT_UNCONFIGURED.
+       *
+       * `decisionId` becomes the migration's `requestId`, so a REPLAYED deploy replays the
+       * migration receipt instead of starting a second batch. The replay, the project-wide lock
+       * and the receipt identity all stay `migrateWithBackup`'s — nothing is re-implemented here.
+       */
+      ...(options.environmentCredential === undefined ? {} : { migrate: async (
+        environment: string, sha: string, decisionId: string,
+      ): Promise<DeployMigrationResult> => {
+        const resolved = resolveDeployMigrationContext({
+          credential: options.environmentCredential ?? ((): string | null => null),
+          now: clock, projectId, projectRoot: options.buildContext, store,
+          workspace: options.buildContext,
+        }, { environment, requestId: decisionId, sha });
+        // The resolver's refusal carries the layer that actually answered — SCOPE or KEY from the
+        // environment slice, DAEMON_DEPLOY_ENGINE from the resolver's own workspace guards.
+        if (!resolved.ok) return { code: resolved.code, detail: "", layer: resolved.layer, ok: false };
+        const receipt = await migrateWithBackup(store, resolved.input);
+        if (receipt.outcome === "APPLIED") return { applied: receipt.applied, ok: true };
+        // `refusal.detail` is the engine's own failing FILE for MIGRATION_FAILED, which is what
+        // DoD 3 requires the deploy to name. It is a file path, never a connection value.
+        return {
+          code: receipt.refusal?.code ?? "MIGRATION_FAILED",
+          detail: receipt.refusal?.detail ?? "",
+          layer: receipt.refusal?.layer ?? "DAEMON_INGRESS",
+          ok: false,
+        };
+      } }),
       releaseDecision: (_environment: string, sha: string): string | null => {
         if (goalId === null) return null;
         const release = readReleaseReceipt(store, projectId,

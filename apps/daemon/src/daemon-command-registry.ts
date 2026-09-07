@@ -303,6 +303,11 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         ? {} : { repositoryBootstrap: options.repositoryBootstrap }),
       ...(options.deploymentDeploy === undefined
         ? {} : { deploymentDeploy: options.deploymentDeploy }),
+      // THE SAME credential thunk the environment edge below uses at :512, not a second reader:
+      // the composed deploy migration must derive its seal from the daemon's one credential, and
+      // a resolver-only change would leave every real migration ENV_STORE_KEY_UNAVAILABLE@KEY.
+      ...(options.environmentCredential === undefined
+        ? {} : { environmentCredential: options.environmentCredential }),
       ...(options.foundationCatalogSource === undefined
         ? {} : { foundationCatalogSource: options.foundationCatalogSource }),
       ...(options.foundationContextSeal === undefined

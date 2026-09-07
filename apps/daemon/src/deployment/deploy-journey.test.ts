@@ -1,7 +1,7 @@
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { RuntimeCommandEnvelope } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   closeStores, driveThrough, envelope, openStore, PROJECT_ID, send,
@@ -19,7 +19,38 @@ import { deploymentInfrastructureFiles }
   from "../repository/deployment/deployment-infrastructure-templates.js";
 import { readDeployLedger, readPreviousDeployReceipt } from "./deploy-ledger.js";
 import { productionDeployPorts } from "./deploy-command.js";
-import { createDockerDouble } from "./deploy-ports.js";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { setEnvironmentVariable } from "../environment/environment-store.js";
+import { readMigrationReceipt } from "../repository/migrations/migration-receipt.js";
+import { nodeMigrationPorts } from "../repository/migrations/migration-ports.js";
+import { nodeDeployBuild } from "./deploy-image-build.js";
+import {
+  createDockerDouble, nodeDockerRunner, nodeImageTransfer, nodeSshRunner,
+} from "./deploy-ports.js";
+
+/**
+ * THE HOST EFFECT BOUNDARY, AND NOTHING ABOVE IT. The default-composition arm at the bottom of
+ * this file dispatches with NO `ports`, so `productionDeployPorts()` hands back the real node
+ * runners and the migration reaches `nodeMigrationPorts`. Replacing exactly those five keeps the
+ * header's "NO NETWORK, NO DOCKER DAEMON, NO CHILD PROCESS" literally true while leaving every
+ * piece of AUTHORITY — the composition, the resolver, the engine, the lock, both receipts and the
+ * deploy sequence — as the real shipped code. `importOriginal` keeps `createDockerDouble` and the
+ * argv builders real, which is what every other arm in this file uses.
+ */
+vi.mock("./deploy-ports.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./deploy-ports.js")>(),
+  nodeDockerRunner: vi.fn(), nodeImageTransfer: vi.fn(), nodeSshRunner: vi.fn(),
+}));
+vi.mock("./deploy-image-build.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("./deploy-image-build.js")>(), nodeDeployBuild: vi.fn(),
+}));
+vi.mock("../repository/migrations/migration-ports.js", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../repository/migrations/migration-ports.js")>(),
+  nodeMigrationPorts: vi.fn(),
+}));
 import type { DockerDouble, DockerDoubleOptions, DeployTarget } from "./deploy-ports.js";
 import {
   DEPLOY_BUILD_FAILED, DEPLOY_DOCKER_UNAVAILABLE, DEPLOY_ENGINE_STAMP, DEPLOY_HEALTH_TIMEOUT,
@@ -58,6 +89,13 @@ const DECIDED_AT = "2026-09-06T00:00:00.000Z";
 const PROXY_CONFIG =
   deploymentInfrastructureFiles(CONTROLLED_PROFILE_VERSION, []).get("docker/Caddyfile") ?? "";
 const LOCAL: DeployTarget = { network: "moe-net", sshTarget: null, url: "https://app.example.test" };
+/** The daemon credential the environment store seals with, and an obviously-synthetic connection
+ *  value in the same shape `environment-delivery.test.ts` already ships. */
+const DAEMON_CREDENTIAL = "daemon-credential-deploy-journey";
+const SEEDED_DATABASE = "postgres://app:s3cr3t@db.internal:5432/app";
+/** `migrationFilename` admits only /^\d{13,17}[-_][A-Za-z0-9_-]+\.(?:js|cjs|mjs|sql)$/, and the
+ *  receipt decoder applies it to `applied[]` — a shorter name answers MIGRATION_RECEIPT_INVALID. */
+const APPLIED_BATCH = "1725660000000_orders.sql";
 
 interface Journey {
   readonly candidateFor: (commandId: string, sha?: string) => string;
@@ -483,4 +521,115 @@ describe("the wiring itself, attacked (adversarial self-review)", () => {
       expect(refusal.detail).not.toContain(LOCAL.url ?? "");
       expect(refusal.detail).not.toMatch(/:\/\/[^/\s]*:[^/\s]*@/u);
     });
+});
+
+/**
+ * DoD 1: A REAL `deployment.deploy` DISPATCH REACHES `migrateWithBackup` THROUGH THE DEFAULT
+ * COMPOSITION — no `ports` option anywhere.
+ *
+ * WHY THIS ARM EXISTS SEPARATELY FROM THE ORDERING ARMS. Every other journey here injects
+ * `ports`, and `deploy-command.ts` composes `options.ports ?? { ...productionDeployPorts(), ... }`
+ * — so an injected object REPLACES the request-scoped migration member entirely. An arm that
+ * supplied `ports` could therefore prove the engine's ordering perfectly while the production
+ * composition shipped no migration at all. Only a dispatch with NO `ports` proves the wiring.
+ *
+ * OFFLINE IS PRESERVED BY MOCKING THE HOST EFFECT BOUNDARY, NOT THE AUTHORITY: the four node
+ * runners and `nodeMigrationPorts` are replaced; `productionDeployPorts`, the resolver, the
+ * engine, the lock, the receipt and the deploy sequence are all the real shipped code. That is
+ * the same line `migrate-down-test-fixtures.ts:43` draws — "The only doubles are the two host
+ * ports" — and the same shape `deploy-release-binding.test.ts` uses to drive a production
+ * composition without a docker daemon.
+ */
+describe("the default daemon composition reaches the real migration (DoD 1)", () => {
+  const roots: string[] = [];
+
+  afterEach(() => {
+    while (roots.length > 0) {
+      const root = roots.pop();
+      if (root === undefined) continue;
+      try { rmSync(root, { force: true, recursive: true }); } catch { /* held handle must not mask */ }
+    }
+  });
+
+  it("migrates for the ADMITTED environment with the exact workspace and SHA, then starts the candidate", async () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-deploy-default-"));
+    roots.push(root);
+    const store = openStore();
+    driveThrough(store, "goal.close");
+
+    // The environment store is seeded through the REAL setter with the REAL daemon credential,
+    // so the value the migration receives can only have arrived by a genuine delivery read.
+    const credential = (): string | null => DAEMON_CREDENTIAL;
+    expect(setEnvironmentVariable(
+      { credential, now: (): string => DECIDED_AT, projectId: PROJECT_ID, store },
+      { environment: PRODUCTION, name: "DATABASE_URL", value: SEEDED_DATABASE },
+    )).toMatchObject({ ok: true });
+    // A durable target through the real setter command: `productionDeployPorts.target` reads it.
+    const targetVersion = store.getAggregateVersion(deployTargetAggregateId(PROJECT_ID, PRODUCTION));
+    expect(send(store, envelope("deployment.set_target", targetVersion, {
+      environment: PRODUCTION, network: LOCAL.network, sshTarget: null, url: LOCAL.url,
+    }, `bind-${PRODUCTION}-default-composition`)))
+      .toMatchObject({ ok: true, disposition: "DECIDED" });
+
+    const commandId = "cmd-deploy-default-composition";
+    const docker = createDockerDouble({
+      proxyConfig: PROXY_CONFIG,
+      running: { [INCUMBENT]: "HEALTHY" },
+      health: { [candidateContainerName(PRODUCTION, SHA, commandId)]: ["HEALTHY"] },
+    });
+    vi.mocked(nodeDockerRunner).mockImplementation(docker.docker);
+    vi.mocked(nodeSshRunner).mockImplementation(docker.ssh);
+    vi.mocked(nodeImageTransfer).mockImplementation(docker.transfer);
+    vi.mocked(nodeDeployBuild).mockImplementation(docker.build);
+
+    const observed: { connection: string | null; workspace: string | null } =
+      { connection: null, workspace: null };
+    vi.mocked(nodeMigrationPorts).mockReturnValue({
+      dump: async (connection: string, path: string): Promise<void> => {
+        observed.connection = connection;
+        writeFileSync(path, "-- schema\n");
+      },
+      apply: async (workspace: string): Promise<readonly string[]> => {
+        observed.workspace = workspace;
+        return [APPLIED_BATCH];
+      },
+    });
+
+    // NO `ports` ANYWHERE in this composition — the whole point of the arm.
+    const entries = createAsyncCommandEntries({
+      environmentCredential: credential, operatorPrincipalId: OPERATOR, projectId: PROJECT_ID, store,
+      deploymentDeploy: {
+        buildContext: root, clock: (): string => DECIDED_AT,
+        healthBudgetMs: 10, pollMs: 1, sleep: (): Promise<void> => Promise.resolve(),
+      },
+    });
+    const handler = entries[DEPLOYMENT_DEPLOY_COMMAND_KIND].asyncHandler;
+    if (handler === undefined) throw new Error("deployment.deploy carries no async handler");
+    await handler({
+      principal: principal(OPERATOR),
+      envelope: {
+        commandId, commandKind: DEPLOYMENT_DEPLOY_COMMAND_KIND,
+        correlationId: "corr-deploy-default", expectedVersion: store.getAggregateVersion(PROJECT_ID),
+        payload: { environment: PRODUCTION, sha: SHA } as RuntimeCommandEnvelope["payload"],
+        requestDigest: "d".repeat(64), schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+        sessionCredential: "deploy-default-credential", targetAggregateId: PROJECT_ID,
+      },
+    });
+
+    // THE MIGRATION RAN, read back from its own durable receipt rather than from a return value,
+    // and keyed by the DEPLOY's decisionId so the replay identity is the deploy's.
+    const receipt = readMigrationReceipt(store, PROJECT_ID, commandId);
+    expect(receipt).toMatchObject({
+      applied: [APPLIED_BATCH], environment: PRODUCTION, outcome: "APPLIED", refusal: null, sha: SHA,
+    });
+    // THE EXACT WORKSPACE: the host-scoped build context, not a payload value and not a default.
+    expect(observed.workspace).toBe(root);
+    // THE CONNECTION CAME FROM THE ENVIRONMENT STORE. Nothing in this composition was told the
+    // value; it can only have been resolved by `readEnvironmentDelivery` for the ADMITTED
+    // environment, which is what DoD 2's "resolve named environment values at the host boundary"
+    // asks for and what a `resolveEnvironmentLaunch` composition could not do for `production`.
+    expect(observed.connection).toBe(SEEDED_DATABASE);
+    // AND THE CANDIDATE STARTED AFTER IT: the deploy really continued past the migration.
+    expect(docker.calls.some((call) => call[0] === "run")).toBe(true);
+  });
 });

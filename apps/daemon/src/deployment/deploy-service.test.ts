@@ -3,8 +3,9 @@ import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import { existsSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 
 import { closeStores, openStore, openRestartableStore } from "../review/review-test-fixtures.js";
 import { deploymentInfrastructureFiles } from "../repository/deployment/deployment-infrastructure-templates.js";
@@ -16,8 +17,16 @@ import {
 import {
   createDockerDouble, dockerSaveArgv, sshDockerLoadArgv, nodeDockerRunner, DEPLOY_COMMAND_TIMEOUT_MS,
 } from "./deploy-ports.js";
-import type { DockerDouble, DockerDoubleOptions, DeployTarget, DockerRunner } from "./deploy-ports.js";
+import type {
+  DockerDouble, DockerDoubleOptions, DeployMigrationPort, DeployTarget, DockerRunner,
+} from "./deploy-ports.js";
 import { readDeployLedger, readPreviousDeployReceipt } from "./deploy-ledger.js";
+import { BACKUP_DIRECTORY, BACKUP_LEAF, PRE_MIGRATION_BACKUP_LEAF }
+  from "../bootstrap/activation-receipts-measure.js";
+import { MIGRATION_LOCK_LEAF, migrateWithBackup } from "../repository/migrations/migration-service.js";
+import { readMigrationReceipt } from "../repository/migrations/migration-receipt.js";
+import { MigrationExecutionError } from "../repository/migrations/migration-ports.js";
+import type { MigrationPorts } from "../repository/migrations/migration-ports.js";
 import {
   NO_RELEASE_DECISION_NOTE, buildArgv, candidateContainerName, createDeployService, healthArgv,
   runCandidateArgv,
@@ -33,7 +42,12 @@ import {
  */
 
 afterEach(closeStores);
-vi.mock("node:child_process", () => ({ spawn: vi.fn() }));
+// `execFile` is mocked alongside `spawn` because the migration arms below import the real
+// `migration-service.js`, whose `nodeMigrationPorts` default reaches for it at module load.
+// Those arms inject their own `dump`/`apply`, so the default is never CALLED — but an
+// unmocked export would make this file fail to load, and mocking it keeps the OFFLINE
+// guarantee in the header literally true rather than merely intended.
+vi.mock("node:child_process", () => ({ execFile: vi.fn(), spawn: vi.fn() }));
 
 const PROJECT = "project-review-1";
 const ENVIRONMENT = "production";
@@ -63,6 +77,7 @@ function harness(options: {
   readonly decisionId?: string;
   readonly double?: DockerDoubleOptions;
   readonly environment?: string;
+  readonly migrate?: DeployMigrationPort;
   readonly release?: string | null;
   readonly sha?: string;
   readonly target?: DeployTarget | null;
@@ -91,6 +106,10 @@ function harness(options: {
       ssh: docker.ssh,
       target: () => (options.target === undefined ? LOCAL : options.target),
       transfer: docker.transfer,
+      // Spread, not assigned: an explicit `undefined` is a DIFFERENT thing from an absent key
+      // under exactOptionalPropertyTypes, and only the absent key means "this composition did
+      // not ask for a migration" — which is what every pre-existing arm in this file relies on.
+      ...(options.migrate === undefined ? {} : { migrate: options.migrate }),
     },
     projectId: PROJECT, store,
   });
@@ -634,5 +653,189 @@ describe("the host argv port handles failed stdin without leaking a child", () =
       child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy();
       vi.useRealTimers(); vi.mocked(spawn).mockReset();
     }
+  });
+});
+
+/**
+ * BACKUP-BEFORE-MIGRATE, COMPOSED INTO THE DEPLOY SEQUENCE (DoD 1, 3, 4).
+ *
+ * These arms drive the REAL `migrateWithBackup` — its ordering, its receipt, its project-wide
+ * lock — behind the injectable port. The ONLY doubles are docker (already this file's discipline)
+ * and the two migration host effects, `dump` and `apply`, which is the same line
+ * `migrate-down-test-fixtures.ts:43` draws. Nothing about the engine is restated here, so an
+ * assertion below is an assertion about shipped bytes.
+ *
+ * WHY THE ORDER IS THE SUBJECT: migrating before the image is proven could move the schema and
+ * then fail to produce an image; migrating after `startCandidate` boots the candidate against the
+ * OLD schema. Both neighbours are wrong, so the arms assert the OBSERVED SEQUENCE rather than
+ * that the calls happened.
+ */
+describe("the deploy composes backup-before-migrate before activating the candidate", () => {
+  const roots: string[] = [];
+  const DATABASE = "postgres://app:s3cr3t@db.internal:5432/app";
+  /**
+   * REAL MIGRATION FILENAMES. `migrationFilename` (migration-receipt.ts:42) admits only
+   * `/^\d{13,17}[-_][A-Za-z0-9_-]+\.(?:js|cjs|mjs|sql)$/`, and the receipt decoder applies it to
+   * BOTH `applied[]` and a MIGRATION_FAILED detail. A convenient `"0001_orders"` makes the engine
+   * answer MIGRATION_RECEIPT_INVALID and `"0007_add_orders.sql"` collapses to
+   * MIGRATION_FILE_UNKNOWN — so using the real grammar is what keeps these arms about ORDERING
+   * and REFUSAL rather than about receipt validation.
+   */
+  const APPLIED_BATCH = "1725660000000_orders.sql";
+  const FAILING_FILE = "1725660000007_add_orders.sql";
+
+  afterEach(() => {
+    while (roots.length > 0) {
+      const root = roots.pop();
+      if (root === undefined) continue;
+      try { rmSync(root, { force: true, recursive: true }); } catch { /* a held handle must not mask a failure */ }
+    }
+  });
+
+  function migrationRoot(): string {
+    const root = mkdtempSync(join(tmpdir(), "moe-deploy-migration-"));
+    roots.push(root);
+    return root;
+  }
+
+  interface Journal {
+    readonly events: string[];
+    readonly schema: string[];
+  }
+
+  /**
+   * The real engine behind the port, with a JOURNAL recording the ORDER of the two host effects.
+   * `dump` writes real bytes because `backupFileHash` reads the file back: a dump that only
+   * counted would make the retained-backup assertion vacuous.
+   */
+  function realMigration(
+    store: ReturnType<typeof openStore>, root: string, journal: Journal,
+    overrides: Partial<MigrationPorts> = {},
+  ): DeployMigrationPort {
+    return async (environment, sha, decisionId) => {
+      try {
+        const receipt = await migrateWithBackup(store, {
+          databaseUrl: DATABASE, environment, projectId: PROJECT, projectRoot: root,
+          requestId: decisionId, sha, workspace: root,
+        }, {
+          dump: overrides.dump ?? (async (_connection: string, path: string): Promise<void> => {
+            journal.events.push("dump:start");
+            writeFileSync(path, "-- " + journal.schema.join(",") + "\n");
+            journal.events.push("dump:end");
+          }),
+          apply: overrides.apply ?? (async (): Promise<readonly string[]> => {
+            journal.events.push("apply:start");
+            journal.schema.push(APPLIED_BATCH);
+            journal.events.push("apply:end");
+            return [APPLIED_BATCH];
+          }),
+        });
+        return receipt.outcome === "APPLIED"
+          ? { applied: receipt.applied, ok: true }
+          : { code: receipt.refusal?.code ?? "MIGRATION_FAILED", detail: receipt.refusal?.detail ?? "",
+            layer: receipt.refusal?.layer ?? "DAEMON_INGRESS", ok: false };
+      } catch (error) {
+        const thrown = error as { code?: unknown; layer?: unknown };
+        return typeof thrown.code === "string" && typeof thrown.layer === "string"
+          ? { code: thrown.code, detail: "", layer: thrown.layer, ok: false }
+          : { code: "MIGRATION_UNAVAILABLE", detail: "", layer: "DAEMON_INGRESS", ok: false };
+      }
+    };
+  }
+
+  it("(b) completes the DUMP before the APPLY begins, and both before the candidate starts", async () => {
+    const journal: Journal = { events: [], schema: [] };
+    const context = harness({ migrate: realMigration(openStore(), migrationRoot(), journal) });
+    const report = await context.deploy();
+
+    expect(report.outcome).toBe("DEPLOYED");
+    // THE OBSERVED SEQUENCE, not merely that both happened: `dump:end` must precede
+    // `apply:start`. An implementation that awaited neither would interleave here.
+    expect(journal.events).toEqual(["dump:start", "dump:end", "apply:start", "apply:end"]);
+    // AND the whole migration precedes the container start. `docker.calls` is in call order, so
+    // comparing indices is the ordering claim this row is actually about.
+    const inspected = context.docker.calls
+      .findIndex((call) => call[0] === "image" && call[1] === "inspect");
+    const started = context.docker.calls.findIndex((call) => call[0] === "run");
+    expect(inspected).toBeGreaterThanOrEqual(0);
+    expect(started).toBeGreaterThan(inspected);
+  });
+
+  it("(c) MIGRATION_BACKUP_FAILED leaves the schema unchanged and starts NOTHING", async () => {
+    const journal: Journal = { events: [], schema: ["accounts"] };
+    const root = migrationRoot();
+    // A FILE where the backup directory must be. `migrationBackupDirectory` lstats every path
+    // component and refuses anything that is not a directory. Nothing is mocked.
+    writeFileSync(join(root, BACKUP_DIRECTORY), "not a directory\n");
+    const context = harness({ migrate: realMigration(openStore(), root, journal) });
+    const report = await context.deploy();
+
+    expect(report.outcome).toBe("REFUSED");
+    // CODE AND LAYER both, from the migration's own receipt, carried in the deploy's durable detail.
+    expect(report.receipt?.refusal).toMatchObject({
+      code: DEPLOY_BUILD_FAILED, detail: "MIGRATION_BACKUP_FAILED@DAEMON_INGRESS: backup failed",
+      layer: DEPLOY_ENGINE_STAMP,
+    });
+    // THE SCHEMA IS UNTOUCHED and neither host effect ran — not "it returned a refusal".
+    expect(journal.schema).toEqual(["accounts"]);
+    expect(journal.events).toEqual([]);
+    // NO ACTIVATION AND NO FLIP. `run` starts the candidate and `tee` writes the proxy config, so
+    // asserting the ABSENCE of both is what "prevents activation and traffic flip" means here.
+    expect(context.docker.calls.filter((call) => call[0] === "run")).toEqual([]);
+    expect(context.docker.calls.filter((call) => call[0] === "exec" && call.includes("tee"))).toEqual([]);
+  });
+
+  it("(d) MIGRATION_FAILED names the failing file, persists a REFUSED receipt, retains the backup, and never reads DEPLOYED", async () => {
+    const journal: Journal = { events: [], schema: ["accounts"] };
+    const store = openStore();
+    const context = harness({
+      migrate: realMigration(store, migrationRoot(), journal, {
+        apply: async (): Promise<readonly string[]> => {
+          journal.events.push("apply:start");
+          throw new MigrationExecutionError(FAILING_FILE);
+        },
+      }),
+    });
+    const report = await context.deploy();
+
+    expect(report.outcome).toBe("REFUSED");
+    expect(report.receipt?.outcome).not.toBe("DEPLOYED");
+    // THE FAILING FILE reaches the deploy's durable detail, with the migration's own code@layer.
+    expect(report.receipt?.refusal?.detail)
+      .toBe(`MIGRATION_FAILED@DAEMON_INGRESS: ${FAILING_FILE}`);
+    // THE MIGRATION RECEIPT IS PERSISTED AND REFUSED — read back from the store, never inferred.
+    const persisted = readMigrationReceipt(store, PROJECT, "decision-1");
+    expect(persisted).toMatchObject({
+      outcome: "REFUSED",
+      refusal: { code: "MIGRATION_FAILED", detail: FAILING_FILE, layer: "DAEMON_INGRESS" },
+    });
+    // (f) THE BACKUP IS RETAINED after a post-dump failure: the receipt carries its ref and the
+    // file is still on disk. Discarding it is the one thing an operator cannot undo.
+    expect(persisted?.backupRef).toMatch(/@sha256:[0-9a-f]{64}$/u);
+    expect(existsSync((persisted?.backupRef ?? "").split("@sha256:")[0] ?? "")).toBe(true);
+    expect(journal.schema).toEqual(["accounts"]);
+    expect(context.docker.calls.filter((call) => call[0] === "run")).toEqual([]);
+  });
+
+  it("(e) a REPLAYED decision applies no second batch, and the EXISTING project lock refuses MIGRATION_IN_PROGRESS", async () => {
+    const journal: Journal = { events: [], schema: [] };
+    const root = migrationRoot();
+    const port = realMigration(openStore(), root, journal);
+
+    expect((await harness({ migrate: port }).deploy()).outcome).toBe("DEPLOYED");
+    expect(journal.schema).toEqual([APPLIED_BATCH]);
+
+    // SAME decisionId, so the engine's `requestId` replay answers from the receipt. A second batch
+    // would push a second "orders", which makes the SCHEMA the thing that proves no duplicate ran.
+    expect(await port(ENVIRONMENT, SHA, "decision-1")).toMatchObject({ ok: true });
+    expect(journal.schema).toEqual([APPLIED_BATCH]);
+    expect(journal.events.filter((event) => event === "apply:start")).toHaveLength(1);
+
+    // THE EXISTING PROJECT LOCK, taken by hand at the leaf the engine itself EXPORTS — not a
+    // second lock this row invented. A different decisionId cannot slip past it.
+    mkdirSync(join(root, BACKUP_DIRECTORY, BACKUP_LEAF, PRE_MIGRATION_BACKUP_LEAF, MIGRATION_LOCK_LEAF));
+    expect(await port(ENVIRONMENT, SHA, "decision-2"))
+      .toMatchObject({ code: "MIGRATION_IN_PROGRESS", layer: "DAEMON_INGRESS", ok: false });
+    expect(journal.schema).toEqual([APPLIED_BATCH]);
   });
 });

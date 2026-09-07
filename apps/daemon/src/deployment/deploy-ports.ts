@@ -48,9 +48,50 @@ export type DeployTargetPort = (environment: string) => DeployTarget | null;
  */
 export type ReleaseDecisionPort = (environment: string, sha: string) => string | null;
 
+/** A migration that ran. `applied` is the engine's own batch list, so an arm can assert WHAT ran
+ *  rather than that something did. */
+export interface DeployMigrationApplied {
+  readonly applied: readonly string[];
+  readonly ok: true;
+}
+
+/**
+ * A migration that did not run, or ran and failed. The code and layer are the MIGRATION's own —
+ * `MIGRATION_FAILED@DAEMON_INGRESS`, `ENV_STORE_KEY_UNAVAILABLE@KEY` — carried verbatim rather
+ * than restamped, because the deploy engine is not what refused. `detail` names the failing
+ * migration file where the engine knew it, and NEVER a connection value: this shape reaches the
+ * deploy receipt's detail, which is durable.
+ */
+export interface DeployMigrationRefused {
+  readonly code: string;
+  readonly detail: string;
+  readonly layer: string;
+  readonly ok: false;
+}
+
+export type DeployMigrationResult = DeployMigrationApplied | DeployMigrationRefused;
+
+/**
+ * The schema migration for an admitted deploy, as an injectable bounded host effect — so an arm
+ * can drive the ordering without a database, exactly as `docker` and `ssh` are driven without one.
+ * `decisionId` is passed because it is the migration's REPLAY IDENTITY: a replayed deploy must
+ * replay its migration receipt rather than start a second batch, and `migrateWithBackup` owns that
+ * replay by `requestId`.
+ */
+export type DeployMigrationPort = (
+  environment: string, sha: string, decisionId: string,
+) => Promise<DeployMigrationResult>;
+
 export interface DeployPorts {
   readonly build: DeployBuildPort;
   readonly docker: DockerRunner;
+  /**
+   * ABSENT means this composition did not ask for a migration — the rollback path and the arms
+   * that are about docker rather than schema. It is NOT a licence for the production composition
+   * to omit it: `deploy-command.ts` always supplies the real one, and the default-composition arm
+   * in `deploy-service.test.ts` proves that by OBSERVATION rather than by this type.
+   */
+  readonly migrate?: DeployMigrationPort;
   readonly releaseDecision: ReleaseDecisionPort;
   /** Carries the same docker argv to a REMOTE target: `ssh <target> docker <args>`. */
   readonly ssh: SshRunner;
