@@ -173,7 +173,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T11:04:58.185Z",
-  "updatedAt": "2026-09-07T16:58:34.005Z",
+  "updatedAt": "2026-09-07T16:59:51.076Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T13:01:27.743Z",
     "plannedStepCount": 7,
@@ -277,6 +277,22 @@
       "treeId": "add3582bea10aa75fb113ba70c63260ebd9c9ef3",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "02c96372dd5bdf54604062b84f9d84c67ec36c0a",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-eaa78526@2026-09-07T16:47:35Z",
+      "paths": [
+        ".moe/tasks/task-75bff0c9efc24daaad81ac81a373cd90.json",
+        ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json"
+      ],
+      "recordedBy": "qa-eaa78526",
+      "recordedAt": "2026-09-07T16:59:51.076Z",
+      "treeId": "ba52a6a8159613863e76b7889731ff12d09323bf",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -289,14 +305,15 @@
     "packages/scheduler/src/node-authority/node-planning-source-codec.ts",
     "apps/daemon/src/planning/compiled-policy-authority-body.ts",
     "apps/daemon/src/planning/journey-authority-bodies.ts",
-    ".moe/tasks/task-75bff0c9efc24daaad81ac81a373cd90.json"
+    ".moe/tasks/task-75bff0c9efc24daaad81ac81a373cd90.json",
+    ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-4d8571e7@2026-09-07T16:02:53Z",
-    "at": "2026-09-07T16:35:28.476Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-eaa78526@2026-09-07T16:47:35Z",
+    "at": "2026-09-07T16:59:51.076Z"
   },
   "reviewStartedAt": "2026-09-07T16:35:11.948Z",
   "verification": {
