@@ -7,7 +7,7 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { PROJECT_CONFIGURATION_LIMIT_KEYS } from "@moe/contracts";
+import { PROJECT_CONFIGURATION_LIMIT_KEYS, RUNTIME_COMMAND_KINDS } from "@moe/contracts";
 import {
   createProjectConfigurationManifest, encodeProjectConfigurationManifest,
 } from "@moe/core";
@@ -855,6 +855,10 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "graph.approve", "graph.prepare_supersession", "graph.release_preparation",
         "graph.request_expansion", "graph.supersede",
         "integration.accept_output", "journal.append",
+        // The OPERATOR-ONLY probe-interval write (task-eb37494e), served by its own edge through
+        // the interval record. This roster is SORTED, so it files between `journal.append` and
+        // `plan.propose` rather than at the end of the PAYLOAD_KEYS table it is appended to.
+        "monitoring.set_probe_interval",
         "plan.propose", "planning.submit_decomposition", "policy.install",
         "policy.validate", "preview.decide", "preview.start",
         "product_contract.answer_clarification", "product_contract.approve_gate_1",
@@ -1209,6 +1213,85 @@ describe("the deployment kinds are published human-only and MCP-excluded", () =>
     // daemon-command-async-entries.test.ts, which dispatches the kind through the entry.
     expect(deploymentMembers(ASYNC_SERVED_BOOTSTRAP_KINDS))
       .toEqual(["deployment.deploy", "deployment.migrate_down"]);
+  });
+});
+
+/**
+ * task-eb37494e: BIDIRECTIONAL ROSTER COVERAGE FOR THE MONITORING FAMILY.
+ *
+ * WHY THIS BLOCK EXISTS AT ALL, since the neighbour above looks like it would already cover it.
+ * It does not. `affordance-read.test.ts` holds the repository's other set-equality arm of this
+ * shape and it compares `SERVED_BOOTSTRAP_KINDS` against `BOOTSTRAP_COMMAND_KINDS`, so it covers
+ * BOOTSTRAP kinds only; `monitoring.set_probe_interval` is deliberately NOT one (its effects are
+ * synchronous, and a wrong entry there would mint an unplanned card on the operator's affordance
+ * surface). The block above covers `deployment.`-prefixed kinds only. So before this block, NO
+ * arm anywhere related the shared runtime roster to the daemon's dispatch for this family.
+ *
+ * THE SERVED SIDE IS ENUMERATED FROM THE DISPATCH SEAM -- `deps.registry`, the composed table
+ * every transport dispatches through -- and NEVER from a roster constant. That is the whole
+ * discipline: an arm that iterated the roster could only ever prove "advertised implies served",
+ * because deleting a member shrinks its own iteration and the arm stays green while a served
+ * capability vanishes from the advertised surface. Adding a kind to two lists and observing that
+ * they match is a tautology; this compares an ADVERTISEMENT (the shared contract, which the
+ * browser and the generated client dispatch against) to an IMPLEMENTATION (the registry's keys).
+ */
+describe("the monitoring kinds are served, advertised and fenced in lockstep", () => {
+  const monitoringMembers = (roster: Iterable<string>): readonly string[] =>
+    [...roster].filter((kind) => kind.startsWith("monitoring.")).sort();
+  const advertised = monitoringMembers(RUNTIME_COMMAND_KINDS);
+  const served = monitoringMembers(deps.registry.keys());
+
+  it("advertises the monitoring family, so the equalities below have a non-empty subject", () => {
+    // A set arm whose subject is empty passes VACUOUSLY -- two empty arrays are equal. This is
+    // the control that keeps every equality below meaningful, and it names the kind once so a
+    // rename is caught here rather than as a silent shrink to zero.
+    expect(advertised).toEqual(["monitoring.set_probe_interval"]);
+    // AND THE FILTER STILL DISCRIMINATES: without this, `monitoringMembers` returning everything
+    // (or the prefix being wrong) could not be told apart from the roster being right.
+    expect(monitoringMembers(["not.a.served.kind", "monitoring.set_probe_interval"]))
+      .toEqual(["monitoring.set_probe_interval"]);
+    expect(["not.a.served.kind"].filter((kind) => !served.includes(kind)))
+      .toEqual(["not.a.served.kind"]);
+  });
+
+  it("serves exactly what it advertises, as SET-EQUALITY in both directions", () => {
+    // DIRECTION 1 -- advertised implies served: a kind on the shared contract the daemon does
+    // not dispatch is a wire the browser and the generated client can call and nothing answers.
+    // DIRECTION 2 -- served implies advertised: a kind the daemon dispatches that the contract
+    // does not carry is a capability no client can reach. ONE equality states both, which is
+    // why it is written as an equality rather than as two subset filters.
+    expect(served).toEqual(advertised);
+    // Named as well as compared, so a WHOLESALE deletion -- both sides emptied at once, under
+    // which the equality above is still true -- cannot pass. This is the line the mutation drill
+    // reds ON THE SERVED SIDE when the dispatch registration is removed while the shared roster
+    // keeps advertising the kind.
+    expect(served).toContain("monitoring.set_probe_interval");
+    expect(deps.registry.has("monitoring.set_probe_interval")).toBe(true);
+  });
+
+  it("fences every advertised monitoring kind at dispatch, on MCP and in the wrapper", () => {
+    // Each of the three is SET-EQUAL to the advertised set, so a fence dropped for one kind reds
+    // -- a subset check would stay green while exactly that happened.
+    expect(monitoringMembers(OPERATOR_PRINCIPAL_KINDS)).toEqual(advertised);
+    // BOTH sides of the MCP derivation: named in the exclusion AND absent from the allowlist the
+    // entries actually hand to `@moe/mcp`. The first alone would stay green if the allowlist
+    // stopped subtracting the exclusion.
+    expect(monitoringMembers(MCP_EXCLUDED_COMMAND_KINDS)).toEqual(advertised);
+    expect(monitoringMembers(wiredMcpToolKinds())).toEqual([]);
+    // The staffing fence. `agentCapabilitiesFor` answers null for this kind, so an omission here
+    // is not caught by the capability gate: it would be a staffable seat for an operator act.
+    expect(monitoringMembers(HUMAN_ONLY_STEPS)).toEqual(advertised);
+  });
+
+  it("serves the kind SYNCHRONOUSLY, never from the async bootstrap half", () => {
+    // The served surface has two halves and a membership check cannot tell them apart. This kind
+    // is an ordinary durable write, so it must NOT have admitted through the bootstrap surface:
+    // an entry there would put an unplanned offer on the operator's affordance surface.
+    expect(monitoringMembers(ASYNC_SERVED_BOOTSTRAP_KINDS)).toEqual([]);
+    expect(deps.registry.get("monitoring.set_probe_interval")?.asyncHandler).toBeUndefined();
+    // The CONTROL that keeps the `toBeUndefined` above from passing for "no entry at all": a
+    // kind that IS async-served reads the other way through the same accessor.
+    expect(deps.registry.get("deployment.deploy")?.asyncHandler).toBeDefined();
   });
 });
 
