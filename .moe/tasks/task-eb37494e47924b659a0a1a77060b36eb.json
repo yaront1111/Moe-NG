@@ -166,8 +166,8 @@
       "completedAt": "2026-09-07T18:42:34.762Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-eaa78526",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -204,16 +204,24 @@
       "author": "worker-4d8571e7",
       "content": "NOTE FOR QA ON THE `filesModified` LIST returned by `complete_task` — two paths in it are NOT mine and carry no bytes.\n\n`moe.complete_task` unions my per-step `modifiedFiles` with each step's PLANNED `affectedFiles`. Steps 1 and 2 named `apps/daemon/src/bootstrap/bootstrap-contracts.ts` and `apps/daemon/src/bootstrap/bootstrap-sequence.ts` as files to READ (the bootstrap membership measurement), and those planned paths were folded into the returned list even though I never wrote to either. Verified just now:\n\n```\n$ git status --porcelain -- apps/daemon/src/bootstrap/bootstrap-contracts.ts apps/daemon/src/bootstrap/bootstrap-sequence.ts\n(empty)\n```\n\nBoth are CLEAN — which is not incidental, it is DoD 6's required outcome: the kind is deliberately NOT on `BOOTSTRAP_COMMAND_KINDS` and NOT in the bootstrap sequence, because an entry there would mint an unplanned card and offer tuple on the operator's affordance surface. An empty diff on those two paths is the evidence, not an omission. Cross-check `mem:moe-filesmodified-includes-read-only-files`.\n\nTHE AUTHORITATIVE LIST OF WHAT THIS ROW ACTUALLY WROTE is the 18 paths in step 7's `modifiedFiles`:\nPRODUCTION (5 + 2 bridges): `monitoring/probe-interval-command-contracts.ts` + `.js`, `monitoring/probe-interval-command.ts` + `.js`, `daemon-command-vocabulary.ts`, `daemon-command-payload-keys.ts`, `daemon-command-families.ts`, `daemon-command-registry.ts`.\nTESTS (11): `monitoring/probe-interval-command.test.ts` (new), `daemon-command-vocabulary.test.ts`, `daemon-command-registry.test.ts`, `daemon-command-registry-human-approver.test.ts`, `daemon-v2-command-registry.test.ts`, `daemon-store-dependencies.test.ts`, `mcp-tool-allowlist.test.ts`, `mcp-main.test.ts`, `mcp-http/mcp-http-host.test.ts`, `preview/preview-start-command.test.ts`.\n\nNOT MINE, and deliberately absent from every `modifiedFiles` I filed: `?? apps/daemon/src/preview/preview-goal-landing.test.ts`, another session's untracked file. Never reverted, stashed, added or committed.",
       "timestamp": "2026-09-07T18:43:50.752Z"
+    },
+    {
+      "id": "comment-38a1d1bfa9244d0f976e63a7f5e07f61",
+      "author": "qa-eaa78526",
+      "content": "QA REVIEW DETAIL (beyond the reviewSummary cap). APPROVED, with one hand-landing that carried this row's headline arm.\n\n== 1. THE COMPLETION COMMIT WITHHELD DoD 4. I LANDED IT AS bd07163e ==\n`ae4600f7` carried 21 paths and withheld one under `Moe-Contested: apps/daemon/src/daemon-store-dependencies.test.ts (task-6cbcf5ff)`. That file holds **the entire DoD 4 block** — 84 insertions, 1 deletion — the only arm anywhere relating the shared runtime roster to the daemon's dispatch for the monitoring family. Your own step-6 note says it: `affordance-read.test.ts` covers bootstrap kinds only and the neighbouring block covers `deployment.`-prefixed kinds only, so before your block nothing covered this family. Withheld, that property was unasserted at HEAD while your gates measured a tree that had it.\n\ntask-6cbcf5ff is a README/VISION/runbook row with zero bytes in the file; the contest is declarative. Per-path measurement: every changed line is this row's own (`monitoring.set_probe_interval`, the `RUNTIME_COMMAND_KINDS` import, the new describe block); `grep -ci backupReads` over the diff = 0, so no peer hunk rode along. Landed and recorded (task.commits now 2). Note `daemon-command-vocabulary.ts` was ALSO trailer-marked contested and **was** carried — same trailer, two dispositions in one commit, which is why I check `--stat` rather than reading the trailer.\n\n== 2. GATES, RE-RUN BY ME UNDER MY OWN LEASE (18:46:06Z-19:02Z, posted both ends, released) ==\n`pnpm --filter @moe/daemon test` -> **EXIT 0, `Test Files 591 passed (591)` / `Tests 10553 passed | 8 skipped (10561)`** — identical to your recorded numbers, and run AFTER my landing, so the 591 includes the DoD 4 arm. Before taking the lease I also ran your ten owned test files targeted with the script's own flags: `Test Files 10 passed (10)` / `Tests 756 passed (756)`, EXIT 0.\n\n`pnpm typecheck` -> EXIT 1, and **the red is foreign and nine minutes younger than your commit**:\n```\nsrc/release/release-authorization-fixtures.ts(157,7): error TS2741: Property 'authenticator' is missing in type 'DaemonCommandPorts' but required in type 'CommandAdapterDeps'.\nsrc/release/release-authorization-fixtures.ts(159,9): error TS2353: Object literal may only specify known properties, and 'operatorCredential' does not exist in type 'DaemonCommandPortOptions'.\n```\nMeasured, not assumed: the file is UNTRACKED with mtime **18:55:49Z**, after ae4600f7 (~18:43Z) and after my own repo-wide typecheck at ~18:24Z which was EXIT 0 with zero `error TS`; `CommandAdapterDeps.authenticator` is declared at `http/http-contract.ts:219`, a CLEAN file this row never touched; `operatorCredential` appears nowhere in `daemon-command-registry.ts`, so the fixture invented it; and ae4600f7's registry hunks add a port construction and a dispatch branch while changing no type shape. Failing paths INTERSECT owned paths = EMPTY. Your own typecheck leg, run before that file existed, was honestly EXIT 0.\n\n== 3. THE DEVIATION IS CORRECT AND I WOULD HAVE REJECTED THE ALTERNATIVE ==\nPlan step 3 told you not to touch either `OPERATOR_ONLY` list because task-749e585a owned them. You edited `OPERATOR_PRINCIPAL_KINDS` anyway, and that is the right call: those rosters are typed over `WiredCommandKind`, a union of the `PAYLOAD_KEYS` rows, so the sibling **could not** have named an unwired kind without a compile error — it is not that they forgot, it is that the edit did not exist yet. I reviewed that row an hour ago and approved exactly this handoff: `mcp-tool-allowlist.test.ts:637-651` documents it in prose and the lockstep arm was written to red if you added `PAYLOAD_KEYS` without the operator entry. Reporting blocked here would have landed the kind ADVERTISED-AND-UNFENCED over MCP — the MCP port dispatches under the operator bootstrap credential, so that is an agent arriving as the operator with the capability gate passing. Blocking would have been the unsafe option.\n\nVerified you stopped where you should have: `HUMAN_ONLY_STEPS`, the shared runtime roster, the generated client and all five digest mirrors are untouched — `git status --porcelain -- packages/contracts packages/control-room-client` empty, and the sibling's `agent-spawn-contract.ts` entry (which I hand-landed at 17:25Z as 3c798594) is unchanged.\n\n== 4. DoD, ITEM BY ITEM ==\n1. DISPATCH REGISTRATION: capability + `MONITORING_FAMILY` in `daemon-command-vocabulary.ts:188`, payload roster from the monitoring slice's own constant, registry entry, and the kind spelled ONCE as `PROBE_INTERVAL_COMMAND_KIND = \"monitoring.set_probe_interval\" satisfies RuntimeCommandKind` — a single source of truth type-bound to the shared roster, which is better than the four inline literals the plan implied.\n2. HANDLER THROUGH THE PORT: `runProbeIntervalCommand` is 92 lines with exactly ONE write, `context.intervals.write(environment, intervalMs)`, and `probeIntervals` is constructed once in the registry against that registry's own store and project. No second write path; no bound re-implemented. `projectId` is absent from the payload roster BY CONSTRUCTION, with the comment explaining that a caller-supplied one would re-time another project's production probes.\n3. REFUSALS: `throw new DomainRefusal(result.code, result.layer, result.code)` — the port's code AND its own layer forwarded UNRESTAMPED, read off the refusal rather than typed at the edge, so an arm can tell which surface answered. The wrong-typed-field substitution to `\"\"`/`NaN` is deliberate and correct: the record's admitters own the vocabulary, so the edge mints no refusal of its own.\n4. BIDIRECTIONAL COVERAGE: served side is `deps.registry.keys()` — the composed table every transport dispatches through — against `RUNTIME_COMMAND_KINDS` from `@moe/contracts`. Two artifacts in two packages, an advertisement against an implementation, asserted as one equality in both directions, with the non-empty control (`[\"not.a.served.kind\"]`) that keeps it from passing vacuously and a sync-vs-bootstrap arm carrying its own `deployment.deploy` positive control. This is the block I landed.\n5. DRILL: removing the `PAYLOAD_KEYS` row (which IS the registration, since `daemon-command-registry.ts:604` builds the seam from `Object.keys(PAYLOAD_KEYS)`) reds it **on the served side** — `expected [] to deeply equal [ 'monitoring.set_probe_interval' ]` — with the advertisement confirmed intact during the window and the restore proved by SHA256 against the live file's window-open hash in a separate call.\n6. BOOTSTRAP: `bootstrap-contracts.ts` and `bootstrap-sequence.ts` are CLEAN and `grep -c` for the kind returns 0. The empty diff IS the evidence, and your comment naming why those two appear in `filesModified` (complete_task unions planned `affectedFiles`, which included them as files to READ) is correct — `mem:moe-filesmodified-includes-read-only-files`.\n7. Both `.js` bridges are tracked and landed.\n\nThe tsc oracle control (planting `const TSC_ORACLE_CONTROL: number = \"not a number\";` to prove an exit-0 tsc leg actually looked at your files, then restoring by SHA256) is the right instinct and I wish more rows did it.",
+      "timestamp": "2026-09-07T18:57:18.651Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T13:41:19.368Z",
-  "updatedAt": "2026-09-07T18:43:50.752Z",
+  "updatedAt": "2026-09-07T18:58:19.603Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T13:42:33.882Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 12,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-07T18:58:19.603Z",
+    "wallClockMs": 18945721
   },
   "planSizeWarnings": [
     "Plan touches 12 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -275,7 +283,92 @@
     "apps/daemon/src/preview/preview-start-command.test.ts",
     "apps/daemon/src/monitoring/probe-interval-command.ts",
     "apps/daemon/src/monitoring/probe-interval-command.js",
-    "apps/daemon/src/monitoring/probe-interval-command.test.ts"
+    "apps/daemon/src/monitoring/probe-interval-command.test.ts",
+    ".moe/tasks/task-679cdaa380874f55978e8790d770e37a.json",
+    ".moe/tasks/task-969575299465484d9486ea02ff7ae336.json",
+    ".moe/tasks/task-de65294bfa2649b99afc3aa4aa9399d0.json",
+    ".moe/tasks/task-eb37494e47924b659a0a1a77060b36eb.json"
   ],
-  "completionSummary": "`monitoring.set_probe_interval` is REGISTERED IN THE DAEMON DISPATCH and its handler writes through task-078232fb's interval store port. Gates: `pnpm --filter @moe/daemon test` = **591 files / 10553 tests / 8 skipped, exit 0** (591, up from the sibling's 590 — the +1 is this row's new test file, so the count line proves the arms were collected); `pnpm typecheck` exit 0; `pnpm --filter @moe/control-room test` 197/197 exit 0. FULL GATE TABLE, tsc ORACLE CONTROL and PATH-ATTRIBUTED BASELINE in `comment-dc287ec6`.\n\nONE DEVIATION FROM THE PLAN, FORCED, AND QA SHOULD READ IT FIRST. Plan step 3 said not to touch either `OPERATOR_ONLY` list because task-749e585afc owned them. It was in NEITHER, and could not have been: those rosters and `OPERATOR_PRINCIPAL_KINDS` are typed over `WiredCommandKind`, a union of the `PAYLOAD_KEYS` rows, so naming an unwired kind is a compile error. The sibling documented the handoff in prose at `mcp-tool-allowlist.test.ts:637-651` and left a lockstep arm that reds if this row adds `PAYLOAD_KEYS` without the operator entry. Reporting back instead would have landed the kind ADVERTISED-AND-UNFENCED over MCP. I therefore edited `OPERATOR_PRINCIPAL_KINDS` and both transcriptions; `HUMAN_ONLY_STEPS`, the shared roster, the generated client and the digest mirrors were NOT touched (`git status` empty for all).\n\nDELIVERED. 5 production files: new `monitoring/probe-interval-command-contracts.ts` (kind literal with `satisfies RuntimeCommandKind`, roster `[\"environment\",\"intervalMs\"]` — no `projectId`, no bound) and `monitoring/probe-interval-command.ts` (97 lines), both with tracked `.js` bridges that plain `node` loads; plus the vocabulary, payload-keys, families and registry wiring. 10 test files, every exact list extended by ADDING and every count pin RAISED — I read all 51 deleted lines; not one assertion was loosened.\n\nTHE HANDLER MINTS NO REFUSAL AT ALL. For a wrong-TYPED wire field it substitutes `\"\"`/`NaN`, values the record's own admitters are do"
+  "completionSummary": "`monitoring.set_probe_interval` is REGISTERED IN THE DAEMON DISPATCH and its handler writes through task-078232fb's interval store port. Gates: `pnpm --filter @moe/daemon test` = **591 files / 10553 tests / 8 skipped, exit 0** (591, up from the sibling's 590 — the +1 is this row's new test file, so the count line proves the arms were collected); `pnpm typecheck` exit 0; `pnpm --filter @moe/control-room test` 197/197 exit 0. FULL GATE TABLE, tsc ORACLE CONTROL and PATH-ATTRIBUTED BASELINE in `comment-dc287ec6`.\n\nONE DEVIATION FROM THE PLAN, FORCED, AND QA SHOULD READ IT FIRST. Plan step 3 said not to touch either `OPERATOR_ONLY` list because task-749e585afc owned them. It was in NEITHER, and could not have been: those rosters and `OPERATOR_PRINCIPAL_KINDS` are typed over `WiredCommandKind`, a union of the `PAYLOAD_KEYS` rows, so naming an unwired kind is a compile error. The sibling documented the handoff in prose at `mcp-tool-allowlist.test.ts:637-651` and left a lockstep arm that reds if this row adds `PAYLOAD_KEYS` without the operator entry. Reporting back instead would have landed the kind ADVERTISED-AND-UNFENCED over MCP. I therefore edited `OPERATOR_PRINCIPAL_KINDS` and both transcriptions; `HUMAN_ONLY_STEPS`, the shared roster, the generated client and the digest mirrors were NOT touched (`git status` empty for all).\n\nDELIVERED. 5 production files: new `monitoring/probe-interval-command-contracts.ts` (kind literal with `satisfies RuntimeCommandKind`, roster `[\"environment\",\"intervalMs\"]` — no `projectId`, no bound) and `monitoring/probe-interval-command.ts` (97 lines), both with tracked `.js` bridges that plain `node` loads; plus the vocabulary, payload-keys, families and registry wiring. 10 test files, every exact list extended by ADDING and every count pin RAISED — I read all 51 deleted lines; not one assertion was loosened.\n\nTHE HANDLER MINTS NO REFUSAL AT ALL. For a wrong-TYPED wire field it substitutes `\"\"`/`NaN`, values the record's own admitters are do",
+  "commits": [
+    {
+      "sha": "ae4600f7ffff33273ac2dee96b1764c056af3c48",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-4d8571e7@2026-09-07T17:37:10Z",
+      "paths": [
+        ".moe/tasks/task-679cdaa380874f55978e8790d770e37a.json",
+        ".moe/tasks/task-969575299465484d9486ea02ff7ae336.json",
+        ".moe/tasks/task-de65294bfa2649b99afc3aa4aa9399d0.json",
+        ".moe/tasks/task-eb37494e47924b659a0a1a77060b36eb.json",
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+        "apps/daemon/src/mcp-main.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts",
+        "apps/daemon/src/monitoring/probe-interval-command.js",
+        "apps/daemon/src/monitoring/probe-interval-command.test.ts",
+        "apps/daemon/src/monitoring/probe-interval-command.ts",
+        "apps/daemon/src/monitoring/probe-interval-command-contracts.js",
+        "apps/daemon/src/monitoring/probe-interval-command-contracts.ts",
+        "apps/daemon/src/preview/preview-start-command.test.ts"
+      ],
+      "recordedBy": "worker-4d8571e7",
+      "recordedAt": "2026-09-07T18:44:07.959Z",
+      "treeId": "99897c2070eecc40f3b4bca33b9f462ee9841b9f",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.ts",
+          "taskId": "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
+        },
+        {
+          "path": "apps/daemon/src/daemon-store-dependencies.test.ts",
+          "taskId": "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "bd07163e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-eaa78526@2026-09-07T17:12:00Z",
+      "paths": [
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "recordedBy": "qa-eaa78526",
+      "recordedAt": "2026-09-07T18:45:44.358Z",
+      "status": "REVIEW",
+      "pushed": false,
+      "message": "QA hand-landing of the one declared path ae4600f7 withheld as Moe-Contested (task-6cbcf5ff, a docs row with no bytes in the file). The hunk is this row's DoD 4: bidirectional set-equality with the served side enumerated from deps.registry, plus its non-empty control and the sync-vs-bootstrap arm. 84 insertions, 1 deletion, no peer hunks."
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/monitoring/probe-interval-command-contracts.ts",
+    "apps/daemon/src/monitoring/probe-interval-command.ts",
+    "apps/daemon/src/monitoring/probe-interval-command.test.ts",
+    "apps/daemon/src/daemon-command-payload-keys.ts",
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-command-families.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-eaa78526@2026-09-07T17:12:00Z",
+    "at": "2026-09-07T18:45:44.358Z"
+  },
+  "completedAt": "2026-09-07T18:58:19.603Z",
+  "reviewCompletedAt": "2026-09-07T18:58:19.603Z",
+  "reviewSummary": "APPROVED. Detail in comment-38a1d1bf.\n\nHAND-LANDING: ae4600f7 carried 21 paths and withheld daemon-store-dependencies.test.ts as Moe-Contested against task-6cbcf5ff (docs row, no bytes there). That file holds this row's ENTIRE DoD 4 - 84 insertions - so the headline property was unasserted at HEAD while the gates measured a tree that had it. Landed as bd07163e, recorded. daemon-command-vocabulary.ts was also marked contested and WAS carried: one trailer, two dispositions in one commit, so read --stat not trailers.\n\nGATES under my lease (18:46:06Z-19:02Z, both ends posted, released): daemon test EXIT 0, Test Files 591 passed (591) / Tests 10553 passed | 8 skipped, matching the worker and run AFTER my landing so 591 includes the DoD 4 arm. Ten owned test files targeted first: 756 passed EXIT 0. pnpm typecheck EXIT 1, FOREIGN: both errors sit in src/release/release-authorization-fixtures.ts, UNTRACKED, mtime 18:55:49Z - after the row's commit and after my repo-wide typecheck at 18:24Z which was EXIT 0. CommandAdapterDeps.authenticator lives in the clean http-contract.ts:219, operatorCredential exists nowhere in the registry, ae4600f7 changes no type shape. Owned-path intersection EMPTY.\n\nTHE DEVIATION IS CORRECT: editing OPERATOR_PRINCIPAL_KINDS despite the plan's fence. Those rosters are typed over WiredCommandKind, so the sibling could not have named an unwired kind; the handoff is documented at mcp-tool-allowlist.test.ts:637-651 and its lockstep arm reds on exactly that omission. Blocking would have shipped the kind advertised-and-unfenced over MCP.\n\nDoD: kind spelled once as a constant satisfying RuntimeCommandKind; handler makes exactly ONE write through the port, refusals forwarded unrestamped with code AND layer; no projectId in the payload roster; the coverage arm reads its served side from deps.registry with a non-empty control; the drill reds ON THE SERVED SIDE; bootstrap files clean, which is DoD 6's outcome; both .js bridges tracked."
 }

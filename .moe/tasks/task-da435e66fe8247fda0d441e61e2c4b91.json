@@ -1,0 +1,50 @@
+{
+  "id": "task-da435e66fe8247fda0d441e61e2c4b91",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "bug: landLaneNode can time out or leave a dirty workspace while staffing the seeded policy step",
+  "description": "Blocks task-6bafd3b9439640cba358dd6e79329c9d. On a fresh SHIPPED lane with {liveCredentials:\"ABSENT\", fakeGh:\"SUCCESS\"}, calling landLaneNode BEFORE creating the contract graph intermittently returns LANDING_BUDGET_SPENT with repeated policy.validate STAFFING_ATTEMPTS_EXHAUSTED; another run continued into BASELINE_WORKSPACE_DIRTY. Repro: pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts contract-goal.spec.ts --grep \"contract lane\" (3.3m, 1 failed). Existing landingSeatDouble writes the same timestamped file for every staffed mission; landLaneNode uses maxAgents=2 and a continuous wrapper. Source/evidence and standalone reproduction will be attached in a comment.",
+  "definitionOfDone": [
+    "A fresh seeded release-configured lane can call landLaneNode repeatedly and receives a real landing SHA with a clean workspace after teardown, with a committed regression that previously failed.",
+    "Policy/non-code staffing cannot rewrite a code node's submitted bytes or consume its landing signal; retain real wrapper/verifier/landing and no hand-seeded receipts.",
+    "Focused landing and dependent contract-goal browser arms pass under browser-e2e-gate; record executed spec count and exit status."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": "task-6bafd3b9439640cba358dd6e79329c9d",
+  "priority": "HIGH",
+  "order": 72,
+  "comments": [
+    {
+      "id": "comment-6de16a94ad0e47d8826fe5e24a01b74a",
+      "author": "worker-76f4ef35",
+      "content": "MEASURED before our contract graph is created: contract-goal.spec.ts calls createLaneContractGoal; its first effect after resolving scratch is await landLaneNode(lane). No prepared test files, graph seal, new seat or criterion service has run when the following failure occurs. Latest command `pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts contract-goal.spec.ts` -> 1 passed (workspace-only arm), 1 failed, 3.3m, exit 1. Assertion at lane-contract-goal.ts:73: legacy.ok false; detail LANDING_BUDGET_SPENT followed by repeated `[wrapper] policy.validate@e2e-proj-qknzux-policy: STAFFING_ATTEMPTS_EXHAUSTED`. Earlier run reached our next wrapper, which refused both producer nodes with BASELINE_WORKSPACE_DIRTY / REPOSITORY_DELIVERY_BASELINE_UNAVAILABLE (REPOSITORY_DELIVERY). That earlier run did not capture which dirty path, so the common-cause restaff/write race is a HYPOTHESIS, not established causation. Another run got past legacy landing with a clean workspace; failure is intermittent.\n\nMinimal standalone REPRO SOURCE (new temporary Playwright spec next to lane-landing.ts; not yet independently run as this reduced source):\nimport { test, expect } from '@playwright/test';\nimport { execFileSync } from 'node:child_process';\nimport { withDaemonBackedControlRoom } from './daemon-ports.js';\nimport { landLaneNode } from './lane-landing.js';\ntest('legacy landing returns a clean baseline', async () => {\n  test.setTimeout(240_000);\n  const result = await withDaemonBackedControlRoom({liveCredentials:'ABSENT', fakeGh:'SUCCESS'}, async lane => {\n    const landed = await landLaneNode(lane);\n    expect(landed.ok, JSON.stringify(landed)).toBe(true);\n    expect(execFileSync('git', ['status','--porcelain'], {cwd:lane.workspace, encoding:'utf8'})).toBe('');\n  });\n  expect(result.ok, JSON.stringify(result)).toBe(true);\n});\n\nSource evidence to investigate, not proof of root cause: landingSeatDouble ignores mission/arguments and always writes timestamped LANDED_PATH; landLaneNode uses LANDING_MAX_AGENTS=2, continuous wrapper, notices a file and submits only one round, kills only after first COMMITTED line. Policy-only seats therefore can write the same file as the code seat. No fixes made to shared lane modules.",
+      "timestamp": "2026-09-07T18:54:00.831Z"
+    },
+    {
+      "id": "comment-24801f4da15a46f789a18e49b059db02",
+      "author": "architect-f362f7a6",
+      "content": "ARCHITECT AUDIT (read-only, latest HEAD aa438b789ed579e6f3449fa8b17600a109fcc059). Confirmed reporter comment-6de16a94 keeps common-cause hypothesis distinct from measured failures. Current landingSeatDouble always timestamp-writes LANDED_PATH and ignores stdin. Production agent-spawner.ts:400 writes request.mission to stdin; agent-mission-text.ts:codeMission starts with the exact quoted target code-node durable-claim header, unlike mission(policy.validate). landLaneNode currently resolves its target only AFTER any seat writes, accepts any [lander] COMMITTED node, and reads git HEAD before finally kills the wrapper. This concretely permits non-code byte/signal interference; whether it explains both reported failures needs red/green evidence, not assertion.\nProposed bounded ownership: tests/e2e/control-room/lane-landing.ts plus NEW lane-landing.test.ts and lane-landing.spec.ts. Resolve intended compiled node before spawn, target-match the actual mission header (not arbitrary substring in instructions), keep repeat writes byte-stable without truncation and ignore policy/other-node missions, wait for target-specific landing, stop tracked children before final git clean/HEAD observation; no larger budgets, seeded receipts, deletion/reset of dirty bytes or production authority edits. Keep native .cmd/.sh bridges. Direct generated-child tests should feed actual codeMission/mission output, exercise policy before/after correct-node writes, different-node and empty input, repeat/concurrent invocations, preserved foreign bytes and genuine IO failures. Standalone real lane must assert SHA differs from baseline and equals actual git HEAD plus the target COMMITTED receipt, clean git status after helper teardown, and no surviving owned pids. Existing readReviewLedgers(store,projectId,new Set([nodeRef])).landings is the measured read-only receipt path. Never credit policy log lines as code landing.\nCandidate primary focused browser command: pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts lane-landing.spec.ts contract-goal.spec.ts (browser-e2e-gate; record exact nonzero counts/status). Direct helper command: pnpm exec vitest run tests/e2e/control-room/lane-landing.test.ts. Full repo gates per rails; tests/e2e/control-room/tsconfig.json needs explicit typecheck. Dependent contract-goal files currently belong to worker-76f4ef35 and are untracked; do NOT include them in this task's delivered diff or create a dependency cycle waiting for the consumer to be DONE. Its execution evidence must identify its exact cooperating bytes and owner.\nAsked human in REPL to confirm this approach and clarify 'repeatedly': separate fresh seeded lanes or repeat the same already-landed lane (latter changes command replay/target lifecycle requirements). No confirmation received yet; no speculative plan submitted, no source edits/tests claimed. Also context labels this bug isEpicFinal:true even though the existing Gates integration/hardening row owns whole-epic hardening; do not silently expand this 3-file bug into the entire epic.",
+      "timestamp": "2026-09-07T18:59:57.960Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-07T18:52:51.614Z",
+  "updatedAt": "2026-09-07T18:59:58.292Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-07T18:52:57.145Z"
+  },
+  "contextFetchedBy": [
+    "architect-f362f7a6"
+  ],
+  "blockedReason": "Awaiting human confirmation requested in REPL for bounded mission-aware landing-helper repair, and acceptance clarification: does 'call landLaneNode repeatedly' mean multiple independent fresh seeded lanes, or repeated calls on the same already-landed lane? Those differ in round command replay and completed-node lifecycle; submitting the former without confirmation would guess the DoD. Read-only source/repro audit and proposed three owned paths are preserved in the latest architect comment; no source changes or plan submitted. Reporter was asked for semantics; governor notified.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-07T18:59:58.292Z"
+}

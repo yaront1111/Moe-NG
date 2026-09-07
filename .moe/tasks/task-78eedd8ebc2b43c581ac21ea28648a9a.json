@@ -130,7 +130,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-4d8571e7",
+  "assignedWorkerId": "worker-76f4ef35",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -179,7 +179,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:48:57.960Z",
-  "updatedAt": "2026-09-07T18:56:53.015Z",
+  "updatedAt": "2026-09-07T19:17:59.637Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:32:30.829Z",
     "plannedStepCount": 9,
@@ -220,7 +220,8 @@
   "contextFetchedBy": [
     "worker-f72a1438",
     "architect-f6c5da87",
-    "worker-4d8571e7"
+    "worker-4d8571e7",
+    "worker-76f4ef35"
   ],
   "workStartedAt": "2026-09-06T19:07:29.782Z",
   "blockedReason": null,
@@ -261,18 +262,58 @@
       "treeId": "5ede22408b871c687042690bb33afac43690c65a",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "f1611058321a60cc91b2560197a6d38b7d2beba1",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-4d8571e7@2026-09-07T18:48:57Z",
+      "paths": [
+        ".moe/tasks/task-6bafd3b9439640cba358dd6e79329c9d.json",
+        ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json",
+        "apps/control-room/src/v2/board/board-lanes.tsx",
+        "apps/control-room/src/v2/board/board-screen.test.tsx",
+        "apps/control-room/src/v2/goals/goal-deployments.test.tsx",
+        "apps/control-room/src/v2/goals/goal-deployments.tsx",
+        "apps/control-room/src/v2/goals/migration-presentation.tsx"
+      ],
+      "recordedBy": "worker-4d8571e7",
+      "recordedAt": "2026-09-07T18:57:16.301Z",
+      "treeId": "5e0e41ccbb6fc5bca146ac5138fa43d1af76eb1e",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/ops/activity-words.test.ts",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        },
+        {
+          "path": "apps/control-room/src/v2/ops/activity-words.ts",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
     ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json",
     ".moe/tasks/task-969575299465484d9486ea02ff7ae336.json",
-    ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json"
+    ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json",
+    ".moe/tasks/task-6bafd3b9439640cba358dd6e79329c9d.json",
+    "apps/control-room/src/v2/board/board-lanes.tsx",
+    "apps/control-room/src/v2/board/board-screen.test.tsx",
+    "apps/control-room/src/v2/goals/goal-deployments.test.tsx",
+    "apps/control-room/src/v2/goals/goal-deployments.tsx",
+    "apps/control-room/src/v2/goals/migration-presentation.tsx"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/daemon/src/release/release-authorization-fixtures.ts",
+    "apps/daemon/src/release/release-decide-authorization.test.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
     "sessionId": "worker-4d8571e7@2026-09-07T18:48:57Z",
-    "at": "2026-09-07T18:49:04.856Z"
+    "at": "2026-09-07T18:57:16.301Z"
   }
 }
