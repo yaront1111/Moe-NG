@@ -125,8 +125,17 @@ function proxiedPaths(): ReadonlySet<string> {
  *   surface (task-df972c274f2a43eda3a9f57d2780c6f9) landed first of its two consumers, adding
  *   the `dev-proxy-paths.ts` pin alongside the exact-key decoder in
  *   apps/control-room/src/live/live-deployments-health.ts.
+ *
+ * - `/backups/read` is served by task-1f994315fd164a789424349cb7bba4ca (the durable per-backup
+ *   restore-proof record) and is NOT YET PROXIED. That row deliberately lands the daemon half
+ *   alone: its own DoD authorises splitting the browser half off rather than shipping a route
+ *   nothing fetches, and the split row is task-679cdaa380874f55978e8790d770e37a - the
+ *   Health-screen backups list - which adds the `dev-proxy-paths.ts` pin beside an exact-key
+ *   decoder and RETIRES this entry together with the one in UNCONSUMED_SERVED_ROUTES below.
+ *   Recorded here rather than hidden: this is the census that keeps a producer with no consumer
+ *   visible in the daemon's own tests instead of silent.
  */
-const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([]);
+const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze(["/backups/read"]);
 
 /**
  * JSON_ROUTES the browser production tree does not fetch. Frozen census, not a
@@ -134,6 +143,12 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([]);
  * of a previously-consumed route reds. An entry with no reason is a hiding
  * place; the positive-control arm pins every member named in THIS comment.
  *
+ * /backups/read: served by task-1f994315fd164a789424349cb7bba4ca, which lands the durable
+ * restore-proof record, the route and the whole composition chain but NO browser consumer -
+ * deliberately, and named here rather than hidden. Retired by
+ * task-679cdaa380874f55978e8790d770e37a, the Health-screen backups list, which adds the
+ * exact-key decoder beside live-deployments-health.ts, renders the three states in
+ * v2/ops/environments-section.tsx, and clears this entry and the UNPROXIED one together.
  * /events/resume: client-transport.ts declares EVENT_PAGE_PATH (/events/read)
  * and EVENT_ACKNOWLEDGE_PATH (/events/ack) and not resume; generated-client.ts:28
  * states Cursor/resume semantics are TBD.
@@ -172,6 +187,9 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([]);
  * that is exactly the hole the reachability walk closed.
  */
 const UNCONSUMED_SERVED_ROUTES: readonly string[] = Object.freeze([
+  // Served by task-1f994315fd164a789424349cb7bba4ca; RETIRED by
+  // task-679cdaa380874f55978e8790d770e37a, which fetches it from the Health screen.
+  "/backups/read",
   "/budget/commitment/read",
   "/documents/ingest",
   // `/environments/read` was here and is RETIRED by task-ba83b202265d40d1885d3091f009b0a2,
@@ -353,7 +371,7 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     // (404-by-fallthrough) and a branch with no roster entry (never reached at all).
     const served = new Set([...branches, UNCONDITIONAL_ELSE_MEMBER]);
     expect(sorted(served)).toStrictEqual(sorted(roster));
-    expect(roster.size).toBe(35);
+    expect(roster.size).toBe(36);
     // The else really is unconditional. If it becomes `else if`, the union above would be a
     // lie and this line is what catches it.
     expect(source).toContain("} else serveDocumentDossier(response, request, options, body);");
