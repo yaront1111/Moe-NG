@@ -98,7 +98,7 @@
     }
   ],
   "status": "BLOCKED",
-  "assignedWorkerId": "worker-767c9887",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -117,11 +117,17 @@
       "author": "worker-767c9887",
       "content": "STEP-6 EVIDENCE, PART 1 OF 2 — DRILLS AND CONTROLS. Steps 1-5 are COMPLETE and green on disk; step 6 is IN PROGRESS and parked only on the `full-suite-gate` lease for the repo-wide disclosure legs. Nothing below depends on that lease.\n\nRESTORE DISCIPLINE (global rail 13). Pre-drill `git status --porcelain` of exactly the paths mutated:\n```\n M apps/daemon/src/deployment/migrate-down-command.ts            (tracked)\n?? apps/daemon/src/deployment/migrate-down-host-context.test.ts  (UNTRACKED, new this row)\n```\nBacked up to `%TEMP%\\moe-drill-worker-767c9887\\`, SHA256-verified equal to live BEFORE any mutation. Restored FROM THE BACKUP (never `git checkout --`/`git restore`), proved in a call SEPARATE from the restore:\n```\n647aa168949ced6e97568b7105fe07c2ab4785e277eeef722af7ee0e9a178b8b  backup / live  migrate-down-command.ts\neea2caabf372843667d4b41a826d2227ea491a604688e6a1103ddcabc0523a2c  backup / live  migrate-down-host-context.test.ts\ngrep -rn \"DRILL 1|DRILL 2|void 0 &&\" apps/daemon/src/deployment/  ->  CLEAN\n```\nThe untracked path is why this matters: `git diff -- <it>` is empty before, during and after a mutation, so naming it as a restore proof would certify nothing and an unrestored mutant would ride in wearing a clean diff, with its own arms green because the mutant is what they were re-graded against. `git diff --stat` was used as proof for the TRACKED file only.\n\nDRILL 1 — the resolver ignores its argument (`resolveHost(\"staging\")`, the pre-fix daemon-wide static). Exactly one arm went red, the isolation one:\n```\nx resolves each environment's own host authority through the production registry\nAssertionError: expected [ 'b_only_table', ...(1) ] to deeply equal [ 'kept_by_earlier_batch' ]\n   migrate-down-host-context.test.ts:236   expect(world.schemaOf(ENV_B)).toEqual([SURVIVES]);\nTests  1 failed | 5 passed (6)\n```\n`production`'s revert landed on `staging`'s database, so B's table was still standing. The defect this row exists to kill, caught by name.\n\nDRILL 2 — the resolve-guard moved to AFTER `revertLastBatch`. The first run went red on the message assertion, which fires earlier; I muted the four `expect(refusal.message)` lines and re-ran to reach the assertion step 6(b)2 actually names. Both survive:\n```\nx ...when a resolved record is incomplete\nAssertionError: expected [ 'kept_by_earlier_batch' ] to deeply equal [ 'a_only_table', ...(1) ]\n   migrate-down-host-context.test.ts:304   expect(world.schemaOf(ENVIRONMENT)).toEqual(before);\n\nx ...when the resolver answers null for the environment\nAssertionError: expected { ...(11) } to be null   // {\"code\":\"MIGRATION_DOWN_FAILED\",\"layer\":\"DAEMON_INGRESS\"}\n   migrate-down-host-context.test.ts:283   expect(world.receipt(\"cmd-revert-staging\")).toBeNull();\n```\nThe engine had already mutated the schema AND written a durable receipt before the refusal fired. So \"refuses before any engine read or write\" is pinned by the schema and receipt assertions, not by a code string.\n\nCONTROL 3 — TYPECHECK EXECUTION, owed because a green over a NEW file is exactly where an incremental tsc can pass vacuously:\n```\n$ printf 'export const plantedTypeError: number = \"not a number\";\\n' > apps/daemon/src/deployment/tsc-control-worker-767c9887.ts\n$ pnpm --filter @moe/daemon exec tsc --project tsconfig.json\nsrc/deployment/tsc-control-worker-767c9887.ts(1,14): error TS2322: Type 'string' is not assignable to type 'number'.\nTSC_WITH_PLANT_EXIT=1\n```\nRemoved; `ls` confirms absent. So the daemon `tsc` really does compile `migrate-down-host-context.test.ts` and its EXIT 0 is a real green.\n\nPOST-RESTORE RE-RUN, foreground, exit read unpiped via ${PIPESTATUS[0]}:\n```\n$ pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 \\\n    --testTimeout=30000 src/deployment/ src/daemon-command-async-entries.test.ts \\\n    src/daemon-command-registry.test.ts\n Test Files  17 passed (17)\n      Tests  596 passed | 1 skipped (597)          VITEST_EXIT=0\n$ pnpm --filter @moe/daemon exec tsc --project tsconfig.json          TSC_EXIT=0\n```\nBaseline for the delta: 16 files / 590 passed | 1 skipped before this row's arms. +1 file, +6 tests = the six arms exactly. THE 1 SKIPPED IS THE LIVE-PostgreSQL ARM: `MOE_MIGRATION_RESTORE` is UNSET in every run quoted here, so none of these numbers is evidence of Docker coverage.\n\nWORKING TREE under `apps/daemon` is my six declared paths plus one foreign untracked file (`src/preview/preview-goal-landing.test.ts`) that was already there at step 1. Not reverted, not stashed, not staged, not a stop condition.",
       "timestamp": "2026-09-07T13:25:31.975Z"
+    },
+    {
+      "id": "comment-20208839e08943c99487758ba4d38648",
+      "author": "worker-767c9887",
+      "content": "HANDOFF ADDENDUM — read this BEFORE running any mutation drill on this row's paths.\n\nSTATE AT 13:34Z: all six declared paths are COMMITTED and PUSHED in checkpoint 43355a9e. `git status --porcelain -- apps/daemon/src/deployment/` is EMPTY. The worktree copy of migrate-down-command.ts byte-equals the landed blob:\n  worktree sha256 647aa168949ced6e97568b7105fe07c2ab4785e277eeef722af7ee0e9a178b8b\n  HEAD blob  sha256 647aa168949ced6e97568b7105fe07c2ab4785e277eeef722af7ee0e9a178b8b\nSo nothing is unrestored and no drill mutant survives. QA's 13:24Z \"28 bytes smaller than my 13:20:57Z snapshot\" question is CLOSED as reading (a) — their snapshot caught a transient mid-edit state; the file settled at 9,973 bytes and that is what landed.\n\nHAZARD FOR WHOEVER RESUMES THIS ROW — a stale backup is sitting on the exact path a restore reaches for:\n  %TEMP%/moe-migrate-down-worker-767c9887.ts\n  mtime  2026-09-07T02:42:20Z      (ELEVEN HOURS before this row's 13:22Z drill window)\n  size   8365                       (vs 9973 on disk now)\n  sha256 798d0d0b95f4d9c782e2b0fd85b7503b89e21524e1073ec2c565e5ae630d30b7\n  == `git show 4710d60b:apps/daemon/src/deployment/migrate-down-command.ts`   <- the PRE-ROW bytes\nIt contains the file as it was BEFORE this row existed: no MigrateDownHostContext, no resolveHost, no hostContext seam — the old daemon-wide databaseUrl?/projectRoot?/workspace? triple. `diff` against the current file is 32 added / 9 removed: the entire row.\n\nWHY IT IS DANGEROUS AND WHY OUR PROOF CANNOT SEE IT: the backup path is keyed on the WORKER ID, and worker ids are reused across wrapper relaunches — one seat covers many rows in a day. A session that does `cp \"$B\" <target>` to restore and then `sha256sum \"$B\" <target>` in a separate call (exactly as the discipline prescribes) gets TWO IDENTICAL HASHES and a green restore-proof, because the check compares the restore to the backup and both are the stale bytes. The proof is self-consistent, correctly executed, and would certify that you had just deleted the whole row. This did NOT happen here — 647aa168 proves the 13:23Z restore reached the right bytes — but it was one `cp` away.\n\nTHE GUARD, from the next drill onwards: hash the backup AGAINST THE PRE-MUTATION FILE at window-open, before a byte moves, and put backup path + backup sha256 + that match in the announcement. Adding only the backup hash (QA's 13:30Z improvement) closes the transient-snapshot gap but NOT this one — a wrong-vintage backup passes a hash check by construction. Structural half: name backups `moe-<file>-<taskId>-<workerId>.ts` so they cannot collide across rows and a leftover announces its own staleness.\n\nI did NOT delete or rename the stale file: it is 11h old, I cannot prove no other session references it, and unilaterally mutating shared %TEMP% state is the same class of move as force-releasing a lease. Reported in chan-ced99359 at 13:34Z; governors can sweep it in a named call.\n\nFull write-up: `mem:gotcha-workerid-named-backup-collides-across-sessions`.\n\nWHAT REMAINS on this row is unchanged and small — under the full-suite-gate lease (queue position 1, task-keyed, survives this release): `pnpm --filter @moe/daemon test` and `pnpm typecheck` as the global-rail-3 disclosure legs with per-file attribution of any red against the six owned paths, then complete step 6 and complete_task with the scoped command as verification.",
+      "timestamp": "2026-09-07T13:37:17.852Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-06T19:16:23.587Z",
-  "updatedAt": "2026-09-07T13:27:07.451Z",
+  "updatedAt": "2026-09-07T13:37:37.422Z",
   "metrics": {
     "firstClaimAt": "2026-09-06T20:03:48.019Z",
     "plannedStepCount": 6,
@@ -165,5 +171,88 @@
   "blockedReason": "RESOURCE WAIT ONLY — the work is DONE and GREEN. Parks on a lease, not a defect. Governors: nothing to triage. Architects: nothing asked.\n\nSTEPS 1-5 COMPLETE on disk, six declared paths, scoped gate green WITH its count line:\n  pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/deployment/ src/daemon-command-async-entries.test.ts src/daemon-command-registry.test.ts\n  -> Test Files 17 passed (17) / Tests 596 passed | 1 skipped (597), EXIT 0\n  pnpm --filter @moe/daemon exec tsc --project tsconfig.json -> EXIT 0, with a PROVEN positive control (planted TS2322 in a NEW file under src/deployment/ gave exit 1 naming it).\nBaseline before this row was 16 files / 590: +1 file, +6 tests = exactly the six arms added. The 1 skipped is the live-PostgreSQL arm — MOE_MIGRATION_RESTORE was UNSET in every run quoted, so none of these numbers is Docker evidence.\n\nBOTH step-6 mutation drills already ran and went RED, restored from an out-of-tree backup, proved by SHA256 in a call SEPARATE from the restore (the new test file is UNTRACKED, so git diff would have certified nothing). Failing lines quoted in comment-bfec008b.\n\nLEFT: only the repo-wide DISCLOSURE legs global rail 3 requires — `pnpm --filter @moe/daemon test` and `pnpm typecheck`, with per-file attribution of any red against my six owned paths. Full suites, so they belong under this gate. I am #1 and alone in the queue; worker-ca28be90 has held since 12:57:59Z and is running `pnpm test:e2e:browser` under a separate browser-e2e-gate lease taken 13:12:28Z.\n\nNOT A FORCE REQUEST: the holder is demonstrably live (second lease 15 min ago), and I said at 13:23Z I would not run a full suite beside theirs. Keeping that.\n\nAuto-unblocks on grant. Next session: run the two legs, complete step-6, complete_task with the scoped command as verification.",
   "blockedResourceId": "full-suite-gate",
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-07T13:27:07.451Z"
+  "blockedAt": "2026-09-07T13:27:07.451Z",
+  "commits": [
+    {
+      "sha": "43355a9e96755962271748a075977e232d11e0c0",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-767c9887@2026-09-07T13:00:36Z",
+      "paths": [
+        ".moe/tasks/task-078232fb9b9d4c06a5faf3c02adaf705.json",
+        ".moe/tasks/task-122b55fd2c284174876bd1d5573bdcc5.json",
+        ".moe/tasks/task-136cbab29b39465e93b60e923c4689d6.json",
+        ".moe/tasks/task-1f994315fd164a789424349cb7bba4ca.json",
+        ".moe/tasks/task-50aaab925e504819b85b932c9396c5b3.json",
+        ".moe/tasks/task-60008fcf4719490f97075c7754ac5807.json",
+        ".moe/tasks/task-620fb461689441d6bd1fed23ce62aff7.json",
+        ".moe/tasks/task-679cdaa380874f55978e8790d770e37a.json",
+        ".moe/tasks/task-749e585afc534762941d0cb6a54ec433.json",
+        ".moe/tasks/task-75bff0c9efc24daaad81ac81a373cd90.json",
+        ".moe/tasks/task-a98b01a44ffd46cba9d9648fcb7001cb.json",
+        ".moe/tasks/task-b7cdf265455d45c58010aa4d6f6c1544.json",
+        ".moe/tasks/task-da60dc4b39c5409788246f6ed7fa932c.json",
+        "apps/daemon/src/daemon-command-async-entries.ts",
+        "apps/daemon/src/deployment/migrate-down-command.ts",
+        "apps/daemon/src/deployment/migrate-down-host-context.test.ts",
+        "apps/daemon/src/deployment/migrate-down-real.test.ts",
+        "apps/daemon/src/deployment/migrate-down-test-fixtures.ts"
+      ],
+      "recordedBy": "worker-767c9887",
+      "recordedAt": "2026-09-07T13:27:46.014Z",
+      "treeId": "9844c9c2cdf590ba1eee78f3f0f80fb0076f50c6",
+      "status": "BLOCKED",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-registry.ts",
+          "taskId": "task-136cbab29b39465e93b60e923c4689d6"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-078232fb9b9d4c06a5faf3c02adaf705.json",
+    ".moe/tasks/task-122b55fd2c284174876bd1d5573bdcc5.json",
+    ".moe/tasks/task-136cbab29b39465e93b60e923c4689d6.json",
+    ".moe/tasks/task-1f994315fd164a789424349cb7bba4ca.json",
+    ".moe/tasks/task-50aaab925e504819b85b932c9396c5b3.json",
+    ".moe/tasks/task-60008fcf4719490f97075c7754ac5807.json",
+    ".moe/tasks/task-620fb461689441d6bd1fed23ce62aff7.json",
+    ".moe/tasks/task-679cdaa380874f55978e8790d770e37a.json",
+    ".moe/tasks/task-749e585afc534762941d0cb6a54ec433.json",
+    ".moe/tasks/task-75bff0c9efc24daaad81ac81a373cd90.json",
+    ".moe/tasks/task-a98b01a44ffd46cba9d9648fcb7001cb.json",
+    ".moe/tasks/task-b7cdf265455d45c58010aa4d6f6c1544.json",
+    ".moe/tasks/task-da60dc4b39c5409788246f6ed7fa932c.json",
+    "apps/daemon/src/daemon-command-async-entries.ts",
+    "apps/daemon/src/deployment/migrate-down-command.ts",
+    "apps/daemon/src/deployment/migrate-down-host-context.test.ts",
+    "apps/daemon/src/deployment/migrate-down-real.test.ts",
+    "apps/daemon/src/deployment/migrate-down-test-fixtures.ts"
+  ],
+  "touchedFiles": [
+    ".tmp-md-split.py",
+    ".tmp-md-arms.ts",
+    ".tmp-md-fix.py"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-767c9887@2026-09-07T13:00:36Z",
+    "at": "2026-09-07T13:27:46.014Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-5 COMPLETE and LANDED. All six declared paths are committed and pushed in checkpoint 43355a9e; `git status --porcelain -- apps/daemon/src/deployment/` is EMPTY. Scoped gate green with its count line: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/deployment/ src/daemon-command-async-entries.test.ts src/daemon-command-registry.test.ts` -> Test Files 17 passed (17) / Tests 596 passed | 1 skipped (597), EXIT 0. Baseline before the row was 16 files / 590, so +1 file / +6 tests = exactly the six arms added. `pnpm --filter @moe/daemon exec tsc --project tsconfig.json` EXIT 0 with a PROVEN positive control (planted TS2322 in a NEW file under src/deployment/ gave exit 1 naming it). Both step-6 mutation drills already ran RED and were restored, failing lines quoted in comment-bfec008b; worktree sha256 647aa168... byte-equals the HEAD blob, so no mutant survives.",
+      "whatRemains": "Only the global-rail-3 repo-wide DISCLOSURE legs, which are full suites and belong under the full-suite-gate lease this row is queued for (position 1, task-keyed, survives this release, auto-unblocks on grant): (1) `pnpm --filter @moe/daemon test`, (2) `pnpm typecheck` — each foreground, one per call, TRUE_EXIT measured unpiped — then per-file attribution of any red against the six owned paths (failing paths minus owned paths must be EMPTY). Then complete step 6 and complete_task using the scoped vitest command above as verification.",
+      "pitfalls": "1) A STALE BACKUP SITS ON THE RESTORE PATH. %TEMP%/moe-migrate-down-worker-767c9887.ts, mtime 2026-09-07T02:42:20Z, 8365 bytes, sha256 798d0d0b95f4d9c7... — byte-identical to `git show 4710d60b:apps/daemon/src/deployment/migrate-down-command.ts`, i.e. the PRE-ROW state, missing the entire hostContext design (32 added / 9 removed lines). Backup paths are keyed on WORKER ID and worker ids are reused across relaunches, so `cp \"$B\" <target>` followed by `sha256sum \"$B\" <target>` prints two identical hashes and GREENS a restore-proof that just deleted the whole row. Before any drill: hash the backup against the pre-mutation file at window-open, before a byte moves. Full write-up in comment-20208839 and `mem:gotcha-workerid-named-backup-collides-across-sessions`. 2) Do NOT use `git checkout -- <path>` to undo a mutant on an uncommitted row — it reverts the whole row, not just the mutant. 3) The 1 skipped test is the live-PostgreSQL arm; MOE_MIGRATION_RESTORE was UNSET in every run quoted, so none of these numbers is Docker evidence. 4) `full-suite-gate` was held by worker-ca28be90 from 12:57:59Z; they are demonstrably live (second lease taken 13:12:28Z). Do NOT force — 5 censuses today, 0 forces, and every force censused hit a live holder.",
+      "openQuestions": "None blocking. QA's 13:24Z '28 bytes smaller' question is CLOSED as reading (a) — a transient mid-edit snapshot at 13:20:57Z; the file settled at 9,973 bytes and that is what landed (worktree sha256 == HEAD blob sha256 == 647aa168...). The only open ask is procedural and already agreed with QA: future drill announcements carry backup path + backup sha256 + the window-open match against the pre-mutation file.",
+      "releasedAt": "2026-09-07T13:37:37.419Z",
+      "releasedBy": "worker-767c9887",
+      "reason": "Explicit handoff, not idleness. Row is BLOCKED as queue position 1 on full-suite-gate; the lease queue entry is task-keyed and survives this release. Freeing the seat so it can take claimable work instead of idling behind a resource wait, per the daemon's own nextAction."
+    }
+  ]
 }

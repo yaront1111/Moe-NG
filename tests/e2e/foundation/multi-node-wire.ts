@@ -37,15 +37,22 @@ export interface DaemonWire {
 /**
  * The daemon's listener guards demand all four headers; Origin is checked against the bound
  * loopback origin, so it is the daemon's OWN origin rather than a spelled constant.
+ *
+ * The csrf token is a TRAILING parameter defaulted to the token `j1-loop-harness.ts` starts
+ * every throwaway daemon with (`--csrf-token=${CSRF_TOKEN}`), because the header only has to
+ * match whatever the daemon under test was launched with. It is a parameter rather than an
+ * edit to `j1-loop-harness.ts`, which many unrelated journeys share.
  */
-export function daemonWire(origin: string, operatorCredential: string): DaemonWire {
+export function daemonWire(
+  origin: string, operatorCredential: string, csrfToken: string = CSRF_TOKEN,
+): DaemonWire {
   const post = async (path: string, body: unknown, credential?: string): Promise<Frame> => {
     const response = await fetch(`${origin}${path}`, {
       body: JSON.stringify(body),
       headers: {
         "content-type": "application/json",
         origin,
-        "x-moe-csrf": CSRF_TOKEN,
+        "x-moe-csrf": csrfToken,
         "x-moe-protocol-version": WIRE_PROTOCOL_VERSION,
         "x-moe-session-credential": credential ?? operatorCredential,
       },

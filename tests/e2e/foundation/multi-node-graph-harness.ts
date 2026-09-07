@@ -20,35 +20,37 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { J1Scratch } from "./j1-loop-harness.js";
+import { DEFAULT_MULTI_NODE_IDENTITY } from "./multi-node-identity.js";
+import type { MultiNodeIdentity } from "./multi-node-identity.js";
+
+/** Re-exported so a caller composes the journey from ONE module rather than two. */
+export { DEFAULT_MULTI_NODE_IDENTITY, multiNodeIdentity } from "./multi-node-identity.js";
+export type {
+  MultiNodeCriterion, MultiNodeIdentity, MultiNodeIdentityOverrides,
+} from "./multi-node-identity.js";
+
+/**
+ * THE DEFAULT IDENTITY, UNDER THE NAMES IT HAS ALWAYS HAD. Each of these was a literal here
+ * until `multi-node-identity.ts` existed; they are re-stated as bindings so every existing
+ * importer keeps its exact import line, and so there is exactly ONE place a value is spelled.
+ */
+const IDENTITY = DEFAULT_MULTI_NODE_IDENTITY;
 
 /** The three sealed node keys, in the order the graph binds them. */
-export const ALPHA = "node-alpha";
-export const BETA = "node-beta";
-export const OMEGA = "node-omega";
-export const MULTI_NODE_KEYS = Object.freeze([ALPHA, BETA, OMEGA]);
+export const ALPHA = IDENTITY.alpha;
+export const BETA = IDENTITY.beta;
+export const OMEGA = IDENTITY.omega;
+export const MULTI_NODE_KEYS = IDENTITY.nodeKeys;
 
 /** One criterion per node, so the coverage read's denominator is exactly three. */
-export const CRITERIA = Object.freeze([
-  Object.freeze({
-    criterionId: "crit-alpha", nodeKey: ALPHA,
-    statement: "node-alpha/math.mjs exports add and multiply and its own test passes.",
-  }),
-  Object.freeze({
-    criterionId: "crit-beta", nodeKey: BETA,
-    statement: "node-beta/math.mjs exports add and multiply and its own test passes.",
-  }),
-  Object.freeze({
-    criterionId: "crit-omega", nodeKey: OMEGA,
-    statement: "node-omega/math.mjs integrates alpha and beta and its own test passes.",
-  }),
-]);
+export const CRITERIA = IDENTITY.criteria;
 
 /** The goal identity. Production mints `goal-${commandId}`, so the two are stated as a pair. */
-export const GOAL_CREATE_COMMAND_ID = "multi-1";
-export const GOAL_ID = `goal-${GOAL_CREATE_COMMAND_ID}`;
-export const PROJECT_ID = "moe-e2e-multi-node";
-export const CONTRACT_ID = "multi-node-contract-1";
-export const REVISION_ID = "multi-node-revision-1";
+export const GOAL_CREATE_COMMAND_ID = IDENTITY.goalCreateCommandId;
+export const GOAL_ID = IDENTITY.goalId;
+export const PROJECT_ID = IDENTITY.projectId;
+export const CONTRACT_ID = IDENTITY.contractId;
+export const REVISION_ID = IDENTITY.revisionId;
 
 export const PRD_TEXT = [
   "# Three nodes, one goal",
@@ -59,11 +61,11 @@ export const PRD_TEXT = [
 ].join("\n");
 
 /** Fixed, not minted: a random credential would be a random source in a scanned module. */
-export const OPERATOR_CREDENTIAL = "moe-e2e-multi-node-operator-credential";
-export const AGENT_SESSION = "sess-multi-node-agent";
-export const AGENT_SECRET = "secret-multi-node-agent";
-export const HUMAN_SESSION = "sess-multi-node-human";
-export const HUMAN_SECRET = "secret-multi-node-human";
+export const OPERATOR_CREDENTIAL = IDENTITY.operatorCredential;
+export const AGENT_SESSION = IDENTITY.agentSession;
+export const AGENT_SECRET = IDENTITY.agentSecret;
+export const HUMAN_SESSION = IDENTITY.humanSession;
+export const HUMAN_SECRET = IDENTITY.humanSecret;
 
 export interface MultiNodeScratch extends J1Scratch {
   /** Local node key -> its module directory beneath the shared repository root. */
@@ -102,14 +104,21 @@ function initializeRepository(directory: string): void {
 
 /**
  * The scratch uses the production compiled mission source with no operator node overrides.
+ *
+ * The identity is a TRAILING argument defaulted to today's, so `createMultiNodeScratch()`
+ * still writes today's directories under today's project and credential. It is also the
+ * carrier that reaches a throwaway daemon: `j1-loop-harness.ts:116-124` maps `projectId` and
+ * `credential` off this record into `MOE_PROJECT_ID` and `MOE_DAEMON_CREDENTIAL`.
  */
-export function createMultiNodeScratch(): MultiNodeScratch {
+export function createMultiNodeScratch(
+  identity: MultiNodeIdentity = IDENTITY,
+): MultiNodeScratch {
   const root = mkdtempSync(join(tmpdir(), "moe-e2e-multi-"));
   const specsDir = join(root, "specs");
   mkdirSync(specsDir);
   const repository = join(root, "workspace"); mkdirSync(repository);
   const workspaces: Record<string, string> = {};
-  for (const criterion of CRITERIA) {
+  for (const criterion of identity.criteria) {
     const workspace = join(repository, criterion.nodeKey);
     mkdirSync(workspace);
     writeFileSync(join(workspace, "test.mjs"), NODE_TEST, "utf8");
@@ -117,7 +126,7 @@ export function createMultiNodeScratch(): MultiNodeScratch {
   }
   writeFileSync(join(repository, "test.mjs"), [
     'import {existsSync} from "node:fs";',
-    `const modules = ${JSON.stringify(MULTI_NODE_KEYS)};`,
+    `const modules = ${JSON.stringify(identity.nodeKeys)};`,
     'let tested = 0; for (const module of modules) { if (!existsSync(new URL(`./${module}/math.mjs`, import.meta.url))) continue;',
     'await import(`./${module}/test.mjs`); tested++; }',
     'if (tested === 0) throw new Error("no module was implemented");',
@@ -127,8 +136,8 @@ export function createMultiNodeScratch(): MultiNodeScratch {
     // Unused by the multi-node arm (its shim is handed `--pid-dir`), but the J1Scratch shape
     // is what every harness function takes, so it is a real path rather than a lie.
     agentPidFile: join(root, "agent.pid"),
-    credential: OPERATOR_CREDENTIAL,
-    projectId: PROJECT_ID,
+    credential: identity.operatorCredential,
+    projectId: identity.projectId,
     root,
     specsDir,
     storePath: join(root, "store.sqlite"),
@@ -138,35 +147,59 @@ export function createMultiNodeScratch(): MultiNodeScratch {
   };
 }
 
-/** The structure the planning seat submits: the PLAN, and nothing about risk. */
-export const MULTI_NODE_STRUCTURE = Object.freeze({
-  completionNodeKey: OMEGA,
-  nodes: Object.freeze([
-    Object.freeze({
-      criterionIds: Object.freeze(["crit-alpha"]), dependsOn: Object.freeze([]),
-      nodeKey: ALPHA, objective: "Implement the alpha math module with its own test.",
-    }),
-    Object.freeze({
-      criterionIds: Object.freeze(["crit-beta"]), dependsOn: Object.freeze([]),
-      nodeKey: BETA, objective: "Implement the beta math module with its own test.",
-    }),
-    Object.freeze({
-      // BOTH producers are named EXPLICITLY rather than left to the producer's
-      // no-outgoing-edge rule (`compiled-policy-authority-body.ts:151`), so the submitted
-      // structure states the build order this journey asserts on instead of inheriting it.
-      criterionIds: Object.freeze(["crit-omega"]),
-      dependsOn: Object.freeze([ALPHA, BETA]),
-      nodeKey: OMEGA, objective: "Integrate alpha and beta behind one math module.",
-    }),
-  ]),
-});
+/**
+ * The structure the planning seat submits: the PLAN, and nothing about risk.
+ *
+ * The node objectives are derived from the keys rather than spelled, because an identity with
+ * other keys would otherwise submit a plan whose prose names nodes it does not contain.
+ */
+export function multiNodeStructure(
+  identity: MultiNodeIdentity = IDENTITY,
+): Record<string, unknown> {
+  const criterionFor = (nodeKey: string): readonly string[] => {
+    const ids = identity.criteria.filter((criterion) => criterion.nodeKey === nodeKey)
+      .map((criterion) => criterion.criterionId);
+    // An identity whose criteria do not cover a node key would otherwise submit a node with
+    // EMPTY criterionIds, which the daemon answers with an opaque internal error rather than a
+    // named refusal. Saying so here costs one line and saves the next caller the bisect.
+    if (ids.length === 0) throw new Error(`the identity states no criterion for ${nodeKey}`);
+    return Object.freeze(ids);
+  };
+  const { alpha, beta, omega } = identity;
+  return Object.freeze({
+    completionNodeKey: omega,
+    nodes: Object.freeze([
+      Object.freeze({
+        criterionIds: criterionFor(alpha), dependsOn: Object.freeze([]),
+        nodeKey: alpha, objective: "Implement the alpha math module with its own test.",
+      }),
+      Object.freeze({
+        criterionIds: criterionFor(beta), dependsOn: Object.freeze([]),
+        nodeKey: beta, objective: "Implement the beta math module with its own test.",
+      }),
+      Object.freeze({
+        // BOTH producers are named EXPLICITLY rather than left to the producer's
+        // no-outgoing-edge rule (`compiled-policy-authority-body.ts:151`), so the submitted
+        // structure states the build order this journey asserts on instead of inheriting it.
+        criterionIds: criterionFor(omega),
+        dependsOn: Object.freeze([alpha, beta]),
+        nodeKey: omega, objective: "Integrate alpha and beta behind one math module.",
+      }),
+    ]),
+  });
+}
+
+/** The default identity's structure, kept as a const so existing readers see one object. */
+export const MULTI_NODE_STRUCTURE = multiNodeStructure();
 
 /** The Product Contract revision draft the planning seat proposes from the PRD it can read. */
-export function revisionDraft(sourceDigest: string): Record<string, unknown> {
+export function revisionDraft(
+  sourceDigest: string, identity: MultiNodeIdentity = IDENTITY,
+): Record<string, unknown> {
   return {
-    authorRef: AGENT_SESSION,
-    contractId: CONTRACT_ID,
-    criteria: CRITERIA.map((criterion) => ({
+    authorRef: identity.agentSession,
+    contractId: identity.contractId,
+    criteria: identity.criteria.map((criterion) => ({
       criterionId: criterion.criterionId,
       requirementId: "req-three-nodes",
       statement: criterion.statement,
@@ -180,7 +213,7 @@ export function revisionDraft(sourceDigest: string): Record<string, unknown> {
     }],
     retiredCriterionIds: [],
     retiredRequirementIds: [],
-    revisionId: REVISION_ID,
+    revisionId: identity.revisionId,
     sourceDocumentDigests: [sourceDigest],
   };
 }

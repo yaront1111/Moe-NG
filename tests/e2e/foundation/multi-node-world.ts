@@ -19,12 +19,14 @@ import {
 } from "../../../apps/daemon/src/orchestrator/demo-seed-plan.js";
 import type { SeedCommand } from "../../../apps/daemon/src/orchestrator/demo-seed-plan.js";
 
-import { GOAL_CREATE_COMMAND_ID, GOAL_ID, OMEGA } from "./multi-node-graph-harness.js";
 import type { MultiNodeScratch } from "./multi-node-graph-harness.js";
+import { DEFAULT_MULTI_NODE_IDENTITY } from "./multi-node-identity.js";
+import type { MultiNodeIdentity } from "./multi-node-identity.js";
+import { withStore } from "./multi-node-reads.js";
 import { type DaemonWire, command, send } from "./multi-node-wire.js";
 
-export const CORRELATION_ID = "corr-multi-node-journey";
-export const OPERATOR_PRINCIPAL = "operator-local";
+export const CORRELATION_ID = DEFAULT_MULTI_NODE_IDENTITY.correlationId;
+export const OPERATOR_PRINCIPAL = DEFAULT_MULTI_NODE_IDENTITY.operatorPrincipal;
 const ALL_CAPABILITIES = Object.freeze([
   "goal.write", "planning.write", "project.admin", "review.write", "work.write",
 ]);
@@ -36,6 +38,24 @@ export interface JourneyClock {
 }
 
 /**
+ * THE PRELUDE HAS THREE PARTS, AND A CALLER CAN NEED THE MIDDLE ONE ALONE.
+ *
+ * (a) the shipped seed's prefix, (b) a `policy.validate` THIS MODULE INSERTS — see
+ * `policyValidate` below for why the seed lacks it — and (c) `project.activate` and the rest.
+ * A caller that has already run the SHIPPED seed has (a) and (c) but has never run (b), which
+ * is precisely the part `approval.decide_intent` needs. So the selection NAMES which parts run
+ * instead of being a boolean skip, because a boolean would drop exactly the one part such a
+ * caller is missing and the approval would refuse with no hint at where the hole is.
+ */
+export type WorldPreludeMode =
+  /** (a)+(b)+(c), in today's order. What every existing caller gets. */
+  | "SEED_POLICY_AND_ACTIVATE"
+  /** (a)+(c): exactly what the SHIPPED seed sends, with no `policy.validate` inserted. */
+  | "SEED_AND_ACTIVATE"
+  /** (b) alone: the caller's project is ALREADY installed, seeded and activated. */
+  | "POLICY_VALIDATE_ONLY";
+
+/**
  * The world every journey needs, taken from the SHIPPED seed's own plan rather than restated
  * here — same commands, same order, same payloads.
  *
@@ -45,20 +65,25 @@ export interface JourneyClock {
  */
 export function worldPrelude(
   scratch: MultiNodeScratch, clock: JourneyClock,
+  identity: MultiNodeIdentity = DEFAULT_MULTI_NODE_IDENTITY,
+  mode: WorldPreludeMode = "SEED_POLICY_AND_ACTIVATE",
 ): readonly SeedCommand[] {
+  if (mode === "POLICY_VALIDATE_ONLY") {
+    return [policyValidate(scratch, identity, policyStreamVersion(scratch))];
+  }
   const planned = buildDemoSeedPlan({
     budgetRef: null,
-    correlationId: CORRELATION_ID,
+    correlationId: identity.correlationId,
     decidedAt: clock.nowIso,
-    goalId: GOAL_ID,
+    goalId: identity.goalId,
     node: {
       instructions: "Create math.mjs exporting add and multiply so test.mjs passes.",
-      nodeRef: OMEGA, test: "node test.mjs", title: `Implement ${OMEGA}`,
+      nodeRef: identity.omega, test: "node test.mjs", title: `Implement ${identity.omega}`,
       workspace: scratch.workspace.replaceAll("\\", "/"),
     },
-    principalId: OPERATOR_PRINCIPAL,
+    principalId: identity.operatorPrincipal,
     projectId: scratch.projectId,
-    runId: `run-${GOAL_CREATE_COMMAND_ID}`,
+    runId: `run-${identity.goalCreateCommandId}`,
     stopBeforeApproval: true,
   });
   const goalAt = planned.findIndex((entry) => entry.commandKind === "goal.create");
@@ -66,10 +91,32 @@ export function worldPrelude(
   const prelude = planned.slice(0, goalAt);
   const activateAt = prelude.findIndex((entry) => entry.commandKind === "project.activate");
   if (activateAt === -1) throw new Error("the shipped seed plan no longer activates the project");
-  return [
-    ...prelude.slice(0, activateAt), policyValidate(scratch, prelude), ...prelude.slice(activateAt),
-  ];
+  if (mode === "SEED_AND_ACTIVATE") return prelude;
+  const validate = policyValidate(scratch, identity, countInstalls(prelude));
+  return [...prelude.slice(0, activateAt), validate, ...prelude.slice(activateAt)];
 }
+
+/** The policy stream's version line, counted off a prelude the caller is about to send. */
+function countInstalls(prelude: readonly SeedCommand[]): number {
+  return prelude.filter((entry) => entry.commandKind === "policy.install").length;
+}
+
+/**
+ * The same version line, read off DURABLE STATE instead of off an array.
+ *
+ * A `POLICY_VALIDATE_ONLY` caller never builds the prelude, so it has nothing to count. The
+ * two answers agree by construction on the default path: the seed's three `policy.install`
+ * commands all target `${projectId}-policy` at expected versions 0, 1 and 2
+ * (`demo-seed-plan.ts:144,211-213`), so the stream stands at exactly the install count once
+ * they have landed. Reading it here also keeps the fence honest for a caller whose project
+ * carries installs this module never planned.
+ */
+function policyStreamVersion(scratch: MultiNodeScratch): number {
+  return withStore(scratch, (store) =>
+    store.getAggregateVersion(policyAggregateId(scratch.projectId)));
+}
+
+const policyAggregateId = (projectId: string): string => `${projectId}-policy`;
 
 /**
  * THE SEED STOPS ONE COMMAND SHORT OF WHAT A PLAN APPROVAL NEEDS, and it is short on purpose.
@@ -86,18 +133,17 @@ export function worldPrelude(
  * reusing the selected slice makes the derivation refuse) and BEFORE the activate, which is the
  * order `bootstrap-test-fixtures.ts:747-750` already proves.
  */
-function policyValidate(
-  scratch: MultiNodeScratch, prelude: readonly SeedCommand[],
+export function policyValidate(
+  scratch: MultiNodeScratch, identity: MultiNodeIdentity, expectedVersion: number,
 ): SeedCommand {
-  const installs = prelude.filter((entry) => entry.commandKind === "policy.install").length;
-  return command(CORRELATION_ID, {
+  return command(identity.correlationId, {
     commandId: "cmd-multi-node-policy-validate",
     commandKind: "policy.validate",
-    expectedVersion: installs,
+    expectedVersion,
     payload: {
       input: {
         action: "plan.approve",
-        actor: OPERATOR_PRINCIPAL,
+        actor: identity.operatorPrincipal,
         callerRiskHint: null,
         decisionDigest: "d".repeat(64),
         graphNodeRevisionRefs: [],
@@ -106,15 +152,16 @@ function policyValidate(
         scope: [],
       },
     },
-    targetAggregateId: `${scratch.projectId}-policy`,
+    targetAggregateId: policyAggregateId(scratch.projectId),
   });
 }
 
 /** Opens one session under the OPERATOR credential, the only identity that may mint one. */
 export async function openSession(
   wire: DaemonWire, sessionId: string, secret: string,
+  identity: MultiNodeIdentity = DEFAULT_MULTI_NODE_IDENTITY,
 ): Promise<void> {
-  await send(wire, command(CORRELATION_ID, {
+  await send(wire, command(identity.correlationId, {
     commandId: `cmd-open-${sessionId}`,
     commandKind: "session.open",
     payload: {
@@ -140,11 +187,12 @@ export async function openSession(
  */
 export function mintHumanPrincipal(
   scratch: MultiNodeScratch, clock: JourneyClock, principalId: string,
+  identity: MultiNodeIdentity = DEFAULT_MULTI_NODE_IDENTITY,
 ): void {
   const provider = createStoreDependencies({
     clock: () => clock.nowIso,
     credential: scratch.credential,
-    principalId: OPERATOR_PRINCIPAL,
+    principalId: identity.operatorPrincipal,
     projectId: scratch.projectId,
     storePath: scratch.storePath,
   });
@@ -155,7 +203,7 @@ export function mintHumanPrincipal(
     if (authority === undefined) throw new Error("the provider serves no pairing session port");
     const minted = authority.createPrincipal({
       commandId: "cmd-multi-node-human-principal",
-      correlationId: CORRELATION_ID,
+      correlationId: identity.correlationId,
       kind: "HUMAN",
       principalId,
       profileRevisionId: "profile-multi-node-1",
