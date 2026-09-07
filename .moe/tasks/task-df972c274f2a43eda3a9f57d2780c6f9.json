@@ -115,7 +115,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T20:05:08.102Z",
-  "updatedAt": "2026-09-07T18:57:07.395Z",
+  "updatedAt": "2026-09-07T18:58:06.290Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T22:15:46.064Z",
     "plannedStepCount": 6,
@@ -151,7 +151,8 @@
   },
   "planApprovedAt": "2026-09-05T22:18:26.260Z",
   "contextFetchedBy": [
-    "worker-7b684492"
+    "worker-7b684492",
+    "qa-dbfde2ce"
   ],
   "workStartedAt": "2026-09-06T23:47:33.058Z",
   "declaredFiles": [
@@ -222,6 +223,22 @@
       "treeId": "1b2dde03ec894fd90e08f039d1bc909f433dba89",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "41f8bf3fab04d865a1d19b1eecde15dfe5336ffb",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-7b684492@2026-09-07T18:57:08Z",
+      "paths": [
+        ".moe/tasks/task-6bafd3b9439640cba358dd6e79329c9d.json",
+        ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json"
+      ],
+      "recordedBy": "worker-7b684492",
+      "recordedAt": "2026-09-07T18:57:13.766Z",
+      "treeId": "d5922a8c8e99bf7d9e361582bc6167835e9bc536",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -236,7 +253,9 @@
     "apps/control-room/src/v2/ops/live-environments.tsx",
     "apps/control-room/src/v2/ops/live-environments.test.tsx",
     "apps/control-room/src/v2/ops/live-ops.tsx",
-    "apps/control-room/src/live/live-document-proxy.test.ts"
+    "apps/control-room/src/live/live-document-proxy.test.ts",
+    ".moe/tasks/task-6bafd3b9439640cba358dd6e79329c9d.json",
+    ".moe/tasks/task-df972c274f2a43eda3a9f57d2780c6f9.json"
   ],
   "touchedFiles": [
     "apps/control-room/src/v2/ops/live-environments.tsx",
@@ -250,12 +269,15 @@
     "apps/control-room/src/live/live-document-proxy.test.ts",
     "apps/control-room/src/live/dev-proxy-paths.ts"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/daemon/src/release/release-authorization-fixtures.ts",
+    "apps/daemon/src/release/release-decide-authorization.test.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-4d8571e7@2026-09-07T17:28:19Z",
-    "at": "2026-09-07T17:36:38.201Z"
+    "sessionId": "worker-7b684492@2026-09-07T18:57:08Z",
+    "at": "2026-09-07T18:57:13.766Z"
   },
   "reviewStartedAt": "2026-09-07T18:46:24.203Z",
   "verification": {
