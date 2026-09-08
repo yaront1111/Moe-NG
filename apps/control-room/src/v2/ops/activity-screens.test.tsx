@@ -80,6 +80,38 @@ describe("activity words", () => {
 });
 
 describe("ActivityPanel", () => {
+  it.each([
+    ["APPLIED", "applied the migrations to this environment"],
+    ["REFUSED", "could not migrate: read the receipt for what the schema did"],
+    ["REVERTED", "reverted the last migration batch"],
+    ["PARTIAL", "recorded the migration: PARTIAL"],
+    [null, "recorded the migration"],
+  ])("renders migration verdict %s in the project-wide activity DOM", (verdict, words) => {
+    render(<ActivityPanel nowMs={NOW} scopeLabel="Project" outcome={{
+      ...ACTIVITY, scope: { goalId: null, targets: 1 }, entries: [{
+        commandKind: "internal.repository.migration_receipt", verdict,
+        decidedAt: "2026-09-03T09:35:00.000Z", disposition: "COMMITTED",
+        principalId: "daemon:migrations", targetAggregateId: "migration:receipt-1", version: 1,
+      }],
+    }} />);
+    const entry = screen.getByTestId("cr.activity.entry.0");
+    expect(entry.querySelector(".cr2-activity-what")?.textContent).toBe(`the daemon ${words}`);
+    expect(entry.textContent).toContain("migration:receipt-1");
+    expect(entry.getAttribute("data-disposition")).toBe("COMMITTED");
+  });
+
+  it("preserves verdicts on folded seat records too", () => {
+    render(<ActivityPanel nowMs={NOW} scopeLabel="Project" outcome={{
+      ...ACTIVITY, scope: { goalId: null, targets: 1 }, entries: [{
+        commandKind: "session.renew", verdict: "UNRECOGNIZED",
+        decidedAt: "2026-09-03T09:35:00.000Z", disposition: "COMMITTED",
+        principalId: "operator-local", targetAggregateId: "session/seat-1", version: 2,
+      }],
+    }} />);
+    expect(screen.getByTestId("cr.activity.seats").querySelector(".cr2-activity-what")?.textContent)
+      .toBe("the operator renewed a seat (UNRECOGNIZED)");
+  });
+
   it("renders each decision as who did what, latest first, and says refusals are not recorded", () => {
     render(<ActivityPanel nowMs={NOW} outcome={ACTIVITY} scopeLabel="Alpha" />);
     expect(screen.getByTestId("cr.activity.count").textContent).toContain("2 work decisions of 12 recorded");

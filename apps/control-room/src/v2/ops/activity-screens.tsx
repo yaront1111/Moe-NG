@@ -8,7 +8,7 @@ import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
 import { pauseSeatWords } from "../shell/pause-context.js";
 import type { ProviderPause } from "../shell/pause-context.js";
-import { agoWords, isSeatRecord, kindWords, principalWords, seatLimitWords, seatWords } from "./activity-words.js";
+import { agoWords, decisionWords, isSeatRecord, principalWords, seatLimitWords, seatWords } from "./activity-words.js";
 import type { AgentProviderPort } from "./agent-provider-port.js";
 import { SeatDisclosure, SeatStartFacts } from "./seat-disclosure.js";
 
@@ -75,7 +75,7 @@ export function ActivityPanel({ nowMs, outcome, scopeLabel }: ActivityPanelProps
               >
                 <span className="cr2-activity-when">{agoWords(entry.decidedAt, nowMs)}</span>
                 <span className="cr2-activity-what">
-                  {`${principalWords(entry.principalId)} ${kindWords(entry.commandKind)}`}
+                  {`${principalWords(entry.principalId)} ${decisionWords(entry.commandKind, entry.verdict)}`}
                   {entry.disposition === "VERSION_CONFLICT" ? " (version conflict, nothing changed)" : ""}
                 </span>
                 <span className="cr2-approve-mono cr2-activity-target">
@@ -95,7 +95,7 @@ export function ActivityPanel({ nowMs, outcome, scopeLabel }: ActivityPanelProps
                   {seats.map((entry, index) => (
                     <li className="cr2-activity-row" key={`seat:${entry.decidedAt}:${String(index)}`}>
                       <span className="cr2-activity-when">{agoWords(entry.decidedAt, nowMs)}</span>
-                      <span className="cr2-activity-what">{`${principalWords(entry.principalId)} ${kindWords(entry.commandKind)}`}</span>
+                      <span className="cr2-activity-what">{`${principalWords(entry.principalId)} ${decisionWords(entry.commandKind, entry.verdict)}`}</span>
                       <span className="cr2-approve-mono cr2-activity-target">{`${entry.commandKind} ${MIDDOT} ${entry.targetAggregateId}`}</span>
                     </li>
                   ))}

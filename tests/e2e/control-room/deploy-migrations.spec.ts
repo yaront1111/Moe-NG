@@ -21,8 +21,7 @@
  * (migration-observation.ts), and it commits on its own `migration:<receiptId>` aggregate, so a
  * goal-scoped `/activity/read` cannot carry it. The PROJECT-WIDE feed can and does: Health
  * mounts `LiveActivity goalRef={null}` (live-ops.tsx:145), which is the surface asserted here.
- * The verdict itself is asserted at the read boundary, exactly as deploy-environment.spec.ts
- * does, because that is the fact the browser renders from.
+ * Each verdict is asserted at the read boundary AND as distinct words in its own Health row.
  *
  * 2. THE NODE CARD IS NOT REACHABLE FROM A LANE AT HEAD, twice over. A seeded lane exposes NO
  * run goal - project-scoped `/runs/read` answers `{"goals":[],"outcome":"RUNS"}` even after a
@@ -254,9 +253,10 @@ test("migration journey: what the schema did, on the card, in the feed, and NOT 
         // TWO DEPLOYS, TWO KEYS. `verify` is deliberately never deployed.
         const appliedKey = await deployAndKey(lane, goalId, APPLIED_ENV, sha);
         const refusedKey = await deployAndKey(lane, goalId, REFUSED_ENV, sha);
+        const revertedKey = "lane-migration-reverted";
         expect(appliedKey, "each environment carries its OWN decision key").not.toBe(refusedKey);
 
-        // THE TWO RECEIPTS, through the SHIPPED writer. The refused one keeps its backup: a
+        // THREE RECEIPTS, through the SHIPPED writer. The refused one keeps its backup: a
         // migration that failed AFTER a good dump is the exact state this feature exists to make
         // visible, and it must not read as "no backup was taken".
         withStore(lane, (store) => {
@@ -267,6 +267,11 @@ test("migration journey: what the schema did, on the card, in the feed, and NOT 
           recordMigrationReceipt(store, receiptFor(lane, refusedKey, REFUSED_ENV, sha, {
             applied: [], backupRef: refusedRef, outcome: "REFUSED",
             refusal: migrationRefusal("MIGRATION_FAILED", FAILING_MIGRATION),
+          }));
+          // A separate down request is project-wide evidence, not the forward deploy's key.
+          recordMigrationReceipt(store, receiptFor(lane, revertedKey, APPLIED_ENV, sha, {
+            applied: [SECOND_MIGRATION, FIRST_MIGRATION], backupRef: appliedRef,
+            outcome: "REVERTED", refusal: null,
           }));
         });
 
@@ -366,15 +371,26 @@ test("migration journey: what the schema did, on the card, in the feed, and NOT 
         const activity = await lanePost(lane, "/activity/read", {});
         const entries = (activity.body["entries"] ?? []) as { commandKind?: string; verdict?: string }[];
         const receipts = entries.filter((entry) => entry.commandKind === MIGRATION_RECEIPT_COMMAND_KIND);
-        expect(receipts.length, `no migration receipt in ${JSON.stringify(activity.body)}`).toBe(2);
-        expect(receipts.map((entry) => entry.verdict).sort()).toEqual(["APPLIED", "REFUSED"]);
+        expect(receipts.length, `no migration receipt in ${JSON.stringify(activity.body)}`).toBe(3);
+        expect(receipts.map((entry) => entry.verdict).sort()).toEqual(["APPLIED", "REFUSED", "REVERTED"]);
 
         // NOW IN THE SHIPPED BROWSER. Health mounts the project-wide activity list; a goal-scoped
         // feed cannot carry a receipt that has no goalRef, and nothing here attaches one.
         await page.getByTestId("cr.nav.health").click();
         await expect(page.getByTestId("cr.activity.root")).toBeVisible({ timeout: CARD_MS });
-        await expect(page.getByTestId("cr.activity.list")).toContainText(
-          "recorded the migration", { timeout: CARD_MS });
+        const migrationRows = page.getByTestId("cr.activity.list").locator("li")
+          .filter({ hasText: MIGRATION_RECEIPT_COMMAND_KIND });
+        await expect(migrationRows).toHaveCount(3, { timeout: CARD_MS });
+        for (const [requestId, words] of [
+          [appliedKey, "applied the migrations to this environment"],
+          [refusedKey, "could not migrate: read the receipt for what the schema did"],
+          [revertedKey, "reverted the last migration batch"],
+        ] as const) {
+          const row = migrationRows.filter({ hasText: `migration:${migrationReceiptId(lane.projectId, requestId)}` });
+          await expect(row).toHaveCount(1);
+          await expect(row.locator(".cr2-activity-what")).toHaveText(`the daemon ${words}`);
+          await expect(row).toHaveAttribute("data-disposition", "COMMITTED");
+        }
         const feed = (await page.getByTestId("cr.activity.root").textContent()) ?? "";
         expect(feed, "no connection string in the ledger either").not.toContain("postgres://");
         expect(feed).not.toContain("DATABASE_URL");

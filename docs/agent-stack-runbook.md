@@ -309,41 +309,73 @@ command seam rather than silently skipping the revert.
 
 **When a down-migration cannot revert: restore the recorded backup.** This is
 the paragraph you are reading during an incident, so these are the actual
-commands. Substitute the bracketed values from the receipt.
+commands. First choose the snapshot by its receipt, not by the newest filename:
+
+- The failed **`deployment.migrate_down` receipt's `backupRef`** names the dump
+  taken immediately BEFORE `down()`. Restoring it recovers the **migrated,
+  pre-down state**, including the data present when that attempt began.
+- The original **forward migration's APPLIED receipt's `backupRef`** names the
+  dump taken BEFORE `up()`. Restoring that one returns the **pre-migration
+  state**, discarding later changes. That is a different recovery decision,
+  requiring explicit human approval of that data loss.
+
+Both dumps live in `.moe-next/backups/pre-migration/<env>/`; the directory name
+does not identify the recovery direction. Use the chosen receipt's exact path
+and digest. If its `backupRef` is null, STOP: that receipt provides no backup.
+Substitute the bracketed snapshot values below from that reference.
 
 Find the digest and confirm the file has not changed since it was written:
 
 ```
-sha256sum <project>/.moe-next/backups/pre-migration/<env>/<ts>.sql
-# Windows: certutil -hashfile <project>\.moe-next\backups\pre-migration\<env>\<ts>.sql SHA256
+sha256sum "<project>/.moe-next/backups/pre-migration/<env>/<ts>.sql"
+# Windows: certutil -hashfile "<project>\.moe-next\backups\pre-migration\<env>\<ts>.sql" SHA256
 ```
 
 It must equal the `sha256:` half of the receipt's `backupRef`. If it does not,
 STOP -- you are about to restore a file that is not the one the receipt
 describes.
 
-Then restore. Against a reachable database:
+**Before the destructive reset:** stop application writers, preserve the failed
+database for investigation, and have the operator verify the selected receipt,
+snapshot digest, environment, server/container and database together. Confirm
+the approved loss of changes since that snapshot. Do not proceed on a mismatch
+or an unverified backup. The confirmation below is required for either form.
 
+Against a reachable database (Bash). Configure `<service>` using protected
+PostgreSQL service/password files for the verified destination; never put a
+connection string or password in shell history or command arguments:
+
+```bash
+read -r -p "Type RESTORE <env>/<database> to replace the public schema: " confirm
+[ "$confirm" = "RESTORE <env>/<database>" ] || exit 1
+psql "service=<service>" -X -q -v ON_ERROR_STOP=1 --single-transaction \
+  -c "SET client_min_messages TO warning; DROP SCHEMA public CASCADE; CREATE SCHEMA public;" \
+  -f "<project>/.moe-next/backups/pre-migration/<env>/<ts>.sql"
 ```
-psql "<the environment's connection string>" -X -q -v ON_ERROR_STOP=1 \
-  -f <project>/.moe-next/backups/pre-migration/<env>/<ts>.sql
+
+Against a database inside a container (Bash; the reset/restore sequence driven
+on 2026-09-08). Use its already configured authentication, not a password argument:
+
+```bash
+read -r -p "Type RESTORE <env>/<database> to replace the public schema: " confirm
+[ "$confirm" = "RESTORE <env>/<database>" ] || exit 1
+docker exec -i <container> psql -X -q -U <user> -d <database> \
+  -v ON_ERROR_STOP=1 --single-transaction \
+  -c "SET client_min_messages TO warning; DROP SCHEMA public CASCADE; CREATE SCHEMA public;" \
+  -f - < "<project>/.moe-next/backups/pre-migration/<env>/<ts>.sql"
 ```
 
-Against a database inside a container (the form driven on 2026-09-08):
-
-```
-docker exec -i <container> psql -X -q -U <user> -d <database> -v ON_ERROR_STOP=1 \
-  < <project>/.moe-next/backups/pre-migration/<env>/<ts>.sql
-```
-
-`-v ON_ERROR_STOP=1` is not optional: without it psql reports success after
-skipping statements that failed. `-X -q` suppresses the startup file and the
-banner, which is also what keeps connection parameters out of your terminal
-scrollback.
-
-**The dump is taken BEFORE the migration, so restoring it returns the schema to
-its PRE-migration state** -- it undoes the forward migration, it does not undo
-the failed `down()` back to the migrated state. That is the intended direction.
+Run ONE attempt and check its exit status; a nonzero exit is a failed restore,
+not a reason to retry without these safeguards. The `-c` reset and `-f` dump
+apply are in the SAME `--single-transaction`: `ON_ERROR_STOP=1` stops at a
+failure and the transaction rolls back BOTH, rather than leaving a half-restored
+schema. Resetting first avoids collisions with the still-migrated objects.
+Keep `-f -` for the container's stdin dump so psql processes its meta-commands.
+These flags and the reset match `apps/daemon/src/backups/backup-ports.ts`'s
+`restoreIntoDatabase`; do not split the reset into a separate committed command.
+`client_min_messages=warning` suppresses cascading-drop notices; `-X -q` avoids
+startup-file effects and quiets routine output, but does not sanitize errors.
+Do not paste raw diagnostics or dump contents into chat, logs or receipts.
 
 **What has been driven, measured 2026-09-08.** Against a REAL disposable
 PostgreSQL (`postgres:17-alpine`, engine 29.6.2 linux/amd64): a migration
