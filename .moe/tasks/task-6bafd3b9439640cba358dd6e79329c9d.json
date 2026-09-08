@@ -175,7 +175,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T05:41:06.478Z",
-  "updatedAt": "2026-09-08T13:55:46.848Z",
+  "updatedAt": "2026-09-08T13:55:51.582Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T11:00:16.539Z",
     "plannedStepCount": 7,
@@ -354,6 +354,23 @@
       "treeId": "a03733eacb4283f8c5efacb564bf3f4342411c40",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "4cb65a31249c16f5a41278168da38e962be97e4b",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-2702df88@2026-09-08T13:55:47Z",
+      "paths": [
+        ".moe/tasks/task-0bd37766500c427aacf4f59abbd6dad1.json",
+        ".moe/tasks/task-6bafd3b9439640cba358dd6e79329c9d.json",
+        ".moe/tasks/task-c78140e9a4b749078d4fb633e2e70850.json"
+      ],
+      "recordedBy": "qa-2702df88",
+      "recordedAt": "2026-09-08T13:55:51.581Z",
+      "treeId": "c8872e28a3f53cc9d2839d893bcbf746ba54f480",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -362,14 +379,17 @@
     "tests/e2e/control-room/wrapper-lane.ts",
     "tests/e2e/control-room/lane-multi-node-workspace.ts",
     "tests/e2e/control-room/contract-goal.spec.ts",
-    "tests/e2e/control-room/lane-contract-goal.ts"
+    "tests/e2e/control-room/lane-contract-goal.ts",
+    ".moe/tasks/task-0bd37766500c427aacf4f59abbd6dad1.json",
+    ".moe/tasks/task-6bafd3b9439640cba358dd6e79329c9d.json",
+    ".moe/tasks/task-c78140e9a4b749078d4fb633e2e70850.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-812079a7@2026-09-08T13:16:58Z",
-    "at": "2026-09-08T13:17:04.881Z"
+    "sessionId": "qa-2702df88@2026-09-08T13:55:47Z",
+    "at": "2026-09-08T13:55:51.581Z"
   },
   "workStartedAt": "2026-09-07T18:37:36.495Z",
   "declaredFiles": [
