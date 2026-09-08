@@ -6,6 +6,7 @@ import { expect, it } from "vitest";
 import { createPublicationCandidateReader } from "./publication-candidate.js";
 import { createGitPublicationPort, publicationGitRunner } from "./git-publication-port.js";
 import { landingEnvironment, nodeGitRunner } from "./git-landing-port.js";
+import { admitRemoteUrl } from "./publish-receipt-contracts.js";
 
 it("pushes the approved old commit to a real bare remote after HEAD advances, without local URL rewrites", async () => {
   const base = resolve(tmpdir()); const root = mkdtempSync(join(base, "moe-publication-native-"));
@@ -31,5 +32,59 @@ it("pushes the approved old commit to a real bare remote after HEAD advances, wi
     expect(git(`--git-dir=${remote}`, "rev-parse", "refs/heads/approved\u2003")).toBe(captured.candidate.approval.sha);
     expect(newer).not.toBe(captured.candidate.approval.sha);
     expect(git("rev-parse", "HEAD")).toBe(newer);
+  } finally { if (resolve(root).startsWith(`${base}${sep}`)) rmSync(root, { recursive: true, force: true }); }
+}, 90_000);
+
+/** A real repository with one commit, plus a real `git init --bare` remote beside it. */
+const publishableFixture = (root: string, remoteUrl: string) => {
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: root, env: landingEnvironment(),
+    windowsHide: true, shell: false, encoding: "utf8", timeout: 15_000 }).replace(/\r?\n$/u, "");
+  git("init", "--quiet", "--initial-branch=approved");
+  writeFileSync(join(root, "product.txt"), "approved\n"); git("add", "product.txt");
+  git("-c", "user.name=Moe", "-c", "user.email=moe@moe.local", "-c", "commit.gpgsign=false", "commit", "--quiet", "-m", "approved");
+  const captured = createPublicationCandidateReader(root)(remoteUrl);
+  if (!captured.ok) throw new Error(captured.code);
+  return { candidate: captured.candidate, git };
+};
+
+it("pushes and observes a real local bare remote end to end with no injected options at all", async () => {
+  const base = resolve(tmpdir()); const root = mkdtempSync(join(base, "moe-publication-bare-"));
+  const remote = join(root, "remote.git");
+  try {
+    // The ledger's own admission policy is what makes a local bare repository a legal remote; assert it rather than assume it.
+    expect(admitRemoteUrl(remote)).toBe(remote);
+    const { candidate, git } = publishableFixture(root, remote);
+    git("init", "--bare", "--quiet", remote);
+    const port = createGitPublicationPort({});
+    expect(await port.push(candidate)).toEqual({ ok: true });
+    expect(await port.observe(candidate)).toEqual({ ok: true, sha: candidate.approval.sha });
+    expect(git(`--git-dir=${remote}`, "rev-parse", "refs/heads/approved")).toBe(candidate.approval.sha);
+  } finally { if (resolve(root).startsWith(`${base}${sep}`)) rmSync(root, { recursive: true, force: true }); }
+}, 90_000);
+
+it("reaches the push for an scp-style ssh remote instead of refusing at the credential read", async () => {
+  const base = resolve(tmpdir()); const root = mkdtempSync(join(base, "moe-publication-scp-"));
+  const remote = join(root, "remote.git"); const scpStyle = "git@github.com:owner/repo.git";
+  try {
+    expect(admitRemoteUrl(scpStyle)).toBe(scpStyle);
+    const { candidate, git } = publishableFixture(root, scpStyle);
+    expect(candidate.approval.remoteUrl).toBe(scpStyle);
+    git("init", "--bare", "--quiet", remote);
+    const built: string[][] = []; const spawned: string[][] = [];
+    // readConfig stays the production default runner so the UNSWAPPED scp-style string reaches the real credential read;
+    // only the push/ls-remote runner rewrites it to the local bare repository, so nothing here touches the network.
+    const port = createGitPublicationPort({ readConfig: nodeGitRunner, run: async (cwd, args) => {
+      built.push([...args]);
+      const rewritten = args.map((arg) => arg === scpStyle ? remote : arg);
+      spawned.push([...rewritten]); return publicationGitRunner(cwd, rewritten);
+    } });
+    expect(await port.push(candidate)).toEqual({ ok: true });
+    // The port reached the push carrying the scp-style remote, rather than refusing PUBLISH_PUSH_UNKNOWN at the credential read.
+    const pushArgv = built.find((args) => args.includes("push"));
+    expect(pushArgv).toBeDefined();
+    expect(pushArgv).toContain(scpStyle);
+    // ...and real git never received it, so no run of this suite can reach github.com.
+    expect(spawned.flat()).not.toContain(scpStyle);
+    expect(git(`--git-dir=${remote}`, "rev-parse", "refs/heads/approved")).toBe(candidate.approval.sha);
   } finally { if (resolve(root).startsWith(`${base}${sep}`)) rmSync(root, { recursive: true, force: true }); }
 }, 90_000);
