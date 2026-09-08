@@ -99,6 +99,25 @@ describe("the deployment-health read client decodes the served frame", () => {
     }
   });
 
+  /**
+   * THE ONE FIELD THE INCIDENT CARD EXISTS TO SHOW, so it is round-tripped HOSTILE rather than
+   * clean: leading whitespace, mixed case, a colon-separated address and a long tail. A decoder
+   * that trims, truncates, summarises or re-cases this line sends the operator back to the logs
+   * the card was built to replace, and every arm above would still be green.
+   */
+  it("carries a hostile last-error line through with NO trim, truncation or re-casing", () => {
+    const line = "  Error: connect ECONNREFUSED 10.4.19.7:8443 (attempt 3/3)"
+      + " while probing GET /healthz -- Upstream Said: 502 Bad Gateway";
+    const answer = mapDeploymentsHealthAnswer(200, {
+      ...healthy(),
+      lastError: {
+        at: "2026-09-07T08:59:00.000Z", code: "DEPLOY_HEALTHCHECK_FAILED",
+        layer: "DEPLOY_ENGINE", line, source: "DEPLOY_RECEIPT",
+      },
+    });
+    expect(answer.status === "DEPLOYMENTS_HEALTH" ? answer.lastError?.line : null).toBe(line);
+  });
+
   it("REFUSES a frame carrying an extra key, with the invalid-response code", () => {
     const answer = mapDeploymentsHealthAnswer(200, { ...healthy(), probeCount: 60 });
     expect(answer).toEqual({

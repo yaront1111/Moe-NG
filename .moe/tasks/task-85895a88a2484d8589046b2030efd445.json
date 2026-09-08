@@ -36,33 +36,49 @@
     {
       "stepId": "step-2",
       "description": "THE FIFTH KIND, AND THE goalId DECISION (DoD 4, rail 5). Add the incident kind to `NEEDS_YOU_KINDS` (needs-you-model.ts:28) and to the TWO exhaustive `Record<NeedsYouKind, ...>` maps it feeds — `KIND_ORDER` (:72) and `KIND_EYEBROW` (needs-you.tsx:41). Both stop compiling until they gain the key; that coupling is why this is a two-file change rather than one, and `needs-you.tsx` imports only the TYPE, so a symbol grep never names it.\n\nKIND_ORDER IS A PRIORITY, NOT A FORMALITY. An incident is an outage in progress; choose its position relative to PLAN_APPROVAL, ESCALATION, GATE_1 and READY_TO_CLOSE deliberately and say why in the note. Getting it wrong buries an outage under routine approvals.\n\nTHE goalId DECISION, which rail 5 requires be made deliberately and which is MECHANICAL, not just semantic: needs-you-model.ts:186-187 sorts with `... || left.goalId.localeCompare(right.goalId)`. `goalId` is required on every item and is DEREFERENCED there. An incident routes to an ENVIRONMENT. Do NOT put an environment id in `goalId` — every existing consumer assumes that field means what it says, and the comparator would be silently comparing two different kinds of identifier.\nChoose one and record it: a discriminated member carrying the environment, or an optional routing target with the comparator taught to handle its absence. Whichever you pick, assert the OTHER FOUR kinds still sort exactly as before — that is the regression this decision risks.\n\nASCII-only, apostrophe-free JSX text (the scheduler boundary scan reds on an apostrophe in JSX), and `wc -l` both files against the 250 ceiling — they were 198 and 211.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/v2/approvals/needs-you-model.ts",
         "apps/control-room/src/v2/approvals/needs-you.tsx"
       ],
-      "startedAt": "2026-09-08T02:35:12.829Z"
+      "modifiedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you-incident.ts",
+        "apps/control-room/src/v2/approvals/needs-you-incident.test.ts",
+        "apps/control-room/src/v2/approvals/needs-you-model.ts",
+        "apps/control-room/src/v2/approvals/needs-you.tsx",
+        "apps/control-room/src/v2/goals/plan-rejected-surfaces.test.tsx"
+      ],
+      "note": "THE NINTH KIND (not the fifth - peers grew the roster to eight before I arrived), AND THE goalId DECISION.\n\nROSTER, all nine, peer entries preserved verbatim:\n  NEEDS_YOU_KINDS = [\"INCIDENT\",\"PLAN_APPROVAL\",\"PLAN_REJECTED\",\"PREVIEW\",\"RELEASE\",\"DEPLOY\",\"ESCALATION\",\"GATE_1\",\"READY_TO_CLOSE\"]\n  KIND_ORDER: INCIDENT 0, then the previous eight shifted by one in their EXISTING relative order.\n  KIND_EYEBROW (needs-you.tsx): + INCIDENT: \"Incident\".\nNothing was deleted. I also corrected two docblock sentences the addition made false: \"Seven kinds of item\" (already stale at eight before me) is now \"Nine\", and \"Every item routes to the goal\" now names the one deliberate exception.\n\nWHY INCIDENT SORTS FIRST: alone among the kinds it is an outage ALREADY IN PROGRESS rather than a decision waiting its turn - users are losing the product while it sits in the list. Every other kind is work that can wait one position; burying an outage under routine plan approvals is how it gets read late.\n\nTHE goalId DECISION (rail 5), settled by PRECEDENT not invention. The incident item carries `goalId: \"\"` and `planningRunRef: \"\"` - NO id at all, and specifically never an environment id in a goal's field. needs-you-escalation.ts:39 already writes `goalId: goal?.goalId ?? \"\"` for an item whose goal is unknown, so the empty string already means \"no goal\" in this exact family. The environment travels in a DISCRIMINATED `incident` member (the plan's first option), where a consumer must ask for it by name. Consequences, all checked: the comparator at needs-you-model.ts (`left.goalId.localeCompare(right.goalId)`) keeps a total order because \"\" is still a string; needs-you.tsx already suppresses the open-the-goal button when `planningRunRef` is empty, so no card offers to open a goal that does not exist.\n\nSORT REGRESSION ASSERTED THROUGH THE PRODUCTION COMPARATOR, not a reimplementation: the same board derived twice, once with an open incident and once without, gives [\"INCIDENT\",\"PLAN_APPROVAL\",\"GATE_1\"] and [\"PLAN_APPROVAL\",\"GATE_1\"]. Roster arm asserts MEMBERSHIP of all nine, never a count (three peer rows are still adding kinds; a frozen count would red on their landing rather than on a defect).\n\nUNNAMED EXACT-ROSTER CONSUMER FOUND AND UPDATED - DISCLOSED IN FULL. apps/control-room/src/v2/goals/plan-rejected-surfaces.test.tsx:58 asserts `expect([...NEEDS_YOU_KINDS]).toEqual([...])` with the eight-kind array frozen inline. It is NOT in this plan's affectedFiles and no symbol grep of \"INCIDENT\" would have named it. It reddened on the first run:\n  \"Test Files 1 failed | 200 passed (201)\" / plan-rejected-surfaces.test.tsx:58:34\nI added \"INCIDENT\" in first position and changed NOTHING else in that file. This is the consumer being made CORRECT, not the producer being reformatted to evade a check - the arm still asserts an exact ordered roster, and its companion `new Set(NEEDS_YOU_KINDS).size` uniqueness assertion is untouched. Blocking the row over a one-line test-roster update would have stranded working bytes against DELIVERY BIAS; the extra path is declared here and in modifiedFiles.\n\nNEW MODULE, not growth in the contended files: apps/control-room/src/v2/approvals/needs-you-incident.ts (119 lines) holds `IncidentFacts`, `incidentKeyOf`, `incidentItems` and the rollback resolution, mirroring needs-you-escalation.ts (type-only `NeedsYouItem` import, so no runtime cycle).\n\nLINE COUNTS, disclosed against the 250 target: needs-you-model.ts 249 -> 268, needs-you.tsx 233 -> 234. Both are OVER the 250 target and far under the 400 hard cap. The plan expected 198/211; three peer rows landed four extra kinds into these files before I claimed, so a ninth kind cannot be added inside 250. I deliberately did NOT reclaim lines by moving `EscalationFacts`/`CloseFacts` out: needs-you-model.ts is being edited by three concurrent rows and a structural move maximises the rebase surface rail 6 warns about, for 14 lines.\n\nASCII-only; no apostrophes added to JSX text.\nGate at this step: `npx vitest run --root apps/control-room src/v2/approvals/needs-you-incident.test.ts src/v2/goals/plan-rejected-surfaces.test.tsx` -> \"Test Files 2 passed (2) / Tests 22 passed (22)\". Package typecheck (`tsc --noEmit`) exit 0.",
+      "startedAt": "2026-09-08T02:35:12.829Z",
+      "completedAt": "2026-09-08T02:39:06.812Z"
     },
     {
       "stepId": "step-3",
       "description": "THE READ CLIENT AND ITS PROXY PIN (rail 7). Create the live read module under apps/control-room/src/live/ for `/deployments/health/read`, following the neighbouring live read clients.\n\nEXACT-KEY DECODING: an unknown key and a missing key each REFUSE with a specific code, asserted with the code AND the layer that refused — never merely that decoding failed.\n\nCARRY THE LAST ERROR LINE THROUGH UNCHANGED. The decoder must not truncate, trim, summarise or re-case it. This is the one field the whole card exists to show, and a decoder that tidies it defeats the row as surely as a card that omits it.\n\nADD THE PROXY PIN to `DEV_PROXY_PATHS` in apps/control-room/src/live/dev-proxy-paths.ts (frozen list at :5), keeping the file's existing ordering. Note `/design/read` is NOT pinned there, so a pin is not automatic for every route — without it the dev lane cannot reach the read at all.\n\nDecode the OPEN INCIDENT and the PREVIOUS DEPLOY SHA as first-class members: step 4 renders the error line and step 5 needs the sha at the confirm.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/live/live-deployments-health-read.ts",
         "apps/control-room/src/live/dev-proxy-paths.ts"
       ],
       "newFiles": [
         "apps/control-room/src/live/live-deployments-health-read.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-deployments-health.test.ts"
+      ],
+      "note": "THE READ CLIENT AND ITS PROXY PIN ALREADY EXIST. This step became a VERIFICATION step, not a build step, because building it again would have been the silent-duplicate failure the global rails name (re-implementing a landed surface collides with its owner in the shared worktree).\n\nMEASURED ON DISK:\n- apps/control-room/src/live/live-deployments-health.ts (334 lines) is the read client the plan asked me to create. It POSTs exactly {environment} to `/deployments/health/read`, decodes exact-key at EVERY level via `exactDataRecord`, and refuses at its own layer.\n- THE PROXY PIN IS ALREADY THERE: dev-proxy-paths.ts pins \"/deployments/health/read\" between \"/deployments/read\" and \"/environments/read\", with a comment that also records the plan's own point - \"/design/read above is deliberately NOT pinned, so a pin is not automatic for every route\". live-deployments-health.test.ts:292 asserts the pin (\"pins the route in DEV_PROXY_PATHS, or the dev lane answers it with Vite\").\n- EXACT-KEY REFUSALS ALREADY ASSERT CODE AND LAYER, not merely that decoding failed: extra key, missing key, unknown key nested inside lastProbe, an invented `state`, a series missing its window, a frame answering about a DIFFERENT environment - each asserts {code: \"DEPLOYMENTS_HEALTH_RESPONSE_INVALID\", layer: \"CONTROL_ROOM_DEPLOYMENTS_HEALTH\"}. The three refusal ENVELOPES (route {code,layer}, listener {code,layer,outcome}, probe store {code,layer,ok:false}) each carry the refusing authority's own code and layer through.\n- THE OPEN INCIDENT AND THE ROLLBACK TARGET ARE ALREADY FIRST-CLASS: `incident {id, openedAt}` and `rollbackTarget {imageDigest, sha, toReceiptRef}`, the latter gated on hex64 `toReceiptRef` and docker's `sha256:<64 hex>` digest. NOTE FOR STEP 5, and it corrects the plan's wording: the sha the confirm must name is `rollbackTarget.sha` (receipt-bound, spendable), NOT `rollbackSha`, which the client's own docblock marks DISPLAY ONLY and \"positional over the raw ledger - can name the deploy running right now\".\n\nTHE ONE GAP I FOUND AND CLOSED. The decoder's by-value arm round-tripped only a CLEAN error line (\"Error: failed to solve: process did not complete successfully\"). Nothing asserted the line survives untidied, which is the exact defect DoD 1 exists to prevent. Added ONE arm to live-deployments-health.test.ts: \"carries a hostile last-error line through with NO trim, truncation or re-casing\", round-tripping a line with LEADING WHITESPACE, mixed case, a host:port, a parenthesised counter and a long tail, asserting `.line` equals the literal.\nPROOF THE ARM EXECUTES (not just that the file is exit 0): `npx vitest run --root apps/control-room src/live/live-deployments-health.test.ts -t \"hostile last-error\"` -> \"Test Files 1 passed (1) / Tests 1 passed | 52 skipped (53)\". Whole file: \"Tests 53 passed (53)\" (52 before).\n\nThe same property is asserted a second time at the MODEL seam by needs-you-incident.test.ts, which builds every fixture by putting a wire body through `mapDeploymentsHealthAnswer` rather than hand-shaping a view - so no arm in this row asserts against a shape the real wire never produces.\n\nNo new module and no second proxy pin were created.",
+      "startedAt": "2026-09-08T02:39:10.852Z",
+      "completedAt": "2026-09-08T02:40:06.000Z"
     },
     {
       "stepId": "step-4",
       "description": "THE CARD AND ITS ERROR LINE (DoD 1). Render the incident item in needs-you.tsx: 'production unhealthy since <t>' with THE LAST ERROR LINE VERBATIM.\n\nASSERT THE EXACT ERROR TEXT reaches the rendered card — seed a distinctive error string through the decoder and assert that exact string is in the output. DoD 1 is explicit that asserting 'some error-ish string is present' does not count, and the reason is concrete: a card showing only 'unhealthy' sends the operator to the logs this card was built to replace. Assert against the whole rendered container, not one node.\n\nDo not truncate the error line for layout. If it is long, wrap or scroll it — an ellipsis in the middle of a stack line is the same failure in a nicer font. If a bound is genuinely needed, say what it is and why in the note.\n\nRender the 'since <t>' from the incident's opened-at, not from the last probe timestamp: the operator wants how long this has been happening, not when it was last checked. Those diverge exactly when it matters.\n\nASCII-only and apostrophe-free JSX text.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/v2/approvals/needs-you.tsx",
         "apps/control-room/src/v2/approvals/needs-you.test.tsx"
-      ]
+      ],
+      "startedAt": "2026-09-08T02:40:35.507Z"
     },
     {
       "stepId": "step-5",
@@ -121,22 +137,30 @@
       "author": "worker-4d8571e7",
       "content": "SECOND SESSION ON THIS ROW - YIELDING TO THE LIVE ONE. Additive findings only; I made NO source edits, ran no gate, and touched no board status.\n\nTWIN DETECTION (the clock, not the notes - both sessions share seat worker-4d8571e7):\n- My `complete_step` on step-1 was refused `[INVALID_STATE] Step is in COMPLETED state`. Disk says step-1 completedAt 2026-09-08T02:34:26.134Z and step-2 startedAt 02:35:12.829Z, while my own call was made at ~02:35:2xZ. A call I had not yet made cannot have closed the step.\n- Independent proof: `git status --porcelain -- apps/control-room` shows `?? apps/control-room/src/v2/approvals/needs-you-incident.ts`, 6428 bytes, mtime 02:35:43Z - written the same second I read it. That is a session typing, not debris.\n- needs-you-model.ts has already moved under the twin: NEEDS_YOU_KINDS is now at :58 (was :52 when I measured at 02:2xZ) and the comparator at :255 (was :238).\nPer the yield protocol I am not re-editing files (last writer wins and would destroy green work) and not calling report_blocked (it would flip the row out of WORKING mid-step).\n\nI independently reached the SAME four decisions the twin recorded in its step-1 note - goalId \"\" by the needs-you-escalation.ts:39 precedent, the offer matched by commandKind alone because affordance-rollback-offers.ts mints AT MOST ONE project-scoped offer, step 3 already delivered by task-509c6c16, dismiss keyed to the incident id - so that note is corroborated by a second measurement, not single-sourced.\n\nTHE ONE THING THAT NOTE DOES NOT CARRY, and it is time-critical because the twin is inside step-2 (the roster edit) right now:\n\nAN UNNAMED EXACT-ROSTER CONSUMER OUTSIDE THE PLAN'S AFFECTED FILES (global rail 19 / the bidirectional-roster rail). apps/control-room/src/v2/goals/plan-rejected-surfaces.test.tsx:58-61 pins the roster as an ORDERED EXACT ARRAY, not a membership check:\n\n    expect([...NEEDS_YOU_KINDS]).toEqual([\n      \"PLAN_APPROVAL\", \"PLAN_REJECTED\", \"PREVIEW\", \"RELEASE\", \"DEPLOY\", \"ESCALATION\", \"GATE_1\",\n      \"READY_TO_CLOSE\",\n    ]);\n    expect(new Set(NEEDS_YOU_KINDS).size).toBe(NEEDS_YOU_KINDS.length);\n\nADDING ANY NINTH KIND REDS THIS TEST. It is in v2/goals/, imports the constant from ../approvals/needs-you-model.js, and appears in NO step of this plan's affected files - exactly the frozen-roster hazard step 7 warns against, already sitting in a peer test. `pnpm --filter @moe/control-room test` will catch it, but only after the roster edit is written.\n\nThe honest fix is to add the new kind to that literal in its declared order; its own docblock asks for \"every advertised kind is a distinct string in the declared order\", so updating it preserves the assertion rather than evading it. It must NOT be fixed by renaming or reformatting the producer. Whoever lands this should `moe.declare_files` that path, since no step lists it.\n\nFULL SWEEP FOR OTHER CONSUMERS A NINTH KIND COULD RED (`git grep -n \"NEEDS_YOU_KINDS|KIND_ORDER|KIND_EYEBROW\"` plus a sweep for hard counts and literal kind arrays over apps/control-room/src):\n- plan-rejected-surfaces.test.tsx:58 - THE ONLY hard red. Confirmed.\n- KIND_ORDER (needs-you-model.ts:128) and KIND_EYEBROW (needs-you.tsx:47) are exhaustive `Record<NeedsYouKind, ...>` maps - they stop COMPILING until they gain the key, so `pnpm typecheck` catches them; no test pins their contents.\n- countLabel pins are SAFE, all of them, but only conditionally: needs-you-model.test.ts:108/:134/:202/:348 and plan-rejected-surfaces.test.tsx:74 call deriveNeedsYou WITHOUT a health input, so an absent/undefined health member must yield zero incident items. If the new input member is ever made required, all five red at once.\n- live-needs-you.test.tsx:70 expects \"2 decisions need you\". This one is a REAL RISK for step 5's composition: if LiveNeedsYou starts a health read with no injected reader, that test can gain an item or leak a poll. Give the health reader the same `?? default` injection shape the other five readers use, and that test stays green.\n\nNo files created or modified by this session. Foreign dirt observed and left alone: 27 modified (.moe/**, .codex/**, .grok/config.toml, apps/daemon/src/http/affordance-read.ts) and 7 untracked, plus the twin's in-flight needs-you-incident.ts.",
       "timestamp": "2026-09-08T02:36:53.169Z"
+    },
+    {
+      "id": "comment-2169bd68f6ce4537850f71bd2bce1dea",
+      "author": "worker-4d8571e7",
+      "content": "WORKER-4d8571e7 SESSION 3 (PID 31036, launched 02:38:31Z): YIELDING AGAIN TO A LIVE TWIN, PLUS ONE DEFECT THE TWIN IS ABOUT TO WALK INTO AT STEP 4/5.\n\nTWIN CONFIRMED LIVE, NOT AN ORPHAN. Two claude.exe worker seats hold the SAME workerId AND the same taskId: PID 65624 (prompt file moe-system-prompt-worker-60888.md, created 02:31:52Z) and me, PID 31036 (…-71748.md, created 02:38:31Z). Both greps answer `workerId=worker-4d8571e7` and `Claimed task id: task-85895a88…`, so this is the wrapper double-assign, not a stale process. Liveness is measured, not inferred: the task JSON moved AFTER my launch - step-2 completedAt 02:39:06.812Z, step-3 startedAt 02:39:10.852Z - and plan-rejected-surfaces.test.tsx mtime is 02:38:32Z, one second after my process was created. I made NO source edit, NO step-state call and NO status change. Last writer wins on a shared file and the twin is five steps of work ahead of me.\n\nTHE DEFECT: `decisionKeyOf` WAS NEVER TAUGHT THE INCIDENT KEY, SO EVERY INCIDENT CARD SHARES ONE IDENTITY.\nneeds-you.tsx:69-73 `decisionKeyOf(item)` returns `item.goalId` for any item with no `escalation` member (:71). An INCIDENT item is built with `goalId: \"\"` (needs-you-incident.ts, the deliberate rail-5 shape - correct, keep it). So for EVERY incident item `decisionKeyOf` answers `\"\"`, and three separate call sites collapse onto that empty key:\n\n1. :223 `key={`${item.kind}:${decisionKeyOf(item)}`}` -> literally `\"INCIDENT:\"` for every incident card. React reuses ONE `DecisionCard` instance across colliding keys, and `DecisionCard` holds `useState(armed)` at :116. Two environments in an open incident therefore SHARE THE ARMED STATE: arming the rollback confirm on one card can present an armed confirm on the other. That is DoD 2's own hazard - \"rolling back to the wrong sha during an incident is a second incident\" - arriving as a React reconciliation bug rather than a text bug, and it is invisible to any test that seeds a single environment.\n2. :118 `slug` -> `\"incident.\"`, so :124 renders `data-testid=\"cr.needsyou.item.incident.\"` on every incident card. `getByTestId` throws \"Found multiple elements\" on the two-environment case; `queryAllByTestId`[0] silently reads the wrong card.\n3. :227 `decisionResults?.get(decisionKeyOf(item))` -> `get(\"\")` for every incident, so one rollback's busy/outcome/error line renders on ALL incident cards at once.\n\nTHE FIX IS ALREADY HALF-WRITTEN AND ONLY THE WIRING IS MISSING. needs-you-incident.ts already exports `incidentKeyOf(environment, incidentId)` -> `<environment>#<incidentId>` and its own docblock states the intent verbatim: \"The key one incident's dismissal and one incident's decision result are both kept under\". The dismissal side uses it; the DECISION side does not. Add a branch to `decisionKeyOf` BEFORE the `return item.goalId` fallback at :71:\n\n    const incident = item.incident;\n    if (incident !== undefined) return incidentKeyOf(incident.environment, incident.incidentId);\n\nThat is a value import of `incidentKeyOf` into needs-you.tsx (the existing `NeedsYouItem` import there is type-only; the incident module imports `NeedsYouItem` type-only from the model, so no runtime cycle is created). It fixes all three call sites at once because all three route through `decisionKeyOf`.\n\nASSERT IT, do not just patch it: seed TWO environments each with an OPEN INCIDENT and DIFFERENT `rollbackTarget.sha`, arm the confirm on the first, and assert the SECOND card's confirm surface still shows the second environment's sha - not the first's, and not an armed state at all. A single-environment fixture passes with the bug present.\n\nMINOR, same file: the incident item sets `actionLabel: \"Open the goal\"`, but :173 suppresses that button whenever `planningRunRef === \"\"`, which an incident always is. The field is therefore dead text that never renders - harmless today, but it says \"Open the goal\" on the one kind that has no goal, and the module's own `detail` says \"open the environment to read the probes\" instead. Worth making the two agree.\n\nSTILL STANDING from comment-107a5720e8044791ac80b2ad27358d61: apps/control-room/src/v2/goals/plan-rejected-surfaces.test.tsx:58-61 pins NEEDS_YOU_KINDS as an ORDERED EXACT array and sits outside every step's affectedFiles - it needs `moe.declare_files` or the wrapper will not land the edit.",
+      "timestamp": "2026-09-08T02:41:05.850Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T20:05:32.557Z",
-  "updatedAt": "2026-09-08T02:36:53.169Z",
+  "updatedAt": "2026-09-08T02:41:05.850Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T22:15:51.129Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 1
+    "executedStepCount": 3
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T22:20:59.455Z",
@@ -170,16 +194,46 @@
       "treeId": "8e7182f76f644714eef84a3d29d00c978ace20b6",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "643d120464b031845884d5939323020d8c11fb6d",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-4d8571e7@2026-09-08T02:31:37Z",
+      "paths": [
+        ".moe/tasks/task-2f2ed034fbec4fe48b49a951951c9505.json",
+        ".moe/tasks/task-85895a88a2484d8589046b2030efd445.json"
+      ],
+      "recordedBy": "worker-4d8571e7",
+      "recordedAt": "2026-09-08T02:37:59.604Z",
+      "treeId": "1a46cdbab58a898f388695341019eefeacf3ea50",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/approvals/needs-you.tsx",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        },
+        {
+          "path": "apps/control-room/src/v2/approvals/needs-you-model.ts",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-85895a88a2484d8589046b2030efd445.json"
+    ".moe/tasks/task-85895a88a2484d8589046b2030efd445.json",
+    ".moe/tasks/task-2f2ed034fbec4fe48b49a951951c9505.json"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/control-room/src/v2/approvals/needs-you-incident.test.ts",
+    "apps/control-room/src/v2/approvals/needs-you-incident.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-4d8571e7@2026-09-08T02:31:48Z",
-    "at": "2026-09-08T02:31:51.486Z"
+    "sessionId": "worker-4d8571e7@2026-09-08T02:31:37Z",
+    "at": "2026-09-08T02:37:59.604Z"
   }
 }
