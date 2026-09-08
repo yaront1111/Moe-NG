@@ -74,8 +74,8 @@
       "completedAt": "2026-09-08T07:41:56.147Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-f992a686",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -150,11 +150,17 @@
       "author": "worker-319873d7",
       "content": "FOR THE QA SEAT (qa-f992a686) — WHERE THE DELIVERED BYTES ARE, and one correction to the completion record.\n\nA TWIN SEAT CLOSED THIS ROW while my gate was running (third twin split on this epic; the step-5 note predicted it: \"if it also closes this row, the second call will be refused by the runtime, not by me\" — it was, with `[INVALID_STATE] Task is in REVIEW state`). So the completion record you are reading is the twin's. Mine is comment-ddf5d9a9, posted minutes before it, and it SUPERSEDES the step-3 note's caveat \"LEGS NOT RE-RUN AT THIS TREE\".\n\nBYTES. The completion commit `185d7592` carries the task JSON only (`Moe-Paths: 1`). The delivered test bytes are in the recorded checkpoint `9d90a647`, verified at HEAD by me:\n- `git show HEAD:tests/e2e/control-room/deploy-rollback-incident.spec.ts | wc -l` = 250\n- the one-incident set-shaped assertion `[data-kind='INCIDENT']` — present (1 hit)\n- the teardown-on-throw arm — present (1 hit)\n- `closed(): Promise<boolean>` in `lane-rollback-incident.ts`, the MEASURED port release — present (1 hit)\n- `git cat-file -e HEAD:tests/e2e/control-room/deploy-incident-rollback.spec.ts` -> `does not exist in 'HEAD'`. The 391-line duplicate an earlier session left is gone; `git log --diff-filter=D` names `9d90a647` as the commit that removed it.\n`git status --porcelain -- tests/e2e/control-room/` is clean apart from three FOREIGN untracked peer files (`contract-goal.spec.ts`, `lane-contract-goal.ts`, `lane-multi-node-workspace.ts`) — not mine, not touched.\n\nTHE ONE CORRECTION worth your time: the step-3 note states a twin had already deleted the monolith. It had NOT — the file was still tracked and on disk when this session started (added by `00a56cae`, the rival pair by `3e088750`). I removed it here and ported its unique arm into the survivor. If you grep for duplicate coverage of this journey you will find exactly one spec, which is the intended state.\n\nGATES I RE-RAN AT THE DELIVERED TREE (full verbatim table in comment-ddf5d9a9): `pnpm test:e2e:browser` EXIT 1 `6 failed / 1 skipped / 41 passed (13.9m)` with my `ok 17` and `ok 18` inside it; scoped run EXIT 0 `2 passed (1.6m)`; `pnpm --filter @moe/daemon test` EXIT 0 `Test Files 595 passed (595)`; `pnpm --filter @moe/control-room test` EXIT 0 `Test Files 204 passed (204)`; `pnpm typecheck` EXIT 0, 19 `: Done`; root `pnpm test` EXIT 1 on the foreign `cutover-drill.test.ts TASK-MF ARM E` board-growth red. The prior session's SEVENTH browser red (`deploy-fake-docker.spec.ts:150`, `STORE_BUSY @ DURABLE_STORE`) did NOT recur — its transient call was correct.\n\nNEGATIVE CONTROL was re-run in THIS session, not inherited: production `incident-card.tsx:55` mutated to a constant `data-state=\"UP\"`, spec red AT the named assertion `deploy-rollback-incident.spec.ts:164` (Expected \"DOWN\" / Received \"UP\"), restored in a separate call with sha256 `58633939…` equality plus empty `git diff`/`porcelain`. Window 07:21:06Z–07:22:44Z, `Win32_Process` censused for `vitest|playwright|--filter` beforehand: none. Every gate leg above ran AFTER the restore, so none of them saw the mutant.\n\nDoD 3, 5 and 6 remain ROUTED to governors exactly as the reopen instructed; I attempted none of them. The open gap I found and did NOT fix — incident HISTORY is durable but never served (`deployments-health-read.ts:270` `findLast(open)`, mirrored singular at `live-deployments-health.ts:71`) — is named for task-99f364e3 in comment-6789c92a.",
       "timestamp": "2026-09-08T07:48:54.688Z"
+    },
+    {
+      "id": "comment-c9c4e4f589ed4b6aafce9b64533c557f",
+      "author": "qa-f992a686",
+      "content": "QA ROUND 2 — APPROVED. Everything below re-measured by me (qa-f992a686) at the delivered tree, 2026-09-08 07:45–08:15Z. I falsified nothing in the completion record.\n\nTHE ONE CLAUSE I REOPENED ON IS CLOSED. DoD 4's Playwright half.\n- Recorded verification re-run by me, standalone, foreground, unpiped, `${PIPESTATUS[0]}` read:\n  `pnpm test:e2e:browser tests/e2e/control-room/deploy-rollback-incident.spec.ts`\n  `ok 1 [chromium] … :124:1 … (1.6m)` / `ok 2 … :239:1 (2.1s)` / `2 passed (1.6m)` / TRUE_EXIT=0.\n  Matches task.verification arm for arm (their run said 1.7m; same two `ok` lines, same exit).\n- FULL gate re-run by me under the `browser-e2e-gate` lease: `6 failed | 1 skipped | 41 passed (13.8m)`, TRUE_EXIT=1. The six are MY DISCLOSED BASELINE NAME FOR NAME — contract-goal:39, journeys:65, journeys:86, prd-persistence-boundary:127, prd-to-approval:38, provider-pause:181 (its own transcript reads `You've hit your session limit · resets 12:10am Asia/Jerusalem` — environment, not code). `deploy-rollback-incident` is ABSENT from the failure roster, which Playwright prints exhaustively. THE SEVENTH RED DID NOT RECUR: `deploy-fake-docker.spec.ts:150` (`STORE_BUSY @ DURABLE_STORE`) is gone at this tree — the transient call in the step-3 note was CORRECT, and the later re-measurement in comment-ddf5d9a9 (`6 failed / 41 passed`) is the one that reproduces.\n\nNON-VACUITY, since Playwright prints no count line. Three independent oracles, not one: (a) the negative control on the PRODUCTION surface — `incident-card.tsx:55` mutated to a constant `data-state=\"UP\"` reds the spec AT the named assertion `:164` (`Expected \"DOWN\" / Received \"UP\"`), restored with sha256 equality in a separate call, `git status --porcelain` and `git diff` both empty; I re-confirmed line 55 reads `data-state={facts.state}` and the path is clean; (b) structural anti-vacuity inside the spec — `endpoint.statuses` must contain BOTH 503 and 200, so a lane whose probes never left the daemon fails; (c) the 1.6m runtime is the arithmetic outage floor (60 s reconcile + 3×5 s probes), i.e. the journey really waited the outage out. I did NOT re-drill `incident-card.tsx` myself: `full-suite-gate` is held by qa-dbfde2ce who is queued to run `--filter @moe/control-room test`, and a mutant on that file would have voided their round.\n\nAUTHORITY IS PRODUCTION, NOT REIMPLEMENTED. The spec/lane import `readCurrentDeployReceipt` (deploy-ledger), `deployTargetAggregateId`, `DEPLOYMENT_HEALTH_PATH`, `publishAggregateId`, `resolveRepositoryExecutionIdentity`, real `SqliteEventStore`, and dispatch `deployment.rollback` at the production command edge. Refusal asserted by CODE AND LAYER in the DOM (`OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION`) and again from a minted non-configured seat, which is what makes it about the PRINCIPAL. Incident count is SET-SHAPED over `[data-kind='INCIDENT']`, so a duplicate raise (new id, new testid) cannot escape it. Per-file: 250 + 189 lines.\n\nBYTES. Completion commit `185d7592` (`Moe-Kind: completion`, retry after qa_reject #1) is on `moe/work-2026-09-04` and an ancestor of HEAD; `67d73f78` is its amend twin. It carries the task JSON only (`Moe-Paths: 1`) — the test bytes are in checkpoints `3e088750` (217+175) and `9d90a647` (+57/+14 and the `git rm` of the 391-line duplicate). All three verified at HEAD: both files `git cat-file -e` OK, `git diff` against HEAD EMPTY, `deploy-incident-rollback.spec.ts` absent. NOTHING TO HAND-LAND. Zero references to the deleted filename outside `.moe` (rail 19 consumer sweep: `journey-coverage.test.ts` readdirs directories, pins no spec name).\n\nROUTED ITEMS RE-CONFIRMED BY ME, not taken on the record's word. DoD 3: `ROLLBACK_RECEIPT_UNKNOWN`, `ROLLBACK_IMAGE_MISSING`, `moe-rollback-receipt` = 0 hits each across apps/packages/adapters/tests/docs; what exists is `DEPLOY_ROLLBACK_RECEIPT_INVALID` (deploy-service.ts:38, a rename) and `DEPLOY_ROLLBACK_IMAGE_UNAVAILABLE` (:39) used only as the DETAIL under `DEPLOY_BUILD_FAILED` (deploy-rollback.test.ts:181). DoD 5: 0 `*.health.sqlite` tree-wide, `docker ps -aq` empty. DoD 6: docs paths still contested. All three were routed to @governors as msg-f2e41640 BEFORE round 1's reject; the worker attempted none, exactly as instructed.\n\nTWO FOLLOW-UPS, NEITHER A REJECT REASON (global rail 16).\n1. `cr.backups.*` — the backups list with restore-proof state has NO browser coverage; it is jsdom-only (`backups-list.test.tsx`). DoD 4's literal three surfaces are covered (the \"Deployments card\" is `cr.environments.card.<env>` — `cr.deployments.` is 0 hits in the bundle), and my reopen scoped the fix to DOWN → incident → rollback → recovery. Backups belong in the epic-final hardening row.\n2. INCIDENT HISTORY IS NEVER SERVED — confirmed at the exact lines. `deployments-health-read.ts:270` `openIncidentOf` = `incidents.findLast(i => i.closedAt === null)`, and `live-deployments-health.ts` types `incident: EnvironmentIncidentView | null` (singular). Closed incidents ARE decoded and retained (`health-incident.ts:41,48`), so it is one member away from servable. Unowned; the worker named it for task-99f364e3 in comment-6789c92a and I second that.",
+      "timestamp": "2026-09-08T08:04:46.624Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:13:59.198Z",
-  "updatedAt": "2026-09-08T07:48:54.688Z",
+  "updatedAt": "2026-09-08T08:05:57.377Z",
   "dependsOn": [
     "task-6ec875f4dd5f4f2ab97e46f71bf57b2b",
     "task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4",
@@ -169,7 +175,9 @@
     "plannedDistinctFileCount": 0,
     "executedStepCount": 10,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-09-08T08:05:57.377Z",
+    "wallClockMs": 285108299
   },
   "stepsCompleted": [
     "step-1",
@@ -815,6 +823,21 @@
       "treeId": "31e1230ed284cf037b74d2f0daf4cb2c3f436543",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "67d73f7808fef205011fe47071d838f2c60b9419",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-319873d7@2026-09-08T07:15:07Z",
+      "paths": [
+        ".moe/tasks/task-7683a432eb3f4e87b1eb0cbc6e3a55ff.json"
+      ],
+      "recordedBy": "worker-319873d7",
+      "recordedAt": "2026-09-08T07:50:13.890Z",
+      "treeId": "cb0cf9318c0a70190d331f84c4b33f65b5d5d32b",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -827,8 +850,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "completion",
-    "sessionId": "worker-319873d7@2026-09-08T07:14:40Z",
-    "at": "2026-09-08T07:45:55.761Z"
+    "sessionId": "worker-319873d7@2026-09-08T07:15:07Z",
+    "at": "2026-09-08T07:50:13.890Z"
   },
   "workStartedAt": "2026-09-08T03:25:53.187Z",
   "reviewStartedAt": "2026-09-08T07:45:05.779Z",
@@ -839,7 +862,7 @@
     "reportedAt": "2026-09-08T07:45:05.779Z"
   },
   "completionSummary": "DoD 4's Playwright half — the ONE clause QA reopened on — is CLOSED. DoD 3/5/6 restated as ROUTED with my own re-measurements (comment-d8834878); not attempted, as instructed.\n\nSHIPPED: tests/e2e/control-room/deploy-rollback-incident.spec.ts (250 lines) + lane-rollback-incident.ts (189); deleted deploy-incident-rollback.spec.ts (391), the duplicate an earlier twin wrote 26 s after the survivor, its unique arms merged in. Real daemon, real schedule, real loopback probes, real ledger, deployment.rollback at the production command edge. DOWN -> ONE incident card -> Health data-status=\"DOWN\" -> arm-then-confirm rollback REFUSED for the paired browser (OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION, asserted in the DOM by code AND layer) -> operator rollback redeploys the PREVIOUS receipt's sha and imageDigest -> the probe loop closes the incident. Anti-vacuity: endpoint.statuses must contain BOTH 503 and 200; [data-kind='INCIDENT'] counted SET-SHAPED; teardown-on-throw arm; port release measured with a real connect.\n\nROOT CAUSE OF THE TWO EARLIER RED SPECS: this row's OWN unrestored drill mutant on incident-card.tsx (data-state=\"UP\" vs HEAD's {facts.state}), planted under a window I announced (msg-d6cbde39) and left ~2h50m. Restored, proof in msg-cef3a7d4. The drill's red WAS the negative control proving the assertion executes.\n\nGATES (standalone, foreground):\n- verification `pnpm test:e2e:browser <spec>` = 0, `2 passed (1.7m)`\n- FULL `pnpm test:e2e:browser` = 1, `7 failed / 1 skipped / 40 passed (13.9m)`. My spec PASSED inside it (ok 17 :124 1.6m, ok 18 :239 2.2s).\n- `pnpm typecheck` = 0, 19 `: Done`, 0 `error TS`\n- control-room incident-card + incident-dismiss = 0, `Test Files 2 passed (2)` / `Tests 19 passed (19)`\n\nREDS DISCLOSED, NOT FIXED, NOT FAKED. Six are QA's baseline verbatim (contract-goal:39, journeys:65, journeys:86, prd-persistence-boundary:127, prd-to-approval:38, provider-pause:181). The SEVENTH is new and not mine: deploy-fake-docker:150 failing in ",
-  "reviewCompletedAt": "2026-09-08T04:07:23.016Z",
+  "reviewCompletedAt": "2026-09-08T08:05:57.377Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 4 — Playwright against a REAL daemon: absent. No browser spec covers monitoring, backups, rollback or the incident card. (UI half IS done.)",
@@ -950,5 +973,7 @@
     "tests/e2e/control-room/deploy-rollback-incident.spec.ts",
     "tests/e2e/control-room/lane-rollback-incident.ts",
     "tests/e2e/control-room/deploy-incident-rollback.spec.ts"
-  ]
+  ],
+  "completedAt": "2026-09-08T08:05:57.377Z",
+  "reviewSummary": "APPROVED round 2. FULL EVIDENCE IN comment-c9c4e4f5 (this field caps at 2000).\n\nDoD 4's Playwright half — the ONE clause I reopened on — is CLOSED and reproduced by me. Both legs standalone/foreground/unpiped, ${PIPESTATUS[0]} read:\n- verification `pnpm test:e2e:browser <spec>`: ok 1 :124 (1.6m), ok 2 :239 (2.1s), `2 passed (1.6m)`, TRUE_EXIT=0 — matches task.verification arm for arm.\n- FULL gate under the browser-e2e-gate lease: `6 failed | 1 skipped | 41 passed (13.8m)`, TRUE_EXIT=1. The six are my disclosed baseline name for name; the new spec is ABSENT from Playwright's exhaustive failure roster; the 7th red (deploy-fake-docker:150 STORE_BUSY) did NOT recur, so the transient call was right.\n\nNON-VACUITY (Playwright prints no count line), 3 oracles: the production negative control on incident-card.tsx:55 reds the spec at named assertion :164, restored with sha256 equality (I re-confirmed line 55 = data-state={facts.state}, clean); endpoint.statuses must contain BOTH 503 and 200; 1.6m is the arithmetic outage floor. Authority is production — real deploy-ledger, real SqliteEventStore, deployment.rollback at the command edge, refusal by CODE AND LAYER (OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION) plus a minted non-configured seat; incident count set-shaped over [data-kind='INCIDENT']. 250 + 189 lines.\n\nBYTES: completion commit 185d7592 on moe/work-2026-09-04, ancestor of HEAD; test bytes in checkpoints 3e088750 + 9d90a647, all at HEAD, git diff EMPTY, 391-line duplicate removed. Nothing to hand-land; 0 refs to the deleted name outside .moe.\n\nDoD 1/2 discharged round 1. DoD 3/5/6 stay ROUTED (msg-f2e41640) and I re-measured each: the three DoD-3 names = 0 hits; 0 *.health.sqlite; docker ps -aq empty; docs contested.\n\nFOLLOW-UPS, not reject reasons (rail 16): cr.backups.* restore-proof has no browser coverage. INCIDENT HISTORY NEVER SERVED (deployments-health-read.ts:270 findLast(open)) — unowned, named for task-99f364e3."
 }
