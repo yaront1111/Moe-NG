@@ -176,8 +176,8 @@
       "completedAt": "2026-09-08T02:18:57.773Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-319873d7",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -254,7 +254,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T19:38:54.771Z",
-  "updatedAt": "2026-09-08T02:18:57.773Z",
+  "updatedAt": "2026-09-08T02:20:19.046Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T01:40:32.419Z",
     "plannedStepCount": 9,
@@ -437,25 +437,42 @@
       "treeId": "b950e15ff0151170144c0dffb1f046fd3fdd3524",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "a1ee9919aa05db0563aa39f6100db8e84822fe8e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-319873d7@2026-09-08T02:16:11Z",
+      "paths": [
+        ".moe/tasks/task-2f2ed034fbec4fe48b49a951951c9505.json",
+        "apps/control-room/src/live/live-deployments-health.ts",
+        "apps/daemon/src/http/affordance-read.ts",
+        "apps/daemon/src/http/deployments-health-read.ts"
+      ],
+      "recordedBy": "worker-319873d7",
+      "recordedAt": "2026-09-08T02:19:35.527Z",
+      "treeId": "f5afc621ce7bbdaa85d01d26aa09618dad07792e",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-2f2ed034fbec4fe48b49a951951c9505.json",
-    "apps/daemon/src/deployment/rollback-target.js",
-    "apps/daemon/src/deployment/rollback-target.test.ts",
     "apps/daemon/src/deployment/rollback-target.ts",
-    "apps/daemon/src/http/deployments-health-read.test.ts",
+    "apps/daemon/src/deployment/rollback-target.test.ts",
     "apps/daemon/src/http/deployments-health-read.ts",
-    "apps/control-room/src/live/live-deployments-health.ts",
-    "apps/daemon/src/http/affordance-read.ts",
-    "apps/daemon/src/http/affordance-rollback-offers.test.ts",
+    "apps/daemon/src/http/deployments-health-read.test.ts",
     "apps/daemon/src/http/affordance-rollback-offers.ts",
+    "apps/daemon/src/http/affordance-rollback-offers.test.ts",
+    "apps/daemon/src/http/affordance-read.ts",
+    "apps/control-room/src/live/live-deployments-health.ts",
     "apps/control-room/src/live/live-deployments-health.test.ts",
     "apps/control-room/src/v2/ops/environments-daemon-frame.test.tsx",
     "apps/control-room/src/v2/ops/environments-gap.test.tsx",
     "apps/control-room/src/v2/ops/environments-section.test.tsx",
-    "apps/control-room/src/v2/ops/live-environments.test.tsx",
     "apps/control-room/src/v2/ops/live-environments-enumeration.test.tsx",
+    "apps/control-room/src/v2/ops/live-environments.test.tsx",
+    "apps/daemon/src/deployment/rollback-target.js",
     "apps/daemon/src/http/affordance-rollback-offers.js",
     "apps/daemon/src/http/affordance-rollback-round-trip.test.ts"
   ],
@@ -463,8 +480,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-319873d7@2026-09-08T02:09:30Z",
-    "at": "2026-09-08T02:15:40.382Z"
+    "sessionId": "worker-319873d7@2026-09-08T02:16:11Z",
+    "at": "2026-09-08T02:19:35.527Z"
   },
   "workStartedAt": "2026-09-08T01:47:01.037Z",
   "declaredFiles": [
@@ -473,5 +490,13 @@
   "touchedFiles": [
     "apps/daemon/src/deployment/rollback-target.test.ts",
     "apps/daemon/src/deployment/rollback-target.ts"
-  ]
+  ],
+  "reviewStartedAt": "2026-09-08T02:20:19.046Z",
+  "verification": {
+    "command": "cd apps/daemon && npx vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/deployment/rollback-target.test.ts src/http/deployments-health-read.test.ts src/daemon-entry-deployments-health.test.ts src/http/affordance-rollback-offers.test.ts src/http/affordance-rollback-round-trip.test.ts src/http/affordance-read.test.ts src/http/affordance-read-planning.test.ts src/http/affordance-deployment-goals.test.ts src/http/affordance-agent-provider-offers.test.ts",
+    "exitCode": 0,
+    "outputTail": " RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  9 passed (9)\n      Tests  152 passed (152)\n   Start at  05:19:03\n   Duration  6.37s (transform 12.28s, setup 0ms, import 19.15s, tests 3.87s, environment 0ms)\n\nEXIT=0",
+    "reportedAt": "2026-09-08T02:20:19.046Z"
+  },
+  "completionSummary": "The daemon now OFFERS deployment.rollback and NAMES the receipt to spend. Both gaps re-measured at HEAD first; both were still open.\n\nDoD 1 — resolveRollbackTarget (new apps/daemon/src/deployment/rollback-target.ts, 45 lines) projects receipts to outcome===\"DEPLOYED\" && imageDigest!==null; ran[len-2] is the target, <2 -> null. Mirrors rollback-command.ts:98-101, so an offered control is an accepted one. resolveRollbackOffers (new affordance-rollback-offers.ts, 101 lines) mints AT MOST ONE project-scoped offer, only when some environment holds a target: aggregateId=projectId (:85), version=getAggregateVersion(projectId) (:160), local schema version so NO digest mirror moves. Fails closed on a store throw with DEPLOY_ROLLBACK_LEDGER_UNREADABLE, never a fabricated version. Threaded into readSurface behind the existing deployBound, outside the goal loop, no ChainStep.\n\nDoD 2 — rollbackTarget{imageDigest,sha,toReceiptRef} served on /deployments/health/read and decoded by the browser with a nested exact-key decoder (a malformed member refuses the WHOLE frame). rollbackSha is BYTE-IDENTICAL to before and documented as display-only. Stale binding defined truthfully: an immutable toReceiptRef stays admissible after a newer deploy (deploys never touch the project aggregate); another ROLLBACK landing first refuses EXPECTED_VERSION_CONFLICT. My first draft of that doc named the wrong code and was corrected in step 9.\n\nDoD 3 — affordance-rollback-round-trip.test.ts spends the surface's own offer and the health frame's own receipt ref through the REAL registry over createStoreDependencies. Reaches DEPLOY_BUILD_FAILED@DAEMON_DEPLOY_ENGINE, i.e. past every admission guard; asserts none of the four admission codes AND that the refusing layer is neither DAEMON_COMMAND_SEAM nor DAEMON_AUTHORIZATION. Refusal arms: OPERATOR_PRINCIPAL_REQUIRED@DAEMON_AUTHORIZATION from a principal holding every capability; MCP exclusion derived from wiredMcpToolKinds() with a positive control; one-deploy"
 }
