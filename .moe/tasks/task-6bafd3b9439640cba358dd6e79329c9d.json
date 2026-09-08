@@ -72,29 +72,42 @@
     {
       "stepId": "step-4",
       "description": "DELIVER THE THREE NODES WITH THE REAL WRAPPER. Still in `lane-contract-goal.ts`: run the lane's `startWrapper` for THREE passes — ALPHA and BETA are independent and OMEGA is blocked until both land, and the lane sets `MOE_WRAPPER_MAX_AGENTS: \"1\"`, so one seat delivers one node per pass. Build the environment by SPREADING `wrapperEnv(scratch, seatCommand, WRAPPER_INTERVAL_MS, true)` and adding the three keys the foundation run sets: `MOE_NODE_SPECS_DIR: \"\"` so only COMPILED nodes are staffed (the lane's single operator spec is irrelevant — compiled missions come from the sealed graph), `MOE_NODE_TEST_COMMAND`, and `MOE_NODE_WORKSPACE` pointing at the lane's git workspace. Do NOT edit `wrapper-lane.ts` or `daemon-ports.ts` — both are task-cf2d91d9's declared paths and `wrapperEnv` already returns a plain record. Wait on the wrapper transcript the way `landLaneNode` does, and kill every wrapper in a `finally` on EVERY exit path including the throwing and timing-out ones; return each pid so the caller's teardown can prove no orphan survived. Assert after each pass that the expected node delivered and that OMEGA stayed undelivered until its producers landed — an assertion that only checks the final state cannot tell a working dependency gate from a broken one.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/control-room/lane-contract-goal.ts",
         "tests/e2e/control-room/wrapper-lane.ts",
         "tests/e2e/control-room/lane-multi-node-workspace.ts"
       ],
-      "startedAt": "2026-09-07T18:43:13.888Z"
+      "modifiedFiles": [
+        "tests/e2e/control-room/lane-contract-goal.ts",
+        "tests/e2e/control-room/contract-goal.spec.ts"
+      ],
+      "note": "RESUMED: a prior session of this row left step-4 IN_PROGRESS with code on disk (mtime 2026-09-07 21:55, no writer since; start_step answered [INVALID_STATE] expected PENDING, which is the resume signature, not a rival — no claude.exe seat older than 2026-09-08 15:22 has touched these paths). Re-verified from disk rather than trusting the in-flight claim.\n\nDELIVERED (lane-contract-goal.ts): deliverNodes() runs THREE wrapper passes over startWrapper with the env built by SPREADING wrapperEnv(laneScratch, seat.command, WRAPPER_INTERVAL_MS, true) and adding exactly the three foundation keys — MOE_NODE_SPECS_DIR:\"\" (only COMPILED nodes staffed), MOE_NODE_WORKSPACE: scratch.workspace, MOE_NODE_TEST_COMMAND:\"node test.mjs\" — plus MOE_WRAPPER_ONCE:\"1\" so one seat delivers one node per pass under the lane's MOE_WRAPPER_MAX_AGENTS:\"1\". daemon-ports.ts and wrapper-lane.ts were NOT touched (task-cf2d91d9's paths); wrapperEnv's frozen record is spread, never mutated.\n\nORDERING IS ASSERTED PER PASS, not only at the end: before passes 0 and 1, delivered(scratch, omega) === null AND the daemon's own read surface reports stepFor(surface,\"node.deliver\",omegaRef).status === \"BLOCKED\" — stepFor returning undefined fails the assert, so the gate cannot go vacuous. Each pass asserts exactly ONE node was written (SEAT_NEVER_WROTE_EXACTLY_ONE_NODE with the transcript), that passes 0-1 delivered alpha|beta and pass 2 delivered omega, and that the wrapper's lander printed COMMITTED for that node's execution ref.\n\nLEAK DISCIPLINE: every startWrapper child joins `tracked` and is killTree'd in a finally on EVERY exit path including throwing/timing-out ones, each kill re-asserted with running(child)===false; each pass returns its pid so the caller proves no orphan survived.\n\nVERIFICATION (foreground, standalone, under the browser-e2e-gate lease granted 12:38:40Z):\n  npx playwright test -c tests/e2e/control-room/playwright.config.ts contract-goal.spec.ts --reporter=line\n  -> \"2 passed (29.1s)\", exit 0. Focused step-4 arm alone: \"1 passed (29.2s)\", exit 0.\n  npx tsc -p tests/e2e/control-room/tsconfig.json -> exit 0, no output.\nNON-VACUOUS: the arm asserts goal.wrapperPids toHaveLength(4) (legacy landing + three delivery passes), math.mjs present in the lane workspace for all three keys, and survivingPids(...) toEqual([]) after teardown.\n\nPEER DIRT (noted, not touched): tests/e2e/control-room/lane-landing.ts was rewritten by task-da435e66's session at 15:33, four minutes before this session started; my module imports landLaneNode/LANDING_BUDGET_MS from it and typecheck is exit 0 against that state. Also dirty from other rows: .moe/**, apps/daemon/src/http/affordance-read.ts, apps/daemon/src/preview/preview-goal-landing.test.ts, Moe-NG_Deep_Review_2026-09-05.md. None reverted, stashed or committed.",
+      "startedAt": "2026-09-07T18:43:13.888Z",
+      "completedAt": "2026-09-08T12:40:28.638Z"
     },
     {
       "stepId": "step-5",
       "description": "APPROVE THE CRITERIA, VERIFY, CLOSE, AND LAND. Finish `lane-contract-goal.ts` by calling the leaf's parameterised `approveAndRunCriteria` and `closeCompletedGoal` against the lane, then compose `landLaneNode` so the goal is LANDED — DoD 3 — asserting the returned sha with `/^[0-9a-f]{40}$/` and that it moved off `lane.workspaceSha`. If landing genuinely cannot compose here, DoD 3 permits stating exactly why in the module's own comment and what it does instead; state it plainly rather than implying it landed. Note in a comment that `approveAndRunCriteria` opens the store while the daemon holds the same file — that is the established WAL second-writer pattern `clearPause` already documents, not a hazard being introduced here. The helper RETURNS the goal, and its own arm asserts the three things DoD 1 names, read through the production readers: `readCriterionGoal` is ok, `readReleaseDossierInput` is non-null, and the criteria carry no gaps. NOTHING IS HAND-SEEDED: every durable fact came through a shipped command kind over the daemon's real HTTP edge, and a store row written directly here is fabricated authority that rejects the row.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/control-room/lane-contract-goal.ts",
         "tests/e2e/control-room/lane-landing.ts",
         "apps/daemon/src/criterion-evidence/criterion-goal.ts",
         "apps/daemon/src/release/release-durable-facts.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/e2e/control-room/lane-contract-goal.ts",
+        "tests/e2e/control-room/contract-goal.spec.ts"
+      ],
+      "note": "TDD: spec assertions first (tsc RED with five TS2339 on landedSha/scratch/coverage/criterionStatuses, quoted below), then the helper. GREEN: \"1 passed (45.5s)\", exit 0.\n\nRED, verbatim first line: tests/e2e/control-room/contract-goal.spec.ts(59,17): error TS2339: Property 'landedSha' does not exist on type '{ goalRef: string; runId: string; nodes: readonly SealedNodeView[]; wrapperPids: readonly number[]; }'.\n\nDELIVERED. verifyAndClose() in lane-contract-goal.ts: reads the workspace HEAD as integratedSha BEFORE anything else, calls the leaf's parameterised approveAndRunCriteria(scratch, wire, clock, identity), asserts evidence.planningRunRef === sealed.runId (the seal's OWN id, passed in — not a string derived from the goal id, which would agree by luck), evidence.criteria.length === identity.criteria.length, and per row evidence.status PASSED + exitCode 0 + sha === integratedSha. Then readCoverage over the daemon's /documents/coverage/read, closeReadiness === {criteria:3, kind:\"READY\"}, then closeCompletedGoal(scratch, wire, identity) and goalAggregates includes the goal. A comment records that approveAndRunCriteria opens SqliteEventStore while the daemon holds the same file — the WAL second-writer pattern clearPause already documents, not a new hazard.\n\nDoD 3, STATED PLAINLY RATHER THAN IMPLIED. landLaneNode IS composed (it runs first, on the legacy graph, to get a clean baseline) but it CANNOT be aimed at this goal: it calls retireSpecNode then laneCompiledNodeRef, both of which resolve the lane's SEEDED spec node, and it takes no goal/node argument. This goal is landed by the SAME production lander, run by the real wrapper on each of the three delivery passes and asserted there via `[lander] <ref>: COMMITTED` plus the lander's own commit message through landedCommits(). The module's LaneContractGoal.landedSha doc comment says exactly this. The sha is read back from the repository via laneWorkspaceIdentity (the way landLaneNode reads its own), asserted /^[0-9a-f]{40}$/u AND asserted to differ from BOTH lane.workspaceSha (else no node landed) and legacy.sha (else only the legacy landing moved the head) — either alone would pass on a goal that never landed.\n\nDoD 1 ASSERTED FROM THE HELPER'S OWN ARM through the PRODUCTION readers, not through anything the lane wrote: withStore(goal.scratch, ...) opens the daemon's store and calls readCriterionGoal (apps/daemon/src/criterion-evidence/criterion-goal.ts) and readReleaseDossierInput (apps/daemon/src/release/release-durable-facts.ts). The ok assertion is written `expect(read.criterion.ok ? \"ok\" : read.criterion.code).toBe(\"ok\")` so a refusal reports its CODE instead of a bare false. Dossier non-null AND its criteria roster equals [\"criterion-0\",\"criterion-1\",\"criterion-2\"]. NO GAPS: coverage totals {criteria:3, planned:0, verified:3} and per-row statuses [\"VERIFIED\",\"VERIFIED\",\"VERIFIED\"].\n\nNOTHING HAND-SEEDED. Every durable fact came through a shipped command kind over the daemon's real HTTP edge (product_contract.propose_revision / approve_gate_1 / planning.submit_decomposition / approval.decide_intent inside sealMultiNodeGraph, review.submit per pass, the criterion approve+verify offers, goal.close). The only in-process call is createCriterionEvidenceService().advance() inside the leaf's approveAndRunCriteria — the same lifecycle the foundation journey hosts, with the service's own repository/containment guards intact. No store row is written by this module.\n\nGATES (foreground, standalone, browser-e2e-gate lease held): npx tsc -p tests/e2e/control-room/tsconfig.json exit 0; npx playwright test ... -g \"contract-bound, criterion-verified and landed\" -> \"1 passed (45.5s)\" exit 0.\n\nFILE SIZES: lane-contract-goal.ts 193 lines, contract-goal.spec.ts 77 lines — both under the 250 target. daemon-ports.ts and wrapper-lane.ts still untouched.",
+      "startedAt": "2026-09-08T12:40:44.490Z",
+      "completedAt": "2026-09-08T12:44:49.098Z"
     },
     {
       "stepId": "step-6",
       "description": "THE COMMITTED NEGATIVE ARM — DoD 4, and the arm that proves this row was needed at all. New `tests/e2e/control-room/contract-goal.spec.ts`. On a SHIPPED-SEED lane, assert `readCriterionGoal` refuses with code EXACTLY `COMPILED_CONTRACT_BINDING_ABSENT` AND layer EXACTLY `CRITERION_EVIDENCE` — both, per global rail 1; asserting only that it failed is one added refusal layer away from vacuous. On the helper's goal, assert it is ok. The two arms must run against genuinely different lanes, not the same lane read twice. Verify the negative arm by mutating the production surface until it goes red, then restore — and because these spec files are new and UNTRACKED, `git diff` is blind to them: `git status --porcelain` the exact paths before drilling and prove the restore by SHA256 equality against an out-of-tree backup in a call SEPARATE from the restore.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "tests/e2e/control-room/contract-goal.spec.ts",
         "tests/e2e/control-room/lane-contract-goal.ts",
@@ -102,7 +115,8 @@
       ],
       "newFiles": [
         "tests/e2e/control-room/contract-goal.spec.ts"
-      ]
+      ],
+      "startedAt": "2026-09-08T12:44:51.593Z"
     },
     {
       "stepId": "step-7",
@@ -116,8 +130,8 @@
       ]
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "WORKING",
+  "assignedWorkerId": "worker-812079a7",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -142,12 +156,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T05:41:06.478Z",
-  "updatedAt": "2026-09-07T18:55:47.194Z",
+  "updatedAt": "2026-09-08T13:16:58.348Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T11:00:16.539Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 12,
-    "executedStepCount": 3
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "architect-6e49a205",
@@ -155,7 +169,9 @@
     "worker-2aa4ee52",
     "governor-9af9af37",
     "architect-f362f7a6",
-    "worker-76f4ef35"
+    "worker-76f4ef35",
+    "worker-7b684492",
+    "worker-812079a7"
   ],
   "dependsOn": [
     "task-371677fc977948a597fa9b821b99f939",
@@ -167,7 +183,9 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-07T11:04:57.210Z",
@@ -316,11 +334,9 @@
     "tests/e2e/control-room/lane-contract-goal.ts",
     "tests/e2e/control-room/contract-goal.spec.ts"
   ],
-  "blockedReason": "Existing landLaneNode composition on a fresh SHIPPED fakeGh=SUCCESS lane intermittently returns LANDING_BUDGET_SPENT with policy.validate STAFFING_ATTEMPTS_EXHAUSTED BEFORE the helper prepares files or creates the contract graph. Another run led into BASELINE_WORKSPACE_DIRTY; exact race remains a hypothesis. Safe full delivery cannot be verified without fixing prerequisite bug task-da435e66fe8247fda0d441e61e2c4b91; no shared helper edits made. Latest focused run 1 passed/1 failed, exit 1 (3.3m); fresh workspace-only arm 1 passed, exit 0; browser tsc exit 0. Steps 1-3 complete; step 4 partial; 5-7 pending. All 3 new paths declared for wrapper checkpoint. Handoff comment-09631398, bug evidence comment-6de16a94. Browser lease released, all test processes polled to completion.",
-  "blockedOnTaskIds": [
-    "task-da435e66fe8247fda0d441e61e2c4b91"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-07T18:55:47.194Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }
