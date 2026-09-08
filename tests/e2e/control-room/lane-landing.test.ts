@@ -31,7 +31,7 @@ import { agentSpawnInvocation }
   from "../../../apps/daemon/src/orchestrator/agent-spawn-invocation.js";
 import { codeMission, mission }
   from "../../../apps/daemon/src/orchestrator/agent-mission-text.js";
-import { LANDED_PATH, landedSeatBytes, landingSeatDouble } from "./lane-landing.js";
+import { LANDED_PATH, committedLine, landedSeatBytes, landingSeatDouble } from "./lane-landing.js";
 
 const TARGET = "node:v1:target-node-ref";
 const OTHER = "node:v1:some-other-node-ref";
@@ -189,6 +189,36 @@ describe("the seat under contention and under failure", () => {
     expect(run.status, "a failed write is a FAILED seat").not.toBe(0);
     expect(run.stderr).toContain("SEAT_WRITE_FAILED");
     expect(landed()).toBeNull();
+  });
+});
+
+describe("the lander line the lane waits on", () => {
+  /** Exactly what `repository-delivery-runtime.ts:91` prints. */
+  const landerLine = (ref: string, outcome: string): string =>
+    `[lander] ${ref}: ${outcome} (detail text)`;
+
+  it("matches the TARGET's COMMITTED line and captures its ref", () => {
+    const found = committedLine(TARGET).exec(landerLine(TARGET, "COMMITTED"));
+    // `watch()` settles on capture group 1 and treats a missing one as a pattern bug, so the
+    // group has to be present as well as correct.
+    expect(found?.[1]).toBe(TARGET);
+  });
+
+  it("does NOT match another node's COMMITTED line, so the lane keeps waiting", () => {
+    const transcript = [landerLine(OTHER, "COMMITTED"), landerLine(TARGET, "BASELINE_RECORDED"),
+      `[lander] ${WORK_ITEM}: COMMITTED (a work item is not a code node)`].join("\n");
+    expect(committedLine(TARGET).exec(transcript)).toBeNull();
+    // And it still finds the target once the target's own line arrives.
+    expect(committedLine(TARGET).exec(`${transcript}\n${landerLine(TARGET, "COMMITTED")}`)?.[1])
+      .toBe(TARGET);
+  });
+
+  it("does not credit the target's REFUSED line, and reads the ref as literal text", () => {
+    expect(committedLine(TARGET).exec(landerLine(TARGET, "REFUSED"))).toBeNull();
+    // A ref carrying regex metacharacters must match itself, never act as a pattern.
+    const awkward = "node:v1:a.b+c(d)";
+    expect(committedLine(awkward).exec(landerLine(awkward, "COMMITTED"))?.[1]).toBe(awkward);
+    expect(committedLine(awkward).exec(landerLine("node:v1:aXbXcd", "COMMITTED"))).toBeNull();
   });
 });
 

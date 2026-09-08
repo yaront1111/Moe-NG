@@ -146,11 +146,29 @@ export function laneCompiledNodeDiagnosis(scratch: LaneScratch): string {
   } finally { store.close(); }
 }
 
-/** The lander's own words for a landing that produced a commit. */
-// The closing bracket is ESCAPED. Under the `u` flag a lone `]` is a SyntaxError ("Lone
-// quantifier brackets"), thrown at IMPORT, so an unescaped one takes every spec that imports
-// this module down with it and `test:e2e:browser` finds no tests at all.
-const COMMITTED_LINE = /^\[lander\] (\S+): COMMITTED /mu;
+/**
+ * The lander's own words for a landing that produced a commit BY THIS NODE.
+ *
+ * `repository-delivery-runtime.ts:91` logs `[lander] <nodeRef>: <outcome> (<detail>)` for every
+ * node it reports on, and the lane's board carries more than one item. The old pattern was
+ * `(\S+)` - it CAPTURED the ref and the caller discarded it, so any node's COMMITTED line, or a
+ * `policy.validate` line that happened to read COMMITTED, released the wait and the lane then
+ * returned a head some other delivery had produced. Baking the target ref into the pattern means
+ * a foreign line cannot match at all and the wait continues; the capture is the ref itself, so
+ * `watch()`'s "a match without a capture is a pattern bug" contract still holds and what comes
+ * back is provably the node that was asked for.
+ */
+export function committedLine(nodeRef: string): RegExp {
+  // The closing bracket is ESCAPED. Under the `u` flag a lone `]` is a SyntaxError ("Lone
+  // quantifier brackets"), thrown at IMPORT, so an unescaped one takes every spec that imports
+  // this module down with it and `test:e2e:browser` finds no tests at all.
+  return new RegExp(`^\\[lander\\] (${escapeForPattern(nodeRef)}): COMMITTED `, "mu");
+}
+
+/** Every regex metacharacter neutered, so a ref is matched as the literal text it is. */
+function escapeForPattern(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
 
 export interface LaneLanded {
   readonly ok: true;
@@ -168,12 +186,56 @@ export interface LaneLandingRefused {
 }
 
 /**
+ * The exact bytes the seat writes for its target node. DETERMINISTIC BY CONTRACT.
+ *
+ * `lane-review-round.ts` digests this file as the round's SUBMITTED_BYTES, and the wrapper may
+ * staff the item again after that digest was taken. The old body carried
+ * `new Date().toISOString()`, so a restaff rewrote the file with DIFFERENT bytes and left the
+ * committed landing modified in the workspace - measured 2026-09-08 on 17 fresh lanes as
+ * `M landed-by-the-seat.txt` in 17 of 17, with the committed blob (425c2ec) and the worktree
+ * blob (e648c1e) 2.9 s apart. A fixed body is still DIFFERENT from the staffing baseline, where
+ * the file is absent, so the lander still has something to commit.
+ *
+ * The ref is IN the bytes, so two nodes sharing one workspace cannot leave each other's landing.
+ */
+export function landedSeatBytes(nodeRef: string): string {
+  return `landed by the seat for ${nodeRef}\n`;
+}
+
+/**
+ * The clause a staffed mission must carry before this seat will write, taken from PRODUCTION.
+ *
+ * `agent-mission-text.ts:112` opens EVERY `codeMission` with exactly this sentence, and
+ * `mission()` (:294) opens with a different one that names a work item and a command kind and
+ * carries no node ref at all. So this clause means "the staffed mission is the durable claim on
+ * THIS code node" - not "the text mentions this ref somewhere". The distinction is the whole
+ * fix: a hint, a diagnostic or another node's brief may quote a ref without holding its claim,
+ * and a bare-substring match would write the landing file for all three.
+ */
+export function landingSeatClaim(nodeRef: string): string {
+  return `You are a moe-next coding agent. You hold the durable claim on code node "${nodeRef}"`;
+}
+
+/**
  * Writes the landing seat double into `dir` and says which form this platform can run.
+ *
+ * IT READS ITS MISSION. `agent-spawner.ts:400` writes `request.mission` to the seat's stdin and
+ * ends it, and the wrapper staffs EVERY ready item through the same command - the lane's board
+ * also carries `policy.validate`. A seat that ignored stdin therefore wrote the CODE node's
+ * landing file on behalf of a mission that never delivered the node, satisfying `landLaneNode`'s
+ * `existsSync` signal for the wrong seat. So the child reads stdin to completion and writes ONLY
+ * when the mission carries `landingSeatClaim(nodeRef)`. Anything else - a policy mission, another
+ * node's mission, a mission that merely quotes the ref, empty stdin, a closed pipe - writes
+ * nothing and exits 0, which the lane then reports as SEAT_NEVER_WROTE rather than as a landing.
+ *
+ * A FAILED WRITE IS A FAILED SEAT: the write is guarded and a real IO error is printed as
+ * SEAT_WRITE_FAILED with a nonzero exit, never swallowed into a 0 that claims a landing the
+ * workspace does not hold.
  *
  * THREE FILES FOR THE SAME REASON `wrapper-lane.ts` WRITES THREE: `agent-spawn-invocation.ts`
  * runs a win32 seat THROUGH cmd.exe as a command LINE, so the command has to be a `.cmd`; on
  * posix the spawner passes argv directly, so a `.sh` is the executable form. Both delegate to
- * one `.js` so the platforms cannot drift.
+ * one `.js` so the platforms cannot drift, and cmd.exe passes its own stdin straight through.
  *
  * The seat exits 0 - a landing needs an ACCEPTED node, and the wrapper classifies the exit
  * rather than asking the seat what happened. It ignores every argument the spawner appends,
@@ -184,14 +246,31 @@ export interface LaneLandingRefused {
  * round only moves the node to SUBMITTED - `node-verifier.ts` then runs the node's own `test`
  * command before the daemon accepts anything, so the seat's word is not what earns the landing.
  */
-export function landingSeatDouble(dir: string, workspace: string): { command: string } {
+export function landingSeatDouble(
+  dir: string, workspace: string, nodeRef: string,
+): { command: string } {
   const jsPath = join(dir, "landing-seat.js");
   const cmdPath = join(dir, "landing-seat.cmd");
   const shPath = join(dir, "landing-seat.sh");
   const target = JSON.stringify(join(workspace, LANDED_PATH));
-  writeFileSync(jsPath,
-    `require("node:fs").writeFileSync(${target}, "landed at " + new Date().toISOString() + "\\n");\n`
-    + "process.exit(0);\n", "utf8");
+  const claim = JSON.stringify(landingSeatClaim(nodeRef));
+  const bytes = JSON.stringify(landedSeatBytes(nodeRef));
+  writeFileSync(jsPath, [
+    "const chunks = [];",
+    // A seat that cannot read its mission has no claim to act on, so it writes nothing.
+    'process.stdin.on("error", function () { process.exit(0); });',
+    'process.stdin.on("data", function (chunk) { chunks.push(chunk); });',
+    'process.stdin.on("end", function () {',
+    `  if (Buffer.concat(chunks).toString("utf8").indexOf(${claim}) === -1) process.exit(0);`,
+    `  try { require("node:fs").writeFileSync(${target}, ${bytes}); }`,
+    "  catch (error) {",
+    '    process.stderr.write("SEAT_WRITE_FAILED " + String(error) + "\\n");',
+    "    process.exit(1);",
+    "  }",
+    "  process.exit(0);",
+    "});",
+    "",
+  ].join("\n"), "utf8");
   writeFileSync(cmdPath,
     `@echo off\r\n"${process.execPath}" "%~dp0landing-seat.js"\r\nexit /b %ERRORLEVEL%\r\n`, "utf8");
   writeFileSync(shPath,
@@ -213,7 +292,16 @@ export async function landLaneNode(lane: DaemonLane): Promise<LaneLanded | LaneL
     return { detail: "the lane's scratch directory could not be resolved", ok: false, wrapperPid: null };
   }
   retireSpecNode(scratch);
-  const seat = landingSeatDouble(scratch.root, scratch.workspace);
+  // RESOLVED BEFORE ANYTHING IS SPAWNED. It needs no wrapper - `retireSpecNode` has run, so the
+  // compiled source already answers - and the seat double cannot build its discriminator without
+  // it. Resolving it AFTER the wait (as this did) meant the file that released the wait could
+  // have been written by any seat at all, which is defect 1.
+  const nodeRef = laneCompiledNodeRef(scratch);
+  if (nodeRef === null) {
+    return { detail: `NO_COMPILED_EXECUTION_NODE ${laneCompiledNodeDiagnosis(scratch)}`,
+      ok: false, wrapperPid: null };
+  }
+  const seat = landingSeatDouble(scratch.root, scratch.workspace, nodeRef);
   const tracked: ChildProcess[] = [];
   const watched = startWrapper(lane.repoRoot, {
     ...wrapperEnv(scratch, seat.command, WRAPPER_INTERVAL_MS, true),
@@ -236,6 +324,16 @@ export async function landLaneNode(lane: DaemonLane): Promise<LaneLanded | LaneL
   const refuse = (detail: string): LaneLandingRefused =>
     ({ detail: `${detail}
 ${watched.transcript().slice(-1400)}`, ok: false, wrapperPid });
+  // IDEMPOTENT, because it is called twice on the happy path and once on every other. The
+  // `finally` teardown has to stay - it is what covers the refusing and the THROWING paths
+  // (epic rail 4) - so the early stop cannot be a move, only an addition that the second call
+  // then no-ops rather than re-killing an already-dead child.
+  let stopped = false;
+  const stopTracked = async (): Promise<void> => {
+    if (stopped) return;
+    stopped = true;
+    for (const child of [...tracked].reverse()) await killTree(child);
+  };
   try {
     // THE SEAT'S FILE IS THE SIGNAL, not a fixed sleep: it is the same byte the round's
     // SUBMITTED_BYTES digest is taken over, so a round recorded before it existed would be
@@ -244,14 +342,19 @@ ${watched.transcript().slice(-1400)}`, ok: false, wrapperPid });
     const seatDeadline = Date.now() + SEAT_WRITE_BUDGET_MS;
     while (!existsSync(landedFile) && Date.now() < seatDeadline) await delay(250);
     if (!existsSync(landedFile)) return refuse("SEAT_NEVER_WROTE");
-    const nodeRef = laneCompiledNodeRef(scratch);
-    if (nodeRef === null) {
-      return refuse(`NO_COMPILED_EXECUTION_NODE ${laneCompiledNodeDiagnosis(scratch)}`);
-    }
     const refused = await submitLaneRound(lane, scratch, nodeRef);
     if (refused !== null) return refuse(refused);
-    const committed = await watched.waitFor(COMMITTED_LINE, LANDING_BUDGET_MS);
+    // THE TARGET'S landing, not the first one anyone announces. A foreign COMMITTED line no
+    // longer matches, so the wait runs on and a genuine miss still surfaces as
+    // LANDING_BUDGET_SPENT with the transcript, which is the diagnosable failure - never a
+    // silent pass on another node's commit.
+    const committed = await watched.waitFor(committedLine(nodeRef), LANDING_BUDGET_MS);
     if (committed === null) return refuse("LANDING_BUDGET_SPENT");
+    // THE WRAPPER IS STOPPED BEFORE GIT IS OBSERVED. `laneWorkspaceIdentity` used to run while
+    // the wrapper was still taking passes, so a pass that was mid-baseline or mid-verify during
+    // the read is what a caller saw as BASELINE_WORKSPACE_DIRTY and as a workspace that would
+    // not come back clean. Nothing owned by this lane is still writing after this line.
+    await stopTracked();
     // READ BACK FROM GIT, never taken from the log line: the receipt's authority is the commit
     // the repository actually holds, and a transcript is only how the lane learned to look.
     const identity = laneWorkspaceIdentity(scratch.root);
@@ -261,6 +364,6 @@ ${watched.transcript().slice(-1400)}`, ok: false, wrapperPid });
   } finally {
     // EVERY EXIT PATH, including the timeout and the throw. The wrapper outliving this call
     // would staff against a store the lane deletes moments later.
-    for (const child of [...tracked].reverse()) await killTree(child);
+    await stopTracked();
   }
 }
