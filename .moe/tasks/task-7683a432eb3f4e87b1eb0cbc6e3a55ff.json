@@ -106,7 +106,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:13:59.198Z",
-  "updatedAt": "2026-09-08T04:15:11.093Z",
+  "updatedAt": "2026-09-08T04:27:09.496Z",
   "dependsOn": [
     "task-6ec875f4dd5f4f2ab97e46f71bf57b2b",
     "task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4",
@@ -260,19 +260,41 @@
       "treeId": "d5dce4f9ebb74e38c8287c67f9694a344f895bac",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "3e088750fe2636314ada349e8dacde8a34281291",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-319873d7@2026-09-08T04:07:28Z",
+      "paths": [
+        ".moe/tasks/task-7683a432eb3f4e87b1eb0cbc6e3a55ff.json",
+        "tests/e2e/control-room/deploy-rollback-incident.spec.ts",
+        "tests/e2e/control-room/lane-rollback-incident.ts"
+      ],
+      "recordedBy": "worker-319873d7",
+      "recordedAt": "2026-09-08T04:27:09.495Z",
+      "treeId": "1f268a05e028c66f1049d10e2219ab414f0b99eb",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
     ".moe/tasks/task-7683a432eb3f4e87b1eb0cbc6e3a55ff.json",
     ".moe/tasks/task-99f364e3a6104ee993b6820c580a52fb.json",
-    ".moe/tasks/task-f008f29a38d54ae7a10e97cad1c4443d.json"
+    ".moe/tasks/task-f008f29a38d54ae7a10e97cad1c4443d.json",
+    "tests/e2e/control-room/deploy-rollback-incident.spec.ts",
+    "tests/e2e/control-room/lane-rollback-incident.ts"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/control-room/src/v2/approvals/incident-card.tsx",
+    "tests/e2e/control-room/deploy-incident-rollback.spec.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-4d8571e7@2026-09-08T03:25:32Z",
-    "at": "2026-09-08T04:15:01.300Z"
+    "sessionId": "worker-319873d7@2026-09-08T04:07:28Z",
+    "at": "2026-09-08T04:27:09.495Z"
   },
   "workStartedAt": "2026-09-08T03:25:53.187Z",
   "reviewStartedAt": "2026-09-08T03:56:37.932Z",
@@ -384,5 +406,9 @@
         }
       ]
     }
+  ],
+  "touchedFiles": [
+    "tests/e2e/control-room/lane-rollback-incident.ts",
+    "tests/e2e/control-room/deploy-rollback-incident.spec.ts"
   ]
 }
