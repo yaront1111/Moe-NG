@@ -8,8 +8,39 @@
     "If reproducible, identify the child/process lifecycle cause and add deterministic regression coverage before a scoped fix; preserve unrelated shared work."
   ],
   "taskRails": [],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Record the approved no-code resolution scope and measurement anchor. Read row comments11c896fd,a8748960,d0fefa22,39dfd531 and the three named test files; confirm with per-file source inspection that the exact index-mode, candidate-digest-after-drain and physical-PowerShell-archive arms still exist with their original assertions/deadlines and Windows guards. Record current HEAD, exact-path git status and SHA256 so worker observations cannot be confused with architect's older tree or another agent's edits. The current evidence supports only NOT REPRODUCED, not a diagnosed contention cause or fixed code. Keep all three tests, production child handling, root config, timeouts, retry counts, Git fixtures and packaging authority unchanged. Existing DoD1 permits this measured outcome; DoD2's deterministic regression/fix branch is inactive unless the subject recurs. Document in a Moe row comment (under4500 chars), not a new evidence file. No implementation, test rewrite, dependency, docs or source edit in this step.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/integration/portability/bin-target-modes.test.ts",
+        "tools/packaging/pack-windows-process-lease.test.ts",
+        "tools/packaging/pack-windows.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Run ONE final verification gate on Windows. Acquire full-suite-gate for this task; before starting record read-only process metadata (PID/parent/start time, never arbitrary command-line or environment values), existing Vitest main count and docker container count. Do not stop foreign processes or wait for them as an artificial success condition; disclose overlap. Run foreground standalone `pnpm test` at unchanged default deadlines/concurrency, followed by PRIMARY `pnpm exec vitest run tests/integration/portability/bin-target-modes.test.ts tools/packaging/pack-windows-process-lease.test.ts tools/packaging/pack-windows.test.ts`, each with its own true exit status, no pipelines, chains, retries or timeout/concurrency overrides. Require primary EXIT0, Test Files3 passed and a positive Tests count (currently30); confirm the named Windows cases ran rather than skipped. For root record its complete count lines, each failing file and exact cause/code/layer when present, and whether any of the three original failures occurred. Broad root EXIT1 from unrelated paths must be disclosed verbatim and is not a reason to modify them or fabricate root green; this task has no diff, so there is no introduced owned-path delta. Record HEAD/status/hashes after both runs, and check own Vitest/child exit plus owned resource cleanup; never delete unowned temp paths or containers. Release the gate on success/failure in finally. Current same-name recurrence or a skipped/unexecuted subject prevents a NOT REPRODUCED completion: record the precise failing seam, child state, deadline and observed load, then return this SAME row for a scoped architect amendment via Moe rather than applying an unplanned fix. In the non-reproduction outcome, persist the primary command/exit/counts as fresh complete_task verification and root evidence in a bounded comment. Root lane only, apps/** not covered; this no-code row does not claim daemon-app or whole-repository regression green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/integration/portability/bin-target-modes.test.ts",
+        "tools/packaging/pack-windows-process-lease.test.ts",
+        "tools/packaging/pack-windows.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Final adversarial evidence review and normal QA handoff; load adversarial-self-review. Verify the fresh run executed all three named subject arms on Windows, not just exit0/no-match or a skipped platform suite. Check exact source hashes/status show no changes to targets or assertive consumers; confirm no timeout/retry/exclusion/config changes were smuggled in, no passing rerun hid an earlier subject failure, and every foreign root failure remains explicitly disclosed. Challenge the causal conclusion: different host/process load and early daemon-startup failures cannot prove contention or permanent reliability. No mutation drill is justified when no behavior changed; do not alter production merely to manufacture evidence. The completion wording must be 'NOT REPRODUCED at <worker measurement anchor>; no code change; original timeouts absent in measured runs; unrelated root failures disclosed', never 'fixed' or 'repo-wide green'. Complete steps with modifiedFiles:[] and complete_task through the normal REVIEW/QA workflow using the fresh primary gate, not direct DONE/BLOCKED or a fabricated completion commit. If a named failure was observed, preserve it and request amendment instead of completing this no-code outcome.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/integration/portability/bin-target-modes.test.ts",
+        "tools/packaging/pack-windows-process-lease.test.ts",
+        "tools/packaging/pack-windows.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,9 +62,52 @@
       "author": "worker-d0fc1403",
       "content": "Concurrency attribution: directly observed prior scoped Vitest PID26900 (created17:43Z) running during red pre-diff root. QA reports integration's compose stack existed earlier (caddy/postgres/app/interrupted-alpine), but this worker did not measure docker concurrently with red, so container load is peer-reported, not a proven controlled variable. At quiet standalone rerun I directly measured only its own Vitest main PID22464 and docker ps -a returned no containers. Current evidence does not establish a code defect; do not infer causation from timing alone.",
       "timestamp": "2026-09-08T18:10:30.867Z"
+    },
+    {
+      "id": "comment-d0fefa22ec9f402a926916376aba0348",
+      "author": "architect-9556982c",
+      "content": "CURRENT SCOPED MEASUREMENT, 2026-09-08 18:42Z: under full-suite-gate lease acquired18:42:33Z, foreground standalone `pnpm exec vitest run tests/integration/portability/bin-target-modes.test.ts tools/packaging/pack-windows-process-lease.test.ts tools/packaging/pack-windows.test.ts` EXIT0, Test Files3 passed(3), Tests30 passed(30), duration26.70s, start21:42:47 local. Anchor HEAD2569dd4e2b0d89a998a41c6deee030d6b93cac8f plus disclosed shared WIP; all3 named paths clean and unchanged. BEFORE this scoped launch, directly measured91 node,30 powershell,2pwsh processes; one preexisting Vitest main PID43680 (created18:42:00Z) plus60888/30420 with vitest in command line; docker ps returned4 container IDs. Thus NOT a quiet-host experiment and not proof that peer load caused earlier failure. No process/container was stopped or inspected for secret contents. Fresh root pnpm test running after scoped completion; no conclusion before its foreground result.\n\nRead each complete named test and production lease/pack surfaces. bin-target-modes uses per-case30s plus synchronous Git child30s and cloned fixture cleanup finally. Candidate-digest lease arm defaults5s outer while helper request is30s (+120s outer spawn margin); physical PowerShell archive arm likewise defaults5s. These are observations, not justification for increasing budgets. Existing root config already bounds workers2..8 and honors VITEST_MAX_WORKERS. Earlier task comments record both root and scoped unchanged passes, so no code defect established. Asked human in REPL whether to close as not reproduced/no code if current root also excludes the3 original timeouts. No edits or plan submitted yet.",
+      "timestamp": "2026-09-08T18:44:33.388Z"
+    },
+    {
+      "id": "comment-39dfd531a35b4dd398754b3ff88c4c99",
+      "author": "architect-9556982c",
+      "content": "ROOT FOLLOW-UP 2026-09-08: foreground standalone `pnpm test` EXIT1; Test Files13 failed |425 passed |1 skipped(439); Tests19 failed |10363 passed |91 skipped(10473); start21:43:23 local, duration132.48s. Anchor HEAD2569dd4e2b0d89a998a41c6deee030d6b93cac8f both before/after, with peer WIP. NONE of the3 named Windows timeout files appears in the failed-file set. This is NOT root green and NOT proof that intermittent contention is permanently fixed; many daemon journeys terminated earlier than normal because of foreign WIP, so workload equivalence is not established. Scoped30/30 was separately observed in comment-d0fefa22.\n\nExact foreign failure causes: `Error [ERR_MODULE_NOT_FOUND]: Cannot find module 'D:\\projexts\\moe-next\\apps\\daemon\\src\\deployment\\deploy-candidate-environment.js' imported from D:\\projexts\\moe-next\\apps\\daemon\\src\\deployment\\deploy-command.ts` (runtime/package-loadability.test.ts:170; most real-process journeys via j1-loop-harness.ts:246). `Error: boundary scan failed for apps\\daemon\\src\\deployment\\deploy-candidate-environment.ts: Error: unterminated quoted source token` at packages/scheduler/src/package-boundary.test.ts:327. Secondary TypeError reading undefined httpPort at tests/integration/portability/transport-host-matrix.test.ts:322 after daemon startup failed. These belong to in-flight local-delivery task-0ca117e389df43ee9b458255f0752842, not this timeout row; no peer edits made.\n\nAll13 failing files: tests/runtime/package-loadability.test.ts; packages/scheduler/src/package-boundary.test.ts; tests/integration/portability/{goal-brief-mcp-readback.test.ts,transport-host-matrix.test.ts}; tests/e2e/foundation/{codex-seat-loop.e2e.test.ts,hostile-client.e2e.test.ts,dispatch-crash-sweep.e2e.test.ts,j1-loop-real-process.e2e.test.ts,j3-crash-recovery.e2e.test.ts,j4-replan-handoff.e2e.test.ts,j5-plan-reject-replan.e2e.test.ts,multi-node-graph.e2e.test.ts,multi-node-identity.e2e.test.ts}.\n\nNo target edits: git status exact3 paths empty before/after; SHA256 stable bin-target-modes=7970B0D805198D12B41DFF8BAF1D94B83199AFB10F918393AEE1C68D733019A9, process-lease.test=F1036A00528A5790C2876140A09AA0A6FB3503B9E96FB4B886743DCC7C3B0D43, pack-windows.test=31E2B8419239DC8C24A08124D3FD5D3BE4B34CD98A8B4E5E2378B39202455DF5. Post-run process census had no node process with vitest in command line and docker ps returned no containers; earlier4 containers were foreign and not touched. full-suite-gate released18:45Z and granted to task-44c0178b. No lease/child held. Recommendation remains no speculative timeout/retry/code changes; classify not reproduced through normal plan/worker/QA workflow after user's pending REPL confirmation. No task completion claimed.",
+      "timestamp": "2026-09-08T18:47:19.553Z"
+    },
+    {
+      "id": "comment-7a49b62d9471478a966dd1bd6d4e4296",
+      "author": "architect-9556982c",
+      "content": "REPL CONFIRMATION: user said continue after 'Awaiting confirmation to close as not reproduced, without code changes.' Submitting a three-step, read-only resolution plan: retain all deadlines/assertions/production code, fresh Windows root+scoped gate and honest path attribution, then evidence review and normal worker/QA completion. No code-defect or contention-causation claim. If any named subject recurs, no-code outcome is invalid and this same row returns for a measured amendment. Current HEAD8b78572535058daef8ddf1d3f55d0e5f33c3bd1a; all3 target paths clean with identical SHA256 to architect measurements. No new task or source changes.",
+      "timestamp": "2026-09-08T19:44:43.942Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T18:01:56.019Z",
-  "updatedAt": "2026-09-08T18:21:04.163Z"
+  "updatedAt": "2026-09-08T19:44:46.346Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-08T18:41:56.902Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 3
+  },
+  "contextFetchedBy": [
+    "architect-9556982c"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-08T19:44:44.141Z",
+  "planningNotes": {
+    "approachesConsidered": "Human said continue in the REPL after the explicit proposal to resolve as NOT REPRODUCED with no code changes. This is the existing bug-investigation row's allowed falsification outcome, not a new evidence row or a claim of fixed behavior. Rejected blind timeout inflation, retries, shrinking root concurrency again, excluding cases, speculative lifecycle refactors and changing foreign production work. Plan consists of three steps: document the measured premise, one final verification gate, one adversarial evidence review/QA handoff. No source/test/config/docs edits; TDD and implementation phases intentionally omitted because no changed behavior or reproducible subject exists. Estimated 15 minutes human-equivalent excluding any resource queue.",
+    "codebaseInsights": "Read all three target files and production pack-windows-process-lease.ts/pack-windows.ts plus vitest.config.ts; per-file import/deadline searches confirmed real Git/PowerShell paths. bin-target-modes has 30000ms case/child limits; candidate digest and physical ZIP cases use the default5000ms outer limit, with helper request30000ms and outer spawn allowance+120000ms. Root already bounds workers2..8 and permits VITEST_MAX_WORKERS. Deadline mismatch alone does not establish a defect. Previous worker comments11c896fd/a8748960 report unchanged root EXIT0 (438passed/1skipped files,10423passed/49skipped tests) then scoped3files/30tests EXIT0,26.24s. Architect measurement at HEAD2569dd4e2b0d89a998a41c6deee030d6b93cac8f: scoped primary EXIT0,3files/30tests,26.70s; root pnpm test EXIT1,13failed/425passed/1skipped files,19failed/10363passed/91skipped tests,132.48s. None of the three subject files failed. Exact foreign causes/paths and limitations are in commentsd0fefa22/39dfd531: missing deploy-candidate-environment.js imported by deploy-command.ts, scheduler source scanner unterminated quoted source token in that peer module, secondary undefined httpPort after startup failure. No workload-equivalence or root-green claim. Initial scoped host census observed another Vitest main and4containers; later root census only own Vitest; neither observation proves causation. Gate released18:45Z, no process/lease held. Latest recheck HEAD8b78572535058daef8ddf1d3f55d0e5f33c3bd1a: exact three paths still clean and SHA256 identical to measured run (hashes in comment39dfd531). No symbol/shape/export/dependency changes in this plan; no workspace import probe or new producer/consumer needed.",
+    "risks": "Not reproduced does not prove impossible, permanently fixed, or caused by contention. Current root failures shortened daemon journeys, so a lower-duration green subject is not a controlled load comparison. New worker-time evidence overrides these snapshots; a recurrence means this no-code resolution cannot complete, not permission to invent a fix. Windows-only cases must actually execute on Windows; a Linux/macOS skip is not falsification. Protect foreign WIP and processes, disclose new failures without broad edits or creating evidence rows. The affectedFiles roster is READ-ONLY observation scope: modifiedFiles must remain empty absent an approved amendment; no dummy commit or source change to satisfy landing mechanics.",
+    "keyFiles": [
+      "tests/integration/portability/bin-target-modes.test.ts",
+      "tools/packaging/pack-windows-process-lease.test.ts",
+      "tools/packaging/pack-windows.test.ts",
+      "vitest.config.ts",
+      "tools/packaging/pack-windows-process-lease.ts",
+      "tools/packaging/pack-windows.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-08T19:44:46.346Z"
 }

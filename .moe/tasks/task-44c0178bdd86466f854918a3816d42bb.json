@@ -15,41 +15,65 @@
     {
       "stepId": "step-1",
       "description": "Before editing, record named HEAD/merge-base and exact owned-path git status; preserve peer dirt. Re-run `pnpm test:security` as the FIRST foreground verification command under full-suite-gate, quoting exit status, test count lines and all distinct failing TASK-LV test names in a task comment. The architect's fresh baseline is EXIT1,2failed/10passed files,14failed/989passed tests of1003; seven names execute twice. Re-measure source tuples via git grep for AGENT_PROVIDER_LAYER and DEPLOY_ROLLBACK_LAYER and the DAEMON_DEPLOY_RUNNER literal, and read the scanner's own failure output/populations rather than writing a second scanner. Pin changes below to this worker's current census; additional missing tuples need exact source/file evidence, not invented roster entries. Existing failures are the TDD RED; do not edit production files.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/layer-visibility-cases.ts",
         "tests/security/boundary-roster.security.ts"
-      ]
+      ],
+      "note": "FIRST foreground pnpm test:security EXIT1, Test Files 2 failed | 10 passed (12), Tests 14 failed | 989 passed (1003). All seven exact names, scanner populations and source tuple lines recorded in comment-7bf3778ff1e3423ba4c0d6e8f1bd0b63. Pre-diff anchor00c88cd8, owned paths clean; preserved15 foreign dirty paths. Existing scan arms furnish TDD RED; no source edits. Also captured pre-edit root/typecheck/foundation/store/daemon baseline: typecheck/foundation/store0, root/daemon1 foreign missing deploy-candidate-environment.js. Lease released after all foreground runs.",
+      "startedAt": "2026-09-08T18:18:21.900Z",
+      "completedAt": "2026-09-08T18:42:13.378Z"
     },
     {
       "stepId": "step-2",
       "description": "Minimum backfill. In layer-visibility-cases.ts add exactly {constant:'AGENT_PROVIDER_LAYER',file:'apps/control-room/src/v2/ops/agent-provider-port.ts'} and {constant:'DEPLOY_ROLLBACK_LAYER',file:'apps/control-room/src/v2/approvals/rollback-port.ts'} to UNSCANNED_PRIVATE_LAYERS, preserving frozen explicit hand-maintained entries. Add DAEMON_DEPLOY_RUNNER to UNRESOLVED_LAYER_LITERALS with its exact incident-frames.fixture.ts source and an honest note that the existing classifier includes singular .fixture.ts even though this is a test helper; do not assert a runtime boundary was discovered. Set independently measured pins EXPECTED_PRIVATE_COUNT77, EXPECTED_LITERAL_COUNT103, EXPECTED_UNRESOLVED_LITERAL_COUNT38 if the first-run census is unchanged. In boundary-roster.security.ts update EXPECTED_INVISIBLE_DENOMINATOR257 and EXPECTED_INVISIBLE_SHARE_PER_MILLE300, leaving numerator derived from EXPECTED_PRIVATE_COUNT and exported count180 untouched. Refresh immediately associated private-width/count and ratio comments with measured values or explicit dated historical wording. Do not modify any scan regex, isProductionModule/SCAN_ROOTS, set-equality assertion, suite discovery, production constant name/export, or intentional second execution via durable-store-boundaries. Keep all unrelated code unchanged.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/layer-visibility-cases.ts",
         "tests/security/boundary-roster.security.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/security/layer-visibility-cases.ts",
+        "tests/security/boundary-roster.security.ts"
+      ],
+      "note": "Minimum two-file backfill applied: two actual private declaration tuples, explicitly classified fixture literal DAEMON_DEPLOY_RUNNER, pins77/103/38 and independent257/300 ratio. Refreshed associated current count/width comments; no scanner grammar/filter/roots/assertions/discovery/production changes. Foreground GREEN pnpm test:security EXIT0: Test Files 12 passed (12); Tests 1003 passed (1003),45.15s. Both original suite executions and independent set/count/partition/ratio/planted controls pass. Diff22 additions/22 deletions; git diff --check0.",
+      "startedAt": "2026-09-08T18:42:24.676Z",
+      "completedAt": "2026-09-08T18:47:14.721Z"
     },
     {
       "stepId": "step-3",
       "description": "One concentrated verification step. Exact primary complete_task evidence command: `pnpm test:security` from repo root, foreground, under the shared gate lease. Require EXIT0 plus nonzero Test Files/Tests count lines; expected unchanged discovery is12files/1003tests, but report actual fresh counts and investigate any unexplained loss. Both executing TASK-LV groups, both set directions, literal partition, independent ratio and planted-scanner controls must pass; a counts-only or one-file green is insufficient. Also run the required repository gates pnpm typecheck, pnpm test, pnpm verify:foundation, pnpm verify:store and pnpm --filter @moe/daemon test with exact statuses/counts and path-attributed baseline handling for foreign red. Do not claim root-only results cover security.ts or apps/**. In a concise row comment record the exact new source tuples/file:lines, literal-site git grep command at the delivered tree, and that DAEMON_DEPLOY_RUNNER IS part of this fix because the existing scanner includes its singular.fixture.ts site, not because it is a real production layer. Release leases after foreground runs. No generated transcripts/probes committed.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/layer-visibility-cases.ts",
         "tests/security/boundary-roster.security.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/security/layer-visibility-cases.ts",
+        "tests/security/boundary-roster.security.ts"
+      ],
+      "note": "Primary security EXIT0,12files1003tests (45.15s). Required post-diff gates foreground: typecheck0; foundation0,35files756tests; store0,53files688tests. Root1,14failed424passed1skipped files,20failed10362passed91skipped tests. Daemon1,15failed583passed files,20failed10680passed10skipped tests+1error. Before/after root and daemon failing-path sets IDENTICAL; owned delta empty. Missing deploy-candidate-environment.js and deployment scanner/build errors routed to existing task-0ca117e3; pack timeout existing task-0126aacd. Exact statuses/path sets/source tuples/durable grep anchors in row comments. No security test loss. Lease RELEASED after all runs; no mutants yet.",
+      "startedAt": "2026-09-08T18:47:14.977Z",
+      "completedAt": "2026-09-08T19:44:22.146Z"
     },
     {
       "stepId": "step-4",
       "description": "One final adversarial review using adversarial-self-review. Confirm the diff contains only measured entries, independent pins and directly relevant comments; no exclusion, allowlist derivation, duplicate suppression or weakened assertions. Under a quiet exclusive gate window, first record git status --porcelain for the two exact files and create out-of-tree worker-ID-suffixed backups. Temporarily remove one newly added private entry while retaining all count pins; run `pnpm exec vitest run --config tests/security/vitest.config.ts boundary-roster.security.ts -t \"TASK-LV allowlists every scanned module-private declaration\"` and require nonzero exit with the exact removed constant@file in that specific set-equality failure, not an unrelated tally failure. Similarly remove the new bare-literal entry and run `pnpm exec vitest run --config tests/security/vitest.config.ts boundary-roster.security.ts -t \"TASK-LV allowlists every unresolved literal\"`, requiring DAEMON_DEPLOY_RUNNER in its failure. Restore in finally and independently prove tracked-path restoration with diff or SHA256 equality for any unexpectedly untracked path, then re-run exact `pnpm test:security` after restoration and use that fresh result for complete_task. Note the cheap follow-up of running the existing TASK-LV lane when *_LAYER producers change / reconciling singular.fixture classification; do not create a new guard framework or evidence row. Report both owned paths in complete_step.modifiedFiles; wrapper lands explicit paths and QA reviews. Keep the task a coding/regression fix, no preview environment work.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/security/layer-visibility-cases.ts",
         "tests/security/boundary-roster.security.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/security/layer-visibility-cases.ts",
+        "tests/security/boundary-roster.security.ts"
+      ],
+      "note": "Adversarial checklist and independent read-only diff review clean. Two exclusive omission drills both EXIT1,1failed/54skipped in exact named set arms: AGENT_PROVIDER_LAYER@apps/control-room/src/v2/ops/agent-provider-port.ts (:849) and DAEMON_DEPLOY_RUNNER (:956). Pins unchanged. Fresh out-of-tree backups carry task+timestamp+worker; live pre-mutation SHA recorded; finally restore and SEPARATE SHA256 checks after EACH drill match both live files. Full details/backup anchors in comment-23b2324393734ec8a168e300c041efdf. Final restored foreground pnpm test:security EXIT0: Test Files12passed(12), Tests1003passed(1003),28.37s. No weakened assertions/scanner/discovery; no production changes. git diff --check0,22add/22delete across exactly2files. Lease released; no lingering processes/mutants. Cheap existing-lane and singular.fixture-classifier follow-ups noted, no new framework/evidence row.",
+      "startedAt": "2026-09-08T19:44:22.387Z",
+      "completedAt": "2026-09-08T19:48:17.004Z"
     }
   ],
-  "status": "WORKING",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -77,20 +101,114 @@
       "author": "architect-9556982c",
       "content": "FRESH FOREGROUND BASELINE now obtained, superseding the earlier no-run note. full-suite-gate became available; acquired at 17:56:18Z, ran exact `pnpm test:security` before any source edits, and released after completion. EXIT CODE 1 (exec session29052 final `[ELIFECYCLE] Command failed with exit code 1.`). Count lines verbatim:\n Test Files  2 failed | 10 passed (12)\n      Tests  14 failed | 989 passed (1003)\nDuration 35.32s.\n\nExactly seven distinct test NAMES failed, each under boundary-roster.security.ts AND durable-store-boundaries.security.ts:\n1 TASK-LV allowlists every scanned module-private declaration (scan minus allowlist is empty)\n2 TASK-LV counts exactly EXPECTED_PRIVATE_COUNT module-private declarations at the wide pattern width\n3 TASK-LV pins the invisible share at the wide pattern width, numerator and denominator both named\n4 TASK-LV scans a non-empty literal population\n5 TASK-LV allowlists every unresolved literal (scan minus allowlist is empty)\n6 TASK-LV counts exactly EXPECTED_UNRESOLVED_LITERAL_COUNT unresolved literals\n7 TASK-LV splits the scanned literals into resolved plus unresolved with nothing dropped\n\nActual scan-minus-allowlist output names exactly DEPLOY_ROLLBACK_LAYER@apps/control-room/src/v2/approvals/rollback-port.ts and AGENT_PROVIDER_LAYER@apps/control-room/src/v2/ops/agent-provider-port.ts. Actual private population77 vs pin75; literal population103 vs pin102; unresolved population38 vs pin37; actual missing literal DAEMON_DEPLOY_RUNNER. No other case failure. Thus the third contributor is part of THIS census fix, with the test-fixture classification caveat in the previous comment. Exported roster size180 passed; derived updated denominator77+180=257 and Math.round(77/257*1000)=300. Current pins255/294 are independently asserted and must also change in the second owned file.\n\nNo source edits or mutations occurred, no successful gate claimed. Narrow two-file plan is ready, pending the REPL confirmation already requested.",
       "timestamp": "2026-09-08T17:59:13.687Z"
+    },
+    {
+      "id": "comment-7bf3778ff1e3423ba4c0d6e8f1bd0b63",
+      "author": "worker-9dcd2d4f",
+      "content": "Worker pre-edit baseline, 2026-09-08 18:22Z. HEAD/task merge-base (no task diff) 00c88cd8cbcc1bb3ca105461d4bd843fb445e23e; branch moe/work-2026-09-04; git merge-base HEAD origin/main = 68eb1c5d47cbf65217a7d4ca358f8c4555836528. Exact owned-path git status --porcelain empty; 15 foreign/pre-existing dirty paths untouched. FIRST foreground verification `pnpm test:security` under full-suite-gate EXIT 1. Verbatim:\n Test Files  2 failed | 10 passed (12)\n      Tests  14 failed | 989 passed (1003)\nSeven distinct names (each runs in boundary-roster.security.ts and durable-store-boundaries.security.ts):\nTASK-LV allowlists every scanned module-private declaration (scan minus allowlist is empty)\nTASK-LV counts exactly EXPECTED_PRIVATE_COUNT module-private declarations at the wide pattern width\nTASK-LV pins the invisible share at the wide pattern width, numerator and denominator both named\nTASK-LV scans a non-empty literal population\nTASK-LV allowlists every unresolved literal (scan minus allowlist is empty)\nTASK-LV counts exactly EXPECTED_UNRESOLVED_LITERAL_COUNT unresolved literals\nTASK-LV splits the scanned literals into resolved plus unresolved with nothing dropped\nScanner failure output: missing DEPLOY_ROLLBACK_LAYER@apps/control-room/src/v2/approvals/rollback-port.ts; AGENT_PROVIDER_LAYER@apps/control-room/src/v2/ops/agent-provider-port.ts. Wide private 77 vs pin75, literals103 vs102, unresolved38 vs37. Literal set failure names only DAEMON_DEPLOY_RUNNER. Exported180 green; denominator 77+180=257, per-mille300.\n`git grep -n -E 'AGENT_PROVIDER_LAYER|DEPLOY_ROLLBACK_LAYER|DAEMON_DEPLOY_RUNNER' -- apps packages tools` confirms declarations rollback-port.ts:29 and agent-provider-port.ts:21; literal incident-frames.fixture.ts:30 plus incident-card.test.tsx:69,81. Existing isProductionModule boundary-roster.security.ts:661-674 includes singular .fixture.ts; this is a scanned test helper, NOT a newly discovered production refusal boundary. Existing failures are RED phase; no production edits.",
+      "timestamp": "2026-09-08T18:24:00.749Z"
+    },
+    {
+      "id": "comment-08b553ff30e44a78a1df644f5d5ee080",
+      "author": "worker-9dcd2d4f",
+      "content": "PRE-DIFF foreground baseline on shared tree, task merge-base00c88cd8 (no owned edits); foreign WIP preserved. pnpm typecheck: EXIT 0.\n\nFailing test path set:",
+      "timestamp": "2026-09-08T18:43:48.776Z"
+    },
+    {
+      "id": "comment-2a1fcee81554469eb62b233f432900b8",
+      "author": "worker-9dcd2d4f",
+      "content": "PRE-DIFF foreground baseline on shared tree, task merge-base00c88cd8 (no owned edits); foreign WIP preserved. pnpm test: EXIT 1.\n Test Files  14 failed | 424 passed | 1 skipped (439)\n      Tests  20 failed | 10361 passed | 91 skipped (10472)\n   Duration  272.50s (transform 39.44s, setup 0ms, import 237.36s, tests 1644.51s, environment 24ms)\nFailing test path set:\ntests/e2e/foundation/codex-seat-loop.e2e.test.ts\ntests/e2e/foundation/hostile-client.e2e.test.ts\ntests/integration/portability/goal-brief-mcp-readback.test.ts\ntests/integration/portability/transport-host-matrix.test.ts\ntests/runtime/package-loadability.test.ts\ntools/packaging/pack-command.test.ts\npackages/scheduler/src/package-boundary.test.ts\ntests/e2e/foundation/dispatch-crash-sweep.e2e.test.ts\ntests/e2e/foundation/j1-loop-real-process.e2e.test.ts\ntests/e2e/foundation/j3-crash-recovery.e2e.test.ts\ntests/e2e/foundation/j4-replan-handoff.e2e.test.ts\ntests/e2e/foundation/j5-plan-reject-replan.e2e.test.ts\ntests/e2e/foundation/multi-node-graph.e2e.test.ts\ntests/e2e/foundation/multi-node-identity.e2e.test.ts",
+      "timestamp": "2026-09-08T18:43:48.960Z"
+    },
+    {
+      "id": "comment-d1f6a953ac9f4e6ebb3e86d3f3f80edd",
+      "author": "worker-9dcd2d4f",
+      "content": "PRE-DIFF foreground baseline on shared tree, task merge-base00c88cd8 (no owned edits); foreign WIP preserved. pnpm verify:foundation: EXIT 0.\n Test Files  35 passed (35)\n      Tests  756 passed (756)\n   Duration  12.45s (transform 6.14s, setup 0ms, import 6.43s, tests 16.22s, environment 2ms)\nFailing test path set:",
+      "timestamp": "2026-09-08T18:43:49.121Z"
+    },
+    {
+      "id": "comment-7fafc6d250a64cdbba548f22462fc383",
+      "author": "worker-9dcd2d4f",
+      "content": "PRE-DIFF foreground baseline on shared tree, task merge-base00c88cd8 (no owned edits); foreign WIP preserved. pnpm verify:store: EXIT 0.\n Test Files  53 passed (53)\n      Tests  688 passed (688)\n   Duration  8.79s (transform 3.64s, setup 0ms, import 9.86s, tests 33.14s, environment 3ms)\nFailing test path set:",
+      "timestamp": "2026-09-08T18:43:49.282Z"
+    },
+    {
+      "id": "comment-81e73e5aec5d4195a6c01aee105ba4ff",
+      "author": "worker-9dcd2d4f",
+      "content": "PRE-DIFF foreground baseline on shared tree, task merge-base00c88cd8 (no owned edits); foreign WIP preserved. pnpm --filter @moe/daemon test: EXIT 1.\n Test Files  15 failed | 581 passed (596)\n      Tests  20 failed | 10622 passed | 10 skipped (10652)\n     Errors  1 error\n   Duration  752.50s (transform 32.41s, setup 0ms, import 374.74s, tests 2514.05s, environment 29ms)\nFailing test path set:\nsrc/daemon-main-activation-boot.test.ts\nsrc/daemon-entry-preview.test.ts\nsrc/daemon-entry.test.ts\nsrc/daemon-startup.test.ts\nsrc/daemon-store-dependencies.test.ts\nsrc/graph-preview-request.test.ts\nsrc/index-surface.test.ts\nsrc/runtime-entrypoint.test.ts\nsrc/activation/activation-attempt-reader.test.ts\nsrc/deployment/deploy-journey.test.ts\nsrc/identity/genesis-first-boot.test.ts\nsrc/orchestrator/moe-up-main.test.ts\nsrc/orchestrator/wrapper-entrypoint.test.ts\nsrc/projects/project-stack-host-main.test.ts\nsrc/planning/graph-query-production-route.test.ts",
+      "timestamp": "2026-09-08T18:43:49.462Z"
+    },
+    {
+      "id": "comment-dc27c500a7f949919b908e188ce9663a",
+      "author": "worker-9dcd2d4f",
+      "content": "Foreign pre-diff failure details (not task-owned; preserved; routed to existing WORKING producer task-0ca117e389df43ee9b458255f0752842 via comment-d16b3b458bbf4957a8e127a318e4700f, not a duplicate row):\nRoot packages/scheduler/src/package-boundary.test.ts:327:15 — `Error: boundary scan failed for apps\\daemon\\src\\deployment\\deploy-candidate-environment.ts: Error: unterminated quoted source token`.\nRoot tools/packaging/pack-command.test.ts:649:41 — `Error: Test timed out in 5000ms.` Existing timeout row task-0126aacd753b42a188718c8e87cda0e2 currently measuring this.\nRoot tests/e2e/foundation/j1-loop-harness.ts:246:9 and daemon apps/daemon/src/planning/graph-query-production-route.test.ts:201:60,231:60 — `ERR_MODULE_NOT_FOUND`, `Cannot find module 'D:\\projexts\\moe-next\\apps\\daemon\\src\\deployment\\deploy-candidate-environment.js' imported from D:\\projexts\\moe-next\\apps\\daemon\\src\\deployment\\deploy-command.ts`.\nDaemon apps/daemon/src/deployment/deploy-journey.test.ts:635:5 — `Error: DEPLOY_BUILD_FAILED: [REDACTED]`.\nDaemon apps/daemon/src/runtime-entrypoint.test.ts:255:6 bridge inventory also reds; same missing bridge. Path sets/counts in preceding baseline comments. These are shared-tree pre-diff observations, not a claim that these foreign bytes were committed at00c88cd8. No baseline blocker attributed to this roster-only repair.",
+      "timestamp": "2026-09-08T18:44:16.150Z"
+    },
+    {
+      "id": "comment-875d0f75950a44e7aa1c1674eae4207f",
+      "author": "worker-9dcd2d4f",
+      "content": "POST-DIFF standalone foreground pnpm typecheck: EXIT 0. Shared-tree gate began at HEAD2569dd4e2b0d89a998a41c6deee030d6b93cac8f plus the two owned roster edits; pre-diff observations were at00c88cd8 before those edits. No claim that foreign WIP equals committed bytes.\n\nAFTER-minus-BEFORE failing-path set: []; disappeared: []. Delta intersect owned {tests/security/layer-visibility-cases.ts,tests/security/boundary-roster.security.ts}: EMPTY.\nNo failing paths.",
+      "timestamp": "2026-09-08T19:43:44.953Z"
+    },
+    {
+      "id": "comment-dd441e5179d8423f848393b35d04df03",
+      "author": "worker-9dcd2d4f",
+      "content": "POST-DIFF standalone foreground pnpm test: EXIT 1. Shared-tree gate began at HEAD2569dd4e2b0d89a998a41c6deee030d6b93cac8f plus the two owned roster edits; pre-diff observations were at00c88cd8 before those edits. No claim that foreign WIP equals committed bytes.\n Test Files  14 failed | 424 passed | 1 skipped (439)\n      Tests  20 failed | 10362 passed | 91 skipped (10473)\n   Duration  94.78s (transform 45.68s, setup 0ms, import 120.77s, tests 554.15s, environment 25ms)\nAFTER-minus-BEFORE failing-path set: []; disappeared: []. Delta intersect owned {tests/security/layer-visibility-cases.ts,tests/security/boundary-roster.security.ts}: EMPTY.\nFailing paths (daemon paths relative to apps/daemon):\npackages/scheduler/src/package-boundary.test.ts\ntests/e2e/foundation/codex-seat-loop.e2e.test.ts\ntests/e2e/foundation/dispatch-crash-sweep.e2e.test.ts\ntests/e2e/foundation/hostile-client.e2e.test.ts\ntests/e2e/foundation/j1-loop-real-process.e2e.test.ts\ntests/e2e/foundation/j3-crash-recovery.e2e.test.ts\ntests/e2e/foundation/j4-replan-handoff.e2e.test.ts\ntests/e2e/foundation/j5-plan-reject-replan.e2e.test.ts\ntests/e2e/foundation/multi-node-graph.e2e.test.ts\ntests/e2e/foundation/multi-node-identity.e2e.test.ts\ntests/integration/portability/goal-brief-mcp-readback.test.ts\ntests/integration/portability/transport-host-matrix.test.ts\ntests/runtime/package-loadability.test.ts\ntools/packaging/pack-command.test.ts",
+      "timestamp": "2026-09-08T19:43:45.162Z"
+    },
+    {
+      "id": "comment-f74946f0ab214e40986ccde7f7e54e30",
+      "author": "worker-9dcd2d4f",
+      "content": "POST-DIFF standalone foreground pnpm verify:foundation: EXIT 0. Shared-tree gate began at HEAD2569dd4e2b0d89a998a41c6deee030d6b93cac8f plus the two owned roster edits; pre-diff observations were at00c88cd8 before those edits. No claim that foreign WIP equals committed bytes.\n Test Files  35 passed (35)\n      Tests  756 passed (756)\n   Duration  6.26s (transform 3.42s, setup 0ms, import 3.64s, tests 8.88s, environment 2ms)\nAFTER-minus-BEFORE failing-path set: []; disappeared: []. Delta intersect owned {tests/security/layer-visibility-cases.ts,tests/security/boundary-roster.security.ts}: EMPTY.\nNo failing paths.",
+      "timestamp": "2026-09-08T19:43:45.349Z"
+    },
+    {
+      "id": "comment-3473c7451f784ae8b31700267e1685e3",
+      "author": "worker-9dcd2d4f",
+      "content": "POST-DIFF standalone foreground pnpm verify:store: EXIT 0. Shared-tree gate began at HEAD2569dd4e2b0d89a998a41c6deee030d6b93cac8f plus the two owned roster edits; pre-diff observations were at00c88cd8 before those edits. No claim that foreign WIP equals committed bytes.\n Test Files  53 passed (53)\n      Tests  688 passed (688)\n   Duration  6.04s (transform 3.78s, setup 0ms, import 8.61s, tests 28.04s, environment 4ms)\nAFTER-minus-BEFORE failing-path set: []; disappeared: []. Delta intersect owned {tests/security/layer-visibility-cases.ts,tests/security/boundary-roster.security.ts}: EMPTY.\nNo failing paths.",
+      "timestamp": "2026-09-08T19:43:45.742Z"
+    },
+    {
+      "id": "comment-c3cec371db6549efbf5c7bc7988dd039",
+      "author": "worker-9dcd2d4f",
+      "content": "POST-DIFF standalone foreground pnpm --filter @moe/daemon test: EXIT 1. Shared-tree gate began at HEAD2569dd4e2b0d89a998a41c6deee030d6b93cac8f plus the two owned roster edits; pre-diff observations were at00c88cd8 before those edits. No claim that foreign WIP equals committed bytes.\n Test Files  15 failed | 583 passed (598)\n      Tests  20 failed | 10680 passed | 10 skipped (10710)\n     Errors  1 error\n   Duration  461.97s (transform 29.47s, setup 0ms, import 325.09s, tests 1435.43s, environment 29ms)\nAFTER-minus-BEFORE failing-path set: []; disappeared: []. Delta intersect owned {tests/security/layer-visibility-cases.ts,tests/security/boundary-roster.security.ts}: EMPTY.\nFailing paths (daemon paths relative to apps/daemon):\nsrc/activation/activation-attempt-reader.test.ts\nsrc/daemon-entry-preview.test.ts\nsrc/daemon-entry.test.ts\nsrc/daemon-main-activation-boot.test.ts\nsrc/daemon-startup.test.ts\nsrc/daemon-store-dependencies.test.ts\nsrc/deployment/deploy-journey.test.ts\nsrc/graph-preview-request.test.ts\nsrc/identity/genesis-first-boot.test.ts\nsrc/index-surface.test.ts\nsrc/orchestrator/moe-up-main.test.ts\nsrc/orchestrator/wrapper-entrypoint.test.ts\nsrc/planning/graph-query-production-route.test.ts\nsrc/projects/project-stack-host-main.test.ts\nsrc/runtime-entrypoint.test.ts",
+      "timestamp": "2026-09-08T19:43:46.405Z"
+    },
+    {
+      "id": "comment-f44e2614ce5449268166081207c4bc94",
+      "author": "worker-9dcd2d4f",
+      "content": "Delivered-tree measurement anchor: current shared HEAD8b78572535058daef8ddf1d3f55d0e5f33c3bd1a plus ONLY the two owned roster edits. Durable repeatable source commands: `git grep -n -E '^const (AGENT_PROVIDER_LAYER|DEPLOY_ROLLBACK_LAYER)' -- apps/control-room` and `git grep -n -F DAEMON_DEPLOY_RUNNER -- apps packages tools`. Exact declarations: AGENT_PROVIDER_LAYER@apps/control-room/src/v2/ops/agent-provider-port.ts:21 and DEPLOY_ROLLBACK_LAYER@apps/control-room/src/v2/approvals/rollback-port.ts:29. Literal site apps/control-room/src/v2/approvals/incident-frames.fixture.ts:30; test expectations in incident-card.test.tsx:69,81. DAEMON_DEPLOY_RUNNER IS part of this fix because unchanged isProductionModule includes singular .fixture.ts (boundary-roster.security.ts:661-674), NOT because this test helper is a runtime boundary. The delivered scanner set arms exercise this classification each security run; no deleted probe needed.\nFull security GREEN45.15s:12files/1003tests, identical discovery to RED. Broader before/after failing-path sets identical (root14 paths, daemon15 paths); owned intersection empty. Root total10472->10473 and daemon10652->10710 reflect peer tests; no security test loss. No root-only claim covers apps/** or security.ts. Repository typecheck/foundation/store all exit0; root/daemon remain1 as fully disclosed. No generated evidence files.",
+      "timestamp": "2026-09-08T19:44:21.930Z"
+    },
+    {
+      "id": "comment-23b2324393734ec8a168e300c041efdf",
+      "author": "worker-9dcd2d4f",
+      "content": "Final adversarial review/drills, 2026-09-08 19:45Z, shared HEAD8b785725 + exact two-file patch. Diff reviewed top-to-bottom by worker and independent read-only reviewer: only measured entries/pins/comments; no grammar/exclusion/discovery/dedup/derived-allowlist/assertion changes. Immutable constants only; no new runtime input, authority, IO or concurrency path. Existing source scan races remain unchanged; drift fail-closes. Exclusive full-suite-gate held; prior suites ended before mutations.\nPre-drill git status exact paths: both tracked ` M`. Fresh LIVE SHA256 BEFORE either mutation at 20260908T194507578Z:\ntests/security/layer-visibility-cases.ts\n317265AD8EDE7CDED2AFDB075161AB477FFA150A296E0E631E07F9D8B6EEF6E6\nbackup C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-task-44c0178bdd86466f854918a3816d42bb-20260908T194507578Z-layer-visibility-cases.ts-worker-9dcd2d4f.bak\ntests/security/boundary-roster.security.ts\nD616F912E6924AC6408BF68427A88D3C0C593471417BBF309702DB2463E3DA01\nbackup C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-task-44c0178bdd86466f854918a3816d42bb-20260908T194507578Z-boundary-roster.security.ts-worker-9dcd2d4f.bak\nDrill1 remove AGENT_PROVIDER_LAYER tuple ONLY, retaining all count pins: `pnpm exec vitest run --config tests/security/vitest.config.ts boundary-roster.security.ts -t \"TASK-LV allowlists every scanned module-private declaration\"` EXIT1, Test Files1failed(1), Tests1failed|54skipped(55). Exact arm boundary-roster.security.ts:849:22 fails with AGENT_PROVIDER_LAYER@apps/control-room/src/v2/ops/agent-provider-port.ts, not a tally.\nDrill2 remove DAEMON_DEPLOY_RUNNER entry ONLY: `pnpm exec vitest run --config tests/security/vitest.config.ts boundary-roster.security.ts -t \"TASK-LV allowlists every unresolved literal\"` EXIT1, Test Files1failed(1), Tests1failed|54skipped(55); exact arm :956:78 names DAEMON_DEPLOY_RUNNER. Each transform required exactly1 matching entry; each finally copied live-vintage backup back. SEPARATE tool calls after each restore recomputed SHA256 of BOTH LIVE files and matched the literal pre-mutation hashes above, EXIT0; no git-restore/index shortcut or closed-loop-only proof.\nFresh restored `pnpm test:security` EXIT0: Test Files 12 passed (12); Tests 1003 passed (1003),28.37s. Lease released, no mutants/generated files/processes left in repo.\nCheap follow-up only (no new row/framework): require existing TASK-LV lane when *_LAYER producers change and reconcile singular.fixture.ts classification explicitly. Do not hide a future omission by weakening scanner or generating its allowlist.",
+      "timestamp": "2026-09-08T19:47:22.109Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T17:43:14.159Z",
-  "updatedAt": "2026-09-08T18:05:05.756Z",
+  "updatedAt": "2026-09-08T19:50:42.136Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T17:52:21.846Z",
     "plannedStepCount": 4,
-    "plannedDistinctFileCount": 2
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 4,
+    "doneAt": "2026-09-08T19:50:42.136Z",
+    "wallClockMs": 7100290
   },
   "contextFetchedBy": [
-    "architect-9556982c"
+    "architect-9556982c",
+    "worker-9dcd2d4f",
+    "qa-2702df88"
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-08T18:05:03.364Z",
   "planningNotes": {
@@ -105,5 +223,46 @@
       "apps/control-room/src/v2/approvals/incident-frames.fixture.ts"
     ]
   },
-  "planApprovedAt": "2026-09-08T18:05:05.756Z"
+  "planApprovedAt": "2026-09-08T18:05:05.756Z",
+  "workStartedAt": "2026-09-08T18:18:21.900Z",
+  "reviewStartedAt": "2026-09-08T19:48:42.670Z",
+  "verification": {
+    "command": "pnpm test:security",
+    "exitCode": 0,
+    "outputTail": "$ tsc -p tests/security/tsconfig.json && vitest run --config tests/security/vitest.config.ts\n\n RUN  v4.1.10 D:/projexts/moe-next/tests/security\n\n\n Test Files  12 passed (12)\n      Tests  1003 passed (1003)\n   Start at  22:46:08\n   Duration  28.37s (transform 7.68s, setup 0ms, import 13.83s, tests 13.31s, environment 1ms)\n\n",
+    "reportedAt": "2026-09-08T19:48:42.670Z"
+  },
+  "filesModified": [
+    "tests/security/layer-visibility-cases.ts",
+    "tests/security/boundary-roster.security.ts"
+  ],
+  "completionSummary": "Two-file TASK-LV roster repair: added source-backed AGENT_PROVIDER_LAYER (agent-provider-port.ts:21), DEPLOY_ROLLBACK_LAYER (rollback-port.ts:29), and explicitly documented scanned TEST-HELPER literal DAEMON_DEPLOY_RUNNER (incident-frames.fixture.ts:30). Pins77/103/38; independent denominator257/per-mille300; exported180 unchanged. No production/scanner/filter/assertion/discovery changes. FIRST security baseline EXIT1:2failed10passed files;14failed989passed tests. Final restored pnpm test:security EXIT0:12passed files,1003passed tests,28.37s. Both omission drills EXIT1 in exact set-equality arms naming removed tuple/literal, not tally; finally restores proven by separate SHA256 checks against fresh live pre-mutation hashes. Detail comment-23b2324393734ec8a168e300c041efdf. Required broad gates before/after: typecheck0; foundation0(35files756tests); store0(53files688tests). Root/daemon both1 for disclosed foreign red; failing-path sets identical before/after (14root,15daemon), owned delta EMPTY. After root14failed424passed1skipped files/20failed10362passed91skipped tests; daemon15failed583passed files/20failed10680passed10skipped tests+1error. Missing deployment bridge/scanner/build errors routed existing task-0ca117e3; timeout existing task-0126aacd. No repo-wide-green claim. Scoped diff22add22delete, independent review clean, all leases released, handoff memory written. Wrapper to land both reported paths.",
+  "commits": [
+    {
+      "sha": "0e0f9568301abf067fe66451feccdb165f6b79e5",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-2702df88@2026-09-08T14:24:00Z",
+      "paths": [
+        "tests/security/layer-visibility-cases.ts",
+        "tests/security/boundary-roster.security.ts"
+      ],
+      "recordedBy": "qa-2702df88",
+      "recordedAt": "2026-09-08T19:50:07.100Z",
+      "treeId": "7963bbc1f8faf204ffc0a93f89b7438394598af9",
+      "status": "REVIEW",
+      "pushed": false,
+      "message": "QA hand-landing after re-running pnpm test:security (EXIT 0, 12 files / 1003 tests). Two owned test paths only."
+    }
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-2702df88@2026-09-08T14:24:00Z",
+    "at": "2026-09-08T19:50:07.100Z"
+  },
+  "completedAt": "2026-09-08T19:50:42.136Z",
+  "reviewCompletedAt": "2026-09-08T19:50:42.136Z",
+  "reviewSummary": "APPROVED. I filed the red this row closes, so I re-measured rather than accepting the fix on trust.\n\nRE-RUN BY ME: `pnpm test:security` EXIT 0 — 12 files / 1003 tests. My own 14:46Z baseline on that lane was EXIT 1, 14 failed / 989 passed of the same 1003. Red to green on exactly the tests I measured.\n\nDoD 1: the row re-ran the baseline FIRST and reproduced my vintage exactly (14 failed / 989 passed, 12 files) four hours later on an independent seat — that is what made my measurement a premise rather than a claim.\n\nDoD 2/3: the trap was avoided. Counts AND allowlists moved together — EXPECTED_PRIVATE_COUNT 75->77, EXPECTED_LITERAL_COUNT 102->103, EXPECTED_UNRESOLVED_LITERAL_COUNT 37->38, plus roster entries naming the declaring file. I verified each constant exists in production at HEAD rather than trusting the entries: `AGENT_PROVIDER_LAYER` agent-provider-port.ts:21, `DEPLOY_ROLLBACK_LAYER` rollback-port.ts:29, `DAEMON_DEPLOY_RUNNER` incident-frames.fixture.ts:30. Derived numbers reconcile: 257 = 77 private + 180 exported, 77/257 = 300 per mille. No scan arm deleted or weakened; no production file touched.\n\nDoD 5: `DAEMON_DEPLOY_RUNNER` is neither silently dropped nor silently swept in — admitted as a scanned TEST-HELPER literal with its reason at the entry.\n\nDoD 4: both omission drills red in the exact set-equality arms naming the removed tuple, not in a tally, with restores proven by SHA256 against fresh pre-mutation hashes. Non-vacuous by construction too — those same arms are what failed in my baseline, naming these constants.\n\nFOREIGN REDS DISCLOSED, one confirmed by me: root and daemon remain EXIT 1 for causes outside this row — the scheduler boundary scanner cannot tokenize `deploy-candidate-environment.ts` (routed to the governor, msg-74629bf2). Before/after failing sets identical, owned delta empty.\n\nHAND-LANDED 0e0f9568: no completion commit existed, both paths sat dirty. Not pushed."
 }

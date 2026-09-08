@@ -65,12 +65,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor promote BACKLOG -> PLANNING to keep the claim pool stocked; all 7 seats are currently busy, and BACKLOG rows are never offered to claim_next_task, so a freeing seat would otherwise idle. Filed today from live measurement. Order 139 keeps it behind the HIGH rows.",
+  "reopenReason": "Governor re-plan handoff. This row was BLOCKED with NO blockedResourceId and NO blockedOnTaskIds and no assignee, so nothing could ever auto-clear it - it needed a status flip or it would sit forever. It is not a defect and not a resource wait: it is a PLAN CONFLICT the worker was right to refuse rather than code around.\n\nTHE CONFLICT, for the architect who picks this up. Approved step 4 instructs admitting plain MIGRATION_FAILED@DAEMON_INGRESS into PUBLIC_PHASE_DETAILS. At measured HEAD 2569dd4e, apps/daemon/src/deployment/deploy-refusal-redaction.test.ts:241 explicitly lists that exact literal as an IMPOSTOR, and :246-250 invokes recordDeployReceipt and asserts [REDACTED]. Following step 4 as written would knowingly red a required daemon gate. That asserting consumer is absent from all six approved owned paths, so editing it would breach the unnamed-consumer scope rail. The worker correctly did neither, made no source edits, claimed no tests, and asked for an amendment.\n\nRESOLVE IT ONE OF TWO WAYS, deliberately - do not split the difference: either (a) amend steps 4/5 to include deploy-refusal-redaction.test.ts as a seventh owned path and update the exact policy coverage there, or (b) amend step 4 to keep plain MIGRATION_FAILED redacted and re-aim the fix at distinguishing a missing migration TOOL from a missing migration FILE without widening the allowlist. Note that PUBLIC_PHASE_DETAILS may only ever contain strings minted by production code with no caller text in them; widening it to satisfy a test would reintroduce the leak task-c78140e9 closed. Step 1 read-only is complete and step 2 was started; full evidence and exact commands are in the task comment.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "MEDIUM",
@@ -87,11 +87,17 @@
       "author": "worker-5d2b88e7",
       "content": "Measured plan-scope collision before any source edits, HEAD 2569dd4e2b0d89a998a41c6deee030d6b93cac8f. `Select-String -Path apps/daemon/src/deployment/deploy-refusal-redaction.test.ts -Pattern 'MIGRATION_FAILED@DAEMON_INGRESS' -Context 5,10` locates line 241 inside impostors; lines 246-250 call production recordDeployReceipt and assert detail [REDACTED]. Effective step 4 (activeAmendmentId null; amendments null, read directly from task JSON) instructs adding the tool-missing literal AND plain migration-failure literal. That changes an exact policy expectation in an unnamed consumer. Approved six owned paths exclude deploy-refusal-redaction.test.ts. Global shape/consumer rail requires stop/report, not silently take a seventh path. Please amend steps 4/5 to own that existing redaction test, move the now-approved plain literal from impostors into SAFE_PHASES and add new exact-member/filename-tail negative arms there; alternatively explicitly keep plain MIGRATION_FAILED redacted and amend the intended operator-view promise. No code edits, no mutations, no verification pass claimed. Step 1 completed; step 2 started only. Detail choice resolved: migration receipt text requires nonempty string, therefore use code-as-detail and exact composite MIGRATION_TOOL_MISSING@DAEMON_INGRESS: MIGRATION_TOOL_MISSING. Also ensure resumed drill instructions use live pre-mutation SHA256 + task-id backup, not base step6's superseded bare git-diff restore proof.",
       "timestamp": "2026-09-08T18:42:58.755Z"
+    },
+    {
+      "id": "comment-f630ab602fe74b4c994768ffb4bc558a",
+      "author": "worker-5d2b88e7",
+      "content": "Human continuation ~19:43Z: task-specific WORKING claim rejected INVALID_STATE (task PLANNING). Confirmed governor re-plan handoff and no step4/5 amendments. Requested targeted amendment + return to WORKING in shared chat msg-c28c67c157e74d83bdafb83921adcb51; bounded wait found no response. No code changes/tests. Leaving row PLANNING and claimable for architect, not undoing governor routing by re-blocking it. Serena handoff updated.",
+      "timestamp": "2026-09-08T19:47:32.569Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T17:18:11.126Z",
-  "updatedAt": "2026-09-08T18:42:59.157Z",
+  "updatedAt": "2026-09-08T19:47:32.569Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T18:02:22.676Z",
     "plannedStepCount": 6,
@@ -123,8 +129,10 @@
     "worker-5d2b88e7"
   ],
   "workStartedAt": "2026-09-08T18:40:24.360Z",
-  "blockedReason": "Approved step4 (activeAmendmentId null, amendments null verified on disk) instructs PUBLIC_PHASE_DETAILS to admit plain MIGRATION_FAILED@DAEMON_INGRESS. At measured HEAD 2569dd4e, apps/daemon/src/deployment/deploy-refusal-redaction.test.ts:241 explicitly lists that literal as impostor; :246-250 invokes recordDeployReceipt and asserts [REDACTED]. This asserting consumer is absent from all six approved owned paths. Following step4 would knowingly break required daemon gate; changing test without amendment violates unnamed-consumer scope rail. Please amend steps4/5 to include deploy-refusal-redaction.test.ts and update exact policy coverage (seventh path), or explicitly amend step4 to keep plain failure redacted. Step1 read-only complete, step2 started; no source edits or mutation, no tests claimed. Full evidence and exact commands in task comment; Serena handoff saved.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-08T18:42:59.157Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "Approved step4 (activeAmendmentId null, amendments null verified on disk) instructs PUBLIC_PHASE_DETAILS to admit plain MIGRATION_FAILED@DAEMON_INGRESS. At measured HEAD 2569dd4e, apps/daemon/src/deployment/deploy-refusal-redaction.test.ts:241 explicitly lists that literal as impostor; :246-250 invokes recordDeployReceipt and asserts [REDACTED]. This asserting consumer is absent from all six approved owned paths. Following step4 would knowingly break required daemon gate; changing test without amendment violates unnamed-consumer scope rail. Please amend steps4/5 to include deploy-refusal-redaction.test.ts and update exact policy coverage (seventh path), or explicitly amend step4 to keep plain failure redacted. Step1 read-only complete, step2 started; no source edits or mutation, no tests claimed. Full evidence and exact commands in task comment; Serena handoff saved.",
+  "blockedOnTaskIds": null
 }

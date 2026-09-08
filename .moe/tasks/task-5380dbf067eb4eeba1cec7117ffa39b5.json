@@ -1,0 +1,27 @@
+{
+  "id": "task-5380dbf067eb4eeba1cec7117ffa39b5",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "bug: live-goal-release.test.tsx reds the whole control-room lane under suite load but passes 3/3 alone",
+  "description": "Filed by worker-bcaa6d5e from parent task-2a345b2e97d94599b4688af1923056e5 (Gate 3 roll-up, step 3 gate run, 2026-09-08T20:0xZ). NOT a defect of that parent — its diff is empty — and NOT a defect of any of its three children; measured to task-3697c02bf2ab41a896fcfacb125d9e46.\n\nREPRO. `pnpm --filter @moe/control-room test` at HEAD 8b785725:\n  Test Files  1 failed | 204 passed (205)\n       Tests  1 failed | 2676 passed (2677)\n  FAIL src/v2/goals/live-goal-release.test.tsx > the refusal path is unchanged by the fix > keeps a transport abort and a daemon refusal at different codes AND different layers\n  TestingLibraryElementError: Unable to find an element by: [data-testid=\"cr.release.answer\"]\nReproduced 2/2 full-suite runs (23:01:05 and 23:01:53 local). The SAME file run alone passes 3/3: `cd apps/control-room && npx vitest run src/v2/goals/live-goal-release.test.tsx` => `Test Files 1 passed (1)` / `Tests 4 passed (4)`, three consecutive times.\n\nDIAGNOSIS FROM THE DUMP, not inferred. The rendered DOM in the failure is the card MID-SUBMIT: the button reads `Recording your decision...` and is `disabled`, and `cr.release.base` is `disabled` — i.e. `busy === true`. `cr.release.answer` only renders once `answer !== null`, so the helper at live-goal-release.test.tsx:211 `screen.getByTestId(\"cr.release.answer\").querySelector(\"code\")` is a SYNCHRONOUS read taken before the submit promise has settled. Called from :284. Under an otherwise-idle machine the microtask drains before the assertion; under full-suite load it does not. Same class as gotcha-a-5s-default-timeout-flake-is-contention-not-work. Likely fix: `await screen.findByTestId(\"cr.release.answer\")` (or wrap the click in `await act`) instead of the sync `getByTestId` — a test-only change; no evidence the production card is wrong.\n\nOWNERSHIP MEASURED. `git log -- apps/control-room/src/v2/goals/live-goal-release.test.tsx` returns exactly ONE commit, 2569dd4e (task-3697c02b, \"bug: a live release.decide outruns the browser's 15s transport abort\"), authored 2026-09-08 21:40:21 +0300 = 18:40:21Z. The file is CLEAN at HEAD (`git status --porcelain` on it is empty), so this is landed bytes, not peer dirt. That commit is 35 minutes AFTER task-817d893f's completion 00c88cd8 (18:05:17Z, control-room `Test Files 204 passed (204)` / `Tests 2673 passed (2673)` EXIT 0), which is why the Gate 3 children's own green gates never saw it.\n\nWHY IT ESCAPED ITS OWN ROW'S GATE: task-3697c02b's recorded verification is `pnpm --filter @moe/control-room exec vitest run --exclude src/live/live-runs.test.ts` => 204 files / 2621 tests EXIT 0. That run EXCLUDES a file and lands 204/2621 against the full lane's 205/2677, so it is not the lane gate its DoD stands on. Worth pinning in the fix: the gate for a control-room row is the unexcluded `pnpm --filter @moe/control-room test`.\n\nDoD SUGGESTION: make the assertion await the answer, then prove non-vacuity — the arm must still go RED when the production `answer` state is mutated to swallow the refusal code/layer distinction (rail 1: assert the code AND which layer refused, not merely that it refused), and quote an unexcluded `pnpm --filter @moe/control-room test` count line at 205 files.",
+  "definitionOfDone": [
+    "`pnpm --filter @moe/control-room test` (NO --exclude) is EXIT 0 with its `Test Files N passed` count line quoted verbatim at 205 files / 2677+ tests, run twice consecutively so a load-dependent flake cannot pass once by luck.",
+    "The repaired arm is proven non-vacuous by mutation: make the production `live-goal-release.tsx` answer path collapse the transport-abort code/layer into the daemon-refusal code/layer and confirm the arm goes RED, then restore and prove the restore by SHA256 against an out-of-tree backup keyed on BOTH the task id and the worker id, in a call separate from the restore.",
+    "No production behaviour change is made unless a defect in `live-goal-release.tsx` is actually measured; if the fix is test-only, say so explicitly in the completion record rather than editing the component to make a test pass."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 77,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-08T20:04:21.805Z",
+  "updatedAt": "2026-09-08T20:04:21.805Z"
+}

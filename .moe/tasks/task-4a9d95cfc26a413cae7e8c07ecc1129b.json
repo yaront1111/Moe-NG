@@ -63,7 +63,7 @@
       "completedAt": "2026-09-08T19:32:22.891Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -95,12 +95,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T17:49:20.617Z",
-  "updatedAt": "2026-09-08T19:32:52.236Z",
+  "updatedAt": "2026-09-08T19:48:12.355Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T18:40:12.129Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 1,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-09-08T19:48:12.355Z",
+    "wallClockMs": 4080226
   },
   "stepsCompleted": [
     "step-1",
@@ -120,7 +122,8 @@
   },
   "planApprovedAt": "2026-09-08T18:42:57.634Z",
   "contextFetchedBy": [
-    "worker-bcaa6d5e"
+    "worker-bcaa6d5e",
+    "qa-2702df88"
   ],
   "workStartedAt": "2026-09-08T19:18:20.098Z",
   "reviewStartedAt": "2026-09-08T19:32:52.236Z",
@@ -131,7 +134,38 @@
     "reportedAt": "2026-09-08T19:32:52.236Z"
   },
   "filesModified": [
-    "packages/benchmark/src/pre-freeze-pinned-documents.test.ts"
+    "packages/benchmark/src/pre-freeze-pinned-documents.test.ts",
+    ".moe/tasks/task-39e1628f68f54b8694bfd4a9a8a1b0ad.json",
+    ".moe/tasks/task-4a9d95cfc26a413cae7e8c07ecc1129b.json"
   ],
-  "completionSummary": "FIXED. One file, two hunks, both inside the one flaking `it`: packages/benchmark/src/pre-freeze-pinned-documents.test.ts.\n\nTHE DIAGNOSIS IS MEASURED, AND IT CORRECTS THE PLAN ON TWO POINTS. Phase timers on a 693ms run: `repo=164 auth=385 import=5 read=135 writes=1`. NINE git subprocess spawns are 98.7% of the arm. The plan's two cheapening theories are both false: the `node:fs` mock fired EXACTLY ONCE ungated (counter surfaced through a deliberate failing assert: `expected 1 to be -1`), and the module re-import is 5ms = 0.7%. So there was no cost to remove. The real finding: identical bytes on one host ran 352ms..698ms idle, 2317ms loaded, >5000ms in the filing — a ~15x spread. It is contention on process spawn, not work.\n\nDELIVERED: (1) a path gate on the mock — buys 0ms, and I say so; kept because ungated the FIRST readFileSync moves the tree, so a future dependency reading a file at load would move it BEFORE the first observation and the arm would pass at CORPUS_ROOT_DIRTY with its moved-tree coverage silently retired. (2) `}, 30_000);` on that arm ONLY, with five comment lines carrying the measurement. No retry, no exclusion, `vitest.config.ts` untouched, no other arm's budget changed (`grep -n \"^  }, \"` returns exactly one line).\n\nDoD 2: ten consecutive standalone runs, all `Tests 12 passed (12)`, arm at 684/692/670/662/655/698/667/660/352/674 ms — min 352, max 698, median 668.5. Margin 43x. CAVEAT: the host was quiet for all ten, so the margin is the evidence, not the count.\n\nDRILLS, BOTH PROCESS-LOCAL (peer held full-suite-gate over the root lane, which reads the files): (i) production refusal removed → `expected 'SPEC_BYTES_UNPINNED' to be 'CORPUS_ROOT_MOVED'`, red on the ASSERTION not a timeout, proving the tree still moves inside the window; (ii) budget → 200 → `Test timed out in 200ms`. Production file sha256 4ee941d5… identical before and after; `git diff` empty.\n\nDoD 4 NOT MET AND DISCLOSED, NOT FAKED. Root cannot be EXIT 0 at this HEAD: `packages/sched"
+  "completionSummary": "FIXED. One file, two hunks, both inside the one flaking `it`: packages/benchmark/src/pre-freeze-pinned-documents.test.ts.\n\nTHE DIAGNOSIS IS MEASURED, AND IT CORRECTS THE PLAN ON TWO POINTS. Phase timers on a 693ms run: `repo=164 auth=385 import=5 read=135 writes=1`. NINE git subprocess spawns are 98.7% of the arm. The plan's two cheapening theories are both false: the `node:fs` mock fired EXACTLY ONCE ungated (counter surfaced through a deliberate failing assert: `expected 1 to be -1`), and the module re-import is 5ms = 0.7%. So there was no cost to remove. The real finding: identical bytes on one host ran 352ms..698ms idle, 2317ms loaded, >5000ms in the filing — a ~15x spread. It is contention on process spawn, not work.\n\nDELIVERED: (1) a path gate on the mock — buys 0ms, and I say so; kept because ungated the FIRST readFileSync moves the tree, so a future dependency reading a file at load would move it BEFORE the first observation and the arm would pass at CORPUS_ROOT_DIRTY with its moved-tree coverage silently retired. (2) `}, 30_000);` on that arm ONLY, with five comment lines carrying the measurement. No retry, no exclusion, `vitest.config.ts` untouched, no other arm's budget changed (`grep -n \"^  }, \"` returns exactly one line).\n\nDoD 2: ten consecutive standalone runs, all `Tests 12 passed (12)`, arm at 684/692/670/662/655/698/667/660/352/674 ms — min 352, max 698, median 668.5. Margin 43x. CAVEAT: the host was quiet for all ten, so the margin is the evidence, not the count.\n\nDRILLS, BOTH PROCESS-LOCAL (peer held full-suite-gate over the root lane, which reads the files): (i) production refusal removed → `expected 'SPEC_BYTES_UNPINNED' to be 'CORPUS_ROOT_MOVED'`, red on the ASSERTION not a timeout, proving the tree still moves inside the window; (ii) budget → 200 → `Test timed out in 200ms`. Production file sha256 4ee941d5… identical before and after; `git diff` empty.\n\nDoD 4 NOT MET AND DISCLOSED, NOT FAKED. Root cannot be EXIT 0 at this HEAD: `packages/sched",
+  "commits": [
+    {
+      "sha": "8b78572535058daef8ddf1d3f55d0e5f33c3bd1a",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-bcaa6d5e@2026-09-08T19:18:03Z",
+      "paths": [
+        ".moe/tasks/task-39e1628f68f54b8694bfd4a9a8a1b0ad.json",
+        ".moe/tasks/task-4a9d95cfc26a413cae7e8c07ecc1129b.json",
+        "packages/benchmark/src/pre-freeze-pinned-documents.test.ts"
+      ],
+      "recordedBy": "worker-bcaa6d5e",
+      "recordedAt": "2026-09-08T19:33:26.003Z",
+      "treeId": "c7aeb68b26ed0db5393e1c833e4ba884e246efc5",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-bcaa6d5e@2026-09-08T19:18:03Z",
+    "at": "2026-09-08T19:33:26.003Z"
+  },
+  "completedAt": "2026-09-08T19:48:12.355Z",
+  "reviewCompletedAt": "2026-09-08T19:48:12.355Z",
+  "reviewSummary": "APPROVED with DoD 4 explicitly UNMET and independently verified as foreign. Commit 8b785725: one source file, +16/-2.\n\nDoD 2 REPRODUCED ON MY OWN MACHINE: ten consecutive standalone runs, `Tests 12 passed (12)` every time, 10/10. That is the clause one green run cannot satisfy, and it now has two independent ten-run samples.\n\nDoD 1 — a budget sized from a MEASUREMENT, not a picked number: `}, 30_000);` on the flaking arm alone, with the timings in the comment (693ms idle, 98.7% of it nine git spawns; 2317ms loaded; >5000ms in the filing — ~15x spread over identical bytes, so what varies is contention, not work). No retry, no exclusion, `vitest.config.ts` untouched, and `grep -n \"^  }, \"` returns exactly ONE line — so DoD 3 holds by measurement rather than claim.\n\nCREDIT FOR CORRECTING THE PLAN: its two cheapening theories were measured FALSE (the `node:fs` mock already fired exactly once; the re-import is 0.7%), so there was no cost to remove and the row says so instead of pretending the gate bought time. The gate was kept for a stated different reason — ungated, a future dependency reading a file at load would move the tree BEFORE the first observation and silently retire the arm's coverage.\n\nDRILLS ran process-local via a throwaway `--config` transform while a peer held the gate — the right call — with the production file's sha256 identical before and after. Drill (i) reds on the ASSERTION, not on a timeout, which is what proves the tree still moves inside the window.\n\nDoD 4 (root EXIT 0) IS NOT MET and was disclosed rather than faked. I confirmed the blocker and it is FOREIGN: `packages/scheduler/src/package-boundary.test.ts` fails with `boundary scan failed for apps/daemon/src/deployment/deploy-candidate-environment.ts: unterminated quoted source token`, from the module that landed with task-0ca117e3. Typecheck and the daemon suite are green, so the production file is fine. Routed to the governor for its own row (msg-74629bf2)."
 }
