@@ -108,6 +108,7 @@ const VALUE_BY_KEY: Readonly<Record<string, unknown>> = Object.freeze({
   probeIntervalMs: 60_000,
   probeRefusal: null,
   rollbackSha: null,
+  rollbackTarget: null,
   state: "UP",
 });
 

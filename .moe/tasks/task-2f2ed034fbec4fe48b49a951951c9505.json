@@ -84,35 +84,54 @@
     {
       "stepId": "step-5",
       "description": "BROWSER DECODER PRESERVES THE BINDING (DoD 2, \"Preserve exact-key readers\"). In live-deployments-health.ts: add `rollbackTarget` to `EnvironmentHealthView`, add the key to the `exactDataRecord` roster at :237, decode it with a nested decoder that follows the file's own stated rule - A NULL MEMBER AND AN UNREADABLE MEMBER ARE DIFFERENT: a malformed rollbackTarget must refuse the WHOLE frame (invalidResponse), never silently read as \"no target\", because that would hide a spendable control from an operator during an incident.\n\nThe nested decoder validates all three members: toReceiptRef 64-hex, sha non-empty text, imageDigest matching `sha256:<64 hex>`.\n\nIn live-deployments-health.test.ts: update the two key rosters at :453/:459-460, add the key to the fixtures, and add arms for (a) a well-formed target decoded through to the view, (b) null target -> view member null, frame still valid, (c) each malformed member in turn -> the WHOLE frame refuses with the invalid-response code, (d) the `delete partial[...]` missing-key arm extended to the new key.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/live/live-deployments-health.ts",
         "apps/control-room/src/live/live-deployments-health.test.ts"
       ],
-      "startedAt": "2026-09-08T01:53:36.892Z"
+      "modifiedFiles": [
+        "apps/control-room/src/live/live-deployments-health.ts",
+        "apps/control-room/src/live/live-deployments-health.test.ts"
+      ],
+      "note": "BROWSER DECODER NOW PRESERVES THE BINDING.\n\nPRODUCTION (live-deployments-health.ts):\n- New exported `EnvironmentRollbackTargetView {imageDigest, sha, toReceiptRef}`; `rollbackTarget: EnvironmentRollbackTargetView | null` added to EnvironmentHealthView, documented as the ONLY spendable authority with the no-lease/re-poll rule; rollbackSha's member doc now says DISPLAY ONLY and warns it can name the deploy running right now.\n- New module constants HEX64 (/^[0-9a-f]{64}$/u) and IMAGE_DIGEST (/^sha256:[0-9a-f]{64}$/u) plus a `hex64` guard, beside the existing text/nullableText/count/duration guards.\n- `rollbackTargetOf(value)` follows the file's own nested-decoder shape: null passes through, otherwise exactDataRecord(value, [\"imageDigest\",\"sha\",\"toReceiptRef\"]) and all three members shape-checked - toReceiptRef 64-hex, sha non-empty text, imageDigest sha256:<64 hex>.\n- `rollbackTarget` added to the exactDataRecord roster in mapDeploymentsHealthAnswer, and the NULL-VS-UNREADABLE guard extended with `(rollbackTarget === null && row.rollbackTarget !== null)`. That clause is the whole point of the step: without it a malformed target narrows to \"no target\" and hides a spendable control from an operator mid-incident. The member is carried into the returned view.\n\nTESTS (live-deployments-health.test.ts), all four required arm groups:\n- File header roster sentence and BOTH key rosters updated (decoded view now eleven members incl. status; wire FRAME roster now eleven incl. ok). Test name changed \"ten members\" -> \"eleven members\".\n- FRAME and healthy() fixtures carry the new key (a well-formed target and null respectively), and the carries-every-field-by-value arm asserts the full tuple.\n- New describe block: (a) well-formed target decoded through by value; (b) null target -> view member null AND frame still valid, with rollbackSha non-null in the same arm so \"display fact without authority\" is pinned; (c) an it.each of EIGHT malformed shapes, each refusing the WHOLE frame with DEPLOYMENTS_HEALTH_RESPONSE_INVALID @ CONTROL_ROOM_DEPLOYMENTS_HEALTH - toReceiptRef 63 chars, toReceiptRef non-hex (\"g\" x64, which a length-only check would pass), imageDigest missing the sha256: prefix, empty sha, non-string sha, an extra nested key, a missing member, and a non-object target; (d) the missing-key arm extended via `delete partial[\"rollbackTarget\"]`.\n\nVERIFICATION: `cd apps/control-room && npx vitest run src/live/live-deployments-health.test.ts` -> exit 0, `Test Files  1 passed (1)` / `Tests  52 passed (52)`.\n\nSTILL MID-LANDING, as risk 1 in the plan predicted: the five raw-body fixtures under apps/control-room/src/v2/ops/ have NOT been repaired yet, so the FULL control-room leg is expected red right now. That leg is step 6's job and its count line is quoted in step 8 - I am deliberately not reporting a control-room green taken before step 6.",
+      "startedAt": "2026-09-08T01:53:36.892Z",
+      "completedAt": "2026-09-08T01:55:30.984Z"
     },
     {
       "stepId": "step-6",
       "description": "REPAIR THE FIVE RAW-BODY FIXTURES that feed `mapDeploymentsHealthAnswer` and would otherwise refuse the frame the moment step 2 lands. Add `rollbackTarget: null` beside the existing `rollbackSha` in each:\n  apps/control-room/src/v2/ops/environments-daemon-frame.test.tsx:~110\n  apps/control-room/src/v2/ops/environments-gap.test.tsx:~40\n  apps/control-room/src/v2/ops/environments-section.test.tsx:~50\n  apps/control-room/src/v2/ops/live-environments-enumeration.test.tsx:~87\n  apps/control-room/src/v2/ops/live-environments.test.tsx:~73\n\nThis is a mechanical fixture repair - change nothing else in these files. If any of them turns out to build a DECODED view rather than a raw body, leave it alone and say so in the step note; the discriminator is whether the object carries `ok: true` and is passed to mapDeploymentsHealthAnswer.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/v2/ops/environments-daemon-frame.test.tsx",
         "apps/control-room/src/v2/ops/environments-gap.test.tsx",
         "apps/control-room/src/v2/ops/environments-section.test.tsx",
         "apps/control-room/src/v2/ops/live-environments-enumeration.test.tsx",
         "apps/control-room/src/v2/ops/live-environments.test.tsx"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/ops/environments-daemon-frame.test.tsx",
+        "apps/control-room/src/v2/ops/environments-gap.test.tsx",
+        "apps/control-room/src/v2/ops/environments-section.test.tsx",
+        "apps/control-room/src/v2/ops/live-environments-enumeration.test.tsx",
+        "apps/control-room/src/v2/ops/live-environments.test.tsx",
+        "apps/daemon/src/deployment/rollback-target.js",
+        "apps/daemon/src/http/affordance-rollback-offers.js"
+      ],
+      "note": "FIVE FIXTURES REPAIRED, and a SIXTH CONSUMER THE PLAN DID NOT NAME was found and fixed.\n\nFIXTURE REPAIR, mechanical, `rollbackTarget: null` added beside the existing `rollbackSha` and nothing else changed in any of the five:\n  environments-daemon-frame.test.tsx:110, environments-gap.test.tsx:40, environments-section.test.tsx:50,\n  live-environments-enumeration.test.tsx:87, live-environments.test.tsx:73\nThe step's own discriminator was applied to each: all five carry `ok: true` and feed mapDeploymentsHealthAnswer, so all five are RAW BODIES and all five were in scope. `git grep -n rollbackSha -- apps/control-room/src` (minus the decoder's own file) returns exactly these five and nothing more, so the roster was complete.\n\nenvironments-daemon-frame.test.tsx deserves a note: it does not merely carry a fixture, it SCRAPES the daemon route's member names out of source text (VIEW_KEYS, live-deployments-health.ts readonly-member regex) and asserts set-equality against its VALUE_BY_KEY map, then sweeps `it.each(VIEW_KEYS)` omitting one member at a time. Adding the key to VALUE_BY_KEY is what keeps that set-equality true; the sweep now also proves an omitted rollbackTarget refuses the frame. That file was already the strongest consumer of this shape and it stays that way.\n\nTHE UNNAMED SIXTH CONSUMER - a real red I caused, disclosed rather than routed around. The first full control-room run came back `Test Files  1 failed | 199 passed (200)` with:\n  Error [ERR_MODULE_NOT_FOUND]: Cannot find module 'D:\\projexts\\moe-next\\apps\\daemon\\src\\http\\affordance-rollback-offers.js' imported from ...\\affordance-read.ts\n  at src/live/live-runs.test.ts:293\nlive-runs.test.ts spawns node --experimental-strip-types against the DAEMON sources. This repo TRACKS a one-line `.js` bridge beside every daemon `.ts` module (73 of them under src/http alone; `git ls-files` confirms they are committed, not build output), whose entire content is `export * from \"./<name>.ts\";`. A new TS module without its bridge is invisible to any consumer that resolves through the `.js` specifier. Created the two missing bridges, byte-for-byte in the established form:\n  apps/daemon/src/deployment/rollback-target.js\n  apps/daemon/src/http/affordance-rollback-offers.js\nNeither is a test file, so both are production paths and both are reported above.\n\nVERIFICATION (the full package leg, foreground): `cd apps/control-room && npx vitest run` -> exit 0, `Test Files  200 passed (200)` / `Tests  2628 passed (2628)`. Step 8 re-runs this through the package's own `pnpm --filter @moe/control-room test` script and quotes that count line as the epic-rail-1 evidence; this run is the step-6 landing proof.\n\nRisk 1 in the plan is now discharged: steps 2, 5 and 6 landed together and the control-room leg is green for the first time since step 2 changed the served shape.",
+      "startedAt": "2026-09-08T01:55:33.381Z",
+      "completedAt": "2026-09-08T01:57:15.640Z"
     },
     {
       "stepId": "step-7",
       "description": "THE ROUND TRIP (DoD 3) - the arm that proves this row actually shipped a spendable control, in a new file.\n\nAgainst a REAL store and the REAL command registry, seed two DEPLOYED receipts for one environment, then:\n1. read the production affordance surface and take the `deployment.rollback` offer from `nextAllowedCommands` - never a hand-built envelope;\n2. read the production health frame and take `rollbackTarget.toReceiptRef` - never a hand-built receipt id;\n3. dispatch through the real registry as the CONFIGURED OPERATOR PRINCIPAL with payload exactly `{ environment, toReceiptRef, restoreDatabase: false }` and the offer's commandId/expectedVersion/targetAggregateId.\n\nASSERT THE ADMISSION, not merely the absence of a refusal: the request must get PAST rollback-command.ts:98-101. Whatever terminal outcome the unwired-ports test daemon reaches, the arm must FAIL if the code is DEPLOY_ROLLBACK_RECEIPT_INVALID, DEPLOY_ROLLBACK_TARGET_INVALID, DEPLOY_ROLLBACK_REQUEST_INVALID or EXPECTED_VERSION_CONFLICT - those four are exactly the ways a wrong offer or a wrong receipt ref would show up, and pinning them by name is what makes the arm non-vacuous.\n\nREFUSAL ARMS, each asserting CODE AND LAYER (global rail 1):\n- non-operator principal holding EVERY capability (so AUTHORIZE cannot answer first) -> OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION. Copy the technique from task-b22462cf's registry arm.\n- MCP exclusion intact: assert `deployment.rollback` is in MCP_EXCLUDED_COMMAND_KINDS and that the MCP allowlist does not serve it - derived from the implementation seam, not from a hand-copied roster.\n- an environment with only one DEPLOYED receipt -> the surface emits NO offer AND the health frame's rollbackTarget is null, so there is no authority to spend.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/http/affordance-rollback-round-trip.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/http/affordance-rollback-round-trip.test.ts"
-      ]
+      ],
+      "startedAt": "2026-09-08T01:57:19.705Z"
     },
     {
       "stepId": "step-8",
@@ -153,16 +172,22 @@
       "author": "worker-319873d7",
       "content": "SEAT COLLISION ON THIS ROW — TWO LIVE SESSIONS SHARING workerId worker-319873d7. Filed by the session that YIELDED. All times UTC.\n\nWHY THIS COMMENT AND NOT report_blocked: the other session is ALIVE and AHEAD. `report_blocked` flips the row out of WORKING, which does not pause a live session — it breaks it at whatever point it has reached (measured on task-78eedd8e 2026-09-07: a correctly-reported collision block stranded a step IN_PROGRESS for hours and needed a governor to hand-reopen). Nothing here is a defect in the delivered work.\n\nTHE CENSUS, in the order it was taken:\n1. My `complete_step` for step-1 was refused `[INVALID_STATE] Step is in COMPLETED state`. Disk showed step-1 completedAt 01:48:27.752Z — 2 s BEFORE my own step-1 vitest run even started (04:48:29 +0300 = 01:48:29Z). So the step-1 NOTE on disk is the other session's, not mine.\n2. The step-1 BYTES on disk are mine: rollback-target.test.ts carries 7 arms / 111 lines; the other session's note records \"6 passed (6)\" and explicitly observes \"rollback-target.ts came back from disk with a rewritten header between my Write and my next read\". That is it seeing my overwrite. Both versions implement the same rule and the same exported symbols; the surviving one is green.\n3. `git status` at 01:49:43Z showed apps/daemon/src/http/deployments-health-read.{ts,test.ts} dirty — files I never touched — with mtimes 04:49:09 and 04:49:43 (+0300), i.e. written DURING my session and AFTER my rollback-target.ts (04:47:48), and importing it.\n4. My `complete_step` for step-2 was refused the same way: step-2 completedAt 01:50:35.016Z, step-3 startedAt 01:50:39.200Z.\n5. Decisive liveness proof at 01:52:14Z: `apps/daemon/src/http/affordance-rollback-offers.{ts,test.ts}` had just appeared untracked — step-3's deliverable, mid-write. Not a stale lease, not leftover debris: a step that began 95 s earlier producing its files in real time.\n\nWHAT I VERIFIED BEFORE YIELDING (fresh, against the delivered tree at d457110b, so the row's step-1/step-2 evidence is not single-sourced):\n- `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/deployment/rollback-target.test.ts src/http/deployments-health-read.test.ts` -> exit 0, \"Test Files 2 passed (2) / Tests 44 passed (44)\".\n- `... src/daemon-entry-deployments-health.test.ts` -> exit 0, \"Test Files 1 passed (1) / Tests 9 passed (9)\".\n- `pnpm --filter @moe/daemon typecheck` -> exit 0, no diagnostics.\n- rollbackSha IS BYTE-IDENTICAL to before the row: `git show d457110b~1:apps/daemon/src/http/deployments-health-read.ts | grep -n rollbackSha` gives `:276  rollbackSha: source.deploys?.previous?.sha ?? null,` and HEAD has the same expression at `:302`. Only the line number moved. The declared type `readonly rollbackSha: string | null` is unchanged.\n\nTWO THINGS THE NEXT SESSION ON THIS ROW SHOULD KNOW, because neither is in a step note:\n(a) I added `apps/daemon/src/deployment/rollback-target.js` (`export * from \"./rollback-target.ts\";`) and declared it via moe.declare_files — step-1's modifiedFiles list omits it. Census: EVERY non-test, non-fixture .ts under src/deployment and src/http has such a sibling bridge; the module is unresolvable without it. It is committed at d457110b.\n(b) STEP 8'S GATE LIST NAMES A FILE AT THE WRONG PATH. `daemon-entry-deployments-health.test.ts` lives at `apps/daemon/src/`, NOT `apps/daemon/src/http/`. A vitest filter naming the http path matches ZERO files and STILL EXITS 0 with no count line for it — resolve the leg by `git ls-files` before quoting it as evidence.\n\nPER-FILE CAP, for the epic-final hardening row rather than mid-row: deployments-health-read.ts is now 358 lines (was 331) — under the 400 split line, over the 250 target.\n\nPeer dirt untouched throughout, never treated as a stop condition: apps/daemon/src/preview/preview-goal-landing.test.ts, tests/e2e/control-room/{contract-goal.spec.ts,lane-contract-goal.ts,lane-multi-node-workspace.ts}, .moe/resources/*.json, Moe-NG_Deep_Review_2026-09-05.md.",
       "timestamp": "2026-09-08T01:52:51.536Z"
+    },
+    {
+      "id": "comment-e54d6acbf55e464996c020aa58408591",
+      "author": "worker-319873d7",
+      "content": "SECOND SEAT ON THIS ROW — YIELDING (session B, wrapper-RESUMEd 2026-09-08 ~01:54:15Z under the same workerId worker-319873d7). I edited NOTHING, staged nothing, and did not touch board status. Everything below was produced by THIS session at the UTC times stated, so a grader reads it as an independent drive and not as session A's evidence reported twice.\n\n## LIVENESS CENSUS — four measurements, files changing while I watched\nThe wrapper preamble said \"a prior session died\". It had not. I wrote zero bytes and observed:\n- 01:54:2xZ `git status --porcelain -- apps/control-room/src/live apps/daemon` -> only `M live-deployments-health.ts`.\n- 01:54:53Z `stat` -> `live-deployments-health.test.ts` mtime 01:54:48Z (5 s earlier), still CLEAN vs HEAD.\n- 01:55:06Z -> that same file is now `M` (+12/-5). A write landed between my two censuses.\n- 01:56:15Z -> the FIVE step-6 fixture files (`environments-daemon-frame`, `environments-gap`, `environments-section`, `live-environments-enumeration`, `live-environments`) flipped clean -> `M`.\n- 01:57:00Z -> `.moe/tasks/<id>.json`: step-5 COMPLETED at 01:55:30.984Z, step-6 IN_PROGRESS; and `?? apps/daemon/src/http/affordance-rollback-offers.js` appeared between 01:56:15Z and 01:57:00Z.\nSession A is ALIVE, AHEAD, and self-correcting. Per `mem:yield-do-not-block-when-the-other-session-is-alive-and-ahead`, report_blocked here would flip the row out of WORKING and BREAK the live session mid-step, so I did not call it.\n\n## INDEPENDENT GATE EVIDENCE (run by session B, against the delivered tree at HEAD e46d4996 + session A's dirty control-room work)\n1. Focused daemon leg, package's own flags preserved (narrowing drops `--testTimeout=30000` and fakes timeout reds — `mem:gotcha-narrowing-a-package-test-script-drops-its-flags-and-fakes-a-red`):\n   `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/deployment/rollback-target.test.ts src/http/deployments-health-read.test.ts src/daemon-entry-deployments-health.test.ts src/http/affordance-rollback-offers.test.ts src/http/affordance-read.test.ts src/http/affordance-read-planning.test.ts src/http/affordance-deployment-goals.test.ts src/http/affordance-agent-provider-offers.test.ts`\n   -> EXIT 0, `Test Files 8 passed (8)`, `Tests 147 passed (147)`, Start at 04:55:58 (+0300 = 01:55:58Z). Count line present, so the run was not vacuous.\n   PATH NOTE for step 8: `daemon-entry-deployments-health.test.ts` lives at `apps/daemon/src/`, NOT `src/http/`. A filter on the http path matches zero files and STILL exits 0 with no count line. All eight legs above were resolved by `git ls-files` first.\n2. `pnpm --filter @moe/daemon typecheck` -> EXIT 0 (`tsc --project tsconfig.json`), 01:56:1xZ.\n3. I deliberately did NOT run `pnpm --filter @moe/control-room test`: at that moment step 6 was mid-flight, and plan risk 1 says steps 2/5/6 are ONE landing. A control-room count line taken before step 6 lands is inadmissible.\n\n## CORRECTION to the `.js` bridge claim in `task-2f2ed034...-handoff`\nThat memory says a module under `src/http` is \"unresolvable without\" its sibling `export * from \"./<name>.ts\";` bridge. MEASURED FALSE on this host. Census: 78 non-test `.ts` in `src/http`, 5 without a bridge — 4 fixture modules plus `affordance-rollback-offers.ts` (at the time I measured). Node probe run from `apps/daemon/src/http` BEFORE the bridge existed, on node v24.16.0:\n  `node --input-type=module -e \"for (const m of ['./affordance-agent-provider-offers.js','./affordance-rollback-offers.js']) { try { await import(m); console.log('RESOLVED', m); } catch (e) { console.log((e.code||e.name)+' '+m); } }\"`\n  -> `RESOLVED ./affordance-agent-provider-offers.js` AND `RESOLVED ./affordance-rollback-offers.js`.\nNode 24 remaps a relative `.js` specifier onto the sibling `.ts` natively, so the bridge is a CONVENTION here, not a load-bearing requirement — `apps/daemon` runs `.ts` directly (`start` = `node ./src/daemon-main.ts`, `main` = `./src/index.ts`). Session A has since added the bridge anyway, which keeps the row consistent with the other 73 production modules. No defect either way; recorded so a later reader does not chase a phantom runtime break.\n\n## PEER DIRT (noted, untouched, not a stop condition)\n`?? apps/daemon/src/preview/preview-goal-landing.test.ts` is foreign to this row and predates my session.",
+      "timestamp": "2026-09-08T01:57:30.380Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T19:38:54.771Z",
-  "updatedAt": "2026-09-08T01:53:36.892Z",
+  "updatedAt": "2026-09-08T01:57:30.380Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T01:40:32.419Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 15,
-    "executedStepCount": 4
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "worker-4d8571e7",
@@ -176,7 +201,9 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-08T01:46:18.991Z",
@@ -244,6 +271,25 @@
       "treeId": "4ab8a49031d76f8b98ef32026102b5bfa4331c8b",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "e46d499651e933f549cbb8adc6317cb1fad7e8c4",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-319873d7@2026-09-08T01:46:28Z",
+      "paths": [
+        ".moe/tasks/task-2f2ed034fbec4fe48b49a951951c9505.json",
+        "apps/control-room/src/live/live-deployments-health.ts",
+        "apps/daemon/src/http/affordance-read.ts",
+        "apps/daemon/src/http/affordance-rollback-offers.test.ts",
+        "apps/daemon/src/http/affordance-rollback-offers.ts"
+      ],
+      "recordedBy": "worker-319873d7",
+      "recordedAt": "2026-09-08T01:53:56.122Z",
+      "treeId": "622801cb3ffb82782000d406d6e573a905c4ad5d",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -252,17 +298,25 @@
     "apps/daemon/src/deployment/rollback-target.test.ts",
     "apps/daemon/src/deployment/rollback-target.ts",
     "apps/daemon/src/http/deployments-health-read.test.ts",
-    "apps/daemon/src/http/deployments-health-read.ts"
+    "apps/daemon/src/http/deployments-health-read.ts",
+    "apps/control-room/src/live/live-deployments-health.ts",
+    "apps/daemon/src/http/affordance-read.ts",
+    "apps/daemon/src/http/affordance-rollback-offers.test.ts",
+    "apps/daemon/src/http/affordance-rollback-offers.ts"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-4d8571e7@2026-09-08T01:40:44Z",
-    "at": "2026-09-08T01:50:23.321Z"
+    "sessionId": "worker-319873d7@2026-09-08T01:46:28Z",
+    "at": "2026-09-08T01:53:56.122Z"
   },
   "workStartedAt": "2026-09-08T01:47:01.037Z",
   "declaredFiles": [
     "apps/daemon/src/deployment/rollback-target.js"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/deployment/rollback-target.test.ts",
+    "apps/daemon/src/deployment/rollback-target.ts"
   ]
 }

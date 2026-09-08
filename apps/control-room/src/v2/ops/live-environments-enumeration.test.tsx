@@ -84,7 +84,8 @@ function healthOf(environment: string): DeploymentsHealthOutcome {
     environment, incident: null, lastError: null,
     lastProbe: { at: "2026-09-07T09:55:00.000Z", latencyMs: 44, status: "SUCCESS" },
     latencySeries: { points: [{ at: "2026-09-07T09:55:00.000Z", latencyMs: 44 }], windowMinutes: 60 },
-    ok: true, probeIntervalMs: 60_000, probeRefusal: null, rollbackSha: null, state: "UP",
+    ok: true, probeIntervalMs: 60_000, probeRefusal: null, rollbackSha: null,
+    rollbackTarget: null, state: "UP",
   });
   if (answer.status !== "DEPLOYMENTS_HEALTH") throw new Error(`health fixture did not decode: ${answer.code}`);
   return answer;

@@ -58,6 +58,13 @@ export interface EnvironmentProbeRefusalView {
   readonly layer: string;
 }
 
+/** The daemon's rollback binding: which receipt, which image, which commit. */
+export interface EnvironmentRollbackTargetView {
+  readonly imageDigest: string;
+  readonly sha: string;
+  readonly toReceiptRef: string;
+}
+
 export interface EnvironmentHealthView {
   readonly status: "DEPLOYMENTS_HEALTH";
   readonly environment: string;
@@ -131,6 +138,11 @@ function exactDataRecord(
 
 const text = (value: unknown): value is string => typeof value === "string" && value.length > 0;
 const nullableText = (value: unknown): value is string | null => value === null || text(value);
+/** The daemon's receipt id: a sha256 hex digest, and the rollback payload's own gate. */
+const HEX64 = /^[0-9a-f]{64}$/u;
+/** `sha256:<64 hex>`, the form `docker inspect` reports an image digest in. */
+const IMAGE_DIGEST = /^sha256:[0-9a-f]{64}$/u;
+const hex64 = (value: unknown): value is string => text(value) && HEX64.test(value);
 const count = (value: unknown): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 /**
@@ -231,6 +243,24 @@ function probeRefusalOf(value: unknown): EnvironmentProbeRefusalView | null {
 }
 
 /**
+ * THE MEMBER AN OPERATOR SPENDS DURING AN INCIDENT, so every field is shape-checked rather than
+ * merely present. `toReceiptRef` is the daemon's receipt id and the rollback handler's payload
+ * gate is `/^[0-9a-f]{64}$/u`, so anything else could only ever refuse at dispatch; `imageDigest`
+ * is docker's own `sha256:<64 hex>`. A malformed member here refuses the WHOLE frame at the
+ * caller (see the null-vs-unreadable rule below) rather than reading as "no target", which would
+ * hide a spendable control from the one person who needs it.
+ */
+function rollbackTargetOf(value: unknown): EnvironmentRollbackTargetView | null {
+  if (value === null) return null;
+  const row = exactDataRecord(value, ["imageDigest", "sha", "toReceiptRef"]);
+  if (row === null || !text(row.sha) || !hex64(row.toReceiptRef)
+    || typeof row.imageDigest !== "string" || !IMAGE_DIGEST.test(row.imageDigest)) return null;
+  return Object.freeze({
+    imageDigest: row.imageDigest, sha: row.sha, toReceiptRef: row.toReceiptRef,
+  });
+}
+
+/**
  * A NULL MEMBER AND AN UNREADABLE MEMBER ARE DIFFERENT. Every nested decoder above answers null
  * for both, so each one is checked against the raw member here: a malformed `lastProbe` must
  * refuse the whole frame rather than read as "no probe yet", which is what would put a green
@@ -243,7 +273,7 @@ export function mapDeploymentsHealthAnswer(
   if (refusal !== null) return refusal;
   const row = exactDataRecord(body, [
     "environment", "incident", "lastError", "lastProbe", "latencySeries", "ok",
-    "probeIntervalMs", "probeRefusal", "rollbackSha", "state",
+    "probeIntervalMs", "probeRefusal", "rollbackSha", "rollbackTarget", "state",
   ]);
   // `probeIntervalMs` is checked HERE rather than through a nested decoder because it has no
   // legitimate null: a malformed one must refuse the whole frame, never be dropped to leave a
@@ -257,13 +287,15 @@ export function mapDeploymentsHealthAnswer(
   const probeRefusal = probeRefusalOf(row.probeRefusal);
   // `latencySeries` has no legitimate null, so ANY null answer refuses the frame outright.
   const latencySeries = latencySeriesOf(row.latencySeries);
+  const rollbackTarget = rollbackTargetOf(row.rollbackTarget);
   if ((lastProbe === null && row.lastProbe !== null) || (lastError === null && row.lastError !== null)
     || (incident === null && row.incident !== null) || latencySeries === null
+    || (rollbackTarget === null && row.rollbackTarget !== null)
     || (probeRefusal === null && row.probeRefusal !== null)) return invalidResponse();
   return Object.freeze({
     environment: row.environment, incident, lastError, lastProbe, latencySeries,
-    probeIntervalMs: row.probeIntervalMs, probeRefusal,
-    rollbackSha: row.rollbackSha, state: row.state, status: "DEPLOYMENTS_HEALTH" as const,
+    probeIntervalMs: row.probeIntervalMs, probeRefusal, rollbackSha: row.rollbackSha,
+    rollbackTarget, state: row.state, status: "DEPLOYMENTS_HEALTH" as const,
   });
 }
 

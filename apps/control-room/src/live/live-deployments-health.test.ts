@@ -4,7 +4,7 @@
  * The frames below are the shape `projectDeploymentsHealth` in
  * apps/daemon/src/http/deployments-health-read.ts actually serves - exact keys
  * `environment, incident, lastError, lastProbe, latencySeries, ok, probeIntervalMs,
- * probeRefusal, rollbackSha, state` - so a
+ * probeRefusal, rollbackSha, rollbackTarget, state` - so a
  * daemon-side shape change reds this file rather than reaching production as a blank card.
  */
 
@@ -39,6 +39,9 @@ const FRAME = {
   probeIntervalMs: 5_000,
   probeRefusal: null,
   rollbackSha: "b".repeat(40),
+  rollbackTarget: {
+    imageDigest: `sha256:${"c".repeat(64)}`, sha: "b".repeat(40), toReceiptRef: "d".repeat(64),
+  },
   state: "DOWN",
 } as const;
 
@@ -46,7 +49,8 @@ const healthy = (): Record<string, unknown> => ({
   environment: "staging", incident: null, lastError: null,
   lastProbe: { at: "2026-09-07T09:04:00.000Z", latencyMs: 88, status: "SUCCESS" },
   latencySeries: { points: [{ at: "2026-09-07T09:04:00.000Z", latencyMs: 88 }], windowMinutes: 60 },
-  ok: true, probeIntervalMs: 900_000, probeRefusal: null, rollbackSha: null, state: "UP",
+  ok: true, probeIntervalMs: 900_000, probeRefusal: null, rollbackSha: null,
+  rollbackTarget: null, state: "UP",
 });
 
 const replyOf = (status: number, body: unknown): (() => Promise<Response>) =>
@@ -79,6 +83,9 @@ describe("the deployment-health read client decodes the served frame", () => {
       probeIntervalMs: 5_000,
       probeRefusal: null,
       rollbackSha: "b".repeat(40),
+      rollbackTarget: {
+        imageDigest: `sha256:${"c".repeat(64)}`, sha: "b".repeat(40), toReceiptRef: "d".repeat(64),
+      },
       state: "DOWN",
       status: "DEPLOYMENTS_HEALTH",
     });
@@ -446,18 +453,73 @@ describe("the deployment-health read client preserves the effective probe interv
    * The arms above all add or corrupt a key; none of them notices a member that stops being
    * served, because a shrunken frame simply refuses and an arm expecting a refusal would pass.
    */
-  it("decodes exactly the ten members the daemon serves, no more and no fewer", () => {
+  it("decodes exactly the eleven members the daemon serves, no more and no fewer", () => {
     const answer = mapDeploymentsHealthAnswer(200, { ...FRAME });
     if (answer.status !== "DEPLOYMENTS_HEALTH") throw new Error("the frame must decode");
     expect(Object.keys(answer).sort()).toEqual([
       "environment", "incident", "lastError", "lastProbe", "latencySeries", "probeIntervalMs",
-      "probeRefusal", "rollbackSha", "state", "status",
+      "probeRefusal", "rollbackSha", "rollbackTarget", "state", "status",
     ]);
     // The WIRE roster, stated separately: `ok` is consumed and replaced by `status`, so the two
     // rosters differ by exactly that one substitution and neither can be derived from the other.
     expect(Object.keys(FRAME).sort()).toEqual([
       "environment", "incident", "lastError", "lastProbe", "latencySeries", "ok",
-      "probeIntervalMs", "probeRefusal", "rollbackSha", "state",
+      "probeIntervalMs", "probeRefusal", "rollbackSha", "rollbackTarget", "state",
     ]);
+  });
+});
+
+/**
+ * THE SPEND AUTHORITY, decoded. `rollbackTarget` is the only member of this frame an operator
+ * DISPATCHES with, so it is the one member where "quietly read as null" is a safety fault rather
+ * than a display fault: it would hide a working rollback control during an incident.
+ */
+describe("the decoder preserves the rollback binding it cannot invent", () => {
+  const TARGET = Object.freeze({
+    imageDigest: `sha256:${"c".repeat(64)}`, sha: "b".repeat(40), toReceiptRef: "d".repeat(64),
+  });
+  const INVALID = {
+    code: "DEPLOYMENTS_HEALTH_RESPONSE_INVALID",
+    layer: "CONTROL_ROOM_DEPLOYMENTS_HEALTH",
+    status: "ERROR",
+  };
+  const viewOf = (body: Record<string, unknown>): Record<string, unknown> =>
+    mapDeploymentsHealthAnswer(200, body) as unknown as Record<string, unknown>;
+
+  it("carries a well-formed target through to the view by value", () => {
+    const answer = viewOf({ ...healthy(), rollbackTarget: { ...TARGET } });
+    expect(answer["status"]).toBe("DEPLOYMENTS_HEALTH");
+    expect(answer["rollbackTarget"]).toEqual(TARGET);
+  });
+
+  it("reads a NULL target as no control, leaving the rest of the frame valid", () => {
+    const answer = viewOf({ ...healthy(), rollbackSha: "e".repeat(40), rollbackTarget: null });
+    expect(answer["status"]).toBe("DEPLOYMENTS_HEALTH");
+    expect(answer["rollbackTarget"]).toBeNull();
+    // A display sha WITHOUT a target is legitimate and must not be mistaken for authority.
+    expect(answer["rollbackSha"]).toBe("e".repeat(40));
+  });
+
+  /**
+   * EACH MEMBER MALFORMED IN TURN REFUSES THE WHOLE FRAME. A null answer from the nested decoder
+   * is checked against the RAW member at the caller, so none of these can narrow to "no target".
+   */
+  it.each([
+    ["a toReceiptRef that is not 64 hex", { ...TARGET, toReceiptRef: "d".repeat(63) }],
+    ["a toReceiptRef carrying non-hex characters", { ...TARGET, toReceiptRef: "g".repeat(64) }],
+    ["an imageDigest that is not sha256:<64 hex>", { ...TARGET, imageDigest: "c".repeat(64) }],
+    ["an empty sha", { ...TARGET, sha: "" }],
+    ["a non-string sha", { ...TARGET, sha: 42 }],
+    ["an extra nested key", { ...TARGET, environment: "production" }],
+    ["a missing member", { imageDigest: TARGET.imageDigest, sha: TARGET.sha }],
+    ["a target that is not an object at all", "d".repeat(64)],
+  ])("REFUSES the whole frame on %s", (_label, rollbackTarget) => {
+    expect(mapDeploymentsHealthAnswer(200, { ...healthy(), rollbackTarget })).toEqual(INVALID);
+  });
+
+  it("REFUSES a frame that omits rollbackTarget entirely", () => {
+    const partial: Record<string, unknown> = healthy();
+    delete partial["rollbackTarget"];
+    expect(mapDeploymentsHealthAnswer(200, partial)).toEqual(INVALID);
   });
 });
