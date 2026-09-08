@@ -117,8 +117,8 @@
       "completedAt": "2026-09-08T20:47:22.958Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-2702df88",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -173,12 +173,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T14:31:18.565Z",
-  "updatedAt": "2026-09-08T20:48:39.397Z",
+  "updatedAt": "2026-09-08T20:55:47.787Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T18:20:58.228Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-08T20:55:47.787Z",
+    "wallClockMs": 9289559
   },
   "contextFetchedBy": [
     "architect-1a475444",
@@ -246,20 +248,42 @@
       "treeId": "2e0850e3030ec9bdcb41e9e1f1a36efc65bbb1ef",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "c5311ac5fda016fa5cd5dbd7182eaf398a1aa499",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-812079a7@2026-09-08T19:47:38Z",
+      "paths": [
+        ".moe/tasks/task-0126aacd753b42a188718c8e87cda0e2.json",
+        ".moe/tasks/task-f9dc8291ad864a6cb5ca0536d3603a43.json",
+        "apps/daemon/package.json",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts",
+        "CONTRIBUTING.md"
+      ],
+      "recordedBy": "worker-812079a7",
+      "recordedAt": "2026-09-08T20:50:12.705Z",
+      "treeId": "32589f291fc2a15fb3efe5931d8cff373d418288",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
     "apps/daemon/src/work/foundation-attempt-windows.test.ts",
     "apps/daemon/src/work/foundation-attempt-service.test.ts",
     "apps/daemon/package.json",
-    "CONTRIBUTING.md"
+    "CONTRIBUTING.md",
+    ".moe/tasks/task-0126aacd753b42a188718c8e87cda0e2.json",
+    ".moe/tasks/task-f9dc8291ad864a6cb5ca0536d3603a43.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-812079a7@2026-09-08T18:48:52Z",
-    "at": "2026-09-08T18:48:57.932Z"
+    "kind": "completion",
+    "sessionId": "worker-812079a7@2026-09-08T19:47:38Z",
+    "at": "2026-09-08T20:50:12.705Z"
   },
   "reviewStartedAt": "2026-09-08T20:48:33.614Z",
   "verification": {
@@ -268,5 +292,17 @@
     "outputTail": " Test Files  598 passed (598)\n      Tests  10712 passed | 9 skipped (10721)\n   Start at  23:41:16\n   Duration  305.43s (transform 27.01s, setup 0ms, import 311.18s, tests 828.69s, environment 28ms)",
     "reportedAt": "2026-09-08T20:48:33.614Z"
   },
-  "completionSummary": "Fixed by LANE SEPARATION, not timeout inflation. Evidence in comment-176d98a9 (measurement), comment-6511ea5a (live lane + partition + count+1), comment-eaec9d40 (repo legs + baseline attribution), comment-f763f35e (drills + hostile read).\n\nDoD1 MEASURED FRESH, 4 runs at the launch seam, foreground, gate held, 1 worker: 63.0 / 165.0 / 216.3 / 123.6 s. The arm's 100s/122s comment is CORRECTED, not inherited — 3.4x spread, no usable trend.\n\nDoD2 THE ARM EXECUTED: [LIVE_PROVIDER_DISCOVERY] {\"executed\":true,\"platform\":\"win32\",\"refusalCode\":null} with forwardedLaunches:1 every run. The :816-819 runtime-absent branch was never taken, so this is real session evidence, not a vacuous green.\n\nDoD3 DEPENDENCE REMOVED WITHOUT WEAKENING. Not deleted, not skipped, not conditional, not reduced to \"did not throw\". The arm keeps every physical assertion (tree released after proven settlement, boundary really reached via pin root + one forwarded launch, producer argv/environment, OBSERVED + natural EXITED, integer exit, TELEMETRY_STREAM_ANOMALOUS@TELEMETRY_SCHEMA, non-SUCCEEDED, frozen record, replay/conflict fences). It is now registered with UNCONDITIONAL `it` and runtime absence FAILS with CLAUDE_RUNTIME_PATH_MISSING@RUNTIME or CLAUDE_RUNTIME_PLATFORM_UNSUPPORTED@RUNTIME — strictly stronger than the old green absence branch. Sibling arms untouched.\n\nDoD4 BOUND JUSTIFIED, AND UNCHANGED AT 240_000. Margins 177.0 / 75.0 / 23.7 / 116.4 s; worst leaves 9.9%. No N is defensible against an unbounded external latency with a 3.4x spread and no trend, so raising it would only re-arm the failure at N. The lane changed instead; 240_000 stays a real bound on the lane that intentionally reports honest external failure.\n\nDoD5 EXIT 0 AT BOTH COUNTS. Current roster: Test Files 598 passed (598), Tests 10712 passed | 9 skipped (10721). Count+1 (598->599): Test Files 599 passed (599), Tests 10713 passed | 9 skipped (10722). Throwaway created with create-new semantics, path-fenced, removed, proven abs"
+  "completionSummary": "Fixed by LANE SEPARATION, not timeout inflation. Evidence in comment-176d98a9 (measurement), comment-6511ea5a (live lane + partition + count+1), comment-eaec9d40 (repo legs + baseline attribution), comment-f763f35e (drills + hostile read).\n\nDoD1 MEASURED FRESH, 4 runs at the launch seam, foreground, gate held, 1 worker: 63.0 / 165.0 / 216.3 / 123.6 s. The arm's 100s/122s comment is CORRECTED, not inherited — 3.4x spread, no usable trend.\n\nDoD2 THE ARM EXECUTED: [LIVE_PROVIDER_DISCOVERY] {\"executed\":true,\"platform\":\"win32\",\"refusalCode\":null} with forwardedLaunches:1 every run. The :816-819 runtime-absent branch was never taken, so this is real session evidence, not a vacuous green.\n\nDoD3 DEPENDENCE REMOVED WITHOUT WEAKENING. Not deleted, not skipped, not conditional, not reduced to \"did not throw\". The arm keeps every physical assertion (tree released after proven settlement, boundary really reached via pin root + one forwarded launch, producer argv/environment, OBSERVED + natural EXITED, integer exit, TELEMETRY_STREAM_ANOMALOUS@TELEMETRY_SCHEMA, non-SUCCEEDED, frozen record, replay/conflict fences). It is now registered with UNCONDITIONAL `it` and runtime absence FAILS with CLAUDE_RUNTIME_PATH_MISSING@RUNTIME or CLAUDE_RUNTIME_PLATFORM_UNSUPPORTED@RUNTIME — strictly stronger than the old green absence branch. Sibling arms untouched.\n\nDoD4 BOUND JUSTIFIED, AND UNCHANGED AT 240_000. Margins 177.0 / 75.0 / 23.7 / 116.4 s; worst leaves 9.9%. No N is defensible against an unbounded external latency with a 3.4x spread and no trend, so raising it would only re-arm the failure at N. The lane changed instead; 240_000 stays a real bound on the lane that intentionally reports honest external failure.\n\nDoD5 EXIT 0 AT BOTH COUNTS. Current roster: Test Files 598 passed (598), Tests 10712 passed | 9 skipped (10721). Count+1 (598->599): Test Files 599 passed (599), Tests 10713 passed | 9 skipped (10722). Throwaway created with create-new semantics, path-fenced, removed, proven abs",
+  "touchedFiles": [
+    "apps/daemon/src/work/foundation-attempt-service.test.ts",
+    "vitest.drill-f9dc8291.config.mts",
+    "apps/daemon/src/work/foundation-attempt-windows.test.ts",
+    ".moe/tmp-contributing-812079a7.txt",
+    "CONTRIBUTING.md",
+    ".moe/tmp-lane-contract-812079a7.txt",
+    "apps/daemon/package.json"
+  ],
+  "completedAt": "2026-09-08T20:55:47.787Z",
+  "reviewCompletedAt": "2026-09-08T20:55:47.787Z",
+  "reviewSummary": "APPROVED. Landed c5311ac5 (4 source paths + board JSON), tree clean.\n\nFIXED BY LANE SEPARATION, NOT TIMEOUT INFLATION — the bound stays at 240_000. Against measured launches of 63.0 / 165.0 / 216.3 / 123.6 s (3.4x spread, no trend), no N is defensible, and the row says so instead of picking a bigger number.\n\nRE-RUN BY ME, scoped rather than the full daemon suite (disclosure below): the deterministic lane over both changed files with `--testNamePattern=\"^(?!.*LIVE_PROVIDER:)\"` gives `Test Files 2 passed (2)`, `Tests 130 passed | 1 skipped (131)`. That ONE skip is precisely the live arm the pattern excludes — so the exclusion reaches exactly one case and nothing else, measured rather than asserted.\n\nTHE EXCLUSION IS GUARDED, which is what makes the design safe. A control suite asserts the LIVE_PROVIDER: title appears exactly once and in no SUITE title, asserts the arm carries an unconditional `it` (explicit `not.toContain` for `it.runIf(WINDOWS_ONLY)` and `it.skip`), and DERIVES the exclusion regex from `package.json` itself — so a guard that stopped matching the real script fails rather than passing on a restatement.\n\nDoD 3 verified by diff: the only removed assertion is the green-on-absence early return. Every physical assertion survives, and runtime absence now FAILS with `CLAUDE_RUNTIME_PATH_MISSING@RUNTIME` — strictly stronger than the branch it replaced.\n\nDISCLOSED: I did not re-run the full daemon suite. full-suite-gate was peer-held from 20:48Z with a convoy behind it, so I ran the scoped lane and released my queue slot. Its recorded 598 files / 10712 passed | 9 skipped reconciles with my own 598 / 10702 | 8 earlier today: +10 tests from the new arms, +1 skip from the filtered case.\n\nNOT A DEFECT, worth knowing: `.github/workflows/cross-host.yml` runs the ordinary daemon gate on both hosts and has no step for `test:live:foundation-attempt`, so nothing runs the live lane automatically — it rests on the CONTRIBUTING discipline."
 }
