@@ -106,7 +106,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:13:59.198Z",
-  "updatedAt": "2026-09-08T04:27:09.496Z",
+  "updatedAt": "2026-09-08T04:27:35.056Z",
   "dependsOn": [
     "task-6ec875f4dd5f4f2ab97e46f71bf57b2b",
     "task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4",
@@ -277,6 +277,22 @@
       "treeId": "1f268a05e028c66f1049d10e2219ab414f0b99eb",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "00a56caefbc5d0d34436504f17e886f1bdf48f08",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-319873d7@2026-09-08T04:07:46Z",
+      "paths": [
+        ".moe/tasks/task-7683a432eb3f4e87b1eb0cbc6e3a55ff.json",
+        "tests/e2e/control-room/deploy-incident-rollback.spec.ts"
+      ],
+      "recordedBy": "worker-319873d7",
+      "recordedAt": "2026-09-08T04:27:35.056Z",
+      "treeId": "23aa92793378442524265797d9edfc074c159c1c",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -284,17 +300,17 @@
     ".moe/tasks/task-99f364e3a6104ee993b6820c580a52fb.json",
     ".moe/tasks/task-f008f29a38d54ae7a10e97cad1c4443d.json",
     "tests/e2e/control-room/deploy-rollback-incident.spec.ts",
-    "tests/e2e/control-room/lane-rollback-incident.ts"
+    "tests/e2e/control-room/lane-rollback-incident.ts",
+    "tests/e2e/control-room/deploy-incident-rollback.spec.ts"
   ],
   "unattributedPaths": [
-    "apps/control-room/src/v2/approvals/incident-card.tsx",
-    "tests/e2e/control-room/deploy-incident-rollback.spec.ts"
+    "apps/control-room/src/v2/approvals/incident-card.tsx"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-319873d7@2026-09-08T04:07:28Z",
-    "at": "2026-09-08T04:27:09.495Z"
+    "sessionId": "worker-319873d7@2026-09-08T04:07:46Z",
+    "at": "2026-09-08T04:27:35.056Z"
   },
   "workStartedAt": "2026-09-08T03:25:53.187Z",
   "reviewStartedAt": "2026-09-08T03:56:37.932Z",
@@ -409,6 +425,7 @@
   ],
   "touchedFiles": [
     "tests/e2e/control-room/lane-rollback-incident.ts",
-    "tests/e2e/control-room/deploy-rollback-incident.spec.ts"
+    "tests/e2e/control-room/deploy-rollback-incident.spec.ts",
+    "tests/e2e/control-room/deploy-incident-rollback.spec.ts"
   ]
 }
