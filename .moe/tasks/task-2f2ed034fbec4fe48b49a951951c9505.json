@@ -10,9 +10,97 @@
     "Run fresh focused daemon tests with nonzero executed counts, pnpm typecheck, and the control-room package gate when served read or decoder shape changes. Parent task-85895a88a2484d8589046b2030efd445 is the concrete consumer and must depend on this row."
   ],
   "taskRails": [],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "LEAF FIRST: land the shared rollback-target resolver, with no consumer yet.\n\nCreate `resolveRollbackTarget(state: EnvironmentDeployState | null): RollbackTarget | null` where `RollbackTarget = { readonly imageDigest: string; readonly sha: string; readonly toReceiptRef: string }`.\n\nTHE RULE, and it is the whole point of the module: project `state.receipts` down to the receipts with `outcome === \"DEPLOYED\" && imageDigest !== null` - that projection is the deploy history that actually ran. The LAST of those is the running image; the one BEFORE it is the rollback target. Fewer than two -> null. Never use `previous` from EnvironmentDeployState: it is positional in the raw list and includes REFUSED receipts, which is the exact bug this row closes.\n\nDocument in the module header WHY the positional `previous` is wrong, citing deploy-ledger.ts:73 (\"never collapsed\") and rollback-command.ts:98-101 (the handler's admission rule this resolver mirrors).\n\nTests (rollback-target.test.ts), each asserting the returned receiptId, not just non-null:\n- two DEPLOYED receipts -> target is the older one\n- [DEPLOYED A, DEPLOYED B, REFUSED C] -> target is A, NOT B and NOT C (this is the arm the old rollbackSha gets wrong)\n- [DEPLOYED A, REFUSED B] -> null: A is what is running, there is nothing behind it\n- a DEPLOYED receipt with `imageDigest: null` is skipped, not offered\n- one DEPLOYED receipt -> null; empty receipts -> null; null state -> null\n- the returned toReceiptRef matches /^[0-9a-f]{64}$/u, so it satisfies rollback-command.ts:47 by construction",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/rollback-target.ts",
+        "apps/daemon/src/deployment/rollback-target.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/deployment/rollback-target.ts",
+        "apps/daemon/src/deployment/rollback-target.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "SERVE THE BINDING on /deployments/health/read (DoD 2).\n\nAdd `rollbackTarget: { imageDigest, sha, toReceiptRef } | null` to `DeploymentsHealthView`, computed in `projectDeploymentsHealth` as `resolveRollbackTarget(source.deploys)`. This needs NO new IO: `DeploymentsHealthSource.deploys` already carries the full `receipts` list.\n\nLEAVE `rollbackSha` EXACTLY AS IT IS (`source.deploys?.previous?.sha ?? null`). Add a comment on both members stating the contract explicitly: rollbackSha is a DISPLAY fact (\"what was deployed before this receipt\") and rollbackTarget is the ONLY spend authority; a card renders and spends rollbackTarget, and MUST NOT construct a rollback from rollbackSha. STALE-BINDING BEHAVIOUR, state it in the same comment: the binding is re-read on every poll and carries no lease - a target that has been superseded between poll and dispatch refuses DEPLOY_ROLLBACK_RECEIPT_INVALID or EXPECTED_VERSION_CONFLICT at the handler, which is the intended fail-closed outcome, so the card must re-poll after any refusal rather than retry the same tuple.\n\nUpdate the exact-key roster at deployments-health-read.test.ts:265 to include the new key.\n\nTests: (a) two DEPLOYED receipts -> rollbackTarget.toReceiptRef is the older receipt's id and rollbackSha equals it too; (b) THE DISAGREEMENT ARM - [DEPLOYED A, DEPLOYED B, REFUSED C] -> rollbackSha is B.sha (positional previous) while rollbackTarget.toReceiptRef is A's id, with a comment saying this is the incoherence the row closes; (c) [DEPLOYED A, REFUSED B] -> rollbackSha non-null, rollbackTarget NULL, so no control authority; (d) no deploys -> both null; (e) the key roster arm passes with exactly the new key added.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/deployments-health-read.ts",
+        "apps/daemon/src/http/deployments-health-read.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "MINT THE OFFER (DoD 1). New sibling of affordance-agent-provider-offers.ts - read that file first; it is the template for a non-BootstrapCommandKind offer.\n\n`resolveRollbackOffers({ projectId, store }): { offers: readonly RollbackOffer[]; refused: string | null }` where RollbackOffer is `{ aggregateId, inputSchemaVersion, kind: \"deployment.rollback\", version }`.\n\nEXACT VALUES, each traced to the handler and none invented:\n- `aggregateId` = projectId, because rollback-command.ts:85 refuses DEPLOY_ROLLBACK_TARGET_INVALID on anything else.\n- `version` = `store.getAggregateVersion(projectId)`, because rollback-command.ts:164 commits an empty leg against the PROJECT aggregate at `envelope.expectedVersion`.\n- `inputSchemaVersion` = a local `DEPLOY_ROLLBACK_SCHEMA_VERSION = \"deployment.rollback/1\"`. Opaque per runtime-affordance.ts:49; this publishes no new kind and touches no digest mirror.\n\nAT MOST ONE OFFER, and only when at least one environment has a rollback target: make ONE `readDeployLedger(store, projectId)` call and test `[...states.values()].some(state => resolveRollbackTarget(state) !== null)`. Empty -> `{ offers: [], refused: null }`; that is DoD 1's \"missing/unverifiable receipt yields no rollback control authority\".\n\nFAIL CLOSED on a store throw: return no offers plus a refusal code (follow AGENT_PROVIDER_STORE_UNREADABLE's shape with a rollback-specific constant). Never fabricate a version.\n\nHeader comment must say why there is ONE project-scoped offer and not one per environment (NextAllowedCommand has no environment member; the handler fences the project aggregate; per-environment authority is `rollbackTarget` on the health frame) and why it mints NO ChainStep (agent-wrapper staffs from surface.steps and vocabulary.ts:279 already makes this kind never-staffable).\n\nTests drive the PRODUCTION resolver against a real store: no receipts -> no offer; one DEPLOYED -> no offer; two DEPLOYED -> exactly one offer whose version equals `store.getAggregateVersion(projectId)` read independently and whose aggregateId is the projectId; [DEPLOYED, REFUSED] in one environment plus two DEPLOYED in another -> exactly one offer; unreadable store -> no offer and the exact refusal code.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/affordance-rollback-offers.ts",
+        "apps/daemon/src/http/affordance-rollback-offers.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/affordance-rollback-offers.ts",
+        "apps/daemon/src/http/affordance-rollback-offers.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "THREAD THE OFFER INTO THE SURFACE. In `readSurface`, after the agent-provider block (affordance-read.ts:~455) and OUTSIDE any goal loop, call `resolveRollbackOffers({ projectId: config.projectId, store: config.store })` and push each entry through the existing local `offer(kind, aggregateId, version, inputSchemaVersion)` helper. Push NO ChainStep.\n\nGATE THE CALL BEHIND THE EXISTING `deployBound`: a project with no bound deploy target cannot have a deploy receipt (deploy-command.ts refuses DEPLOY_TARGET_MISSING before any docker spawn), so the ledger walk is pure cost there. Comment it, the way the set_target block at :433 is commented.\n\nAdd one arm to affordance-read.test.ts ONLY IF the existing fixture makes it cheap; the dedicated coverage lives in steps 3 and 7. Do NOT touch the set-equality census at :539-585 - it filters on SERVED_BOOTSTRAP_KINDS and must keep ignoring this kind. If any existing arm in that file goes red, STOP and report rather than widening the census.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/affordance-read.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "BROWSER DECODER PRESERVES THE BINDING (DoD 2, \"Preserve exact-key readers\"). In live-deployments-health.ts: add `rollbackTarget` to `EnvironmentHealthView`, add the key to the `exactDataRecord` roster at :237, decode it with a nested decoder that follows the file's own stated rule - A NULL MEMBER AND AN UNREADABLE MEMBER ARE DIFFERENT: a malformed rollbackTarget must refuse the WHOLE frame (invalidResponse), never silently read as \"no target\", because that would hide a spendable control from an operator during an incident.\n\nThe nested decoder validates all three members: toReceiptRef 64-hex, sha non-empty text, imageDigest matching `sha256:<64 hex>`.\n\nIn live-deployments-health.test.ts: update the two key rosters at :453/:459-460, add the key to the fixtures, and add arms for (a) a well-formed target decoded through to the view, (b) null target -> view member null, frame still valid, (c) each malformed member in turn -> the WHOLE frame refuses with the invalid-response code, (d) the `delete partial[...]` missing-key arm extended to the new key.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/live/live-deployments-health.ts",
+        "apps/control-room/src/live/live-deployments-health.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "REPAIR THE FIVE RAW-BODY FIXTURES that feed `mapDeploymentsHealthAnswer` and would otherwise refuse the frame the moment step 2 lands. Add `rollbackTarget: null` beside the existing `rollbackSha` in each:\n  apps/control-room/src/v2/ops/environments-daemon-frame.test.tsx:~110\n  apps/control-room/src/v2/ops/environments-gap.test.tsx:~40\n  apps/control-room/src/v2/ops/environments-section.test.tsx:~50\n  apps/control-room/src/v2/ops/live-environments-enumeration.test.tsx:~87\n  apps/control-room/src/v2/ops/live-environments.test.tsx:~73\n\nThis is a mechanical fixture repair - change nothing else in these files. If any of them turns out to build a DECODED view rather than a raw body, leave it alone and say so in the step note; the discriminator is whether the object carries `ok: true` and is passed to mapDeploymentsHealthAnswer.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/environments-daemon-frame.test.tsx",
+        "apps/control-room/src/v2/ops/environments-gap.test.tsx",
+        "apps/control-room/src/v2/ops/environments-section.test.tsx",
+        "apps/control-room/src/v2/ops/live-environments-enumeration.test.tsx",
+        "apps/control-room/src/v2/ops/live-environments.test.tsx"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "THE ROUND TRIP (DoD 3) - the arm that proves this row actually shipped a spendable control, in a new file.\n\nAgainst a REAL store and the REAL command registry, seed two DEPLOYED receipts for one environment, then:\n1. read the production affordance surface and take the `deployment.rollback` offer from `nextAllowedCommands` - never a hand-built envelope;\n2. read the production health frame and take `rollbackTarget.toReceiptRef` - never a hand-built receipt id;\n3. dispatch through the real registry as the CONFIGURED OPERATOR PRINCIPAL with payload exactly `{ environment, toReceiptRef, restoreDatabase: false }` and the offer's commandId/expectedVersion/targetAggregateId.\n\nASSERT THE ADMISSION, not merely the absence of a refusal: the request must get PAST rollback-command.ts:98-101. Whatever terminal outcome the unwired-ports test daemon reaches, the arm must FAIL if the code is DEPLOY_ROLLBACK_RECEIPT_INVALID, DEPLOY_ROLLBACK_TARGET_INVALID, DEPLOY_ROLLBACK_REQUEST_INVALID or EXPECTED_VERSION_CONFLICT - those four are exactly the ways a wrong offer or a wrong receipt ref would show up, and pinning them by name is what makes the arm non-vacuous.\n\nREFUSAL ARMS, each asserting CODE AND LAYER (global rail 1):\n- non-operator principal holding EVERY capability (so AUTHORIZE cannot answer first) -> OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION. Copy the technique from task-b22462cf's registry arm.\n- MCP exclusion intact: assert `deployment.rollback` is in MCP_EXCLUDED_COMMAND_KINDS and that the MCP allowlist does not serve it - derived from the implementation seam, not from a hand-copied roster.\n- an environment with only one DEPLOYED receipt -> the surface emits NO offer AND the health frame's rollbackTarget is null, so there is no authority to spend.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/http/affordance-rollback-round-trip.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/http/affordance-rollback-round-trip.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "GATES (DoD 4). Run in the foreground and QUOTE THE COUNT LINE from each - exit 0 without a `Test Files N passed` line means nothing ran.\n\n1. Focused daemon leg over every file this row touched or created: rollback-target, deployments-health-read, daemon-entry-deployments-health, affordance-rollback-offers, affordance-rollback-round-trip, affordance-read, affordance-read-planning, affordance-deployment-goals, affordance-agent-provider-offers. Use the package's own script flags - narrowing `pnpm --filter @moe/daemon test` to a file list DROPS `--testTimeout=30000` and fakes timeout reds on a clean tree.\n2. `pnpm --filter @moe/control-room test` - MANDATORY under epic rail 1 and because this row changes a served read shape and its decoder. Quote the count line.\n3. `pnpm typecheck` - exit 0, and quote the last line.\n4. `pnpm --filter @moe/daemon test` (full daemon leg) as the path-attributed baseline: record failures at the merge-base and at HEAD, and confirm the delta intersected with this row's owned paths is EMPTY. Disclose any foreign red verbatim with its file paths - never hide it, never call it ours.\n\nRecord each command and its result in the step note. The named verification command for complete_task is the focused daemon leg from (1).",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-9",
+      "description": "ADVERSARIAL SELF-REVIEW before complete_task. Read the whole diff as an attacker:\n\n- CONCURRENCY: two surface reads racing a deploy that lands between the ledger walk and the version read - the offer carries a stale project version and refuses EXPECTED_VERSION_CONFLICT at dispatch. Confirm that is the FAIL-CLOSED outcome and that the documented stale-binding behaviour in step 2 describes it truthfully.\n- Does the offer ever appear for a project with zero deploys, or for an environment whose only DEPLOYED receipt is the running one? Both must be no.\n- Is `rollbackSha` byte-identical to before? `git diff` the two arms that assert it; if either moved, the change is out of contract.\n- MUTATION DRILLS, at least three, each proving an arm goes RED: (a) make resolveRollbackTarget return `state.previous` -> the disagreement arm in step 2 must red; (b) make the offer's expectedVersion `0` -> the round trip must red; (c) drop the `deployBound` gate -> nothing should red, which is the honest result to REPORT rather than to hide, since it is a cost guard and not a correctness one. Restore every mutant and PROVE the restore: `git diff` for tracked files, SHA256 against an out-of-tree backup for the new untracked ones, in a call separate from the restore.\n- Confirm the five fixture files carry no change beyond the added key.\n\nThen complete_task with the focused daemon leg's fresh output as `verification`, and report EVERY created/modified path in modifiedFiles.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": "worker-319873d7",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -28,5 +116,35 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T19:38:54.771Z",
-  "updatedAt": "2026-09-07T19:38:54.771Z"
+  "updatedAt": "2026-09-08T01:46:28.216Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-08T01:40:32.419Z",
+    "plannedStepCount": 9,
+    "plannedDistinctFileCount": 15
+  },
+  "contextFetchedBy": [
+    "worker-4d8571e7",
+    "worker-319873d7"
+  ],
+  "planSizeWarnings": [
+    "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 15 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-08T01:46:18.991Z",
+  "planningNotes": {
+    "approachesConsidered": "WIDEN NextAllowedCommand TO CARRY THE RECEIPT REF - REJECTED. Its key roster is closed (runtime-affordance.ts:34) and widening it is a shared-contract rotation across the four digest mirrors, which epic rail 1 puts out of scope here. The receipt reference therefore has to ride the health read, which is what DoD 2 already asks for.\n\nONE OFFER PER ENVIRONMENT (the deploy-target resolver's axis) - REJECTED. NextAllowedCommand has no environment member and the handler fences the PROJECT aggregate, so N per-environment offers would be N identical tuples differing only by commandId - indistinguishable to the card and impossible to match. The per-environment gate lives where it can actually be read: `rollbackTarget` on the health frame, null when that environment has nothing valid to roll back to. The project-level offer is withheld entirely when NO environment has a target, which is the DoD-1 sentence at the only granularity the offer shape can express.\n\nRE-DERIVING `rollbackSha` FROM THE NEW RESOLVER - REJECTED. It would silently change a served value three landed test files assert on (deployments-health-read.test.ts:374, daemon-entry-deployments-health.test.ts:219-220) for no gain. rollbackSha stays exactly `previous.sha` - \"what was deployed before this receipt\", a display fact for the Environments surface. `rollbackTarget` is the new and ONLY spend authority. Step 2 pins the case where they legitimately disagree so the difference is a tested contract rather than an accident.\n\nCALLING readPreviousDeployReceipt PER ENVIRONMENT IN THE AFFORDANCE READ - REJECTED. Each call re-walks the whole decision ledger in 200-row pages, so four environments would be four full walks on every affordance poll. One readDeployLedger call returns the whole map.",
+    "codebaseInsights": "MEASURED AT HEAD 412da959 (not the 4ee9efe1 in the description; both gaps are still open).\n\n(1) `git grep -n 'deployment.rollback' -- apps/daemon/src/http apps/daemon/src/bootstrap/bootstrap-contracts.ts` -> EXIT 1, no matches. STILL TRUE.\n(2) `git grep -n 'toReceiptRef' -- apps/daemon/src/http apps/control-room/src` -> EXIT 1, no matches. STILL TRUE.\n\nTHE HANDLER'S EXACT ADMISSION RULE, read from rollback-command.ts, not assumed:\n- :85 `envelope.targetAggregateId !== projectId` -> DEPLOY_ROLLBACK_TARGET_INVALID. The offer's targetAggregateId IS the projectId.\n- :164 commits a leg `{aggregateId: projectId, expectedVersion: envelope.expectedVersion, events: []}`. So the offer's expectedVersion MUST be the PROJECT aggregate's version, `store.getAggregateVersion(projectId)`. Any other number refuses EXPECTED_VERSION_CONFLICT in front of an operator.\n- :44-49 exact payload: keys.length===3, exactly environment/toReceiptRef/restoreDatabase; toReceiptRef must match /^[0-9a-f]{64}$/u; restoreDatabase must be boolean.\n- :98-101 the selected receipt must satisfy ALL of: readDeployReceipt ok, receipt.environment === payload environment, outcome === \"DEPLOYED\", imageDigest !== null. Anything else -> DEPLOY_ROLLBACK_RECEIPT_INVALID.\n- `deployReceiptId` (deploy-receipt-contracts.ts:118) is a sha256 hex digest, so a real receiptId satisfies the 64-hex gate by construction.\n\nTHE INCOHERENCE THIS ROW EXISTS TO CLOSE. deployments-health-read.ts:276 serves `rollbackSha: source.deploys?.previous?.sha ?? null`. `previous` (deploy-ledger.ts:109) is POSITIONAL in the raw receipt list and is NOT filtered by outcome or imageDigest, and readDeployLedger keeps REFUSED receipts in the list (:73 \"never collapsed\"). So today the card can be shown a rollbackSha whose receipt the handler refuses. The running image is the LAST receipt with outcome DEPLOYED and imageDigest non-null; the rollback target is the one BEFORE that in the DEPLOYED-only projection. Those two rules differ exactly when a refused deploy is the most recent receipt.\n\nOFFER SHAPE PRECEDENT: affordance-agent-provider-offers.ts is the exact template for a kind that is NOT a BootstrapCommandKind - it mints an offer and NO ChainStep, and affordance-read.ts:250-266 has a local `offer(kind, aggregateId, version, inputSchemaVersion)` helper that casts commandKind. Confirmed safe: the set-equality census at affordance-read.test.ts:539-585 filters on `SERVED_BOOTSTRAP_KINDS.includes(entry.commandKind)`, so a non-bootstrap offer does not enter it and no count pin moves. No ChainStep is also REQUIRED, not merely convenient: agent-wrapper staffs from surface.steps, and vocabulary.ts:279 already returns null (never staffable) for this kind.\n\n`inputSchemaVersion` is an OPAQUE non-empty daemon string - packages/contracts/src/runtime/runtime-affordance.ts:49 only checks isNonEmptyString, and generated-client.ts:18 documents it as opaque. The repo convention is `<kind>/1`. So \"deployment.rollback/1\" is a local constant and NOT a shared-contract rotation: epic rail 1's four GENERATED_CONTRACT_DIGEST mirrors are NOT touched by this row, because no new command kind is published - the kind already exists in the vocabulary (task-b22462cf, DONE).\n\nEXACT-KEY ROSTERS FOR THE HEALTH FRAME - exactly three, enumerated by `git grep -n '\"probeIntervalMs\", \"probeRefusal\"'`:\n  apps/control-room/src/live/live-deployments-health.ts:237 (PRODUCTION exactDataRecord - an unknown key REFUSES the frame)\n  apps/control-room/src/live/live-deployments-health.test.ts:460\n  apps/daemon/src/http/deployments-health-read.test.ts:265\nPlus five RAW-BODY fixtures that feed mapDeploymentsHealthAnswer and will refuse the moment the daemon adds a key: environments-daemon-frame.test.tsx:110, environments-gap.test.tsx:40, environments-section.test.tsx:50, live-environments-enumeration.test.tsx:87, live-environments.test.tsx:73. daemon-entry-deployments-health.test.ts:219 reads rollbackSha but carries NO key roster, so it stays untouched as long as rollbackSha keeps its current meaning - which this plan preserves deliberately.",
+    "risks": "1. THE EXACT-KEY DECODER IS A HARD COUPLING. The moment step 2 adds a key to the daemon frame, live-deployments-health.ts:237 refuses every frame until step 5 lands, and the five raw-body fixtures red until step 6. Steps 2, 5 and 6 are ONE landing - do not stop between them and do not report a green control-room leg taken before step 6.\n\n2. DO NOT MAKE THE OFFER'S expectedVersion ANYTHING BUT THE PROJECT AGGREGATE VERSION. It is easy to reach for the deploy aggregate or the rollback guard; both refuse at dispatch. The round trip in step 7 is what proves it, and it is the single most valuable arm in this plan.\n\n3. THE HOT PATH. readDeployLedger pages the entire command-decision ledger. Keep it to ONE call per surface read, behind the existing `deployBound` guard, and never inside the per-goal loop - affordance-read.ts:433 carries the same warning for the deploy-target resolver.\n\n4. FAIL CLOSED, ALWAYS. A store throw in the resolver yields NO offer plus a refusal code - never a fabricated version. An invented expectedVersion refuses in front of an operator, which is strictly worse than offering nothing.\n\n5. RAIL 1 (global): every refusal arm asserts the CODE and the LAYER, and the non-operator arm must be reached from a session that holds every capability, or AUTHORIZE answers first and the arm goes vacuous. Copy the technique from the reviewSummary of task-b22462cf, which pinned exactly this.\n\n6. GATE EVIDENCE: `pnpm --filter <pkg> test` prints a count line only when tests actually ran. Quote `Test Files N passed` for every leg. The control-room leg is MANDATORY here (epic rail 1) because this row changes a served read shape and its browser decoder.",
+    "keyFiles": [
+      "apps/daemon/src/deployment/rollback-command.ts",
+      "apps/daemon/src/deployment/deploy-ledger.ts",
+      "apps/daemon/src/http/deployments-health-read.ts",
+      "apps/daemon/src/http/affordance-agent-provider-offers.ts",
+      "apps/daemon/src/http/affordance-read.ts",
+      "apps/control-room/src/live/live-deployments-health.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-08T01:46:21.161Z"
 }
