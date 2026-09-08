@@ -64,8 +64,8 @@
       "completedAt": "2026-09-08T20:09:55.180Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-2702df88",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": "https://github.com/yaront1111/Moe-NG/pull/33",
   "reopenCount": 0,
@@ -96,7 +96,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:11:24.958Z",
-  "updatedAt": "2026-09-08T20:12:28.920Z",
+  "updatedAt": "2026-09-08T20:14:28.586Z",
   "dependsOn": [
     "task-70a7ccd3293f465fbc9c1888ae540f5d",
     "task-f961dc899a13488da8f119abdc37631f",
@@ -106,7 +106,9 @@
     "firstClaimAt": "2026-09-05T00:31:54.121Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 0,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-09-08T20:14:28.586Z",
+    "wallClockMs": 330154465
   },
   "stepsCompleted": [
     "step-1",
@@ -143,6 +145,47 @@
     "outputTail": "Running 1 test using 1 worker\n\n  ok 1 [chromium] › tests\\e2e\\control-room\\release-approval.spec.ts:305:1 › real daemon: the operator reads the evidence, approves the release and gets the PR link (49.1s)\n\n  1 passed (51.0s)\nVERIFY_EXIT=0",
     "reportedAt": "2026-09-08T20:12:23.459Z"
   },
-  "filesModified": [],
-  "completionSummary": "SPIDR ROLL-UP. Zero production bytes: all six DoD clauses were discharged by the three children, each re-measured by me at HEAD 8b785725, not taken on trust. Full item-by-item record in step-5's note; gate table + live-PR proof in comment-f11d3060; two adversarial findings in comment-78438434 and comment-08e78fb3.\n\nCHILDREN, all DONE, all ancestors of HEAD: task-70a7ccd3 (dossier generator) @1c464208, 30/30 EXIT 0. task-f961dc89 (release.decide + gh port + receipt) @c2e5d284 +c4f40d66, typecheck EXIT 0. task-817d893f (card + journey + live PR + docs) @66bf3f60/736d6a08/00c88cd8, control-room 204/2673 EXIT 0.\n\nTHE LIVE PR WAS OPENED — stated explicitly, and I re-verified it myself rather than only quoting child comment-6cfd1a84. github.com/yaront1111/Moe-NG/pull/33 is OPEN, not draft, base main, head 205d51eb26322056fafcdc60ab98c247d1cd135e. Receipt 9e528b92...5870, dossierSha256 fbb2d0adb10892de2aa1786b8b39ef8163c390d0b0c4ce32bac6b8b5080c5845. I fetched the body: 1819 bytes as gh returns it, 1818 after dropping gh's appended newline, and sha256 of those 1818 bytes EQUALS the receipt's dossierSha256; the 1819-byte hash c74ad2dc...f395 differs, so the match is byte-exact, not incidental. No gh refusal to report — gh is installed and authenticated here.\n\nVERIFICATION: the plan named `pnpm test:e2e:browser`. That FULL lane is EXIT 1 on 6 FOREIGN specs (journeys x2, prd-persistence-boundary, prd-to-approval, preview-reject-live, provider-pause) while Gate 3's own spec PASSES inside it (ok 48, 52.9s). Submitted verification is the same script scoped to release-approval.spec.ts, re-run FRESH immediately before this call: EXIT 0, `1 passed (51.0s)`. This row's diff is EMPTY, so the rail-3 delta intersected with owned paths is EMPTY by construction.\n\nOTHER GATES: typecheck EXIT 0 / 19 tsc legs. Root-lane blast radius (packages/contracts + control-room-client, the packages child 2 touched) 25 files / 605 tests EXIT 0. Daemon release blast radius 14/145 EXIT 0; roster guards 9"
+  "filesModified": [
+    ".moe/tasks/task-0126aacd753b42a188718c8e87cda0e2.json",
+    ".moe/tasks/task-0ca117e389df43ee9b458255f0752842.json",
+    ".moe/tasks/task-2a345b2e97d94599b4688af1923056e5.json",
+    ".moe/tasks/task-44c0178bdd86466f854918a3816d42bb.json",
+    ".moe/tasks/task-4a9d95cfc26a413cae7e8c07ecc1129b.json",
+    ".moe/tasks/task-5380dbf067eb4eeba1cec7117ffa39b5.json",
+    ".moe/tasks/task-61f826e50332498eaaaf44f2043845fc.json"
+  ],
+  "completionSummary": "SPIDR ROLL-UP. Zero production bytes: all six DoD clauses were discharged by the three children, each re-measured by me at HEAD 8b785725, not taken on trust. Full item-by-item record in step-5's note; gate table + live-PR proof in comment-f11d3060; two adversarial findings in comment-78438434 and comment-08e78fb3.\n\nCHILDREN, all DONE, all ancestors of HEAD: task-70a7ccd3 (dossier generator) @1c464208, 30/30 EXIT 0. task-f961dc89 (release.decide + gh port + receipt) @c2e5d284 +c4f40d66, typecheck EXIT 0. task-817d893f (card + journey + live PR + docs) @66bf3f60/736d6a08/00c88cd8, control-room 204/2673 EXIT 0.\n\nTHE LIVE PR WAS OPENED — stated explicitly, and I re-verified it myself rather than only quoting child comment-6cfd1a84. github.com/yaront1111/Moe-NG/pull/33 is OPEN, not draft, base main, head 205d51eb26322056fafcdc60ab98c247d1cd135e. Receipt 9e528b92...5870, dossierSha256 fbb2d0adb10892de2aa1786b8b39ef8163c390d0b0c4ce32bac6b8b5080c5845. I fetched the body: 1819 bytes as gh returns it, 1818 after dropping gh's appended newline, and sha256 of those 1818 bytes EQUALS the receipt's dossierSha256; the 1819-byte hash c74ad2dc...f395 differs, so the match is byte-exact, not incidental. No gh refusal to report — gh is installed and authenticated here.\n\nVERIFICATION: the plan named `pnpm test:e2e:browser`. That FULL lane is EXIT 1 on 6 FOREIGN specs (journeys x2, prd-persistence-boundary, prd-to-approval, preview-reject-live, provider-pause) while Gate 3's own spec PASSES inside it (ok 48, 52.9s). Submitted verification is the same script scoped to release-approval.spec.ts, re-run FRESH immediately before this call: EXIT 0, `1 passed (51.0s)`. This row's diff is EMPTY, so the rail-3 delta intersected with owned paths is EMPTY by construction.\n\nOTHER GATES: typecheck EXIT 0 / 19 tsc legs. Root-lane blast radius (packages/contracts + control-room-client, the packages child 2 touched) 25 files / 605 tests EXIT 0. Daemon release blast radius 14/145 EXIT 0; roster guards 9",
+  "commits": [
+    {
+      "sha": "be0683d167362b1f98d3ac50d5e4d22a5c1471bd",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-bcaa6d5e@2026-09-08T19:33:57Z",
+      "paths": [
+        ".moe/tasks/task-0126aacd753b42a188718c8e87cda0e2.json",
+        ".moe/tasks/task-0ca117e389df43ee9b458255f0752842.json",
+        ".moe/tasks/task-2a345b2e97d94599b4688af1923056e5.json",
+        ".moe/tasks/task-44c0178bdd86466f854918a3816d42bb.json",
+        ".moe/tasks/task-4a9d95cfc26a413cae7e8c07ecc1129b.json",
+        ".moe/tasks/task-5380dbf067eb4eeba1cec7117ffa39b5.json",
+        ".moe/tasks/task-61f826e50332498eaaaf44f2043845fc.json"
+      ],
+      "recordedBy": "worker-bcaa6d5e",
+      "recordedAt": "2026-09-08T20:12:33.134Z",
+      "treeId": "9782cc91ae5c0a5d5da89b54f43c13c3338f9188",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-bcaa6d5e@2026-09-08T19:33:57Z",
+    "at": "2026-09-08T20:12:33.134Z"
+  },
+  "completedAt": "2026-09-08T20:14:28.586Z",
+  "reviewCompletedAt": "2026-09-08T20:14:28.586Z",
+  "reviewSummary": "APPROVED. SPIDR roll-up, zero production bytes; six clauses discharged by three children, and I re-measured the load-bearing ones myself.\n\nRE-RUN BY ME, the recorded command verbatim under a browser-e2e-gate lease 20:12-20:14Z (released): `tsc -p tests/e2e/control-room/tsconfig.json && playwright test ... release-approval.spec.ts` EXIT 0, `1 passed (52.9s)`. Worth noting: that same spec FAILED for me at 18:39Z with `ERR_MODULE_NOT_FOUND ... deploy-candidate-environment.js` — a peer's missing bridge, since landed in cff9a8a7. Same spec, same tree, now green; the earlier red was never this row's.\n\nDoD 3's LIVE PR CONFIRMED INDEPENDENTLY, and we agree digit for digit: `gh pr view 33 --repo yaront1111/Moe-NG` is OPEN, not draft, not merged, base `main`, head 205d51eb. I hashed the body myself — sha256 = fbb2d0adb10892de2aa1786b8b39ef8163c390d0b0c4ce32bac6b8b5080c5845, byte-for-byte the receipt's `dossierSha256`, with CRLF, newline-stripped and newline-appended variants all differing. The row found the same 1819-vs-1818 newline nuance I did, from its own measurement.\n\nCHILDREN verified on disk, not from the summary: task-70a7ccd3, task-f961dc89, task-817d893f all DONE, and every claimed sha (1c464208, c2e5d284, c4f40d66, 66bf3f60, 736d6a08, 00c88cd8) is an ancestor of HEAD.\n\nDoD 6's ROOT LEG IS NOT QUOTABLE AT THIS HEAD. The row substituted blast-radius subsets (contracts + control-room-client 25/605, daemon release 14/145) rather than claiming a green it could not have. I confirmed the blocker and it is foreign to this row, whose diff is EMPTY: `packages/scheduler/src/package-boundary.test.ts` fails with `boundary scan failed for ... deploy-candidate-environment.ts: unterminated quoted source token`. Still unfiled as of msg-51219d61. Typecheck EXIT 0; the security lane is green.\n\nFull browser lane EXIT 1 on six foreign specs with Gate 3's own passing inside it — disclosed, and consistent with what I measured today."
 }
