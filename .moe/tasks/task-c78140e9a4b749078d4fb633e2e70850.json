@@ -115,7 +115,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": "qa-f992a686",
+  "assignedWorkerId": "qa-eaa78526",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -160,11 +160,17 @@
       "author": "worker-b53c3a30",
       "content": "STEP 6 — ADVERSARIAL SELF-REVIEW + MUTATION DRILL (2026-09-08)\n\nA. THE DRILL WAS PROCESS-LOCAL, SO NO SHARED FILE WAS EVER WRITTEN.\n`full-suite-gate` was still leased to this row when the drill ran, and an on-disk mutation of a tracked module reds every peer's typecheck and any arm importing it for the length of the window. The mutant was therefore applied as an out-of-tree vitest source TRANSFORM (`%TEMP%/moe-c78140e9-drill-worker-b53c3a30/vitest.drill.mjs`, suffixed by worker id), never as a write to `apps/daemon/src/deployment/deploy-ledger.ts`.\n\nThe transform SELF-PROVES it fired, so a silently-unapplied mutant cannot pass as a green drill: it counts anchor matches and THROWS unless there is exactly one, then logs the site. Observed on the run: `DRILL MUTANT APPLIED (1 site) -> D:/projexts/moe-next/apps/daemon/src/deployment/deploy-ledger.ts`.\n\nMUTATION (one bounded change, bypassing sanitization at the write boundary):\n```\n- const stored = admitted.receipt.refusal === null\n-   ? admitted.receipt\n-   : { ...admitted.receipt, refusal: declassifyRefusal(admitted.receipt.refusal) };\n+ const stored = admitted.receipt; void declassifyRefusal;\n```\n\nB. RESULT — THE REGRESSION IS NOT VACUOUS. `Test Files 1 failed (1)` / `Tests 17 failed | 25 passed (42)`, EXIT 1.\nAll 17 reds are the marker/absence arms, every one failing at the value-free boolean assertion `AssertionError: expected false to be true`: the five generated-material arms (credential-bearing url, authorization header, opaque value, tail-truncated multiline, unknown code-looking string), empty detail, whole-string near-miss, non-member code-looking strings, the four real-service stderr paths (docker version, image build, candidate start, image transfer), returned migration detail, thrown migration code+layer, target-missing detail, the file-backed close/reopen arm, and the replay arm.\nThe 25 SURVIVORS are exactly the arms a redaction bypass must NOT move, which is what proves the drill discriminates rather than nuking the file: all 17 audited phase literals still pass verbatim, the six malformed-admission arms still refuse with DEPLOY_RECEIPT_INVALID and commit nothing (including both null-pairing directions), the successful-receipt arm, and the caller-non-mutation arm. Code and layer are therefore still reached correctly under the mutant — only the detail's privacy property moves.\nValue-freeness confirmed by measurement, not by assertion: `grep -cE \"postgres://|Bearer |password|token\"` over the ENTIRE failing run output returned **0**.\n\nC. RESTORATION PROOF, in a call separate from the drill.\n`git status --porcelain` over all five owned paths: EMPTY (byte-identical to HEAD). SHA256 of the live writer equals the backup taken BEFORE the drill: `51e850e487f52b2eb17ae897aaebf0b1aad4497889a534d671e9815d2555b834` on both. `grep -c \"void declassifyRefusal\"` on the live file: **0** — the mutant token never touched disk. The backup was verified pre-drill to carry the 2 pristine `declassifyRefusal` occurrences, so it is not a mid-mutation vintage. Drill directory deleted; `git status --porcelain | grep -c drill` = 0, so no artifact entered the tree.\n\nD. FRESH PRIMARY RERUN AFTER RESTORATION (the output `complete_task` carries): EXIT 0, `Test Files 4 passed (4)` / `Tests 118 passed (118)`, 5.40s.\n\nE. ADVERSARIAL CHECKLIST — findings.\n- MALFORMED LAUNDERED BY MASKING? No. `decodeDeployReceiptBytes` admits the CALLER'S shape first; only then is `stored` built from the admitted frozen snapshot, and a second decode guards the committed bytes. The six malformed arms stay green under the mutant, so they are testing admission, not redaction.\n- ARBITRARY CODE-LOOKING TEXT THROUGH THE FINITE SET? No. Membership is exact `Set.has` — no trim, no case fold, no prefix/suffix — so `\"DEPLOY_PROXY_BUSY \"`, `\"DEPLOY_PROXY_BUSY: <stderr>\"` and unknown uppercase codes all redact. Pinned by the whole-string near-miss and non-member arms.\n- TRUNCATION ESCAPE? No. `lastStderrLine` slices to 600 bytes; a truncated credential is still not a set member. A truncation that landed exactly on a safe literal would by definition carry no caller text.\n- CALLER OBJECT MUTATED? No. `declassifyRefusal` returns a NEW object and `stored` is a spread; the caller's `input.refusal` is never assigned to. Directly covered by the unchanged-input arm.\n- RAW BYTES ON ANY OTHER SURFACE? No. `requestBytes` carries only decisionId/environment/receiptId/version; the event payload only environment/outcome/receiptId/sha; the returned receipt is read back from the store (`persisted.receipt`), not the pre-admission local. Absence is asserted on the returned receipt, the decision resultBytes, the event payload+metadata, and the raw sqlite file plus `-wal`/`-shm`.\n- REPLAY WRITES A SECOND ROW? No. The `historical.ok` early return answers `replayed: true` before any write; pinned by the replay arm, which is one of the 17 that reds under the mutant.\n- CONCURRENCY: unchanged. `commitExpectedVersionDecision` still carries `expectedVersion` and the EXPECTED_VERSION_CONFLICT path is untouched.\n- NO READ-SIDE OR UI SCRUBBER ADDED: `grep -rn \"REDACTED\" apps/control-room/src apps/daemon/src/http` finds only a pre-existing, unrelated `[redacted]` in `activation-read.ts:119` (clean in git status, not touched by this row) and a control-room test fixture string. The health read and both browser surfaces render the daemon's line verbatim, as DoD 4 requires.\n\nF. KNOWN AND DELIBERATELY OUT OF SCOPE (belongs to the epic-final hardening row task-99f364e3, not a new evidence row): this fix prevents NEW plaintext details from becoming durable; receipts written before it still hold whatever was persisted then, and no claim is made that existing stores are secret-free. The stale docblock at `deploy-command.ts:158-160` still says the detail \"carries docker's last stderr line\" — recorded in comment-a3256dc4 for that row's docs sweep. Theoretical only: the writer now does two JSON round-trips per receipt instead of one, which is negligible at one receipt per deploy decision and buys the admit-then-declassify ordering that is the whole safety property.",
       "timestamp": "2026-09-08T13:01:03.538Z"
+    },
+    {
+      "id": "comment-ca3d449254d9492bb350c308f0fb97a1",
+      "author": "qa-f992a686",
+      "content": "QA RE-VERIFICATION TRANSCRIPT (qa-f992a686, 2026-09-08T13:05-13:20Z). APPROVED. Every gate re-run in the foreground by QA, not read off the record.\n\nGATES, ALL EXIT 0, WITH COUNT LINES\n1. task.verification command, re-run verbatim (`pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000` on the four named files): `Test Files 4 passed (4)` / `Tests 118 passed (118)`, 5.43s. Byte-identical to the recorded outputTail (118/118). Arithmetic still holds: 76 baseline + 42 new = 118, so no pre-existing arm was deleted to buy green.\n2. `pnpm --filter @moe/daemon test`: `Test Files 596 passed (596)` / `Tests 10637 passed | 8 skipped (10645)`, 304s. NOTE: the worker's disclosed foreign red `apps/daemon/src/work/foundation-attempt-windows.test.ts:861` did NOT recur — confirms their load-flake attribution.\n3. `pnpm --filter @moe/control-room test`: `Test Files 204 passed (204)` / `Tests 2673 passed (2673)`, 17.5s. (Worker recorded 2667; the +6 are peer arms landed since. Not a defect.)\n4. `pnpm typecheck`: every package `Done`, exit 0, including apps/daemon and apps/control-room.\n5. DoD-4 browser consumers, focused: `pnpm --filter @moe/control-room exec vitest run src/v2/approvals/incident-card.test.tsx src/v2/ops/environments-section.test.tsx` -> `Test Files 2 passed (2)` / `Tests 27 passed (27)`.\n\nINDEPENDENT MUTATION DRILL (QA's own, not a re-read of the worker's)\nProcess-local out-of-tree vitest transform per `mem:gotcha-process-local-drill-via-out-of-tree-vitest-transform`; the full-suite-gate was held by worker-7b684492 at the time, so nothing was written to the shared tree. Self-proving plugin printed `DRILL MUTANT APPLIED (1 site)`; anchor `PUBLIC_PHASE_DETAILS.has(refusal.detail)` -> `true`, i.e. declassification fully bypassed.\nRESULT: `Tests 20 failed | 52 passed (72)` across the three redaction-bearing files. The 52 survivors are exactly the arms a redaction bypass must NOT move (safe-literal passthrough, malformed-receipt admission refusals, caller non-mutation, successful receipts) — an all-red drill would have meant the mutant broke compilation, not that the arms discriminate. Every generated-secret arm failed at a VALUE-FREE marker (`expected false to be true`); the only arms that printed an actual string printed non-secret fixed literals (`DEPLOY_PROXY_BUSYY`, `no deploy target bound for production`). Zero credential bytes in the failing output.\nRESTORE PROOF: process-local, so the file was never opened for writing. `git status --porcelain` on the five owned paths EMPTY before and after; live `deploy-ledger.ts` SHA256 `51e850e487f52b2eb17ae897aaebf0b1aad4497889a534d671e9815d2555b834` equals the pre-drill backup and the worker's recorded hash; `grep -c MOE_QA_DRILL_BYPASS` on disk = 0. Temp dir removed.\n\nDoD-1 RE-MEASURED INDEPENDENTLY (not taken from the record)\n`grep -rn recordDeployReceipt apps/daemon/src --include=*.ts` excluding tests: exactly ONE production caller, `deploy-service.ts:203`. So the write seam is single and the policy has no bypass.\n`grep -n \"refuse(target\\|refuse(null\" deploy-service.ts` = 11 sites. UNSAFE (external free text, can carry an interpolated credential): 272 `lastStderrLine(version.stderr)`, 287 `lastStderrLine(built.stderr)`, 290 `lastStderrLine(moved.stderr)` (ssh transfer), 317 `lastStderrLine(started.stderr)`, 312 `migrated` (migration free text). That is 5, matching planningNotes exactly. SAFE-BY-CONSTRUCTION: 268 (interpolates only an admitted environment), 276 `lease`, 286/296 literals, 321 generated health-timeout text, 326 `flipped.detail`. All 5 unsafe paths have a direct arm (version / build / transfer / candidate-start stderr, migration-returned, migration-thrown). The policy is fail-closed, so a 12th refuse() site added later is redacted by default rather than leaking — that is the property that makes this durable.\n\nDoD-2 ORDERING VERIFIED AT SOURCE\n`deploy-ledger.ts:205-219`: `decodeDeployReceiptBytes` admits the CALLER'S shape first, then `declassifyRefusal` builds the stored receipt from the admitted frozen snapshot, then a second decode guards `committedResultBytes`. Masking first would launder a malformed refusal into a well-formed one; the four `DEPLOY_RECEIPT_INVALID` arms and the two null-pairing arms pin this and stayed GREEN under the bypass mutant, which is how you know they test admission rather than redaction. The returned receipt is re-read from the store (`readDeployReceipt` at :245), so caller, decision bytes and disk agree. `requestBytes` and the event payload carry no detail field at all.\n\nDoD-4 VERIFIED BY ABSENCE AND BY ASSERTION\n`git show --stat ae9e827f` carries ZERO control-room paths. `grep -rn \"REDACT\\|redact\\|scrub\"` over apps/control-room/src/v2/{ops,approvals,live} returns only two pre-existing unrelated hits in `seat-disclosure-words.ts`. Both surfaces still assert exact `toBe` verbatim equality (`incident-card.test.tsx:59,74`, `environments-section.test.tsx:129`). No browser scrubber was added.\n\nCOMMIT AUDIT — WHY THE NO-COMPLETION-COMMIT WARNING IS NOT A DEFECT HERE\ntask.commits holds two checkpoints and no completion: `ae9e827f` (worker-b53c3a30, Moe-Status BLOCKED, 6 paths) and `43f855e7` (this QA session, 1 path, task json only). landing = null. The BYTES ARE DURABLE ANYWAY: `git diff HEAD --quiet` per path reports all five owned paths IDENTICAL to HEAD, `ae9e827f` is an ancestor of `moe/work-2026-09-04`, and `git show HEAD:apps/daemon/src/deployment/deploy-ledger.ts | grep -c \"declassifyRefusal\\|REDACTED_DETAIL\"` = 4. There is therefore NOTHING for QA to hand-land — a pathspec commit would be empty. The warning is the known wrapper artifact of a session that exited on BLOCKED (checkpoint) rather than on REVIEW (completion), not withheld work.\n\nSIZE: `deploy-ledger.ts` 249 physical lines, under the 250 target. Task-level net LOC is not a bar (global rail).",
+      "timestamp": "2026-09-08T13:13:21.536Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T02:53:22.927Z",
-  "updatedAt": "2026-09-08T13:02:39.470Z",
+  "updatedAt": "2026-09-08T13:13:31.090Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T06:59:51.804Z",
     "plannedStepCount": 6,
@@ -174,7 +180,8 @@
   "contextFetchedBy": [
     "architect-f362f7a6",
     "worker-b53c3a30",
-    "qa-f992a686"
+    "qa-f992a686",
+    "qa-eaa78526"
   ],
   "dependsOn": [
     "task-85895a88a2484d8589046b2030efd445"
@@ -235,6 +242,21 @@
       "treeId": "7316feac54036719e14435b4ac2a869d83a9efc3",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "43f855e72bd69bd8d0a0c6b4e9dd1abc07a18639",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f992a686@2026-09-08T13:02:39Z",
+      "paths": [
+        ".moe/tasks/task-c78140e9a4b749078d4fb633e2e70850.json"
+      ],
+      "recordedBy": "qa-f992a686",
+      "recordedAt": "2026-09-08T13:02:46.825Z",
+      "treeId": "dc56228cefc8ceedf2538d5c1fe085245f53273b",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -242,7 +264,8 @@
     "apps/daemon/src/deployment/deploy-service.test.ts",
     "apps/daemon/src/deployment/deploy-journey.test.ts",
     "apps/daemon/src/daemon-entry-deployments-health.test.ts",
-    "apps/daemon/src/deployment/deploy-refusal-redaction.test.ts"
+    "apps/daemon/src/deployment/deploy-refusal-redaction.test.ts",
+    ".moe/tasks/task-c78140e9a4b749078d4fb633e2e70850.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/deployment/deploy-refusal-redaction.test.ts",
@@ -253,10 +276,11 @@
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
-    "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-b53c3a30@2026-09-08T11:39:15Z",
-    "at": "2026-09-08T12:26:02.121Z"
+    "outcome": "nothing",
+    "kind": "completion",
+    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
+    "sessionId": "worker-b53c3a30@2026-09-08T12:43:29Z",
+    "at": "2026-09-08T13:02:47.022Z"
   },
   "reviewStartedAt": "2026-09-08T13:02:38.569Z",
   "verification": {
