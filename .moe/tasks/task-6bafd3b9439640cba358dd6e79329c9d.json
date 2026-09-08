@@ -107,7 +107,7 @@
     {
       "stepId": "step-6",
       "description": "THE COMMITTED NEGATIVE ARM — DoD 4, and the arm that proves this row was needed at all. New `tests/e2e/control-room/contract-goal.spec.ts`. On a SHIPPED-SEED lane, assert `readCriterionGoal` refuses with code EXACTLY `COMPILED_CONTRACT_BINDING_ABSENT` AND layer EXACTLY `CRITERION_EVIDENCE` — both, per global rail 1; asserting only that it failed is one added refusal layer away from vacuous. On the helper's goal, assert it is ok. The two arms must run against genuinely different lanes, not the same lane read twice. Verify the negative arm by mutating the production surface until it goes red, then restore — and because these spec files are new and UNTRACKED, `git diff` is blind to them: `git status --porcelain` the exact paths before drilling and prove the restore by SHA256 equality against an out-of-tree backup in a call SEPARATE from the restore.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/control-room/contract-goal.spec.ts",
         "tests/e2e/control-room/lane-contract-goal.ts",
@@ -116,22 +116,35 @@
       "newFiles": [
         "tests/e2e/control-room/contract-goal.spec.ts"
       ],
-      "startedAt": "2026-09-08T12:44:51.593Z"
+      "modifiedFiles": [
+        "tests/e2e/control-room/contract-goal.spec.ts"
+      ],
+      "note": "RESUMED: step-6 was left IN_PROGRESS by a dead prior seat (worker-7b684492; last write 2026-09-08 12:45Z, no live rival — Get-CimInstance Win32_Process shows exactly 2 claude.exe, mine 16:17:05 and a qa seat 16:17:25). Its negative arm was already on disk AND already committed by the wip 977c4653 (git status --porcelain -- tests/e2e/ shows only the foreign `M deploy-migrations.spec.ts`, never touched). This session re-verified it and did the DRILL the step requires.\n\nBASELINE GREEN: `npx playwright test -c tests/e2e/control-room/playwright.config.ts -g \"shipped-seed lane\"` -> \"1 passed (6.6s)\", exit 0.\n\nDRILL WINDOW. Targets are TRACKED production files, so both a SHA256 out-of-tree proof and `git diff` are valid; both were taken. Pre-drill `git status --porcelain -- apps/daemon/src/criterion-evidence/` EMPTY, and the backups are proven to be HEAD content by BLOB equality, not merely by transfer:\n  criterion-goal.ts      HEAD_BLOB=7f1d227810d446bca1bc9a03262c6e1f6c13dcaa BACKUP_BLOB=7f1d227810d446bca1bc9a03262c6e1f6c13dcaa\n  criterion-contracts.ts HEAD_BLOB=4435265defe9d085f373d1989f9bfe029751a579 BACKUP_BLOB=4435265defe9d085f373d1989f9bfe029751a579\nBackup at %TEMP%\\moe-drill-task-6bafd3b9-worker-812079a7 (taskId+workerId keyed, not seat-id-reused).\n\nMUTANT 1 — THE CODE. criterion-goal.ts:26 `criterionRefused(bound.code)` -> `criterionRefused(\"CRITERION_CHECK_GOAL_UNBOUND\")` (a NEIGHBOURING real code, not a nonsense token). RED, exit 1, on the code alone:\n  -   \"code\": \"COMPILED_CONTRACT_BINDING_ABSENT\",\n  +   \"code\": \"CRITERION_CHECK_GOAL_UNBOUND\",\n  1 failed\nRestore issued in a SEPARATE call; proof: sha256 3b33e617141b85d4b879a887c4ece33444943264fe99a2f86433e76b3fdff01c live == backup, `git diff --stat` empty, porcelain [].\n\nMUTANT 2 — THE LAYER. criterion-contracts.ts:90 `layer: \"CRITERION_EVIDENCE\"` -> `layer: \"PLANNING_AUTHORITY\" as unknown as \"CRITERION_EVIDENCE\"`. RED, exit 1, on the layer alone:\n  -   \"layer\": \"CRITERION_EVIDENCE\",\n  +   \"layer\": \"PLANNING_AUTHORITY\",\n  1 failed\nRestore in a separate call; proof: sha256 dbb1dc77849a3d449cee8f0a0bb8b100152c48d8af072ed949d0de378a2127bb live == backup, porcelain [], and `grep -rn 'PLANNING_AUTHORITY\" as unknown' apps/` -> NONE. So global rail 1 is discharged on BOTH halves: neither the code nor the layer is a passenger.\n\nPOST-RESTORE GREEN, re-run to close the window: \"1 passed (5.9s)\", exit 0.\n\nDIFFERENT LANES, VERIFIED NOT ASSUMED. daemon-ports.ts:132-155 `createLaneScratch` takes `mkdtempSync` -> unique tag -> `projectId: e2e-proj-${tag}` and its own storePath, so the negative arm's lane and the positive arm's lane are distinct stores, not one lane read twice.\n\nBrowser gate lease browser-e2e-gate re-acquired under this worker (task-keyed, was held by the dead seat).",
+      "startedAt": "2026-09-08T12:44:51.593Z",
+      "completedAt": "2026-09-08T13:20:30.692Z"
     },
     {
       "stepId": "step-7",
       "description": "GATES AND ADVERSARIAL SELF-REVIEW, one concentrated pass. Run each leg FOREGROUND and STANDALONE, reading the OUTPUT not the exit code — an exit-0 leg with no `Test Files N passed` count line RAN NOTHING. Legs, all quoted with their count lines: `npx tsc -p tests/e2e/control-room/tsconfig.json` FIRST (the browser script is `tsc && playwright test`, so a tsc failure means zero specs ran); `pnpm test:e2e` with `tests/e2e/foundation/multi-node-graph.e2e.test.ts` NAMED in the output, proving this row did not disturb the foundation journey; `pnpm --filter @moe/daemon test`; `pnpm typecheck`; and `pnpm test:e2e:browser` under the `browser-e2e-gate` lease with its SPEC COUNT quoted. One gate at a time. Record the merge-base and HEAD failure sets for the repo-wide legs and path-attribute the delta against this row's owned paths — that intersection must be EMPTY; disclose foreign red verbatim with its exact failing paths and never certify it green. Then read your own diff as an attacker: can any exit path leak a wrapper, a seat, the daemon or the dev server? Does the negative arm still fail if the refusal code is changed to a neighbouring one? Did anything get hand-seeded? Were `daemon-ports.ts` or `wrapper-lane.ts` touched (they must not be)? Are both new modules under 250 lines? Finally confirm `git status --porcelain` shows only paths you own plus the foreign dirt from step 1, and report every touched path in `complete_step.modifiedFiles`.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/control-room/lane-contract-goal.ts",
         "tests/e2e/control-room/lane-multi-node-workspace.ts",
         "tests/e2e/control-room/contract-goal.spec.ts",
         "tests/e2e/foundation/multi-node-graph.e2e.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "tests/e2e/control-room/contract-goal.spec.ts",
+        "tests/e2e/control-room/lane-contract-goal.ts",
+        "tests/e2e/control-room/lane-multi-node-workspace.ts"
+      ],
+      "note": "ALL FIVE GATES RUN FOREGROUND AND STANDALONE, one at a time. Full table, verbatim foreign red and the adversarial pass are in comment-ba8d57eb6a354363978a69fab28c0447 (too long for this field). Headlines:\n\n1. `npx tsc -p tests/e2e/control-room/tsconfig.json` exit 0, zero diagnostics (run FIRST — browser script is `tsc && playwright test`).\n2. `pnpm test:e2e` exit 0 — \"Test Files 21 passed | 1 skipped (22)\", \"Tests 190 passed | 1 skipped (191)\". The 1 skip is canary-self-host's `it.skipIf(!CANARY_OPT_IN)`, grepped, NOT the multi-node journey.\n3. DoD 2's named spec, standalone + verbose so it appears in the OUTPUT: `npx vitest run tests/e2e/foundation/multi-node-graph.e2e.test.ts --reporter=verbose` exit 0, \"Test Files 1 passed (1) / Tests 3 passed (3)\", all three ✓ lines printing the path.\n4. `pnpm --filter @moe/daemon test` exit 0 — \"Test Files 596 passed (596)\", \"Tests 10637 passed | 8 skipped (10645)\".\n5. `pnpm typecheck` exit 0, every package Done.\n6. `pnpm test:e2e:browser` under the browser-e2e-gate lease — SPEC COUNT 43 passed | 6 failed | 1 skipped (50), 15.1m, exit 1. This row's THREE arms are all in the passed set (contract-goal.spec.ts:19 560ms, :48 35.4s, :96 3.9s).\n\nPATH-ATTRIBUTED DELTA IS EMPTY, measured not asserted. This row edits NO existing file — its whole diff is three new modules; `git log --grep task-6bafd3b9 -- daemon-ports.ts wrapper-lane.ts` is empty and both are clean (last moved by task-cf2d91d9 8634e3f6). None of the five failing specs imports either new module (grepped). Decisively: re-running exactly those five STANDALONE, in a run that collected ZERO of this row's arms, reproduced the IDENTICAL six failures — \"6 failed | 8 passed (7.9m)\". Failure set invariant to this row's presence. Live cause for three of them is visible: `apps/control-room/src/v2/ops/activity-screens.tsx` is DIRTY foreign WIP (task-c78140e9) and the lane BUILDS that bundle — prd-to-approval fails on `/\\d+ GOAL/u` vs the rendered \"1 goal\". Foreign dirt noted and stepped past; never reverted, stashed or committed. No merge-base browser run is claimed: 68eb1c5d predates most of these spec files so it is not comparable, and materialising it needs an install that can purge .pnpm under the live fleet.\n\nADVERSARIAL PASS. Leaks: every wrapper/seat killed in a `finally` with `assert.equal(running(child), false)` on all exit paths; pids returned; both arms end `survivingPids(...) == []`; the gate log printed \"no orphans after teardown\". Neighbouring-code mutant: drilled in step 6, RED on the code and separately RED on the layer, both restored under SHA256 + HEAD-blob provenance. Hand-seeding: none — every durable fact rides a shipped command kind over the real HTTP edge; `<key>.reviewed` is a scratch marker, not a store row; math.mjs is never written by the harness. Shared lane files untouched. Line counts 193 / 79 / 118, all under 250. Final `git status --porcelain`: this row's three paths tracked and clean at 977c4653, only step-1 foreign dirt and board churn beside them; test-results/ is gitignored.",
+      "startedAt": "2026-09-08T13:20:33.043Z",
+      "completedAt": "2026-09-08T13:55:18.972Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-812079a7",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-2702df88",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -152,16 +165,22 @@
       "author": "worker-76f4ef35",
       "content": "WORKER HANDOFF / STEP 4 INCOMPLETE (2026-09-07). Owned NEW paths, all declared: tests/e2e/control-room/{lane-contract-goal.ts,lane-multi-node-workspace.ts,contract-goal.spec.ts}. No foundation, daemon-ports.ts, wrapper-lane.ts or lane-landing.ts edits. Start HEAD 49aa399b289afebc4beeb4b10b8fe07ac312f643, latest dfa0d9df8dce2b9a6393e7e2d7d3c8c60f4458ce; tests/e2e status only these 3 untracked files.\n\nSteps 1-3 completed with red/green evidence in step notes. Fresh workspace-only arm: `pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts contract-goal.spec.ts --grep 'multi-node workspace'` -> 1 passed (3.4s), exit 0. `npx tsc -p tests/e2e/control-room/tsconfig.json` exit 0. Earlier seal-only journey passed 1 spec/8.3s before adding delivery; THIS IS NOT proof that the current combined helper completes.\n\nStep-4 WIP: real single-seat wrapper passes with MOE_WRAPPER_ONCE=1; scripted seat reads mission from STDIN (not argv), writes only its node, waits for caller's HTTP review.submit acknowledgement before exit. Helper derives compiled refs with production reader, submits shape-only seat report (not verifier authority), verifies exact COMMITTED transcript/ref + real git commit body, checks omega remains blocked/unwritten, kills every wrapper in finally. None of the full three-pass path has yet passed end-to-end.\n\nThe required landLaneNode composition is attempted BEFORE our new graph exists: it retires the seeded spec and lands the legacy node so it cannot steal our seat; calling it AFTER criterion verification would move the verified SHA. This ordering is documented in source. However it intermittently fails before any new graph/test workspace/seat code runs. Latest full focused run: 1 passed, 1 failed (3.3m), exit 1, LANDING_BUDGET_SPENT with policy.validate STAFFING_ATTEMPTS_EXHAUSTED. Filed OUT-OF-SCOPE prerequisite bug task-da435e66fe8247fda0d441e61e2c4b91; precise evidence + runnable reduced probe source in its comment-6de16a94. Shared helper remains untouched. Dirty-baseline common cause is a hypothesis, not established.\n\nRESUME: recheck bug landing via epicSiblings, finish proving step 4. Steps 5-7 NOT STARTED: criterion approvals/service/closure and release readers/gaps/SHA not implemented; shipped-seed negative code+layer arm and mutation drill not implemented; broad gates not run. Do not complete this row from its early green arms. Keep consumer assertions intact. New specs deliberately retain failing assertions rather than fixme/skip. All verification processes completed; release browser-e2e-gate before parking.",
       "timestamp": "2026-09-07T18:55:31.435Z"
+    },
+    {
+      "id": "comment-ba8d57eb6a354363978a69fab28c0447",
+      "author": "worker-812079a7",
+      "content": "STEP 7 GATE TABLE — every leg FOREGROUND and STANDALONE, one at a time, read by its COUNT LINE not its exit code. Anchor: delivered tree at HEAD 977c465319195194bf5ef2f85bff8fc134dad85c (branch moe/work-2026-09-04), merge-base with main 68eb1c5d47cbf65217a7d4ca358f8c4555836528.\n\n1) `npx tsc -p tests/e2e/control-room/tsconfig.json` — exit 0, ZERO diagnostics. Run FIRST because `test:e2e:browser` is `tsc && playwright test`: a tsc failure means zero specs run.\n\n2) `pnpm test:e2e` — exit 0.\n     Test Files  21 passed | 1 skipped (22)\n          Tests  190 passed | 1 skipped (191)\n   The 1 skip is `canary-self-host.e2e.test.ts:83 it.skipIf(!CANARY_OPT_IN)` — an opt-in canary, NOT the multi-node journey (grepped, not assumed).\n\n3) DoD 2's NAMED foundation journey, run standalone with the verbose reporter so the file appears in the OUTPUT and not merely in the invocation:\n   `npx vitest run tests/e2e/foundation/multi-node-graph.e2e.test.ts --reporter=verbose` — exit 0.\n     ✓ tests/e2e/foundation/multi-node-graph.e2e.test.ts > ... > serializes independent nodes in one repository, withholds their consumer, and closes after exact criterion checks 27794ms\n     ✓ tests/e2e/foundation/multi-node-graph.e2e.test.ts > one seat leaves the other independent node READY, offered and unclaimed 6919ms\n     ✓ tests/e2e/foundation/multi-node-graph.e2e.test.ts > uses a J1-shaped scratch with three module directories in one repository 217ms\n     Test Files  1 passed (1)     Tests  3 passed (3)\n   Unchanged BEHAVIOUR, not merely unchanged source. (The parameterisation itself is leaf task-371677fc's, already DONE/landed.)\n\n4) `pnpm --filter @moe/daemon test` — exit 0.\n     Test Files  596 passed (596)\n          Tests  10637 passed | 8 skipped (10645)\n\n5) `pnpm typecheck` — exit 0, every workspace package \"Done\" (apps/daemon and apps/control-room both named).\n\n6) `pnpm test:e2e:browser` under the `browser-e2e-gate` lease (re-acquired under this worker; it was still held task-keyed by the dead seat worker-7b684492) — SPEC COUNT: **43 passed | 6 failed | 1 skipped (50 specs), 15.1m**, exit 1. This row's three arms are all in the PASSED set:\n     ok  4 contract-goal.spec.ts:19  multi-node workspace commits tests, leaving implementation to the mission's seat (560ms)\n     ok  5 contract-goal.spec.ts:48  contract lane drives a goal to contract-bound, criterion-verified and landed (35.4s)\n     ok  6 contract-goal.spec.ts:96  the shipped-seed lane's goal is refused COMPILED_CONTRACT_BINDING_ABSENT at CRITERION_EVIDENCE (3.9s)\n\nFOREIGN RED, DISCLOSED VERBATIM AND NEVER CERTIFIED GREEN — the 6 failures, with their exact failing paths and shortest decisive lines:\n  a. tests/e2e/control-room/deploy-fake-docker.spec.ts:150:3 (DEPLOY_DOCKER_UNAVAILABLE) — `- ok` / `+ LANDING: LANDING_BUDGET_SPENT`\n  b. tests/e2e/control-room/journeys.spec.ts:65:1 (CR-J1-002) — `expect(locator).toBeDisabled() failed / Expected: disabled / Received: enabled` at journeys.spec.ts:79\n  c. tests/e2e/control-room/journeys.spec.ts:86:1 (CR-A11Y-001) — `expect(received).toHaveLength(expected) / Expected length: 5 / Received length: 0 / Received array: []` at journeys.spec.ts:95\n  d. tests/e2e/control-room/prd-persistence-boundary.spec.ts:127:1 — `Test timeout of 180000ms exceeded.`\n  e. tests/e2e/control-room/prd-to-approval.spec.ts:38:1 — `Expected pattern: /\\d+ GOAL/u / Received string: \"1 goal\"` at prd-to-approval.spec.ts:130\n  f. tests/e2e/control-room/provider-pause.spec.ts:181:1 — `Error: the wrapper must staff node.deliver@node-e2e-ybwsex ... Expected: \"node.deliver@node-e2e-ybwsex\" / Received: null` at provider-pause.spec.ts:206\n\nPATH ATTRIBUTION — the (2)-minus-(1) delta intersected with this row's owned paths is EMPTY, measured three independent ways rather than asserted:\n  (i) THIS ROW EDITS NO EXISTING FILE. Its whole diff is three NEW modules — tests/e2e/control-room/{contract-goal.spec.ts, lane-contract-goal.ts, lane-multi-node-workspace.ts}. `git log --grep task-6bafd3b9 -- tests/e2e/control-room/daemon-ports.ts tests/e2e/control-room/wrapper-lane.ts` returns NOTHING; both shared lane files are clean and last moved by task-cf2d91d9 (8634e3f6). Plan rail honoured: neither was touched.\n  (ii) NO IMPORT EDGE. `grep -n 'contract-goal\\|lane-multi-node-workspace'` across all five failing spec files -> no hit in any of them. A new file nothing imports cannot red a spec.\n  (iii) THE DECISIVE ONE — the five failing specs were re-run STANDALONE, in a run that collected ZERO of this row's arms: `npx playwright test -c tests/e2e/control-room/playwright.config.ts deploy-fake-docker.spec.ts journeys.spec.ts prd-persistence-boundary.spec.ts prd-to-approval.spec.ts provider-pause.spec.ts` -> **6 failed | 8 passed (7.9m)**, exit 1 — the IDENTICAL six, byte-for-byte the same titles. The failure set is invariant to this row's presence.\n  Live cause for (b)(c)(e) is visible in the tree: `apps/control-room/src/v2/ops/activity-screens.tsx` and its .test.tsx are DIRTY foreign WIP (task-c78140e9's), and the browser lane BUILDS that bundle — (e) fails on `/\\d+ GOAL/u` vs the rendered `\"1 goal\"`, i.e. a peer's in-flight UI text. Per the shared-checkout rail that dirt was noted and stepped past: never reverted, stashed, `git add -A`'d or committed.\n  A merge-base browser run was NOT performed and is not claimed: 68eb1c5d predates this lane and most of these spec files, so its failure set is not comparable spec-for-spec, and materialising it needs a scratch worktree plus a `pnpm install` that (per the store-dir hazard) can purge `.pnpm` under the live fleet. Measurement (iii) answers the same question more precisely and at the delivered tree.\n\nADVERSARIAL SELF-REVIEW, own diff read as an attacker:\n  - EXIT PATHS / LEAKS. `deliverPass` kills every tracked child in a `finally` and asserts `running(child) === false` on EVERY path including the throwing and timing-out ones; the helper returns each wrapper pid; both browser arms end `expect(await survivingPids(...)).toEqual([])`, and the gate log printed `[daemon-lane] no orphans after teardown: 3588,57732`. Daemon and dev server are owned by `withDaemonBackedControlRoom`.\n  - DOES THE NEGATIVE ARM STILL FAIL ON A NEIGHBOURING CODE? Yes — drilled in step 6 (see that step's note): code mutant `criterionRefused(bound.code)` -> `criterionRefused(\"CRITERION_CHECK_GOAL_UNBOUND\")` went RED on the code, and an independent layer mutant went RED on the layer. Both halves of global rail 1 are load-bearing; neither is a passenger. Both restored, proven by SHA256 equality against out-of-tree backups whose provenance is HEAD-blob equality, plus empty `git diff`.\n  - HAND-SEEDING? None. Every durable fact rides a shipped command kind over the daemon's real HTTP edge: `product_contract.propose_revision`/`approve_gate_1`/`planning.submit_decomposition` (inside `sealMultiNodeGraph`), `approval.decide_intent`, `review.submit`, the criterion approve/verify chain, `goal.close`. The only files this row writes into a lane are the node `test.mjs` baseline and the seat double; `<key>.reviewed` is a seat-liveness marker in the SCRATCH ROOT, not a store row. `math.mjs` is deliberately never written by the harness — the seat produces it and the verifier's exit code decides.\n  - PER-FILE CAP: lane-contract-goal.ts 193, lane-multi-node-workspace.ts 79, contract-goal.spec.ts 118 — all well under 250.\n  - FINAL WORKTREE: `git status --porcelain` shows this row's three paths CLEAN and tracked (committed at 977c4653), plus only the step-1 foreign dirt and normal board churn. `test-results/` is gitignored by this directory's .gitignore, so no evidence artifact can reach a commit.",
+      "timestamp": "2026-09-08T13:54:59.699Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T05:41:06.478Z",
-  "updatedAt": "2026-09-08T13:16:58.348Z",
+  "updatedAt": "2026-09-08T13:55:46.848Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T11:00:16.539Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 12,
-    "executedStepCount": 5
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-6e49a205",
@@ -171,7 +190,8 @@
     "architect-f362f7a6",
     "worker-76f4ef35",
     "worker-7b684492",
-    "worker-812079a7"
+    "worker-812079a7",
+    "qa-2702df88"
   ],
   "dependsOn": [
     "task-371677fc977948a597fa9b821b99f939",
@@ -185,7 +205,9 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-07T11:04:57.210Z",
@@ -312,21 +334,42 @@
       "treeId": "f8cba8385594930ca1ff98320a033acd153dd70a",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "977c465319195194bf5ef2f85bff8fc134dad85c",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-812079a7@2026-09-08T13:16:58Z",
+      "paths": [
+        ".moe/tasks/task-6bafd3b9439640cba358dd6e79329c9d.json",
+        ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json",
+        ".moe/tasks/task-c78140e9a4b749078d4fb633e2e70850.json",
+        "tests/e2e/control-room/contract-goal.spec.ts",
+        "tests/e2e/control-room/lane-contract-goal.ts",
+        "tests/e2e/control-room/lane-multi-node-workspace.ts"
+      ],
+      "recordedBy": "worker-812079a7",
+      "recordedAt": "2026-09-08T13:17:04.881Z",
+      "treeId": "a03733eacb4283f8c5efacb564bf3f4342411c40",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-6bafd3b9439640cba358dd6e79329c9d.json",
-    ".moe/tasks/task-117a3cd91a8a4db1a61830be8c28f2d2.json",
-    ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json"
+    "tests/e2e/foundation/multi-node-journey.ts",
+    "tests/e2e/foundation/multi-node-world.ts",
+    "tests/e2e/control-room/wrapper-lane.ts",
+    "tests/e2e/control-room/lane-multi-node-workspace.ts",
+    "tests/e2e/control-room/contract-goal.spec.ts",
+    "tests/e2e/control-room/lane-contract-goal.ts"
   ],
-  "unattributedPaths": [
-    "apps/daemon/src/monitoring/probe-interval-typecheck-control.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-2aa4ee52@2026-09-07T16:11:23Z",
-    "at": "2026-09-07T16:13:05.940Z"
+    "sessionId": "worker-812079a7@2026-09-08T13:16:58Z",
+    "at": "2026-09-08T13:17:04.881Z"
   },
   "workStartedAt": "2026-09-07T18:37:36.495Z",
   "declaredFiles": [
@@ -338,5 +381,13 @@
   "blockedOnTaskIds": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "reviewStartedAt": "2026-09-08T13:55:43.176Z",
+  "verification": {
+    "command": "npx playwright test -c tests/e2e/control-room/playwright.config.ts contract-goal.spec.ts",
+    "exitCode": 0,
+    "outputTail": "Running 3 tests using 1 worker\n\n  ok 1 [chromium] > tests\\e2e\\control-room\\contract-goal.spec.ts:19:1 > multi-node workspace commits tests, leaving implementation to the mission's seat (850ms)\n  ok 2 [chromium] > tests\\e2e\\control-room\\contract-goal.spec.ts:48:1 > contract lane drives a goal to contract-bound, criterion-verified and landed (40.2s)\n  ok 3 [chromium] > tests\\e2e\\control-room\\contract-goal.spec.ts:96:1 > the shipped-seed lane's goal is refused COMPILED_CONTRACT_BINDING_ABSENT at CRITERION_EVIDENCE (3.6s)\n\n  3 passed (46.3s)\nEXIT=0",
+    "reportedAt": "2026-09-08T13:55:43.176Z"
+  },
+  "completionSummary": "The control-room lane can now drive a goal to CONTRACT-BOUND, criterion-VERIFIED and LANDED. FULL GATE TABLE, VERBATIM FOREIGN RED AND THE ADVERSARIAL PASS ARE IN comment-ba8d57eb6a354363978a69fab28c0447 — read that, not this capped field.\n\nDELIVERED (three new modules, no existing file edited): `lane-contract-goal.ts` (193) exports `createLaneContractGoal(lane)`, the one helper DoD 1 names; `lane-multi-node-workspace.ts` (79) builds the three node dirs + seat double; `contract-goal.spec.ts` (118) is the committed arm set.\n\nDoD 1 — every byte through the daemon's REAL HTTP edges (seal via `sealMultiNodeGraph` with `preludeMode: \"POLICY_VALIDATE_ONLY\"`, three real-wrapper delivery passes, `review.submit`, the criterion approve/verify chain, `goal.close`). Nothing hand-seeded; `math.mjs` is written by the SEAT and judged by the verifier. Asserted from the helper's own arm through the PRODUCTION readers: `readCriterionGoal` ok, `readReleaseDossierInput` non-null with criteria [criterion-0,1,2], coverage {criteria:3, planned:0, verified:3}, statuses all VERIFIED.\nDoD 2 — leaf task-371677fc's parameterisation is intact: `pnpm test:e2e` 21 files / 190 passed, and the named spec run standalone+verbose prints `tests/e2e/foundation/multi-node-graph.e2e.test.ts` on all 3 ✓ lines, 3 passed.\nDoD 3 — LANDED. `landLaneNode` IS composed (on the legacy graph, before the contract graph so no later commit can invalidate exact-SHA criterion evidence); this goal's own three nodes are landed by the SAME production lander driven by the real wrapper, asserted per pass via `[lander] <ref>: COMMITTED` + `landedCommits`. sha matches /^[0-9a-f]{40}$/ and is proven off BOTH the lane baseline and the legacy landing. The interface comment states plainly why `landLaneNode` cannot be re-aimed at this goal.\nDoD 4 — the negative is committed and DRILLED: on a genuinely different lane (mkdtemp per call ⇒ distinct projectId/store) `readCriterionGoal` refuses code EXACTLY COMPILED_CONTRACT_BINDING_ABSE"
 }
