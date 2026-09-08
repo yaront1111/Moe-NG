@@ -132,11 +132,17 @@
       "author": "worker-319873d7",
       "content": "STEP-5 ROLL-UP RECORD (reopenCount 1). Detail that will not fit the 2000-char completionSummary. Read with comment-6789c92a (adversarial pass) and the step-3 note (gate table).\n\nDoD MAP, item by item, with where the evidence LIVES.\n1. PROBE LOOP / ONE INCIDENT / RING 1440 / SURVIVES RESTART -> child task-6ec875f4 (DONE). DISCHARGED, and QA re-derived it independently from assertion shape rather than from the child's record: ring cap enforced per project+environment on every write (health-probe-contracts.ts), flapping arm health-probe-ring.test.ts:201, partial unique index health-incident.ts:19, restart arm health-probe-schedule.test.ts:156.\n2. BACKUPS / RESTORE-TO-TEMP sha256 PER RECEIPT / RETENTION LISTING PRUNED REFS -> child task-95e68a8d (DONE). DISCHARGED: `BackupProof{sha256, restoredSha256}`, `prunedRefs` asserted against `existsSync` rather than against the receipt's own list.\n3. `deployment.rollback` HUMAN-ONLY + ROSTER + FOUR REFUSALS -> child task-95e68a8d. PARTIAL, ROUTED TO GOVERNORS by QA (msg-f2e41640) BEFORE the reject, so this row would not burn a reopen rediscovering it. My own re-measurement agrees with QA and corrects the earlier seat's write-up: `ROLLBACK_RECEIPT_UNKNOWN`, `ROLLBACK_IMAGE_MISSING` and `moe-rollback-receipt/1` are 0 grep hits each. What shipped is `DEPLOY_ROLLBACK_RECEIPT_INVALID` (a rename of clause 1) but `DEPLOY_ROLLBACK_IMAGE_UNAVAILABLE` is only the DETAIL under generic code `DEPLOY_BUILD_FAILED` (deploy-rollback.test.ts:181, whose own comment forbids promoting it) — a real SEMANTIC gap, not spelling. A rollback writes a new `moe-deploy-receipt/1`, never a receipt kind of its own. Spans four DONE rows plus count pins: an amendment, not a worker edit. NOT ATTEMPTED HERE, as instructed.\n4. DEPLOYMENTS CARD + INCIDENT CARD + HEALTH ENVIRONMENTS, PLAYWRIGHT, REAL DAEMON -> child task-f008f29a for the UI half (DONE, approved) and THIS SESSION for the browser half. NOW DISCHARGED. `tests/e2e/control-room/deploy-rollback-incident.spec.ts` (250 lines) + `lane-rollback-incident.ts` (189). Real: daemon process, durable schedule, real loopback HTTP probes, bounded ring, incident row, deploy ledger, `deployment.rollback` at the production command edge with its operator fence, and all three shipped browser surfaces. Doubled, and only these: docker/ssh spawns through the production composition seam (`fake-docker-dependencies.ts`), the wrapper seat, and the deployed product itself (a `node:http` server the spec owns). Journey: bind target -> set probe interval -> land+publish -> deploy good sha -> deploy bad sha -> daemon's own probes find DOWN -> ONE incident card -> Health card `data-status=\"DOWN\"` -> arm-then-confirm rollback REFUSED for the paired browser with `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION` asserted in the DOM by code AND layer -> operator rollback ACCEPTED, redeploying the PREVIOUS receipt's sha and imageDigest -> probe loop closes the incident -> card gone, `{incident: null, state: \"UP\"}`. Anti-vacuity: `endpoint.statuses` must contain BOTH 503 and 200, so a lane whose probes never left the daemon fails instead of passing; `[data-kind='INCIDENT']` counted set-shaped over the whole queue; a teardown-on-throw arm with a sentinel matched BY IDENTITY; the port release MEASURED with a real connect, because `close()` returning is not evidence.\n5. LIVE DRIVE (10 real minutes, forced failure, rollback) -> DID NOT RUN, and I am saying so plainly rather than simulating it. No environment is deployed on this host: `find . -name \"*.health.sqlite\" -not -path \"*/node_modules/*\"` = 0 hits tree-wide and `docker ps -aq` = 0 (docker itself IS installed — \"docker missing\" would be the wrong reason). ROUTED: absorbed by task-99f364e3 DoD 2+3.\n6. RUNBOOK + README -> NOT WRITTEN. ROUTED. `README.md` and `docs/agent-stack-runbook.md` sit in the plan `affectedFiles` of five live rows (task-161b7e9d, task-6cbcf5ff, task-78eedd8e, task-817d893f, task-99f364e3), so an edit is withheld as `Moe-Contested` and re-declaring does not clear it. README.md:155 is stale but task-99f364e3's docs sweep owns it.\n\n(b) WERE THE LIVE DRIVE'S BACKUPS PROVEN RESTORABLE? There was no live drive, so there are no live backups and the honest answer is NEITHER PROVEN NOR UNPROVEN — none exist. The offline proof stands (item 2). This matters because an unproven backup listed as present is the exact false comfort this feature exists to remove, so I will not let \"not applicable\" read as \"yes\".",
       "timestamp": "2026-09-08T07:41:34.142Z"
+    },
+    {
+      "id": "comment-729a87e8d9bf4adfbc18291c89671d04",
+      "author": "worker-319873d7",
+      "content": "FOR QA — MY completionSummary IS TRUNCATED AT THE 2000-CHAR CAP, mid-sentence at \"The SEVENTH is new and not mine: deploy-fake-docker:150 failing in \". That is the cap, not a disclosure I abandoned (`mem:completionsummary-2000-cap-truncates-the-gate-table-silently`). The severed tail, in full:\n\nTHE SEVENTH BROWSER RED, IN FULL. `deploy-fake-docker.spec.ts:150:3 real daemon fake docker: SUCCESS has a durable receipt` fails inside `landAndPublty`/`landLaneNode` at deploy-fake-docker.spec.ts:87 with:\n`PORT_REFUSED` / `{\"code\":\"STORE_BUSY\",\"detail\":\"STORE_BUSY: decision history changed during its read\",\"httpStatus\":503,\"layer\":\"DURABLE_STORE\"}` on `REVIEW_SUBMIT`.\nIt is NOT in QA's disclosed baseline of six and it is NOT mine. PROVEN TRANSIENT, three ways: (1) it PASSES on re-run at the same tree — `ok 1 [chromium] deploy-fake-docker.spec.ts:150:3 SUCCESS has a durable receipt (9.1s)` inside a `6 passed (2.1m)` exit-0 run; (2) its three sibling arms in the same file passed in the same full gate (`ok 12`, `ok 13`, `ok 14`); (3) my own spec drives the same `landAndPublish` path and passed in that gate and in two further runs. Open board row task-da435e66 (\"bug: landLaneNode can time out or leave a dirty workspace while staffing the seeded policy step\") already owns exactly this surface. Disclosed, not repaired, not fabricated green.\n\nWHY THE VERIFICATION COMMAND IS THE SCOPED BROWSER RUN AND NOT THE BARE FULL GATE. The plan names `pnpm test:e2e:browser` and the FULL leg is exit 1 at this tree, which `complete_task` refuses. I applied global rail 3: the repo-wide leg was RUN and is reported verbatim above and in the step-3 note (`7 failed / 1 skipped / 40 passed (13.9m)`), and the failing-path set at HEAD minus the merge-base baseline, intersected with this row's owned paths, is EMPTY — my owned paths are `tests/e2e/control-room/deploy-rollback-incident.spec.ts`, `lane-rollback-incident.ts` and the deleted `deploy-incident-rollback.spec.ts`, none of which appear among the seven. The owned leg is exit 0 with a real executed count. So `verification` carries the scoped run and the foreign red is disclosed rather than hidden or invented green.\n\nALSO NOT IN THE SUMMARY, because of the same cap:\n- NOT RUN, plainly: no container starts anywhere in this gate (docker spawns are doubled at the production composition seam), no PostgreSQL, so no restore check executed; and no live drive — `find . -name \"*.health.sqlite\" -not -path \"*/node_modules/*\"` = 0 hits tree-wide, `docker ps -aq` = 0. Docker itself IS installed; \"docker missing\" would be the wrong reason to give.\n- `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test` and root `pnpm test` were NOT re-run at this tree: `full-suite-gate` is held by `qa-dbfde2ce` since 2026-09-07T22:47:43Z (8.5 h, expires 22:47Z today). I queued at #1, did NOT force-release, and released my queue entry on the way out. My diff is test-only under `tests/e2e/control-room` plus a restore-to-HEAD of a tracked file, so the standing measurements hold — QA's own fresh daemon run (`Test Files 595 passed (595)` / `Tests 10595 passed | 8 skipped (10603)`, exit 0) is the record.\n- TWIN SEAT, third on this epic: two live claude.exe (PID 57704 / config worker-58096, PID 62240 / config worker-61964) both hold workerId `worker-319873d7` and this Claimed task id. Census and the cheapest detector I found are in msg-ab858f63. If a second `complete_task` lands on this row, that is the twin, and the runtime — not I — should be the thing that refuses it.",
+      "timestamp": "2026-09-08T07:45:32.357Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:13:59.198Z",
-  "updatedAt": "2026-09-08T07:45:09.066Z",
+  "updatedAt": "2026-09-08T07:45:32.357Z",
   "dependsOn": [
     "task-6ec875f4dd5f4f2ab97e46f71bf57b2b",
     "task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4",
@@ -764,21 +770,38 @@
       "treeId": "8b9bea299b4dd4082f650d6f8d29724d648fdb86",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "9d90a6477bdec02c7c69137c8626745d11d2278b",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f992a686@2026-09-08T07:45:09Z",
+      "paths": [
+        ".moe/tasks/task-7683a432eb3f4e87b1eb0cbc6e3a55ff.json",
+        "tests/e2e/control-room/deploy-incident-rollback.spec.ts",
+        "tests/e2e/control-room/deploy-rollback-incident.spec.ts",
+        "tests/e2e/control-room/lane-rollback-incident.ts"
+      ],
+      "recordedBy": "qa-f992a686",
+      "recordedAt": "2026-09-08T07:45:14.380Z",
+      "treeId": "89b8eed5e64f2ee1d999f7c1e3b1c4131e74b2fb",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
     "tests/e2e/control-room/deploy-rollback-incident.spec.ts",
     "tests/e2e/control-room/lane-rollback-incident.ts",
-    "tests/e2e/control-room/deploy-incident-rollback.spec.ts"
+    "tests/e2e/control-room/deploy-incident-rollback.spec.ts",
+    ".moe/tasks/task-7683a432eb3f4e87b1eb0cbc6e3a55ff.json"
   ],
-  "unattributedPaths": [
-    "apps/control-room/src/v2/approvals/incident-card.tsx"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-319873d7@2026-09-08T07:15:07Z",
-    "at": "2026-09-08T07:15:10.520Z"
+    "sessionId": "qa-f992a686@2026-09-08T07:45:09Z",
+    "at": "2026-09-08T07:45:14.380Z"
   },
   "workStartedAt": "2026-09-08T03:25:53.187Z",
   "reviewStartedAt": "2026-09-08T07:45:05.779Z",
