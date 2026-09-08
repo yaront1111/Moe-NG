@@ -58,7 +58,7 @@ interface LayerDeclaration {
 /**
  * The module-private twin of `DECLARATION_PATTERN`. It differs from the exported pattern in
  * exactly ONE token — the missing `export ` — so a reader can see that the ANCHOR, not the
- * character class, is what hides these sixty. Same `[A-Z0-9_]+` width, same optional type
+ * character class, is what hides these declarations. Same `[A-Z0-9_]+` width, same optional type
  * annotation group, same column-0 anchoring that stops it matching prose in a doc comment.
  */
 const PRIVATE_DECLARATION_PATTERN = /^const ([A-Z0-9_]+(?:LAYERS|LAYER|BOUNDARIES))\s*(?::[^=]+)?=/u;
@@ -148,17 +148,13 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
 }
 
 /**
- * Stated at the WIDE pattern width (`[A-Z0-9_]+`). The narrow `[A-Z_]+` width measures 73 at
- * this HEAD; the TWO wide-only names are PRODUCT_CONTRACT_GATE_1_READ_LAYER and
+ * Stated at the WIDE pattern width (`[A-Z0-9_]+`): 77 declarations on 2026-09-08.
+ * The TWO wide-only names are PRODUCT_CONTRACT_GATE_1_READ_LAYER and
  * LIVE_GATE_1_LAYER, each hidden twice over — module-private AND digit-bearing. Quoting a
  * private count against an exported count of a DIFFERENT width is the recurring error in this
  * area, so every ratio built on this constant must name the width it measures.
- *
- * These two prose numbers are NOT asserted by any arm, so they go stale in silence while the
- * lane stays green; both were re-measured against the tree when RELEASE_LAYER was added rather
- * than carried forward.
  */
-const EXPECTED_PRIVATE_COUNT = 75;
+const EXPECTED_PRIVATE_COUNT = 77;
 
 /**
  * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
@@ -176,8 +172,10 @@ const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
   { constant: "LIVE_PREVIEW_LAYER", file: "apps/control-room/src/live/live-preview.ts" },
   { constant: "LIVE_REPOSITORY_REMOTE_LAYER", file: "apps/control-room/src/live/live-repository-remote.ts" },
   { constant: "PREVIEW_LAYER", file: "apps/control-room/src/v2/approvals/preview-port.ts" },
+  { constant: "DEPLOY_ROLLBACK_LAYER", file: "apps/control-room/src/v2/approvals/rollback-port.ts" },
   { constant: "DEPLOY_LAYER", file: "apps/control-room/src/v2/goals/deploy-port.ts" },
   { constant: "RELEASE_LAYER", file: "apps/control-room/src/v2/goals/release-port.ts" },
+  { constant: "AGENT_PROVIDER_LAYER", file: "apps/control-room/src/v2/ops/agent-provider-port.ts" },
   { constant: "ADVANCED_FRAMES_LAYER", file: "apps/control-room/src/v2/shell/advanced-frames.ts" },
   { constant: "ACTIVATION_RECEIPTS_LAYER", file: "apps/daemon/src/bootstrap/activation-receipts.ts" },
   { constant: "ADMISSION_GATE_LAYER", file: "apps/daemon/src/activation/admission-gate-resolver.ts" },
@@ -365,8 +363,8 @@ const resolvedLayerLiterals = (): readonly string[] => {
     .filter((value) => declared.has(value));
 };
 
-const EXPECTED_LITERAL_COUNT = 102;
-const EXPECTED_UNRESOLVED_LITERAL_COUNT = 37;
+const EXPECTED_LITERAL_COUNT = 103;
+const EXPECTED_UNRESOLVED_LITERAL_COUNT = 38;
 
 /**
  * The frozen unresolved census. THE ALLOWLIST IS THE DELIVERABLE, NOT A TODO: closing these
@@ -397,6 +395,9 @@ const UNRESOLVED_LAYER_LITERALS: readonly string[] = Object.freeze([
   "DAEMON_APPROVAL_INTENT",
   "DAEMON_AUTHORIZATION",
   "DAEMON_COMPOSITION",
+  // apps/control-room/src/v2/approvals/incident-frames.fixture.ts:30 is a test helper.
+  // The existing classifier includes singular .fixture.ts; this is not a runtime boundary.
+  "DAEMON_DEPLOY_RUNNER",
   "DAEMON_FOUNDATION_ATTEMPT",
   "DAEMON_GRAPH_INGRESS",
   "DAEMON_POLICY_AUTHORITY",

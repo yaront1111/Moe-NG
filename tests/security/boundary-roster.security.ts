@@ -22,12 +22,12 @@
  * OVER EXPORTED DECLARATIONS ONLY. `DECLARATION_PATTERN` is anchored `^export const`, so three
  * populations sit outside every arm above, and this paragraph carries its own falsifier for
  * each — the file's convention is that a prose claim names the assertion that reds if it rots.
- *   MODULE-PRIVATE DECLARATIONS, 60 at the wide `[A-Z0-9_]+` width — a column-0 `const *_LAYER`
+ *   MODULE-PRIVATE DECLARATIONS, 77 at the wide `[A-Z0-9_]+` width — a column-0 `const *_LAYER`
  *   no `^export const` anchor can ever reach. Reddened by "TASK-LV allowlists every scanned
  *   module-private declaration (scan minus allowlist is empty)" when one appears, by "TASK-LV
  *   has no allowlist entry absent from source" when one vanishes, and by "TASK-LV counts
  *   exactly EXPECTED_PRIVATE_COUNT module-private declarations at the wide pattern width".
- *   BARE LITERALS AT REFUSAL SITES, 94 distinct values of which 29 resolve to NO declared
+ *   BARE LITERALS AT REFUSAL SITES, 103 distinct values of which 38 resolve to NO declared
  *   constant — a layer that is never a declaration, so no pattern width reaches it. Reddened by
  *   "TASK-LV allowlists every unresolved literal (scan minus allowlist is empty)", its
  *   allowlist-minus-scan twin, and "TASK-LV counts exactly
@@ -39,9 +39,9 @@
  * and every other arm in this file stays green while sixteen live boundaries leave the scan,
  * because the roster would then be compared against the same narrowed scan that produced it.
  *
- * ALWAYS STATE THE PATTERN WIDTH WHEN QUOTING THESE. The invisible share is 60 of 228 (26.3%)
- * with a WIDE numerator over a WIDE denominator; the narrow width measures 65 of 233 and is
- * equally correct at its own width. Two seats argued 45 versus 46 across two rounds as though
+ * ALWAYS STATE THE PATTERN WIDTH WHEN QUOTING THESE. On 2026-09-08 the invisible share is
+ * 77 of 257 (30.0%) with a WIDE numerator over a WIDE denominator; a narrow-width census
+ * must use its own denominator. Two seats argued 45 versus 46 across two rounds as though
  * it were a factual dispute; it was a units mismatch. Pinned by "TASK-LV pins the invisible
  * share at the wide pattern width, numerator and denominator both named".
  *
@@ -818,7 +818,7 @@ describe("scanner matches the annotated declaration form", () => {
  *
  * Every arm before this one measures EXPORTED declarations, because `DECLARATION_PATTERN` is
  * anchored `^export const`. A column-0 `const FOO_LAYER` is structurally unreachable by that
- * anchor no matter how wide its character class gets, and sixty of them stamp live refusals.
+ * anchor no matter how wide its character class gets; the current scan finds 77 declarations.
  * These four arms make that population a DECLARED NUMBER instead of an unmeasured remainder.
  *
  * SET EQUALITY IN BOTH DIRECTIONS, and the reason is the defect this closes. An arm that walks
@@ -830,11 +830,11 @@ describe("scanner matches the annotated declaration form", () => {
  */
 /**
  * The invisible share, stated once so no arm re-derives it. WIDE numerator, WIDE denominator:
- * 75 module-private declarations against those 75 plus the 180 exported ones.
+ * 77 module-private declarations against those 77 plus the 180 exported ones.
  */
 const EXPECTED_INVISIBLE_NUMERATOR = EXPECTED_PRIVATE_COUNT;
-const EXPECTED_INVISIBLE_DENOMINATOR = 255;
-const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 294;
+const EXPECTED_INVISIBLE_DENOMINATOR = 257;
+const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 300;
 
 describe("TASK-LV module-private layer declarations are bounded", () => {
   it("TASK-LV scans a non-empty module-private population", () => {
@@ -864,9 +864,8 @@ describe("TASK-LV module-private layer declarations are bounded", () => {
 
   it("TASK-LV pins the invisible share at the wide pattern width, numerator and denominator both named", () => {
     // NUMERATOR: module-private declarations. DENOMINATOR: those plus every EXPORTED one.
-    // Both at the WIDE `[A-Z0-9_]+` width — the narrow width measures 65 of 233 and is equally
-    // correct at its own width, which is exactly the units mismatch that was twice mistaken for
-    // a factual dispute. Naming both sides is what stops the ratio drifting by moving one:
+    // Both at the WIDE `[A-Z0-9_]+` width, avoiding the narrow/wide units mismatch that was
+    // twice mistaken for a factual dispute. Naming both sides stops ratio drift by moving one:
     // export ten private layers and the numerator falls while the denominator holds, so the
     // per-mille pin reds even though the total population never moved.
     const numerator = scanPrivateLayerDeclarations().length;
