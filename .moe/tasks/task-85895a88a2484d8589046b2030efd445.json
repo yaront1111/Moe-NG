@@ -142,8 +142,8 @@
       "completedAt": "2026-09-08T02:53:57.388Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-eaa78526",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -201,16 +201,24 @@
       "author": "worker-4d8571e7",
       "content": "HAND-LANDING NOTICE FOR @qa-eaa78526 — the completion commit left HEAD un-typecheckable; sha 08eb99fc repairs it. Read this before reviewing 35c3f27a.\n\nWHAT HAPPENED. This row ran across FIVE worker sessions on one seat (worker-4d8571e7). Session E (PID 31584, 02:51:03Z) started while session D's successor twin (PID 65624, 02:31:52Z) was still executing step-7; the twin closed step-7 at 02:53:57Z and made the terminal complete_task. I yielded the terminal call to it and did the one thing it structurally could not do.\n\nTHE DEFECT IN THE LANDING, measured not inferred. Completion commit 35c3f27a carries `Moe-Paths: 6` and FOUR `Moe-Contested:` trailers, all naming task-817d893fa1254a4d82d2888af1f87a47 — a row that is BLOCKED with assignedWorkerId null. After 35c3f27a, `git status --porcelain -- apps/control-room` still showed two paths dirty:\n  M apps/control-room/src/v2/approvals/needs-you-model.ts\n  M apps/control-room/src/v2/approvals/live-needs-you.tsx\n`needs-you-model.ts` is THE ROSTER — DoD 4's whole subject. At 35c3f27a its landed content read:\n  NEEDS_YOU_KINDS = [\"PLAN_APPROVAL\",\"PLAN_REJECTED\",\"PREVIEW\",\"RELEASE\",\"DEPLOY\",\"ESCALATION\",\"GATE_1\",\"READY_TO_CLOSE\"]\nEight kinds. No INCIDENT. Meanwhile HEAD ALREADY CARRIED the consumers:\n  - `needs-you-incident.ts:111` (landed fd5f9ca6) constructs `kind: \"INCIDENT\"` and `:107` an `incident:` member;\n  - `needs-you.tsx:58` (landed 35c3f27a) declares `KIND_EYEBROW.INCIDENT` inside `Readonly<Record<NeedsYouKind, string>>` and `:142` reads `item.incident`.\nSo HEAD at 35c3f27a did NOT typecheck: producers withheld, consumers landed. Four wip commits and one completion commit each re-skipped the same producer.\n\nTHE REPAIR. 08eb99fc366ccd5039abb07e59cfad42498f1f26 on moe/work-2026-09-04, explicit two-path pathspec, no `git add -A`. Before committing I read `git diff -U0` on both files in full: EVERY hunk is this row's incident work. No peer roster entry is deleted — PLAN_REJECTED, PREVIEW, RELEASE and DEPLOY (task-a988ca1c / task-33ceae56 / task-84cd2e55) all survive verbatim in both NEEDS_YOU_KINDS and KIND_ORDER. No foreign WIP rode along.\n\nGATES, run in THIS session at exactly the tree that is now HEAD (working tree for apps/control-room is now empty in `git status`, so tree == HEAD byte for byte):\n  pnpm --filter @moe/control-room test -> `Test Files  204 passed (204)` / `Tests  2667 passed (2667)`, exit 0\n  pnpm typecheck -> every project `Done`, exit 0\nAn earlier run of the same command at 02:52Z was RED (1 failed) on `goals-home.test.tsx:419` `expect(ONOPENBOARD_CONSUMERS).toHaveLength(19)` — an exact roster pin in a PEER directory that the two new incident test files entered via a whole-tree symbol sweep. The twin fixed it (19 -> 21 plus the two entries in sorted order) at 02:52:24Z; that fix is in 35c3f27a. Disclosed because the red is in this session's transcript.\n\nRoot `pnpm test` covers NO apps/** file and is not evidence for anything this row owns.\n\nDoD 4 AT HEAD, re-measured after the repair (`git show HEAD:...`):\n  NEEDS_YOU_KINDS = [\"INCIDENT\",\"PLAN_APPROVAL\",\"PLAN_REJECTED\",\"PREVIEW\",\"RELEASE\",\"DEPLOY\",\"ESCALATION\",\"GATE_1\",\"READY_TO_CLOSE\"]  (:60-63)\n  KIND_ORDER      = INCIDENT:0, PLAN_APPROVAL:1, PLAN_REJECTED:2, PREVIEW:3, RELEASE:4, DEPLOY:5, ESCALATION:6, GATE_1:7, READY_TO_CLOSE:8  (:129-132)\nNine, not five: peers grew the roster from four to eight before this row arrived. The four original kinds keep their relative order exactly; only INCIDENT is prepended, deliberately, because an outage in progress must not sort below a routine plan approval.\n\nRAIL 5 AT HEAD. The comparator at needs-you-model.ts:256-257 still dereferences `left.goalId.localeCompare(right.goalId)`. `needs-you-incident.ts:105` sets `goalId: \"\"` — the empty string, matching `needs-you-escalation.ts:39`'s existing `goal?.goalId ?? \"\"`. No environment id, and no non-goal id, is in any goalId field; `localeCompare` on \"\" is total and the other eight kinds sort unchanged.\n\nFOREIGN DIRT LEFT UNTOUCHED, disclosed not swept: `M .codex/agent-instructions.md`, `M .codex/config.toml`, `M .grok/config.toml`, `M apps/daemon/src/http/affordance-read.ts`, `?? Moe-NG_Deep_Review_2026-09-05.md`, `?? apps/daemon/src/preview/preview-goal-landing.test.ts`, `?? tests/e2e/control-room/{contract-goal.spec.ts,lane-contract-goal.ts,lane-multi-node-workspace.ts}`. None are mine; none were reverted, stashed or committed.\n\nTHE ONE OPEN ITEM, not fixed because it is cosmetic and I would not touch a file mid-review: `needs-you-incident.ts` sets `actionLabel: \"Open the goal\"` on every incident item, but `needs-you.tsx` suppresses that button whenever `planningRunRef === \"\"`, which is always true for an incident. Dead text, contradicting the module's own detail line (\"open the environment to read the probes\"). Worth a follow-up line in the epic-final hardening row.",
       "timestamp": "2026-09-08T02:57:37.436Z"
+    },
+    {
+      "id": "comment-9f9309a940b3492aae8ca607f26a8be3",
+      "author": "qa-eaa78526",
+      "content": "QA REVIEW EVIDENCE (qa-eaa78526, 2026-09-08T03:00Z), anchored at the DELIVERED TREE = HEAD 09f4e5d0 (apps/control-room clean, `git status --porcelain -- apps/control-room` empty).\n\nGATES I RE-RAN MYSELF, not the worker's transcript:\n- `pnpm --filter @moe/control-room test` -> \"Test Files  204 passed (204)\" / \"Tests  2667 passed (2667)\", EXIT=0. Count line present, so the leg executed.\n- `pnpm typecheck` -> every project \"Done\", EXIT=0.\nRoot `pnpm test` was NOT used and is not evidence here: its include carries no apps/**.\n\nLANDING. The completion commit 35c3f27a WITHHELD two paths as `Moe-Contested` to task-817d893f (needs-you-model.ts, live-needs-you.tsx). The worker landed them itself one minute later in 08eb99fc (`Moe-Kind: repair`, same Moe-Task trailer, exactly those 2 paths, 78 insertions). I diffed both before the gate: every hunk is INCIDENT/health/rollback/dismiss vocabulary, no peer hunk carried, no peer roster entry removed. Without them HEAD would not typecheck (needs-you.tsx reads KIND_EYEBROW.INCIDENT; needs-you-incident.ts constructs kind \"INCIDENT\"), so this is a genuine repair, not a whole-tree sweep. All 7 commits are recorded in task.commits; no QA hand-landing was needed.\n\nDoD, item by item, with the arm that pins it:\n1. ERROR LINE VERBATIM - incident-card.test.tsx:52 asserts `card.textContent` CONTAINS the exact ERROR_LINE (leading whitespace intact) against the whole rendered container AND `.error` node `toBe(ERROR_LINE)`; :63 seeds a 480-char line and asserts `toBe(line)` plus `not.toContain(\"...\")`; :78 proves the code/layer ride BESIDE the line, never interpolated into it. Model-side needs-you-incident.test.ts:99 pins the same string through `mapDeploymentsHealthAnswer`, the production decoder.\n2. CONFIRM NAMES THE SHA - incident-card.test.tsx:127 asserts `.confirm` (a testid that does not exist before arming) contains BOTH TARGET_SHA and \"production\", compared against the read's own `rollbackTarget.sha`, never a hex pattern. incident-dismiss.test.tsx also proves the confirm survives 60s of real polling without losing its armed state.\n3. DISMISS != RESOLVE, both directions - direction 1 renders grandchild A's `EnvironmentsSection` from the SAME decoded outcome and asserts `data-status` DOWN, \"Down\" and \"Incident 7\"; it also asserts `sendCommand` was never called with a NON-EMPTY command roster, so the \"nothing was sent\" arm is not vacuous behind an OFFER_KIND_UNBUILDABLE refusal. Direction 2 advances the health feed through the real 15s poll (recovery, then incident id 8) and asserts the card RETURNS while production#7 stays dismissed.\n4. ROSTER - NEEDS_YOU_KINDS was EIGHT at execution, not four; the row added INCIDENT as the ninth. The arm asserts MEMBERSHIP of all nine by name (no frozen count, so a peer landing cannot red it), and a second arm sorts through the PRODUCTION comparator with and without the incident, proving the KIND_ORDER renumbering moved nothing but the new entry.\n5. DAEMON-OFFERED - `rollbackFor` returns null when `surface.outcome !== \"SURFACE\"`, matching the `offerFor` fail-closed rule. Three ABSENT arms (no offer / no rollbackTarget for this environment / no dispatcher) query the testid and find NOTHING, not a disabled button.\n\nRAILS. goalId is `\"\"` and planningRunRef is `\"\"` - no environment id in a goal's field; the environment travels in the discriminated `incident` member and needs-you.tsx:195 already suppresses the open-the-goal button on an empty planningRunRef. Sources are ASCII-only (the single non-ASCII byte in needs-you.tsx is the arrow at :202, present at 0a09b1a2 before this row). `/deployments/health/read` is pinned at dev-proxy-paths.ts:33. Epic rail 3: the card renders the error line verbatim BY DESIGN, and the worker filed task-c78140e9 (PLANNING, same epic) for the daemon-side redaction of `refusal.detail` rather than narrowing this DoD - correct layer.\n\nNON-BLOCKING, FOR THE EPIC-FINAL HARDENING ROW (not rejection reasons):\n- needs-you-model.ts is 268 lines and needs-you.tsx 258, over the 250 TARGET but under the 400 split threshold. Splitting either would collide with three peer rows editing them concurrently; the overage is mostly docblock. Worth a split once the contention clears.\n- live-needs-you.tsx docblock duplicates one clause (\"the runs read names the goal an exhausted node belongs to\") from the edit. Comment text only.",
+      "timestamp": "2026-09-08T02:59:46.522Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T20:05:32.557Z",
-  "updatedAt": "2026-09-08T02:57:37.436Z",
+  "updatedAt": "2026-09-08T03:01:21.383Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T22:15:51.129Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-08T03:01:21.383Z",
+    "wallClockMs": 189930254
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -409,6 +417,21 @@
       "status": "REVIEW",
       "pushed": false,
       "message": "Hand-landed the two paths the completion commit 35c3f27a contested away to task-817d893f (BLOCKED, unassigned). Without needs-you-model.ts, HEAD did not typecheck: needs-you.tsx and needs-you-incident.ts were already landed against a NeedsYouKind union with no INCIDENT member."
+    },
+    {
+      "sha": "09f4e5d0f97046c3fa233090937376cab10c7da1",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-4d8571e7@2026-09-08T02:51:02Z",
+      "paths": [
+        ".moe/tasks/task-85895a88a2484d8589046b2030efd445.json"
+      ],
+      "recordedBy": "worker-4d8571e7",
+      "recordedAt": "2026-09-08T02:58:56.569Z",
+      "treeId": "b2c67d08f5dfb3db58aa88d3c58e02bc20b8a5e5",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -434,8 +457,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "completion",
-    "sessionId": "worker-4d8571e7@2026-09-08T02:51:03Z",
-    "at": "2026-09-08T02:57:04.506Z"
+    "sessionId": "worker-4d8571e7@2026-09-08T02:51:02Z",
+    "at": "2026-09-08T02:58:56.569Z"
   },
   "reviewStartedAt": "2026-09-08T02:55:15.384Z",
   "verification": {
@@ -458,5 +481,8 @@
     "apps/control-room/src/v2/approvals/rollback-port.ts",
     "apps/control-room/src/v2/goals/plan-rejected-surfaces.test.tsx",
     "apps/control-room/src/v2/approvals/needs-you-incident.ts"
-  ]
+  ],
+  "completedAt": "2026-09-08T03:01:21.383Z",
+  "reviewCompletedAt": "2026-09-08T03:01:21.383Z",
+  "reviewSummary": "APPROVED at HEAD 09f4e5d0 (apps/control-room clean). Full evidence: comment-9f9309a9.\n\nGATES I RE-RAN: `pnpm --filter @moe/control-room test` -> \"Test Files 204 passed (204) / Tests 2667 passed (2667)\", EXIT=0 (count line present). `pnpm typecheck` -> all Done, EXIT=0. Root `pnpm test` unused - no apps/** in its include.\n\nLANDING: completion 35c3f27a withheld needs-you-model.ts + live-needs-you.tsx as Moe-Contested to task-817d893f; the worker landed those two in 08eb99fc (Moe-Kind: repair, same trailer). I diffed both first: every hunk this row's vocabulary, no peer roster entry deleted, no foreign WIP. Without them HEAD would not typecheck.\n\nDoD1 incident-card.test.tsx:52 asserts the exact ERROR_LINE (leading whitespace intact) against the whole container plus toBe on the node; :63 a 480-char line, toBe + not.toContain(\"...\").\nDoD2 :127 asserts TARGET_SHA and \"production\" inside `.confirm`, a testid absent before arming, against the read's own rollbackTarget.sha, not a pattern. Stays armed across 60s of polling.\nDoD3 BOTH directions: dir1 renders grandchild A's EnvironmentsSection off the same decoded outcome, asserts data-status DOWN + \"Incident 7\", and asserts nothing dispatched with a NON-EMPTY command roster, so the arm is not vacuous behind a nearer refusal. Dir2 advances the feed through the real 15s poll (recovery, then incident 8): the card RETURNS while production#7 stays dismissed.\nDoD4 roster was EIGHT; INCIDENT is ninth. Membership by name for all nine (no frozen count) plus a sort arm through the PRODUCTION comparator with/without the incident, proving the renumber moved nothing else.\nDoD5 rollbackFor returns null when surface.outcome !== \"SURFACE\"; three ABSENT arms (no offer / no target / no dispatcher) find nothing - absent, not disabled.\n\nRAILS: goalId \"\" and planningRunRef \"\" - no env id in a goal field. ASCII-only. Proxy pin dev-proxy-paths.ts:33. Rail 3: verbatim render IS the DoD; task-c78140e9 filed for daemon-side redaction."
 }
