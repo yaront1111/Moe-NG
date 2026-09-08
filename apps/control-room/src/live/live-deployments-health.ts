@@ -79,7 +79,16 @@ export interface EnvironmentHealthView {
    */
   readonly probeIntervalMs: number;
   readonly probeRefusal: EnvironmentProbeRefusalView | null;
+  /** DISPLAY ONLY: the sha the daemon says sat before this receipt. Never spend it - it is
+   *  positional over the raw ledger and can name the deploy running right now. */
   readonly rollbackSha: string | null;
+  /**
+   * THE ONLY SPENDABLE ROLLBACK AUTHORITY, or null when the daemon has none for this
+   * environment. `toReceiptRef` travels VERBATIM into a `deployment.rollback` payload; a card
+   * never constructs one from `rollbackSha`. The daemon re-resolves it on every poll and it
+   * carries no lease, so a refused dispatch means RE-POLL and spend the fresh tuple.
+   */
+  readonly rollbackTarget: EnvironmentRollbackTargetView | null;
   readonly state: EnvironmentHealthState;
 }
 

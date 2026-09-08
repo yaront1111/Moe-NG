@@ -34,17 +34,23 @@
     {
       "stepId": "step-2",
       "description": "SERVE THE BINDING on /deployments/health/read (DoD 2).\n\nAdd `rollbackTarget: { imageDigest, sha, toReceiptRef } | null` to `DeploymentsHealthView`, computed in `projectDeploymentsHealth` as `resolveRollbackTarget(source.deploys)`. This needs NO new IO: `DeploymentsHealthSource.deploys` already carries the full `receipts` list.\n\nLEAVE `rollbackSha` EXACTLY AS IT IS (`source.deploys?.previous?.sha ?? null`). Add a comment on both members stating the contract explicitly: rollbackSha is a DISPLAY fact (\"what was deployed before this receipt\") and rollbackTarget is the ONLY spend authority; a card renders and spends rollbackTarget, and MUST NOT construct a rollback from rollbackSha. STALE-BINDING BEHAVIOUR, state it in the same comment: the binding is re-read on every poll and carries no lease - a target that has been superseded between poll and dispatch refuses DEPLOY_ROLLBACK_RECEIPT_INVALID or EXPECTED_VERSION_CONFLICT at the handler, which is the intended fail-closed outcome, so the card must re-poll after any refusal rather than retry the same tuple.\n\nUpdate the exact-key roster at deployments-health-read.test.ts:265 to include the new key.\n\nTests: (a) two DEPLOYED receipts -> rollbackTarget.toReceiptRef is the older receipt's id and rollbackSha equals it too; (b) THE DISAGREEMENT ARM - [DEPLOYED A, DEPLOYED B, REFUSED C] -> rollbackSha is B.sha (positional previous) while rollbackTarget.toReceiptRef is A's id, with a comment saying this is the incoherence the row closes; (c) [DEPLOYED A, REFUSED B] -> rollbackSha non-null, rollbackTarget NULL, so no control authority; (d) no deploys -> both null; (e) the key roster arm passes with exactly the new key added.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/deployments-health-read.ts",
         "apps/daemon/src/http/deployments-health-read.test.ts"
       ],
-      "startedAt": "2026-09-08T01:48:43.479Z"
+      "modifiedFiles": [
+        "apps/daemon/src/http/deployments-health-read.ts",
+        "apps/daemon/src/http/deployments-health-read.test.ts"
+      ],
+      "note": "BINDING SERVED on /deployments/health/read.\n\nPRODUCTION (deployments-health-read.ts): imported resolveRollbackTarget + type RollbackTarget (placed with the other ../deployment/* imports so the module order stays sorted); added `readonly rollbackTarget: RollbackTarget | null` to DeploymentsHealthView; projectDeploymentsHealth now emits `rollbackTarget: resolveRollbackTarget(source.deploys)`. NO new IO - DeploymentsHealthSource.deploys already carries the full receipts list.\n\nrollbackSha IS BYTE-IDENTICAL: still `source.deploys?.previous?.sha ?? null`, only a one-line comment added above it. Both members carry the contract in their docs: rollbackSha is a DISPLAY fact (positional `previous`, refusals included, can name the receipt running right now) and must NOT be used to construct a rollback; rollbackTarget is the ONLY spend authority and mirrors rollback-command.ts:98-101 so an offered control is an accepted control. STALE-BINDING documented on the member: re-read every poll, NO lease; a superseded target refuses DEPLOY_ROLLBACK_RECEIPT_INVALID (newer deploy moved it) or EXPECTED_VERSION_CONFLICT (project aggregate advanced) at the handler - the intended fail-closed outcome - so a card must RE-POLL after any refusal, never retry the same tuple.\n\nTESTS (deployments-health-read.test.ts): key roster at the set-equality arm now reads exactly [environment, incident, lastError, lastProbe, latencySeries, ok, probeIntervalMs, probeRefusal, rollbackSha, rollbackTarget, state]. Added module-level REFUSAL fixture (DEPLOY_BUILD_FAILED @ DEPLOY_ENGINE_STAMP) because the existing refusedReceipt() helper takes no receiptId override. Four new arms:\n(a) spendable target - toEqual on the FULL tuple {imageDigest, sha, toReceiptRef}, asserting the receipt id, not a sha, because rollback-command.ts:44-49 spends toReceiptRef and can never spend a sha;\n(b) THE DISAGREEMENT ARM [DEPLOYED A, DEPLOYED B, REFUSED C] -> rollbackSha === B.sha (the receipt still RUNNING) while rollbackTarget.toReceiptRef === A.receiptId, and explicitly not B - the incoherence this row closes, now a pinned contract instead of an accident;\n(c) [DEPLOYED A, REFUSED B] -> rollbackSha non-null (PREVIOUS_SHA) but rollbackTarget NULL: a display fact with no control authority behind it;\n(d) deploys: null -> both null.\n\nVERIFICATION, both foreground, count lines quoted:\n- `npx vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/http/deployments-health-read.test.ts` -> exit 0, `Test Files  1 passed (1)` / `Tests  37 passed (37)`.\n- `npx vitest run ... src/daemon-entry-deployments-health.test.ts` -> exit 0, `Test Files  1 passed (1)` / `Tests  9 passed (9)`. Untouched and still green, which is the point: it reads rollbackSha and carries no key roster, so preserving rollbackSha's meaning kept it passing with zero edits.\n\nPLAN CORRECTION for step 8: the composed-listener test is at apps/daemon/src/daemon-entry-deployments-health.test.ts, NOT under src/http/. A `src/http/daemon-entry-deployments-health.test.ts` filter matches nothing and vitest still exits 0 with `Test Files 1 passed` from the other file in the list - a vacuous leg. Step 8 will use the src/ path.\n\nFILE SIZE disclosed: deployments-health-read.ts is now 358 lines (was 331 before this step; +27, almost all the two member docs the step required). Under the 400 hard cap, over the 250 target, and the excess is pre-existing - splitting it would move the exact-key roster this row is pinning and is not in this row's scope. rollback-target.ts is 45 lines.\n\nControl-room decoder is NOT yet updated: as risk 1 in the plan says, steps 2, 5 and 6 are ONE landing and the control-room leg is not run until step 6 lands.",
+      "startedAt": "2026-09-08T01:48:43.479Z",
+      "completedAt": "2026-09-08T01:50:35.016Z"
     },
     {
       "stepId": "step-3",
       "description": "MINT THE OFFER (DoD 1). New sibling of affordance-agent-provider-offers.ts - read that file first; it is the template for a non-BootstrapCommandKind offer.\n\n`resolveRollbackOffers({ projectId, store }): { offers: readonly RollbackOffer[]; refused: string | null }` where RollbackOffer is `{ aggregateId, inputSchemaVersion, kind: \"deployment.rollback\", version }`.\n\nEXACT VALUES, each traced to the handler and none invented:\n- `aggregateId` = projectId, because rollback-command.ts:85 refuses DEPLOY_ROLLBACK_TARGET_INVALID on anything else.\n- `version` = `store.getAggregateVersion(projectId)`, because rollback-command.ts:164 commits an empty leg against the PROJECT aggregate at `envelope.expectedVersion`.\n- `inputSchemaVersion` = a local `DEPLOY_ROLLBACK_SCHEMA_VERSION = \"deployment.rollback/1\"`. Opaque per runtime-affordance.ts:49; this publishes no new kind and touches no digest mirror.\n\nAT MOST ONE OFFER, and only when at least one environment has a rollback target: make ONE `readDeployLedger(store, projectId)` call and test `[...states.values()].some(state => resolveRollbackTarget(state) !== null)`. Empty -> `{ offers: [], refused: null }`; that is DoD 1's \"missing/unverifiable receipt yields no rollback control authority\".\n\nFAIL CLOSED on a store throw: return no offers plus a refusal code (follow AGENT_PROVIDER_STORE_UNREADABLE's shape with a rollback-specific constant). Never fabricate a version.\n\nHeader comment must say why there is ONE project-scoped offer and not one per environment (NextAllowedCommand has no environment member; the handler fences the project aggregate; per-environment authority is `rollbackTarget` on the health frame) and why it mints NO ChainStep (agent-wrapper staffs from surface.steps and vocabulary.ts:279 already makes this kind never-staffable).\n\nTests drive the PRODUCTION resolver against a real store: no receipts -> no offer; one DEPLOYED -> no offer; two DEPLOYED -> exactly one offer whose version equals `store.getAggregateVersion(projectId)` read independently and whose aggregateId is the projectId; [DEPLOYED, REFUSED] in one environment plus two DEPLOYED in another -> exactly one offer; unreadable store -> no offer and the exact refusal code.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/affordance-rollback-offers.ts",
         "apps/daemon/src/http/affordance-rollback-offers.test.ts"
@@ -52,24 +58,38 @@
       "newFiles": [
         "apps/daemon/src/http/affordance-rollback-offers.ts",
         "apps/daemon/src/http/affordance-rollback-offers.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/affordance-rollback-offers.ts",
+        "apps/daemon/src/http/affordance-rollback-offers.test.ts"
+      ],
+      "note": "OFFER MINTED, still unthreaded (step 4 wires it). New apps/daemon/src/http/affordance-rollback-offers.ts (100 lines), modelled on affordance-agent-provider-offers.ts as instructed.\n\nEXPORTS: DEPLOY_ROLLBACK_SCHEMA_VERSION = \"deployment.rollback/1\", DEPLOY_ROLLBACK_LEDGER_UNREADABLE, interfaces RollbackOffer / RollbackOfferInput / RollbackOfferResult, and resolveRollbackOffers({projectId, store}) -> {offers, refused}.\n\nEVERY VALUE TRACED, none invented (verified on disk this session, not from the description):\n- aggregateId = projectId, because rollback-command.ts:85 refuses DEPLOY_ROLLBACK_TARGET_INVALID on anything else.\n- version = store.getAggregateVersion(projectId), because rollback-command.ts:160 commits `{aggregateId: projectId, expectedVersion: envelope.expectedVersion, events: []}`. (The plan cited :164; the leg is at :160 in the committed legs array, :164 is the effectDisposition check immediately after. Same commit, same rule.)\n- inputSchemaVersion is a LOCAL constant. No new kind is published, so no GENERATED_CONTRACT_DIGEST mirror moves and epic rail 1's four-mirror census does not fire on this row.\n\nONE LEDGER WALK: a single readDeployLedger(store, projectId), then `[...values()].some(state => resolveRollbackTarget(state) !== null)`. Not one readPreviousDeployReceipt per environment - each of those re-walks the whole decision ledger in 200-row pages.\n\nAT MOST ONE OFFER, NO ChainStep. Header states why: NextAllowedCommand has no environment member and the handler fences the PROJECT aggregate, so N per-environment offers would be N identical tuples differing only by commandId; the per-environment authority is rollbackTarget on the health frame. No step because the wrapper staffs from surface.steps and daemon-command-vocabulary.ts:279 already returns null (never staffable) for this kind - VERIFIED by grep this session, alongside :415 which puts the kind in the MCP-excluded roster.\n\nFAIL CLOSED: the try wraps BOTH the ledger walk and the version read, so a store throw on either yields {offers: [], refused: DEPLOY_ROLLBACK_LEDGER_UNREADABLE} and never a fabricated version. \"Nothing to roll back to\" is {offers: [], refused: null} - deliberately distinguishable from \"could not read\".\n\nTESTS (7) drive the PRODUCTION resolver against a REAL store (openStore/PROJECT_ID from review-test-fixtures) with receipts written through the REAL recordDeployReceipt: never deployed -> no offer; one DEPLOYED -> no offer; two DEPLOYED -> exactly one offer, toEqual on the whole tuple with version read back off the store INDEPENDENTLY (a self-referential assertion would pass against a resolver that echoed its own input); preview [DEPLOYED, REFUSED] + production [DEPLOYED, DEPLOYED] -> exactly ONE offer; [DEPLOYED, REFUSED] alone -> no offer; unreadable ledger -> the exact refusal code; and an extra arm the plan did not name - a Proxy that throws only from getAggregateVersion -> same fail-closed answer, which pins that the version read is inside the guard rather than after it.\n\nVERIFICATION: `cd apps/daemon && npx vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/http/affordance-rollback-offers.test.ts` -> exit 0, `Test Files  1 passed (1)` / `Tests  7 passed (7)`.\n\nRED-FIRST EVIDENCE: the first run of this file was `Tests  5 failed | 2 passed (7)` with `Error: DEPLOY_RECEIPT_INVALID` - my seed shas were readable labels and DeployReceiptV1.sha is admitted against a git object-id shape (/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u, deploy-receipt-contracts.ts:77). Fixed by a shaOf(seed) helper minting 40-hex. Worth recording: the store REFUSES a non-hex sha on the WRITE, so a fixture that looks fine reads as a resolver bug two files away.",
+      "startedAt": "2026-09-08T01:50:39.200Z",
+      "completedAt": "2026-09-08T01:52:45.861Z"
     },
     {
       "stepId": "step-4",
       "description": "THREAD THE OFFER INTO THE SURFACE. In `readSurface`, after the agent-provider block (affordance-read.ts:~455) and OUTSIDE any goal loop, call `resolveRollbackOffers({ projectId: config.projectId, store: config.store })` and push each entry through the existing local `offer(kind, aggregateId, version, inputSchemaVersion)` helper. Push NO ChainStep.\n\nGATE THE CALL BEHIND THE EXISTING `deployBound`: a project with no bound deploy target cannot have a deploy receipt (deploy-command.ts refuses DEPLOY_TARGET_MISSING before any docker spawn), so the ledger walk is pure cost there. Comment it, the way the set_target block at :433 is commented.\n\nAdd one arm to affordance-read.test.ts ONLY IF the existing fixture makes it cheap; the dedicated coverage lives in steps 3 and 7. Do NOT touch the set-equality census at :539-585 - it filters on SERVED_BOOTSTRAP_KINDS and must keep ignoring this kind. If any existing arm in that file goes red, STOP and report rather than widening the census.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/affordance-read.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/http/affordance-read.ts"
+      ],
+      "note": "OFFER THREADED INTO THE PRODUCTION SURFACE. Two edits to affordance-read.ts, nothing else.\n\n1. `import { resolveRollbackOffers } from \"./affordance-rollback-offers.js\";` beside the sibling offer resolvers.\n2. A `if (deployBound) { for (const entry of resolveRollbackOffers({projectId: config.projectId, store: config.store}).offers) offers.push(offer(entry.kind, entry.aggregateId, entry.version, entry.inputSchemaVersion)); }` block, placed immediately AFTER the agent-provider loop and BEFORE the compiler-lane loop. No ChainStep pushed.\n\nPLACEMENT MEASURED, not assumed. `deployBound` is declared at affordance-read.ts:410 inside readSurface (after bootstrapSteps() has already returned), and the agent-provider block at :456 is in the same scope - so the gate is in scope at the insertion point and the block sits OUTSIDE the per-goal `for (const goalId of ...)` loop at :412-420. One ledger walk per surface read, never one per goal.\n\nTHE GATE IS A COST GUARD AND THE COMMENT SAYS SO: an unbound project refuses DEPLOY_TARGET_MISSING before any docker spawn, so it can hold no deploy receipt, so the resolver's whole-ledger walk would be pure cost. Not a correctness guard - step 9's drill (c) will confirm that dropping it reds nothing, and that honest result gets reported rather than hidden. Comment mirrors the set_target block's own rationale-in-place style and points at the module for the rest.\n\nCENSUS UNTOUCHED as instructed: the set-equality arm in affordance-read.test.ts filters on SERVED_BOOTSTRAP_KINDS, and deployment.rollback is not a BootstrapCommandKind, so it neither enters that census nor moves any count pin. Confirmed empirically - all four affordance suites pass with zero edits to them.\n\nNO ARM ADDED to affordance-read.test.ts. The step made it conditional on the existing fixture being cheap; it is not (the fixture would need a bound deploy target AND two recorded receipts), and step 7's round trip covers exactly this reachability against the REAL surface and the REAL registry, which is the stronger arm. Dedicated resolver coverage is step 3's seven arms.\n\nVERIFICATION: `cd apps/daemon && npx vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/http/affordance-read.test.ts src/http/affordance-read-planning.test.ts src/http/affordance-deployment-goals.test.ts src/http/affordance-agent-provider-offers.test.ts` -> exit 0, `Test Files  4 passed (4)` / `Tests  87 passed (87)`. No pre-existing arm went red, so the STOP-and-report condition in the step did not fire.",
+      "startedAt": "2026-09-08T01:52:53.504Z",
+      "completedAt": "2026-09-08T01:53:34.520Z"
     },
     {
       "stepId": "step-5",
       "description": "BROWSER DECODER PRESERVES THE BINDING (DoD 2, \"Preserve exact-key readers\"). In live-deployments-health.ts: add `rollbackTarget` to `EnvironmentHealthView`, add the key to the `exactDataRecord` roster at :237, decode it with a nested decoder that follows the file's own stated rule - A NULL MEMBER AND AN UNREADABLE MEMBER ARE DIFFERENT: a malformed rollbackTarget must refuse the WHOLE frame (invalidResponse), never silently read as \"no target\", because that would hide a spendable control from an operator during an incident.\n\nThe nested decoder validates all three members: toReceiptRef 64-hex, sha non-empty text, imageDigest matching `sha256:<64 hex>`.\n\nIn live-deployments-health.test.ts: update the two key rosters at :453/:459-460, add the key to the fixtures, and add arms for (a) a well-formed target decoded through to the view, (b) null target -> view member null, frame still valid, (c) each malformed member in turn -> the WHOLE frame refuses with the invalid-response code, (d) the `delete partial[...]` missing-key arm extended to the new key.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/live/live-deployments-health.ts",
         "apps/control-room/src/live/live-deployments-health.test.ts"
-      ]
+      ],
+      "startedAt": "2026-09-08T01:53:36.892Z"
     },
     {
       "stepId": "step-6",
@@ -127,16 +147,22 @@
       "author": "worker-4d8571e7",
       "content": "SEAT COLLISION, YIELDED (not blocked). Written by the SECOND session on this row: worker-4d8571e7, 2026-09-08T01:48Z. Census: `.moe/workers` shows worker-319873d7 CODING on this row, lastActivityAt 01:48:33Z (1s before this write); planSubmittedAt 01:46:18Z, planApprovedAt 01:46:21Z, step-1 IN_PROGRESS since 01:47:01Z. I am IDLE with currentTaskId null. My own submit_plan was refused [INVALID_STATE] Task is in WORKING state. The live session is ahead and holds the correct seat, so I ran nothing, edited nothing and staged nothing. report_blocked would flip the row out of WORKING and BREAK that session mid-step, so it was deliberately not called.\n\nHANDING OVER MY MEASUREMENTS (HEAD 412da959, branch moe/work-2026-09-04) so they are not re-derived. All four description claims re-confirmed: `git grep -n 'deployment.rollback' -- apps/daemon/src/http apps/daemon/src/bootstrap/bootstrap-contracts.ts` EXIT 1 no matches; `git grep -n 'toReceiptRef' -- apps/daemon/src/http apps/control-room/src` no matches; deployments-health-read.ts:276 serves `rollbackSha: source.deploys?.previous?.sha ?? null`; createAffordancePort maps BOOTSTRAP_COMMAND_KINDS (affordance-read.ts:281) then explicit providers (deploy-target :434, agent-provider :459), no rollback branch.\n\nFOUR THINGS THAT BITE LATE, each measured:\n\n1. expectedVersion MUST be `store.getAggregateVersion(projectId)`, NOT `versionOf(ledger, projectId)`. rollback-command.ts:159 commits the leg `{ aggregateId: projectId, expectedVersion: envelope.expectedVersion, events: [] }`, while bootstrap-ledger.ts:143-145 `versionOf` folds only the bootstrap decision ledger. targetAggregateId must be the projectId (rollback-command.ts:83 -> DEPLOY_ROLLBACK_TARGET_INVALID).\n\n2. FIVE RAW-BODY FIXTURES feed `mapDeploymentsHealthAnswer`, whose `exactDataRecord(body, [...])` roster (live-deployments-health.ts:237) is EXACT — an added daemon key refuses the WHOLE frame until each fixture carries it: v2/ops/environments-daemon-frame.test.tsx:110, environments-gap.test.tsx:40, environments-section.test.tsx:50, live-environments-enumeration.test.tsx:87, live-environments.test.tsx:73. They are raw bodies, not decoded views (they carry `ok: true`, which the decoded view lacks). Browser roster literals also at live-deployments-health.test.ts:454 and :460, with a delete-a-key arm at :106.\n\n3. THE DAEMON SIDE PINS THE KEY SET TOO: deployments-health-read.test.ts:262-269 asserts the sorted served roster in BOTH directions. Existing arms stay green under a DEPLOYED+digest selector — `receipt()` (:45-61) defaults outcome DEPLOYED with `sha256:c*64`, so the :371 arm still reads PREVIOUS_SHA and the :378 single-deploy arm still reads null. One more member-level consumer: daemon-entry-deployments-health.test.ts:219-220 asserts `view[\"rollbackSha\"]` off a real boot; its RECEIPT_BASE (:88-91) also carries a digest and its d-1 receipt is DEPLOYED, so it should stay green unchanged — worth re-running rather than editing.\n\n4. THE ROSTER ARM DOES NOT FIRE. affordance-read.test.ts:552-580 is bidirectional over SERVED_BOOTSTRAP_KINDS only and filters offers by `SERVED_BOOTSTRAP_KINDS.includes(entry.commandKind)`. deployment.rollback is not a BootstrapCommandKind (bootstrap-contracts.ts:30-58; daemon-command-vocabulary.ts:68 widens BOOTSTRAP_FAMILY with `| \"deployment.rollback\"` precisely because it is outside), so it sits outside that set-equality exactly as project.set_agent_provider does. Do NOT add it to BOOTSTRAP_COMMAND_KINDS.\n\nALSO: EPIC RAIL 1 DOES NOT FIRE — this row adds no command kind. deployment.rollback already reached runtime-vocabulary.ts:91 and generated-client.ts:196,321 via task-b22462cf/task-2ab7b462, so no GENERATED_CONTRACT_DIGEST mirror moves. The control-room gate is still mandatory, but because the DECODER shape changes.\n\nHOT PATH: `readDeployLedger` (deploy-ledger.ts:59) pages the WHOLE decision ledger. affordance-read is polled continuously and a receipt-match full scan already pegged the daemon loop once (fixed ec604baa). Walk it ONCE per surface read and derive every environment from that one map — never once per environment, never inside the goal loop.\n\nROUND-TRIP HARNESS EXISTS: rollback-production-wiring.test.ts:20-34 builds `createStoreDependencies` and pulls `provide().registry.get(\"deployment.rollback\")?.asyncHandler`; :131 uses `createAsyncCommandEntries` with `createDockerDouble` so no container starts (epic rail 4). daemon-store-foundation-composition.ts:422 composes `createAffordancePort` and daemon-store-dependencies.ts:73 exposes `affordances()` — one provider yields both the production read and the production registry.\n\nFILE SIZE: affordance-read.ts is 628 lines at merge-base (pre-existing, not this row's). Keep the delta to an import plus a short loop; put the logic in the new sibling module. deployments-health-read.ts is 331 and must stay under 400.\n\nDoD 4's DEPENDENCY EDGE IS NOT WORKER-DOABLE: `moe.set_task_dependencies` refused this seat `[NOT_ALLOWED] architect or governor role required`. I have posted the @governors request for parent task-85895a88a2484d8589046b2030efd445 to depend on this row.",
       "timestamp": "2026-09-08T01:49:15.379Z"
+    },
+    {
+      "id": "comment-649a3e56af014042b8dae7060f7a09ad",
+      "author": "worker-319873d7",
+      "content": "SEAT COLLISION ON THIS ROW — TWO LIVE SESSIONS SHARING workerId worker-319873d7. Filed by the session that YIELDED. All times UTC.\n\nWHY THIS COMMENT AND NOT report_blocked: the other session is ALIVE and AHEAD. `report_blocked` flips the row out of WORKING, which does not pause a live session — it breaks it at whatever point it has reached (measured on task-78eedd8e 2026-09-07: a correctly-reported collision block stranded a step IN_PROGRESS for hours and needed a governor to hand-reopen). Nothing here is a defect in the delivered work.\n\nTHE CENSUS, in the order it was taken:\n1. My `complete_step` for step-1 was refused `[INVALID_STATE] Step is in COMPLETED state`. Disk showed step-1 completedAt 01:48:27.752Z — 2 s BEFORE my own step-1 vitest run even started (04:48:29 +0300 = 01:48:29Z). So the step-1 NOTE on disk is the other session's, not mine.\n2. The step-1 BYTES on disk are mine: rollback-target.test.ts carries 7 arms / 111 lines; the other session's note records \"6 passed (6)\" and explicitly observes \"rollback-target.ts came back from disk with a rewritten header between my Write and my next read\". That is it seeing my overwrite. Both versions implement the same rule and the same exported symbols; the surviving one is green.\n3. `git status` at 01:49:43Z showed apps/daemon/src/http/deployments-health-read.{ts,test.ts} dirty — files I never touched — with mtimes 04:49:09 and 04:49:43 (+0300), i.e. written DURING my session and AFTER my rollback-target.ts (04:47:48), and importing it.\n4. My `complete_step` for step-2 was refused the same way: step-2 completedAt 01:50:35.016Z, step-3 startedAt 01:50:39.200Z.\n5. Decisive liveness proof at 01:52:14Z: `apps/daemon/src/http/affordance-rollback-offers.{ts,test.ts}` had just appeared untracked — step-3's deliverable, mid-write. Not a stale lease, not leftover debris: a step that began 95 s earlier producing its files in real time.\n\nWHAT I VERIFIED BEFORE YIELDING (fresh, against the delivered tree at d457110b, so the row's step-1/step-2 evidence is not single-sourced):\n- `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/deployment/rollback-target.test.ts src/http/deployments-health-read.test.ts` -> exit 0, \"Test Files 2 passed (2) / Tests 44 passed (44)\".\n- `... src/daemon-entry-deployments-health.test.ts` -> exit 0, \"Test Files 1 passed (1) / Tests 9 passed (9)\".\n- `pnpm --filter @moe/daemon typecheck` -> exit 0, no diagnostics.\n- rollbackSha IS BYTE-IDENTICAL to before the row: `git show d457110b~1:apps/daemon/src/http/deployments-health-read.ts | grep -n rollbackSha` gives `:276  rollbackSha: source.deploys?.previous?.sha ?? null,` and HEAD has the same expression at `:302`. Only the line number moved. The declared type `readonly rollbackSha: string | null` is unchanged.\n\nTWO THINGS THE NEXT SESSION ON THIS ROW SHOULD KNOW, because neither is in a step note:\n(a) I added `apps/daemon/src/deployment/rollback-target.js` (`export * from \"./rollback-target.ts\";`) and declared it via moe.declare_files — step-1's modifiedFiles list omits it. Census: EVERY non-test, non-fixture .ts under src/deployment and src/http has such a sibling bridge; the module is unresolvable without it. It is committed at d457110b.\n(b) STEP 8'S GATE LIST NAMES A FILE AT THE WRONG PATH. `daemon-entry-deployments-health.test.ts` lives at `apps/daemon/src/`, NOT `apps/daemon/src/http/`. A vitest filter naming the http path matches ZERO files and STILL EXITS 0 with no count line for it — resolve the leg by `git ls-files` before quoting it as evidence.\n\nPER-FILE CAP, for the epic-final hardening row rather than mid-row: deployments-health-read.ts is now 358 lines (was 331) — under the 400 split line, over the 250 target.\n\nPeer dirt untouched throughout, never treated as a stop condition: apps/daemon/src/preview/preview-goal-landing.test.ts, tests/e2e/control-room/{contract-goal.spec.ts,lane-contract-goal.ts,lane-multi-node-workspace.ts}, .moe/resources/*.json, Moe-NG_Deep_Review_2026-09-05.md.",
+      "timestamp": "2026-09-08T01:52:51.536Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T19:38:54.771Z",
-  "updatedAt": "2026-09-08T01:49:15.379Z",
+  "updatedAt": "2026-09-08T01:53:36.892Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T01:40:32.419Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 15,
-    "executedStepCount": 1
+    "executedStepCount": 4
   },
   "contextFetchedBy": [
     "worker-4d8571e7",
@@ -147,7 +173,10 @@
     "Plan touches 15 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-08T01:46:18.991Z",
@@ -195,17 +224,42 @@
       "treeId": "5f5dc6af589186b504bfa22636c33d72c094ef7b",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "d457110b166a502866e1814a430de4f569c00742",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-4d8571e7@2026-09-08T01:40:44Z",
+      "paths": [
+        ".moe/tasks/task-2f2ed034fbec4fe48b49a951951c9505.json",
+        "apps/daemon/src/deployment/rollback-target.js",
+        "apps/daemon/src/deployment/rollback-target.test.ts",
+        "apps/daemon/src/deployment/rollback-target.ts",
+        "apps/daemon/src/http/deployments-health-read.test.ts",
+        "apps/daemon/src/http/deployments-health-read.ts"
+      ],
+      "recordedBy": "worker-4d8571e7",
+      "recordedAt": "2026-09-08T01:50:23.321Z",
+      "treeId": "4ab8a49031d76f8b98ef32026102b5bfa4331c8b",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-2f2ed034fbec4fe48b49a951951c9505.json"
+    ".moe/tasks/task-2f2ed034fbec4fe48b49a951951c9505.json",
+    "apps/daemon/src/deployment/rollback-target.js",
+    "apps/daemon/src/deployment/rollback-target.test.ts",
+    "apps/daemon/src/deployment/rollback-target.ts",
+    "apps/daemon/src/http/deployments-health-read.test.ts",
+    "apps/daemon/src/http/deployments-health-read.ts"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-319873d7@2026-09-08T01:46:35Z",
-    "at": "2026-09-08T01:46:38.730Z"
+    "sessionId": "worker-4d8571e7@2026-09-08T01:40:44Z",
+    "at": "2026-09-08T01:50:23.321Z"
   },
   "workStartedAt": "2026-09-08T01:47:01.037Z",
   "declaredFiles": [

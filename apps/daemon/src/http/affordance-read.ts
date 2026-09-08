@@ -33,6 +33,7 @@ import { AFFORDANCE_SURFACE_LAYER, NODE_DELIVER_KIND } from "./affordance-contra
 import { createCompilerLanePort } from "./affordance-compiler-lane.js";
 import { resolveAgentProviderOffers } from "./affordance-agent-provider-offers.js";
 import { resolveDeployTargetOffers } from "./affordance-deploy-target-offers.js";
+import { resolveRollbackOffers } from "./affordance-rollback-offers.js";
 import { resolvePlanningAuthorities } from "./affordance-planning-authorities.js";
 import { planReviewable, resolvePlanningOffers } from "./affordance-planning-offers.js";
 import type {
@@ -458,6 +459,23 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     }).offers) {
       offers.push(offer(
         entry.kind, entry.aggregateId, entry.version, entry.inputSchemaVersion));
+    }
+    // ROLLING BACK A DEPLOY, from the incident card: at most one project-scoped offer per poll,
+    // at the PROJECT aggregate the handler fences and at the version it commits its empty leg
+    // against. Rationale — why one offer and not one per environment, and why this kind mints NO
+    // ChainStep — lives in affordance-rollback-offers.ts. GATED ON `deployBound` the way the
+    // set_target block above is gated on its own prerequisite: an unbound project refuses
+    // DEPLOY_TARGET_MISSING before any docker spawn, so it can hold no deploy receipt and the
+    // resolver's whole-ledger walk would be pure cost on every affordance poll. Once per surface
+    // read, never inside the goal loop above, for the same reason. Minted for every reader
+    // because this surface holds no caller principal: OPERATOR_PRINCIPAL_REQUIRED is the
+    // handler's own refusal at dispatch (rollback-command.ts:80).
+    if (deployBound) {
+      for (const entry of resolveRollbackOffers({
+        projectId: config.projectId, store: config.store,
+      }).offers) {
+        offers.push(offer(entry.kind, entry.aggregateId, entry.version, entry.inputSchemaVersion));
+      }
     }
     // Compiler-lane steps: what makes the WRAPPER staff a planning agent onto a
     // source-bound goal. READY at the goal aggregate's own version — the offer
