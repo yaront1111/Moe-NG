@@ -8,8 +8,7 @@
  * HTTP probes over the loopback to a REAL server; the bounded probe ring and the incident row;
  * the deploy ledger; `deployment.rollback` at the production command edge with its operator
  * fence; and all three browser surfaces - the Needs-you incident card, its arm-then-confirm
- * rollback control, and the Health screen's Environments section - served by the shipped bundle
- * through the dev proxy, reading the daemon's own answers.
+ * rollback control, and the Health screen's Environments section - served by the shipped bundle.
  *
  * WHAT IS A DOUBLE, and it is exactly two things. (1) The deploy's SPAWNS, injected at the
  * production composition seam by `fake-docker-dependencies.ts`, so no container runs. (2) The
@@ -22,12 +21,11 @@
  * WHY THE ROLLBACK IS DISPATCHED TWICE, and why that is the point rather than a workaround. The
  * shipped browser pairs into a NON-OPERATOR credential (`main.tsx:128` ->
  * `live-handshake.ts:170-186`), and `deployment.rollback` fences on the CONFIGURED OPERATOR at
- * its own handler entry (`rollback-command.ts:80-83`) because it is an async entry the registry's
- * synchronous operator check never reaches. So the paired human's confirm is REFUSED, by code and
- * by layer, and the card shows them which authority said no - asserted here, in the DOM, exactly
- * as `preview-approve-live.spec.ts` asserts the same wall for `preview.decide`. The rollback that
- * actually runs is then dispatched by the configured operator, which `lane.credential` provably
- * is, and the browser is measured again afterwards.
+ * its own handler entry (`rollback-command.ts:80-83`) - an async entry the registry's synchronous
+ * operator check never reaches. So the paired human's confirm is REFUSED, by code and by layer,
+ * and the card shows them which authority said no, exactly as `preview-approve-live.spec.ts`
+ * asserts the same wall for `preview.decide`. The rollback that actually runs is then dispatched
+ * by the configured operator, which `lane.credential` provably is.
  */
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
@@ -100,6 +98,21 @@ async function waitForIncident(lane: DaemonLane): Promise<number> {
   throw new Error("unreachable: the assertion above fails first");
 }
 
+/**
+ * EVERY EXIT PATH STOPS WHAT THE ARM STARTED, and each stop is MEASURED rather than assumed: the
+ * doubled environment's port is probed with a REAL connect, because `close()` returning is not
+ * evidence a keep-alive socket let go of it, and the lane's own pids and scratch tree go through
+ * `assertStopped`. Epic rail 4: a lane that leaks a port makes every later gate inadmissible.
+ */
+async function stopEverything(lane: DaemonLane | undefined,
+  endpoint: LaneEnvironmentEndpoint | undefined): Promise<void> {
+  await endpoint?.close();
+  if (endpoint !== undefined) {
+    expect(await endpoint.closed(), "the doubled environment releases its port").toBe(true);
+  }
+  await assertStopped(lane, wrapperPids);
+}
+
 async function openIncidentCard(page: Page, incidentId: number): Promise<string> {
   const testId = `cr.needsyou.incident.${ENVIRONMENT}#${String(incidentId)}`;
   await page.getByTestId("cr.nav.approvals").click();
@@ -155,6 +168,10 @@ test("real daemon: a bad release goes DOWN, the incident card offers the rollbac
         // because it stopped ANSWERING, which is precisely the case a deploy receipt cannot
         // explain - so the card says so instead of inventing a line.
         await expect(page.getByTestId(`${card}.noerror`)).toBeVisible();
+        // ONE CARD FOR ONE OUTAGE, counted across the WHOLE queue: a duplicate raise mints a
+        // SECOND incident id and a second testid, invisible to a lookup keyed on the first.
+        await expect(page.locator("[data-kind='INCIDENT']"),
+          "three failures raise one incident, not one per probe").toHaveCount(1);
 
         // THE HEALTH SCREEN AGREES, from its own read: `data-status` is the frame's state copied
         // across, so this is the daemon's verdict rendered twice, not a second opinion.
@@ -210,8 +227,24 @@ test("real daemon: a bad release goes DOWN, the incident card offers the rollbac
         expect(endpoint.statuses).toContain(200);
       });
       expect(result.ok ? "ok" : `${result.code}: ${result.detail}`).toBe("ok");
-    } finally {
-      await endpoint?.close();
-      await assertStopped(started, wrapperPids);
-    }
+    } finally { await stopEverything(started, endpoint); }
   });
+
+/**
+ * THE FAILURE PATH TEARS DOWN TOO. A journey with a landing, two deploys and a five-minute outage
+ * in it fails sometimes, and epic rail 4 binds the failing exit as hard as the passing one. The
+ * body throws a sentinel matched BY IDENTITY, so a lane that swallowed it and answered a refusal
+ * instead would fail here rather than read as a pass.
+ */
+test("real daemon: the incident lane tears down when its body throws", async () => {
+  let started: DaemonLane | undefined;
+  let endpoint: LaneEnvironmentEndpoint | undefined;
+  wrapperPids.length = 0;
+  const failure = new Error("E2E_BODY_SENTINEL");
+  try {
+    endpoint = await startEnvironmentEndpoint(() => true);
+    await expect(withDaemonBackedControlRoom({
+      fakeDocker: "SUCCESS", liveCredentials: "ATTACHED", seed: "NONE",
+    }, async (lane) => { started = lane; throw failure; })).rejects.toBe(failure);
+  } finally { await stopEverything(started, endpoint); }
+});

@@ -18,6 +18,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
+import { createConnection } from "node:net";
 import { dirname, join } from "node:path";
 
 import { expect } from "@playwright/test";
@@ -65,6 +66,12 @@ export function currentDeploySha(lane: DaemonLane, environment: string): string 
 
 export interface LaneEnvironmentEndpoint {
   close(): Promise<void>;
+  /**
+   * A REAL connect attempt against the bound port. `close()` RETURNING is not evidence the port
+   * was released - epic rail 4 asks whether the thing this lane started actually stopped - so the
+   * teardown measures it from outside the server object rather than trusting the callback.
+   */
+  closed(): Promise<boolean>;
   /** Every status this endpoint served, in order. The teardown asserts it actually answered. */
   readonly statuses: readonly number[];
   readonly url: string;
@@ -98,6 +105,13 @@ export async function startEnvironmentEndpoint(
     close: (): Promise<void> => new Promise<void>((resolve) => {
       server.closeAllConnections();
       server.close(() => { resolve(); });
+    }),
+    closed: (): Promise<boolean> => new Promise<boolean>((resolve) => {
+      const socket = createConnection({ host: "127.0.0.1", port: address.port });
+      const settle = (isClosed: boolean): void => { socket.destroy(); resolve(isClosed); };
+      socket.setTimeout(1_000, () => { settle(false); });
+      socket.once("connect", () => { settle(false); });
+      socket.once("error", () => { settle(true); });
     }),
     statuses,
     url: `http://127.0.0.1:${port}`,
