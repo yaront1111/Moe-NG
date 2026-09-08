@@ -1,0 +1,32 @@
+{
+  "id": "task-48945cb6a24d4a5db0723c1f914624d1",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "bug: publicationCredentialArguments hard-fails every remote git cannot url-match, so no scp-style SSH remote is publishable",
+  "description": "Filed by worker-bcaa6d5e from task-817d893fa1254a4d82d2888af1f87a47 (Gate 3 browser proof), 2026-09-08. That row is BLOCKED on this one.\n\nTHE DEFECT. apps/daemon/src/repository/git-publication-credentials.ts:7-8 runs `git config --null --get-urlmatch credential <remoteUrl>` and treats ONLY `code === 1 && stdout === \"\"` as \"no credential configuration\". Git answers exit **128** with `fatal: invalid URL scheme name or missing '://' suffix` for any remote that is not a scheme-bearing URL, so the next line throws PUBLISH_CREDENTIAL_CONFIGURATION_UNREADABLE and `createGitPublicationPort().push()` returns PUBLISH_PUSH_UNKNOWN having never attempted the push. `observe()` fails the same way with PUBLISH_REMOTE_UNREADABLE.\n\nWHY IT IS A PRODUCTION BUG, not a test-lane one. `admitRemoteUrl` (publish-receipt-contracts.ts:77-85) DELIBERATELY admits scp-style SSH remotes through REMOTE_SSH -- `git@github.com:owner/repo.git` has no `://` and is the form `gh` and GitHub hand users by default. Every such remote is admitted by the ledger, stored, re-admitted on read, and then made UNPUSHABLE by this call. The publish silently reports PUBLISH_PUSH_UNKNOWN, which reads as a transport fault rather than \"this daemon cannot use the remote you bound\".\n\nMEASURED, not inferred (probe run at HEAD 7e76c556, deleted after):\n  GIT [\"--git-dir=...\\\\.git\",\"config\",\"--null\",\"--get-urlmatch\",\"credential\",\"C:/.../release-remote.git\"] -> 128 \"\" \"fatal: invalid URL scheme name or missing '://' suffix\\n\"\n  PUSH   : {\"ok\":false,\"code\":\"PUBLISH_PUSH_UNKNOWN\",\"detail\":\"PUBLISH_PUSH_UNKNOWN\"}\n  OBSERVE: {\"ok\":false,\"code\":\"PUBLISH_REMOTE_UNREADABLE\",\"detail\":\"PUBLISH_REMOTE_UNREADABLE\"}\nWith the SAME candidate and the credential read stubbed to `{code:1,stdout:\"\"}` (i.e. \"no credential config\"), both succeed against real git:\n  GIT [...,\"push\",\"--no-verify\",\"--\",\"C:/.../release-remote.git\",\"7b45c4d5...:refs/heads/main\"] -> 0\n  PUSH   : {\"ok\":true}\n  OBSERVE: {\"ok\":true,\"sha\":\"7b45c4d54a2d281ebbb947d0475e07b3ba9be28b\"}\nSo the credential read is the ONLY thing standing between the production port and a working push.\n\nFIX DIRECTION (the implementer confirms it, this is not a mandate): treat \"git cannot url-match this remote\" as \"there is no credential configuration for it\" -- i.e. admit exit 128 with the invalid-URL-scheme fatal alongside the existing exit-1 case -- rather than as an unreadable configuration. Do NOT widen it to every nonzero exit: a genuinely unreadable config must still fail closed. Keep the injection-guard on values (`/[\\r\\n\\0]/`) and the three-key allowlist exactly as they are.\n\nWHY task-817d893f WAITS ON THIS. Its Playwright journey needs a PUSHED publication before the release card can offer a sha (release-evidence-read.ts:216). A hermetic lane cannot use a network remote, and a local bare repository -- a real git remote, real objects, real refs -- is admitted by `admitRemoteUrl` and then refused here. With this fixed, that journey is hermetic and green; without it, the only remaining path is pushing a branch to a real GitHub repository on every browser-suite run, which is an outward-facing side effect no test suite should carry.",
+  "definitionOfDone": [
+    "`publicationCredentialArguments` returns [] (no credential arguments) for a remote git cannot url-match, and still THROWS PUBLISH_CREDENTIAL_CONFIGURATION_UNREADABLE for a genuinely unreadable configuration. Both arms asserted by their distinguishing condition, not merely by 'did not throw'.",
+    "A test pins the exact git behaviour this depends on: `git config --null --get-urlmatch credential <non-url>` exits 128 with `fatal: invalid URL scheme name or missing '://' suffix`. Assert the exit code AND the stderr line, so a future git that changes either is caught here rather than in a browser lane.",
+    "An arm proves the scp-style SSH remote `git@github.com:owner/repo.git` -- which `admitRemoteUrl` admits -- now reaches the push rather than refusing PUBLISH_PUSH_UNKNOWN at the credential read.",
+    "`createGitPublicationPort().push()` and `.observe()` both succeed end to end against a REAL local bare repository, asserting `{ok:true}` and `{ok:true, sha:<the approved sha>}` respectively. This is the arm task-817d893f's journey depends on.",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "ONE FILE, ONE CONDITION. The fix is the acceptance predicate in git-publication-credentials.ts. Do not widen it to accept every nonzero exit, do not touch admitRemoteUrl's admission policy, and do not add a seam to inject the git port -- the lane keeps the publisher real on purpose.",
+    "FAIL CLOSED STAYS. A config read that genuinely cannot be parsed must still throw PUBLISH_CREDENTIAL_CONFIGURATION_UNREADABLE with the same code. Assert the refusing arm by its CODE, and confirm it goes red when the production predicate is mutated."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 75,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-08T15:26:20.248Z",
+  "updatedAt": "2026-09-08T15:26:20.248Z"
+}

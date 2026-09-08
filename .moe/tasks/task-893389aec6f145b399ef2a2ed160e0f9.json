@@ -78,8 +78,8 @@
       "completedAt": "2026-09-08T15:08:13.042Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-2702df88",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -100,16 +100,24 @@
       "author": "worker-812079a7",
       "content": "ADVERSARIAL FINDING AGAINST MY OWN DIFF, AND THE ONE FOLLOW-UP IT LEAVES OPEN (worker-812079a7, step 5).\n\nTHE FINDING. My first draft of the cutover-manifest.ts header claimed `.serena` was \"the same category as node_modules\", and singled out `.moe` as the one with tracked content. I measured it instead of asserting it:\n\n  for d in .git .serena dist node_modules target .moe; do git ls-files \"$d\" | wc -l; done\n  .git=0  .serena=972  dist=0  node_modules=0  target=0  .moe=1034\n\nThe four pre-existing exclusions hold ZERO tracked files. `.serena` holds 972 — 970 of them under `.serena/memories`, plus `.serena/project.yml` and `.serena/.gitignore`. So excluding the name DOES stop manifesting 972 tracked files, and my draft applied a standard to `.moe` that `.serena` also fails. That is exactly the kind of claim a reviewer should have caught rather than me, so I rewrote the comment to disclose it: 972 of 4303 tracked, the other 3331 (77%) host-local session churn; `.moe` is 94% tracked against `.serena`'s 23%, which is the real difference between the two calls.\n\nWHY THE EXCLUSION STILL SHIPS. The walk matches by NAME, not by path prefix (cutover-manifest.ts visitDirent: `limits.excludedNames.has(dirent.name)`). Admitting `.serena/*` while skipping `.serena/memories/*` is NOT EXPRESSIBLE in the current mechanism, so the choice was all-or-nothing against a directory that is 77% host-local churn and 41% of the entire walk. Agent notes ABOUT the repository are not the legacy system being cut over.\n\nFOLLOW-UP, recorded here rather than as a row (DELIVERY BIAS: follow-up items go in a comment on the owning row). If a later row needs those 970 tracked memories manifested, the change is PATH-PREFIX EXCLUSION in the walk — an excluded-prefix set alongside `excludedDirectoryNames`, declared in `excludedDirectories` the same way so `CUTOVER_MANIFEST_EXCLUSION_MISMATCH` keeps failing closed — NOT a bigger `MAX_WALK_ENTRIES`. Nothing on this board currently gates on it, and the walk has 37% headroom without it.\n\nWHY THE EXCLUSION CANNOT HIDE A REAL CUTOVER DIFFERENCE, answered against the module's own contract rather than by assertion: the skipped name is DECLARED in `manifest.excludedDirectories` (ARM C3 asserts the declaration, not merely the absence — absence alone is also what a walk that returned nothing produces), and `compareCutoverManifests` refuses any comparison whose two captures declared different exclusion sets with `CUTOVER_MANIFEST_EXCLUSION_MISMATCH` (pinned by ARM D1). A widened exclusion between two captures fails closed; it cannot masquerade as a match.\n\nCLEAN-HOST QUESTION the plan asked me to answer: on a CI host where `.serena` is absent or holds only its 972 tracked files, does the new arm still prove anything? Yes — ARM C3 builds its own `.serena/memories` under the `fixture()` mkdtemp root and never reads the host's. Its negative control (`excludedDirectoryNames: []` over the same tree, expecting exactly 12 entries back) is what stops it passing vacuously if the walk breaks. The one host-dependent piece is ARM E's REAL-ROOT refusal branch, which is a diagnostic, not an assertion.\n\nOTHER CHECKLIST ITEMS, all cleared: `countByTopSegment` is iterative (no stack depth risk), does not follow symlinks or junctions, swallows an unreadable directory rather than letting the diagnostic become the failure, opens no file and computes no hash, and runs ONLY inside the already-failed refusal branch. No secret surface: it emits directory names and integer counts, never file contents. ARM C3's temp tree is torn down by the existing `afterEach` cleanup registry (epic rail 4).\n\nFILE SIZE, flagged not hidden: cutover-manifest.ts is 392 lines (was 365) — under the 400 split threshold but not comfortably, and the growth is all header comment. cutover-drill.test.ts is 720 (was 579) and was already past 400 at HEAD before this row.",
       "timestamp": "2026-09-08T15:07:33.377Z"
+    },
+    {
+      "id": "comment-caa047b3d9cf4e1eb9e08a2e859b14f2",
+      "author": "qa-2702df88",
+      "content": "QA APPROVAL EVIDENCE. Approving. Everything below I ran or measured myself; the worker's numbers were re-derived, not accepted.\n\nGATES RE-RUN BY ME, foreground, under a full-suite-gate lease I took at 15:11Z and released at 15:13Z:\n- `pnpm test:migration` EXIT 0 — Test Files 6 passed (6), Tests 80 passed (80). Nonzero count line present, so DoD 3's vacuity trap is closed. Matches the recorded verification exactly.\n- `pnpm test` (root) EXIT 0 — Test Files 434 passed | 2 skipped (436), Tests 10404 passed | 46 skipped (10450). THE ROOT LANE IS NOW GREEN. This row's own defect was the sole root red on this branch all day (cutover-drill.test.ts:536, CUTOVER_MANIFEST_ENTRY_LIMIT_EXCEEDED), and it is gone — that is the strongest possible confirmation of the fix, and it clears the caveat three other rows have been disclosing since this morning.\n- `pnpm typecheck` EXIT 0, zero `error TS`.\n\nDoD 1 — population re-measured independently on my own run:\n- `find . \\( -name node_modules -o -name .git -o -name dist -o -name target \\) -prune -o -print | wc -l` = 10562 (worker measured 10574; drift is agent sessions, as the row itself predicts).\n- Same walk plus `.serena` = 6258 (worker 6271). Margin 3742 under the unchanged 10_000.\n- `.serena` = 4298 files, 972 tracked. The code comment's \"972 of those 4303 ARE tracked\" is exact on the tracked half.\n- `.moe` = 1069 files, 1036 tracked — the comment's 94%-tracked argument for NOT excluding it holds.\n- The decisive claim verified verbatim: `git check-ignore -v .serena/memories/<probe>` answers `C:/Users/Yaron/.gitignore_global:1:.serena/`, and `git config --get core.excludesfile` confirms that file is the host-global ignore, OUTSIDE this repository. So the walk's population really was a property of the machine. (Note for future readers: probing the directory itself returns exit 1 because `.serena/.gitignore` is tracked; probe an untracked path under it.)\n\nDoD 2 — the bound was NOT moved. `MAX_WALK_ENTRIES = 10_000` at cutover-manifest.ts:95, unchanged in the diff, and still pinned by cutover-drill.test.ts:345 `expect(MAX_WALK_ENTRIES).toBe(10_000)`.\n\nRED-FIRST ARM C3 — I did not need to take the worker's word that it was witnessed red, because it is non-vacuous BY CONSTRUCTION. It builds a fixture `.serena/memories` with 12 files and asserts `{descended: false, declared: true}` in ONE toEqual (so neither half can hide behind the other's failure), then the negative control passes `excludedDirectoryNames: []` and requires exactly those 12 entries back plus `excludedDirectories` empty plus `entryCount` equal to the excluded run plus 12. Those two halves together can only both hold if `.serena` is in DEFAULT_EXCLUDED_DIRECTORY_NAMES and the walk still works. It uses a constructed tree, never the host's real `.serena`, so it survives a clean CI host. I planted no mutant: peers hold browser-e2e-gate and an on-disk drill would red their legs, and the assertion shape settles it without one.\n\nARM E diagnostic — the refusal branch now prints the admitted population per top-level segment plus the exclusions in force, the census counts dirents only and runs ONLY on the already-failed path (no second hashing walk inside a 300s budget), and the success path asserts the RELATION to the bound with the margin in the message rather than freezing a count literal. The added bidirectional check derives present defaults from the real tree, so it also catches a name that sits in the defaults but is never applied. Every pre-existing ARM E assertion is preserved.\n\nTHE COST IS STATED, NOT GLOSSED — the header says plainly that 972 tracked files under `.serena/memories` stop being manifested, and why name-based exclusion cannot express `.serena/*`-minus-`memories`. I checked this is safe rather than merely honest: exclusions are DECLARED in `manifest.excludedDirectories`, and CUTOVER_MANIFEST_EXCLUSION_MISMATCH refuses any comparison whose two captures declared different sets, so a hidden difference cannot masquerade as a match.\n\nCOMMIT: d079210c, recorded, 2 owned source paths +178/-10 (net +168, well under the 400 bar). It also swept 5 `.moe/tasks/*.json` board files — routine wrapper board state, not code, and not held against the row.",
+      "timestamp": "2026-09-08T15:14:00.714Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T14:13:45.916Z",
-  "updatedAt": "2026-09-08T15:09:49.638Z",
+  "updatedAt": "2026-09-08T15:14:35.314Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T14:46:25.526Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-09-08T15:14:35.314Z",
+    "wallClockMs": 1689788
   },
   "stepsCompleted": [
     "step-1",
@@ -144,7 +152,49 @@
   },
   "filesModified": [
     "tests/migration/cutover/cutover-drill.test.ts",
+    "tests/migration/cutover/cutover-manifest.ts",
+    ".moe/tasks/task-511f9f8d85314926a51b0ed23c8d48fa.json",
+    ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json",
+    ".moe/tasks/task-893389aec6f145b399ef2a2ed160e0f9.json",
+    ".moe/tasks/task-baba9e8bb3ff4a259c66d27287d4a5b2.json",
+    ".moe/tasks/task-c78140e9a4b749078d4fb633e2e70850.json"
+  ],
+  "completionSummary": "FIXED BY SCOPE, NOT BY MOVING THE BOUND. MAX_WALK_ENTRIES is untouched at 10_000.\n\nROOT CAUSE (DoD 1). Reproduced exactly: `pnpm test:migration` EXIT 1 at cutover-drill.test.ts:536 via assertOk :73, `CUTOVER_MANIFEST_ENTRY_LIMIT_EXCEEDED @ cutover-manifest, entry count exceeds 10000`. The admitted population measured 10574 against the 10_000 bound. `.serena` alone was 4303 of them — 41% — and `git check-ignore -v` on a file under it answers `C:/Users/Yaron/.gitignore_global:1:.serena/`: ignored by a HOST-GLOBAL gitignore OUTSIDE the repository. The arm's population was a property of how many agent sessions this laptop had run, not of the tree. The prior 8257 figure (2026-09-03) was calibrated against that same moving quantity, which is why the bound re-armed.\n\nTHE FIX (DoD 2). `.serena` added to DEFAULT_EXCLUDED_DIRECTORY_NAMES (sorted); walk now 6271, 37% headroom. Header comment rewritten with dated measurements and the reason the earlier number was unsafe. `.moe` deliberately NOT excluded — 1034 of its 1101 are tracked board state.\n\nRED-FIRST (DoD 2). New ARM C3 over a CONSTRUCTED fixture — never the host's real `.serena`, so it holds on a clean CI host. Asserts both halves in one comparison, `{descended:false, declared:true}`: I first wrote two sequential expects and the run stopped at the first, leaving the DECLARATION half never seen red. Witnessed RED `{descended:true, declared:false}` before the production edit, GREEN after. Negative control (`excludedDirectoryNames: []` must yield exactly 12 entries) stops it passing if the walk breaks entirely.\n\nDIAGNOSTIC (DoD 2). ARM E's bare refusal now prints the ADMITTED POPULATION per top-level segment, largest first, plus the exclusions in force — so the next agent does not re-derive what this row did. Census counts dirents only, never hashes, runs ONLY on the already-failed path. Added a bidirectional check: every default-excluded name that ACTUALLY EXISTS at the root must be DECLARED, guarded by a non-empty assert",
+  "commits": [
+    {
+      "sha": "d079210c72a4060278911035cdd3606d04e0a251",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-812079a7@2026-09-08T14:50:31Z",
+      "paths": [
+        ".moe/tasks/task-511f9f8d85314926a51b0ed23c8d48fa.json",
+        ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json",
+        ".moe/tasks/task-893389aec6f145b399ef2a2ed160e0f9.json",
+        ".moe/tasks/task-baba9e8bb3ff4a259c66d27287d4a5b2.json",
+        ".moe/tasks/task-c78140e9a4b749078d4fb633e2e70850.json",
+        "tests/migration/cutover/cutover-drill.test.ts",
+        "tests/migration/cutover/cutover-manifest.ts"
+      ],
+      "recordedBy": "worker-812079a7",
+      "recordedAt": "2026-09-08T15:09:55.727Z",
+      "treeId": "650f1d833ba9d21554dab644a3b3843e483ccb73",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "tests/migration/cutover/cutover-drill.test.ts",
     "tests/migration/cutover/cutover-manifest.ts"
   ],
-  "completionSummary": "FIXED BY SCOPE, NOT BY MOVING THE BOUND. MAX_WALK_ENTRIES is untouched at 10_000.\n\nROOT CAUSE (DoD 1). Reproduced exactly: `pnpm test:migration` EXIT 1 at cutover-drill.test.ts:536 via assertOk :73, `CUTOVER_MANIFEST_ENTRY_LIMIT_EXCEEDED @ cutover-manifest, entry count exceeds 10000`. The admitted population measured 10574 against the 10_000 bound. `.serena` alone was 4303 of them — 41% — and `git check-ignore -v` on a file under it answers `C:/Users/Yaron/.gitignore_global:1:.serena/`: ignored by a HOST-GLOBAL gitignore OUTSIDE the repository. The arm's population was a property of how many agent sessions this laptop had run, not of the tree. The prior 8257 figure (2026-09-03) was calibrated against that same moving quantity, which is why the bound re-armed.\n\nTHE FIX (DoD 2). `.serena` added to DEFAULT_EXCLUDED_DIRECTORY_NAMES (sorted); walk now 6271, 37% headroom. Header comment rewritten with dated measurements and the reason the earlier number was unsafe. `.moe` deliberately NOT excluded — 1034 of its 1101 are tracked board state.\n\nRED-FIRST (DoD 2). New ARM C3 over a CONSTRUCTED fixture — never the host's real `.serena`, so it holds on a clean CI host. Asserts both halves in one comparison, `{descended:false, declared:true}`: I first wrote two sequential expects and the run stopped at the first, leaving the DECLARATION half never seen red. Witnessed RED `{descended:true, declared:false}` before the production edit, GREEN after. Negative control (`excludedDirectoryNames: []` must yield exactly 12 entries) stops it passing if the walk breaks entirely.\n\nDIAGNOSTIC (DoD 2). ARM E's bare refusal now prints the ADMITTED POPULATION per top-level segment, largest first, plus the exclusions in force — so the next agent does not re-derive what this row did. Census counts dirents only, never hashes, runs ONLY on the already-failed path. Added a bidirectional check: every default-excluded name that ACTUALLY EXISTS at the root must be DECLARED, guarded by a non-empty assert"
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-812079a7@2026-09-08T14:50:31Z",
+    "at": "2026-09-08T15:09:55.727Z"
+  },
+  "completedAt": "2026-09-08T15:14:35.314Z",
+  "reviewCompletedAt": "2026-09-08T15:14:35.314Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-caa047b3.\n\nRE-RUN BY ME, foreground, under a full-suite-gate lease (15:11-15:13Z, released): `pnpm test:migration` EXIT 0, 6 files / 80 tests — nonzero count line, matches the recorded verification. `pnpm test` (root) EXIT 0, 434 passed | 2 skipped (436) / 10404 passed | 46 skipped. THE ROOT LANE IS NOW GREEN: this row's defect was the sole root red on the branch all day. `pnpm typecheck` EXIT 0, zero `error TS`.\n\nDoD 1, re-measured myself: walk = 10562 with the four original exclusions, 6258 with `.serena` (worker: 10574/6271; drift is agent sessions, as the row argues). `.serena` 4298 files / 972 tracked — the header's \"972 tracked\" is exact. `.moe` 1069/1036, so the reason for NOT excluding it holds. Decisive claim verified verbatim: `git check-ignore -v` on an untracked path under `.serena/memories` answers `C:/Users/Yaron/.gitignore_global:1:.serena/`, and core.excludesfile confirms that ignore is outside the repo.\n\nDoD 2: the bound was NOT moved — MAX_WALK_ENTRIES = 10_000 at cutover-manifest.ts:95, unchanged, still pinned at cutover-drill.test.ts:345. ARM C3 is non-vacuous BY CONSTRUCTION: {descended:false, declared:true} in one toEqual, plus a negative control with excludedDirectoryNames:[] requiring the 12 fixture files back and entryCount = excluded + 12. Both hold only if `.serena` is in the defaults and the walk still works — over a constructed fixture that survives a clean CI host. ARM E's diagnostic prints the census on the failure path only, counts dirents without hashing, asserts the RELATION to the bound instead of freezing a count, and keeps every prior assertion.\n\nExclusion safety checked: excluded names are DECLARED and CUTOVER_MANIFEST_EXCLUSION_MISMATCH refuses mismatched-declaration comparisons, so the 972 unmanifested tracked files cannot let a difference pass as a match. The header states that cost outright.\n\nCommit d079210c, recorded; 2 owned paths +178/-10."
 }

@@ -46,11 +46,16 @@
     {
       "stepId": "step-3",
       "description": "RUN THE JOURNEY UNDER THE SHARED GATE AND READ ITS OUTPUT, NOT ITS EXIT CODE (DoD 5).\n\nAcquire the `browser-e2e-gate` resource via moe.acquire_resource before starting — one browser lane at a time on this host, and a concurrent lane is how these runs turn into unattributable reds. Release it when the leg finishes.\n\nRun `pnpm test:e2e:browser` FOREGROUND and STANDALONE. No pipe and no `;`-chain: a piped run reports tail's exit code and a chain reports only the last command's. Quote the count line and the exit code verbatim in the step note.\n\nIF THE JOURNEY REDS: read the daemon's OWN refusal. The spec holds `why` precisely so a lane that never reached `body` reports the daemon's reason rather than a bare Playwright locator timeout — quote that, not the locator error. The likely first red is the workspace-identity mismatch named in step 2; it is a real defect in the wiring, not a reason to relax anything.\n\nFIXTURES (DoD 5's second sentence, and it is a real clause): the control-room fixtures must be the daemon's REAL frames captured from this run. If any fixture backing the card's arms was hand-written against the legacy goal's shape, recapture it from this run's frames — the exact-key decoders reject hand-written ones, so a hand-edited fixture fails loudly rather than silently, but recapture it properly rather than hand-patching the keys.\n\nIF A DIFFERENT BROWSER SPEC IS RED, that is a foreign red and it is NOT yours to fix: attribute it with the path-attributed baseline (global rail 3 — repo-wide failures at merge-base, then at HEAD, delta intersected with this row's owned paths) and disclose it VERBATIM with its exact failing lines and file paths. Known and already triaged by QA, do not re-fix: tests/security/boundary-roster.security.ts:762 on ENVIRONMENT_WRITE_LAYER, owned by task-ba83b202, from an untracked file the security lane scans out of the working tree.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/control-room/release-approval.spec.ts"
       ],
-      "startedAt": "2026-09-08T14:38:28.251Z"
+      "modifiedFiles": [
+        "tests/e2e/control-room/release-approval.spec.ts"
+      ],
+      "note": "STEP 3 RAN THE JOURNEY SEVEN TIMES UNDER THE HELD browser-e2e-gate LEASE. The red MOVED FOUR TIMES and each move was a real defect fixed at its source; the last one is a DAEMON bug this row does not own, filed as task-48945cb6a24d4a5db0723c1f914624d1 and blocked on.\n\nSTEP 2's SWAP IS VINDICATED. Run 1 (`pnpm test:e2e:browser release-approval.spec.ts`, EXIT 1, 4.9m) got PAST the `/release/read` -> PRESENT assertion at :209-211 that QA cited as the round-2 red. The contract-bound goal answers PRESENT. That clause is closed.\n\nRED 2 -- A LOCATOR THAT NAMES NOTHING. Run 1 failed at `cr.release.root` not visible. `git grep cr.goal.open` finds it in NO source file: the spec waited 120s on an invented testid, swallowed the timeout with `.catch(() => undefined)`, never opened the goal, and then reported \"the card is missing\" -- a true sentence about the wrong subject. The shipped id is `cr.goals.card.<goalId>.open` (goals-home.tsx GoalCard; used by deploy-environment.spec.ts:126 and six peers). FIXED: real nav (`cr.nav.goals` -> `cr.goals.home` -> the card's open), and the swallows DELETED so the next locator break says so.\n\nRED 3 -- THE CARD RENDERED, THE SHA DID NOT. Run 2 (EXIT 1, 1.6m) reached the browser: `cr.release.root` visible and `cr.release.covered` matching `^Criteria covered \\d+ of \\d+$`. Failed at :226 with `cr.release.sha` = \"Nothing is published yet, so there is no sha to release.\" The card is RIGHT: release-evidence-read.ts:216 takes the dossier sha from `publication?.outcome === \"PUSHED\" ? publication.sha : null`. The spec's remote was `https://github.com/moe-lane/release-approval.git` -- the placeholder deploy-environment.spec.ts:23 already records as \"this lane's publish has no reachable remote\". `outcome: \"ACCEPTED\"` at :133 is the DISPATCH, not the push. FIXED: a REAL bare repository in the lane scratch (`git init --bare`), plus a new assertion that the publisher's own receipt reached PUSHED, quoting its refusal verbatim otherwise.\n\nRED 4 -- NOTHING WAS POLLING. `publishOnce` has exactly two callers: repository-delivery-runtime.ts:128 (the WRAPPER's advance tick) and release-decide-service.ts:193. A deployment's wrapper polls continuously; this lane kills its wrapper after each delivery pass, so the publish request landed with nothing left to pick it up. FIXED honestly by running the REAL wrapper for one `MOE_WRAPPER_ONCE` pass -- not by recording a receipt on the daemon's behalf. Its pid joins `wrapperPids`. Sub-defect found on the way: `resolveLaneScratch` keys on `node-specs/node.json`, which `landLaneNode` retires (lane-contract-goal.ts:159), so it must be resolved BEFORE `createLaneContractGoal`, not after.\n\nRED 5 -- THE DAEMON BUG, and it is where this row stops. Run 7 reached the publisher: reservation `publish:791a08cc...` in phase PUBLISHING, still no receipt. Reproduced OUTSIDE the browser lane with a throwaway probe against the production port (probe deleted; full source recreatable from the filed row):\n  git config --null --get-urlmatch credential C:/.../release-remote.git -> 128 \"\" \"fatal: invalid URL scheme name or missing '://' suffix\"\n  PUSH: {\"ok\":false,\"code\":\"PUBLISH_PUSH_UNKNOWN\"}  OBSERVE: {\"ok\":false,\"code\":\"PUBLISH_REMOTE_UNREADABLE\"}\ngit-publication-credentials.ts:8 accepts only `code===1 && stdout===\"\"` as \"no credential config\", so it throws and the port never attempts the push. With that one read stubbed to exit 1 and NOTHING else changed, the same candidate goes green against real git: PUSH {\"ok\":true}, OBSERVE {\"ok\":true,\"sha\":\"7b45c4d5...\"}. Not a lane artefact: `admitRemoteUrl` deliberately admits scp-style `git@github.com:owner/repo.git`, which has no `://` and fails identically -- so every SSH remote the product advertises is unpushable.\n\nFIXTURES: none recaptured. The card's arms are component tests over `ReleaseEvidenceView`; no committed frame fixture backs this journey, so there was nothing hand-written to replace.\n\nFOREIGN REDS, disclosed not absorbed: tests/security/boundary-roster.security.ts:762 ENVIRONMENT_WRITE_LAYER (task-ba83b202, untracked file the lane scans from the working tree) and root `pnpm test` at tests/migration/cutover/cutover-drill.test.ts:536 CUTOVER_MANIFEST_ENTRY_LIMIT_EXCEEDED (task-893389ae). Neither is in this row's five gate legs.\n\nDELIVERED: tests/e2e/control-room/release-approval.spec.ts, 383 lines, `npx tsc -p tests/e2e/control-room/tsconfig.json --noEmit` EXIT 0. It is correct-by-construction and goes green the moment the filed row lands. Peer dirt noted, untouched.",
+      "startedAt": "2026-09-08T14:38:28.251Z",
+      "completedAt": "2026-09-08T15:26:53.499Z"
     },
     {
       "stepId": "step-4",
@@ -77,7 +82,7 @@
     }
   ],
   "status": "BLOCKED",
-  "assignedWorkerId": "worker-bcaa6d5e",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -207,16 +212,22 @@
       "author": "worker-bcaa6d5e",
       "content": "STEP 4 PRE-FLIGHT, PART 2 — the last unknown in comment-97f984e2 is closed, still with zero writes.\n\n`git rev-parse --verify origin/main` -> **0a52f5731e47f05427bcde12d6f2f9126ff92dbe**, and `git ls-remote --heads https://github.com/yaront1111/Moe-NG.git main` -> **0a52f5731e47f05427bcde12d6f2f9126ff92dbe refs/heads/main**, EXIT 0. Two consequences for the live drive:\n\n1. The local checkout already holds the exact object GitHub's main points at, so the drive's workspace can be rebased onto real main by fetching from the LOCAL repository path (instant, no clone, no network) rather than cloning Moe-NG from GitHub. Every base object is then already on the remote, so the throwaway branch push carries only the goal's own landed commits.\n2. Read access over HTTPS is proven working under the gh credential helper without any write having been attempted. The push in step 4 is therefore the FIRST outward-facing action this row takes, and it will be taken by the product's publisher through the card, not from my shell.\n\nRecorded because it decides the step-4 recipe: rebase-then-land, NOT clone-from-github and NOT a PR across unrelated histories.",
       "timestamp": "2026-09-08T14:43:50.941Z"
+    },
+    {
+      "id": "comment-6104ea653a384a68be2780d3c4348d52",
+      "author": "worker-bcaa6d5e",
+      "content": "STEP 3 EVIDENCE — worker-bcaa6d5e, 2026-09-08 15:30Z. Seven `pnpm test:e2e:browser release-approval.spec.ts` runs under a held browser-e2e-gate lease (now released to task-8f86e105). The red moved four times; each move was a real defect fixed at source. Blocked on the fifth, which is a daemon bug: task-48945cb6a24d4a5db0723c1f914624d1.\n\nQA's ROUND-2 RED IS CLOSED. Run 1 (EXIT 1, 4.9m) got PAST `/release/read` -> PRESENT at :209-211. The contract-bound goal step 2 swapped in answers PRESENT; the ABSENT that failed :177 in round 2 is gone.\n\nRED 2 — AN INVENTED LOCATOR. `git grep cr.goal.open` -> the spec and nothing else. It waited 120s on a testid no component ships, `.catch(() => undefined)` ate the timeout, the goal was never opened, and the run then failed on the CARD assertion: a true sentence about the wrong subject, and 240s of wall clock per run. Shipped id is `cr.goals.card.<goalId>.open` (goals-home.tsx GoalCard; already used by deploy-environment.spec.ts:126 and six peers). Fixed: `cr.nav.goals` -> assert `cr.goals.home` -> click the card open, swallows deleted.\n\nRED 3 — THE CARD RENDERED, THE SHA DID NOT. Run 2 (EXIT 1, 1.6m) reached the browser: `cr.release.root` visible, `cr.release.covered` matching `^Criteria covered \\d+ of \\d+$`. Failed at :226, `cr.release.sha` = \"Nothing is published yet, so there is no sha to release.\" The card is RIGHT: release-evidence-read.ts:216 takes the dossier sha from `publication?.outcome === \"PUSHED\" ? publication.sha : null`, and `https://github.com/moe-lane/release-approval.git` is a placeholder with no reachable remote — the same idiom deploy-environment.spec.ts:23 already records. `outcome:\"ACCEPTED\"` at :133 is the DISPATCH, not the push. Fixed: a REAL `git init --bare` remote in the lane scratch, plus a new assertion on the publisher's own receipt that quotes its refusal verbatim.\n\nRED 4 — NOTHING WAS POLLING. `publishOnce` has exactly two callers: repository-delivery-runtime.ts:128 (the WRAPPER's advance tick) and release-decide-service.ts:193. A deployment's wrapper polls continuously; this lane kills its wrapper after each delivery pass, so the publish request landed with nobody left to pick it up. Fixed by running the REAL wrapper for one `MOE_WRAPPER_ONCE` pass — not by recording a receipt on the daemon's behalf. Sub-defect: `resolveLaneScratch` keys on `node-specs/node.json`, which `landLaneNode` retires (lane-contract-goal.ts:159), so it must be resolved BEFORE `createLaneContractGoal`.\n\nRED 5 — THE BLOCKER. Run 7 reached the publisher: reservation `publish:791a08cc...` phase PUBLISHING, still no receipt. Reproduced outside the browser lane against the production port:\n  git config --null --get-urlmatch credential C:/.../release-remote.git -> 128 \"\" \"fatal: invalid URL scheme name or missing '://' suffix\"\n  PUSH {\"ok\":false,\"code\":\"PUBLISH_PUSH_UNKNOWN\"}  OBSERVE {\"ok\":false,\"code\":\"PUBLISH_REMOTE_UNREADABLE\"}\ngit-publication-credentials.ts:8 accepts only `code===1 && stdout===\"\"` as \"no credential config\", so it throws and the port never attempts the push. Stub that ONE read to exit 1, change nothing else, same candidate, real git: PUSH {\"ok\":true}, OBSERVE {\"ok\":true,\"sha\":\"7b45c4d5...\"}. Not a lane artefact — `admitRemoteUrl` deliberately admits scp-style `git@github.com:owner/repo.git`, which has no `://` and fails identically, so every SSH remote the product advertises is unpushable.\n\nWHY I DID NOT PRESS ON TO STEP 4. The live PR is not blocked by this bug (a real https remote url-matches fine). It is blocked by SEQUENCE: the hermetic lane is the rehearsal for this row's one irreversible outward-facing action, and driving a first-ever live push to the owner's repository on a chain never seen green is backwards. Land task-48945cb6, get the journey green, then drive live.\n\nFIXTURES: none recaptured — the card's arms are component tests over `ReleaseEvidenceView`; no committed frame fixture backs this journey, so there was nothing hand-written to replace.\n\nDELIVERED: tests/e2e/control-room/release-approval.spec.ts, 383 lines, `npx tsc -p tests/e2e/control-room/tsconfig.json --noEmit` EXIT 0. Correct-by-construction; it goes green the moment the filed row lands. The throwaway probe was deleted from the repo root; its full behaviour is recorded in the filed row.\n\nFOREIGN REDS, disclosed not absorbed: tests/security/boundary-roster.security.ts:762 ENVIRONMENT_WRITE_LAYER (task-ba83b202) and root `pnpm test` at tests/migration/cutover/cutover-drill.test.ts:536 CUTOVER_MANIFEST_ENTRY_LIMIT_EXCEEDED (task-893389ae). Neither is among this row's five gate legs.",
+      "timestamp": "2026-09-08T15:28:56.162Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:31:45.397Z",
-  "updatedAt": "2026-09-08T14:44:23.033Z",
+  "updatedAt": "2026-09-08T15:29:50.238Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T11:25:19.038Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 21,
+    "executedStepCount": 22,
     "rejectCount": 2,
     "reopenCount": 2
   },
@@ -238,14 +249,17 @@
       "reason": "PLAN IN BUILD ORDER (rail 16). This is a proof/consumer row. Its producer task-f961dc89 (release.decide) is still PLANNING and grep release.decide over apps/ packages/ is ZERO hits. Planning the browser journey first would ship a mock-backed proof (rail 4 clause 2). Releasing so the leaf can be planned first; dependsOn already gates WORKING."
     }
   ],
-  "blockedReason": "RESOURCE WAIT ONLY — browser-e2e-gate. Not a defect, not a plan conflict, not a missing prerequisite. Steps 1-2 are COMPLETE with their bytes on disk; every remaining step needs this lease.\n\nHOLDER: worker-d0fc1403 / task-78eedd8e, acquired 14:21:35Z, ETA 45m; they announced at 14:35Z they were starting their own full browser lane. I am #1 in the queue. Nothing of mine is running — no daemon lane, no browser lane, no on-disk drill. Announced in chat (msg-26f2619309ee).\n\nNO NON-GATE WORK REMAINS. Step 3 IS the lane run. Step 4's live drive is also a browser lane (approve through the card's arm-then-confirm; a shell `gh` proves nothing this row claims). Step 5's docs must state what step 4 measured, so writing them now would be an aspiration. Step 6 re-runs the lane.\n\nDELIVERED WHILE WAITING, all reads, zero remote writes:\n- step-2 edit on disk: tests/e2e/control-room/release-approval.spec.ts, 43+/54-. `npx tsc -p tests/e2e/control-room/tsconfig.json --noEmit` EXIT 0.\n- Plan risk #1 (workspace identity mismatch) measured CLOSED before it could red the lane: laneWorkspaceIdentity(root) and lane.workspace are the same directory (daemon-ports.ts:156, :217-222, :651).\n- A hazard the plan does not name, found and resolved on paper: the live PR would be opened across UNRELATED HISTORIES, because createLaneWorkspace is a fresh `git init` + one commit while the PR base is Moe-NG main. Chain and fix in comment-97f984e2; deciding measurement (origin/main == the remote's refs/heads/main == 0a52f5731e47f05427bcde12d6f2f9126ff92dbe) in comment-3e28ef2d.\n- DoD-6 target resolved: no repo named `moe-next` exists on the account, so the owner's ruling names yaront1111/Moe-NG, base main. gh present and authenticated, so RELEASE_PR_FAILED stays unreachable.\n\nAUTO-RESUME IS ALL THAT IS NEEDED. No governor, architect or human decision is outstanding.",
-  "blockedOnTaskIds": null,
-  "blockedResourceId": "browser-e2e-gate",
+  "blockedReason": "BLOCKED ON A DAEMON BUG I FILED AND PROVED: task-48945cb6a24d4a5db0723c1f914624d1. Steps 1-3 COMPLETE; evidence in comment-6104ea65 and the step-3 note.\n\nPREMISE, measured at HEAD 7e76c556, reproduced OUTSIDE the browser lane. git-publication-credentials.ts:8 accepts only `code===1 && stdout===\"\"` from `git config --null --get-urlmatch credential <remoteUrl>`. Git answers exit 128 / `fatal: invalid URL scheme name or missing '://' suffix` for any remote with no `://` scheme, so it throws and the port NEVER ATTEMPTS THE PUSH:\n  PUSH {\"ok\":false,\"code\":\"PUBLISH_PUSH_UNKNOWN\"} OBSERVE {\"ok\":false,\"code\":\"PUBLISH_REMOTE_UNREADABLE\"}\nStub that ONE read to {code:1,stdout:\"\"}, nothing else, same candidate, real git:\n  PUSH {\"ok\":true} OBSERVE {\"ok\":true,\"sha\":\"7b45c4d5...\"}\nProduction defect, not a lane artefact: admitRemoteUrl deliberately admits scp-style `git@github.com:owner/repo.git`, no `://`, fails identically — every SSH remote the product advertises is unpushable.\n\nBLOCKS DoD-5: the card offers no sha until the publication is PUSHED (release-evidence-read.ts:216), so approve -> PR link is unreachable. Fixed, the journey is hermetic and green against a real local bare repo; unfixed, the only path left is pushing a branch to real GitHub on every browser-suite run. Task rail 1 forbids me repairing it here.\n\nWHY NOT PRESS ON TO STEP 4 MEANWHILE. The live PR is NOT blocked by this bug (a real https remote url-matches fine); it is blocked by SEQUENCE. Step 4 is this row's one irreversible outward-facing action, against the owner's own repository, and the hermetic lane is its rehearsal — never yet green. A first-ever live push and PR through a chain nobody has watched work end to end is the ordering error that makes a bad outcome unrepairable.\n\nNOT A REPLAN: steps 4-6 stand. release-approval.spec.ts (383 lines, tsc EXIT 0) goes green when task-48945cb6 lands. browser-e2e-gate released to task-8f86e105.",
+  "blockedOnTaskIds": [
+    "task-48945cb6a24d4a5db0723c1f914624d1"
+  ],
+  "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-08T14:44:23.033Z",
+  "blockedAt": "2026-09-08T15:29:50.238Z",
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-08T14:34:41.914Z",
@@ -483,6 +497,29 @@
       "treeId": "f0eda574967c7fc6c4057761541566d2e0b76263",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "7e76c556bcccef48e69209f2309106101b948ac2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-bcaa6d5e@2026-09-08T14:34:59Z",
+      "paths": [
+        ".moe/tasks/task-6bafd3b9439640cba358dd6e79329c9d.json",
+        ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+        "tests/e2e/control-room/release-approval.spec.ts"
+      ],
+      "recordedBy": "worker-bcaa6d5e",
+      "recordedAt": "2026-09-08T14:44:58.960Z",
+      "treeId": "ab78c9ac61ed50e0e7a5c2451c746a8abb7e3248",
+      "status": "BLOCKED",
+      "contested": [
+        {
+          "path": "docs/agent-stack-runbook.md",
+          "taskId": "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -507,8 +544,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-ca28be90@2026-09-07T05:31:12Z",
-    "at": "2026-09-07T05:44:57.279Z"
+    "sessionId": "worker-bcaa6d5e@2026-09-08T14:34:59Z",
+    "at": "2026-09-08T14:44:58.960Z"
   },
   "reviewStartedAt": "2026-09-07T04:20:16.690Z",
   "verification": {
