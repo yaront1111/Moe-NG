@@ -37,6 +37,16 @@ import { readGoalCatalogOverHttp } from "./prd-boundary-readers.js";
 const REMOTE_URL = "https://github.com/moe-lane/deploy-fake-docker.git";
 const ENVIRONMENT = "staging";
 const target = { environment: ENVIRONMENT, network: "lane-network", sshTarget: null, url: "https://lane.test" };
+/**
+ * WHAT A REFUSAL DETAIL BECOMES WHEN IT IS NOT ONE OF THE ENGINE'S OWN PUBLIC PHASE WORDS,
+ * DECLARED LOCALLY ON PURPOSE. `deploy-ledger.ts:24` keeps its `REDACTED_DETAIL` unexported and
+ * both daemon arms spell their own literal (deploy-journey.test.ts:90, deploy-service.test.ts:63)
+ * for a reason worth repeating here: an arm that IMPORTS the production marker follows that value
+ * anywhere it goes - including to the empty string - and stays green while redaction is gone.
+ */
+const REDACTED_DETAIL = "[REDACTED]";
+/** The fake docker port's stderr (`deploy-ports.ts:334`): untrusted tool text, never durable. */
+const FAKE_DOCKER_STDERR = "docker: not found";
 
 /**
  * STRICTLY LONGER THAN `LANDING_BUDGET_MS`, and that is the whole point of naming it here.
@@ -178,8 +188,19 @@ for (const mode of ["SUCCESS", "DEPLOY_DOCKER_UNAVAILABLE"] as const) {
           const receipt = readCurrentDeployReceipt(store, lane.projectId, ENVIRONMENT);
           expect(receipt).toMatchObject({ outcome: mode === "SUCCESS" ? "DEPLOYED" : "REFUSED", sha });
           expect(receipt?.refusal).toEqual(mode === "SUCCESS" ? null : {
-            code: mode, layer: "DAEMON_DEPLOY_ENGINE", detail: "docker: not found",
+            code: mode, layer: "DAEMON_DEPLOY_ENGINE", detail: REDACTED_DETAIL,
           });
+          // THE LEAK THE POSITIVE CANNOT SEE. `detail` equalling the marker says nothing about the
+          // OTHER fields of the stored row, and a detail that is redacted while the same stderr
+          // rides along in a sibling field is exactly the failure worth guarding, so assert the
+          // fake's stderr appears NOWHERE in the durable receipt.
+          //
+          // WHY NOT THE VALUE-FREE BOOLEAN SHAPE the parent row's secrets arms use: those compare
+          // to a boolean because the runner prints the ACTUAL value on failure, so a `toBe` against
+          // a real credential leaks it into the run log at the moment the arm fires. This string is
+          // benign text minted by an injected fake, so a readable diff is worth more here. Do not
+          // "fix" this to a boolean, and do not admit this string to `PUBLIC_PHASE_DETAILS`.
+          expect(JSON.stringify(receipt)).not.toContain(FAKE_DOCKER_STDERR);
         } finally { store.close(); }
         // THE DOUBLE WAS REACHED, observed rather than inferred: the injected port appends every
         // spawn it is asked for, and `"version"` is the `docker --version` probe the runner makes
