@@ -232,7 +232,65 @@ port, so no migration ran, and the candidate started with **no environment
 variables at all**: `docker run` is invoked with no `-e` and no `--env-file`, so
 a product that needs a `DATABASE_URL` would fail its health probe and the
 operator would read `DEPLOY_HEALTH_TIMEOUT` — a refusal naming HEALTH when the
-real cause is CONFIGURATION. Supplying them is a separate row.
+real cause is CONFIGURATION. Supplying them is a separate row, now filed as
+`task-0ca117e389df43ee9b458255f0752842` and re-measured on 2026-09-08 against a
+candidate the deploy service itself started.
+
+**What has been driven, measured 2026-09-08 (engine 29.6.2).** The whole chain,
+end to end, on ONE product, with no double anywhere in it — scaffold, real
+`docker compose` topology, real archive build from a real commit, variables
+through the encrypted store, the real migration, deploy, and rollback. This
+supersedes two claims in the 2026-09-07 paragraph above: **a `migrate` port WAS
+composed and a real migration DID run** against the disposable PostgreSQL, and
+the rollback is no longer unexercised. Both directions are proven by an HTTP
+RESPONSE from the running environment rather than by a receipt: the deployed
+build answers with its own marker, and after the rollback the PREVIOUS build's
+marker answers. The rollback was dispatched through the control an operator
+actually has — the `deployment.rollback` offer from `/affordances/read` and the
+receipt the shared `resolveRollbackTarget` names — not from a test's own
+variables. Reproduce with
+`MOE_PLATFORM_PIPELINE=1 pnpm exec vitest run tests/e2e/foundation/platform-pipeline.e2e.test.ts --no-file-parallelism`.
+
+**A ROLLBACK DOES NOT REVERT YOUR SCHEMA, and this is the sentence to read
+twice.** The deploy engine runs its migration step on the rollback leg too, with
+the previous sha, so the forward migration is re-attempted, finds nothing to
+apply, and the schema is left exactly where the forward deploy put it. Measured
+by querying `pg_tables` immediately before and after the rollback: the migrated
+table is present both times. `migrate_down` is a separate operator action and
+nothing on the rollback path invokes it. An operator who reads "rolled back" and
+infers their schema moved with it will be wrong.
+
+**A migration needs the product's workspace INSTALLED.** The migration tool is a
+dependency of the generated product, so a freshly scaffolded or freshly cloned
+tree cannot migrate until its workspace is installed. Today that failure arrives
+as `DEPLOY_BUILD_FAILED` with a redacted detail, and underneath it
+`MIGRATION_FAILED / MIGRATION_FILE_UNKNOWN` — a code naming a FILE when the real
+cause is a missing TOOL. Filed as `task-61f826e50332498eaaaf44f2043845fc`.
+
+**Nothing leaks when a deploy, a migration or a verifier fails.** Proven on the
+failure paths specifically, with live resources enumerated by `docker ps`,
+`docker network ls` and an OS port probe before and after each arm, because a
+cleanup function that returned is not evidence:
+`tests/e2e/foundation/platform-teardown-failure-paths.e2e.test.ts`.
+
+**No variable value surfaces anywhere along the pipeline.** A canary planted
+through the encrypted store is proven to have reached the deployed database
+process — postgres authenticates a connection with it — and is then absent from
+all 45 swept artifacts: both deploy receipts, both report details, the ledger,
+the migration receipt, the probe response, the candidate's `docker inspect` and
+logs, the proxy's Caddyfile after the flip, every generated infrastructure file
+and every committed fixture. `.env` holds it and is not committed.
+`tests/e2e/foundation/platform-secret-canary.e2e.test.ts`.
+
+**These three live files publish the product's real ports (3000 and 5432), so
+run them one at a time** — `--no-file-parallelism` — and only with
+`MOE_PLATFORM_PIPELINE=1`. Without the flag they neither bind nor build, which
+is why the shared root gate is unaffected by them.
+
+**An environment can never be retired.** There is no destroy or teardown command
+at any layer, and the health sweep takes its roster from the append-only deploy
+ledger, so an environment whose containers you removed by hand is probed forever
+and keeps recording DOWN. Filed as `task-de80c663569a4ab2b30a9db6ac526e4b`.
 
 **The three days this cost, so nobody repeats it.** `DEPLOY_DOCKER_UNAVAILABLE`
 collapses two different states: docker *not installed* (needs a host change) and
