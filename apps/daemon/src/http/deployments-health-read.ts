@@ -28,6 +28,8 @@ import { decodeBoundedJsonBytes } from "@moe/contracts";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
 import type { EnvironmentDeployState } from "../deployment/deploy-ledger.js";
 import type { DeployEngineStamp, DeployRefusalCode } from "../deployment/deploy-receipt-contracts.js";
+import { resolveRollbackTarget } from "../deployment/rollback-target.js";
+import type { RollbackTarget } from "../deployment/rollback-target.js";
 import { PROBE_URL_MISSING } from "../monitoring/health-probe-contracts.js";
 import type {
   HealthIncident, HealthProbe, HealthProbeRefusal, HealthProbeResult, HealthState,
@@ -107,8 +109,31 @@ export interface DeploymentsHealthView {
   readonly probeIntervalMs: number;
   /** The probe row's own refusal when this environment cannot be probed at all. */
   readonly probeRefusal: HealthProbeRefusal | null;
-  /** The sha of the receipt the current deploy replaced — the rollback target, or null. */
+  /**
+   * A DISPLAY FACT AND NOTHING MORE: the sha of the receipt that sat before this one in the raw
+   * ledger. It is POSITIONAL (`previous`, deploy-ledger.ts:91) and so includes REFUSED receipts,
+   * which means it can name a receipt that never ran or the one running RIGHT NOW. A card may
+   * render it as "previously deployed"; a card MUST NOT construct a rollback from it. Kept
+   * byte-identical to what it always served — the Environments surface reads it — with
+   * `rollbackTarget` added beside it as the authority.
+   */
   readonly rollbackSha: string | null;
+  /**
+   * THE ONLY SPEND AUTHORITY FOR A ROLLBACK, or null when this environment has none.
+   *
+   * Resolved by `resolveRollbackTarget`, which mirrors the handler's own admission rule
+   * (rollback-command.ts:98-101), so a non-null value here names a receipt `deployment.rollback`
+   * will accept and a null says there is no control to offer at all. A card spends THIS —
+   * `toReceiptRef` verbatim into the payload — and never a sha it inferred.
+   *
+   * STALE BINDING, stated rather than left to be discovered. This is re-read on every poll and
+   * carries NO LEASE. A target superseded between the poll and the dispatch refuses at the
+   * handler — DEPLOY_ROLLBACK_RECEIPT_INVALID when a newer deploy moved the target, or
+   * EXPECTED_VERSION_CONFLICT when the project aggregate advanced — which is the intended
+   * fail-closed outcome. A card must therefore RE-POLL after any refusal and spend the fresh
+   * tuple, never retry the same one.
+   */
+  readonly rollbackTarget: RollbackTarget | null;
   readonly state: HealthState;
 }
 
@@ -273,7 +298,9 @@ export function projectDeploymentsHealth(
     // Straight through, deliberately. No `??`, no clamp, no re-resolution: see the member's doc.
     probeIntervalMs: source.probeIntervalMs,
     probeRefusal: probeRefusalOf(source.deploys),
+    // Unchanged on purpose — see the member's doc. The authority lives in the line below it.
     rollbackSha: source.deploys?.previous?.sha ?? null,
+    rollbackTarget: resolveRollbackTarget(source.deploys),
     state: deriveHealthState(source.probes),
   });
 }

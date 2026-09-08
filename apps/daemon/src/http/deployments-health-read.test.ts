@@ -60,6 +60,11 @@ function receipt(overrides: Partial<DeployReceiptV1> = {}): DeployReceiptV1 {
   });
 }
 
+/** A refusal a receipt can carry when the arm cares about the OUTCOME, not the error line. */
+const REFUSAL: DeployRefusal = Object.freeze({
+  code: "DEPLOY_BUILD_FAILED" as const, detail: "exit code: 1", layer: DEPLOY_ENGINE_STAMP,
+});
+
 function refusedReceipt(detail: string, decidedAt: string): DeployReceiptV1 {
   const refusal: DeployRefusal = Object.freeze({
     code: "DEPLOY_BUILD_FAILED" as const, detail, layer: DEPLOY_ENGINE_STAMP,
@@ -262,7 +267,7 @@ it("reports no last probe before an environment has been probed", () => {
 it("serves EXACTLY the key roster its consumers decode, in both directions", () => {
   expect(Object.keys(viewOf(source())).sort()).toEqual([
     "environment", "incident", "lastError", "lastProbe", "latencySeries", "ok",
-    "probeIntervalMs", "probeRefusal", "rollbackSha", "state",
+    "probeIntervalMs", "probeRefusal", "rollbackSha", "rollbackTarget", "state",
   ]);
   expect(Object.keys(viewOf(source())["latencySeries"] as object).sort())
     .toEqual(["points", "windowMinutes"]);
@@ -377,6 +382,62 @@ it("serves the previous receipt's sha as the rollback target", () => {
 
 it("serves no rollback target on an environment's first deploy", () => {
   expect(viewOf(source())["rollbackSha"]).toBeNull();
+});
+
+/**
+ * DoD 2's SPEND AUTHORITY. `rollbackTarget` names the receipt the handler will accept, so the
+ * assertion is on the RECEIPT ID and the digest — a sha alone is exactly what the card cannot
+ * spend (rollback-command.ts:44-49 takes `toReceiptRef`, never a sha).
+ */
+it("serves the spendable rollback target beside the display sha", () => {
+  const older = receipt({ receiptId: "1".repeat(64), sha: PREVIOUS_SHA });
+  const view = viewOf(source({
+    deploys: deploys([older, receipt({ decisionId: "decision-2", receiptId: "2".repeat(64) })]),
+  }));
+  expect(view["rollbackTarget"]).toEqual({
+    imageDigest: older.imageDigest, sha: PREVIOUS_SHA, toReceiptRef: "1".repeat(64),
+  });
+  expect(view["rollbackSha"]).toBe(PREVIOUS_SHA);
+});
+
+/**
+ * THE INCOHERENCE THIS ROW CLOSES, pinned as a contract rather than left as an accident.
+ *
+ * With [DEPLOYED A, DEPLOYED B, REFUSED C] the positional `previous` is B — the receipt STILL
+ * RUNNING — so `rollbackSha` names the deploy an operator is trying to leave. `rollbackTarget`
+ * names A, the deploy behind the running image, because it projects the history down to the
+ * receipts that actually ran. The two DISAGREE here by design; this arm asserts both values so
+ * neither can drift into the other.
+ */
+it("disagrees with rollbackSha when a refused deploy is the most recent receipt", () => {
+  const a = receipt({ receiptId: "1".repeat(64), sha: PREVIOUS_SHA });
+  const b = receipt({ decisionId: "decision-2", receiptId: "2".repeat(64) });
+  const c = receipt({
+    decisionId: "decision-3", imageDigest: null, outcome: "REFUSED" as const,
+    receiptId: "3".repeat(64), refusal: REFUSAL, sha: "e".repeat(40),
+  });
+  const view = viewOf(source({ deploys: deploys([a, b, c]) }));
+  expect(view["rollbackSha"]).toBe(b.sha);
+  expect((view["rollbackTarget"] as { toReceiptRef: string }).toReceiptRef).toBe(a.receiptId);
+  expect((view["rollbackTarget"] as { toReceiptRef: string }).toReceiptRef).not.toBe(b.receiptId);
+});
+
+/** A display sha with NO spend authority behind it: the card gets a fact and no control. */
+it("serves a rollbackSha but a NULL rollbackTarget when only one deploy ever ran", () => {
+  const a = receipt({ receiptId: "1".repeat(64), sha: PREVIOUS_SHA });
+  const b = receipt({
+    decisionId: "decision-2", imageDigest: null, outcome: "REFUSED" as const,
+    receiptId: "2".repeat(64), refusal: REFUSAL, sha: SHA,
+  });
+  const view = viewOf(source({ deploys: deploys([a, b]) }));
+  expect(view["rollbackSha"]).toBe(PREVIOUS_SHA);
+  expect(view["rollbackTarget"]).toBeNull();
+});
+
+it("serves both rollback members as null when the environment has never deployed", () => {
+  const view = viewOf(source({ deploys: null }));
+  expect(view["rollbackSha"]).toBeNull();
+  expect(view["rollbackTarget"]).toBeNull();
 });
 
 /**
