@@ -124,20 +124,26 @@
     {
       "stepId": "step-7",
       "description": "THE ROUND TRIP (DoD 3) - the arm that proves this row actually shipped a spendable control, in a new file.\n\nAgainst a REAL store and the REAL command registry, seed two DEPLOYED receipts for one environment, then:\n1. read the production affordance surface and take the `deployment.rollback` offer from `nextAllowedCommands` - never a hand-built envelope;\n2. read the production health frame and take `rollbackTarget.toReceiptRef` - never a hand-built receipt id;\n3. dispatch through the real registry as the CONFIGURED OPERATOR PRINCIPAL with payload exactly `{ environment, toReceiptRef, restoreDatabase: false }` and the offer's commandId/expectedVersion/targetAggregateId.\n\nASSERT THE ADMISSION, not merely the absence of a refusal: the request must get PAST rollback-command.ts:98-101. Whatever terminal outcome the unwired-ports test daemon reaches, the arm must FAIL if the code is DEPLOY_ROLLBACK_RECEIPT_INVALID, DEPLOY_ROLLBACK_TARGET_INVALID, DEPLOY_ROLLBACK_REQUEST_INVALID or EXPECTED_VERSION_CONFLICT - those four are exactly the ways a wrong offer or a wrong receipt ref would show up, and pinning them by name is what makes the arm non-vacuous.\n\nREFUSAL ARMS, each asserting CODE AND LAYER (global rail 1):\n- non-operator principal holding EVERY capability (so AUTHORIZE cannot answer first) -> OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION. Copy the technique from task-b22462cf's registry arm.\n- MCP exclusion intact: assert `deployment.rollback` is in MCP_EXCLUDED_COMMAND_KINDS and that the MCP allowlist does not serve it - derived from the implementation seam, not from a hand-copied roster.\n- an environment with only one DEPLOYED receipt -> the surface emits NO offer AND the health frame's rollbackTarget is null, so there is no authority to spend.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/http/affordance-rollback-round-trip.test.ts"
       ],
       "newFiles": [
         "apps/daemon/src/http/affordance-rollback-round-trip.test.ts"
       ],
-      "startedAt": "2026-09-08T01:57:19.705Z"
+      "modifiedFiles": [
+        "apps/daemon/src/http/affordance-rollback-round-trip.test.ts"
+      ],
+      "note": "ROUND TRIP LANDED (DoD 3). New apps/daemon/src/http/affordance-rollback-round-trip.test.ts, 4 arms, all against the PRODUCTION composition `createStoreDependencies` - the same factory the daemon entry uses, so the affordance port, the health port and the command registry all come from one composition root over one store file.\n\nTHE ROUND TRIP, nothing hand-built: (1) provider.affordances().readSurface() -> filter nextAllowedCommands for deployment.rollback -> exactly ONE, commandId/expectedVersion/targetAggregateId taken off it; (2) provider.deploymentsHealth().read({environment}) -> projectDeploymentsHealth(...).rollbackTarget -> toReceiptRef taken off it, asserted 64-hex; (3) registry.get(\"deployment.rollback\").asyncHandler dispatched as the configured operator with payload exactly {environment, restoreDatabase:false, toReceiptRef}.\n\nTHE ADMISSION IS ASSERTED POSITIVELY, not just as an absent refusal. Required negative: the code is none of DEPLOY_ROLLBACK_RECEIPT_INVALID / DEPLOY_ROLLBACK_TARGET_INVALID / DEPLOY_ROLLBACK_REQUEST_INVALID / EXPECTED_VERSION_CONFLICT. Added positive: the refusing LAYER is neither DAEMON_COMMAND_SEAM (where this handler's own refuse() mints all four) nor DAEMON_AUTHORIZATION (the principal check in front of them), which is what proves execution LEFT the admission stage.\nMEASURED TERMINAL OUTCOME, recorded by a temporary console.log then removed: `{\"code\":\"DEPLOY_BUILD_FAILED\",\"layer\":\"DAEMON_DEPLOY_ENGINE\"}`. The dispatch got all the way to the deploy engine and died because this box has no docker - exactly the terminal outcome an unwired test daemon should reach, and one a wrong offer or wrong receipt ref cannot reach.\n\nREFUSAL ARMS, code AND layer:\n- non-operator principal \"planning-agent\" holding EVERY capability (admin, goal.write, work.write, policy.write, review.write, approval.write) -> toEqual({code: \"OPERATOR_PRINCIPAL_REQUIRED\", layer: \"DAEMON_AUTHORIZATION\"}). Non-vacuous by construction: no capability gate can answer first, and this kind is served from an ASYNC entry so it never reaches the registry's synchronous operator check - it fences itself at rollback-command.ts:80, the one refusal in this handler stamped DAEMON_AUTHORIZATION instead of DAEMON_COMMAND_SEAM.\n- MCP exclusion derived from the SERVED SEAM: deployment.rollback IS in MCP_EXCLUDED_COMMAND_KINDS and IS NOT in wiredMcpToolKinds() - the exact allowlist both MCP entries are handed. Plus a positive control (roster length > 1 and contains goal.create) so the negative cannot pass by the allowlist having collapsed to empty.\n- one DEPLOYED receipt -> BOTH seams withhold at once: zero offers AND rollbackTarget null. Asserting only one would leave the other free to hand out authority alone.\n\nSEED NOTE, disclosed. The deploy target is bound by the PRODUCTION setter `setDeployTarget` called directly, not through registry.get(\"deployment.set_target\").handler. First attempt used the registry and every arm red with `Error: BOOTSTRAP_PREREQUISITE_MISSING` from daemon-command-dispatch.ts:137 - that entry additionally enforces the whole bootstrap ladder (register -> bind -> policy -> ... -> publish) and refuses on a fresh store. The ladder gates WHEN an operator may bind a target; it is not what this row tests, and climbing it would bury the round trip in world-building. The BINDING ITSELF is written by the production writer, which is what deployBound reads back. Comment in the file says all of this.\n\nEPIC RAIL 4 (anything started is stopped): each arm's mkdtemp directory is removed and the provider closed in a `finally`, and `seed()` closes on its own throw path too. Verified after the run: zero `moe-rollback-round-trip-*` directories left in TEMP. The docker build never started a container - there is no docker binary on this host, which is why the engine refused.\n\nVERIFICATION: `cd apps/daemon && npx vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/http/affordance-rollback-round-trip.test.ts` -> exit 0, `Test Files  1 passed (1)` / `Tests  4 passed (4)`.",
+      "startedAt": "2026-09-08T01:57:19.705Z",
+      "completedAt": "2026-09-08T02:02:39.380Z"
     },
     {
       "stepId": "step-8",
       "description": "GATES (DoD 4). Run in the foreground and QUOTE THE COUNT LINE from each - exit 0 without a `Test Files N passed` line means nothing ran.\n\n1. Focused daemon leg over every file this row touched or created: rollback-target, deployments-health-read, daemon-entry-deployments-health, affordance-rollback-offers, affordance-rollback-round-trip, affordance-read, affordance-read-planning, affordance-deployment-goals, affordance-agent-provider-offers. Use the package's own script flags - narrowing `pnpm --filter @moe/daemon test` to a file list DROPS `--testTimeout=30000` and fakes timeout reds on a clean tree.\n2. `pnpm --filter @moe/control-room test` - MANDATORY under epic rail 1 and because this row changes a served read shape and its decoder. Quote the count line.\n3. `pnpm typecheck` - exit 0, and quote the last line.\n4. `pnpm --filter @moe/daemon test` (full daemon leg) as the path-attributed baseline: record failures at the merge-base and at HEAD, and confirm the delta intersected with this row's owned paths is EMPTY. Disclose any foreign red verbatim with its file paths - never hide it, never call it ours.\n\nRecord each command and its result in the step note. The named verification command for complete_task is the focused daemon leg from (1).",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-08T02:02:41.884Z"
     },
     {
       "stepId": "step-9",
@@ -178,16 +184,22 @@
       "author": "worker-319873d7",
       "content": "SECOND SEAT ON THIS ROW — YIELDING (session B, wrapper-RESUMEd 2026-09-08 ~01:54:15Z under the same workerId worker-319873d7). I edited NOTHING, staged nothing, and did not touch board status. Everything below was produced by THIS session at the UTC times stated, so a grader reads it as an independent drive and not as session A's evidence reported twice.\n\n## LIVENESS CENSUS — four measurements, files changing while I watched\nThe wrapper preamble said \"a prior session died\". It had not. I wrote zero bytes and observed:\n- 01:54:2xZ `git status --porcelain -- apps/control-room/src/live apps/daemon` -> only `M live-deployments-health.ts`.\n- 01:54:53Z `stat` -> `live-deployments-health.test.ts` mtime 01:54:48Z (5 s earlier), still CLEAN vs HEAD.\n- 01:55:06Z -> that same file is now `M` (+12/-5). A write landed between my two censuses.\n- 01:56:15Z -> the FIVE step-6 fixture files (`environments-daemon-frame`, `environments-gap`, `environments-section`, `live-environments-enumeration`, `live-environments`) flipped clean -> `M`.\n- 01:57:00Z -> `.moe/tasks/<id>.json`: step-5 COMPLETED at 01:55:30.984Z, step-6 IN_PROGRESS; and `?? apps/daemon/src/http/affordance-rollback-offers.js` appeared between 01:56:15Z and 01:57:00Z.\nSession A is ALIVE, AHEAD, and self-correcting. Per `mem:yield-do-not-block-when-the-other-session-is-alive-and-ahead`, report_blocked here would flip the row out of WORKING and BREAK the live session mid-step, so I did not call it.\n\n## INDEPENDENT GATE EVIDENCE (run by session B, against the delivered tree at HEAD e46d4996 + session A's dirty control-room work)\n1. Focused daemon leg, package's own flags preserved (narrowing drops `--testTimeout=30000` and fakes timeout reds — `mem:gotcha-narrowing-a-package-test-script-drops-its-flags-and-fakes-a-red`):\n   `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/deployment/rollback-target.test.ts src/http/deployments-health-read.test.ts src/daemon-entry-deployments-health.test.ts src/http/affordance-rollback-offers.test.ts src/http/affordance-read.test.ts src/http/affordance-read-planning.test.ts src/http/affordance-deployment-goals.test.ts src/http/affordance-agent-provider-offers.test.ts`\n   -> EXIT 0, `Test Files 8 passed (8)`, `Tests 147 passed (147)`, Start at 04:55:58 (+0300 = 01:55:58Z). Count line present, so the run was not vacuous.\n   PATH NOTE for step 8: `daemon-entry-deployments-health.test.ts` lives at `apps/daemon/src/`, NOT `src/http/`. A filter on the http path matches zero files and STILL exits 0 with no count line. All eight legs above were resolved by `git ls-files` first.\n2. `pnpm --filter @moe/daemon typecheck` -> EXIT 0 (`tsc --project tsconfig.json`), 01:56:1xZ.\n3. I deliberately did NOT run `pnpm --filter @moe/control-room test`: at that moment step 6 was mid-flight, and plan risk 1 says steps 2/5/6 are ONE landing. A control-room count line taken before step 6 lands is inadmissible.\n\n## CORRECTION to the `.js` bridge claim in `task-2f2ed034...-handoff`\nThat memory says a module under `src/http` is \"unresolvable without\" its sibling `export * from \"./<name>.ts\";` bridge. MEASURED FALSE on this host. Census: 78 non-test `.ts` in `src/http`, 5 without a bridge — 4 fixture modules plus `affordance-rollback-offers.ts` (at the time I measured). Node probe run from `apps/daemon/src/http` BEFORE the bridge existed, on node v24.16.0:\n  `node --input-type=module -e \"for (const m of ['./affordance-agent-provider-offers.js','./affordance-rollback-offers.js']) { try { await import(m); console.log('RESOLVED', m); } catch (e) { console.log((e.code||e.name)+' '+m); } }\"`\n  -> `RESOLVED ./affordance-agent-provider-offers.js` AND `RESOLVED ./affordance-rollback-offers.js`.\nNode 24 remaps a relative `.js` specifier onto the sibling `.ts` natively, so the bridge is a CONVENTION here, not a load-bearing requirement — `apps/daemon` runs `.ts` directly (`start` = `node ./src/daemon-main.ts`, `main` = `./src/index.ts`). Session A has since added the bridge anyway, which keeps the row consistent with the other 73 production modules. No defect either way; recorded so a later reader does not chase a phantom runtime break.\n\n## PEER DIRT (noted, untouched, not a stop condition)\n`?? apps/daemon/src/preview/preview-goal-landing.test.ts` is foreign to this row and predates my session.",
       "timestamp": "2026-09-08T01:57:30.380Z"
+    },
+    {
+      "id": "comment-b39fc13bbe9b4c639142b76eec4efd21",
+      "author": "worker-319873d7",
+      "content": "SESSION D (2026-09-08 01:58-02:02Z, seat worker-319873d7) — YIELDED to a LIVE twin, edited ZERO bytes. This is the FOURTH session to share this seat id; sessions B, C and now D all detected a live twin. Everything below was produced by session D and by nobody else; attribute it by the UTC times, not by the seat id.\n\nLIVENESS CENSUS (repeated sample, not a snapshot — a single `stat` cannot tell a live writer from stranded debris):\n  01:58:40Z  .moe/tasks/<row>.json rewritten (the wrapper's claim for THIS session)\n  01:59:01Z  ?? apps/daemon/src/http/affordance-rollback-round-trip.test.ts  6904 bytes\n  01:59:52Z  same path 10895 bytes\n  02:00:04Z .. 02:00:34Z  10895 bytes, constant (a snapshot here would have read \"stranded\")\n  02:00:41Z  11547 bytes\n  02:01:40Z  12784 bytes\nMonotonic growth across four samples while session D wrote nothing = a session typing. The tool harness independently reported the file \"changed on disk since you last read it\" mid-census, and the diff showed real repair work (hand-rolled `registry.get(\"deployment.set_target\")` replaced by the production `setDeployTarget` + `readDurableLedger`, `surface.ok` corrected to `surface.outcome !== \"SURFACE\"`, `projectDeploymentsHealth` imported). The twin is AHEAD and CORRECT, so session D ran nothing over apps/daemon and touched no file: a gate taken over a half-written test would be a fabricated red, and a Write would silently destroy a step that is already green.\n\nSTEP CLOCK at 02:01:45Z — step-1..step-6 COMPLETED (01:48:27.752Z, 01:50:35.016Z, 01:52:45.861Z, 01:53:34.520Z, 01:55:30.984Z, 01:57:15.640Z), step-7 IN_PROGRESS since 01:57:19.705Z, steps 8-9 PENDING. Roughly one step per 90-120 s, so the twin is progressing, not wedged. NOT reporting blocked: `report_blocked` flips the row out of WORKING and would refuse the twin's own `complete_step` with [INVALID_STATE] mid-step (measured on task-78eedd8e, 2026-09-07 19:21Z).\n\nGATE SESSION D DID RUN — the CONTROL-ROOM leg, which epic rail 1 makes MANDATORY for this row and which session C deliberately skipped because step 6 was mid-flight at the time. Step 6 closed 01:57:15.640Z, so the steps 2/5/6 landing is now whole and the leg is admissible:\n\n  pnpm --filter @moe/control-room test\n  -> EXIT 0 (${PIPESTATUS[0]}, not tail's)\n  -> Test Files  200 passed (200)\n  -> Tests  2628 passed (2628)\n  -> Start at 05:01:26 (+0300 = 02:01:26Z), Duration 13.46s\n\nThat is a NONZERO executed count line, so the leg actually ran; it is not a \"No projects matched the filters\" exit 0. It covers `apps/control-room/src/live/live-deployments-health.ts` (step 5's decoder, including the new exact-key roster entry) and all five step-6 raw-body fixtures plus the sixth consumer step 6 found unnamed by the plan. DoD 4's control-room clause is therefore satisfied at the tree as of 02:01:26Z.\n\nGATES SESSION D DELIBERATELY DID NOT RUN: `pnpm typecheck` and the focused daemon leg. Both compile `affordance-rollback-round-trip.test.ts`, which grew 12784 bytes at 02:01:40Z and is mid-write. Any red from them right now would be an artifact of the twin's in-flight state, and quoting it as this row's evidence would be a false attribution. The twin must run both itself at step 8, AFTER step 7 closes.\n\nFOR WHOEVER FINISHES STEP 8 — the plan's own gate list still carries the defect session C recorded: `daemon-entry-deployments-health.test.ts` lives at `apps/daemon/src/`, NOT `apps/daemon/src/http/`. A vitest filter on the http path matches ZERO files and STILL EXITS 0 with no count line. Resolve every leg with `git ls-files` before quoting it, and keep the package script's `--testTimeout=30000` — narrowing `pnpm --filter @moe/daemon test` to a file list drops that flag and fakes timeout reds on a clean tree.\n\nPEER DIRT, noted and untouched: `?? apps/daemon/src/preview/preview-goal-landing.test.ts`, `?? tests/e2e/control-room/{contract-goal.spec.ts,lane-contract-goal.ts,lane-multi-node-workspace.ts}`, `?? .moe/resources/{browser-e2e,full-suite}-gate.json`, `?? Moe-NG_Deep_Review_2026-09-05.md`. All foreign to this row.",
+      "timestamp": "2026-09-08T02:02:13.126Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T19:38:54.771Z",
-  "updatedAt": "2026-09-08T01:57:30.380Z",
+  "updatedAt": "2026-09-08T02:02:41.884Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T01:40:32.419Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 15,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "worker-4d8571e7",
@@ -203,7 +215,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-08T01:46:18.991Z",
@@ -290,6 +303,29 @@
       "treeId": "622801cb3ffb82782000d406d6e573a905c4ad5d",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "0e89a6d535ae6f5f6513b8b72ca817e9febd3aad",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-319873d7@2026-09-08T01:54:27Z",
+      "paths": [
+        ".moe/tasks/task-2f2ed034fbec4fe48b49a951951c9505.json",
+        "apps/control-room/src/live/live-deployments-health.test.ts",
+        "apps/control-room/src/live/live-deployments-health.ts",
+        "apps/control-room/src/v2/ops/environments-daemon-frame.test.tsx",
+        "apps/control-room/src/v2/ops/environments-gap.test.tsx",
+        "apps/control-room/src/v2/ops/environments-section.test.tsx",
+        "apps/control-room/src/v2/ops/live-environments.test.tsx",
+        "apps/control-room/src/v2/ops/live-environments-enumeration.test.tsx",
+        "apps/daemon/src/http/affordance-rollback-offers.js"
+      ],
+      "recordedBy": "worker-319873d7",
+      "recordedAt": "2026-09-08T01:58:40.173Z",
+      "treeId": "9c27e5ae25704afd935f32647b9068f54727ff8a",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -302,14 +338,21 @@
     "apps/control-room/src/live/live-deployments-health.ts",
     "apps/daemon/src/http/affordance-read.ts",
     "apps/daemon/src/http/affordance-rollback-offers.test.ts",
-    "apps/daemon/src/http/affordance-rollback-offers.ts"
+    "apps/daemon/src/http/affordance-rollback-offers.ts",
+    "apps/control-room/src/live/live-deployments-health.test.ts",
+    "apps/control-room/src/v2/ops/environments-daemon-frame.test.tsx",
+    "apps/control-room/src/v2/ops/environments-gap.test.tsx",
+    "apps/control-room/src/v2/ops/environments-section.test.tsx",
+    "apps/control-room/src/v2/ops/live-environments.test.tsx",
+    "apps/control-room/src/v2/ops/live-environments-enumeration.test.tsx",
+    "apps/daemon/src/http/affordance-rollback-offers.js"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-319873d7@2026-09-08T01:46:28Z",
-    "at": "2026-09-08T01:53:56.122Z"
+    "sessionId": "worker-319873d7@2026-09-08T01:54:27Z",
+    "at": "2026-09-08T01:58:40.173Z"
   },
   "workStartedAt": "2026-09-08T01:47:01.037Z",
   "declaredFiles": [
