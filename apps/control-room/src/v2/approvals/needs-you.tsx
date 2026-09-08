@@ -2,6 +2,8 @@ import { useState } from "react";
 import type { JSX } from "react";
 
 import { OutcomeNote } from "../components/outcome-note.js";
+import { IncidentCard } from "./incident-card.js";
+import { incidentKeyOf } from "./needs-you-incident.js";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
 import { writeFailedSaid } from "../outcome-words.js";
@@ -11,8 +13,9 @@ import type { PreviewDecision, PreviewFinding } from "./preview-port.js";
 import type { OfferOutcome } from "./offer-wire.js";
 
 /**
- * The NEEDS YOU queue: one card per decision the daemon is waiting on, in the order a
- * person should take them (plans, then exhausted reviews, contracts, goals ready to close).
+ * The NEEDS YOU queue: one card per decision the daemon is waiting on, in the order a person
+ * should take them (an environment INCIDENT first - it is an outage already running - then
+ * plans, exhausted reviews, contracts, goals ready to close).
  * Every card names its goal and opens it; a card whose item carries a daemon offer also
  * carries that decision inline, and the daemon's answer is shown beside it at its own layer.
  * Closing a goal is terminal, so its button asks twice (arm, then confirm) and the armed
@@ -37,6 +40,10 @@ export interface NeedsYouProps {
   readonly decisionResults?: ReadonlyMap<string, DecisionResult> | undefined;
   /** Spends the daemon's offer this item carries; absent means no inline decision. */
   readonly onDecide?: ((item: NeedsYouItem, choice?: NeedsYouChoice) => void) | undefined;
+  /** Drops an INCIDENT item from THIS queue only; absent means the card cannot be dismissed. */
+  readonly onDismissIncident?: ((item: NeedsYouItem) => void) | undefined;
+  /** Spends the INCIDENT item's `deployment.rollback` offer; absent renders it read-only. */
+  readonly onRollback?: ((item: NeedsYouItem) => void) | undefined;
   /** Spends the PREVIEW item's `preview.decide` offer. Absent means the card renders read-only. */
   readonly onPreviewDecide?: ((
     item: NeedsYouItem, decision: PreviewDecision, findings: readonly PreviewFinding[],
@@ -48,6 +55,7 @@ const KIND_EYEBROW: Readonly<Record<NeedsYouKind, string>> = Object.freeze({
   DEPLOY: "Deploy",
   ESCALATION: "Review exhausted",
   GATE_1: "Product contract",
+  INCIDENT: "Incident",
   PLAN_APPROVAL: "Plan",
   PLAN_REJECTED: "Plan sent back",
   PREVIEW: "Gate 2",
@@ -66,6 +74,8 @@ interface InlineDecision {
 
 /** The key a decision's result is kept under: the node for an escalation, else the goal. */
 export function decisionKeyOf(item: NeedsYouItem): string {
+  const incident = item.incident;
+  if (incident !== undefined) return incidentKeyOf(incident.environment, incident.incidentId);
   const escalation = item.escalation;
   if (escalation === undefined) return item.goalId;
   const nodeRef = escalation.affordance["targetAggregateId"];
@@ -105,9 +115,13 @@ function resultLine(decision: InlineDecision, result: DecisionResult | undefined
   return result.choice === "REPLAN" ? REPLAN_DONE_LINE : decision.doneLine;
 }
 
-function DecisionCard({ item, onDecide, onOpenBoard, onPreviewDecide, result }: {
+function DecisionCard({
+  item, onDecide, onDismissIncident, onOpenBoard, onPreviewDecide, onRollback, result,
+}: {
   readonly item: NeedsYouItem;
   readonly onDecide: NeedsYouProps["onDecide"];
+  readonly onDismissIncident: NeedsYouProps["onDismissIncident"];
+  readonly onRollback: NeedsYouProps["onRollback"];
   readonly onOpenBoard: NeedsYouProps["onOpenBoard"];
   readonly onPreviewDecide: NeedsYouProps["onPreviewDecide"];
   readonly result: DecisionResult | undefined;
@@ -125,6 +139,15 @@ function DecisionCard({ item, onDecide, onOpenBoard, onPreviewDecide, result }: 
         <p className="cr2-slot-kicker">{`${KIND_EYEBROW[item.kind]} ${MIDDOT} ${item.title}`}</p>
         <h2 className="cr2-needs-headline">{item.headline}</h2>
         <p className="cr2-needs-detail">{item.detail}</p>
+        {item.incident === undefined ? null : (
+          <IncidentCard
+            busy={result?.busy === true}
+            done={done}
+            facts={item.incident}
+            onDismiss={onDismissIncident === undefined ? undefined : (): void => onDismissIncident(item)}
+            onRollback={onRollback === undefined ? undefined : (): void => onRollback(item)}
+          />
+        )}
         {item.preview === undefined || onPreviewDecide === undefined ? null : (
           <PreviewCard
             accepted={done}
@@ -196,7 +219,7 @@ function DecisionCard({ item, onDecide, onOpenBoard, onPreviewDecide, result }: 
 }
 
 export function NeedsYou({
-  data, decisionResults, onDecide, onOpenBoard, onPreviewDecide,
+  data, decisionResults, onDecide, onDismissIncident, onOpenBoard, onPreviewDecide, onRollback,
 }: NeedsYouProps): JSX.Element {
   return (
     <section className="cr2-needs" data-testid="cr.needsyou.root">
@@ -221,8 +244,10 @@ export function NeedsYou({
               item={item}
               key={`${item.kind}:${decisionKeyOf(item)}`}
               onDecide={onDecide}
+              onDismissIncident={onDismissIncident}
               onOpenBoard={onOpenBoard}
               onPreviewDecide={onPreviewDecide}
+              onRollback={onRollback}
               result={decisionResults?.get(decisionKeyOf(item))}
             />
           ))}

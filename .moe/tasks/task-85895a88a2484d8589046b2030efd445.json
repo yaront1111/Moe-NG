@@ -112,25 +112,38 @@
     {
       "stepId": "step-6",
       "description": "DISMISS IS NOT RESOLVE (DoD 3, rail 3) — the row's subtlest property, asserted in BOTH directions because either alone permits the bug.\n\nDIRECTION 1: after dismissing, the environment STILL READS DOWN on grandchild A's Environments surface. Assert against that surface, not against this card's own state. A dismiss that clears the card and leaves the operator believing the environment recovered is how an outage gets forgotten.\n\nDIRECTION 2: the card RETURNS at the next failure threshold rather than staying silent. That threshold is the probe row's lifecycle (task-cc05c473: one open incident per outage, closed on recovery, a new one at the next three consecutive failures) — assert against that lifecycle rather than inventing a re-raise rule here.\n\nONE DIRECTION ALONE PERMITS A DISMISS THAT QUIETLY ENDS MONITORING, which is why DoD 3 names both. Write them as two arms so a future edit cannot delete one and leave a green suite.\n\nMake the dismiss's scope explicit in the note: does it dismiss this incident, or mute the environment? They differ on the second outage, and the answer must match direction 2.\n\nMUTATE AND CONFIRM RED: make dismiss also clear the environment state, run direction 1, confirm RED; restore. Make dismiss suppress the next raise, run direction 2, confirm RED; restore. These files are TRACKED, so `git diff -- <path>` is a valid restore proof; `git status --porcelain` them first.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/v2/approvals/needs-you-model.test.ts",
         "apps/control-room/src/v2/approvals/needs-you.test.tsx"
       ],
-      "startedAt": "2026-09-08T02:46:20.900Z"
+      "modifiedFiles": [
+        "apps/control-room/src/v2/approvals/incident-dismiss.test.tsx"
+      ],
+      "note": "DISMISS IS NOT RESOLVE, both directions, both drilled RED and restored.\n\nTHE DISMISS SCOPE, stated explicitly: it dismisses THIS INCIDENT, it does NOT mute the environment. The key is `<environment>#<incidentId>` (incidentKeyOf). That choice IS direction 2: the probe row opens a NEW incident with a NEW id at the next threshold, which an incident-keyed dismissal cannot match. Muting the environment would have been the version that quietly ends monitoring.\n\nNEW ARM FILE incident-dismiss.test.tsx, running through `LiveNeedsYou` - the PRODUCTION composition - so the dismissal travels the real path (card button -> queue dismissal set -> deriveNeedsYou), not a hand-driven reducer. Two arms, deliberately separate so a future edit cannot delete one and leave a green suite.\n\nDIRECTION 1 \"leaves the environment reading DOWN on the Environments surface\": renders grandchild A's `EnvironmentsSection` from the SAME decoded outcome, asserting data-status=\"DOWN\", the words \"Down\", and that incident 7 is STILL listed there. Plus two assertions that make it non-vacuous rather than structurally true: (a) `sendCommand` was NOT called - the Environments surface reads the DAEMON, so the only way this queue could make an environment stop reading DOWN is by writing to it; (b) the decoded frame is byte-equal to a pristine re-decode, so an in-place edit of the health state would show.\n\nDIRECTION 2 \"comes back at the next failure threshold, under the daemon's new incident id\": dismiss incident 7, then advance the health feed through the PROBE ROW'S OWN LIFECYCLE - recovery (incident null, state UP; card stays gone) and then a fresh outage (incident id 8) - through the real 15s poll. Asserts incident 8's card appears with its own opened-at, AND that incident 7 stays dismissed (a dismissal, not a reset). No re-raise rule is invented here; the daemon's lifecycle is the oracle.\n\nA VACUOUS-ARM DEFECT I FOUND AND FIXED IN MY OWN TEST, worth recording because it is the \"one added layer away from vacuous\" failure exactly. My first direction-1 fixture used `client: { commands: {} }` (copied from live-needs-you.test.tsx). With an empty command roster `spendOffer` refuses OFFER_KIND_UNBUILDABLE at the BUILD layer and never reaches the transport - so the deliberately broken dismiss I planted DID dispatch a rollback and `sendCommand` was still uncalled: MEASURED GREEN UNDER THE MUTANT. The surface also carried no rollback offer, so the mutant's guard skipped anyway. Fixed both: the fixture surface now carries the real `deployment.rollback` offer and the wire has a working builder, so a dispatch genuinely reaches `sendCommand`.\n\nDRILLS - pre-drill census `git status --porcelain` on each exact path first.\nDRILL B (direction 2), path apps/control-room/src/v2/approvals/needs-you-incident.ts, TRACKED AND CLEAN at drill time (a mid-session wrapper checkpoint 157fe382 committed it), sha256 72db16c9d972d9209c5b6d2446b8317fd4b4cafa2a71dc290760a6f0173cc370.\n  Coarse first attempt (incidentKeyOf returning the environment) reddened 3 of 4 - too blunt, it moved every testid. Restored, then the PRECISE mutant: the dismissal check matches by environment prefix (`key.split(\"#\")[0] === environment`), keys and testids untouched.\n  RESULT: EXACTLY ONE arm red - \"comes back at the next failure threshold\" with `Unable to find [data-testid=\"cr.needsyou.item.incident.production#8\"]` - and direction 1 STAYED GREEN. That is the proof the two directions are independent.\n  RESTORED: `git checkout --`; `git diff -- <path>` 0 bytes, `git status --porcelain` empty, sha256 back to 72db16c9..., `grep -c \"DRILL MUTANT\"` = 0.\nDRILL A (direction 1), path apps/control-room/src/v2/approvals/live-needs-you.tsx, TRACKED AND MODIFIED at drill time (so `git diff` is not empty either side and is NOT a usable proof) - backed up out of tree to %TEMP%/moe-drill-task-85895a88-worker-4d8571e7-live-needs-you.tsx, pre-drill sha256 0a269d15959bc0d5cab9cc20a8df91e6b8c0d8ecd5b49e74cb4daffda75cb0b8.\n  MUTANT: the dismiss handler also dispatches the rollback - \"a dismiss that acts on the environment\", which is what resolve means.\n  RESULT after fixing the vacuous fixture: EXACTLY ONE arm red - \"leaves the environment reading DOWN\" with `expected \"vi.fn()\" to not be called at all, but actually been called 1 times`.\n  RESTORED from the backup in a SEPARATE call, then proved: sha256 equals the pre-drill value byte for byte, `grep -c \"DRILL MUTANT\"` = 0, suite green again.\n\nGATE after restore: `npx vitest run --root apps/control-room src/v2/approvals/incident-dismiss.test.tsx` -> \"Test Files 1 passed (1) / Tests 4 passed (4)\".\nFourth arm asserts the card SAYS so in its own words (\"stays down\", \"next failure threshold\"); a fifth asserts the queue asks for NO health at all when the only environment REFUSED its deploy, so an undeployed environment cannot be painted DEGRADED by an empty probe ring.",
+      "startedAt": "2026-09-08T02:46:20.900Z",
+      "completedAt": "2026-09-08T02:50:33.588Z"
     },
     {
       "stepId": "step-7",
       "description": "ROSTER ARMS, GATES AND SELF-REVIEW (DoD 4 and 6).\n\nROSTER (DoD 4): assert ALL FIVE kinds are present — the four that existed plus the incident — so adding the fifth provably disturbed none. Do NOT assert a hard COUNT of roster members: three peer rows are adding entries concurrently and a frozen count would red on their landing rather than on a defect. Assert membership of each named kind instead.\nAssert the other four still SORT as before (step 2's goalId decision is what could break this).\n\nGATES — each standalone, each quoted with its `Test Files N passed` count line; an exit-0 leg with no count line RAN NOTHING:\n- `pnpm --filter @moe/control-room test` — the row's named verification command and its ONLY real evidence.\n- `pnpm typecheck`.\nState explicitly that root `pnpm test` covers NO apps/** file, so it is not evidence for anything this row owns.\n`wc -l` both edited files and quote them against the 250 ceiling (198 and 211 at plan time — a peer may have grown them).\n\nSELF-REVIEW:\n- Is there a non-goal id in ANY `goalId` field? Grep the new item construction. This is rail 5 and the comparator at :186-187 is what makes it bite.\n- Does the error line survive verbatim from decoder to DOM — no trim, no truncate, no case change? Round-trip a string with leading whitespace and punctuation.\n- Does the confirm still name the sha when the card is re-rendered mid-incident by a surface poll? A card re-keyed by a poll losing its armed state is the board-chain hazard in a new place.\n- Did a peer's roster entry survive your rebase? Re-read both files and confirm you deleted nothing.\n- Does any rendered string carry a URL with embedded credentials from a probe error (epic rail 3)? A health-check failure can echo a connection string.\n\nPATH-ATTRIBUTED BASELINE: merge-base failures, HEAD failures, subtract, intersect with owned paths; complete only when EMPTY. Disclose foreign red verbatim with paths.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/control-room/src/v2/approvals/needs-you-model.test.ts",
         "apps/control-room/src/v2/approvals/needs-you-model.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/approvals/incident-dismiss.test.tsx",
+        "apps/control-room/src/v2/goals/goals-home.test.tsx",
+        "apps/control-room/src/v2/approvals/needs-you.tsx"
+      ],
+      "note": "ROSTER ARMS, GATES AND SELF-REVIEW.\n\nGATES, each standalone, each with its count line:\n- `pnpm --filter @moe/control-room test` -> \"Test Files 204 passed (204) / Tests 2667 passed (2667)\", exit 0. THE ROW'S NAMED VERIFICATION COMMAND.\n- `pnpm typecheck` -> every package \"Done\", exit 0 (captured via PIPESTATUS, not a pipe tail).\nROOT `pnpm test` IS NOT EVIDENCE FOR ANYTHING THIS ROW OWNS: the root vitest include has no apps/**, so it runs ZERO of the 204 files above. I did not run it and do not cite it.\n\nA SECOND UNNAMED FROZEN-ROSTER CONSUMER FOUND BY THE FULL GATE AND UPDATED. The first full run was \"Test Files 1 failed | 203 passed (204)\": apps/control-room/src/v2/goals/goals-home.test.tsx sweeps EVERY .ts/.tsx under src for the bare string \"onOpenBoard\" and pins the result against a frozen 19-member list in both directions (\"expected [ (21) ] to deeply equal [ (19) ]\"). My two new render-test files pass `onOpenBoard` to NeedsYou, so they ARE consumers. Added both in sorted position and moved `toHaveLength(19)` to 21. Nothing else in that file changed. This is the second such consumer (plan-rejected-surfaces.test.tsx was the first, step 2) - neither was in the plan's affectedFiles and neither is findable by a grep for the symbol being added.\n\nROSTER (DoD 4): membership of ALL NINE kinds asserted, never a count - three peer rows are still adding kinds and a frozen count would red on their landing rather than on a defect. The other eight still SORT as before, asserted through the PRODUCTION comparator by deriving the same board with and without an incident.\n\nSELF-REVIEW, item by item:\n1. NON-GOAL ID IN goalId? NO. `grep -n goalId needs-you-incident.ts` -> the only construction is `goalId: \"\"`. No environment id anywhere near that field. The comparator keeps a total order (\"\" is a string).\n2. ERROR LINE VERBATIM DECODER -> DOM? YES, and drilled at two seams: the decoder arm round-trips a hostile line (leading whitespace, host:port, mixed case) and the card arm asserts a 480-char line renders EQUAL with no \"...\". `grep -n \"slice\\|substr\\|trim()\" incident-card.tsx` -> matches only inside the docblock; there is no truncation in the component.\n3. CONFIRM SURVIVES A MID-INCIDENT POLL? YES, and it is now an arm, not an assumption: arm the rollback, run 60s of real polls (board 2s, catalog 2s, deploys 10s, health 15s), assert the confirm STILL names the sha. DRILLED: mutating the list key to `${kind}:${key}:${Math.random()}` in needs-you.tsx reds it with `Unable to find [data-testid=\"...confirm\"]`. needs-you.tsx was TRACKED AND MODIFIED, so git diff is not a restore proof - backed up out of tree, restored, sha256 95c64c3e7daf3e77d64535b8613cb522f170255972c103d0680ab44d3252831a byte-identical, 0 mutant tokens.\n4. PEER ROSTER ENTRIES SURVIVED? YES. NEEDS_YOU_KINDS holds all eight pre-existing kinds plus INCIDENT; KIND_EYEBROW holds all nine. Nothing deleted, re-ordered or renamed.\n5. CREDENTIALS IN A RENDERED STRING (epic rail 3)? A REAL GAP, OUT OF THIS ROW'S SCOPE, FILED AS task-c78140e9a4b749078d4fb633e2e70850 (PLANNING, HIGH). Measured: deployments-health-read.ts:247 serves `line: receipt.refusal.detail` verbatim off the deploy receipt, and `grep -rn \"redact|REDACT\" apps/daemon/src/deployment/*.ts apps/daemon/src/http/deployments-health-read.ts apps/daemon/src/secrets/` returns NOTHING - there is no redaction anywhere between the receipt write and the DOM. It is NOT fixable here: the seam is daemon-side, this row is confined to the control room, and DoD 1 REQUIRES the card render the line verbatim, so a browser-side scrub would be the wrong layer AND would break the property this row exists to guarantee. My own fixtures contain no credentials (10.4.19.7:8443), so rail 3's \"not in a test fixture committed to the tree\" holds here.\n6. ASCII-ONLY: scanned all six new modules for bytes outside 0x20-0x7E - clean. No apostrophe in any JSX text (the single apostrophe in incident-card.tsx is inside a docblock).\n\nPATH-ATTRIBUTED BASELINE: both owned-package legs are exit 0 at HEAD (control-room 204/204, repo typecheck all Done), so the HEAD failing-path set is EMPTY and the intersection with owned paths is necessarily EMPTY. NO FOREIGN RED TO DISCLOSE. Foreign dirt noted and untouched throughout: .codex/*, .grok/config.toml, .moe/messages/*, .moe/pins/*, .moe/roles/*, 11 .moe/tasks/*.json, apps/daemon/src/http/affordance-read.ts (M), and untracked Moe-NG_Deep_Review_2026-09-05.md, apps/daemon/src/preview/preview-goal-landing.test.ts, tests/e2e/control-room/{contract-goal.spec.ts,lane-contract-goal.ts,lane-multi-node-workspace.ts}.\n\nLINE COUNTS against the 250 target (400 hard cap): needs-you-model.ts 268, needs-you.tsx 258 - BOTH OVER THE TARGET AND DISCLOSED. They were 198/211 when the plan was written and 249/233 when I measured at claim time: three peer rows landed four extra kinds into them before I arrived, so a ninth kind cannot be added inside 250. I kept my own additions minimal and put every new behaviour in new f",
+      "startedAt": "2026-09-08T02:50:37.961Z",
+      "completedAt": "2026-09-08T02:53:57.388Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-4d8571e7",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -176,16 +189,22 @@
       "author": "worker-4d8571e7",
       "content": "SESSION D ADDENDUM, 02:53Z - A LIVE DRILL MUTANT IS ON DISK RIGHT NOW. Recording it so a commit or a gate taken in this window is not misread.\n\n`apps/control-room/src/v2/approvals/needs-you-incident.ts:100-101` currently carries:\n\n    // DRILL MUTANT: dismissal suppresses the ENVIRONMENT, so the next incident stays silent.\n    if ([...(dismissed ?? [])].some((key) => key.split(\"#\")[0] === environment)) continue;\n\nreplacing the production line `if (dismissed?.has(incidentKeyOf(environment, incident.id)) === true) continue;`.\n\nTHIS IS THE TWIN'S STEP-6 DIRECTION-2 DRILL, not stranded debris, and the discriminator is the one `mem:gotcha-tell-a-live-drill-from-a-stranded-mutant-before-you-yield` names: step-6 is IN_PROGRESS (`startedAt 02:46:20.900Z`), the twin PID 65624 is alive, and the mutant is SELF-LABELLED with the exact defect the step's drill script calls for (\"make dismiss suppress the next raise, run direction 2, confirm RED; restore\"). I did NOT restore it. Restoring another session's live mutant mid-drill either re-greens the arm it is being graded against or races the twin's own restore, and `git diff` would then show clean while the drill was silently voided.\n\nCONSEQUENCES FOR ANYONE READING THIS WINDOW:\n1. ANY gate run between ~02:52Z and the twin's restore will red on `incident-dismiss.test.tsx` / `needs-you-incident.test.ts` direction-2 arms. That red is EXPECTED and belongs to the drill, not to a defect. It is a second, independent reason session D did not run `pnpm --filter @moe/control-room test` or `pnpm typecheck`.\n2. IF A WRAPPER EXIT COMMIT IN THIS WINDOW CARRIES `needs-you-incident.ts`, it carries the mutant. Session D declared no files and its three `complete_step` calls were all refused, so nothing was asserted from this seat - but the plan's affectedFiles can still attribute the path. QA: verify the DELIVERED bytes at the row's own completion sha, not at an intermediate `wip(...)` checkpoint, and confirm line 100-101 reads `dismissed?.has(incidentKeyOf(environment, incident.id))`. The `key.split(\"#\")[0]` form must NOT appear at HEAD: it keys the dismissal on the ENVIRONMENT rather than the INCIDENT, which is precisely the \"dismiss quietly ends monitoring\" failure DoD 3 direction 2 exists to refuse.\n3. The restore proof for this path is `git diff -- apps/control-room/src/v2/approvals/needs-you-incident.ts` ONLY IF the file is tracked at the time. It IS tracked (committed in 157fe382); `git status --porcelain` listed it clean before the mutation. Sibling paths in the same drill are NOT: `incident-card.test.tsx`, `incident-card.tsx`, `incident-frames.fixture.ts`, `incident-dismiss.test.tsx`, `rollback-port.ts`, `rollback-port.test.ts` and `use-incident-health.ts` are all `??`, where `git diff` is blind - empty before, during and after - so any drill touching those needs a SHA256 comparison against an out-of-tree backup, in a call separate from the restore.\n\nNo further action from session D. The twin supplies the terminal call.",
       "timestamp": "2026-09-08T02:50:02.631Z"
+    },
+    {
+      "id": "comment-bc3cb0e013df47368daef423a736dfd5",
+      "author": "worker-4d8571e7",
+      "content": "COMPLETION EVIDENCE (worker-4d8571e7, 2026-09-08) - detail that exceeds the completionSummary cap.\n\nGATES, each standalone, each with its count line:\n- `pnpm --filter @moe/control-room test` (the row's named verification) -> \"Test Files 204 passed (204) / Tests 2667 passed (2667)\", exit 0. Run FRESH immediately before complete_task.\n- `pnpm typecheck` -> every package \"Done\", exit 0 (PIPESTATUS, not a pipe tail).\n- Root `pnpm test` NOT run and NOT cited: the root vitest include has no apps/**, so it executes ZERO of those 204 files.\n\nDoD MAPPING\n1. ERROR LINE VERBATIM - incident-card.test.tsx asserts the WHOLE rendered container contains the exact literal \"  Error: connect ECONNREFUSED 10.4.19.7:8443 (attempt 3/3)\" (leading whitespace, address, case intact) AND the error node EQUALS it; a second arm renders a 480-char line, asserts EQUAL and asserts no \"...\". A third asserts the code/layer live in a SEPARATE node and are NOT inside the error node. live-deployments-health.test.ts gained a decoder-seam arm (\"carries a hostile last-error line through with NO trim, truncation or re-casing\"), proven to execute by `-t` (1 passed | 52 skipped).\n2. CONFIRM NAMES THE SHA - before arming, `cr.needsyou.incident.production#7.confirm` does not exist. Once armed, the confirm line AND the armed button label AND its aria-label each carry the FULL 40-char sha and the environment. Compared against the fixture's `rollbackTarget.sha` VALUE, never a hex pattern. Full sha, not a 7-char prefix, deliberately.\n3. DISMISS IS NOT RESOLVE - two arms in incident-dismiss.test.tsx, both through LiveNeedsYou. Direction 1 renders grandchild A's EnvironmentsSection from the same decoded outcome: data-status=\"DOWN\", the word \"Down\", incident 7 still listed, PLUS `sendCommand` not called and the frame byte-equal to a pristine decode. Direction 2 advances the health feed through the probe row's lifecycle (recovery, then a new incident id 8) through the real 15s poll and asserts the card returns while incident 7 stays dismissed.\n4. ROSTER - all NINE kinds asserted by MEMBERSHIP (never a count; peers are still adding kinds). Sorting of the other eight asserted through the PRODUCTION comparator, same board derived with and without an incident.\n5. OFFERED BY THE DAEMON - three ABSENT-not-disabled arms (no offer / no rollbackTarget for this environment / no dispatcher). rollback-port.test.ts has 6 arms; the three refusal arms name THREE DIFFERENT layers (DAEMON_DEPLOY_ENGINE, CONTROL_ROOM_TRANSPORT, CONTROL_ROOM_DEPLOY_ROLLBACK) so none can pass because a nearer layer answered first.\n\nMUTATION DRILLS - pre-drill `git status --porcelain` on each exact path first.\n- DIRECTION 2, needs-you-incident.ts (TRACKED+CLEAN, sha 72db16c9d972d9209c5b6d2446b8317fd4b4cafa2a71dc290760a6f0173cc370): dismissal check matched by environment prefix. RESULT: exactly ONE arm red (`Unable to find [data-testid=\"cr.needsyou.item.incident.production#8\"]`), direction 1 stayed GREEN. Restored: `git diff` 0 bytes, status empty, sha unchanged, 0 mutant tokens.\n- DIRECTION 1, live-needs-you.tsx (TRACKED+MODIFIED, so git diff is NOT a valid proof; backed up out of tree, pre sha 0a269d15959bc0d5cab9cc20a8df91e6b8c0d8ecd5b49e74cb4daffda75cb0b8): dismiss also dispatches the rollback. RESULT: exactly ONE arm red (`expected \"vi.fn()\" to not be called at all, but actually been called 1 times`). Restored, sha byte-identical, 0 mutant tokens.\n- POLL RE-KEY, needs-you.tsx (TRACKED+MODIFIED, backed up, pre sha 95c64c3e7daf3e77d64535b8613cb522f170255972c103d0680ab44d3252831a): list key given a random suffix. RESULT: the armed-confirm-survives-polls arm red. Restored, sha byte-identical, 0 mutant tokens.\n\nA VACUOUS ARM I FOUND IN MY OWN TEST AND FIXED. Direction 1's first fixture used `client: { commands: {} }` (copied from live-needs-you.test.tsx). `spendOffer` then refuses OFFER_KIND_UNBUILDABLE at the BUILD layer and never reaches the transport, so the planted mutant DID dispatch and `sendCommand` was still uncalled - MEASURED GREEN UNDER THE MUTANT. Fixed by giving the fixture a real `deployment.rollback` builder and putting the real offer on the surface.\n\nTWO UNNAMED FROZEN-ROSTER CONSUMERS, neither in the plan's affectedFiles, neither findable by grepping the symbol being added:\n- v2/goals/plan-rejected-surfaces.test.tsx:58 - `expect([...NEEDS_YOU_KINDS]).toEqual([...])` with the eight kinds inline. Added \"INCIDENT\" first, nothing else touched.\n- v2/goals/goals-home.test.tsx - sweeps every src file for the bare string \"onOpenBoard\" against a frozen 19-member list in BOTH directions. My two new render-test files are genuine consumers; added in sorted position, `toHaveLength(19)` -> 21. Found only by the full package run (\"Test Files 1 failed | 203 passed (204)\").\n\nLINE COUNTS vs the 250 target (400 hard cap), disclosed: needs-you-model.ts 268, needs-you.tsx 258 - BOTH OVER. They were 198/211 at plan time and 249/233 when I measured at claim time; three peer rows landed four extra kinds before I arrived, so a ninth kind cannot be added inside 250. I kept additions minimal and put every new behaviour in new files rather than moving EscalationFacts/CloseFacts out, because that file is under concurrent edit by three rows and a structural move maximises the rebase surface for 14 lines. New files: incident-card.tsx 126, needs-you-incident.ts 117, incident-frames.fixture.ts 85, use-incident-health.ts 67, rollback-port.ts 46; live-needs-you.tsx 232.\n\nPATH-ATTRIBUTED BASELINE: owned-package legs exit 0 at HEAD, repo typecheck exit 0, so the HEAD failing-path set is EMPTY and the intersection with owned paths is EMPTY. NO FOREIGN RED TO DISCLOSE. Foreign dirt noted and never touched: .codex/*, .grok/config.toml, .moe/messages/*, .moe/pins/*, .moe/roles/*, 11 .moe/tasks/*.json, apps/daemon/src/http/affordance-read.ts (M), and untracked Moe-NG_Deep_Review_2026-09-05.md, apps/daemon/src/preview/preview-goal-landing.test.ts, tests/e2e/control-room/{contract-goal.spec.ts,lane-contract-goal.ts,lane-multi-node-workspace.ts}.\n\nPLAN STEP 3 WAS ALREADY BUILT BY A SIBLING and was NOT duplicated: live-deployments-health.ts (334 lines, exact-key at every level) and the dev-proxy-paths.ts pin both already existed. Step 3 became a verification step plus the one missing hostile-line arm.\n\nFILED OUT OF SCOPE: task-c78140e9a4b749078d4fb633e2e70850 (PLANNING, HIGH) - deployments-health-read.ts:247 serves `receipt.refusal.detail` verbatim and there is NO redaction anywhere in the daemon, so a deploy failure can print a connection string on two screens. Not fixable here: daemon-side seam, and DoD 1 requires this card render the line verbatim.",
+      "timestamp": "2026-09-08T02:54:57.383Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T20:05:32.557Z",
-  "updatedAt": "2026-09-08T02:50:02.631Z",
+  "updatedAt": "2026-09-08T02:55:15.384Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T22:15:51.129Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 5
+    "executedStepCount": 7
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -195,7 +214,9 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T22:20:59.455Z",
@@ -287,23 +308,80 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "fd5f9ca64d87669f0d58da406406b7e5a8ee73ce",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-4d8571e7@2026-09-08T02:43:02Z",
+      "paths": [
+        ".moe/tasks/task-85895a88a2484d8589046b2030efd445.json",
+        "apps/control-room/src/v2/approvals/incident-card.test.tsx",
+        "apps/control-room/src/v2/approvals/incident-card.tsx",
+        "apps/control-room/src/v2/approvals/incident-frames.fixture.ts",
+        "apps/control-room/src/v2/approvals/needs-you-incident.test.ts",
+        "apps/control-room/src/v2/approvals/rollback-port.test.ts",
+        "apps/control-room/src/v2/approvals/rollback-port.ts",
+        "apps/control-room/src/v2/approvals/use-incident-health.ts"
+      ],
+      "recordedBy": "worker-4d8571e7",
+      "recordedAt": "2026-09-08T02:50:31.788Z",
+      "treeId": "beaca5bac039e29c979144a1972eb93618fc535b",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/approvals/live-needs-you.tsx",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        },
+        {
+          "path": "apps/control-room/src/v2/approvals/needs-you.tsx",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        },
+        {
+          "path": "apps/control-room/src/v2/approvals/needs-you-model.ts",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        },
+        {
+          "path": "apps/control-room/src/v2/goals/plan-rejected-surfaces.test.tsx",
+          "taskId": "task-817d893fa1254a4d82d2888af1f87a47"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-85895a88a2484d8589046b2030efd445.json",
-    ".moe/tasks/task-2f2ed034fbec4fe48b49a951951c9505.json",
-    "apps/control-room/src/live/live-deployments-health.test.ts",
+    "apps/control-room/src/v2/approvals/needs-you-model.ts",
+    "apps/control-room/src/v2/approvals/needs-you.tsx",
+    "apps/control-room/src/v2/approvals/needs-you-incident.ts",
     "apps/control-room/src/v2/approvals/needs-you-incident.test.ts",
-    "apps/control-room/src/v2/approvals/needs-you-incident.ts"
+    "apps/control-room/src/v2/goals/plan-rejected-surfaces.test.tsx",
+    "apps/control-room/src/live/live-deployments-health.test.ts",
+    "apps/control-room/src/v2/approvals/incident-card.tsx",
+    "apps/control-room/src/v2/approvals/incident-card.test.tsx",
+    "apps/control-room/src/v2/approvals/incident-frames.fixture.ts",
+    "apps/control-room/src/v2/approvals/rollback-port.ts",
+    "apps/control-room/src/v2/approvals/rollback-port.test.ts",
+    "apps/control-room/src/v2/approvals/use-incident-health.ts",
+    "apps/control-room/src/v2/approvals/live-needs-you.tsx",
+    "apps/control-room/src/v2/approvals/incident-dismiss.test.tsx",
+    "apps/control-room/src/v2/goals/goals-home.test.tsx"
   ],
   "unattributedPaths": [
-    "apps/control-room/src/v2/approvals/incident-card.test.tsx",
-    "apps/control-room/src/v2/approvals/incident-card.tsx"
+    "apps/control-room/src/v2/approvals/incident-dismiss.test.tsx"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-4d8571e7@2026-09-08T02:38:31Z",
-    "at": "2026-09-08T02:42:31.766Z"
-  }
+    "sessionId": "worker-4d8571e7@2026-09-08T02:43:02Z",
+    "at": "2026-09-08T02:50:31.788Z"
+  },
+  "reviewStartedAt": "2026-09-08T02:55:15.384Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": " RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n\n Test Files  204 passed (204)\n      Tests  2667 passed (2667)\n   Start at  05:54:02\n   Duration  13.49s (transform 24.04s, setup 0ms, import 59.59s, tests 107.95s, environment 172.13s)\n\nEXIT=0",
+    "reportedAt": "2026-09-08T02:55:15.384Z"
+  },
+  "completionSummary": "The NINTH Needs-you kind, INCIDENT (the roster was EIGHT, not four - the plan's line numbers were stale; every peer entry preserved).\n\nFULL EVIDENCE IS IN comment-bc3cb0e013df47368daef423a736dfd5 (drills, arm-by-arm DoD mapping, line counts, baseline).\n\nDELIVERED: needs-you-incident.ts (item derivation + incidentKeyOf), incident-card.tsx (verbatim error line, arm-then-confirm rollback, dismiss), rollback-port.ts, use-incident-health.ts, incident-frames.fixture.ts, plus 4 test files; needs-you-model.ts, needs-you.tsx and live-needs-you.tsx extended additively. The consumer edge is LANDED, not just exported: LiveNeedsYou polls /deployments/health/read per DEPLOYED environment and spends the offer.\n\nTHREE DECISIONS THE ROW ASKED FOR:\n1. goalId - an incident routes to an ENVIRONMENT, so the item carries goalId:\"\" and planningRunRef:\"\" (NO id at all, never an environment id in a goal's field) and the environment rides a discriminated `incident` member. Precedent, not invention: needs-you-escalation.ts:39 already writes `goalId: goal?.goalId ?? \"\"`. The comparator keeps a total order; the open-the-goal button is already suppressed on empty planningRunRef.\n2. KIND_ORDER - INCIDENT first, above every approval: alone among the kinds it is an outage already running.\n3. DISMISS SCOPE - it dismisses THIS INCIDENT (key `<env>#<id>`), it does NOT mute the environment. That choice IS direction 2.\n\nTHE CONFIRM names the environment and the FULL sha, and the sha is `rollbackTarget.sha` (receipt-bound) - NOT `rollbackSha`, which the read marks DISPLAY ONLY and positional. The dispatch sends `toReceiptRef` with restoreDatabase pinned false.\n\nGATES: `pnpm --filter @moe/control-room test` -> Test Files 204 passed (204) / Tests 2667 passed (2667), exit 0, run fresh. `pnpm typecheck` exit 0. Root `pnpm test` runs ZERO apps/** files and is not cited.\n\nDISCLOSED: needs-you-model.ts 268 and needs-you.tsx 258 are OVER the 250 target (under the 400 cap) - peers grew them to 249/233 before I cl"
 }

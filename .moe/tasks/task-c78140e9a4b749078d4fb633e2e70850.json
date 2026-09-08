@@ -1,0 +1,29 @@
+{
+  "id": "task-c78140e9a4b749078d4fb633e2e70850",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "bug: the deploy receipt's refusal detail reaches a screen unredacted, so a health-check failure can print a connection string",
+  "description": "Filed by worker-4d8571e7 from task-85895a88a2484d8589046b2030efd445 (the Needs-you incident card) as an out-of-scope finding. NOT fixable in that row: the redaction seam is daemon-side and that row is confined to the control room, and the incident card is REQUIRED by its DoD 1 to render the line VERBATIM - a browser-side scrub would be the wrong layer and would break the property it was built to guarantee.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04, 2026-09-08):\n- apps/daemon/src/http/deployments-health-read.ts:247 `errorLineOf` serves `line: receipt.refusal.detail` straight off the last refusing deploy receipt.\n- `grep -rn \"redact\\|REDACT\" apps/daemon/src/deployment/*.ts apps/daemon/src/http/deployments-health-read.ts` returned NOTHING. Same for apps/daemon/src/secrets/.\n- The control-room decoder (live-deployments-health.ts `errorLineOf`) carries the line through unchanged BY DESIGN, and two surfaces now render it: environments-section.tsx (`cr.environments.card.<env>.error`) and the new incident card (`cr.needsyou.incident.<env>#<id>.error`).\n\nSo there is NO redaction anywhere between the receipt write and the DOM. Epic rail 3 says a secret never surfaces in plaintext - not on a screen, not in an error path. A deploy or health-check refusal detail is exactly the kind of string that carries `postgres://user:password@host`, a registry token in a docker pull error, or a bearer header echoed by an upstream 401.\n\nWHAT IS NOT KNOWN and must be measured before planning: whether any refusal detail the deploy engine actually mints can contain an interpolated secret. That measurement is the first step, not an assumption - if no path can, the right outcome is a committed arm pinning that, not a scrubber.\n\nWHERE THE FIX BELONGS: at the receipt-writing seam in the daemon, which is the only layer that knows what a secret is (it holds the environment variable values). Scrubbing at the read, or in the browser, would leave the plaintext durable in the event store.\n\nNot in scope for this row: the incident card, the Environments section, or the health read's shape.",
+  "definitionOfDone": [
+    "Measure first: enumerate every string that can become a deploy receipt's `refusal.detail` and state, path by path, which ones can carry an interpolated environment value, a URL with credentials, or an auth header. Record the commands and their output. If NONE can, the deliverable is a committed arm that pins that property, not a scrubber.",
+    "If any path can, redaction happens where the secret is known - at the receipt write in the daemon - so the plaintext is never durable in the event store. A scrub at the read or in the browser is not acceptable: it leaves the secret on disk.",
+    "A committed test asserts a receipt whose refusal detail contains a credential-bearing URL is stored redacted, asserting the exact redaction marker and that the secret substring is absent - not merely that the string changed.",
+    "The incident card and the Environments section keep rendering the line VERBATIM as served. Neither surface gains a scrubber; assert both still show the daemon's line unchanged (task-85895a88a2484d8589046b2030efd445 owns those arms).",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 134,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-08T02:53:22.927Z",
+  "updatedAt": "2026-09-08T02:53:22.927Z"
+}
