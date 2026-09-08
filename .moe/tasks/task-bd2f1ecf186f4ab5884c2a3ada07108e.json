@@ -243,7 +243,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T17:18:12.578Z",
-  "updatedAt": "2026-09-07T22:59:25.163Z",
+  "updatedAt": "2026-09-07T23:00:21.945Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T17:19:37.645Z",
     "plannedStepCount": 7,
@@ -423,6 +423,21 @@
       "treeId": "392689923efe02734ffe5614957e036d1ea91179",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "412da959c869ff7ae36d40a996dd508631e182dd",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-eaa78526@2026-09-07T22:48:26Z",
+      "paths": [
+        ".moe/tasks/task-bd2f1ecf186f4ab5884c2a3ada07108e.json"
+      ],
+      "recordedBy": "qa-eaa78526",
+      "recordedAt": "2026-09-07T23:00:21.945Z",
+      "treeId": "dd3988ac8a07483f12e40c2714f4db1b131aedb4",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -436,9 +451,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-319873d7@2026-09-07T22:30:37Z",
-    "at": "2026-09-07T22:52:16.087Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-eaa78526@2026-09-07T22:48:26Z",
+    "at": "2026-09-07T23:00:21.945Z"
   },
   "declaredFiles": [
     "apps/daemon/src/release/release-decide-command.ts",
