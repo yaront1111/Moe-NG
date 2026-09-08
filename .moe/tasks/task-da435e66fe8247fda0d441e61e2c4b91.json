@@ -180,7 +180,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T18:52:51.614Z",
-  "updatedAt": "2026-09-08T12:22:35.494Z",
+  "updatedAt": "2026-09-08T12:22:40.119Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T18:52:57.145Z",
     "plannedStepCount": 7,
@@ -287,19 +287,35 @@
       "treeId": "e92e114a2d1dafa3edff73af058ac532fb070c92",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "6738cc561e7f584d5921412f712dacbb2070f097",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-eaa78526@2026-09-08T12:22:35Z",
+      "paths": [
+        ".moe/tasks/task-da435e66fe8247fda0d441e61e2c4b91.json"
+      ],
+      "recordedBy": "qa-eaa78526",
+      "recordedAt": "2026-09-08T12:22:40.118Z",
+      "treeId": "47390d42c91ce837d44384f282ce8439bc23b47e",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
     "tests/e2e/control-room/lane-landing.test.ts",
     "tests/e2e/control-room/lane-landing.ts",
-    "tests/e2e/control-room/lane-landing.spec.ts"
+    "tests/e2e/control-room/lane-landing.spec.ts",
+    ".moe/tasks/task-da435e66fe8247fda0d441e61e2c4b91.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-319873d7@2026-09-08T11:49:35Z",
-    "at": "2026-09-08T11:57:55.629Z"
+    "sessionId": "qa-eaa78526@2026-09-08T12:22:35Z",
+    "at": "2026-09-08T12:22:40.118Z"
   },
   "workStartedAt": "2026-09-08T11:35:16.504Z",
   "touchedFiles": [
