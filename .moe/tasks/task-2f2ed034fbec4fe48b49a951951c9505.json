@@ -260,7 +260,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T19:38:54.771Z",
-  "updatedAt": "2026-09-08T02:31:25.978Z",
+  "updatedAt": "2026-09-08T02:32:21.152Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T01:40:32.419Z",
     "plannedStepCount": 9,
@@ -480,6 +480,22 @@
       "treeId": "c364de6e4634562fc7eaf7cd6ec331e9625ee21e",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "0a09b1a2b997cc1d1bf8ec41c431161e77c63845",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-eaa78526@2026-09-08T02:20:38Z",
+      "paths": [
+        ".moe/tasks/task-2f2ed034fbec4fe48b49a951951c9505.json",
+        "apps/daemon/src/http/affordance-read.ts"
+      ],
+      "recordedBy": "qa-eaa78526",
+      "recordedAt": "2026-09-08T02:32:21.152Z",
+      "treeId": "82f1236732667b840acb55af470ded0316fc3aad",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -505,9 +521,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-319873d7@2026-09-08T01:46:35Z",
-    "at": "2026-09-08T02:20:27.159Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-eaa78526@2026-09-08T02:20:38Z",
+    "at": "2026-09-08T02:32:21.152Z"
   },
   "workStartedAt": "2026-09-08T01:47:01.037Z",
   "declaredFiles": [

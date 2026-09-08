@@ -24,21 +24,24 @@
     {
       "stepId": "step-1",
       "description": "PREREQUISITE HARD STOP AND A FRESH ROSTER MEASUREMENT. Four dependencies were unlanded at plan time.\n\nVERIFY ON DISK:\n- `git grep -rn \"/deployments/health/read\" -- apps/daemon/src` — the read (task-509c6c1609174adb9228940bc002f5c3). Confirm it is reachable from the COMPOSED production listener, not only a test server.\n- `git grep -rn \"moe-health-probe\\|incident\" -- apps/daemon/src/monitoring` — the probe ring and incident lifecycle (task-6ec875f4 / task-cc05c473).\n- `git grep -rn \"deployment.rollback\" -- apps/daemon/src` — the rollback the card offers (task-95e68a8d chain).\n- `git grep -c \"cr\\.env\\|environments-screen\\|Environments\" -- apps/control-room/src/v2` — grandchild A's Environments surface (task-df972c274f2a43eda3a9f57d2780c6f9), which DoD 3 asserts against.\nIf any is absent, `moe.report_blocked` with `blockedOnTaskIds`. Do NOT mock the read, do NOT synthesise an offer, do NOT assert DoD 3 against an internal flag instead of A's surface.\n\nRE-MEASURE THE CONTENDED ROSTER — three rows (task-a988ca1c, task-33ceae56, task-84cd2e55) are editing these two files concurrently and none had landed at plan time:\n  `grep -n \"NEEDS_YOU_KINDS\\|KIND_ORDER\" apps/control-room/src/v2/approvals/needs-you-model.ts`\n  `grep -n \"KIND_EYEBROW\" apps/control-room/src/v2/approvals/needs-you.tsx`\nRecord what each contains NOW. REBASE onto peer entries; deleting one to clean your diff is the failure rail 6 names.\n\nAlso read needs-you-model.ts:186-187 and confirm the comparator still dereferences `left.goalId` — step 2 depends on it.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/approvals/needs-you-model.ts",
+        "apps/control-room/src/v2/approvals/needs-you.tsx"
+      ],
+      "note": "PREREQUISITES ALL LANDED; ROSTER RE-MEASURED; PLAN STEP 3 IS ALREADY BUILT BY A SIBLING.\n\nMEASURED AT HEAD ac5c9ecd (branch moe/work-2026-09-04), no amendments on any step (activeAmendmentId null on all seven).\n\n1. `/deployments/health/read` EXISTS and is production-composed: apps/daemon/src/http/deployments-health-read.ts:43 DEPLOYMENTS_HEALTH_READ_PATH, and apps/daemon/src/daemon-entry-deployments-health.test.ts:2 states it is reached THROUGH THE PRODUCTION LISTENER.\n2. Probe ring + incident lifecycle EXIST: apps/daemon/src/monitoring/health-probe-ring.ts, health-incident.ts (+ .js bridge), health-probe-contracts.ts.\n3. `deployment.rollback` is now OFFERED BY THE DAEMON: apps/daemon/src/http/affordance-rollback-offers.ts (landed by my own prerequisite row task-2f2ed034, commit 84cba8ef), imported at affordance-read.ts:36 and spent at :474. AT MOST ONE offer per project, targetAggregateId = projectId (rollback-command.ts:85 refuses anything else). Client builder exists: generated-client.ts:196/:321.\n4. Environments surface EXISTS: apps/control-room/src/v2/ops/environments-section.tsx renders `data-status={view.state}` on testid `cr.environments.card.<env>` plus `.state` words. That is DoD 3 direction 1's assertion target.\n\nROSTER IS EIGHT, NOT FOUR (plan's line numbers are stale; peers landed four more kinds):\n  needs-you-model.ts:52 NEEDS_YOU_KINDS = [\"PLAN_APPROVAL\",\"PLAN_REJECTED\",\"PREVIEW\",\"RELEASE\",\"DEPLOY\",\"ESCALATION\",\"GATE_1\",\"READY_TO_CLOSE\"]\n  needs-you-model.ts:112 KIND_ORDER: eight entries, PLAN_APPROVAL 0 .. READY_TO_CLOSE 7\n  needs-you.tsx:47 KIND_EYEBROW: eight entries\n  wc -l: needs-you-model.ts 249, needs-you.tsx 233 (plan said 198/211). Both near the 250 ceiling, so incident logic goes in NEW focused modules rather than growing these two.\nComparator still dereferences goalId: needs-you-model.ts:238 `|| left.goalId.localeCompare(right.goalId)`.\n\nPLAN STEP 3 IS ALREADY DELIVERED and must NOT be duplicated (global rail 6: re-implementing a landed surface is a silent duplicate). apps/control-room/src/live/live-deployments-health.ts exists with exact-key decoding, carries `lastError.line` through UNCHANGED, decodes `incident {id, openedAt}` and `rollbackTarget {imageDigest, sha, toReceiptRef}` as first-class members; the proxy pin is already at dev-proxy-paths.ts:33. Step 3 becomes a verification step, not a build step.\n\ngoalId DECISION (rail 5), recorded here and settled by PRECEDENT rather than invention: needs-you-escalation.ts:39 already writes `goalId: goal?.goalId ?? \"\"` for an item with no goal. So an empty string already means NO GOAL in this exact file family. The incident item will carry `goalId: \"\"` (no id at all - never an environment id) and carry the environment in a DISCRIMINATED `incident` member, which is the plan's first option. `planningRunRef: \"\"` too, which needs-you.tsx:170 already uses to suppress the open-the-goal button. The comparator keeps a total order and no consumer sees a non-goal id.\n\nFOREIGN DIRT NOTED, NOT TOUCHED (6+ paths belong to other sessions): .codex/*, .grok/config.toml, .moe/messages/*, .moe/roles/*, 11 .moe/tasks/*.json, apps/daemon/src/http/affordance-read.ts (M), and untracked Moe-NG_Deep_Review_2026-09-05.md, apps/daemon/src/preview/preview-goal-landing.test.ts, tests/e2e/control-room/*.\n\nPrior session (worker-76f4ef35, then worker-4d8571e7) made NO source edits; wip commit ac5c9ecd carries only the task json.",
+      "startedAt": "2026-09-07T19:36:53.537Z",
+      "completedAt": "2026-09-08T02:34:26.134Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE FIFTH KIND, AND THE goalId DECISION (DoD 4, rail 5). Add the incident kind to `NEEDS_YOU_KINDS` (needs-you-model.ts:28) and to the TWO exhaustive `Record<NeedsYouKind, ...>` maps it feeds — `KIND_ORDER` (:72) and `KIND_EYEBROW` (needs-you.tsx:41). Both stop compiling until they gain the key; that coupling is why this is a two-file change rather than one, and `needs-you.tsx` imports only the TYPE, so a symbol grep never names it.\n\nKIND_ORDER IS A PRIORITY, NOT A FORMALITY. An incident is an outage in progress; choose its position relative to PLAN_APPROVAL, ESCALATION, GATE_1 and READY_TO_CLOSE deliberately and say why in the note. Getting it wrong buries an outage under routine approvals.\n\nTHE goalId DECISION, which rail 5 requires be made deliberately and which is MECHANICAL, not just semantic: needs-you-model.ts:186-187 sorts with `... || left.goalId.localeCompare(right.goalId)`. `goalId` is required on every item and is DEREFERENCED there. An incident routes to an ENVIRONMENT. Do NOT put an environment id in `goalId` — every existing consumer assumes that field means what it says, and the comparator would be silently comparing two different kinds of identifier.\nChoose one and record it: a discriminated member carrying the environment, or an optional routing target with the comparator taught to handle its absence. Whichever you pick, assert the OTHER FOUR kinds still sort exactly as before — that is the regression this decision risks.\n\nASCII-only, apostrophe-free JSX text (the scheduler boundary scan reds on an apostrophe in JSX), and `wc -l` both files against the 250 ceiling — they were 198 and 211.",
       "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/control-room/src/v2/approvals/needs-you-model.ts",
         "apps/control-room/src/v2/approvals/needs-you.tsx"
       ],
-      "startedAt": "2026-09-07T19:36:53.537Z"
-    },
-    {
-      "stepId": "step-2",
-      "description": "THE FIFTH KIND, AND THE goalId DECISION (DoD 4, rail 5). Add the incident kind to `NEEDS_YOU_KINDS` (needs-you-model.ts:28) and to the TWO exhaustive `Record<NeedsYouKind, ...>` maps it feeds — `KIND_ORDER` (:72) and `KIND_EYEBROW` (needs-you.tsx:41). Both stop compiling until they gain the key; that coupling is why this is a two-file change rather than one, and `needs-you.tsx` imports only the TYPE, so a symbol grep never names it.\n\nKIND_ORDER IS A PRIORITY, NOT A FORMALITY. An incident is an outage in progress; choose its position relative to PLAN_APPROVAL, ESCALATION, GATE_1 and READY_TO_CLOSE deliberately and say why in the note. Getting it wrong buries an outage under routine approvals.\n\nTHE goalId DECISION, which rail 5 requires be made deliberately and which is MECHANICAL, not just semantic: needs-you-model.ts:186-187 sorts with `... || left.goalId.localeCompare(right.goalId)`. `goalId` is required on every item and is DEREFERENCED there. An incident routes to an ENVIRONMENT. Do NOT put an environment id in `goalId` — every existing consumer assumes that field means what it says, and the comparator would be silently comparing two different kinds of identifier.\nChoose one and record it: a discriminated member carrying the environment, or an optional routing target with the comparator taught to handle its absence. Whichever you pick, assert the OTHER FOUR kinds still sort exactly as before — that is the regression this decision risks.\n\nASCII-only, apostrophe-free JSX text (the scheduler boundary scan reds on an apostrophe in JSX), and `wc -l` both files against the 250 ceiling — they were 198 and 211.",
-      "status": "PENDING",
-      "affectedFiles": [
-        "apps/control-room/src/v2/approvals/needs-you-model.ts",
-        "apps/control-room/src/v2/approvals/needs-you.tsx"
-      ]
+      "startedAt": "2026-09-08T02:35:12.829Z"
     },
     {
       "stepId": "step-3",
@@ -112,20 +115,29 @@
       "author": "worker-76f4ef35",
       "content": "STEP-1 AUDIT, NO SOURCE EDITS. All five declared prerequisites are landed:true in get_context with durable completion/verification records. The missing seam is different: daemon rollback OFFER, filed task-2f2ed034fbec4fe48b49a951951c9505. createAffordancePort (http/affordance-read.ts) iterates BOOTSTRAP_COMMAND_KINDS, which excludes rollback, then explicit providers; full HTTP subtree has zero deployment.rollback matches. Handler exists but is not an offer. rollback-command.ts:39-49 requires environment/toReceiptRef/restoreDatabase; :92 checks targetAggregateId===projectId. The health read carries previous.sha only (:276), not the selected receipt binding. UI must not invent an offer or repurpose sha as receipt reference.\n\nPLAN AMENDMENT NEEDED before resume (no activeAmendmentId/amendments were present):\n1. Roster now EIGHT: PLAN_APPROVAL, PLAN_REJECTED, PREVIEW, RELEASE, DEPLOY, ESCALATION, GATE_1, READY_TO_CLOSE. KIND_ORDER is 0..7 in that sequence; KIND_EYEBROW preserves all eight. Comparator still dereferences goalId at model:239-240. Choose a discriminated environment member and incident-first priority, never environment in goalId. Model 249 lines, card 233; focused incident model/card modules needed rather than monolith growth.\n2. Step 3 duplicates a delivered surface: live/live-deployments-health.ts already provides the exact-key client, open incident, lastError.line and rollbackSha; dev-proxy-paths.ts:33 already pinned. Reuse existing reader, do not create live-deployments-health-read.ts.\n3. Unnamed asserting consumer discovered: v2/goals/plan-rejected-surfaces.test.tsx:58-61 has an EXACT roster array. Global shape-consumer rail requires amendment adding it before widening roster.\n4. Plan omits production composition: v2/approvals/live-needs-you.tsx:127 calls deriveNeedsYou with no environment health; :134-177 handles close/escalate/preview only. It and tests plus rollback port/routing seam must be owned to make the card production-reachable, not merely fixture-renderable.\n5. Grandchild A Environments is v2/ops/environments-section.tsx through live-environments.tsx/LiveHealth. LastError source is DEPLOY_RECEIPT, not a probe exception (prerequisite completionSummary explicitly explains this).\n\nNo tests run: prerequisite audit halted before behavior edits; no green/completion claim. Foreign dirty paths preserved, no declarations or staging.",
       "timestamp": "2026-09-07T19:39:28.709Z"
+    },
+    {
+      "id": "comment-107a5720e8044791ac80b2ad27358d61",
+      "author": "worker-4d8571e7",
+      "content": "SECOND SESSION ON THIS ROW - YIELDING TO THE LIVE ONE. Additive findings only; I made NO source edits, ran no gate, and touched no board status.\n\nTWIN DETECTION (the clock, not the notes - both sessions share seat worker-4d8571e7):\n- My `complete_step` on step-1 was refused `[INVALID_STATE] Step is in COMPLETED state`. Disk says step-1 completedAt 2026-09-08T02:34:26.134Z and step-2 startedAt 02:35:12.829Z, while my own call was made at ~02:35:2xZ. A call I had not yet made cannot have closed the step.\n- Independent proof: `git status --porcelain -- apps/control-room` shows `?? apps/control-room/src/v2/approvals/needs-you-incident.ts`, 6428 bytes, mtime 02:35:43Z - written the same second I read it. That is a session typing, not debris.\n- needs-you-model.ts has already moved under the twin: NEEDS_YOU_KINDS is now at :58 (was :52 when I measured at 02:2xZ) and the comparator at :255 (was :238).\nPer the yield protocol I am not re-editing files (last writer wins and would destroy green work) and not calling report_blocked (it would flip the row out of WORKING mid-step).\n\nI independently reached the SAME four decisions the twin recorded in its step-1 note - goalId \"\" by the needs-you-escalation.ts:39 precedent, the offer matched by commandKind alone because affordance-rollback-offers.ts mints AT MOST ONE project-scoped offer, step 3 already delivered by task-509c6c16, dismiss keyed to the incident id - so that note is corroborated by a second measurement, not single-sourced.\n\nTHE ONE THING THAT NOTE DOES NOT CARRY, and it is time-critical because the twin is inside step-2 (the roster edit) right now:\n\nAN UNNAMED EXACT-ROSTER CONSUMER OUTSIDE THE PLAN'S AFFECTED FILES (global rail 19 / the bidirectional-roster rail). apps/control-room/src/v2/goals/plan-rejected-surfaces.test.tsx:58-61 pins the roster as an ORDERED EXACT ARRAY, not a membership check:\n\n    expect([...NEEDS_YOU_KINDS]).toEqual([\n      \"PLAN_APPROVAL\", \"PLAN_REJECTED\", \"PREVIEW\", \"RELEASE\", \"DEPLOY\", \"ESCALATION\", \"GATE_1\",\n      \"READY_TO_CLOSE\",\n    ]);\n    expect(new Set(NEEDS_YOU_KINDS).size).toBe(NEEDS_YOU_KINDS.length);\n\nADDING ANY NINTH KIND REDS THIS TEST. It is in v2/goals/, imports the constant from ../approvals/needs-you-model.js, and appears in NO step of this plan's affected files - exactly the frozen-roster hazard step 7 warns against, already sitting in a peer test. `pnpm --filter @moe/control-room test` will catch it, but only after the roster edit is written.\n\nThe honest fix is to add the new kind to that literal in its declared order; its own docblock asks for \"every advertised kind is a distinct string in the declared order\", so updating it preserves the assertion rather than evading it. It must NOT be fixed by renaming or reformatting the producer. Whoever lands this should `moe.declare_files` that path, since no step lists it.\n\nFULL SWEEP FOR OTHER CONSUMERS A NINTH KIND COULD RED (`git grep -n \"NEEDS_YOU_KINDS|KIND_ORDER|KIND_EYEBROW\"` plus a sweep for hard counts and literal kind arrays over apps/control-room/src):\n- plan-rejected-surfaces.test.tsx:58 - THE ONLY hard red. Confirmed.\n- KIND_ORDER (needs-you-model.ts:128) and KIND_EYEBROW (needs-you.tsx:47) are exhaustive `Record<NeedsYouKind, ...>` maps - they stop COMPILING until they gain the key, so `pnpm typecheck` catches them; no test pins their contents.\n- countLabel pins are SAFE, all of them, but only conditionally: needs-you-model.test.ts:108/:134/:202/:348 and plan-rejected-surfaces.test.tsx:74 call deriveNeedsYou WITHOUT a health input, so an absent/undefined health member must yield zero incident items. If the new input member is ever made required, all five red at once.\n- live-needs-you.test.tsx:70 expects \"2 decisions need you\". This one is a REAL RISK for step 5's composition: if LiveNeedsYou starts a health read with no injected reader, that test can gain an item or leak a poll. Give the health reader the same `?? default` injection shape the other five readers use, and that test stays green.\n\nNo files created or modified by this session. Foreign dirt observed and left alone: 27 modified (.moe/**, .codex/**, .grok/config.toml, apps/daemon/src/http/affordance-read.ts) and 7 untracked, plus the twin's in-flight needs-you-incident.ts.",
+      "timestamp": "2026-09-08T02:36:53.169Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T20:05:32.557Z",
-  "updatedAt": "2026-09-08T02:31:36.619Z",
+  "updatedAt": "2026-09-08T02:36:53.169Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T22:15:51.129Z",
     "plannedStepCount": 7,
-    "plannedDistinctFileCount": 6
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 1
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
   ],
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T22:20:59.455Z",
   "planningNotes": {
@@ -142,5 +154,32 @@
   "blockedOnTaskIds": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "commits": [
+    {
+      "sha": "ac5c9ecd11dddf985b57b48d348c1d07f3df96a2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-4d8571e7@2026-09-08T02:31:48Z",
+      "paths": [
+        ".moe/tasks/task-85895a88a2484d8589046b2030efd445.json"
+      ],
+      "recordedBy": "worker-4d8571e7",
+      "recordedAt": "2026-09-08T02:31:51.486Z",
+      "treeId": "8e7182f76f644714eef84a3d29d00c978ace20b6",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-85895a88a2484d8589046b2030efd445.json"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-4d8571e7@2026-09-08T02:31:48Z",
+    "at": "2026-09-08T02:31:51.486Z"
+  }
 }
