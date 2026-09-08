@@ -180,7 +180,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T18:52:51.614Z",
-  "updatedAt": "2026-09-08T12:22:40.119Z",
+  "updatedAt": "2026-09-08T12:23:55.369Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T18:52:57.145Z",
     "plannedStepCount": 7,
@@ -302,6 +302,21 @@
       "treeId": "47390d42c91ce837d44384f282ce8439bc23b47e",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "ef3353e3a09c32959871b51bf589937debc88a41",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-319873d7@2026-09-08T11:44:37Z",
+      "paths": [
+        ".moe/tasks/task-da435e66fe8247fda0d441e61e2c4b91.json"
+      ],
+      "recordedBy": "worker-319873d7",
+      "recordedAt": "2026-09-08T12:23:55.369Z",
+      "treeId": "abbb4979343abdd8081b4a9c249e95e09e4e59a4",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -313,9 +328,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-eaa78526@2026-09-08T12:22:35Z",
-    "at": "2026-09-08T12:22:40.118Z"
+    "kind": "completion",
+    "sessionId": "worker-319873d7@2026-09-08T11:44:37Z",
+    "at": "2026-09-08T12:23:55.369Z"
   },
   "workStartedAt": "2026-09-08T11:35:16.504Z",
   "touchedFiles": [
