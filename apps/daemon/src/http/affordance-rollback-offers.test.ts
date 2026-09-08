@@ -17,6 +17,7 @@ import {
 afterEach(closeStores);
 
 const DIGEST = `sha256:${"b".repeat(64)}`;
+const encoder = new TextEncoder();
 
 /** A distinct 40-hex commit id per receipt: `DeployReceiptV1.sha` is admitted against a git
  *  object-id shape, so a readable label would be rejected on the WRITE. */
@@ -38,6 +39,27 @@ function refusedDeploy(store: SqliteEventStore, environment: string, decisionId:
     releaseDecision: null, sha: shaOf(seed), url: null,
   });
   if (!written.ok) throw new Error(written.code);
+}
+
+/**
+ * ADVANCE THE PROJECT AGGREGATE. Nothing this suite seeds writes to it - a deploy receipt lands
+ * on `deploy:<project>:<environment>` and a target binding on its own aggregate - so without
+ * this the project version is 0 and every assertion about the offered version passes against a
+ * resolver that hard-codes zero. Measured: a `version = 0` mutant kept this file green until
+ * this helper existed.
+ */
+function bumpProjectAggregate(store: SqliteEventStore, times: number): void {
+  for (let index = 0; index < times; index += 1) {
+    const marker = `project-bump-${index}`;
+    store.commitExpectedVersionDecision({
+      commandKind: "test.project_bump", committedResultBytes: encoder.encode("{}"),
+      correlationId: marker, decidedAt: "2026-09-08T03:00:00.000Z",
+      events: [{ eventId: marker, eventType: "TestProjectBumped", payload: encoder.encode("{}") }],
+      expectedVersion: store.getAggregateVersion(PROJECT_ID),
+      key: { commandId: marker, principalId: "test-bump", projectId: PROJECT_ID },
+      requestBytes: encoder.encode(marker), targetAggregateId: PROJECT_ID,
+    });
+  }
 }
 
 const resolve = (store: SqliteEventStore) => resolveRollbackOffers({ projectId: PROJECT_ID, store });
@@ -69,6 +91,22 @@ it("offers exactly one project-scoped rollback once a second deploy has landed",
     }],
     refused: null,
   });
+});
+
+/**
+ * THE VERSION IS READ, NOT ZERO, and this arm is the only thing that says so. Every other arm in
+ * this file runs against a project aggregate still at 0, so a resolver hard-coding zero would
+ * satisfy them all. Here the aggregate is advanced THREE times first, and the offer must carry 3.
+ */
+it("offers the project aggregate's CURRENT version, not the zero a fresh store would give", () => {
+  const store = openStore();
+  deployed(store, "production", "first", 1);
+  deployed(store, "production", "second", 2);
+  bumpProjectAggregate(store, 3);
+  const projectVersion = store.getAggregateVersion(PROJECT_ID);
+  expect(projectVersion).toBe(3);
+  expect(resolve(store).offers[0]?.version).toBe(projectVersion);
+  expect(resolve(store).offers[0]?.version).not.toBe(0);
 });
 
 /**

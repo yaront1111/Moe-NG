@@ -106,6 +106,22 @@ function seed(deploys: number): Seeded {
         // Named-code throw: a silently refused seed leaves every assertion below vacuous.
         if (!written.ok) throw new Error(`deploy receipt seed refused: ${written.code}`);
       }
+      // ADVANCE THE PROJECT AGGREGATE so the offered `expectedVersion` is NOT zero. Nothing
+      // above writes to it - a receipt lands on `deploy:<project>:<environment>` and a target
+      // binding on its own aggregate - so on a fresh store the project version is 0 and the
+      // dispatch below would admit a hard-coded zero just as happily as a read one. Measured
+      // during the step-9 drill: a `version = 0` mutant in the offer resolver kept this file
+      // GREEN until this bump existed. With it, that mutant refuses EXPECTED_VERSION_CONFLICT.
+      const encoder = new TextEncoder();
+      seeder.commitExpectedVersionDecision({
+        commandKind: "test.project_bump", committedResultBytes: encoder.encode("{}"),
+        correlationId: "round-trip-bump", decidedAt: "2026-09-08T03:00:00.000Z",
+        events: [{ eventId: "round-trip-bump", eventType: "TestProjectBumped",
+          payload: encoder.encode("{}") }],
+        expectedVersion: seeder.getAggregateVersion(PROJECT),
+        key: { commandId: "round-trip-bump", principalId: "test-bump", projectId: PROJECT },
+        requestBytes: encoder.encode("round-trip-bump"), targetAggregateId: PROJECT,
+      });
     } finally { seeder.close(); }
   } catch (error) {
     close();
@@ -166,6 +182,8 @@ it("spends the daemon's own offer and the daemon's own receipt ref through the r
     if (offer === undefined || target === null) throw new Error("the daemon offered no authority");
     expect(offer.targetAggregateId).toBe(PROJECT);
     expect(target.toReceiptRef).toMatch(/^[0-9a-f]{64}$/u);
+    // The offer carries a READ version, not a fresh store's zero - see the bump in `seed`.
+    expect(offer.expectedVersion).toBeGreaterThan(0);
 
     const entry = seeded.provider.provide().registry.get("deployment.rollback");
     expect(entry?.asyncHandler).toBeTypeOf("function");
