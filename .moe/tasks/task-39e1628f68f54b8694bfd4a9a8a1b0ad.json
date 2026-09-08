@@ -1,0 +1,39 @@
+{
+  "id": "task-39e1628f68f54b8694bfd4a9a8a1b0ad",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "bug: the pinned-corpus SHA-forgery arm has a 2.9x margin on the same 5s default and is the next arm to red the root lane",
+  "description": "HANDED ON FROM task-4a9d95cfc26a413cae7e8c07ecc1129b (the moved-tree arm in the SAME FILE, fixed there). That row's DoD 3 forbade changing this arm's budget, so it is filed rather than fixed. dependsOn task-4a9d95cf because both edits land in the same file and must not collide in the shared worktree.\n\nTHE ARM: packages/benchmark/src/pre-freeze-pinned-documents.test.ts, \"never lets a caller-supplied SHA stand in for observed Git authority\" (was :186, now ~:200 after task-4a9d95cf's two hunks).\n\nMEASURED, TWICE, ON THIS HOST, against vitest's DEFAULT 5000ms with no explicit budget on the `it`:\n- 1721ms under fleet load (architect-5385678f, plan time for task-4a9d95cf) — a 2.9x margin.\n- 280 / 287 / 290 / 632ms idle (worker-bcaa6d5e, 2026-09-08 ~19:20Z, four standalone runs).\n\nWHY IT WILL FLAKE. Its sibling in the same file was measured at 693ms idle, 2317ms loaded, and >5000ms in the filing that opened task-4a9d95cf — a ~15x spread over IDENTICAL bytes. The variable is host contention on git subprocess spawns, not work: task-4a9d95cf's phase timers put 98.7% of the sibling's duration in NINE git spawns. This arm calls the same `newCorpusRepo` helper (three git spawns) plus four production authority observations. A 2.9x margin against a 15x observed spread is the same bet the sibling lost.\n\nWHY IT MATTERS: root `pnpm test` is a DoD-1 leg for many rows on this board. A red that belongs to nobody's diff burns a full-suite run plus a gate lease every time it fires, and teaches readers to discount root reds.\n\nTHE FIX SHAPE, already proven on the sibling: an explicit per-`it` third-argument budget sized from a fresh measurement, with a comment naming the number AND the measurement it came from. NOT a retry, NOT an exclusion, NOT a raised global `testTimeout` — all three were rejected on task-4a9d95cf for reasons recorded in its planningNotes.\n\nALSO WORTH MEASURING WHILE HERE, but only if it does not change the other arms' behaviour: `newCorpusRepo` (:41-53) issues THREE git spawns (`init`, `add`, `commit`) per call and is the single largest cost in every arm that uses it (:92 DIRTY_REPO sweep case, the moved-tree arm, and this one). task-4a9d95cf could not touch it because its DoD protected the other eleven arms' behaviour. A row that owns the whole file could.",
+  "definitionOfDone": [
+    "The SHA-forgery arm carries an explicit per-`it` budget sized from a fresh measurement of its own duration, with the number and its measurement recorded in a comment: not a retry, not an exclusion, not a raised global testTimeout.",
+    "At least ten consecutive standalone runs of packages/benchmark/src/pre-freeze-pinned-documents.test.ts are green with both the `Tests N passed` count line AND the arm's own duration in ms quoted per run, plus the min/max/median, because ten greens at a duration near the budget prove nothing.",
+    "A mutation drill proves the budget is load-bearing: set it below the measured duration and the arm times out again; and the arm still refuses at CORPUS_ROOT_UNSET and CORPUS_ROOT_DIRTY at PRE_FREEZE_AUDIT, so the budget did not make a broken arm green.",
+    "The other eleven arms in the file keep their current behaviour and budgets, including the moved-tree arm's `}, 30_000);` landed by task-4a9d95cf.",
+    "Root `pnpm test` run under the full-suite-gate, with its exit code and `Test Files N passed` count line quoted verbatim; any foreign red attributed by path against the merge-base baseline and disclosed, never fixed in-line."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-4a9d95cfc26a413cae7e8c07ecc1129b"
+  ],
+  "priority": "MEDIUM",
+  "order": 146,
+  "comments": [
+    {
+      "id": "comment-d240651016fb4ceca2e072eacd6c3b35",
+      "author": "worker-bcaa6d5e",
+      "content": "A THIRD ARM OF THE SAME CLASS, FOUND WHILE ATTRIBUTING ROOT RED ON task-4a9d95cf. Measured 2026-09-08 by worker-bcaa6d5e. Recording it here rather than opening another row, because whoever plans this row is already holding the \"5s default vs. load-dependent work\" problem.\n\n`tools/packaging/pack-command.test.ts` around :649. worker-9dcd2d4f's root baseline at 18:42:13Z reported it as a root-lane failure: \"pack-command.test.ts:649 timeout5000ms\". I re-ran that file STANDALONE at HEAD minutes ago and it PASSED — `Tests 1 failed | 87 passed (88)`, where the single failure was the unrelated `packages/scheduler/src/package-boundary.test.ts` boundary scan, not pack-command. Red under fleet load, green standalone, same bytes: that is the signature this whole thread is about.\n\n`grep -n \"}, [0-9_]*);\" tools/packaging/pack-command.test.ts` returns NOTHING — the file has no explicit per-`it` budget anywhere, so every arm in it races vitest's 5000ms default. The arms around :649 hash a real executable via `pinnedCargoExecutable()` and compare a pinned sha256, which is load-dependent file I/O on a binary.\n\nNOT IN THIS ROW'S SCOPE AS FILED (this row names the pinned-corpus file), and I am deliberately NOT widening it — but a planner who wants to fix the class rather than one instance should consider whether the two belong in one row. If they are split, the pack-command one needs its own row; leaving it in this comment alone will lose it.\n\nMethod that worked on task-4a9d95cf and is worth reusing here: measure with `--reporter=verbose` for per-arm ms; get the write/spawn account with phase timers surfaced through a deliberate failing `expect` (console.log is swallowed in this repo's vitest runs); and run mutation drills PROCESS-LOCAL via a throwaway `--config` with a Vite `transform` plugin, so nothing is mutated on the shared tree while a peer holds full-suite-gate.",
+      "timestamp": "2026-09-08T19:30:35.384Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-08T19:27:36.044Z",
+  "updatedAt": "2026-09-08T19:30:35.384Z"
+}
