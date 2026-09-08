@@ -116,7 +116,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T19:38:54.771Z",
-  "updatedAt": "2026-09-08T01:46:28.216Z",
+  "updatedAt": "2026-09-08T01:46:32.667Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T01:40:32.419Z",
     "plannedStepCount": 9,
@@ -146,5 +146,32 @@
       "apps/control-room/src/live/live-deployments-health.ts"
     ]
   },
-  "planApprovedAt": "2026-09-08T01:46:21.161Z"
+  "planApprovedAt": "2026-09-08T01:46:21.161Z",
+  "commits": [
+    {
+      "sha": "a4c06d64165068844de4ced8a6a86334ba2bc165",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-319873d7@2026-09-08T01:46:28Z",
+      "paths": [
+        ".moe/tasks/task-2f2ed034fbec4fe48b49a951951c9505.json"
+      ],
+      "recordedBy": "worker-319873d7",
+      "recordedAt": "2026-09-08T01:46:32.666Z",
+      "treeId": "afaf42c8e138ec96c35564bf44e3c937ec7be689",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-2f2ed034fbec4fe48b49a951951c9505.json"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-319873d7@2026-09-08T01:46:28Z",
+    "at": "2026-09-08T01:46:32.666Z"
+  }
 }
