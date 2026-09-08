@@ -119,11 +119,17 @@
       "author": "worker-bcaa6d5e",
       "content": "STEP 1 — THE PRD IS ABSENT. ASKING RATHER THAN INVENTING ONE. worker-bcaa6d5e, 2026-09-08.\n\n@human / owner: this row cannot honestly start its live half without a PRD from you. Step 1(b) of the approved plan is explicit, and so is the row description: \"the human supplies or approves it at claim time (comment on this row)\".\n\nWHAT I MEASURED, so this is not a lazy ask.\n- `jq '.task.comments' ` on this row returns exactly ONE comment: comment-47c3ed43 by architect-16a01670, 2026-09-04, about `dependsOn` arithmetic. No PRD.\n- Chat sweep across all five `.moe/messages/*.jsonl`, `select(.content|test(\"161b7e9d\"))` and a separate human-sender + /PRD/i sweep: no PRD addressed to this row. The only PRD-shaped human artefacts on the board are the 2026-08-30 PRD-COMPILER design proposal (`docs/plans/2026-08-30-prd-compiler-design-proposal.md`) and `documents.source_read`, which are the machinery for reading a PRD, not a product PRD.\n\nWHY I AM NOT WRITING ONE MYSELF. The row's whole value is that Moe was handed requirements it did not choose. A PRD I author is one I would pick to be easy — three screens I already know the generator scaffolds, one table I already know the migration lane handles. The transcript would be indistinguishable from a real one and would prove nothing. Step 1(b) says so in as many words: \"a PRD you wrote yourself makes the whole proof circular\".\n\nWHAT I NEED — small but real, the shape already agreed in the description:\n  * a 3-screen TypeScript web app\n  * sign-in\n  * ONE PostgreSQL table\n  * ONE API\n  * and at least one genuine ambiguity you are willing to be asked about, because DoD 1 requires \"at least one real clarification\" at Gate 1. If the PRD is airtight, the seat asks nothing and that clause cannot be satisfied honestly — I would have to record \"no clarification was needed\" as a finding rather than manufacture a question.\n\nPaste it as a comment on this row and I will run the loop against it.\n\nSCOPE NOTE THAT MAY MATTER MORE THAN THE PRD. At 2026-09-08 17:49Z architect-9556982c relayed a direction of yours from the REPL: \"I THINK LETS DELETE THE PREVIEW TASKS WE JUST WANT TO FINISH CODING\". They deleted task-047b1d8b (the standalone standing-preview drive), preserved the rationale as \"scope cancelled, NOT capability verified\", and explicitly said they had NOT altered this row because it mixes broader implementation and regression scope — while asking governors to \"apply the human's coding-first direction to preview-environment provisioning/live-proof clauses embedded in in-flight integration rows as appropriate\".\n\nThis row is exactly such a row. Its DoD 1 requires a live PREVIEW deploy receipt, health URL and migration receipt on a fresh product, browser-only. That is the same drive you just cancelled, wearing an integration row's clothes. So there are two readings and I am not going to pick for you:\n\n  (A) The direction reaches this row too. Then DoD 1's live-run half and DoD 2/3 are cancelled-as-scope, the row narrows to the CODE and the EVIDENCE it already owns — the fault-injection knob, the whole-epic regression, the docs sweep, the adversarial pass — and no PRD is needed at all.\n  (B) The direction was about the standalone row only. Then I need the PRD above and the live run happens.\n\nUntil you say, I am proceeding with everything that is true under BOTH readings, which is real work and not a holding pattern:\n  - step 2, the fault-injection knob (the one piece of production code this row writes; measured absent, `grep -rnE 'FAULT_INJECT|DEVELOPMENT_ONLY|MOE_CRASH|crashAfter|killAfter' --include=*.ts apps/daemon/src` = 0 hits), and\n  - the follow-up ledger and adversarial reading that DoD 6 owns.\n\nSTEP 1(a), THE GATE ON THE TWELVE — SATISFIED. All twelve `dependsOn` ids are DONE with landing shas, `dependsOnUnmet: []`. Shas recorded in the step note.",
       "timestamp": "2026-09-08T20:52:20.668Z"
+    },
+    {
+      "id": "comment-8dc5457a08c141558a3c2e230c7afb34",
+      "author": "worker-bcaa6d5e",
+      "content": "EVIDENCE-INTEGRITY NOTICE FOR WHOEVER REVIEWS THIS ROW. worker-bcaa6d5e, 2026-09-08T22:01Z. I hold no claim on this row; posting here because chat routing hit the loop-guard cap and this is the durable surface.\n\nBOTH COMPLETED STEP NOTES ARE SEVERED AT A 5000-CHAR CAP. Measured:\n  step 1  COMPLETED  noteLen == 5000  ends mid-word: \"...remedy unowned); task-8\"\n  step 2  COMPLETED  noteLen == 5000  ends mid-word: \"GATES, standalone and foreground, TRUE_EXIT read separately (glob\"\n\nExactly 5000 both times. STEP 2'S GATE SECTION BEGINS AND THEN STOPS. The count lines, the TRUE_EXIT codes read separately from the glob, and everything after them are NOT in this row's durable record. Do not read the silence after \"(glob\" as gates that were never run — it is a truncation with no marker, which is the failure mode that makes a severed field read identically to a skipped gate.\n\nWHERE THE MISSING EVIDENCE ACTUALLY LIVES:\n- The daemon count line for this row's step-2 work is `601 files / 10734 passed | 9 skipped`, quoted in chat msg-f627ddff (2026-09-08T21:06Z), run bounded above by step 2 completing at 21:03:42Z. It survives ONLY in chat.\n- Step 2's delivered files, fences, roster-coverage argument and the four-mutant drill with its sha256 restore proof are inside the surviving first 5000 chars and are intact.\n\nCROSS-CHECK BEFORE COMPARING ANY COUNT LINE. A count line is comparable only against its own embedded `Start at`, never against when someone typed it. Two numbers on this board that look contradictory are not: task-0ca117e3's `598 / 10702 | 8` carries `Start at 22:05:11` local (+0300) = 19:05Z, reportedAt 19:17:17Z, and was re-quoted at 21:54Z as a vintage; this row's `601 / 10734 | 9` ran later, by ~21:03Z. The count rose over two hours on an un-reverted shared tree. That is the expected direction, not a regression and not an instability.\n\nSAME DEFECT CLASS, DIFFERENT FIELD: task-99f364e3's `completionSummary` is severed at the 2000 cap (mid-word at \"gi\"), dropping two of its DoD gate rows. Two Moe fields now truncate load-bearing evidence silently and mid-word — `completionSummary` at 2000, step `note` at 5000. The working remedy is to write gate tables into a COMMENT first and let the note or summary point at it.\n\nTWO OPEN ITEMS RAISED ELSEWHERE THAT BEAR ON THIS ROW'S BLOCK, recorded here so they are not lost with the chat:\n1. `<project>/.moe-next/backups/pre-migration/` DOES exist, contrary to what qa-2702df88 and I each measured yesterday: `apps/daemon/.moe-next/backups/pre-migration/staging/` holds `20260907132136484.sql` and `20260907132202919.sql`. Both are 16 bytes, both contain exactly `-- offline dump`. The project root is `apps/daemon`, not the repo root, and `.gitignore:76` is `.moe-next/`, so `git status` can never see them and a repo-root-relative `ls` reports absence. `find . -type d -name pre-migration -not -path \"*/node_modules/*\"` finds them in one call. Both seats have now reproduced this independently.\n   THE OPERATIONAL CONCLUSION IS UNCHANGED: these are not real dumps, so there is still no live migration receipt on this host and DoD 1/2/3 remain unsatisfiable from a worker seat. The hazard is narrower and lives in the EVIDENCE-GATHERING layer, not production: qa-2702df88 verified that `rollback-restore.ts:141` starts from the migration receipt and hashes against the recorded digest, and `migration-observation.ts:107` `backupOf` demands ref-parses + leaf-matches + confined-directory + real-file, so a receipt-less orphan is invisible to both. What is exposed is a human or agent seat answering \"is there a pre-migration backup for staging?\" by looking — two correctly-named, environment-scoped, plausibly-timestamped, data-free files are sitting exactly where that check looks, and `git status` cannot warn them. Provenance is UNPINNED on both seats: the only producer of that stub string is `apps/daemon/src/deployment/migrate-down-host-context.test.ts:109`, whose projectRoot at `:95` is `mkdtempSync(join(tmpdir(), ...))`, so it is not the writer.\n2. The five exercises orphaned by comment-47c3ed43 (bind+publish a remote, `goal.close`, reject-then-reapprove a plan, kill+restart the wrapper mid-seat, hit a provider limit) have no surviving DoD on this row or elsewhere. qa-2702df88 called this a real coverage hole needing a filing seat rather than a blocked one.\n\nNothing in this comment changes the row's status. It stays BLOCKED on the two gates in blockedReason; both are still human calls.",
+      "timestamp": "2026-09-08T22:01:48.924Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:14:49.532Z",
-  "updatedAt": "2026-09-08T21:07:38.602Z",
+  "updatedAt": "2026-09-08T22:01:48.924Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:28:10.582Z",
     "plannedStepCount": 8,
@@ -156,5 +162,54 @@
   "blockedReason": "HUMAN INPUT REQUIRED. Two gates, neither resolvable from a worker seat. Steps 1-2 of 8 COMPLETE; the row's only production code is delivered and green. Detail: comment-19f101a4 (the ask), the step-2 note (code + gates), chat msg-f627ddff (routed to @governors @architects).\n\nGATE 1 - THE PRD IS ABSENT, and it is a human input by design: \"the human supplies or approves it at claim time (comment on this row)\", repeated by plan step 1(b) with its reason - a PRD I author is chosen to be easy, so the transcript would prove nothing. MEASURED: this row had exactly ONE comment before mine (the architect's dependsOn note); sweeps of all five .moe/messages/*.jsonl for \"161b7e9d\" and for human-sender + /PRD/i found none. Asked rather than inventing one.\n\nGATE 2 - THE SCOPE MAY ALREADY BE CANCELLED, and it is the bigger one. 2026-09-08T17:49Z, architect-9556982c relaying the owner from the REPL: \"I THINK LETS DELETE THE PREVIEW TASKS WE JUST WANT TO FINISH CODING\". They deleted task-047b1d8b, recorded \"scope cancelled, NOT capability verified\" on task-8f86e105, did NOT alter this row because it \"mixes broader implementation/regression scope\", and asked governors to apply the direction to \"live-proof clauses embedded in in-flight integration rows as appropriate\". DoD 1 here IS such a clause: live PREVIEW deploy receipt + health URL + migration receipt, fresh product, browser-only. Reading (A): that half is cancelled scope, row narrows to code + regression + docs + adversarial. Reading (B): the live run happens. Choosing for the owner either burns hours on a cancelled drive or discards the epic's Stage 1 bar.\n\nNo blockedOnTaskIds - neither gate is a row landing. Reading (A) also needs an architect amendment: steps 6-8 are PRD-independent, but step order is enforced and step 7 pins the README date to the step-3 run.\n\nDELIVERED: the DEVELOPMENT_ONLY landing fault knob. daemon lane EXIT 0, 601 files / 10734 passed; typecheck EXIT 0; test:fault EXIT 0.",
   "blockedResourceId": null,
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-08T21:07:38.602Z"
+  "blockedAt": "2026-09-08T21:07:38.602Z",
+  "commits": [
+    {
+      "sha": "b8f499daa13aad3c5b44be104ee74d6e93f8772f",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-bcaa6d5e@2026-09-08T20:44:28Z",
+      "paths": [
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        ".moe/tasks/task-f9dc8291ad864a6cb5ca0536d3603a43.json",
+        "apps/daemon/src/orchestrator/landing-fault-injection.js",
+        "apps/daemon/src/orchestrator/landing-fault-injection.test.ts",
+        "apps/daemon/src/orchestrator/landing-fault-injection.ts",
+        "apps/daemon/src/orchestrator/node-lander-journal.ts",
+        "apps/daemon/src/orchestrator/node-lander-journal-fault.test.ts"
+      ],
+      "recordedBy": "worker-bcaa6d5e",
+      "recordedAt": "2026-09-08T21:07:59.903Z",
+      "treeId": "415f6e89089d4258735163fdfa941acf4d0ebbab",
+      "status": "BLOCKED",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+    ".moe/tasks/task-f9dc8291ad864a6cb5ca0536d3603a43.json",
+    "apps/daemon/src/orchestrator/landing-fault-injection.js",
+    "apps/daemon/src/orchestrator/landing-fault-injection.test.ts",
+    "apps/daemon/src/orchestrator/landing-fault-injection.ts",
+    "apps/daemon/src/orchestrator/node-lander-journal.ts",
+    "apps/daemon/src/orchestrator/node-lander-journal-fault.test.ts"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/orchestrator/node-lander-journal.ts",
+    "apps/daemon/src/orchestrator/node-lander-journal-fault.test.ts",
+    "apps/daemon/src/orchestrator/landing-fault-injection.test.ts",
+    "apps/daemon/src/orchestrator/landing-fault-injection.ts",
+    "vitest.drill-161b7e9d.config.mts"
+  ],
+  "unattributedPaths": [
+    "apps/daemon/src/gates-journey-fixtures.ts",
+    "apps/daemon/src/zz-probe-w812079a7.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-bcaa6d5e@2026-09-08T20:44:28Z",
+    "at": "2026-09-08T21:07:59.903Z"
+  }
 }

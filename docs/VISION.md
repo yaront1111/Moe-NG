@@ -36,6 +36,13 @@ engine — not the product promise.
 10. **Production release** — Gate 3: approve
 11. Observe users and iterate
 
+The four operator decisions above — Gate 1, the design step, Gate 2 and Gate 3 —
+COMPOSE ON ONE GOAL, measured 2026-09-09 rather than assumed:
+`apps/daemon/src/gates-compose-journey.test.ts` drives a single goal through all
+four through the real command path against a real store, in both variants (a
+design AUTHORED and a design DECLARED SKIPPED), and asserts each out-of-order
+attempt refuses with its own code AND the layer that answered.
+
 ## What Moe takes and returns
 
 **In:** a PRD; business objectives; target users; brand and design references;
@@ -138,9 +145,21 @@ Contract; requirement-to-code traceability; canonical Foundation execution;
 Claude and Codex; isolated verifier; working browser preview; proof-carrying
 GitHub PR. *(proposed bar)* survives a crash **mid-write**, with recovery
 provable from durable records alone, never from agent memory.
-*Status, measured 2026-09-08:* the PREVIEW gate is BUILT AND WIRED and has not
-been DRIVEN against a real landed product - `internal.repository.landing_receipt`
-has no HTTP ingress, so no browser path produces the landed goal it requires.
+*Status, measured 2026-09-09:* THE PREVIEW GATE HAS BEEN DRIVEN against a real
+landed product, superseding the older line here that called it undriven. That
+line reasoned from a browser: `internal.repository.landing_receipt` has no HTTP
+ingress, so no BROWSER path produces the landed goal a preview requires — but the
+WRAPPER lands without HTTP, so the lane always could.
+`tests/e2e/control-room/preview-approve-live.spec.ts` and
+`preview-reject-live.spec.ts` land a preview scaffold through the real wrapper
+and the real `node-lander`, start a real `preview.start` that spawns a real dev
+server on loopback, and read both verdicts back out of `/activity/read`.
+WHAT IS STILL BROKEN IS THE BUTTON, not the gate: the verdicts are committed by
+the CONFIGURED OPERATOR rather than by a click, because the shipped browser pairs
+into a non-operator credential and is refused `OPERATOR_PRINCIPAL_REQUIRED @
+DAEMON_AUTHORIZATION`, and because `preview-port.ts` sends the preview AGGREGATE
+id where the decide edge spends a RECEIPT id (`PREVIEW_GOAL_NOT_LANDED @
+GOAL_AUTHORITY`). README.md carries both halves with their file and line.
 THE RELEASE GATE HAS BEEN DRIVEN. `release.decide` ships with a closed three-code
 refusal vocabulary, a daemon-rendered evidence dossier served over an
 authenticated read, and a browser card that keeps covered and UNKNOWN counts

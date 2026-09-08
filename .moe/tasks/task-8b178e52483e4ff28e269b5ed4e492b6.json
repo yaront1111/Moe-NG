@@ -1,0 +1,30 @@
+{
+  "id": "task-8b178e52483e4ff28e269b5ed4e492b6",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "bug: the scheduler package-boundary scan throws on a regex literal inside a template expression, and the throw blinds the rest of the walk",
+  "description": "REPRODUCED 2026-09-08 21:12Z by worker-bcaa6d5e, foreground, no lease (single test file):\n\n  pnpm exec vitest run packages/scheduler/src/package-boundary.test.ts\n  Tests  1 failed | 55 passed (56)   EXIT 1\n  > keeps scheduler registrars behind the package-root import boundary\n  Error: boundary scan failed for apps\\daemon\\src\\deployment\\deploy-candidate-environment.ts: Error: unterminated quoted source token\n\nTHE NAMED DAEMON FILE IS NOT THE DEFECT. `apps/daemon/src/deployment/deploy-candidate-environment.ts:74` is valid TypeScript:\n  .map(([name, value]) => `${name}='${value.replace(/'/gu, \"'\\\\''\")}'\\n`)\n\nTHE DEFECT IS IN THE SCANNER. `packages/scheduler/src/package-boundary.test.ts:99` `templateExpressionEnd()` — the brace matcher that finds the end of a `${...}` — has branches for `'`, `\"`, nested backticks, `//` and `/* */`, and NO REGULAR-EXPRESSION BRANCH. `sourceTokens()` at :168 already has one (`canStartRegularExpression` + `readRegularExpression`); the omission exists only in the template-expression scanner.\n\nMECHANISM: walking `value.replace(/'/gu, ...)`, at the `/` of `/'/gu` the `next` char is `'`, so it is neither `//` nor `/*`; control falls to `else`, steps ONE char forward, and lands ON the quote inside the regex. The `'` branch then fires `readQuoted` from there, pairing that quote against the next `'` in the file (inside `\"'\\\\''\"`). Pairing stays off-by-one until a quote opens a run that hits end-of-line, where `readQuoted` (:92) throws `unterminated quoted source token`.\n\nMINIMAL REPRO, no daemon involved:  const x = `${s.replace(/'/gu, \"y\")}`;\nAny regex literal containing a quote character, inside a template expression.\n\nTHE SILENT HALF IS WORSE THAN THE RED: the scan `throw`s on the FIRST unreadable file, so one such file blinds the boundary check for EVERY file after it in walk order. This test is the fence keeping `@moe/scheduler` internals out of the rest of the tree; while it is red it is also not checking a scan-order tail of the repo at all.\n\nSCOPE: test-only, one function, one file. Restores coverage rather than adding it. Filed by an idle worker seat with no claimed row; the chat escalation (msg-67929259, chan-ced99359) returned `routingTargets: []` because the channel Loop Guard had already capped, so it notified nobody — this row is the escalation. Reported unowned by qa-2702df88 as the board's only reproducible red.",
+  "definitionOfDone": [
+    "`pnpm exec vitest run packages/scheduler/src/package-boundary.test.ts` is EXIT 0 with all cases passing, quoted with its real output, and `apps/daemon/src/deployment/deploy-candidate-environment.ts` is UNCHANGED by this row — the daemon file is correct TypeScript and editing it would hide the scanner defect rather than fix it.",
+    "`templateExpressionEnd()` consumes a regular-expression literal as ONE token, gated the same way `sourceTokens()` gates its own regex branch. State in a step note whether the gating helper was reused or duplicated, and if duplicated, why.",
+    "A regression case asserts the minimal shape directly — a regex literal containing a quote character inside a `${...}` — alongside the existing table at :264. Assert on the SCANNER's result for that source text, not on the daemon file, so the arm survives that file changing or moving.",
+    "AN ARM PROVES THE SCAN DOES NOT SILENTLY STOP EARLY. The current failure mode hides every file after the first unreadable one; a fix that only removes the throw would leave that hole open. Assert the scan reaches a known-last file, or that the count of files scanned equals the count enumerated.",
+    "Confirm by measurement whether the blinded tail contained any real boundary violation that was being hidden: run the fixed scan and report the number of files now scanned versus before, and name any violation it newly reports. If none, say so explicitly — a clean result here is a finding, not an absence.",
+    "No net new production code. The whole change is inside `packages/scheduler/src/package-boundary.test.ts`."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 147,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-08T21:30:07.227Z",
+  "updatedAt": "2026-09-08T21:30:07.227Z"
+}
