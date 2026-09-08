@@ -93,7 +93,11 @@ export interface EnvironmentHealthView {
    * THE ONLY SPENDABLE ROLLBACK AUTHORITY, or null when the daemon has none for this
    * environment. `toReceiptRef` travels VERBATIM into a `deployment.rollback` payload; a card
    * never constructs one from `rollbackSha`. The daemon re-resolves it on every poll and it
-   * carries no lease, so a refused dispatch means RE-POLL and spend the fresh tuple.
+   * carries NO LEASE. `toReceiptRef` is an immutable receipt id, so a dispatch from an earlier
+   * poll rolls back to EXACTLY the deploy the operator was shown even if a newer one has landed
+   * since — deliberate, not a hole. What DOES refuse is another rollback winning first
+   * (EXPECTED_VERSION_CONFLICT, or DEPLOY_ROLLBACK_IN_PROGRESS on a reserved environment), so a
+   * refused dispatch means RE-POLL and spend the fresh tuple, never retry the same one.
    */
   readonly rollbackTarget: EnvironmentRollbackTargetView | null;
   readonly state: EnvironmentHealthState;

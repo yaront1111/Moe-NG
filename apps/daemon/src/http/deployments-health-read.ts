@@ -126,12 +126,26 @@ export interface DeploymentsHealthView {
    * will accept and a null says there is no control to offer at all. A card spends THIS —
    * `toReceiptRef` verbatim into the payload — and never a sha it inferred.
    *
-   * STALE BINDING, stated rather than left to be discovered. This is re-read on every poll and
-   * carries NO LEASE. A target superseded between the poll and the dispatch refuses at the
-   * handler — DEPLOY_ROLLBACK_RECEIPT_INVALID when a newer deploy moved the target, or
-   * EXPECTED_VERSION_CONFLICT when the project aggregate advanced — which is the intended
-   * fail-closed outcome. A card must therefore RE-POLL after any refusal and spend the fresh
-   * tuple, never retry the same one.
+   * STALE BINDING, stated exactly rather than left to be discovered. This is re-read on every
+   * poll and carries NO LEASE, and the two ways it can go stale behave DIFFERENTLY:
+   *
+   * (1) A NEWER DEPLOY LANDS. `toReceiptRef` is an immutable receipt id and the handler admits
+   * per-receipt (rollback-command.ts:98-101 asks only: readable, same environment, DEPLOYED,
+   * digest non-null) — it never asks whether the receipt is still the second-newest. So a
+   * dispatch carrying a ref from an earlier poll is ADMITTED and rolls back to EXACTLY the
+   * receipt the operator was shown. That is deliberate, not a hole: the operator spends the
+   * deploy they chose, not whatever "one back" happens to mean at dispatch time. A deploy does
+   * not advance the project aggregate either — its receipt lands on
+   * `deploy:<projectId>:<environment>` — so it cannot be caught by the version fence.
+   *
+   * (2) ANOTHER ROLLBACK LANDS FIRST. That one commits an empty leg against the PROJECT
+   * aggregate (rollback-command.ts:160), so the version this offer was minted against is now
+   * stale and the second dispatch refuses EXPECTED_VERSION_CONFLICT — the fail-closed outcome
+   * that makes two racing rollbacks impossible. A reserved environment guard refuses
+   * DEPLOY_ROLLBACK_IN_PROGRESS for the same reason.
+   *
+   * A card must therefore RE-POLL after any refusal and spend the fresh tuple, never retry the
+   * same one.
    */
   readonly rollbackTarget: RollbackTarget | null;
   readonly state: HealthState;
