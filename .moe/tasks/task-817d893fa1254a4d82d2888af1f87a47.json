@@ -117,7 +117,7 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -240,7 +240,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:31:45.397Z",
-  "updatedAt": "2026-09-07T21:58:58.593Z",
+  "updatedAt": "2026-09-08T14:21:29.748Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T11:25:19.038Z",
     "plannedStepCount": 9,
@@ -265,14 +265,11 @@
       "reason": "PLAN IN BUILD ORDER (rail 16). This is a proof/consumer row. Its producer task-f961dc89 (release.decide) is still PLANNING and grep release.decide over apps/ packages/ is ZERO hits. Planning the browser journey first would ship a mock-backed proof (rail 4 clause 2). Releasing so the leaf can be planned first; dependsOn already gates WORKING."
     }
   ],
-  "blockedReason": "FULL RELEASE PROOF PRESERVED; owner scope ruling comment-933e6a7c accepted. New, independently measured production gap in comment-4157b81a: browser pairing mints a HUMAN/session principal, but release.decide's async command wrapper AND service require exact configured operatorPrincipalId. Focused production-registry refusal test passed 1 executed / 5 skipped, exact OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION. The synchronous paired-HUMAN waiver is bypassed and removing the operator roster entry would also open MCP. Filed owner-gated production authorization prerequisite task-bd2f1ecf186f4ab5884c2a3ada07108e and registered it in dependsOn. It is independent of the still-absent contract-goal helper task-6bafd3b9439640cba358dd6e79329c9d. Consumer planning must not invent either the missing helper API or an unapproved authority change; both producers must resolve before a no-guess plan can complete this browser approval proof. Live setup/target hazards and resume conditions are in comment-d3555f5b. No source edits or external writes; no DoD narrowed; no plan submitted.",
-  "blockedOnTaskIds": [
-    "task-6bafd3b9439640cba358dd6e79329c9d",
-    "task-bd2f1ecf186f4ab5884c2a3ada07108e"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "PLANNING",
-  "blockedAt": "2026-09-07T17:19:37.008Z",
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
     "Plan touches 12 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."

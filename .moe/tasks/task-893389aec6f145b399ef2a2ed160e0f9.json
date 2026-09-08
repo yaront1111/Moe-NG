@@ -1,0 +1,27 @@
+{
+  "id": "task-893389aec6f145b399ef2a2ed160e0f9",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "bug: cutover real-root acceptance exceeds the 10000-entry manifest bound",
+  "description": "Found while verifying parent task-78eedd8ebc2b43c581ac21ea28648a9a: pnpm test at a7dc26999a1fe92edee501953206a6ae54377038 + four UI/docs reopen diffs exits 1 solely at tests/migration/cutover/cutover-drill.test.ts:536 (assertOk :73): CUTOVER_MANIFEST_ENTRY_LIMIT_EXCEEDED @ cutover-manifest, entry count exceeds 10000.\nThe same path/code is recorded in parent comment-3b5de9a4 before reopen; current evidence comment-660e46b8. Real-root acceptance includes generated/runtime material and exceeds the bounded capture. Re-measure the admitted population and intended exclusions; do not simply weaken the limit or clean foreign files. No active matching cutover/manifest/10000 task found in list_tasks.",
+  "definitionOfDone": [
+    "Reproduce the exact CUTOVER_MANIFEST_ENTRY_LIMIT_EXCEEDED at the real-root acceptance and identify which admitted path populations exceed the bound without exposing credentials.",
+    "Implement the approved bounded capture or acceptance-scope correction with red-first regression coverage; preserve necessary cutover coverage, fail-closed limits, and peer/generated files.",
+    "Fresh focused cutover gate passes with nonzero tests; disclose full root result and path-attributed foreign failures."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 135,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-08T14:13:45.916Z",
+  "updatedAt": "2026-09-08T14:13:45.916Z"
+}
