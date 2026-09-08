@@ -1,0 +1,32 @@
+{
+  "id": "task-f4f45c281ab64f6dbf2c4ff163140010",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "bug: a deploy to a REMOTE (ssh) target cannot deliver environment variables and now refuses",
+  "description": "Filed from task-0ca117e389df43ee9b458255f0752842 (the row that made a LOCAL deploy deliver its environment at all). Disclosed rather than hidden: that row's fix does not reach remote targets, and it now says so out loud instead of failing obscurely.\n\nMEASURED, docker 29.6.2: a value passed with `--env` is printed by `docker inspect` in `.Config.Env` (1 grep hit); the same value in a BIND-MOUNTED FILE gives 0. `tests/e2e/foundation/platform-secret-canary.e2e.test.ts:218` sweeps that stdout and :232 asserts zero hits, so the delivery had to be a mounted file. A bind mount names a path on the DOCKER host, and for `sshTarget !== null` the docker host is not the daemon's — the path does not exist there.\n\nWHAT IT DOES TODAY: `resolveCandidateMount` (apps/daemon/src/deployment/deploy-candidate-environment.ts) returns `DEPLOY_ENVIRONMENT_REMOTE_UNSUPPORTED` when `sshTarget !== null` AND the environment holds at least one variable; the deploy refuses before starting anything. A remote target whose environment holds NO variables still deploys exactly as before, so this is not a blanket removal of remote deploy.\n\nWHY REFUSING BEATS MOUNTING ANYWAY: docker AUTO-CREATES a missing bind source as an empty DIRECTORY. The candidate would start, its loader would fail to read `/run/moe/env`, and the deploy would present as a 150-second DEPLOY_HEALTH_TIMEOUT with no hint of the cause.\n\nTHE SHAPE THAT WOULD FIX IT, already built and measured on this host before being set aside: `docker create` + `docker cp -` (a USTAR archive on stdin) + `docker start`. It needs no host file at all — the plaintext goes host memory -> docker CLI stdin -> container filesystem — and it works identically local and remote, because `run()` already carries stdin through `ssh <target> docker ...`. It was NOT taken on the parent row because it changes the candidate's docker VERB from `run` to `create`/`start`, and the verb is pinned well beyond the parent's planned blast radius: deploy-journey.test.ts:660, deploy-refusal-redaction.test.ts:325 (`failVerb(\"run\")`), deploy-build-authority.test.ts:31, deploy-rollback.test.ts:183, deploy-service.test.ts:552/:779/:812/:850, and the double's dispatch at deploy-ports.ts:341. That is a rail-20 stop-and-report set, which is exactly why it is a row of its own.\n\nTwo facts any implementer needs, both measured: the image already carries `ENTRYPOINT [\"docker-entrypoint.sh\"]` from the node base image, and `--entrypoint` CLEARS `.Config.Cmd` — so the original `Entrypoint ++ Cmd` must be read back off the image (`imageCommandArgv`/`parseImageCommand` already do this).",
+  "definitionOfDone": [
+    "A deploy to a target with sshTarget !== null delivers the environment store's variables to the candidate it starts, proven BY RESPONSE from the deployed build rather than by argv inspection.",
+    "No variable value reaches docker inspect, a log line, a receipt or an error path on the remote path either: the secret canary's candidate-inspect sweep still reports hits=0.",
+    "DEPLOY_ENVIRONMENT_REMOTE_UNSUPPORTED is removed only once remote delivery actually works; until then it stays and is asserted by code, not merely by outcome.",
+    "Every consumer of the candidate's docker VERB is updated in the same commit (the nine sites enumerated in the description), with no exact toEqual loosened into a toContain and the positional arm at deploy-rollback.test.ts:142 left positional.",
+    "pnpm --filter @moe/daemon test EXIT 0 with its count line quoted, and the two MOE_PLATFORM_PIPELINE=1 e2e files stay green, run one at a time with --no-file-parallelism."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-0ca117e389df43ee9b458255f0752842"
+  ],
+  "priority": "MEDIUM",
+  "order": 144,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-08T18:38:35.074Z",
+  "updatedAt": "2026-09-08T18:38:35.074Z"
+}

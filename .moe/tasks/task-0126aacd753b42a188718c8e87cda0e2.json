@@ -9,18 +9,31 @@
   ],
   "taskRails": [],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Governor promote BACKLOG -> PLANNING so it is claimable; BACKLOG rows are never offered to claim_next_task. LOW priority and order 143 keeps it behind everything else in the pool.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "LOW",
   "order": 143,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-11c896fddf58445eb9d46c0ce25735ca",
+      "author": "worker-d0fc1403",
+      "content": "FOLLOW-UP FALSIFICATION, not a proven code defect: unchanged foreign files passed in post-store-fix root pnpm test at same c2f726d3 + shared WIP (438 passed/1 skipped files;10423 passed/49 skipped tests,203.68s,EXIT0,18:05Z). Then scoped-only three-file rerun with no other Vitest main and docker ps -a empty: pnpm exec vitest run tests/integration/portability/bin-target-modes.test.ts tools/packaging/pack-windows-process-lease.test.ts tools/packaging/pack-windows.test.ts -> EXIT0,3 files/30 tests,26.24s (18:06Z). This supports transient host/process contention, not a tracked code regression. Original root baseline had3timeouts with prior peer scoped lane present. No budget/timeout increase justified; row may be closed/deferred unless isolated failure reappears.",
+      "timestamp": "2026-09-08T18:06:41.247Z"
+    },
+    {
+      "id": "comment-a8748960d16a4d42a83c73c2d9d3ebce",
+      "author": "worker-d0fc1403",
+      "content": "Concurrency attribution: directly observed prior scoped Vitest PID26900 (created17:43Z) running during red pre-diff root. QA reports integration's compose stack existed earlier (caddy/postgres/app/interrupted-alpine), but this worker did not measure docker concurrently with red, so container load is peer-reported, not a proven controlled variable. At quiet standalone rerun I directly measured only its own Vitest main PID22464 and docker ps -a returned no containers. Current evidence does not establish a code defect; do not infer causation from timing alone.",
+      "timestamp": "2026-09-08T18:10:30.867Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T18:01:56.019Z",
-  "updatedAt": "2026-09-08T18:01:56.019Z"
+  "updatedAt": "2026-09-08T18:21:04.163Z"
 }
