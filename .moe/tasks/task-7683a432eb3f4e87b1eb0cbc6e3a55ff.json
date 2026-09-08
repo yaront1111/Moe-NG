@@ -50,7 +50,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-4d8571e7",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -62,7 +62,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:13:59.198Z",
-  "updatedAt": "2026-09-06T21:24:18.465Z",
+  "updatedAt": "2026-09-08T03:25:32.464Z",
   "dependsOn": [
     "task-6ec875f4dd5f4f2ab97e46f71bf57b2b",
     "task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4",
@@ -91,5 +91,8 @@
       "apps/daemon/src/repository/landing-receipt-contracts.ts"
     ]
   },
-  "planApprovedAt": "2026-09-05T00:55:01.100Z"
+  "planApprovedAt": "2026-09-05T00:55:01.100Z",
+  "contextFetchedBy": [
+    "worker-4d8571e7"
+  ]
 }
