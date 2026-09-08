@@ -1,0 +1,28 @@
+{
+  "id": "task-de80c663569a4ab2b30a9db6ac526e4b",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "bug: an environment can never be retired, so the health sweep probes dead URLs forever",
+  "description": "MEASURED 2026-09-08 at HEAD 7622a2e8 by worker-bcaa6d5e from the epic-final row task-99f364e3, hunting the specific cross-band shape \"a probe schedule that outlives the environment it probes\".\n\nTHE SYMBOL. `apps/daemon/src/monitoring/health-probe-ring.ts:240 createHealthProbeJob` enumerates what to probe as\n  [...readDeployLedger(options.store, options.projectId).keys()].filter(name => !skip.has(name))\n`readDeployLedger` derives its environment set from DEPLOY RECEIPTS, which are append-only. An environment therefore enters the sweep on its first deploy and can never leave it.\n\nAND THERE IS NO WAY OUT, which is the part that makes this real rather than theoretical: `git grep -l \"deployment.destroy\\|environment.destroy\\|deployment.teardown\\|ENVIRONMENT_DESTROY\" -- apps packages` returns NOTHING. The platform has no retire, destroy or teardown command for an environment at any layer. So an operator who stands up a preview environment, uses it and tears the containers down by hand has no way to tell the daemon it is gone; the sweep keeps probing its URL on every tick, forever, and every one of those ticks records a DOWN sample in the ring and can open an incident.\n\nWHAT IS ALREADY RIGHT, so a fix does not re-derive it: the per-environment job (`createEnvironmentHealthProbeJob`) reads an `active()` predicate PER TICK and probes nothing when the interval record has been cleared, and the sweep already honours a `dedicated` skip set read per tick. The mechanism for \"stop probing this one\" exists at the dedicated-job granularity; what is missing is any operator-reachable way to say an environment is retired, and the sweep's use of an append-only ledger as its roster.\n\nNOT THE SAME AS THE DEDICATED-INTERVAL CASE ALREADY SHIPPED by task-078232fb: clearing an interval moves an environment from its dedicated job BACK to the sweep. It does not retire it.\n\nDEFINITION OF DONE\n1. An operator can retire an environment through a real command, and the health sweep stops enumerating it — proven by a probe tick that records nothing for the retired name.\n2. Retirement is a durable, replayable fact, not in-memory state: a daemon restart does not resurrect the retired environment into the sweep.\n3. The deploy ledger stays append-only. Retirement is a separate fact layered over it, never a receipt deletion.\n4. Retiring an environment does not destroy its history: its probe ring and its receipts stay readable.\n5. `pnpm --filter @moe/daemon test` EXIT 0 with its count line quoted.",
+  "definitionOfDone": [
+    "An operator-reachable command retires an environment, and createHealthProbeJob stops enumerating it: a probe tick after retirement records no sample for that name.",
+    "Retirement is durable and replayable — a daemon restart does not resurrect the retired environment into the sweep.",
+    "The deploy ledger stays append-only: retirement is a fact layered over it, never a receipt deletion, and the retired environment's probe ring and receipts stay readable.",
+    "pnpm --filter @moe/daemon test EXIT 0 with its Test Files count line quoted."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor promote BACKLOG -> PLANNING to keep the claim pool stocked; all 7 seats are currently busy and BACKLOG is never offered to claim_next_task. Filed today from live measurement. Order 140 keeps it behind the HIGH rows.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 140,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-08T17:18:29.893Z",
+  "updatedAt": "2026-09-08T17:58:03.048Z"
+}

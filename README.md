@@ -234,18 +234,30 @@ SERVED AND SCREENSHOTTED, but against the lane's own scaffold app, NOT against
 UnAI: `D:/projexts/UnAI/package.json` declares only `test` and `typecheck`, so it
 resolves no `preview`, `dev` or `start` script and `resolvePreviewCommand`
 refuses it `PREVIEW_COMMAND_MISSING`.
-Gate 3 EXISTS AND IS WIRED, AND IS BLOCKED BEHIND THE
-SAME MISSING LANDING (measured 2026-09-07): `release.decide` is a published,
-operator-fenced command with a closed three-code refusal vocabulary, the daemon
-builds the evidence dossier and serves it over an authenticated read route, the
-affordance surface offers the decision once a commit has landed, and the browser
-renders the evidence with its covered and UNKNOWN counts kept apart, an
-arm-then-confirm approve, and the pull request link a released receipt carries.
-No release has been driven against a real landed product for the reason above,
-and NO PULL REQUEST HAS BEEN OPENED BY THE PRODUCT: the `gh` path was driven as
-far as GitHub itself on 2026-09-07 - the head proof, the production argv and an
-authenticated answer from github.com - but the run that would create one needs a
-landed goal and an owner-named target repository. **A REAL `codex exec` SEAT HAS
+**GATE 3 HAS BEEN DRIVEN, AND THE PRODUCT HAS OPENED A REAL PULL REQUEST**
+(measured 2026-09-08, superseding "wired but blocked behind the same missing
+landing"): `release.decide` is a published, operator-fenced command with a closed
+three-code refusal vocabulary, the daemon builds the evidence dossier and serves
+it over an authenticated read route, the affordance surface offers the decision
+once a commit has landed, and the browser renders the evidence with its covered
+and UNKNOWN counts kept apart, an arm-then-confirm approve, and the pull request
+link a released receipt carries. On 2026-09-08 that chain ran end to end against
+github.com with nothing faked: a contract-bound goal whose three nodes were
+landed by the real wrapper's lander, published to a throwaway branch by the real
+publisher, and approved by the two clicks of the browser card - which opened
+<https://github.com/yaront1111/Moe-NG/pull/33>, base `main`, head
+`205d51eb26322056fafcdc60ab98c247d1cd135e`. It is proof-carrying in fact and not
+in name: the PR BODY IS the stored dossier, byte for byte - its sha256 equals the
+receipt's `dossierSha256` `fbb2d0ad...5845` - and it renders every criterion with
+its verifier command, exit code, receipt sha and landing sha. The drive is kept
+as the opt-in `release-approval-live.spec.ts` (`MOE_LIVE_RELEASE_PR=1`), which
+spawns the production `gh` rather than the lane's double. TWO LIMITS STAND. The
+landing still comes from the wrapper's lander, not from a browser action -
+`internal.repository.landing_receipt` has no HTTP ingress - so an operator cannot
+originate one from the screen. And a live `release.decide` outruns the browser's
+15s command-transport abort, so the ordering session shows a read error and the
+link appears only on the next look; the pull request is opened and the receipt
+recorded either way. **A REAL `codex exec` SEAT HAS
 DELIVERED A NODE** (measured 2026-09-07, superseding "wired but last proven only
 to reach the API"): codex-cli 0.153.4, argv read from the OS while the process
 was alive, three `seat_start` rows reporting provider `codex`, and the lander

@@ -138,15 +138,25 @@ Contract; requirement-to-code traceability; canonical Foundation execution;
 Claude and Codex; isolated verifier; working browser preview; proof-carrying
 GitHub PR. *(proposed bar)* survives a crash **mid-write**, with recovery
 provable from durable records alone, never from agent memory.
-*Status, measured 2026-09-07:* the preview gate and the release gate are both
-BUILT AND WIRED and neither has been DRIVEN against a real landed product -
-`internal.repository.landing_receipt` has no HTTP ingress, so no browser path
-produces the landed goal both gates require. `release.decide` ships with a
-closed three-code refusal vocabulary, a daemon-rendered evidence dossier served
-over an authenticated read, and a browser card that keeps covered and UNKNOWN
-counts apart before asking for the verdict. The proof-carrying PR itself is the
-one piece with no run behind it: the `gh` path reached github.com and answered
-on 2026-09-07, but no pull request has been opened by this product.
+*Status, measured 2026-09-08:* the PREVIEW gate is BUILT AND WIRED and has not
+been DRIVEN against a real landed product - `internal.repository.landing_receipt`
+has no HTTP ingress, so no browser path produces the landed goal it requires.
+THE RELEASE GATE HAS BEEN DRIVEN. `release.decide` ships with a closed three-code
+refusal vocabulary, a daemon-rendered evidence dossier served over an
+authenticated read, and a browser card that keeps covered and UNKNOWN counts
+apart before asking for the verdict - and on 2026-09-08 that whole chain ran
+against github.com with nothing faked. A contract-bound goal, landed by the real
+wrapper's lander and published by the real publisher, was approved by the browser
+card's two clicks, and the product opened
+<https://github.com/yaront1111/Moe-NG/pull/33> at sha
+`205d51eb26322056fafcdc60ab98c247d1cd135e`. The proof-carrying PR is no longer
+the piece with no run behind it: the pull request BODY IS the stored dossier,
+byte for byte, its sha256 equal to the receipt's `dossierSha256`, listing every
+acceptance criterion with the verifier command, exit code, receipt sha and
+landing sha that carried it. Two limits stand and are not softened here: the
+landing still originates outside the browser, and a live `release.decide` outruns
+the browser's 15s transport abort, so the operator sees the link on the next look
+rather than in the ordering session.
 
 **Stage 2 — PRD → deployed MVP:** repository bootstrapping (the unseeded local
 browser path creates one commit, binds and catalogs the repository, and creates

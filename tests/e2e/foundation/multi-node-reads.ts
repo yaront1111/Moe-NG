@@ -248,9 +248,17 @@ export function landedCommits(scratch: MultiNodeScratch, nodeKey: string): reado
   const cwd = scratch.workspaces[nodeKey];
   if (cwd === undefined) return [];
   const executionRef = executionRefFor(scratch, nodeKey);
-  return execFileSync("git", ["log", "--format=%B"], { cwd, encoding: "utf8" })
+  const message = `Moe landed node ${executionRef} after the daemon verified it.`;
+  // BOUNDED BY THE LANDINGS, NOT BY THE HISTORY. `--format=%B` over every commit is fine on a
+  // two-commit lane baseline and answers `spawnSync git ENOBUFS` on a workspace whose history is
+  // a real repository's -- moe-next's own main is 1625 commits and 1.7MB of message bytes,
+  // against execFileSync's 1MB default. `--grep -F` asks git for exactly the commits the filter
+  // below would have kept, so the returned array is unchanged and the read no longer grows with
+  // the tree the lane happens to be built on.
+  return execFileSync("git", ["log", "--format=%B", "--fixed-strings", `--grep=${message}`],
+    { cwd, encoding: "utf8" })
     .split("\n").map((line) => line.trim())
-    .filter((line) => line === `Moe landed node ${executionRef} after the daemon verified it.`);
+    .filter((line) => line === message);
 }
 
 /** Removes every scratch a run registered. A held Windows handle is not a test verdict. */

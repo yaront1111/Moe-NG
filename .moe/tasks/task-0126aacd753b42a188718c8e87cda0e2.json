@@ -1,0 +1,26 @@
+{
+  "id": "task-0126aacd753b42a188718c8e87cda0e2",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "bug: Windows child-process gate cases time out under the root suite",
+  "description": "Before task-511f9f8d edits, pnpm test at c2f726d3376bc61b0d7d20542fdfa8ecc37044d2 (17:49–17:54Z, full-suite lease) exited1: 3 failed/10409 passed/49 skipped; owned store files clean.\nTimeout-only failures: tests/integration/portability/bin-target-modes.test.ts exact index-mode finding (30000ms); tools/packaging/pack-windows-process-lease.test.ts candidate digest after job drains (5000ms); tools/packaging/pack-windows.test.ts physical PowerShell archive (5000ms). Root baseline detail in task-511f9f8d comment-a40f272e.\nInvestigate measured child/process contention versus test deadlines and compare isolated/full runs; do not fix by blind timeout inflation or retries.",
+  "definitionOfDone": [
+    "Reproduce or explicitly falsify the three named failures with current foreground root/scoped measurements and active-gate attribution.",
+    "If reproducible, identify the child/process lifecycle cause and add deterministic regression coverage before a scoped fix; preserve unrelated shared work."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "LOW",
+  "order": 143,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-08T18:01:56.019Z",
+  "updatedAt": "2026-09-08T18:01:56.019Z"
+}

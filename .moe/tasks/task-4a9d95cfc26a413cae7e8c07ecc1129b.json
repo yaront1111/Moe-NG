@@ -1,0 +1,28 @@
+{
+  "id": "task-4a9d95cfc26a413cae7e8c07ecc1129b",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "bug: pre-freeze-pinned-documents times out at random on a 5s budget, redding the root lane for every row",
+  "description": "MEASURED 2026-09-08 20:35-20:50 local at HEAD c2f726d3 by worker-bcaa6d5e from the epic-final row task-99f364e3, while running root `pnpm test` as a DoD-1 leg.\n\nTHE FAILURE, verbatim:\n  FAIL packages/benchmark/src/pre-freeze-pinned-documents.test.ts > pinned corpus authority (task-e1b47913) > refuses a corpus that moves between the two authority observations\n  Error: Test timed out in 5000ms.\n  at packages/benchmark/src/pre-freeze-pinned-documents.test.ts:158:3\n\nIT IS A FLAKE, NOT A DEFECT IN ANY DIFF, and it is measured as one rather than asserted. Four full root runs in one hour: RED, GREEN, GREEN, RED. Then the file STANDALONE, three consecutive runs with nothing else on the host: `Tests 1 failed | 11 passed (12)`, then `12 passed (12)`, then `12 passed (12)`. Same bytes, same HEAD, different answer — roughly one failure in three either way, so root file-parallelism is not the cause and neither is any concurrent suite.\n\nTHE SHAPE. The arm builds real git corpora on disk (`newCorpusRepo`) and is bounded by vitest's DEFAULT 5000 ms test timeout — no explicit budget on the `it`. Spawning git and writing a corpus twice is not reliably a sub-5-second operation on this host, so the arm races its own default. Its ELEVEN siblings in the same file pass every time; only the arm that observes a corpus TWICE is affected, which is consistent with a duration problem rather than a logic one.\n\nWHY IT MATTERS BEYOND THIS ROW: root `pnpm test` is a DoD-1 leg for many rows on this board, including every integration row. A one-in-three red that belongs to nobody's diff burns a full-suite run — about three minutes plus a gate lease — every time it fires, and it teaches readers to discount root reds, which is how a real one gets missed.\n\nATTRIBUTION: nothing in task-99f364e3's owned paths is involved. That row's files are `tests/e2e/foundation/platform-{pipeline,pipeline-harness,teardown-failure-paths,secret-canary}` and `docs/agent-stack-runbook.md`; the failing file is `packages/benchmark/src/`, and it fails standalone with those files present but not executing.\n\nDEFINITION OF DONE\n1. The arm's budget matches the work it actually does, or the work is made cheap enough for the default — a retry or an exclusion is NOT acceptable and neither is raising the global `testTimeout`.\n2. Evidence it is fixed rather than made rarer: at least TEN consecutive standalone runs green, count lines quoted. One green run proves nothing against a one-in-three flake.\n3. The other eleven arms in the file keep their current behaviour and budgets.\n4. Root `pnpm test` EXIT 0 with its count line quoted.",
+  "definitionOfDone": [
+    "The timing-out arm is bounded by a budget that matches the git-corpus work it performs, or that work is made cheap enough for the default: not a retry, not an exclusion, and not a raised global testTimeout.",
+    "At least TEN consecutive standalone runs of packages/benchmark/src/pre-freeze-pinned-documents.test.ts are green with count lines quoted, because one green run cannot distinguish a fix from a one-in-three flake.",
+    "The other eleven arms in the file keep their current behaviour and budgets.",
+    "Root pnpm test EXIT 0 with its Test Files count line quoted."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "MEDIUM",
+  "order": 142,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-08T17:49:20.617Z",
+  "updatedAt": "2026-09-08T17:49:20.617Z"
+}
