@@ -89,8 +89,8 @@
       ]
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": null,
+  "status": "WORKING",
+  "assignedWorkerId": "worker-4d8571e7",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -116,7 +116,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T20:05:32.557Z",
-  "updatedAt": "2026-09-07T19:40:20.188Z",
+  "updatedAt": "2026-09-08T02:31:36.619Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T22:15:51.129Z",
     "plannedStepCount": 7,
@@ -134,14 +134,13 @@
   },
   "planApprovedAt": "2026-09-05T22:21:01.586Z",
   "contextFetchedBy": [
-    "worker-76f4ef35"
+    "worker-76f4ef35",
+    "worker-4d8571e7"
   ],
   "workStartedAt": "2026-09-07T19:36:53.537Z",
-  "blockedReason": "Step-1 production prerequisite audit found no daemon rollback OFFER, despite the served command. At HEAD4ee9efe1, git grep -n 'deployment.rollback' -- apps/daemon/src/http apps/daemon/src/bootstrap/bootstrap-contracts.ts EXIT1/no matches; createAffordancePort iterates bootstrap roster excluding rollback then explicit providers, none for rollback. Handler requires project-targeted environment/toReceiptRef/restoreDatabase; health/read exposes rollbackSha only and HTTP/browser toReceiptRef grep also EXIT1. DoD2/5 and rail4 cannot be delivered with a real spendable control without synthesizing browser authority. Filed missing producer task-2f2ed034fbec4fe48b49a951951c9505 (no existing sibling owns this seam), which this block waits on. All original dependencies ARE landed, not the block premise. Additional required plan correction: exact roster consumer v2/goals/plan-rejected-surfaces.test.tsx:58 is outside planned paths; live-needs-you.tsx health polling/rollback dispatch composition also absent from scope; step3 duplicates already delivered live-deployments-health.ts+proxy pin. No active amendments on fetched steps. Full reproducible audit/comment9b9fae6b and Serena handoff. No source edits or tests; no completion claim. Preserved all foreign work.",
-  "blockedOnTaskIds": [
-    "task-2f2ed034fbec4fe48b49a951951c9505"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-07T19:40:20.188Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }
