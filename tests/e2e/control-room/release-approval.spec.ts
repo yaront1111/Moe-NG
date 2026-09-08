@@ -16,8 +16,7 @@ import { FAKE_PR_URL } from "./fake-gh-contract.js";
 import { lanePids, mintLaneOperatorSeat, readWireProtocolVersion, survivingPids,
   withDaemonBackedControlRoom } from "./daemon-ports.js";
 import type { DaemonLane, DaemonLaneOptions, LaneOperatorSeat } from "./daemon-ports.js";
-import { landLaneNode } from "./lane-landing.js";
-import { readGoalCatalogOverHttp } from "./prd-boundary-readers.js";
+import { createLaneContractGoal } from "./lane-contract-goal.js";
 
 /**
  * GATE 3 IN THE BROWSER, AGAINST A REAL DAEMON: evidence -> card -> approve -> PR link.
@@ -41,7 +40,15 @@ import { readGoalCatalogOverHttp } from "./prd-boundary-readers.js";
  * anything. The double is a double.
  */
 
-const JOURNEY_MS = 420_000;
+/**
+ * The goal this journey drives is BUILT, not seeded: `createLaneContractGoal` runs the real
+ * wrapper on three delivery passes and then verifies every criterion against the landed tree.
+ * `contract-goal.spec.ts:49` budgets 900s for that helper alone, and this journey adds the
+ * publish, the browser handshake and the card on top, so the old 420s budget is a guaranteed
+ * timeout rather than a bound on anything. Nothing is relaxed by widening it: every assertion
+ * below is unchanged, and `playwright.config.ts:35`'s 180s default is overridden per-test.
+ */
+const JOURNEY_MS = 1_200_000;
 const CARD_MS = 120_000;
 const PAIRING_BUDGET_MS = 90_000;
 const PAIRING_LABEL = /^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u;
@@ -85,31 +92,46 @@ async function readRelease(lane: DaemonLane, goalId: string): Promise<Record<str
 }
 
 /**
- * Drives the release's PREREQUISITE to a committed decision, honestly. Copied in shape from
- * deploy-fake-docker.spec.ts:73-93, which walks the same chain for the same reason: the
- * wrapper's lander commits into the lane's real git workspace and records a COMMITTED landing,
- * and the publish is dispatched on a MINTED operator seat because a lane credential is not a
- * HUMAN principal. Nothing is seeded and no gate is relaxed.
+ * Drives the release's PREREQUISITE to a committed decision, honestly.
+ *
+ * THE GOAL IS BUILT, NOT PICKED OFF THE SEED. `createLaneContractGoal` (lane-contract-goal.ts:156)
+ * composes the graph, delivers all three nodes through the real wrapper, verifies every criterion
+ * against the landed tree and closes the goal — so the goal it returns is CONTRACT-BOUND and
+ * criterion-VERIFIED and `readReleaseDossierInput` answers with a dossier rather than null.
+ * Taking the goal CATALOG's first entry instead, as this helper used to, hands back the shipped
+ * demo seed's LEGACY Foundation goal, whose contract binding was never minted; `/release/read`
+ * then answers ABSENT and it is answering CORRECTLY. `contract-goal.spec.ts:96-118` pins that
+ * legacy refusal by CODE and LAYER, so the two shapes are separated by a test, not by a comment.
+ *
+ * `landLaneNode` IS NOT CALLED HERE and must not be: the helper composes it itself at
+ * lane-contract-goal.ts:162, deliberately BEFORE it adds the contract graph. A second landing
+ * afterwards adds a commit and invalidates the exact-SHA criterion evidence this card renders.
+ *
+ * The publish below is unchanged and is dispatched on a MINTED operator seat, because a lane
+ * credential is not a HUMAN principal. Nothing is seeded and no gate is relaxed.
  */
 async function landAndPublish(lane: DaemonLane): Promise<{ goalId: string; sha: string }> {
-  const landed = await landLaneNode(lane);
-  if (landed.wrapperPid !== null) wrapperPids.push(landed.wrapperPid);
-  expect(landed.ok ? "ok" : `LANDING: ${landed.detail}`).toBe("ok");
-  if (!landed.ok) throw new Error("unreachable: the assertion above fails first");
-  expect(landed.sha, "the lander commits a real sha git resolves").toMatch(/^[0-9a-f]{40}$/u);
-  const catalog = await readGoalCatalogOverHttp(lane.daemonOrigin, lane.repoRoot,
-    lane.credential, lane.csrfToken);
-  const goalId = "goals" in catalog ? catalog.goals[0]?.goalId ?? null : null;
-  expect(goalId, `the seeded lane must expose a goal: ${JSON.stringify(catalog)}`).not.toBeNull();
+  const contract = await createLaneContractGoal(lane);
+  // Every wrapper the helper started is this spec's to account for: pids that never reach the
+  // module array are invisible to `assertStopped`/`survivingPids` and leak into the next spec.
+  wrapperPids.push(...contract.wrapperPids);
+  expect(contract.landedSha, "the lander commits a real sha git resolves")
+    .toMatch(/^[0-9a-f]{40}$/u);
+  expect(contract.landedSha, "the head must have moved off the lane baseline")
+    .not.toBe(lane.workspaceSha);
+  // The helper reads its sha from `laneWorkspaceIdentity(scratch.root)`, which is
+  // `join(root, "workspace")` — the very directory `lane.workspace` names (daemon-ports.ts:156,
+  // :217-222, :651). Same tree, so this identity matches that sha.
   const identity = resolveRepositoryExecutionIdentity(lane.workspace);
   expect(identity.ok, JSON.stringify(identity)).toBe(true);
-  if (goalId === null || !identity.ok) throw new Error("unreachable: assertions above fail first");
+  if (!identity.ok) throw new Error("unreachable: the assertion above fails first");
+  const goalId = contract.goalRef;
   const approval = { branch: "main", remoteUrl: REMOTE_URL,
-    repositoryId: publicationRepositoryId(identity.identity), sha: landed.sha };
+    repositoryId: publicationRepositoryId(identity.identity), sha: contract.landedSha };
   const published = await command(lane, "repository.publish", publishAggregateId(goalId),
     { approval, goalId, remoteUrl: REMOTE_URL }, mintLaneOperatorSeat(lane));
   expect(published, `PUBLISH: ${JSON.stringify(published)}`).toMatchObject({ outcome: "ACCEPTED" });
-  return { goalId, sha: landed.sha };
+  return { goalId, sha: contract.landedSha };
 }
 
 /** The operator's real pairing ritual, copied from preview-approve.spec.ts:57-72. */
@@ -152,40 +174,7 @@ async function assertStopped(lane: DaemonLane | undefined, why: string): Promise
   expect(existsSync(dirname(lane.catalogPath))).toBe(false);
 }
 
-/**
- * PARKED ON A MEASURED LANE CAPABILITY GAP, NOT ON A DEFECT IN THIS SPEC OR IN THE DAEMON.
- *
- * `test.fixme` rather than a weakened assertion: this journey asserts the RIGHT thing and the
- * lane cannot yet supply it. Nothing below is relaxed, stubbed or hand-seeded, and a fixme
- * claims no pass - it keeps a permanently-red spec off the shared `browser-e2e-gate` lane while
- * the prerequisite lands, and it goes back to `test(` unchanged when it does.
- *
- * WHAT WAS MEASURED (worker-ca28be90, 2026-09-07, by RUNNING the lane and reading the store, not
- * by reading the source). The lane seeds with the SHIPPED demo seed, which produces a LEGACY
- * Foundation goal:
- *
- *   GRAPHS    [{"goalRef":"goal-live-1","run":"run-live-1"}]
- *   BINDING   goal-live-1 {"ok":false,"code":"COMPILED_CONTRACT_BINDING_ABSENT"}
- *   CRITERION goal-live-1 {"ok":false,"code":"COMPILED_CONTRACT_BINDING_ABSENT","layer":"CRITERION_EVIDENCE"}
- *   DOSSIER   goal-live-1 NULL
- *
- * `demo-seed-payloads.ts` drives the legacy `planning.*` chain and never sends
- * `product_contract.propose_revision` / `approve_gate_1` / `planning.submit_decomposition`, and
- * `compile-dispatcher.ts:290` is the only place the contract binding is minted. So
- * `/release/read` answering ABSENT below is the CORRECT answer for this goal;
- * `goal-approved-execution-scope.ts:31-42` names this goal shape explicitly. The seed's
- * `approval.decide` IS committed - the missing artifact is the contract binding, not the scope
- * approval.
- *
- * Re-anchoring to the REFUSED path does not rescue it either: `goal-release.tsx:90` gates the
- * approve control on `sha !== null`, so with an ABSENT read the card renders honest and
- * DISABLED and the browser can never reach the dispatch.
- *
- * UNPARKS WHEN task-6bafd3b9439640cba358dd6e79329c9d lands ("The control-room lane can drive a
- * goal to a CONTRACT-BOUND, criterion-VERIFIED, LANDED state"). Swap `landAndPublish` for that
- * helper's goal and restore `test(`.
- */
-test.fixme("real daemon: the operator reads the evidence, approves the release and gets the PR link",
+test("real daemon: the operator reads the evidence, approves the release and gets the PR link",
   async ({ page }) => {
     test.setTimeout(JOURNEY_MS);
     let started: DaemonLane | undefined;

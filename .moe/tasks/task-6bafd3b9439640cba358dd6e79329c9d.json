@@ -181,7 +181,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T05:41:06.478Z",
-  "updatedAt": "2026-09-08T14:21:29.626Z",
+  "updatedAt": "2026-09-08T14:23:08.836Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T11:00:16.539Z",
     "plannedStepCount": 7,
@@ -394,6 +394,23 @@
       "treeId": "ff84ec417e26146baefc253843f4a54e4c9dd719",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "3bde70cee2677795eff2c22d3a6fefdce3f57c8b",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-2702df88@2026-09-08T13:55:47Z",
+      "paths": [
+        ".moe/tasks/task-6bafd3b9439640cba358dd6e79329c9d.json",
+        ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+        ".moe/tasks/task-893389aec6f145b399ef2a2ed160e0f9.json"
+      ],
+      "recordedBy": "qa-2702df88",
+      "recordedAt": "2026-09-08T14:23:08.836Z",
+      "treeId": "be4737f46d999a7b7cda866ea20e590eda9c14bd",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -405,14 +422,16 @@
     "tests/e2e/control-room/lane-contract-goal.ts",
     ".moe/tasks/task-0bd37766500c427aacf4f59abbd6dad1.json",
     ".moe/tasks/task-6bafd3b9439640cba358dd6e79329c9d.json",
-    ".moe/tasks/task-c78140e9a4b749078d4fb633e2e70850.json"
+    ".moe/tasks/task-c78140e9a4b749078d4fb633e2e70850.json",
+    ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+    ".moe/tasks/task-893389aec6f145b399ef2a2ed160e0f9.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-812079a7@2026-09-08T13:16:58Z",
-    "at": "2026-09-08T13:57:18.240Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-2702df88@2026-09-08T13:55:47Z",
+    "at": "2026-09-08T14:23:08.836Z"
   },
   "workStartedAt": "2026-09-07T18:37:36.495Z",
   "declaredFiles": [
