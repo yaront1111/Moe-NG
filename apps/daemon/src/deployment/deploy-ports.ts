@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import type { DeployCandidateEnvironmentPort } from "./deploy-candidate-environment.js";
 import type { DeployBuildPort } from "./deploy-image-build.js";
 
 /**
@@ -85,6 +86,8 @@ export type DeployMigrationPort = (
 export interface DeployPorts {
   readonly build: DeployBuildPort;
   readonly docker: DockerRunner;
+  /** ABSENT means no variable delivery; `deploy-candidate-environment.ts` holds the whole design. */
+  readonly environment?: DeployCandidateEnvironmentPort;
   /**
    * ABSENT means this composition did not ask for a migration — the rollback path and the arms
    * that are about docker rather than schema. It is NOT a licence for the production composition
@@ -251,6 +254,8 @@ export interface DockerDoubleOptions {
   readonly sshStderr?: string;
 }
 
+/** The double's answer to `imageCommandArgv`: `Entrypoint ++ Cmd`, as real docker prints them. */
+export const DOUBLE_IMAGE_COMMAND = '["docker-entrypoint.sh"]\n["node","/app/dist/server.js"]\n';
 const ok = (stdout = ""): DeployRunResult => ({ code: 0, stderr: "", stdout });
 const failed = (stderr: string, code: number | null = 1): DeployRunResult =>
   ({ code, stderr, stdout: "" });
@@ -354,7 +359,9 @@ export function createDockerDouble(options: DockerDoubleOptions = {}): DockerDou
       if (state !== "ABSENT") states.set(named, state);
       return state === "ABSENT" ? failed("No such object") : ok(`${state.toLowerCase()}\n`);
     }
-    if (verb === "image") return ok(`${digest}\n`);
+    // TWO image reads, not one: `--entrypoint` clears the image CMD, so a delivering deploy reads
+    // the argv back first. Answering only the digest models a docker no candidate could start on.
+    if (verb === "image") return ok(args.includes("{{.Id}}") ? `${digest}\n` : DOUBLE_IMAGE_COMMAND);
     if (verb === "stop") { states.set(named, "STOPPED"); return ok(); }
     if (verb === "rm") { states.set(named, "REMOVED"); return ok(); }
     if (verb === "save") {

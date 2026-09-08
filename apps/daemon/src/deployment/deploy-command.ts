@@ -15,6 +15,7 @@ import { releaseReceiptId } from "../release/release-receipt-contracts.js";
 import { readReleaseReceipt } from "../release/release-receipt-ledger.js";
 import { bootstrapRequestBytes } from "../repository/repository-bootstrap-command.js";
 import { readPublishLedger } from "../repository/publish-ledger.js";
+import { candidateEnvironmentPort } from "./deploy-candidate-environment.js";
 import { nodeDockerRunner, nodeImageTransfer, nodeSshRunner } from "./deploy-ports.js";
 import type { DeployMigrationResult, DeployPorts } from "./deploy-ports.js";
 import { resolveDeployMigrationContext } from "./deploy-migration-context.js";
@@ -257,6 +258,18 @@ export function createDeployCommandHandler(options: DeployCommandOptions): Async
        * migration receipt instead of starting a second batch. The replay, the project-wide lock
        * and the receipt identity all stay `migrateWithBackup`'s — nothing is re-implemented here.
        */
+      /**
+       * THE SAME WIRING CONDITION AS `migrate`, AND FOR THE SAME REASON: a daemon with no
+       * environment credential has no variables to deliver, and composing this there would make
+       * every deploy on it refuse. Both members read the SAME store through the SAME
+       * `readEnvironmentDelivery` seam, so the migration and the container it will serve can never
+       * disagree about what `production` means.
+       */
+      ...(options.environmentCredential === undefined ? {} : {
+        environment: candidateEnvironmentPort({
+          credential: options.environmentCredential, now: clock, projectId, store,
+        }),
+      }),
       ...(options.environmentCredential === undefined ? {} : { migrate: async (
         environment: string, sha: string, decisionId: string,
       ): Promise<DeployMigrationResult> => {

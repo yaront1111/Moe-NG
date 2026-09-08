@@ -5,6 +5,8 @@ import {
   DEPLOY_TARGET_MISSING, admitDeploySha, admitEnvironmentName, deployImageTag, deployReceiptId,
 } from "./deploy-receipt-contracts.js";
 import type { DeployReceiptV1, DeployRefusal, DeployRefusalCode } from "./deploy-receipt-contracts.js";
+import { resolveCandidateMount, runCandidateArgv } from "./deploy-candidate-environment.js";
+import type { CandidateEnvironmentMount } from "./deploy-candidate-environment.js";
 import { createProxyPort, DEPLOY_HEALTH_BUDGET_MS, DEPLOY_HEALTH_POLL_MS, lastStderrLine } from "./deploy-ports.js";
 import type { DeployMigrationResult, DeployPorts, DeployRunResult, DeployTarget } from "./deploy-ports.js";
 import { readDeployReceipt, recordDeployReceipt } from "./deploy-ledger.js";
@@ -64,11 +66,7 @@ export function candidateContainerName(
 }
 
 export { dockerArchiveBuildArgv as buildArgv } from "./deploy-image-build.js";
-
-/** Internal candidate: no public port conflict with the incumbent or proxy. */
-export const runCandidateArgv = (
-  name: string, network: string, tag: string,
-): readonly string[] => ["run", "--detach", "--name", name, "--network", network, tag];
+export { runCandidateArgv } from "./deploy-candidate-environment.js";
 
 /** Probe the candidate by name: the public URL would prove only the incumbent's health. */
 export const healthArgv = (name: string): readonly string[] =>
@@ -226,12 +224,17 @@ export function createDeployService(config: DeployServiceConfig) {
 
   /** Reuses an existing container of this name rather than recreating it: a replay, not a race. */
   const startCandidate = async (
-    target: DeployTarget, name: string, tag: string,
+    target: DeployTarget, name: string, tag: string, mount: CandidateEnvironmentMount | null,
   ): Promise<DeployRunResult> => {
     const existing = await run(target, healthArgv(name));
     if (existing.code === 0) return existing;
-    return run(target, runCandidateArgv(name, target.network, tag));
+    return run(target, runCandidateArgv(name, target.network, tag, mount));
   };
+
+  const candidateMount = (
+    target: DeployTarget, tag: string, source: string,
+  ): Promise<CandidateEnvironmentMount | string> =>
+    resolveCandidateMount((args) => run(target, args), target.sshTarget, tag, source);
 
   const execute = async (request: DeployRequest, rollbackImage?: string): Promise<DeployReport> => {
     const { environment, sha } = request;
@@ -275,6 +278,8 @@ export function createDeployService(config: DeployServiceConfig) {
     const lease = await acquireProxy(proxyPort);
     if (typeof lease === "string") return refuse(target, DEPLOY_BUILD_FAILED, lease);
     let keepLock = false; let keepCandidate = false; let candidateStarted = false;
+    // WHAT REMOVES THE PLAINTEXT FILE: the `finally` below, on every exit path this function has.
+    let disposeDelivery: (() => void) | null = null;
     const name = candidateContainerName(environment, sha, request.decisionId);
     try {
       const replay = readReplay(config, request, rollbackImage);
@@ -295,6 +300,19 @@ export function createDeployService(config: DeployServiceConfig) {
       if (inspected.code !== 0 || !/^sha256:[0-9a-f]{64}$/u.test(digest) || (rollbackImage !== undefined && digest !== rollbackImage)) {
         return refuse(target, DEPLOY_BUILD_FAILED, rollbackImage === undefined ? "DEPLOY_IMAGE_DIGEST_UNAVAILABLE" : DEPLOY_ROLLBACK_IMAGE_UNAVAILABLE);
       }
+      // THE ENVIRONMENT IS RESOLVED BEFORE THE MIGRATION, and both refusals are FORWARDED with the
+      // code and layer that answered — `ENV_STORE_KEY_UNAVAILABLE@KEY` is the environment slice's,
+      // not this engine's. It reads the same store the migration is about to read, so an unopenable
+      // store refuses while the schema is still where the code expects it. There is no partial
+      // delivery to inherit: `readEnvironmentDelivery` refuses the WHOLE read on one bad seal.
+      const delivery = ports.environment === undefined ? null : ports.environment(environment);
+      if (delivery !== null && !delivery.ok) {
+        return refuse(target, DEPLOY_BUILD_FAILED, `${delivery.code}@${delivery.layer}`);
+      }
+      if (delivery !== null) disposeDelivery = delivery.dispose;
+      const mount = delivery === null || delivery.source === null
+        ? null : await candidateMount(target, tag, delivery.source);
+      if (typeof mount === "string") return refuse(target, DEPLOY_BUILD_FAILED, mount);
       // THE MIGRATION RUNS HERE, AND BOTH NEIGHBOURS ARE WRONG. Before the build, a migration
       // could move the schema and then fail to produce an image, leaving the schema ahead of the
       // code with no image to roll back to. After `startCandidate`, the candidate boots against
@@ -312,7 +330,7 @@ export function createDeployService(config: DeployServiceConfig) {
         return refuse(target, DEPLOY_BUILD_FAILED, migrated);
       }
       candidateStarted = true;
-      const started = await startCandidate(target, name, tag);
+      const started = await startCandidate(target, name, tag, mount);
       if (started.code !== 0) {
         return refuse(target, DEPLOY_BUILD_FAILED, lastStderrLine(started.stderr));
       }
@@ -340,6 +358,9 @@ export function createDeployService(config: DeployServiceConfig) {
     } finally {
       if (candidateStarted && !keepCandidate && lease.incumbent !== name) await run(target, ["rm", "--force", name]);
       if (!keepLock) await proxyPort.unlock(lease.proxy);
+      // The candidate read its delivery once at startup and carries no restart policy, so the
+      // plaintext is not needed past this point on ANY exit path — success, refusal or throw.
+      if (disposeDelivery !== null) disposeDelivery();
     }
   };
 

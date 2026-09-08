@@ -8,6 +8,7 @@ import { DomainRefusal } from "../daemon-command-dispatch.js";
 import { DAEMON_COMMAND_SEAM } from "../http/http-async-contract.js";
 import type { AsyncCommandHandler } from "../http/http-async-contract.js";
 import type { CommandHandlerInput, DurableDecision } from "../http/http-contract.js";
+import { candidateEnvironmentPort } from "./deploy-candidate-environment.js";
 import { productionDeployPorts } from "./deploy-command.js";
 import type { DeployCommandOptions } from "./deploy-command.js";
 import { readDeployReceipt } from "./deploy-ledger.js";
@@ -180,8 +181,18 @@ export function createRollbackCommandHandler(options: RollbackCommandOptions): A
       validateReceipt(recovered.receipt);
       receipt = recovered.receipt;
     } else {
+      // A ROLLED-BACK CANDIDATE IS STILL A CANDIDATE. It is started by the same `startCandidate`,
+      // so it needs the same delivery: restoring an image whose process has no variables would
+      // trade one broken deploy for another. Composed on the same wiring condition as the deploy's.
       const report = await createDeployService({ ...options,
-        ports: options.ports ?? productionDeployPorts(store, projectId) }).rollback({
+        ports: options.ports ?? {
+          ...productionDeployPorts(store, projectId),
+          ...(options.environmentCredential === undefined ? {} : {
+            environment: candidateEnvironmentPort({
+              credential: options.environmentCredential, now: clock, projectId, store,
+            }),
+          }),
+        } }).rollback({
         decisionId: envelope.commandId, environment: request.environment, receiptId: request.receiptId,
       });
       if (report.receipt === null || report.outcome !== report.receipt.outcome) {

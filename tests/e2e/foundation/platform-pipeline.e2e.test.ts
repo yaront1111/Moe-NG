@@ -19,11 +19,13 @@ import type { DeployMigrationResult } from "../../../apps/daemon/src/deployment/
 import { resolveDeployMigrationContext } from "../../../apps/daemon/src/deployment/deploy-migration-context.js";
 import { migrateWithBackup } from "../../../apps/daemon/src/repository/migrations/migration-service.js";
 import { setEnvironmentVariable } from "../../../apps/daemon/src/environment/environment-store.js";
+import { candidateEnvironmentPort } from "../../../apps/daemon/src/deployment/deploy-candidate-environment.js";
 import {
-  BUILD_ROUTE, HEALTH_PATH, PUBLIC_PORT, awaitAnswer, composeDown, composeUp, dockerQuietly,
+  BUILD_ROUTE, DELIVERY_MARKER_VARIABLE, DELIVERY_ROUTE, HEALTH_PATH, PUBLIC_PORT, awaitAnswer,
+  composeDown, composeUp, dockerQuietly,
   excludeLocally, installWorkspace, legDetail, liveContainers, liveNetworks, materialize,
   removeWorkspace, request, reservePublicPort, rewriteBuildRoute,
-  withBuildRoute,
+  withBuildRoute, withDeliveryRoute,
 } from "./platform-pipeline-harness.js";
 
 /**
@@ -62,6 +64,12 @@ const ENVIRONMENT = "preview";
 const PROJECT_ID = "project-platform-pipeline";
 /** Deliberately not credential-shaped: a plausible-looking secret in a test trips real scanners. */
 const CANARY = `canary-not-a-secret-${randomBytes(6).toString("hex")}`;
+/**
+ * The value the DEPLOYED BUILD must echo back. A different shape from the canary's on purpose: one
+ * proves delivery ARRIVED and the other proves nothing LEAKED, and a reader must never have to
+ * work out which of the two a hit belongs to. Equally inert — no scheme, no `@`, no `password=`.
+ */
+const DELIVERY_MARKER = `delivered-not-a-secret-${randomBytes(6).toString("hex")}`;
 
 function git(directory: string, args: readonly string[]): void {
   const outcome = spawnSync("git", [...args], { cwd: directory, encoding: "utf8", shell: false, timeout: 120_000 });
@@ -104,6 +112,13 @@ async function servedBuild(): Promise<string> {
   return (JSON.parse(answer.body) as ServedBuild).build;
 }
 
+/** What the process SERVING the public port says its own `process.env` holds for the marker. */
+async function servedMarker(): Promise<string | null> {
+  const answer = await awaitAnswer(DELIVERY_ROUTE, 120_000);
+  expect(answer.status, `${DELIVERY_ROUTE} answered ${String(answer.status)}: ${answer.body}`).toBe(200);
+  return (JSON.parse(answer.body) as { readonly marker: string | null }).marker;
+}
+
 describe("the platform pipeline", () => {
   it("marks the served build inside the generated server, so a response names it", () => {
     const source = ['  if (url === "/health") {', "    return ok;", "  }"].join("\n");
@@ -112,6 +127,18 @@ describe("the platform pipeline", () => {
     expect(marked).toContain('{ build: "build-alpha" }');
     // The anchor must still be there: a marker that REPLACED /health would prove nothing about
     // health and would make the incumbent's own healthcheck fail for an unrelated reason.
+    expect(marked).toContain('if (url === "/health") {');
+  });
+
+  it("reads the delivery marker at REQUEST time, not at generation time", () => {
+    const source = ['  if (url === "/health") {', "    return ok;", "  }"].join("\n");
+    const marked = withDeliveryRoute(source);
+    expect(marked).toContain(`if (url === "${DELIVERY_ROUTE}")`);
+    // `process.env` INSIDE the handler: a build-time literal would answer identically for a
+    // container that never received the variable, which is the exact defect this route exists to
+    // detect. The route names ONE non-secret variable and echoes nothing else.
+    expect(marked).toContain(`process.env.${DELIVERY_MARKER_VARIABLE} ?? null`);
+    expect(marked).not.toContain("DATABASE_URL");
     expect(marked).toContain('if (url === "/health") {');
   });
 
@@ -172,6 +199,12 @@ describe("the platform pipeline", () => {
         expect(JSON.parse(health.body)).toEqual({ status: "ok" });
         expect(await servedBuild()).toBe(buildA);
 
+        // THE NEGATIVE CONTROL FOR THE DELIVERY PROOF BELOW, taken BEFORE anything is delivered.
+        // The compose-managed INCUMBENT serves the same build and answers the same route, and it
+        // has no marker — so a later `marker === DELIVERY_MARKER` cannot be satisfied by the image,
+        // by the route being hard-coded, or by the incumbent still holding the port.
+        expect(await servedMarker()).toBeNull();
+
         // CROSS-BAND CONTRACT, asserted before the deploy depends on it: the deploy engine finds
         // the proxy by the compose SERVICE LABEL scoped to the network, so a scaffold that stopped
         // emitting a `proxy` service — or a deploy bound to another network — is a defect neither
@@ -196,6 +229,9 @@ ${probeBuild.stderr.slice(-1500)}`).toBe(0);
         for (const [name, value] of [
           ["DATABASE_URL", `postgres://app:${CANARY}@127.0.0.1:5432/app`],
           ["POSTGRES_PASSWORD", CANARY],
+          // The one variable the deployed build is asked to echo. It rides the SAME store read as
+          // the two above, so proving it arrived proves the mechanism, not a special case.
+          [DELIVERY_MARKER_VARIABLE, DELIVERY_MARKER],
         ] as const) {
           const set = setEnvironmentVariable(environmentConfig, { environment: ENVIRONMENT, name, value });
           expect(set.ok, `setting ${name} refused: ${set.ok ? "" : set.code}`).toBe(true);
@@ -229,6 +265,10 @@ ${probeBuild.stderr.slice(-1500)}`).toBe(0);
         const service = createDeployService({
           ports: {
             ...productionDeployPorts(store, PROJECT_ID),
+            // THE REAL PORT, composed exactly as `deploy-command.ts` composes it for every
+            // production deploy — not a stub. It performs the real store read, writes the real
+            // file and is what the candidate's real bind mount points at.
+            environment: candidateEnvironmentPort({ credential: () => credential, now, projectId: PROJECT_ID, store }),
             migrate,
             target: () => ({ network, sshTarget: null, url: `http://127.0.0.1:${String(PUBLIC_PORT)}` }),
           },
@@ -239,9 +279,37 @@ ${probeBuild.stderr.slice(-1500)}`).toBe(0);
         const first = await service.deploy({
           context: workspace.directory, decisionId: "decision-a", environment: ENVIRONMENT, sha: shaA,
         });
-        candidates.push(candidateContainerName(ENVIRONMENT, shaA, "decision-a"));
+        const candidateA = candidateContainerName(ENVIRONMENT, shaA, "decision-a");
+        candidates.push(candidateA);
         expect(first.outcome, why(first)).toBe("DEPLOYED");
         expect(await servedBuild()).toBe(buildA);
+
+        // ================= DoD 3: DELIVERY PROVEN BY RESPONSE, NOT BY ARGV =================
+        // The process now serving the public port is the CANDIDATE the deploy started and the
+        // proxy flipped to, and it reports the marker out of its OWN `process.env`. Nothing here
+        // inspects the argv the engine assembled, and nothing execs into the container: this is
+        // the application answering, which is what production actually depends on.
+        expect(await servedMarker(), "the deployed candidate did not receive its environment").toBe(DELIVERY_MARKER);
+
+        // ================= DoD 2: AND STILL NOTHING LEAKED =================
+        // Under LIVE DELIVERY, which is the condition that makes this meaningful: the canary
+        // password is in the store and is now inside the candidate's process, so a `--env`-shaped
+        // delivery would put it in `.Config.Env` right here.
+        const inspected = dockerQuietly(["inspect", candidateA], 60_000).stdout;
+        const logs = dockerQuietly(["logs", candidateA], 60_000);
+        const delivered: { readonly label: string; readonly text: string }[] = [
+          { label: "the candidate container's inspected configuration", text: inspected },
+          { label: "the candidate container's logs", text: `${logs.stdout}${logs.stderr}` },
+          { label: "the deploy report detail", text: first.detail },
+          { label: "the deploy receipt", text: JSON.stringify(first.receipt) },
+        ];
+        for (const value of [CANARY, DELIVERY_MARKER]) {
+          expect(delivered.filter((artifact) => artifact.text.includes(value)).map((a) => a.label),
+            "a delivered value surfaced in an artifact the operator can read").toEqual([]);
+        }
+        // The sweep can FAIL: without this the four zero-hit results above prove nothing.
+        expect(inspected).toContain(candidateA);
+        expect(inspected).toContain("/run/moe/env");
 
         // A SECOND, REAL COMMIT: two deploys of byte-identical trees are indistinguishable over
         // HTTP, so "the previous sha is serving" could only be shown by receipt — which DoD 3

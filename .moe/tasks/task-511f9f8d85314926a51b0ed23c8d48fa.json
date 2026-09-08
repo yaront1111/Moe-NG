@@ -84,7 +84,7 @@
       "completedAt": "2026-09-08T18:24:55.503Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -122,16 +122,19 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T14:58:43.658Z",
-  "updatedAt": "2026-09-08T18:25:34.185Z",
+  "updatedAt": "2026-09-08T18:49:22.048Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T16:34:41.799Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-09-08T18:49:22.048Z",
+    "wallClockMs": 8080249
   },
   "contextFetchedBy": [
     "architect-9556982c",
-    "worker-d0fc1403"
+    "worker-d0fc1403",
+    "qa-2702df88"
   ],
   "stepsCompleted": [
     "step-1",
@@ -167,5 +170,33 @@
     "packages/store/src/store-runtime-entrypoint.test.ts",
     "packages/store/src/store-entrypoint-smoke-worker.mjs"
   ],
-  "completionSummary": "Fixed store runtime smoke teardown in exactly two test/fixture files: message records result; success requires actual exit0. Late error/nonzero/no-result/timeout have exact STORE_SMOKE_WORKER diagnostics; terminate+exit precedes single exact-directory removal, original and cleanup errors retained. Real SQLite held-worker regression, constructor/assertion errors, sibling isolation and injected cleanup failures:12 tests. TDD RED11/12 -> GREEN12/12;6 quiet mutants fail intended ordering/code/layer assertions and independently hash-restored. Final pnpm verify:store EXIT0:53files/688tests (9.22s,18:23Z); focused12 and store typecheck0. Broader gates: root438passed+1skipped files/10423passed+49skipped tests; foundation35files/756tests; daemon596files/10644passed+8skipped; typecheck0. One held-boundary assertion strengthened after broad gates, then focused+primary rerun. Initial foreign root3 timeouts did not recur and standalone3files/30tests passed; task-0126aacd carries explicit non-reproduction, no timeout changes. Final primary briefly hit peer TS2339 WIP; peer fixed, fresh final primary0. Historical temp/foreign files untouched; no public API changes. Lease released; wrapper/QA own landing/provenance."
+  "completionSummary": "Fixed store runtime smoke teardown in exactly two test/fixture files: message records result; success requires actual exit0. Late error/nonzero/no-result/timeout have exact STORE_SMOKE_WORKER diagnostics; terminate+exit precedes single exact-directory removal, original and cleanup errors retained. Real SQLite held-worker regression, constructor/assertion errors, sibling isolation and injected cleanup failures:12 tests. TDD RED11/12 -> GREEN12/12;6 quiet mutants fail intended ordering/code/layer assertions and independently hash-restored. Final pnpm verify:store EXIT0:53files/688tests (9.22s,18:23Z); focused12 and store typecheck0. Broader gates: root438passed+1skipped files/10423passed+49skipped tests; foundation35files/756tests; daemon596files/10644passed+8skipped; typecheck0. One held-boundary assertion strengthened after broad gates, then focused+primary rerun. Initial foreign root3 timeouts did not recur and standalone3files/30tests passed; task-0126aacd carries explicit non-reproduction, no timeout changes. Final primary briefly hit peer TS2339 WIP; peer fixed, fresh final primary0. Historical temp/foreign files untouched; no public API changes. Lease released; wrapper/QA own landing/provenance.",
+  "commits": [
+    {
+      "sha": "630d1b3dcb0785b208915a9a858d7ef4d6e85781",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-2702df88@2026-09-08T14:24:00Z",
+      "paths": [
+        "packages/store/src/store-runtime-entrypoint.test.ts",
+        "packages/store/src/store-entrypoint-smoke-worker.mjs"
+      ],
+      "recordedBy": "qa-2702df88",
+      "recordedAt": "2026-09-08T18:48:58.214Z",
+      "treeId": "cdfd0efa2921c49b9f00ab06bde2dc1e0ce67538",
+      "status": "REVIEW",
+      "pushed": false,
+      "message": "QA hand-landing after re-running pnpm verify:store (EXIT 0, 53 files / 688 tests). Two owned paths only."
+    }
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-2702df88@2026-09-08T14:24:00Z",
+    "at": "2026-09-08T18:48:58.214Z"
+  },
+  "completedAt": "2026-09-08T18:49:22.048Z",
+  "reviewCompletedAt": "2026-09-08T18:49:22.048Z",
+  "reviewSummary": "APPROVED. Two owned paths, +264/-25.\n\nRE-RUN BY ME: `pnpm verify:store` EXIT 0 — 53 files / 688 tests, matching the recorded verification. Freshness cross-check: the same gate read 677 before this row's arms, so +11 is precisely the new coverage rather than a re-quoted number.\n\nDoD 1 — the ORDERING is the fix: terminate the worker and AWAIT its exit before the single removal of its own directory, so a still-open SQLite handle can no longer turn cleanup into EPERM. Removal is skipped when the worker did not exit, which is correct — deleting under a live handle is what produced the original failure. Only the run's own `mkdtemp` directory is removed; no foreign path is touched.\n\nERRORS ARE NOT MASKED: lifecycle and cleanup failures are collected into an `AggregateError` with the original as `cause`, so a cleanup problem cannot swallow the failure it followed — the classic way a teardown fix hides its own bug.\n\nDoD 2 — the regression is REAL, not an oracle. It holds a genuine worker open through a `SharedArrayBuffer` + `Atomics` gate and asserts the ordering directly, instead of waiting for the host to hand it an EPERM (which would be green on any machine that never produces one). Diagnostics are exact codes at `STORE_SMOKE_WORKER` — NONZERO_EXIT, NO_RESULT, TIMEOUT, WORKER_ERROR — asserted by code, not by \"threw\". Success now requires an actual exit 0 AND a received message, closing the hole where the result arrives before the worker's `finally` closes SQLite.\n\nDRILL DISCIPLINE matched what was announced in advance: declared UTC window 18:18-18:21Z, one file, backups taken BEFORE the mutants existed and token-scanned, six mutants each failing its own intended assertion, restore verified by SHA256 in a call separate from the restore.\n\nHAND-LANDED as 630d1b3d (tree cdfd0efa): no completion commit existed and both paths sat dirty in the shared tree. Not pushed; rides the next worker push."
 }
