@@ -48,7 +48,7 @@ try {
         : "UNKNOWN_ERROR";
   }
   const health = store.getHealth();
-  parentPort.postMessage({
+  if (workerData.mode !== "NO_RESULT") parentPort.postMessage({
     accessMode: health.accessMode,
     dangerousMembers,
     frozen: Object.isFrozen(store),
@@ -58,6 +58,16 @@ try {
     shadowMutationRejected,
     writeCode,
   });
+  if (workerData.gate !== undefined) {
+    const gate = new Int32Array(workerData.gate);
+    Atomics.store(gate, 0, 1);
+    Atomics.notify(gate, 0);
+    Atomics.wait(gate, 1, 0);
+  }
+  if (workerData.mode === "ERROR") {
+    throw Object.assign(new Error("store smoke fixture failure"), { code: "STORE_SMOKE_FIXTURE_THROW" });
+  }
 } finally {
   store.close();
 }
+if (workerData.mode === "NONZERO") process.exitCode = 23;
