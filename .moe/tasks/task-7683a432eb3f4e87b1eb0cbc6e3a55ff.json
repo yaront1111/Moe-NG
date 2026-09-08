@@ -21,14 +21,18 @@
     {
       "stepId": "step-1",
       "description": "SPIDR ROLL-UP GATE. This row is a parent shell; all work lives in its three children and it carries dependsOn on every one. Confirm each is DONE — task-6ec875f4dd5f4f2ab97e46f71bf57b2b (the durable probe loop, the bounded ring, exactly one incident), task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4 (backups proven restorable, retention, deployment.rollback), task-f008f29a38d54ae7a10e97cad1c4443d (the Deployments status, the incident card, the Health Environments section, the live drive and the docs) — recording each landing sha plus completionSummary/reviewSummary. Per global rail 11 read those rather than re-measuring HEAD. If any is short, report_blocked with blockedOnTaskIds naming it.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "SPIDR ROLL-UP GATE — re-confirmed after the QA reopen (reopenCount 1). All six dependsOn children read DONE on disk: task-6ec875f4dd5f4f2ab97e46f71bf57b2b, task-078232fb9b9d4c06a5faf3c02adaf705, task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4, task-da60dc4b39c5409788246f6ed7fa932c, task-b7cdf265455d45c58010aa4d6f6c1544, task-f008f29a38d54ae7a10e97cad1c4443d. Completion commit for THIS row from the prior round is present on moe/work-2026-09-04: 8fb2a0f1 feat(task-7683a432...), Moe-Kind completion. QA (qa-eaa78526) re-ran `pnpm --filter @moe/daemon test` standalone/foreground/unpiped and reproduced task.verification verbatim: `Test Files 595 passed (595)` / `Tests 10595 passed | 8 skipped (10603)`, exit 0 — per global rail 11 I read that from the reopen record and epicSiblings rather than re-measuring HEAD. QA discharged DoD 1 and DoD 2 by re-deriving assertion shape on disk (ring cap 1440 per project+environment on every write, flapping arm health-probe-ring.test.ts:201, partial unique index health-incident.ts:19, restart arm health-probe-schedule.test.ts:156, BackupProof{sha256,restoredSha256}, prunedRefs vs existsSync). No child is short, so no report_blocked. THE ONE OPEN, CLOSABLE CLAUSE is DoD 4's Playwright half; DoD 3, 5 and 6 were measured not-closable from this row and routed to @governors as msg-f2e41640 BEFORE the reject was filed. Shared checkout: 7+ foreign dirty paths (.codex/*, .grok/config.toml, .moe/messages/*, .moe/roles/*, peer task JSONs, apps/daemon/src/http/affordance-read.ts, untracked contract-goal.spec.ts / lane-*.ts / preview-goal-landing.test.ts) — noted, not touched. Lease taken on browser-e2e-gate for this row before any browser run.",
+      "startedAt": "2026-09-08T04:14:10.030Z",
+      "completedAt": "2026-09-08T04:14:31.422Z"
     },
     {
       "stepId": "step-2",
       "description": "RECONCILE THE DoD, in a step note, one line per item. DoD 1 (probe loop, one incident, bounded ring, survives restart with no double schedule) -> child task-6ec875f4; DoD 2 (store and pg_dump backups, restore-to-temp sha256 per receipt, retention listing pruned refs) -> child task-95e68a8d; DoD 3 (deployment.rollback human-only with roster backfill, previous image redeployed, DB restore only when requested, four refusals with code + layer) -> child task-95e68a8d; DoD 4 (Deployments card, incident card, Health Environments section, Playwright) -> child task-f008f29a; DoD 5 (the 10-minute live probe, forced failure, rollback) -> child task-f008f29a; DoD 6 (runbook, README, gates) -> child task-f008f29a. NOTE THE SIBLING SEAM EXPLICITLY: this whole feature reads the deploy receipt that task-04b3ce7e349743c2a156d32ee5550ba5 keeps, under a DIFFERENT parent (containerized deployment) that this row may not depend on. Record whether that row landed and whether the receipt shape the children built against matches what actually shipped — a mismatch makes every rollback resolve to nothing.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-08T04:14:37.481Z"
     },
     {
       "stepId": "step-3",
@@ -89,11 +93,17 @@
       "author": "qa-eaa78526",
       "content": "QA REVIEW EVIDENCE — qa-eaa78526, 2026-09-08 04:00-04:2xZ, branch moe/work-2026-09-04, HEAD 8fb2a0f1. VERDICT: REJECT ON ONE CLAUSE (DoD 4's Playwright half). Everything below is MY OWN measurement, not the deliverer's record.\n\nFIRST, THE RECORD ITSELF IS SOUND. worker-4d8571e7 disclosed all four gaps unprompted and I could falsify none of them. This reject is not a finding against the deliverer's honesty; it is that a disclosed gap is still a gap, and one of the four is closable here.\n\n**COMPLETION COMMIT: PRESENT.** `8fb2a0f1f5494f47eea1f81a98c05c1c5c9505dd`, `feat(task-7683a432…)`, Moe-Kind: completion, on refs/heads/moe/work-2026-09-04, `git branch --contains` = moe/work-2026-09-04. One path, `.moe/tasks/task-7683a432….json`, +23/-4. Correct for a zero-production-bytes roll-up. NOTE FOR THE NEXT GRADER: my `get_context` at 04:00Z showed only two CHECKPOINTS and no completion; the disk JSON and `git log` at 04:1xZ show the completion recorded 03:57:57Z. The get_context snapshot lagged. Do not reject a row of this shape on a completion-commit absence read from get_context — same trap as `mem:task-task-f008f29a…-handoff`.\n\n**VERIFICATION RE-RUN, MATCHES VERBATIM.** `pnpm --filter @moe/daemon test`, standalone, foreground, unpiped, own exit captured: `Test Files  595 passed (595)` / `Tests  10595 passed | 8 skipped (10603)`, TRUE_EXIT=0. Identical to `task.verification`.\n\n**DoD 1 — DISCHARGED, RE-DERIVED FROM ASSERTION SHAPE, NOT FROM THE CHILD'S RECORD.** `HEALTH_PROBE_RING_LIMIT = 1440` at monitoring/health-probe-contracts.ts:5, enforced on EVERY write by a `DELETE … WHERE sequence NOT IN (… ORDER BY sequence DESC LIMIT ?)` inside the same access() as the INSERT (health-probe-ring.ts:102-104) — bounded per (project, environment), not globally. One-incident-per-outage arm exists AND covers the flapping case: health-probe-ring.test.ts:201 `raises one card per outage: continued failure adds none, and a later outage adds a second`. Single-open-card is enforced at the DATABASE layer, not in application code: `ON health_incidents(project_id, environment) WHERE closed_at IS NULL` (health-incident.ts:19). Restart arm: health-probe-schedule.test.ts:156 `re-registers at boot without overwriting the stored intervals or doubling the schedule`. PROBE_URL_MISSING asserted with code AND layer DAEMON_INGRESS at two seams (daemon-entry-deployments-health.test.ts:260, deployments-health-read.test.ts:174).\n\n**DoD 2 — DISCHARGED.** `BackupProof { sha256, restoredSha256 }` at backups/backup-ports.ts:9, both hashes computed from real files (:99, :142) — the restore proof compares the RESTORED artifact, not a re-hash of the source. Retention names the pruned refs and the arm asserts them against the filesystem rather than against the receipt's own list: scheduled-backup.test.ts:169 `expect([...receipt.prunedRefs].sort()).toEqual(before.filter(ref => !existsSync(ref)).sort())`. BACKUP_FAILED code+layer DAEMON_ACTIVATION_RECEIPTS. The real-PostgreSQL arms skipped here (`MOE_MIGRATION_RESTORE` unset, win32) — recorded on task-95e68a8d/task-b7cdf265, and the deliverer's reason for not setting it (a `pnpm install` without `--store-dir` has taken this fleet down) is correct.\n\n**DoD 3 — BEHAVIOUR DISCHARGED; TWO NAMED LITERALS DO NOT EXIST, AND ONE IS MORE THAN A RENAME.** Human-only + fence + roster re-measured by me: `deployment.rollback` at HUMAN_ONLY_STEPS (orchestrator/agent-spawn-contract.ts:277); `OPERATOR_PRINCIPAL_REQUIRED` @ DAEMON_AUTHORIZATION thrown at handler entry (rollback-command.ts:81); roster pins at daemon-command-registry.test.ts:400/:427 and daemon-command-registry-human-approver.test.ts:358. Previous image without rebuild: deploy-rollback.test.ts:93. Restore-only-when-requested is FALSIFIABLE, not merely unfalsified — rollback-command.test.ts injects a `restoreDatabaseInto` double and the not-requested arm asserts the call list is EMPTY.\n`git grep` over *.ts/*.tsx/*.js/*.md: `ROLLBACK_RECEIPT_UNKNOWN` **0 files**, `ROLLBACK_IMAGE_MISSING` **0 files**, `moe-rollback-receipt` **0 files**. THE CORRECTION TO THE COMPLETION RECORD: it is not only spelling. `DEPLOY_ROLLBACK_RECEIPT_INVALID` IS a real code at DAEMON_COMMAND_SEAM, so that one is a rename. `DEPLOY_ROLLBACK_IMAGE_UNAVAILABLE` is NOT a code — deploy-rollback.test.ts:181 pins it as the **detail** under `code: \"DEPLOY_BUILD_FAILED\"`, layer DEPLOY_ENGINE_STAMP, with a comment saying promoting it is forbidden. So the missing-image condition surfaces under a GENERIC code. That is a weaker shape than \"ROLLBACK_IMAGE_MISSING asserted with code + layer\", and it is a design decision recorded on a DONE row, not a defect a seat here should undo. Routed to @governors as an amendment.\n\n**DoD 4 — HALF DONE. THIS IS THE REJECT.** UI half: DONE and composed into production, verified by import chain — `EnvironmentsSection` rendered at live-environments.tsx:228, `IncidentCard` at needs-you.tsx:143, `LatencySparkline` at environments-section.tsx:104, `BackupsList` at :237. PLAYWRIGHT HALF: ABSENT. `ls tests/e2e/control-room/*.spec.ts` = 28 specs; `git grep -lE \"rollback|incident|health-probe|backups\" -- tests/e2e/**` returns only deploy-migrations.spec.ts (pre-migration dumps — a different feature) plus three tests/e2e/foundation files. NO browser spec touches the Deployments card health status, the incident card or the Health Environments section. See the reject issues for why this is actionable HERE.\n\n**DoD 5 — DID NOT RUN, CONFIRMED, AND NOT ACTIONABLE HERE.** `find . -name \"*.health.sqlite\" -not -path \"*/node_modules/*\"` = **0 hits** tree-wide; `docker ps -aq` = **0**. Nothing was simulated. Note the asymmetry the architect left: the child that was built to discharge this (task-f008f29a DoD 7) carries an explicit escape hatch — *\"If no environment is deployed … record that plainly rather than simulating it\"* — and THIS row's DoD 5 does not. The deliverer followed the child's hatch. Routed.\n\n**DoD 6 — GATES YES, DOCS NOT ACTIONABLE HERE.** Verified the contested claim: README.md and docs/agent-stack-runbook.md are in the PLAN affectedFiles of five live rows — task-161b7e9d (WORKING), task-6cbcf5ff (WORKING), task-78eedd8e (REVIEW), task-817d893f (BLOCKED), task-99f364e3 (WORKING). An edit from here is withheld as Moe-Contested and re-declaring does not clear it. Routed.\n\nROUTED TO @governors BEFORE THIS REJECT: msg-f2e416406e02481b969ed34088bbf3b7 in #governors, naming DoD 3, 5 and 6 as not-closable-here with the measurements, and asking whether DoD 4's Playwright clause is amended onto task-99f364e3 instead. If a governor amends it there, say so and I will re-grade this row on that basis without a second round.",
       "timestamp": "2026-09-08T04:05:38.876Z"
+    },
+    {
+      "id": "comment-3cece137315c441b877cb7de282570c1",
+      "author": "worker-4d8571e7",
+      "content": "INDEPENDENT FOREIGN-RED BASELINE FOR THE REOPEN — handing off to @worker-319873d7. Written by seat PID 18556 / config worker-60888 (workerId worker-4d8571e7), which is NOT the assignee of this row any more and is writing nothing further to it.\n\nWHY THIS IS WORTH READING RATHER THAN RE-DERIVING: QA's reject (comment-0e869fae) names six foreign browser reds and tells you to disclose them without repairing them. I ran the whole gate set MYSELF, concurrently and independently of both the seat that completed this row and the QA seat that graded it, and I reached the SAME SIX. Two seats measuring the same six from separate runs is a stronger baseline than either alone — you can quote this as corroboration rather than spending 12.3 minutes reproducing it.\n\nMY RUNS, each standalone and foreground, at HEAD 9bfd4142 on moe/work-2026-09-04 (before QA's completion commit 8fb2a0f1 was on my tree):\n\n`pnpm typecheck` -> EXIT 0. 19 `$ tsc` echoes, 19 `: Done`, 0 `error TS`.\n`pnpm --filter @moe/control-room test` -> EXIT 0. `Test Files  204 passed (204)` / `Tests  2667 passed (2667)`.\n`pnpm --filter @moe/daemon test` -> EXIT 0. `Test Files  595 passed (595)` / `Tests  10595 passed | 8 skipped (10603)`. Byte-identical to task.verification and to QA's own re-run.\n`pnpm test` (root) -> EXIT 1. `Test Files  1 failed | 432 passed | 2 skipped (435)` / `Tests  1 failed | 10387 passed | 46 skipped (10434)`.\n`pnpm test:e2e:browser` -> EXIT 1. `6 failed`, `1 skipped`, `39 passed (12.3m)`.\n\nTHE ROOT RED, which QA's list does not carry and you will meet if you run `pnpm test`:\n  FAIL tests/migration/cutover/cutover-drill.test.ts > TASK-MF ARM E: captureCutoverManifest succeeds against the REAL repo root\n  Error: expected ok:true, received {\"ok\":false,\"layer\":\"cutover-manifest\",\"code\":\"CUTOVER_MANIFEST_ENTRY_LIMIT_EXCEEDED\",\"path\":\".moe/tasks/task-eca1a82ffa844c679d25a60ad8bd165e.json\",\"detail\":\"entry count exceeds 10000\"}\nIt is REPO-SCALE, not anybody's diff: the drill walks the real repo root and refuses past `limits.maxEntries` (tests/migration/cutover/cutover-manifest.ts:232). `.moe/tasks/` alone is 895 files now. The path it names is simply where the walk crossed 10000 — that file is tracked, committed in bca1934f, and clean in porcelain. It is not repairable from this row and it will red for every row on this board until the cap or the walk changes. Worth a governor's attention as board growth, not a defect of yours.\n\nTHE SIX BROWSER REDS, verbatim headlines from my run:\n  1) contract-goal.spec.ts:39:1 › contract lane seals a goal with two producers and their dependent consumer — `AssertionError: legacy landing left a dirty baseline`\n  2) journeys.spec.ts:65:1 › CR-J1-002: production v2 never mounts a graph canvas — `expect(locator).toBeDisabled() failed` at :79 on `resources`\n  3) journeys.spec.ts:86:1 › CR-A11Y-001: five truth classes stay distinct without colour — `expect(received).toHaveLength(expected)` at :95, `expect(chips).toHaveLength(5)`\n  4) prd-persistence-boundary.spec.ts:127:1 › task-965cb2d6: a PRD is browser-local until Create, and refusals write nothing\n  5) prd-to-approval.spec.ts:38:1 › v2: pairs by handshake, reads the sealed plan, and never fabricates approval — `expect(locator).toHaveText(expected) failed` at :130 on `cr.goals.count`\n  6) provider-pause.spec.ts:181:1 › a provider limit parks the real wrapper, the browser says so, and clearing it staffs again — `the wrapper must staff node.deliver@node-e2e-osryvg`\n\nTWO OF THE SIX ARE PROVABLY ENVIRONMENTAL, which is worth saying in your disclosure rather than lumping all six as \"known baseline\":\n  #1 runs from an UNTRACKED file — `git status --porcelain -- tests/e2e/control-room/contract-goal.spec.ts` answers `??`. It is peer debris in the shared checkout, present in no commit, and its own failure message is a complaint about the dirty tree it is running in.\n  #6 needs the real wrapper to STAFF A SEAT. The fleet was saturated across my run (Get-CimInstance showed five live claude.exe: architect-46420, governor-36628, my own, and the two seats that now hold this row). A staffing assertion cannot pass while every seat is taken; that is host contention, not control-room behaviour.\n\nWHAT I LEAVE YOU THAT IS STILL GOOD. comment-a09c0c51 is the step-4 adversarial pass over the composed feature and survives the reopen unchanged — four questions, all measured at source: (a) the flapping environment DOES open a second card with a new id, but incident HISTORY is durable and NEVER SERVED (deployments-health-read.ts:268-270 narrows the list to the one open incident and live-deployments-health.ts:71 mirrors it singular) — the one real gap of the four; (b) rollback-to-a-rollback does NOT strand the operator, because rollback writes a new moe-deploy-receipt/1 through the same execute() path and the ledger never collapses, so resolveRollbackTarget resolves back to B — but no arm feeds a post-rollback [A,B,A'] history; (c) the probe/rollback race cannot raise a false incident, closed twice over by the partial unique index and by \"never leaves the environment with no container serving\"; (d) a cross-environment DB restore is impossible by construction — destination and dump both derive from one `environment` key and no parameter admits a foreign backup. comment-dba6a6e7 restores both step-note tails, including the deploy-receipt seam verdict.\n\nbrowser-e2e-gate is YOURS since 04:08:18Z — I hold no lease and started no suite after that. Nothing of mine is in flight.",
+      "timestamp": "2026-09-08T04:13:00.050Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:13:59.198Z",
-  "updatedAt": "2026-09-08T04:08:54.581Z",
+  "updatedAt": "2026-09-08T04:14:37.481Z",
   "dependsOn": [
     "task-6ec875f4dd5f4f2ab97e46f71bf57b2b",
     "task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4",
@@ -106,11 +116,13 @@
     "firstClaimAt": "2026-09-05T00:54:09.078Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 0,
-    "executedStepCount": 5,
+    "executedStepCount": 6,
     "rejectCount": 1,
     "reopenCount": 1
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1"
+  ],
   "failedDodItems": [
     {
       "item": "DoD 4 — Playwright against a REAL daemon: absent. No browser spec covers monitoring, backups, rollback or the incident card. (UI half IS done.)",
@@ -149,7 +161,8 @@
   "planApprovedAt": "2026-09-05T00:55:01.100Z",
   "contextFetchedBy": [
     "worker-319873d7",
-    "qa-eaa78526"
+    "qa-eaa78526",
+    "worker-4d8571e7"
   ],
   "commits": [
     {
@@ -213,6 +226,21 @@
       "treeId": "4394d02b46132f1a50dd3d54cec98c6a73a7a97c",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "1cbc6189c8313a7acb323d8b65b1efb1b0f784f1",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-eaa78526@2026-09-08T03:56:40Z",
+      "paths": [
+        ".moe/tasks/task-7683a432eb3f4e87b1eb0cbc6e3a55ff.json"
+      ],
+      "recordedBy": "qa-eaa78526",
+      "recordedAt": "2026-09-08T04:08:57.926Z",
+      "treeId": "740908271fcf42bcbeb7427ceabadc4a77d43021",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -224,8 +252,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-319873d7@2026-09-08T04:07:46Z",
-    "at": "2026-09-08T04:07:50.072Z"
+    "sessionId": "qa-eaa78526@2026-09-08T03:56:40Z",
+    "at": "2026-09-08T04:08:57.926Z"
   },
   "workStartedAt": "2026-09-08T03:25:53.187Z",
   "reviewStartedAt": "2026-09-08T03:56:37.932Z",
