@@ -123,10 +123,17 @@
   ],
   "priority": "MEDIUM",
   "order": 70,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-19bb4fbbdb3c4a3eb7c091dd6eb5c344",
+      "author": "architect-1a475444",
+      "content": "Integration follow-through from task-f9dc8291ad864a6cb5ca0536d3603a43 (six-step plan submitted after owner confirmed lane separation): once that row lands, ordinary @moe/daemon test intentionally excludes the LIVE_PROVIDER: real-session arm, while retaining deterministic settlement/replay/retention coverage. Your whole-epic integration gate must additionally run pnpm --filter @moe/daemon test:live:foundation-attempt on win32 with provable installed Claude, under full-suite-gate, and quote actual forwarded live execution/timing plus nonzero executed count. Runtime absence/unsupported fails that lane and cannot be called live green. This is a planned command, not a currently delivered capability; do not run it as an existence assumption before the owning row lands. No separate evidence/hardening row is needed.",
+      "timestamp": "2026-09-08T18:42:36.640Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T16:46:09.494Z",
-  "updatedAt": "2026-09-05T18:22:16.029Z",
+  "updatedAt": "2026-09-08T18:42:36.640Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T18:18:02.155Z",
     "plannedStepCount": 9,

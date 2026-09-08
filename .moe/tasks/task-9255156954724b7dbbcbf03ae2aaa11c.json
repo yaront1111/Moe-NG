@@ -1,0 +1,27 @@
+{
+  "id": "task-9255156954724b7dbbcbf03ae2aaa11c",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "bug: the compose-managed incumbent still carries every variable value in its docker inspect output",
+  "description": "Filed from task-0ca117e389df43ee9b458255f0752842, whose architect invited the filing rather than the widening.\n\nTHE ASYMMETRY. That row made the deployed CANDIDATE receive its environment through a bind-mounted file specifically so no value lands in `docker inspect .Config.Env` — measured: `--env` gives 1 grep hit for a planted value, a mounted file gives 0. The INCUMBENT is unchanged and is not held to that standard: `docker-compose.override.yml` delivers `DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}` and `POSTGRES_PASSWORD` to the compose `app` and `db` services, so the same values sit in THEIR `Config.Env` and are printed by `docker inspect` to anyone who can reach the docker socket.\n\nWHY IT IS INVISIBLE TODAY. `tests/e2e/foundation/platform-secret-canary.e2e.test.ts` sweeps `docker inspect <candidate>` (:218) and never sweeps the incumbent or the db container. So its `hits=0` result — and any epic claim resting on it that \"no secret surfaces anywhere along the pipeline\" — is true of the CANDIDATE only. The sweep is not wrong; its scope is just narrower than the sentence it is quoted for.\n\nSUGGESTED SHAPE, not prescribed: either extend the canary's sweep to the compose-managed containers and make the generated compose topology deliver by mounted file too, or narrow the epic's DoD-5 wording to say explicitly which containers were swept. Do NOT weaken the existing candidate sweep either way.\n\nNot urgent: `.env` is already gitignored and excluded from every build context, so this is a local-socket exposure rather than a committed or published one. LOW.",
+  "definitionOfDone": [
+    "Either the compose-managed app and db containers stop carrying variable values in docker inspect, or the epic's secrecy claim states in writing which containers the canary sweeps and which it does not.",
+    "The candidate-inspect sweep at platform-secret-canary.e2e.test.ts:218 is unchanged or strengthened, never narrowed.",
+    "If the sweep is extended, its swept=N count line rises and the new artifacts are named in the assertion message, as every other sweep in that file already is."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "LOW",
+  "order": 145,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-08T18:44:33.771Z",
+  "updatedAt": "2026-09-08T18:44:33.771Z"
+}

@@ -20,7 +20,11 @@ import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import type { ActivationTelemetryLaunchInput } from "../activation/activation-telemetry-launch.js";
 
 const observedBoundaryProbe = vi.hoisted(() => ({
-  launches: [] as Array<{ readonly input: ActivationTelemetryLaunchInput; readonly result: unknown }>,
+  launches: [] as Array<{
+    /** Wall-clock ms around the awaited production call — see the mock below. */
+    readonly elapsedMs: number;
+    readonly input: ActivationTelemetryLaunchInput; readonly result: unknown;
+  }>,
 }));
 
 /**
@@ -86,8 +90,16 @@ vi.mock("../activation/activation-telemetry-launch.js", async (importOriginal) =
     launchActivationProviderRun: async (
       ...args: Parameters<typeof actual.launchActivationProviderRun>
     ) => {
+      // THE LAUNCH SEAM'S OWN LATENCY, and the only place it can be read. The
+      // real-session arm's `timeoutMs` bounds THIS await and nothing else, while
+      // the case clock also counts store setup, worktree materialisation,
+      // settlement and two replays — so a margin argued from the case duration
+      // is argued from the wrong number. Value-free by construction: a duration
+      // and nothing from the child's stdout, stderr, argv or environment.
+      const startedAt = performance.now();
       const result = await actual.launchActivationProviderRun(...args);
-      observedBoundaryProbe.launches.push({ input: args[1], result });
+      const elapsedMs = performance.now() - startedAt;
+      observedBoundaryProbe.launches.push({ elapsedMs, input: args[1], result });
       return result;
     },
   };
@@ -813,6 +825,17 @@ describe("foundation attempt dispatch — the observed physical control", () => 
 
   it.runIf(WINDOWS_ONLY)("observes a real exited provider process and files it in the ledger", async () => {
     const found = await discovered();
+    // DID THIS ARM ACTUALLY EXECUTE? On a host with no provable installed
+    // runtime the case returns on the next line, so a green leg is vacuous
+    // evidence FOR THIS ARM and the verifier has to be able to tell the two
+    // apart. Printed on both branches, value-free: the boolean, the platform,
+    // and the typed code when absent — never a path, a digest or child output.
+    console.log(`[LIVE_PROVIDER_DISCOVERY] ${JSON.stringify({
+      executed: found.ok, platform: process.platform,
+      refusalCode: found.ok
+        ? null
+        : ("code" in found.refusal ? found.refusal.code : "UNTYPED_REFUSAL"),
+    })}`);
     // task-4db73e90: this host has no installed claude runtime — assert the
     // typed refusal instead of skipping the case.
     if (!found.ok) return assertRuntimeAbsent(found.refusal);
@@ -856,7 +879,23 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     });
 
     try {
+    const dispatchStartedAt = performance.now();
     const outcome = await service.dispatch(request);
+    const dispatchMs = performance.now() - dispatchStartedAt;
+    // THE NUMBER THE BOUND IS ARGUED FROM. `launchSeamMs` is what `timeoutMs`
+    // actually bounds; `dispatchMs` is the whole leg, and the gap between them
+    // is why a margin taken from the case clock overstates the headroom.
+    // Printed before the first assertion so a REFUSAL is diagnosable from the
+    // same line rather than only a pass. Harvest with `--reporter=verbose`:
+    // vitest 4 buffers a passing case's console output and flushes it only for
+    // failures, so a green run under the default reporter shows nothing.
+    console.log(`[LIVE_PROVIDER_TIMING] ${JSON.stringify({
+      dispatchMs: Math.round(dispatchMs),
+      forwardedLaunches: observedBoundaryProbe.launches.length,
+      launchSeamMs: observedBoundaryProbe.launches.map((seen) => Math.round(seen.elapsedMs)),
+      launchTimeoutMs: launchTemplate.limits.timeoutMs,
+      settled: outcome.ok ? "OK" : `${outcome.code}@${outcome.refusedBy}`,
+    })}`);
 
     expect(outcome.ok).toBe(true);
     // SETTLEMENT RELEASED THE TREE. A proven durable result is the ONLY thing

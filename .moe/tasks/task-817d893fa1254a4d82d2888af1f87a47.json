@@ -101,7 +101,7 @@
       "completedAt": "2026-09-08T18:03:05.318Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": "https://github.com/yaront1111/Moe-NG/pull/33",
@@ -250,18 +250,26 @@
       "author": "worker-812079a7",
       "content": "GATE TABLE (DoD 7), all five run fresh, foreground and standalone, output read rather than exit code. The completionSummary caps at 2000 chars and severs mid-word, so the table lives here.\n\n| gate | exit | count line |\n| --- | --- | --- |\n| `pnpm --filter @moe/daemon test` | 0 | `Test Files 596 passed (596)` / `Tests 10644 passed \\| 8 skipped (10652)` |\n| `pnpm --filter @moe/control-room test` | 0 | `Test Files 204 passed (204)` / `Tests 2673 passed (2673)` |\n| `pnpm typecheck` | 0 | every package `Done`, zero `error TS` |\n| `pnpm test` (ROOT LANE ONLY, no apps/**) | 1 | `Test Files 1 failed \\| 436 passed \\| 2 skipped (439)` / `Tests 11 failed \\| 10410 passed \\| 51 skipped (10472)` |\n| `pnpm test:e2e:browser` | 1 | `5 failed \\| 1 skipped \\| 45 passed (16.6m)` |\n\nTHIS ROW'S OWN SPECS IN THAT BROWSER RUN: `release-approval.spec.ts` PASSED (1.1m). `release-approval-live.spec.ts` SKIPPED — the opt-in guard working, so the shared gate opened no pull request. The live drive's own green run is separate and quoted in comment-6cfd1a8452b9476c97219639c7e868b5: EXIT 0, `1 passed (1.3m)`, marker line printed.\n\nDAEMON LEG, DISCLOSED RATHER THAN QUIETLY RE-RUN: the FIRST attempt, launched immediately after the 16-minute browser lane, was EXIT 1 with exactly one red — `apps/daemon/src/work/foundation-attempt-windows.test.ts:861`, `expect(outcome.ok).toBe(true)` on a worktree-settlement assertion, `Test Files 1 failed | 595 passed (596)`. The clean re-run above is 596/596. Contention flake, not a defect, and not this row's file either way.\n\nPATH-ATTRIBUTED BASELINE — the delta intersected with this row's owned paths is EMPTY. Owned: `tests/e2e/control-room/release-approval-live.spec.ts`, `tests/e2e/foundation/multi-node-reads.ts`, `README.md`, `docs/VISION.md`.\n\nFOREIGN RED 1 — ROOT LANE, measured to a live peer rather than guessed. All 11 failures are in ONE file, `packages/store/src/store-runtime-entrypoint.test.ts`, every one an EPERM on `%TEMP%\\moe-runtime-entrypoint-*` during rm, e.g. `EPERM, Permission denied: \\\\?\\C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-runtime-entrypoint-Ex2e8v` at `:242` via `withProbe` at `:112`. Re-run STANDALONE — `npx vitest run packages/store/src/store-runtime-entrypoint.test.ts` — gives `Tests 11 failed | 1 passed (12)`: the identical set, so it is invariant to my row. That file and `packages/store/src/store-entrypoint-smoke-worker.mjs` are DIRTY in the shared checkout and are NOT MINE — both are in the plan affectedFiles of task-511f9f8d85314926a51b0ed23c8d48fa (WORKING, worker-d0fc1403), with mtimes 21:00 and 20:56, i.e. that seat was editing them WHILE this gate ran (root lane start 20:55:38). Neither was in this session's start-of-session dirty census. Not reverted, not stashed, not committed, not re-fixed.\n\nFOREIGN RED 2 — BROWSER LANE, five specs, none of them this row's:\n- `journeys.spec.ts:79` CR-J1-002 — `getByTestId('cr.nav.resources')` expected disabled, received enabled (static fixture lane).\n- `journeys.spec.ts:95` CR-A11Y-001 — `expect(chips).toHaveLength(5)`, received 0 (static fixture lane).\n- `prd-persistence-boundary.spec.ts:127` — `Test timeout of 180000ms exceeded.`\n- `prd-to-approval.spec.ts:130` — `cr.goals.count` expected `/\\d+ GOAL/u`, received `\"1 goal\"`; a peer's wording change, not a behaviour break.\n- `provider-pause.spec.ts:206` — `expect(staffed).toBe(\"node.deliver@node-e2e-weoxnp\")` received null, with the wrapper transcript carrying `You've hit your session limit · resets 12:10am Asia/Jerusalem`. A real Claude provider limit on this host.\n\nHOW I ATTRIBUTED THOSE FIVE, stated plainly so a grader can re-check the method rather than take my word: I did NOT re-run them standalone — that is a second ~20-minute browser-gate lease. I measured the IMPORT GRAPH instead: `grep -n \"multi-node-reads\\|lane-contract-goal\\|release-\"` over all four files returns nothing, so none can reach a module this row changed. The POSITIVE CONTROL is the stronger half — every real consumer of my `landedCommits` edit is GREEN in that same run: `contract-goal.spec.ts` 3/3, `lane-landing.spec.ts` 5/5 lanes, `release-approval.spec.ts`.\n\nThe `tests/security/boundary-roster.security.ts:762` ENVIRONMENT_WRITE_LAYER red the reopen warned about is not among this row's five gate legs and was not run; task-ba83b202 owns it and I did not touch it.",
       "timestamp": "2026-09-08T18:03:32.617Z"
+    },
+    {
+      "id": "comment-845dd3396660497abf7549f5ff33f374",
+      "author": "qa-2702df88",
+      "content": "QA APPROVAL EVIDENCE (round 3). Approving. The clause that carried the two prior rejections is now discharged, and the row's headline claim I verified MYSELF against github.com rather than reading it off the summary.\n\nDoD 6, THE LIVE DRIVE — INDEPENDENTLY CONFIRMED, and this is the strongest thing on the row:\n```\ngh pr view 33 --repo yaront1111/Moe-NG\n  state OPEN, isDraft false, mergedAt null\n  baseRefName main, headRefName moe-gate3-release-mtsxf568\n  headRefOid 205d51eb26322056fafcdc60ab98c247d1cd135e\n```\nAnd the proof-carrying claim is TRUE in the literal sense, not the marketing sense. I pulled the PR body over the API and hashed it:\n```\nsha256(body, as-is, utf-8) = fbb2d0adb10892de2aa1786b8b39ef8163c390d0b0c4ce32bac6b8b5080c5845\n```\nThat is byte-for-byte the `dossierSha256` the receipt records (`fbb2d0ad...5845`). I checked the near-miss variants too — CRLF-normalised, trailing-newline-stripped and newline-appended all give DIFFERENT digests, so the match is exact rather than incidental. The product opened a real pull request whose body IS the stored dossier.\n\nDoD 5, THE REOPEN CONTRACT — CLOSED. The last rejection's actionable item was that `landAndPublish` drove a landing and publish but never an APPROVED SCOPE, so `readCriterionGoal` failed and `/release/read` correctly answered `{\"goalId\":\"goal-live-1\",\"kind\":\"ABSENT\"}`. The journey now builds the goal instead of picking it off the seed: `createLaneContractGoal` composes the graph, delivers all three nodes through the REAL wrapper and verifies every criterion, so the goal is contract-bound and criterion-VERIFIED before the card is read. The assertion was STRENGTHENED, not weakened — `/release/read` is now asserted `toMatchObject({ kind: \"PRESENT\" })` through the real listener before a single browser assertion. No stub, no hand-seeded graph, exactly as the rejection required. The approve is still the card's own arm-then-confirm two clicks, the PR link is read back off the daemon's receipt, and the recorded argv is the production `ghPrArgv` so a dropped `--base` reds here rather than passing on a green link.\n\nWHAT I COULD NOT RE-RUN, stated plainly. I took browser-e2e-gate at 18:39Z and ran `release-approval.spec.ts`. It FAILED — and the failure is FOREIGN, named by the runtime:\n```\nE2E_DAEMON_READY_TIMEOUT:\n  code: 'ERR_MODULE_NOT_FOUND'\n  url: 'file:///D:/projexts/moe-next/apps/daemon/src/deployment/deploy-candidate-environment.js'\n1 failed  (release-approval.spec.ts:305)\n```\nThe lane's daemon never booted, so the spec died at `assertStopped` with `lane` undefined. Cause: a peer's IN-FLIGHT deployment refactor in the shared worktree — `deploy-command.ts`, `deploy-ports.ts`, `deploy-service.ts`, `rollback-command.ts` modified, plus untracked `deploy-candidate-environment.ts` with NO `.js` bridge. `pnpm typecheck` stays green because tsc never resolves the `.js` specifier; the runtime does. That dirt is uncommitted, so it is a working-tree condition and not a branch defect — HEAD is self-consistent. I raised it with the owner at 18:22Z and again at 18:41Z and did not touch their files. I am NOT charging that red to this row, and I am NOT claiming I watched the journey pass: the row's own browser evidence (45 passed | 1 skipped) stands on the worker's run at a tree that predates this dirt.\n\nI ALSO DID NOT RE-DRIVE THE LIVE PR SPEC, deliberately. `release-approval-live.spec.ts` is opt-in on `MOE_LIVE_RELEASE_PR=1` and opens a REAL pull request on the owner's repository. Re-running it to satisfy my own curiosity would have created PR #34 as review litter on someone else's repo. Verifying #33 by inspection is the same evidence at none of the cost.\n\nGATES: `pnpm --filter @moe/control-room test` EXIT 0, 204 / 2673 — the recorded verification, and I ran that same command twice today with identical counts. `pnpm --filter @moe/daemon test` EXIT 0, 596 / 10644 | 8 skipped, run by me at 16:42Z. `pnpm typecheck` EXIT 0 with 19 `$ tsc` echoes.\n\nDoD 7, DOCS — checked against the governor's specific caution rather than skimmed. README and VISION claim ONLY what was driven: the release gate is marked DRIVEN with the PR named, while the PREVIEW gate is explicitly still BUILT AND WIRED AND NOT DRIVEN, and both standing limits are carried forward rather than declared away (landing has no HTTP ingress so an operator cannot originate one from the screen; a live `release.decide` outruns the browser's 15s transport abort so the link appears on the next look). No sentence flattens the preview clause into the shipped list. That was the exact overclaim risk flagged at 17:52Z and it was avoided.\n\nFILED NOT FIXED, correctly: task-3697c02b for the 15s transport abort, measured rather than inferred (PR #32 was opened at 17:04:12Z by such a session and closed as superseded rather than left dangling).\n\nLANDING: completion commit 00c88cd8 carries all four declared paths — `release-approval-live.spec.ts` (343 new lines), `multi-node-reads.ts`, README.md, docs/VISION.md — plus board JSON. The `multi-node-reads.ts` edit is a real fix (`execFileSync` ENOBUFS on a 1.7MB `git log --format=%B` over a real history, now bounded by `--fixed-strings --grep`), and it resolves a path I had earlier flagged as unattributed dirt: it was this row's after all.",
+      "timestamp": "2026-09-08T18:44:14.569Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:31:45.397Z",
-  "updatedAt": "2026-09-08T18:05:01.331Z",
+  "updatedAt": "2026-09-08T18:44:59.859Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T11:25:19.038Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 3,
     "executedStepCount": 25,
     "rejectCount": 2,
-    "reopenCount": 2
+    "reopenCount": 2,
+    "doneAt": "2026-09-08T18:44:59.859Z",
+    "wallClockMs": 285580821
   },
   "contextFetchedBy": [
     "worker-ca28be90",
@@ -269,7 +277,8 @@
     "worker-76f4ef35",
     "architect-5385678f",
     "worker-bcaa6d5e",
-    "worker-812079a7"
+    "worker-812079a7",
+    "qa-2702df88"
   ],
   "priorHandoffs": [
     {
@@ -572,6 +581,49 @@
       "treeId": "754770564f7be0b8f9d3cedcfa641977390ee6ad",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "00c88cd8cbcc1bb3ca105461d4bd843fb445e23e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-812079a7@2026-09-08T16:50:18Z",
+      "paths": [
+        ".moe/project.json",
+        ".moe/tasks/task-0126aacd753b42a188718c8e87cda0e2.json",
+        ".moe/tasks/task-3697c02bf2ab41a896fcfacb125d9e46.json",
+        ".moe/tasks/task-44c0178bdd86466f854918a3816d42bb.json",
+        ".moe/tasks/task-48945cb6a24d4a5db0723c1f914624d1.json",
+        ".moe/tasks/task-4a9d95cfc26a413cae7e8c07ecc1129b.json",
+        ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+        ".moe/tasks/task-8f86e10504c74e248ccfa6f427b41a15.json",
+        ".moe/tasks/task-baba9e8bb3ff4a259c66d27287d4a5b2.json",
+        ".moe/tasks/task-de80c663569a4ab2b30a9db6ac526e4b.json",
+        ".moe/tasks/task-f9dc8291ad864a6cb5ca0536d3603a43.json",
+        "docs/VISION.md",
+        "README.md",
+        "tests/e2e/control-room/release-approval-live.spec.ts",
+        "tests/e2e/foundation/multi-node-reads.ts"
+      ],
+      "recordedBy": "worker-812079a7",
+      "recordedAt": "2026-09-08T18:05:24.753Z",
+      "treeId": "678554fadfbd6bc0b6cb014437098af151ba3924",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "docs/agent-stack-runbook.md",
+          "taskId": "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
+        },
+        {
+          "path": "docs/VISION.md",
+          "taskId": "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
+        },
+        {
+          "path": "README.md",
+          "taskId": "task-161b7e9d566b4c47b429490a54a6cca1"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -579,14 +631,25 @@
     "tests/e2e/control-room/release-approval-live.spec.ts",
     "tests/e2e/foundation/multi-node-reads.ts",
     "README.md",
-    "docs/VISION.md"
+    "docs/VISION.md",
+    ".moe/project.json",
+    ".moe/tasks/task-0126aacd753b42a188718c8e87cda0e2.json",
+    ".moe/tasks/task-3697c02bf2ab41a896fcfacb125d9e46.json",
+    ".moe/tasks/task-44c0178bdd86466f854918a3816d42bb.json",
+    ".moe/tasks/task-48945cb6a24d4a5db0723c1f914624d1.json",
+    ".moe/tasks/task-4a9d95cfc26a413cae7e8c07ecc1129b.json",
+    ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+    ".moe/tasks/task-8f86e10504c74e248ccfa6f427b41a15.json",
+    ".moe/tasks/task-baba9e8bb3ff4a259c66d27287d4a5b2.json",
+    ".moe/tasks/task-de80c663569a4ab2b30a9db6ac526e4b.json",
+    ".moe/tasks/task-f9dc8291ad864a6cb5ca0536d3603a43.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-bcaa6d5e@2026-09-08T14:53:13Z",
-    "at": "2026-09-08T15:30:07.751Z"
+    "kind": "completion",
+    "sessionId": "worker-812079a7@2026-09-08T16:50:18Z",
+    "at": "2026-09-08T18:05:24.753Z"
   },
   "reviewStartedAt": "2026-09-08T18:05:01.331Z",
   "verification": {
@@ -609,9 +672,11 @@
     "apps/control-room/src/v2/goals/goal-release.tsx",
     "tests/e2e/control-room/lane-landing.ts",
     "apps/control-room/src/v2/goals/goal-release.test.tsx",
-    "tests/e2e/control-room/fake-gh-dependencies.ts"
+    "tests/e2e/control-room/fake-gh-dependencies.ts",
+    "tests/e2e/foundation/multi-node-reads.ts",
+    "tests/e2e/control-room/release-approval-live.spec.ts"
   ],
-  "reviewCompletedAt": "2026-09-07T04:33:05.237Z",
+  "reviewCompletedAt": "2026-09-08T18:44:59.859Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD-5: the journey still fails, but the blocking cause MOVED and is now this row's own. At 0982190d under browser-e2e-gate: `pnpm test:e2e:browser release-approval.spec.ts` EXIT 1, 1 failed, 11.8s, failing at :177 on `/release/read` -> {\"goalId\":\"goal-live-1\",\"kind\":\"ABSENT\"}. The landLaneNode STAFFING_ATTEMPTS_EXHAUSTED that made this foreign in round 1 was fixed at 67b98ba0; landing and publish now complete in ~10s. The journey never drives the goal to an approved scope, so readCriterionGoal fails and the daemon correctly answers ABSENT. Worker-fixable journey setup, not a daemon defect.",
@@ -698,5 +763,7 @@
       ]
     }
   ],
-  "priorBlockedReason": "OWNER SCOPE/RAIL DECISION REQUIRED BEFORE RE-PLAN, not another unbounded execution wait. Audit and reproducible HEAD measurements are in comment-5a785d3ee95f46c58f137ac7974d8ece. The suggested inert-card-only DoD-5 conflicts with global rail 4 clause 2 and the unchanged Gate 3 acceptance requirement; a missing Product Contract binding correctly yields ABSENT and disables approval. I asked the owner directly in the REPL to confirm preserving the full release proof and repairing its existing prerequisite; no confirmation has arrived, so submit_plan would be speculative. DoD-6 additionally lacks an owner-named authorized repository/base for a live PR. Resume after owner confirmation of the retained scope, or an explicit authorized scope/rail amendment preserving accountability for omitted proof, plus the live-target decision. The existing prerequisite is now structurally in dependsOn, preserving all three original dependencies; no duplicate task filed, no source changed, no worker released, and no test/PR success claimed."
+  "priorBlockedReason": "OWNER SCOPE/RAIL DECISION REQUIRED BEFORE RE-PLAN, not another unbounded execution wait. Audit and reproducible HEAD measurements are in comment-5a785d3ee95f46c58f137ac7974d8ece. The suggested inert-card-only DoD-5 conflicts with global rail 4 clause 2 and the unchanged Gate 3 acceptance requirement; a missing Product Contract binding correctly yields ABSENT and disables approval. I asked the owner directly in the REPL to confirm preserving the full release proof and repairing its existing prerequisite; no confirmation has arrived, so submit_plan would be speculative. DoD-6 additionally lacks an owner-named authorized repository/base for a live PR. Resume after owner confirmation of the retained scope, or an explicit authorized scope/rail amendment preserving accountability for omitted proof, plus the live-target decision. The existing prerequisite is now structurally in dependsOn, preserving all three original dependencies; no duplicate task filed, no source changed, no worker released, and no test/PR success claimed.",
+  "completedAt": "2026-09-08T18:44:59.859Z",
+  "reviewSummary": "APPROVED (round 3). Full record: comment-845dd339.\n\nDoD 6 CONFIRMED BY ME. `gh pr view 33 --repo yaront1111/Moe-NG`: OPEN, not draft, not merged, base `main`, head @ 205d51eb. The proof-carrying claim is literal — I pulled the body over the API and hashed it: sha256 = fbb2d0adb10892de2aa1786b8b39ef8163c390d0b0c4ce32bac6b8b5080c5845, byte-for-byte the receipt's `dossierSha256`. CRLF-normalised, newline-stripped and newline-appended variants all differ, so the match is exact, not incidental.\n\nDoD 5 REOPEN CONTRACT CLOSED. The prior rejection's item — `landAndPublish` never drove an APPROVED SCOPE, so `/release/read` answered ABSENT — is fixed at the root: `createLaneContractGoal` composes the graph, delivers three nodes through the REAL wrapper and verifies every criterion, so the goal is contract-bound before the card is read. The assertion was STRENGTHENED to `toMatchObject({kind:\"PRESENT\"})`; no stub, no hand-seeded graph. Approve is still arm-then-confirm, and the recorded production `ghPrArgv` means a dropped `--base` reds rather than passing on a green link.\n\nI COULD NOT RE-RUN THE JOURNEY, and say so rather than imply otherwise. Under the browser gate at 18:39Z it failed with `ERR_MODULE_NOT_FOUND ... deploy-candidate-environment.js`: the lane's daemon never booted, caused by a peer's in-flight deployment refactor (untracked module, no `.js` bridge) in the shared tree. Uncommitted, so HEAD is self-consistent; raised twice with its owner; not charged here. I also deliberately did NOT re-drive the opt-in live PR spec — it opens a real PR on the owner's repo, and inspecting #33 is the same evidence without leaving PR #34 as litter.\n\nGATES: control-room 204 / 2673 EXIT 0 (the recorded verification, run twice by me today); daemon 596 / 10644 | 8 skipped EXIT 0; typecheck EXIT 0.\n\nDoD 7: README/VISION mark RELEASE driven and keep PREVIEW explicitly NOT driven, both limits carried forward. Completion 00c88cd8 carries all four declared paths."
 }

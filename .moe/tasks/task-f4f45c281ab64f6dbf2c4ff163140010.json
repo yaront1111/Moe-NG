@@ -25,8 +25,31 @@
   ],
   "priority": "MEDIUM",
   "order": 144,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-ffe101a7feb942c6a75bb18069bff458",
+      "author": "architect-9556982c",
+      "content": "Build-order measurement at PLANNING claim, 2026-09-08: dependsOn correctly names local-delivery producer task-0ca117e389df43ee9b458255f0752842, currently WORKING/landing.merged:false, no completion/verification. `git status --porcelain -- apps/daemon/src/deployment/deploy-candidate-environment.ts apps/daemon/src/deployment/deploy-candidate-environment.test.ts` reports BOTH ??; `git log --grep='Moe-Task: task-0ca117e389df43ee9b458255f0752842'` returns no landing. Per-file Select-String 'from \"' confirms this module imports environment-delivery, environment-projection, deploy-receipt-contracts. Read-only inspection confirms resolveCandidateMount currently refuses nonnull sshTarget before image inspection and the mount port writes a local file; these are still the producer's mutable WIP, not a landed API to plan against. Releasing THIS architect claim in place and taking independent work, not blocking or touching/releasing the producer worker. Safety reason: planning remote edits/removals now would pin and later overwrite a changing shared-file surface; dependency field will enforce build order for worker claims. Next architect should read producer DONE completion/landing then re-census ALL run/create verb consumers and source-text referrers before a plan/split. Keep remote unsupported refusal until real response and value-free inspect canary prove secure remote delivery. No plan/source change in this session.",
+      "timestamp": "2026-09-08T18:41:49.167Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T18:38:35.074Z",
-  "updatedAt": "2026-09-08T18:38:35.074Z"
+  "updatedAt": "2026-09-08T18:41:49.375Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-08T18:40:39.705Z"
+  },
+  "contextFetchedBy": [
+    "architect-9556982c"
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Fetched task/rails, loaded moe-planning/debugging, read candidate-environment WIP, measured per-file imports and both untracked producer paths plus absent landing commit; durable comment records evidence.",
+      "whatRemains": "After task-0ca117e389df43ee9b458255f0752842 lands, remeasure final API and complete verb/source-shape census, clarify real SSH acceptance setup, then plan or split within path caps.",
+      "pitfalls": "Do not overwrite producer WIP or remove REMOTE_UNSUPPORTED speculatively. Docker --env/--env-file leaks through inspect. No real SSH response proof may be replaced by argv/fake runner assertion; user cancelled standing preview provisioning.",
+      "releasedAt": "2026-09-08T18:41:49.370Z",
+      "releasedBy": "architect-9556982c",
+      "reason": "Build-order handoff: required producer API is untracked active worker WIP; dependency already declared. Plan an independent leaf first, then return after producer lands."
+    }
+  ]
 }

@@ -11,19 +11,140 @@
     "`pnpm --filter @moe/daemon test` EXIT 0 foreground with the `Test Files N passed` count line quoted, at the CURRENT file count AND at count+1 (add one throwaway trivial test file, prove EXIT 0, then remove it). Disclose any foreign red with path attribution rather than calling the leg green."
   ],
   "taskRails": [],
-  "implementationPlan": [],
-  "status": "PLANNING",
-  "assignedWorkerId": null,
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Diagnose the exact real-session arm before changing its lane or deadlines (DoD1/2/4). Record the pre-diff HEAD/owned-path status and current discovered file roster; do not reconstruct 592 files. Add value-free timing to the existing forwarding launchActivationProviderRun probe: monotonic elapsed milliseconds around the actual awaited call, preserve the exact result, and no substituted authority. In the target case report whether discovery succeeded, forwarding call count, elapsed launch-seam and dispatch time, and stable refusal code/layer on failure; never print provider stdout/stderr, credentials or environment values. Under full-suite-gate, run foreground 'pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 src/work/foundation-attempt-windows.test.ts -t \"observes a real exited provider process and files it in the ledger\" --reporter=verbose'. Keep original 240000/300000 bounds and all assertions for this measurement. Record fresh seconds, case actually executed vs runtime-absence branch, exit and count line in a <4500-char row comment. Discovery-only/collected/early-return green is not session evidence. If no completed live measurement is possible, report exact prerequisite/failure; never manufacture a duration or silently raise the bound.",
+      "status": "IN_PROGRESS",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+      ],
+      "startedAt": "2026-09-08T18:43:03.632Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Tests first (test-driven-development): extend existing service test 'settles through the supplied provider-run port with exact server-owned references', reusing scriptProvenProvider, terminaliseServiceResources, harness and real createFoundationCaptureProducer. Assert real cwd exists inside the provided-port callback; prepared assignment is admitted; successful settlement removes that same path with exactly one recorded release. Replay the same dispatch and pin unchanged release/capture/preparation/provider-launch/provider-event/decision counts, durable digest and activation events. Change inputManifest.baseIdentity to 'f'.repeat(40): assert FOUNDATION_ATTEMPT_REPLAY_MISMATCH with DAEMON_FOUNDATION_ATTEMPT and no extra effects. Add a sibling scripted post-launch capture-throws case: prove boundary/capture actually reached, exact FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN@DAEMON_FOUNDATION_ATTEMPT, UNKNOWN durable record with null resultManifest, retained real worktree and zero releases. Label scripted observations explicitly non-physical. In windows.test.ts add cross-platform script-routing/prerequisite contract tests that initially fail against the current manifest/early-return disposition: ordinary selection excludes only the marked full name, live selection includes it with one worker and correct file; failed live discovery cannot yield success and preserves the exact missing/unsupported code@RUNTIME. Keep mocks for prerequisite helper tests local to those tests, never installed for the actual live case. Use existing forwarding seams, no duplicate authority/handoff implementation.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement the approved lane separation. Prefix only the slow arm title with 'LIVE_PROVIDER: ' and keep its existing title text/body in the same file. Register this arm with unconditional it, not runIf/skip; once selected require actual discoverInstalledClaudeRuntime success. A missing/unsupported/other discovery refusal must throw/fail with its original code and layer (CLAUDE_RUNTIME_PATH_MISSING or CLAUDE_RUNTIME_PLATFORM_UNSUPPORTED@RUNTIME as applicable), never return a passing absence assertion. Leave other Windows arms unchanged. Set package script test to 'vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 --testNamePattern=\"^(?!.*LIVE_PROVIDER:)\" src'. Add test:live:foundation-attempt = 'vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 --testNamePattern=\"LIVE_PROVIDER:\" src/work/foundation-attempt-windows.test.ts'. Preserve every original physical-control assertion: producer argv/environment, actual forwarded boundary, pin root, tree removal after proven settlement, OBSERVED and natural EXITED, integer exit, TELEMETRY_STREAM_ANOMALOUS@TELEMETRY_SCHEMA, non-SUCCEEDED provider truth, frozen record, exact provider identity, one durable event/decision, replay/conflict fences. Preserve existing 240s/300s bounds; replace historical rationale with fresh measured launch-seam seconds and 240-minus-measurement margin, explicitly separate 60s outer allowance/15s backstop and make no external worst-case guarantee. Retain existing store-finally and fixture cleanup.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts",
+        "apps/daemon/package.json"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Document the two distinct verification claims in CONTRIBUTING.md without rewriting unrelated module-size guidance. Ordinary 'pnpm --filter @moe/daemon test' covers all non-live cases including deterministic settlement/retention/replay but does NOT certify a real provider session. 'pnpm --filter @moe/daemon test:live:foundation-attempt' is required for this row's delivery and for changes to the foundation Windows launch/settlement/template/boundary path; execute it on a win32 host with a provable installed runtime under the shared gate lease. Absence/unsupported is explicitly unverified live capability, never green evidence. Document foreground commands, nonzero counts, value-free timing/margins, no provider retries or timeout bumps to hide failure, and unchanged legitimate --version arms. POSIX and PowerShell users run the same pnpm scripts; quoted negative-lookahead is in package.json, not shell-specific env assignment. Note root test excludes apps. Include the list-command recipe for checking the actual unfiltered/ordinary/live named-case partition. No generated timing reports or scratch files committed.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "CONTRIBUTING.md"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "ONE terminal verification step. Canonical complete_task evidence command is exactly 'pnpm --filter @moe/daemon test', freshly executed foreground on the final restored tree. First run focused service/windows non-live cases and the mandatory standalone 'pnpm --filter @moe/daemon test:live:foundation-attempt'; the live result requires a nonzero executed test count, one actual forwarded session, finite timing and all preserved physical assertions, not discovery/list/absence success. Verify lane partition from installed Vitest's collected full names: unfiltered set equals ordinary union live, intersection empty, live includes the exact target, every other collected case stays ordinary (no fixed roster counts). The committed routing tests must be green. Under full-suite-gate run full ordinary daemon test at its then-current roster; quote Test Files N passed and Tests count and exact exit. Create only the named count-plus-one file with create-new semantics, containing one passing Vitest test; prove it is discovered, rerun the SAME full daemon command foreground, quote fresh count/exit and remove that exact file in finally after checking its resolved path stays inside this workspace. Do not remove or freeze peer-added files; record before/after rosters and any concurrent delta. Prove the throwaway is absent, then rerun canonical daemon gate on final restored paths for durable complete_task output. Also run required repository legs as separate foreground commands: pnpm typecheck; pnpm test (root lane only); pnpm verify:foundation; pnpm verify:store. Evaluate repository-wide reds at recorded pre-diff merge-base vs final HEAD by failing-path delta intersect owned paths, with an out-of-tree source snapshot if baseline execution is needed, never a sibling git worktree or restoration of shared source. Owned focused/package legs must be green; disclose foreign failures verbatim with paths rather than fabricate whole-repo green. Do not claim apps/control-room coverage. Every test leg must show nonzero executed count, not merely exit0; no piped/tail or chained success masking. Persist long counts/rosters/timing evidence in separate <4500-char comments and concise completionSummary.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/package.json",
+        "CONTRIBUTING.md",
+        "apps/daemon/src/work/foundation-attempt-count-plus-one-task-f9dc8291ad864a6cb5ca0536d3603a43.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/work/foundation-attempt-count-plus-one-task-f9dc8291ad864a6cb5ca0536d3603a43.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "ONE final adversarial self-review, then complete_task/QA handoff. Load adversarial-self-review. Review the four-path diff as a hostile reader: could the live arm disappear from both lanes, be run twice, pass when runtime absent, use a fake or --version session, retain/remove the wrong worktree, release on UNKNOWN, emit secret/provider output, or relaunch on replay? Verify negative regex checks the full nested name and scripts cannot report zero tests as coverage. Confirm timings measure actual forwarded work and fresh live output—not historical comments—supports the retained 240s deadline and remaining margin. Demonstrate targeted tests turn red for a process-local production mutation suppressing successful release and a mutation changing the capture-unknown refusal code/layer; also demonstrate the live prerequisite/routing guards reject the relevant false-green variants. Prefer in-memory Vite transforms; do not write production files outside owned paths or mutate modules a running gate reads. Record mutant subject and named red, with no exhaustive new proof matrix. Confirm no throwaway/probe/evidence artefact survives and owned bytes are identical to the final successful gate. No self-fix to the runner's authority or foreign source. Report all actual modified delivered paths via complete_step.modifiedFiles. If review requires further edits, refresh the canonical gate before complete_task; QA receives measured live execution, ordinary current/count+1 evidence and truthful baseline attribution, not a substituted claim that the live lane is deterministic.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts",
+        "apps/daemon/src/work/foundation-attempt-service.test.ts",
+        "apps/daemon/package.json",
+        "CONTRIBUTING.md"
+      ]
+    }
+  ],
+  "status": "BLOCKED",
+  "assignedWorkerId": "worker-812079a7",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Governor promote BACKLOG -> PLANNING to keep the claim pool stocked. This is the correctly-framed successor to ARCHIVED task-0bd37766, whose file-count premise was falsified. Read the description before planning: the 592-file theory is written down AS DEAD (unchanged suite ran EXIT 0 at 592 files, 596 files on disk today) and the real subject is the ~60s margin between the 240_000 launch bound at foundation-attempt-windows.test.ts:861 and observed 100-122s provider latency. Two architect seats already burned on the dead premise; do not re-open it, and do not widen the bound without a measurement behind the number.",
+  "reopenReason": "Human replied 'continue' in the REPL after proposed deterministic/real-provider lane separation; resuming the same task with that approach confirmed.",
   "createdBy": "GOVERNOR",
   "parentTaskId": null,
   "priority": "MEDIUM",
   "order": 74,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-2caead0672034b3f99c8b9f889da8fd4",
+      "author": "architect-1a475444",
+      "content": "Planning measurement at current shared worktree, 2026-09-08 (no product edits): read foundation-attempt-windows.test.ts:814-942 and the forwarding probe at :80-95. The exact observed-control case still calls the production launchActivationProviderRun, uses SEALED_TEMPLATE.argv/environment, launch timeout 240000 ms and per-case 300000 ms. discovery command: node --input-type=module -e \"import { discoverInstalledClaudeRuntime } from '@moe/runner'; const start = performance.now(); const r = await discoverInstalledClaudeRuntime(); console.log(JSON.stringify({platform:process.platform,discoveryMs:performance.now()-start,ok:r.ok === true,code:r.code,layer:r.layer,truthClass:r.truthClass}));\" => EXIT 0, {platform:\"win32\",discoveryMs:625.4821,ok:true}. This proves runtime discovery succeeds, NOT that the real-session case executed or its launch duration; no launch measurement is claimed. A live-case timing run has not been started; full-suite-gate is currently held by worker-9dcd2d4f/task-44c0178bdd86466f854918a3816d42bb for baseline repository gates, and this file shares fixture lock-1 across runs.\n\nArithmetic clarification: 300-240 = 60 seconds is the case-vs-launch allowance (45 seconds after the cited 15-second boundary slack). Against the historical 100/122-second launch samples, the launch-timeout margins would be 140/118 seconds, NOT 60. Neither historical sample is fresh evidence. Do not propagate the title's margin as a measured fact.\n\nA REPL question asks owner approval for deterministic settlement/replay coverage in the ordinary daemon suite plus preserved, separately invoked real-session coverage mandatory for this row's verification. This avoids replacing the actual provider session with --version or selecting a larger timeout without data. No approach approval received yet; no speculative plan submitted. Current daemon script still includes this file normally. Full-tree source reference search found only comments about this filename in foundation-registry.test.ts and mcp-dispatch-port.test.ts; the test-title literal and exact daemon test script have no other source-text asserting consumers. Existing foundation-attempt-service.test.ts already has WithProviderRun scripted coverage; measure/reuse that before introducing duplicate fixtures. Foreign WIP preserved.",
+      "timestamp": "2026-09-08T18:24:35.109Z"
+    },
+    {
+      "id": "comment-8c7614e4c8714b3a97a57ebbe7e3af61",
+      "author": "architect-1a475444",
+      "content": "Owner resumed with REPL 'continue'; acceptance of proposed ordinary deterministic + explicit required live lane recorded in reopenReason. Planned smallest slice: keep real arm in the same file with LIVE_PROVIDER: title marker, negative full-name regex on ordinary script and positive marker on explicit live script, single-worker live command, no it.skip/env flag or --version replacement. The live arm will be unconditional when selected and any discovery refusal becomes an explicit failing prerequisite with its production code/layer. Ordinary script remains all source files, all non-live cases, current four-worker topology. Strengthen existing scripted-provider service test for real filesystem release/replay and add post-launch capture-unknown retention, explicitly NOT claiming those are physical provider evidence.\n\nFresh on-disk edge measurement: apps/daemon/package.json dependencies declare @moe/context, @moe/runner, @moe/store, @moe/core, @moe/scheduler as workspace:*; pnpm-lock.yaml apps/daemon importer at lines 131-168 has matching link:../../packages/<producer> entries. A compiled probe created only at apps/daemon/src/task-f9dc8291ad864a6cb5ca0536d3603a43-edge-probe.ts was deleted in the same command (PROBE_ABSENT=True). Full source: import * as context from '@moe/context'; import * as runner from '@moe/runner'; import * as store from '@moe/store'; import * as core from '@moe/core'; import * as scheduler from '@moe/scheduler'; void [context.renderContext, runner.discoverInstalledClaudeRuntime, store, core, scheduler]; Command: pnpm exec tsc --noEmit --skipLibCheck --strict --target es2024 --module nodenext --moduleResolution nodenext --types node --allowImportingTsExtensions apps/daemon/src/task-f9dc8291ad864a6cb5ca0536d3603a43-edge-probe.ts => BARE_IMPORT_PROBE_EXIT=0. No manifest/lock dependency repair needed.\n\nFresh local installed-Vitest probe: pnpm --filter @moe/daemon exec vitest list --root . --config package.json --maxWorkers=1 src/work/foundation-attempt-windows.test.ts --json => exit 0, eight collected named cases, including exact target. This is DISCOVERY ONLY, not executed-test evidence; no provider session launched. Installed help confirms --testNamePattern tests full names. Thus negative regex must be ^(?!.*LIVE_PROVIDER:), not ^(?!LIVE_PROVIDER:). Full-tree git grep for observedBoundaryProbe/exact arm title found only windows.test.ts; exact positive deterministic test title only service.test.ts. Filename mentions in two other tests are comments, not asserting consumers. Own paths currently clean; foreign WIP preserved. No fresh provider launch duration claimed. First worker step must measure the original arm before changing lane or limits.",
+      "timestamp": "2026-09-08T18:39:14.912Z"
+    },
+    {
+      "id": "comment-fda33bf07e6c4ab4bb1bddeda6cbcbe2",
+      "author": "worker-812079a7",
+      "content": "STEP-1 PART A DONE (instrumentation); PART B (the live measurement) is queued behind full-suite-gate. worker-812079a7, 2026-09-08 ~18:47Z, branch moe/work-2026-09-04, HEAD 2569dd4e.\n\nWHAT LANDED ON DISK, typechecked, in `apps/daemon/src/work/foundation-attempt-windows.test.ts` only:\n1. `observedBoundaryProbe.launches[]` entries now carry `elapsedMs`, taken with `performance.now()` immediately around the AWAITED production `launchActivationProviderRun` call inside the existing forwarding `vi.mock`. The real function still runs and its result is returned unchanged — no substituted authority, no new seam.\n2. The target arm prints two value-free lines: `[LIVE_PROVIDER_DISCOVERY] {executed, platform, refusalCode}` on BOTH discovery branches (so a runtime-absent host is distinguishable from an executed one — DoD 2), and `[LIVE_PROVIDER_TIMING] {dispatchMs, forwardedLaunches, launchSeamMs[], launchTimeoutMs, settled}` printed BEFORE the first assertion so a refusal is diagnosable from the same line. No stdout/stderr, argv, environment, installedRoot or digest is printed.\n`pnpm --filter @moe/daemon typecheck` => `$ tsc --project tsconfig.json`, EXIT 0. Bounds untouched: launch `timeoutMs` still 240_000, case timeout still `}, 300_000);`.\n\nWHY THE SEAM CLOCK AND NOT THE CASE CLOCK. `timeoutMs: 240_000` bounds the launch await and nothing else; the case clock also counts `readyStore`, worktree materialisation, settlement and TWO further dispatches (the replay and the conflict arm). A margin computed from case duration therefore overstates headroom. `launchSeamMs` is the number DoD 4 asks me to justify the bound against.\n\nCORRECTION TO THE ROW TITLE, already flagged by architect-1a475444 in comment-2caead06 and confirmed by me reading the file: \"~60s of margin\" is NOT the launch margin. 300−240 = 60 s is the case-vs-launch allowance. Against the historical 100 s / 122 s samples the LAUNCH margins would be 140 s / 118 s. I am not inheriting either number — DoD 1 requires a fresh one.\n\nPRIOR MEASUREMENTS I FOUND (records, not my evidence): `mem:gotcha-real-provider-launch-arms-red-under-fleet-load` has this exact arm at **123510 ms and 128444 ms** under fleet load on 2026-09-05, i.e. within ~112 s of the 240 s bound; `mem:gotcha-foundation-attempt-windows-reds-only-when-co-scheduled` has a single-arm `-t` run of it at **251.26 s wall** (green) on 2026-09-06. Both corroborate the description's premise and both are older than today's tree.\n\nLINE NUMBERS HAVE MOVED. The DoD says `:861`; on today's tree the arm opened at `:814` before my edit. Its per-case timeout line was `:942`. Do not grep by the DoD's numbers.\n\nFILE COUNT: `find apps/daemon/src -name \"*.test.ts\" | wc -l` = **597** today, not the 596 in the description — a peer added one since filing. DoD 5's \"current count AND count+1\" will be measured against whatever it reads at run time, not against 596/597.\n\nNO OVERLAP WITH THE TWO PEERS ON THE GATE: task-0126aacd (architect-9556982c) targets `tests/integration/portability/` + `tools/packaging/`; task-44c0178b (worker-9dcd2d4f) targets `tests/security/`. My four declared paths intersect neither.\n\nWHY I AM NOT MEASURING NOW. worker-9dcd2d4f holds full-suite-gate and its note includes a daemon leg — which runs this very file. This suite takes a machine-global launch lock at `tmpdir()/moe-claude-launch-locks/sha256(\"lock-1\").lock`, so a concurrent real-session launch would either refuse with LAUNCH_LOCK_IDENTITY_CONFLICT or contend, corrupting BOTH measurements. Parking on the resource is the correct answer, not a workaround.",
+      "timestamp": "2026-09-08T18:47:32.858Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T14:31:18.565Z",
-  "updatedAt": "2026-09-08T17:58:10.307Z"
+  "updatedAt": "2026-09-08T18:48:09.004Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-08T18:20:58.228Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 5
+  },
+  "contextFetchedBy": [
+    "architect-1a475444",
+    "worker-812079a7"
+  ],
+  "blockedReason": "Waiting for full-suite-gate to run step-1's live measurement. Step-1 part A (value-free timing instrumentation on the existing forwarding launchActivationProviderRun probe, plus two value-free report lines in the target arm) is DONE on disk and typechecks: `pnpm --filter @moe/daemon typecheck` EXIT 0. Part B is the measurement DoD 1 requires, and it cannot run now: worker-9dcd2d4f holds the gate for a leg that includes the daemon suite, which runs this very file, and the suite takes a machine-global launch lock at tmpdir()/moe-claude-launch-locks/sha256(\"lock-1\").lock — a concurrent real-provider session would refuse with LAUNCH_LOCK_IDENTITY_CONFLICT or contend, corrupting both measurements. This is a wait on a shared resource, not a defect or a missing prerequisite; auto-unblock on grant. Disclosed to the holder in chan-ced99359 msg-5fc647be, including that my typechecked edit is dirty in their tree.",
+  "blockedResourceId": "full-suite-gate",
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-08T18:48:09.004Z",
+  "priorBlockedReason": "Awaiting owner confirmation of the REPL-proposed acceptance boundary: deterministic settlement/replay coverage in the ordinary daemon suite, with the existing real-provider-session assertions preserved in a separately invoked live lane required for this task's verification. DoD 3 requires removing external provider-latency dependence without weakening the real session/natural EXITED/boundary/worktree-release assertions; a finite timeout increase cannot guarantee that, while substituting --version or simulated physical evidence would violate the DoD. Need confirmation that relocating the live arm out of the ordinary gate is acceptable (and the live lane's required ongoing invocation), or an alternative accepted boundary. No reply to the REPL question and no approach confirmation yet; architect instructions prohibit speculative submit_plan. Measured findings and exact discovery probe are in comment-2caead0672034b3f99c8b9f889da8fd4: win32 discovery ok in 625.4821ms; launch NOT measured or claimed executed; actual limits still 240s launch / 300s case. Historical 100/122s samples imply 140/118s launch margin, not 60s. No code edited. This is not a file-count repro, peer-WIP block, or resource-wait block.",
+  "blockedOnTaskIds": null,
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-08T18:41:40.664Z",
+  "planningNotes": {
+    "approachesConsidered": "Owner confirmed continuation after the REPL proposal to separate ordinary deterministic coverage from an explicit required live-provider lane. Preserve the live arm in place and route by full test name; strengthen the already-existing scripted-provider service tests, rather than duplicate a >600-line fixture closure. Rejected: raising timeout without fresh data; --version in place of a session; mocked physical evidence labelled real; it.skip/env opt-in green-only behavior; wholesale fixture extraction; re-opening the disproven 592-file theory. The ordinary gate becomes independent of this arm's remote provider latency; the live lane intentionally still reports a bounded, honest external failure. Separation is the fix, not a claim to bound external service latency.",
+    "codebaseInsights": "Re-measured at HEAD c5533f68b10fa519aeed38dc3255827bf08d643d. Read windows.test.ts:814-942: produced SEALED_TEMPLATE argv/environment, forwarding launchActivationProviderRun spy, 240000ms launch / 300000ms case, physical release/pin-root/OBSERVED EXITED, telemetry refusal, replay and conflict assertions all present. 60s is case-minus-launch allowance (45s after cited boundary slack), NOT margin against historical 100/122s samples (those imply 140/118s). No fresh session timing claimed by architect. Discovery-only command in comment-2caead0672034b3f99c8b9f889da8fd4 returned win32/ok:true in 625.4821ms. 'pnpm --filter @moe/daemon exec vitest list --root . --config package.json --maxWorkers=1 src/work/foundation-attempt-windows.test.ts --json' exit0 collected eight cases including exact arm; collection is NOT execution. Installed Vitest help confirms testNamePattern matches full names. git grep of exact arm title, deterministic positive title, observedBoundaryProbe, exact test script and filename found no external asserting shape consumers; filename mentions in foundation-registry.test.ts and mcp-dispatch-port.test.ts are comments only and path remains unchanged. service.test.ts:2538 already has scriptProvenProvider, real capture producer/lifecycle/materializer and provider port; harness.prepared[].assignment.realWorktreePath and harness.releases expose actual tree truth. recordProvenFoundationAttempt returns FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN@DAEMON_FOUNDATION_ATTEMPT for thrown capture. Current dependencies @moe/context, runner, store, core, scheduler all declared in daemon manifest and matching lock importer lines131-168. In-package bare-import compiled probe passed exit0 and was deleted same command; full source/command in comment-8c7614e4c8714b3a97a57ebbe7e3af61. No new dependency edge, exported shape, command kind, or production authority change.",
+    "risks": "Four delivered paths plus one named transient count+1 file. Existing large test modules remain in place deliberately: narrow extensions avoid unrelated multi-file fixture migration; no production-source size increase. Do not change any other Windows arm, provider argument/environment bytes, production timeout/authority, digest or refusal vocabulary. Full live selection must refuse runtime absence/unsupported host rather than pass/skip; ordinary scripted evidence must never be called physical provider evidence. Keep 240s/300s unchanged unless new measured data requires replan, not an invented bump. Serialize any runs of this Windows file using the existing full-suite-gate lease because its fixture lock is lock-1. Preserve peer WIP; no checkout/restore/stash/worktree/whole-tree commit. For process-local mutation drills do not write production files; all scratch evidence remains out of source control. Root pnpm test does not cover apps; never label its count repo-wide green.",
+    "keyFiles": [
+      "apps/daemon/src/work/foundation-attempt-windows.test.ts",
+      "apps/daemon/src/work/foundation-attempt-service.test.ts",
+      "apps/daemon/package.json",
+      "CONTRIBUTING.md",
+      "apps/daemon/src/work/foundation-attempt-settlement.ts",
+      "apps/daemon/src/work/foundation-attempt-store.ts",
+      "packages/runner/src/providers/claude/claude-runtime-discovery.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-08T18:41:42.876Z",
+  "workStartedAt": "2026-09-08T18:43:03.632Z",
+  "declaredFiles": [
+    "apps/daemon/src/work/foundation-attempt-windows.test.ts",
+    "apps/daemon/src/work/foundation-attempt-service.test.ts",
+    "apps/daemon/package.json",
+    "CONTRIBUTING.md"
+  ]
 }
