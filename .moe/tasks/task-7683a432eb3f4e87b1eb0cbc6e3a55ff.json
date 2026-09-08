@@ -30,15 +30,18 @@
     {
       "stepId": "step-2",
       "description": "RECONCILE THE DoD, in a step note, one line per item. DoD 1 (probe loop, one incident, bounded ring, survives restart with no double schedule) -> child task-6ec875f4; DoD 2 (store and pg_dump backups, restore-to-temp sha256 per receipt, retention listing pruned refs) -> child task-95e68a8d; DoD 3 (deployment.rollback human-only with roster backfill, previous image redeployed, DB restore only when requested, four refusals with code + layer) -> child task-95e68a8d; DoD 4 (Deployments card, incident card, Health Environments section, Playwright) -> child task-f008f29a; DoD 5 (the 10-minute live probe, forced failure, rollback) -> child task-f008f29a; DoD 6 (runbook, README, gates) -> child task-f008f29a. NOTE THE SIBLING SEAM EXPLICITLY: this whole feature reads the deploy receipt that task-04b3ce7e349743c2a156d32ee5550ba5 keeps, under a DIFFERENT parent (containerized deployment) that this row may not depend on. Record whether that row landed and whether the receipt shape the children built against matches what actually shipped — a mismatch makes every rollback resolve to nothing.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-09-08T04:14:37.481Z"
+      "note": "DoD RECONCILE, one line per item, restated after the QA reopen.\n\nDoD 1 (probe loop, exactly one incident, bounded ring, survives restart with no double schedule) -> child task-6ec875f4. DISCHARGED and re-derived by QA from assertion shape: HEALTH_PROBE_RING_LIMIT=1440 at monitoring/health-probe-contracts.ts:5 enforced per (project,environment) on EVERY write inside the same access() as the INSERT (health-probe-ring.ts:102-104); flapping across repeated outages at health-probe-ring.test.ts:201; single open card enforced at the DATABASE layer by the partial unique index ON health_incidents(project_id, environment) WHERE closed_at IS NULL (health-incident.ts:19); restart/no-double-schedule at health-probe-schedule.test.ts:156.\n\nDoD 2 (store + pg_dump backups, restore-to-temp sha256 per receipt, retention listing pruned refs) -> child task-95e68a8d. DISCHARGED: BackupProof{sha256, restoredSha256} at backups/backup-ports.ts:9 hashes the RESTORED artifact, not a re-hash of the source; the retention arm compares against the FILESYSTEM, not the receipt's own list — scheduled-backup.test.ts:169 toEqual(before.filter(ref => !existsSync(ref))). Real-PostgreSQL arms skip on win32 without MOE_MIGRATION_RESTORE=1 (among the 8 skips); do not set it, that arm runs `pnpm install` in a generated product root without --store-dir.\n\nDoD 3 (deployment.rollback human-only + roster backfill, previous image redeployed, DB restore only when requested, four refusals with code + layer) -> child task-95e68a8d. PARTIAL, ROUTED to @governors (msg-f2e41640). Behaviour ships and is fail-closed with code AND layer at both ends: deployment.rollback is in HUMAN_ONLY_STEPS (orchestrator/agent-spawn-contract.ts:277) and MCP-excluded; OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION at handler entry (rollback-command.ts:80-83). The LITERALS in the DoD text do not exist: `ROLLBACK_RECEIPT_UNKNOWN`, `ROLLBACK_IMAGE_MISSING` and `moe-rollback-receipt` are 0 grep hits each. DEPLOY_ROLLBACK_RECEIPT_INVALID is a real code at DAEMON_COMMAND_SEAM (a rename), but DEPLOY_ROLLBACK_IMAGE_UNAVAILABLE is only the DETAIL under generic code DEPLOY_BUILD_FAILED (deploy-rollback.test.ts:181, whose own comment forbids promoting it). Renaming spans four DONE rows plus count pins — an amendment, not a worker edit.\n\nDoD 4 (Deployments card, incident card, Health Environments section, Playwright) -> child task-f008f29a. UI HALF DONE (EnvironmentsSection live-environments.tsx:228, IncidentCard needs-you.tsx:143, LatencySparkline environments-section.tsx:104, BackupsList :237). PLAYWRIGHT HALF is the ONE reject and the ONE thing closable here; closed in step 3 by a new spec under tests/e2e/control-room/.\n\nDoD 5 (10-minute live probe, forced failure, rollback) -> child task-f008f29a. ROUTED, not runnable on this host: `find . -name \"*.health.sqlite\" -not -path \"*/node_modules/*\"` = 0 tree-wide and `docker ps -aq` = 0. Absorbed by task-99f364e3 DoD 2+3 (WORKING, docker-gated). Child task-f008f29a's DoD 7 carries the \"record it plainly rather than simulating it\" hatch that this parent's DoD 5 never got.\n\nDoD 6 (runbook, README, gates) -> child task-f008f29a. Gates discharged; docs ROUTED. README.md and docs/agent-stack-runbook.md sit in the PLAN affectedFiles of five live rows (task-161b7e9d WORKING, task-6cbcf5ff WORKING, task-78eedd8e REVIEW, task-817d893f BLOCKED, task-99f364e3 WORKING), so an edit from here is withheld as Moe-Contested and re-declaring does not clear it. README.md:155 is stale but task-99f364e3's docs sweep owns it.\n\nTHE SIBLING SEAM (explicit, as the step demands). task-04b3ce7e349743c2a156d32ee5550ba5 — the containerized-deployment row that KEEPS the deploy receipt, under a different parent this row may not depend on — reads DONE on disk. THE SHAPE MATCHES, measured not assumed: DeployReceiptV1 at deploy-receipt-contracts.ts:53-68 ships exactly the members every consumer here resolves through — receiptId (:61), sha (:65), imageDigest (:58), url (:67), outcome (:59), refusal (:66/:48-50). rollback-target.ts's resolveRollbackTarget reads receipt.outcome === \"DEPLOYED\" && receipt.imageDigest !== null and returns {imageDigest, sha, toReceiptRef: receipt.receiptId}; rollback-command.ts:98-101 admits on the SAME four facts; probeEnvironment reads receipt.url and receipt.sha off the same record. So no rollback resolves to nothing for want of a shape. The one seam that is NOT covered by shape alone is the ledger's positional `previous`, which the children deliberately do not use (rollback-target.ts's own doc: REFUSED receipts stay in ledger order, so `previous` can name the still-running image) — they project down to the receipts that actually ran.",
+      "startedAt": "2026-09-08T04:14:37.481Z",
+      "completedAt": "2026-09-08T04:15:08.427Z"
     },
     {
       "stepId": "step-3",
       "description": "RUN THE GATE SET AT THE INTEGRATED TREE. Each leg standalone and foreground with its `Test Files N passed` count line quoted VERBATIM (global rail 8): `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test`, `pnpm test:e2e:browser`. `pnpm test` covers no apps/** (global rail 18) but IS real evidence here because child 2 touched packages/contracts and the generated client for the rollback kind. STATE WHETHER THE DOCKER-DEPENDENT AND TIME-DEPENDENT ARMS RAN: the live drive needs a deployed environment and ten minutes of real probing, and the restore checks need a real PostgreSQL — a gate output that looks complete while those never executed is the failure mode here. Attribute any red by the merge-base/HEAD delta intersected with this row's owned paths (global rail 3). Named verification command for completion: `pnpm test:e2e:browser`.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-08T04:15:11.093Z"
     },
     {
       "stepId": "step-4",
@@ -103,7 +106,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:13:59.198Z",
-  "updatedAt": "2026-09-08T04:14:37.481Z",
+  "updatedAt": "2026-09-08T04:15:11.093Z",
   "dependsOn": [
     "task-6ec875f4dd5f4f2ab97e46f71bf57b2b",
     "task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4",
@@ -116,12 +119,13 @@
     "firstClaimAt": "2026-09-05T00:54:09.078Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 0,
-    "executedStepCount": 6,
+    "executedStepCount": 7,
     "rejectCount": 1,
     "reopenCount": 1
   },
   "stepsCompleted": [
-    "step-1"
+    "step-1",
+    "step-2"
   ],
   "failedDodItems": [
     {
@@ -241,6 +245,21 @@
       "treeId": "740908271fcf42bcbeb7427ceabadc4a77d43021",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "bc5d58562788cae3c8369dd95a0a0c5ccfd3e2ce",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-4d8571e7@2026-09-08T03:25:32Z",
+      "paths": [
+        ".moe/tasks/task-7683a432eb3f4e87b1eb0cbc6e3a55ff.json"
+      ],
+      "recordedBy": "worker-4d8571e7",
+      "recordedAt": "2026-09-08T04:15:01.300Z",
+      "treeId": "d5dce4f9ebb74e38c8287c67f9694a344f895bac",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -252,8 +271,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-eaa78526@2026-09-08T03:56:40Z",
-    "at": "2026-09-08T04:08:57.926Z"
+    "sessionId": "worker-4d8571e7@2026-09-08T03:25:32Z",
+    "at": "2026-09-08T04:15:01.300Z"
   },
   "workStartedAt": "2026-09-08T03:25:53.187Z",
   "reviewStartedAt": "2026-09-08T03:56:37.932Z",
