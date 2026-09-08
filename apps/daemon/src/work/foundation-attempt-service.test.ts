@@ -1,6 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -2535,6 +2537,21 @@ describe("foundation attempt dispatch — the provider run reaches the ledger", 
     return { calls: () => count, providerRun, requests };
   }
 
+  /** The real working directory the boundary was HANDED, read off the launch
+   *  request the port actually received rather than off a harness copy. */
+  function launchedCwd(input: Parameters<FoundationAttemptProviderRun>[1]): string {
+    const request = input.request as { readonly cwd?: unknown };
+    if (typeof request.cwd !== "string") throw new TypeError("the launch request carries no cwd");
+    return request.cwd;
+  }
+
+  /** The real worktree the preparation admitted for this dispatch. */
+  function preparedWorktree(run: Harness): string {
+    const [answer] = run.prepared;
+    if (answer === undefined || !answer.ok) throw new Error("no assignment was prepared");
+    return answer.assignment.realWorktreePath;
+  }
+
   it("settles through the supplied provider-run port with exact server-owned references", async () => {
     const store = readyStore("provider-injected-proven");
     terminaliseServiceResources(store, "provider-injected-proven");
@@ -2543,8 +2560,18 @@ describe("foundation attempt dispatch — the provider run reaches the ledger", 
       readonly authority: Parameters<FoundationAttemptProviderRun>[0];
       readonly input: Parameters<FoundationAttemptProviderRun>[1];
     }> = [];
+    // THE PHYSICAL FACT THIS CASE CAN OWN, sampled at the only instant it is
+    // true. The observation is scripted, so this arm is NOT evidence of a real
+    // provider session — but the worktree under it is materialised by the real
+    // node materializer, and whether it exists WHILE the boundary holds it is a
+    // fact about the daemon, not about the provider. Sampled inside the
+    // callback because a post-dispatch read cannot distinguish "never created"
+    // from "created and released".
+    let cwdAtLaunch: string | null = null, cwdExistedAtLaunch: boolean | null = null;
     const providerRun: FoundationAttemptProviderRun = async (authority, input) => {
       calls.push({ authority, input });
+      cwdAtLaunch = launchedCwd(input);
+      cwdExistedAtLaunch = existsSync(cwdAtLaunch);
       return await launchActivationProviderRun(authority, input);
     };
     const run = harness(store, {
@@ -2577,6 +2604,90 @@ describe("foundation attempt dispatch — the provider run reaches the ledger", 
     });
     const stored = readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE);
     expect(stored.ok && stored.record.resultManifest).not.toBeNull();
+
+    // THE TREE THE LAUNCH RAN IN IS THE TREE THE PREPARATION ADMITTED, it
+    // existed while the boundary held it, and a proven settlement is what took
+    // it away — released exactly once, against that same assignment.
+    const worktree = preparedWorktree(run);
+    expect(run.prepared).toHaveLength(1);
+    expect(cwdAtLaunch).toBe(worktree);
+    expect(cwdExistedAtLaunch).toBe(true);
+    expect(existsSync(worktree)).toBe(false);
+    expect(run.releases).toHaveLength(1);
+    expect(run.releases[0]?.assignment.realWorktreePath).toBe(worktree);
+
+    // REPLAY MOVES NOTHING. Counts AND durable bytes: a second physical launch,
+    // a second capture, a second preparation or a re-release would each be a
+    // real defect that an outcome-only assertion cannot see.
+    const before = providerSnapshot(store);
+    const activationBefore = eventTypes(store, ACTIVATION_AGGREGATE);
+
+    const replay = await run.service.dispatch(dispatchRequest());
+
+    expect(replay.ok).toBe(true);
+    expect(providerSnapshot(store)).toEqual(before);
+    expect(eventTypes(store, ACTIVATION_AGGREGATE)).toEqual(activationBefore);
+    expect(calls).toHaveLength(1);
+    expect(run.prepared).toHaveLength(1);
+    expect(run.captureCalls).toHaveLength(1);
+    expect(run.releases).toHaveLength(1);
+    expect(providerBoundaryProbe.launches).toHaveLength(1);
+
+    // AND A DRIFTED INPUT IS REFUSED BY NAME, not merely refused: the
+    // reservation fence answers before any authority, so the drift can never
+    // reach the boundary and mint a second run under the settled identity.
+    const changed = dispatchRequest();
+    changed["inputManifest"] = {
+      ...structuredClone(INPUT_MANIFEST), baseIdentity: "f".repeat(40),
+    };
+
+    const drifted = await run.service.dispatch(changed);
+
+    expectRefusal(drifted, "FOUNDATION_ATTEMPT_REPLAY_MISMATCH", DAEMON_FOUNDATION_ATTEMPT);
+    expect(providerSnapshot(store)).toEqual(before);
+    expect(calls).toHaveLength(1);
+    expect(run.captureCalls).toHaveLength(1);
+    expect(run.releases).toHaveLength(1);
+    expect(providerBoundaryProbe.launches).toHaveLength(1);
+  });
+
+  it("RETAINS the real worktree when the post-launch capture throws", async () => {
+    const store = readyStore("provider-injected-capture-throws");
+    terminaliseServiceResources(store, "provider-injected-capture-throws");
+    scriptProvenProvider(store);
+    let cwdExistedAtLaunch: boolean | null = null;
+    const providerRun: FoundationAttemptProviderRun = async (authority, input) => {
+      cwdExistedAtLaunch = existsSync(launchedCwd(input));
+      return await launchActivationProviderRun(authority, input);
+    };
+    const run = harness(store, {
+      // The capture runs only after a PROVEN launch observation, so a throw
+      // here is the post-launch seam failing with a real tree already on disk.
+      captureResult: (): never => { throw new Error("injected capture producer threw"); },
+      platform: "win32", providerRun,
+    });
+
+    const outcome = await run.service.dispatch(dispatchRequest());
+
+    // THE BOUNDARY WAS REALLY REACHED. Without this the case would pass
+    // identically if the dispatch had refused before ever launching, and the
+    // retention it asserts would be about a tree nothing ever used.
+    expect(providerBoundaryProbe.launches).toHaveLength(1);
+    expect(run.captureCalls).toHaveLength(1);
+    expect(cwdExistedAtLaunch).toBe(true);
+    expectRefusal(outcome, "FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN", DAEMON_FOUNDATION_ATTEMPT);
+    expect(readFoundationAttemptRecord(store, ACTIVATION_AGGREGATE)).toMatchObject({
+      ok: true,
+      record: {
+        reasonCode: "FOUNDATION_ATTEMPT_CAPTURE_UNKNOWN", reasonLayer: DAEMON_FOUNDATION_ATTEMPT,
+        resultManifest: null, truthClass: "UNKNOWN",
+      },
+    });
+    // AN UNPROVEN RESULT RELEASES NOTHING. The evidence an operator needs to
+    // diagnose the throw is the tree itself, so it stays on disk and the
+    // release count is zero rather than "some".
+    expect(existsSync(preparedWorktree(run))).toBe(true);
+    expect(run.releases).toEqual([]);
   });
 
   const INJECTED_PROVIDER_FAILURES = Object.freeze([

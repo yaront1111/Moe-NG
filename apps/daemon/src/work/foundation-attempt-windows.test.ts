@@ -144,11 +144,64 @@ import type { LaunchTemplateFields } from "./launch-template-producer.js";
 const WINDOWS_ONLY = process.platform === "win32";
 
 /**
+ * THE ONE CASE WHOSE CHILD IS A REAL PROVIDER SESSION, so its wall time is the
+ * provider's and this repository does not control it. Measured on an idle host
+ * with the shared gate held and one worker, four runs took 63.0 s, 165.0 s,
+ * 216.3 s and 123.6 s at the launch seam — a 3.4x spread whose worst sample
+ * eats 90% of this arm's 240 s launch deadline before any co-scheduling. That
+ * is why the ordinary daemon gate no longer schedules it: no deadline is
+ * defensible against an unbounded external latency, so the fix is which lane
+ * runs the arm, not which number bounds it.
+ *
+ * The marker lives in the TITLE because `--testNamePattern` is the only
+ * selector that can route one case out of a file the ordinary gate must still
+ * run. Both scripts and the routing contract below read these two constants, so
+ * the registration and the partition cannot drift apart.
+ */
+const LIVE_ARM_TITLE =
+  "LIVE_PROVIDER: observes a real exited provider process and files it in the ledger";
+const OBSERVED_CONTROL_SUITE = "foundation attempt dispatch — the observed physical control";
+
+/**
  * Whatever `discoverInstalledClaudeRuntime` answers on this host, success or
  * refusal. Derived from the production signature rather than restated, so a
  * widened refusal union cannot drift away from what these cases assert.
  */
 type DiscoveryAnswer = Awaited<ReturnType<typeof discoverInstalledClaudeRuntime>>;
+
+/** What the live arm's discovery step answers: the proven runtime, or the refusal verbatim. */
+type LiveRuntimeAnswer =
+  | {
+      readonly ok: true; readonly installedRoot: string;
+      readonly observation: ProviderRuntimeObservation;
+    }
+  | { readonly ok: false; readonly refusal: DiscoveryAnswer };
+
+/**
+ * THE LIVE LANE'S PREREQUISITE, AND WHY IT CANNOT GO GREEN WITHOUT ONE.
+ *
+ * The ordinary gate no longer schedules the live arm, so the live script is the
+ * ONLY thing that runs it, and a host that cannot run it must say so instead of
+ * passing. The old disposition returned a green absence assertion, which was
+ * honest while the arm also rode the ordinary lane — a runtime-less host would
+ * otherwise have failed every daemon leg. Once the arm is the live script's
+ * whole purpose that same green is a false report of a capability nobody
+ * exercised, so absence becomes a failure here.
+ *
+ * The refusal is rethrown with its OWN code AND layer rather than a substituted
+ * one: a missing runtime, an unsupported platform and an ambiguous install are
+ * different operator problems and the message has to say which.
+ */
+function requireProvenRuntime(found: LiveRuntimeAnswer): {
+  readonly installedRoot: string; readonly observation: ProviderRuntimeObservation;
+} {
+  if (found.ok) return { installedRoot: found.installedRoot, observation: found.observation };
+  const refusal = found.refusal as { readonly code?: unknown; readonly layer?: unknown };
+  const code = typeof refusal.code === "string" ? refusal.code : "UNTYPED_REFUSAL";
+  const layer = typeof refusal.layer === "string" ? refusal.layer : "UNTYPED_LAYER";
+  throw new Error(
+    `LIVE_PROVIDER lane requires a provable installed Claude runtime: ${code}@${layer}`);
+}
 
 const encoder = new TextEncoder();
 const scratchRoots: string[] = [];
@@ -799,10 +852,15 @@ describe("foundation attempt dispatch — the observed physical control", () => 
   }
 
   /**
-   * The capability-absent assertion. ONLY the missing-runtime code is admitted
-   * here: any other refusal — an ambiguous duplicate, an invalid search path, an
-   * unsupported platform — is a real red and is rethrown verbatim, so a broken
-   * discovery can never hide behind the honest branch.
+   * The capability-absent assertion, for the arms that still ride the ORDINARY
+   * lane. Those must stay green on a runtime-less host or every daemon leg on
+   * such a host reds; only the live arm, which the ordinary lane no longer
+   * schedules, escalates absence to a failure through `requireProvenRuntime`.
+   *
+   * ONLY the missing-runtime code is admitted here: any other refusal — an
+   * ambiguous duplicate, an invalid search path, an unsupported platform — is a
+   * real red and is rethrown verbatim, so a broken discovery can never hide
+   * behind the honest branch.
    */
   function assertRuntimeAbsent(refusal: DiscoveryAnswer): void {
     const code = "code" in refusal ? refusal.code : undefined;
@@ -823,23 +881,25 @@ describe("foundation attempt dispatch — the observed physical control", () => 
       .filter((decision) => decision.commandKind === PROVIDER_RUN_COMMAND_KIND);
   }
 
-  it.runIf(WINDOWS_ONLY)("observes a real exited provider process and files it in the ledger", async () => {
+  it(LIVE_ARM_TITLE, async () => {
     const found = await discovered();
-    // DID THIS ARM ACTUALLY EXECUTE? On a host with no provable installed
-    // runtime the case returns on the next line, so a green leg is vacuous
-    // evidence FOR THIS ARM and the verifier has to be able to tell the two
-    // apart. Printed on both branches, value-free: the boolean, the platform,
-    // and the typed code when absent — never a path, a digest or child output.
+    // DID THIS ARM ACTUALLY EXECUTE? Printed BEFORE the prerequisite so a
+    // refusal is diagnosable from the same line as a pass. Value-free: the
+    // boolean, the platform, and the typed code when absent — never a path, a
+    // digest, a credential or child output.
     console.log(`[LIVE_PROVIDER_DISCOVERY] ${JSON.stringify({
       executed: found.ok, platform: process.platform,
       refusalCode: found.ok
         ? null
         : ("code" in found.refusal ? found.refusal.code : "UNTYPED_REFUSAL"),
     })}`);
-    // task-4db73e90: this host has no installed claude runtime — assert the
-    // typed refusal instead of skipping the case.
-    if (!found.ok) return assertRuntimeAbsent(found.refusal);
-    const { installedRoot, observation } = found;
+    // THE PREREQUISITE, NOT AN ESCAPE HATCH. This arm is the live script's
+    // whole purpose, so a host that cannot run it must FAIL rather than report
+    // a capability nobody exercised. `requireProvenRuntime` rethrows the
+    // discovery's own code and layer, so the operator learns which problem they
+    // have. It replaces the old green absence branch, which was only honest
+    // while this arm also rode the ordinary lane.
+    const { installedRoot, observation } = requireProvenRuntime(found);
     const root = scratch("observed-control");
     const isolated = isolatedTarget("observed-control-trees");
     const store = readyStore(root);
@@ -856,12 +916,26 @@ describe("foundation attempt dispatch — the observed physical control", () => 
       bootstrapCredentialDigest: DIGEST_B, cwd: isolated.worktreePath,
       environment: { ...SEALED_TEMPLATE.environment },
       launchSelection: SEALED_TEMPLATE.launchSelection,
-      // BOUNDED, AND MEASURED. The produced argv is a real provider session
-      // rather than `--version`, so the child's latency is the provider's:
-      // observed at 100s and 122s on this host, which made the old 120_000
-      // bound a coin flip. 240_000 keeps a real bound — the launcher's own
-      // deadline still fires, and it stays under this case's 300_000 vitest
-      // timeout even with the boundary's 15s crash-safety slack on top.
+      // BOUNDED, AND MEASURED — AND THE BOUND IS NOT WHAT MAKES THIS SAFE.
+      // The produced argv is a real provider session rather than `--version`,
+      // so the child's wall time is the provider's. Measured fresh at the
+      // launch seam on this host, gate held, one worker, four runs: 63.0s,
+      // 165.0s, 216.3s, 123.6s. Against 240_000 that leaves 177.0s, 75.0s,
+      // 23.7s and 116.4s of margin. The worst sample consumed 90% of the
+      // deadline on an OTHERWISE IDLE host, and the samples carry no usable
+      // trend — 3.4x spread with no ordering to extrapolate from — so no
+      // single one, and no average of them, may argue a bound.
+      //
+      // 240_000 therefore stays exactly where it was, and is NOT a claim that
+      // the provider answers within it. Raising it to any N would only re-arm
+      // the same failure at N. What changed is the lane: this arm no longer
+      // runs on the ordinary daemon gate, so its external latency can no
+      // longer red a row that never touched it. Here it remains a real bound —
+      // the launcher's own deadline still fires, and it stays under this
+      // case's 300_000 vitest timeout even with the boundary's 15s
+      // crash-safety slack, leaving roughly 45s of outer allowance for the
+      // rest of the leg. On the live lane a provider slower than 240s is
+      // reported as the failure it is, never retried away.
       limits: { stderrBytes: 65_536, stdoutBytes: 65_536, tailBytes: 1_024, timeoutMs: 240_000 },
       runtime: { installedRoot, pinRoot, quotedObservation: observation },
     };
@@ -1257,5 +1331,176 @@ describe("foundation attempt dispatch — the observed physical control", () => 
     } finally {
       store.close();
     }
+  });
+});
+
+/**
+ * THE LANE PARTITION, GRADED CROSS-PLATFORM.
+ *
+ * These cases carry no `runIf`: the routing contract is a property of the
+ * manifest and the registration, not of the host, and the host that most needs
+ * it graded is the one that CANNOT run the live arm. They are the reason a
+ * green `pnpm --filter @moe/daemon test` still means something after the slow
+ * arm left it — without them the arm could be dropped from both lanes, or
+ * silently pulled back into the ordinary one, and every gate would stay green.
+ *
+ * The partition is asserted in BOTH directions. Checking only that the live
+ * name is excluded from the ordinary lane would stay green if the live script
+ * stopped selecting it, and checking only that the live script selects it would
+ * stay green if the ordinary lane started running it too.
+ */
+describe("foundation attempt dispatch — the live provider lane's routing contract", () => {
+  interface DaemonManifest { readonly scripts: Readonly<Record<string, string>>; }
+
+  const MANIFEST = JSON.parse(
+    readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+  ) as DaemonManifest;
+  const SOURCE = readFileSync(
+    new URL("./foundation-attempt-windows.test.ts", import.meta.url), "utf8");
+  const LIVE_SCRIPT = "test:live:foundation-attempt";
+
+  /** Vitest matches `--testNamePattern` against the FULL nested name — every
+   *  enclosing suite title joined to the case title — so the patterns are
+   *  graded against that, never against a bare title. */
+  function fullName(title: string): string {
+    return `${OBSERVED_CONTROL_SUITE} > ${title}`;
+  }
+
+  /** The selector a script actually hands Vitest, read out of the manifest
+   *  rather than restated here: a contract that quoted its own copy of the
+   *  regex would keep passing after the script stopped carrying it. */
+  function patternOf(scriptName: string): RegExp {
+    const script = MANIFEST.scripts[scriptName];
+    if (script === undefined) throw new Error(`daemon manifest has no "${scriptName}" script`);
+    const found = /--testNamePattern="([^"]+)"/u.exec(script);
+    if (found?.[1] === undefined) {
+      throw new Error(`"${scriptName}" carries no --testNamePattern: ${script}`);
+    }
+    return new RegExp(found[1], "u");
+  }
+
+  /**
+   * Every case title THIS file registers: the literal titles as written, plus
+   * the live arm, which registers through the shared constant. Reading the
+   * roster off the source is what makes the partition below total — a case
+   * added to neither lane is a case the ordinary gate silently stopped running.
+   */
+  function registeredTitles(): readonly string[] {
+    const literals = Array.from(
+      SOURCE.matchAll(/^ {2}it(?:\.runIf\([A-Za-z_]+\))?\("([^"]+)"/gmu),
+      (found) => found[1] as string);
+    return [...literals, LIVE_ARM_TITLE];
+  }
+
+  const TITLES = registeredTitles();
+
+  it("registers the live arm unconditionally, so no host can skip it green", () => {
+    // `it.runIf(...)` would report a SKIP as a pass on a host that cannot run
+    // the arm, which is exactly the false green the live script exists to
+    // prevent. Its prerequisite is enforced inside the case, by throwing.
+    // The needles are ASSEMBLED rather than written whole: a literal spelling
+    // of the forbidden registration would appear in this file's own source and
+    // fail the check against itself.
+    const arm = "LIVE_ARM_" + "TITLE";
+    expect(new RegExp(`^ {2}it\\(${arm}, async \\(\\) => \\{$`, "mu").test(SOURCE)).toBe(true);
+    expect(SOURCE).not.toContain(`it.runIf(WINDOWS_ONLY)(${arm}`);
+    expect(SOURCE).not.toContain(`it.skip(${arm}`);
+    expect(SOURCE).not.toContain(`it.todo(${arm}`);
+  });
+
+  it("collected a nonempty case roster to partition", () => {
+    // A roster that silently regexed to zero titles would make every partition
+    // assertion below vacuously true.
+    expect(TITLES.length).toBeGreaterThan(1);
+    expect(TITLES).toContain(LIVE_ARM_TITLE);
+    expect(new Set(TITLES).size).toBe(TITLES.length);
+  });
+
+  it("carries the lane marker in no suite title, only in the one case title", () => {
+    // The patterns are graded on full nested names, so a suite title carrying
+    // the marker would drag every case inside it across the lane boundary.
+    const suites = Array.from(
+      SOURCE.matchAll(/^describe\("([^"]+)"/gmu), (found) => found[1] as string);
+    expect(suites.length).toBeGreaterThan(0);
+    expect(suites.filter((title) => title.includes("LIVE_PROVIDER:"))).toEqual([]);
+    expect(TITLES.filter((title) => title.includes("LIVE_PROVIDER:"))).toEqual([LIVE_ARM_TITLE]);
+  });
+
+  it("excludes the live arm from the ordinary daemon gate, and excludes nothing else", () => {
+    const ordinary = patternOf("test");
+
+    expect(ordinary.test(fullName(LIVE_ARM_TITLE))).toBe(false);
+    expect(TITLES.filter((title) => !ordinary.test(fullName(title)))).toEqual([LIVE_ARM_TITLE]);
+  });
+
+  it("routes the live arm, and only the live arm, to the dedicated live script", () => {
+    const live = patternOf(LIVE_SCRIPT);
+
+    expect(live.test(fullName(LIVE_ARM_TITLE))).toBe(true);
+    expect(TITLES.filter((title) => live.test(fullName(title)))).toEqual([LIVE_ARM_TITLE]);
+  });
+
+  it("partitions every registered case into exactly one lane", () => {
+    const ordinary = patternOf("test"), live = patternOf(LIVE_SCRIPT);
+    const selected = TITLES.map((title) => ({
+      inLive: live.test(fullName(title)),
+      inOrdinary: ordinary.test(fullName(title)), title,
+    }));
+
+    // Union is total: no case is dropped from both lanes.
+    expect(selected.filter((seen) => !seen.inOrdinary && !seen.inLive)).toEqual([]);
+    // Intersection is empty: no case is billed to both, so the ordinary gate
+    // never inherits the live arm's provider latency by running it twice.
+    expect(selected.filter((seen) => seen.inOrdinary && seen.inLive)).toEqual([]);
+  });
+
+  it("runs the live script serially against exactly this file", () => {
+    const script = MANIFEST.scripts[LIVE_SCRIPT];
+    if (script === undefined) throw new Error(`daemon manifest has no "${LIVE_SCRIPT}" script`);
+
+    // One worker: the suite takes a machine-global launch lock, so a parallel
+    // second real session refuses with LAUNCH_LOCK_IDENTITY_CONFLICT.
+    expect(script).toContain("--maxWorkers=1");
+    expect(script).toContain("src/work/foundation-attempt-windows.test.ts");
+    // No retries and no widened deadline: a live failure is reported, never
+    // papered over. The arm keeps its own explicit per-case bound.
+    expect(script).not.toContain("--retry");
+    expect(script).not.toContain("--testTimeout=0");
+  });
+
+  it("refuses a missing runtime with its own code and layer instead of passing", () => {
+    const refused = (): unknown => requireProvenRuntime({
+      ok: false,
+      refusal: {
+        code: "CLAUDE_RUNTIME_PATH_MISSING", layer: "RUNTIME", ok: false, truthClass: "UNKNOWN",
+      } as unknown as DiscoveryAnswer,
+    });
+
+    expect(refused).toThrow("CLAUDE_RUNTIME_PATH_MISSING@RUNTIME");
+  });
+
+  it("refuses an unsupported platform with its own code and layer, not the missing one", () => {
+    const refused = (): unknown => requireProvenRuntime({
+      ok: false,
+      refusal: {
+        code: "CLAUDE_RUNTIME_PLATFORM_UNSUPPORTED", layer: "RUNTIME", ok: false,
+        truthClass: "UNKNOWN",
+      } as unknown as DiscoveryAnswer,
+    });
+
+    // Distinguishing the two is the point: a live lane that collapsed every
+    // discovery refusal into "no runtime installed" would send an operator on
+    // an install hunt for a platform that can never run the arm.
+    expect(refused).toThrow("CLAUDE_RUNTIME_PLATFORM_UNSUPPORTED@RUNTIME");
+    expect(refused).not.toThrow("CLAUDE_RUNTIME_PATH_MISSING");
+  });
+
+  it("returns the proven runtime's own root and observation unchanged", () => {
+    const observation = { observationDigest: DIGEST } as unknown as ProviderRuntimeObservation;
+
+    const proven = requireProvenRuntime({ installedRoot: "C:\\claude", observation, ok: true });
+
+    expect(proven.installedRoot).toBe("C:\\claude");
+    expect(proven.observation).toBe(observation);
   });
 });
