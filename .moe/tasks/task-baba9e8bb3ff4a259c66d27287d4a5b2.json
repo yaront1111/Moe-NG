@@ -1,0 +1,36 @@
+{
+  "id": "task-baba9e8bb3ff4a259c66d27287d4a5b2",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "bug: fake-Docker browser receipt assertion still expects unredacted stderr",
+  "description": "Found in parent task-78eedd8ebc2b43c581ac21ea28648a9a final gate: pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts deploy-fake-docker.spec.ts -g DEPLOY_DOCKER_UNAVAILABLE fails at :180/:181, expecting detail 'docker: not found' but durable receipt correctly carries '[REDACTED]', with DEPLOY_DOCKER_UNAVAILABLE@DAEMON_DEPLOY_ENGINE unchanged.\nDONE task-c78140e9a4b749078d4fb633e2e70850 shipped deploy-ledger.ts:50-53 output-allowlist redaction; this asserting consumer was missed. Reproduced full browser and standalone (18.0s); no UI renders in this arm, no parent-owned code edited.",
+  "definitionOfDone": [
+    "Update the fake-Docker durable receipt assertion to the shipped redaction contract while retaining exact refusal code, layer, and dispatch-stage checks; do not weaken production redaction.",
+    "Run the full deploy-fake-docker.spec.ts browser file under the browser lease, with nonzero passing test count and teardown evidence; record full browser baseline if run."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-c78140e9a4b749078d4fb633e2e70850"
+  ],
+  "priority": "MEDIUM",
+  "order": 136,
+  "comments": [
+    {
+      "id": "comment-f6f65323575f42a3a72bb49939e45109",
+      "author": "governor-12ae245c",
+      "content": "GOVERNOR NOTE — a concern I raised against this row's framing, checked and WITHDRAWN. Recorded so the planner does not spend a step re-opening it.\n\nIn #workers (msg-c3a6d207) I warned that this might not be a stale assertion but an OVER-REDACTION defect in DONE task-c78140e9 — the theory being that `docker: not found` carries no secret, so blanketing it would mean that row traded a leak for a blindfold and every operator-facing refusal detail on this path went opaque. That theory is FALSE. I read the implementation; the filer's framing is correct and this row is aimed at the right side.\n\nWhy it is false, from `apps/daemon/src/deployment/deploy-ledger.ts` (note: `deployment/`, not `deploy/` as the description says — worth fixing so nobody greps the wrong path):\n- `declassifyRefusal` keeps `code` and `layer` ALWAYS and declassifies only the free-text `detail`. `DEPLOY_DOCKER_UNAVAILABLE` is itself a member of `PUBLIC_PHASE_DETAILS`, so the vocabulary every reader routes on is untouched. Nothing went opaque.\n- The redacted value is raw tool stderr off `lastStderrLine`, which is the untrusted class by construction, not a benign message caught by a clumsy matcher.\n- The allowlist is deliberate and its rationale is written at :30-38: a detector CANNOT recognise these secrets — an environment value is opaque and arrives inside a 600-byte stderr tail with no scheme, delimiter or header to match on. So the defence is a finite set of production-minted strings rather than pattern-matching. Membership is EXACT — no trim, no prefix, no case folding — precisely because `\"<phase>: <tool output>\"` is how a secret rides beside a safe word.\n\nSo DoD 1 is correctly aimed: update the consumer to the shipped redaction contract, keep the exact code/layer/dispatch-stage checks, and do not weaken production redaction. Concretely, do NOT \"fix\" this by adding `docker: not found` — or any stderr-derived string — to `PUBLIC_PHASE_DETAILS`. That set may only ever contain strings minted by production code with no caller text in them; widening it to satisfy a test would reintroduce exactly the leak c78140e9 closed, and would do it in the one place designed to prevent it.\n\nOne process fact for whoever grades this: c78140e9 was gated on the daemon and control-room legs, and this red only appears in the browser lane, which was not in its gate set. The gate set did not reach the consumer; no reviewer skipped a step.",
+      "timestamp": "2026-09-08T14:53:12.587Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-08T14:52:25.767Z",
+  "updatedAt": "2026-09-08T14:53:12.587Z"
+}

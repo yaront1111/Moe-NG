@@ -108,16 +108,43 @@ export interface CutoverDirent {
 
 /**
  * The default exclusions, and the difference between a walk and a refusal on
- * this repo. Every name here is DEPENDENCY OR DERIVED OUTPUT, never source:
- * `node_modules` (pnpm junctions, and the wall the live run hit), `dist` and
- * `target` (build output, 0 tracked files between them), `.git` (the object
- * store, which any commit rewrites). MEASURED 2026-09-03 on this checkout:
- * 22473 non-`node_modules` files on the FILESYSTEM — the tracked count of 5777
- * badly understates it — falling to 8257 with these four excluded, which is
- * what fits under MAX_WALK_ENTRIES without moving that bound.
+ * this repo. The first four are DEPENDENCY OR DERIVED OUTPUT: `node_modules`
+ * (pnpm junctions, and the wall the live run hit), `dist` and `target` (build
+ * output), `.git` (the object store, which any commit rewrites). All four hold
+ * ZERO tracked files, so they hide nothing a cutover is about. `.serena` is the
+ * fifth and is NOT that clean — read on.
+ *
+ * WHY `.serena` IS HERE, AND WHY THE BOUND IS NOT WHAT MOVED. The figure this
+ * comment used to carry — 8257 admitted, 2026-09-03 — was calibrated against a
+ * quantity that GROWS ON ITS OWN: `.serena` is an agent memory store gaining a
+ * file per session, ignored by a gitignore OUTSIDE this repository (a
+ * `git check-ignore -v` under it answers `<home>/.gitignore_global:1:.serena/`),
+ * so headroom under MAX_WALK_ENTRIES was spent by SESSIONS, not by the repo.
+ * Five days later the walk measured 10574 and the real-root acceptance refused
+ * with CUTOVER_MANIFEST_ENTRY_LIMIT_EXCEEDED — `.serena` alone being 4303 of
+ * them, 41%. The population was the defect, so the bound stays at 10_000:
+ * calibrating a limit against a moving number only buys time until it moves.
+ *
+ * THE COST, STATED RATHER THAN GLOSSED. 972 of those 4303 ARE tracked (970 under
+ * `.serena/memories`) and stop being manifested. Accepted because the other 3331
+ * — 77% — are host-local session churn, and because this walk excludes by NAME:
+ * admitting `.serena/*` while skipping `.serena/memories/*` is not expressible
+ * without changing the mechanism. Agent notes ABOUT the repository are not the
+ * legacy system being cut over. A row that needs them manifested wants
+ * path-prefix exclusion, not a bigger bound.
+ *
+ * `.moe` (1101) is NOT excluded, the same reasoning read the other way: 1034 of
+ * it is TRACKED board state — 94%, against `.serena`'s 23% — so excluding it
+ * would hide overwhelmingly repository content from a manifest whose job is
+ * proving bytes did not move. Nor does it need deciding; there is headroom.
+ *
+ * MEASURED 2026-09-08 (`find . \( -name node_modules -o -name .git -o -name dist
+ * -o -name target \) -prune -o -print | wc -l`): 10574 with the four original
+ * exclusions, 6271 with `.serena` too — 37% under the unchanged 10_000.
  */
 export const DEFAULT_EXCLUDED_DIRECTORY_NAMES: readonly string[] = [
   ".git",
+  ".serena",
   "dist",
   "node_modules",
   "target",

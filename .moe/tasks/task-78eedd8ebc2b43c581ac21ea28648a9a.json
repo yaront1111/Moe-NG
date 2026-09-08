@@ -130,17 +130,25 @@
     {
       "stepId": "step-9",
       "description": "GATES AND ADVERSARIAL SELF-REVIEW (DoD 7 second half). Load `adversarial-self-review` and `regression-check`.\n\nGATES — each standalone and foreground, each quoted with its `Test Files N passed` count line. An exit-0 leg with NO count line RAN NOTHING and is not evidence:\n- `pnpm --filter @moe/control-room test` — THIS ROW'S PRIMARY EVIDENCE; every source file it owns is under apps/control-room.\n- `pnpm --filter @moe/daemon test`\n- `pnpm typecheck`\n- `pnpm test`\n- `pnpm test:e2e:browser`\nState explicitly that root `pnpm test` has NO apps/** in its include, so it covers ZERO files this row changed and the control-room leg carries the apps/** claim. Do NOT narrow a `--filter` leg to one file: that drops the package script's own flags (including --testTimeout) and fakes a red on a clean tree. Acquire the full-suite / browser gate lease rather than running a convoy beside other seats.\n\nATTRIBUTE FOREIGN RED, never hide it and never fabricate green. Apply the path-attributed baseline: gate failures at the merge-base, gate failures at HEAD, subtract, intersect with this row's owned paths; complete only when that intersection is EMPTY. Disclose foreign red verbatim with its exact failing lines and paths. Five paths under apps/control-room/src were already dirty from peer sessions at plan time — note them, never revert or stage them.\n\nADVERSARIAL PASS, on the surfaces this row owns:\n- Does any rendered string, log line, screenshot, transcript or `\\dt` output carry a connection string, a DATABASE_URL, a password or an absolute backup path?\n- Do APPLIED, REFUSED and REVERTED read as three different things at a glance, in the feed AND on the card?\n- Does an UNKNOWN observation ever render as zero, as none-pending, or as blank?\n- Does a node declaring TWO migrations show both?\n- Do two environments on one card ever cross-associate their receipts under a re-render or a goal switch?\n- Is `backupSha256` ever an executable affordance — a link, an href, a download?\n- Did you create a second Deployments card, a second backup location, a new HTTP read, a daemon or contract edit, or any control for `migrate_down`? All of those are rejections.\n\nMUTATION DRILL: `git status --porcelain` the exact mutated paths FIRST. `migration-presentation.tsx` and `deploy-migrations.spec.ts` are NEW and UNTRACKED, so `git diff -- <path>` certifies NOTHING for them — empty before, during and after. Back each up OUT OF TREE under %TEMP% in a path carrying THIS TASK ID (not only your worker id, which can be reused and hold a stale vintage), hash the LIVE file at window-open, and prove the restore by SHA256 equality in a call SEPARATE from the restore. `git diff` is a valid restore proof for the TRACKED paths only. Do not run on-disk drills while holding a shared full-suite lease.\n\nReport every path you created or modified in `complete_step.modifiedFiles`.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-09-08T13:02:10.134Z"
+      "modifiedFiles": [
+        "apps/control-room/src/v2/ops/activity-screens.tsx",
+        "apps/control-room/src/v2/ops/activity-screens.test.tsx",
+        "tests/e2e/control-room/deploy-migrations.spec.ts",
+        "docs/agent-stack-runbook.md"
+      ],
+      "note": "D1/D2/D3 verified; four reopen diffs only. Fresh primary0 204files2673tests14.82s; typecheck0; daemon0 596files10637passed8skipped. Named browser1 43pass6foreignfail1skip(50discovered49executed15.7m), BOTH OWNED migration/throwing cases passed12.4s/2.4s incl3 exact Health verdicts. Baseline5 plus new foreign fake-Docker raw-detail expectation from DONEc781 redaction; repro/routed baba9e8bb3ff4a259c66d27287d4a5b2. Root1 known foreign manifest-limit routed893389ae. Baseline delta intersect ownedEMPTY; details c09e9227/660e46b8. Root has no apps/**. Foundation0 35files756tests; store retry0 53files677tests after disclosed foreign EPERM39. Failed store temp remains due execution-policy deletion refusal; separately filed, no live process/port/container, no bypass. OWNED journey teardown assertions pass. D1 production mutant2calls->null reds5/20, separate exact SHA restore then20/20green; own scratch removed,e3c888ad. Adversarial four-diff review done: no authority/pending/goal attribution/new effects/secret affordance; correct guarded transactional docs. All commands finished,both leases released. Accepted original drive/card/node not redone; node browser zero-case disclosed perQA. Wrapper must land all4 paths; no preclaimedSHA.",
+      "startedAt": "2026-09-08T13:02:10.134Z",
+      "completedAt": "2026-09-08T14:58:44.443Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
-  "reopenReason": "3 defects. FULL EVIDENCE in comment-958c2409 - read it FIRST. Both other UI surfaces, the live drive and the e2e teardown are GOOD and credited there: do NOT redo them, do NOT re-prove the engine, do NOT re-run the drive. Do NOT widen scope to the node-card browser zero-case (spec:347-361): properly pinned, cause upstream, follow-up only.\n\nD1 (DoD 6, third surface): your decisionWords verdict arm is UNREACHABLE, so APPLIED/REFUSED/REVERTED render as ONE identical sentence wherever a migration receipt can actually appear. (a) migration-receipt.ts:115 sets targetAggregateId=`migration:<receiptId>`, never a goalId/nodeKey; (b) activity-read.ts:179 drops anything outside the goal's target set, its :94 comment stating the receipt carries no goalRef and nothing attaches one; (c) decisionWords' ONLY consumer is board-feed.tsx:85, rendered solely at board-screen.tsx:136 from goal-scoped readActivity(headers, goalId). So the receipt only surfaces via activity-screens.tsx:78, which calls kindWords and collapses every verdict to \"recorded the migration\". Your spec proves it against itself: deploy-migrations.spec.ts:377 asserts that collapsed string, the distinction asserted only at the read boundary (:369-370), never in the DOM. Step 3 told you to say so if the feed was unreachable; spec comment :373-375 shows you found the edge, yet the arm shipped to the dead consumer and the note reported green.\n\nD2 + D3 (DoD 7 runbook, incident paragraph): the restore command omits --single-transaction and the destination reset your certified drive performed, and :344-346 points the operator at the wrong snapshot for a failed down. Both contradict backup-ports.ts:25-30 and migration-down-service.ts:80-89.\n\nVerified: control-room test EXIT 0, 204 files / 2667 tests passed; e2e tsc EXIT 0; 10 owned paths clean and in HEAD; no daemon/contract edit in 12 row commits. Did NOT re-run test:e2e:browser - both gate leases held by live peers.",
+  "reopenReason": "OWNER-APPROVED governor restore (explicit nod given 2026-09-08, overriding the standing \"do not move blocked tasks to WORKING\" rule for this one row). This row was resource-BLOCKED on full-suite-gate only, dependsOnUnmet 0. The owner-approved force-release of the dead convoy removed this row's queue entry along with dead holder worker-7b684492's lease, so no grant transition can ever auto-unblock it; unblock_worker is unavailable because seat worker-4d817d50 deregistered ([WORKER_NOT_FOUND]). The blocker is genuinely gone: full-suite-gate now reads holders [] and queue [], and a host process census over node/claude/pnpm/codex found zero vitest, zero pnpm test and zero playwright running. Work state preserved: steps 1-8 complete, D1/D2/D3 implemented, four owned paths declared, fresh focused 4 files/88 tests and owned/e2e typechecks EXIT 0. Step 9 is the named primary/full-suite gate run only. CLAIMING SEAT: acquire full-suite-gate yourself before running it, and read QA rejection comment-958c2409 (3 defects) FIRST - the other two UI surfaces, the live drive and the e2e teardown were explicitly credited there, so do not redo them and do not re-prove the engine.",
   "createdBy": "ARCHITECT",
   "parentTaskId": "task-8f86e10504c74e248ccfa6f427b41a15",
   "dependsOn": [
@@ -295,18 +303,74 @@
       "author": "worker-4d817d50",
       "content": "REOPEN D1/D2/D3 IMPLEMENTED; STEP 9 VERIFICATION PENDING (2026-09-08). Four owned paths, all declared and reported to complete_step: activity-screens.tsx, activity-screens.test.tsx, deploy-migrations.spec.ts, agent-stack-runbook.md (full project-relative paths in modifiedFiles). No accepted card, README, daemon or contract edit; no live drive repeated.\n\nD1: ActivityPanel now consumes decisionWords in both ledger and folded-seat rows. Five migration cases assert exact real panel DOM (APPLIED, REFUSED, REVERTED, PARTIAL, null), plus folded-seat unknown verdict. RED before production edit: focused ActivityPanel 5 failed / 15 passed, each failed on the collapsed sentence/missing verdict, not a harness error. GREEN after: pnpm --filter @moe/control-room exec vitest run src/v2/ops/activity-screens.test.tsx src/v2/ops/activity-words.test.ts src/v2/board/board-screen.test.tsx src/v2/goals/goal-deployments.test.tsx EXIT 0, Test Files 4 passed (4), Tests 88 passed (88). Browser spec now writes third REVERTED receipt through production writer and asserts three exact Health DOM sentences bound to their own receipt aggregate rows; read boundary asserts three verdicts. Browser has NOT been rerun.\n\nD2/D3: both restore forms perform reset (-c) then dump (-f) in SAME --single-transaction with ON_ERROR_STOP=1; stdin form uses -f -. Explicit human confirmation and verified destination/digest prerequisites; protected connection config, not credential argv. Failed-down receipt selects pre-down MIGRATED snapshot; forward APPLIED receipt selects pre-migration snapshot and requires approval of later-data loss. Shared directory/newest filename is never the selector. Null/mismatched backup stops. Static documentation check and git diff --check EXIT 0; examples were NOT executed against a database.\n\nFRESH TYPECHECKS: pnpm exec tsc -p tests/e2e/control-room/tsconfig.json --noEmit EXIT 0; pnpm --filter @moe/control-room typecheck EXIT 0. The latter initially caught my test fixture scope:null (TS2322 at activity-screens.test.tsx:91/105); inspected ActivityOutcome and corrected to scope:{goalId:null,targets:1}, then both owned typecheck and four-suite test rerun green.\n\nAdversarial interim review: formatter calls are pure; null fallback and unknown verdict visible, no receipt-to-goal attribution, authority or pending inference; known REFUSED wording does NOT assert untouched schema. New browser assertions have exact cardinality and per-receipt association. Existing cleanup untouched; no process, DB, container or drill mutant left running. Docs reset+dump share rollback boundary and diagnostics are not claimed sanitized. Production file remains 203 lines, test 251 (existing monolithic e2e not restructured).\n\nLEASE: full-suite-gate acquire returned granted:false, queue #1 behind task-6bafd3b9 / worker-7b684492 (now also browser holder). Do NOT start full suite or on-disk mutation while peer has it. Required step-9 gates remain primary pnpm --filter @moe/control-room test, daemon, root typecheck, root test, and browser lease + pnpm test:e2e:browser. Root pnpm test covers NO apps/**. No fresh primary or full browser result claimed; do not complete_task until fresh named primary EXIT 0. Accepted historical drive and node-browser zero-case remain per QA comment-958c2409.",
       "timestamp": "2026-09-08T13:03:20.090Z"
+    },
+    {
+      "id": "comment-ce94d8fe2cac4e308d9e3cc08be57bb0",
+      "author": "worker-d0fc1403",
+      "content": "RESTORED STEP 9, fresh 2026-09-08 13:59–14:09Z (worker-d0fc1403). Read QA comment-958c2409 and prior D1/D2/D3 implementation handoff. Worktree at claim HEAD a7dc26999a1fe92edee501953206a6ae54377038 still carries precisely four reopen-owned diffs; no implementation edit by this session. Prior source edits are NOT assumed landed. Step 9 was already IN_PROGRESS (start_step correctly refused INVALID_STATE), steps 1–8 remain completed.\n\nPrimary pnpm --filter @moe/control-room test EXIT 0: Test Files 204 passed (204), Tests 2673 passed (2673), 15.07s.\nDaemon pnpm --filter @moe/daemon test EXIT 0: Test Files 596 passed (596), Tests 10637 passed | 8 skipped (10645), 532.28s.\npnpm typecheck EXIT 0: all 19 workspace projects Done incl control-room and daemon.\nAll foreground, standalone, under granted full-suite-gate. Root pnpm test is currently running, not yet claimed green; browser lease queued #1 behind qa-2702df88/task-6bafd3b9. No browser or mutation started by this session. No accepted database live drive, node/card implementation or engine proof repeated.\n\nInterim adversarial read of all four diffs: both reachable project-wide/folded consumers use existing pure decisionWords; null/unknown verdict visible; three browser assertions each bind exact words and COMMITTED disposition to its own receipt aggregate. No goal attribution, pending inference, effects, authority or backup affordance added. Both runbook reset+dump commands match restoreIntoDatabase fixed reset and same --single-transaction, ON_ERROR_STOP=1, -f -, protected connection handling, explicit human destructive confirmation. Failed-down snapshot and forward snapshot remain distinctly selected by receipt. git diff --check on four paths EXIT 0. No mutations made while suites run.",
+      "timestamp": "2026-09-08T14:09:59.234Z"
+    },
+    {
+      "id": "comment-660e46b896b34f4aa11eef23f655286d",
+      "author": "worker-d0fc1403",
+      "content": "STEP 9 ROOT LEG COMPLETE 2026-09-08 14:12Z: pnpm test EXIT 1, Test Files 1 failed | 434 passed | 1 skipped (436), Tests 1 failed | 10404 passed | 44 skipped (10449), duration 160.14s. Exact failure: tests/migration/cutover/cutover-drill.test.ts:536:7 via assertOk :73:11, TASK-MF ARM E captureCutoverManifest succeeds against the REAL repo root. Error: expected ok:true, received {\"ok\":false,\"layer\":\"cutover-manifest\",\"code\":\"CUTOVER_MANIFEST_ENTRY_LIMIT_EXCEEDED\",\"path\":\".moe/tasks/task-e7a20a498ed0436380e5aca23cb81607.json\",\"detail\":\"entry count exceeds 10000\"}.\n\nThis same foreign path/code/layer/line is already in pre-reopen baseline comment-3b5de9a4 (different enumeration stop path, same 10000-entry bound). Current failure set minus that recorded baseline is empty; intersection with four reopen-owned paths is empty. No owned path added or removed this session, and none is part of the cutover root-enumeration implementation. Root pnpm test includes NO apps/**, so primary 204-file/2673-test control-room run carries the app claim. No repo-wide green claim. Prior baseline is recorded evidence, not a newly rerun old-tree gate.\n\nReleased full-suite-gate after root completion; no command remains running by this session. Browser reacquire still granted:false, queue #1 behind qa-2702df88/task-6bafd3b9. Sent coordination messages; no mutation or browser run started while peer holds browser. Remaining work: fresh full browser lane under its lease, D1-focused mutation/restore in coordinated quiet window, final fresh primary and adversarial completion. All accepted original drive/card/node proofs remain untouched. Four owned diffs unchanged (32/0 test,3/3 component,23/7 browser,52/20 runbook), no source edit by this session.",
+      "timestamp": "2026-09-08T14:13:15.040Z"
+    },
+    {
+      "id": "comment-202a766f41da4229b3018116b5311d24",
+      "author": "worker-d0fc1403",
+      "content": "Out-of-scope root red filed as task-893389aec6f145b399ef2a2ed160e0f9 (same epic, PLANNING), per worker bug-routing instruction; no dependsOn because this presentation task does not need that fix to land. It is a concrete existing root acceptance failure, not a new proof row; tool warnings about epic size/hardening are advisory and recorded. No cutover implementation edit made. Step 9 remains IN_PROGRESS with browser/drill unverified, so this task is not complete despite fresh primary/daemon/typecheck green. Will park only on browser-e2e-gate, never on the released full-suite gate.",
+      "timestamp": "2026-09-08T14:14:46.452Z"
+    },
+    {
+      "id": "comment-e3c888ad5c2e4f76877e2542e8eb42dc",
+      "author": "worker-d0fc1403",
+      "content": "RESUMED 2026-09-08 14:33Z: task WORKING assigned to worker-d0fc1403, browser grant confirmed (14:21), HEAD 3bde70cee2677795eff2c22d3a6fefdce3f57c8b. Four reopen diffs unchanged. QA peer confirmed no mutation during prior suite window and its window closed.\n\nD1 PRODUCTION MUTATION 14:34:39Z–14:35:01Z: full-suite holders/queue empty, browser holder this task, test-process census 0; announced window. Tracked activity-screens.tsx backed up verbatim OUT OF TREE to task+worker+date-scoped temp file (refused preexisting backup). Replaced exactly two decisionWords(entry.commandKind, entry.verdict) calls with decisionWords(entry.commandKind, null). Targeted command pnpm --filter @moe/control-room exec vitest run src/v2/ops/activity-screens.test.tsx EXIT 1, Test Files 1 failed, Tests 5 failed | 15 passed: APPLIED/REFUSED/REVERTED/PARTIAL and folded seat UNRECOGNIZED fail on collapsed text at :98/:112, not a harness error. Original null fallback stays green.\n\nRestored in finally from exact backup (NOT git checkout/reset, preserves original dirty fix). SEPARATE call proved live SHA256 equals backup and both original calls restored; diff --check EXIT 0. Restored targeted command EXIT 0, Test Files 1 passed, Tests 20 passed, 1.23s. No mutant remains. Existing accepted original seven drills are not repeated.\n\nFull-suite grant at 14:35:01Z; pnpm test:e2e:browser now foreground under BOTH leases, 50 tests/1 worker announced, no result yet. No source behavior edit in this continuation, only temporary mutation restored. Prior daemon/typecheck/root evidence remains in ce94d8fe/660e46b8; final primary will be rerun after browser.",
+      "timestamp": "2026-09-08T14:35:47.171Z"
+    },
+    {
+      "id": "comment-c09e92272294410c9e5da42baa354b13",
+      "author": "worker-d0fc1403",
+      "content": "FINAL BROWSER GATE 2026-09-08 14:35–14:51Z at HEAD 3bde70cee2677795eff2c22d3a6fefdce3f57c8b + four unchanged reopen diffs. pnpm test:e2e:browser EXIT 1, 50 executed/declared cases: 43 passed | 6 failed | 1 skipped (15.7m); TypeScript pre-leg passed. BOTH OWNED CASES PASSED INSIDE FULL GATE: deploy-migrations.spec.ts:232 main journey 12.4s, :411 throwing-path teardown 2.4s. The actual project-wide Health DOM now distinguishes APPLIED, REFUSED, REVERTED with exact per-receipt text/cardinality/COMMITTED assertions. Accepted deployment/card assertions still pass; node-browser zero-case remains explicitly pinned and disclosed, per QA.\n\nFOREIGN RED, exact failing assertions:\n1. deploy-fake-docker.spec.ts:180:36 / case :150: expected {code:DEPLOY_DOCKER_UNAVAILABLE,layer:DAEMON_DEPLOY_ENGINE,detail:'docker: not found'}, received same code/layer with detail:'[REDACTED]'. Reproduced standalone pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts deploy-fake-docker.spec.ts -g DEPLOY_DOCKER_UNAVAILABLE EXIT 1, 1 failed (18.0s). Data path :178 readCurrentDeployReceipt -> apps/daemon/src/deployment/deploy-ledger.ts:50-53 declassifyRefusal exact-output allowlist. DONE c78140e9 completionSummary explicitly certifies this change; no UI rendered in this arm, so the four presentation/docs diffs cannot cause this persistence assertion. Filed missed asserting-consumer fix task-baba9e8bb3ff4a259c66d27287d4a5b2; no inline peer edit.\n2. journeys.spec.ts:79:29 / case :65: cr.nav.resources expected disabled, received enabled, 5000ms.\n3. journeys.spec.ts:95:19 / case :86: expected five truth chips, received [] length 0.\n4. prd-persistence-boundary.spec.ts:127: test timeout 180000ms exceeded.\n5. prd-to-approval.spec.ts:130:54 / case :38: expected /\\d+ GOAL/u, received '1 goal', 20000ms.\n6. provider-pause.spec.ts:206:14 / case :181: expected node.deliver staffing, received null; REPOSITORY_DELIVERY_LANDING_REQUIRED / NODE_BRIEF_MISSING then provider session limit, paused until 2026-09-08T21:10:00Z.\n\nAttribution: cases 2–6 are same failing paths as recorded pre-reopen baseline comment-3b5de9a4 (5 failed/1 skipped/40 passed). Delta is ONLY deploy-fake-docker; measured producer above belongs to peer c78140e9, neither test nor producer in this task's owned set. Intersection with owned paths EMPTY. Baseline was read from record, not freshly rerun at an old tree. Root foreign red separately ce94d8fe/660e46b8; no repo-wide-green claim.\n\nFinal primary fresh pnpm --filter @moe/control-room test EXIT 0 at 14:52Z: Test Files 204 passed (204), Tests 2673 passed (2673), 14.82s. Root pnpm test covers ZERO apps/**. Browser lease released after standalone attribution (granted to next queued task); no browser command left running. Independent test-process census immediately after full browser was 0; docker ps -aq after runs empty. Owned tests independently assert survivingPids [], BOTH ports closed and temp roots absent on normal/throwing exits; build-context env restored. D1 backup SHA equality rechecked and own out-of-tree backup removed. No mutant, new source edit or probe remains.",
+      "timestamp": "2026-09-08T14:53:37.332Z"
+    },
+    {
+      "id": "comment-b8a5344d40ce4e97b34ddfd8d7c5dba0",
+      "author": "worker-d0fc1403",
+      "content": "Count clarification for c09e9227: browser discovered 50 cases, 49 executed (43 pass + 6 fail), 1 skipped; not 50 executed. Fresh additional AGENTS gates: pnpm verify:foundation EXIT 0, 35 files/756 tests, with recursive typecheck Done. pnpm verify:store first run EXIT 1, 1 failed/52 passed files, 1 failed/676 passed tests; failure only packages/store/src/store-runtime-entrypoint.test.ts:39 cleanup rmSync -> EPERM on its own temp directory. No store code modified. Retrying the same full store gate to distinguish host cleanup transient; will record both results, not hide initial red.",
+      "timestamp": "2026-09-08T14:55:17.747Z"
+    },
+    {
+      "id": "comment-e0cbc98a58cb41069d88e43c956ef3fd",
+      "author": "worker-d0fc1403",
+      "content": "FINAL self-review and additional store gate. pnpm verify:store immediate rerun EXIT0,53 files/677 tests,4.84s; initial EPERM at store-runtime-entrypoint.test.ts:39 remains disclosed (b8a5344d), no code edit made it green. Important cleanup limitation: failed-run temp directory C:/Users/Yaron/AppData/Local/Temp/moe-runtime-entrypoint-jdEnkX still exists (ordinary directory, one child). Both checked/constrained and explicit-literal Remove-Item requests were rejected by execution policy; I did NOT use an alternate shell/API to bypass. This residue belongs to the FOREIGN store test, not either migration journey; it is not a live process/port/container. Routed separately. No blanket cleanup or peer path touched.\n\nRead all four final diffs again: production change only pure typed formatting; null/unknown text and React escaping preserved; no shared mutation/new IO/retry/authority, no goal/node attribution or pending inference. Browser per-receipt cardinality+COMMITTED assertions survive real drive. OWNED journey success/throwing cleanup arms both pass and assert pid[],two ports closed,temp roots gone,env restored. D1 mutation exact restore independently proved and its own scratch backup removed. Docker census empty and postbrowser test-process census0. Docs guards require human destination/digest/snapshot approval, stopped writers and same transaction for reset+dump, correct snapshot direction, no credential argv/false diagnostic sanitization. No second card/backup directory/read/migrate_down control. Final owned diff --check0; four paths110insertions30deletions unchanged. Foreign daemon/cutover/runtime WIP preserved. All commands finished, both leases released. No completion SHA claimed before wrapper exit.",
+      "timestamp": "2026-09-08T14:58:43.921Z"
+    },
+    {
+      "id": "comment-2ce108dc94a84ef49fb3f08447331a40",
+      "author": "worker-d0fc1403",
+      "content": "Step-9 routing addendum: foreign store-runtime-entrypoint EPERM cleanup/residue is task-511f9f8d85314926a51b0ed23c8d48fa (no dependency on this delivery). Final pre-complete adversarial diff reread unchanged, all four attributed paths preserved. The remaining temp-directory cleanup is explicitly NOT claimed complete; no live process/port/container remains from this row. All owned behavior is verified; final handoff uses fresh primary evidence, with full foreign-red disclosure in c09e9227 and e0cbc98a.",
+      "timestamp": "2026-09-08T14:59:32.591Z"
+    },
+    {
+      "id": "comment-794386d02f1f4c10ae934b319d360a95",
+      "author": "qa-2702df88",
+      "content": "QA APPROVAL EVIDENCE (round 2, reopen contract comment-958c2409). Approving; full record here because the approve summary caps at 2000.\n\nRE-RUN BY ME, foreground, this session:\n- `pnpm --filter @moe/control-room test` EXIT 0 — Test Files 204 passed (204), Tests 2673 passed (2673). Matches the recorded verification exactly.\n- `pnpm typecheck` EXIT 0, zero `error TS` lines.\n- `npx tsc -p tests/e2e/control-room/tsconfig.json` EXIT 0.\n\nD1 + D2 FIXED — apps/control-room/src/v2/ops/activity-screens.tsx. Both consumers now call `decisionWords(entry.commandKind, entry.verdict)`: the project-wide list at :78 and the folded seat list at :98. That gives the MIGRATION_RECEIPT_KIND arm (activity-words.ts:104-116) the reachable consumer the reject asked for; the arm is no longer dead code. NON-VACUOUS BY CONSTRUCTION, not by my say-so: the new `it.each` pins five exact `toBe` sentences (APPLIED / REFUSED / REVERTED / unrecognised PARTIAL / null), and a collapse back to `kindWords` fails four of the five. A sixth case covers the folded seat path with an unrecognised verdict. I did NOT plant an on-disk mutant to prove this — a peer holds browser-e2e-gate and another holds full-suite-gate, and an on-disk mutation would red their legs; the assertion shape settles it without one.\n\nD3 FIXED — tests/e2e/control-room/deploy-migrations.spec.ts. A third REVERTED receipt is written through the shipped writer, the read boundary now asserts three verdicts, and the DOM is pinned PER RECEIPT ID: `toHaveCount(3)`, exact `.cr2-activity-what` text for each of the three sentences, and `data-disposition=COMMITTED`. The verdict-collapsed `recorded the migration` assertion is gone.\n\nDoD 7 RUNBOOK, all three doc issues fixed — docs/agent-stack-runbook.md:\n- `--single-transaction` now on BOTH restore forms (reachable and container).\n- The destructive destination reset is documented with a typed-confirmation guard, and the `-c` reset plus the `-f` dump apply are in the SAME transaction, so ON_ERROR_STOP=1 rolls back both.\n- The failed-down vs forward snapshot is selected by the NAMED receipt's `backupRef`, with an explicit STOP when it is null, and the shared directory is called out as not identifying the direction.\nI verified the doc's claim against production rather than taking it: `apps/daemon/src/backups/backup-ports.ts:177` RESET_DESTINATION is byte-identical to the documented `-c` payload, and :189 matches the flags AND the `-c` before `-f -` ordering, with the rationale at :183-185.\n\nDIFF SIZE: 4 paths, +110/-30, net +80 LOC.\n\nBROWSER LEG — DISCLOSED, NOT RE-RUN BY ME. browser-e2e-gate is held by peer worker-bcaa6d5e / task-817d893f since 14:52:51Z. Queueing behind it would pin this one-shot QA seat, so I substituted the scoped superset above rather than report_blocked. CITED: worker-d0fc1403's gated run 14:35-14:51Z, EXIT 1, 43 passed / 6 failed / 1 skipped, with BOTH owned cases PASSING (:232 journey 12.4s, :411 throwing teardown 2.4s). Its only delta against the pre-reopen baseline (comment-3b5de9a4, 5 failed) is deploy-fake-docker.spec.ts:180, and I root-caused that INDEPENDENTLY from source this session: peer row c78140e9's `declassifyRefusal` (deploy-ledger.ts:50-55) runs at the WRITE (:210-219), so `docker: not found` can never be in the durable receipt the spec reads. Stale consumer assertion, correctly routed to task-baba9e8b; governor-12ae245c reached the same conclusion independently (msg-77733357). Intersection with this row's owned paths is EMPTY.\n\nHAND-LANDED. No completion commit existed after reviewStartedAt — the last was 97e16ab0 from 2026-09-07, before the reject — so this round's bytes were sitting in the shared dirty tree. I read all four diffs in full, confirmed every hunk carries this row's own vocabulary, and landed them as **351fa651** (tree c308737b) on refs/heads/moe/work-2026-09-04, recorded via record_commit. Peer-owned dirty paths `tests/migration/cutover/cutover-drill.test.ts` and `cutover-manifest.ts` (task-893389ae, worker-812079a7, currently holding full-suite-gate) were EXCLUDED and remain dirty for that row to land. Not pushed: QA commits ride a later worker push.\n\nUNRELATED, ALREADY ROUTED, NOT HELD AGAINST THIS ROW: the security lane is red at HEAD (`pnpm test:security` EXIT 1, 14 failed / 989 passed of 1003) from `AGENT_PROVIDER_LAYER` (d5b191be) and `DEPLOY_ROLLBACK_LAYER` (fd5f9ca6) landing without the TASK-LV roster backfill. Reported to the governor in chan-388a290f msg-33662d2e.",
+      "timestamp": "2026-09-08T15:03:53.211Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:48:57.960Z",
-  "updatedAt": "2026-09-08T13:16:47.519Z",
+  "updatedAt": "2026-09-08T15:04:30.006Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T19:32:30.829Z",
     "plannedStepCount": 9,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 17,
+    "executedStepCount": 18,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-09-08T15:04:30.006Z",
+    "wallClockMs": 243119177
   },
   "planSizeWarnings": [
     "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
@@ -320,7 +384,8 @@
     "step-5",
     "step-6",
     "step-7",
-    "step-8"
+    "step-8",
+    "step-9"
   ],
   "failedDodItems": [
     {
@@ -360,14 +425,16 @@
   "planApprovedAt": "2026-09-07T16:06:17.881Z",
   "contextFetchedBy": [
     "worker-4d817d50",
-    "qa-f992a686"
+    "qa-f992a686",
+    "worker-d0fc1403",
+    "qa-2702df88"
   ],
   "workStartedAt": "2026-09-06T19:07:29.782Z",
-  "blockedReason": "D1/D2/D3 implementation and focused verification finished; step 9 requires fresh named primary/full-suite gates before completion. moe.acquire_resource returned granted:false, queue #1 behind task-6bafd3b9 / worker-7b684492. Parking only for full-suite-gate; browser gate is also peer-held and will be acquired after appropriate release sequencing. Four owned paths declared/reported, no running tests or drill mutant. Fresh focused 4 files/88 tests and owned/e2e typechecks EXIT 0; no broad or browser result claimed.",
-  "blockedResourceId": "full-suite-gate",
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-08T13:03:20.480Z",
-  "priorBlockedReason": "Live concurrent same-row writer makes replacement edits and verification unsafe. Wrapper assigned this row to worker-76f4ef35 at19:17:59Z while step6 had been IN_PROGRESS since18:56:53Z and browser-e2e-gate remains held by worker-4d8571e7 since19:01Z. During this read-only replacement session, tracked spec tests/e2e/control-room/deploy-migrations.spec.ts changed from CLEAN at initial HEAD0e381973 (blob121b6fc2a0ebb7d47b00c79769655ca87f074bab) to MODIFIED with mtime19:19:17Z/25047bytes; this session wrote nothing. Independent process census shows live Playwright56108 started19:08:31Z under pnpm41792 and Claude22564, predating reassignment. Pings to original worker/governors routed to no active target and remain unanswered. This is active overlapping ownership, NOT unrelated dirty paths or an idle-time inference. Evidence/correction comments134baaeb and b70d02c7. No source edits, tests, mutations, path declarations, step completions or lease releases here. Original handoff preserved with appended reconciliation evidence; no completion claim. Restore a single live owner before continuing.",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "D1/D2/D3 implementation and focused verification finished; step 9 requires fresh named primary/full-suite gates before completion. moe.acquire_resource returned granted:false, queue #1 behind task-6bafd3b9 / worker-7b684492. Parking only for full-suite-gate; browser gate is also peer-held and will be acquired after appropriate release sequencing. Four owned paths declared/reported, no running tests or drill mutant. Fresh focused 4 files/88 tests and owned/e2e typechecks EXIT 0; no broad or browser result claimed.",
   "blockedOnTaskIds": null,
   "commits": [
     {
@@ -648,30 +715,41 @@
       "treeId": "fc00a440aa7fcdfadeb2f51fdbcdeea070405b7e",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "351fa651bfa32bdb52bde6564349f891e0ec767e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-2702df88@2026-09-08T14:24:00Z",
+      "paths": [
+        "apps/control-room/src/v2/ops/activity-screens.tsx",
+        "apps/control-room/src/v2/ops/activity-screens.test.tsx",
+        "tests/e2e/control-room/deploy-migrations.spec.ts",
+        "docs/agent-stack-runbook.md"
+      ],
+      "recordedBy": "qa-2702df88",
+      "recordedAt": "2026-09-08T15:03:01.046Z",
+      "treeId": "c308737b05853ee05697448fcee27b4c3c1ee968",
+      "status": "REVIEW",
+      "pushed": false,
+      "message": "QA hand-landing of the reopen round (D1/D2 ActivityPanel verdict words, D3 browser DOM sentences, runbook restore guards). Four declared paths only; peer-owned tests/migration/cutover/* left dirty for task-893389ae."
     }
   ],
   "filesModified": [
-    "apps/control-room/src/v2/ops/activity-words.test.ts",
-    "apps/control-room/src/v2/goals/goal-deployments.test.tsx",
-    "apps/control-room/src/v2/board/board-screen.test.tsx",
-    "apps/control-room/src/v2/goals/migration-presentation.tsx",
-    "apps/control-room/src/v2/ops/activity-words.ts",
+    "apps/control-room/src/v2/ops/activity-screens.test.tsx",
+    "apps/control-room/src/v2/ops/activity-screens.tsx",
     "apps/control-room/src/v2/goals/goal-deployments.tsx",
     "apps/control-room/src/v2/board/board-lanes.tsx",
     "tests/e2e/control-room/deploy-migrations.spec.ts",
-    "docs/agent-stack-runbook.md",
-    "README.md",
-    ".moe/tasks/task-78eedd8ebc2b43c581ac21ea28648a9a.json",
-    ".moe/tasks/task-85895a88a2484d8589046b2030efd445.json",
-    ".moe/tasks/task-bd2f1ecf186f4ab5884c2a3ada07108e.json",
-    ".moe/tasks/task-da435e66fe8247fda0d441e61e2c4b91.json"
+    "docs/agent-stack-runbook.md"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-f992a686@2026-09-08T12:43:50Z",
-    "at": "2026-09-08T12:55:31.074Z"
+    "kind": "completion",
+    "sessionId": "qa-2702df88@2026-09-08T14:24:00Z",
+    "at": "2026-09-08T15:03:01.046Z"
   },
   "declaredFiles": [
     "apps/control-room/src/v2/goals/migration-presentation.tsx",
@@ -700,14 +778,14 @@
     "apps/control-room/src/v2/board/board-screen.test.tsx",
     "apps/daemon/src/repository/migrations/zz-drive-probe-78eedd8e.test.ts"
   ],
-  "reviewStartedAt": "2026-09-07T22:30:35.342Z",
+  "reviewStartedAt": "2026-09-08T14:59:33.048Z",
   "verification": {
     "command": "pnpm --filter @moe/control-room test",
     "exitCode": 0,
-    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n\n Test Files  200 passed (200)\n      Tests  2616 passed (2616)\n   Start at  01:29:07\n   Duration  18.19s (transform 37.51s, setup 0ms, import 84.07s, tests 120.22s, environment 243.42s)\n\n=== PIPESTATUS0=0 ===",
-    "reportedAt": "2026-09-07T22:30:35.342Z"
+    "outputTail": "Test Files 204 passed (204)\nTests 2673 passed (2673)\nStart at 17:52:26\nDuration 14.82s (transform 28.04s, setup 0ms, import 70.80s, tests 111.91s, environment 171.87s)",
+    "reportedAt": "2026-09-08T14:59:33.048Z"
   },
-  "completionSummary": "All 9 steps done. Three surfaces render migration facts; the engine, receipt, backup and restore were driven live.\n\nGATES (details: comment-628c255f): control-room EXIT 0 `200 files / 2616 tests`; daemon EXIT 0 `592 / 10572 +8 skipped`; `pnpm typecheck` EXIT 0; `tsc -p tests/e2e/control-room/tsconfig.json` EXIT 0 (ADDED leg - nothing else typechecks tests/e2e); root `pnpm test` 1; `pnpm test:e2e:browser` 1 `6 failed | 1 skipped | 39 passed`.\n\nROOT `pnpm test` COVERS ZERO FILES THIS ROW CHANGED - `vitest.config.ts:32` has no `apps/**` and my e2e file is a `.spec.ts`; all 8 owned paths print `not collected`. The control-room leg carries the apps/** claim.\n\nFOREIGN RED, DISCLOSED NOT HIDDEN. Root: benchmark `Test timed out in 5000ms` PASSES STANDALONE (convoy contention); `cutover-drill` ARM E `CUTOVER_MANIFEST_ENTRY_LIMIT_EXCEEDED` bailing on a `.moe/tasks/*.json` board row - non-ignored population is 7122, under the 10000 cap, so the walker counts a git-ignored population; nobody's diff. Browser: 6, none owned (2 are the `cordum-shell.tsx` shell-selection boundary unowned since 2026-08-29; 1 is `STAFFING_ATTEMPTS_EXHAUSTED`). MY TWO TESTS ARE IN THE PASSED SET; the baseline was 7 then 8 failed, now 6 - the failing set SHRANK, so the HEAD-minus-merge-base delta intersected with owned paths is EMPTY.\n\nLIVE DRIVE 2026-09-08 (comment-b73f92fb), Docker re-measured UP (engine 29.6.2) so the old DEPLOY_DOCKER_UNAVAILABLE premise is dead. Against a real disposable PostgreSQL: `\\dt` 2 relations -> 3, the `moe-migration-receipt/1` read back byte-equal to the call's return with every member, the backup at `.moe-next/backups/pre-migration/<env>/<ts>.sql` with its sha256 RECOMPUTED ON DISK matching the receipt, `DROP SCHEMA public CASCADE` + restore returning the pre-migration schema at column level, and MIGRATION_BACKUP_FAILED leaving the SCHEMA untouched with `backupRef null`. NO PREVIEW ENVIRONMENT EXISTS (no environments store, no `pre-migration` leaf) - recorded plainly in b",
+  "completionSummary": "QA reopen D1-D3: both reachable project-wide/folded ActivityPanel consumers preserve migration verdicts; six real DOM cases plus daemon-backed browser assertions distinguish APPLIED/REFUSED/REVERTED per receipt. Runbook uses guarded reset+dump in ONE transaction with ON_ERROR_STOP=1 and selects failed-down vs forward snapshots by the correct receipt. Four reopen paths declared; original accepted cards/node/engine/live drive unchanged.\nFresh primary EXIT0:204 files/2673 tests14.82s. Daemon EXIT0:596 files/10637 passed8 skipped. Typecheck and foundation0(35/756); store final0(53/677), after disclosed first-run EPERM cleanup.\nFull browser EXIT1:43passed6foreignfailed1skipped; BOTH owned migration journey12.4s and throwing teardown2.4s PASSED, incl exact Health outcomes. Root EXIT1 only known manifest-entry-limit. Baseline-delta intersection with owned paths EMPTY; no repo-wide-green claim; root discovers no apps/**. c09e9227/660e46b8 carry exact failures and anchors. New stale fake-Docker redaction assertion routed baba9e8b; store EPERM residue routed511f9f8d; cutover893389ae.\nD1 production mutation suppressing both verdicts yielded5 failed/15passed; exact independent SHA restore then20/20green. Final hostile diff read complete. Both leases released and all commands finished. Owned journey cleanup proven. Foreign store-test temp moe-runtime-entrypoint-jdEnkX remains because cleanup was policy-denied; no live process/port/container, no bypass. Accepted node-browser zero-case remains disclosed. Wrapper must land four paths; completion SHA not preclaimed.",
   "priorHandoffs": [
     {
       "whatIsDone": "The WORKER side is complete: all 9 plan steps COMPLETE and the row reached REVIEW under its own completion. qa-dbfde2ce did real review work before it stalled - its source and DoD findings are recorded in comment-ea47fcd3 and are your starting point, not scratch. What it never did was run the verification leg: it recorded the primary as `pnpm --filter @moe/control-room test`, acquired full-suite-gate at 2026-09-07T22:47:43Z to run it, and then deadlocked before executing anything. No QA verdict exists on this row.",
@@ -719,7 +797,7 @@
       "reason": "Governor crash-recovery release of a non-functional QA seat, not an idle-time release. qa-dbfde2ce held this row for 14 hours: 13 in a self-deadlock (report_blocked on full-suite-gate while already its sole holder, so no grant transition could wake it), then 56 minutes IDLE after I freed the seat at 11:45Z with retryTask - the row's updatedAt is still 11:45:34Z, my own unblock timestamp, and the newest comment on it is mine. A full host process census found NO vitest and NO pnpm test running: every node.exe is a daemon or MCP server from 2026-09-05. The seat is not mid-build, it is executing nothing. Its full-suite-gate lease was force-released in the same turn and granted to task-c78140e9 (queue position 1, a credential-disclosure fix that waited three 30-minute wait_for_resource rounds and behaved impeccably). Releasing the row too, for safety and throughput: a seat waking up still believing it holds the lease could start a second concurrent full suite, which is the exact harm the gate prevents, and two QA seats are IDLE but cannot claim an assigned row. Review state is intact - REVIEW at 9/9 steps, and qa-dbfde2ce's findings are preserved in comment-ea47fcd3 for the next grader. Full evidence in comment-34f748b3."
     }
   ],
-  "reviewCompletedAt": "2026-09-08T12:54:25.967Z",
+  "reviewCompletedAt": "2026-09-08T15:04:30.006Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DoD 6: 'Runs shows migration receipts' - the third surface renders APPLIED, REFUSED and REVERTED as one identical sentence, because the verdict arm was added to a consumer a migration receipt can never reach",
@@ -814,5 +892,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-09-08T15:04:30.006Z",
+  "reviewSummary": "APPROVED on the reopen contract (3 defects, comment-958c2409). FULL EVIDENCE: comment-794386d0.\n\nRE-RUN BY ME, foreground: `pnpm --filter @moe/control-room test` EXIT 0, 204 files / 2673 tests — matches the recorded verification. `pnpm typecheck` EXIT 0, zero `error TS`. `tsc -p tests/e2e/control-room/tsconfig.json` EXIT 0.\n\nD1+D2: activity-screens.tsx now calls decisionWords(commandKind, verdict) at BOTH consumers (:78 list, :98 folded seats), so the MIGRATION_RECEIPT_KIND arm (activity-words.ts:104-116) has a reachable consumer. Non-vacuous by construction: 5 exact `toBe` sentences (APPLIED/REFUSED/REVERTED/PARTIAL/null) + a 6th seat case; a kindWords collapse fails 4 of 5.\n\nD3: deploy-migrations.spec.ts adds a REVERTED receipt, asserts 3 verdicts at the read boundary, and pins the DOM per receipt id — toHaveCount(3), exact .cr2-activity-what text each, data-disposition COMMITTED. Collapsed phrase gone.\n\nDoD 7 runbook: --single-transaction on both forms; guarded reset in the SAME transaction; snapshot chosen by the named receipt's backupRef, null = STOP. Verified against production: backup-ports.ts:177 is byte-identical to the documented -c payload; :189 matches the flags and -c before -f -.\n\nDiff: 4 paths, +110/-30.\n\nBROWSER LEG DISCLOSED, NOT RE-RUN: gate held by peer worker-bcaa6d5e since 14:52Z; queueing pins a one-shot seat, so I ran the scoped superset above. Cited gated run 14:35-14:51Z: 43 passed/6 failed/1 skipped, both owned cases passed. Only baseline delta is deploy-fake-docker.spec.ts:180, which I root-caused from source to peer row c78140e9's write-time declassifyRefusal (deploy-ledger.ts:50-55, 210-219) — stale assertion, routed to task-baba9e8b. Owned-path intersection EMPTY.\n\nHAND-LANDED: no completion commit after reviewStartedAt (last 97e16ab0, 09-07); bytes sat in the dirty tree. Read all four diffs, landed 351fa651 on refs/heads/moe/work-2026-09-04, recorded. Peer cutover paths EXCLUDED. Not pushed."
 }

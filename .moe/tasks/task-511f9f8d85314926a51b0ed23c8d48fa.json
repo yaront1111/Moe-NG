@@ -1,0 +1,33 @@
+{
+  "id": "task-511f9f8d85314926a51b0ed23c8d48fa",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "bug: store runtime-entrypoint test can leave its temp directory after EPERM",
+  "description": "Parent task-78eedd8ebc2b43c581ac21ea28648a9a verification: first pnpm verify:store failed only packages/store/src/store-runtime-entrypoint.test.ts:39 rmSync with EPERM; immediate same-command rerun passed 53 files/677 tests unchanged.\nFailed-run temp directory C:/Users/Yaron/AppData/Local/Temp/moe-runtime-entrypoint-jdEnkX still exists with one child. Read-only check confirms ordinary directory; this session's explicit cleanup was denied by execution policy. Investigate child lifecycle/Windows handle release, not retries that hide the failure; no store code changed here.",
+  "definitionOfDone": [
+    "Measure the runtime child and handle lifecycle behind the EPERM and add a focused regression for guaranteed teardown without deleting foreign paths.",
+    "Verify store runtime-entrypoint test and full store gate with nonzero test counts; ensure both success/failure cleanup paths close handles and remove their owned temporary directories."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "LOW",
+  "order": 137,
+  "comments": [
+    {
+      "id": "comment-15bcc2709e914a2795ed9f2b8f3374a1",
+      "author": "governor-12ae245c",
+      "content": "GOVERNOR NOTE — a read-only look at the failing test, offered as a HYPOTHESIS with its evidence, not a verdict. I have not run it. DoD 1 asks for the child/handle lifecycle to be measured; this is where I would point the measurement first.\n\nTHE SHAPE IS NOT THE ONE THIS BOARD HAS SEEN BEFORE. Our prior Windows EPERM-at-teardown case (`seamHarness`, apps/daemon/src/http/foundation-registry-fixtures.ts) was a MISSING try/finally: a handle opened before a throwing seed step, with its closer bound only on the success path. That is NOT this. `store-runtime-entrypoint.test.ts` has a correct `try { … } finally { rmSync(directory, …) }`. Do not go looking for a missing finally here; it is present.\n\nWHAT LOOKS WRONG INSTEAD — the promise settles on the wrong event. The test resolves on `worker.once(\"message\", resolve)` (:19). The `exit` listener (:21-25) only ever REJECTS, and only on a nonzero code — so on the success path the promise is already settled by `resolve` and nothing ever awaits the worker actually exiting. The `finally` then runs `rmSync` on a directory whose `store.sqlite` (:16, `workerData.databasePath`) may still be held by a worker thread that has posted its message but not yet torn down its sqlite handle. On Windows, unlinking a directory containing a file with a live handle is exactly EPERM.\n\nThis predicts every symptom in the description: intermittent rather than deterministic (it is a race between worker teardown and `rmSync`); an immediate rerun passing clean; and the leaked directory surviving with EXACTLY ONE CHILD — which on this reading is `store.sqlite`, the one file the worker had open.\n\nIF THAT HOLDS, the fix is to await the worker's real termination before leaving the try block — resolve only once the worker has exited (or `await worker.terminate()`), rather than on the message alone. That satisfies DoD 2's \"both success/failure cleanup paths close handles\" at the cause.\n\nTWO TRAPS, since the filer already flagged \"not retries that hide the failure\":\n- `rmSync`'s `maxRetries` / `retryDelay` options are the retry that would hide this. They are purpose-built to spin on EPERM/EBUSY until the handle happens to close. Adding them would make the red disappear while the handle leak stays, and this row would be the last chance to catch it.\n- `force: true` is ALREADY on that call (:38) and does nothing here — it only suppresses errors for a path that does not exist. It is not a handle-contention fix, so its presence is not evidence the cleanup was hardened.\n\nScoping note for whoever plans this: the directory named in the description, `C:/Users/Yaron/AppData/Local/Temp/moe-runtime-entrypoint-jdEnkX`, is outside the repo and is this row's own leaked artifact. Removing that specific stale directory is in scope; DoD 1's \"without deleting foreign paths\" means do not let the regression sweep `%TEMP%` by prefix — a concurrent seat's live `moe-runtime-entrypoint-*` directory would be collateral.",
+      "timestamp": "2026-09-08T14:59:36.577Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-08T14:58:43.658Z",
+  "updatedAt": "2026-09-08T14:59:36.577Z"
+}
