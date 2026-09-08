@@ -1,5 +1,6 @@
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { DeploymentsOutcome } from "../../live/live-deployments.js";
+import type { DeploymentsHealthOutcome } from "../../live/live-deployments-health.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import type { GoalCatalogFrame, LiveGoalCatalogEntry } from "../../live/live-goal-catalog.js";
 import type { PreviewReadOutcome } from "../../live/live-preview.js";
@@ -10,6 +11,8 @@ import { currentRunOf, planSentBack } from "../goals/plan-run-resolution.js";
 import { deployOfferFor } from "./needs-you-deploy.js";
 import type { DeployFacts } from "./needs-you-deploy.js";
 import { escalationItems } from "./needs-you-escalation.js";
+import { incidentItems } from "./needs-you-incident.js";
+import type { IncidentFacts } from "./needs-you-incident.js";
 import { previewOfferFor } from "./needs-you-preview.js";
 import type { PreviewFacts } from "./needs-you-preview.js";
 import { releaseOfferFor } from "./needs-you-release.js";
@@ -17,7 +20,7 @@ import type { ReleaseFacts } from "./needs-you-release.js";
 
 /**
  * NEEDS YOU: every decision across the project that is waiting on a human, derived only
- * from things the daemon already states. Seven kinds of item:
+ * from things the daemon already states. Nine kinds of item:
  *
  *  - PLAN_APPROVAL: the affordance surface OFFERS `approval.decide_intent` for a goal's
  *    planning run. The offer is the daemon's own statement that the run is in review and
@@ -28,6 +31,9 @@ import type { ReleaseFacts } from "./needs-you-release.js";
  *    and it CLEARS on the same frame that offers the successor - at which point the
  *    PLAN_APPROVAL item above takes its place. The two are mutually exclusive by
  *    construction: `planSentBack` is false exactly when that offer exists.
+ *  - INCIDENT: the deployment-health read says an environment has an OPEN INCIDENT. It is the
+ *    one kind that does NOT route to a goal - an outage belongs to an environment - so it
+ *    carries no goal id at all and its facts live in `needs-you-incident.ts`.
  *  - ESCALATION: the surface OFFERS `escalation.decide` for a node, which the daemon does
  *    only when three review rounds failed and the kernel refuses more until a human decides.
  *    The runs read names the goal the node belongs to.
@@ -45,13 +51,15 @@ import type { ReleaseFacts } from "./needs-you-release.js";
  *    is past Gate 1, and the goal is still open. Closing stays the operator's call; when the
  *    surface OFFERS `goal.close` for the goal the card carries that decision inline.
  *
- * Every item routes to the goal, where the plan, the contract and the evidence live. An
- * inline decision exists only where the daemon offered the command for it.
+ * Every item routes to the goal, where the plan, the contract and the evidence live - with ONE
+ * deliberate exception, INCIDENT, which routes to an ENVIRONMENT and therefore carries no goal
+ * id at all rather than a non-goal id in a goal's field. An inline decision exists only where
+ * the daemon offered the command for it.
  */
 
 export const NEEDS_YOU_KINDS = [
-  "PLAN_APPROVAL", "PLAN_REJECTED", "PREVIEW", "RELEASE", "DEPLOY", "ESCALATION", "GATE_1",
-  "READY_TO_CLOSE",
+  "INCIDENT", "PLAN_APPROVAL", "PLAN_REJECTED", "PREVIEW", "RELEASE", "DEPLOY", "ESCALATION",
+  "GATE_1", "READY_TO_CLOSE",
 ] as const;
 export type NeedsYouKind = (typeof NEEDS_YOU_KINDS)[number];
 
@@ -77,6 +85,8 @@ export interface NeedsYouItem {
   readonly escalation?: EscalationFacts | undefined;
   readonly goalId: string;
   readonly headline: string;
+  /** Present only for an INCIDENT item: the environment, the error line and the rollback. */
+  readonly incident?: IncidentFacts | undefined;
   readonly kind: NeedsYouKind;
   readonly planningRunRef: string;
   /** Present only for a DEPLOY item: the sha, the bound environments and the offer. */
@@ -100,6 +110,10 @@ export interface NeedsYouInput {
   readonly coverage: ReadonlyMap<string, DocumentCoverageOutcome>;
   /** One deployment read per goal, keyed by goalId; absent means it has not answered. */
   readonly deployments?: ReadonlyMap<string, DeploymentsOutcome> | undefined;
+  /** Incident keys the operator dismissed; a dismissal never reaches any other surface. */
+  readonly dismissedIncidents?: ReadonlySet<string> | undefined;
+  /** One deployment-health read per environment, keyed by environment name. */
+  readonly health?: ReadonlyMap<string, DeploymentsHealthOutcome> | undefined;
   /** One preview read per goal, keyed by goalId; absent means the read has not answered. */
   readonly previews?: ReadonlyMap<string, PreviewReadOutcome> | undefined;
   /** One release evidence read per goal, keyed by goalId; absent means it has not answered. */
@@ -109,9 +123,12 @@ export interface NeedsYouInput {
 }
 
 // DEPLOY sits directly after RELEASE: it continues the release the operator just approved.
+// INCIDENT SORTS FIRST, ABOVE EVERY APPROVAL: alone among the kinds it is an outage already in
+// progress rather than a decision waiting its turn, and burying it under routine plan approvals
+// is how one gets read late. The eight below keep their order relative to one another.
 const KIND_ORDER: Readonly<Record<NeedsYouKind, number>> = Object.freeze({
-  PLAN_APPROVAL: 0, PLAN_REJECTED: 1, PREVIEW: 2, RELEASE: 3, DEPLOY: 4, ESCALATION: 5,
-  GATE_1: 6, READY_TO_CLOSE: 7,
+  INCIDENT: 0, PLAN_APPROVAL: 1, PLAN_REJECTED: 2, PREVIEW: 3, RELEASE: 4, DEPLOY: 5,
+  ESCALATION: 6, GATE_1: 7, READY_TO_CLOSE: 8,
 });
 const OPEN_LIFECYCLES: readonly string[] = Object.freeze(["EXECUTION_ENABLED", "CLOSING"]);
 
@@ -216,7 +233,8 @@ function itemsFor(
 }
 
 export function deriveNeedsYou(input: NeedsYouInput): NeedsYouData {
-  const { catalog, coverage, deployments, previews, releases, runs, surface } = input;
+  const { catalog, coverage, deployments, dismissedIncidents, health, previews, releases, runs,
+    surface } = input;
   if (catalog === null) {
     return Object.freeze({
       countLabel: "Waiting for goals", items: Object.freeze([]),
@@ -234,6 +252,7 @@ export function deriveNeedsYou(input: NeedsYouInput): NeedsYouData {
       itemsFor(entry, coverage.get(entry.goalId), surface, previews, releases, runs,
         deployments?.get(entry.goalId))),
     ...escalationItems(surface, runs, catalog),
+    ...incidentItems({ dismissed: dismissedIncidents, health, surface }),
   ].sort((left, right) => KIND_ORDER[left.kind] - KIND_ORDER[right.kind]
       || left.title.localeCompare(right.title) || left.goalId.localeCompare(right.goalId));
   const count = items.length;

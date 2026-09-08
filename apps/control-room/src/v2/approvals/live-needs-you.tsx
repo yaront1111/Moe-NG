@@ -9,6 +9,8 @@ import type { LiveSetup } from "../../live/live-config.js";
 import { readPreview } from "../../live/live-preview.js";
 import type { PreviewReadOutcome } from "../../live/live-preview.js";
 import { readDeployments } from "../../live/live-deployments.js";
+import { readDeploymentsHealth } from "../../live/live-deployments-health.js";
+import type { DeploymentsHealthOutcome } from "../../live/live-deployments-health.js";
 import type { DeploymentsOutcome } from "../../live/live-deployments.js";
 import { readRelease } from "../../live/live-release.js";
 import type { ReleaseOutcome } from "../../live/live-release.js";
@@ -24,6 +26,10 @@ import type { ReplanSuccessorPort } from "./replan-successor-port.js";
 import type { NeedsYouChoice } from "./needs-you.js";
 import { createPreviewPort } from "./preview-port.js";
 import type { PreviewDecision, PreviewFinding, PreviewPort } from "./preview-port.js";
+import { createRollbackPort } from "./rollback-port.js";
+import type { RollbackPort } from "./rollback-port.js";
+import { deployedEnvironmentsOf, useIncidentHealth } from "./use-incident-health.js";
+import { incidentKeyOf } from "./needs-you-incident.js";
 import { createGoalClosePort } from "./goal-close-port.js";
 import type { GoalClosePort } from "./goal-close-port.js";
 import { NeedsYou, decisionKeyOf } from "./needs-you.js";
@@ -32,11 +38,13 @@ import { deriveNeedsYou } from "./needs-you-model.js";
 import type { NeedsYouItem } from "./needs-you-model.js";
 
 /**
- * The LIVE Needs-you queue. Five daemon reads feed it and each answers one question: the
+ * The LIVE Needs-you queue. Six daemon reads feed it and each answers one question: the
  * affordance surface says what this session is OFFERED (plan approvals, escalations, goal
  * closes), the durable goal catalog says which goals exist, the coverage read says where each
  * goal's contract stands, the release read says whether Gate 3 is still waiting on a person,
  * and the runs read names the goal an exhausted node belongs to. The
+ * runs read names the goal an exhausted node belongs to, and the deployment-health read says
+ * whether an environment the deploy record reports DEPLOYED is in an open INCIDENT. The
  * queue is derived from those answers and nothing else; `onCount` hands the derived count to
  * the shell for the nav badge so the badge and the list cannot disagree. A decision spends
  * the daemon's own offer through the matching port and keeps the answer beside its card.
@@ -62,8 +70,12 @@ export interface LiveNeedsYouProps {
   readonly previewPort?: PreviewPort | undefined;
   /** Injectable for tests; the default reads POST /deployments/read with the session headers. */
   readonly readDeployments?: ((goalId: string) => Promise<DeploymentsOutcome>) | undefined;
+  /** Injectable for tests; the default reads POST /deployments/health/read per environment. */
+  readonly readHealth?: ((environment: string) => Promise<DeploymentsHealthOutcome>) | undefined;
   /** Injectable for tests; the default reads POST /release/read with the session headers. */
   readonly readRelease?: ((goalId: string) => Promise<ReleaseOutcome>) | undefined;
+  /** Injectable for tests; the default spends the attached session's own wire. */
+  readonly rollbackPort?: RollbackPort | undefined;
   /** Injectable for tests; the default reads POST /runs/read with the session's headers. */
   readonly readRuns?: (() => Promise<RunsOutcome>) | undefined;
   readonly setup: LiveSetup;
@@ -71,8 +83,8 @@ export interface LiveNeedsYouProps {
 
 export function LiveNeedsYou({
   closePort, escalationPort, onConnection, onCount, onOpenBoard, previewPort, readCoverage,
-  readDeployments: readDeploymentsProp, readPreview: readPreviewProp,
-  readRelease: readReleaseProp, readRuns: readRunsProp, setup,
+  readDeployments: readDeploymentsProp, readHealth: readHealthProp, readPreview: readPreviewProp,
+  readRelease: readReleaseProp, readRuns: readRunsProp, rollbackPort, setup,
   successorPort,
 }: LiveNeedsYouProps): JSX.Element {
   const [surface, setSurface] = useState<SurfaceFrame | null>(null);
@@ -89,6 +101,10 @@ export function LiveNeedsYou({
     ?? ((goalId: string): Promise<ReleaseOutcome> => readRelease(setup.headers, goalId)));
   const [deploymentsReader] = useState(() => readDeploymentsProp
     ?? ((goalId: string): Promise<DeploymentsOutcome> => readDeployments(setup.headers, goalId)));
+  const [healthReader] = useState(() => readHealthProp ?? ((environment: string):
+    Promise<DeploymentsHealthOutcome> => readDeploymentsHealth(setup.headers, environment)));
+  const [rollback] = useState(() => rollbackPort ?? createRollbackPort(setup));
+  const [dismissedIncidents, setDismissedIncidents] = useState<ReadonlySet<string>>(new Set());
 
   const feed = useMemo(() => createBoardFeed({
     headers: setup.headers,
@@ -123,9 +139,14 @@ export function LiveNeedsYou({
   // The SAME authority `goal-deployments.tsx` reads. `/runs/read` carries deployment rows too,
   // but they are project-scoped and its goal list skips any goal with no document binding.
   const deployments = useGoalReads(catalog, deploymentsReader);
+  // The deployed set is read off the SAME `/deployments/read` answers the DEPLOY items use, so
+  // the queue never enumerates environments twice and the two cannot drift.
+  const environments = useMemo(() => deployedEnvironmentsOf(deployments), [deployments]);
+  const health = useIncidentHealth(environments, healthReader);
   const data = useMemo(
-    () => deriveNeedsYou({ catalog, coverage, deployments, previews, releases, runs, surface }),
-    [catalog, coverage, deployments, previews, releases, runs, surface],
+    () => deriveNeedsYou({ catalog, coverage, deployments, dismissedIncidents, health, previews,
+      releases, runs, surface }),
+    [catalog, coverage, deployments, dismissedIncidents, health, previews, releases, runs, surface],
   );
   const surfaceRef = useRef<SurfaceFrame | null>(null);
   surfaceRef.current = surface;
@@ -172,6 +193,29 @@ export function LiveNeedsYou({
       }));
     });
   }, [preview]);
+  // DISMISS REACHES ONLY THIS SET. It is keyed by THIS incident id, so the environment keeps
+  // reading DOWN wherever else it is rendered, and the next incident - a new id the daemon opens
+  // at the next failure threshold - is not matched by it and comes back.
+  const onDismissIncident = useCallback((item: NeedsYouItem) => {
+    const facts = item.incident;
+    if (facts === undefined) return;
+    setDismissedIncidents((previous) =>
+      new Set(previous).add(incidentKeyOf(facts.environment, facts.incidentId)));
+  }, []);
+  const onRollback = useCallback((item: NeedsYouItem) => {
+    const facts = item.incident;
+    if (facts?.rollback === undefined || facts.rollback === null) return;
+    const key = incidentKeyOf(facts.environment, facts.incidentId);
+    setResults((previous) => new Map(previous).set(key, { busy: true, outcome: null }));
+    void rollback.submit(facts.rollback, facts.environment).then((outcome) => {
+      setResults((previous) => new Map(previous).set(key, { busy: false, outcome }));
+    }, () => {
+      setResults((previous) => new Map(previous).set(key, {
+        busy: false,
+        outcome: { code: "DECISION_DISPATCH_FAILED", layer: "CONTROL_ROOM_NEEDS_YOU", ok: false },
+      }));
+    });
+  }, [rollback]);
   useEffect(() => { onCount?.(data.items.length); }, [data.items.length, onCount]);
 
   return (
@@ -179,8 +223,10 @@ export function LiveNeedsYou({
       data={data}
       decisionResults={results}
       onDecide={onDecide}
+      onDismissIncident={onDismissIncident}
       onOpenBoard={onOpenBoard}
       onPreviewDecide={onPreviewDecide}
+      onRollback={onRollback}
     />
   );
 }
