@@ -43,7 +43,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-4d8571e7",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -59,7 +59,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-05T00:54:00.782Z",
-  "updatedAt": "2026-09-05T20:07:13.914Z",
+  "updatedAt": "2026-09-08T03:01:23.169Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T20:02:54.872Z",
     "plannedStepCount": 3,
@@ -79,5 +79,8 @@
       "apps/control-room/src/live/live-ops.tsx"
     ]
   },
-  "planApprovedAt": "2026-09-05T20:07:13.914Z"
+  "planApprovedAt": "2026-09-05T20:07:13.914Z",
+  "contextFetchedBy": [
+    "worker-4d8571e7"
+  ]
 }
