@@ -20,6 +20,39 @@ import type { DeployReceiptV1, DeployRefusal } from "./deploy-receipt-contracts.
 const encoder = new TextEncoder();
 const LEDGER_PAGE_SIZE = 200;
 
+/** What a refusal detail becomes when it is not one of this engine's own public phase words. */
+const REDACTED_DETAIL = "[REDACTED]";
+
+/**
+ * THE ONLY DETAILS THAT MAY BECOME DURABLE, as a finite set of the engine's OWN outputs.
+ *
+ * A refusal detail is external free text — docker's stderr, ssh's stderr, a migration engine's
+ * words — so it can carry a connection string, a registry token or an echoed authorization
+ * header (epic rail 3). The defence is NOT recognising secrets: an environment value is usually
+ * opaque and `lastStderrLine` keeps only the last 600 bytes, so a credential arrives with no
+ * scheme, delimiter or header to match on. What a detector cannot see, a FINITE OUTPUT SET does
+ * not have to — every string below is minted by production code with no caller text in it
+ * (deploy-service.ts, deploy-image-build.ts), so anything else is untrusted by construction.
+ * Membership is EXACT: no trim, no prefix/suffix, no case folding, because `"<phase>: <tool
+ * output>"` is exactly how a secret rides along beside a safe word.
+ */
+const PUBLIC_PHASE_DETAILS: ReadonlySet<string> = new Set([
+  "DEPLOY_PROXY_MISSING_OR_AMBIGUOUS", "DEPLOY_PROXY_BUSY", "DEPLOY_PROXY_CONFIG_UNSUPPORTED",
+  "DEPLOY_PROXY_INCUMBENT_MISSING", "DEPLOY_PROXY_RECOVERY_REQUIRED", "DEPLOY_PROXY_WRITE_FAILED",
+  "DEPLOY_PROXY_RELOAD_FAILED", "DEPLOY_BUILD_UNAVAILABLE", "DEPLOY_IMAGE_DIGEST_UNAVAILABLE",
+  "DEPLOY_ROLLBACK_IMAGE_UNAVAILABLE", "DEPLOY_EFFECT_UNAVAILABLE", "DEPLOY_COMMIT_UNAVAILABLE",
+  "DEPLOY_ARCHIVE_UNAVAILABLE", "DEPLOY_ARCHIVE_FAILED", "DEPLOY_DOCKER_UNAVAILABLE",
+  "DEPLOY_BUILD_STDIN_FAILED", "DEPLOY_BUILD_TIMED_OUT",
+]);
+
+/** The refusal as it may be STORED: code and layer unchanged — this engine's own stable
+ *  vocabulary, and what every reader routes on — with only the free-text detail declassified. */
+function declassifyRefusal(refusal: DeployRefusal): DeployRefusal {
+  return PUBLIC_PHASE_DETAILS.has(refusal.detail)
+    ? refusal
+    : { code: refusal.code, detail: REDACTED_DETAIL, layer: refusal.layer };
+}
+
 export interface EnvironmentDeployState {
   /** The most recent receipt for this environment, in ledger order. */
   readonly current: DeployReceiptV1;
@@ -172,9 +205,18 @@ export function recordDeployReceipt(
     url: input.url,
     version: DEPLOY_RECEIPT_VERSION,
   };
-  const resultBytes = encoder.encode(JSON.stringify(receipt));
   // The null-pairing discipline is enforced on the WRITE too: a caller that
   // hands us both an imageDigest and a refusal never reaches the store.
+  // ADMISSION RUNS ON THE CALLER'S SHAPE, BEFORE DECLASSIFICATION — masking the detail first
+  // would turn a malformed refusal into a well-formed one and write it.
+  const admitted = decodeDeployReceiptBytes(encoder.encode(JSON.stringify(receipt)));
+  if (!admitted.ok) return { code: "DEPLOY_RECEIPT_INVALID", ok: false };
+  const stored = admitted.receipt.refusal === null
+    ? admitted.receipt
+    : { ...admitted.receipt, refusal: declassifyRefusal(admitted.receipt.refusal) };
+  // ONLY these bytes are committed, so the untrusted text is never durable — scrubbing at a read
+  // or in a browser would leave the plaintext in the event store for every later reader.
+  const resultBytes = encoder.encode(JSON.stringify(stored));
   if (!decodeDeployReceiptBytes(resultBytes).ok) return { code: "DEPLOY_RECEIPT_INVALID", ok: false };
   const aggregateId = deployAggregateId(input.projectId, input.environment);
   const event: EventDraft = {

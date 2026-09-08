@@ -19,6 +19,7 @@ import { deploymentInfrastructureFiles }
   from "../repository/deployment/deployment-infrastructure-templates.js";
 import { readDeployLedger, readPreviousDeployReceipt } from "./deploy-ledger.js";
 import { productionDeployPorts } from "./deploy-command.js";
+import { randomBytes } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -81,6 +82,12 @@ afterEach(closeStores);
 const OPERATOR = "principal-1";
 const PRODUCTION = "production";
 const STAGING = "staging";
+/** What a declassified refusal detail reads as. `recordDeployReceipt` replaces every detail that
+ *  is not one of the engine's own public phase words BEFORE the receipt becomes durable, and
+ *  `deploy-command.ts` builds its `DomainRefusal` from that persisted receipt — so the marker is
+ *  what survives the wiring. Restated rather than imported: an arm that imported the production
+ *  constant would follow it to any other value and keep passing. */
+const REDACTED_DETAIL = "[REDACTED]";
 const SHA = "0123456789abcdef0123456789abcdef01234567";
 const NEXT_SHA = "fedcba9876543210fedcba9876543210fedcba98";
 const CONTEXT = "/workspace/product";
@@ -333,17 +340,18 @@ describe("the registered deploy refuses with code AND layer (DoD 4, 6)", () => {
       .toEqual([DEPLOY_DOCKER_UNAVAILABLE, DEPLOY_ENGINE_STAMP]);
   });
 
-  it("carries docker's ACTUAL last stderr line into DEPLOY_BUILD_FAILED", async () => {
+  it("declassifies docker's stderr on the way out of DEPLOY_BUILD_FAILED", async () => {
     const stderr = "Step 7/9 : RUN pnpm build\n#12 4.2 ERR_PNPM_NO_SCRIPT missing script: build";
     const context = journey({ double: { buildStderr: stderr } });
 
     const refusal = await refusalOf(context.deploy());
 
+    // THE CODE AND THE LAYER SURVIVE THE WIRING — that is what this file is for. The detail does
+    // not: `deploy-command.ts` builds this `DomainRefusal` from the PERSISTED receipt, and the
+    // receipt writer declassifies external tool text before it becomes durable (epic rail 3).
     expect([refusal.code, refusal.layer]).toEqual([DEPLOY_BUILD_FAILED, DEPLOY_ENGINE_STAMP]);
-    // THE TOOL'S OWN WORDS. A generic message is undiagnosable from a receipt read weeks later,
-    // and the LAST line is the one docker fails on.
-    expect(refusal.detail)
-      .toContain("#12 4.2 ERR_PNPM_NO_SCRIPT missing script: build");
+    expect(refusal.detail).toBe(REDACTED_DETAIL);
+    expect(refusal.detail).not.toContain("ERR_PNPM_NO_SCRIPT");
   });
 });
 
@@ -507,19 +515,38 @@ describe("the wiring itself, attacked (adversarial self-review)", () => {
       expect(context.docker.locked()).toBe(false);
     });
 
-  it("carries NO credential material into a refusal detail beyond the tool's own stderr",
+  it("carries NO credential material into the dispatched refusal OR the durable receipt",
     async () => {
-      const context = journey({
-        double: { buildStderr: "failed to solve: pull access denied for registry.example.test" },
-      });
+      // GENERATED AT RUNTIME, never a committed fixture, and never printed by an assertion below.
+      // The old shape of this arm pinned docker's line VERBATIM and then checked it held no
+      // credential — which only ever held because the planted line had none. A real
+      // `pull access denied` names the registry it could not authenticate to, and an upstream 401
+      // echoes the header it rejected, so the line itself is the carrier.
+      const value = randomBytes(24).toString("hex");
+      const planted = `failed to solve: pull access denied for https://ci:${value}@registry.example.test`;
+      expect(planted.includes(value)).toBe(true);
+      const context = journey({ double: { buildStderr: planted } });
 
       const refusal = await refusalOf(context.deploy());
 
-      // The detail is docker's line and nothing else: no target url, no ssh target, no
-      // credential the daemon holds is appended to it on the way out.
-      expect(refusal.detail).toBe("failed to solve: pull access denied for registry.example.test");
-      expect(refusal.detail).not.toContain(LOCAL.url ?? "");
-      expect(refusal.detail).not.toMatch(/:\/\/[^/\s]*:[^/\s]*@/u);
+      // BOTH SEAMS, because scrubbing only one of them is the bug this arm exists to catch: the
+      // refusal a caller SEES and the receipt that is durable FOREVER. Boolean comparisons only —
+      // a failing `toBe` would print the planted line into the run log.
+      expect(refusal.code).toBe(DEPLOY_BUILD_FAILED);
+      expect(refusal.layer).toBe(DEPLOY_ENGINE_STAMP);
+      expect(refusal.detail === REDACTED_DETAIL).toBe(true);
+      expect(refusal.detail.includes(value)).toBe(false);
+      expect(/:\/\/[^/\s]*:[^/\s]*@/u.test(refusal.detail)).toBe(false);
+      const stored = readDeployLedger(context.store, PROJECT_ID).get(STAGING)?.current;
+      expect(stored?.refusal?.detail === REDACTED_DETAIL).toBe(true);
+      // AND ON DISK, not merely on the two objects: the decision bytes are what a later reader
+      // decodes, so an unsanitised copy surviving there would defeat the whole fix.
+      const bytes = context.store.readCommandDecisionsAfter(0n, 500).items
+        .map((decision) => decision.resultBytes);
+      expect(bytes.length).toBeGreaterThan(0);
+      for (const one of bytes) {
+        expect(Buffer.from(one).includes(Buffer.from(value, "utf8"))).toBe(false);
+      }
     });
 });
 

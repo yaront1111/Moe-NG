@@ -50,6 +50,17 @@ afterEach(closeStores);
 vi.mock("node:child_process", () => ({ execFile: vi.fn(), spawn: vi.fn() }));
 
 const PROJECT = "project-review-1";
+/**
+ * WHAT A DECLASSIFIED REFUSAL DETAIL READS AS. `recordDeployReceipt` replaces every detail that
+ * is not one of the engine's own public phase words before the receipt becomes durable, because
+ * docker's stderr, ssh's stderr and a migration engine's free text can all carry a connection
+ * string or a token (epic rail 3). The refusal CODE and LAYER are untouched, so every arm below
+ * still asserts which layer refused and why; only the tool's raw words stop being durable.
+ * Restated here rather than imported: an arm importing the production constant would follow it to
+ * any other value and keep passing. Its own exhaustive coverage is in
+ * `deploy-refusal-redaction.test.ts`.
+ */
+const REDACTED_DETAIL = "[REDACTED]";
 const ENVIRONMENT = "production";
 const STAGING = "staging";
 const SHA = "0123456789abcdef0123456789abcdef01234567";
@@ -186,8 +197,15 @@ describe("the deploy engine builds at the landed sha (DoD 1)", () => {
     const receipt = readDeployLedger(context.store, PROJECT).get(ENVIRONMENT)?.current;
     expect(receipt?.refusal?.code).toBe(DEPLOY_BUILD_FAILED);
     expect(receipt?.refusal?.layer).toBe(DEPLOY_ENGINE_STAMP);
-    expect(receipt?.refusal?.detail)
-      .toBe("docker save: Error response from daemon: no such image: sha-not-built");
+    // The DETAIL is declassified at the write (epic rail 3, `deploy-ledger.ts`): `docker save`'s
+    // stderr is external free text and a pull/push failure is exactly where a registry credential
+    // appears. THE ROW'S CLAIM SURVIVES WITHOUT IT — the second child (`ssh docker load`) would
+    // have exited 0, so a shell pipe reporting only the LAST status would have read DEPLOYED here.
+    // REFUSED is therefore the whole evidence that the FIRST child's exit code was not swallowed.
+    expect(receipt?.refusal?.detail).toBe(REDACTED_DETAIL);
+    expect(receipt?.refusal?.detail).not.toContain("no such image");
+    expect(context.docker.calls).toContainEqual(dockerSaveArgv(deployImageTag(ENVIRONMENT, SHA)));
+    expect(context.docker.sshCalls).toContainEqual(sshDockerLoadArgv(REMOTE.sshTarget as string));
     // `save` failing means `load` must never be treated as the whole answer.
     expect(context.docker.state(context.candidate)).toBe("ABSENT");
   });
@@ -251,18 +269,20 @@ describe("every refusal names its code and its layer (DoD 4)", () => {
     expect(context.docker.state(context.candidate)).toBe("ABSENT");
   });
 
-  it("carries docker's ACTUAL last stderr line into DEPLOY_BUILD_FAILED", async () => {
+  it("declassifies docker's build stderr instead of making it durable", async () => {
     const planted = "failed to solve: process \"/bin/sh -c pnpm build\" did not complete successfully: exit code: 137";
     const context = harness({ double: { buildStderr: `Step 7/9 : RUN pnpm build\n${planted}\n` } });
     const report = await context.deploy();
 
     expect(report.outcome).toBe("REFUSED");
     const receipt = readDeployLedger(context.store, PROJECT).get(ENVIRONMENT)?.current;
+    // THE CODE AND THE LAYER STILL NAME THE CAUSE. A build refusal is not degraded to a bare
+    // failure — what changes is that docker's own words no longer become durable, because a
+    // failing `RUN` step routinely echoes a token, a registry URL or a `--build-arg` value.
     expect(receipt?.refusal?.code).toBe(DEPLOY_BUILD_FAILED);
     expect(receipt?.refusal?.layer).toBe(DEPLOY_ENGINE_STAMP);
-    // THE EXACT PLANTED TEXT. A generic "build failed" message cannot pass this,
-    // and a receipt read weeks later is undiagnosable without it.
-    expect(receipt?.refusal?.detail).toBe(planted);
+    expect(receipt?.refusal?.detail).toBe(REDACTED_DETAIL);
+    expect(receipt?.refusal?.detail).not.toContain("exit code: 137");
   });
 });
 
@@ -767,14 +787,22 @@ describe("the deploy composes backup-before-migrate before activating the candid
     // A FILE where the backup directory must be. `migrationBackupDirectory` lstats every path
     // component and refuses anything that is not a directory. Nothing is mocked.
     writeFileSync(join(root, BACKUP_DIRECTORY), "not a directory\n");
-    const context = harness({ migrate: realMigration(openStore(), root, journal) });
+    const migrationStore = openStore();
+    const context = harness({ migrate: realMigration(migrationStore, root, journal) });
     const report = await context.deploy();
 
     expect(report.outcome).toBe("REFUSED");
-    // CODE AND LAYER both, from the migration's own receipt, carried in the deploy's durable detail.
+    // THE DEPLOY'S OWN CODE AND LAYER. The migration's `code@layer` used to be copied into this
+    // detail; it is declassified now, because the same field also carries the engine's free text
+    // (a resolver's message, a failing path) and the writer cannot tell the two apart.
     expect(report.receipt?.refusal).toMatchObject({
-      code: DEPLOY_BUILD_FAILED, detail: "MIGRATION_BACKUP_FAILED@DAEMON_INGRESS: backup failed",
-      layer: DEPLOY_ENGINE_STAMP,
+      code: DEPLOY_BUILD_FAILED, detail: REDACTED_DETAIL, layer: DEPLOY_ENGINE_STAMP,
+    });
+    // THE AUTHORITATIVE MIGRATION CODE IS UNAFFECTED — it never lived in the deploy's detail. It
+    // is on the migration's OWN receipt, read back from the store rather than inferred, which is
+    // what makes the declassification above lossless for an operator.
+    expect(readMigrationReceipt(migrationStore, PROJECT, "decision-1")).toMatchObject({
+      outcome: "REFUSED", refusal: { code: "MIGRATION_BACKUP_FAILED", layer: "DAEMON_INGRESS" },
     });
     // THE SCHEMA IS UNTOUCHED and neither host effect ran — not "it returned a refusal".
     expect(journal.schema).toEqual(["accounts"]);
@@ -800,9 +828,14 @@ describe("the deploy composes backup-before-migrate before activating the candid
 
     expect(report.outcome).toBe("REFUSED");
     expect(report.receipt?.outcome).not.toBe("DEPLOYED");
-    // THE FAILING FILE reaches the deploy's durable detail, with the migration's own code@layer.
-    expect(report.receipt?.refusal?.detail)
-      .toBe(`MIGRATION_FAILED@DAEMON_INGRESS: ${FAILING_FILE}`);
+    // THE FAILING FILE DOES NOT reach the deploy's durable detail. A migration's free text is the
+    // one place a connection string is most likely to appear, so the deploy receipt keeps only
+    // its own code and layer; the failing FILE is read below off the migration's own receipt,
+    // which is the record that names it authoritatively anyway.
+    expect(report.receipt?.refusal?.detail).toBe(REDACTED_DETAIL);
+    expect(report.receipt?.refusal?.detail).not.toContain(FAILING_FILE);
+    expect(report.receipt?.refusal?.code).toBe(DEPLOY_BUILD_FAILED);
+    expect(report.receipt?.refusal?.layer).toBe(DEPLOY_ENGINE_STAMP);
     // THE MIGRATION RECEIPT IS PERSISTED AND REFUSED — read back from the store, never inferred.
     const persisted = readMigrationReceipt(store, PROJECT, "decision-1");
     expect(persisted).toMatchObject({

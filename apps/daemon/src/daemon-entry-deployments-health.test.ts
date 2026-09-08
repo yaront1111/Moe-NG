@@ -46,9 +46,19 @@ const ENVIRONMENT = "production";
 const SHA = "a".repeat(40);
 const ROLLBACK_SHA = "b".repeat(40);
 
-/** Long, quoted and punctuated: nothing a summariser or a code-mapper mints by accident. */
+/**
+ * THE UNSANITISED INPUT, handed to the PRODUCTION writer. Long, quoted and punctuated: nothing a
+ * summariser or a code-mapper mints by accident, and nothing the route could reconstruct.
+ * `recordDeployReceipt` declassifies external tool text before it becomes durable (epic rail 3),
+ * so this string is what goes IN and `STORED_ERROR_LINE` is what the route must serve back.
+ * Keeping the two SEPARATE is the point: seeding the marker directly would make the arm below
+ * assert only that a constant round-trips, and it would no longer catch a route that invented,
+ * summarised or truncated the line it was given.
+ */
 const ERROR_LINE = 'failed to solve: process "/bin/sh -c pnpm --filter @acme/api build" '
   + "did not complete successfully: exit code: 137 (OOMKilled, layer sha256:9f2c1b, 2.4GiB/2GiB)";
+/** What the writer made durable, and therefore exactly what the read must serve, byte for byte. */
+const STORED_ERROR_LINE = "[REDACTED]";
 
 async function post(
   started: { readonly origin: string; readonly port: number },
@@ -207,13 +217,21 @@ it("serves environment state, the verbatim error line and the open incident from
       expect(view["lastProbe"]).toEqual({
         at: "2026-09-06T11:02:00.000Z", latencyMs: 431, status: "FAILURE",
       });
-      // THE POINT OF THE ROW: byte equality against the seeded line, off the wire. A route that
-      // answered "unhealthy", a code, or a truncation makes the card it feeds useless.
+      // THE POINT OF THE ROW: byte equality against the STORED line, off the wire, with the
+      // seeded code and layer intact. The route is a pure read — it neither scrubs nor decorates
+      // — so what it serves is exactly what the writer made durable. A route that answered
+      // "unhealthy", a code, or a truncation still makes the card it feeds useless and still
+      // fails here.
       expect(view["lastError"]).toEqual({
         at: "2026-09-06T12:00:00.000Z", code: "DEPLOY_BUILD_FAILED",
-        layer: "DAEMON_DEPLOY_ENGINE", line: ERROR_LINE, source: "DEPLOY_RECEIPT",
+        layer: "DAEMON_DEPLOY_ENGINE", line: STORED_ERROR_LINE, source: "DEPLOY_RECEIPT",
       });
-      expect((view["lastError"] as { readonly line: string }).line).toBe(ERROR_LINE);
+      expect((view["lastError"] as { readonly line: string }).line).toBe(STORED_ERROR_LINE);
+      // AND THE INPUT IS GONE. The unsanitised text was seeded through the production writer at
+      // the top of this arm, so its absence from the composed HTTP response is a claim about the
+      // whole path — writer, store, projection, listener — not about a fixture.
+      expect(JSON.stringify(view)).not.toContain("OOMKilled");
+      expect(JSON.stringify(view)).not.toContain(ERROR_LINE);
       // The one-open-incident lifecycle opened on the third failure; its opened-at is the probe's.
       expect(view["incident"]).toEqual({ id: 1, openedAt: "2026-09-06T11:02:00.000Z" });
       expect(view["rollbackSha"]).toBe(SHA);
