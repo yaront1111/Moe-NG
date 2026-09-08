@@ -68,20 +68,26 @@
     {
       "stepId": "step-5",
       "description": "THE COMMITTED REGRESSION (DoD 1). NEW `tests/e2e/control-room/lane-landing.spec.ts` — the standalone real-lane Playwright arm, the permanent form of step 1's throwaway. Delete the throwaway now if it is still on disk.\n\nN INDEPENDENT FRESH SEEDED LANES, per the owner ruling — each iteration its own `withDaemonBackedControlRoom({liveCredentials:'ABSENT', fakeGh:'SUCCESS'})` and its own `landLaneNode`, never a second call against a lane that already landed. Pick N from step 1's measured failure rate so the arm would have failed before the fix, and say in a comment WHY that N: an intermittent arm with N too small is green by luck and pins nothing.\n\nASSERT, PER LANE:\n- `landed.ok` is true, with the refusal detail in the failure message so a red is diagnosable;\n- the returned `sha` DIFFERS from the pre-landing baseline sha AND EQUALS the workspace's actual `git rev-parse HEAD` — read from git, never parsed from the transcript;\n- the TARGET node carries a COMMITTED landing receipt, read through the measured production path `readReviewLedgers(store, projectId, new Set([nodeRef])).landings` (`apps/daemon/src/review/review-read-model.ts:288`). Never credit a `[lander]` log line as the receipt, and never credit a policy line at all;\n- `git status --porcelain` in the lane workspace is EMPTY after the helper's teardown;\n- the wrapper pid returned in `LaneLanded.wrapperPid` is GONE — no surviving owned process.\n\nDO NOT DELETE OR RESET DIRTY BYTES TO MAKE THE CLEAN-STATUS ASSERTION PASS (owner fence). If the workspace is dirty, that is the bug and the arm must fail.\n\nTEARDOWN in a `finally` on every path including the throwing one: the lane, the daemon child, the wrapper, any temp root. A leaked wrapper keeps staffing against a store the lane is about to delete, and a leaked process makes every later gate on this board inadmissible.\n\nDO NOT TOUCH THE PEER'S FILES. `contract-goal.spec.ts`, `lane-contract-goal.ts` and `lane-multi-node-workspace.ts` are untracked in the shared worktree and belong to task-6bafd3b9 (worker-76f4ef35). Do not sweep, revert, commit or import them, and do not create a dependency cycle waiting on that consumer.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "tests/e2e/control-room/lane-landing.spec.ts"
       ],
       "newFiles": [
         "tests/e2e/control-room/lane-landing.spec.ts"
       ],
-      "startedAt": "2026-09-08T11:48:08.300Z"
+      "modifiedFiles": [
+        "tests/e2e/control-room/lane-landing.spec.ts"
+      ],
+      "note": "COMMITTED REGRESSION LANDED AND GREEN. NEW `tests/e2e/control-room/lane-landing.spec.ts`, 200 lines.\n\n`pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts lane-landing.spec.ts` -> `ok 1 [chromium] > lane-landing.spec.ts:152:1 > landLaneNode lands the code node and leaves a clean workspace on five fresh lanes (43.9s)` / `1 passed (45.3s)`, EXIT=0. Executed spec count: 1 test, 1 spec file. 8.8 s per lane, matching step 1's measurement — a FAST pass is the green signature here, not a slow one waiting out a toBeVisible.\n\nStep 1's throwaway (`zz-baseline-throwaway.spec.ts`) is gone — `ls tests/e2e/control-room/ | grep -i throwaway` returns nothing and git status shows no such path.\n\nN INDEPENDENT FRESH LANES, per the owner ruling. Each of the 5 iterations is its own `withDaemonBackedControlRoom({fakeGh:\"SUCCESS\", liveCredentials:\"ABSENT\"})` — own daemon, dev server, store, scratch git repo, seeded board — and calls `landLaneNode` exactly ONCE. No second call against an already-landed lane, no round-command replay.\n\nWHY N=5, stated in the file header: step 1 measured the pre-fix per-lane clean rate at 1/17, so a pre-fix run of 5 independent lanes goes green by luck with probability (1/17)^5 ~ 7e-7. N=1 would have passed once in seventeen runs and pinned nothing. The DISCRIMINATOR is the clean workspace, NOT `landed.ok` — `landed.ok` was true 17/17 before the fix and is not what failed.\n\nASSERTED PER LANE, each with a `describeAudit` failure message carrying nodeRef, baseline, landed, head, receipt, wrapperPid, survivors, porcelain and refusal detail:\n- `landed.ok` true (refusal detail asserted null, so a red quotes the wrapper transcript);\n- returned `sha` != the pre-landing baseline sha AND == the workspace's own `git rev-parse --verify HEAD^{commit}` — both read from git via `spawnSync(\"git\", [\"-C\", ws, ...], {shell:false})`, never parsed from the transcript;\n- the TARGET node carries a COMMITTED landing receipt through the production path `readReviewLedgers(store, projectId, new Set([nodeRef])).landings.get(nodeRef)` (review-read-model.ts:288), and `receipt.commit.sha` EQUALS the returned sha. No `[lander]` log line is credited; a policy item never earns a receipt at all;\n- `git status --porcelain` in the lane workspace is EMPTY after landLaneNode's teardown — THE REGRESSION;\n- `survivingPids([landed.wrapperPid])` is `[]` — no wrapper outlives the helper.\n\nANTI-VACUITY: the sweep asserts `laneRefusals` is `[]` and `audits` has length 5 BEFORE the per-lane loop, so a run where zero lanes opened cannot pass with an empty loop.\n\nNO FENCE BREACHED. Nothing is deleted, reset or swept to make the clean-status assertion pass — the porcelain is measured and REPORTED; a dirty workspace fails the arm. No receipt is hand-seeded. No budget raised.\n\nTEARDOWN: `withDaemonBackedControlRoom` owns lane/daemon/dev-server/scratch teardown in its own `finally` on every path including a throwing one; `landLaneNode` owns the wrapper the same way. Audits are collected and asserted AFTER each lane closes, so an assertion cannot abandon the remaining lanes or strand a live child.\n\nPEER FILES UNTOUCHED: contract-goal.spec.ts, lane-contract-goal.ts and lane-multi-node-workspace.ts (task-6bafd3b9 / worker-76f4ef35) are not imported, edited, swept or waited on. No dependency added.\n\n`pnpm exec tsc -p tests/e2e/control-room/tsconfig.json` EXIT=0. browser-e2e-gate lease held under this taskId (expires 2026-09-09T11:50Z).",
+      "startedAt": "2026-09-08T11:48:08.300Z",
+      "completedAt": "2026-09-08T11:51:18.985Z"
     },
     {
       "stepId": "step-6",
       "description": "GATES (DoD 3), each standalone and foreground, each quoted with the count line that proves it EXECUTED. Exit 0 alone is not evidence: 'No test files found' and '0 passed' are also exit 0, so the discriminator is the printed `Test Files N passed` count — and for Playwright, the executed spec count and exit status, which DoD 3 names explicitly.\n\n- `pnpm exec vitest run tests/e2e/control-room/lane-landing.test.ts` — the direct arms, seconds not minutes. This is the fast oracle for steps 2-4.\n- `pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts lane-landing.spec.ts contract-goal.spec.ts` — the focused browser leg, under the browser-e2e-gate lease. `contract-goal.spec.ts` is the DEPENDENT arm DoD 3 requires and is the PEER'S UNTRACKED FILE: you RUN it as evidence, you do not own, edit or commit it. Name its owner and its untracked state in the record, and if it fails for a reason inside its own bytes rather than in the landing helper, attribute it there rather than absorbing it.\n- `pnpm test` — the root lane, which DOES include `tests/**/*.test.ts` (vitest.config.ts include), so it covers this row's new direct arms. It covers NO apps/** file; say so.\n- `pnpm typecheck` — and note that `tests/e2e/control-room/tsconfig.json` exists and needs its own explicit typecheck if the root leg does not reach it. Verify which is true rather than assuming.\n- `pnpm --filter @moe/daemon test` and `pnpm --filter @moe/control-room test`.\n- `pnpm test:e2e:browser` — the full browser lane, for the six existing consumers of `landLaneNode` listed in step 4. This is the regression that matters most: the fix changes when the helper resolves its target and when it stops its children, and every one of those specs drives it.\n\nPLAYWRIGHT INVERTS THE USUAL INSTINCT: a FAST pass is the green signature and a SLOW run is the red one waiting out a 30 s `toBeVisible`. Do not read a long run as thoroughness.\n\nATTRIBUTE FOREIGN RED, never hide it and never fabricate green. Path-attributed baseline: gate failures at the merge-base, gate failures at HEAD, subtract, intersect with this row's three owned paths; complete only when that intersection is EMPTY. Disclose foreign red verbatim with exact failing lines and paths. Acquire the shared gate lease rather than running a convoy beside other seats, and do not re-run a full suite repeatedly — it degrades every other seat's gate.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-08T11:51:30.861Z"
     },
     {
       "stepId": "step-7",
@@ -142,16 +148,22 @@
       "author": "worker-319873d7",
       "content": "SESSION COLLISION ON THIS ROW — READ BEFORE TRIAGING. Filed by the ORIGINAL session (claude.exe pid 26052, started 2026-09-08T14:34:20 local = 11:34Z, Moe-Session worker-319873d7@2026-09-08T11:34:35Z, the one that owns commit b16c544a).\n\nWHAT HAPPENED. The wrapper launched two FURTHER claude.exe sessions under the SAME workerId while this one was still running: pids 42944 (14:39:16) and 52000 (14:44:38). Measured with `Get-CimInstance Win32_Process` at 14:47 local; 52000 was still alive. `tasklist` from the Bash sandbox reports nothing, so CIM is the only census that works here.\n\nDIVISION OF WORK, as it actually landed:\n- step-1 (the measured red) and step-2 (the direct arms) were completed by THIS session. Their notes and comment-7baa79e6 are mine. `tests/e2e/control-room/lane-landing.test.ts` is my file and is on the branch in b16c544a (`Moe-Session: worker-319873d7@2026-09-08T11:34:35Z`, 226 lines, byte-identical to disk).\n- step-3 was completed by a LATER session (its note says \"Prior session recorded these RED 11 failed | 1 passed at HEAD\", which is my step-2 result). Its `lane-landing.ts` edit REPLACED mine on disk. I had made the same two fixes independently and reached the same green (`Tests 12 passed (12)`, EXIT=0) before its note appeared; the surviving version is functionally equivalent — same `landingSeatClaim`/`landedSeatBytes` exports, same stdin discrimination, same early `laneCompiledNodeRef` resolution. No work was lost and nothing is half-applied.\n- step-4 is IN_PROGRESS under that later session. My `complete_step` for step-3 was refused `[INVALID_STATE] Step is in COMPLETED state, expected IN_PROGRESS`, which is the documented signature of the purged seat.\n\nWHY I STOPPED RATHER THAN CONTINUED. Two sessions editing the same three files in one shared checkout is how a half-applied fix ships. I already watched my `lane-landing.ts` bytes be replaced mid-step. Continuing would race the live seat on `lane-landing.ts`, `lane-landing.test.ts` and the not-yet-created `lane-landing.spec.ts`. I did NOT `report_blocked`: that would flip the row to BLOCKED and stop the live session that is legitimately finishing it. I did NOT revert, stash or re-apply anything.\n\nSTATE I AM LEAVING BEHIND, for whoever finishes steps 4-7:\n- `browser-e2e-gate` lease is HELD, task-keyed to this row (acquired 11:35:20Z, note names this row), so the live session inherits it and does not need to re-acquire. Release it after step 6.\n- Step 1's baseline is comment-7baa79e6: 17 fresh lanes, `landed.ok` 17/17, clean workspace 0/17, `##### TALLY passed=0/12 #####` with EXIT=1. That is DoD 1's \"previously failed\" evidence and does not need re-measuring.\n- Both step-1 throwaways are DELETED and confirmed absent; no `zz-*` file remains under tests/e2e/control-room.\n- Peer dirt untouched throughout: contract-goal.spec.ts, lane-contract-goal.ts, lane-multi-node-workspace.ts are still `??` and belong to task-6bafd3b9 / worker-76f4ef35.",
       "timestamp": "2026-09-08T11:48:01.068Z"
+    },
+    {
+      "id": "comment-06e1410105364af19a856229106be31b",
+      "author": "worker-319873d7",
+      "content": "STEP-5 DELIVERABLE WAS DESTROYED BY A TWIN SESSION OF THIS SAME workerId, AND REBUILT. Disclosing on the row so QA grades the bytes that are actually here, not the bytes the step-5 note was written about. Chat copy: msg-3dcd06ce (chan-388a290f).\n\nTWO LIVE SESSIONS, ONE workerId, ONE ROW — fourth occurrence on this epic. Census `Get-CimInstance Win32_Process -Filter \"Name='claude.exe'\"` at 2026-09-08T11:55:56Z:\n- PID 52000, `moe-mcp-config-worker-58096.json`, started 11:44:38Z — completed step-5 at 11:51:19Z and holds step-6 (task JSON last written 11:51:30Z). STILL ALIVE.\n- PID 31468, `moe-mcp-config-worker-61964.json`, started 11:49:35Z — me.\nBoth `%TEMP%\\moe-system-prompt-worker-{58096,61964}.md` carry `workerId=worker-319873d7` and `Claimed task id: task-da435e66fe8247fda0d441e61e2c4b91`.\n\nTHE DAMAGE, MEASURED. At my session start `git status --porcelain` showed `tests/e2e/control-room/lane-landing.spec.ts` ABSENT and the board showed step-5 IN_PROGRESS, so I wrote it. In that window the twin completed step-5 with its own 200-line copy (`1 passed (45.3s)`, EXIT 0, five fresh lanes) and moved to step-6. My write at ~11:53Z overwrote those bytes. They were UNTRACKED: `git log --all --oneline -- tests/e2e/control-room/lane-landing.spec.ts` is EMPTY and `git cat-file -e HEAD:tests/e2e/control-room/lane-landing.spec.ts` answers \"exists on disk, but not in 'HEAD'\". Not recoverable. This is my error, not the twin's.\n\nTHE REBUILD, SHAPED TO THE RECORD RATHER THAN TO MY CONVENIENCE. I did not leave a weaker file sitting under the twin's step-5 note. The delivered file is ONE test titled exactly `landLaneNode lands the code node and leaves a clean workspace on five fresh lanes`, FIVE independent fresh lanes, each its own `withDaemonBackedControlRoom({fakeGh:\"SUCCESS\", liveCredentials:\"ABSENT\"})` and its own `landLaneNode` — never a second call against a landed lane (which the helper cannot serve anyway: `retireSpecNode` deletes the node spec `resolveLaneScratch` matches on).\n\nPER-LANE ASSERTIONS, all against measured production surfaces:\n- `landed.ok`, with the refusal `detail` in the failure message;\n- `landed.sha` EQUALS `git rev-parse --verify HEAD^{commit}` read from the lane workspace with GIT_* stripped, and DIFFERS from the pre-landing `scratch.workspaceSha`;\n- `git status --porcelain` in the lane workspace is EMPTY — the arm that was 0/17 before the fix. Nothing is deleted or reset to make it pass;\n- the target's landing receipt via the production `readReviewLedgers(store, projectId, new Set([nodeRef])).landings` (`apps/daemon/src/review/review-read-model.ts:288`): `outcome === \"COMMITTED\"`, `subjectRef === nodeRef`, `commit.sha === landed.sha`, and `LANDED_PATH` among `commit.files`. No `[lander]` log line is credited as a receipt;\n- `survivingPids([landed.wrapperPid])` is `[]`, asked FIRST so a leaked wrapper is reported even when a later assertion is about to fail.\n\nFRESH RUN OF THE REBUILT FILE:\n`pnpm exec playwright test -c tests/e2e/control-room/playwright.config.ts lane-landing.spec.ts`\n```\n##### LANE TALLY passed=5/5 #####\nlane 1/5..lane 5/5: landed, clean, receipt COMMITTED\n  ok 1 [chromium] > lane-landing.spec.ts:131:1 > landLaneNode lands the code node and leaves a clean workspace on five fresh lanes (49.1s)\n  1 passed (50.4s)\n```\nEXIT 0. Executed spec count: 1 spec file, 1 test, 5 lanes. `pnpm exec tsc -p tests/e2e/control-room/tsconfig.json` EXIT 0.\n\nTHE ONE RESPECT IN WHICH THE BYTES DIFFER FROM THE NOTE: 148 lines, not 200. Recorded rather than papered over.\n\nWHAT I AM NOT DOING. I am not racing PID 52000: I hold no step, I will not call complete_step or complete_task on this row, and I have not touched `lane-landing.ts` or `lane-landing.test.ts`. I am leaving the task-keyed `browser-e2e-gate` lease HELD so the twin's step-6 legs are not cut out from under it. Peer dirt untouched: `contract-goal.spec.ts`, `lane-contract-goal.ts`, `lane-multi-node-workspace.ts` (task-6bafd3b9 / worker-76f4ef35).\n\nTO WHOEVER RUNS STEP 6: any lane-landing.spec.ts count line captured before ~11:56Z was taken against bytes that no longer exist. Re-run before quoting it.",
+      "timestamp": "2026-09-08T11:56:38.589Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T18:52:51.614Z",
-  "updatedAt": "2026-09-08T11:48:08.300Z",
+  "updatedAt": "2026-09-08T11:56:38.589Z",
   "metrics": {
     "firstClaimAt": "2026-09-07T18:52:57.145Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "contextFetchedBy": [
     "architect-f362f7a6",
@@ -168,7 +180,8 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-08T11:34:17.170Z",
@@ -210,22 +223,51 @@
       "treeId": "978cece14d212cc08200b2bd14855bf2ebd3502b",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "8ede1ac3b2e23d148dce18bc8255863f3c88bc39",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-319873d7@2026-09-08T11:34:20Z",
+      "paths": [
+        ".moe/tasks/task-da435e66fe8247fda0d441e61e2c4b91.json",
+        "tests/e2e/control-room/lane-landing.test.ts",
+        "tests/e2e/control-room/lane-landing.ts"
+      ],
+      "recordedBy": "worker-319873d7",
+      "recordedAt": "2026-09-08T11:49:04.229Z",
+      "treeId": "d50bb13f90b7f208e8d1c46ae2dba7200cf13070",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "tests/e2e/control-room/lane-landing.ts",
+          "taskId": "task-6bafd3b9439640cba358dd6e79329c9d"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
     ".moe/tasks/task-da435e66fe8247fda0d441e61e2c4b91.json",
     ".moe/tasks/task-99f364e3a6104ee993b6820c580a52fb.json",
-    "tests/e2e/control-room/lane-landing.test.ts"
+    "tests/e2e/control-room/lane-landing.test.ts",
+    "tests/e2e/control-room/lane-landing.ts"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-319873d7@2026-09-08T11:34:35Z",
-    "at": "2026-09-08T11:44:06.787Z"
+    "sessionId": "worker-319873d7@2026-09-08T11:34:20Z",
+    "at": "2026-09-08T11:49:04.229Z"
   },
   "workStartedAt": "2026-09-08T11:35:16.504Z",
   "touchedFiles": [
-    "tests/e2e/control-room/zz-baseline-throwaway.spec.ts"
+    "tests/e2e/control-room/zz-baseline-throwaway.spec.ts",
+    "tests/e2e/control-room/lane-landing.test.ts",
+    "tests/e2e/control-room/lane-landing.ts"
+  ],
+  "declaredFiles": [
+    "tests/e2e/control-room/lane-landing.spec.ts"
   ]
 }
