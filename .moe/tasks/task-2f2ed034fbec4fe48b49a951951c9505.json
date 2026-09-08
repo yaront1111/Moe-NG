@@ -190,11 +190,17 @@
       "author": "worker-319873d7",
       "content": "SESSION D (2026-09-08 01:58-02:02Z, seat worker-319873d7) — YIELDED to a LIVE twin, edited ZERO bytes. This is the FOURTH session to share this seat id; sessions B, C and now D all detected a live twin. Everything below was produced by session D and by nobody else; attribute it by the UTC times, not by the seat id.\n\nLIVENESS CENSUS (repeated sample, not a snapshot — a single `stat` cannot tell a live writer from stranded debris):\n  01:58:40Z  .moe/tasks/<row>.json rewritten (the wrapper's claim for THIS session)\n  01:59:01Z  ?? apps/daemon/src/http/affordance-rollback-round-trip.test.ts  6904 bytes\n  01:59:52Z  same path 10895 bytes\n  02:00:04Z .. 02:00:34Z  10895 bytes, constant (a snapshot here would have read \"stranded\")\n  02:00:41Z  11547 bytes\n  02:01:40Z  12784 bytes\nMonotonic growth across four samples while session D wrote nothing = a session typing. The tool harness independently reported the file \"changed on disk since you last read it\" mid-census, and the diff showed real repair work (hand-rolled `registry.get(\"deployment.set_target\")` replaced by the production `setDeployTarget` + `readDurableLedger`, `surface.ok` corrected to `surface.outcome !== \"SURFACE\"`, `projectDeploymentsHealth` imported). The twin is AHEAD and CORRECT, so session D ran nothing over apps/daemon and touched no file: a gate taken over a half-written test would be a fabricated red, and a Write would silently destroy a step that is already green.\n\nSTEP CLOCK at 02:01:45Z — step-1..step-6 COMPLETED (01:48:27.752Z, 01:50:35.016Z, 01:52:45.861Z, 01:53:34.520Z, 01:55:30.984Z, 01:57:15.640Z), step-7 IN_PROGRESS since 01:57:19.705Z, steps 8-9 PENDING. Roughly one step per 90-120 s, so the twin is progressing, not wedged. NOT reporting blocked: `report_blocked` flips the row out of WORKING and would refuse the twin's own `complete_step` with [INVALID_STATE] mid-step (measured on task-78eedd8e, 2026-09-07 19:21Z).\n\nGATE SESSION D DID RUN — the CONTROL-ROOM leg, which epic rail 1 makes MANDATORY for this row and which session C deliberately skipped because step 6 was mid-flight at the time. Step 6 closed 01:57:15.640Z, so the steps 2/5/6 landing is now whole and the leg is admissible:\n\n  pnpm --filter @moe/control-room test\n  -> EXIT 0 (${PIPESTATUS[0]}, not tail's)\n  -> Test Files  200 passed (200)\n  -> Tests  2628 passed (2628)\n  -> Start at 05:01:26 (+0300 = 02:01:26Z), Duration 13.46s\n\nThat is a NONZERO executed count line, so the leg actually ran; it is not a \"No projects matched the filters\" exit 0. It covers `apps/control-room/src/live/live-deployments-health.ts` (step 5's decoder, including the new exact-key roster entry) and all five step-6 raw-body fixtures plus the sixth consumer step 6 found unnamed by the plan. DoD 4's control-room clause is therefore satisfied at the tree as of 02:01:26Z.\n\nGATES SESSION D DELIBERATELY DID NOT RUN: `pnpm typecheck` and the focused daemon leg. Both compile `affordance-rollback-round-trip.test.ts`, which grew 12784 bytes at 02:01:40Z and is mid-write. Any red from them right now would be an artifact of the twin's in-flight state, and quoting it as this row's evidence would be a false attribution. The twin must run both itself at step 8, AFTER step 7 closes.\n\nFOR WHOEVER FINISHES STEP 8 — the plan's own gate list still carries the defect session C recorded: `daemon-entry-deployments-health.test.ts` lives at `apps/daemon/src/`, NOT `apps/daemon/src/http/`. A vitest filter on the http path matches ZERO files and STILL EXITS 0 with no count line. Resolve every leg with `git ls-files` before quoting it, and keep the package script's `--testTimeout=30000` — narrowing `pnpm --filter @moe/daemon test` to a file list drops that flag and fakes timeout reds on a clean tree.\n\nPEER DIRT, noted and untouched: `?? apps/daemon/src/preview/preview-goal-landing.test.ts`, `?? tests/e2e/control-room/{contract-goal.spec.ts,lane-contract-goal.ts,lane-multi-node-workspace.ts}`, `?? .moe/resources/{browser-e2e,full-suite}-gate.json`, `?? Moe-NG_Deep_Review_2026-09-05.md`. All foreign to this row.",
       "timestamp": "2026-09-08T02:02:13.126Z"
+    },
+    {
+      "id": "comment-f580a3409b8a4cca9313bfcee9968304",
+      "author": "worker-319873d7",
+      "content": "SESSION E (2026-09-08 02:03:31–02:07Z, wrapper worker-58096) — YIELDED, wrote ZERO bytes to the repo. Fifth session to share workerId worker-319873d7 on this row; the wrapper's RESUME premise (\"prior session died\") was FALSE again.\n\nWHY YIELDED — PROCESS-TREE CENSUS, not a snapshot. Step 8 is a GATES-ONLY step: it creates no files, so the mtime census that discriminated a live twin at steps 6/7 is blind here. The discriminator that works is the process tree.\n\n  claude.exe pid=67184 ppid=61964, age 1091s at 02:04:24Z => started ~01:46:13Z.\n  Step clock: step-1 startedAt 01:47:01.037Z. That is session A, the session that carried steps 1–7.\n  Its descendant chain, alive at census time:\n    bash 38332 -> bash 50316 -> bash 35748\n      -> pnpm.exe 30308  \"pnpm --filter @moe/daemon test\"        (started 02:02:57Z)\n        -> cmd 72508     \"vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src\"\n          -> node 9468   vitest.mjs (same argv)\n            -> 4 rotating worker processes\n\nREPEATED SAMPLES over 102s (five samples, 25s apart) — worker ages in seconds:\n  02:05:24Z pnpm ALIVE claudeA ALIVE workers=4 ages=[121,11,5,2]\n  02:05:50Z pnpm ALIVE claudeA ALIVE workers=4 ages=[147,4,2,0]\n  02:06:15Z pnpm ALIVE claudeA ALIVE workers=4 ages=[172,2,1,1]\n  02:06:41Z pnpm ALIVE claudeA ALIVE workers=4 ages=[197,1,1,1]\n  02:07:06Z pnpm ALIVE claudeA ALIVE workers=4 ages=[223,13,2,1]\nThe pool keeps retiring and respawning workers (fresh 0–13s ages every sample) while the parent's own age climbs monotonically 121->223s. That is a suite walking file to file, not a hung process. Session A is mid-step-8, running DoD 4 leg 4 (the FULL @moe/daemon leg, the path-attributed baseline) — the argv carries the package script's own `src` and keeps `--testTimeout=30000`.\n\nWHAT SESSION E DELIBERATELY DID NOT DO\n1. No second gate. `pnpm typecheck` and the focused daemon leg would both contend for CPU with a live 4-worker vitest pool; this repo already reds shell-out tests on spawn latency, so a concurrent leg risks FALSELY REDDING the twin's gate and would make its evidence inadmissible. A green I produced under contention would also be a second, unattributable transcript for the same clause.\n2. No complete_step / complete_task / report_blocked. step-8 is IN_PROGRESS under the live twin; a terminal call from this session would either bounce INVALID_STATE or steal the row's state out from under the session that is 8/9 through it. report_blocked would be actively harmful: it would stamp blockedReason on a row whose owner is seconds from completing it.\n\nSTATE VERIFIED FROM DISK BY SESSION E (read-only)\n- All seven step-1..7 deliverables are IN HEAD (`git cat-file -e HEAD:<path>` for rollback-target.{ts,test.ts,js}, affordance-rollback-offers.{ts,test.ts,js}, affordance-rollback-round-trip.test.ts). Nothing of this row is left in the dirty tree.\n- `git status --porcelain` shows 26 dirty paths, ALL foreign/board debris (.moe/**, .codex/**, .grok/config.toml, Moe-NG_Deep_Review_2026-09-05.md, apps/daemon/src/preview/preview-goal-landing.test.ts, tests/e2e/control-room/{contract-goal.spec.ts,lane-contract-goal.ts,lane-multi-node-workspace.ts}). Untouched, per the shared-checkout rail.\n- Gate ledger so far: control-room leg EXIT 0 `Test Files 200 passed (200)` / `Tests 2628 passed (2628)` (session D, 02:01:26Z, taken AFTER step 6 closed at 01:57:15.640Z so the 2/5/6 landing was whole). Focused daemon leg EXIT 0 `Test Files 8 passed (8)` / `Tests 147 passed (147)` at HEAD e46d4996 (session C) — must be RE-RUN by session A with src/http/affordance-rollback-round-trip.test.ts appended, since that file did not exist yet.",
+      "timestamp": "2026-09-08T02:07:49.679Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-07T19:38:54.771Z",
-  "updatedAt": "2026-09-08T02:02:41.884Z",
+  "updatedAt": "2026-09-08T02:07:49.679Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T01:40:32.419Z",
     "plannedStepCount": 9,
@@ -326,6 +332,22 @@
       "treeId": "9c27e5ae25704afd935f32647b9068f54727ff8a",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "a60b95558a124d6ca6e164bdb526c975672c1798",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-319873d7@2026-09-08T01:59:11Z",
+      "paths": [
+        ".moe/tasks/task-2f2ed034fbec4fe48b49a951951c9505.json",
+        "apps/daemon/src/http/affordance-rollback-round-trip.test.ts"
+      ],
+      "recordedBy": "worker-319873d7",
+      "recordedAt": "2026-09-08T02:03:25.504Z",
+      "treeId": "388e4bce53869daaa7087eb587f707275ce6bd4f",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -345,14 +367,15 @@
     "apps/control-room/src/v2/ops/environments-section.test.tsx",
     "apps/control-room/src/v2/ops/live-environments.test.tsx",
     "apps/control-room/src/v2/ops/live-environments-enumeration.test.tsx",
-    "apps/daemon/src/http/affordance-rollback-offers.js"
+    "apps/daemon/src/http/affordance-rollback-offers.js",
+    "apps/daemon/src/http/affordance-rollback-round-trip.test.ts"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-319873d7@2026-09-08T01:54:27Z",
-    "at": "2026-09-08T01:58:40.173Z"
+    "sessionId": "worker-319873d7@2026-09-08T01:59:11Z",
+    "at": "2026-09-08T02:03:25.504Z"
   },
   "workStartedAt": "2026-09-08T01:47:01.037Z",
   "declaredFiles": [
