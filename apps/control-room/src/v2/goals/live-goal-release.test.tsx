@@ -27,10 +27,45 @@ import { LiveGoalRelease } from "./live-goal-release.js";
  * pull request on every run, which is not a thing a test suite may do.
  */
 
+/**
+ * A REAL timer and a REAL clock, captured at module load -- BEFORE the `beforeEach` below installs
+ * vitest's fake timers. Whatever `vi.useFakeTimers()` replaces on the global object, these two
+ * references still reach the real event loop and the real wall clock.
+ */
+const realSetTimeout = globalThis.setTimeout.bind(globalThis);
+const realNow = Date.now.bind(Date);
+
+/**
+ * REAL wall clock one arm may spend waiting for detached work, summed across every drained read
+ * that arm makes (`drainUntil`, below).
+ *
+ * A MILLISECOND BUDGET AND NOT A HOP COUNT, WHICH IS THE ENTIRE REPAIR. `spendOffer` hashes the
+ * payload with `crypto.subtle.digest` before it reaches the transport, and that promise resolves
+ * off Node's THREADPOOL: it needs real elapsed time, and no number of microtask hops supplies
+ * any. Draining N times at a 0ms fake advance costs well under a millisecond, so a hop-bounded
+ * drain gives up before the work it waits for can land -- which is how
+ * `expect(await sendCount(wire)).toBe(1)` red a loaded lane with `expected +0 to be 1` while
+ * passing every run on a quiet host.
+ *
+ * SIZED FROM MEASUREMENT, NOT TASTE. Instrumented copies of these arms, run inside a real
+ * 206-file control-room lane (5 runs, 2 of them under 16 spinning CPU hogs, 50 drained reads)
+ * never needed more than ONE real event-loop turn, and the most expensive single turn cost 24ms
+ * of wall clock. 2500ms is roughly a hundred of those worst-case turns.
+ *
+ * STILL BOUNDED, AND STILL INSIDE VITEST'S 5s PER-TEST DEFAULT: state that never arrives fails
+ * FAST at `getByTestId`'s own "unable to find an element" error instead of hanging to the runner
+ * timeout -- the trap `await screen.findByTestId(...)` would set here, since this file arms fake
+ * timers for every arm and RTL's `waitFor` polls a `setInterval` nothing would advance. The
+ * budget is per ARM rather than per read, so an arm whose state never arrives cannot multiply the
+ * wait by the number of reads it makes.
+ */
+const DRAIN_BUDGET_MS = 2_500;
+let drainBudgetLeftMs = DRAIN_BUDGET_MS;
+
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
-beforeEach(() => { vi.useFakeTimers(); });
+beforeEach(() => { vi.useFakeTimers(); drainBudgetLeftMs = DRAIN_BUDGET_MS; });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 const GOAL_ID = "goal-1";
@@ -207,35 +242,44 @@ const TRANSPORT_ABORT = Object.freeze({
 });
 
 /**
+ * ONE REAL EVENT-LOOP TURN, then React's queue: a real `setTimeout` so libuv can deliver a
+ * threadpool completion in the poll phase, then `advanceTimersByTimeAsync(0)` so React's own work
+ * flushes inside `act`. Returns the real wall clock consumed, which `drainUntil` charges against
+ * the arm's budget. It advances the FAKE clock 0ms, so no arm's 5s read poll fires as a side
+ * effect of looking.
+ */
+const drainTick = async (): Promise<number> => {
+  const startedAt = realNow();
+  await act(async () => {
+    await new Promise<void>((resolve) => { realSetTimeout(resolve, 1); });
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  // Never zero: a tick the clock reports as instant must still cost budget, or this loops forever.
+  return Math.max(realNow() - startedAt, 1);
+};
+
+/**
+ * Spends real event-loop turns until `ready()`, or until this arm's `DRAIN_BUDGET_MS` is gone --
+ * at which point it returns and lets the caller's own read produce the failure.
+ */
+const drainUntil = async (ready: () => boolean): Promise<void> => {
+  while (!ready() && drainBudgetLeftMs > 0) {
+    drainBudgetLeftMs -= await drainTick();
+  }
+};
+
+/**
  * The `CODE @ LAYER` string `OutcomeNote` prints inside its Details block, read from the DOM.
  *
  * IT DRAINS FIRST, AND THAT IS LOAD-BEARING, NOT BELT-AND-BRACES. `decide()` (goal-release.tsx)
  * dispatches the submit FIRE-AND-FORGET -- `void port.submit(...).then((outcome) => setAnswer(...))`
  * -- so the click handler returns immediately and the `await act(async () => fireEvent.click(...))`
  * that ends `confirmRelease()` has NO contract to await that detached chain. Reading the answer
- * synchronously after a confirm is therefore unguarded BY CONSTRUCTION, not merely unlucky.
- *
- * The gap is not a microtask hop either. `spendOffer` hashes the payload with
- * `crypto.subtle.digest` BEFORE it ever reaches the transport, and that promise is resolved off
- * Node's threadpool, not off the microtask queue: measured here, it outlasts 50 chained
- * `await null` hops and costs ~3ms of wall clock. On an idle host it lands before the next
- * statement runs; under full-suite load it does not, which is how a file that passes 3/3 alone
- * red the whole control-room lane. `settle()` yields a REAL event-loop turn per tick
- * (`advanceTimersByTimeAsync`), so this waits for that landing instead of racing it.
- *
- * BOUNDED ON PURPOSE. An answer that never arrives must still fail FAST, at `getByTestId`'s own
- * "unable to find an element" error, rather than hanging to the vitest timeout -- which is the
- * trap `await screen.findByTestId(...)` would set here, since this file arms fake timers for
- * every arm and RTL's `waitFor` polls on a `setInterval` nothing would advance.
- *
- * It advances 0ms, so no arm's 5s read poll fires as a side effect of looking at the answer.
+ * synchronously after a confirm is therefore unguarded BY CONSTRUCTION, not merely unlucky. The
+ * gap is not a microtask hop either -- see `DRAIN_BUDGET_MS` for what it actually is.
  */
-const ANSWER_DRAINS = 10;
 const noteCode = async (testId: string): Promise<string> => {
-  for (let drained = 0; drained < ANSWER_DRAINS; drained += 1) {
-    if (screen.queryByTestId(testId) !== null) break;
-    await settle();
-  }
+  await drainUntil(() => screen.queryByTestId(testId) !== null);
   return screen.getByTestId(testId).querySelector("code")?.textContent ?? "";
 };
 
@@ -251,20 +295,16 @@ const readRefusalCode = (): Promise<string> => noteCode("cr.release.read-refusal
 
 /**
  * How many decides actually reached the transport. IT DRAINS, and the reason is sharper than
- * for the DOM reads: `spendOffer` hashes the payload with `crypto.subtle.digest` BEFORE it
- * calls `sendCommand`, so this counter does not move until that threadpool round trip lands.
- * Reading it straight after a confirm reads it before the browser has sent anything -- measured
- * on a loaded control-room lane as `AssertionError: expected +0 to be 1`.
+ * for the DOM reads: the digest precedes `sendCommand`, so this counter does not move until that
+ * threadpool round trip lands, which makes a bare `wire.sends()` the EARLIEST read in the chain
+ * to lose the race -- measured on a loaded lane as `AssertionError: expected +0 to be 1`.
  *
  * It waits for the FIRST send and then reports the TRUE count, so an arm asserting `toBe(1)`
  * still fails on 0 (never sent, which is this assertion's whole job as a positive control) and
  * still fails on 2 (sent twice).
  */
 const sendCount = async (wire: Wire): Promise<number> => {
-  for (let drained = 0; drained < ANSWER_DRAINS; drained += 1) {
-    if (wire.sends() > 0) break;
-    await settle();
-  }
+  await drainUntil(() => wire.sends() > 0);
   return wire.sends();
 };
 

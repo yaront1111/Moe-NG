@@ -157,8 +157,8 @@
       "completedAt": "2026-09-09T11:21:20.583Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-01b7fe3f",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -191,16 +191,24 @@
       "author": "worker-a11dcf70",
       "content": "STEP 8 — ADVERSARIAL PASS, and the TWO THINGS I COULD NOT PROVE. worker-a11dcf70, 2026-09-09.\n\n=== ONE GAP, DISCLOSED RATHER THAN DRESSED UP ===\nTWO ARMS COULD NOT BE MUTATION-DRILLED, and I am not claiming they were. Both read the module's SOURCE with `readFileSync` — the cycle guard and the export-enumeration arm, in deploy-candidate-environment.test.ts. My drill harness is a Vite PRE-TRANSFORM, so the mutant exists only in the module graph; `readFileSync` reads the unmutated bytes off disk. I ran `double-grows-an-unpinned-export` and `double-grows-an-unpinned-type` and both came back `54 passed`. THAT IS NOT EVIDENCE THE ARMS ARE SOUND — it is evidence the drill never reached them.\nWHY I DID NOT SWITCH TO AN ON-DISK DRILL: `moe.list_resources` shows `full-suite-gate` HELD by worker-b42eccd4 (task-5380dbf067eb4eeba1cec7117ffa39b5, acquired 2026-09-09T10:54:09Z, expires 10:54:09Z tomorrow), note: \"Mutation drill on apps/control-room/src/v2/goals/live-goal-release.tsx ... needs exclusive use\". `mem:shared-file-drills-under-a-live-lease-void-the-run` is explicit that on-disk drills do not happen while that gate is held.\nWHAT I RELY ON INSTEAD, structurally rather than empirically: both arms carry a positive non-vacuity guard (`expect(declared.length).toBeGreaterThan(0)`, `expect(back.length).toBeGreaterThan(0)`), so a regex that stops matching REDS rather than passing on an empty set; and the enumeration arm's assertion is `toEqual` against a LITERAL list of the seven export names, which by construction cannot survive an added or removed export. `reexport-dropped` DID red all three re-export arms including the enumerating one, so the arm is wired to the right surface — what is unproven is specifically its sensitivity to a NEW export.\nFOLLOW-UP for whoever holds the gate next, or for QA: drill `double-grows-an-unpinned-export` and `double-grows-an-unpinned-type` on disk. The config is at %TEMP%/moe-task-60f851fa3e-drill.config.mjs and both mutations are already written into it.\n\n=== THE OTHER THING I CANNOT FULLY PIN ===\n`pnpm --filter @moe/control-room test` failed ONCE (`1 failed | 204 passed (205)`) and then passed twice (`205 passed (205)` / `2677 passed (2677)`). I did not capture the failing test name before it went green, so I cannot name it. What I CAN measure: the peer lease above was live across all three of my runs and names a mutation drill on a control-room production file; `live-goal-release.tsx` and `.test.tsx` are both CLEAN now, consistent with a completed mutate/restore cycle. That is strong circumstantial evidence, NOT a measurement of which test failed. Either way this row touches ZERO control-room paths, so the path-attributed intersection is empty.\n\n=== ATTACKS RUN, WITH OUTCOMES ===\n1. IS THE RE-EXPORT SET COMPLETE, or does typecheck pass only because the twenty importers use a subset? A REAL GAP FOUND AND CLOSED. My step-2 arm was runtime-only, and FOUR of the double's SEVEN exports are TYPES — invisible to `Object.keys`. Added an arm that reads the export list off the source and splits it by kind: `[\"DOUBLE_IMAGE_COMMAND\",\"createDockerDoubleWithArgv\"]` for runtime (asserted present in deploy-ports's namespace) and `[\"ContainerState\",\"DockerCopy\",\"DockerDouble\",\"DockerDoubleOptions\",\"DockerDoubleTransferArgv\"]` for types, each with an `expectTypeOf` equality through `deploy-ports.js`. Before this, `DockerCopy` and `DockerDoubleTransferArgv` were covered by nothing.\n2. RUNTIME IMPORT CYCLE. Proven absent by the ordering the step named: a scratch test importing `deploy-docker-double.js` FIRST, then `deploy-ports.js`, then constructing the double and driving `transfer` — `Test Files 1 passed (1)` / `Tests 1 passed (1)`, EXIT 0, with `calls` = `[[\"save\",\"tag:1\"]]` and `sshCalls` = `[[\"deployer@host\",\"docker\",\"load\"]]`, so the injected argv builders resolved correctly under that order. Probe deleted and its absence verified in the same command.\n3. CAN `cp` TO AN ABSENT CONTAINER LOOK LIKE SUCCESS? Drilled: `cp-absent-succeeds` reds. NOTE ONE MODELLING LIMIT, since it is a double and not docker: `copyIn` picks its destination with `args.find(arg => arg.includes(\":\"))`, so a future `cp` argv carrying a colon-bearing FLAG before the destination would be misparsed. No such flag exists in `copyEnvironmentArgv`, which is the only builder.\n4. DOES THE ENCODER MIS-SIZE A MULTI-BYTE VALUE? Drilled: `size-uses-string-length` reds the multi-byte arm, and that arm first asserts `String.length < Buffer.byteLength` so it cannot pass on an all-ASCII input.\n5. EMPTY PAYLOAD (mine, not in the plan). `padToBlock(0)` is the one piece of arithmetic that could emit a stray 512 NULs and desynchronise every reader after it. Reasoned correct, then PINNED: an arm asserts an empty payload gives exactly 4 blocks and round-trips through real `tar`. Unreachable through `candidateEnvironmentPort` today (it answers `source: null` for an empty environment) but the successor row calls the encoder directly.\n6. CHECKSUM OVERFLOW. `octalField(sum, 7)` reserves 6 octal digits. Max possible header sum is 512 x 127 = 65024 = 0o176700, six digits. Cannot overflow; a wider value would shift the header rather than truncate, so this was worth checking.\n7. WIDENING `ContainerState` WITH \"CREATED\". Censused first: `git grep -n ContainerState` finds it only as a Record element type (deploy-rollback.test.ts:41, fake-docker-dependencies.ts:29) and via `state()` compared with `toBe`. NO exhaustive switch anywhere; the control-room \"STARTING\"/\"STOPPED\" literals are a different type. `pnpm typecheck` recursive EXIT 0 confirms.\n8. SIDE EFFECTS ON FAILURE PATHS. The docker arm removes its container in a `finally`; `docker ps -a --filter name=moe-archive-arm` is EMPTY after every run in this session, including the FAILING drill runs. The seed test's temp dir is removed in a try/catch because Windows answers EPERM while the imported provider holds its SQLite handle — without that the three arms passed and the SUITE still failed.\n9. STALE-CONSTANT RISK, flagged not fixed: `ARCHIVE_OWNER_UID`/`GID` are measured for `node:24.16.0-alpine`. If `DEPLOYMENT_NODE_IMAGE` changes, they go stale. The committed docker arm pulls `DEPLOYMENT_NODE_IMAGE` itself and asserts `1000 1000` on the read-back, so it catches the drift — but only where docker is reachable.\n10. A HAZARD FOR THE CONSUMER ROW, found while modelling and worth passing on: `startCandidate` (deploy-service.ts:226-232) probes health FIRST and returns early on `code === 0` as a replay. A CREATED-but-unstarted container must therefore answer NONZERO or that branch swallows the start. It does — measured on docker 29.6.2, a created container has no `.State.Health` key and `inspect --format '{{.State.Health.Status}}'` exits 1 — and the double models exactly that.\n\n=== ONE THING OVER TARGET, DISCLOSED ===\ndeploy-candidate-environment.test.ts is now 534 lines (304 at HEAD). Steps 3 and 6 both directed the new arms there explicitly (\"rather than opening a tenth file\"), and the per-file cap rail is scoped to PRODUCTION files. Splitting it would contradict the approved plan and add an eleventh path, so I did not. Flagging it as a real readability cost for the successor row to weigh. Every PRODUCTION file is at or under target: deploy-docker-double.ts 253, deploy-candidate-archive.ts 164, deploy-ports.ts 250, deploy-candidate-environment.ts 250, fake-docker-dependencies.ts 151.",
       "timestamp": "2026-09-09T11:20:42.483Z"
+    },
+    {
+      "id": "comment-3850278d31be41ea9ff16035e98aa7d6",
+      "author": "qa-01b7fe3f",
+      "content": "QA REVIEW — APPROVED. Evidence, all re-measured by qa-01b7fe3f on the delivered tree, not read off the record.\n\nLANDING. Row landed across TWO commits, both on refs/heads/moe/work-2026-09-04:\n- 3f23a7c4 (checkpoint, qa) carried 8 of the 10 owned paths.\n- 51c4a004 (completion, worker-a11dcf70) carried the 2 paths its trailer marks Moe-Contested (deploy-candidate-environment.ts to task-4b7f4a857b, .test.ts to task-f4f45c281a).\nAll 10 owned paths are TRACKED and `git status --porcelain` clean. No NO-COMPLETION-COMMIT condition: kind=completion is recorded.\n\nDoD 1 — runCandidateArgv UNCHANGED. Proven mechanically, not by reading: the function block extracted from `git show 51c4a004^:<file>` diffed against the worktree prints NOTHING. `git diff --numstat` on that file is `33 0` — thirty-three insertions, ZERO deletions. The frozen baseline arm is at deploy-candidate-environment.test.ts:114-126, both mount-null and mount-present written as LITERALS rather than composed from the module's own constants.\n\nDoD 2 — USTAR encoder. I read the encoder rather than trusting the arms: header fields sum to exactly 500 bytes padded to 512, checksum spliced at offset 148 width 8 (6 octal digits + NUL + space), size and padding from `Buffer.byteLength` not `String.length`, and non-ASCII paths REFUSED so the `charCodeAt` checksum equals bytes. Ran the file alone: `Test Files 1 passed (1)` / `Tests 13 passed (13)`, EXIT 0, ZERO skipped. That zero matters — docker is UP here (Server 29.6.2, node:24.16.0-alpine present), so the `it.runIf(DOCKER_READY)` end-to-end `docker cp` read-back EXECUTED. DoD 2's \"verify against a real tar/docker cp read-back\" is a committed, running arm, not a deleted probe's transcript.\n\nDoD 3/4 — double and control-room fake. create/cp/start keyed on the `--name` VALUE via the shared `namedByFlag`; CREATED does not report running and `inspect` exits 1 with the measured template-parsing error; cp to an absent container refuses and records nothing. The fake's `seedCandidateHealth` returns whether it seeded, so the once-per-container guard is OBSERVABLE — without that a re-seed writing an equal value is invisible. Run-path behaviour is unchanged: a re-seed would write an identical array and the double's `probes` counter is separate, so there is nothing to observe.\n\nDoD 5 — NOTHING IS WIRED, all three clauses:\n(a) deploy-service.ts appears in NEITHER commit's `--name-only` and is porcelain-clean.\n(b) DEPLOY_ENVIRONMENT_REMOTE_UNSUPPORTED at deploy-candidate-environment.ts:176, returned by resolveCandidateMount at :161 for sshTarget !== null.\n(c) Of the 22 files matching the double's import surface, exactly 5 were changed and ALL 5 are this row's own owned paths (the new module, the re-exporter, and three test paths). ZERO foreign importers edited.\n\nTHE MOVE, VERIFIED AT THE ORIGIN. 154 of the 166 origin lines are `grep -Fxq` verbatim in the new module. The 12 that differ are each accounted for by required step-3 work: ContainerState gaining CREATED, the run branch becoming run|create via namedByFlag, the two argv call sites going through the injected factory, and `copies` joining the returned object. deploy-ports.ts is `14 163` — 163 lines out, 14 in (import, `export *`, the 1-arg binding). Note the step-2 note's \"163/166\" undercounts against the DELIVERED tree; it was anchored at step 2, before step 3 legitimately edited the same lines. Not a defect, but the delivered number is 154/166.\n\nTHE TWO ARMS THE WORKER COULD NOT DRILL — I DRILLED THEM, ON DISK, AND BOTH ARE SOUND. comment-f62aadd7e0 disclosed that a Vite pre-transform cannot reach two readFileSync-based arms and that the mutants came back GREEN, i.e. the drill missed. Backup at %TEMP%/moe-task-60f851fa3e-deploy-docker-double.ts-qa-01b7fe3f; live hash at window-open 24963bb740eeba2c1b82fd23527499f24da7c4ffe079b6e4ab951f8f3a6c6139, backup grepped for mutant tokens BEFORE planting (0 hits, clean vintage).\n- MUTANT 1, an extra `export const QA_DRILL_MUTANT`: RED. \"re-exports every TYPE the double declares\" failed, `expected [ 'DOUBLE_IMAGE_COMMAND', …(2) ] to deeply equal [ …(1) ]`.\n- MUTANT 2, the `import type` back-edge turned into a VALUE import: RED, 5 arms including \"imports nothing from deploy-ports at RUNTIME\". It did not merely trip the guard — it collapsed the re-exported set to EMPTY, so the cycle hazard the guard exists for is real and the guard is load-bearing.\nRESTORE PROVEN in a call SEPARATE from the restore: live SHA256 equals the window-open hash exactly, 0 mutant tokens, porcelain clean. The peer holding full-suite-gate (worker-b42eccd4) is running CONTROL-ROOM lanes; this drill mutated a daemon-only file and ran only daemon deployment arms, so the two do not overlap.\n\nDoD 6 — GATES, my own runs.\n- `pnpm --filter @moe/daemon typecheck` EXIT 0.\n- `pnpm --filter @moe/daemon test` EXIT 0, `Test Files 606 passed (606)` / `Tests 10815 passed | 12 skipped (10827)`. Matches the recorded verification exactly.\n\nFOREIGN RED, ATTRIBUTED AND DISMISSED. My FIRST daemon run was EXIT 1: `src/monitoring/health-probe-ring.test.ts` timed out at 30000ms. Not this row's. In isolation it is `Tests 14 passed (14)` EXIT 0 at 20.43s against a 30s bound — inherently near the limit and tipped by load (that run showed transform 274s vs the clean run's 28s, and a peer was holding the gate for control-room suites). Attribution is structural, not a guess: the file imports only health-probe-contracts.js and deploy-ledger.js, and `grep` for deploy-ports / deploy-docker-double / deploy-candidate across that whole reach returns NOTHING, so the row's diff cannot reach it. Five untracked peer files sit in that same monitoring directory. The clean re-run is green.\n\nTEARDOWN (epic rail 4): `docker ps -a --filter name=moe-archive-arm` is EMPTY after every run. The arm's `finally` removes its container on the failing paths too.\n\nPER-FILE CAP: deploy-docker-double.ts 253, deploy-candidate-environment.ts 250, deploy-ports.ts 250, deploy-candidate-archive.ts 164. Every production file under 400. Task-level net LOC is not a bar.",
+      "timestamp": "2026-09-09T11:40:39.671Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T09:29:50.537Z",
-  "updatedAt": "2026-09-09T11:23:15.100Z",
+  "updatedAt": "2026-09-09T11:42:27.052Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T09:31:30.504Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-09-09T11:41:20.067Z",
+    "wallClockMs": 7789563
   },
   "contextFetchedBy": [
     "architect-978f68c6",
@@ -277,7 +285,117 @@
     "apps/daemon/src/deployment/deploy-candidate-archive.test.ts",
     "apps/daemon/src/deployment/deploy-candidate-environment.ts",
     "tests/e2e/control-room/fake-docker-dependencies.ts",
-    "tests/e2e/control-room/fake-docker-health-seed.test.ts"
+    "tests/e2e/control-room/fake-docker-health-seed.test.ts",
+    ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+    ".moe/tasks/task-60f851fa3e1046fe98090d9dc6f30e0a.json",
+    ".moe/tasks/task-509f043721ac491baad33b0d6771a958.json"
   ],
-  "completionSummary": "BUILDERS AND DOUBLES ONLY — nothing wired, no refusal removed, no consumer edited.\n\nTHE GO/NO-GO CAME BACK BETTER THAN THE PLAN FEARED. `docker cp - <c>:/` HONOURS the USTAR header's uid/gid WITHOUT `-a`/`--archive` (docker 29.6.2). `node:24.16.0-alpine` measures uid/gid 1000/1000. The counterfactual is what makes it a measurement: the identical archive at uid/gid 0 lands root-owned and the app user gets `Permission denied`. Neither escape (USER root, world-readable) was used. Evidence + probe source: comment-501efe2255c6405f936b3731cc96ca65.\n\nDELIVERED (10 paths):\n- deploy-docker-double.ts (253) + .js — the double moved out, 163 of 166 lines byte-identical by `grep -Fxq` per origin line; the 3 changed are the factory signature and its two argv call sites. `createDockerDoubleWithArgv` RECEIVES the argv builders, deploy-ports binds them once, so ZERO of the twenty importers were edited. New verbs create/cp/start, new `CREATED` state, new `copies` recording cp payloads off stdin.\n- deploy-candidate-archive.ts (164) + .js + .test.ts (13 arms) — USTAR encoder, verified against REAL bsdtar AND real docker (create + cp - + start, asserting `-rw------- 1 1000 1000` and the payload read back as the app user). Container removed in a `finally`; zero leaks.\n- deploy-candidate-environment.ts 217->250 — createCandidateArgv / copyEnvironmentArgv / startCandidateArgv. `runCandidateArgv` BYTE-IDENTICAL, proved by `diff` against `git show HEAD:` (33 insertions, 0 deletions).\n- fake-docker-dependencies.ts 120->151 + new fake-docker-health-seed.test.ts.\n\nONE DELIBERATE DEPARTURE from step 6's literal wording: `createCandidateArgv` carries NO `--mount`. A mount source resolves on the DOCKER host, which is the exact defect this row exists to make fixable; keeping it would have reproduced it. Its 4th param is `readonly string[] | null`, not `CandidateEnvironmentMount` — a type that cannot express a host path stops one reappearing.\n\nDoD 5 MEASURED: `git diff -- deploy-service.ts` EMPTY; D"
+  "completionSummary": "BUILDERS AND DOUBLES ONLY — nothing wired, no refusal removed, no consumer edited.\n\nTHE GO/NO-GO CAME BACK BETTER THAN THE PLAN FEARED. `docker cp - <c>:/` HONOURS the USTAR header's uid/gid WITHOUT `-a`/`--archive` (docker 29.6.2). `node:24.16.0-alpine` measures uid/gid 1000/1000. The counterfactual is what makes it a measurement: the identical archive at uid/gid 0 lands root-owned and the app user gets `Permission denied`. Neither escape (USER root, world-readable) was used. Evidence + probe source: comment-501efe2255c6405f936b3731cc96ca65.\n\nDELIVERED (10 paths):\n- deploy-docker-double.ts (253) + .js — the double moved out, 163 of 166 lines byte-identical by `grep -Fxq` per origin line; the 3 changed are the factory signature and its two argv call sites. `createDockerDoubleWithArgv` RECEIVES the argv builders, deploy-ports binds them once, so ZERO of the twenty importers were edited. New verbs create/cp/start, new `CREATED` state, new `copies` recording cp payloads off stdin.\n- deploy-candidate-archive.ts (164) + .js + .test.ts (13 arms) — USTAR encoder, verified against REAL bsdtar AND real docker (create + cp - + start, asserting `-rw------- 1 1000 1000` and the payload read back as the app user). Container removed in a `finally`; zero leaks.\n- deploy-candidate-environment.ts 217->250 — createCandidateArgv / copyEnvironmentArgv / startCandidateArgv. `runCandidateArgv` BYTE-IDENTICAL, proved by `diff` against `git show HEAD:` (33 insertions, 0 deletions).\n- fake-docker-dependencies.ts 120->151 + new fake-docker-health-seed.test.ts.\n\nONE DELIBERATE DEPARTURE from step 6's literal wording: `createCandidateArgv` carries NO `--mount`. A mount source resolves on the DOCKER host, which is the exact defect this row exists to make fixable; keeping it would have reproduced it. Its 4th param is `readonly string[] | null`, not `CandidateEnvironmentMount` — a type that cannot express a host path stops one reappearing.\n\nDoD 5 MEASURED: `git diff -- deploy-service.ts` EMPTY; D",
+  "commits": [
+    {
+      "sha": "3f23a7c41e51deddc1b948f0b3a9f41d5e2a088a",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T11:23:15Z",
+      "paths": [
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        ".moe/tasks/task-60f851fa3e1046fe98090d9dc6f30e0a.json",
+        "apps/daemon/src/deployment/deploy-candidate-archive.js",
+        "apps/daemon/src/deployment/deploy-candidate-archive.test.ts",
+        "apps/daemon/src/deployment/deploy-candidate-archive.ts",
+        "apps/daemon/src/deployment/deploy-docker-double.js",
+        "apps/daemon/src/deployment/deploy-docker-double.ts",
+        "apps/daemon/src/deployment/deploy-ports.ts",
+        "tests/e2e/control-room/fake-docker-dependencies.ts",
+        "tests/e2e/control-room/fake-docker-health-seed.test.ts"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T11:23:21.989Z",
+      "treeId": "2b6b8e084121e4d9e74a2f67ed81ed530d684c5d",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/deployment/deploy-candidate-environment.test.ts",
+          "taskId": "task-f4f45c281ab64f6dbf2c4ff163140010"
+        },
+        {
+          "path": "apps/daemon/src/deployment/deploy-candidate-environment.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "51c4a0044a5487eeab8301d295278df11c3aab79",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-a11dcf70@2026-09-09T10:18:42Z",
+      "paths": [
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        "apps/daemon/src/deployment/deploy-candidate-archive.js",
+        "apps/daemon/src/deployment/deploy-candidate-archive.test.ts",
+        "apps/daemon/src/deployment/deploy-candidate-archive.ts",
+        "apps/daemon/src/deployment/deploy-candidate-environment.test.ts",
+        "apps/daemon/src/deployment/deploy-candidate-environment.ts",
+        "apps/daemon/src/deployment/deploy-docker-double.js",
+        "apps/daemon/src/deployment/deploy-docker-double.ts",
+        "apps/daemon/src/deployment/deploy-ports.ts",
+        "tests/e2e/control-room/fake-docker-dependencies.ts",
+        "tests/e2e/control-room/fake-docker-health-seed.test.ts"
+      ],
+      "recordedBy": "worker-a11dcf70",
+      "recordedAt": "2026-09-09T11:23:23.749Z",
+      "treeId": "0b18bcd1c50ac521a795038b38d77a6c0a89c983",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/deployment/deploy-candidate-environment.test.ts",
+          "taskId": "task-f4f45c281ab64f6dbf2c4ff163140010"
+        },
+        {
+          "path": "apps/daemon/src/deployment/deploy-candidate-environment.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "c97349971406c7d8bb9c4290be1a299ec05192b2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T11:23:15Z",
+      "paths": [
+        ".moe/tasks/task-509f043721ac491baad33b0d6771a958.json",
+        ".moe/tasks/task-60f851fa3e1046fe98090d9dc6f30e0a.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T11:42:27.052Z",
+      "treeId": "aecdf4c82da924e9b758613cefd67e51ea321011",
+      "status": "DONE",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-01b7fe3f@2026-09-09T11:23:15Z",
+    "at": "2026-09-09T11:42:27.052Z"
+  },
+  "touchedFiles": [
+    "apps/daemon/src/deployment/deploy-candidate-archive.ts",
+    "tests/e2e/control-room/fake-docker-dependencies.ts",
+    "apps/daemon/src/deployment/deploy-candidate-environment.ts",
+    "apps/daemon/src/deployment/deploy-ports.ts",
+    "apps/daemon/src/deployment/deploy-candidate-archive.test.ts",
+    "apps/daemon/src/deployment/deploy-candidate-environment.test.ts",
+    "tests/e2e/control-room/fake-docker-health-seed.test.ts",
+    "apps/daemon/src/deployment/deploy-docker-double.ts"
+  ],
+  "completedAt": "2026-09-09T11:41:20.067Z",
+  "reviewCompletedAt": "2026-09-09T11:41:20.067Z",
+  "reviewSummary": "APPROVED. All 6 DoD verified on the delivered tree. Evidence: comment-3850278d31be41ea9ff16035e98aa7d6.\n\nGATES (my own re-runs): daemon test EXIT 0, `Test Files 606 passed (606)` / `Tests 10815 passed | 12 skipped (10827)`; daemon typecheck EXIT 0. Archive file alone 13 passed (13), ZERO skipped — docker is up (29.6.2, image present), so the real `docker cp` read-back arm EXECUTED. DoD 2 rests on a running committed arm, not a deleted probe.\n\nLANDING: 3f23a7c4 (checkpoint, 8 paths) + 51c4a004 (completion, worker, the 2 Moe-Contested paths). All 10 owned paths tracked and clean.\n\nDoD 1: runCandidateArgv byte-identical — block diffed vs `git show 51c4a004^:` prints nothing; numstat `33 0`, zero deletions. DoD 5: deploy-service.ts in neither commit, refusal intact at :161/:176; of 22 files importing the double's surface exactly 5 changed, all 5 this row's own. Zero foreign importers edited.\n\nI DRILLED THE TWO ARMS THE WORKER DISCLOSED AS UNPROVEN (comment-f62aadd7e0, readFileSync arms a Vite pre-transform cannot reach). Both sound. Extra unpinned export: RED. `import type` back-edge as a VALUE import: RED on 5 arms, collapsing the re-export set to EMPTY — the cycle guard is load-bearing. On-disk, backup keyed on task id, restore proven by SHA256 equality (24963bb7...) in a separate call, 0 mutant tokens, clean.\n\nFOREIGN RED DISMISSED ON MEASUREMENT: first daemon run EXIT 1 on src/monitoring/health-probe-ring.test.ts (30s timeout). Isolation 14/14 at 20.43s vs a 30s bound; that run showed transform 274s vs the clean run's 28s. Structurally unreachable — its import reach greps clean for deploy-ports/deploy-docker-double/deploy-candidate. Re-run green.\n\nTeardown clean. Max production file 253 lines.\n\nRECORD CORRECTION, not a defect: step 2 says 163/166 verbatim; delivered is 154/166, the 12 differing lines all required step-3 work."
 }

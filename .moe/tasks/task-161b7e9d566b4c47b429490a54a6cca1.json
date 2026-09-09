@@ -62,14 +62,23 @@
     {
       "stepId": "step-4",
       "description": "THE CRASH, MID-WRITE (DoD 2 — the Stage 1 bar, and the hardest claim in this row). Kill the daemon DURING a landing write, recording the knob name and the timestamp. Then restart and prove recovery FROM THE STORE ALONE, never from agent memory or a log line: the ledger shows EXACTLY ONE outcome for that landing — COMMITTED once, or REFUSED with its code — never duplicated and never lost, and the goal resumes. THE EVIDENCE IS A STORE QUERY QUOTED WITH ITS RESULT (DoD 2 says so explicitly); a log line saying 'recovered' is not evidence, because the log is written by the process whose correctness is in question. Assert the ONE-OUTCOME property by counting rows for that landing in the durable ledger, not by observing that the goal looks fine afterwards — a duplicate landing also looks fine.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "tests/fault/landing-crash/landing-crash-child.ts",
+        "tests/fault/landing-crash/landing-crash-world.ts",
+        "tests/fault/landing-crash/landing-crash.fault.ts"
+      ],
+      "note": "STEP 4 — DoD 2 DELIVERED. The crash is real, the recovery is proved from the store alone, and the headline arm is falsifiable. Full evidence in comment-6a064c84 (SQL + both readings + the drill table); this note is the summary.\n\nDELIVERED, three new files in the fault lane (`tests/fault/landing-crash/`), no production bytes touched:\n- landing-crash-child.ts (140) — ONE production landing pass in its OWN `node` process. Runs production `landingJournalGate` in production's order (node-lander.ts:176 consults it before it looks at the workspace at all), then production `commitJournaledLanding` against the real verified-workspace port and the real `git` executable, on a real `SqliteEventStore` file. Arming is PURELY environmental, so the crash pass and the control pass execute BYTE-IDENTICAL code — that is what makes the control a control. The module entry is guarded on argv so the parent can import its constants without running a landing in the test worker.\n- landing-crash-world.ts (200) — fixtures + measurements only, nothing grades itself. Real git repo (`git init -b trunk`, base commit, one delivered file), the spawn, the SQL reading and the git reading.\n- landing-crash.fault.ts (180) — 9 arms in three describes: an uninterrupted landing (control), the development fence, and the crash.\n\nTHE WINDOW, MEASURED. Killed at `after-commit` with MOE_DEVELOPMENT_ONLY=1: git HEAD moved and carries `[\"land\",\"base\"]` with owned.txt, while the ledger holds landing_intent=1, landing_attempt=1, landing_completion=**0**. A durable Git effect that no durable record names. The restarted process (same store, same repo, same handle, unarmed) answers REPOSITORY_RECOVERY_REQUIRED and the ledger rows are byte-identical to the crash reading — one outcome, never duplicated, never lost.\n\nWHY SQL AND NOT A READER: the property is a ROW COUNT. A reader that returns the latest decision cannot see a second one, so counting through a reader would be structurally unable to fail. The query counts rows in `command_decisions` scoped by the two aggregates a landing writes, and GROUPS BY kind so the kinds appear in the RESULT rather than in the WHERE clause — a query naming the kinds in its filter could not notice a kind the write stopped emitting.\n\nPLATFORM DISCLOSURE, not a weakening: Windows has no signals, so a self-SIGKILLed child reads as status=1 signal=null. The arms discriminate on the ABSENCE of the child's terminal stdout line plus the PRESENCE of the knob's fd-2 note, which reads identically everywhere.\n\nMUTATION DRILL — PROCESS-LOCAL, ZERO BYTES CHANGED. The arms run in a REAL child, so a Vite pretransform cannot reach them; a throwaway Node `module.register` load hook rewrote production source in memory on the way in, each mutant throwing ANCHOR MISS if its anchor was absent, hook files deleted after. This mattered: worker-b42eccd4 has held `full-suite-gate` since 11:22Z, and an on-disk drill would have voided their run.\n  control -> 9 passed | m1 delete trip(\"after-commit\") -> RED 3 (child SURVIVED, completion 1 not 0) | m2 gate always null -> RED 2 | m2b m2 + conflict/retry checks off -> RED 2, refusal moves to EVIDENCE_INVALID, exposing the decision ledger's idempotency as a THIRD layer | m4 intentId keyed per-process -> RED 3 including EXACTLY ONE OUTCOME with landing_intent=2 and two attempt aggregates, a GENUINE duplicate | m3 development fence always passes -> RED the fence arm.\nRESTORE PROOF: no restore window, bytes never changed. sha256 before == after in a SEPARATE call — node-lander-journal.ts 532e48c6f692f1eb74f0df80fd4471e8b74c791800e2e2abf2c9afe3795fbd16, landing-fault-injection.ts 94b09468e8784d56834797ef56f443ad93eefb65980c287e2b888a6517307374 (both identical to the values step 2 recorded); the three other mutated files clean in `git status --porcelain`.\n\nMEASURED GOTCHA worth keeping: the store must live OUTSIDE the repository. `commitVerifiedWorkspace` re-captures and refuses VERIFIED_WORKSPACE_DRIFT if anything moved since the binding, and journaling the landing intent writes its WAL between capture and commit — with the store at the repo root every pass refused DRIFT and never reached git.\n\nGATES, standalone and foreground: `npx tsc -p tests/fault/tsconfig.json` exit 0; `pnpm test:fault` -> `Test Files 11 passed (11)` / `Tests 92 passed (92)`, exit 0 (10 files / 83 tests before this step). Root `pnpm test` is unaffected: the root config discovers `*.test.ts` and none of these three files carries that suffix.\n\nHONEST LIMIT: \"the goal resumes\" is proved at the LANDING level. Goal-graph resumption after a crash rides on the live run, which step 3 left at PLAN_COMPILED. Steps 5-8 untouched.\n\nPEER DIRT NOTED, UNTOUCHED: the 30 dirty paths present at session start. Reverted nothing, committed nothing of theirs.",
+      "startedAt": "2026-09-09T11:27:33.916Z",
+      "completedAt": "2026-09-09T11:40:54.806Z"
     },
     {
       "stepId": "step-5",
       "description": "THE RELEASE DOSSIER AT THE RELEASED SHA (DoD 3). Every approved criterion reads VERIFIED, n/n, in the dossier AT the released sha, and the dossier is attached to the opened PR with its URL in the comment. Assert the fraction with its DENOMINATOR — 'all verified' without n/n hides a dossier that enumerated fewer criteria than the contract approved, which is the failure mode this clause exists to catch. Cross-check the criterion COUNT against the approved Product Contract revision rather than against the dossier's own header, since a dossier that dropped a criterion would report itself complete.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "IN_PROGRESS",
+      "affectedFiles": [],
+      "startedAt": "2026-09-09T11:41:25.158Z"
     },
     {
       "stepId": "step-6",
@@ -92,7 +101,7 @@
       "affectedFiles": []
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -206,21 +215,40 @@
       "author": "governor-74f24573",
       "content": "🧭 TIMESTAMP CORRECTION on comment-260d2696 and comment-267eccae. Both carry times I wrote by hand that are WRONG. The rulings' content stands; their stamps do not. governor-74f24573.\n\n**The daemon's own record, which is the authority:**\n```\ncomment-267eccae   recorded 11:19:05.622Z    (it says \"2026-09-09T10:38Z\" in its text — WRONG)\ncomment-260d2696   recorded ~10:36Z          (it says \"2026-09-09T10:32Z\" in its text — WRONG)\n```\nI stamped each with the time I believed the owner had answered rather than the time the comment was actually written, and the gap on the second one is about forty minutes. `createdAt` is not persisted on disk, so the self-stamped line inside the text is what a later reader will trust — which is exactly why a wrong one is worth correcting rather than leaving.\n\n**THE REAL SEQUENCE, anchored on chat message timestamps which are recorded:**\n```\n10:36:09Z  I relay the FIRST ruling (registry widening) to #governors\n10:36:26Z  I relay it to #architects\n10:37:55Z  I STOP the architects: the fence is 13 sites, not one\n10:39:27Z  governor-608c8a78 relays comment-260d2696 to the worker\n11:19:05Z  comment-267eccae recorded — the owner's REVISED ruling\n11:19:18Z  I stand the architects down\n```\n\n**THE CORRECTION THAT MATTERS, and it is about a peer rather than about me.** In msg-e238de64 I told @governor-608c8a78 they had \"relayed a withdrawn ruling\" and that comment-260d2696 \"had already been superseded one minute before\". **That is false.** At 10:39:27Z the superseding comment did not exist and would not for another forty minutes. **comment-260d2696 was the current, correct ruling at the moment they relayed it, and they relayed it accurately.** There was nothing wrong with their action and I should not have characterised it as there being. The apparent conflict existed only because my own fabricated timestamp put my correction before their message when it came long after.\n\n**Unchanged and still authoritative:** comment-267eccae supersedes comment-260d2696 in full. No fence is widened; test release unchanged first via `releaseByPairedAdmin`; browser-only wherever the browser genuinely reaches; preview and deploy may go over the operator wire with the actor disclosed in the transcript.\n\n**Standing note for anyone writing a ruling into a comment: do not hand-stamp a time.** Quote the chat message id and its recorded timestamp instead. A hand-written time is unverifiable, silently drifts from when the ruling was actually recorded, and — as here — can be used to reconstruct a sequence of events that never happened.",
       "timestamp": "2026-09-09T11:22:29.131Z"
+    },
+    {
+      "id": "comment-b883caad43cc455d9a5098638aef5f83",
+      "author": "governor-74f24573",
+      "content": "🧭 One-line correction to comment-24489abe: **the recorded timestamp DOES exist. I looked under the wrong key.** governor-74f24573. @governor-608c8a78 caught it.\n\ncomment-24489abe said \"`createdAt` is not persisted on disk, so the self-stamped line inside the text is what a later reader will trust\". **The first half is a wrong query, and the second half does not follow.** A comment in `.moe/tasks/*.json` carries exactly:\n```\n['author', 'content', 'id', 'timestamp']\n```\n`createdAt` reads back `None` because **there is no such field** — `timestamp` is the recorded one, and `get_context` exposes it as well. Verified on this row's own last two comments:\n```\ncomment-b2a0a575   timestamp 2026-09-09T11:22:14.106Z\ncomment-24489abe   timestamp 2026-09-09T11:22:29.131Z\n```\n\n**This strengthens the rule rather than weakening it: hand-stamping is not just unsafe, it is unnecessary.** Every comment already carries a trustworthy time. Read `timestamp`, cite that, and leave an unobserved decision time unspecified rather than inventing one.\n\nEverything else in comment-24489abe stands: the two rulings' self-stamped times are wrong, the real sequence is the one anchored on chat message ids, and **@governor-608c8a78 relayed the then-current ruling correctly at 10:39:27Z** — my accusation there was false and remains withdrawn.\n\nAuthoritative resolution for this row is **comment-b2a0a575** (governor-608c8a78's consolidation), on top of comment-267eccae. Nothing here changes it.",
+      "timestamp": "2026-09-09T11:24:16.742Z"
+    },
+    {
+      "id": "comment-6a064c84e4b3456c922f8340ce04f562",
+      "author": "worker-a11dcf70",
+      "content": "STEP 4 / DoD 2 — THE FORCED CRASH MID-WRITE, AND RECOVERY PROVED FROM THE STORE ALONE. worker-a11dcf70.\n\nTHE KNOB AND THE MOMENT. `MOE_FAULT_INJECT_LANDING=after-commit` with `MOE_DEVELOPMENT_ONLY=1`. The note the knob writes to fd 2 with a synchronous `writeSync` immediately BEFORE the signal, verbatim from the gate run:\n```\nMOE_FAULT_INJECT_LANDING point=after-commit pid=7856 at=2026-09-09T11:39:48.925Z\ncrash exit  status=1 signal=null platform=win32 terminalLine=false\n```\n`signal=null` is not a weaker kill: Windows has no signals, so a self-SIGKILLed process is observed as a nonzero status. The discriminator the arms rely on is platform-independent — the child's terminal stdout line is ABSENT (`terminalLine=false`) and the knob's note is PRESENT.\n\nTHE STORE QUERY, quoted with its result. Not a reader: DoD 2's property is a ROW COUNT, and a reader that returns the latest decision is structurally unable to see a second one.\n```sql\nSELECT target_aggregate_id AS aggregate, command_kind AS kind,\n       effect_disposition AS disposition, COUNT(*) AS decisions\n  FROM command_decisions\n WHERE target_aggregate_id = ? OR target_aggregate_id LIKE ?\n GROUP BY aggregate, kind, disposition\n ORDER BY aggregate, kind\n-- parameters: [\"repository-landing:5cb9d7a0…d54e\", \"repository-landing-attempt:%\"]\n```\nAFTER THE CRASH:\n```\nrepository-landing-attempt:c325f416…162c | internal.repository.landing_attempt    | EFFECTS_COMMITTED | 1\nrepository-landing:5cb9d7a0…d54e        | internal.repository.landing_intent     | EFFECTS_COMMITTED | 1\n```\n`landing_completion` = **0**. Git at the same instant: `HEAD=14d8fdd948cc64f7d63f8dcae7bf737e62ed2be9`, `log=[\"land\",\"base\"]`, HEAD's file list `[\"owned.txt\"]`. That is the window itself — a durable Git effect that no durable record names.\n\nAFTER THE RESTART (a second real process; same store file, same repository, same handle, nothing armed): the rows are **byte-identical to the crash reading** and `HEAD` is unchanged. The restarted daemon's answer, from production `landingJournalGate` where `node-lander.ts:176` calls it:\n```\n{\"code\":\"REPOSITORY_RECOVERY_REQUIRED\",\"gate\":\"REPOSITORY_RECOVERY_REQUIRED\",\"outcome\":\"REFUSED\"}\n```\nSo: ONE outcome for that landing — REFUSED with its code — never duplicated, never lost. Counted, not observed; a duplicated landing also looks fine afterwards.\n\nTHE VEHICLE, and why it is a real process. `tests/fault/landing-crash/` — `landing-crash-child.ts` (one production landing pass in its own `node` process), `landing-crash-world.ts` (real `git` repo + real store file + the SQL), `landing-crash.fault.ts` (9 arms). The child runs production `landingJournalGate`, `commitJournaledLanding` and the verified-workspace port against the real `git` executable. Arming is PURELY environmental, so the crash pass and the control pass execute byte-identical code.\n\nMUTATION DRILL — PROCESS-LOCAL, ZERO BYTES ON DISK CHANGED (the full-suite gate is held by worker-b42eccd4 since 11:22Z, so an on-disk drill was not admissible). A throwaway Node `module.register` load hook rewrote production source in memory on the way into the child; each mutant threw ANCHOR MISS if its anchor was absent; hook files deleted after.\n```\ncontrol (none) -> 9 passed\nm1 delete trip(\"after-commit\")              -> RED 3 arms; child SURVIVED and returned COMMITTED, completion count 1 not 0\nm2 gate always returns null                 -> RED 2 arms (restart no longer refuses with its code)\nm2b m2 + fact-conflict + retry checks off   -> RED 2 arms; refusal moved to REPOSITORY_RECOVERY_EVIDENCE_INVALID — the decision ledger's own idempotency is a THIRD layer\nm4 intentId keyed per-process, not session  -> RED 3 arms incl. EXACTLY ONE OUTCOME: landing_intent decisions **2**, two attempt aggregates. A GENUINE duplicate. The headline arm is falsifiable.\nm3 development fence always passes          -> RED the fence arm; the knob fired in a run that never set MOE_DEVELOPMENT_ONLY\n```\nRESTORE PROOF: no restore window — bytes never changed. sha256 before == after, taken in a separate call: `node-lander-journal.ts 532e48c6…fbd16`, `landing-fault-injection.ts 94b09468…07374`; `repository-landing-intent.ts`, `repository-recovery-facts.ts`, `repository-landing-attempt.ts` all clean in `git status --porcelain`.\n\nGATE: `pnpm test:fault` standalone, foreground — `Test Files 11 passed (11)`, `Tests 92 passed (92)`, exit 0.\n\nHONEST LIMIT, not a narrowing: \"the goal resumes\" is proved here at the LANDING level (the restarted pass reaches a terminal coded outcome and mints nothing). Goal-graph resumption after a crash rides on the live run, which step 3 left at PLAN_COMPILED.",
+      "timestamp": "2026-09-09T11:40:26.977Z"
+    },
+    {
+      "id": "comment-89501ec7503049f18d2d3a8168057d61",
+      "author": "worker-a11dcf70",
+      "content": "STEP 5 / DoD 3 — THE OWNER'S ITEM 1 IS ANSWERED: RELEASE IS BROWSER-REACHABLE. The dossier clause is NOT, and the exact remaining blocker is below. worker-a11dcf70.\n\nTHE OWNER ASKED (comment-267eccae item 1): \"TEST RELEASE FIRST — it may already work untouched. Nobody has established that release refuses your paired browser. Measure it before assuming.\"\n\nANSWER: **release.decide does NOT refuse the paired browser.** Measured by running committed arms at HEAD, not by reading source:\n```\ncd apps/daemon && npx vitest run --root . --config package.json src/release/release-decide-authorization.test.ts\nTest Files  1 passed (1)      Tests  19 passed (19)      exit 0\n```\nThose 19 arms in `apps/daemon/src/release/release-decide-authorization.test.ts` already pin the whole carve-out, in BOTH directions:\n- :112 \"admits a paired durable HUMAN holding ADMIN under its OWN principal id\"\n- :285 \"lets an authorized paired ADMIN reach the honest missing-composition refusal\" — past authorization, judged on composition\n- :145 / :156 refuse ADMIN-less and GOAL-less paired humans at their own named layers\n- :363 \"does NOT widen a DIFFERENT operator kind for the same paired ADMIN\" — the direction that stops this from being a blanket widening\n- :355 keeps `release.decide` operator-classified AND MCP-excluded\n\nWHY THE CARVE-OUT IS ACTUALLY REACHABLE, which the epic's own boundary record got wrong. `release.decide` is an ASYNC entry. `daemon-command-registry.ts` returns `commandAuthority.wrapAsync(asyncEntry)` BEFORE the synchronous operator fence at :392, so the registry's five-kind widening list never applies to it. The only identity fence on the kind is `assertReleasePrincipal` (release-decide-command.ts:65), and that one carries `releaseByPairedAdmin`. Same structural reason the governor gave for deploy being served asynchronously — but for release it opens the door instead of closing it.\n\nCORRECTION TO A DELIVERED RECORD: `live-proof-prd.spec.ts:257` records a four-line \"operator-only-boundary\" roster that lists `release.decide@release-decide-command.ts:69` beside preview.start, preview.decide and deployment.deploy. That line is WRONG for a paired ADMIN and should come out or be re-labelled when step 3's spec is next touched. I am not editing it in this session because the row is going BLOCKED and a half-applied edit to a completed step's file is worse than a recorded correction. Filed here rather than as a new row (global rail 21: this IS the hardening row).\n\nWHAT DoD 3 STILL NEEDS, exactly. \"The release dossier AT THE RELEASED SHA shows every approved criterion VERIFIED (n/n) and is attached to the opened PR (URL in the comment).\"\n1. **There is no release, because there is no landed product.** Step 3 stopped at PLAN_COMPILED. A dossier needs the chain step 3 did not reach: two nodes staffed concurrently -> landed -> preview -> release. The criteria are the PRD's A1-A8 (comment-5657f450), and a dossier over anything else would not be this product's dossier.\n2. **A real PR needs a remote only the operator can name.** `tests/e2e/control-room/release-approval-live.spec.ts` is the existing real-GitHub path and it is opt-in by design: `MOE_LIVE_RELEASE_PR=1` plus `MOE_LIVE_RELEASE_REMOTE`, \"never hard-coded: a committed spec that knows one account's repository is a landmine for the next checkout\" (:36-41). It also rebases the lane workspace onto the remote's base first, because a fresh `git init` shares no ancestor with the remote and GitHub refuses the PR outright. I have no remote for a FRESH product, and creating one and pushing to it is an outward-facing act I will not take unilaterally.\n\nNOT NARROWED, NOT FAKED. The hermetic path (`fakeGh`) would produce a dossier and a PR-shaped receipt at zero cost, and it would be a lie in the transcript: `daemon-ports.ts:504` gives a lane `MOE_NODE_WORKSPACE` only when `fakeDocker`/`fakeGh` is set, so the very switch that makes release work is the switch that makes the PR a double. Task rail 2 and the governor's item 4 both say record the blocker instead.",
+      "timestamp": "2026-09-09T11:44:50.062Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:14:49.532Z",
-  "updatedAt": "2026-09-09T11:22:29.131Z",
+  "updatedAt": "2026-09-09T11:47:22.259Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:28:10.582Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 3
+    "executedStepCount": 4
   },
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T00:29:25.253Z",
@@ -240,13 +268,14 @@
   "contextFetchedBy": [
     "worker-bcaa6d5e",
     "governor-608c8a78",
-    "worker-b42eccd4"
+    "worker-b42eccd4",
+    "worker-a11dcf70"
   ],
   "workStartedAt": "2026-09-08T20:46:11.016Z",
-  "blockedReason": null,
+  "blockedReason": "STEP 4 (DoD 2) DELIVERED GREEN; blocking on step 5 (DoD 3) with the exact remaining blocker, per governor resolution comment-b2a0a575 item 4. Full evidence in comment-6a064c84 (step 4) and comment-89501ec7 (step 5).\n\nDELIVERED: the forced crash mid-write. tests/fault/landing-crash/, 3 files, 9 arms. A REAL node process runs production landingJournalGate + commitJournaledLanding against real git and a real store; the DEVELOPMENT-ONLY knob SIGKILLs it at after-commit. After the kill git HEAD carries the landing commit while the ledger holds landing_intent=1, landing_attempt=1, landing_completion=0; the restart answers REPOSITORY_RECOVERY_REQUIRED and the rows are byte-identical. Counted with SQL. `pnpm test:fault` -> Test Files 11 passed (11), Tests 92 passed (92), exit 0.\n\nOWNER ITEM 1 ANSWERED - RELEASE IS BROWSER-REACHABLE. Fresh run of apps/daemon/src/release/release-decide-authorization.test.ts -> 19 passed, exit 0. release.decide is an ASYNC entry, so the registry returns wrapAsync BEFORE its synchronous operator fence and the five-kind widening never applies; the only identity fence is assertReleasePrincipal, which carries releaseByPairedAdmin. No fence touched.\n\nI NEED TWO THINGS, neither a worker's to decide:\n(1) A RELEASE REMOTE, or a ruling on the PR clause. release-approval-live.spec.ts is opt-in by design on MOE_LIVE_RELEASE_PR=1 + MOE_LIVE_RELEASE_REMOTE, operator-named. I have no remote for a fresh product and will not create or push a GitHub repo unilaterally. fakeGh is no substitute: the switch that makes release work is the switch that makes the PR a double.\n(2) THE LANDING CHAIN. Nothing landed, so no dossier exists; step 3 stopped at PLAN_COMPILED. Staffing collides with DoD 1 \"real seats\": lane-landing.ts:16-21 doubles the seat and agent-provider-seats.spec.ts:27-32 refuses a real provider on quota flake.\n\nNo blockedOnTaskIds; twelve deps DONE. Steps 6-8 are NOT blocked by this.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-09T11:47:04.518Z",
   "commits": [
     {
       "sha": "b8f499daa13aad3c5b44be104ee74d6e93f8772f",
@@ -287,6 +316,25 @@
       "treeId": "f5204267369ea095b699f3a409b01c111ca06d97",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "c20a8b888af3d8736f1cc76e7078a7f2e08527bb",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-a11dcf70@2026-09-09T11:23:55Z",
+      "paths": [
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        ".moe/tasks/task-60f851fa3e1046fe98090d9dc6f30e0a.json",
+        "tests/fault/landing-crash/landing-crash.fault.ts",
+        "tests/fault/landing-crash/landing-crash-child.ts",
+        "tests/fault/landing-crash/landing-crash-world.ts"
+      ],
+      "recordedBy": "worker-a11dcf70",
+      "recordedAt": "2026-09-09T11:47:22.259Z",
+      "treeId": "bfee314b93e399e9a023ecf96b92befc69cc4249",
+      "status": "BLOCKED",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -300,7 +348,11 @@
     "tests/e2e/control-room/live-proof-arms.ts",
     "tests/e2e/control-room/live-proof-gate1.ts",
     "tests/e2e/control-room/live-proof-prd.spec.ts",
-    "tests/e2e/control-room/live-proof-prd.ts"
+    "tests/e2e/control-room/live-proof-prd.ts",
+    ".moe/tasks/task-60f851fa3e1046fe98090d9dc6f30e0a.json",
+    "tests/fault/landing-crash/landing-crash.fault.ts",
+    "tests/fault/landing-crash/landing-crash-child.ts",
+    "tests/fault/landing-crash/landing-crash-world.ts"
   ],
   "touchedFiles": [
     "apps/daemon/src/orchestrator/node-lander-journal.ts",
@@ -311,21 +363,19 @@
     "tests/e2e/control-room/live-proof-prd.spec.ts",
     "tests/e2e/control-room/live-proof-arms.ts",
     "tests/e2e/control-room/live-proof-prd.ts",
-    "tests/e2e/control-room/live-proof-gate1.ts"
+    "tests/e2e/control-room/live-proof-gate1.ts",
+    "drill-161b7e9d-register.mjs",
+    "tests/fault/landing-crash/landing-crash-world.ts",
+    "tests/fault/landing-crash/landing-crash.fault.ts",
+    "tests/fault/landing-crash/landing-crash-child.ts",
+    "drill-161b7e9d-hooks.mjs"
   ],
-  "unattributedPaths": [
-    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
-    "apps/daemon/src/daemon-store-dependencies.test.ts",
-    "apps/daemon/src/daemon-v2-command-registry.test.ts",
-    "apps/daemon/src/mcp-main.test.ts",
-    "apps/daemon/src/monitoring/environment-retirement-command-contracts.js",
-    "apps/daemon/src/orchestrator/agent-spawn-contract.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-b42eccd4@2026-09-09T10:02:44Z",
-    "at": "2026-09-09T10:38:57.786Z"
+    "sessionId": "worker-a11dcf70@2026-09-09T11:23:55Z",
+    "at": "2026-09-09T11:47:22.259Z"
   },
   "priorBlockedReason": "DoD 1's \"from the browser only\" is MEASURABLY UNSATISFIABLE for the second half of the loop. Satisfying it literally needs a security-boundary widening that task rail 1 puts OUT OF SCOPE for this row. Routing the clause rather than narrowing it (task rail 2). Detail in comment-088f073b; transcript in 22e6aeae / 21089128 / c0267fa1.\n\nNOT A STALLED ROW. Step 3 delivered a browser drive on a FRESH store: 3 consecutive green runs (~14s), typecheck exit 0. It walks bootstrap (browser's own form) -> bind -> activate -> goal bound to my PRD sha -> contract revision (8 criteria) -> a MATERIAL clarification rendered and ANSWERED BY CLICK -> Gate 1 APPROVED BY CLICK -> design submitted -> two-node plan compiled. The PRD is mine, authored under your 09:07Z waiver, recorded verbatim as comment-5657f450 BEFORE I read any pipeline source.\n\nTHE MEASUREMENT, with a discriminating control so it is not one layer from vacuous. Same command, same bytes, two seats:\n- durable HUMAN (the paired browser's class): 403 OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION\n- configured operator: 422 DEPLOY_TARGET_INVALID @ DAEMON_INGRESS\nDifferent LAYERS, so the fence is IDENTITY not payload. Both are committed assertions. Same fence on preview.start, preview.decide, release.decide, deployment.deploy. So Gate 2, Gate 3, deploy, env vars and migration cannot be committed from the browser.\n\nTHE QUESTION I do not answer: does \"browser only\" mean (A) the browser drives what it can and the four human gates are the CONFIGURED OPERATOR's acts - how the product is designed, no code change, I resume at step 4 at once; or (B) literally every step from the browser, needing four operator fences widened - out of scope under task rail 1, and per precedent task-6d5db404 its own reviewed row this one depends on?\n\nYour 09:07Z ruling settled SCOPE. This is FEASIBILITY. No blockedOnTaskIds; needs a governor sentence. Docker now up (29.6.2).",
   "blockedOnTaskIds": null,
@@ -333,6 +383,9 @@
     "tests/e2e/control-room/live-proof-prd.ts",
     "tests/e2e/control-room/live-proof-prd.spec.ts",
     "tests/e2e/control-room/live-proof-arms.ts",
-    "tests/e2e/control-room/live-proof-gate1.ts"
+    "tests/e2e/control-room/live-proof-gate1.ts",
+    "tests/fault/landing-crash/landing-crash.fault.ts",
+    "tests/fault/landing-crash/landing-crash-child.ts",
+    "tests/fault/landing-crash/landing-crash-world.ts"
   ]
 }
