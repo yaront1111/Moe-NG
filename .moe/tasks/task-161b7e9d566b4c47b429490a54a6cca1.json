@@ -237,7 +237,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:14:49.532Z",
-  "updatedAt": "2026-09-09T11:47:04.518Z",
+  "updatedAt": "2026-09-09T11:47:22.259Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:28:10.582Z",
     "plannedStepCount": 8,
@@ -316,6 +316,25 @@
       "treeId": "f5204267369ea095b699f3a409b01c111ca06d97",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "c20a8b888af3d8736f1cc76e7078a7f2e08527bb",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-a11dcf70@2026-09-09T11:23:55Z",
+      "paths": [
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        ".moe/tasks/task-60f851fa3e1046fe98090d9dc6f30e0a.json",
+        "tests/fault/landing-crash/landing-crash.fault.ts",
+        "tests/fault/landing-crash/landing-crash-child.ts",
+        "tests/fault/landing-crash/landing-crash-world.ts"
+      ],
+      "recordedBy": "worker-a11dcf70",
+      "recordedAt": "2026-09-09T11:47:22.259Z",
+      "treeId": "bfee314b93e399e9a023ecf96b92befc69cc4249",
+      "status": "BLOCKED",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -329,7 +348,11 @@
     "tests/e2e/control-room/live-proof-arms.ts",
     "tests/e2e/control-room/live-proof-gate1.ts",
     "tests/e2e/control-room/live-proof-prd.spec.ts",
-    "tests/e2e/control-room/live-proof-prd.ts"
+    "tests/e2e/control-room/live-proof-prd.ts",
+    ".moe/tasks/task-60f851fa3e1046fe98090d9dc6f30e0a.json",
+    "tests/fault/landing-crash/landing-crash.fault.ts",
+    "tests/fault/landing-crash/landing-crash-child.ts",
+    "tests/fault/landing-crash/landing-crash-world.ts"
   ],
   "touchedFiles": [
     "apps/daemon/src/orchestrator/node-lander-journal.ts",
@@ -340,21 +363,19 @@
     "tests/e2e/control-room/live-proof-prd.spec.ts",
     "tests/e2e/control-room/live-proof-arms.ts",
     "tests/e2e/control-room/live-proof-prd.ts",
-    "tests/e2e/control-room/live-proof-gate1.ts"
+    "tests/e2e/control-room/live-proof-gate1.ts",
+    "drill-161b7e9d-register.mjs",
+    "tests/fault/landing-crash/landing-crash-world.ts",
+    "tests/fault/landing-crash/landing-crash.fault.ts",
+    "tests/fault/landing-crash/landing-crash-child.ts",
+    "drill-161b7e9d-hooks.mjs"
   ],
-  "unattributedPaths": [
-    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
-    "apps/daemon/src/daemon-store-dependencies.test.ts",
-    "apps/daemon/src/daemon-v2-command-registry.test.ts",
-    "apps/daemon/src/mcp-main.test.ts",
-    "apps/daemon/src/monitoring/environment-retirement-command-contracts.js",
-    "apps/daemon/src/orchestrator/agent-spawn-contract.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-b42eccd4@2026-09-09T10:02:44Z",
-    "at": "2026-09-09T10:38:57.786Z"
+    "sessionId": "worker-a11dcf70@2026-09-09T11:23:55Z",
+    "at": "2026-09-09T11:47:22.259Z"
   },
   "priorBlockedReason": "DoD 1's \"from the browser only\" is MEASURABLY UNSATISFIABLE for the second half of the loop. Satisfying it literally needs a security-boundary widening that task rail 1 puts OUT OF SCOPE for this row. Routing the clause rather than narrowing it (task rail 2). Detail in comment-088f073b; transcript in 22e6aeae / 21089128 / c0267fa1.\n\nNOT A STALLED ROW. Step 3 delivered a browser drive on a FRESH store: 3 consecutive green runs (~14s), typecheck exit 0. It walks bootstrap (browser's own form) -> bind -> activate -> goal bound to my PRD sha -> contract revision (8 criteria) -> a MATERIAL clarification rendered and ANSWERED BY CLICK -> Gate 1 APPROVED BY CLICK -> design submitted -> two-node plan compiled. The PRD is mine, authored under your 09:07Z waiver, recorded verbatim as comment-5657f450 BEFORE I read any pipeline source.\n\nTHE MEASUREMENT, with a discriminating control so it is not one layer from vacuous. Same command, same bytes, two seats:\n- durable HUMAN (the paired browser's class): 403 OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION\n- configured operator: 422 DEPLOY_TARGET_INVALID @ DAEMON_INGRESS\nDifferent LAYERS, so the fence is IDENTITY not payload. Both are committed assertions. Same fence on preview.start, preview.decide, release.decide, deployment.deploy. So Gate 2, Gate 3, deploy, env vars and migration cannot be committed from the browser.\n\nTHE QUESTION I do not answer: does \"browser only\" mean (A) the browser drives what it can and the four human gates are the CONFIGURED OPERATOR's acts - how the product is designed, no code change, I resume at step 4 at once; or (B) literally every step from the browser, needing four operator fences widened - out of scope under task rail 1, and per precedent task-6d5db404 its own reviewed row this one depends on?\n\nYour 09:07Z ruling settled SCOPE. This is FEASIBILITY. No blockedOnTaskIds; needs a governor sentence. Docker now up (29.6.2).",
   "blockedOnTaskIds": null,
