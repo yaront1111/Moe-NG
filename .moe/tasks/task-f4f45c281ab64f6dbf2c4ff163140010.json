@@ -152,7 +152,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T18:38:35.074Z",
-  "updatedAt": "2026-09-09T12:30:42.384Z",
+  "updatedAt": "2026-09-09T12:34:49.217Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T18:40:39.705Z",
     "plannedStepCount": 8,
@@ -313,9 +313,10 @@
     "apps/daemon/src/deployment/deploy-candidate-start.js"
   ],
   "lastCommitOutcome": {
-    "outcome": "committed",
+    "outcome": "nothing",
     "kind": "checkpoint",
-    "sessionId": "worker-0e797912@2026-09-09T12:30:35Z",
-    "at": "2026-09-09T12:30:42.384Z"
+    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
+    "sessionId": "worker-0e797912@2026-09-09T12:34:43Z",
+    "at": "2026-09-09T12:34:49.217Z"
   }
 }
