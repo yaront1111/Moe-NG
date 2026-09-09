@@ -108,7 +108,7 @@
       ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -167,7 +167,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T15:00:40.393Z",
-  "updatedAt": "2026-09-09T20:50:37.403Z",
+  "updatedAt": "2026-09-09T21:08:46.289Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T17:08:24.544Z",
     "plannedStepCount": 7,
@@ -206,10 +206,10 @@
   },
   "planApprovedAt": "2026-09-09T19:36:16.439Z",
   "workStartedAt": "2026-09-09T19:36:41.671Z",
-  "blockedReason": "PARKED ON `full-suite-gate` FOR DoD 5 ONLY. Steps 1-5 COMPLETE and green; step 7's work is finished and already written to the row; step 6 stays IN_PROGRESS because its only remaining leg is the exact command DoD 5 names.\n\nWHY A WAIT, NOT A SUBSTITUTION. DoD 5 is `pnpm --filter @moe/daemon test` EXIT 0 with its count line quoted. A scoped superset cannot satisfy a clause naming the command, and running a daemon-wide suite beside a peer's is what this gate prevents. worker-409b958a has held it since 19:43:27Z for task-b2b4550835; I am #1 and re-polled acquire_resource five times over ~20 min rather than assuming.\n\nEVERYTHING GATE-FREE IS MEASURED AND ON THE ROW. comment-1277acba: all six pre-fix REDs verbatim; the scoped 7-file command at `Test Files 7 passed (7) / Tests 81 passed (81)` run TWICE (post-fix and post-drill); typecheck EXIT 0; per-file deltas (goal-landing-facts 16->18, publication-goal-integration 1->3, publication-approval 8->10, criterion-integrated 1->5, goal-live-evidence unchanged at 14); the 11-arm mutation matrix; restore proof; post-drill SHA256s. comment-7ae4089c: the adversarial self-review. comment-5c197f55 and comment-598c3e3c: preview and control-room follow-ups. comment-5660024e on task-b8ec9a63: the release-durable-facts follow-up.\n\nTHE TREE IS SAFE FOR THE CURRENT HOLDER. No mutant on disk: both drills ran PROCESS-LOCALLY via a temp vitest config outside `src` whose setupFiles vi.mock the shared predicate. The three temp files are deleted and `git status --porcelain` on those paths is EMPTY. No test process of mine runs, I hold no other lease, nothing is half-written.\n\nON GRANT: re-measure disk/git, GATE START, run the suite standalone in the foreground, quote its count line, path-attribute any foreign red, GATE END, release. Then step 6, then step 7, then complete_task on that fresh exit-0 run. The nine paths are in the step-5 note and the handoff memory.\n\nNO COMPLETION CLAIM IS MADE HERE.",
-  "blockedResourceId": "full-suite-gate",
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-09T20:03:20.618Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "commits": [
     {
       "sha": "f976d2c76d17f2db9918c0c888f4b55010ebcf4b",
@@ -278,5 +278,6 @@
     "kind": "checkpoint",
     "sessionId": "worker-0e797912@2026-09-09T19:36:26Z",
     "at": "2026-09-09T20:03:37.934Z"
-  }
+  },
+  "blockedOnTaskIds": null
 }

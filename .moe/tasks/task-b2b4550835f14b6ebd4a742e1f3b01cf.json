@@ -100,7 +100,7 @@
       "completedAt": "2026-09-09T20:58:20.927Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -170,16 +170,24 @@
       "author": "worker-a11dcf70",
       "content": "ADVERSARIAL PASS (step-5), answering the five questions the step asked, in order. No fix-now defect found; two deliberate behaviours disclosed rather than changed.\n\n1. HUMAN AND AUTOMATIC ON THE SAME PASS - WHICH WINS, CAN BOTH WRITE? Neither can double-write. The internal producer snapshots `getAggregateVersion` on the runs aggregate BEFORE reading the catalogues and the artifact, then commits at that `expectedVersion`. Anything landing in between makes the commit lose the compare-and-swap. Proven by the two `loses the run CAS to a competing %s queue` arms (human verify, and a second automatic queue), each asserting `CRITERION_CHECK_VERSION_CONFLICT` and the aggregate at version 1. The stale-version window is fail-closed in the safe direction: a stale-LOW expectedVersion can only refuse, never overwrite. Within one process the `advancing ??=` guard at criterion-runner.ts:157-160 already serialises, and the `Promise.all` arm shows 3 events for two concurrent passes.\n\n2. ARTIFACT CHANGES BETWEEN QUEUE AND EXECUTE - INHERITED OR BYPASSED? Inherited, because the internal path writes the identical `CriterionRun` shape and is executed by the same unmodified code, so criterion-runner.ts:74, :98 and :116 re-check `sameCriterionArtifact` exactly as they do for a human-queued run. Arm `retains artifact fences when it changes before/during automatic execution` proves both timings: changed BEFORE execution the executor is never called; changed DURING (mutated inside the check) it is called once, and in both cases the run ends BLOCKED, the reservation is BLOCKED, and the reservation is NOT released. Verified from the fence, not from the design.\n\n3. DOES IT KEEP FIRING ON A BLOCKED RUN - RETRY LOOP? No. The guard is `runs.some((run) => run.status !== \"COMPLETED\")` -> `CRITERION_CHECK_RUN_PENDING`, which covers BLOCKED as well as QUEUED and RUNNING, asserted in the parameterised idempotence arm. DISCLOSED CONSEQUENCE, deliberate: a BLOCKED batch is never automatically retried, and neither is a COMPLETED batch whose receipts FAILED, since the artifact-equality decline is status-blind. Recovery is a human explicit verify, or a new integrated artifact. Chosen over auto-retry because a self-retrying failed check at an unchanged sha is an unbounded loop that also re-acquires the repository reservation each time. Commented in source at criterion-run.ts.\n\n4. CAN A CLOSING / COMPLETED GOAL BE QUEUED AFTER CLOSURE? Yes, and this is a real behaviour change worth QA's eye rather than a bug I am hiding. `activeCompiledGraphs` at criterion-runner.ts:125 filters EXECUTION_ENABLED, CLOSING and COMPLETED, and I did not narrow it - narrowing it would have changed which goals the EXISTING runner advances, which is outside this row. Effect: a closed goal that gains a new integrated artifact, with every criterion still approved and no pending run, gets one fresh run at that artifact. It is bounded - one run per distinct artifact, then ALREADY_COMPLETED - so it is not a loop, and re-verifying a closed goal at a new sha is evidence a reader wants. Flagging it because the alternative reading (evidence should freeze at closure) is defensible and is a one-line filter change if the epic wants it.\n\n5. DOES AN UNATTENDED RUN NOW PRODUCE RECEIPTS, AND WHICH ARM PROVES IT? Yes. The arm is criterion-runner-recovery.test.ts `automatically completes approved checks without a human verification command`. It points at behaviour, not design: it drives the real `queueAutomaticCriterionVerification` through the real `service.advance()` (only the executor and repository test seams are substituted, as the plan permits), and asserts COMPLETED with `status: \"PASSED\"` on both criteria, `service.verify` never called, and every run event's decisionTrace principal equal to CRITERION_PRINCIPAL. No ADMIN-principal command is dispatched anywhere in that arm.\n\nCHECKLIST ITEMS WITH NOTHING TO REPORT: no handle, socket or subprocess is opened by the queue - it writes one record and takes no reservation, and it only runs when `owned.handle === null`, so a completed batch's release path always precedes queuing a different artifact (own arm). Malformed and throwing artifact readers are contained to `CRITERION_CHECK_UNREADABLE` with the aggregate untouched. A zero-criteria goal is excluded explicitly by `approved.length === 0`, which the `!==` length comparison alone would have let through.",
       "timestamp": "2026-09-09T20:58:08.602Z"
+    },
+    {
+      "id": "comment-6618d33876e84cdabc6ea99e490aa357",
+      "author": "qa-01b7fe3f",
+      "content": "QA REVIEW EVIDENCE (qa-01b7fe3f) — verified at completion commit cf644c10, APPROVED.\n\nGATE, RE-RUN BY ME, standalone and foreground, not taken from the row:\n`pnpm --filter @moe/daemon test` -> `Test Files  608 passed (608)` / `Tests  10892 passed | 12 skipped (10904)`, PIPESTATUS[0]=0, 251.34s. Identical to task.verification's recorded count line.\n\nCOMMIT: cf644c10 on refs/heads/moe/work-2026-09-04, 9 paths, Moe-Inferred: 0. `git status --porcelain` on apps/daemon/src/criterion-evidence/ and the doc is EMPTY, so the delivered bytes are the reviewed bytes and there is no post-commit drift.\n\nDoD, item by item, with the arm that carries it:\n1. criterion-runner-recovery.test.ts `automatically completes approved checks without a human verification command` — asserts run status COMPLETED, integratedSha, and evidence status PASSED on BOTH criteria; spies world.service.verify and asserts it was never called; asserts every one of the 3 run events carries principalId CRITERION_PRINCIPAL and that event[0] is kind internal.criterion.queued. Not \"a run row appeared\".\n2. criterion-command.test.ts asserts CRITERION_FAMILY[kind] === CAPABILITIES.ADMIN for BOTH kinds, and an external GOAL-capability caller over HTTP gets `{outcome: REFUSED, httpStatus: 403, stage: AUTHORIZE, code: CAPABILITY_DENIED}` with the target aggregate version still 0. criterion-run.test.ts additionally pins the human path: the daemon principal on service.verify still gets CRITERION_CHECK_HUMAN_REQUIRED @ CRITERION_EVIDENCE. I also checked PRODUCTION at HEAD rather than trusting the test: daemon-command-vocabulary.ts:179 is unchanged and the registry's OPERATOR_PRINCIPAL_REQUIRED throw at :409-414 is untouched.\n3. Three separate arms, three distinct codes: INTEGRATED_ARTIFACT_CHANGED (absent artifact), RUN_PENDING (QUEUED/RUNNING/BLOCKED, each a separate it.each case), APPROVAL_REQUIRED (partial approvals). Each also asserts the runs aggregate version is unchanged.\n4. COMPLETED at the same artifact declines ALREADY_COMPLETED with run count still 1 and aggregate version unchanged; a NEW artifact then queues, count 1 -> 2.\n5. docs/plans/2026-09-06-repository-delivery-remediation.md:47 corrected wider than the clause asked (composed AND driven every wrapper pass, plus the no-auto-retry rule), and the bullet's contract-revision / run-to-revision caveats are correctly left standing as still open.\n6. Above.\n\nTWO PROCESS-LOCAL MUTATION DRILLS, BOTH KILLED. Temp vitest config + vi.mock outside src; nothing under src was ever written; scoped baseline and post-drill restore are both `Test Files 4 passed (4)` / `Tests 40 passed (40)` exit 0; temp files deleted and absent from git status; the production call site at criterion-runner.ts:130 greps back.\n- MUTANT A neutered queueAutomaticCriterionVerification to a refusal: killed ALL 20 new arms including the DoD 1 arm, which drives the real producer through service.advance(). So DoD 1 is not vacuous and the trigger wiring is load-bearing.\n- MUTANT B forced sameCriterionArtifact to false: killed `does not requeue a COMPLETED run at the same artifact` while the QUEUED/RUNNING/BLOCKED cases of that same it.each SURVIVED. That asymmetry is the most useful single result in this review — it proves the status-pending guard and the artifact-identity guard are independent code paths, which is exactly what DoD 3 means by \"each asserted separately so the trigger cannot be a blanket\".\n\nREADER WIDENING: the criterion-read.test.ts matrix is genuinely discriminating rather than a single \"catalogue is null\" assertion. internal.criterion.run + daemon principal is PREFIX-VALID, so it clears criterion-storage.ts:60 and can only die at the exact-kind check in criterion-run.ts; internal.criterion.queued + human principal is EXACT-KIND-VALID and can only die at the storage principal check. Each case has exactly one layer that can refuse it, so loosening the exact-kind check to a startsWith would go red.\n\nPer-file caps fine: criterion-run.ts 109 lines, criterion-runner.ts 165. No authorization widening, no scheduler, no second acquire path. Row shipped narrower than filed for the reason comment-b1022979 gives, and that is correctly disclosed in the completion record.",
+      "timestamp": "2026-09-09T21:08:45.309Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T15:29:42.545Z",
-  "updatedAt": "2026-09-09T20:59:12.330Z",
+  "updatedAt": "2026-09-09T21:09:33.787Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T16:03:03.428Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 10,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-09-09T21:09:33.787Z",
+    "wallClockMs": 18390359
   },
   "planSizeWarnings": [
     "Plan touches 10 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -209,7 +217,8 @@
   "contextFetchedBy": [
     "worker-409b958a",
     "governor-608c8a78",
-    "worker-a11dcf70"
+    "worker-a11dcf70",
+    "qa-01b7fe3f"
   ],
   "workStartedAt": "2026-09-09T16:06:50.247Z",
   "blockedReason": null,
@@ -242,7 +251,44 @@
     "apps/daemon/src/criterion-evidence/criterion-read.test.ts",
     "apps/daemon/src/criterion-evidence/criterion-runner-recovery.test.ts",
     "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
-    "docs/plans/2026-09-06-repository-delivery-remediation.md"
+    "docs/plans/2026-09-06-repository-delivery-remediation.md",
+    ".moe/tasks/task-b2b4550835f14b6ebd4a742e1f3b01cf.json",
+    ".moe/tasks/task-de80c663569a4ab2b30a9db6ac526e4b.json"
   ],
-  "completionSummary": "SHIPPED NARROWER THAN FILED, and the reason is in comment-b1022979: the row's description sentence \"There is no scheduler, no wrapper staffing, no coordinator call\" is FALSE. criterion-runner.advance() was already driven every wrapper pass (repository-delivery-runtime.ts:140 -> agent-wrapper-main.ts:316/:350). The only missing piece was that nothing ever wrote a QUEUED run for it to pick up. So this row adds exactly that queue, not a scheduler.\n\nWHAT LANDED. queueAutomaticCriterionVerification in criterion-run.ts, a SECOND producer beside the human one, running on CRITERION_PRINCIPAL under kind internal.criterion.queued, called from inside the existing serialized advance() walk at criterion-runner.ts:130 and only when no repository reservation is held. It re-checks the same three preconditions criterion-read.ts:73-74 uses for the human verify offer. readCriterionRuns was widened in the SAME edit to admit the internal kind: a producer without that widening does not error, it makes the whole catalogue unreadable to every consumer.\n\nFENCE UNTOUCHED. isDurableHumanPrincipal still guards queueCriterionVerification, CRITERION_FAMILY still maps criterion_check.verify and criterion_check.approve to ADMIN, the registry operator check is unchanged. Arms assert CAPABILITY_DENIED @ AUTHORIZE (403) for an external non-ADMIN caller of both kinds, and CRITERION_CHECK_HUMAN_REQUIRED @ CRITERION_EVIDENCE when the daemon principal tries the human command.\n\nGATE. pnpm --filter @moe/daemon test EXIT 0, count line \"Test Files  608 passed (608)\", \"Tests  10892 passed | 12 skipped (10904)\". pnpm typecheck EXIT 0, \"apps/daemon typecheck: Done\". No foreign red to attribute.\n\nEVIDENCE. Arm-by-arm table in comment-5a02bf4a6008. Adversarial pass in comment-1441f8565466.\n\nTWO THINGS FOR QA TO LOOK AT, disclosed not hidden. (1) A BLOCKED run, and a COMPLETED run whose receipts FAILED, are never auto-retried at the same artifact; recovery is a human verify or a new artifact. Auto-retry at an unch"
+  "completionSummary": "SHIPPED NARROWER THAN FILED, and the reason is in comment-b1022979: the row's description sentence \"There is no scheduler, no wrapper staffing, no coordinator call\" is FALSE. criterion-runner.advance() was already driven every wrapper pass (repository-delivery-runtime.ts:140 -> agent-wrapper-main.ts:316/:350). The only missing piece was that nothing ever wrote a QUEUED run for it to pick up. So this row adds exactly that queue, not a scheduler.\n\nWHAT LANDED. queueAutomaticCriterionVerification in criterion-run.ts, a SECOND producer beside the human one, running on CRITERION_PRINCIPAL under kind internal.criterion.queued, called from inside the existing serialized advance() walk at criterion-runner.ts:130 and only when no repository reservation is held. It re-checks the same three preconditions criterion-read.ts:73-74 uses for the human verify offer. readCriterionRuns was widened in the SAME edit to admit the internal kind: a producer without that widening does not error, it makes the whole catalogue unreadable to every consumer.\n\nFENCE UNTOUCHED. isDurableHumanPrincipal still guards queueCriterionVerification, CRITERION_FAMILY still maps criterion_check.verify and criterion_check.approve to ADMIN, the registry operator check is unchanged. Arms assert CAPABILITY_DENIED @ AUTHORIZE (403) for an external non-ADMIN caller of both kinds, and CRITERION_CHECK_HUMAN_REQUIRED @ CRITERION_EVIDENCE when the daemon principal tries the human command.\n\nGATE. pnpm --filter @moe/daemon test EXIT 0, count line \"Test Files  608 passed (608)\", \"Tests  10892 passed | 12 skipped (10904)\". pnpm typecheck EXIT 0, \"apps/daemon typecheck: Done\". No foreign red to attribute.\n\nEVIDENCE. Arm-by-arm table in comment-5a02bf4a6008. Adversarial pass in comment-1441f8565466.\n\nTWO THINGS FOR QA TO LOOK AT, disclosed not hidden. (1) A BLOCKED run, and a COMPLETED run whose receipts FAILED, are never auto-retried at the same artifact; recovery is a human verify or a new artifact. Auto-retry at an unch",
+  "commits": [
+    {
+      "sha": "cf644c10b871563462bb431479b8345cb6c0331e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-a11dcf70@2026-09-09T20:50:46Z",
+      "paths": [
+        ".moe/tasks/task-b2b4550835f14b6ebd4a742e1f3b01cf.json",
+        ".moe/tasks/task-de80c663569a4ab2b30a9db6ac526e4b.json",
+        "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
+        "apps/daemon/src/criterion-evidence/criterion-read.test.ts",
+        "apps/daemon/src/criterion-evidence/criterion-run.test.ts",
+        "apps/daemon/src/criterion-evidence/criterion-run.ts",
+        "apps/daemon/src/criterion-evidence/criterion-runner.ts",
+        "apps/daemon/src/criterion-evidence/criterion-runner-recovery.test.ts",
+        "docs/plans/2026-09-06-repository-delivery-remediation.md"
+      ],
+      "recordedBy": "worker-a11dcf70",
+      "recordedAt": "2026-09-09T20:59:20.315Z",
+      "treeId": "360495eb8eb9df5d52e73a47cf0886bbd6232e82",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-a11dcf70@2026-09-09T20:50:46Z",
+    "at": "2026-09-09T20:59:20.315Z"
+  },
+  "completedAt": "2026-09-09T21:09:33.787Z",
+  "reviewCompletedAt": "2026-09-09T21:09:33.787Z",
+  "reviewSummary": "APPROVED at commit cf644c10 (9 paths, Moe-Inferred 0). Full evidence in comment-6618d338.\n\nGATE RE-RUN BY ME, standalone/foreground: `pnpm --filter @moe/daemon test` -> `Test Files  608 passed (608)` / `Tests  10892 passed | 12 skipped (10904)`, exit 0, 251.34s. Identical to task.verification. git status --porcelain on owned src paths and the doc EMPTY: reviewed bytes == delivered bytes.\n\nDoD1: arm asserts status COMPLETED, integratedSha, evidence PASSED on both criteria, spies service.verify and asserts it was NEVER called, and asserts all 3 run events carry CRITERION_PRINCIPAL with event[0] kind internal.criterion.queued. DoD2: both kinds asserted ADMIN, external GOAL-capability HTTP caller refused CAPABILITY_DENIED @ stage AUTHORIZE 403 with target version 0, human path still refuses CRITERION_CHECK_HUMAN_REQUIRED @ CRITERION_EVIDENCE for the daemon principal; I checked the fence in PRODUCTION at HEAD, not just the test (vocabulary:179 unchanged, registry OPERATOR_PRINCIPAL_REQUIRED throw untouched). DoD3: three separate arms, three distinct codes (INTEGRATED_ARTIFACT_CHANGED / RUN_PENDING / APPROVAL_REQUIRED), each asserting version unchanged. DoD4: ALREADY_COMPLETED, count still 1; new artifact queues 1->2. DoD5: doc:47 corrected wider than asked.\n\nNON-VACUITY: two process-local drills (temp vitest config + vi.mock, nothing written under src), both killed. A) neutering queueAutomaticCriterionVerification killed all 20 new arms including the DoD1 arm, which drives the real producer through service.advance(). B) forcing sameCriterionArtifact false killed the COMPLETED idempotence case while QUEUED/RUNNING/BLOCKED in the same it.each SURVIVED, proving the pending guard and artifact-identity guard are independent - precisely DoD3's \"not a blanket\". Baseline and restore both 4 files / 40 tests exit 0; temp files deleted, call site greps back.\n\nCaps fine (109/165). No authorization widening, no scheduler, no second acquire."
 }
