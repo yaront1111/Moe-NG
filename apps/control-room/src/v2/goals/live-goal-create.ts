@@ -229,7 +229,14 @@ export function createGoalDispatcher(
   getFrame: () => SurfaceFrame | null,
   readSurface: SurfaceReader = readSurfaceOnce,
 ): (draft: GoalDraft) => Promise<GoalCreateResult> {
-  return async (draft: GoalDraft): Promise<GoalCreateResult> => {
+  // Scoped to this mounted dispatcher/session: the browser never persists credentials or
+  // pending commands. A new offer is NOT a retry identity after an uncertain round trip.
+  let pending: {
+    readonly bytes: string; readonly commandId: string; readonly key: string; readonly title: string;
+    uncertain: boolean;
+  } | null = null;
+  let active: { readonly key: string; readonly promise: Promise<GoalCreateResult> } | null = null;
+  const prepare = async (draft: GoalDraft, key: string): Promise<GoalCreateResult | null> => {
     // ONE FRAME PER DECISION: the refusal must describe the same surface the offer was
     // looked for on. Up to two reads reach that frame, never a mix of both. The polled
     // frame is up to POLL_INTERVAL_MS (2 s, live-goals.tsx) old and a prerequisite can
@@ -267,9 +274,78 @@ export function createGoalDispatcher(
       return { ok: false, report: refusalReport(error) ?? "COMMAND_BUILD_REFUSED" };
     }
     const envelope = built.envelope as RuntimeCommandEnvelope;
-    const sent = await setup.transport.sendCommand(envelope);
-    if (!sent.delivered) return { ok: false, report: `UNDELIVERED · ${sent.code}` };
-    const answered = answerReport(sent.response, prepared.title);
-    return answered.ok ? { ...answered, commandId: envelope.commandId } : answered;
+    pending = {
+      bytes: JSON.stringify(envelope), commandId: envelope.commandId, key,
+      title: prepared.title, uncertain: false,
+    };
+    return null;
+  };
+  const send = async (): Promise<GoalCreateResult> => {
+    const attempt = pending;
+    if (attempt === null) throw new Error("goal create has no prepared command");
+    let sent;
+    try {
+      // Each send gets a fresh copy; even a transport mutating its argument cannot change
+      // the retained bytes. No caller-owned draft, offer or envelope alias is kept.
+      sent = await setup.transport.sendCommand(JSON.parse(attempt.bytes) as RuntimeCommandEnvelope);
+    } catch {
+      attempt.uncertain = true;
+      return { ok: false, report: "UNDELIVERED · TRANSPORT_REQUEST_FAILED" };
+    }
+    if (!sent.delivered) {
+      attempt.uncertain = true;
+      return { ok: false, report: `UNDELIVERED · ${sent.code}` };
+    }
+    const response = sent.response;
+    const answered = answerReport(response, attempt.title);
+    const decision = isRecord(response) ? response["decision"] : undefined;
+    // Transport parses JSON but does not correlate decisions. Only an accepted durable
+    // decision for THIS command can clear it. After ambiguity, a later auth refusal
+    // says nothing about whether the original send committed before its answer was lost.
+    const correlated = isRecord(decision) && decision["commandId"] === attempt.commandId
+      && (decision["disposition"] === "DECIDED" || decision["disposition"] === "REPLAYED")
+      && decision["resultCode"] === "EFFECTS_COMMITTED"
+      && typeof decision["effectId"] === "string" && decision["effectId"] !== "";
+    if (answered.ok && correlated) {
+      pending = null;
+      return { ...answered, commandId: attempt.commandId };
+    }
+    const definiteRefusal = isRecord(response) && response["ok"] === false
+      && (refusalReport(response["refusal"]) ?? refusalReport(response["error"])) !== null;
+    if (definiteRefusal) {
+      if (!attempt.uncertain) pending = null;
+      return answered;
+    }
+    attempt.uncertain = true;
+    return { ok: false, report: "UNDELIVERED · TRANSPORT_RESPONSE_UNREADABLE @ CONTROL_ROOM_GOAL_CREATE" };
+  };
+  return (draft: GoalDraft): Promise<GoalCreateResult> => {
+    let snapshot: GoalDraft;
+    let key: string;
+    // Stable content identity, not object identity. Includes every posted brief/source byte;
+    // unrelated object properties and object insertion order cannot turn a retry into an edit.
+    try {
+      snapshot = JSON.parse(JSON.stringify(draft)) as GoalDraft;
+      key = JSON.stringify([briefOfDraft(snapshot), snapshot.prd === undefined ? null : {
+        displayPath: snapshot.prd.name, mediaType: snapshot.prd.mediaType, text: snapshot.prd.text,
+      }]);
+    } catch {
+      return Promise.resolve({ ok: false, report: "GOAL_CREATE_DRAFT_UNREADABLE @ CONTROL_ROOM_GOAL_CREATE" });
+    }
+    const retainedKey = pending?.key ?? active?.key;
+    if (retainedKey !== undefined && retainedKey !== key) return Promise.resolve({
+      ok: false,
+      report: "AMBIGUOUS_CREATE_RETRY_LOCKED @ CONTROL_ROOM_GOAL_CREATE: retry the unchanged goal before editing or replacing its PRD.",
+    });
+    if (active !== null) return active.promise;
+    const promise = Promise.resolve().then(async () => {
+      if (pending === null) {
+        const refusal = await prepare(snapshot, key);
+        if (refusal !== null) return refusal;
+      }
+      return send();
+    }).finally(() => { active = null; });
+    active = { key, promise };
+    return promise;
   };
 }

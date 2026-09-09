@@ -146,11 +146,16 @@ function wire(send: WireState["send"], catalogGoals: Record<string, unknown>[] =
   return { catalogGoals, send, sent: [] };
 }
 
-const OK_ANSWER = {
-  delivered: true as const,
-  response: { decision: { disposition: "DECIDED", resultCode: "EFFECTS_COMMITTED" }, ok: true },
-  status: 200,
-};
+function acceptedAnswer(envelope: SentEnvelope) {
+  return {
+    delivered: true as const,
+    response: { decision: {
+      commandId: envelope.commandId, disposition: "DECIDED", effectId: "effect-goal",
+      resultCode: "EFFECTS_COMMITTED",
+    }, ok: true },
+    status: 200,
+  };
+}
 
 function refusalAnswer(code: string, layer: string): unknown {
   return { delivered: true as const, response: { ok: false, refusal: { code, layer } }, status: 200 };
@@ -250,7 +255,7 @@ function fetchedPaths(): readonly string[] {
 describe("the live Create goal flow sends the operator's actual draft", () => {
   it("sends each distinct draft verbatim and never the fixed dev prose", async () => {
     const user = userEvent.setup({ delay: null });
-    const state = wire(() => OK_ANSWER);
+    const state = wire(acceptedAnswer);
     stubWire(state);
     render(<LiveGoalsHome onOpenBoard={vi.fn()} setup={attachedSetup(state)} />);
 
@@ -289,7 +294,7 @@ describe("only a durable goal read back from the catalog drives goal state", () 
   it("shows and opens the catalog entry the daemon minted for the sent command", async () => {
     const user = userEvent.setup({ delay: null });
     const onOpenBoard = vi.fn();
-    const state = wire(() => OK_ANSWER);
+    const state = wire(acceptedAnswer);
     stubWire(state);
     render(<LiveGoalsHome onOpenBoard={onOpenBoard} setup={attachedSetup(state)} />);
 
@@ -320,7 +325,7 @@ describe("only a durable goal read back from the catalog drives goal state", () 
   it("opens nothing and renders no goal when the catalog does not carry the write", async () => {
     const user = userEvent.setup({ delay: null });
     const onOpenBoard = vi.fn();
-    const state = wire(() => OK_ANSWER);
+    const state = wire(acceptedAnswer);
     stubWire(state);
     render(<LiveGoalsHome onOpenBoard={onOpenBoard} setup={attachedSetup(state)} />);
 
@@ -340,7 +345,7 @@ describe("only a durable goal read back from the catalog drives goal state", () 
 describe("selecting a PRD writes nothing anywhere", () => {
   it("reaches no ingest route and sends no command until Create is clicked", async () => {
     const user = userEvent.setup({ delay: null });
-    const state = wire(() => OK_ANSWER);
+    const state = wire(acceptedAnswer);
     stubWire(state);
     render(<LiveGoalsHome onOpenBoard={vi.fn()} setup={attachedSetup(state)} />);
 
@@ -446,7 +451,7 @@ describe("a refused create keeps the operator's draft on screen with its reason 
 describe("a selected PRD travels inside the goal-creation command", () => {
   it("sends goal.create_with_source carrying the bytes this browser read", async () => {
     const user = userEvent.setup({ delay: null });
-    const state = wire(() => OK_ANSWER);
+    const state = wire(acceptedAnswer);
     stubWire(state);
     render(<LiveGoalsHome onOpenBoard={vi.fn()} setup={attachedSetup(state)} />);
 
@@ -470,7 +475,7 @@ describe("a selected PRD travels inside the goal-creation command", () => {
 
   it("leaves the no-PRD create on goal.create with an unchanged payload", async () => {
     const user = userEvent.setup({ delay: null });
-    const state = wire(() => OK_ANSWER);
+    const state = wire(acceptedAnswer);
     stubWire(state);
     render(<LiveGoalsHome onOpenBoard={vi.fn()} setup={attachedSetup(state)} />);
 
@@ -488,7 +493,7 @@ describe("a selected PRD travels inside the goal-creation command", () => {
 
   it("keeps the brief PRD line the local digest and never the file bytes", async () => {
     const user = userEvent.setup({ delay: null });
-    const state = wire(() => OK_ANSWER);
+    const state = wire(acceptedAnswer);
     stubWire(state);
     render(<LiveGoalsHome onOpenBoard={vi.fn()} setup={attachedSetup(state)} />);
 
@@ -509,7 +514,7 @@ describe("a selected PRD travels inside the goal-creation command", () => {
 
   it("reaches no ingest route across select, Create and Cancel", async () => {
     const user = userEvent.setup({ delay: null });
-    const state = wire(() => OK_ANSWER, [catalogRow(`goal-${WITH_SOURCE_COMMAND_ID}`)]);
+    const state = wire(acceptedAnswer, [catalogRow(`goal-${WITH_SOURCE_COMMAND_ID}`)]);
     stubWire(state);
     render(<LiveGoalsHome onOpenBoard={vi.fn()} setup={attachedSetup(state)} />);
 
@@ -561,7 +566,7 @@ describe("a selected PRD travels inside the goal-creation command", () => {
   it("shows the goal only once the durable catalog carries the source-created id", async () => {
     const user = userEvent.setup({ delay: null });
     const durableId = `goal-${WITH_SOURCE_COMMAND_ID}`;
-    const state = wire(() => OK_ANSWER);
+    const state = wire(acceptedAnswer);
     stubWire(state);
     render(<LiveGoalsHome onOpenBoard={vi.fn()} setup={attachedSetup(state)} />);
 
@@ -584,7 +589,7 @@ describe("a selected PRD travels inside the goal-creation command", () => {
 describe("only a committed create discards the draft", () => {
   it("closes the form once and reopens it empty", async () => {
     const user = userEvent.setup({ delay: null });
-    const state = wire(() => OK_ANSWER, [catalogRow(DURABLE_GOAL_ID)]);
+    const state = wire(acceptedAnswer, [catalogRow(DURABLE_GOAL_ID)]);
     stubWire(state);
     render(<LiveGoalsHome onOpenBoard={vi.fn()} setup={attachedSetup(state)} />);
 
@@ -604,7 +609,7 @@ describe("only a committed create discards the draft", () => {
 
 describe("the goals list shows the daemon's PRD coverage as each card's progress", () => {
   it("fills the bar from an injected coverage reader without a second fetch", async () => {
-    const state = wire(() => OK_ANSWER, [catalogRow("goal-cov")]);
+    const state = wire(acceptedAnswer, [catalogRow("goal-cov")]);
     stubWire(state);
     const readCoverage = vi.fn(async (goalId: string) => ({
       contracts: [{
@@ -627,7 +632,7 @@ describe("the goals list shows the daemon's PRD coverage as each card's progress
   });
 
   it("says progress is unavailable when no reader is attached", async () => {
-    const state = wire(() => OK_ANSWER, [catalogRow("goal-plain")]);
+    const state = wire(acceptedAnswer, [catalogRow("goal-plain")]);
     stubWire(state);
     render(<LiveGoalsHome onOpenBoard={vi.fn()} setup={attachedSetup(state)} />);
     await screen.findByTestId("cr.goals.card.goal-plain.progress");

@@ -67,7 +67,10 @@ function setupWith(sent: SentEnvelope[]): LiveSetup {
         sent.push(envelope);
         return {
           delivered: true,
-          response: { decision: { disposition: "ACCEPTED", resultCode: "COMMITTED" }, ok: true },
+          response: { decision: {
+            commandId: envelope.commandId, disposition: "DECIDED", effectId: "effect-goal",
+            resultCode: "EFFECTS_COMMITTED",
+          }, ok: true },
         };
       }),
     },
