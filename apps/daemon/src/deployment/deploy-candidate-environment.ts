@@ -99,6 +99,39 @@ export const runCandidateArgv = (
     "--entrypoint", CANDIDATE_ENVIRONMENT_SHELL, tag, "-c", CANDIDATE_ENVIRONMENT_LOADER,
     ...mount.command]);
 
+/**
+ * THE SAME CANDIDATE, BROUGHT UP IN THREE CALLS INSTEAD OF ONE, so the delivery can reach a REMOTE
+ * docker host. A bind mount's `source` is resolved on the DOCKER host, and for `sshTarget !== null`
+ * that is not the daemon's machine — which is why `resolveCandidateMount` refuses remotely at all.
+ * `create` + `cp -` + `start` names no host path anywhere: the bytes ride the docker CLI's STDIN,
+ * which `run()` already carries through `ssh <target> docker ...`. NOTHING HERE IS WIRED YET —
+ * `runCandidateArgv` is untouched and stays the only builder `startCandidate` calls.
+ *
+ * `command` is the image's own `Entrypoint ++ Cmd`, which `--entrypoint` discards. It is a bare
+ * string array rather than a `CandidateEnvironmentMount` ON PURPOSE: that type carries a host
+ * `source`, and a type that cannot express a host path is what stops one reappearing here.
+ */
+export const createCandidateArgv = (
+  name: string, network: string, tag: string, command: readonly string[] | null = null,
+): readonly string[] => (command === null
+  ? ["create", "--name", name, "--network", network, tag]
+  : ["create", "--name", name, "--network", network,
+    "--entrypoint", CANDIDATE_ENVIRONMENT_SHELL, tag, "-c", CANDIDATE_ENVIRONMENT_LOADER, ...command]);
+
+/**
+ * `docker cp - <name>:/` — the archive on STDIN, so NO TOKEN HERE CARRIES A VALUE OR A PATH.
+ *
+ * The destination is `/` and the archive carries `run/moe/env` with its parent, because `/run/moe`
+ * does not exist in the image and copying to a missing directory is the one shape that cannot
+ * fail. NO `--archive`/`-a`: measured against docker 29.6.2, `docker cp -` already honours the
+ * USTAR header's uid and gid, and the same archive written root-owned makes the file unreadable to
+ * the `USER node` the image ends on.
+ */
+export const copyEnvironmentArgv = (name: string): readonly string[] => ["cp", "-", `${name}:/`];
+
+/** The container name alone. `create` already carries the network, the entrypoint and the argv. */
+export const startCandidateArgv = (name: string): readonly string[] => ["start", name];
+
 /** Two JSON lines rather than one object: `.Config` also carries the image's `Env`, which is not ours to read. */
 export const imageCommandArgv = (tag: string): readonly string[] =>
   ["image", "inspect", "--format", "{{json .Config.Entrypoint}}\n{{json .Config.Cmd}}", tag];

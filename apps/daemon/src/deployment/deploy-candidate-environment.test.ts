@@ -1,6 +1,9 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
+
+import * as double from "./deploy-docker-double.js";
+import * as ports from "./deploy-ports.js";
 
 import { closeStores, openStore } from "../review/review-test-fixtures.js";
 import { CONTROLLED_PROFILE_VERSION } from "../repository/controlled-profile/controlled-profile-generator.js";
@@ -12,9 +15,10 @@ import { deployImageTag } from "./deploy-receipt-contracts.js";
 import {
   CANDIDATE_ENVIRONMENT_LOADER, CANDIDATE_ENVIRONMENT_PATH, CANDIDATE_ENVIRONMENT_SHELL,
   DEPLOY_ENVIRONMENT_IMAGE_COMMAND_UNKNOWN, DEPLOY_ENVIRONMENT_REMOTE_UNSUPPORTED,
-  candidateEnvironmentPort, encodeCandidateEnvironment, imageCommandArgv, parseImageCommand,
-  resolveCandidateMount, runCandidateArgv,
+  candidateEnvironmentPort, copyEnvironmentArgv, createCandidateArgv, encodeCandidateEnvironment,
+  imageCommandArgv, parseImageCommand, resolveCandidateMount, runCandidateArgv, startCandidateArgv,
 } from "./deploy-candidate-environment.js";
+import { encodeCandidateArchive } from "./deploy-candidate-archive.js";
 import { candidateContainerName, createDeployService } from "./deploy-service.js";
 
 /**
@@ -107,10 +111,90 @@ describe("the candidate argv carries paths, never values", () => {
     ]);
   });
 
+  it("FREEZES runCandidateArgv's exact bytes on BOTH arms, as the successor's migration baseline", () => {
+    // DoD 1. This row wires nothing and must leave `runCandidateArgv` byte-identical, so the row
+    // that migrates the verb starts from a PROVEN baseline rather than from whatever this one left
+    // behind. Written out as literals, not composed from the module's own constants: a baseline
+    // that reads its expectation from the thing under test cannot detect the thing changing.
+    expect(runCandidateArgv("c", "n", "t")).toEqual(["run", "--detach", "--name", "c", "--network", "n", "t"]);
+    expect(runCandidateArgv("c", "n", "t", { command: ["e", "x"], source: "/h/env" })).toEqual([
+      "run", "--detach", "--name", "c", "--network", "n",
+      "--mount", "type=bind,source=/h/env,target=/run/moe/env,readonly",
+      "--entrypoint", "/bin/sh", "t", "-c",
+      'set -a; . /run/moe/env; set +a; exec "$0" "$@"', "e", "x",
+    ]);
+  });
+
   it("names no variable and no value in the loader, whatever is being delivered", () => {
     expect(CANDIDATE_ENVIRONMENT_LOADER).not.toMatch(/[A-Z][A-Z0-9_]*=/u);
     expect(CANDIDATE_ENVIRONMENT_LOADER).toContain(CANDIDATE_ENVIRONMENT_PATH);
     expect(CANDIDATE_ENVIRONMENT_SHELL).toBe("/bin/sh");
+  });
+});
+
+/**
+ * THE THREE-CALL SHAPE, BUILDERS ONLY. Nothing in this row wires them into `deploy-service.ts`;
+ * these arms pin the bytes so the successor row migrates onto something already proven.
+ */
+describe("create, cp and start name no host path and no value", () => {
+  it("creates the candidate with the image's own argv restored, and never --detach", () => {
+    expect(createCandidateArgv("c", "n", "t")).toEqual(["create", "--name", "c", "--network", "n", "t"]);
+    expect(createCandidateArgv("c", "n", "t", [IMAGE_ENTRYPOINT, ...IMAGE_CMD])).toEqual([
+      "create", "--name", "c", "--network", "n",
+      "--entrypoint", "/bin/sh", "t", "-c",
+      'set -a; . /run/moe/env; set +a; exec "$0" "$@"',
+      IMAGE_ENTRYPOINT, "node", "/app/dist/server.js",
+    ]);
+    // `--detach` is a `run` flag and `create` rejects it; `start` is what detaches here.
+    expect(createCandidateArgv("c", "n", "t", ["e"])).not.toContain("--detach");
+  });
+
+  it("carries NO host path in the create argv, which is the whole reason this shape exists", () => {
+    // `runCandidateArgv` must name a host path — that is exactly why it cannot deliver to a remote
+    // docker host. This one must not, on either arm, so the same argv works local and remote.
+    for (const argv of [createCandidateArgv("c", "n", "t"), createCandidateArgv("c", "n", "t", ["e"])]) {
+      expect(argv).not.toContain("--mount");
+      expect(argv.some((token) => token.includes("type=bind"))).toBe(false);
+      expect(argv.some((token) => token.includes("source="))).toBe(false);
+    }
+    // ...and the contrast is asserted, so this is not passing on an argv that never had one.
+    expect(runCandidateArgv("c", "n", "t", { command: ["e"], source: "/h/env" }))
+      .toContain("type=bind,source=/h/env,target=/run/moe/env,readonly");
+  });
+
+  it("copies from STDIN to the container root, with no value and no archive flag", () => {
+    expect(copyEnvironmentArgv("c")).toEqual(["cp", "-", "c:/"]);
+    // The payload rides on stdin: no token here carries a variable name or a value, and `-a` is
+    // absent because `docker cp -` was MEASURED to honour the USTAR header's uid/gid without it.
+    expect(copyEnvironmentArgv("c")).not.toContain("--archive");
+    expect(copyEnvironmentArgv("c")).not.toContain("-a");
+    expect(copyEnvironmentArgv("c").some((token) => token.includes(VALUE))).toBe(false);
+  });
+
+  it("starts the container by name alone", () => {
+    expect(startCandidateArgv("c")).toEqual(["start", "c"]);
+  });
+
+  it("drives a real docker double end to end: create, cp, start, then healthy", async () => {
+    // The three builders against the double that models the three verbs — the closest this row
+    // gets to the journey, without wiring anything. Proves they compose, and that the value
+    // reaches the container's filesystem through STDIN and through no argv.
+    const double = createDockerDouble({ health: { c: ["STARTING", "HEALTHY"] } });
+    const archive = encodeCandidateArchive(encodeCandidateEnvironment({ SECRET_TOKEN: VALUE }));
+    if (!archive.ok) throw new Error(`encoder refused: ${archive.code}`);
+
+    await double.docker(createCandidateArgv("c", "moe-net", "tag:1", [IMAGE_ENTRYPOINT, ...IMAGE_CMD]));
+    expect(double.state("c")).toBe("CREATED");
+    expect((await double.docker(copyEnvironmentArgv("c"), archive.archive)).code).toBe(0);
+    expect((await double.docker(startCandidateArgv("c"))).code).toBe(0);
+
+    expect(double.state("c")).toBe("STARTING");
+    expect(double.copies).toEqual([{ container: "c", destination: "/", payload: archive.archive }]);
+    expect(double.copies[0]?.payload.includes(VALUE)).toBe(true);
+    // NOT ONE ARGV TOKEN, ACROSS ALL THREE CALLS, CARRIES THE VALUE.
+    expect(double.calls.flat().some((token) => token.includes(VALUE))).toBe(false);
+    expect(double.calls.flat().filter((token) => token === "--env" || token === "--env-file" || token === "-e"))
+      .toEqual([]);
   });
 });
 
@@ -300,5 +384,151 @@ describe("the deploy engine mounts the delivery it was given", () => {
     expect(context.double.calls.find((call) => call[0] === "run")).toEqual(
       runCandidateArgv(context.candidate, "moe-net", deployImageTag(ENVIRONMENT, SHA)),
     );
+  });
+});
+
+/**
+ * THE DOUBLE MOVED TO ITS OWN MODULE AND TWENTY FILES DID NOT. Those files import the double's
+ * surface from `./deploy-ports.js`, so the re-export IS their contract, and a forgotten re-export
+ * ships GREEN under typecheck whenever the twenty happen to use only a subset of what moved.
+ */
+describe("the docker double is re-exported from deploy-ports so no importer moved", () => {
+  it("carries every RUNTIME export of the double module, at the same identity", () => {
+    const advertised = ports as unknown as Readonly<Record<string, unknown>>;
+    const served = double as unknown as Readonly<Record<string, unknown>>;
+    // Direction 1: nothing the double serves is missing from what deploy-ports advertises.
+    expect(Object.keys(served).filter((key) => !(key in advertised))).toEqual([]);
+    // ...and it is the SAME binding, not a second definition that could drift.
+    expect(Object.keys(served).filter((key) => advertised[key] !== served[key])).toEqual([]);
+  });
+
+  it("re-exports every TYPE the double declares, which Object.keys cannot see at all", () => {
+    // THE ATTACK THIS ANSWERS: typecheck passes if the twenty importers happen to use a SUBSET of
+    // what moved, and four of the double's seven exports are TYPES — invisible to a runtime key
+    // check. So the export list is read off the SOURCE and split by kind. Runtime kinds must be in
+    // deploy-ports's namespace; type kinds must be in the pinned list below. Adding an export to
+    // the double and forgetting it here reds, instead of shipping green until a consumer reaches
+    // for it.
+    const source = readFileSync(new URL("./deploy-docker-double.ts", import.meta.url), "utf8");
+    const declared = [...source.matchAll(/^export (interface|type|const|function) (\w+)/gmu)];
+    expect(declared.length).toBeGreaterThan(0);
+    const byKind = (kinds: readonly string[]): readonly string[] =>
+      declared.filter((match) => kinds.includes(match[1] ?? "")).map((match) => match[2] ?? "").sort();
+
+    expect(byKind(["const", "function"])).toEqual(["DOUBLE_IMAGE_COMMAND", "createDockerDoubleWithArgv"]);
+    expect(byKind(["const", "function"]).filter((name) => !(name in ports))).toEqual([]);
+    expect(byKind(["interface", "type"])).toEqual(
+      ["ContainerState", "DockerCopy", "DockerDouble", "DockerDoubleOptions", "DockerDoubleTransferArgv"]);
+    // Each of those five, reachable through deploy-ports.js and identical to the double's own.
+    expectTypeOf<ports.ContainerState>().toEqualTypeOf<double.ContainerState>();
+    expectTypeOf<ports.DockerCopy>().toEqualTypeOf<double.DockerCopy>();
+    expectTypeOf<ports.DockerDouble>().toEqualTypeOf<double.DockerDouble>();
+    expectTypeOf<ports.DockerDoubleOptions>().toEqualTypeOf<double.DockerDoubleOptions>();
+    expectTypeOf<ports.DockerDoubleTransferArgv>().toEqualTypeOf<double.DockerDoubleTransferArgv>();
+  });
+
+  it("carries the exact NAMES the twenty importers reach for, spelled out and not iterated", () => {
+    // Direction 2, and the reason it is a literal list: the arm above iterates the double's own
+    // keys, so DELETING an export shrinks that iteration and it stays green. These names are the
+    // twenty files' actual import contract, so a deletion reds here by name.
+    expect(Object.keys(ports)).toEqual(expect.arrayContaining([
+      "DOUBLE_IMAGE_COMMAND", "createDockerDouble", "createDockerDoubleWithArgv",
+    ]));
+    expect(DOUBLE_IMAGE_COMMAND).toBe('["docker-entrypoint.sh"]\n["node","/app/dist/server.js"]\n');
+  });
+
+  it("imports nothing from deploy-ports at RUNTIME, which is what keeps the cycle open", () => {
+    // `deploy-ports.ts` `export *`s from this module, so a VALUE import back would make module
+    // evaluation order load-bearing — and typecheck cannot see that. Asserted against the SOURCE
+    // because the property is about the import form, which is erased before anything runs.
+    const source = readFileSync(new URL("./deploy-docker-double.ts", import.meta.url), "utf8");
+    const back = [...source.matchAll(/^import (type )?[^;]*?from "\.\/deploy-ports\.js";$/gmu)];
+    expect(back.length).toBeGreaterThan(0);
+    expect(back.filter((match) => match[1] === undefined)).toEqual([]);
+  });
+});
+
+/**
+ * CREATE-THEN-START, which is what remote delivery needs: a bind mount's source is resolved on the
+ * DOCKER host, and for an ssh target that is not the daemon's machine. `docker create` + `docker
+ * cp -` + `docker start` puts the bytes through the CLI's stdin instead, which the runner already
+ * carries to a remote target. Nothing is wired to it yet — this row teaches the model only.
+ */
+describe("the double models create, cp and start as three separate things", () => {
+  const CANDIDATE = "moe-candidate-1";
+  const create = (double: ports.DockerDouble): Promise<DeployRunResult> =>
+    double.docker(["create", "--name", CANDIDATE, "--network", "moe-net", "tag:1"]);
+
+  it("does not report a CREATED container as running, healthy, or probeable", async () => {
+    // The health SCRIPT says HEALTHY. The container was never started, so it must not answer from
+    // it: measured on docker 29.6.2, a created container has no `.State.Health` key at all and
+    // `docker inspect --format '{{.State.Health.Status}}'` EXITS 1 until `docker start`.
+    const double = createDockerDouble({ health: { [CANDIDATE]: ["HEALTHY"] } });
+    await create(double);
+
+    expect(double.state(CANDIDATE)).toBe("CREATED");
+    expect(double.serving()).toEqual([]);
+    const probe = await double.docker(["inspect", "--format", "{{.State.Health.Status}}", CANDIDATE]);
+    expect(probe.code).toBe(1);
+    expect(probe.stdout).toBe("");
+  });
+
+  it("moves the SAME container to STARTING on start, keyed on the --name value", async () => {
+    const double = createDockerDouble({ health: { [CANDIDATE]: ["HEALTHY"] } });
+    await create(double);
+    expect(await double.docker(["start", CANDIDATE])).toEqual({ code: 0, stderr: "", stdout: CANDIDATE });
+
+    expect(double.state(CANDIDATE)).toBe("STARTING");
+    // The health script applies only once it has RUN, so the probe now answers from it — proving
+    // `create` keyed the container on the same name the probe uses, not on the trailing image tag.
+    const probe = await double.docker(["inspect", "--format", "{{.State.Health.Status}}", CANDIDATE]);
+    expect(probe.code).toBe(0);
+    expect(probe.stdout).toBe("healthy\n");
+  });
+
+  it("refuses to START a container that was never created, naming it", async () => {
+    const double = createDockerDouble();
+    const started = await double.docker(["start", CANDIDATE]);
+
+    expect(started.code).toBe(1);
+    expect(started.stderr).toBe(`Error response from daemon: No such container: ${CANDIDATE}`);
+    expect(double.state(CANDIDATE)).toBe("ABSENT");
+  });
+
+  it("refuses a cp to an ABSENT container rather than succeeding silently", async () => {
+    // A silent success here is the failure that matters: it would let a wired deploy start a
+    // candidate with NO environment and present as a 150s health timeout far from the cause.
+    const double = createDockerDouble();
+    const copied = await double.docker(["cp", "-", `${CANDIDATE}:/`], "PAYLOAD");
+
+    expect(copied.code).toBe(1);
+    expect(copied.stderr).toBe(`destination "${CANDIDATE}:/" must be a directory`);
+    expect(double.copies).toEqual([]);
+  });
+
+  it("accepts a cp to a created container and records the payload off the ARGV", async () => {
+    const double = createDockerDouble();
+    await create(double);
+    const copied = await double.docker(["cp", "-", `${CANDIDATE}:/`], `SECRET='${VALUE}'\n`);
+
+    expect(copied.code).toBe(0);
+    expect(double.copies).toEqual([
+      { container: CANDIDATE, destination: "/", payload: `SECRET='${VALUE}'\n` },
+    ]);
+    // THE PROPERTY THE WHOLE SHAPE EXISTS FOR: the value rode on stdin and no argv token holds it.
+    expect(double.calls.flat().some((token) => token.includes(VALUE))).toBe(false);
+    // A copy does not start anything either.
+    expect(double.state(CANDIDATE)).toBe("CREATED");
+  });
+
+  it("leaves the run verb exactly as it was, so no existing arm drifts", async () => {
+    const double = createDockerDouble({ health: { [CANDIDATE]: ["STARTING", "HEALTHY"] } });
+    expect(await double.docker(["run", "--detach", "--name", CANDIDATE, "--network", "moe-net", "tag:1"]))
+      .toEqual({ code: 0, stderr: "", stdout: CANDIDATE });
+
+    expect(double.state(CANDIDATE)).toBe("STARTING");
+    const probe = await double.docker(["inspect", "--format", "{{.State.Health.Status}}", CANDIDATE]);
+    expect(probe.code).toBe(0);
+    expect(probe.stdout).toBe("starting\n");
   });
 });
