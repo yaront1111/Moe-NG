@@ -31,12 +31,24 @@ import type { PreviewDecisionProvenance } from "./preview-decision-record.js";
  * automatic decision is the gate staying pending for a human, which is what it did before.
  */
 
-/** This module answered. Deliberately NOT added to `PREVIEW_LAYERS` or `SERVICE_REFUSED_BY`: no
- *  refusal here reaches a wire, so widening either closed roster would advertise a channel that
- *  does not exist. */
-export const PREVIEW_AUTO_DECISION_LAYER = "PREVIEW_AUTO_DECISION" as const;
+/**
+ * MODULE-PRIVATE ON PURPOSE, AND DO NOT RE-EXPORT THESE THREE TO SATISFY AN IMPORT.
+ *
+ * Deliberately NOT added to `PREVIEW_LAYERS` or `SERVICE_REFUSED_BY`: no refusal here reaches a
+ * wire, so widening either closed roster would advertise a channel that does not exist. The
+ * security roster has a FIRST-CLASS CATEGORY for exactly that — `PRIVATE_DECLARATION_PATTERN`
+ * in tests/security/layer-visibility-cases.ts scans column-0 `const *_LAYER(S)` into its own
+ * counted, both-directions allowlist — and these three are enrolled there
+ * (`UNSCANNED_PRIVATE_LAYERS`), NOT in the exported roster. `DECLARATION_PATTERN` is anchored
+ * `^export const`, so re-exporting any one of them puts it back in the EXPORTED population and
+ * reds tests/security/boundary-roster.security.ts with a scan-minus-roster finding — which is
+ * how they shipped red the first time. Callers keep the vocabulary through the exported TYPES
+ * below and through `previewAutoDecline`, neither of which the scanner can see.
+ */
+/** This module answered. */
+const PREVIEW_AUTO_DECISION_LAYER = "PREVIEW_AUTO_DECISION" as const;
 /** CORE answered — the same attribution `bootstrap-policy-services.ts` gives an engine refusal. */
-export const PREVIEW_AUTO_POLICY_LAYER = "CORE_REDUCER" as const;
+const PREVIEW_AUTO_POLICY_LAYER = "CORE_REDUCER" as const;
 
 /**
  * Why no automatic decision was taken, mapped to the layer that answered. The layer is DERIVED
@@ -45,7 +57,7 @@ export const PREVIEW_AUTO_POLICY_LAYER = "CORE_REDUCER" as const;
  * stays closed at four, because no condition below is one a payload can create and none travels
  * back to a caller.
  */
-export const PREVIEW_AUTO_CODE_LAYERS = Object.freeze({
+const PREVIEW_AUTO_CODE_LAYERS = Object.freeze({
   /** Already decided, human or automatic. Precedence and idempotence are ONE check: first wins. */
   PREVIEW_AUTO_ALREADY_DECIDED: PREVIEW_AUTO_DECISION_LAYER,
   /** CORE: the outcome was not ALLOW. The engine's own `reasonCodes` travel with this. */

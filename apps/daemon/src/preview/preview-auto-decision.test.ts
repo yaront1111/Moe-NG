@@ -11,7 +11,8 @@
  * two different LAYERS answer them, so "no approval happened" is one added layer away from
  * vacuous: a receipt-shape regression would decline every case and every arm would stay green
  * while nothing about policy was being tested. Every arm below asserts the CODE together with the
- * LAYER `PREVIEW_AUTO_CODE_LAYERS` maps it to, and the engine's own reason code where core
+ * LAYER production pairs it with — read through the exported `previewAutoDecline`, because the
+ * code->layer map itself is module-private — and the engine's own reason code where core
  * answered — and each is paired with a POSITIVE CONTROL over the same input that DOES approve, so
  * a gate that started declining for the wrong reason reddens the control instead of hiding inside
  * the refusal.
@@ -54,8 +55,7 @@ import {
   previewAutoCommandId, resolvePreviewAutoDecision,
 } from "./preview-auto-composition.js";
 import {
-  PREVIEW_AUTO_CODE_LAYERS, PREVIEW_AUTO_DECISION_LAYER, PREVIEW_AUTO_POLICY_LAYER,
-  previewAutoDecisionFor,
+  PREVIEW_AUTO_CODES, previewAutoDecisionFor, previewAutoDecline,
 } from "./preview-auto-decision.js";
 import type { PreviewAutoDecision } from "./preview-auto-decision.js";
 import {
@@ -309,7 +309,6 @@ describe("R2 and R3 are never auto-approved", () => {
     it(`declines ${tier} with HUMAN_ONLY_TIER from the engine, at the CORE layer`, () => {
       const result = declined(previewAutoDecisionFor(input({ tier })));
       expect(result.code).toBe("PREVIEW_AUTO_NOT_ALLOWED");
-      expect(result.layer).toBe(PREVIEW_AUTO_POLICY_LAYER);
       expect(result.layer).toBe("CORE_REDUCER");
       // The ENGINE's own reason code, not a restamped one — this is the fact the DoD names.
       expect(result.reasonCodes).toContain("HUMAN_ONLY_TIER");
@@ -319,7 +318,7 @@ describe("R2 and R3 are never auto-approved", () => {
   it("declines an R0 subject with no opt-in covering the action, with the engine's own code", () => {
     const result = declined(previewAutoDecisionFor(input({ optIns: [], tier: "R0" })));
     expect(result.code).toBe("PREVIEW_AUTO_NOT_ALLOWED");
-    expect(result.layer).toBe(PREVIEW_AUTO_POLICY_LAYER);
+    expect(result.layer).toBe("CORE_REDUCER");
     expect(result.reasonCodes).toContain("AUTO_APPROVAL_NOT_OPTED_IN");
   });
 
@@ -333,14 +332,14 @@ describe("R2 and R3 are never auto-approved", () => {
   it("declines when NO tier-bearing fact is in scope, because unknown risk dominates ALLOW", () => {
     const result = declined(previewAutoDecisionFor(input({ tier: null })));
     expect(result.code).toBe("PREVIEW_AUTO_NOT_ALLOWED");
-    expect(result.layer).toBe(PREVIEW_AUTO_POLICY_LAYER);
+    expect(result.layer).toBe("CORE_REDUCER");
     expect(result.reasonCodes).toContain("RISK_TIER_UNCLASSIFIABLE");
   });
 
   it("declines a structurally invalid input at the CORE layer, committing nothing", () => {
     const result = declined(previewAutoDecisionFor({ action: PREVIEW_DECIDE_COMMAND_KIND }));
     expect(result.code).toBe("PREVIEW_AUTO_POLICY_INPUT_INVALID");
-    expect(result.layer).toBe(PREVIEW_AUTO_POLICY_LAYER);
+    expect(result.layer).toBe("CORE_REDUCER");
   });
 });
 
@@ -368,10 +367,38 @@ describe("the auto-approval ceiling is core's, and this row did not move it", ()
     );
   });
 
-  it("every declination code maps to exactly one layer, and both layers are reachable", () => {
-    const layers = new Set(Object.values(PREVIEW_AUTO_CODE_LAYERS));
-    expect([...layers].sort()).toEqual([PREVIEW_AUTO_POLICY_LAYER, PREVIEW_AUTO_DECISION_LAYER]
-      .sort());
+  /**
+   * READ THROUGH THE PUBLIC REFUSAL SURFACE, AND STRICTER THAN THE ARM IT REPLACES. The code->layer
+   * map is module-private (the security roster's private population is where a layer that reaches
+   * no wire belongs), so this drives every code through the exported `previewAutoDecline` — the
+   * one place production pairs a code with a layer — and pins the WHOLE TABLE as literals.
+   *
+   * WHY THE WHOLE TABLE AND NOT THE VALUE SET. The previous form asserted
+   * `new Set(Object.values(MAP))` equals the two layers, which CANNOT FAIL on a real remapping:
+   * move ALREADY_DECIDED from PREVIEW_AUTO_DECISION to CORE_REDUCER and the value set is still
+   * exactly those two. It also put an imported constant on both sides, which this repo names as
+   * the weak form. Every entry below is a literal, so any single remap reds this arm, and the
+   * roster-completeness half survives as the `PREVIEW_AUTO_CODES` set-equality.
+   */
+  it("pairs every declination code with its own layer, asserted as literals through production", () => {
+    expect([...PREVIEW_AUTO_CODES]).toEqual([
+      "PREVIEW_AUTO_ALREADY_DECIDED", "PREVIEW_AUTO_NOT_ALLOWED", "PREVIEW_AUTO_POLICY_INPUT_INVALID",
+      "PREVIEW_AUTO_POLICY_UNRESOLVED", "PREVIEW_AUTO_RECEIPT_NOT_STARTED",
+      "PREVIEW_AUTO_TIER_UNCOVERED",
+    ]);
+    const table = Object.fromEntries(
+      PREVIEW_AUTO_CODES.map((code) => [code, previewAutoDecline(code).layer]),
+    );
+    expect(table).toEqual({
+      PREVIEW_AUTO_ALREADY_DECIDED: "PREVIEW_AUTO_DECISION",
+      PREVIEW_AUTO_NOT_ALLOWED: "CORE_REDUCER",
+      PREVIEW_AUTO_POLICY_INPUT_INVALID: "CORE_REDUCER",
+      PREVIEW_AUTO_POLICY_UNRESOLVED: "PREVIEW_AUTO_DECISION",
+      PREVIEW_AUTO_RECEIPT_NOT_STARTED: "PREVIEW_AUTO_DECISION",
+      PREVIEW_AUTO_TIER_UNCOVERED: "PREVIEW_AUTO_DECISION",
+    });
+    // BOTH layers stay reachable — the property the replaced arm owned, kept alongside the table.
+    expect([...new Set(Object.values(table))].sort()).toEqual(["CORE_REDUCER", "PREVIEW_AUTO_DECISION"]);
   });
 });
 
@@ -420,7 +447,7 @@ describe("preview.start auto-approves over a real store, with no human decision"
       receipt: receipt(store), store,
     }));
     expect(result.code).toBe("PREVIEW_AUTO_POLICY_UNRESOLVED");
-    expect(result.layer).toBe(PREVIEW_AUTO_DECISION_LAYER);
+    expect(result.layer).toBe("PREVIEW_AUTO_DECISION");
   });
 
   it("never fires on a REFUSED receipt, which names a code and served no url", () => {
@@ -434,7 +461,7 @@ describe("preview.start auto-approves over a real store, with no human decision"
       decidedAt: DECIDED_AT, principalId: OPERATOR, projectId: PROJECT_ID, receipt: refused, store,
     }));
     expect(result.code).toBe("PREVIEW_AUTO_RECEIPT_NOT_STARTED");
-    expect(result.layer).toBe(PREVIEW_AUTO_DECISION_LAYER);
+    expect(result.layer).toBe("PREVIEW_AUTO_DECISION");
   });
 
   /**
@@ -466,7 +493,7 @@ describe("preview.start auto-approves over a real store, with no human decision"
       receipt: receipt(store), store,
     }));
     expect(result.code).toBe("PREVIEW_AUTO_POLICY_UNRESOLVED");
-    expect(result.layer).toBe(PREVIEW_AUTO_DECISION_LAYER);
+    expect(result.layer).toBe("PREVIEW_AUTO_DECISION");
   });
 
   it("the shipped seed world installs TWO evaluation slices, which is why selection filters on the declaration", () => {
@@ -541,7 +568,7 @@ describe("a recorded human decision WINS, and the automatic path never overturns
       receipt: receipt(store), store,
     }));
     expect(result.code).toBe("PREVIEW_AUTO_ALREADY_DECIDED");
-    expect(result.layer).toBe(PREVIEW_AUTO_DECISION_LAYER);
+    expect(result.layer).toBe("PREVIEW_AUTO_DECISION");
     // The human's verdict is UNTOUCHED, and it reads back as a HUMAN one: provenance null.
     const human = readPreviewDecision(store, PROJECT_ID, OPERATOR, humanCommandId);
     expect(human?.decision).toBe("REJECT");

@@ -485,7 +485,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:14:49.532Z",
-  "updatedAt": "2026-09-09T23:27:49.407Z",
+  "updatedAt": "2026-09-09T23:28:57.079Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:28:10.582Z",
     "plannedStepCount": 8,
@@ -1027,6 +1027,22 @@
       "treeId": "515ff585e022fc033f02f307795f5a15b850b6b2",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "958801a4a642b40b55016be97b74fcb52b94d8b2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T23:14:36Z",
+      "paths": [
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        ".moe/tasks/task-b8ec9a638f6540c28798c29f23fd5ada.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T23:28:57.079Z",
+      "treeId": "1ac383ee9da6d3b022cf5dba66f59c26f02aa207",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -1044,7 +1060,8 @@
     "README.md",
     "docs/VISION.md",
     "docs/agent-stack-runbook.md",
-    ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json"
+    ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+    ".moe/tasks/task-b8ec9a638f6540c28798c29f23fd5ada.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/orchestrator/node-lander-journal.ts",
@@ -1075,13 +1092,13 @@
     "tests/e2e/control-room/live-proof-recover.ts"
   ],
   "unattributedPaths": [
-    "apps/daemon/drill-qa-b8ec9a63.config.ts"
+    "tests/security/layer-visibility-cases.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-0e797912@2026-09-09T20:50:49Z",
-    "at": "2026-09-09T23:09:04.810Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-01b7fe3f@2026-09-09T23:14:36Z",
+    "at": "2026-09-09T23:28:57.079Z"
   },
   "priorBlockedReason": "HELD FOR THE SHARED-TREE CUTOVER, at the governor's own instruction. NOT a capability block and NOT a re-opening of comment-f3a33015 — that resume ruling stands and the acceptance bar is untouched.\n\ngovernor-608c8a78 asked every seat (msg-a1ea4386) under the user's explicit checkout-main + preserve/commit/push request to reach a safe point, preserve through normal wrapper landing, and NOT start a new mutable run during the cutover. Every remaining piece of this row IS a new mutable run: step 5 is a fresh-product live run with real provider seats ending in a real GitHub PR; step 6 is nine-plus whole-suite legs. A branch switch mid-run destroys it. Independently, step 6 cannot run anyway: full-suite-gate is held by qa-01b7fe3f from 2026-09-09T12:21:00Z.\n\nSTATE, measured not inferred (msg-422fafb8, comment-37410b0e): all 12 delivered paths TRACKED and clean vs HEAD; `git log origin/moe/work-2026-09-04..HEAD` = 0, so the work is committed AND pushed and a checkout of main loses nothing of mine. Steps 1-4 stay COMPLETED. I own no launcher and started no run.\n\nDELIVERED ANYWAY, a real defect in this row's own bytes: live-proof-prd.spec.ts:257 recorded a FALSE \"operator-only-boundary\" roster — it listed release.decide as operator-only (served as an ASYNC entry, so the registry's synchronous fence never runs; assertReleasePrincipal admits a paired ADMIN via releaseByPairedAdmin) and its registry line ref was stale (fence at :393, not :379). Corrected to operatorOnly + pairedAdminReachable; one grep hit repo-wide so no consumer moved; tsc exit 0, zero diagnostics.\n\nTO CLEAR: a governor confirms the cutover is finished and the branch is settled. The next seat then resumes step 5 directly — remote, setup contract and outstanding list are all in comment-37410b0e, nothing to re-derive.",
   "blockedOnTaskIds": null,
