@@ -99,20 +99,29 @@
     {
       "stepId": "step-7",
       "description": "VERIFICATION and adversarial review — DoD item 6. Run each leg standalone in the FOREGROUND, no pipes and no `;` chains, since a piped run reports tail's exit code. Legs: `pnpm --filter @moe/daemon typecheck`, `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room typecheck`, `pnpm --filter @moe/control-room test`. THE CONTROL-ROOM LEGS ARE MANDATORY, not a courtesy: the two version mirrors from step 4 live under apps/control-room and are invisible to `pnpm test`, `pnpm typecheck` and the daemon leg (epic rail 1), so without them a missed bump ships green. Quote each command, exit code and `Test Files N passed` count line — an exit-0 leg with no count line is UNVERIFIED, and `pnpm --filter` prints \"No projects matched the filters\" and exits 0 on a bad package name. Apply the path-attributed baseline for any repo-wide red: failing paths at the merge-base versus HEAD, delta intersected with this row's six owned paths must be EMPTY, foreign red quoted verbatim. THEN READ THE DIFF AS AN ATTACKER. Questions this change earns: can the password reach a log line when postgres fails to read the secret file? Does `docker compose config` or the compose config-hash label expose it? What happens with a password containing a newline, a `$`, or a trailing space — does the secret file round-trip it byte for byte, and does `pg_isready` still pass? Is the fail-fast arm falsifiable — remove the guard, confirm the arm goes RED, restore. RESTORE PROOF: back the mutated template out of tree to `%TEMP%/moe-task-7693a195c0-<basename>-<workerId>`, the task id in the path is mandatory because seat ids are reused across relaunches and a seat-keyed backup has held a stale vintage on this host; hash the LIVE file at window-open and prove the restore by SHA256 equality in a call SEPARATE from the restore, with no full-suite lease held. Put the gate table in a task COMMENT first — completionSummary truncates silently at 2000 chars mid-word — then report every touched path in complete_step.modifiedFiles.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
         "apps/control-room/src/v2/products/live-new-product.tsx"
       ],
-      "startedAt": "2026-09-09T20:12:18.539Z"
+      "modifiedFiles": [
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+        "apps/control-room/src/v2/products/live-new-product.tsx",
+        "apps/control-room/src/v2/products/live-new-product.test.tsx"
+      ],
+      "note": "VERIFICATION COMPLETE — five legs, all EXIT 0, all with count lines. Full table in comment-4eb5977f08f848ad9a3f1fc531732c72.\n\n- `pnpm --filter @moe/daemon typecheck` exit 0\n- `pnpm --filter @moe/daemon test` exit 0, `Test Files 610 passed (610)` / `Tests 10970 passed | 12 skipped (10982)` — THE LEG THIS ROW OWED after the resource park\n- `pnpm --filter @moe/control-room typecheck` exit 0\n- `pnpm --filter @moe/control-room test` exit 0, `Test Files 207 passed (207)` / `Tests 2693 passed (2693)` — mandatory under epic rail 1, the two hand-transcribed controlled-3 mirrors live here and are invisible to the daemon leg\n- named scoped command fresh, exit 0, `Test Files 4 passed (4)` / `Tests 38 passed | 5 skipped (43)`\n\nEach leg standalone and foreground, redirected to a file rather than piped, exit captured on the next statement — no tail exit code, no `;`-chain masking. Every leg printed a count line, so none is a vacuous `--filter` miss.\n\nNO SOURCE BYTE WRITTEN THIS SESSION. Governor msg-66a574f0 authorised a verification resume that preserves existing bytes and step attestations. The five owned sources hash identically before and after the gate window: 5b96e9c2 / f682642d / 14b3f311 / 9a6cf240 / c8141a45.\n\nLANDING. `git log -1 -- <path>` puts FOUR sources in commit `ac50be66`. The fifth, controlled-profile-generator.test.ts, is still dirty at +63/-14 carrying this row's goldens and arms; it is declared here so the completion commit lands it. That closes the \"fifth-source landing unproved\" item in the reopen reason.\n\nCONTESTED PATH NOT TOUCHED. deployment-infrastructure-generator.test.ts drew a collision warning against task-9255156954; `git status --porcelain` and `git diff --stat` on it are both empty. This row runs it (12 arms green) and owns none of its bytes, so it is deliberately absent from modifiedFiles.\n\nTEARDOWN, epic rail 4: `docker ps -a` filtered on this row's probe names returns nothing; a name grep for password-probe|controlled exits 1. No docker started this session.\n\nNOT RE-RUN, stated rather than implied: the step-6 live docker proof (comment-7c502167) and the adversarial mutation drill (comment-d1be6141) are prior recorded measurements. An on-disk drill under a held full-suite lease is forbidden, and re-running the docker proof was outside the authorised resume.\n\nPeer dirt noted and left alone: ~24 foreign paths dirty in this shared checkout, including .moe board files, preview/release/migration modules and tests/security. None reverted, stashed, or committed.",
+      "startedAt": "2026-09-09T20:12:18.539Z",
+      "completedAt": "2026-09-09T23:45:01.510Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
-  "reopenReason": "GOVERNOR UNBLOCK, owner authorized in the REPL (\"also unblock\"). DELIVERY ONLY — see comment-a3bcb698. NOT a code rejection and NOT a re-plan: all six DoD items PASS on QA's verification, four gates fresh green (daemon 607 files/10834 tests EXIT 0, control-room 205/2677 EXIT 0, both typechecks EXIT 0). BLOCK PREMISE QUOTED VERBATIM, since the hop nulls the field: \"DELIVERY STILL MISSING AFTER THE CONTEST WAS CLEARED... UNBLOCK, now a SINGLE condition: a preflight-tracked WORKER session claims this row and EXITS ON IT, producing a completion commit carrying the five paths. Delivery only - the code is verified and must not be rewritten.\" The reservation contest is CLEARED (architect-ed42e60a narrowed task-4b7f4a85's affectedFiles under owner approval; task-b58778da holds the restore). get_commit_scope now reports ZERO peer intersections on all five implementation paths. ⚠️ IF STEPS SHOW PENDING that is a status-change artifact, not work to redo — all 7 were COMPLETED. ⚠️ THE FIVE DIRTY PATHS ARE THE ONLY COPY: HEAD has 0 occurrences of POSTGRES_PASSWORD_FILE/controlled-3 in all three controlled-profile files. DO NOT checkout/stash/reset/clean. Governor holds an out-of-tree rescue as a safety net only. DO NOT hand-land, reimplement, or carry the stale NUL / apps/daemon/NUL unattributedPaths entries into a landing (Windows redirect artifact, absent from disk). Landing this row is also what makes PR34 (work branch -> main, 1488 files) safe: controlled-profile-root-templates.ts:243 still emits the password into compose metadata at HEAD and PR34 does not carry the fix.",
+  "reopenReason": "User requested task unblocking. Fresh read confirms this row is unassigned BLOCKED from WORKING solely on the former full-suite resource wait; the queue entry was voluntarily removed and the full-suite resource now has zero holders and zero waiters. Return to its prior WORKING state for a genuinely fresh wrapper-preflight-tracked verification resume, preserving existing completed steps. A worker must acquire the resource before any broad gate; a new conversation turn in a taskless persistent CLI is not a preflight. Full daemon/UI and named scoped verification remain owed; fifth-source landing is still unproved and installed lexer fix951137ff has not been verified. This clears the obsolete resource block only: no completion claim, plan reset, worker release, source edit, guard bypass, or manual landing.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "LOW",
@@ -273,16 +282,22 @@
       "author": "governor-608c8a78",
       "content": "Governance22:50Z: worker409 voluntarily removed its unused full-suite queue entry while exiting an original taskless persistent CLI (workers msg-4c22da0f / msg-68313c74). The row remains unassigned BLOCKED with blockedResourceId=full-suite-gate, but no longer has an automatic queue-grant path. Do not infer a moving resource wait from that stale field alone. No gate or fifth-source delivery has been proved; the source lexer fix951137ff is still not verified installed. A genuinely wrapper-preflight-tracked resume plus current resource acquisition and truthful postflight evidence are still required. This note does not clear the blocker, reset steps, assert completion, or authorize a same-CLI claim.",
       "timestamp": "2026-09-09T22:50:58.444Z"
+    },
+    {
+      "id": "comment-4eb5977f08f848ad9a3f1fc531732c72",
+      "author": "worker-0e797912",
+      "content": "STEP 7 GATE TABLE — fresh run, worker-0e797912, 2026-09-09T23:38Z-23:44Z, under a held full-suite-gate lease (GATE START msg-befe5afa, GATE END msg-9932a3d1). Every leg standalone and foreground. No pipes: output went to a file by redirect and the exit code was captured with `echo \"..._EXIT=$?\"` on the next statement, so no tail exit code and no `;`-chain masking.\n\n| leg | exit | count line |\n|---|---|---|\n| `pnpm --filter @moe/daemon typecheck` | 0 | n/a (tsc) |\n| `pnpm --filter @moe/daemon test` | 0 | `Test Files  610 passed (610)` / `Tests  10970 passed \\| 12 skipped (10982)` |\n| `pnpm --filter @moe/control-room typecheck` | 0 | n/a (tsc) |\n| `pnpm --filter @moe/control-room test` | 0 | `Test Files  207 passed (207)` / `Tests  2693 passed (2693)` |\n| named scoped command (below) | 0 | `Test Files  4 passed (4)` / `Tests  38 passed \\| 5 skipped (43)` |\n\nThe daemon leg is the one this row still owed after the resource park. It is now run and green: 237.60s duration, 610 files. The control-room leg is mandatory under epic rail 1 and not a courtesy: the two hand-transcribed `controlled-3` mirrors live under apps/control-room and are invisible to `pnpm test`, `pnpm typecheck` and the daemon leg.\n\nNAMED SCOPED COMMAND, run fresh from apps/daemon:\n`pnpm exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 --testNamePattern='^(?!.*LIVE_PROVIDER:)' src/repository/controlled-profile src/repository/deployment/deployment-infrastructure-generator.test.ts`\n\nEVERY LEG PRINTED A COUNT LINE, so none is a vacuous `--filter` miss. A bad package name prints \"No projects matched the filters\" and exits 0; that string appears in no log here.\n\nBYTE INTEGRITY, measured before AND after the window, same five sha256:\n```\n5b96e9c2 controlled-profile-root-templates.ts\nf682642d controlled-profile-generator.ts\n14b3f311 controlled-profile-generator.test.ts\n9a6cf240 live-new-product.tsx\nc8141a45 live-new-product.test.tsx\n```\nNo source byte was written this session. Governor msg-66a574f0 directed a verification resume that preserves existing bytes and attestations, not a recreation, and that is what happened.\n\nLANDING STATE, measured not assumed. `git log -1 -- <path>` shows FOUR of the five already landed in `ac50be66` (the BLOCKED-exit wip commit for this row). The fifth, `controlled-profile-generator.test.ts`, is still dirty at `+63/-14` and its diff is this row's work end to end: the `controlled-3` golden header, `docker-compose.yml ca06da38...` in GOLDEN_MANIFEST, the `POSTGRES_PASSWORD_FILE` / `secrets:` lines in EXPECTED_DOCKER_COMPOSE, the always-on shape arm, and the opt-in `composePasswordConfig` compose-parse arms. It is declared in step-7 `modifiedFiles` so the completion commit lands it. This is the \"fifth-source landing unproved\" item from the reopen reason.\n\nCONTESTED PATH LEFT ALONE. `deployment-infrastructure-generator.test.ts` drew a file-collision warning against task-9255156954. `git status --porcelain` and `git diff --stat` on it are both EMPTY. This row reads it (the scoped command runs it, 12 arms green) and changes no byte of it. It is deliberately NOT in `modifiedFiles`.\n\nTEARDOWN, epic rail 4. `docker ps -a` filtered on this row's probe names returns nothing and a grep for `password-probe|controlled` over all container names exits 1. Nothing leaked. No docker was started this session; the live proof in step 6 is the earlier recorded run.\n\nNOT RE-RUN THIS SESSION, stated plainly rather than implied: the live docker proof (step 6, comment-7c502167) and the adversarial mutation drill (comment-d1be6141). Both are prior recorded measurements. Re-running an on-disk drill while holding the full-suite lease is forbidden, and re-running the docker proof was outside what the governor's resume authorised.",
+      "timestamp": "2026-09-09T23:44:46.637Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T09:49:59.862Z",
-  "updatedAt": "2026-09-09T22:50:58.444Z",
+  "updatedAt": "2026-09-09T23:46:10.882Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T10:02:51.986Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 20
+    "executedStepCount": 21
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -293,7 +308,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-09T10:05:40.283Z",
@@ -313,30 +329,29 @@
   "contextFetchedBy": [
     "governor-608c8a78",
     "worker-a11dcf70",
-    "worker-409b958a"
+    "worker-409b958a",
+    "worker-0e797912"
   ],
   "workStartedAt": "2026-09-09T10:20:55.085Z",
-  "blockedReason": "Delivery-only resume, step7 still IN_PROGRESS. Actual acquire returned granted:false, position3; no broad suite or background process started. All5canonical source hashes unchanged;4sources in the existing checkpoint, generator test14b3f311 remains dirty/asserted. Fresh foreground daemon/UI typechecks EXIT0; named scoped command Test Files4passed(4), Tests38passed|5skipped(43) EXIT0; opt-in real Compose file Test Files1passed(1), Tests27passed(27) EXIT0; diff-check0. No source changes or physical mutants. Required full daemon command remains owed and cannot be substituted with old QA or current focused output; full UI evidence is historical, refresh on final gate. Detailed current evidence and resume checklist recorded in the latest worker409 task comment. On grant confirm ownership, run full commands standalone to positive count lines, rerun named scoped completion command fresh, then finish step7/complete_task. Installed launcher attribution issue for the remaining test is documented by governor; source fix is not proof of deployment or landing. Preserve exact bytes and route real postflight outcome. No completion claim.",
+  "blockedReason": null,
   "blockedOnTaskIds": null,
-  "blockedResourceId": "full-suite-gate",
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-09T20:57:31.370Z",
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "verification": {
     "command": "cd apps/daemon && pnpm exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 --testNamePattern='^(?!.*LIVE_PROVIDER:)' src/repository/controlled-profile src/repository/deployment/deployment-infrastructure-generator.test.ts",
     "exitCode": 0,
-    "outputTail": " RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  4 passed (4)\n      Tests  38 passed | 5 skipped (43)\n   Start at  19:51:44\n   Duration  398ms (transform 239ms, setup 0ms, import 328ms, tests 205ms, environment 0ms)\n\nSCOPED_EXIT=0",
-    "reportedAt": "2026-09-09T16:56:38.341Z"
+    "outputTail": " RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  4 passed (4)\n      Tests  38 passed | 5 skipped (43)\n   Start at  02:43:41\n   Duration  331ms (transform 193ms, setup 0ms, import 271ms, tests 166ms, environment 0ms)\n\nSCOPED_EXIT=0",
+    "reportedAt": "2026-09-09T23:46:10.882Z"
   },
   "filesModified": [
     "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
     "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
     "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
     "apps/control-room/src/v2/products/live-new-product.tsx",
-    "apps/control-room/src/v2/products/live-new-product.test.tsx",
-    ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json",
-    ".moe/tasks/task-958158c90dd74060a81cc156a68c86ab.json"
+    "apps/control-room/src/v2/products/live-new-product.test.tsx"
   ],
-  "completionSummary": "DELIVERY-ONLY RESTORE. No source byte changed this session and none should have: the work was complete and qa-01b7fe3f verified all six DoD items PASS at 14:21Z. The only thing missing was a commit carrying the five sources. Full gate table and adversarial review in comment-045748aa.\n\nTHE STUCK MECHANISM, now cleared. Downstream task-4b7f4a85 — which dependsOn THIS row — held all five implementation paths in its plan affectedFiles. With policy contested=skip-untouched, every non-writing exit skipped them and produced MOE_COMMIT_NOTHING_TO_COMMIT, so a consumer was reserving its own prerequisite's paths. After architect-ed42e60a's reservation recovery, get_commit_scope postflight re-read immediately before this call shows all five asserted=true, peerContested=0.\n\nWHAT I MEASURED FRESH: Docker Server 29.6.2 / Compose v5.3.1, matching the record; the named verification command EXIT 0 (4 files, 38 passed | 5 skipped); both typechecks EXIT 0; full control-room suite EXIT 0 (205 files, 2678 passed); one manifest hash moved and only one (docker-compose.yml to ca06da38), pnpm-lock 0963d16c byte-unchanged, GOLDEN_FILE_COUNT 23, no v3 asset, zero CHANGE_ME lines in the diff; docker ps -a empty and port 5432 free.\n\nTWO LIMITS, stated not buried. (1) pnpm --filter @moe/daemon test was NOT run by me — full-suite-gate is peer-held with two rows queued on clauses no substitute can discharge, and this restore has no defect to re-check. It rests on QA's 14:21Z run (607 files, 10834 passed). (2) The recovery rewrote the five files at 16:13:55, AFTER that run. The diffstat is identical (81/23) and I published each file's sha256 in the step-1 note, but a matching diffstat is not byte identity and no hash of the pre-restore vintage exists. QA should re-run the daemon leg rather than inherit mine.\n\nSCOPE BOUNDARY: this closes the DB service's leak, not the product's. deployment-infrastructure-templates.ts:143 still emits DATABASE_URL under environment: and .env.example embeds the passwor",
+  "completionSummary": "controlled-3 delivers the postgres password as a compose SECRET, not through `environment:`. Verification is now closed. NO SOURCE BYTE WAS WRITTEN THIS SESSION: governor msg-66a574f0 authorised a resume that preserves existing bytes and step attestations. Full gate table: comment-4eb5977f08f848ad9a3f1fc531732c72.\n\nFIVE LEGS, ALL EXIT 0, ALL WITH COUNT LINES:\n- daemon typecheck 0\n- daemon test 0, `Test Files 610 passed (610)` / `Tests 10970 passed | 12 skipped (10982)` — THE LEG THIS ROW OWED\n- control-room typecheck 0\n- control-room test 0, `Test Files 207 passed (207)` / `Tests 2693 passed (2693)` — mandatory, the two hand-transcribed mirrors live there (epic rail 1)\n- named scoped command fresh 0, `Test Files 4 passed (4)` / `Tests 38 passed | 5 skipped (43)`\nEach standalone foreground, redirected not piped, exit captured on the next statement.\n\nSHIPPED: db emits `POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password` plus a service secrets entry and a top-level secret sourced `environment: ${POSTGRES_PASSWORD:+POSTGRES_PASSWORD}` — only the NAME is emitted, never the value. Version bumped in all four literal sites. GOLDEN_MANIFEST's docker-compose.yml moved to ca06da38...; pnpm-lock.yaml 0963d16c... did NOT move; GOLDEN_FILE_COUNT stays 23; no v3 asset (amendment comment-8751c582).\n\nMEASURED: Docker 29.6.2 / Compose v5.3.1 supports the environment-sourced secret, so the file-sourced fallback was correctly NOT taken and the operator flow is unchanged. Fail-fast preserved and drilled: unset POSTGRES_PASSWORD EXITS 1 naming the variable, while the naive form exits 0 and would start an empty-password db. The plan's `x-required-password: ${...:?}` was REJECTED — `docker compose config` interpolates and prints it.\n\nDISCLOSED: a trailing-newline password fails auth BEFORE and AFTER. Not a regression, not claimed supported.\n\nLANDING: four sources landed at ac50be66; the fifth, controlled-profile-generator.test.ts (+63/-14), lands via this completion commit. deployment-",
   "commits": [
     {
       "sha": "50a8a3231887f671d5639c8f4963ecc82212ef69",
@@ -743,12 +758,13 @@
     "sessionId": "worker-a11dcf70@2026-09-09T20:04:59Z",
     "at": "2026-09-09T20:18:59.194Z"
   },
-  "priorBlockedReason": "PARKED ON `full-suite-gate` FOR ONE LEG ONLY: `pnpm --filter @moe/daemon test`. A wait, not a defect, not a completion claim. Detail in comment-7c502167 (gate table + drill) and comment-d1be6141 (adversarial review).\n\nNO SOURCE BYTE CHANGED — comment-fecd9f61 authorises verifying existing bytes, not recreating them. sha256 at HEAD f220e6de matches the 16:13 restore vintage exactly: 5b96e9c2 / f682642d / 14b3f311 / 9a6cf240 / c8141a45. Steps 1-6 re-attested from disk after the reset; step 7 IN_PROGRESS.\n\nRESERVATION CLEARED, the thing that failed ten times: get_commit_scope postflight shows all five sources ASSERTED and NONE peerDeclared, so this session's normal wrapper exit lands them under the task trailer.\n\nGREEN: daemon typecheck EXIT 0; control-room typecheck EXIT 0; control-room test EXIT 0 at `Test Files 207 passed (207)` / `Tests 2693 passed (2693)`; committed docker-backed compose arms EXIT 0 at `Tests 27 passed (27)`, non-vacuity delta 3 against the 24-passed/3-skipped control; deployment-infrastructure-generator.test.ts EXIT 0 at 12 passed, so the column-0 `secrets:` block did not register as a fourth service.\n\nWHY A WAIT, NOT A SUBSTITUTION. DoD 6 names that command exactly and comment-fecd9f61 marks it OWED (the inherited 14:21Z green predates the restore). Running a daemon-wide suite unleased beside two rows queued for it is what this gate prevents. Holder worker-409b958a since 19:43:27Z; I am #3. Census in msg-6de3c26c: zero vitest processes at 20:14Z, but absence is not liveness, so I request no force-release.\n\nTREE SAFE: no on-disk mutant (drill ran in a /tmp scratch, removed), no test process of mine running, docker ps -a empty, 5432 free, zero untracked in owned dirs.\n\nON GRANT: re-hash the five, GATE START, run the leg foreground, quote its count line, GATE END, release, complete_step step-7 with all five paths, complete_task on the named scoped command run fresh.",
+  "priorBlockedReason": "Delivery-only resume, step7 still IN_PROGRESS. Actual acquire returned granted:false, position3; no broad suite or background process started. All5canonical source hashes unchanged;4sources in the existing checkpoint, generator test14b3f311 remains dirty/asserted. Fresh foreground daemon/UI typechecks EXIT0; named scoped command Test Files4passed(4), Tests38passed|5skipped(43) EXIT0; opt-in real Compose file Test Files1passed(1), Tests27passed(27) EXIT0; diff-check0. No source changes or physical mutants. Required full daemon command remains owed and cannot be substituted with old QA or current focused output; full UI evidence is historical, refresh on final gate. Detailed current evidence and resume checklist recorded in the latest worker409 task comment. On grant confirm ownership, run full commands standalone to positive count lines, rerun named scoped completion command fresh, then finish step7/complete_task. Installed launcher attribution issue for the remaining test is documented by governor; source fix is not proof of deployment or landing. Preserve exact bytes and route real postflight outcome. No completion claim.",
   "declaredFiles": [
     "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
     "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
     "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
     "apps/control-room/src/v2/products/live-new-product.tsx",
     "apps/control-room/src/v2/products/live-new-product.test.tsx"
-  ]
+  ],
+  "reviewStartedAt": "2026-09-09T23:46:10.882Z"
 }
