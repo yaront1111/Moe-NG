@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import { POLICY_AUTO_APPROVAL_TIERS } from "@moe/core";
+import type { PolicyAutoApprovalTier } from "@moe/core";
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonObject, JsonValue } from "@moe/contracts";
 
@@ -25,11 +27,34 @@ export const RELEASE_RECEIPT_PRINCIPAL_ID = "daemon:release" as const;
 export const RELEASE_RECEIPT_VERSION = "moe-release-receipt/1" as const;
 export const RELEASE_RECEIPT_COMMAND_KIND = "internal.release.receipt" as const;
 
+/**
+ * WHAT AN AUTOMATIC APPROVAL NAMES, and why a reviewer can tell one from a human's.
+ *
+ * `tier` is a `PolicyAutoApprovalTier`, deliberately NARROWER than the engine's four-tier
+ * `PolicyRiskTier`: an opt-in outside `POLICY_AUTO_APPROVAL_TIERS` is not an auto-approval
+ * declaration, so a receipt claiming to have acted under an R2 opt-in is REFUSED rather than
+ * stored. The shape is structurally identical to `ReleaseAutoOptIn` and is declared here rather
+ * than imported so this codec keeps its own narrowing and stays the authority over its own bytes.
+ */
+export interface ReleaseReceiptProvenance {
+  readonly action: string;
+  readonly tier: PolicyAutoApprovalTier;
+}
+
 export interface ReleaseReceiptV1 {
   /** sha256 of the STORED dossier markdown — the exact bytes that became the PR body. */
   readonly dossierSha256: string;
   readonly goalId: string;
   readonly outcome: "RELEASED" | "REFUSED";
+  /**
+   * The opt-in this release was taken under, or NULL for a human decision.
+   *
+   * TOTAL IN MEMORY, OPTIONAL ON THE WIRE. A decoded receipt always carries the key, so no
+   * reader has to distinguish "absent" from "null"; the stored bytes omit it entirely when it is
+   * null, so every receipt this daemon has already written stays byte-identical and the version
+   * literal does not move. See `decodeReleaseReceiptBytes` for why the version did NOT get bumped.
+   */
+  readonly provenance: ReleaseReceiptProvenance | null;
   readonly prUrl: string | null;
   readonly projectId: string;
   readonly receiptId: string;
@@ -47,15 +72,52 @@ const RECEIPT_KEYS = [
   "dossierSha256", "goalId", "outcome", "prUrl", "projectId", "receiptId", "refusalCode",
   "sha", "version",
 ] as const;
+/** The ONE key a receipt may carry beyond the required roster. Nothing else is admitted. */
+const PROVENANCE_KEY = "provenance";
+const PROVENANCE_KEYS = ["action", "tier"] as const;
 
 function isObject(value: JsonValue | undefined): value is JsonObject {
   return value !== null && value !== undefined && typeof value === "object"
     && !Array.isArray(value) && Object.getPrototypeOf(value) === null;
 }
 
+/**
+ * The roster check, still CLOSED: exactly the nine required keys, optionally plus `provenance`.
+ * An extra key that is not `provenance` is refused exactly as it always was, and a body carrying
+ * `provenance` but missing a required key is refused for the missing key rather than balanced off
+ * against the optional one — the count is checked against the roster the body actually claims.
+ */
 function exact(value: JsonObject, keys: readonly string[]): boolean {
   const actual = Object.keys(value);
-  return actual.length === keys.length && actual.every((key) => keys.includes(key));
+  const roster = Object.hasOwn(value, PROVENANCE_KEY) ? [...keys, PROVENANCE_KEY] : keys;
+  return actual.length === roster.length && actual.every((key) => roster.includes(key));
+}
+
+/**
+ * The stored provenance, or REFUSAL. `undefined` means the bytes carried the key and it was
+ * malformed, which is a refusal; `null` means the key was absent, which is a human decision.
+ * The two are kept apart here so a garbled provenance can never read as "a human decided this".
+ *
+ * THERE IS EXACTLY ONE ENCODING OF "A HUMAN DECIDED THIS": the key is ABSENT. An explicit
+ * `"provenance": null` is REFUSED rather than accepted as a synonym, because `releaseReceiptId`
+ * does not hash provenance, so two byte-forms of one receipt would share an id and a reader
+ * comparing bytes could not tell a replay from a rewrite.
+ */
+function persistedProvenance(
+  value: JsonValue | undefined,
+): ReleaseReceiptProvenance | null | undefined {
+  if (value === undefined) return null;
+  if (!isObject(value) || !exactProvenance(value)) return undefined;
+  const action = value["action"];
+  const tier = POLICY_AUTO_APPROVAL_TIERS.find((one) => one === value["tier"]);
+  if (typeof action !== "string" || action.length === 0 || tier === undefined) return undefined;
+  return Object.freeze({ action, tier });
+}
+
+function exactProvenance(value: JsonObject): boolean {
+  const actual = Object.keys(value);
+  return actual.length === PROVENANCE_KEYS.length
+    && actual.every((key) => (PROVENANCE_KEYS as readonly string[]).includes(key));
 }
 
 function ref(value: JsonValue | undefined): value is string {
@@ -123,6 +185,16 @@ function isReleaseCode(value: JsonValue | undefined): value is ReleaseDecideCode
  * Both are written as `(outcome === X) !== (field !== null)` so neither direction can pass
  * by accident: a forged RELEASED-with-null-prUrl and a forged REFUSED-carrying-a-prUrl are
  * both refused, and so is a refusalCode this vocabulary never minted.
+ *
+ * WHY `provenance` ARRIVED WITHOUT A VERSION BUMP. `releaseReceiptId` HASHES
+ * `RELEASE_RECEIPT_VERSION`, so moving that literal rotates EVERY receipt id: `deploy-command.ts`
+ * and `goal-deployment-read.ts` recompute the new id and stop finding stored RELEASED receipts,
+ * and the re-derivation check below turns every already-stored receipt RELEASE_RECEIPT_INVALID,
+ * which `release-evidence-read.ts` escalates to UNREADABLE for the whole release read. An
+ * OPTIONAL key costs none of that: the nine required keys and the id derivation are untouched, a
+ * receipt written before this key existed decodes with `provenance: null`, and a body carrying
+ * any OTHER extra key is refused exactly as it always was. The roster stays closed; it simply
+ * admits one named member. A body claiming `moe-release-receipt/2` is still refused.
  */
 export function decodeReleaseReceiptBytes(input: unknown): ReleaseReceiptDecodeResult {
   const decoded = decodeBoundedJsonBytes(input);
@@ -135,9 +207,11 @@ export function decodeReleaseReceiptBytes(input: unknown): ReleaseReceiptDecodeR
   const rawCode = value["refusalCode"];
   const prUrl = rawUrl === null ? null : (ref(rawUrl) ? rawUrl : undefined);
   const refusalCode = rawCode === null ? null : (isReleaseCode(rawCode) ? rawCode : undefined);
+  const provenance = persistedProvenance(value[PROVENANCE_KEY]);
   if (value["version"] !== RELEASE_RECEIPT_VERSION || !ref(value["projectId"])
     || !ref(value["goalId"]) || !ref(value["sha"]) || prUrl === undefined
-    || refusalCode === undefined || !HEX64.test(String(value["dossierSha256"]))
+    || refusalCode === undefined || provenance === undefined
+    || !HEX64.test(String(value["dossierSha256"]))
     || !HEX64.test(String(value["receiptId"]))
     || (outcome !== "RELEASED" && outcome !== "REFUSED")
     || (outcome === "RELEASED") !== (prUrl !== null)
@@ -154,6 +228,7 @@ export function decodeReleaseReceiptBytes(input: unknown): ReleaseReceiptDecodeR
     dossierSha256: value["dossierSha256"] as string,
     goalId: value["goalId"],
     outcome,
+    provenance,
     prUrl,
     projectId: value["projectId"],
     receiptId,

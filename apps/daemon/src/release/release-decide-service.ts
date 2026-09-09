@@ -10,7 +10,9 @@ import { releaseDossierId } from "./release-dossier-contracts.js";
 import type { AncestryPredicate, DossierInput } from "./release-dossier-contracts.js";
 import { readReleaseDossier } from "./release-dossier-ledger.js";
 import { releaseDossierGaps } from "./release-dossier.js";
+import { readReleaseAutoApproval } from "./release-auto-approval-record.js";
 import { dossierSha256, releaseReceiptId } from "./release-receipt-contracts.js";
+import type { ReleaseReceiptProvenance } from "./release-receipt-contracts.js";
 import { readReleaseReceipt, recordReleaseReceipt } from "./release-receipt-ledger.js";
 import type { ReleasePrPort } from "./release-pr-port.js";
 import type { SqliteEventStore } from "@moe/store";
@@ -124,6 +126,14 @@ export function createReleaseDecideHandler(options: ReleaseDecideOptions): Async
     const { base, goalId, sha } = intent;
     const decidedAt = clock();
 
+    // WHICH OPT-IN THIS RELEASE WAS TAKEN UNDER, or null for a human. The join is by the
+    // reconciler's DETERMINISTIC commandId and is re-checked against (goal, sha): a human
+    // dispatch carries a random uuid, finds no record, and its receipt records `null` — which is
+    // the truth about it, since no opt-in was named. Read ONCE per command, before any write.
+    const auto = readReleaseAutoApproval(store, projectId, envelope.commandId);
+    const provenance: ReleaseReceiptProvenance | null =
+      auto !== null && auto.goalId === goalId && auto.sha === sha ? auto.optIn : null;
+
     const record = (
       outcome: "RELEASED" | "REFUSED",
       prUrl: string | null,
@@ -131,8 +141,8 @@ export function createReleaseDecideHandler(options: ReleaseDecideOptions): Async
       markdown: string,
     ): { readonly receiptId: string; readonly replayed: boolean } => {
       const written = recordReleaseReceipt(store, {
-        decidedAt, dossierSha256: dossierSha256(markdown), goalId, outcome, prUrl, projectId,
-        refusalCode, sha,
+        decidedAt, dossierSha256: dossierSha256(markdown), goalId, outcome, provenance, prUrl,
+        projectId, refusalCode, sha,
       });
       if (!written.ok) {
         throw domainRefusalOf(releaseRefusal("RELEASE_PR_FAILED",
