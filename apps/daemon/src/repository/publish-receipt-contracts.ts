@@ -73,7 +73,8 @@ const REFUSAL_KEYS = ["code", "detail"] as const;
  */
 const REMOTE_HTTPS = /^https:\/\/[A-Za-z0-9.-]+(?::\d+)?\/[^\s@]+$/u;
 const REMOTE_SSH = /^ssh:\/\/(?:[A-Za-z0-9_.-]+@)?[A-Za-z0-9.-]+(?::\d+)?\/[^\s@]+$/u;
-const REMOTE_SCP = /^(?:[A-Za-z0-9_.-]+@)?[A-Za-z0-9.-]+:[^\s@]+$/u;
+// A second colon invokes a Git remote helper, not SSH; later path colons remain valid.
+const REMOTE_SCP = /^(?:[A-Za-z0-9_.-]+@)?[A-Za-z0-9.-]+:(?!:)[^\s@]+$/u;
 
 export function admitRemoteUrl(value: unknown): string | null {
   if (typeof value !== "string" || value.length === 0 || value.length > 2048) return null;

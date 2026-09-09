@@ -229,6 +229,9 @@ describe("repository.publish binds the project remote", () => {
   it.each([
     ["an embedded credential", "https://user:secret@github.com/o/r.git"],
     ["a scheme git cannot push", "file:///tmp/x"],
+    ["an explicit ext helper", "ext::sh"],
+    ["an explicit custom helper", "custom::target"],
+    ["an SCP-shaped helper separator", "git@example.test::repo.git"],
     ["an empty string, which is not null", ""],
     ["a url past the length bound", `https://github.com/o/${"r".repeat(2048)}`],
   ])("refuses %s at the ingress and binds nothing", (_label, remoteUrl) => {
@@ -328,10 +331,11 @@ describe("repository.publish binds the project remote", () => {
    * event payload rather than the admitted url would publish to a remote the ingress rule now
    * forbids — the exact defect the re-admission on read exists to prevent.
    */
-  it("refuses a null publish when the bound url no longer admits, instead of pushing to it", () => {
+  it.each(["http://github.com/fixture/plaintext.git", "ext::sh", "custom::target"])(
+    "refuses a null publish when bound url %s no longer admits, instead of pushing to it", (remoteUrl) => {
     const store = openStore();
     driveThrough(store, "repository.publish");
-    bindRaw(store, "cmd-bind-legacy", "http://github.com/fixture/plaintext.git");
+    bindRaw(store, "cmd-bind-legacy", remoteUrl);
     expect(readProjectRemote(store, PROJECT_ID)).toBeNull();
     expect(boundEvents(store)).toHaveLength(1);
 

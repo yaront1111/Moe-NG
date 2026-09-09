@@ -2,8 +2,14 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createPublicationCandidateReader } from "./publication-candidate.js";
+
+// Observe real Git calls without replacing their results or effects.
+vi.mock("node:child_process", async (original) => {
+  const actual = await original<typeof import("node:child_process")>();
+  return { ...actual, execFileSync: vi.fn(actual.execFileSync) };
+});
 
 const roots: string[] = [];
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { force: true, recursive: true }); });
@@ -26,6 +32,19 @@ describe("daemon publication candidate", () => {
       approval: { branch: "delivery", remoteUrl: "https://github.com/example/product.git", sha },
       identity: { root: realpathSync.native(root), gitDirectory: realpathSync.native(join(root, ".git")) },
     } });
+    for (const remoteUrl of ["ssh://git@example.test:22/repo.git", "git@example.test:repo.git",
+      "git@example.test:group/repo:archive.git", "git@example.test:group/repo::archive.git",
+      "https://example.test/group/repo:archive.git"]) {
+      vi.mocked(execFileSync).mockClear();
+      expect(read(remoteUrl)).toMatchObject({ ok: true, candidate: { approval: { remoteUrl, sha } } });
+      expect(execFileSync).toHaveBeenCalled();
+    }
+    for (const remoteUrl of ["ext::sh", "custom::target", "git@example.test::repo.git"]) {
+      vi.mocked(execFileSync).mockClear();
+      expect(read(remoteUrl)).toEqual({ ok: false,
+        code: "PUBLISH_REMOTE_URL_INVALID", detail: "PUBLISH_REMOTE_URL_INVALID" });
+      expect(execFileSync).not.toHaveBeenCalled();
+    }
     git(root, "branch", "-m", "delivery\u2003");
     expect(read("https://github.com/example/product.git")).toMatchObject({ ok: true,
       candidate: { approval: { branch: "delivery\u2003" } } });
