@@ -234,6 +234,10 @@ describe("wiredMcpToolKinds command half", () => {
       // task-eb37494e wired the kind for dispatch, and the exclusion followed BY DERIVATION from
       // OPERATOR_PRINCIPAL_KINDS -- precisely the movement the lockstep arm at the foot of this
       // file exists to force. In SORTED position, because the derivation sorts.
+      // task-509f0437 wired the kind for dispatch and the exclusion followed BY DERIVATION in the
+      // same way -- no member was hand-added to this production array; only this INDEPENDENT
+      // transcription of it moved. Sorted BEFORE the interval kind, because the derivation sorts.
+      "monitoring.retire_environment",
       "monitoring.set_probe_interval",
       "preview.decide", "preview.start", "product_contract.answer_clarification",
       "product_contract.sync_env_example", "project.set_agent_provider", "release.decide",
@@ -243,7 +247,7 @@ describe("wiredMcpToolKinds command half", () => {
     // EXACT, not `> 0`: a ONE-member roster satisfies `length > 0` while silently
     // re-admitting one approval kind to MCP, which is the precise regression this row exists
     // to prevent. Drilled by deletion in step 7 D3.
-    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(26);
+    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(27);
     expect(Object.isFrozen(MCP_EXCLUDED_COMMAND_KINDS)).toBe(true);
     // Every operator-only kind but the operator's own scoped-session mint is off the MCP roster:
     // the exclusion is the vocabulary's human-only class, so a kind that joins it leaves the
@@ -268,7 +272,7 @@ describe("wiredMcpToolKinds command half", () => {
       queries: MCP_SERVED_QUERY_KINDS.length,
       vocabulary: Object.keys(PAYLOAD_KEYS).length,
       wired: wiredMcpToolKinds().length,
-    }).toEqual({ excluded: 26, queries: 7, vocabulary: 63, wired: 44 });
+    }).toEqual({ excluded: 27, queries: 7, vocabulary: 64, wired: 44 });
   });
 
   it("is deterministic and frozen", () => {

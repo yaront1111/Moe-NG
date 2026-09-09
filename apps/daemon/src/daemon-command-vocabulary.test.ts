@@ -275,6 +275,13 @@ const ROWS: readonly VocabularyRow[] = [
   // comes from the authenticated principal.
   { agent: null, capability: ADMIN, family: "MONITORING", kind: "monitoring.set_probe_interval",
     payloadKeys: ["environment", "intervalMs"] },
+  // task-509f0437, appended after the interval kind because PAYLOAD_KEYS appends it there. Same
+  // shape and same reasons: `agent` null because it is an operator act, ADMIN fencing REACH only.
+  // ONE payload key -- the environment. No cutoff, because the retirement generation is the one
+  // the daemon OBSERVES at write time and a caller who could name it could retire through a dead
+  // generation; and no `projectId`, which comes from the authenticated principal.
+  { agent: null, capability: ADMIN, family: "MONITORING", kind: "monitoring.retire_environment",
+    payloadKeys: ["environment"] },
 ];
 
 /** Views over the production maps, so a value here is always the shipped value. */
@@ -338,14 +345,18 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
   // visible. Fenced three ways -- here at dispatch, in HUMAN_ONLY_STEPS against the wrapper
   // (landed by task-749e585afc), and out of the MCP roster the allowlist DERIVES from this set.
   "monitoring.set_probe_interval",
+  // task-509f0437. The same three-way fence, for a strictly stronger reason: the interval kind
+  // can only re-time the probe, this one STOPS it. An agent that could retire an environment
+  // could silence the monitoring that would otherwise have paged a human about an outage in it.
+  "monitoring.retire_environment",
 ];
 
 describe("command vocabulary", () => {
   it("carries exactly the transcribed wired kinds in their registration order", () => {
     // Pins the swept case count: an it.each over a shortened table would otherwise
     // pass while asserting nothing.
-    expect(ROWS).toHaveLength(63);
-    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(63);
+    expect(ROWS).toHaveLength(64);
+    expect(new Set(ROWS.map((row) => row.kind)).size).toBe(64);
     expect(Object.keys(PAYLOAD_KEYS)).toEqual(ROWS.map((row) => row.kind));
   });
 
@@ -389,7 +400,7 @@ describe("command vocabulary", () => {
     // That is exactly how `preview.decide` was nearly transcribed as standalone.
     expect([...FAMILY_NAMES].sort()).toEqual(Object.keys(FAMILY_MAPS).sort());
     const declared = ROWS.filter((row) => row.family !== "STANDALONE");
-    expect(declared).toHaveLength(52);
+    expect(declared).toHaveLength(53);
     for (const name of FAMILY_NAMES) {
       expect([...FAMILY_MAPS[name].keys()].sort()).toEqual(
         declared.filter((row) => row.family === name).map((row) => row.kind).sort(),
@@ -448,8 +459,8 @@ describe("command vocabulary", () => {
   });
 
   it("gates exactly the transcribed kinds behind the operator principal", () => {
-    expect(OPERATOR_ONLY).toHaveLength(27);
-    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(27);
+    expect(OPERATOR_ONLY).toHaveLength(28);
+    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(28);
     // Both directions over every wired kind: a kind added to the set reddens on the
     // remaining kinds that must stay open, one dropped reddens on those that must not.
     for (const row of ROWS) {

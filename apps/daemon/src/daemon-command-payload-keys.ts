@@ -5,6 +5,8 @@ import { EFFECT_ACTIVATE_COMMAND_KIND, EFFECT_ACTIVATE_PAYLOAD_KEYS }
 import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
 import { PROBE_INTERVAL_COMMAND_KIND, PROBE_INTERVAL_PAYLOAD_KEYS }
   from "./monitoring/probe-interval-command-contracts.js";
+import { ENVIRONMENT_RETIREMENT_COMMAND_KIND, ENVIRONMENT_RETIREMENT_PAYLOAD_KEYS }
+  from "./monitoring/environment-retirement-command-contracts.js";
 import {
   ENVIRONMENT_COMMAND_KIND_SET, ENVIRONMENT_COMMAND_KIND_UNSET,
 } from "./environment/environment-store.js";
@@ -209,4 +211,10 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     // named there beside the edge that decodes it so the seam's allow-list and the decoder cannot
     // name different fields. `projectId` is ABSENT BY CONSTRUCTION like every kind above.
     [PROBE_INTERVAL_COMMAND_KIND]: [...PROBE_INTERVAL_PAYLOAD_KEYS],
+    // APPENDED after the interval kind for the same key-order reason the comment above gives:
+    // this literal's KEY ORDER is the Map fill order `buildCommandRegistry` uses, and two suites
+    // transcribe it by hand. Its roster is the monitoring slice's own
+    // (`monitoring/environment-retirement-command-contracts.js`), one field wide, with
+    // `projectId` ABSENT BY CONSTRUCTION like every kind above.
+    [ENVIRONMENT_RETIREMENT_COMMAND_KIND]: [...ENVIRONMENT_RETIREMENT_PAYLOAD_KEYS],
   });

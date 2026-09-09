@@ -232,6 +232,15 @@ const ROWS: readonly Row[] = [
   { agent: null, capability: ADMIN, code: "PROBE_INTERVAL_ENVIRONMENT_INVALID",
     kind: "monitoring.set_probe_interval", layer: INGRESS,
     payloadKeys: ["environment", "intervalMs"] },
+  // task-509f0437, and the code transcribed here is the RECORD's first refusal for the same
+  // reason the interval row's is: the retirement edge substitutes `""` for a missing or
+  // wrong-typed `environment` -- a value `admitEnvironmentName` is documented to reject -- rather
+  // than minting a refusal of its own, so the answer is the record's code at the record's layer,
+  // forwarded unrestamped. A code the edge could mint would let the two authors of this
+  // vocabulary drift.
+  { agent: null, capability: ADMIN, code: "ENVIRONMENT_RETIREMENT_ENVIRONMENT_INVALID",
+    kind: "monitoring.retire_environment", layer: INGRESS,
+    payloadKeys: ["environment"] },
   { agent: [PLANNING, WORK], capability: PLANNING, code: PREREQUISITE, kind: "plan.propose",
     layer: PREREQ_LAYER, payloadKeys: ["commands", "runId"] },
   // The compile DISPATCHER's own request codec answers an empty payload -- the Gate 1
@@ -407,6 +416,8 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   // beside the deployment kinds it reads like, so that neither this transcription nor the
   // vocabulary's ROWS had to be rewritten mid-table.
   "monitoring.set_probe_interval",
+  // task-509f0437, appended after it for exactly the same reason.
+  "monitoring.retire_environment",
 ];
 
 /**
@@ -458,6 +469,11 @@ const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
   // arrives. ADMIN fences reach; this set fences the act, and the MCP exclusion derived from it
   // is what keeps the kind off a surface the operator bootstrap credential authenticates.
   "monitoring.set_probe_interval",
+  // task-509f0437. Retiring an environment is the operator's act in a stronger sense still: it
+  // does not re-time the probe, it ENDS it, so the signal an outage would have produced stops
+  // existing. ADMIN fences reach; this set fences the act, and the derived MCP exclusion keeps
+  // the kind off a surface the operator bootstrap credential authenticates.
+  "monitoring.retire_environment",
 ];
 
 const CREDENTIAL = "registry-operator-credential";
@@ -1108,8 +1124,8 @@ describe("registered command table", () => {
   it("serves exactly the characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(63);
-    expect(deps.registry.size).toBe(63);
+    expect(ROWS).toHaveLength(64);
+    expect(deps.registry.size).toBe(64);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
   });
 
@@ -1198,7 +1214,7 @@ describe("registered command table", () => {
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(63);
+    expect(REGISTRATION_ORDER).toHaveLength(64);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -1369,8 +1385,8 @@ describe("authorization ordering under a real session", () => {
     });
 
     it("gates exactly the transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(27);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(27);
+      expect(OPERATOR_ONLY).toHaveLength(28);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(28);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
@@ -2051,7 +2067,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(63);
+    expect(ports.registry.size).toBe(64);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -2073,7 +2089,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(63);
+    expect(supplied.registry.size).toBe(64);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
@@ -2105,7 +2121,7 @@ describe("createDaemonCommandPorts", () => {
 
     const snapshotPorts = createDaemonCommandPorts(options);
     expect(reads).toBe(1);
-    expect(snapshotPorts.registry.size).toBe(63);
+    expect(snapshotPorts.registry.size).toBe(64);
     expect(reads).toBe(1);
 
     expect(() => createDaemonCommandPorts({

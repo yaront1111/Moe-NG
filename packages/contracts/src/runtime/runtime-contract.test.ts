@@ -49,7 +49,8 @@ const EXPECTED_COMMAND_KINDS = [
   "graph.release_preparation", "graph.request_expansion", "graph.supersede",
   "integration.accept_output", "integration.resolve_finding", "integration.seal",
   "integration.start", "integration.submit_finding", "journal.append", "lease.confirm_revoke",
-  "lease.extend", "lease.mark_suspect", "monitoring.set_probe_interval",
+  "lease.extend", "lease.mark_suspect",
+  "monitoring.retire_environment", "monitoring.set_probe_interval",
   "plan.propose", "planning.cancel", "planning.claim",
   "planning.recover_absent", "planning.release", "planning.submit_decomposition",
   "policy.install", "policy.validate", "preview.decide", "preview.start",
@@ -111,12 +112,17 @@ describe("runtime vocabulary is closed and disjoint", () => {
     // The comment read 119 against an assertion of 120 at 3a056078 — a prior addition bumped the
     // number and left the prose behind. Repaired here rather than grown, so the next reader can
     // trust it.
-    expect(commands.size).toBe(121);
+    expect(commands.size).toBe(122);
     expect(RUNTIME_COMMAND_KINDS).toContain("plan.propose");
     // task-749e585a: the operator's per-environment health-probe interval. Named here as well as
     // in EXPECTED_COMMAND_KINDS so a mistranscription of the hand-written roster above cannot
     // silently drop the kind while the count literal still adds up.
     expect(RUNTIME_COMMAND_KINDS).toContain("monitoring.set_probe_interval");
+    // task-509f0437: retiring an environment, on the same terms and for a stronger reason —
+    // retirement SILENCES a probe outright, where the interval only re-times it. Named
+    // separately from EXPECTED_COMMAND_KINDS for the reason the line above gives, and the two
+    // monitoring kinds are named together so a reader cannot take one as covering the other.
+    expect(RUNTIME_COMMAND_KINDS).toContain("monitoring.retire_environment");
     expect(RUNTIME_COMMAND_KINDS).toContain("graph.prepare_supersession");
     expect(RUNTIME_COMMAND_KINDS).toContain("foundation.dispatch");
     expect(RUNTIME_COMMAND_KINDS).toContain("foundation.verification");

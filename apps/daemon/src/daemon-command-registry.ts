@@ -59,6 +59,12 @@ import { runEnvironmentEdge } from "./daemon-command-environment.js";
 import type { EnvironmentEdgeKind } from "./daemon-command-environment.js";
 import { runProbeIntervalCommand } from "./monitoring/probe-interval-command.js";
 import { createProbeIntervalRecord } from "./monitoring/probe-interval-record.js";
+import { runEnvironmentRetirementCommand }
+  from "./monitoring/environment-retirement-command.js";
+import { ENVIRONMENT_RETIREMENT_COMMAND_KIND }
+  from "./monitoring/environment-retirement-command-contracts.js";
+import { createEnvironmentRetirementRecord }
+  from "./monitoring/environment-retirement-record.js";
 import type { EnvironmentCredentialSource } from "./environment/environment-store.js";
 import { createActivationReceiptMeasurer } from "./bootstrap/activation-command-entry.js";
 import type { AsyncCommandHandler } from "./http/http-async-contract.js";
@@ -230,6 +236,16 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
   // that replays the aggregate on every call, so a second instance would only give two readers of
   // one aggregate the chance to drift. `now` reads the daemon clock, never a payload.
   const probeIntervals = createProbeIntervalRecord({
+    now: authorityClock, projectId, store,
+  });
+  // The retirement PORT, built once on exactly the same terms and for the same reason. Like the
+  // interval record it is a STATELESS FACADE -- every `read`/`stored`/`write` replays the
+  // aggregate off `store` (`environment-retirement-record.ts`), nothing is memoised -- so what
+  // makes a retirement visible to the health sweep is not instance identity but the fact that
+  // the sweep's own record (`daemon-store-foundation-composition.ts`, composed from this same
+  // config) replays the SAME `store` under the SAME `projectId`. A retirement written here is
+  // therefore visible on the sweep's next tick, not at the next restart.
+  const probeRetirements = createEnvironmentRetirementRecord({
     now: authorityClock, projectId, store,
   });
 
@@ -549,7 +565,27 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       // path to the interval aggregate. The project comes from the AUTHENTICATED principal's
       // registry composition, never from the payload -- a caller-supplied one would re-time
       // another project's production probe.
+      // THE FAMILY ADMITS, THE KIND DISPATCHES. `monitoring` is true for EVERY member of
+      // MONITORING_FAMILY, so once the family held a second kind it stopped being a handler
+      // selector: routing on it alone would have served retirement through the interval edge,
+      // which decodes a field retirement does not carry. The per-kind branch below is what makes
+      // the two disjoint, and a THIRD monitoring kind that forgot to add its own branch would
+      // reach the interval edge -- caught, not silently, by `daemon-command-registry.test.ts`'s
+      // characterization table, which pins each wired kind's refusal CODE and layer and would
+      // read the interval record's vocabulary where it expected the new kind's.
       if (monitoring) {
+        // THE SAME ONE PORT, SHARED, and the same project discipline as the interval port:
+        // `probeRetirements` is constructed ONCE above against this registry's own store and
+        // project, so the edge holds no store of its own and there is no second write path to
+        // the retirement aggregate. The project comes from the AUTHENTICATED principal's
+        // registry composition, never from the payload -- a caller-supplied one would silence
+        // another project's monitoring.
+        if (kind === ENVIRONMENT_RETIREMENT_COMMAND_KIND) {
+          return runEnvironmentRetirementCommand({
+            envelope: { commandId: envelope.commandId, payload: envelope.payload },
+            retirements: probeRetirements,
+          });
+        }
         return runProbeIntervalCommand({
           envelope: { commandId: envelope.commandId, payload: envelope.payload },
           intervals: probeIntervals,

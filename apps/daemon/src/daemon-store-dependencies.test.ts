@@ -858,6 +858,10 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         // The OPERATOR-ONLY probe-interval write (task-eb37494e), served by its own edge through
         // the interval record. This roster is SORTED, so it files between `journal.append` and
         // `plan.propose` rather than at the end of the PAYLOAD_KEYS table it is appended to.
+        // And the OPERATOR-ONLY retirement write (task-509f0437), served by its own edge through
+        // the retirement record. Sorted BEFORE the interval kind despite being APPENDED to the
+        // PAYLOAD_KEYS table after it, which is the difference this roster's sort exists to absorb.
+        "monitoring.retire_environment",
         "monitoring.set_probe_interval",
         "plan.propose", "planning.submit_decomposition", "policy.install",
         "policy.validate", "preview.decide", "preview.start",
@@ -1245,7 +1249,12 @@ describe("the monitoring kinds are served, advertised and fenced in lockstep", (
     // A set arm whose subject is empty passes VACUOUSLY -- two empty arrays are equal. This is
     // the control that keeps every equality below meaningful, and it names the kind once so a
     // rename is caught here rather than as a silent shrink to zero.
-    expect(advertised).toEqual(["monitoring.set_probe_interval"]);
+    // task-509f0437 added the second member. This literal is the ONE place the family's
+    // membership is named rather than derived, so it is deliberately exact: a kind that appears
+    // on the shared contract without reaching the fences below reds HERE first.
+    expect(advertised).toEqual([
+      "monitoring.retire_environment", "monitoring.set_probe_interval",
+    ]);
     // AND THE FILTER STILL DISCRIMINATES: without this, `monitoringMembers` returning everything
     // (or the prefix being wrong) could not be told apart from the roster being right.
     expect(monitoringMembers(["not.a.served.kind", "monitoring.set_probe_interval"]))
@@ -1267,6 +1276,8 @@ describe("the monitoring kinds are served, advertised and fenced in lockstep", (
     // keeps advertising the kind.
     expect(served).toContain("monitoring.set_probe_interval");
     expect(deps.registry.has("monitoring.set_probe_interval")).toBe(true);
+    expect(served).toContain("monitoring.retire_environment");
+    expect(deps.registry.has("monitoring.retire_environment")).toBe(true);
   });
 
   it("fences every advertised monitoring kind at dispatch, on MCP and in the wrapper", () => {
@@ -1289,6 +1300,9 @@ describe("the monitoring kinds are served, advertised and fenced in lockstep", (
     // an entry there would put an unplanned offer on the operator's affordance surface.
     expect(monitoringMembers(ASYNC_SERVED_BOOTSTRAP_KINDS)).toEqual([]);
     expect(deps.registry.get("monitoring.set_probe_interval")?.asyncHandler).toBeUndefined();
+    // Retirement is an ordinary durable write too: it appends one event and decides. Async-serving
+    // it would put an unplanned rollback/retry offer on the operator's affordance surface.
+    expect(deps.registry.get("monitoring.retire_environment")?.asyncHandler).toBeUndefined();
     // The CONTROL that keeps the `toBeUndefined` above from passing for "no entry at all": a
     // kind that IS async-served reads the other way through the same accessor.
     expect(deps.registry.get("deployment.deploy")?.asyncHandler).toBeDefined();

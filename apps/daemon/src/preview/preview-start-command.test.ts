@@ -82,6 +82,11 @@ const WRAPPER_FENCED_SERVED_KINDS: readonly string[] = Object.freeze([
   // task-eb37494e. The wrapper fence (HUMAN_ONLY_STEPS) was landed with the ADVERTISEMENT by
   // task-749e585afc; this transcription could only grow once the kind became SERVED, which is
   // what that row's dispatch registration did.
+  // task-509f0437, and it grew this transcription the same way: the wrapper fence and the
+  // dispatch registration landed together in that row, so the kind became SERVED and
+  // wrapper-fenced in one move. SORTED BEFORE the interval kind -- this arm is strict-equal
+  // over a sorted set, so position is asserted, not only membership.
+  "monitoring.retire_environment",
   "monitoring.set_probe_interval",
   // BOTH halves of the preview act, and the subject of this row.
   "preview.decide", "preview.start",

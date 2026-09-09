@@ -236,6 +236,14 @@ export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
   // meantime, and it is a staffing decision rather than a capability fact, so it keeps applying
   // whatever `agentCapabilitiesFor` later returns.
   "monitoring.set_probe_interval",
+  // Retiring an environment ends its monitoring rather than re-timing it, so an agent holding
+  // the kind could silence the probe that would have paged a human. Unlike the kind above, this
+  // one is wired for dispatch in the SAME row that adds it here, so its MCP exclusion is live
+  // from the start (derived from `OPERATOR_PRINCIPAL_KINDS`) rather than resting on the
+  // advertisement gap. The entry HERE is still wanted and is not redundant: it is the WRAPPER's
+  // half, a staffing decision rather than a capability fact, and it keeps applying whatever
+  // `agentCapabilitiesFor` later returns.
+  "monitoring.retire_environment",
   // Provider selection chooses which vendor receives source and session credentials. MCP
   // exclusion blocks transport access; this fence also forbids staffing that human decision.
   "project.set_agent_provider",

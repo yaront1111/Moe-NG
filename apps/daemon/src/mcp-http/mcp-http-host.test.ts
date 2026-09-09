@@ -687,9 +687,9 @@ describe("task-4c9b1d85 http entry refuses the excluded approval kinds", () => {
       }
 
       // The sweep must have GENERATED cases: a zero-case loop passes vacuously.
-      expect(EXCLUSION_CASES.length).toBe(26);
+      expect(EXCLUSION_CASES.length).toBe(27);
       expect(Object.isFrozen(EXCLUSION_CASES)).toBe(true);
-      expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(52);
+      expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(54);
       expect(observed).toHaveLength(EXCLUSION_CASES.length);
       for (const { body, kind } of observed) {
         expect({ denied: body.includes("CAPABILITY_DENIED"), kind })
@@ -718,7 +718,7 @@ describe("task-4c9b1d85 http entry refuses the excluded approval kinds", () => {
       )));
       const body = await within("tools/list body", response.text());
 
-      expect(EXCLUSION_CASES.length).toBe(26);
+      expect(EXCLUSION_CASES.length).toBe(27);
       for (const { kind } of EXCLUSION_CASES) {
         expect({ advertised: body.includes(`"${toolLabelForKind(kind)}"`), kind })
           .toEqual({ advertised: false, kind });

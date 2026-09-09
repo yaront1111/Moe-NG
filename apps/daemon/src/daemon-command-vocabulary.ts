@@ -23,6 +23,8 @@ import type { SessionCommandKind } from "./identity/session-contracts.js";
 import { EVENT_STREAM_RESUME_COMMAND_KIND } from "./http/event-resume-command.js";
 import { JOURNAL_APPEND_COMMAND_KIND } from "./journal/journal-contracts.js";
 import { PROBE_INTERVAL_COMMAND_KIND } from "./monitoring/probe-interval-command-contracts.js";
+import { ENVIRONMENT_RETIREMENT_COMMAND_KIND }
+  from "./monitoring/environment-retirement-command-contracts.js";
 
 import { PREVIEW_DECIDE_COMMAND_KIND, PREVIEW_START_COMMAND_KIND }
   from "./preview/preview-contracts.js";
@@ -185,7 +187,17 @@ export const ENV_EXAMPLE_SYNC_FAMILY = Object.freeze({ [ENV_EXAMPLE_SYNC_COMMAND
  *  the daemon probes a production environment is an administrative act on the project: too fast
  *  is a load generator aimed at production, too slow is not monitoring. The BOUNDS that decide
  *  which is which are `probe-interval-record.js`'s and are never restated here. */
-export const MONITORING_FAMILY = Object.freeze({ [PROBE_INTERVAL_COMMAND_KIND]: CAPABILITIES.ADMIN });
+export const MONITORING_FAMILY = Object.freeze({
+  [PROBE_INTERVAL_COMMAND_KIND]: CAPABILITIES.ADMIN,
+  // ADMIN fences REACH on the same terms as the interval kind above, and the human gate is
+  // likewise OPERATOR_PRINCIPAL_KINDS plus the MCP exclusion derived from it -- never this
+  // capability. Retiring an environment is administrative in the strongest sense available
+  // in this family: the interval kind can only re-time a probe, this one STOPS it, so an
+  // outage in the retired environment stops producing samples at all. Which environments
+  // may be retired, and through which deployment generation, are the RECORD's
+  // (`environment-retirement-record.js`) and are never restated here.
+  [ENVIRONMENT_RETIREMENT_COMMAND_KIND]: CAPABILITIES.ADMIN,
+});
 export const SETTINGS_FAMILY = Object.freeze({ [AGENT_PROVIDER_COMMAND_KIND]: CAPABILITIES.ADMIN });
 
 /** ADMIN fences REACH -- it keeps scoped agent sessions out. It is NOT the human gate: what
@@ -243,7 +255,7 @@ export type WiredCommandKind =
   | typeof PREVIEW_START_COMMAND_KIND
   | typeof CUTOVER_ACTIVATE_COMMAND_KIND
   | typeof ENVIRONMENT_COMMAND_KIND_SET | typeof ENVIRONMENT_COMMAND_KIND_UNSET
-  | typeof PROBE_INTERVAL_COMMAND_KIND
+  | typeof PROBE_INTERVAL_COMMAND_KIND | typeof ENVIRONMENT_RETIREMENT_COMMAND_KIND
   | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
   | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
   | typeof EVENT_STREAM_RESUME_COMMAND_KIND
@@ -285,6 +297,11 @@ export function agentCapabilitiesFor(kind: string): readonly string[] | null {
   // production health probe could slow it until an outage stopped being visible, or speed it
   // until the probe itself was the outage. Never staffable, whatever ADMIN reach says.
   if (kind === PROBE_INTERVAL_COMMAND_KIND) return null;
+  // And a STRONGER case of the same act: re-timing a probe can slow monitoring until an
+  // outage stops being visible; retiring an environment ends its monitoring outright. An
+  // agent holding this kind could hide an outage by declaring the environment gone. Never
+  // staffable, whatever ADMIN reach says.
+  if (kind === ENVIRONMENT_RETIREMENT_COMMAND_KIND) return null;
   if (kind === "node.deliver") {
     return Object.freeze([CAPABILITIES.REVIEW, CAPABILITIES.WORK]);
   }
@@ -402,6 +419,14 @@ export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   // is the half that could not exist until the kind was wired, and its absence is exactly what
   // `mcp-tool-allowlist.test.ts`'s lockstep arm reds on.
   PROBE_INTERVAL_COMMAND_KIND,
+  // AND AN AGENT MUST NEVER RETIRE ONE. Same three-way fence and same derivation as the kind
+  // above, for a sharper reason: retirement SILENCES the sweep for that environment
+  // (`daemon-store-foundation-composition.js` skips arming retired entries and excludes them
+  // from the dedicated predicate), so an agent holding it could stop the very probe that would
+  // have paged a human about an outage -- and the monitoring that just went quiet is not what
+  // would catch that. Judging an environment finished is the operator's call about their own
+  // product.
+  ENVIRONMENT_RETIREMENT_COMMAND_KIND,
   // Publishing pushes the operator's repository to a remote they named; bootstrap CREATES one at
   // a path they supplied. Their own code, and MCP-unreachable like the approvals.
   "repository.publish", "repository.bootstrap",

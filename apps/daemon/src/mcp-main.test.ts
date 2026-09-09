@@ -232,6 +232,9 @@ const EXPECTED_EXCLUDED_COMMAND_KINDS: readonly string[] = Object.freeze([
   // the INDEPENDENT side of the comparison, so it is hand-written here even though production
   // derives the exclusion from OPERATOR_PRINCIPAL_KINDS.
   "monitoring.set_probe_interval",
+  // task-509f0437: retiring an environment ends its monitoring, so it is the operator's act on
+  // the same standing. Hand-written here for the same independence reason as the kind above.
+  "monitoring.retire_environment",
 ]);
 const EXCLUSION_CASES: readonly { readonly entry: string; readonly kind: string }[] =
   Object.freeze(MCP_EXCLUDED_COMMAND_KINDS.map((kind) => Object.freeze({ entry: ENTRY, kind })));
@@ -246,9 +249,9 @@ describe("task-4c9b1d85 stdio entry excludes every human-only kind", () => {
     const allowed = new Set(advertisedNames());
 
     // The sweep must have GENERATED cases: a zero-case loop passes vacuously.
-    expect(EXCLUSION_CASES.length).toBe(26);
+    expect(EXCLUSION_CASES.length).toBe(27);
     expect(Object.isFrozen(EXCLUSION_CASES)).toBe(true);
-    expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(52);
+    expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(54);
     const expected = [...EXPECTED_EXCLUDED_COMMAND_KINDS].sort();
     const production = [...MCP_EXCLUDED_COMMAND_KINDS].sort();
     expect(production).toEqual(expected);

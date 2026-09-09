@@ -367,9 +367,13 @@ describe("SOFT_POLICY_WAIVER over the real HTTP ingress", () => {
       // is exactly why this transcription grew by ADDING the kind rather than by relaxing the
       // length pin: the pin is what proves the derivation moved when the vocabulary did.
       "monitoring.set_probe_interval",
+      // task-509f0437, and it grew this transcription the same way and for the same reason:
+      // retiring an environment ends its monitoring, so it joined OPERATOR_PRINCIPAL_KINDS and
+      // the exclusion followed by derivation with no edit to the production array.
+      "monitoring.retire_environment",
     ]);
-    expect(expectedExclusions).toHaveLength(26);
-    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(26);
+    expect(expectedExclusions).toHaveLength(27);
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(27);
     expect([...MCP_EXCLUDED_COMMAND_KINDS].sort()).toEqual([...expectedExclusions].sort());
     // Direction 1: the production registry SERVES the kind this branch composes into.
     expect(deps.registry.has("approval.decide")).toBe(true);

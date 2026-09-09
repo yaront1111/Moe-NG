@@ -270,7 +270,8 @@ describe("daemon /2 command registry", () => {
       // until that kind's /2 service lands.
       // 61 -> 62 for `monitoring.set_probe_interval` (task-eb37494e), which is wired on the
       // shared PAYLOAD_KEYS and therefore reaches this plane too.
-      expect(ports.registry.size).toBe(62);
+      // 62 -> 63 for `monitoring.retire_environment` (task-509f0437), on the same shared table.
+      expect(ports.registry.size).toBe(63);
       expect(reads).toEqual({ clock: 1, operatorPrincipalId: 1, projectId: 1, store: 1 });
     } finally {
       closeStores();
