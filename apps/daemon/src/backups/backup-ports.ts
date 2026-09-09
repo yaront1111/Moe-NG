@@ -100,9 +100,11 @@ async function restoreStore(path: string): Promise<BackupProof> {
   } finally { rmSync(temporary, { recursive: true, force: true }); }
 }
 
+// The image initializes using a temporary socket-only server, then restarts it.
+// Only TCP on the final server's fixed port proves restoration can safely begin.
 async function ready(name: string): Promise<void> {
   for (let attempt = 0; attempt < 60; attempt++) {
-    try { docker(["exec", name, "pg_isready", "-U", "postgres"]); return; }
+    try { docker(["exec", name, "pg_isready", "-h", "127.0.0.1", "-p", "5432", "-U", "postgres"]); return; }
     catch { await new Promise(resolve => setTimeout(resolve, 250)); }
   }
   throw fail();

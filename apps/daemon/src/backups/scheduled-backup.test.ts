@@ -200,7 +200,7 @@ describe.runIf(RUN_POSTGRES_RESTORE)("real PostgreSQL backup restore", () => {
         "POSTGRES_HOST_AUTH_METHOD=trust", "postgres:17-alpine"]);
       let ready = false;
       for (let i = 0; i < 60; i++) {
-        try { docker(["exec", name, "pg_isready", "-U", "postgres"]); ready = true; break; }
+        try { docker(["exec", name, "pg_isready", "-h", "127.0.0.1", "-p", "5432", "-U", "postgres"]); ready = true; break; }
         catch { await new Promise(resolve => setTimeout(resolve, 250)); }
       }
       expect(ready).toBe(true);
