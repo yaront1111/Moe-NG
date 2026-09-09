@@ -163,7 +163,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T14:58:04.260Z",
-  "updatedAt": "2026-09-09T23:13:43.947Z",
+  "updatedAt": "2026-09-09T23:14:05.104Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T15:27:48.449Z",
     "plannedStepCount": 5,
@@ -234,7 +234,8 @@
     "apps/daemon/src/gates-compose-journey.test.ts",
     ".moe/tasks/task-b8571cfe50614c1d89fee3a0a448de10.json",
     ".moe/tasks/task-b8ec9a638f6540c28798c29f23fd5ada.json",
-    ".moe/tasks/task-f7d38f752b074dc89da30631783aae04.json"
+    ".moe/tasks/task-f7d38f752b074dc89da30631783aae04.json",
+    ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json"
   ],
   "completionSummary": "Release evidence is now bound to criterion receipts at the released sha, so release is decided on at least the evidence goal closure demands.\n\nTWO DEFECTS CLOSED. (1) release-dossier.ts's rowOf never passed a PRESENT receipt.sha to the ancestry predicate, so a verifier run taken on a foreign tree reported gaps=0 — the filing's probe. New receiptOf mirrors landingOf and emits RECEIPT_NOT_ANCESTOR / RECEIPT_UNMEASURABLE (kept apart because contracts.ts:22-31 forbids collapsing \"could not check\" into \"checked and absent\"). (2) Nothing under release/ consulted criterion evidence at all. readReleaseDossierInput now calls currentCriterionReceipts and the new criterionOf emits CRITERION_NOT_VERIFIED_AT_SHA per criterion, binding each PASSED receipt's own artifact sha through the same predicate.\n\nONE PLAN INSTRUCTION DECLINED, WITH THE MEASUREMENT. Step 3 said call readIntegratedCriterionArtifact too. Goal closure does NOT consume it (goal-services.ts:166 -> goalCloseReadinessFor -> document-coverage-read.ts:190 -> document-coverage-criteria.ts:27 uses currentCriterionReceipts with the DEFAULT artifact read); it is the producer's resolver. Injecting it would have made release's set a strict SUBSET of closure's, so DoD 3's set-equality clause could not have held. Release now uses the identical call.\n\nNINE ARMS, all by CODE, all on one-criterion covered fixtures so no other layer answers first. DoD 3's set equality is asserted in the git-backed lane against BOTH production surfaces, roster asserted non-empty first. DoD 4 pinned: REJECTED and absent preview both still release, code map still exactly three codes, preview section verbatim in the PR body. DoD 6: the false ordering header reworded, the replay-fence arm kept and documented as the unattended path. DoD 5 was discharged at planning time; prerequisite task-b2b4550835f14b6ebd4a742e1f3b01cf confirmed landed at cf644c10.\n\nFOUR in-memory mutation drills, all killed, DISJOINT kill sets; nothing under src ever written.\n\nGATE",
   "commits": [
@@ -314,14 +315,30 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "1394e36be76358a1f80783b95798c41c32945e76",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T23:05:47Z",
+      "paths": [
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        ".moe/tasks/task-b8ec9a638f6540c28798c29f23fd5ada.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T23:14:05.104Z",
+      "treeId": "6794f8f89d1bed9f2c1b95bb0e095d859313402d",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-b42eccd4@2026-09-09T22:31:13Z",
-    "at": "2026-09-09T23:05:55.739Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-01b7fe3f@2026-09-09T23:05:47Z",
+    "at": "2026-09-09T23:14:05.104Z"
   },
   "touchedFiles": [
     "apps/daemon/src/release/release-durable-facts.test.ts",
