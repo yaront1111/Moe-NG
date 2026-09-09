@@ -71,7 +71,7 @@
       "completedAt": "2026-09-09T23:38:41.430Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -117,16 +117,24 @@
       "author": "worker-b42eccd4",
       "content": "COMPLETION SUMMARY WAS TRUNCATED AT THE 2000-CHAR CAP, mid-word, and it severed the GATE TABLE. Do not read that as a skipped gate — the table is complete in comment-1039dc9cc3b144319b9719c57fd9f132 under criterion (e). Reproduced here so it sits in one place:\n\n```\nnpx vitest run --config tests/security/vitest.config.ts tests/security/boundary-roster.security.ts\n   Test Files  1 passed (1)      Tests  55 passed (55)                     EXIT 0\n   (pre-fix: Tests 3 failed | 52 passed (55), \"expected 183 to be 180\")\npnpm test:security\n   Test Files  12 passed (12)    Tests  1003 passed (1003)                 EXIT 0\n   (pre-fix per task-161b7e9d: 2 failed | 10 passed (12) / 6 failed | 997 passed (1003))\npnpm --filter @moe/daemon test\n   Test Files  610 passed (610)  Tests  10957 passed | 12 skipped (10969)  EXIT 0   234.75s\npnpm typecheck\n   apps/daemon typecheck: Done                                             EXIT 0\n```\nEvery leg foreground and standalone; exit status taken from `${PIPESTATUS[0]}`, never tail's. `full-suite-gate` was free at the census, held 23:32:49Z for the daemon leg only, released immediately after.\n\nThe cut also lost the last paragraph, which flagged that `pnpm test:security` runs in CI (.github/workflows/cross-host.yml:128 posix, :344 windows) but in NO per-row gate — the reason this defect shipped green, and the second recorded instance of that gap. Full argument in comment-e8642e7195044016a1eb2021fde774d9 (adversarial pass, question 3).\n\nEvidence map for QA: comment-07ea2193 step-1 measurement and the settled design question; comment-1039dc9c acceptance criteria (a)-(e); comment-8f368940 the four-mutant drill transcript and teardown proof; comment-e8642e71 the adversarial pass.",
       "timestamp": "2026-09-09T23:40:23.656Z"
+    },
+    {
+      "id": "comment-b8e958919e074e079d033550dac14943",
+      "author": "qa-01b7fe3f",
+      "content": "QA REVIEW EVIDENCE (qa-01b7fe3f) — reviewed the completion commit 45282159, not the dirty tree.\n\nCOMMIT AUDIT. `git show 45282159` / `git branch --contains 45282159` -> on refs/heads/moe/work-2026-09-04, trailer `Moe-Task: task-89300aa0…`, `Moe-Paths: 6`. Six paths: the four sources plus two .moe/tasks JSONs. `git status --porcelain` and `git diff HEAD` on all four sources are EMPTY, so the delivered bytes ARE the working-tree bytes I tested.\n\nACCEPTANCE CRITERIA (a)-(e) from step 4, each re-measured by me:\n(a) `git grep -n` over apps/packages/adapters/tests: the three names appear only as column-0 `const` at preview-auto-decision.ts:49/:51/:60, as internal uses, as the three UNSCANNED_PRIVATE_LAYERS entries, and in prose. NO `export const`, NO production importer. `PREVIEW_AUTO_CODES` is exported but ends in CODES, so `DECLARATION_PATTERN` (…LAYERS|LAYER|BOUNDARIES) cannot match it — no new exported-roster entry smuggled in.\n(b) `EXPECTED_ROSTER_SIZE = 180` UNEDITED in the diff, and the exported scan arm is green — the arithmetic that confirms the route.\n(c) All four private-population constants moved: EXPECTED_PRIVATE_COUNT 77->80 and 3 allowlist entries (layer-visibility-cases.ts), EXPECTED_INVISIBLE_DENOMINATOR 257->260 and PER_MILLE 300->308 (boundary-roster.security.ts). 80/260 = 307.69 and the arm at :888 is `Math.round(…*1000)`, so 308 is the file's own rounding, not an invented rule. Prose at :25, :43 and :833 moved with them, plus a rotation note above EXPECTED_ROSTER_SIZE.\n(d) DEMONSTRATED BY MY OWN MUTANT, not taken on trust. Process-local Vite `transform` (no on-disk src mutation, so nothing to restore) remapping `PREVIEW_AUTO_TIER_UNCOVERED: PREVIEW_AUTO_DECISION_LAYER` -> `PREVIEW_AUTO_POLICY_LAYER`. That code's layer is asserted NOWHERE ELSE in the file (grep: only :387 and :398), so it isolates the rewritten arm. Result `Tests 1 failed | 35 passed (36)`, EXIT 1, failing at :392 with the table diff naming the remapped entry. Under the PRE-ROW `new Set(Object.values(MAP))` shape this mutant is invisible — both layers remain in the value set — so the rewrite is a strict strengthening, not a like-for-like port. Control (unmutated, `--config package.json`): `Tests 36 passed (36)` EXIT 0. Drill config `apps/daemon/drill-qa89300aa0.config.ts` deleted; `git status --porcelain` on it and on both preview paths is EMPTY.\n(e) Security lane green, count lines below.\n\nTHE ROUTE PREMISE, RE-MEASURED. `previewAutoDecline` is genuine production surface (preview-auto-composition.ts:128/:130/:133/:136), and its sole consumer preview-start-command.ts:207-208 does `const auto = resolvePreviewAutoDecision(…); if (!auto.ok) return;` — code, layer and reasonCodes are discarded at the branch, never thrown, never encoded. So no refusal reaches a wire and a LAYER_ROSTER backfill would have advertised a channel that does not exist. Private was the correct route, not the cheap one.\n\nGATES I RAN MYSELF:\n```\nnpx vitest run --config tests/security/vitest.config.ts tests/security/boundary-roster.security.ts\n      Test Files  1 passed (1)      Tests  55 passed (55)      EXIT 0\npnpm test:security\n      Test Files 12 passed (12)     Tests 1003 passed (1003)   EXIT 0   22.39s\napps/daemon scoped blast radius: vitest run --root . --config package.json src/preview\n      Test Files 12 passed (12)     Tests 178 passed (178)     EXIT 0\n```\nEvery leg printed a nonzero executed-test count line, so none is a vacuous exit-0.\n\nFOREIGN RED, DISCLOSED AND ATTRIBUTED AWAY. `pnpm typecheck` is EXIT 1 at review time with exactly two errors, both in `apps/daemon/src/release/release-auto-decide.test.ts` (TS2345, `\"blocker.challenge\"` not assignable to `WiredCommandKind`). That path is UNTRACKED (`??` in git status, `git ls-files --error-unmatch` fails), belongs to an in-flight peer row, is outside this row's owned paths, and did not exist in 45282159. Zero preview/* or tests/security/* errors. worker-0e797912 reported both typechecks EXIT 0 at 23:44Z, after this row's commit landed at 23:40Z, so the red arrived later from a different row. Path-attributed intersection with this row's owned paths is EMPTY.\n\nDAEMON FULL LANE, CORROBORATION NOT MY MEASUREMENT. worker-0e797912's GATE END at 23:45Z reports `pnpm --filter @moe/daemon test` EXIT 0, `Test Files 610 passed (610)` / `Tests 10970 passed | 12 skipped`, on a tree that already carried 45282159. I did not run it myself; full-suite-gate was held when I started, so I ran the scoped preview superset instead.\n\nPER-FILE CAP: preview-auto-decision.ts is 132 lines. The other three are test/helper sources.",
+      "timestamp": "2026-09-09T23:47:49.700Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T23:20:33.910Z",
-  "updatedAt": "2026-09-09T23:40:23.656Z",
+  "updatedAt": "2026-09-09T23:48:31.331Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T23:20:36.760Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 4
+    "executedStepCount": 4,
+    "doneAt": "2026-09-09T23:48:31.331Z",
+    "wallClockMs": 1674571
   },
   "stepsCompleted": [
     "step-1",
@@ -149,7 +157,8 @@
   },
   "planApprovedAt": "2026-09-09T23:23:20.920Z",
   "contextFetchedBy": [
-    "worker-b42eccd4"
+    "worker-b42eccd4",
+    "qa-01b7fe3f"
   ],
   "workStartedAt": "2026-09-09T23:24:02.781Z",
   "reviewStartedAt": "2026-09-09T23:40:09.104Z",
@@ -163,7 +172,47 @@
     "apps/daemon/src/preview/preview-auto-decision.ts",
     "apps/daemon/src/preview/preview-auto-decision.test.ts",
     "tests/security/boundary-roster.security.ts",
-    "tests/security/layer-visibility-cases.ts"
+    "tests/security/layer-visibility-cases.ts",
+    ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+    ".moe/tasks/task-89300aa0557e430888d43f652165bf41.json"
   ],
-  "completionSummary": "The three unrostered constants are MODULE-PRIVATE, not roster-backfilled, and the security lane is green: 55/55 on the named file, 1003/1003 across the whole lane, up from 3 and 6 failures.\n\nROUTE, traced not assumed. preview-start-command.ts:207-208 does `if (!auto.ok) return;` — a declination's code, layer and reasonCodes are DISCARDED at the branch, and every previewAutoDecline site is a `return`, never a `throw`, so no DomainRefusal carries these to a codec. They reach no wire, so rostering would advertise a channel that does not exist. Confirming arithmetic: the private route returns the exported scan to exactly 180 with EXPECTED_ROSTER_SIZE UNEDITED (it appears only as diff CONTEXT). No rename to dodge the pattern, no SCAN_ROOTS edit.\n\nFOUR FILES. preview-auto-decision.ts: `export` dropped from the three at :49/:51/:60; types, PREVIEW_AUTO_CODES and previewAutoDecline stay exported (DECLARATION_PATTERN is `^export const`, so a type is invisible to it); the comment now names the private population as the CATEGORY so nobody re-exports them to fix an import. Its test: eight layer arms rewritten to literals; the roster-coverage arm rewritten against the public surface. layer-visibility-cases.ts: EXPECTED_PRIVATE_COUNT 77->80 plus three allowlist entries — PLAN/DISK DELTA, two of the \"four constants in the security file\" are declared here, disclosed at step 1. boundary-roster.security.ts: DENOMINATOR 257->260, SHARE_PER_MILLE 300->308 (the file's own Math.round, not invented), all four stale prose sites (one the plan did not list, found by grep), and a rotation note.\n\nDRILL, four process-local mutants, nothing under src ever written. One code remapped to the wrong layer: this row's shape reds in TWO independent arms (2 failed | 34 passed (36)); the PRE-ROW shape stays 36 passed (36). The old `new Set(Object.values(MAP))` arm could not see a single remap, and eight toBe(CONSTANT) arms had production on both sides — both had to go.\n\nGATES, all foreground, exit via ${"
+  "completionSummary": "The three unrostered constants are MODULE-PRIVATE, not roster-backfilled, and the security lane is green: 55/55 on the named file, 1003/1003 across the whole lane, up from 3 and 6 failures.\n\nROUTE, traced not assumed. preview-start-command.ts:207-208 does `if (!auto.ok) return;` — a declination's code, layer and reasonCodes are DISCARDED at the branch, and every previewAutoDecline site is a `return`, never a `throw`, so no DomainRefusal carries these to a codec. They reach no wire, so rostering would advertise a channel that does not exist. Confirming arithmetic: the private route returns the exported scan to exactly 180 with EXPECTED_ROSTER_SIZE UNEDITED (it appears only as diff CONTEXT). No rename to dodge the pattern, no SCAN_ROOTS edit.\n\nFOUR FILES. preview-auto-decision.ts: `export` dropped from the three at :49/:51/:60; types, PREVIEW_AUTO_CODES and previewAutoDecline stay exported (DECLARATION_PATTERN is `^export const`, so a type is invisible to it); the comment now names the private population as the CATEGORY so nobody re-exports them to fix an import. Its test: eight layer arms rewritten to literals; the roster-coverage arm rewritten against the public surface. layer-visibility-cases.ts: EXPECTED_PRIVATE_COUNT 77->80 plus three allowlist entries — PLAN/DISK DELTA, two of the \"four constants in the security file\" are declared here, disclosed at step 1. boundary-roster.security.ts: DENOMINATOR 257->260, SHARE_PER_MILLE 300->308 (the file's own Math.round, not invented), all four stale prose sites (one the plan did not list, found by grep), and a rotation note.\n\nDRILL, four process-local mutants, nothing under src ever written. One code remapped to the wrong layer: this row's shape reds in TWO independent arms (2 failed | 34 passed (36)); the PRE-ROW shape stays 36 passed (36). The old `new Set(Object.values(MAP))` arm could not see a single remap, and eight toBe(CONSTANT) arms had production on both sides — both had to go.\n\nGATES, all foreground, exit via ${",
+  "commits": [
+    {
+      "sha": "452821592e912c11cb1f14284be404adbef80b53",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-b42eccd4@2026-09-09T23:23:43Z",
+      "paths": [
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        ".moe/tasks/task-89300aa0557e430888d43f652165bf41.json",
+        "apps/daemon/src/preview/preview-auto-decision.test.ts",
+        "apps/daemon/src/preview/preview-auto-decision.ts",
+        "tests/security/boundary-roster.security.ts",
+        "tests/security/layer-visibility-cases.ts"
+      ],
+      "recordedBy": "worker-b42eccd4",
+      "recordedAt": "2026-09-09T23:40:33.919Z",
+      "treeId": "c7b77cf228cc1d614f0f02cc91a89bd01fcd42b9",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/preview/preview-auto-decision.test.ts",
+    "apps/daemon/drill-89300aa0.config.ts",
+    "tests/security/boundary-roster.security.ts",
+    "apps/daemon/src/preview/preview-auto-decision.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-b42eccd4@2026-09-09T23:23:43Z",
+    "at": "2026-09-09T23:40:33.919Z"
+  },
+  "completedAt": "2026-09-09T23:48:31.331Z",
+  "reviewCompletedAt": "2026-09-09T23:48:31.331Z",
+  "reviewSummary": "APPROVED. Reviewed completion commit 45282159 (moe/work-2026-09-04, Moe-Task trailer, 6 paths); git diff HEAD on all four sources EMPTY, so delivered bytes = tested bytes. Full evidence: comment-b8e95891.\n\nGATES I RE-RAN. Security file: Tests 55 passed (55) EXIT 0, was 3 failed|52 passed. pnpm test:security: 12 files, 1003 passed (1003) EXIT 0. Scoped daemon blast radius (vitest run --root . --config package.json src/preview): 12 files, 178 passed (178) EXIT 0. Every leg printed a nonzero count line.\n\nCRITERIA. (a) git grep: no `export const` on the three, no production importer; PREVIEW_AUTO_CODES ends in CODES so DECLARATION_PATTERN cannot match it. (b) EXPECTED_ROSTER_SIZE stayed 180 unedited, the arithmetic confirming the route. (c) all four private constants moved (77->80, +3 allowlist entries, 257->260, 300->308; 80/260=307.69 and the arm uses Math.round, so 308 is the file's own rule) with prose at :25/:43/:833 plus a rotation note. (e) lane green.\n\n(d) NON-VACUITY DEMONSTRATED BY MY OWN MUTANT. Process-local Vite transform, no on-disk src mutation, remapping PREVIEW_AUTO_TIER_UNCOVERED to the wrong layer, a code whose layer is asserted nowhere else, isolating the rewritten arm: Tests 1 failed | 35 passed (36) EXIT 1 at :392. The pre-row new Set(Object.values(MAP)) shape is blind to that mutant, so the rewrite is a strict strengthening. Control unmutated: 36 passed (36) EXIT 0. Drill config deleted, status clean.\n\nROUTE PREMISE RE-MEASURED: preview-start-command.ts:207-208 discards the declination at `if (!auto.ok) return;`, never thrown, never encoded, so no refusal reaches a wire and a roster backfill would advertise a channel that does not exist.\n\nFOREIGN RED DISCLOSED: pnpm typecheck EXIT 1, two TS2345 errors both in the UNTRACKED peer file apps/daemon/src/release/release-auto-decide.test.ts, outside owned paths, absent from 45282159; a peer reported typecheck EXIT 0 at 23:44Z after this commit landed. Owned-path intersection EMPTY."
 }
