@@ -30,9 +30,20 @@ export const ALPHA_LANDING = sha40("aa");
 export const BRAVO_LANDING = sha40("bb");
 export const ORPHAN_LANDING = sha40("cc");
 export const RECEIPT_SHA = sha40("dd");
+/** The integrated commit the approved criterion CHECKS passed at. */
+export const CRITERION_ARTIFACT = sha40("ee");
 
-/** Every landing an `ancestryOf` fixture answers ANCESTOR for, unless overridden. */
-const ANCESTORS: ReadonlySet<string> = new Set([ALPHA_LANDING, BRAVO_LANDING]);
+/**
+ * Every commit an `ancestryOf` fixture answers ANCESTOR for, unless overridden.
+ *
+ * `RECEIPT_SHA` IS ONE OF THEM, and it was not before the receipt sha was put through the
+ * ancestry predicate. A fixture that calls itself "evidence complete and re-measurable" while
+ * citing a verifier receipt taken on a tree this sha does not contain was describing evidence
+ * that is not complete — it only read that way because nothing measured it.
+ */
+const ANCESTORS: ReadonlySet<string> = new Set([
+  ALPHA_LANDING, BRAVO_LANDING, RECEIPT_SHA, CRITERION_ARTIFACT,
+]);
 
 /**
  * A predicate over a fixed verdict table, plus a call log so a test can assert the
@@ -60,6 +71,12 @@ export function dossierInput(overrides: Partial<DossierInput> = {}): DossierInpu
       { criterionId: "crit-charlie", nodeKey: null, title: "Dossier bytes are diffable" },
       { criterionId: "crit-alpha", nodeKey: "node-alpha", title: "Dossier renders every section" },
       { criterionId: "crit-bravo", nodeKey: "node-bravo", title: "Dossier is stored durably" },
+    ],
+    // Both COVERED criteria carry a passed criterion check at an artifact this sha contains.
+    // crit-charlie deliberately does not: it is carried by no node, so there is nothing to check.
+    criterionReceipts: [
+      { artifactSha: CRITERION_ARTIFACT, criterionId: "crit-alpha" },
+      { artifactSha: CRITERION_ARTIFACT, criterionId: "crit-bravo" },
     ],
     goalId: GOAL_ID,
     goalTitle: "Ship the release dossier",

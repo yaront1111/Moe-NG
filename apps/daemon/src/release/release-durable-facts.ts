@@ -1,6 +1,10 @@
 import type { SqliteEventStore } from "@moe/store";
 import { readLatestProjectConfiguration } from "../configuration/project-configuration-selection.js";
+import { readCriterionArtifact } from "../criterion-evidence/criterion-artifact.js";
+import type { IntegratedCriterionArtifact } from "../criterion-evidence/criterion-contracts.js";
 import { readCriterionGoal } from "../criterion-evidence/criterion-goal.js";
+import type { CriterionGoal } from "../criterion-evidence/criterion-goal.js";
+import { currentCriterionReceipts } from "../criterion-evidence/criterion-read.js";
 import { decisionsOf } from "../decision-ledger-memo.js";
 import { decodeGoalCatalogEntry } from "../http/goal-catalog-entry.js";
 import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
@@ -12,7 +16,7 @@ import { readLandingReceipt } from "../repository/landing-ledger.js";
 import { landingReceiptId } from "../repository/landing-receipt-contracts.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { readVerifierReceipt } from "../review/verifier-receipt-ledger.js";
-import type { DossierInput, DossierNodeFacts, DossierPreviewDecision, DossierReviewRound } from "./release-dossier-contracts.js";
+import type { DossierCriterionReceipt, DossierInput, DossierNodeFacts, DossierPreviewDecision, DossierReviewRound } from "./release-dossier-contracts.js";
 
 function nodeFacts(store: SqliteEventStore, projectId: string, nodeKey: string): {
   node: DossierNodeFacts; rounds: readonly DossierReviewRound[];
@@ -85,9 +89,37 @@ function previewDecision(store: SqliteEventStore, projectId: string, goalId: str
   } catch { return null; }
 }
 
+/**
+ * THE PER-CRITERION EVIDENCE, read through the criterion seam rather than re-derived here.
+ *
+ * `currentCriterionReceipts` is the SAME function goal closure consumes — traced:
+ * goal-services.ts:166 refuses GOAL_CLOSE_CRITERIA_UNVERIFIED from `goalCloseReadinessFor` ->
+ * `readGoalCloseReadiness` -> document-coverage-read.ts:190 `readCoverageCriterionAuthority` ->
+ * document-coverage-criteria.ts:27, which calls it with the DEFAULT artifact read. This edge
+ * calls it with the same default, so release and closure answer from one authority. Its rules —
+ * latest run COMPLETED, artifact unchanged, receipt PASSED, approved check and criterion digest
+ * still matching — are NOT restated here; a second copy is exactly the drift this exists to end.
+ *
+ * `artifactRead` is a TEST SEAM, the same one criterion-service.ts:18 carries and for the same
+ * reason: production measures the workspace's own integrated Git artifact, and a lane with no git
+ * object database can substitute that ONE measurement without doubling anything that decides.
+ */
+function criterionReceiptsOf(
+  store: SqliteEventStore, goal: CriterionGoal,
+  artifactRead: (root: string) => IntegratedCriterionArtifact | null,
+): readonly DossierCriterionReceipt[] {
+  try {
+    return [...currentCriterionReceipts(store, goal, artifactRead)]
+      .map(([criterionId, receipt]) => Object.freeze({
+        artifactSha: receipt.artifact.sha, criterionId,
+      }));
+  } catch { return []; }
+}
+
 /** Read approved scope and evidence through their durable validators; never infer a missing receipt. */
 export function readReleaseDossierInput(
   store: SqliteEventStore, projectId: string, goalId: string,
+  artifactRead: (root: string) => IntegratedCriterionArtifact | null = readCriterionArtifact,
 ): DossierInput | null {
   try {
     if (store.getHealth().projectId !== projectId) return null;
@@ -104,6 +136,7 @@ export function readReleaseDossierInput(
         return Object.freeze({ criterionId: criterion.criterionId, title: criterion.statement,
           nodeKey: owners.length === 1 ? subjects.get(owners[0]!.nodeKey) ?? null : null });
       })),
+      criterionReceipts: Object.freeze(criterionReceiptsOf(store, goal, artifactRead)),
       goalId, goalTitle: goalTitle(store, projectId, goalId),
       nodes: Object.freeze(facts.map((fact) => Object.freeze(fact.node))),
       policyRevision: configuration.ok ? configuration.manifest.settings.policy.policyRevisionId : null,

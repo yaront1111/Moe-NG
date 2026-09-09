@@ -12,12 +12,15 @@ import type { DossierInput } from "./release-dossier-contracts.js";
  */
 
 export type DossierGapCode =
+  | "CRITERION_NOT_VERIFIED_AT_SHA"
   | "CRITERION_UNCOVERED"
   | "LANDING_ABSENT"
   | "LANDING_NOT_ANCESTOR"
   | "LANDING_UNMEASURABLE"
   | "RECEIPT_ABSENT"
+  | "RECEIPT_NOT_ANCESTOR"
   | "RECEIPT_SOURCE_UNPROVEN"
+  | "RECEIPT_UNMEASURABLE"
   | "RECEIPT_SHARED_NODE";
 
 export interface DossierGap {
@@ -43,13 +46,24 @@ export const UNKNOWN = "UNKNOWN";
 
 /** Why a citation could not be re-measured, in words, keyed by its stable code. */
 export const GAP_SENTENCES: Readonly<Record<DossierGapCode, string>> = Object.freeze({
+  // The bar GOAL_CLOSE_CRITERIA_UNVERIFIED already holds a goal to, now held at release too.
+  CRITERION_NOT_VERIFIED_AT_SHA:
+    "no passed criterion check binds this criterion to a commit this sha contains",
   CRITERION_UNCOVERED: "no verifying node carries this criterion",
   LANDING_ABSENT: "the verifying node recorded no landing commit",
   LANDING_NOT_ANCESTOR: "the cited landing commit is not an ancestor of this sha",
   LANDING_UNMEASURABLE:
     "git could not decide whether the cited landing commit is an ancestor of this sha",
   RECEIPT_ABSENT: "the verifying node recorded no verifier receipt",
+  // NOT_ANCESTOR and UNMEASURABLE stay SEPARATE here for the reason
+  // release-dossier-contracts.ts:22-31 gives for the landing pair: "we could not check" and "we
+  // checked and it is absent" are different claims, and one code for both tells a reader nothing.
+  RECEIPT_NOT_ANCESTOR:
+    "the verifier receipt's measured source commit is not an ancestor of this sha",
   RECEIPT_SOURCE_UNPROVEN: "the verifier receipt carries no measured source commit",
+  RECEIPT_UNMEASURABLE:
+    "git could not decide whether the verifier receipt's measured source commit is an ancestor of"
+    + " this sha",
   RECEIPT_SHARED_NODE:
     "the verifying node key is carried by more than one activated plan, so its review ledger is"
     + " shared and its evidence cannot be attributed to this goal",

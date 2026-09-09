@@ -11,7 +11,7 @@ import {
   REMOTE_BOUND_EVENT_TYPE, REPOSITORY_PUBLISH_COMMAND_KIND, publishAggregateId, remoteAggregateId,
 } from "../repository/publish-receipt-contracts.js";
 import { recordPublishReceipt } from "../repository/publish-ledger.js";
-import { RELEASE_DECIDE_CODE_LAYER_MAP } from "./release-decide-contracts.js";
+import { RELEASE_DECIDE_CODES, RELEASE_DECIDE_CODE_LAYER_MAP } from "./release-decide-contracts.js";
 import { createReleaseDecideHandler } from "./release-decide-service.js";
 import type { ReleaseDossierFacts, ReleasePublisher } from "./release-decide-service.js";
 import { releaseDossierAggregateId, releaseDossierId } from "./release-dossier-contracts.js";
@@ -432,6 +432,59 @@ describe("release.decide service", () => {
     expect(prPort.requests).toHaveLength(1);
     expect(publisher.calls).toHaveLength(1);
     expect(releasedReceiptCount(store)).toBe(1);
+  });
+
+  /**
+   * THE OWNER'S DIRECTION OF 2026-09-09, pinned so a well-meaning future edit cannot reverse it:
+   * "we can approve the plan at the start but that's it". An external reviewer prescribed a
+   * RELEASE_PREVIEW_REQUIRED refusal ahead of release and the owner OVERRULED it. So the preview
+   * verdict is RENDERED, never enforced — the operator reads it in the pull-request body — and
+   * release is decided on MACHINE EVIDENCE alone.
+   *
+   * Both arms carry complete evidence, so the ONLY thing that could refuse them is a preview gate.
+   */
+  it.each([
+    { preview: null, what: "NO preview decision at all" },
+    {
+      preview: {
+        decidedAt: DECIDED_AT, decisionId: "dec-preview-rejected", outcome: "REJECT",
+        url: null,
+      },
+      what: "a REJECTED preview decision",
+    },
+  ])("releases on evidence alone with $what", async ({ preview }) => {
+    const store = openStore();
+    bindRemote(store);
+    recordPush(store);
+    const input: DossierInput = { ...completeInput(), preview };
+    // The premise, asserted rather than assumed: the gap list is empty, so evidence is the only
+    // thing that has answered by the time the preview verdict is visible.
+    expect(releaseDossierGaps(input, HEAD_SHA, ancestryOf().predicate)).toEqual([]);
+    const markdown = storeDossier(store, input);
+    const { handler, prPort } = build(store, { input });
+
+    const decision = await handler(inputOf(store));
+    expect(decision).toMatchObject({ disposition: "DECIDED", resultCode: "RELEASED" });
+    expect(releasedReceiptCount(store)).toBe(1);
+    // AND THE PREVIEW SECTION TRAVELS VERBATIM. Not suppressed, not summarised: the rejection is
+    // in the body of the pull request a human reads.
+    expect(prPort.requests).toHaveLength(1);
+    expect(prPort.requests[0]?.body).toBe(markdown);
+    expect(markdown).toContain("## Preview decision");
+    expect(markdown).toContain(preview === null
+      ? "There is no preview decision for this goal."
+      : "- Outcome: REJECT");
+  });
+
+  it("mints NO preview-required refusal: the closed code map is still exactly its three codes", () => {
+    // The map is the authority (`RELEASE_DECIDE_CODES` is derived from its keys), so a new gate
+    // could not be added without a key here. RELEASE_EVIDENCE_INCOMPLETE is the evidence code, and
+    // the criterion gap this row added flows into it rather than minting a fourth.
+    expect(Object.keys(RELEASE_DECIDE_CODE_LAYER_MAP).sort()).toEqual([
+      "RELEASE_EVIDENCE_INCOMPLETE", "RELEASE_PR_FAILED", "RELEASE_REMOTE_MISSING",
+    ]);
+    expect(RELEASE_DECIDE_CODES).toHaveLength(3);
+    for (const code of RELEASE_DECIDE_CODES) expect(code).not.toContain("PREVIEW");
   });
 
   it("REJECT pushes nothing and opens nothing", async () => {

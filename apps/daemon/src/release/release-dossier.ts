@@ -1,5 +1,6 @@
 import type {
   AncestryPredicate, AncestryVerdict, DossierCriterionFacts, DossierInput, DossierNodeFacts,
+  DossierReceiptFacts,
 } from "./release-dossier-contracts.js";
 import { RELEASE_DOSSIER_VERSION } from "./release-dossier-contracts.js";
 import {
@@ -93,10 +94,60 @@ function landingOf(
   };
 }
 
+/**
+ * The verifier receipt's own gaps, and the SECOND place this file re-measures a citation.
+ *
+ * A receipt whose measured source commit is PRESENT goes through the same `AncestryPredicate`
+ * the landing goes through. Before this it did not: a non-null `receipt.sha` produced zero gaps
+ * and `ancestry` was never reached for it, so a dossier citing a verifier run taken on a tree
+ * that is not the one being released read as complete evidence. The receipt sha is the commit
+ * the verifier actually measured, so it answers a different question from the landing sha and
+ * both have to hold.
+ */
+function receiptOf(
+  criterion: DossierCriterionFacts,
+  receipt: DossierReceiptFacts | null,
+  ancestry: AncestryPredicate,
+): readonly DossierGap[] {
+  if (receipt === null) return [gapOf("RECEIPT_ABSENT", criterion.criterionId)];
+  if (receipt.sha === null) return [gapOf("RECEIPT_SOURCE_UNPROVEN", criterion.criterionId)];
+  const verdict = ancestry(receipt.sha);
+  if (verdict === "ANCESTOR") return [];
+  const code = verdict === "NOT_ANCESTOR" ? "RECEIPT_NOT_ANCESTOR" : "RECEIPT_UNMEASURABLE";
+  return [gapOf(code, criterion.criterionId, `${GAP_SENTENCES[code]} (${receipt.sha})`)];
+}
+
+/**
+ * THE PER-CRITERION CHECK, and the gap that makes this document mean what its own
+ * "re-measured" sentence claims.
+ *
+ * A node's verifier receipt is ONE command for the whole node. It says the node's tests passed;
+ * it does not say any APPROVED CRITERION was checked, and a dossier that cited only it reported
+ * zero gaps for a goal no criterion check had ever run against. `goal.close` already refuses
+ * such a goal with GOAL_CLOSE_CRITERIA_UNVERIFIED, so release was deciding on weaker evidence
+ * than closure demands — which is backwards, because release is the irreversible one.
+ *
+ * The artifact commit comes from the criterion receipt itself and is put through the SAME
+ * predicate as the landing and the verifier receipt: a check that passed on a tree this sha does
+ * not contain says nothing about this sha.
+ */
+function criterionOf(
+  criterion: DossierCriterionFacts,
+  verified: ReadonlyMap<string, string>,
+  ancestry: AncestryPredicate,
+): readonly DossierGap[] {
+  const code = "CRITERION_NOT_VERIFIED_AT_SHA";
+  const artifactSha = verified.get(criterion.criterionId);
+  if (artifactSha === undefined) return [gapOf(code, criterion.criterionId)];
+  if (ancestry(artifactSha) === "ANCESTOR") return [];
+  return [gapOf(code, criterion.criterionId, `${GAP_SENTENCES[code]} (${artifactSha})`)];
+}
+
 function rowOf(
   criterion: DossierCriterionFacts,
   nodes: ReadonlyMap<string, DossierNodeFacts>,
   ancestry: AncestryPredicate,
+  verified: ReadonlyMap<string, string>,
 ): CriterionRow {
   if (criterion.nodeKey === null) return uncovered(criterion);
   const node = nodes.get(criterion.nodeKey);
@@ -107,13 +158,12 @@ function rowOf(
   if (node.sharedAcrossPlans) return shared(criterion, node);
   const { gaps: landingGaps, landing } = landingOf(criterion, node, ancestry);
   const receipt = node.receipt;
-  const receiptGaps = receipt === null ? [gapOf("RECEIPT_ABSENT", criterion.criterionId)]
-    : receipt.sha === null ? [gapOf("RECEIPT_SOURCE_UNPROVEN", criterion.criterionId)] : [];
+  const receiptGaps = receiptOf(criterion, receipt, ancestry);
   return {
     command: receipt?.command ?? UNKNOWN,
     criterionId: criterion.criterionId,
     exitCode: receipt === null ? UNKNOWN : String(receipt.exitCode),
-    gaps: [...receiptGaps, ...landingGaps],
+    gaps: [...receiptGaps, ...landingGaps, ...criterionOf(criterion, verified, ancestry)],
     landing,
     nodeKey: node.nodeKey,
     receiptSha: receipt?.sha ?? UNKNOWN,
@@ -138,10 +188,13 @@ export function criterionRows(
   input: DossierInput, ancestry: AncestryPredicate,
 ): readonly CriterionRow[] {
   const nodes = new Map(input.nodes.map((node) => [node.nodeKey, node]));
+  const verified = new Map(
+    input.criterionReceipts.map((receipt) => [receipt.criterionId, receipt.artifactSha]),
+  );
   const at = memoized(ancestry);
   return [...input.criteria]
     .sort((a, b) => byCodeUnit(a.criterionId, b.criterionId))
-    .map((criterion) => rowOf(criterion, nodes, at));
+    .map((criterion) => rowOf(criterion, nodes, at, verified));
 }
 
 /**

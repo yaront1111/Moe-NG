@@ -207,7 +207,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:06:24.908Z",
-  "updatedAt": "2026-09-09T22:51:39.161Z",
+  "updatedAt": "2026-09-09T22:52:49.773Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T19:32:30.438Z",
     "plannedStepCount": 8,
@@ -219,7 +219,8 @@
   "contextFetchedBy": [
     "architect-fa84777a",
     "worker-a11dcf70",
-    "qa-01b7fe3f"
+    "qa-01b7fe3f",
+    "governor-608c8a78"
   ],
   "stepsCompleted": [
     "step-1",
@@ -288,6 +289,24 @@
       "treeId": "fe44fedbc6e4cd88ba228b7364d5102817e92ee2",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "f52445f9ac0b027f045ff6a607375f14497032b0",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T22:42:14Z",
+      "paths": [
+        ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json",
+        ".moe/tasks/task-77207fb327a9462b869ff647650e57cf.json",
+        ".moe/tasks/task-b8571cfe50614c1d89fee3a0a448de10.json",
+        ".moe/tasks/task-d85fd8fd74354e94886d619c67f24c75.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T22:52:33.224Z",
+      "treeId": "7ffbafd1e6f2666f1c5702e4fcdefeed5d6e3272",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -299,21 +318,23 @@
     "apps/daemon/src/preview/preview-start-command.ts",
     "apps/daemon/src/preview/preview-auto-decision.test.ts",
     "apps/daemon/src/preview/preview-auto-composition.ts",
-    "apps/daemon/src/preview/preview-auto-composition.js"
+    "apps/daemon/src/preview/preview-auto-composition.js",
+    ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json",
+    ".moe/tasks/task-77207fb327a9462b869ff647650e57cf.json",
+    ".moe/tasks/task-b8571cfe50614c1d89fee3a0a448de10.json",
+    ".moe/tasks/task-d85fd8fd74354e94886d619c67f24c75.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/preview/preview-auto-decision.test.ts",
     "apps/daemon/src/preview/preview-decision-record.ts",
     "apps/daemon/src/preview/preview-auto-decision.ts"
   ],
-  "unattributedPaths": [
-    "tests/e2e/control-room/live-proof-recover.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-a11dcf70@2026-09-09T20:59:51Z",
-    "at": "2026-09-09T21:41:54.367Z"
+    "sessionId": "qa-01b7fe3f@2026-09-09T22:42:14Z",
+    "at": "2026-09-09T22:52:33.224Z"
   },
   "blockedOnTaskIds": null,
   "reviewStartedAt": "2026-09-09T22:41:59.850Z",
