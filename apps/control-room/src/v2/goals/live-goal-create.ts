@@ -10,6 +10,7 @@ import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { LiveSetup } from "../../live/live-config.js";
 import { readSurfaceOnce } from "../ops/policy-install-port.js";
 import type { GoalCreateResult, GoalDraft } from "./goal-model.js";
+import { policyTierForRiskClass } from "./goal-risk-tier.js";
 import { labelForMissing } from "./work-labels.js";
 
 /**
@@ -40,6 +41,10 @@ export interface GoalBriefDraft {
  * ADVISORY REQUESTS written into the instructions - not a budget grant, not a
  * policy class, and not a claim that the PRD was adopted as project material.
  * The PRD digest is the one this browser computed, labelled as such.
+ *
+ * The risk line now names the POLICY TIER the operator's class means, read from the one
+ * typed mapping (`goal-risk-tier.ts`) rather than spelled here. It stays advisory: an
+ * installed policy still classifies the goal's facts itself, and this brief grants nothing.
  */
 export function briefOfDraft(draft: GoalDraft): GoalBriefDraft {
   const lines: string[] = [draft.outcome];
@@ -48,7 +53,10 @@ export function briefOfDraft(draft: GoalDraft): GoalBriefDraft {
     for (const criterion of draft.acceptanceCriteria) lines.push(`- ${criterion}`);
   }
   if (draft.budgetEnvelope !== "") lines.push(`Budget envelope: ${draft.budgetEnvelope}`);
-  if (draft.riskClass !== undefined) lines.push(`Risk class: ${draft.riskClass}`);
+  if (draft.riskClass !== undefined) {
+    const tier = policyTierForRiskClass(draft.riskClass);
+    lines.push(`Risk class: ${draft.riskClass} (policy tier ${tier})`);
+  }
   if (draft.prd !== undefined) {
     lines.push(
       `PRD: ${draft.prd.name} (${String(draft.prd.size)} bytes) sha256 ${draft.prd.localSha256}`,
