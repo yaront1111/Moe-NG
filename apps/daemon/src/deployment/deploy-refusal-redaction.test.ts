@@ -147,11 +147,27 @@ function service(store: ReturnType<typeof openStore>, options: ServiceOptions = 
   return () => deployer.deploy({ context: CONTEXT, decisionId, environment: ENVIRONMENT, sha: SHA });
 }
 
-/** Fails a single docker verb with planted stderr, leaving every other call to the double. */
-const failVerb = (verb: string, stderr: string) => (runner: DockerRunner): DockerRunner =>
-  async (args, stdin): Promise<DeployRunResult> => args[0] === verb
-    ? { code: 1, stderr, stdout: "" }
-    : runner(args, stdin);
+/**
+ * Fails a single docker verb with planted stderr, leaving every other call to the double.
+ *
+ * `hits()` COUNTS THE CALLS IT INTERCEPTED, and every arm using it asserts that count is nonzero.
+ * Without that, planting a failure on a verb the engine no longer issues is a silent no-op: the
+ * deploy succeeds, the arm's "the secret was redacted" assertions hold trivially against a refusal
+ * detail that was never produced, and a redaction arm passes having exercised no failure path.
+ * That is exactly what happened to `failVerb("run", ...)` when the candidate stopped being started
+ * with `docker run`.
+ */
+type VerbFailure = ((runner: DockerRunner) => DockerRunner) & { readonly hits: () => number };
+const failVerb = (verb: string, stderr: string): VerbFailure => {
+  let matched = 0;
+  const wrap = (runner: DockerRunner): DockerRunner =>
+    async (args, stdin): Promise<DeployRunResult> => {
+      if (args[0] !== verb) return runner(args, stdin);
+      matched += 1;
+      return { code: 1, stderr, stdout: "" };
+    };
+  return Object.assign(wrap, { hits: () => matched });
+};
 
 describe("the receipt writer declassifies an untrusted refusal detail (DoD 2, DoD 3)", () => {
   it.each(Object.keys(carriers))("redacts a %s before it reaches the store", (shape) => {
@@ -297,10 +313,13 @@ describe("the real deploy service cannot land a secret through ANY of its refusa
     const store = openStore();
     // The OPAQUE carrier here on purpose: docker's `version` failure is the one path whose text a
     // reviewer is least likely to expect a credential in, and it has no syntax to match on.
-    const deploy = service(store, { wrap: failVerb("version", value) });
+    const failure = failVerb("version", value);
+    const deploy = service(store, { wrap: failure });
 
     const report = await deploy();
 
+    // The planted failure actually fired: without this the refusal below could be someone else's.
+    expect(failure.hits()).toBeGreaterThan(0);
     expect(report.outcome).toBe("REFUSED");
     expect(report.receipt?.refusal?.code).toBe(DEPLOY_DOCKER_UNAVAILABLE);
     expect(report.receipt?.refusal?.layer).toBe(DEPLOY_ENGINE_STAMP);
@@ -325,9 +344,13 @@ describe("the real deploy service cannot land a secret through ANY of its refusa
     // `code@layer` detail the engine composes from them is the leak this arm is about.
     const thrownRefusal: DeployMigrationPort = () => Promise.reject(
       Object.assign(new Error("migration refused"), { code: detail, layer: detail }));
+    // THE CANDIDATE START IS `docker start` NOW, not `docker run`. Spelled `run` this planted
+    // nothing, the deploy succeeded, and every assertion below held against a refusal that was
+    // never produced — so `hits()` is asserted after the run to keep that unrepresentable.
+    const startFailure = failVerb("start", detail);
     const byPath: Readonly<Record<string, ServiceOptions>> = {
       build: { double: { buildStderr: detail } },
-      start: { wrap: failVerb("run", detail) },
+      start: { wrap: startFailure },
       transfer: { double: { saveStderr: detail }, target: REMOTE },
       "migration-returned": { migrate: returnedRefusal },
       "migration-thrown": { migrate: thrownRefusal },
@@ -338,6 +361,9 @@ describe("the real deploy service cannot land a secret through ANY of its refusa
 
     const report = await deploy();
 
+    // The `start` row is the only one whose failure is planted by verb; prove it intercepted the
+    // candidate's start rather than silently matching nothing.
+    expect(startFailure.hits()).toBe(path === "start" ? 1 : 0);
     expect(report.outcome).toBe("REFUSED");
     expect(report.receipt?.refusal?.code).toBe(DEPLOY_BUILD_FAILED);
     expect(report.receipt?.refusal?.layer).toBe(DEPLOY_ENGINE_STAMP);

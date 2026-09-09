@@ -656,7 +656,9 @@ describe("the default daemon composition reaches the real migration (DoD 1)", ()
     // environment, which is what DoD 2's "resolve named environment values at the host boundary"
     // asks for and what a `resolveEnvironmentLaunch` composition could not do for `production`.
     expect(observed.connection).toBe(SEEDED_DATABASE);
-    // AND THE CANDIDATE STARTED AFTER IT: the deploy really continued past the migration.
-    expect(docker.calls.some((call) => call[0] === "run")).toBe(true);
+    // AND THE CANDIDATE STARTED AFTER IT: the deploy really continued past the migration. Both
+    // halves of the bring-up are named, so a create with no start would not satisfy this.
+    expect(docker.calls.some((call) => call[0] === "create")).toBe(true);
+    expect(docker.calls.some((call) => call[0] === "start")).toBe(true);
   });
 });

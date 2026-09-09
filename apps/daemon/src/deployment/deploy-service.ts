@@ -5,8 +5,8 @@ import {
   DEPLOY_TARGET_MISSING, admitDeploySha, admitEnvironmentName, deployImageTag, deployReceiptId,
 } from "./deploy-receipt-contracts.js";
 import type { DeployReceiptV1, DeployRefusal, DeployRefusalCode } from "./deploy-receipt-contracts.js";
-import { resolveCandidateMount, runCandidateArgv } from "./deploy-candidate-environment.js";
-import type { CandidateEnvironmentMount } from "./deploy-candidate-environment.js";
+import { bringUpCandidate, healthArgv, prepareCandidateDelivery } from "./deploy-candidate-start.js";
+import type { CandidateDelivery } from "./deploy-candidate-start.js";
 import { createProxyPort, DEPLOY_HEALTH_BUDGET_MS, DEPLOY_HEALTH_POLL_MS, lastStderrLine } from "./deploy-ports.js";
 import type { DeployMigrationResult, DeployPorts, DeployRunResult, DeployTarget } from "./deploy-ports.js";
 import { readDeployReceipt, recordDeployReceipt } from "./deploy-ledger.js";
@@ -66,11 +66,10 @@ export function candidateContainerName(
 }
 
 export { dockerArchiveBuildArgv as buildArgv } from "./deploy-image-build.js";
-export { runCandidateArgv } from "./deploy-candidate-environment.js";
-
-/** Probe the candidate by name: the public URL would prove only the incumbent's health. */
-export const healthArgv = (name: string): readonly string[] =>
-  ["inspect", "--format", "{{.State.Health.Status}}", name];
+export {
+  copyEnvironmentArgv, createCandidateArgv, runCandidateArgv, startCandidateArgv,
+} from "./deploy-candidate-environment.js";
+export { healthArgv } from "./deploy-candidate-start.js";
 
 const refusal = (code: DeployRefusalCode, detail: string): DeployRefusal =>
   ({ code, detail, layer: DEPLOY_ENGINE_STAMP });
@@ -222,19 +221,11 @@ export function createDeployService(config: DeployServiceConfig) {
     return false;
   };
 
-  /** Reuses an existing container of this name rather than recreating it: a replay, not a race. */
-  const startCandidate = async (
-    target: DeployTarget, name: string, tag: string, mount: CandidateEnvironmentMount | null,
-  ): Promise<DeployRunResult> => {
-    const existing = await run(target, healthArgv(name));
-    if (existing.code === 0) return existing;
-    return run(target, runCandidateArgv(name, target.network, tag, mount));
-  };
-
-  const candidateMount = (
-    target: DeployTarget, tag: string, source: string,
-  ): Promise<CandidateEnvironmentMount | string> =>
-    resolveCandidateMount((args) => run(target, args), target.sshTarget, tag, source);
+  /** `create` + `cp -` + `start`, so the delivery reaches a REMOTE docker host too. See that module. */
+  const startCandidate = (
+    target: DeployTarget, name: string, tag: string, delivery: CandidateDelivery | null,
+  ): Promise<DeployRunResult> =>
+    bringUpCandidate((args, stdin) => run(target, args, stdin), name, target.network, tag, delivery);
 
   const execute = async (request: DeployRequest, rollbackImage?: string): Promise<DeployReport> => {
     const { environment, sha } = request;
@@ -278,8 +269,6 @@ export function createDeployService(config: DeployServiceConfig) {
     const lease = await acquireProxy(proxyPort);
     if (typeof lease === "string") return refuse(target, DEPLOY_BUILD_FAILED, lease);
     let keepLock = false; let keepCandidate = false; let candidateStarted = false;
-    // WHAT REMOVES THE PLAINTEXT FILE: the `finally` below, on every exit path this function has.
-    let disposeDelivery: (() => void) | null = null;
     const name = candidateContainerName(environment, sha, request.decisionId);
     try {
       const replay = readReplay(config, request, rollbackImage);
@@ -309,10 +298,10 @@ export function createDeployService(config: DeployServiceConfig) {
       if (delivery !== null && !delivery.ok) {
         return refuse(target, DEPLOY_BUILD_FAILED, `${delivery.code}@${delivery.layer}`);
       }
-      if (delivery !== null) disposeDelivery = delivery.dispose;
-      const mount = delivery === null || delivery.source === null
-        ? null : await candidateMount(target, tag, delivery.source);
-      if (typeof mount === "string") return refuse(target, DEPLOY_BUILD_FAILED, mount);
+      const content = delivery === null ? null : delivery.content;
+      const prepared = content === null
+        ? null : await prepareCandidateDelivery((args) => run(target, args), tag, content);
+      if (typeof prepared === "string") return refuse(target, DEPLOY_BUILD_FAILED, prepared);
       // THE MIGRATION RUNS HERE, AND BOTH NEIGHBOURS ARE WRONG. Before the build, a migration
       // could move the schema and then fail to produce an image, leaving the schema ahead of the
       // code with no image to roll back to. After `startCandidate`, the candidate boots against
@@ -330,7 +319,7 @@ export function createDeployService(config: DeployServiceConfig) {
         return refuse(target, DEPLOY_BUILD_FAILED, migrated);
       }
       candidateStarted = true;
-      const started = await startCandidate(target, name, tag, mount);
+      const started = await startCandidate(target, name, tag, prepared);
       if (started.code !== 0) {
         return refuse(target, DEPLOY_BUILD_FAILED, lastStderrLine(started.stderr));
       }
@@ -356,11 +345,11 @@ export function createDeployService(config: DeployServiceConfig) {
       const cleanup = stopped !== null && stopped.code !== 0 ? "; DEPLOY_INCUMBENT_STOP_FAILED" : "";
       return report("DEPLOYED", `${name} healthy at ${tag}${cleanup}`, receipt);
     } finally {
+      // THIS ALSO REMOVES A CREATED-BUT-NEVER-STARTED CONTAINER. `candidateStarted` is set before
+      // `startCandidate`, which now creates before it starts, so a candidate abandoned between
+      // `create` and `start` — a failed `cp`, a failed `start` — is torn down here like any other.
       if (candidateStarted && !keepCandidate && lease.incumbent !== name) await run(target, ["rm", "--force", name]);
       if (!keepLock) await proxyPort.unlock(lease.proxy);
-      // The candidate read its delivery once at startup and carries no restart policy, so the
-      // plaintext is not needed past this point on ANY exit path — success, refusal or throw.
-      if (disposeDelivery !== null) disposeDelivery();
     }
   };
 
