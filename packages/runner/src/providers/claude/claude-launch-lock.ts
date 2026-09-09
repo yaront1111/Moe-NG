@@ -128,6 +128,9 @@ function listenExclusively(server: ReturnType<typeof createServer>,
 }
 
 export async function acquireWindowsLaunchLock(lockIdentity: string): Promise<ClaudeLaunchLockResult> {
+  if (process.platform !== "win32") {
+    return lockRefusal("CLAUDE_LAUNCH_LOCK_UNKNOWN", "the named-pipe launch lock requires Windows");
+  }
   const scope = resolveLaunchLockScope(lockIdentity);
   if (scope === null) {
     return lockRefusal("CLAUDE_LAUNCH_LOCK_UNKNOWN",

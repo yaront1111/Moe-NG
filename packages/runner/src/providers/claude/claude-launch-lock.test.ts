@@ -138,7 +138,25 @@ afterEach(async () => {
   scratchRoots.clear();
 });
 
-describe("the OS-exclusive Claude launch lock", () => {
+it("refuses non-Windows hosts before creating a filesystem socket", async () => {
+  const descriptor = Object.getOwnPropertyDescriptor(process, "platform");
+  if (descriptor === undefined) throw new Error("platform descriptor is absent");
+  useNamespace();
+  let acquired: Awaited<ReturnType<typeof acquireWindowsLaunchLock>> | undefined;
+  try {
+    Object.defineProperty(process, "platform", { ...descriptor, value: "linux" });
+    acquired = await acquireWindowsLaunchLock("unsupported-host");
+    expect(acquired).toMatchObject({
+      ok: false, code: "CLAUDE_LAUNCH_LOCK_UNKNOWN", layer: "LAUNCH_LOCK",
+    });
+  } finally {
+    Object.defineProperty(process, "platform", descriptor);
+    if (acquired?.ok) await acquired.lease.release();
+  }
+});
+
+// A Win32 pipe is not a Unix-domain socket: SIGKILL releases only the former's name.
+describe.skipIf(process.platform !== "win32")("the OS-exclusive Claude launch lock", () => {
   it("admits every acquire regardless of what the advisory sidecar records", async () => {
     useNamespace();
     const identity = `sidecar-variants-${process.pid}`;
