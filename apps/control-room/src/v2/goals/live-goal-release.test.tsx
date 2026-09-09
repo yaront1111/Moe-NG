@@ -188,7 +188,7 @@ describe("a decide that outruns the transport bound still shows the operator the
     expect(screen.getByTestId("cr.release.root")).toBe(root);
     expect((screen.getByTestId("cr.release.base") as HTMLInputElement).value).toBe("release-train");
     // Exactly one decide left the browser across the whole flow.
-    expect(wire.sends()).toBe(1);
+    expect(await sendCount(wire)).toBe(1);
   });
 });
 
@@ -206,9 +206,67 @@ const TRANSPORT_ABORT = Object.freeze({
   code: "TRANSPORT_REQUEST_FAILED", delivered: false, layer: "CONTROL_ROOM_TRANSPORT",
 });
 
-/** The `CODE @ LAYER` string `OutcomeNote` prints inside its Details block, read from the DOM. */
-const answerCode = (): string =>
-  screen.getByTestId("cr.release.answer").querySelector("code")?.textContent ?? "";
+/**
+ * The `CODE @ LAYER` string `OutcomeNote` prints inside its Details block, read from the DOM.
+ *
+ * IT DRAINS FIRST, AND THAT IS LOAD-BEARING, NOT BELT-AND-BRACES. `decide()` (goal-release.tsx)
+ * dispatches the submit FIRE-AND-FORGET -- `void port.submit(...).then((outcome) => setAnswer(...))`
+ * -- so the click handler returns immediately and the `await act(async () => fireEvent.click(...))`
+ * that ends `confirmRelease()` has NO contract to await that detached chain. Reading the answer
+ * synchronously after a confirm is therefore unguarded BY CONSTRUCTION, not merely unlucky.
+ *
+ * The gap is not a microtask hop either. `spendOffer` hashes the payload with
+ * `crypto.subtle.digest` BEFORE it ever reaches the transport, and that promise is resolved off
+ * Node's threadpool, not off the microtask queue: measured here, it outlasts 50 chained
+ * `await null` hops and costs ~3ms of wall clock. On an idle host it lands before the next
+ * statement runs; under full-suite load it does not, which is how a file that passes 3/3 alone
+ * red the whole control-room lane. `settle()` yields a REAL event-loop turn per tick
+ * (`advanceTimersByTimeAsync`), so this waits for that landing instead of racing it.
+ *
+ * BOUNDED ON PURPOSE. An answer that never arrives must still fail FAST, at `getByTestId`'s own
+ * "unable to find an element" error, rather than hanging to the vitest timeout -- which is the
+ * trap `await screen.findByTestId(...)` would set here, since this file arms fake timers for
+ * every arm and RTL's `waitFor` polls on a `setInterval` nothing would advance.
+ *
+ * It advances 0ms, so no arm's 5s read poll fires as a side effect of looking at the answer.
+ */
+const ANSWER_DRAINS = 10;
+const noteCode = async (testId: string): Promise<string> => {
+  for (let drained = 0; drained < ANSWER_DRAINS; drained += 1) {
+    if (screen.queryByTestId(testId) !== null) break;
+    await settle();
+  }
+  return screen.getByTestId(testId).querySelector("code")?.textContent ?? "";
+};
+
+/** The submit's own answer: the code and layer the authority that refused it reported. */
+const answerCode = (): Promise<string> => noteCode("cr.release.answer");
+
+/**
+ * The READ's refusal, which is a different sentence at a different layer -- and it is reached
+ * through the same detached submit, because the port wrapper only calls `refresh()` once the
+ * submit has settled. So it needs the same drain for the same reason.
+ */
+const readRefusalCode = (): Promise<string> => noteCode("cr.release.read-refusal");
+
+/**
+ * How many decides actually reached the transport. IT DRAINS, and the reason is sharper than
+ * for the DOM reads: `spendOffer` hashes the payload with `crypto.subtle.digest` BEFORE it
+ * calls `sendCommand`, so this counter does not move until that threadpool round trip lands.
+ * Reading it straight after a confirm reads it before the browser has sent anything -- measured
+ * on a loaded control-room lane as `AssertionError: expected +0 to be 1`.
+ *
+ * It waits for the FIRST send and then reports the TRUE count, so an arm asserting `toBe(1)`
+ * still fails on 0 (never sent, which is this assertion's whole job as a positive control) and
+ * still fails on 2 (sent twice).
+ */
+const sendCount = async (wire: Wire): Promise<number> => {
+  for (let drained = 0; drained < ANSWER_DRAINS; drained += 1) {
+    if (wire.sends() > 0) break;
+    await settle();
+  }
+  return wire.sends();
+};
 
 describe("the refusal path is unchanged by the fix", () => {
   /**
@@ -228,15 +286,15 @@ describe("the refusal path is unchanged by the fix", () => {
     await settle();
     await confirmRelease();
 
-    expect(wire.sends()).toBe(1);
-    expect(answerCode()).toBe("RELEASE_EVIDENCE_INCOMPLETE @ DAEMON_PREREQUISITE");
+    expect(await sendCount(wire)).toBe(1);
+    expect(await answerCode()).toBe("RELEASE_EVIDENCE_INCOMPLETE @ DAEMON_PREREQUISITE");
     // And WHAT to go and fix, which is the whole reason the daemon sends a detail.
     expect(screen.getByTestId("cr.release.answer-detail").textContent).toBe(EVIDENCE_DETAIL);
 
     // STILL THERE after several poll cycles: the fix must not let a later re-render quietly
     // replace a refusal the operator has not read yet.
     await settle(20_000);
-    expect(answerCode()).toBe("RELEASE_EVIDENCE_INCOMPLETE @ DAEMON_PREREQUISITE");
+    expect(await answerCode()).toBe("RELEASE_EVIDENCE_INCOMPLETE @ DAEMON_PREREQUISITE");
   });
 
   /**
@@ -256,12 +314,11 @@ describe("the refusal path is unchanged by the fix", () => {
     render(<LiveGoalRelease frame={OFFERED} goalId={GOAL_ID} setup={setup} />);
     await settle();
     await confirmRelease();
-    expect(wire.sends()).toBe(1);
+    expect(await sendCount(wire)).toBe(1);
 
     await settle(5_000);
     // The honest sentence, at the read's own layer, about a read that really did fail.
-    expect(screen.getByTestId("cr.release.read-refusal").querySelector("code")?.textContent)
-      .toBe("TRANSPORT_REQUEST_FAILED @ CONTROL_ROOM_RELEASE_READ");
+    expect(await readRefusalCode()).toBe("TRANSPORT_REQUEST_FAILED @ CONTROL_ROOM_RELEASE_READ");
   });
 
   /**
@@ -281,8 +338,8 @@ describe("the refusal path is unchanged by the fix", () => {
     render(<LiveGoalRelease frame={OFFERED} goalId={GOAL_ID} setup={refusing.setup} />);
     await settle();
     await confirmRelease();
-    const refused = answerCode();
-    expect(refusing.wire.sends()).toBe(1);
+    const refused = await answerCode();
+    expect(await sendCount(refusing.wire)).toBe(1);
     cleanup();
 
     const aborting = attach(async () => new Promise((resolve) => {
@@ -291,9 +348,13 @@ describe("the refusal path is unchanged by the fix", () => {
     render(<LiveGoalRelease frame={OFFERED} goalId={GOAL_ID} setup={aborting.setup} />);
     await settle();
     await confirmRelease();
+    // THE DECIDE MUST BE ON THE WIRE BEFORE THE CLOCK MOVES. This arm's abort is a
+    // `setTimeout(TRANSPORT_BOUND_MS)` armed INSIDE `sendCommand`, so advancing the clock first
+    // advances past a timer that does not exist yet -- and then no later 0ms drain can ever fire
+    // it. Asserting the send here is both the positive control and the ordering guard.
+    expect(await sendCount(aborting.wire)).toBe(1);
     await settle(TRANSPORT_BOUND_MS);
-    const aborted = answerCode();
-    expect(aborting.wire.sends()).toBe(1);
+    const aborted = await answerCode();
 
     expect(refused).toBe("RELEASE_EVIDENCE_INCOMPLETE @ DAEMON_PREREQUISITE");
     expect(aborted).toBe("TRANSPORT_REQUEST_FAILED @ CONTROL_ROOM_TRANSPORT");
