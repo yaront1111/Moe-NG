@@ -95,8 +95,8 @@
       "completedAt": "2026-09-09T09:56:27.360Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-01b7fe3f",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -129,22 +129,37 @@
       "author": "worker-0e797912",
       "content": "STEP 6 ADVERSARIAL REVIEW, worker-0e797912. Findings I could not disprove, recorded rather than hidden.\n\nSTRONGEST NON-REGRESSION EVIDENCE, run after the diff was final: I loaded the PRE-CHANGE scanner (from the out-of-tree backup taken in step 1) and the DELIVERED scanner side by side in one process and compared `moduleSpecifiers` output file by file over the whole repository roster. Result: enumerated 4109, comparable 4108, old-threw 1, new-threw 0, DIFFER 0, differences []. So for every file the old scanner could already read, classification is byte-identical; the only change is that the one file it could not read is now read. This is what rules out \"the fix quietly reclassified something\". Probe source is out of tree and its full body is reproducible from the pattern in comment-1effcf2d29fe4b17b69a498f8d906615 with `moduleSpecifiers` exported instead of `containsForbiddenSchedulerImport`.\n\n1. EOF SWALLOWING — cannot pass. Each index arm asserts `toBe(expectedEnd)` where expectedEnd is prefix.length + expression.length, strictly less than source.length, and additionally asserts `source[expectedEnd] === \"}\"`. An EOF return equals source.length and fails both.\n\n2. REGEX-VERSUS-DIVISION after each predecessor class is covered and all six division rows stayed GREEN under drill 1 (regex branch deleted), which is the direction that proves they are not passing by accident: identifier, number, closing parenthesis, string, literal template, interpolated template. Comments and whitespace correctly produce NO predecessor, covered by the line-comment and block-comment rows.\n\n3. PRE-EXISTING QUIRK I MIRRORED RATHER THAN FIXED: neither scanner pushes a token after consuming a regex literal, and \"/\" is not in regexPrefixPunctuation, so `a / /b/u` reads the second slash as division in BOTH scanners. Identical before and after my diff; changing it would alter shared gating outside this row. Recorded, not silently inherited.\n\n4. RECURSION COST, accepted with reasoning: `pushTemplateTokens` inside the matcher tokenizes a nested interpolated template's expressions, so a template nested d deep costs about 2^d traversals. The same recursive shape already existed (readTemplate calls templateExpressionEnd, sourceTokens re-tokenizes each expression); my change raises the constant, not the class. Measured cost of the whole 4109-file walk plus all 100 cases: about 1.0s against a 30s bound. The cheaper alternative — pushing only the last token the shared helper would have produced — was rejected because it restates gating policy in a second place, which step 3 forbids.\n\n5. NEW EXPOSURE, disclosed honestly: the arm now reads all 4109 files instead of dying at 959, so on this shared checkout it will now see a peer's file mid-write where before that file may have sat in the blinded tail. That is the fence working as intended, not a defect, but it does mean this arm can flake on a torn write. A peer modified apps/daemon/src/monitoring/health-probe-io.test.ts DURING my session; I re-ran the gate afterwards against that changed tree and it is still EXIT 0, Test Files 1 passed (1), Tests 100 passed (100), boundary scan: enumerated 4109, completed 4109, violations 0.\n\n6. SELF-SCAN: this file is not scanned by either arm (packages/scheduler is excluded by the walker, and the DEVELOPMENT_ONLY arm skips *.test.ts), so the template literals I added in the new cases cannot feed back into the scanner under test.\n\n7. BOTH ORIGINAL FENCES INTACT: DEVELOPMENT_ONLY arm untouched — the 7/6 fixed table counts, MINIMUM_PRODUCTION_SOURCES_SCANNED = 60 and all five named witnesses are outside the diff. The repository arm keeps scannedWitness, the nonempty check, the zero-violation check and the contextual `boundary scan failed for <path>` throw; nothing is caught and ignored and no file is skipped.\n\n8. FILE SIZE: 590 lines, a TEST file. The per-file cap is per production source, and the architect recorded that production line caps do not apply here. No production code was added anywhere.\n\n9. STEP 6 CHANGED NO BYTES. SHA256 of the delivered file is 106aadf959ee0497729f6cecd9ee6bdd89ded40173c51c849fca53e405e5e699, identical before and after this review, so step 5's evidence stands unmodified; I re-ran the gate anyway because of the peer's mid-session change.",
       "timestamp": "2026-09-09T09:56:06.102Z"
+    },
+    {
+      "id": "comment-f41e7b16b8f841a491f1371ff96d16e4",
+      "author": "governor-608c8a78",
+      "content": "Governor provenance investigation (read-only, 2026-09-09 ~10:01Z): git show of 4991d4328a6bab8d429b745299596b2e7e47c56b confirms it contains the owned scanner plus five BOARD task JSON records, and its trailers explicitly say Moe-Kind: checkpoint; Moe-Session: qa-01b7fe3f@2026-09-09T09:57:31Z; status REVIEW; recovered. Commit subject/body explicitly say QA checkpoint, not completion. Worker exit then reported completion/nothing MOE_COMMIT_NOTHING_TO_COMMIT. Source observation in D:/projexts/moes/scripts/moe-agent.ps1 Invoke-MoeRecoveryCheck: any existing baseline with Landed=false is treated as 'previous session ended without landing' and recovered as checkpoint; it does not establish prior CLI exit there. This matches QA preflight overtaking the still-finishing worker. The worker's no-change path records no SHA, and record_commit outcome=nothing adds no ledger entry; thus waiting longer alone need not produce a completion. Bytes are present; completion provenance is still absent. No source edits, task-status changes, synthetic record_commit, or hand-landing performed.",
+      "timestamp": "2026-09-09T10:00:05.864Z"
+    },
+    {
+      "id": "comment-f79669a4a14643cebfdc6276a6a44c37",
+      "author": "qa-01b7fe3f",
+      "content": "QA INDEPENDENT VERIFICATION (qa-01b7fe3f, 2026-09-09 ~12:58Z). Reviewed the delivered bytes at HEAD 4991d432 (`git show 4991d432 -- packages/scheduler/src/package-boundary.test.ts`), not the dirty tree. Owned path `git status --porcelain` EMPTY both before and after everything below.\n\nRE-RAN THE RECORDED GATE MYSELF\n`pnpm exec vitest run packages/scheduler/src/package-boundary.test.ts`\n  Test Files  1 passed (1)\n  Tests  100 passed (100)   EXIT 0 (captured via PIPESTATUS[0], not tail's)\nMatches task.verification exactly (same command, same exitCode 0, same count line). Baseline in the row description was `1 failed | 55 passed (56)` EXIT 1.\n\nOWNED-PACKAGE LEGS, separate foreground invocations\n  pnpm --filter @moe/scheduler test       -> Test Files 49 passed (49); Tests 1782 passed (1782); EXIT 0\n  pnpm --filter @moe/scheduler typecheck  -> tsc --project tsconfig.json; EXIT 0\nBoth print a nonzero executed-test count / real compiler invocation, so neither is a vacuous exit-0 filter miss.\n\nI DID NOT TRUST THE WORKER'S DRILLS — I RAN MY OWN, DISK NEVER TOUCHED\nTechnique: out-of-tree vitest config at %TEMP%/moe-8b178e52-qa01b7fe3f-drill.config.mjs with an `enforce: \"pre\"` Vite transform that mutates the module IN MEMORY. No on-disk mutation, therefore no backup, no restore, no restore proof to get wrong on this shared checkout. Each mutation asserts its own anchor and asserts WHICH function it hit (indexOf compared against `function sourceTokens(` offset), so a drill that silently mutated the wrong scanner throws instead of proving nothing.\n\nDRILL A - delete the regex branch from `templateExpressionEnd` ONLY (sourceTokens' identical branch left intact):\n  Tests 28 failed. Reproduces the ORIGINAL reported red verbatim -\n  \"boundary scan failed for apps\\daemon\\src\\deployment\\deploy-candidate-environment.ts: Error: unterminated quoted source token\"\n  and the new arms fail on the exact claimed mechanism: \"expected 37 to be 34\". Every table row goes red with its own index pair (38/35, 25/35, 39/36, 34/31, 28/25, 57/54, 41/38, 48/45), and the suffix-import arms throw. The six division controls stayed GREEN under this mutation, which is the correct discrimination: the fix is in the matcher, not a blanket slash-as-regex.\n\nDRILL B - truncate the repository walk to `files.slice(0, -1)`:\n  Tests 1 failed | 99 passed (100)\n  AssertionError: expected [ ...(4108) ] to deeply equal [ ...(4109) ]\n  So DoD 4 is real: a scan that stops early fails on the MISSING TAIL, not merely on the file that stopped it. Confirms the roster denominator is captured before the walk and `scanned` is appended only after classification.\n\nDoD 5 CONFIRMED AS A FINDING, NOT AN ABSENCE: the green run's own assertion `expect(violations).toEqual([])` holds across the full 4109-file roster (drill B prints the denominator as 4109). The 3151-file tail that the throw had been blinding contains ZERO real boundary violations. Nothing was being hidden.\n\nDoD 1 SCOPE FENCE: `apps/daemon/src/deployment/deploy-candidate-environment.ts` is untouched by this row - `git diff b7a43191~1 HEAD -- <path>` is empty, `git status --porcelain <path>` is clean, and `git log -1 -- <path>` names cff9a8a7 (task-0ca117e3), a different row. DoD 6: the only source path in the commit is the owned test file; the five .moe/tasks/*.json are board state swept by the wrapper checkpoint, not production code.\n\nCOMMIT SHAPE: no `completion` commit exists - task.commits holds two `checkpoint` entries (b7a43191 WORKING, 4991d432 REVIEW), the second landed by a prior qa seat sharing my worker id after its CLI exited on this row. The DELIVERED BYTES ARE NEVERTHELESS IN HEAD and the owned path is clean, so there was nothing left for me to hand-land; record_commit dedupes by sha and cannot reclassify a checkpoint. A NO-COMPLETION-COMMIT warning on this approval is that wrapper artefact, not missing work.\n\nDISCLOSED AND ACCEPTED, NOT DEFECTS: `a / /b/u` reads the second slash as division in BOTH scanners (pre-existing, byte-identical before and after, gating policy is shared not restated); the arm now reads all 4109 files so it is newly exposed to a peer's torn mid-write, which is correct fail-closed behaviour for a fence.",
+      "timestamp": "2026-09-09T10:00:36.863Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T21:30:07.227Z",
-  "updatedAt": "2026-09-09T09:57:31.209Z",
+  "updatedAt": "2026-09-09T10:01:20.143Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T00:28:14.533Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 1,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-09T10:01:20.143Z",
+    "wallClockMs": 34385610
   },
   "contextFetchedBy": [
     "worker-bcaa6d5e",
     "architect-978f68c6",
     "worker-0e797912",
-    "qa-01b7fe3f"
+    "qa-01b7fe3f",
+    "governor-608c8a78"
   ],
   "stepsCompleted": [
     "step-1",
@@ -184,17 +199,43 @@
       "treeId": "a71a75dda31e1937b2f734eac2998a41920e17ba",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "4991d4328a6bab8d429b745299596b2e7e47c56b",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T09:57:31Z",
+      "paths": [
+        ".moe/tasks/task-61f826e50332498eaaaf44f2043845fc.json",
+        ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json",
+        ".moe/tasks/task-8b178e52483e4ff28e269b5ed4e492b6.json",
+        ".moe/tasks/task-9255156954724b7dbbcbf03ae2aaa11c.json",
+        ".moe/tasks/task-d11695b0b6714183a16146eb4dd444f3.json",
+        "packages/scheduler/src/package-boundary.test.ts"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T09:57:36.651Z",
+      "treeId": "4ab698058287393923bcee6f76a0a7354b1b2f55",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
-    "packages/scheduler/src/package-boundary.test.ts"
+    "packages/scheduler/src/package-boundary.test.ts",
+    ".moe/tasks/task-61f826e50332498eaaaf44f2043845fc.json",
+    ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json",
+    ".moe/tasks/task-8b178e52483e4ff28e269b5ed4e492b6.json",
+    ".moe/tasks/task-9255156954724b7dbbcbf03ae2aaa11c.json",
+    ".moe/tasks/task-d11695b0b6714183a16146eb4dd444f3.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
-    "outcome": "committed",
-    "kind": "checkpoint",
+    "outcome": "nothing",
+    "kind": "completion",
+    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
     "sessionId": "worker-0e797912@2026-09-09T09:32:39Z",
-    "at": "2026-09-09T09:32:43.390Z"
+    "at": "2026-09-09T09:57:36.909Z"
   },
   "workStartedAt": "2026-09-09T09:33:01.641Z",
   "reviewStartedAt": "2026-09-09T09:57:28.345Z",
@@ -204,5 +245,8 @@
     "outputTail": " RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  1 passed (1)\n      Tests  100 passed (100)\n   Start at  12:55:34\n   Duration  1.07s (transform 20ms, setup 0ms, import 31ms, tests 943ms, environment 0ms)\n\n--- same command with --reporter=verbose, to surface the delivered arm's own census line ---\nstdout | packages/scheduler/src/package-boundary.test.ts > keeps scheduler registrars behind the package-root import boundary\nboundary scan: enumerated 4109, completed 4109, violations 0\n Test Files  1 passed (1)\n      Tests  100 passed (100)",
     "reportedAt": "2026-09-09T09:57:28.345Z"
   },
-  "completionSummary": "Fixed the SCANNER, not the daemon file. `templateExpressionEnd()` in packages/scheduler/src/package-boundary.test.ts had every branch `sourceTokens()` has EXCEPT the regular-expression one, so a regex literal containing a quote inside a `${...}` sent it into `readQuoted` from inside the regex, pairing quotes off-by-one until one ran to end-of-line and threw. It now uses the SAME `canStartRegularExpression` gate and `readRegularExpression` reader, placed after the two comment branches, with local significant-token tracking (whitespace and comments leave no predecessor; identifiers consumed whole; strings and single-char punctuation retained, so `2 / count` sees punctuation \"2\"). The six lines that turn a template into tokens were extracted verbatim into `pushTemplateTokens()` and are now called by BOTH scanners — a pure extraction, so the nested-template shape that decides the gate cannot drift.\n\nDoD 1: `pnpm exec vitest run packages/scheduler/src/package-boundary.test.ts` EXIT 0, Test Files 1 passed (1), Tests 100 passed (100); was EXIT 1, 1 failed | 55 passed (56). `apps/daemon/src/deployment/deploy-candidate-environment.ts` is UNCHANGED — `git diff --stat HEAD` on it is empty and its SHA256 is unchanged since the row started.\n\nDoD 2: helper REUSED, not duplicated; explained in the step-3 note and in one inline comment on the function.\n\nDoD 3: the minimal shape is asserted against the SCANNER's own result, not the daemon file — `templateExpressionEnd` returns the closing brace 34, not EOF 37 — plus 18 table rows (quote regexes, both unbalanced braces and a slash in a character class, escaped delimiter, all flags, regex at expression start, line and block comment before a regex, nested template, nested object braces, and six division controls), each asserted twice: exact closing index and exact `moduleSpecifiers` after a following real import.\n\nDoD 4: the repository arm now enumerates the full roster BEFORE the walk and appends to `scanned` only AFTER classification"
+  "completionSummary": "Fixed the SCANNER, not the daemon file. `templateExpressionEnd()` in packages/scheduler/src/package-boundary.test.ts had every branch `sourceTokens()` has EXCEPT the regular-expression one, so a regex literal containing a quote inside a `${...}` sent it into `readQuoted` from inside the regex, pairing quotes off-by-one until one ran to end-of-line and threw. It now uses the SAME `canStartRegularExpression` gate and `readRegularExpression` reader, placed after the two comment branches, with local significant-token tracking (whitespace and comments leave no predecessor; identifiers consumed whole; strings and single-char punctuation retained, so `2 / count` sees punctuation \"2\"). The six lines that turn a template into tokens were extracted verbatim into `pushTemplateTokens()` and are now called by BOTH scanners — a pure extraction, so the nested-template shape that decides the gate cannot drift.\n\nDoD 1: `pnpm exec vitest run packages/scheduler/src/package-boundary.test.ts` EXIT 0, Test Files 1 passed (1), Tests 100 passed (100); was EXIT 1, 1 failed | 55 passed (56). `apps/daemon/src/deployment/deploy-candidate-environment.ts` is UNCHANGED — `git diff --stat HEAD` on it is empty and its SHA256 is unchanged since the row started.\n\nDoD 2: helper REUSED, not duplicated; explained in the step-3 note and in one inline comment on the function.\n\nDoD 3: the minimal shape is asserted against the SCANNER's own result, not the daemon file — `templateExpressionEnd` returns the closing brace 34, not EOF 37 — plus 18 table rows (quote regexes, both unbalanced braces and a slash in a character class, escaped delimiter, all flags, regex at expression start, line and block comment before a regex, nested template, nested object braces, and six division controls), each asserted twice: exact closing index and exact `moduleSpecifiers` after a following real import.\n\nDoD 4: the repository arm now enumerates the full roster BEFORE the walk and appends to `scanned` only AFTER classification",
+  "completedAt": "2026-09-09T10:01:20.143Z",
+  "reviewCompletedAt": "2026-09-09T10:01:20.143Z",
+  "reviewSummary": "APPROVED. Verified delivered bytes at HEAD 4991d432 via git show, not the dirty tree. Full evidence in comment-f79669a4.\n\nGATE RE-RUN BY ME: `pnpm exec vitest run packages/scheduler/src/package-boundary.test.ts` -> \"Test Files 1 passed (1)\", \"Tests 100 passed (100)\", EXIT 0 (PIPESTATUS[0]), matching task.verification exactly; baseline was 1 failed | 55 passed (56) EXIT 1. Owned legs, separate foreground runs: `pnpm --filter @moe/scheduler test` -> 49 files / 1782 tests passed EXIT 0 (nonzero count line, not a vacuous filter miss); typecheck EXIT 0.\n\nMY OWN MUTATION DRILLS, not the worker's: out-of-tree vitest config with an in-memory enforce:\"pre\" transform, so disk was never mutated and there is no restore proof to get wrong on this shared tree; each mutation asserts its anchor and which function it hit. (A) Deleting the regex branch from templateExpressionEnd alone -> 28 failed, reproducing the original \"unterminated quoted source token\" on the daemon file and failing the new arms on the claimed mechanism, \"expected 37 to be 34\"; the six division controls stayed GREEN, so the fix discriminates regex from division rather than reading every slash as a regex. (B) Truncating the walk to files.slice(0,-1) -> \"expected [ ...(4108) ] to deeply equal [ ...(4109) ]\", so DoD 4 fails on the MISSING TAIL, not merely on the stopping file.\n\nDoD 1-6 evidenced. DoD 5 is a positive finding: violations empty across the full 4109-file roster, so the 3151-file blinded tail hid ZERO real violations. DoD 1 fence holds - the daemon file has an empty diff across both task commits, is clean, last touched by cff9a8a7 from another row. DoD 6 holds - only source path is the owned TEST file.\n\nCOMMITS: no completion commit; two checkpoints, the second landed by a prior qa seat sharing my worker id. Bytes are in HEAD and the path is clean, so nothing was left to hand-land."
 }
