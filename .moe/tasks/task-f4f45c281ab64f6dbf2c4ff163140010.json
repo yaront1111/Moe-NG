@@ -148,11 +148,17 @@
       "author": "architect-9556982c",
       "content": "Build-order measurement at PLANNING claim, 2026-09-08: dependsOn correctly names local-delivery producer task-0ca117e389df43ee9b458255f0752842, currently WORKING/landing.merged:false, no completion/verification. `git status --porcelain -- apps/daemon/src/deployment/deploy-candidate-environment.ts apps/daemon/src/deployment/deploy-candidate-environment.test.ts` reports BOTH ??; `git log --grep='Moe-Task: task-0ca117e389df43ee9b458255f0752842'` returns no landing. Per-file Select-String 'from \"' confirms this module imports environment-delivery, environment-projection, deploy-receipt-contracts. Read-only inspection confirms resolveCandidateMount currently refuses nonnull sshTarget before image inspection and the mount port writes a local file; these are still the producer's mutable WIP, not a landed API to plan against. Releasing THIS architect claim in place and taking independent work, not blocking or touching/releasing the producer worker. Safety reason: planning remote edits/removals now would pin and later overwrite a changing shared-file surface; dependency field will enforce build order for worker claims. Next architect should read producer DONE completion/landing then re-census ALL run/create verb consumers and source-text referrers before a plan/split. Keep remote unsupported refusal until real response and value-free inspect canary prove secure remote delivery. No plan/source change in this session.",
       "timestamp": "2026-09-08T18:41:49.167Z"
+    },
+    {
+      "id": "comment-80cb0da4dc204e85bd91dfa68fe7db70",
+      "author": "governor-608c8a78",
+      "content": "Governor attributed ONLY apps/daemon/src/deployment/deploy-candidate-start.js onto this task after confirming get_context ownership of sibling .ts, current unattributedPaths, and exact canonical .js→.ts re-export bytes (no secret content printed). Let this task's own next landing preserve it; I did not edit/stage/commit/push any source. Checkpoint2991add0 contains12 paths and remains unpushed, not completion. DELIVERY HYGIENE: apps/daemon/remote-deploy-acceptance.mts (254 lines) is in that checkpoint; owner must determine whether this is an intended durable test or a temporary acceptance probe and honor AGENTS' no-scratch/probe-commit rail before completion. I have not inspected its implementation or declared it valid/invalid from the name. Preserve foreign WIP; no blanket delete.",
+      "timestamp": "2026-09-09T12:44:44.946Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T18:38:35.074Z",
-  "updatedAt": "2026-09-09T12:34:49.217Z",
+  "updatedAt": "2026-09-09T12:44:44.946Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T18:40:39.705Z",
     "plannedStepCount": 8,
@@ -162,7 +168,8 @@
   "contextFetchedBy": [
     "architect-9556982c",
     "architect-978f68c6",
-    "worker-0e797912"
+    "worker-0e797912",
+    "governor-608c8a78"
   ],
   "priorHandoffs": [
     {
@@ -316,7 +323,10 @@
     "outcome": "nothing",
     "kind": "checkpoint",
     "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
-    "sessionId": "worker-0e797912@2026-09-09T12:34:43Z",
-    "at": "2026-09-09T12:34:49.217Z"
-  }
+    "sessionId": "worker-0e797912@2026-09-09T12:42:50Z",
+    "at": "2026-09-09T12:42:56.384Z"
+  },
+  "declaredFiles": [
+    "apps/daemon/src/deployment/deploy-candidate-start.js"
+  ]
 }
