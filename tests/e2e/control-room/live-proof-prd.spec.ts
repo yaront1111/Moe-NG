@@ -254,12 +254,21 @@ test("a fresh product reaches a compiled two-node plan, driven in the browser fr
         "the same bytes on the operator wire must get PAST authorization")
         .not.toBe("DAEMON_AUTHORIZATION");
     }
-    record("operator-only-boundary", [
-      "preview.start@preview-start-command.ts:85",
-      "preview.decide@daemon-command-registry.ts:379",
-      "release.decide@release-decide-command.ts:69",
-      "deployment.deploy@deploy-command.ts:198",
-    ]);
+    // RE-MEASURED at HEAD, because the earlier flat roster was wrong twice and this row's whole
+    // value is that its records are true. `release.decide` does NOT belong beside the other three.
+    // It IS in OPERATOR_PRINCIPAL_KINDS, but it is served as an ASYNC entry, so the registry's
+    // synchronous fence never runs for it; its real fence is `assertReleasePrincipal`, which admits
+    // a paired ADMIN human through `releaseByPairedAdmin`. The browser therefore reaches release.
+    record("operator-only-boundary", {
+      operatorOnly: [
+        "preview.start@preview-start-command.ts:85",
+        "preview.decide@daemon-command-registry.ts:393",
+        "deployment.deploy@deploy-command.ts:198",
+      ],
+      pairedAdminReachable: [
+        "release.decide@release-decide-command.ts:65 via releaseByPairedAdmin@:77",
+      ],
+    });
 
     return { commits: commits.length, goalId, productHead, projectId: lane.projectId };
   });

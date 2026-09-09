@@ -101,8 +101,8 @@
       "affectedFiles": []
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-a11dcf70",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -293,11 +293,17 @@
       "author": "governor-608c8a78",
       "content": "RESOLVED BLOCK / RESUME THE APPROVED REAL RUN. Fresh check: BLOCKED/unassigned, all12 dependencies satisfied, four completed steps preserved. (1) Canonical designated private remote is ONLY https://github.com/yaront1111/moe-live-proof-161b7e9d.git; MOE_LIVE_RELEASE_PR=1, per comment-d3a282da under direct human 'U DECIDE'. (2) Architect-f04f69cf WITHDREW missing production concurrency and anti-vendor policy claims (comment-909f3a20), then checked the fresh-project configuration (comment-51287327). There is no established prerequisite requiring a seat-double waiver/new feature row. The remaining real execution/evidence is this task's approved work. Resume WORKING, not re-plan or completion.\nHANDOFF: use the shipped Moe-NG runtime, not outer Moe fleet evidence. Required setup contract names MOE_STORE_PATH, MOE_PROJECT_ID, MOE_DAEMON_CREDENTIAL; compiled execution needs MOE_NODE_WORKSPACE pointing to the fresh product and MOE_NODE_TEST_COMMAND (default pnpm test), with maxAgents at least2. Validate the actual run's configuration/value-free diagnostics; absent workspace is a candidate, NOT a confirmed diagnosis. Do not print credentials or fabricate a product directory/store/graph. Configuration/setup is not permission to bypass browser human gates or to auto-decide them.\nACCEPTANCE UNCHANGED: real provider seats, >=2 actually concurrent execution nodes and real landing SHAs, full goal resumption after crash, every criterion VERIFIED at released SHA, actual browser release/PR and real preview/deploy receipts. Existing owner exception is still ONLY preview/deploy configured operator wire with truthful actor/transport labels; release uses existing paired-admin browser path. No fence edits or fakeGh/doubled-seat substitution. Step4's landing-level REFUSED drill remains PARTIAL DoD2 evidence, not full goal resumption. If the live attempt actually refuses or reveals a missing producer, capture the exact stable refusal/evidence and report_blocked with the concrete prerequisite—not a policy inferred from deterministic-test comments.",
       "timestamp": "2026-09-09T12:22:37.506Z"
+    },
+    {
+      "id": "comment-37410b0e908c45c985fc121fa790fdab",
+      "author": "worker-a11dcf70",
+      "content": "STEP 5 HELD FOR THE SHARED-TREE CUTOVER; ONE FALSE RECORD IN THIS ROW'S OWN BYTES CORRECTED. worker-a11dcf70, 2026-09-09.\n\n1. WHY I AM NOT RUNNING. governor-608c8a78 asked every seat (msg-a1ea4386, #governors), under the user's explicit checkout-main + preserve/commit/push request, to reach a safe point, preserve through normal wrapper landing, and NOT start a new mutable run during the cutover. Everything this row has left — the fresh-product live run with real provider seats, and step 6's nine-plus suite legs — IS a new mutable run, and a branch switch mid-run destroys it. So I preserved and stopped rather than start one minutes before a checkout. This does NOT re-open comment-f3a33015: the resume ruling stands, the acceptance bar is untouched, and nothing is narrowed. I answered the governor with measured state at msg-422fafb8 (all 12 of this row's delivered paths TRACKED and clean vs HEAD; `git log origin/moe/work-2026-09-04..HEAD` = 0, so my work is already committed AND pushed; a checkout of main loses nothing of mine).\n\nIndependently blocking step 6 right now: `full-suite-gate` is HELD by qa-01b7fe3f since 2026-09-09T12:21:00Z (`.moe/resources/full-suite-gate.json`), for the @moe/daemon and @moe/control-room legs. `browser-e2e-gate` has no holders.\n\n2. THE CORRECTION — a real defect in delivered bytes, not paperwork. `tests/e2e/control-room/live-proof-prd.spec.ts:257` recorded a FLAT \"operator-only-boundary\" roster of four kinds. It was wrong twice, and this row's whole value is that its records are true.\n- It listed `release.decide` beside preview/deploy as operator-only. FALSE. Re-measured at HEAD: `release.decide` IS in `OPERATOR_PRINCIPAL_KINDS` (`daemon-command-vocabulary.ts:378`), but it is served as an ASYNC entry, so the registry's synchronous fence never runs for it — `daemon-command-async-entries.ts:183-193` says exactly that in its own words. Its real fence is `assertReleasePrincipal` (`release-decide-command.ts:65`), which admits a paired ADMIN human via `releaseByPairedAdmin` (`:77`). The browser reaches release. That is the owner's item 1, and the roster contradicted it.\n- Its registry line ref was STALE: it said `daemon-command-registry.ts:379`; the `OPERATOR_PRINCIPAL_KINDS.has(kind)` fence is at `:393`. Line 379 is inside the policy-waiver block.\n\nThe record is now two labelled sets: `operatorOnly` (three kinds, each ref re-read at HEAD and quoted — preview-start-command.ts:85, daemon-command-registry.ts:393, deploy-command.ts:198, all three the identical `principalId !== operatorPrincipalId` throw) and `pairedAdminReachable` (release.decide). CONSUMER SWEEP before touching it: `grep -rn \"operator-only-boundary\" --include=*.ts --include=*.tsx --include=*.md apps tests packages adapters docs` returns EXACTLY ONE line, the producing site itself. Nothing asserts on this label, so nothing else moves.\n\nVERIFIED, fresh, exit code quoted: `npx tsc --noEmit --skipLibCheck --strict --target es2023 --lib es2024,dom --types node --module nodenext --moduleResolution nodenext tests/e2e/control-room/live-proof-prd.spec.ts` -> EXIT 0, ZERO diagnostics across the whole import graph. (An earlier attempt of mine WITHOUT `--types node --lib` exited 1 on 600+ `Cannot find name 'process'` errors — that was my invented flag set missing @types/node, not a real red, and I am recording it so nobody re-derives it as a finding.) I deliberately did NOT re-run `release-decide-authorization.test.ts` at HEAD: it is in the exact lane qa-01b7fe3f holds the gate for. The prior session's fresh run of it was 19 passed, exit 0.\n\n3. FOR THE NEXT SEAT, so nothing is re-derived. Remote: ONLY https://github.com/yaront1111/moe-live-proof-161b7e9d.git with MOE_LIVE_RELEASE_PR=1 (comment-d3a282da). Fresh-product setup contract: MOE_STORE_PATH, MOE_PROJECT_ID, MOE_DAEMON_CREDENTIAL required by name (`daemon-store-dependencies.ts:24`, refuses STORE_DEPENDENCIES_ENV_MISSING), plus MOE_NODE_WORKSPACE and MOE_NODE_TEST_COMMAND or compiled nodes stay UNSTAFFED and fail closed — the leading candidate for why step 3 stopped at PLAN_COMPILED (comment-51287327; a candidate, NOT a confirmed diagnosis). maxAgents >= 2 is the DEFAULT (`wrapper-knobs.ts:30`). Still outstanding: DoD 1 tail, DoD 3, step 6 (ADD `pnpm test:fault` to the DoD's nine legs — this row ships fault injection), step 7 docs sweep, step 8 adversarial pass + follow-up ledger.",
+      "timestamp": "2026-09-09T14:19:09.433Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:14:49.532Z",
-  "updatedAt": "2026-09-09T13:43:27.344Z",
+  "updatedAt": "2026-09-09T14:20:15.281Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:28:10.582Z",
     "plannedStepCount": 8,
@@ -333,10 +339,10 @@
     "worker-409b958a"
   ],
   "workStartedAt": "2026-09-08T20:46:11.016Z",
-  "blockedReason": null,
+  "blockedReason": "HELD FOR THE SHARED-TREE CUTOVER, at the governor's own instruction. NOT a capability block and NOT a re-opening of comment-f3a33015 — that resume ruling stands and the acceptance bar is untouched.\n\ngovernor-608c8a78 asked every seat (msg-a1ea4386) under the user's explicit checkout-main + preserve/commit/push request to reach a safe point, preserve through normal wrapper landing, and NOT start a new mutable run during the cutover. Every remaining piece of this row IS a new mutable run: step 5 is a fresh-product live run with real provider seats ending in a real GitHub PR; step 6 is nine-plus whole-suite legs. A branch switch mid-run destroys it. Independently, step 6 cannot run anyway: full-suite-gate is held by qa-01b7fe3f from 2026-09-09T12:21:00Z.\n\nSTATE, measured not inferred (msg-422fafb8, comment-37410b0e): all 12 delivered paths TRACKED and clean vs HEAD; `git log origin/moe/work-2026-09-04..HEAD` = 0, so the work is committed AND pushed and a checkout of main loses nothing of mine. Steps 1-4 stay COMPLETED. I own no launcher and started no run.\n\nDELIVERED ANYWAY, a real defect in this row's own bytes: live-proof-prd.spec.ts:257 recorded a FALSE \"operator-only-boundary\" roster — it listed release.decide as operator-only (served as an ASYNC entry, so the registry's synchronous fence never runs; assertReleasePrincipal admits a paired ADMIN via releaseByPairedAdmin) and its registry line ref was stale (fence at :393, not :379). Corrected to operatorOnly + pairedAdminReachable; one grep hit repo-wide so no consumer moved; tsc exit 0, zero diagnostics.\n\nTO CLEAR: a governor confirms the cutover is finished and the branch is settled. The next seat then resumes step 5 directly — remote, setup contract and outstanding list are all in comment-37410b0e, nothing to re-derive.",
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-09T14:20:15.281Z",
   "commits": [
     {
       "sha": "b8f499daa13aad3c5b44be104ee74d6e93f8772f",
@@ -487,6 +493,21 @@
       "treeId": "43018ef2a3b504ce5ff4961d9f1a3f8483851a90",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "3b0f73b21c37539336d30a1d19b500861e6ac053",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-a11dcf70@2026-09-09T13:58:28Z",
+      "paths": [
+        ".moe/tasks/task-de80c663569a4ab2b30a9db6ac526e4b.json"
+      ],
+      "recordedBy": "worker-a11dcf70",
+      "recordedAt": "2026-09-09T13:58:35.557Z",
+      "treeId": "454d5de13df80b5701ee1d387e634534dea2911f",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -526,11 +547,10 @@
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
-    "outcome": "nothing",
+    "outcome": "committed",
     "kind": "checkpoint",
-    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
-    "sessionId": "worker-a11dcf70@2026-09-09T13:43:22Z",
-    "at": "2026-09-09T13:43:27.344Z"
+    "sessionId": "worker-a11dcf70@2026-09-09T13:58:28Z",
+    "at": "2026-09-09T13:58:35.557Z"
   },
   "priorBlockedReason": "STEP 4 (DoD 2) DELIVERED GREEN; blocking on step 5 (DoD 3) with the exact remaining blocker, per governor resolution comment-b2a0a575 item 4. Full evidence in comment-6a064c84 (step 4) and comment-89501ec7 (step 5).\n\nDELIVERED: the forced crash mid-write. tests/fault/landing-crash/, 3 files, 9 arms. A REAL node process runs production landingJournalGate + commitJournaledLanding against real git and a real store; the DEVELOPMENT-ONLY knob SIGKILLs it at after-commit. After the kill git HEAD carries the landing commit while the ledger holds landing_intent=1, landing_attempt=1, landing_completion=0; the restart answers REPOSITORY_RECOVERY_REQUIRED and the rows are byte-identical. Counted with SQL. `pnpm test:fault` -> Test Files 11 passed (11), Tests 92 passed (92), exit 0.\n\nOWNER ITEM 1 ANSWERED - RELEASE IS BROWSER-REACHABLE. Fresh run of apps/daemon/src/release/release-decide-authorization.test.ts -> 19 passed, exit 0. release.decide is an ASYNC entry, so the registry returns wrapAsync BEFORE its synchronous operator fence and the five-kind widening never applies; the only identity fence is assertReleasePrincipal, which carries releaseByPairedAdmin. No fence touched.\n\nI NEED TWO THINGS, neither a worker's to decide:\n(1) A RELEASE REMOTE, or a ruling on the PR clause. release-approval-live.spec.ts is opt-in by design on MOE_LIVE_RELEASE_PR=1 + MOE_LIVE_RELEASE_REMOTE, operator-named. I have no remote for a fresh product and will not create or push a GitHub repo unilaterally. fakeGh is no substitute: the switch that makes release work is the switch that makes the PR a double.\n(2) THE LANDING CHAIN. Nothing landed, so no dossier exists; step 3 stopped at PLAN_COMPILED. Staffing collides with DoD 1 \"real seats\": lane-landing.ts:16-21 doubles the seat and agent-provider-seats.spec.ts:27-32 refuses a real provider on quota flake.\n\nNo blockedOnTaskIds; twelve deps DONE. Steps 6-8 are NOT blocked by this.",
   "blockedOnTaskIds": null,
