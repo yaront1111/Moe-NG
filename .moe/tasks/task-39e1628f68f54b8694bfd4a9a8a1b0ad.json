@@ -140,7 +140,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T19:27:36.044Z",
-  "updatedAt": "2026-09-09T10:28:04.399Z",
+  "updatedAt": "2026-09-09T10:28:46.829Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T19:43:04.969Z",
     "plannedStepCount": 5,
@@ -188,7 +188,8 @@
     ".moe/tasks/task-39e1628f68f54b8694bfd4a9a8a1b0ad.json",
     ".moe/tasks/task-5380dbf067eb4eeba1cec7117ffa39b5.json",
     ".moe/tasks/task-60f851fa3e1046fe98090d9dc6f30e0a.json",
-    ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json"
+    ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json",
+    ".moe/tasks/task-f18bddee94cf4b559272d23d53f6180e.json"
   ],
   "completionSummary": "The SHA-forgery arm at packages/benchmark/src/pre-freeze-pinned-documents.test.ts now closes `}, 30_000);` (:219) with an eight-line comment inside the `it` carrying the number AND its measurement. One hunk, `@@ -211 +211,9 @@`, `1 file changed, 9 insertions(+), 1 deletion(-)`. No retry, no exclusion, no testTimeout change; vitest.config.ts untouched.\n\nEvidence lives in four row comments because the tables exceed this field:\n- comment-303825208ed7431ca28f6296411a8609 — DoD 2, per-run table.\n- comment-6e6ff2b2465b4cf191dc80fc8753a8a4 — DoD 3/4 drills, with the drill config's full source inline.\n- comment-13a0f937d26648d695ff633640014415 — adversarial pass.\n- comment-f9f7b0135357439e9ea7eaf95fbdb743 — DoD 5, root lane and attribution.\n\nDoD 1: budget sized from a fresh measurement, matching the sibling's 30_000.\nDoD 2: TEN consecutive standalone runs, every one exit 0 with `Test Files 1 passed (1)` and `Tests 12 passed (12)`. Arm 242 min / 257 median / 277 max ms. Margin 108x. Host was QUIET for all ten, so the margin carries the claim, not the count. I added a contended sample rather than leave it there: six concurrent copies gave 342-405ms, confirming load pushes the reading up ~1.5x. Against the filing's real 1721ms the margin is 17x.\nDoD 3: four process-local mutation drills through an out-of-tree vitest `--config` pre-transform, so no repo byte was ever mutated and no restore proof was needed. A no-mutation CONTROL ran green first. Drill (i) at 200ms reds `Test timed out in 200ms.` at :200:3, this arm alone, other eleven green. Drills (ii-a/b/c) break the production refusals and red on ASSERTIONS, not timeouts: `expected 'CORPUS_ROOT_UNVERSIONED' to be 'CORPUS_ROOT_UNSET'` at :206, the same at :209 for CORPUS_ROOT_DIRTY, and `expected 'NOT_PRE_FREEZE_AUDIT' to be 'PRE_FREEZE_AUDIT'` at :210.\nDoD 4: `grep -n \"^  }, \"` returns exactly TWO lines, :194 (the sibling's, untouched) and :219 (mine), against exactly ONE before. Paired with the single-hunk diff.\nDoD 5: root",
   "commits": [
@@ -210,20 +211,36 @@
       "treeId": "b9e3eb9c734370a35b74b4010c4c1103b74c0028",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "8ea581821bd588fb3790b928cedc18419170fc7b",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T10:23:05Z",
+      "paths": [
+        ".moe/tasks/task-39e1628f68f54b8694bfd4a9a8a1b0ad.json",
+        ".moe/tasks/task-f18bddee94cf4b559272d23d53f6180e.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T10:28:46.829Z",
+      "treeId": "b44cf95093d40b0cb6c2016679fa73b9618e07f1",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
     "packages/benchmark/src/pre-freeze-pinned-documents.test.ts"
   ],
   "unattributedPaths": [
-    "tests/e2e/control-room/live-proof-prd.spec.ts",
-    "tests/e2e/control-room/live-proof-prd.ts"
+    "tests/e2e/control-room/live-proof-arms.ts",
+    "tests/e2e/control-room/live-proof-gate1.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-a11dcf70@2026-09-09T10:03:04Z",
-    "at": "2026-09-09T10:18:10.490Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-01b7fe3f@2026-09-09T10:23:05Z",
+    "at": "2026-09-09T10:28:46.829Z"
   },
   "completedAt": "2026-09-09T10:28:04.399Z",
   "reviewCompletedAt": "2026-09-09T10:28:04.399Z",

@@ -4,9 +4,9 @@ import {
   writeFileSync,
 } from "node:fs";
 import { arch, release, tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 
 import { DEFAULT_CONTEXT_BYTE_BUDGET, renderContext, selectContext } from "@moe/context";
 import {
@@ -15,7 +15,7 @@ import {
 } from "@moe/runner";
 import type { GitObserver, ProviderRuntimeObservation, ScopeObservation } from "@moe/runner";
 import type { CommitExpectedVersionDecisionInput, SqliteEventStore } from "@moe/store";
-import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { ActivationTelemetryLaunchInput } from "../activation/activation-telemetry-launch.js";
 
@@ -209,17 +209,84 @@ const DIGEST = "a".repeat(64), DIGEST_B = "3".repeat(64);
 const DECIDED_AT = "2026-08-15T00:00:00.000Z";
 const NODE_KEY = ACTIVATION_WORLD_NODE_KEY, SESSION_ID = "session-1";
 
+const LAUNCH_LOCK_NAMESPACE_ENV = "MOE_CLAUDE_LAUNCH_LOCK_NAMESPACE";
+const PRIOR_LAUNCH_LOCK_NAMESPACE = process.env[LAUNCH_LOCK_NAMESPACE_ENV];
+const LANE_LAUNCH_LOCK_NAMESPACE = `daemonlane-${process.pid}`;
+const LAUNCH_LOCK_MODULE_URL = new URL(
+  "../../../../packages/runner/src/providers/claude/claude-launch-lock.ts",
+  import.meta.url).href;
+
+/**
+ * The advisory sidecar path for `lock-1`, resolved by the PRODUCTION resolver
+ * instead of re-derived here. `@moe/runner` publishes only its root barrel and
+ * this package's `rootDir` is `src`, so the lock module cannot be imported
+ * (TS6059) — a one-shot child running the real resolver is how this fixture
+ * stays honest about the path it removes. A move or rename fails loudly here
+ * rather than silently cleaning a path nothing writes.
+ */
+function resolveHolderSidecar(namespace: string | undefined): string {
+  const source = [
+    namespace === undefined ? `delete process.env[${JSON.stringify(LAUNCH_LOCK_NAMESPACE_ENV)}];`
+      : `process.env[${JSON.stringify(LAUNCH_LOCK_NAMESPACE_ENV)}] = ${JSON.stringify(namespace)};`,
+    `const mod = await import(${JSON.stringify(LAUNCH_LOCK_MODULE_URL)});`,
+    `process.stdout.write(mod.resolveLaunchLockScope("lock-1").sidecarPath);`,
+  ].join("\n");
+  const resolved = execFileSync(process.execPath, ["--input-type=module", "-e", source],
+    { encoding: "utf8" }).trim();
+  if (!resolved.endsWith(".holder")) throw new Error(`unexpected sidecar path: ${resolved}`);
+  return resolved;
+}
+const LANE_HOLDER_SIDECAR = resolveHolderSidecar(LANE_LAUNCH_LOCK_NAMESPACE);
+const DEFAULT_HOLDER_SIDECAR = resolveHolderSidecar(undefined);
+
+/**
+ * WHICH PIPE NAMESPACE THIS CASE RUNS ON, and the one place the widening is
+ * deliberate.
+ *
+ * The lock is a WIN32 named pipe now and the pipe namespace is MACHINE-GLOBAL, so the
+ * ordinary arms take a LANE-SPECIFIC namespace and stop sharing the fleet's
+ * mutex. The `test:live:foundation-attempt` lane does NOT: it launches a real
+ * provider, so it must keep the DEFAULT namespace to stay serialized against a
+ * real fleet launch on the account quota.
+ */
+let observedTestName: string | null = null;
+beforeEach(() => {
+  observedTestName = expect.getState().currentTestName ?? null;
+  if ((observedTestName ?? "").includes("LIVE_PROVIDER:")) {
+    if (PRIOR_LAUNCH_LOCK_NAMESPACE === undefined) delete process.env[LAUNCH_LOCK_NAMESPACE_ENV];
+    else process.env[LAUNCH_LOCK_NAMESPACE_ENV] = PRIOR_LAUNCH_LOCK_NAMESPACE;
+    return;
+  }
+  process.env[LAUNCH_LOCK_NAMESPACE_ENV] = LANE_LAUNCH_LOCK_NAMESPACE;
+});
+
+/**
+ * Removes THIS fixture's advisory holder sidecar for `lock-1`, under whichever
+ * namespace the case just used.
+ *
+ * It used to delete a `.lock` FILE unconditionally, and that file was what
+ * production consulted to decide whether a holder was alive — so the cleanup
+ * could reap a LIVE holder's lock by name. There is no such file any more.
+ * Exclusion is the pipe binding and it never reads this sidecar, so removing
+ * one can neither refuse nor admit anybody; the arm below proves that against a
+ * live holder rather than arguing it. Only a `.holder` path is ever passed, so
+ * pre-existing `.lock` residue is structurally out of reach.
+ */
+function removeHolderSidecar(): void {
+  rmSync(process.env[LAUNCH_LOCK_NAMESPACE_ENV] === LANE_LAUNCH_LOCK_NAMESPACE
+    ? LANE_HOLDER_SIDECAR : DEFAULT_HOLDER_SIDECAR, { force: true });
+}
+afterAll(() => {
+  // This lane's own scratch root, and only ever this lane's: the DEFAULT root
+  // holds pre-existing residue nothing here may reach.
+  const laneRoot = dirname(LANE_HOLDER_SIDECAR);
+  if (laneRoot !== dirname(DEFAULT_HOLDER_SIDECAR)) {
+    rmSync(laneRoot, { recursive: true, force: true });
+  }
+});
+
 afterEach(() => {
-  // THE FIXTURE'S OWN OS-EXCLUSIVE LOCK. The real-launch arms all use the claim
-  // identity `lock-1`, and an arm that fails mid-flight — a slow provider
-  // session, a worker killed by a case timeout — leaves the lock file behind.
-  // Production only reclaims one whose recorded holder is PROVABLY dead, and a
-  // reused PID reads as alive, so the leftover would refuse every following run
-  // of this suite with LAUNCH_LOCK_IDENTITY_CONFLICT (measured). Clearing this
-  // suite's own fixture lock is test cleanup; the production reclaim rule is
-  // untouched.
-  rmSync(join(tmpdir(), "moe-claude-launch-locks",
-    `${createHash("sha256").update("lock-1").digest("hex")}.lock`), { force: true });
+  removeHolderSidecar();
   observedBoundaryProbe.launches.length = 0;
   settlementProbe.calls.length = 0;
   terminalProbe.results.length = 0;
@@ -1503,4 +1570,82 @@ describe("foundation attempt dispatch — the live provider lane's routing contr
     expect(proven.installedRoot).toBe("C:\\claude");
     expect(proven.observation).toBe(observation);
   });
+});
+
+
+describe("foundation attempt dispatch — the fixture's launch-lock cleanup", () => {
+  /**
+   * Source for a child that HOLDS `lock-1` on this lane's namespace and idles.
+   *
+   * Holder and rival are separate PROCESSES on purpose: in one process they
+   * share an event loop and every timing is an artifact. The child imports the
+   * production module directly (Node strips types), so nothing here
+   * reimplements the surface under test. `--input-type=module` is what makes
+   * its top-level `await import` legal; `-e` is CommonJS otherwise.
+   */
+  function holderSource(): string {
+    return [
+      `process.env[${JSON.stringify(LAUNCH_LOCK_NAMESPACE_ENV)}] = `
+        + `${JSON.stringify(LANE_LAUNCH_LOCK_NAMESPACE)};`,
+      `const mod = await import(${JSON.stringify(LAUNCH_LOCK_MODULE_URL)});`,
+      `const held = await mod.acquireWindowsLaunchLock("lock-1");`,
+      `if (!held.ok) { console.log("REFUSED " + held.code); process.exit(3); }`,
+      `console.log("READY");`,
+      `setInterval(() => {}, 1000);`,
+    ].join("\n");
+  }
+  /** One rival acquire, run to completion in its own process. */
+  function rivalOutcome(): string {
+    return execFileSync(process.execPath, ["--input-type=module", "-e", [
+      `process.env[${JSON.stringify(LAUNCH_LOCK_NAMESPACE_ENV)}] = `
+        + `${JSON.stringify(LANE_LAUNCH_LOCK_NAMESPACE)};`,
+      `const mod = await import(${JSON.stringify(LAUNCH_LOCK_MODULE_URL)});`,
+      `const got = await mod.acquireWindowsLaunchLock("lock-1");`,
+      `process.stdout.write(got.ok ? "ok" : got.code + "@" + got.layer);`,
+      `if (got.ok) await got.lease.release();`,
+    ].join("\n")], { encoding: "utf8" }).trim();
+  }
+
+  it("cannot reap a LIVE holder's lock, because exclusion never reads the sidecar",
+    async () => {
+      const holder = spawn(process.execPath, ["--input-type=module", "-e", holderSource()],
+        { stdio: ["ignore", "pipe", "pipe"] });
+      let seen = "";
+      holder.stdout.setEncoding("utf8");
+      holder.stdout.on("data", (chunk: string) => { seen += chunk; });
+      holder.stderr.setEncoding("utf8");
+      holder.stderr.on("data", (chunk: string) => { seen += `STDERR:${chunk}`; });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const startedAt = Date.now();
+          const tick = setInterval(() => {
+            if (seen.includes("READY")) { clearInterval(tick); resolve(); return; }
+            if (Date.now() - startedAt > 20_000) {
+              clearInterval(tick);
+              reject(new Error(`holder never reported READY: ${seen}`));
+            }
+          }, 20);
+        });
+
+        // The exact cleanup the afterEach runs, against a LIVE holder.
+        removeHolderSidecar();
+        expect(existsSync(LANE_HOLDER_SIDECAR)).toBe(false);
+
+        expect(rivalOutcome()).toBe("LAUNCH_LOCK_IDENTITY_CONFLICT@LAUNCH_LOCK");
+        expect(holder.exitCode).toBeNull();
+        // The lane selector is load-bearing: if `currentTestName` were empty in
+        // `beforeEach`, every case would silently take the ordinary branch and
+        // the live lane would stop serializing on the fleet's mutex.
+        expect(observedTestName).toContain("cannot reap a LIVE holder's lock");
+        expect(process.env[LAUNCH_LOCK_NAMESPACE_ENV]).toBe(LANE_LAUNCH_LOCK_NAMESPACE);
+      } finally {
+        // Epic rail 4: killed on EVERY exit path, including the throwing one.
+        holder.kill("SIGKILL");
+        await new Promise<void>((resolve) => {
+          if (holder.exitCode !== null || holder.signalCode !== null) { resolve(); return; }
+          holder.on("exit", () => resolve());
+        });
+      }
+      expect(holder.exitCode === null && holder.signalCode === null).toBe(false);
+    }, 60_000);
 });

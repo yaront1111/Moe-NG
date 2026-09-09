@@ -21,7 +21,7 @@ import { HOSTILE_LAUNCH_OPERAND, snapshotClaudeLaunchRequest } from "./claude-la
 import { acquireWindowsLaunchLock } from "./claude-launch-lock.js";
 import { canonicalizeEquivalentSystemRootAliases } from "./claude-host-environment.js";
 export * from "./claude-launcher-contract.js";
-export { acquireWindowsLaunchLock, reapStaleLaunchLock } from "./claude-launch-lock.js";
+export { acquireWindowsLaunchLock } from "./claude-launch-lock.js";
 /**
  * The ordered launch facade.
  *

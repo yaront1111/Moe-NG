@@ -20,6 +20,7 @@ import {
   type ClaudeLaunchRequest,
   type ClaudeLaunchSelection,
 } from "@moe/runner";
+import { resolveLaunchLockScope } from "./claude-launch-lock.js";
 import { createNodeClaudeRuntimeFs } from "./claude-runtime-pin.js";
 import {
   makeActivationRequest,
@@ -132,7 +133,17 @@ describe.skipIf(!WINDOWS_HOST)("the public Windows Claude launcher", () => {
     /** What the CHILD actually received, written by the child itself. */
     const systemRootReport = join(root, "provider-system-root.json");
     const lockIdentity = `lock-control-poll-${process.pid}-${Date.now()}`;
-    const lockPath = join(tmpdir(), "moe-claude-launch-locks", `${digestText(lockIdentity)}.lock`);
+    // The OS-exclusive lock is a WIN32 named pipe on a MACHINE-GLOBAL namespace
+    // now, so this arm takes one of its own rather than the fleet's default.
+    // There is no lock FILE left to remove in the finally: the pipe dies with
+    // this process however it ends, and the only disk artifact is the advisory
+    // `.holder` sidecar, which the release unlinks and which exclusion never
+    // reads -- leaving it behind can refuse nobody.
+    const priorLockNamespace = process.env["MOE_CLAUDE_LAUNCH_LOCK_NAMESPACE"];
+    process.env["MOE_CLAUDE_LAUNCH_LOCK_NAMESPACE"] = `winctl-${process.pid}-${Date.now()}`;
+    // Resolved WHILE the variable is set, and removed only when it is NOT the
+    // default root, which holds pre-existing residue no test may reach.
+    const lockScratchRoot = resolveLaunchLockScope("scratch")?.sidecarRoot;
     mkdirSync(installedRoot, { recursive: true });
     copyFileSync(process.execPath, executable);
 
@@ -276,7 +287,12 @@ describe.skipIf(!WINDOWS_HOST)("the public Windows Claude launcher", () => {
       expect(totalElapsed).toBeLessThan(CHILD_DRIVEN_BOUND_MS);
       expect(totalElapsed).toBeLessThan(WATCHDOG_MS);
     } finally {
-      rmSync(lockPath, { force: true });
+      if (priorLockNamespace === undefined) delete process.env["MOE_CLAUDE_LAUNCH_LOCK_NAMESPACE"];
+      else process.env["MOE_CLAUDE_LAUNCH_LOCK_NAMESPACE"] = priorLockNamespace;
+      if (lockScratchRoot !== undefined
+        && lockScratchRoot !== join(tmpdir(), "moe-claude-launch-locks")) {
+        rmSync(lockScratchRoot, { recursive: true, force: true });
+      }
       rmSync(root, { recursive: true, force: true });
     }
   }, CASE_TIMEOUT_MS);
