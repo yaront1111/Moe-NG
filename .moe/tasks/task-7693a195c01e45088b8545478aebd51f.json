@@ -209,7 +209,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T09:49:59.862Z",
-  "updatedAt": "2026-09-09T13:28:18.899Z",
+  "updatedAt": "2026-09-09T13:43:27.934Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T10:02:51.986Z",
     "plannedStepCount": 7,
@@ -576,14 +576,50 @@
         }
       ],
       "pushed": false
+    },
+    {
+      "sha": "c4c0ac98b437f25545576840ef546c7ec20b1e8c",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T13:43:20Z",
+      "paths": [
+        ".moe/tasks/task-de80c663569a4ab2b30a9db6ac526e4b.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T13:43:27.934Z",
+      "treeId": "25825e92c8251989e5ce1b73a4683003a2b7d4b4",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/products/live-new-product.test.tsx",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/control-room/src/v2/products/live-new-product.tsx",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        }
+      ],
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
-    "outcome": "nothing",
+    "outcome": "committed",
     "kind": "checkpoint",
-    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
-    "sessionId": "qa-01b7fe3f@2026-09-09T13:28:13Z",
-    "at": "2026-09-09T13:28:18.899Z"
+    "sessionId": "qa-01b7fe3f@2026-09-09T13:43:20Z",
+    "at": "2026-09-09T13:43:27.934Z"
   }
 }
