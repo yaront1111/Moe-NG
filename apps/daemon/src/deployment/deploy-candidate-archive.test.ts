@@ -56,17 +56,71 @@ const docker = (args: readonly string[], stdin?: string): { out: string; status:
 const DOCKER_READY = docker(["version", "--format", "{{.Server.Version}}"]).status === 0
   && docker(["image", "inspect", DELIVERY_IMAGE]).status === 0;
 
+/**
+ * TWO REAL TARS PRINT THE SAME FACT IN TWO LAYOUTS, so the arm reads the fact and not the layout.
+ * Measured on this very archive:
+ *   GNU tar 1.35:  `-rw------- 1000/1000        45 1970-01-01 02:00 run/moe/env`  (SLASH-joined)
+ *   bsdtar 3.8.8:  `-rw-------  0 1000   1000       45 Jan 01  1970 run/moe/env`  (SEPARATE columns)
+ * Both ship on the hosts this suite runs on — `spawnSync("tar", ..., {shell:false})` resolves
+ * whichever one is on PATH — so pinning either spelling reds on the other host.
+ *
+ * THIS IS NOT A LOOSENING, and the arm below proves it: both numbers must be EXACTLY 1000 and
+ * ADJACENT, separated only by a slash or blanks on ONE line. A listing reporting uid 1000 with
+ * gid 0 still fails, which is the point — a root-group 0600 delivery file is unreadable by the
+ * app user and surfaces 150 seconds later as a health timeout naming nothing. The digit
+ * boundaries keep `11000/10001` out, so a longer id merely CONTAINING 1000 is not mistaken for
+ * the app user's.
+ *
+ * The 1000s are LITERALS, not the imported constants: a constant on both sides of the assertion
+ * moves with the mutation and stays green.
+ */
+const APP_USER_OWNS_THE_LISTED_ENTRY = /(?<![\d/])1000[/ \t]+1000(?![\d/])/u;
+
 describe("the candidate archive is a USTAR stream a real tar accepts", () => {
   it("lists exactly the parent directory and the delivery file, with the app user's ids", () => {
     const listed = readBack(encoded(PAYLOAD), ["-tvf", "-"]);
 
     expect(listed.status).toBe(0);
-    // `tar -tv` prints the NUMERIC ids, which is the field under test. Literal, not the imported
-    // constant: a constant on both sides of the assertion moves with the mutation and stays green.
-    expect(listed.out).toContain("1000/1000");
+    // `tar -tv` prints the NUMERIC ids, which is the field under test. Matched by shape rather
+    // than by one tar's spelling — see APP_USER_OWNS_THE_LISTED_ENTRY for why, and for the arm
+    // that proves the shape still rejects a mismatched owner and group.
+    expect(listed.out).toMatch(APP_USER_OWNS_THE_LISTED_ENTRY);
     expect(listed.out).toContain("-rw-------");
     expect(listed.out.split(/\r?\n/u).filter((line) => line !== "").map((line) => line.split(" ").pop()))
       .toEqual(["run/moe/", "run/moe/env"]);
+  });
+
+  it("reads the app user's ownership out of either tar's layout, and only when BOTH ids are it", () => {
+    // The two ACCEPT lines are real output, copied off this archive rather than composed here.
+    const gnu = "-rw------- 1000/1000        45 1970-01-01 02:00 run/moe/env";
+    const bsd = "-rw-------  0 1000   1000       45 Jan 01  1970 run/moe/env";
+
+    expect(gnu).toMatch(APP_USER_OWNS_THE_LISTED_ENTRY);
+    expect(bsd).toMatch(APP_USER_OWNS_THE_LISTED_ENTRY);
+
+    // Each REFUSE line is an ACCEPT line with the GROUP id alone changed, so the arm isolates the
+    // field. A 0600 file owned by uid 1000 but group 0 is the delivery failure this arm exists to
+    // keep catching: the app user cannot read it, and it surfaces as an unattributed health
+    // timeout 150 seconds into a deploy. `toContain("1000")` and `/1000.*1000/` both admit these.
+    expect(gnu.replace("1000/1000", "1000/1001")).not.toMatch(APP_USER_OWNS_THE_LISTED_ENTRY);
+    expect(bsd.replace("1000   1000", "1000      0")).not.toMatch(APP_USER_OWNS_THE_LISTED_ENTRY);
+    // And a longer id that merely CONTAINS 1000 is a different user, not this one — whether it
+    // contains it twice with no separator at all, or wraps it in further digits.
+    expect(gnu.replace("1000/1000", "11000/10001")).not.toMatch(APP_USER_OWNS_THE_LISTED_ENTRY);
+    expect(gnu.replace("1000/1000", "10001000")).not.toMatch(APP_USER_OWNS_THE_LISTED_ENTRY);
+
+    // THE TWO IDS MUST BE THE ADJACENT OWNER AND GROUP COLUMNS, not any two 1000s in the output.
+    // Both lines below are root-group deliveries the app user cannot read, and both carry a
+    // SECOND 1000 that a pattern spanning arbitrary text would pair with the uid and call a pass:
+    // once as a plausible 1000-byte size on the same line, once on the neighbouring entry's line.
+    expect("-rw-------  0 1000      0     1000 Jan 01  1970 run/moe/env")
+      .not.toMatch(APP_USER_OWNS_THE_LISTED_ENTRY);
+    expect("drwxr-xr-x  0 1000      0        0 Jan 01  1970 run/moe/\n"
+      + "-rw-------  0    0   1000       45 Jan 01  1970 run/moe/env")
+      .not.toMatch(APP_USER_OWNS_THE_LISTED_ENTRY);
+
+    // The replacements above must have actually fired, or those three refusals are vacuous.
+    expect([gnu.includes("1000/1000"), bsd.includes("1000   1000")]).toEqual([true, true]);
   });
 
   it("returns the payload byte for byte through a real extraction", () => {
