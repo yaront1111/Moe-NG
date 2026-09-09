@@ -114,7 +114,7 @@
       "completedAt": "2026-09-09T09:31:01.026Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -160,16 +160,24 @@
       "author": "worker-0e797912",
       "content": "STEP 6 EVIDENCE — GATES AND ADVERSARIAL PASS.\n\nGATE, foreground and standalone, run at the restored tree AFTER every drill was reverted and SHA256-proven:\n  $ pnpm --filter @moe/daemon test\n   Test Files  604 passed (604)\n        Tests  10762 passed | 9 skipped (10771)\n     Duration  260.36s\n  exit 0\nThe count line is present and NONZERO, so the leg executed — this is not a \"No projects matched the filters\" or \"0 passed\" exit 0.\n\n  $ pnpm typecheck\n  apps/daemon typecheck: Done  (every workspace package Done)\n  exit 0\nRun because `MigrationCode` is a roster type and 21 modules import migration-receipt.js.\n\nNO FOREIGN RED TO ATTRIBUTE. Both legs are exit 0 with no failures, so the path-attributed baseline (global rail 3) has nothing to compute: the failing-path set at HEAD is empty, so its delta against merge-base is empty by construction. The peer row with the SECURITY lane red over unrostered `*_LAYER` constants is NOT this row: this row adds no `*_LAYER` constant at all. It reuses the EXISTING `DAEMON_INGRESS`, which every other member of `codeLayers` already uses and which controlled-profile-generator.ts:38-41 names for this exact code.\n\nONE DISCLOSURE ABOUT THE COUNT LINE. `apps/daemon/src/preview/preview-goal-landing.test.ts` is an UNTRACKED peer file present in the shared checkout since before I claimed. It is not mine, I never opened or edited it, and it executes inside that 604/10762. So the denominator includes work this row does not own. I am not treating that as a stop condition and I did not touch it.\n\nADVERSARIAL PASS (adversarial-self-review loaded), the step's five questions in order:\n\n1. WHAT DOES A PARTIALLY INSTALLED node_modules REPORT? The honest failure, measured twice. In step 2 I spawned the real MIGRATE script against a temp tree holding a STUB `node_modules/node-pg-migrate` whose `runner` throws: stdout was `MOE_MIGRATION_RESULT={\"applied\":[],\"file\":null}` with NO `toolMissing` key, exit 1 — the existing path. And migration-service.test.ts's new four-case arm includes a raw `new Error(\"ERR_MODULE_NOT_FOUND\")`, the exact shape a missing TRANSITIVE dependency raises, asserted to stay `MIGRATION_FAILED`. The discriminator is `import.meta.resolve` on the ROOT specifier, so \"the tool is absent\" and \"an installed tool's dependency is absent\" cannot collapse. The `await import(...)` deliberately sits OUTSIDE the tool-missing branch so any other import failure keeps the old catch.\n\n2. DID THIS REACH THE VERIFIER PATH? No. The verifier detects its own condition at verifier-database.ts:42-43 by checking for a `db:migrate` script in the workspace manifest — a different mechanism in a different module, untouched. I also checked the roster that would have caught collateral damage: repository-bootstrap-read.ts:14-25 pins `CODES` against `BootstrapCode` in BOTH directions with compile-time `Exclude<...> extends never` assertions. I added no member to `ControlledProfileRefusalCode`, so that pin is undisturbed — and `pnpm typecheck` exit 0 proves it rather than my saying so.\n\n3. CAN A FILENAME LEAK INTO THE DEPLOY DETAIL? No, on three separate measurements. The new branch mints `migrationRefusal(MIGRATION_TOOL_MISSING, MIGRATION_TOOL_MISSING)` — both halves closed-roster constants, no caller text. The disclosure arm asserts `1700000000009-broken.js` is absent from EVERY durable byte (decision results plus every event payload and metadata), not just the detail field. Drill (iv) proves the filename-tail form of the SAME code and layer still redacts. And the near-miss sweep now generates six shapes per member for the new one too, including `\"<member>: connection refused\"` — the suffix case a prefix policy would let through. Membership stays EXACT.\n\n4. DID THE TEMP TREE AND ITS CHILD PROCESS DIE ON THE THROWING PATH? Yes, both. The new ungated arm wraps everything in `try/finally` with `store?.close()` then `rmSync(root, { recursive: true, force: true })`, so the tree goes even when an assertion throws. The child process is closed by production: `apply` ends in `finally { await runner.close(); }`, which runs on the rejection path — and that rejection path is exactly what the arm exercises. No docker container and no port is involved, so epic rail 4 has nothing else outstanding here.\n\n5. THE FILING'S OWN QUESTION — can an operator reading ONLY the deploy receipt tell the two apart, with no debugger and no free text? Yes. Uninstalled workspace reads `MIGRATION_TOOL_MISSING@DAEMON_INGRESS: MIGRATION_TOOL_MISSING` verbatim; a broken migration file reads `[REDACTED]`, with the filename preserved on the MIGRATION receipt, which is never declassified. Redaction was not weakened: exactly one member was added to a set whose stated criterion it meets, the generic `MIGRATION_FAILED@DAEMON_INGRESS` stays out and stays listed as an impostor, and no free text carries the meaning — the code does. The fourth disclosure arm asserts the two details are UNEQUAL rather than merely both refusals, which is the assertion the original defect would have walked straight past.\n\nCHECKLIST ITEMS WITH NOTHING TO REPORT: no new shared mutable state, no check-then-act, no new IO or handles beyond the existing child process, and no new caller-facing input surface — the only new input is a boolean field the production child mints itself.",
       "timestamp": "2026-09-09T09:30:37.996Z"
+    },
+    {
+      "id": "comment-5885ebe966054557bfcb58fb57c75d27",
+      "author": "qa-01b7fe3f",
+      "content": "QA REVIEW EVIDENCE (qa-01b7fe3f, 2026-09-09). Full record; the approval summary points here.\n\nCOMMIT. 4d86dc58 on moe/work-2026-09-04, Moe-Kind: completion. All 8 row paths byte-identical to it at review time — `git diff HEAD -- <path>` returned 0 lines for each of migration-ports.ts, migration-receipt.ts, migration-service.ts, migration-real.test.ts, migration-service.test.ts, deploy-ledger.ts, deploy-refusal-redaction.test.ts, deploy-migration-disclosure.test.ts. I reviewed the recorded commit, not the dirty tree.\n\nGATES I RE-RAN MYSELF, foreground, full-suite-gate held.\n- `pnpm --filter @moe/daemon test` EXIT 0 -> `Test Files  604 passed (604)` / `Tests  10762 passed | 9 skipped (10771)`, Duration 256.24s. Matches the worker's claim exactly.\n- `pnpm typecheck` EXIT 0 (apps/daemon typecheck: Done).\n- Row's 4 owned test files alone -> `Test Files  4 passed (4)` / `Tests  61 passed | 1 skipped (62)`, EXIT 0.\n- Verbose run proving the new arm EXECUTED rather than skipped:\n  `✓ src/repository/migrations/migration-real.test.ts > names the missing TOOL, not an unknown FILE, when the workspace was never installed 113ms`\n  (the one `↓` in that file is the pre-existing docker-gated restore arm).\n\nDoD 1 — TOOL vs FILE. The `MIGRATE` program is a `String.raw` template, so TypeScript never parses it and typecheck green proves nothing about it. I drilled it by EXTRACTING the emitted text and running it under `node --input-type=module --eval` in %TEMP%. The repo was never mutated; `git status --porcelain -- apps packages adapters` showed only the two peer paths before and after.\n- empty tree -> exit 1, `MOE_MIGRATION_RESULT={\"applied\":[],\"file\":null,\"toolMissing\":true}`\n- PRE-FIX counterfactual, probe line replaced IN MEMORY with a bare `await import('node-pg-migrate');` -> exit 1 and NO marker emitted at all, which is precisely the filed defect (apply then throws MigrationExecutionError(null), toolMissing false, MIGRATION_FILE_UNKNOWN).\nThat is the rail-1 mutation drill: the arm's `toolMissing: true` assertion is reachable only because of the fix.\n\nDoD 2 — survives redaction, redaction not weakened. deploy-service.ts:164 composes `${code}@${layer}: ${detail}`, byte-identical to the single new PUBLIC_PHASE_DETAILS member. Both halves are closed-roster constants, so no caller text can ride. Plain `MIGRATION_FAILED@DAEMON_INGRESS` remains in the impostor list at deploy-refusal-redaction.test.ts:244, and the SAME code+layer carrying a filename tail still redacts — asserted twice, once as a new impostor entry and once as a disclosure arm. deploy-migration-disclosure.test.ts reads the DURABLE ledger, not the returned object, and asserts the filename appears in zero durable bytes.\n\nDoD 3 — both conditions have arms. Uninstalled: migration-real.test.ts, a REAL spawn (verifier-process-runner.ts:78 is `spawn = options.spawn ?? nodeSpawn` and nodeMigrationPorts passes no override), temp tree and store torn down in `finally` on the throwing path. Unreadable file: migration-service.test.ts's 4-case table asserting every non-tool failure keeps MIGRATION_FAILED with its filename, plus the docker-gated live arm left exactly as written.\n\nADVERSARIAL PASS, each independently measured by me.\n1. MigrationCode did NOT widen to `string`. A throwaway probe assigning \"NOT_A_REAL_CODE\" drew TS2322 and TS2345 naming the 10-member literal union including MIGRATION_TOOL_MISSING. Probe deleted in the same call.\n2. A PARTIALLY installed workspace is NOT misclassified. A stub node-pg-migrate whose index.js imports a missing transitive emitted no marker and exited 1 — the old MIGRATION_FAILED path, by design, because the `await import` sits outside the branch.\n3. The working path still works. A stub-installed tree ran the `else` block and exited 0 with `{\"applied\":[],\"file\":null}`, so the new wrapper did not break the success case.\n4. No unnamed roster consumer. Full-tree grep for `SAFE_PHASES|PUBLIC_PHASE_DETAILS` returns only deploy-ledger.ts:39,57 and deploy-refusal-redaction.test.ts:68,211,223,227. Both edited; the near-miss sweep pins `SAFE_PHASES.length * 6` and self-adjusts.\n\nNOTED, NOT GROUNDS FOR REJECTION.\n- deploy-ledger.ts is 255 lines (was 249). Over the 250 soft target, far under the 400 bar; six of the seven added lines are the rail-required comment.\n- deploy-refusal-redaction.test.ts is 409 lines, but it was already 406 BEFORE this row, the cap is per PRODUCTION file, and this row took only the two prescribed one-line edits.\n- The worker's report that plan step-6 drill (iii) cannot red the impostor arm is CORRECT — I confirmed by reading. Both the impostor arm and the filename-tail arm drive recordDeployReceipt / an injected port with a hand-built detail, so neither routes through migration-service.ts. Substituting a fourth drill and saying so, rather than claiming an unreachable red, is the right call.\n\nPEER DIRT, untouched by the worker and by me: apps/daemon/src/http/affordance-read.ts (modified) and apps/daemon/src/preview/preview-goal-landing.test.ts (untracked). The untracked peer test executes inside the 604/10762 count — disclosed by the worker, and it is why the file count reads 604.\n\nfull-suite-gate acquired for my re-run and released; it was granted on to task-8b178e52.",
+      "timestamp": "2026-09-09T09:40:49.703Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T17:18:11.126Z",
-  "updatedAt": "2026-09-09T09:31:57.656Z",
+  "updatedAt": "2026-09-09T09:41:24.472Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T18:02:22.676Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-09T09:41:24.472Z",
+    "wallClockMs": 56341796
   },
   "planSizeWarnings": [
     "Plan touches 8 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -202,7 +210,8 @@
   "contextFetchedBy": [
     "worker-5d2b88e7",
     "architect-f04f69cf",
-    "worker-0e797912"
+    "worker-0e797912",
+    "qa-01b7fe3f"
   ],
   "workStartedAt": "2026-09-08T18:40:24.360Z",
   "blockedReason": null,
@@ -246,6 +255,32 @@
       "treeId": "7921beef07b532e1933e49c72e291ff3c8b03bb8",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "4d86dc58b3f1e5b1fcbbbc20e19b033d089b44a2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-0e797912@2026-09-09T09:11:38Z",
+      "paths": [
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        ".moe/tasks/task-61f826e50332498eaaaf44f2043845fc.json",
+        ".moe/tasks/task-a2dd124fed1b4b9889c626824fc0a6fb.json",
+        ".moe/tasks/task-d11695b0b6714183a16146eb4dd444f3.json",
+        "apps/daemon/src/deployment/deploy-ledger.ts",
+        "apps/daemon/src/deployment/deploy-migration-disclosure.test.ts",
+        "apps/daemon/src/deployment/deploy-refusal-redaction.test.ts",
+        "apps/daemon/src/repository/migrations/migration-ports.ts",
+        "apps/daemon/src/repository/migrations/migration-real.test.ts",
+        "apps/daemon/src/repository/migrations/migration-receipt.ts",
+        "apps/daemon/src/repository/migrations/migration-service.test.ts",
+        "apps/daemon/src/repository/migrations/migration-service.ts"
+      ],
+      "recordedBy": "worker-0e797912",
+      "recordedAt": "2026-09-09T09:32:07.927Z",
+      "treeId": "29a8b74f569b190bfa4928a21f056b55fe180fa0",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -256,14 +291,18 @@
     "apps/daemon/src/deployment/deploy-ledger.ts",
     "apps/daemon/src/repository/migrations/migration-real.test.ts",
     "apps/daemon/src/repository/migrations/migration-service.test.ts",
-    "apps/daemon/src/deployment/deploy-migration-disclosure.test.ts"
+    "apps/daemon/src/deployment/deploy-migration-disclosure.test.ts",
+    ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+    ".moe/tasks/task-61f826e50332498eaaaf44f2043845fc.json",
+    ".moe/tasks/task-a2dd124fed1b4b9889c626824fc0a6fb.json",
+    ".moe/tasks/task-d11695b0b6714183a16146eb4dd444f3.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
+    "kind": "completion",
     "sessionId": "worker-0e797912@2026-09-09T09:11:38Z",
-    "at": "2026-09-09T09:11:43.608Z"
+    "at": "2026-09-09T09:32:07.927Z"
   },
   "reviewStartedAt": "2026-09-09T09:31:57.656Z",
   "verification": {
@@ -272,5 +311,18 @@
     "outputTail": " Test Files  604 passed (604)\n      Tests  10762 passed | 9 skipped (10771)\n   Start at  12:24:55\n   Duration  260.36s (transform 27.82s, setup 0ms, import 314.40s, tests 663.10s, environment 30ms)\n\nGATE_EXIT=0",
     "reportedAt": "2026-09-09T09:31:57.656Z"
   },
-  "completionSummary": "A missing migration TOOL now reports as MIGRATION_TOOL_MISSING, not as an unknown FILE, and it survives redaction. 8 files.\n\nDoD 1. migration-ports.ts: the MIGRATE child no longer top-level-imports node-pg-migrate. `emit` moved to the head, then `import.meta.resolve('node-pg-migrate')` in a try; on throw it emits `{applied:[],file:null,toolMissing:true}` and exits 1, else the original body runs in an else block behind `await import(...)`. MigrationExecutionError gained an OPTIONAL SECOND param (default false) so all 4 existing positional sites compile untouched. migration-receipt.ts adds `[MIGRATION_TOOL_MISSING]:\"DAEMON_INGRESS\"` to the frozen codeLayers by IMPORTED CONSTANT — no new *_LAYER, no retyped literal. migration-service.ts branches on it above the MIGRATION_FAILED line; everything else keeps its code and filename.\n\nDoD 2. Exactly ONE member added to PUBLIC_PHASE_DETAILS: \"MIGRATION_TOOL_MISSING@DAEMON_INGRESS: MIGRATION_TOOL_MISSING\". Every character is a production constant end to end. Plain MIGRATION_FAILED@DAEMON_INGRESS was NOT added and stays listed as an impostor — that settles the conflict that reopened this row, per option (b). Redaction unweakened; the code carries the meaning.\n\nDoD 3. Both conditions have arms. Uninstalled: a NEW UNGATED arm in migration-real.test.ts drives the REAL nodeMigrationPorts().apply against an empty temp tree (no docker, no DB) and then the SERVICE end to end to a persisted MIGRATION_TOOL_MISSING receipt; temp tree torn down in finally. Installed-but-broken: the two existing arms unchanged, plus a new 4-case discriminator arm (including a raw ERR_MODULE_NOT_FOUND, the partial-install shape) all pinned to MIGRATION_FAILED with the filename, plus a decode round-trip proving the new code decodes only under DAEMON_INGRESS. New deploy-migration-disclosure.test.ts asserts the operator's view on the DURABLE receipt: tool-missing verbatim, file failure [REDACTED], filename absent from every durable byte, and the two details UN"
+  "completionSummary": "A missing migration TOOL now reports as MIGRATION_TOOL_MISSING, not as an unknown FILE, and it survives redaction. 8 files.\n\nDoD 1. migration-ports.ts: the MIGRATE child no longer top-level-imports node-pg-migrate. `emit` moved to the head, then `import.meta.resolve('node-pg-migrate')` in a try; on throw it emits `{applied:[],file:null,toolMissing:true}` and exits 1, else the original body runs in an else block behind `await import(...)`. MigrationExecutionError gained an OPTIONAL SECOND param (default false) so all 4 existing positional sites compile untouched. migration-receipt.ts adds `[MIGRATION_TOOL_MISSING]:\"DAEMON_INGRESS\"` to the frozen codeLayers by IMPORTED CONSTANT — no new *_LAYER, no retyped literal. migration-service.ts branches on it above the MIGRATION_FAILED line; everything else keeps its code and filename.\n\nDoD 2. Exactly ONE member added to PUBLIC_PHASE_DETAILS: \"MIGRATION_TOOL_MISSING@DAEMON_INGRESS: MIGRATION_TOOL_MISSING\". Every character is a production constant end to end. Plain MIGRATION_FAILED@DAEMON_INGRESS was NOT added and stays listed as an impostor — that settles the conflict that reopened this row, per option (b). Redaction unweakened; the code carries the meaning.\n\nDoD 3. Both conditions have arms. Uninstalled: a NEW UNGATED arm in migration-real.test.ts drives the REAL nodeMigrationPorts().apply against an empty temp tree (no docker, no DB) and then the SERVICE end to end to a persisted MIGRATION_TOOL_MISSING receipt; temp tree torn down in finally. Installed-but-broken: the two existing arms unchanged, plus a new 4-case discriminator arm (including a raw ERR_MODULE_NOT_FOUND, the partial-install shape) all pinned to MIGRATION_FAILED with the filename, plus a decode round-trip proving the new code decodes only under DAEMON_INGRESS. New deploy-migration-disclosure.test.ts asserts the operator's view on the DURABLE receipt: tool-missing verbatim, file failure [REDACTED], filename absent from every durable byte, and the two details UN",
+  "touchedFiles": [
+    "apps/daemon/src/deployment/deploy-migration-disclosure.test.ts",
+    "apps/daemon/src/repository/migrations/migration-service.ts",
+    "apps/daemon/src/repository/migrations/migration-service.test.ts",
+    "apps/daemon/src/repository/migrations/migration-receipt.ts",
+    "apps/daemon/src/deployment/deploy-ledger.ts",
+    "apps/daemon/src/deployment/deploy-refusal-redaction.test.ts",
+    "apps/daemon/src/repository/migrations/migration-ports.ts",
+    "apps/daemon/src/repository/migrations/migration-real.test.ts"
+  ],
+  "completedAt": "2026-09-09T09:41:24.472Z",
+  "reviewCompletedAt": "2026-09-09T09:41:24.472Z",
+  "reviewSummary": "APPROVED. Full evidence in comment-5885ebe9 on this row.\n\nCOMMIT 4d86dc58 on moe/work-2026-09-04; all 8 row paths byte-identical to it (git diff HEAD = 0 lines each), so I graded the recorded commit, not the dirty tree.\n\nGATES I RE-RAN: `pnpm --filter @moe/daemon test` EXIT 0 -> `Test Files 604 passed (604)` / `Tests 10762 passed | 9 skipped (10771)`, 256.24s, matching the worker exactly. `pnpm typecheck` EXIT 0. Row's 4 owned files alone -> `Test Files 4 passed (4)` / `Tests 61 passed | 1 skipped (62)`. Verbose run proves the new arm EXECUTED, not skipped (113ms).\n\nDoD 1: the MIGRATE program is a String.raw template TypeScript never parses, so I drilled it by EXTRACTING the emitted text and running it in %TEMP% - repo never mutated. Empty tree -> exit 1 with toolMissing:true. PRE-FIX counterfactual (probe replaced in memory by a bare await import) -> exit 1, NO marker at all, reproducing the filed defect. The arm is reachable only because of the fix.\n\nDoD 2: deploy-service.ts:164 composes the detail byte-identically to the one new allowlist member, both halves closed-roster constants. Redaction NOT weakened - plain MIGRATION_FAILED@DAEMON_INGRESS stays an impostor and the same code+layer with a filename tail still redacts. Disclosure arms read the DURABLE ledger and prove the filename is in zero durable bytes.\n\nDoD 3: the uninstalled arm is a REAL spawn (verifier-process-runner.ts:78, no spawn override), torn down in finally; four file-failure cases keep MIGRATION_FAILED with its filename.\n\nADVERSARIAL, measured by me: MigrationCode did NOT widen (probe drew TS2322/TS2345 naming the 10-member union); a PARTIAL install is not misclassified; the success path still runs against a stub-installed tree; no unnamed roster consumer.\n\nNOTED not rejected: deploy-ledger.ts 255 lines (soft 250, hard 400); deploy-refusal-redaction.test.ts 409 but already 406 before this row, and the cap is per production file.\n\nPeer dirt untouched. full-suite-gate released to task-8b178e52."
 }
