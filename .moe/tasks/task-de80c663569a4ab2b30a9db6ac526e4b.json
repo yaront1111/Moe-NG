@@ -57,8 +57,8 @@
       "completedAt": "2026-09-09T12:25:46.721Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-b42eccd4",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-3ae63006",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -85,11 +85,17 @@
       "author": "worker-b42eccd4",
       "content": "MUTATION DRILL — FULL SOURCE, so a grader can recreate and re-run it. Process-local: an out-of-tree vitest config with an enforce:\"pre\" Vite transform mutates production bytes IN MEMORY. No file on the shared checkout was ever modified, so there is no backup and no restore proof to get wrong.\n\nWritten to %TEMP%/moe-task-de80c663-worker-b42eccd4-drill.config.mjs (path carries the TASK id, not only the seat). Run as:\n  MOE_REPO_ROOT=\"D:/projexts/moe-next\" MOE_DRILL_MUTATION=<cell> pnpm exec vitest run --config <thatpath>\n\n```js\nconst MUTATION = process.env.MOE_DRILL_MUTATION ?? \"\";\nconst SWEEP_FILE = \"daemon-store-foundation-composition.ts\";\nconst RECORD_FILE = \"environment-retirement-record.ts\";\nconst LEDGER_FILE = \"deploy-ledger.ts\";\nconst SWEEP_ANCHOR = \"return new Set(snapshot.ok ? snapshot.value.keys() : []);\";\nconst SWEEP_REPLACEMENT = \"return new Set(snapshot.ok ? [] : []);\";\nconst RECORD_ANCHOR = \"config.store.commit({ aggregateId: `environment-retirement/${config.projectId}`,\";\nconst RECORD_REPLACEMENT = \"((x) => x)({ aggregateId: `environment-retirement/${config.projectId}`,\";\nconst DEDICATED_ANCHOR = \"() => dedicated().has(environment) && !retired().has(environment))\";\nconst DEDICATED_REPLACEMENT = \"() => dedicated().has(environment))\";\nconst LEDGER_ANCHOR = \"      list.push(decoded.receipt);\";\nconst LEDGER_REPLACEMENT = \"      if (environment === \\\"staging\\\") continue;\\n      list.push(decoded.receipt);\";\nlet applied = 0;\nfunction once(code, anchor, replacement, label) {\n  const at = code.indexOf(anchor);\n  if (at < 0) throw new Error(\"DRILL_ANCHOR_MISSING \" + label);\n  if (code.indexOf(anchor, at + 1) >= 0) throw new Error(\"DRILL_ANCHOR_AMBIGUOUS \" + label);\n  applied += 1;\n  return code.slice(0, at) + replacement + code.slice(at + anchor.length);\n}\nfunction mutate(code, id) {\n  if (MUTATION === \"sweep-ignores-retirement\" && id.endsWith(SWEEP_FILE)) return once(code, SWEEP_ANCHOR, SWEEP_REPLACEMENT, \"sweep\");\n  if (MUTATION === \"retirement-not-durable\" && id.endsWith(RECORD_FILE)) return once(code, RECORD_ANCHOR, RECORD_REPLACEMENT, \"record\");\n  if (MUTATION === \"dedicated-escapes-retirement\" && id.endsWith(SWEEP_FILE)) return once(code, DEDICATED_ANCHOR, DEDICATED_REPLACEMENT, \"dedicated\");\n  if (MUTATION === \"ledger-drops-receipts\" && id.endsWith(LEDGER_FILE)) return once(code, LEDGER_ANCHOR, LEDGER_REPLACEMENT, \"ledger\");\n  if (MUTATION === \"receipt-content-corrupted\" && id.endsWith(LEDGER_FILE)) return once(code, LEDGER_ANCHOR,\n    \"      list.push({ ...decoded.receipt, url: (decoded.receipt.url ?? '').replace('127.0.0.1', '0.0.0.0') });\", \"content\");\n  return null;\n}\nexport default {\n  root: process.env.MOE_REPO_ROOT,\n  plugins: [{ name: \"moe-retirement-drill\", enforce: \"pre\",\n    transform(code, id) { return MUTATION === \"\" ? null : mutate(code, id); },\n    buildEnd() {\n      if (MUTATION !== \"\" && applied === 0) throw new Error(\"DRILL_MUTATION_NEVER_APPLIED\");\n      console.warn(\"[drill] mutation=\" + (MUTATION || \"control\") + \" applied=\" + applied);\n    } }],\n  test: { environment: \"node\", include: [\"apps/daemon/src/monitoring/environment-retirement-restart.test.ts\"],\n    pool: \"forks\", isolate: true, passWithNoTests: false, testTimeout: 30000 },\n};\n```\n\nSIX CELLS, EVERY ONE WITH ITS applied= COUNT:\ncontrol              3 passed (3)  applied=0\nretirement-not-durable       arm 1 ONLY red @:225  applied=1  (command answers DECIDED, nothing persists — the DoD-2 defect exactly: two new staging samples appear after the restart)\nsweep-ignores-retirement     arm 1 ONLY red @:225  applied=1\ndedicated-escapes-retirement arm 3 ONLY red @:316  applied=1  (\"expected 3, received 9\" — the per-environment job kept probing at 10s across a 60s window; arms 1 and 2 stay GREEN because they use no interval)\nledger-drops-receipts        ALL THREE red         applied=1  (arm 2 @:253 STAGING_ABSENT_FROM_LEDGER; the REJECTED \"delete the receipts\" design — reddening everything is correct, that design destroys the feature)\nreceipt-content-corrupted    arm 2 ONLY red @:271  applied=1  (receipt still exists AND still probes; only its url differs — \"http://127.0.0.1:49211\" vs \"http://0.0.0.0:49211\". This is the cell isolating step 3(a)'s assert-on-CONTENT half)\n\nControl green PLUS mutants red is the pair that means something; either alone would prove nothing. Every cell asserts its own anchor and buildEnd throws DRILL_MUTATION_NEVER_APPLIED on zero applications, so a transform aimed at a file the test never imports cannot read as green.",
       "timestamp": "2026-09-09T12:25:14.097Z"
+    },
+    {
+      "id": "comment-b0897311a6a8497586fb2996205f1275",
+      "author": "worker-b42eccd4",
+      "content": "RE-VERIFICATION IN A FRESH SESSION (the prior session died after step 4; its gate output died with it, so every leg below was RUN AGAIN in this session at 2026-09-09 ~14:03-14:15Z / 17:03-17:15 local). Nothing was edited: my one owned path is committed at 8cca472b and `git status --porcelain -- apps/daemon/src/monitoring/` is EMPTY, so this is the same tree the first gate table graded.\n\nFRESH GATE TABLE, each leg foreground and standalone, exit captured with ${PIPESTATUS[0]}, count line verbatim:\n\npnpm --filter @moe/daemon test        EXIT 0   Test Files 607 passed (607) | Tests 10834 passed | 12 skipped (10846) | 237.06s\npnpm --filter @moe/daemon test  (2nd) EXIT 0   Test Files 607 passed (607) | Tests 10834 passed | 12 skipped (10846) | 237.01s\npnpm --filter @moe/control-room test  EXIT 0   Test Files 205 passed (205) | Tests 2677 passed (2677) | 14.12s\npnpm typecheck                        EXIT 0   apps/daemon typecheck: Done (all packages Done)\n\nThe daemon leg ran TWICE (the second was an attempt to pass a vitest filter through `pnpm ... test -- <name>`, which does NOT reach vitest as a filter and re-ran the whole suite). Unintended, but it is a free reproducibility control: two independent full runs, same 607/607, same 10834 passed.\n\nDELTA vs THE PRIOR SESSION'S TABLE: 10834 passed | 12 skipped, against 10833 passed | 13 skipped at 12:24Z. One test moved from skipped to passed. It is not mine — my file's 3 arms are unconditional and none is skipped — it is a peer's conditional arm whose precondition is now met. Denominator is unchanged at 10846.\n\nPOSITIVE CONTROL that my arms actually EXECUTE (an exit-0 leg with no count line proves nothing; so does a full-suite count line that never names the file):\n  cd apps/daemon && npx vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/monitoring/environment-retirement-restart.test.ts\n  EXIT 0   Test Files 1 passed (1) | Tests 3 passed (3)\nThree arms, matching the three this row delivered (end-to-end retire + restart; history-survives + ledger-unmutated; dedicated-interval + deploy-after-retirement).\n\nFULL-SUITE-GATE LEASE, disclosed rather than taken. `.moe/resources/full-suite-gate.json` shows holder qa-01b7fe3f for task-7693a195c0, acquiredAt 2026-09-09T12:21:00Z with etaMs 900000 — i.e. 87 minutes past its own stated ETA when I measured at 14:03Z. I did NOT force-release it (not my call) and did NOT queue on it (acquire + report_blocked on a resource parks a one-shot seat). I measured instead: `Get-CimInstance Win32_Process | Where-Object CommandLine -match 'vitest|pnpm|tsc '` returned NO vitest and NO pnpm process — only my own shell. No suite was running, so my runs contended with nothing. Recording it as a live lease past its ETA for whoever triages stale leases.\n\nPEER DIRT AT THIS TREE: 34 dirty paths, 4 of them untracked, none under apps/daemon/src/monitoring. Reverted, stashed, added and committed NONE of them.",
+      "timestamp": "2026-09-09T14:12:52.156Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T17:18:29.893Z",
-  "updatedAt": "2026-09-09T13:47:16.171Z",
+  "updatedAt": "2026-09-09T14:13:15.634Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T18:13:13.603Z",
     "plannedStepCount": 4,
@@ -123,7 +129,8 @@
   },
   "planApprovedAt": "2026-09-08T18:18:18.632Z",
   "contextFetchedBy": [
-    "worker-b42eccd4"
+    "worker-b42eccd4",
+    "qa-3ae63006"
   ],
   "workStartedAt": "2026-09-09T11:52:54.823Z",
   "commits": [
@@ -295,11 +302,7 @@
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-de80c663569a4ab2b30a9db6ac526e4b.json",
-    "apps/daemon/src/monitoring/environment-retirement-restart.test.ts",
-    ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json",
-    ".moe/tasks/task-f4f45c281ab64f6dbf2c4ff163140010.json",
-    ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json"
+    "apps/daemon/src/monitoring/environment-retirement-restart.test.ts"
   ],
   "touchedFiles": [
     "apps/daemon/src/monitoring/environment-retirement-restart.test.ts"
@@ -310,5 +313,13 @@
     "kind": "checkpoint",
     "sessionId": "worker-b42eccd4@2026-09-09T13:47:09Z",
     "at": "2026-09-09T13:47:16.171Z"
-  }
+  },
+  "reviewStartedAt": "2026-09-09T14:13:08.422Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": " Test Files  607 passed (607)\n      Tests  10834 passed | 12 skipped (10846)\n   Start at  17:03:28\n   Duration  237.06s (transform 22.53s, setup 0ms, import 287.08s, tests 600.72s, environment 29ms)\n\nEXIT=0",
+    "reportedAt": "2026-09-09T14:13:08.422Z"
+  },
+  "completionSummary": "INTEGRATION PROOF for the retire-an-environment split. This row owns NO production code; it delivers ONE file, apps/daemon/src/monitoring/environment-retirement-restart.test.ts (349 lines, 3 arms), committed at 8cca472b.\n\nTHE SPLIT WAS THREE CHILDREN, NOT FOUR (step-1 measurement; the plan's premise was stale). task-1714234a has no task JSON on disk — deleted, its command-edge scope ABSORBED into child 3.\n- task-a2dd124f — the durable retirement record (environment-retirement-record.ts).\n- task-f18bddee — createHealthProbeJob filters retired names; composition supplies the predicate per tick.\n- task-509f0437 — publishes monitoring.retire_environment across the roster + digest mirrors AND ships the command edge.\n\nWHAT ONLY THIS ROW COULD PROVE, driven through the REAL operator command, never a hand-written record write:\n1. dispatch retire → tick → ring records NO new sample for the retired name (read before/after, compared).\n2. RESTART: close the store, reopen, rebuild the composition, tick again — still nothing. Writer and reader share ONE durable fact; the split's characteristic failure (two record instances, invisible until restart) does not occur.\n3. History survives, asserted on CONTENT: receipts still readable through readDeployLedger, ring samples still readable, receipt count and environment set UNCHANGED — the fix is a layered fact, not a receipt deletion.\n4. A retired environment holding a DEDICATED interval still stops, through the real command.\n5. Deploy-after-retirement: answer PINNED by an arm rather than left for production.\n\nTeardown (epic rail 4): every arm asserts in `finally`, so on the failure path too, that no timer arm outlives its composition; zero leaked temp dirs.\n\nGATES RE-RUN FRESH THIS SESSION (prior session died; its output died with it): daemon 607/607, 10834 passed | 12 skipped, EXIT 0 — twice, identical. control-room 205/205, 2677 passed, EXIT 0. pnpm typecheck EXIT 0. Positive control: my file alone = Test Files 1 passed, Tests 3 pass"
 }
