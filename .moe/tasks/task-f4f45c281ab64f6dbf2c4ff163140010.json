@@ -152,7 +152,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T18:38:35.074Z",
-  "updatedAt": "2026-09-09T12:17:29.372Z",
+  "updatedAt": "2026-09-09T12:26:47.090Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T18:40:39.705Z",
     "plannedStepCount": 8,
@@ -202,5 +202,75 @@
     ]
   },
   "planApprovedAt": "2026-09-09T09:32:27.329Z",
-  "workStartedAt": "2026-09-09T11:41:55.864Z"
+  "workStartedAt": "2026-09-09T11:41:55.864Z",
+  "commits": [
+    {
+      "sha": "2991add070a6c448b72830f9bc21407a900ade35",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-0e797912@2026-09-09T11:41:35Z",
+      "paths": [
+        ".moe/tasks/task-f4f45c281ab64f6dbf2c4ff163140010.json",
+        "apps/daemon/remote-deploy-acceptance.mts",
+        "apps/daemon/src/deployment/deploy-build-authority.test.ts",
+        "apps/daemon/src/deployment/deploy-candidate-environment.test.ts",
+        "apps/daemon/src/deployment/deploy-candidate-environment.ts",
+        "apps/daemon/src/deployment/deploy-candidate-start.ts",
+        "apps/daemon/src/deployment/deploy-journey.test.ts",
+        "apps/daemon/src/deployment/deploy-ports.ts",
+        "apps/daemon/src/deployment/deploy-refusal-redaction.test.ts",
+        "apps/daemon/src/deployment/deploy-rollback.test.ts",
+        "apps/daemon/src/deployment/deploy-service.test.ts",
+        "apps/daemon/src/deployment/deploy-service.ts"
+      ],
+      "recordedBy": "worker-0e797912",
+      "recordedAt": "2026-09-09T12:26:47.090Z",
+      "treeId": "fc55558e105fe766d2f596a6ca3ac1525259fc7c",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/deployment/deploy-candidate-environment.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        }
+      ],
+      "pushed": false
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-f4f45c281ab64f6dbf2c4ff163140010.json",
+    "apps/daemon/remote-deploy-acceptance.mts",
+    "apps/daemon/src/deployment/deploy-build-authority.test.ts",
+    "apps/daemon/src/deployment/deploy-candidate-environment.test.ts",
+    "apps/daemon/src/deployment/deploy-candidate-environment.ts",
+    "apps/daemon/src/deployment/deploy-candidate-start.ts",
+    "apps/daemon/src/deployment/deploy-journey.test.ts",
+    "apps/daemon/src/deployment/deploy-ports.ts",
+    "apps/daemon/src/deployment/deploy-refusal-redaction.test.ts",
+    "apps/daemon/src/deployment/deploy-rollback.test.ts",
+    "apps/daemon/src/deployment/deploy-service.test.ts",
+    "apps/daemon/src/deployment/deploy-service.ts"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/deployment/deploy-candidate-start.ts",
+    "apps/daemon/src/deployment/deploy-refusal-redaction.test.ts",
+    "apps/daemon/src/deployment/deploy-rollback.test.ts",
+    "apps/daemon/src/deployment/deploy-candidate-environment.ts",
+    "apps/daemon/src/deployment/deploy-ports.ts",
+    "apps/daemon/src/deployment/deploy-build-authority.test.ts",
+    "apps/daemon/src/deployment/deploy-service.test.ts",
+    "apps/daemon/src/deployment/deploy-candidate-environment.test.ts",
+    "apps/daemon/remote-deploy-acceptance.mts",
+    "apps/daemon/src/deployment/deploy-journey.test.ts",
+    "apps/daemon/src/deployment/deploy-service.ts"
+  ],
+  "unattributedPaths": [
+    "apps/daemon/src/deployment/deploy-candidate-start.js"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-0e797912@2026-09-09T11:41:35Z",
+    "at": "2026-09-09T12:26:47.090Z"
+  }
 }
