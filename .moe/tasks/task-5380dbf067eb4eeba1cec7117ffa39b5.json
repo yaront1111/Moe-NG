@@ -143,7 +143,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T20:04:21.805Z",
-  "updatedAt": "2026-09-09T11:47:27.503Z",
+  "updatedAt": "2026-09-09T11:47:43.242Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T08:57:02.263Z",
     "plannedStepCount": 5,
@@ -261,19 +261,38 @@
       "treeId": "fcde241133d790506c7ae318bd7134ac5c73e919",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "321f127d6cceaa42ebaea8ac22863bbe4ca4cb05",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-b42eccd4@2026-09-09T11:20:18Z",
+      "paths": [
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        ".moe/tasks/task-5380dbf067eb4eeba1cec7117ffa39b5.json",
+        "apps/control-room/src/v2/goals/live-goal-release.test.tsx"
+      ],
+      "recordedBy": "worker-b42eccd4",
+      "recordedAt": "2026-09-09T11:47:43.242Z",
+      "treeId": "08f375dca1761b1be1642f997bf831d85140cfdf",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
     "apps/control-room/src/v2/goals/live-goal-release.test.tsx",
     "apps/control-room/src/v2/goals/live-goal-release.tsx",
-    "apps/control-room/src/v2/goals/goal-release.tsx"
+    "apps/control-room/src/v2/goals/goal-release.tsx",
+    ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+    ".moe/tasks/task-5380dbf067eb4eeba1cec7117ffa39b5.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-01b7fe3f@2026-09-09T11:13:22Z",
-    "at": "2026-09-09T11:21:10.362Z"
+    "kind": "completion",
+    "sessionId": "worker-b42eccd4@2026-09-09T11:20:18Z",
+    "at": "2026-09-09T11:47:43.242Z"
   },
   "workStartedAt": "2026-09-09T10:39:49.015Z",
   "reviewStartedAt": "2026-09-09T11:47:27.503Z",
@@ -285,7 +304,14 @@
   },
   "completionSummary": "TEST-ONLY. One file: apps/control-room/src/v2/goals/live-goal-release.test.tsx. No defect measured in live-goal-release.tsx or goal-release.tsx; neither edited to make a test pass; both byte-identical to HEAD (cb28138a..., bab402b7...) and clean.\n\nQA's reopen was right. The drain was rebounded from a HOP COUNT to a REAL MILLISECOND BUDGET: realSetTimeout/realNow captured at module scope before fake timers exist; DRAIN_BUDGET_MS 2500 per ARM (not per read, or three failing reads would blow vitest's 5s default); drainTick spends one real event-loop turn and returns Math.max(elapsed,1) -- the floor stops a 0ms-measured turn spinning forever.\n\nBudget SIZED FROM MEASUREMENT: instrumented copies run INSIDE a real 206-file lane (5 runs, 2 under 16 CPU hogs, 50 reads) needed at most one real turn; worst single turn 24ms. 2500ms is ~100 of those.\n\nPROVEN DETERMINISTICALLY, not by a green streak (round 1 was 4/4 green and ~50% broken). Process-local amplification of the real digest inside spendOffer: old hop bound breaks at FIVE extra digests with QA's exact `expected +0 to be 1`; new bound holds to 20000, breaks at 60000 -- still on the assertion, never a timeout. Captured clock proven genuinely real (fake delta 0, real delta >=20ms). setAnswer mutated to never fire: RTL \"Unable to find an element\" at 2586ms/2565ms, inside the 5s default.\n\nDoD 2 drill on disk: backup keyed on task id AND worker id, vintage proven against the HEAD blob and a mutant-token grep, collapse RED on the ASSERTION at :400, restore proven by SHA256 in a separate call.\n\nDoD 1: 8 consecutive unexcluded lane runs (exit 0/1/0/0/1/1/0/0; runs 5-6 contended) plus this fresh 9th. Runs 7/8 are the consecutive exit-0 pair. live-goal-release.test.tsx failed in NONE of the 9. Four foreign reds disclosed verbatim, all clean landed bytes, three observed failing before this edit existed; owned-path delta EMPTY.\n\nEvidence: comment-3531503b (gate table), comment-98719e19 (adversarial pass). Seven sibling cards share ",
   "touchedFiles": [
-    "apps/control-room/src/v2/goals/live-goal-release.test.tsx"
+    "apps/control-room/src/v2/goals/live-goal-release.test.tsx",
+    "apps/control-room/.drill/drill.config.mts",
+    "apps/control-room/src/v2/goals/live-goal-release.tsx",
+    "apps/control-room/.drill/gen.cjs",
+    "apps/control-room/.drill/counterfactual.config.mts",
+    "apps/control-room/.drill2/clock.test.ts",
+    "apps/control-room/.drill2/adversarial.config.mts",
+    "apps/control-room/.drill/lane.config.mts"
   ],
   "reviewCompletedAt": "2026-09-09T11:20:05.639Z",
   "rejectionDetails": {

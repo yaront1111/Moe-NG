@@ -108,7 +108,7 @@
       "startedAt": "2026-09-09T10:42:44.814Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -182,7 +182,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T09:49:59.862Z",
-  "updatedAt": "2026-09-09T10:56:29.038Z",
+  "updatedAt": "2026-09-09T11:52:11.903Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T10:02:51.986Z",
     "plannedStepCount": 7,
@@ -220,12 +220,9 @@
     "governor-608c8a78"
   ],
   "workStartedAt": "2026-09-09T10:20:55.085Z",
-  "blockedReason": "Mandatory plan/DoD `pnpm --filter @moe/daemon test` freshly EXIT1 (4failed/602passed files;9failed/10804passed/12skipped tests), so complete_task's required EXIT0 cannot honestly be supplied. Exact foreign failures documented in comment-6f63ff5b: roster task-509f043721ac491baad33b0d6771a958 owns preview-start-command.test.ts:517 missing retirement wrapper-roster member and mcp-http-host.test.ts:690/:721 expected26/received27; candidate task-60f851fa3e1046fe98090d9dc6f30e0a owns archive.test.ts:66 Windows tar numeric-column expectation and candidate-environment.test.ts five missing-function arms. Both rows currently WORKING/unlanded; owners pinged and commented, no duplicate bug rows or foreign edits. Own implementation and six-case live auth/inspect/teardown proof finished; focused2files39tests and control-room205files2677tests EXIT0, all typechecks/root/foundation/store EXIT0. Step7 kept IN_PROGRESS pending exact full daemon green; no false completion. Full-suite lease released to queued peer, all foreground processes finished. Five modified paths already declared/attributed for wrapper checkpoint. Resume after owners land, acquire lease, rerun primary fresh, finish final review/step7/complete_task and exit.",
-  "blockedOnTaskIds": [
-    "task-509f043721ac491baad33b0d6771a958",
-    "task-60f851fa3e1046fe98090d9dc6f30e0a"
-  ],
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-09T10:56:01.029Z"
+  "blockedFromStatus": null,
+  "blockedAt": null
 }
