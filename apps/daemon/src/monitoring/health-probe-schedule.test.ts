@@ -4,10 +4,12 @@ import { join } from "node:path";
 import { SqliteEventStore } from "@moe/store";
 import { expect, it } from "vitest";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
-import { recordDeployReceipt } from "../deployment/deploy-ledger.js";
+import { readDeployLedger, recordDeployReceipt } from "../deployment/deploy-ledger.js";
 import type { ScheduleTimer } from "../orchestrator/durable-schedule.js";
-import { HEALTH_PROBE_JOB_ID, healthProbeJobId } from "./health-probe-contracts.js";
+import { HEALTH_PROBE_JOB_ID, HEALTH_PROBE_SIDECAR_SUFFIX, HEALTH_PROBE_VERSION, healthProbeJobId } from "./health-probe-contracts.js";
 import { DEFAULT_PROBE_INTERVAL_MS, createProbeIntervalRecord } from "./probe-interval-record.js";
+import { createEnvironmentRetirementRecord } from "./environment-retirement-record.js";
+import { createHealthProbeRing, type HealthProbeRing } from "./health-probe-ring.js";
 
 const PROJECT = "project-probe-schedule";
 const CREDENTIAL = "test-operator-credential";
@@ -58,9 +60,9 @@ function probeCounter(): Probed {
   };
 }
 
-function deploy(store: SqliteEventStore, environment: string): void {
+function deploy(store: SqliteEventStore, environment: string, decisionId = `deploy-${environment}`): void {
   const result = recordDeployReceipt(store, {
-    decidedAt: CLOCK(), decisionId: `deploy-${environment}`, environment, imageDigest: `sha256:${"b".repeat(64)}`,
+    decidedAt: CLOCK(), decisionId, environment, imageDigest: `sha256:${"b".repeat(64)}`,
     projectId: PROJECT, refusal: null, releaseDecision: null, sha: "a".repeat(40),
     url: `http://127.0.0.1:${PORTS[environment]}`,
   });
@@ -77,6 +79,7 @@ interface DaemonContext {
   counts: Map<string, number>;
   store: SqliteEventStore;
   timer: FakeTimer;
+  ring: HealthProbeRing;
 }
 
 async function withDaemon(
@@ -93,7 +96,10 @@ async function withDaemon(
     shutdown();
     current = createStoreDependencies({
       credential: CREDENTIAL, healthProbeHttp: http, principalId: "operator-local",
-      projectId: PROJECT, schedule: { timer }, storePath,
+      // A permissive fallback must not resurrect a retired probe ID during restore.
+      projectId: PROJECT, schedule: { timer, resolve: () => async () => {
+        counts.set("fallback", (counts.get("fallback") ?? 0) + 1);
+      } }, storePath,
     });
   };
   // The genesis install owns the empty store; seeding before it refuses
@@ -108,7 +114,8 @@ async function withDaemon(
       const written = record.write(environment, intervalMs);
       if (!written.ok) throw new Error(`${written.code}@${written.layer}`);
     }
-    await body({ boot, counts, shutdown, store, timer });
+    await body({ boot, counts, shutdown, store, timer,
+      ring: createHealthProbeRing(`${storePath}${HEALTH_PROBE_SIDECAR_SUFFIX}`, PROJECT) });
   } finally {
     shutdown();
     store.close();
@@ -222,5 +229,67 @@ it("gives two environments that share one interval two independent jobs", async 
       expect(timer.liveIntervals()).toEqual([10_000, 10_000, DEFAULT_PROBE_INTERVAL_MS]);
       await timer.advance(60_000);
       expect([counts.get("staging"), counts.get("production")]).toEqual([6, 6]);
+    });
+});
+
+it.each(["dedicated", "sweep"] as const)("stops retired %s probes without erasing history", async (mode) => {
+  await withDaemon(["staging", "production"], new Map(mode === "dedicated" ? [["staging", 10_000]] : []),
+    async ({ boot, store, timer, ring }) => {
+      boot();
+      await timer.advance(mode === "dedicated" ? 10_000 : DEFAULT_PROBE_INTERVAL_MS);
+      let before = ring.read("staging");
+      const ledger = readDeployLedger(store, PROJECT);
+      const sample = { version: HEALTH_PROBE_VERSION, environment: "staging", sha: "a".repeat(40),
+        status: "SUCCESS", latencyMs: expect.any(Number), at: expect.any(String) };
+      expect(before).toEqual({ ok: true, value: [sample] });
+      const record = createEnvironmentRetirementRecord({ projectId: PROJECT, store });
+      expect(record.write("staging")).toEqual({ ok: true, value: true });
+      // The next dedicated tick precedes reconciliation; this drives the REAL composed predicate.
+      await timer.advance(DEFAULT_PROBE_INTERVAL_MS);
+      expect(ring.read("staging")).toEqual(before);
+      expect(ring.read("production")).toEqual({ ok: true,
+        value: Array.from({ length: mode === "dedicated" ? 1 : 2 }, () => ({ ...sample, environment: "production" })) });
+      expect(readDeployLedger(store, PROJECT)).toEqual(ledger);
+      if (mode === "dedicated") {
+        const armed = timer.arms.length;
+        deploy(store, "staging", "reactivate-existing-arm");
+        await timer.advance(10_000);
+        before = ring.read("staging");
+        expect(before).toEqual({ ok: true, value: [sample, sample] });
+        expect(timer.arms.length).toBe(armed);
+        expect(record.write("staging")).toEqual({ ok: true, value: true });
+      }
+      const arms = timer.arms.length, registered = registrations(store);
+      boot(); // Neither restore nor reconciliation may arm a retired environment.
+      expect(timer.arms.length - arms).toBe(1);
+      expect(timer.liveIntervals()).toEqual([DEFAULT_PROBE_INTERVAL_MS]);
+      expect(registrations(store)).toEqual(registered);
+      await timer.advance(DEFAULT_PROBE_INTERVAL_MS);
+      expect(ring.read("staging")).toEqual(before);
+      deploy(store, "staging", "redeploy-same-sha");
+      expect(record.read("staging")).toEqual({ ok: true, value: false });
+      await timer.advance(DEFAULT_PROBE_INTERVAL_MS + (mode === "dedicated" ? 10_000 : 0));
+      expect(ring.read("staging")).toEqual({ ok: true,
+        value: Array.from({ length: mode === "dedicated" ? 3 : 2 }, () => sample) });
+    });
+});
+
+it("keeps monitoring both paths when retirement cannot be read", async () => {
+  await withDaemon(["staging", "production"], new Map([["staging", 10_000]]),
+    async ({ boot, store, timer, ring }) => {
+      const record = createEnvironmentRetirementRecord({ projectId: PROJECT, store });
+      expect(record.write("staging")).toEqual({ ok: true, value: true });
+      const aggregateId = `environment-retirement/${PROJECT}`, payload = new TextEncoder().encode("{");
+      store.commit({ aggregateId, commandBytes: payload, commandId: "corrupt-retirement",
+        committedAt: CLOCK(), expectedVersion: store.getAggregateVersion(aggregateId),
+        events: [{ eventId: "corrupt-retirement-event", eventType: "moe.environment.retired", payload }],
+      });
+      expect(record.stored()).toEqual({ ok: false, code: "ENVIRONMENT_RETIREMENT_RECORD_INVALID", layer: "DAEMON_INGRESS" });
+      boot();
+      await timer.advance(DEFAULT_PROBE_INTERVAL_MS);
+      const sample = { version: HEALTH_PROBE_VERSION, environment: "staging", sha: "a".repeat(40),
+        status: "SUCCESS", latencyMs: expect.any(Number), at: expect.any(String) };
+      expect(ring.read("staging")).toEqual({ ok: true, value: Array.from({ length: 6 }, () => sample) });
+      expect(ring.read("production")).toEqual({ ok: true, value: [{ ...sample, environment: "production" }] });
     });
 });

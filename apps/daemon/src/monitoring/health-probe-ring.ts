@@ -235,13 +235,17 @@ function probeJob(options: HealthProbeJobOptions, environments: () => Iterable<s
 }
 
 /** The sweep at the default rate. `dedicated` names environments that own a job at their own interval;
- * probing them here as well would be the double schedule DoD 3 forbids. It is read PER TICK, so setting
- * or clearing an interval needs no restart; empty by default, which is the shipped behaviour. */
+ * probing them here as well would be the double schedule DoD 3 forbids. `retired` excludes retired
+ * environments independently. Both sources are read PER TICK, so changing either needs no restart;
+ * both default to empty, preserving the shipped behaviour. */
 export function createHealthProbeJob(
-  options: HealthProbeJobOptions, dedicated: () => ReadonlySet<string> = () => new Set()): ProbeJob {
+  options: HealthProbeJobOptions, dedicated: () => ReadonlySet<string> = () => new Set(),
+  retired: () => ReadonlySet<string> = () => new Set()): ProbeJob {
   return probeJob(options, () => {
     const skip = dedicated();
-    return [...readDeployLedger(options.store, options.projectId).keys()].filter((name) => !skip.has(name));
+    const excluded = retired();
+    return [...readDeployLedger(options.store, options.projectId).keys()]
+      .filter((name) => !skip.has(name) && !excluded.has(name));
   });
 }
 /** One environment, one schedule id, one interval; no receipt still refuses PROBE_RECEIPT_MISSING.

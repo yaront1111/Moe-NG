@@ -4,13 +4,14 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { SqliteEventStore } from "@moe/store";
 import { expect, it } from "vitest";
-import { recordDeployReceipt } from "../deployment/deploy-ledger.js";
+import { readDeployLedger, recordDeployReceipt } from "../deployment/deploy-ledger.js";
 import { DEPLOY_ENGINE_PRINCIPAL_ID, DEPLOY_RECEIPT_COMMAND_KIND, deployAggregateId, deployReceiptId }
   from "../deployment/deploy-receipt-contracts.js";
 import { HEALTH_PROBE_VERSION } from "./health-probe-contracts.js";
 import type { HealthProbe } from "./health-probe-contracts.js";
 import { createHealthProbeJob, createHealthProbeRing, probeEnvironment } from "./health-probe-ring.js";
 import type { HealthHttpPort, HealthProbeOptions, HealthProbeRing } from "./health-probe-ring.js";
+import { createEnvironmentRetirementRecord } from "./environment-retirement-record.js";
 
 const PROJECT = "project-probe-io";
 const ENVIRONMENT = "preview";
@@ -158,6 +159,41 @@ it("probes later environments after a missing URL and reports only the stable fa
       value: [{ ...SAMPLE, environment: "production", latencyMs: expect.any(Number) }] });
   });
 });
+
+it.each(["before construction", "after first tick", "default unchanged"] as const)(
+  "retirement preserves sweep history: %s", async (mode) => {
+    await withFixture(async (fixture) => {
+      for (const name of [ENVIRONMENT, "production"]) {
+        deploy(fixture.store, "http://127.0.0.1:43210", name);
+        expect(fixture.ring.append({ ...SAMPLE, environment: name }))
+          .toEqual({ ok: true, value: [{ ...SAMPLE, environment: name }] });
+      }
+      const ledger = readDeployLedger(fixture.store, PROJECT);
+      const record = createEnvironmentRetirementRecord({ store: fixture.store, projectId: PROJECT });
+      const retire = (): void => { expect(record.write(ENVIRONMENT)).toEqual({ ok: true, value: true }); };
+      const retired = (): ReadonlySet<string> => {
+        const snapshot = record.stored();
+        if (!snapshot.ok) throw new Error(`${snapshot.code}@${snapshot.layer}`);
+        return new Set(snapshot.value.keys());
+      };
+      if (mode === "before construction") retire();
+      const job = createHealthProbeJob(options(fixture, { http: async () => 200 }), undefined,
+        mode === "default unchanged" ? undefined : retired);
+      const signal = new AbortController().signal;
+      if (mode === "after first tick") { await job(signal); retire(); }
+      const before = fixture.ring.read(ENVIRONMENT), other = fixture.ring.read("production");
+      if (!before.ok || !other.ok) throw new Error("fixture history unreadable");
+      expect(before.value[0]).toEqual(SAMPLE);
+      await job(signal);
+      const sample = { ...SAMPLE, latencyMs: expect.any(Number) };
+      expect(fixture.ring.read(ENVIRONMENT)).toEqual({ ok: true,
+        value: mode === "default unchanged" ? [...before.value, sample] : before.value });
+      expect(fixture.ring.read("production")).toEqual({ ok: true,
+        value: [...other.value, { ...sample, environment: "production" }] });
+      expect(readDeployLedger(fixture.store, PROJECT)).toEqual(ledger);
+    });
+  },
+);
 
 it("leaves no post-abort job writes when an HTTP callback completes late", async () => {
   await withFixture(async (fixture) => {

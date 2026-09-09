@@ -113,6 +113,7 @@ import type { HealthHttpPort } from "./monitoring/health-probe-ring.js";
 import { HEALTH_PROBE_JOB_ID, HEALTH_PROBE_SIDECAR_SUFFIX, healthProbeJobEnvironment, healthProbeJobId }
   from "./monitoring/health-probe-contracts.js";
 import { DEFAULT_PROBE_INTERVAL_MS, createProbeIntervalRecord } from "./monitoring/probe-interval-record.js";
+import { createEnvironmentRetirementRecord } from "./monitoring/environment-retirement-record.js";
 import { readDeployLedger } from "./deployment/deploy-ledger.js";
 import type { DeploymentsHealthReadPort } from "./http/deployments-health-read.js";
 import {
@@ -639,6 +640,7 @@ export function createStoreDependencies(
   const probeOptions = { store, projectId: config.projectId, clock,
     ...(config.healthProbeHttp === undefined ? {} : { http: config.healthProbeHttp }) };
   const probeIntervals = createProbeIntervalRecord({ store, projectId: config.projectId, now: epochClock });
+  const probeRetirements = createEnvironmentRetirementRecord({ store, projectId: config.projectId, now: epochClock });
   /**
    * The environments an operator has given their OWN probe interval. Read from the durable record
    * on every call rather than captured once, so setting or clearing an interval takes effect on the
@@ -649,25 +651,37 @@ export function createStoreDependencies(
     const intervals = probeIntervals.stored();
     return new Set(intervals.ok ? intervals.value.keys() : []);
   };
+  /** Only verified retirement suppresses monitoring. An unreadable record yields no exclusions:
+   * this may probe a retired URL, but inventing "all retired" would silently blind live environments.
+   * Read fresh each time; a new successful receipt can end retirement without a restart. */
+  const retired = (): ReadonlySet<string> => {
+    const snapshot = probeRetirements.stored();
+    return new Set(snapshot.ok ? snapshot.value.keys() : []);
+  };
   const dedicatedJob = (environment: string): ReturnType<typeof createHealthProbeJob> =>
-    createEnvironmentHealthProbeJob(probeOptions, environment, () => dedicated().has(environment));
+    createEnvironmentHealthProbeJob(probeOptions, environment, () => dedicated().has(environment) && !retired().has(environment));
   /**
    * Brings the armed schedules in line with the durable record. `register` is idempotent - an
    * unchanged interval neither re-persists (durable-schedule.ts:93) nor re-arms (`arm()` :77) - so
    * this is safe to run on every sweep tick, and running it there is what makes a NEW or CHANGED
    * interval take effect WITHOUT a daemon restart. A CLEARED one needs no drop: its job's `active`
    * predicate goes false on the same tick the sweep reclaims the environment, so neither probes twice.
+   * Retired entries are not armed. Existing arms stay inert until reactivation or close() releases
+   * them: the scheduler has no scoped stop, and a global rebuild would drop unrelated live callbacks
+   * lacking restore resolvers. This deliberately retains a reactivation watcher, not a live probe.
    */
   const reconcileProbeSchedules = (): ScheduleRefusal | null => {
     const intervals = probeIntervals.stored();
     if (!intervals.ok) return null;
+    const excluded = retired();
     for (const [environment, intervalMs] of intervals.value) {
+      if (excluded.has(environment)) continue;
       const armed = schedules.register(healthProbeJobId(environment), dedicatedJob(environment), intervalMs);
       if (!armed.ok) return armed;
     }
     return null;
   };
-  const sweepProbe = createHealthProbeJob(probeOptions, dedicated);
+  const sweepProbe = createHealthProbeJob(probeOptions, dedicated, retired);
   /** Reconcile BEFORE sweeping, so an environment that just gained its own interval is excluded
    * from this very tick rather than being probed twice on the way to being right. */
   const healthProbe = async (signal: AbortSignal): Promise<void> => {
@@ -728,10 +742,10 @@ export function createStoreDependencies(
   };
   /**
    * Rebinds a job id persisted by a previous boot. A per-environment id whose interval record has
-   * since been cleared resolves to NOTHING on purpose: the scheduler then refuses
-   * SCHEDULE_TARGET_UNRESOLVED and drops the arm, and the sweep reclaims that environment at the
-   * default rate. Manufacturing a callback here would leave a second job probing at a rate no
-   * operator can still see.
+   * since been cleared, or whose environment is retired, resolves to NOTHING on purpose: the
+   * scheduler refuses SCHEDULE_TARGET_UNRESOLVED and drops the arm. The sweep reclaims cleared
+   * intervals at the default rate but still excludes retired environments. Manufacturing a callback
+   * here would leave a job probing an environment at a rate no operator can still see.
    *
    * The rebound job carries the SAME per-tick `active` predicate as a freshly registered one
    * (`dedicatedJob`, not a bare factory). Resolution happens once, at restore; a record cleared
@@ -741,7 +755,7 @@ export function createStoreDependencies(
   const resolveProbe = (id: string): ReturnType<typeof createHealthProbeJob> | null => {
     if (id === HEALTH_PROBE_JOB_ID) return healthProbe;
     const environment = healthProbeJobEnvironment(id);
-    return environment !== null && dedicated().has(environment) ? dedicatedJob(environment) : null;
+    return environment !== null && dedicated().has(environment) && !retired().has(environment) ? dedicatedJob(environment) : null;
   };
   /**
    * The operator-facing read over the durable restore-proof records. It opens the SAME sidecar
@@ -770,7 +784,9 @@ export function createStoreDependencies(
     });
   };
   const schedules = createDurableSchedule({ ...config.schedule, store, projectId: config.projectId, now: epochClock,
-    resolve: (id) => resolveProbe(id) ?? config.schedule?.resolve?.(id) ?? null });
+    // Reserved probe IDs never fall through to an external resolver that could re-arm retirement.
+    resolve: (id) => id === HEALTH_PROBE_JOB_ID || healthProbeJobEnvironment(id) !== null
+      ? resolveProbe(id) : config.schedule?.resolve?.(id) ?? null });
   const close = (): void => { schedules.release(); subscriptionDatabase?.close(); store.close(); };
   /**
    * ORDER IS LOAD-BEARING, and getting it wrong is the defect DoD 3 names. The stored intervals are
