@@ -168,3 +168,49 @@ export async function driveGate1InBrowser(page: Page, lane: DaemonLane, goalId: 
     tail: settled.text.slice(0, 300),
   });
 }
+
+/**
+ * THE PLAN GATE, by click. `approval.decide_intent` is the browser's own plan-approval wire.
+ *
+ * THE EXIT CONDITION IS THE DAEMON'S OFFER, not the button's state: the grant disappears from
+ * the affordance surface once it is spent, and that is the only fact that distinguishes an
+ * approval the daemon committed from a click that landed on a stale affordance. The same
+ * re-render hazard `driveGate1InBrowser` documents applies here, so the click is retried
+ * against the daemon's own read rather than fired once.
+ *
+ * ACTIVATION IS WHAT MAKES THE PLAN EXECUTABLE: `compiled-node-source.ts` walks the ledger's
+ * ENABLED goals, so until this gate commits there are no staffable nodes at all.
+ */
+export async function approvePlanInBrowser(
+  page: Page, lane: DaemonLane, goalId: string, runId: string,
+): Promise<void> {
+  await page.getByTestId(`cr.goals.card.${goalId}.open`).click({ timeout: CLICK_MS })
+    .catch(() => undefined);
+  const fold = page.getByTestId("cr.goal.planfold");
+  if (await fold.count() > 0) {
+    const open = await fold.evaluate((node) => (node as HTMLDetailsElement).open)
+      .catch(() => true);
+    if (!open) await fold.locator("> summary").click({ timeout: CLICK_MS }).catch(() => undefined);
+  }
+  record("plan-gate-screen", await page.getByTestId("cr.approve.screen").count());
+  const approve = page.getByTestId("cr.approve.button");
+  const deadline = Date.now() + APPROVE_BUDGET_MS;
+  let attempts = 0;
+  while (Date.now() < deadline) {
+    const surface = await askDaemon(lane, "/affordances/read", {});
+    if (offerFor(surface.body, "approval.decide_intent", runId) === null) break;
+    if (await approve.count() === 0) { await sleep(1_000); continue; }
+    attempts += 1;
+    await approve.click({ timeout: CLICK_MS }).catch(() => undefined);
+    await sleep(2_000);
+  }
+  await page.evaluate(() => {
+    for (const row of document.querySelectorAll("details")) row.setAttribute("open", "");
+  }).catch(() => undefined);
+  const refusal = page.getByTestId("cr.approve.dispatch-refusal");
+  record("plan-approve", {
+    applied: await page.getByTestId("cr.approve.applied").count(),
+    attempts,
+    refusalText: await refusal.count() > 0 ? (await refusal.innerText()).slice(0, 300) : null,
+  });
+}

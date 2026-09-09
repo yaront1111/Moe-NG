@@ -42,6 +42,27 @@ entry points, environment, and knobs.
   exactly one scaffold commit, binds and catalogs it, then creates the PRD-bound
   goal. This unseeded browser path was measured on 2026-09-06. GitHub is optional;
   remote creation was not live-proven because no owner or visibility was supplied.
+  The chain drives SIX commands, not five: `policy.validate` was added on
+  2026-09-09 because without it a browser-bootstrapped product could activate,
+  compile a plan and then never approve it — `approval.decide_intent`, the only
+  approval wire a paired durable human may ride, derives its policy ref from the
+  newest replay-verified `PolicyEvaluated`, and nothing else writes that row. The
+  refusal was `APPROVAL_INTENT_POLICY_REF_UNAVAILABLE @ DAEMON_APPROVAL_INTENT`.
+  The added slice grants nothing: no rules, no auto-approval opt-ins.
+
+- **A fresh product, end to end, as of 2026-09-09**: one drive takes a recorded
+  PRD from that same form to a real pull request —
+  <https://github.com/yaront1111/moe-live-proof-161b7e9d/pull/2> at sha
+  `65192c19a8cf5197462647926c130a0c12c2c1ad`, whose body is the dossier with a
+  row for every one of the PRD's eight acceptance criteria. In between: Gate 1
+  with a material clarification answered by click, a design revision, a compiled
+  three-node plan, the plan gate taken by click, three nodes landed by the real
+  wrapper and lander at three distinct shas, and 8/8 criteria VERIFIED by the
+  contained criterion evidence service — counted against the approved contract's
+  own roster and against `/documents/coverage/read`, so a dossier that dropped a
+  criterion could not report itself complete. The drive is
+  `tests/e2e/control-room/live-proof-prd.spec.ts`; the pull-request leg is opt-in
+  on `MOE_LIVE_RELEASE_PR=1` and records its own absence when unset.
 
 - **PRD lane**: `goal.create_with_source` binds a PRD to a goal; a planning
   agent reads it (paged) and proposes a versioned Product Contract with
@@ -197,7 +218,30 @@ missing or unverifiable evidence is `UNKNOWN` and gains no authority.
 
 ## What this is not
 
-Nothing here is a readiness, GA, or comparative claim. Measured on 2026-09-05,
+Nothing here is a readiness, GA, or comparative claim. Two clauses below were
+re-measured on 2026-09-09 and are stated first, because the older text around
+them reasons from the state before that run.
+
+NODES OF ONE GOAL ARE DELIVERED ONE AT A TIME, and "staffed in parallel" has to
+be read narrowly because of it. The repository delivery coordinator admits
+exactly one checkout owner per repository root and answers the second node
+`REPOSITORY_EXECUTION_BUSY (REPOSITORY_DELIVERY)` for as long as the first holds
+the reservation — which is from staffing until the landing commits. So two nodes
+are claimed and attempted inside one wrapper pass, and that is what the parallel
+claim means; two commits are never being made at once. This is a designed
+invariant, not a defect, and the 2026-09-09 drive asserts it by that refusal code
+appearing strictly inside the first node's spawn-to-exit window.
+
+THE BROWSER CANNOT INSTALL THE STANDING VERIFIER AUTHORITY. `moe-verifier-policy/1`
+and `moe-reviewer-calibration/1` are installed by the demo seed and by no screen
+the control room ships; without them the wrapper prints "standing authority
+incomplete" and no delivered node is ever accepted. On a browser-bootstrapped
+product that step is the operator's, over the command wire. Related and also
+open: approving a criterion CHECK refuses the configured-operator wire
+`CRITERION_CHECK_HUMAN_REQUIRED @ CRITERION_EVIDENCE` and needs a durable human
+principal, and the control room ships no criterion-approval surface.
+
+Measured on 2026-09-05,
 these are still missing or manual: a multi-node goal was driven on a live
 project on 2026-09-05 — a real `claude` planning seat sealed a five-node DAG,
 a human approved it in the browser, the two independent nodes were staffed on

@@ -1,0 +1,32 @@
+{
+  "id": "task-77207fb327a9462b869ff647650e57cf",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "Cleanup after the migration-source pin: delete the dead DEPLOY_MIGRATION_WORKSPACE_MISMATCH guard, fold the image build onto git-source-extract, fix the gated migrate-down-real sha",
+  "description": "SUCCESSOR of task-d85fd8fd74354e94886d619c67f24c75 (migrations run from the working tree, not the built sha), filed 2026-09-09 by architect-ed42e60a at that row's plan time. Depends on it. Cut out of the parent to hold its roster at 8 files; nothing here is load-bearing for the pin itself, but each item is a real lie or a real duplicate the parent leaves behind. A malformed copy (task-0a65c201, empty description) was deleted minutes before this one was filed.\n\n(1) DELETE THE DEAD GUARD. deploy-migration-context.ts:129-135 refuses DEPLOY_MIGRATION_WORKSPACE_MISMATCH only when `request.workspace` is passed AND differs from the configured workspace — a PATH STRING compare — and NEITHER production caller passes it (deploy-command.ts:280, rollback-restore.ts:130-133). Its comment :129-131 claims it prevents \"migrating a different tree than the one the deploy archived\", which was never true and after the parent is simply the parent's job. Measured references, exactly three: the roster entry :47-48 (DEPLOY_MIGRATION_CONTEXT_DETAILS, 3 codes -> 2; DeployMigrationContextCode :53 narrows automatically), the `request.workspace` key :103-105, the guard :129-135; and in deploy-migration-context.test.ts arm (d) :168-172 first block, arm (e) :206-207 entry, and the helper's `named` param :89-92. NO control-room mirror (live-runs.ts:86 has no migration codes), NO tests/security roster, NO count assertion, NO PUBLIC_PHASE_DETAILS / SAFE_PHASES row (resolver refusals reach the ledger with detail \"\"). Do NOT revive it as an interim `git diff --quiet` guard: that would refuse every rollback that crosses a migration-adding sha (deploy-service.ts:356-363 re-executes at the OLD sha with no rollbackImage fence at :310), would refuse dump restores that never read migrations/ (rollback-restore.ts:143-146), and on a shared-checkout fleet any peer's dirt in migrations/ would block every deploy under a code whose prose names a config error.\n\n(2) FOLD THE TWIN RECIPE. The parent lands apps/daemon/src/repository/git-source-extract.ts (bare temp repo + objects/info/alternates + `<sha>^{commit}` verify + checkout-from-bare + prefix-fenced teardown), lifted from deploy-image-build.ts:16,:29-38,:41-45. Make deploy-image-build.ts call the helper for its bare-repo half so the two do not drift; its four arms in deploy-image-build.test.ts (66 lines) stay green unedited, including :20 \"despite dirty files\".\n\n(3) THE GATED TWIN'S SHA. apps/daemon/src/deployment/migrate-down-real.test.ts (205 lines, `RUN` :48, MOE_MIGRATION_RESTORE=1) materializes a non-git tree :66-83, writes ADDED into the working tree :168-170, then passes a constant `sha: SHA` :51/:173. After the parent, the real port extracts migrations/ at that sha from the workspace's repo — a non-repo with a fake sha refuses before the tool runs, so this gated arm goes RED the next time anyone runs it live. Fix: git init + commit each written migration and pass its real sha. The parent fixes the ungated twin (migration-real.test.ts:51-81) itself.\n\n(4) OPTIONAL, decide at plan time: a distinct MIGRATION_SOURCE_UNAVAILABLE code for \"the sha or its migrations/ is not in this repository\" instead of the parent's byte-parity mapping onto MIGRATION_FAILED/MIGRATION_FILE_UNKNOWN. Costs three rosters (migration-receipt.ts:13-26 codeLayers, deploy-ledger.ts:39-53 PUBLIC_PHASE_DETAILS, deploy-refusal-redaction.test.ts:68-76 SAFE_PHASES + :227 count). Only worth it if an operator has actually been confused by the parity code; otherwise leave it.",
+  "definitionOfDone": [
+    "DEPLOY_MIGRATION_WORKSPACE_MISMATCH no longer exists in the tree: git grep returns zero hits across apps packages tests docs, the roster shrinks 3 -> 2, and deploy-migration-context.test.ts arms (d) and (e) are rewritten to the two surviving codes with no arm made vacuous.",
+    "deploy-image-build.ts composes git-source-extract for its bare-repo half; `git grep -n 'objects/info/alternates' -- apps/daemon/src` hits only the helper; deploy-image-build.test.ts's four arms including :20 \"despite dirty files\" pass UNEDITED.",
+    "migrate-down-real.test.ts commits each migration it writes and passes the real sha; run once under MOE_MIGRATION_RESTORE=1 with docker up and quote the count line — an unrun gated arm is not a pass.",
+    "If a MIGRATION_SOURCE_UNAVAILABLE code is added, all three rosters move together and the redaction count arm is updated; if not, the completion record says so in one sentence.",
+    "pnpm --filter @moe/daemon typecheck and pnpm --filter @moe/daemon test EXIT 0 with count lines quoted; no control-room or security roster is touched (assert by git diff --stat)."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-d85fd8fd74354e94886d619c67f24c75"
+  ],
+  "priority": "LOW",
+  "order": 154,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-09T16:24:18.695Z",
+  "updatedAt": "2026-09-09T16:24:18.695Z"
+}

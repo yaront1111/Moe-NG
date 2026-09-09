@@ -1187,6 +1187,78 @@ project's policy aggregate at its current versions. The seed's builders
 `src/orchestrator/demo-seed-policy.ts`) are the declared defaults; a real
 deployment installs its own slices at the same refs.
 
+### A fresh product, from the browser, and the three steps that are not
+
+Measured 2026-09-09 by `tests/e2e/control-room/live-proof-prd.spec.ts`, which
+drives a product that did not exist when the run started from the New product
+form to a real pull request. The browser reaches: `repository.bootstrap`, the
+activation chain, Gate 1 (including `product_contract.answer_clarification`),
+`design.submit`, `planning.submit_decomposition`, the plan gate
+(`approval.decide_intent`) and Gate 3 (`release.decide`, which admits a paired
+ADMIN through `releaseByPairedAdmin`). Three steps are NOT the browser's and an
+operator has to take them:
+
+| Step | Why | What refuses without it |
+| --- | --- | --- |
+| Install `moe-verifier-policy/1` and `moe-reviewer-calibration/1` | No screen installs them; see *Verifier authority* above | wrapper prints "standing authority incomplete"; no node is ever accepted |
+| Approve each criterion CHECK | Needs a durable HUMAN principal, and no criterion-approval surface ships | `CRITERION_CHECK_HUMAN_REQUIRED @ CRITERION_EVIDENCE` on the operator wire |
+| Preview and deploy | Both run the product on the daemon's own host and are operator-only by design | `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION` |
+
+`policy.validate` IS now driven by the browser's activation chain (added
+2026-09-09). Without it `approval.decide_intent` refuses
+`APPROVAL_INTENT_POLICY_REF_UNAVAILABLE @ DAEMON_APPROVAL_INTENT`, because it
+derives its policy ref from the newest replay-verified `PolicyEvaluated` and
+nothing else writes that row.
+
+Two more kinds the operator drives directly: `repository.recover` (ADMIN,
+operator-only) re-binds a store's recovery genesis, and `qualification.replan`
+opens a successor run when a review has exhausted its attempts (see *Replan*).
+`session.renew` extends a minted session without re-pairing.
+
+### Nodes of one goal deliver ONE AT A TIME
+
+The delivery coordinator admits exactly one checkout owner per repository root.
+While one node holds the reservation — from staffing until its landing commits —
+every other node of that goal is refused
+`REPOSITORY_EXECUTION_BUSY (REPOSITORY_DELIVERY)` on each wrapper pass. So
+"independent nodes are staffed in parallel" means they are CLAIMED and ATTEMPTED
+in the same pass; their commits are serialized. Raising
+`MOE_WRAPPER_MAX_AGENTS` does not change this and never will: the fence is the
+repository, not the seat count. A driver that waits for every seat to report
+before recording any review round therefore DEADLOCKS — the first node holds the
+checkout waiting for a round that is waiting for the second node.
+
+### Human-only kinds (the MCP-excluded roster)
+
+`OPERATOR_PRINCIPAL_KINDS` in `apps/daemon/src/daemon-command-vocabulary.ts` is
+the single source; `mcp-tool-allowlist.js` DERIVES the MCP exclusion from it, so
+a kind added there is removed from the advertised MCP surface by construction.
+As of 2026-09-09 it holds 28 kinds:
+
+```
+approval.decide                  approval.decide_intent
+criterion_check.approve          criterion_check.verify
+cutover.activate                 deployment.deploy
+deployment.migrate_down          deployment.rollback
+deployment.set_target            environment.set_variable
+environment.unset_variable       goal.close
+graph.approve                    graph.supersede
+integration.accept_output        monitoring.retire_environment
+monitoring.set_probe_interval    preview.decide
+preview.start                    product_contract.answer_clarification
+product_contract.sync_env_example project.set_agent_provider
+release.decide                   repository.bootstrap
+repository.publish               repository.recover
+resource.confirm_released        session.open
+```
+
+Membership is what removes a kind from MCP. It is NOT always what fences its
+dispatch: kinds served from ASYNC entries (`deployment.deploy`, `preview.start`,
+`release.decide`) never reach the registry's synchronous operator check, so each
+of those handlers fences itself at entry — and `release.decide`'s own fence
+deliberately admits a paired ADMIN human, which is why Gate 3 is browser-driven
+while preview and deploy are not.
+
 ## Code-node specs
 
 A node spec is one JSON file in `MOE_NODE_SPECS_DIR`:

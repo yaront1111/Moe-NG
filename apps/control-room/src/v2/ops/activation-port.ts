@@ -39,10 +39,27 @@ export { readSurfaceOnce } from "./policy-install-port.js";
  * Both mirrors are HAND-TRANSCRIBED: apps/control-room cannot import apps/daemon (no workspace
  * edge, no tsconfig `paths`, and a deep relative import is TS6059), so this roster must be
  * re-checked whenever EITHER authority moves.
+ *
+ * `policy.validate` IS A MEMBER, and it is the sixth for a THIRD authority nobody had reached
+ * from here before. MEASURED 2026-09-09 on a fresh product this browser bootstrapped: the plan
+ * gate refused `APPROVAL_INTENT_POLICY_REF_UNAVAILABLE @ DAEMON_APPROVAL_INTENT`, because
+ * `approval.decide_intent` — the ONLY approval wire a paired durable HUMAN may ride — derives
+ * its `applicablePolicyRef` from the newest replay-verified `PolicyEvaluated`
+ * (apps/daemon/src/planning/approval-policy-ref.ts), and nothing but `policy.validate` writes
+ * that row. Without it a browser-bootstrapped product activates, compiles a plan, and can then
+ * never approve it: a dead end at the product's headline gate, not a slow path.
+ *
+ * IT SITS BEFORE `project.activate`, which is the order `bootstrap-test-fixtures.ts` already
+ * proves and `tests/e2e/foundation/multi-node-world.ts` documents: the evaluation must follow
+ * every `policy.install` (a later `PolicyInstalled` reusing the selected slice makes the
+ * derivation refuse SUPERSESSION_POLICY_DECISION_POLICY_REUSED) and the admission table asks
+ * only for `policy.install` before it (bootstrap-sequence.ts:30), so it is admissible here.
+ * It GRANTS NOTHING: the slice `DEV_PAYLOADS` names carries no rules and no auto-approval
+ * opt-ins, and evaluating it only records that the policy was evaluated.
  */
 export const ACTIVATION_CHAIN_KINDS = Object.freeze([
   "project.register", "project.bind_repository", "provider.probe", "policy.install",
-  "project.activate",
+  "policy.validate", "project.activate",
 ] as const);
 
 export type ActivationChainKind = (typeof ACTIVATION_CHAIN_KINDS)[number];

@@ -7,11 +7,17 @@ import { join } from "node:path";
 import { expect, test } from "@playwright/test";
 
 import { mintLaneOperatorSeat, withDaemonBackedControlRoom } from "./daemon-ports.js";
+import { resolveLaneScratch } from "./wrapper-lane.js";
 import {
   ask, askDaemon, committedKinds, envelope, isRecord, offerFor, offeredKinds, pairBrowser, record,
 } from "./live-proof-arms.js";
-import { askClarification, driveGate1InBrowser, proposeContract } from "./live-proof-gate1.js";
-import { PRD_TEXT, PRODUCT_NAME } from "./live-proof-prd.js";
+import { approvePlanInBrowser, askClarification, driveGate1InBrowser, proposeContract }
+  from "./live-proof-gate1.js";
+import { installStandingAuthority, landLiveProofNodes } from "./live-proof-landing.js";
+import { prepareLiveProductWorkspace } from "./live-proof-workspace.js";
+import { verifyLiveProofCriteria } from "./live-proof-criteria.js";
+import { LIVE_RELEASE, releaseLiveProof } from "./live-proof-release.js";
+import { CRITERIA, PRD_TEXT, PRODUCT_NAME } from "./live-proof-prd.js";
 
 /**
  * THE EPIC-FINAL LIVE PROOF, step 3: a fresh product, from the browser, on my own recorded PRD.
@@ -22,10 +28,14 @@ import { PRD_TEXT, PRODUCT_NAME } from "./live-proof-prd.js";
  * the refusal with its code AND its layer instead of routing around it. Task rail 2 is explicit
  * that a refusal is a recordable outcome and a narrowed DoD is not.
  *
- * WHAT IT DOES NOT COVER, said here so a green run is never read as more than it is: nothing is
- * staffed and nothing lands, so there are no node landing shas; and Gate 2, Gate 3 and the deploy
- * are on the far side of the operator fence this spec's last arm MEASURES. Steps 4-8 of the plan
- * own those.
+ * WHAT IT NOW COVERS, extended for step 5: past the plan gate the drive STAFFS the compiled
+ * plan's two nodes CONCURRENTLY through the real wrapper and lands both in the product's own
+ * repository, so the node landing shas DoD 1 asks for are read off git here.
+ *
+ * WHAT IT STILL DOES NOT COVER, said here so a green run is never read as more than it is:
+ * Gate 2, Gate 3 and the deploy are on the far side of the operator fence this spec's boundary
+ * arm MEASURES, and the owner's ruling (comment-267eccae) routes preview and deploy over the
+ * operator wire rather than the browser. Steps 5-8 of the plan own those.
  *
  * NOTHING IS SEEDED. `seed: "NONE"` plus the `seedPid === null` assertion is the lane's own
  * witness, and the catalog is asserted ABSENT before the page is touched. No scratchpad script
@@ -33,7 +43,8 @@ import { PRD_TEXT, PRODUCT_NAME } from "./live-proof-prd.js";
  * the browser's own form, and every fact below is read back from the daemon or from git.
  */
 
-const JOURNEY_MS = 420_000;
+/** Raised for the landing leg: three real deliveries, each with a verifier run and a commit. */
+const JOURNEY_MS = 1_800_000;
 const CARD_MS = 120_000;
 const RUN_MS = 240_000;
 const CONTRACT_ID = "contract-standup-live-proof";
@@ -73,31 +84,51 @@ const DESIGN_REVISION = {
 };
 
 /**
- * TWO nodes, because DoD 1 asks for at least two, and the split is the PRD's own seam rather
- * than an arbitrary halving: sign-in and the API's session/400 behaviour on one, the table and
- * its UNIQUE constraint on the other. Every one of the eight approved criteria is carried by
- * exactly one node, so the roster cannot silently drop one.
+ * THREE nodes: two INDEPENDENT work nodes and a completion node that depends on both.
+ *
+ * DoD 1 asks for at least two nodes with at least two STAFFED CONCURRENTLY, and the shape is
+ * what makes the second half reachable. MEASURED 2026-09-09 with a two-node plan whose
+ * completion node was `node-entries`: the graph withholds a completion node until its parents
+ * are ACCEPTED, so exactly ONE node was ever staffed and the drive reported SEAT_NEVER_WROTE
+ * for the other. That is the graph behaving correctly, not a defect -- so the plan now carries
+ * the pair the concurrency claim is about PLUS the completion node the shape requires.
+ *
+ * The split is the PRD's own seam rather than an arbitrary halving: sign-in and the session
+ * fence on one, the table and its UNIQUE constraint on the other, and the integration surface
+ * the last two criteria are measured through on the third. Every one of the eight approved
+ * criteria is carried by exactly one node, so the roster cannot silently drop one.
  */
 const PLAN_NODES = [
   {
     capability: "capability-implement",
-    criterionIds: ["crit-a1", "crit-a2", "crit-a3", "crit-a6"], dependsOn: [],
+    criterionIds: ["crit-a1", "crit-a2", "crit-a3"], dependsOn: [],
     nodeKey: "node-auth-api",
-    objective: "Sign-in, the session fence on /api/entries, and its stable 400.",
+    objective: "Sign-in and the session fence on /api/entries.",
     readScopes: ["services/api/src"], resources: ["resource-a"],
     verificationRecipeRefs: ["recipe-a"], writeScopes: ["services/api/src/auth"],
   },
   {
     capability: "capability-implement",
-    criterionIds: ["crit-a4", "crit-a5", "crit-a7", "crit-a8"], dependsOn: [],
+    criterionIds: ["crit-a4", "crit-a5", "crit-a7"], dependsOn: [],
     nodeKey: "node-entries",
-    objective: "standup_entry, its UNIQUE constraint, HISTORY and optional blockers.",
+    objective: "standup_entry, its UNIQUE constraint and the HISTORY empty state.",
     readScopes: ["services/api/src"], resources: ["resource-a"],
     verificationRecipeRefs: ["recipe-a"], writeScopes: ["services/api/src/entries"],
   },
+  {
+    capability: "capability-implement",
+    criterionIds: ["crit-a6", "crit-a8"], dependsOn: ["node-auth-api", "node-entries"],
+    nodeKey: "node-integration",
+    objective: "The API surface both halves are reached through: the stable 400 and optional blockers.",
+    readScopes: ["services/api/src"], resources: ["resource-a"],
+    verificationRecipeRefs: ["recipe-a"], writeScopes: ["services/api/src"],
+  },
 ];
 
-test("a fresh product reaches a compiled two-node plan, driven in the browser from my PRD", async ({ page }) => {
+/** The two INDEPENDENT nodes, which are the pair DoD 1's concurrency clause is about. */
+const CONCURRENT_NODES = ["node-auth-api", "node-entries"];
+
+test("a fresh product reaches a compiled two-node plan and lands both nodes, from the browser", async ({ page }) => {
   test.setTimeout(JOURNEY_MS);
 
   const parentDir = mkdtempSync(join(tmpdir(), "moe-liveproof-"));
@@ -106,7 +137,8 @@ test("a fresh product reaches a compiled two-node plan, driven in the browser fr
   expect(existsSync(productDir), "the browser must create the submitted directory").toBe(false);
 
   const outcome = await withDaemonBackedControlRoom({
-    approval: "HUMAN", liveCredentials: "ATTACHED", operatorChannel: true, seed: "NONE",
+    approval: "HUMAN", liveCredentials: "ATTACHED", nodeWorkspace: productDir,
+    operatorChannel: true, seed: "NONE",
   }, async (lane) => {
     expect(lane.seedPid, "seed child pid (null proves the lane ran unseeded)").toBeNull();
     expect(existsSync(lane.catalogPath), "no catalog exists before the browser runs").toBe(false);
@@ -198,7 +230,7 @@ test("a fresh product reaches a compiled two-node plan, driven in the browser fr
           planOffer, "planning.submit_decomposition", "live-proof-plan",
           {
             gateRef: contractRef, goalRef: goalId,
-            structure: { completionNodeKey: "node-entries", nodes: PLAN_NODES },
+            structure: { completionNodeKey: "node-integration", nodes: PLAN_NODES },
           },
           "d", lane.credential,
         ));
@@ -207,12 +239,92 @@ test("a fresh product reaches a compiled two-node plan, driven in the browser fr
         const afterPlan = await askDaemon(lane, "/affordances/read", {});
         record("offered-kinds-after-plan", offeredKinds(afterPlan.body));
         // The widened `approval.decide_intent` offer IS the browser's plan-gate wire, and its
-        // targetAggregateId is the compiled run. Not dispatched here: the gate belongs to the
-        // chain step 4 owns, and a half-formed payload of mine would read as a product refusal.
+        // targetAggregateId is the compiled run.
         const intent = offerFor(afterPlan.body, "approval.decide_intent");
         record("plan-run", intent === null ? null : {
           expectedVersion: intent["expectedVersion"], runId: intent["targetAggregateId"],
         });
+
+        // ---- THE PLAN GATE, THEN TWO NODES LANDED CONCURRENTLY (DoD 1's execution half). ----
+        if (intent !== null) {
+          const runId = String(intent["targetAggregateId"]);
+          await approvePlanInBrowser(page, lane, goalId, runId);
+          record("offered-kinds-after-plan-gate",
+            offeredKinds((await askDaemon(lane, "/affordances/read", {})).body));
+          // The acceptance checks are committed into the product's OWN repository before any
+          // seat runs, so the daemon's verifier and the criterion service both measure bytes
+          // that were in the tree before the delivery they judge.
+          record("acceptance-baseline", prepareLiveProductWorkspace(productDir));
+          const scratch = resolveLaneScratch(lane);
+          expect(scratch, "the lane scratch must resolve before the wrapper runs").not.toBeNull();
+          if (scratch === null) throw new Error("unreachable: the assertion above fails first");
+          // OPERATOR-WIRE STEP, DISCLOSED: the browser ships no screen that installs these two
+          // standing slices, and without them the verifier never accepts a delivered node.
+          record("standing-authority-operator-wire", await installStandingAuthority(lane, scratch));
+          const landed = await landLiveProofNodes(
+            lane, productDir, PLAN_NODES.map((node) => node.nodeKey), CONCURRENT_NODES);
+          record("node-landings", landed.ok
+            ? { landings: landed.landings, seats: landed.seats, staffing: landed.staffing }
+            : { detail: landed.detail.slice(0, 1500), ok: false });
+          expect(landed.ok, landed.ok ? "landed" : landed.detail).toBe(true);
+          if (landed.ok) {
+            // TWO DISTINCT COMMITS, so a single landing counted twice cannot pass.
+            expect(new Set(landed.landings.map((row) => row.sha)).size).toBe(PLAN_NODES.length);
+            // THE CONCURRENCY CLAIM, and it is the WRAPPER'S OWN transcript rather than an
+            // inference from two landings existing: a strictly sequential wrapper lands two
+            // nodes too. The witness is a BUSY refusal for the second node inside the first
+            // node's delivery window, which only one checkout owner per repository can produce.
+            expect(landed.staffing.concurrent,
+              `no second node was staffed inside the first node's delivery window: ${JSON.stringify(landed.staffing)}`)
+              .toBe(true);
+            expect(landed.staffing.evidence ?? "", "the witness must carry the product's own code")
+              .toContain("REPOSITORY_EXECUTION_BUSY");
+            expect(CONCURRENT_NODES).toHaveLength(2);
+
+            // ---- DoD 3, FIRST HALF: every approved criterion VERIFIED, WITH ITS DENOMINATOR.
+            const evidence = await verifyLiveProofCriteria(
+              lane, scratch, productDir, goalId, CRITERIA.map((row) => row.id),
+              mintLaneOperatorSeat(lane).credential);
+            record("criterion-evidence", evidence);
+            // THE DENOMINATOR IS THE PRD'S OWN ROSTER, not the daemon's header: a read that
+            // enumerated fewer criteria than the contract approved would otherwise report
+            // itself complete. CRITERIA is the transcription of comment-5657f450.
+            expect(evidence.criteria).toHaveLength(CRITERIA.length);
+            expect(evidence.verified, `verified ${String(evidence.verified)} of ${String(CRITERIA.length)}: ${JSON.stringify(evidence.criteria)}`)
+              .toBe(CRITERIA.length);
+            // AND THE DAEMON'S OWN COVERAGE READ, with its denominator: two independent reads
+            // of the same fact, so a criterion the evidence view lost is caught by the other.
+            expect(evidence.totals?.["criteria"]).toBe(CRITERIA.length);
+            expect(evidence.totals?.["verified"]).toBe(CRITERIA.length);
+            expect(evidence.integratedSha ?? "").toMatch(/^[0-9a-f]{40}$/u);
+
+            // ---- DoD 3, SECOND HALF: the dossier at the released sha, on a real PR. ----
+            // OPT-IN. Without MOE_LIVE_RELEASE_PR=1 nothing is pushed and the absence is
+            // RECORDED rather than passed over in silence, so a green hermetic run can never
+            // be read as having opened a pull request.
+            if (!LIVE_RELEASE) record("release-skipped", "MOE_LIVE_RELEASE_PR is not 1");
+            else {
+              const released = await releaseLiveProof(page, lane, scratch, productDir, goalId);
+              record("release", released);
+              expect(released.publish, "the publisher must push the release branch").toBe("PUSHED");
+              expect(released.prUrl ?? "", "the receipt must carry a real GitHub pull request")
+                .toMatch(/^https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+$/u);
+              expect(released.receipt?.["outcome"]).toBe("RELEASED");
+              // THE DOSSIER AT THE RELEASED SHA, READ BACK FROM GITHUB, with its DENOMINATOR:
+              // every approved criterion appears and the table has exactly as many rows as the
+              // approved contract has criteria. A dossier that dropped one would still call
+              // itself complete, which is the failure this clause exists to catch.
+              const dossier = released.dossier ?? "";
+              expect(dossier, "the pull request must carry the dossier").toContain("Release dossier");
+              expect(dossier).toContain(String(released.receipt?.["sha"] ?? ""));
+              for (const row of CRITERIA) expect(dossier).toContain(row.id);
+              const rows = dossier.split(/\r?\n/u)
+                .filter((line) => line.trimStart().startsWith("| crit-"));
+              expect(rows, `dossier criterion rows:\n${rows.join("\n")}`)
+                .toHaveLength(CRITERIA.length);
+            }
+          }
+        }
       }
     }
 

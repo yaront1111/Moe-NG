@@ -1,0 +1,32 @@
+{
+  "id": "task-f7d38f752b074dc89da30631783aae04",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "bug: a node that legitimately lands nothing never counts toward its goal, so publish and goal closure stall forever",
+  "description": "SPUN OUT OF task-9dbe28fdccc546dfbbbf9b32f68e7c61 (the NOTHING_TO_COMMIT checkout wedge), whose description ROUTED this question to the planning architect: \"whether a node that landed nothing counts as landed for goal.close / repository.publish offers — goal-landing-facts.ts:66-67 counts only COMMITTED, so the same no-diff node will also stall goal closure. That is a second seam and may be its own row.\" architect-f04f69cf, 2026-09-09: it IS a second seam, and this is that row.\n\nWHY IT IS SEPARATE FROM THE PARENT. The parent fixes CHECKOUT OWNERSHIP: an accepted node that lands nothing must release the reservation instead of wedging it in BLOCKED. It touches the delivery coordinator, the execution port's release table and the recovery evidence. THIS row is about GOAL PROGRESS: even with the checkout correctly released, the node contributes nothing to its goal's landed set, so the goal cannot be published or closed. Different module, different consumers, and the parent's fix does not touch it. Plan the parent first; this row's shape depends on it landing.\n\nMEASURED AT HEAD by architect-f04f69cf while planning the parent, not inferred from the review:\n- apps/daemon/src/repository/goal-landing-facts.ts, in `landedGoals`: the loop over `readReviewLedgers(...).landings` does `if (receipt.outcome !== \"COMMITTED\") continue;` (the :66-67 the parent names). A NOTHING_TO_COMMIT receipt has outcome REFUSED and commit null, so the node NEVER joins `landed`.\n- The header on that fail-closed catch states the intent plainly: \"An unreadable ledger is not evidence a commit exists, and offering a publish the workspace has nothing to push is the exact disagreement this gate exists to end.\" That reasoning is CORRECT for an unreadable ledger and is what makes this subtle: the gate is right to demand evidence, and the open question is whether a node that provably had nothing to commit is evidence of progress or of nothing.\n- Consequence chain, from the parent's own measurement: `repository.publish` refuses PUBLISH_GOAL_NOT_INTEGRATED while a goal's execution-bearing nodes have no COMMITTED landing receipt (publication-goal-integration.ts:24, `receipts.length === 0`), and `deployment.deploy`'s prerequisite table reads a COMMITTED `repository.publish` DECISION. So one legitimately-no-diff node stalls publish, deploy and closure for the whole goal.\n\nTHE TRIGGER IS NOT EXOTIC. The parent measured that NOTHING_TO_COMMIT fires for ANY seat that leaves `git status` clean at landing, not only a task that needed no changes — including a seat that committed its own work. node-lander.ts:73-79 records it firing live on UnAI on 2026-09-05.\n\nTHE QUESTION THIS ROW MUST ANSWER, and it is a design decision, not a defect to patch: is \"the node ran, was accepted, and provably had nothing to commit\" a form of DONE that should count toward goal closure and publish offers, or is a goal with no committed bytes correctly unpublishable? Both answers are defensible and the wrong one is a silent hole. Whoever plans this must decide it explicitly and record why, rather than making the counter permissive to clear a stall.\n\nDO NOT WIDEN `landedGoals` TO COUNT NON-COMMITTED RECEIPTS AS A REFLEX. That would also count GIT_COMMIT_FAILED and every other refusal, which is exactly the blanket the parent row's DoD forbids at the other seam. If a no-effect landing should count, the discriminator is the same one the parent uses: a refusal decided BEFORE any landing intent was journaled.\n\nThe parent pins today's behaviour with an arm, so this row starts from a documented baseline rather than a guess.",
+  "definitionOfDone": [
+    "The decision is recorded before any code changes: a row comment states whether a provably-no-effect landing counts toward goal closure and publish offers, with the reason, and names which of the two defensible readings was chosen.",
+    "An arm pins the chosen behaviour at the goal-landing-facts.ts seam, asserting the specific outcome that does and does not count — never merely that a goal did or did not become publishable.",
+    "If no-effect landings are made to count, the discriminator is a refusal decided BEFORE any journaled landing intent (the parent row's discriminator), and an arm proves a post-intent refusal such as GIT_COMMIT_FAILED still does NOT count.",
+    "The publish path is asserted end to end for the chosen answer: a goal whose only execution-bearing node refused NOTHING_TO_COMMIT reaches the intended repository.publish outcome, with its refusal code and layer asserted when it refuses.",
+    "pnpm --filter @moe/daemon test EXIT 0 with its Test Files count line quoted verbatim."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-9dbe28fdccc546dfbbbf9b32f68e7c61"
+  ],
+  "priority": "HIGH",
+  "order": 1010.3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-09T15:00:40.393Z",
+  "updatedAt": "2026-09-09T15:00:40.393Z"
+}

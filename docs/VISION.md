@@ -176,6 +176,29 @@ landing sha that carried it. Two limits stand and are not softened here: the
 landing still originates outside the browser, and a live `release.decide` outruns
 the browser's 15s transport abort, so the operator sees the link on the next look
 rather than in the ordering session.
+THE WHOLE STAGE 1 LOOP HAS NOW RUN ON A PRODUCT THAT DID NOT EXIST WHEN THE RUN
+STARTED (measured 2026-09-09). One drive takes a recorded PRD from the browser's
+own New product form to a real pull request: bootstrap receipt BOOTSTRAPPED at a
+sha git agrees with, activation, Gate 1 with a MATERIAL clarification answered by
+click, a design revision, a compiled three-node plan, the plan gate taken by
+click, three nodes landed by the real wrapper and lander at three distinct shas,
+all eight of the PRD's acceptance criteria VERIFIED by the contained criterion
+service (8/8, cross-checked against the approved contract's own roster and
+against `/documents/coverage/read`), a real publish, and Gate 3 taken by the two
+clicks of the release card — opening
+<https://github.com/yaront1111/moe-live-proof-161b7e9d/pull/2> at sha
+`65192c19a8cf5197462647926c130a0c12c2c1ad`, its body the dossier with a row for
+every criterion. The drive is `tests/e2e/control-room/live-proof-prd.spec.ts`;
+the pull-request leg is opt-in on `MOE_LIVE_RELEASE_PR=1` and records its own
+absence otherwise. THE CRASH BAR IS SEPARATELY MET: `tests/fault/landing-crash`
+kills a real daemon mid-landing-write and proves from the store alone that the
+landing has exactly one outcome. TWO LIMITS STAND. Nodes of one goal are
+delivered ONE AT A TIME — the delivery coordinator admits a single checkout owner
+per repository root and answers `REPOSITORY_EXECUTION_BUSY` to the second, so
+"staffed in parallel" means claimed and attempted together, never two commits
+being made at once. And the browser ships no screen that installs the standing
+verifier authority (`moe-verifier-policy/1`, `moe-reviewer-calibration/1`), so
+that one step is the operator's.
 
 **Stage 2 — PRD → deployed MVP:** repository bootstrapping (the unseeded local
 browser path creates one commit, binds and catalogs the repository, and creates
