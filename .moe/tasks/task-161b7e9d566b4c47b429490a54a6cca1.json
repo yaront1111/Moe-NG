@@ -297,7 +297,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:14:49.532Z",
-  "updatedAt": "2026-09-09T12:58:04.904Z",
+  "updatedAt": "2026-09-09T13:13:11.070Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:28:10.582Z",
     "plannedStepCount": 8,
@@ -511,8 +511,8 @@
     "outcome": "nothing",
     "kind": "checkpoint",
     "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
-    "sessionId": "worker-a11dcf70@2026-09-09T12:58:00Z",
-    "at": "2026-09-09T12:58:04.904Z"
+    "sessionId": "worker-a11dcf70@2026-09-09T13:13:06Z",
+    "at": "2026-09-09T13:13:11.070Z"
   },
   "priorBlockedReason": "STEP 4 (DoD 2) DELIVERED GREEN; blocking on step 5 (DoD 3) with the exact remaining blocker, per governor resolution comment-b2a0a575 item 4. Full evidence in comment-6a064c84 (step 4) and comment-89501ec7 (step 5).\n\nDELIVERED: the forced crash mid-write. tests/fault/landing-crash/, 3 files, 9 arms. A REAL node process runs production landingJournalGate + commitJournaledLanding against real git and a real store; the DEVELOPMENT-ONLY knob SIGKILLs it at after-commit. After the kill git HEAD carries the landing commit while the ledger holds landing_intent=1, landing_attempt=1, landing_completion=0; the restart answers REPOSITORY_RECOVERY_REQUIRED and the rows are byte-identical. Counted with SQL. `pnpm test:fault` -> Test Files 11 passed (11), Tests 92 passed (92), exit 0.\n\nOWNER ITEM 1 ANSWERED - RELEASE IS BROWSER-REACHABLE. Fresh run of apps/daemon/src/release/release-decide-authorization.test.ts -> 19 passed, exit 0. release.decide is an ASYNC entry, so the registry returns wrapAsync BEFORE its synchronous operator fence and the five-kind widening never applies; the only identity fence is assertReleasePrincipal, which carries releaseByPairedAdmin. No fence touched.\n\nI NEED TWO THINGS, neither a worker's to decide:\n(1) A RELEASE REMOTE, or a ruling on the PR clause. release-approval-live.spec.ts is opt-in by design on MOE_LIVE_RELEASE_PR=1 + MOE_LIVE_RELEASE_REMOTE, operator-named. I have no remote for a fresh product and will not create or push a GitHub repo unilaterally. fakeGh is no substitute: the switch that makes release work is the switch that makes the PR a double.\n(2) THE LANDING CHAIN. Nothing landed, so no dossier exists; step 3 stopped at PLAN_COMPILED. Staffing collides with DoD 1 \"real seats\": lane-landing.ts:16-21 doubles the seat and agent-provider-seats.spec.ts:27-32 refuses a real provider on quota flake.\n\nNo blockedOnTaskIds; twelve deps DONE. Steps 6-8 are NOT blocked by this.",
   "blockedOnTaskIds": null,
