@@ -58,14 +58,15 @@ const DOCKER_READY = docker(["version", "--format", "{{.Server.Version}}"]).stat
 
 describe("the candidate archive is a USTAR stream a real tar accepts", () => {
   it("lists exactly the parent directory and the delivery file, with the app user's ids", () => {
-    const listed = readBack(encoded(PAYLOAD), ["-tvf", "-"]);
+    const listed = readBack(encoded(PAYLOAD), ["--numeric-owner", "-tvf", "-"]);
 
     expect(listed.status).toBe(0);
-    // `tar -tv` prints the NUMERIC ids, which is the field under test. Literal, not the imported
-    // constant: a constant on both sides of the assertion moves with the mutation and stays green.
-    expect(listed.out).toContain("1000/1000");
-    expect(listed.out).toContain("-rw-------");
-    expect(listed.out.split(/\r?\n/u).filter((line) => line !== "").map((line) => line.split(" ").pop()))
+    const lines = listed.out.split(/\r?\n/u).filter((line) => line !== "");
+    // GNU tar joins numeric uid/gid with a slash; bsdtar prints a link count and separate columns.
+    // Pin BOTH ids and the exact mode on EACH entry, with literals independent of the encoder.
+    expect(lines[0]).toMatch(/^drwxr-xr-x\s+(?:1000\/1000|[0-9]+\s+1000\s+1000)\s/u);
+    expect(lines[1]).toMatch(/^-rw-------\s+(?:1000\/1000|[0-9]+\s+1000\s+1000)\s/u);
+    expect(lines.map((line) => line.split(" ").pop()))
       .toEqual(["run/moe/", "run/moe/env"]);
   });
 

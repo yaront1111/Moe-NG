@@ -1606,7 +1606,7 @@ describe("foundation attempt dispatch — the fixture's launch-lock cleanup", ()
     ].join("\n")], { encoding: "utf8" }).trim();
   }
 
-  it("cannot reap a LIVE holder's lock, because exclusion never reads the sidecar",
+  it.runIf(WINDOWS_ONLY)("cannot reap a LIVE holder's lock, because exclusion never reads the sidecar",
     async () => {
       const holder = spawn(process.execPath, ["--input-type=module", "-e", holderSource()],
         { stdio: ["ignore", "pipe", "pipe"] });
