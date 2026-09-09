@@ -19,6 +19,8 @@
  * The real `codex exec` run is another row's (task-c090faae); the spawn-surface parity itself is
  * task-48932bec's. Neither is exercised here - this is the OFFLINE proof.
  */
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { killTree, startDaemon } from "./j1-loop-harness.js";
@@ -100,12 +102,44 @@ async function driveCodexJourney(
   return { passes, runId, scratch };
 }
 
-/** The one codex spawn surface every arm reads; a pass with none never staffed a seat at all. */
+/** Provider discovery races the seat's recording; a probe alone never staffed a seat. */
 function firstSpawn(scratch: CodexScratch): SpawnRecord {
-  const records = spawnRecords(scratch);
+  const records = spawnRecords(scratch).filter((record) => !isVersionProbe(record));
   if (records.length === 0) throw new Error("no seat recorded a spawn surface");
   return records[0] as SpawnRecord;
 }
+
+describe("firstSpawn distinguishes seats from provider discovery", () => {
+  const probe: SpawnRecord = {
+    argv: ["--version"], bearerFromEnvironment: false, cwd: ".",
+    mcpConfigFlagPresent: false, originFromArgv: null, pid: 1,
+  };
+  const seat: SpawnRecord = {
+    ...probe, argv: ["exec", "-"], bearerFromEnvironment: true, pid: 2,
+  };
+
+  it.each([true, false])("selects the seat when discovery finishes first=%s", (probeFirst) => {
+    const scratch = createCodexScratch();
+    scratches.push(scratch);
+    const records = probeFirst ? [probe, seat] : [seat, probe];
+    records.forEach((record, index) => {
+      writeFileSync(join(scratch.echoDir, `spawn-${String(index + 1)}.json`),
+        JSON.stringify(record), "utf8");
+    });
+    expect(spawnRecords(scratch)).toHaveLength(2);
+    expect(firstSpawn(scratch)).toStrictEqual(seat);
+  });
+
+  it.each([0, 1])("refuses %i discovery records without a seat", (probeCount) => {
+    const scratch = createCodexScratch();
+    scratches.push(scratch);
+    if (probeCount === 1) {
+      writeFileSync(join(scratch.echoDir, "spawn-1.json"), JSON.stringify(probe), "utf8");
+    }
+    expect(spawnRecords(scratch)).toHaveLength(probeCount);
+    expect(() => firstSpawn(scratch)).toThrow(new Error("no seat recorded a spawn surface"));
+  });
+});
 
 describe("a scripted codex double drives the real MCP wire", () => {
   let happy: CodexRun;
