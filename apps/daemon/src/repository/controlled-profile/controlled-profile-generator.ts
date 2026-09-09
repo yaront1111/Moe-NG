@@ -10,7 +10,7 @@ import { controlledProfileRootFiles } from "./controlled-profile-root-templates.
  *
  * Determinism is the contract, not a nicety. Everything the loop claims downstream — the verifier
  * recipe, the deployment requirements, the migration tool — is written against what a product
- * STARTED as. If two bootstraps of `controlled-2` could differ, none of those claims hold across
+ * STARTED as. If two bootstraps of `controlled-3` could differ, none of those claims hold across
  * products, so the generator reads no clock, no random source, no cwd, no host tool version and no
  * `os.EOL`: its only input is this request, and its only file read is the pinned lockfile asset.
  *
@@ -23,7 +23,7 @@ import { controlledProfileRootFiles } from "./controlled-profile-root-templates.
  */
 
 /** The single source DoD 4 names. Everything else in the profile is an artifact of this string. */
-export const CONTROLLED_PROFILE_VERSION = "controlled-2" as const;
+export const CONTROLLED_PROFILE_VERSION = "controlled-3" as const;
 
 /** Raised when a caller asks for a profile version this build does not know how to emit. */
 export const BOOTSTRAP_PROFILE_VERSION_UNKNOWN = "BOOTSTRAP_PROFILE_VERSION_UNKNOWN" as const;
@@ -115,6 +115,7 @@ export function refuseControlledProfile(code: ControlledProfileRefusalCode): Con
  * asset would then carry them; emitting those bytes would make the generated tree host-dependent
  * and break the golden. Normalizing on READ keeps the emitted bytes identical on every host.
  */
+// controlled-3 changes only compose: no dependencies moved, so it deliberately reuses v2's lock.
 const LOCKFILE_ASSET = new URL("./assets/controlled-profile-v2-lock.yaml", import.meta.url);
 
 function lockfileBytes(): string {

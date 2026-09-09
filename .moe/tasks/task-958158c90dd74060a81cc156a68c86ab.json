@@ -113,7 +113,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T17:14:46.514Z",
-  "updatedAt": "2026-09-09T20:10:31.572Z",
+  "updatedAt": "2026-09-09T20:11:40.486Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T19:32:42.506Z",
     "plannedStepCount": 4,
@@ -177,19 +177,38 @@
       "treeId": "42844b9fcd82ece6fabe8c17f11673528b94ada5",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "866343cd85061d0571e8c8a0a2f7d65ed02918e5",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T20:05:58Z",
+      "paths": [
+        ".moe/tasks/task-4038ba9665174152907f1c9179995b82.json",
+        ".moe/tasks/task-958158c90dd74060a81cc156a68c86ab.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T20:11:40.486Z",
+      "treeId": "3efd8ebd7ce2b24cce3f35b1ebda2d1c17540c97",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
     "apps/daemon/src/deployment/deploy-candidate-archive.test.ts"
   ],
   "unattributedPaths": [
+    "tests/e2e/control-room/live-proof-image.ts",
+    "tests/e2e/control-room/live-proof-migration.ts",
+    "tests/e2e/control-room/live-proof-operate.ts",
     "tests/e2e/control-room/live-proof-seat.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-a11dcf70@2026-09-09T19:35:22Z",
-    "at": "2026-09-09T20:04:27.950Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-01b7fe3f@2026-09-09T20:05:58Z",
+    "at": "2026-09-09T20:11:40.486Z"
   },
   "completedAt": "2026-09-09T20:10:31.572Z",
   "reviewCompletedAt": "2026-09-09T20:10:31.572Z",
