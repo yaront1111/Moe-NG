@@ -72,15 +72,17 @@ const REFUSAL_KEYS = ["code", "detail"] as const;
  * misread or that would carry a secret into a durable decision.
  */
 const REMOTE_HTTPS = /^https:\/\/[A-Za-z0-9.-]+(?::\d+)?\/[^\s@]+$/u;
-const REMOTE_SSH = /^(?:ssh:\/\/)?(?:[A-Za-z0-9_.-]+@)?[A-Za-z0-9.-]+(?::\d+)?[:/][^\s@]+$/u;
+const REMOTE_SSH = /^ssh:\/\/(?:[A-Za-z0-9_.-]+@)?[A-Za-z0-9.-]+(?::\d+)?\/[^\s@]+$/u;
+const REMOTE_SCP = /^(?:[A-Za-z0-9_.-]+@)?[A-Za-z0-9.-]+:[^\s@]+$/u;
 
 export function admitRemoteUrl(value: unknown): string | null {
   if (typeof value !== "string" || value.length === 0 || value.length > 2048) return null;
-  if (/\s/u.test(value)) return null;
+  if (/\s/u.test(value) || value.includes("\\") || /^[A-Za-z]:/u.test(value)) return null;
   // Only https and ssh travel: a file:, git: or http: remote is refused by the name of its scheme.
   if (value.includes("://") && !value.startsWith("https://") && !value.startsWith("ssh://")) return null;
   if (REMOTE_HTTPS.test(value)) return value;
-  if (!value.startsWith("https://") && !value.startsWith("http://") && REMOTE_SSH.test(value)) return value;
+  if (REMOTE_SSH.test(value)) return value;
+  if (!value.includes("://") && REMOTE_SCP.test(value)) return value;
   return null;
 }
 

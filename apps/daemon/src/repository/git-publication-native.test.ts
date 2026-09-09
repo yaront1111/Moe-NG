@@ -47,20 +47,16 @@ const publishableFixture = (root: string, remoteUrl: string) => {
   return { candidate: captured.candidate, git };
 };
 
-it("pushes and observes a real local bare remote end to end with no injected options at all", async () => {
+it("refuses a local bare remote before publication on every host", () => {
   const base = resolve(tmpdir()); const root = mkdtempSync(join(base, "moe-publication-bare-"));
   const remote = join(root, "remote.git");
   try {
-    // The ledger's own admission policy is what makes a local bare repository a legal remote; assert it rather than assume it.
-    expect(admitRemoteUrl(remote)).toBe(remote);
-    const { candidate, git } = publishableFixture(root, remote);
-    git("init", "--bare", "--quiet", remote);
-    const port = createGitPublicationPort({});
-    expect(await port.push(candidate)).toEqual({ ok: true });
-    expect(await port.observe(candidate)).toEqual({ ok: true, sha: candidate.approval.sha });
-    expect(git(`--git-dir=${remote}`, "rev-parse", "refs/heads/approved")).toBe(candidate.approval.sha);
+    // Filesystem remotes are not SSH remotes, even when Windows spells one C:\\path.
+    expect(admitRemoteUrl(remote)).toBeNull();
+    expect(createPublicationCandidateReader(root)(remote))
+      .toMatchObject({ ok: false, code: "PUBLISH_REMOTE_URL_INVALID" });
   } finally { if (resolve(root).startsWith(`${base}${sep}`)) rmSync(root, { recursive: true, force: true }); }
-}, 90_000);
+});
 
 it("reaches the push for an scp-style ssh remote instead of refusing at the credential read", async () => {
   const base = resolve(tmpdir()); const root = mkdtempSync(join(base, "moe-publication-scp-"));

@@ -33,6 +33,15 @@ describe("daemon publication candidate", () => {
     expect(read("https://github.com/example/product.git")).toMatchObject({ ok: false, code: "PUBLISH_CANDIDATE_UNREADABLE" });
   }, 60_000);
 
+  it.each(["/tmp/remote.git", "C:\\temp\\remote.git", "C:/temp/remote.git", "C:remote.git",
+    "relative/remote.git", "./remote.git", "file:///tmp/remote.git",
+    "ssh://example.com:bad/repo", "ssh://", "ssh://user:password@example.com/repo", "\\\\server\\share\\remote.git"])(
+    "refuses non-network or malformed remote %s before Git observation", (remote) => {
+      expect(createPublicationCandidateReader("missing")(remote))
+        .toMatchObject({ ok: false, code: "PUBLISH_REMOTE_URL_INVALID" });
+    },
+  );
+
   it("refuses an unbound workspace and invalid remote before Git observation", () => {
     expect(createPublicationCandidateReader(null)("https://github.com/example/product.git"))
       .toMatchObject({ ok: false, code: "PUBLISH_WORKSPACE_UNCONFIGURED" });
