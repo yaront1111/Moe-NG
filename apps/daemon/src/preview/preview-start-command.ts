@@ -1,12 +1,18 @@
 import type { SqliteEventStore } from "@moe/store";
 
+import { readDurableLedger, versionOf } from "../bootstrap/bootstrap-ledger.js";
 import { DomainRefusal } from "../daemon-command-dispatch.js";
 import type { AsyncCommandHandler } from "../http/http-async-contract.js";
 import type { CommandHandlerInput, DurableDecision } from "../http/http-contract.js";
+import {
+  previewAutoCommandId, resolvePreviewAutoDecision,
+} from "./preview-auto-composition.js";
 import { decodePreviewStartPayload, previewRefusal } from "./preview-contracts.js";
 import type { PreviewRefusal } from "./preview-contracts.js";
+import { previewPortOf, runPreviewDecideEdge } from "./preview-daemon-edge.js";
 import { readPreviewReceipt } from "./preview-ledger.js";
-import { previewReceiptId } from "./preview-receipt-contracts.js";
+import { previewAggregateId, previewReceiptId } from "./preview-receipt-contracts.js";
+import type { PreviewReceiptV1 } from "./preview-receipt-contracts.js";
 import type { PreviewSupervisor } from "./preview-supervisor.js";
 
 /**
@@ -49,6 +55,9 @@ import type { PreviewSupervisor } from "./preview-supervisor.js";
 export const PREVIEW_START_RESULT_CODE = "PREVIEW_STARTED" as const;
 
 export interface PreviewStartOptions {
+  /** ABSENT means the real clock. Present only so an arm can pin the automatic decision's
+   *  `decidedAt`; production never supplies one, matching the release seam's own convention. */
+  readonly clock?: (() => string) | undefined;
   /** The configured operator principal. THE ASYNC ENTRY MUST FENCE ITSELF: `entryOf`
    *  (daemon-command-registry.ts) returns the async entry BEFORE the synchronous operator check,
    *  so `OPERATOR_PRINCIPAL_KINDS` membership alone would leave the kind dispatchable by any
@@ -115,6 +124,14 @@ export function createPreviewStartHandler(options: PreviewStartOptions): AsyncCo
     const receiptId = previewReceiptId(projectId, goalId, sha);
     const already = readPreviewReceipt(store, projectId, receiptId);
     if (already.ok && already.receipt.outcome === "STARTED") {
+      // GATE 2 IS RE-OFFERED ON THE REPLAY, and leaving it out was a real hole. The machine
+      // evidence this gate closes on is the STARTED receipt, which EXISTS here — so a start that
+      // replays after the operator installed the opt-in (or after an earlier attempt declined
+      // because no policy was installed yet) would otherwise leave the gate pending forever, and
+      // the only way to close it would be the human this row exists to remove. It is safe to
+      // re-offer because `resolvePreviewAutoDecision` refuses outright once any decision is
+      // committed, and the automatic commandId is deterministic in the receipt.
+      autoDecide(options, supervisor, already.receipt);
       return Object.freeze({
         commandId: envelope.commandId,
         disposition: "REPLAYED" as const,
@@ -145,6 +162,10 @@ export function createPreviewStartHandler(options: PreviewStartOptions): AsyncCo
       // The refusal carries the ledger's own code as the SOURCE, unrestamped.
       refuse(previewRefusal("PREVIEW_START_TIMEOUT", read.code, "DURABLE_STORE"));
     }
+    // GATE 2 CLOSES HERE, ON THE MACHINE EVIDENCE THAT JUST ARRIVED. Everything above already
+    // proved the preview SERVED: `result.ok` held and the durable receipt read back, so
+    // `read.receipt.outcome` is STARTED and nothing else is reachable at this line.
+    autoDecide(options, supervisor, read.receipt);
     return Object.freeze({
       commandId: envelope.commandId,
       disposition: "DECIDED" as const,
@@ -152,4 +173,58 @@ export function createPreviewStartHandler(options: PreviewStartOptions): AsyncCo
       resultCode: PREVIEW_START_RESULT_CODE,
     });
   };
+}
+
+/**
+ * Decide the preview gate WITHOUT A HUMAN when a standing opt-in covers it, or leave it pending.
+ *
+ * IT CANNOT CHANGE THE ANSWER `preview.start` GIVES. `runPreviewDecideEdge` throws a
+ * `DomainRefusal` for every gate it refuses, and a throw here would turn a preview that started
+ * successfully into a refused command — reporting a failure that did not happen and stranding a
+ * live dev server the operator was never told about. Every failure is therefore swallowed and the
+ * gate simply stays pending for a human, which is exactly what it did before this row existed.
+ *
+ * IT OPENS NO SECOND PATH. The verdict travels through the SAME `runPreviewDecideEdge` the wire
+ * command uses, so the receipt re-read, the REFUSED-receipt refusal, the goal-landing gate, the
+ * expected-version fence and the `PreviewDaemonPort.release` stop all apply unchanged. The only
+ * thing this path supplies that a wire command cannot is `provenance` — which it may only supply
+ * because `resolvePreviewAutoDecision` got an ALLOW from the policy engine for it.
+ *
+ * IT IS NOT A WIRE COMMAND AND NO SEAT CAN REACH IT. There is no MCP tool, no allowlist entry and
+ * no roster edit behind this: it runs server-side inside the daemon under the operator principal
+ * the handler was composed with, on a `commandId` derived from the receipt rather than supplied.
+ *
+ * TWICE IS ONCE. The commandId is deterministic in the receipt, so the store's own decision key
+ * replays a retry; and `resolvePreviewAutoDecision` refuses outright when the preview already
+ * carries a committed decision, which is the same check that stops an automatic APPROVE from
+ * overturning a human REJECT.
+ */
+function autoDecide(
+  options: PreviewStartOptions, supervisor: PreviewSupervisor, receipt: PreviewReceiptV1,
+): void {
+  const { operatorPrincipalId: principalId, projectId, store } = options;
+  const decidedAt = (options.clock ?? (() => new Date().toISOString()))();
+  const auto = resolvePreviewAutoDecision({ decidedAt, principalId, projectId, receipt, store });
+  if (!auto.ok) return;
+  try {
+    runPreviewDecideEdge({
+      envelope: {
+        commandId: previewAutoCommandId(projectId, receipt.receiptId),
+        correlationId: receipt.receiptId,
+        expectedVersion: versionOf(
+          readDurableLedger(store, projectId), previewAggregateId(receipt.goalId),
+        ),
+        payload: Object.freeze({ decision: "APPROVE", previewRef: receipt.receiptId }),
+      },
+      now: () => decidedAt,
+      port: previewPortOf(supervisor),
+      principalId,
+      projectId,
+      provenance: auto.provenance,
+      store,
+    });
+  } catch {
+    // See the header: a refused automatic decision leaves the gate pending, it never fails the
+    // start that produced the evidence.
+  }
 }
