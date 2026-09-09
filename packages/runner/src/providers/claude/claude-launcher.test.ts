@@ -97,7 +97,8 @@ describe("Windows Claude launcher", () => {
     expect(Object.isFrozen(CLAUDE_LAUNCH_ERROR_CODES)).toBe(true);
   });
 
-  it("holds one real OS-exclusive launch lock until its lease is released", async () => {
+  // Native pipe semantics require Windows; injected-port launcher cases remain cross-host.
+  it.skipIf(process.platform !== "win32")("holds one real OS-exclusive launch lock until its lease is released", async () => {
     await onTestLaunchLockNamespace(async () => {
       const identity = `launcher-test-${process.pid}-${Date.now()}`;
       const first = await acquireWindowsLaunchLock(identity);
@@ -115,7 +116,7 @@ describe("Windows Claude launcher", () => {
     });
   });
 
-  it("keeps the conflict while the holder is alive, judging no record", async () => {
+  it.skipIf(process.platform !== "win32")("keeps the conflict while the holder is alive, judging no record", async () => {
     // Renamed from "keeps the conflict when the recorded holder is still
     // alive": there is no recorded holder any more. The pipe's own binding is
     // what refuses, so the refusal cannot be talked out of by anything written
@@ -772,7 +773,7 @@ describe("Windows Claude launcher", () => {
     expect(boundary.log).toEqual([]);
   });
 
-  it("lets only one concurrent delivery cross the real OS lock into the provider", async () => {
+  it.skipIf(process.platform !== "win32")("lets only one concurrent delivery cross the real OS lock into the provider", async () => {
     // The real acquireLock port is the machine-global pipe, so this arm runs
     // on a namespace of its own rather than the fleet's.
     await onTestLaunchLockNamespace(async () => {
