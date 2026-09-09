@@ -200,7 +200,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T18:16:25.350Z",
-  "updatedAt": "2026-09-09T11:34:04.216Z",
+  "updatedAt": "2026-09-09T11:34:20.210Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T18:33:15.983Z",
     "plannedStepCount": 7,
@@ -283,7 +283,76 @@
     "apps/daemon/src/monitoring/environment-retirement-command.test.ts",
     "apps/daemon/src/daemon-command-registry.ts",
     "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
-    "apps/daemon/src/preview/preview-start-command.test.ts"
+    "apps/daemon/src/preview/preview-start-command.test.ts",
+    ".moe/tasks/task-509f043721ac491baad33b0d6771a958.json"
   ],
-  "completionSummary": "THIS ROW ABSORBED THE DELETED CHILD 4 (task-1714234a8b5341f3b652cc5279a1f75e). Its title says \"publish\"; it also SERVES the kind — a grader reading only the title will wrongly think the command edge is missing. The two cannot separate: daemon-command-vocabulary.test.ts:349 holds Object.keys(PAYLOAD_KEYS) equal to ROWS' kinds, so a kind on the roster with no dispatch entry reds at once.\n\nDELIVERED, 26 paths. Shared roster + generated client + all six digest mirrors + daemon payload keys, vocabulary, family, operator set and wrapper fence + a new command edge with its contracts module, both with .js bridges + 13 test files whose frozen literals moved.\n\nGATES, all EXIT 0, each foreground and standalone with a nonzero count line (none is a \"no projects matched\" exit-0): daemon 606/606 files, 10815 tests; control-room 205/205, 2677; control-room-client 10/10, 96; root lane 439+2/441, 10471+51; typecheck all Done.\n\nFOUR MEASURED CORRECTIONS, all detailed in comment-2b1977d1 and comment-09765e03:\n1. THE DESCRIPTION NAMES THE WRONG DIGEST GATE. @moe/control-room is apps/control-room and has NO mirror; the catching arm is contract-digest.test.ts under @moe/control-room-client, also covered by the root lane AND by the daemon leg's committed mirror census. Following the description alone ships a stale digest through green.\n2. SIX MIRRORS, NOT FOUR — five hand-transcribed, plus generated-coverage.test.ts:35 GENERATED_FILE_SHA256, a whole-file sha no census regex in this repo matches. All rotated; residual grep for the old hexes returns nothing.\n3. A DEFECT THAT WOULD HAVE SHIPPED SILENTLY: daemon-command-families.ts computes `monitoring: kind in MONITORING_FAMILY`, so once the family held two kinds the `if (monitoring)` branch stopped selecting a handler and retirement would have been served by the interval edge. Fixed by dispatching per kind.\n4. THE PLAN'S \"SHARED-INSTANCE TRAP\" IS FALSE AS FRAMED and its drill cannot red — the record is a stateless facade replaying per call, "
+  "completionSummary": "THIS ROW ABSORBED THE DELETED CHILD 4 (task-1714234a8b5341f3b652cc5279a1f75e). Its title says \"publish\"; it also SERVES the kind — a grader reading only the title will wrongly think the command edge is missing. The two cannot separate: daemon-command-vocabulary.test.ts:349 holds Object.keys(PAYLOAD_KEYS) equal to ROWS' kinds, so a kind on the roster with no dispatch entry reds at once.\n\nDELIVERED, 26 paths. Shared roster + generated client + all six digest mirrors + daemon payload keys, vocabulary, family, operator set and wrapper fence + a new command edge with its contracts module, both with .js bridges + 13 test files whose frozen literals moved.\n\nGATES, all EXIT 0, each foreground and standalone with a nonzero count line (none is a \"no projects matched\" exit-0): daemon 606/606 files, 10815 tests; control-room 205/205, 2677; control-room-client 10/10, 96; root lane 439+2/441, 10471+51; typecheck all Done.\n\nFOUR MEASURED CORRECTIONS, all detailed in comment-2b1977d1 and comment-09765e03:\n1. THE DESCRIPTION NAMES THE WRONG DIGEST GATE. @moe/control-room is apps/control-room and has NO mirror; the catching arm is contract-digest.test.ts under @moe/control-room-client, also covered by the root lane AND by the daemon leg's committed mirror census. Following the description alone ships a stale digest through green.\n2. SIX MIRRORS, NOT FOUR — five hand-transcribed, plus generated-coverage.test.ts:35 GENERATED_FILE_SHA256, a whole-file sha no census regex in this repo matches. All rotated; residual grep for the old hexes returns nothing.\n3. A DEFECT THAT WOULD HAVE SHIPPED SILENTLY: daemon-command-families.ts computes `monitoring: kind in MONITORING_FAMILY`, so once the family held two kinds the `if (monitoring)` branch stopped selecting a handler and retirement would have been served by the interval edge. Fixed by dispatching per kind.\n4. THE PLAN'S \"SHARED-INSTANCE TRAP\" IS FALSE AS FRAMED and its drill cannot red — the record is a stateless facade replaying per call, ",
+  "commits": [
+    {
+      "sha": "763248778b6f80df977ca9613644873817633d33",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-0e797912@2026-09-09T10:30:02Z",
+      "paths": [
+        ".moe/tasks/task-509f043721ac491baad33b0d6771a958.json",
+        "apps/control-room/src/data/data-adapter.test.ts",
+        "apps/control-room/src/v2/goals/approve-plan.test.tsx",
+        "apps/control-room/src/v2/goals/approve-plan-reject.test.tsx",
+        "apps/control-room/src/v2/goals/plan-run-resolution.test.tsx",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+        "apps/daemon/src/mcp-main.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts",
+        "apps/daemon/src/monitoring/environment-retirement-command.js",
+        "apps/daemon/src/monitoring/environment-retirement-command.test.ts",
+        "apps/daemon/src/monitoring/environment-retirement-command.ts",
+        "apps/daemon/src/monitoring/environment-retirement-command-contracts.js",
+        "apps/daemon/src/monitoring/environment-retirement-command-contracts.ts",
+        "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+        "apps/daemon/src/preview/preview-start-command.test.ts",
+        "packages/contracts/src/runtime/runtime-contract.test.ts",
+        "packages/contracts/src/runtime/runtime-vocabulary.ts",
+        "packages/control-room-client/src/generated/generated-client.ts",
+        "packages/control-room-client/src/generated-coverage.test.ts"
+      ],
+      "recordedBy": "worker-0e797912",
+      "recordedAt": "2026-09-09T11:34:20.210Z",
+      "treeId": "0c0c90b01c650913f099b2b38a36ce11df7e45b2",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/monitoring/environment-retirement-command.test.ts",
+    "apps/daemon/src/orchestrator/agent-spawn-contract.ts",
+    "apps/daemon/src/monitoring/environment-retirement-command.ts",
+    "packages/contracts/src/runtime/runtime-contract.test.ts",
+    "apps/daemon/src/daemon-command-payload-keys.ts",
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/monitoring/environment-retirement-command-contracts.ts"
+  ],
+  "unattributedPaths": [
+    "apps/control-room/.drill/counterfactual.config.mts",
+    "apps/control-room/.drill/drill.config.mts",
+    "apps/control-room/.drill/gen.cjs",
+    "apps/control-room/.drill/lane.config.mts",
+    "apps/control-room/.drill/measure.test.tsx",
+    "tests/fault/landing-crash/landing-crash.fault.ts",
+    "tests/fault/landing-crash/landing-crash-child.ts",
+    "tests/fault/landing-crash/landing-crash-world.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-0e797912@2026-09-09T10:30:02Z",
+    "at": "2026-09-09T11:34:20.210Z"
+  }
 }
