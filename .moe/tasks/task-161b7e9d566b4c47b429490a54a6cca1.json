@@ -192,7 +192,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:14:49.532Z",
-  "updatedAt": "2026-09-09T10:38:39.835Z",
+  "updatedAt": "2026-09-09T10:38:57.786Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:28:10.582Z",
     "plannedStepCount": 8,
@@ -250,6 +250,25 @@
       "treeId": "415f6e89089d4258735163fdfa941acf4d0ebbab",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "cd0995ab3f5a5374683aa92fc41a42b9a4e81c8e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b42eccd4@2026-09-09T10:02:44Z",
+      "paths": [
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        "tests/e2e/control-room/live-proof-arms.ts",
+        "tests/e2e/control-room/live-proof-gate1.ts",
+        "tests/e2e/control-room/live-proof-prd.spec.ts",
+        "tests/e2e/control-room/live-proof-prd.ts"
+      ],
+      "recordedBy": "worker-b42eccd4",
+      "recordedAt": "2026-09-09T10:38:57.786Z",
+      "treeId": "f5204267369ea095b699f3a409b01c111ca06d97",
+      "status": "BLOCKED",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -259,24 +278,36 @@
     "apps/daemon/src/orchestrator/landing-fault-injection.test.ts",
     "apps/daemon/src/orchestrator/landing-fault-injection.ts",
     "apps/daemon/src/orchestrator/node-lander-journal.ts",
-    "apps/daemon/src/orchestrator/node-lander-journal-fault.test.ts"
+    "apps/daemon/src/orchestrator/node-lander-journal-fault.test.ts",
+    "tests/e2e/control-room/live-proof-arms.ts",
+    "tests/e2e/control-room/live-proof-gate1.ts",
+    "tests/e2e/control-room/live-proof-prd.spec.ts",
+    "tests/e2e/control-room/live-proof-prd.ts"
   ],
   "touchedFiles": [
     "apps/daemon/src/orchestrator/node-lander-journal.ts",
     "apps/daemon/src/orchestrator/node-lander-journal-fault.test.ts",
     "apps/daemon/src/orchestrator/landing-fault-injection.test.ts",
     "apps/daemon/src/orchestrator/landing-fault-injection.ts",
-    "vitest.drill-161b7e9d.config.mts"
+    "vitest.drill-161b7e9d.config.mts",
+    "tests/e2e/control-room/live-proof-prd.spec.ts",
+    "tests/e2e/control-room/live-proof-arms.ts",
+    "tests/e2e/control-room/live-proof-prd.ts",
+    "tests/e2e/control-room/live-proof-gate1.ts"
   ],
   "unattributedPaths": [
-    "apps/daemon/src/gates-journey-fixtures.ts",
-    "apps/daemon/src/zz-probe-w812079a7.test.ts"
+    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    "apps/daemon/src/mcp-main.test.ts",
+    "apps/daemon/src/monitoring/environment-retirement-command-contracts.js",
+    "apps/daemon/src/orchestrator/agent-spawn-contract.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-bcaa6d5e@2026-09-08T20:44:28Z",
-    "at": "2026-09-08T21:07:59.903Z"
+    "sessionId": "worker-b42eccd4@2026-09-09T10:02:44Z",
+    "at": "2026-09-09T10:38:57.786Z"
   },
   "priorBlockedReason": "HUMAN INPUT REQUIRED. Two gates, neither resolvable from a worker seat. Steps 1-2 of 8 COMPLETE; the row's only production code is delivered and green. Detail: comment-19f101a4 (the ask), the step-2 note (code + gates), chat msg-f627ddff (routed to @governors @architects).\n\nGATE 1 - THE PRD IS ABSENT, and it is a human input by design: \"the human supplies or approves it at claim time (comment on this row)\", repeated by plan step 1(b) with its reason - a PRD I author is chosen to be easy, so the transcript would prove nothing. MEASURED: this row had exactly ONE comment before mine (the architect's dependsOn note); sweeps of all five .moe/messages/*.jsonl for \"161b7e9d\" and for human-sender + /PRD/i found none. Asked rather than inventing one.\n\nGATE 2 - THE SCOPE MAY ALREADY BE CANCELLED, and it is the bigger one. 2026-09-08T17:49Z, architect-9556982c relaying the owner from the REPL: \"I THINK LETS DELETE THE PREVIEW TASKS WE JUST WANT TO FINISH CODING\". They deleted task-047b1d8b, recorded \"scope cancelled, NOT capability verified\" on task-8f86e105, did NOT alter this row because it \"mixes broader implementation/regression scope\", and asked governors to apply the direction to \"live-proof clauses embedded in in-flight integration rows as appropriate\". DoD 1 here IS such a clause: live PREVIEW deploy receipt + health URL + migration receipt, fresh product, browser-only. Reading (A): that half is cancelled scope, row narrows to code + regression + docs + adversarial. Reading (B): the live run happens. Choosing for the owner either burns hours on a cancelled drive or discards the epic's Stage 1 bar.\n\nNo blockedOnTaskIds - neither gate is a row landing. Reading (A) also needs an architect amendment: steps 6-8 are PRD-independent, but step order is enforced and step 7 pins the README date to the step-3 run.\n\nDELIVERED: the DEVELOPMENT_ONLY landing fault knob. daemon lane EXIT 0, 601 files / 10734 passed; typecheck EXIT 0; test:fault EXIT 0.",
   "blockedOnTaskIds": null,

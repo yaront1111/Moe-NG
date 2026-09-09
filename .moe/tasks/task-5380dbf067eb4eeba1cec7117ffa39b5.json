@@ -55,7 +55,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-b42eccd4",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -86,7 +86,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T20:04:21.805Z",
-  "updatedAt": "2026-09-09T10:07:46.050Z",
+  "updatedAt": "2026-09-09T10:39:28.728Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T08:57:02.263Z",
     "plannedStepCount": 5,
@@ -94,7 +94,8 @@
   },
   "contextFetchedBy": [
     "architect-19410501",
-    "architect-f04f69cf"
+    "architect-f04f69cf",
+    "worker-b42eccd4"
   ],
   "priorHandoffs": [
     {
