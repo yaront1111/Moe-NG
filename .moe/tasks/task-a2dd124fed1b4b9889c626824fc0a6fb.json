@@ -54,27 +54,37 @@
     {
       "stepId": "step-3",
       "description": "Concentrated verification gate (one step). Preserve named merge-base/before-diff broad-lane baseline evidence as required by global rails, and compare final failing paths rather than laundering foreign red; baseline collection is gate setup, not additional per-implementation gates. Under the full-suite-gate resource when required, run each exact command foreground and standalone with its own real exit status: focused `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/monitoring/environment-retirement-record.test.ts src/runtime-entrypoint.test.ts`; owned `pnpm --filter @moe/daemon typecheck`; required broad legs `pnpm typecheck`, `pnpm test`, `pnpm verify:foundation`, `pnpm verify:store`; and PRIMARY completion command `pnpm --filter @moe/daemon test`. The durable event-format addition gets full required regression even though this is a leaf. Require primary/owned legs exit0 and nonzero Test Files/Tests count lines, including execution of the new regression and runtime bridge inventory; no-match/no-tests is unverified. Root counts cover root lane only, apps/** not covered: daemon is explicitly covered by its own gate; do not claim whole-repo apps green. Attribute broad failures at merge-base and delivered HEAD, disclose exact foreign failing lines/paths and require no introduced owned-path delta. No piping/chaining to mask exit codes; on Windows keep host executable pnpm and argv arrays if using a runner, no hard-coded pnpm.cmd fallback/shell:true. Release the gate on every exit. Record command, counts and status for complete_task evidence, and keep long diagnostics in a row comment under4500 chars rather than source files.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/monitoring/environment-retirement-record.ts",
         "apps/daemon/src/monitoring/environment-retirement-record.js",
         "apps/daemon/src/monitoring/environment-retirement-record.test.ts"
       ],
-      "startedAt": "2026-09-08T18:52:07.257Z"
+      "note": "Fresh primary pnpm --filter @moe/daemon test EXIT0, Test Files603passed(603), Tests10753passed|9skipped(10762),273.19s. Focused record+runtime2files/40tests0; daemon typecheck0; pnpm typecheck0; foundation35files/756tests0; store53files/688tests0. Root pnpm test EXIT1:1failed/437passed/1skipped files,1failed/10423passed/49skipped tests. Sole foreign scheduler parser refusal at package-boundary.test.ts:327 on deploy-candidate-environment.ts; existing bug task-8b178e52483e4ff28e269b5ed4e492b6 notified, untouched. Independent exact parser replay at pre-retirement-checkpoint parent36883ed8 and worktree reproduces same error, scoped source diff empty; full reproducible source/anchors and baseline distinction in comment-810ab163. Prior peer pre-diff full baseline retained in comment-e68d2de; no invented baseline full run. Introduced owned failing-path delta empty. No edits in this step. Root lane excludes apps; daemon explicit, Control Room tests not run. Lease retained briefly for final scoped mutation review; no broad suite running now.",
+      "startedAt": "2026-09-08T18:52:07.257Z",
+      "completedAt": "2026-09-09T09:13:11.092Z"
     },
     {
       "stepId": "step-4",
       "description": "Final adversarial self-review and QA handoff (single review step). Load adversarial-self-review; inspect this exact three-file diff for two-instance stale replay/CAS, read-vs-write validation order, failed deploy incorrectly reactivating, same-SHA real success not reactivating, cross-environment/project cutoff misuse, failed append optimistically changing state, corrupt data becoming silence, history mutation, and handles left open on setup/assertion failure. Mutation-check failure families through the new production factory: alter each refusal code/layer or bypass its guard and require the corresponding targeted arm to fail for the named expectation; also bypass durable replay and substitute current/SHA for successful receipt identity, requiring the persistence/reactivation arms to go red. Keep drills scoped; record representative exact failures, not an exhaustive matrix or a new evidence row. BEFORE mutations record git status --porcelain on each exact path; for untracked new modules make an out-of-tree worker-suffixed backup and prove SHA256 equality after restoring in a SEPARATE call (empty git diff is not restore evidence). For tracked files verify the exact original diff/hash was restored. No mutation/probe artifacts may be delivered. If review changes code, repeat the consolidated gate before completion. Record all three modifiedFiles for wrapper attribution, durable completion evidence/counts, and consumer task-f18bddee94cf4b559272d23d53f6180e (plus command child) in handoff; no claim that the sweep already uses this leaf. Complete_task hands the row to QA; do not self-approve or hand-commit.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/monitoring/environment-retirement-record.ts",
         "apps/daemon/src/monitoring/environment-retirement-record.js",
         "apps/daemon/src/monitoring/environment-retirement-record.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/monitoring/environment-retirement-record.ts",
+        "apps/daemon/src/monitoring/environment-retirement-record.js",
+        "apps/daemon/src/monitoring/environment-retirement-record.test.ts"
+      ],
+      "note": "Adversarial checklist completed on exact3file checkpoint-parent diff; no semantic fix required. Five production mutants all behaviorally RED:code27failed/8passed;layer8failed/27skipped;replay,current-receipt,SHA each1failed/34skipped. Exact expected code/layer and generation/restart value mismatches recorded comment-ec8e1141. Before clean tracked status; backup and independent after-restore SHA256 equality C5060148...B7B45F plus exact3file diff0. Final restored focus2files/40tests0; fresh PRIMARY603files/10753passed+9skipped0 from same recovery turn on identical source bytes. Concurrency local replay/CAS, invalid-input-before-IO, corrupt/reference refusals, failure state, history and test handle cleanup reviewed. Cross-aggregate atomicity intentionally not promised. full-suite-gate released with released:[this task], no running test. Three owned paths attributed including inherited checkpoint; no extra repo probe/artifact paths. Out-of-tree own backup cleanup was policy-denied, so not retried; those TEMP files are not delivered. Consumer sweep task-f18bddee dependsOn confirmed live, remains unwired until its row. Final handoff and root foreign bug task-8b178e52 baseline disclosure in comments; not claiming whole-repo green.",
+      "startedAt": "2026-09-09T09:13:11.395Z",
+      "completedAt": "2026-09-09T09:15:46.245Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-3df6caa8",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -113,25 +123,68 @@
       "author": "worker-bcaa6d5e",
       "content": "STATUS PING FROM AN IDLE PEER — three rows and four seats are waiting on this one. worker-bcaa6d5e, 2026-09-08T23:19Z. Reporting only; I have NOT touched your lease and will not. Posting here because my chat message carrying this returned routingTargets: [] -- the Loop Guard swallowed it, so neither you nor the governor was notified.\n\nWHAT I MEASURED, all at 23:18Z:\n\nfull-suite-gate (moe.list_resources):\n    holder      worker-d0fc1403 / task-a2dd124f\n    acquiredAt  2026-09-08T20:48:09.945Z   -> held 2h30m\n    queue       EMPTY\n\nNo suite is executing under it:\n    Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | ? CommandLine -match vitest\n      -> vitest-matching node procs: 0\n(100 node processes on the box, newest batch started 23:17:17Z at ~0.3s CPU each -- MCP servers and agent seats, not a vitest fan-out.)\n\nTHE HOLD'S STATED REASON HAS EXPIRED. Your lease note still reads \"acquire granted:false queue#2 behind task-44c0178b security final gates and task-f9dc8291 live provider timing ... Auto-resume on resource grant.\" Both landed hours ago -- task-44c0178b as 0e0f9568, task-f9dc8291 as c5311ac5 -- and your grant fired at 20:48Z. So that text is the stale queued-state note, not a current status.\n\nTHE STATE IS INTERNALLY INCONSISTENT, which is why I think a wake may simply not have fired rather than assuming you are idle:\n    moe.list_workers   worker-d0fc1403  status BLOCKED, isAlive true, last activity 37s ago\n    this task's JSON   status WORKING, blockedReason EMPTY, blockedOnTaskIds null\n    the resource       HELD by you\n    the process tree   nothing running\nSeat says BLOCKED, row says WORKING, resource says HELD, nothing is executing.\n\nWHY IT MATTERS BEYOND YOUR ROW. Three WORKING rows are gated on this one -- task-f18bddee (dependsOnUnmet 1), task-509f0437 (2), task-de80c663 (3) -- and it is itself the fourth WORKING row. moe.list_workers shows worker-5d2b88e7, worker-812079a7, worker-9dcd2d4f and me all IDLE and alive. Four worker seats with zero claimable rows; wait_for_task has answered hasNext:false on every call for forty minutes.\n\nTHE ASK IS ONE LINE, and it is a question rather than a demand. Your note says steps 1/2 are implemented -- 3 new files, 35 owned tests, daemon typecheck EXIT 0 -- with only the consolidated gates left, and you now hold the gate you were waiting for. Either \"still mine, ETA X\" or \"the wake never fired\" resolves this. Three peers start the moment this row lands, so an ETA is worth more here than it normally would be.\n\nI AM NOT FORCE-RELEASING AND I AM NOT ASKING ANYONE ELSE TO, YET. moe.release_resource with {force, workerId} and no taskId empties the WHOLE resource including other workers' queue entries, and every evicted waiter strands BLOCKED with no grant able to fire. The queue is empty right now so that blast radius is currently nil, but a wrongly-timed release could also start a second full suite against a seat that is genuinely mid-run, and my census is ONE sample. A second census after this ping is owed before anyone touches the lease -- the same rule I would want applied to my own row. That call belongs to @governor-12ae245c, not to an idle peer.\n\nNothing held from this seat, nothing dirty, no queue entries.",
       "timestamp": "2026-09-08T23:19:35.935Z"
+    },
+    {
+      "id": "comment-a77543ecd2ea45f78f463bae78471fe0",
+      "author": "worker-409b958a",
+      "content": "Recovery 2026-09-09: normal task-keyed acquire_resource renewed full-suite-gate under worker-409b958a, granted:true. HEAD 502bb0afe28eee22137ac3b71d916cf20347ef99; owned three paths tracked and clean, checkpoint diff 388 insertions (115 source/272 test/1 bridge). Handoff baseline comment-e68d2de retained as peer-run pre-diff evidence, not newly measured clean checkout. Fresh focused named record+runtime command EXIT0, Test Files 2 passed (2), Tests 40 passed (40), including 35 record tests and current 5 runtime tests. Daemon typecheck0 and pnpm typecheck0. pnpm test currently executing under lease; one scheduler package-boundary test has reported failure, awaiting exact stack before attribution. No source edits yet.",
+      "timestamp": "2026-09-09T09:07:02.079Z"
+    },
+    {
+      "id": "comment-810ab1631ecf432595fa835a3a88e795",
+      "author": "worker-409b958a",
+      "content": "Step3 fresh broad result: pnpm test EXIT1: Test Files1failed|437passed|1skipped(439), Tests1failed|10423passed|49skipped(10473),79.21s. Sole failure packages/scheduler/src/package-boundary.test.ts:327:15: `boundary scan failed for apps\\daemon\\src\\deployment\\deploy-candidate-environment.ts: Error: unterminated quoted source token`. Existing bug task-8b178e52483e4ff28e269b5ed4e492b6 owns repair; repro added there, no duplicate/foreign edits. pnpm verify:foundation EXIT0 35files/756tests; pnpm verify:store EXIT0 53files/688tests. Each separately executed, both embedded typechecks0. Primary daemon run still in progress. Root lane excludes apps/**; not claiming Control Room tests executed.\n\nBaseline attribution: old peer pre-diff runs remain comment-e68d2de. New sole source-tokenizer refusal is independently reproduced at retirement checkpoint parent36883ed8b6ff3bee699fcccbd1c098c0d4818fbb and current WORKTREE with exactly the same source/error; scoped git diff for parser+trigger is empty. This is anchored parser replay, NOT a full baseline suite rerun. Both failing paths are foreign; introduced owned failing-path delta empty. Full re-creatable probe source (stdin to node --input-type=module), EXIT0 confirming expected failure at both anchors:\nimport { execFileSync } from 'node:child_process';\nimport { readFileSync } from 'node:fs';\nimport { stripTypeScriptTypes } from 'node:module';\nimport { pathToFileURL } from 'node:url';\nimport { resolve } from 'node:path';\nconst parser = 'packages/scheduler/src/package-boundary.test.ts';\nconst subject = 'apps/daemon/src/deployment/deploy-candidate-environment.ts';\nconst baseline = '36883ed8b6ff3bee699fcccbd1c098c0d4818fbb';\nfor (const anchor of [baseline, 'WORKTREE']) {\n const read = (path) => anchor === 'WORKTREE' ? readFileSync(path, 'utf8') : execFileSync('git', ['show', `${anchor}:${path}`], { encoding: 'utf8' });\n const prefix = read(parser).split('\\nit(')[0].replace('import { expect, it } from \"vitest\";', '').replaceAll('import.meta.url', JSON.stringify(pathToFileURL(resolve(parser)).href));\n const js = stripTypeScriptTypes(prefix + '\\nexport { containsForbiddenSchedulerImport };', { mode: 'strip' });\n const { containsForbiddenSchedulerImport } = await import('data:text/javascript;base64,' + Buffer.from(js).toString('base64'));\n try { containsForbiddenSchedulerImport(read(subject)); throw new Error('expected source tokenizer refusal missing'); }\n catch (error) { if (error.message !== 'unterminated quoted source token') throw error; process.stdout.write(`${anchor}: ${subject}: ${error.message}\\n`); }\n}\nNo probe file created; exact error output contains no environment value.",
+      "timestamp": "2026-09-09T09:09:50.090Z"
+    },
+    {
+      "id": "comment-ec8e11413df640a5b385870efb882a5d",
+      "author": "worker-409b958a",
+      "content": "Final adversarial review / handoff 2026-09-09: read the exact checkpoint-parent three-file diff end-to-end. Concurrency uses operation-local replay version and store CAS; same-store interleaving and deploy-between-read/commit arms exercise it. Successful receipt identity, not current/refused/SHA/time, drives reactivation; project/environment cutoff checks and strict payload/event validation fail closed. Invalid name validation precedes IO. All exceptional IO/clock/append paths return fixed code+DAEMON_INGRESS; no optimistic cached state. Factory owns no store lifecycle, and real test fixtures close registered stores in finally before checked exact temp cleanup; no container/server/schedule. Cross-aggregate atomicity remains explicitly NOT promised. No additional semantic edit was needed.\n\nFive production mutants, scoped to environment-retirement-record.ts, each EXIT1 for AssertionError (not compile/import failure):\n1. Refusal helper changes code to DRILL_REFUSAL_CODE:27failed/8passed of35. Expected exact ENVIRONMENT_RETIREMENT_ENVIRONMENT_INVALID at test:182, ENVIRONMENT_UNKNOWN at189, RECORD_INVALID at214, STORE_FAILED at226/227/237/249; same layer retained.\n2. Helper layer to DRILL_LAYER:8failed/27skipped of35, exact expected DAEMON_INGRESS vs received DRILL_LAYER in invalid-name, unknown-write, malformed-json and commit-fault arms.\n3. readEvents(...).slice(0,0):restart arm1failed/34skipped at107 expected {ok:true,value:true}, received false AFTER reopened store.\n4. latestSuccessful returns state.current.receiptId:reactivation arm1failed/34skipped at152 expected retired true after REFUSED, received false.\n5. Effective comparison uses receipt SHAs:reactivation arm1failed/34skipped at159 expected false after new same-SHA success, received true.\nEach mutation anchor count checked exactly1, restored original bytes in finally. BEFORE: git status exact source clean/tracked; out-of-tree worker-409b958a backup made. AFTER, independent tool call verifies backup/live SHA256 equality C5060148BDF594CA44BB6CC6123C3693A018BA630DCE65686D500362B3A7B45F and git diff --exit-code across all3 paths0. No mutant remains. Restored focused record+runtime gate EXIT0 Test Files2passed(2), Tests40passed(40),2.69s. Full fresh primary earlier this same recovery turn ran these identical bytes EXIT0 603files/10753passed+9skipped; no semantic changes since.\n\nOwned delivery paths: apps/daemon/src/monitoring/environment-retirement-record.ts, .js, .test.ts. Primary semantics/35tests inherited from checkpoint2217bd85 and reverified, no reimplementation. Consumer rows: sweep task-f18bddee94cf4b559272d23d53f6180e and command task-1714234a8b5341f3b652cc5279a1f75e depend on this leaf. This leaf does NOT wire either; no command kind/registry/digest/manifest/ledger/sweep change. Foreign root red and re-creatable baseline replay in comment-810ab163; existing scanner bug task-8b178e52 notified, not fixed inline. QA should inspect wrapper completion landing, not mistake checkpoint for delivery.",
+      "timestamp": "2026-09-09T09:15:20.508Z"
+    },
+    {
+      "id": "comment-f49b89ed5e064feaa21e28a3dbe85566",
+      "author": "worker-409b958a",
+      "content": "Handoff correction from live task census: prior-plan command child task-1714234a8b5341f3b652cc5279a1f75e is no longer in the current non-archived epic list; that earlier handoff reference was historical, not a live composition claim. Confirmed live consumer edge is sweep task-f18bddee94cf4b559272d23d53f6180e dependsOn:[this leaf]. Runtime roster task-509f043721ac491baad33b0d6771a958 dependsOn leaf+sweep; parent task-de80c663569a4ab2b30a9db6ac526e4b dependsOn all three. This satisfies named-consumer delivery; none is implemented by this leaf. Final observed HEAD c0c4d9759c8721616032d48d70dfcd1a7586c94e; all3 owned paths remain tracked/clean and exact restored checkpoint bytes. Gate evidence anchors are stated in prior comments, not claimed as a new full suite at this changed foreign HEAD.",
+      "timestamp": "2026-09-09T09:16:30.892Z"
+    },
+    {
+      "id": "comment-5d9726a4c8df4f548264f6cdb828439a",
+      "author": "qa-01b7fe3f",
+      "content": "QA REVIEW EVIDENCE (qa-01b7fe3f, 2026-09-09) — full record; reviewSummary is the short form.\n\nGATES I RE-RAN MYSELF (foreground, standalone, under full-suite-gate):\n- `pnpm --filter @moe/daemon test` EXIT 0 — \"Test Files 603 passed (603)\", \"Tests 10758 passed | 9 skipped (10767)\", 261.51s.\n- `pnpm --filter @moe/daemon typecheck` EXIT 0.\nCount delta vs worker's 10753: +5 foreign tests from the live task-61f826e5 migration WIP in the shared tree (same 603 files, all green). Not this row's.\n\nBYTES VERIFIED AT HEAD, NOT THE DIRTY TREE:\n`git cat-file -e HEAD:<path>` exit 0 for all three — environment-retirement-record.ts (115 lines), .js bridge (1 line, exact LF `export * from \"./environment-retirement-record.ts\";`), .test.ts (272 lines). `git status --porcelain -- apps/daemon/src/monitoring/` EMPTY, so the tree I read IS the committed tree. Landed in 2217bd85; `git branch --contains 2217bd85` = moe/work-2026-09-04; reachable from HEAD c0c4d975.\nNO-COMPLETION-COMMIT is a wrapper CLASSIFICATION artifact only (that commit is kind=checkpoint, cli-exit=1). No bytes stranded, so no QA hand-landing was needed or performed. Production file 115 lines, under the 250 per-file target.\n\nDoD MAPPING:\n1. createEnvironmentRetirementRecord({store,projectId,now}) mirrors createProbeIntervalRecord — frozen record, frozen accept/refuse, read/stored/write, same `<name>/${projectId}` aggregate + readEvents/expectedVersion idiom. New isolated aggregate `environment-retirement/${projectId}`, event `moe.environment.retired`. Deliberately STRICTER than the sibling: a malformed event fails CLOSED with RECORD_INVALID instead of being skipped.\n2. Durable: the restart arm closes the store, reopens it, reads back {ok:true,value:true} and stored() = Map([[\"preview\",true]]). Real SqliteEventStore.openForProject on mkdtemp, not a mock.\n3. Ledger append-only: same arm deep-equals readDeployLedger before vs after retirement AND after reopen, and deep-equals readDeployReceipt resultBytes for both a DEPLOYED and a REFUSED receipt.\n4. Probe ring: real createHealthProbeRing samples read back identical after retirement and after reopen.\n5. Code AND layer: the `refused` helper asserts the whole {ok:false,code,layer:\"DAEMON_INGRESS\"} object via toEqual, so the layer is pinned too. All four codes exercised — ENVIRONMENT_INVALID (5 names, `calls===0` proves refusal BEFORE any store call), ENVIRONMENT_UNKNOWN (write, no append), RECORD_INVALID (15 malformed families incl. cross-environment and cross-PROJECT cutoff references), STORE_FAILED (readEvents / readCommandDecisionsAfter / commit faults, CAS conflict, NaN and throwing clocks).\n6. Primary command re-run above with its count line quoted.\n\nMY OWN MUTATION DRILL (independent of the worker's five):\nBackup %TEMP%/moe-envret-qa-01b7fe3f-task-a2dd124fed1b4b9889c626824fc0a6fb.ts taken from a git-CLEAN tracked file; pre-mutation live-file SHA256 c5060148bdf594ca44bb6cc6123c3693a018ba630dce65686d500362b3a7b45f; backup grepped clean of mutant tokens before planting.\n- Mutant A — latestSuccessful `findLast` -> `find` (breaks the generation cutoff): RED, \"Tests 2 failed | 33 passed (35)\", AssertionError \"expected { ok: true, value: true } to deeply equal { ok: true, value: false }\" on the same-SHA reactivation arm and the concurrent-generation arm.\n- Mutant B — refuse() collapses every code to STORE_FAILED: RED across all refusal arms (invalid-name x5, unknown write, malformed families).\nRestored by copy from backup; SHA256 re-hashed in a SEPARATE call = c5060148... exact match; `git status --porcelain` on the dir EMPTY; findLast at line 56 and the original refuse at line 30 confirmed back. No mutant delivered.\n\nSCOPE: exactly the three promised files. No command kind, no registry, no digest mirror, no sweep change — correct for this leaf. Consumer edge satisfied by declared dependsOn from sweep task-f18bddee94cf4b559272d23d53f6180e (rail 4 clause 1a).\n\nFOREIGN RED DISCLOSED, NOT LAUNDERED: the worker's root `pnpm test` EXIT 1 is one scheduler package-boundary arm over deploy-candidate-environment.ts, already filed as task-8b178e52; outside this row's owned paths and absent from the daemon leg. Peer dirt in the shared tree (deploy-ledger.ts PUBLIC_PHASE_DETAILS addition, migration-* from task-61f826e5) noted and untouched; it did not red the daemon gate.",
+      "timestamp": "2026-09-09T09:24:15.072Z"
+    },
+    {
+      "id": "comment-50a4eb52355042eeaf7f540cfd043c53",
+      "author": "governor-608c8a78",
+      "content": "Governance recovery/provenance checkpoint, 2026-09-09T09:25Z. Human instructed 'unblock tasks' here after I proposed confirmed-exit task-only recovery. Released failed worker-3df6caa8 at09:04:49Z; worker-409b958a claimed09:04:52Z and normal acquire refreshed this task's full-suite lease at09:05:32Z. Live resource snapshots09:05:37Z and09:06:54Z named worker-409b958a (NOT historical d0fc1403). Recovery completed all steps and QA owns review. At09:24:59Z get_context still records ONLY checkpoint2217bd85138d7c3f83b7729747bf56b4b4cd67cc/landing.lastCheckpoint, no completion; QA has verified committed bytes and fresh gates (comment-5d9726a4), which is valuable evidence but does not itself record current-round completion provenance. No source bytes are claimed lost. Request normal wrapper completion recording or explicit surfaced provenance resolution; do not manufacture semantic changes, hand-land sources, or treat this as an implementation re-plan. Worker and QA already notified in #workers/#qa at09:21:50Z. I have made no second release and no QA decision.",
+      "timestamp": "2026-09-09T09:25:36.547Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T18:15:37.002Z",
-  "updatedAt": "2026-09-09T08:57:05.300Z",
+  "updatedAt": "2026-09-09T09:25:36.547Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T18:17:31.355Z",
     "plannedStepCount": 4,
     "plannedDistinctFileCount": 3,
-    "executedStepCount": 2
+    "executedStepCount": 4,
+    "doneAt": "2026-09-09T09:25:25.389Z",
+    "wallClockMs": 54474034
   },
   "contextFetchedBy": [
     "architect-9556982c",
     "worker-d0fc1403",
-    "worker-3df6caa8"
+    "worker-3df6caa8",
+    "governor-608c8a78",
+    "worker-409b958a",
+    "qa-01b7fe3f"
   ],
   "stepsCompleted": [
     "step-1",
-    "step-2"
+    "step-2",
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-08T18:39:35.666Z",
@@ -156,5 +209,59 @@
   "blockedResourceId": null,
   "blockedFromStatus": null,
   "blockedAt": null,
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": null,
+  "commits": [
+    {
+      "sha": "2217bd85138d7c3f83b7729747bf56b4b4cd67cc",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-3df6caa8@2026-09-09T08:57:05Z",
+      "paths": [
+        ".moe/tasks/task-a2dd124fed1b4b9889c626824fc0a6fb.json",
+        "apps/daemon/src/monitoring/environment-retirement-record.js",
+        "apps/daemon/src/monitoring/environment-retirement-record.test.ts",
+        "apps/daemon/src/monitoring/environment-retirement-record.ts"
+      ],
+      "recordedBy": "worker-3df6caa8",
+      "recordedAt": "2026-09-09T08:57:14.758Z",
+      "treeId": "00837b8d0321c678c6483f722a215a9a71d161fc",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    "apps/daemon/src/monitoring/environment-retirement-record.test.ts",
+    "apps/daemon/src/monitoring/environment-retirement-record.ts",
+    "apps/daemon/src/monitoring/environment-retirement-record.js"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-3df6caa8@2026-09-09T08:57:05Z",
+    "at": "2026-09-09T08:57:14.758Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-2 completed: environment-retirement-record.ts, exact .js bridge, focused .test.ts. Previous worker recorded 35 focused tests and daemon typecheck; latest preserved checkpoint 2217bd85138d7c3f83b7729747bf56b4b4cd67cc (not completion evidence). Plan and 2/4 completed steps remain unchanged.",
+      "whatRemains": "Resume step 3 consolidated verification, then step 4 adversarial review and normal wrapper completion/QA handoff. Fresh gates and positive count lines required; do not trust historical shared-tree greens as current delivery.",
+      "pitfalls": "full-suite-gate still has a task-keyed lease for this same task naming former worker-d0fc1403. Try normal acquire/resume under the new assignee to refresh ownership; do not force-clear the resource or bypass the lease. Preserve foreign WIP. Root and daemon lanes both touch the machine-global launch-lock root.",
+      "openQuestions": "If the task-keyed lease cannot be resumed normally, send the exact tool refusal to governor-608c8a78 for scoped recovery. PRD-dependent live-proof task is unrelated and remains BLOCKED.",
+      "releasedAt": "2026-09-09T09:04:49.304Z",
+      "releasedBy": "governor-608c8a78",
+      "reason": "Human approved recovery via TUI 'unblock tasks' after governor proposed task-only release. Confirmed wrapper/CLI exit=1 at 2026-09-09T08:57:14.994Z in msg-5ab2cf68fac349c68310be6e7caf8d8e; pinged 08:59:31Z, current assignment still worker-3df6caa8 with no restart evidence. Not released for idle time."
+    }
+  ],
+  "reviewStartedAt": "2026-09-09T09:16:31.132Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": "Test Files 603 passed (603)\nTests 10753 passed | 9 skipped (10762)\nStart at 12:08:13\nDuration 273.19s (transform 28.76s, setup 0ms, import 315.04s, tests 715.93s, environment 29ms)",
+    "reportedAt": "2026-09-09T09:16:31.132Z"
+  },
+  "completionSummary": "Recovered and verified the three-file durable environment-retirement leaf from checkpoint2217bd85; no semantic recovery edits. Frozen fresh read/stored/write API, strict project-scoped event replay, receipt-generation retirement/reactivation, fixed DAEMON_INGRESS refusals, local CAS, unchanged receipts/probe history.35 real-store tests plus exact runtime JS bridge.\nFresh PRIMARY pnpm --filter @moe/daemon test EXIT0:603files passed,10753tests passed/9skipped. Final restored focused record+runtime EXIT0:2files/40tests. Daemon/root typecheck0; foundation35files/756tests0; store53files/688tests0. Root pnpm test EXIT1:1failed/437passed/1skipped files,1failed/10423passed/49skipped tests; ONLY foreign scheduler scanner at package-boundary.test.ts:327 on deploy-candidate-environment.ts. Existing bug task-8b178e52 notified; checkpoint-parent36883ed8 and working-tree parser repro identical, full replay source in comment-810ab163. Owned failure delta empty; not claiming whole-repo green or Control Room test coverage.\nFive production mutants behaviorally red:code27,layer8,replay/current/SHA1 each. Separate SHA256 check and clean3path diff prove original restore; no remaining mutants. Review/handoff comment-ec8e1141; live consumer sweep task-f18bddee dependsOn leaf. No sweep/command composition claimed. Lease released; no tests running. QA to verify normal wrapper completion landing, not checkpoint alone.",
+  "completedAt": "2026-09-09T09:25:25.389Z",
+  "reviewCompletedAt": "2026-09-09T09:25:25.389Z",
+  "reviewSummary": "APPROVED. Full evidence in comment-5d9726a4.\n\nRE-RAN MYSELF: `pnpm --filter @moe/daemon test` EXIT 0, \"Test Files 603 passed (603)\", \"Tests 10758 passed | 9 skipped (10767)\", 261.51s. `pnpm --filter @moe/daemon typecheck` EXIT 0. The +5 tests vs the worker's count are foreign task-61f826e5 WIP in the shared tree.\n\nBYTES AT HEAD, not the dirty tree: `git cat-file -e HEAD:<path>` exit 0 for all three (record.ts 115 lines, .js bridge 1 line exact LF, .test.ts 272); `git status --porcelain` on the monitoring dir EMPTY, so the tree I read IS the committed tree. Landed in 2217bd85, reachable from HEAD c0c4d975. NO-COMPLETION-COMMIT is a wrapper classification artifact (kind=checkpoint); nothing stranded, no hand-landing needed. Production file 115 lines, under the 250 cap.\n\nDoD: (1) mirrors createProbeIntervalRecord, own aggregate and `moe.environment.retired` event, malformed events fail closed. (2) Restart arm closes and reopens a real SqliteEventStore, reads retirement back true. (3) readDeployLedger deep-equal before/after/reopen plus readDeployReceipt resultBytes deep-equal for a DEPLOYED and a REFUSED receipt. (4) Real probe-ring samples read back identical after retirement and reopen. (5) The `refused` helper toEquals the whole {ok,code,layer} object so DAEMON_INGRESS is pinned, not just the code; all four codes exercised, calls===0 proves invalid names refuse before any store call.\n\nMY OWN DRILL, independent of the worker's five. Pre-mutation SHA256 c5060148...b45f on a git-clean tracked file, backup grepped clean first. Mutant A findLast->find: RED, 2 failed | 33 passed (35). Mutant B collapsing every refusal code to STORE_FAILED: RED across every refusal arm. Restored by copy; SHA256 re-hashed in a SEPARATE call = exact match, dir clean, no mutant delivered.\n\nScope is exactly the three promised files. Foreign red disclosed: root `pnpm test` EXIT 1 on one scheduler package-boundary arm, filed as task-8b178e52, outside owned paths."
 }

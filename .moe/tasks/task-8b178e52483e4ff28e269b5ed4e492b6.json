@@ -12,8 +12,57 @@
     "No net new production code. The whole change is inside `packages/scheduler/src/package-boundary.test.ts`."
   ],
   "taskRails": [],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Capture the pre-change baseline and protect scope. Record the task merge-base/HEAD and git status --porcelain for the owned test and apps/daemon/src/deployment/deploy-candidate-environment.ts; hash the latter and leave it untouched. Note foreign dirt without reverting/stashing/staging it. Before editing, preserve the live scanner bytes out of tree under a task-and-worker-specific name, run the task-comment baseline census against those bytes, and record enumerated/completed/attempted/unattempted counts, first failing path and violations before failure. Re-run the reported focused repro and pin its actual error. Capture the required repository-lane merge-base failure sets for step 5; never label a peer-dirty working-tree run as a clean merge-base baseline. If a failing input differs from the merge-base, obtain comparison bytes in a temporary git-archive snapshot (not a sibling worktree), without changing the shared checkout. DoD 1/5/6. No committed probes or evidence artifacts.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/package-boundary.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "TDD (load test-driven-development): extend the existing allowed/forbidden tables around forbiddenImportCases and allowedContentCases with literal source strings containing a quote-bearing regex inside a template expression. Include the exact minimal shape const x = `${s.replace(/'/gu, \"y\")}`; and assert templateExpressionEnd returns the closing-brace index, NOT EOF (current measurement: expected 34, actual 37). An empty moduleSpecifiers result alone is already green before the fix and is not the regression. Pair the source with a following genuine forbidden import and add an import inside the same expression after the regex; assert exact moduleSpecifiers arrays and containsForbiddenSchedulerImport=true, with corresponding allowed regex/prose=false controls. Cover apostrophe/double quote, braces and slash inside a character class, escaped delimiter, flags, regex at expression start, line/block comments before a regex, nested templates/braces, and division after an identifier/number/closing parenthesis/string/template. Add a malformed-regex arm through the scanner asserting the exact existing lexical error 'unterminated regular expression source token', not merely threw. Keep case-generation/nonempty checks. Record red-first output for the closing-index and suffix-import regressions before implementing the matcher.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/package-boundary.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Fix templateExpressionEnd only for lexical recognition: reuse canStartRegularExpression and readRegularExpression after the existing comment branches so a regex literal is consumed atomically and its quotes/braces cannot affect template depth. Track the expression's preceding significant SourceToken context while advancing: skip whitespace/comments, consume full identifiers with identifierStart/identifierPart, retain string and punctuation classifications, and handle a nested literal template as a string or an interpolated template's terminal } as punctuation, matching sourceTokens' regex-gating context. Maintain brace depth only outside quoted/comment/template/regex tokens. Preserve existing lexical failures; no catch-and-ignore, unconditional slash-as-regex, eager prefix re-tokenization, parser dependency, or change to daemon input. Reuse the helper and existing prefix sets rather than duplicating the gating policy; explain that choice in the step note and one concise inline why-comment. Avoid changing sourceTokens or broader unsupported-language semantics unless the named controls prove it necessary; report any additional scope need before taking another path. DoD 2/3/6.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/package-boundary.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Strengthen the existing real repository boundary arm without adding a second scanner. Enumerate sourceFiles for adapters, apps and packages into a complete ordered roster before scanning; preserve all existing exclusions, source extensions, sourceFiles ENOENT behavior and platform-native join/relative paths. Move each scanned-path append after successful contents classification, so an attempted-but-unreadable file is not counted as completed. Assert the nonempty successfully scanned path array equals the full independently enumerated relative-path array (therefore count and last-file coverage), retain scannedWitness and zero-violation assertions, and retain contextual fail-closed errors. Do not weaken the scan by swallowing an exception or skipping the failing daemon file. Emit a value-free run summary of enumerated/completed/violation counts, not source contents. The same delivered arm must provide DoD 4/5 evidence; a helper-only synthetic journey is insufficient. Compare with the pre-change census with explicit tree anchors and disclose roster drift. Report any newly exposed real boundary-violation paths; if none, say so explicitly only after the fixed real scan completes. Route any foreign violation to its owner rather than editing or excluding the input.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/package-boundary.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Concentrated verification. Verify the named regression fails with template regex handling disabled and that the real repository completeness assertion fails if its loop stops after the first completed file; assert the intended lexical-error/closing-index or path-count/roster mismatch, not an unrelated refusal. Prefer process-local transforms of this same test module. If an on-disk drill is necessary, first record exact-path git status and live SHA256, create a fresh out-of-tree backup whose name carries task id AND worker id, confirm backup hash against the live pre-mutation hash, and run no drill while a full-suite lease is active. Restore by copying that backup (never git restore/checkout), then in a SEPARATE call prove the restored live hash equals the recorded pre-mutation hash, including tracked/dirty/untracked paths. After all restores run foreground pnpm --filter @moe/scheduler typecheck and pnpm --filter @moe/scheduler test, requiring nonzero Test Files/Tests counts. Run the required wider legs as separate foreground commands: pnpm typecheck; pnpm test; pnpm verify:foundation; pnpm verify:store; pnpm --filter @moe/daemon test; pnpm --filter @moe/control-room test. These semicolons list commands, not a shell chain: capture each real exit status independently, never pipe away pnpm's exit. Compare the wider failing-path sets at merge-base and final tree, disclose exact foreign failing lines/paths, and require no newly introduced owned-path failure plus green owned-package legs. Root pnpm test alone does not cover apps/**. Finish with the exact complete_task evidence command: pnpm exec vitest run packages/scheduler/src/package-boundary.test.ts. Require EXIT 0, nonzero Test Files and Tests counts, and the real census summary; quote them verbatim with before/after counts and any newly exposed violation finding. Verify no row-owned diff to the daemon file and no production-source changes. Windows/macOS/Linux: native path APIs, standalone pnpm argv, no hard-coded pnpm.cmd Node launcher or bash-only chaining. DoD 1/4/5/6.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/package-boundary.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Final adversarial self-review (load adversarial-self-review): read the exact owned diff as a hostile reviewer. Check regex-versus-division context after whitespace/comments/strings/nested templates, escaped/class-contained braces and quotes, recursive nesting and malformed input, and ensure the regression does not pass via EOF swallowing. Verify the full-roster denominator is captured before the walk and completion is recorded only after classification; catch-and-ignore and loop truncation must not fabricate green. Confirm the recorded targeted red-first/drill evidence exercised those exact surfaces, restoration was proven, and both original boundary fences remain intact. Check concurrent shared-tree changes are disclosed, only the named test file is delivered, and no scratch/debug/probe/artifact or source-content logging was added. No docs/API/export changes are needed; keep explanatory comments in this file only. If review changes bytes, rerun step 5 rather than relying on prior output. Complete only with durable evidence/comment detail under truncation caps, report this path in modifiedFiles, and let the wrapper land the attributed commit for QA.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "packages/scheduler/src/package-boundary.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -23,8 +72,45 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 147,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-1effcf2d29fe4b17b69a498f8d906615",
+      "author": "architect-978f68c6",
+      "content": "Planning measurement at HEAD 2217bd85138d7c3f83b7729747bf56b4b4cd67cc (2026-09-09). Owned scanner and deploy-candidate-environment.ts are clean; foreign source dirt is untouched. Fresh foreground command: pnpm exec vitest run packages/scheduler/src/package-boundary.test.ts -> EXIT 1; Test Files 1 failed (1); Tests 1 failed | 55 passed (56). Error: boundary scan failed for apps\\\\daemon\\\\src\\\\deployment\\\\deploy-candidate-environment.ts: Error: unterminated quoted source token.\n\nIMPORTANT regression trap: the literal minimal source alone returns moduleSpecifiers=[] even BEFORE the fix, because readQuoted accepts EOF. Its templateExpressionEnd is 37 (EOF), expected 34 (closing brace). Therefore an allowed-case false/[] assertion alone is VACUOUS for this bug. Pin the actual closing-brace index, and pair the minimal source with a following real forbidden import; that suffix currently throws the exact quoted-token error.\n\nRead-only baseline census, using the LIVE scanner rather than a reimplementation: enumerated=4108, completed=958, attempted=959, unattempted=3149. First failure is the daemon path above; zero violations before the failure. Final enumerated file: packages/testkit/src/scheduler-fairness/index.ts. These are production-at-claim observations, not a delivered-tree DoD discharge. Full reproducible probe source below; pipe via PowerShell here-string to node --input-type=module, or an equivalent stdin invocation on POSIX. No source files are written.\n\nimport { readFile } from \"node:fs/promises\";\nimport { stripTypeScriptTypes } from \"node:module\";\nimport { join, relative } from \"node:path\";\nconst raw = await readFile(\"packages/scheduler/src/package-boundary.test.ts\", \"utf8\");\nconst cutoff = raw.indexOf('it(\"keeps scheduler registrars behind');\nif (cutoff < 0) throw new Error(\"PROBE_ANCHOR_ABSENT\");\nlet subject = raw.slice(0, cutoff)\n  .replace('import { expect, it } from \"vitest\";', \"\")\n  .replace(/const repositoryRoot = fileURLToPath\\([^;]+;/u,\n    `const repositoryRoot = ${JSON.stringify(process.cwd())};`);\nsubject += \"\\nexport { sourceFiles, containsForbiddenSchedulerImport };\";\nconst m = await import(\"data:text/javascript;base64,\" +\n  Buffer.from(stripTypeScriptTypes(subject)).toString(\"base64\"));\nconst files = (await Promise.all([\"adapters\",\"apps\",\"packages\"]\n  .map(root => m.sourceFiles(join(process.cwd(),root))))).flat();\nlet completed = 0;\nlet firstFailure;\nconst violations = [];\nfor (const file of files) {\n  try {\n    if (m.containsForbiddenSchedulerImport(await readFile(file,\"utf8\")))\n      violations.push(relative(process.cwd(),file));\n    completed++;\n  } catch (error) {\n    firstFailure = {path:relative(process.cwd(),file),error:String(error)};\n    break;\n  }\n}\nconsole.log(JSON.stringify({enumerated:files.length,completed,\n  attempted:completed+Number(Boolean(firstFailure)),\n  unattempted:files.length-completed-Number(Boolean(firstFailure)),\n  firstFailure,violationsBeforeFailure:violations,\n  finalEnumeratedPath:relative(process.cwd(),files.at(-1))}));\n\nA surgical IN-MEMORY candidate reusing canStartRegularExpression/readRegularExpression and retaining lexical prefix state completed 4108/4108 with no errors/violations; all existing allowed/forbidden table expectations still matched. This is an exploration lead, not landed evidence: the worker must implement and run the committed scan, quoting fresh counts and any newly exposed violations.\n\nDraft approach: same one test file only; reuse lexical helpers; exact delimiter and suffix/import regressions; division/nesting/comments/regex-class controls; compare successfully scanned paths/count with the full independently enumerated roster, keeping fail-closed errors. No daemon edit, no production code, no catch-and-ignore. Human confirmation of this approach requested in the REPL; no plan submitted yet.",
+      "timestamp": "2026-09-09T09:03:26.562Z"
+    },
+    {
+      "id": "comment-4da601ef822f4489872a9e90efbdb8a9",
+      "author": "worker-409b958a",
+      "content": "Fresh repro while verifying environment-retirement leaf (no owned source edits): pnpm test EXIT1 at HEAD502bb0afe28eee22137ac3b71d916cf20347ef99. Test Files1failed/437passed/1skipped(439), Tests1failed/10423passed/49skipped(10473). packages/scheduler/src/package-boundary.test.ts:327 throws `boundary scan failed for apps\\daemon\\src\\deployment\\deploy-candidate-environment.ts: Error: unterminated quoted source token`. Both parser and triggering source are byte-identical by scoped git diff to retirement checkpoint parent36883ed8b6ff3bee699fcccbd1c098c0d4818fbb. Existing row owns fix, no duplicate created; leaf will disclose foreign red. No modifications to your files.",
+      "timestamp": "2026-09-09T09:09:00.823Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T21:30:07.227Z",
-  "updatedAt": "2026-09-08T21:30:07.227Z"
+  "updatedAt": "2026-09-09T09:24:38.743Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-09T00:28:14.533Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 1
+  },
+  "contextFetchedBy": [
+    "worker-bcaa6d5e",
+    "architect-978f68c6"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-09T09:24:36.533Z",
+  "planningNotes": {
+    "approachesConsidered": "Reuse the existing lexical regex gate/reader within templateExpressionEnd, with local significant-token state. Rejected unconditional slash recognition (division), prefix rescanning (quadratic), a new parser dependency/multi-file extraction (unnecessary), editing the valid daemon source (masks the defect), or swallowing errors (fabricates coverage). Strengthen the real scan's successful-completion roster while retaining fail-closed behavior; no expansion into a new scan framework.",
+    "codebaseInsights": "Measured 2026-09-09 at HEAD 2217bd85138d7c3f83b7729747bf56b4b4cd67cc. Fresh pnpm exec vitest run packages/scheduler/src/package-boundary.test.ts: EXIT 1; Test Files 1 failed (1); Tests 1 failed | 55 passed (56); exact failing path deploy-candidate-environment.ts and error 'unterminated quoted source token'. Helpers are test-local at canStartRegularExpression:46/readRegularExpression:53/templateExpressionEnd:100/sourceTokens:155; matcher has no regex/context branch. Both scanner and daemon input clean. Full-tree git grep -l of the helper names, test filename, error format and witness/count names: only this test is an executable source reference; 99 other hits are runtime/history/memory files, not asserting consumers. Shape grep confirms allowed/forbidden table counts are nonzero checks; fixed DEVELOPMENT_ONLY 7/6 tables remain untouched. Actual imports are node builtins and vitest; no new workspace dependency edge. package.json resolves @moe/scheduler to packages/scheduler. Root vitest includes adapters/packages/tests/tools, not apps. Read-only same-scanner census: 4108 enumerated, 958 completed, 959 attempted, 3149 unattempted; no violations before first failure; final enumerated path packages/testkit/src/scheduler-fairness/index.ts. FULL baseline probe source is durable comment comment-1effcf2d29fe4b17b69a498f8d906615. Crucial: minimal source alone returns moduleSpecifiers=[] already; templateExpressionEnd incorrectly returns 37 versus expected closing index 34, and a following actual import throws. An exploratory in-memory reuse candidate completed 4108/4108 with no errors/violations and preserved old table outcomes; NOT delivered evidence. Worker must fresh-verify on its delivered scanner/tree. On user 'continue' confirmation, refreshed HEAD=c0c4d9759c8721616032d48d70dfcd1a7586c94e; git diff --stat 2217bd85138d7c3f83b7729747bf56b4b4cd67cc HEAD -- owned-test daemon-input is empty; both paths remain clean. Earlier counts remain explicitly anchored observations, not invented fresh counts. Fresh confirmation-turn focused run again returned EXIT 1, Test Files 1 failed (1), Tests 1 failed | 55 passed (56), same quoted-token failure at the same daemon path. Independent read-only plan review found no correctness/rail blocker.",
+    "risks": "One test file only; 455 lines at claim, production line caps not applicable. Do not add source consumers or change the daemon. Shared tree had foreign source changes in apps/daemon/src/http/affordance-read.ts and untracked apps/daemon/src/preview/preview-goal-landing.test.ts, plus config/runtime/review debris; preserve all. Scan count is platform/tree-dependent and excludes scheduler via existing walker; never hard-code 4108 or sort away existing order. Preserve lexical failures and extension/exclusion policy; no claim that the parser covers the entire JS grammar. Minimal allowed scanner output is vacuous without an end-index or suffix-import positive control. Distinguish completed, attempted and unattempted file counts. Keep probe/mutation backup names task-specific and prove live-byte restore, never use an old seat-only backup. All transient artifacts cleaned without touching foreign paths.",
+    "keyFiles": [
+      "packages/scheduler/src/package-boundary.test.ts",
+      "packages/scheduler/package.json",
+      "vitest.config.ts",
+      "apps/daemon/src/deployment/deploy-candidate-environment.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-09T09:24:38.743Z"
 }
