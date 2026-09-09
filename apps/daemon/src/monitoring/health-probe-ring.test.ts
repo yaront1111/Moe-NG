@@ -23,6 +23,33 @@ async function subject(): Promise<typeof import("./health-probe-ring.js")> {
 
 function directory(): string { return mkdtempSync(join(tmpdir(), "moe-health-ring-")); }
 
+/** Preload only historical SUCCESS samples into the production-created schema. The boundary
+ * appends below still own eviction and incident transitions; setup performs neither operation. */
+function seedPreviewHistory(path: string, first: number, last: number): void {
+  const database = new DatabaseSync(path);
+  let transaction = false;
+  try {
+    const count = () => Number(database.prepare("SELECT COUNT(*) AS n FROM health_probes WHERE project_id = ? AND environment = ?")
+      .get("project-health", "preview")?.n);
+    const before = count();
+    database.exec("BEGIN IMMEDIATE"); transaction = true;
+    const insert = database.prepare(`INSERT INTO health_probes(project_id, environment, version, sha, status, latencyMs, at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)`);
+    let inserted = 0;
+    for (let n = first; n <= last; n++) {
+      const probe = observation(n);
+      insert.run("project-health", probe.environment, probe.version, probe.sha, probe.status, probe.latencyMs, probe.at);
+      inserted++;
+    }
+    expect(inserted).toBeGreaterThan(0);
+    expect(inserted).toBe(last - first + 1);
+    database.exec("COMMIT"); transaction = false;
+    expect(count()).toBe(before + inserted);
+  } finally {
+    try { if (transaction) database.exec("ROLLBACK"); } finally { database.close(); }
+  }
+}
+
 it("publishes bounded probe contracts and the stable missing URL refusal", async () => {
   const path = "./health-probe-contracts.js";
   const contract: unknown = await import(path).catch(() => null);
@@ -49,7 +76,8 @@ it("physically evicts the oldest samples per environment without changing the ev
   try {
     const ring = createHealthProbeRing(`${main}.health.sqlite`, "project-health");
     expect(ring.append(observation(1, "production"))).toMatchObject({ ok: true });
-    for (let n = 1; n <= HEALTH_PROBE_RING_LIMIT; n++) expect(ring.append(observation(n))).toMatchObject({ ok: true });
+    seedPreviewHistory(`${main}.health.sqlite`, 1, HEALTH_PROBE_RING_LIMIT - 1);
+    expect(ring.append(observation(HEALTH_PROBE_RING_LIMIT))).toMatchObject({ ok: true });
     expect(ring.read("preview")).toMatchObject({ ok: true, value: expect.any(Array) });
     const atBound = ring.read("preview");
     if (!atBound.ok) throw new Error(atBound.code);
@@ -173,7 +201,8 @@ it("commits incident transitions with the real append and preserves them past ri
   const { createHealthProbeRing } = await subject();
   const root = directory();
   try {
-    const ring = createHealthProbeRing(join(root, "health.sqlite"), "project-health");
+    const path = join(root, "health.sqlite");
+    const ring = createHealthProbeRing(path, "project-health");
     expect(ring.incidents).toBeTypeOf("function");
     for (let n = 1; n <= 3; n++) expect(ring.append(observation(n, "preview", "FAILURE"))).toMatchObject({ ok: true });
     const opened = ring.incidents("preview");
@@ -184,7 +213,15 @@ it("commits incident transitions with the real append and preserves them past ri
     const closed = ring.incidents("preview");
     if (!closed.ok) throw new Error(closed.code);
     expect(closed.value[0]).toEqual({ ...opened.value[0], closedAt: observation(4).at });
-    for (let n = 5; n <= HEALTH_PROBE_RING_LIMIT + 4; n++) expect(ring.append(observation(n))).toMatchObject({ ok: true });
+    seedPreviewHistory(path, 5, HEALTH_PROBE_RING_LIMIT);
+    for (let n = HEALTH_PROBE_RING_LIMIT + 1; n <= HEALTH_PROBE_RING_LIMIT + 4; n++) {
+      expect(ring.append(observation(n))).toMatchObject({ ok: true });
+    }
+    const retained = ring.read("preview");
+    if (!retained.ok) throw new Error(retained.code);
+    expect(retained.value).toHaveLength(HEALTH_PROBE_RING_LIMIT);
+    expect(retained.value[0]).toEqual(observation(5));
+    expect(retained.value.at(-1)).toEqual(observation(HEALTH_PROBE_RING_LIMIT + 4));
     expect(ring.incidents("preview")).toEqual(closed);
   } finally { rmSync(root, { force: true, recursive: true }); }
 });
