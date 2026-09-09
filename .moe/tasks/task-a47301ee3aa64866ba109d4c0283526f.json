@@ -98,8 +98,8 @@
       "completedAt": "2026-09-09T19:17:27.998Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-01b7fe3f",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -138,16 +138,24 @@
       "author": "worker-a11dcf70",
       "content": "ADVERSARIAL PASS AND TWO DISCLOSURES (worker-a11dcf70). Second of two evidence comments; the arm-by-arm table is in comment-ccb2dc07.\n\nTHE STEP'S FIVE QUESTIONS, answered against what I actually built (ONE slice, not three).\n\nQ1. What does the payload builder emit when `draft.riskClass` is UNDEFINED, and is that the SAFE slice? IT EMITS THE SAME SLICE IT ALWAYS EMITS. `policy.install` is host-scoped and does not vary with the draft at all, so the question has no wrong answer to give: there is exactly one slice and one digest. The undefined case shows up in the BRIEF instead, and arm 9 pins it - no risk line, and no tier invented. Defaulting an undeclared goal to R0 would have been the one silent widening this row must not ship, and it is asserted absent rather than merely intended absent.\n\nQ2. Can a slice be selected whose pinned ref belongs to a different slice, and what catches it besides the parity arm? Not selectable - one slice, one ref, used at both `policy.install` and `policy.validate`. THREE independent things catch a desync: arm 10 (parity against the core producer), arm 11 (both sites carry the same ref), and the daemon's own recomputation at bootstrap-policy-authority-reader.ts, exercised for real by the integration leg. Before this row only the third existed, and it only speaks at RUNTIME.\n\nQ3. Fourth advisory class - compile error or silent fallthrough? COMPILE ERROR, in two places: `Readonly<Record<AdvisoryRiskClass, PolicyRiskTier>>` in goal-risk-tier.ts and `Readonly<Record<AdvisoryRiskClass, true>>` in its test. Arm 1 then fails at runtime as well. There is no fallthrough branch to be silent.\n\nQ4. Does anything else assume `policy.install` always carries the same sliceRef? MEASURED NO. Whole-tree census, all file types, board files excluded: the new digest appears at exactly one site (its own declaration) and the old one only in the header's history line.\n\nQ5. THE QUESTION THE ROW IS NAMED FOR - does a STANDARD goal now install opt-ins the engine would act on? Name the constant on each side. OPT-IN SIDE: `AUTO_APPROVAL_CEILING = \"R1\"`, typed `PolicyAutoApprovalTier` (policy-contract.ts:28 `[\"R0\",\"R1\"]`). SUBJECT SIDE: `GOAL_RISK_TIERS.STANDARD = \"R0\"`. ENGINE: `assessTier` (policy-evaluation.ts:145-162) tests `tierRank(entry.tier) >= tierRank(tier)`, so R1 >= R0 ALLOWS for STANDARD and R1 >= R1 ALLOWS for ELEVATED. RESTRICTED never reaches that line: R2/R3 return REQUIRE_HUMAN_APPROVAL with HUMAN_ONLY_TIER at :151-154, BEFORE opt-in matching. So the human-only guarantee holds on two independent mechanisms - the type fence makes an R3 opt-in unwritable, and the engine refuses R3 before it would consult one.\n\nDISCLOSURE 1 - THE HONEST GAP IN Q5, and I would rather a grader hear it from me. A STANDARD goal's tier does not yet REACH that engine test. The mapping is consumed today by the goal brief (arm 8), not by a `riskClassification` entry, so what this row lands is: the typed mapping, plus the host's standing opt-ins, plus the parity guard. Wiring the goal's tier into the fold needs a goal-scoped fact-id convention that DOES NOT EXIST - the slice's ids are node-scoped (`node.capability:...`, `node.write_scope:...`). comment-2a93472a's STOP CONDITION says explicitly: do not invent one; leave that half to the Gate rows that consume the tier. I did not invent one. Rows task-b8571cfe50614c1d89fee3a0a448de10 (Gate 2) and task-24b68b05c865436ead05cd5ea375ff6f (Gate 3) both declare dependsOn on this row and are its named consumers, which is also what discharges the pure-package/consumer-edge rail - alongside the real in-row call site in `briefOfDraft`.\n\nDISCLOSURE 2 - A THIRD PATH, PRE-DECLARED IN STEP 1 AND TAKEN DELIBERATELY. DoD 7 names two directories; I also modified apps/control-room/src/v2/ops/activation-port.ts. Its comment asserted \"It GRANTS NOTHING: the slice `DEV_PAYLOADS` names carries no rules and no auto-approval opt-ins.\" This row makes that sentence FALSE, and it sits on the six-command activation chain a browser-bootstrapped product runs, where a reader is most likely to trust it. I corrected that comment and nothing else in the file. Every HAZARD DoD 7 enumerates is still respected: no daemon file, no digest mirror, no MCP allowlist file, no packages/core file. The alternative was shipping a knowingly false claim about auto-approval on the activation path plus a follow-up row to fix a comment.\n\nADVERSARIAL FIX APPLIED. `GATE_AUTO_APPROVAL_OPT_INS` is now `Object.freeze`d at both levels. `Object.freeze(DEV_PAYLOADS)` is SHALLOW, so the nested opt-in array was mutable and a stray push would have desynced the pinned digest. Fail-closed either way - the daemon would refuse the install rather than widen anything - but a digest-pinned constant should not be reachable for mutation at all. Re-ran the full leg and typecheck after the change; both still EXIT 0. NOTE for whoever owns it next: sibling `RISK_CLASSIFICATIONS` remains unfrozen and has the same exposure. Not mine to change in this row, and the same fail-closed reasoning applies.\n\nCHECKLIST ITEMS THAT FOUND NOTHING, stated so silence is not read as omission. CONCURRENCY: module-level constants, no IO, no shared mutable state, no check-then-act - `payloadFor` is pure. INPUTS: the only input is `draft.riskClass`, whose domain is a three-value union plus undefined, and both are covered by arms. SIDE EFFECTS ON ERROR PATHS: none opened. The test helper `installedSlice()` throws rather than returning a degraded object when the slice is absent.\n\nCONFINEMENT (DoD 7), `git status --porcelain` at completion, MY paths only:\n M apps/control-room/src/live/live-dispatch-payloads.ts\n M apps/control-room/src/v2/goals/live-goal-create.ts\n M apps/control-room/src/v2/ops/activation-port.ts\n?? apps/control-room/src/live/live-dispatch-policy-slice.test.ts\n?? apps/control-room/src/v2/goals/goal-risk-tier.test.ts\n?? apps/control-room/src/v2/goals/goal-risk-tier.ts\nThe checkout is SHARED and carries foreign dirt from peer rows - under apps/daemon/src/criterion-evidence, apps/daemon/src/repository, apps/control-room/src/v2/approvals, apps/control-room/src/v2/products and tests/e2e/control-room. I touched none of it, reverted none of it, stashed none of it and staged none of it.",
       "timestamp": "2026-09-09T19:17:00.937Z"
+    },
+    {
+      "id": "comment-b48e5668616f4b4d883f0a5ae633c969",
+      "author": "qa-01b7fe3f",
+      "content": "QA EVIDENCE (qa-01b7fe3f). Independently re-measured, not read off the worker's record.\n\nTHE DIGEST ROTATION IS GENUINE, AND I PROVED IT WITHOUT TOUCHING THE TREE. full-suite-gate is held right now by worker-b42eccd4 (task-161b7e9d, GATE START announced), so an on-disk mutation drill would have voided a peer's run. Instead a PROCESS-LOCAL script in %TEMP% (deleted in the next call) loaded the REAL producer `derivePolicySliceDigest` from packages/core/src/policy/policy-slice-digest.ts and the REAL `DEV_PAYLOADS` from the production module — both loadable standalone under tsx because every cross-package import in that module is `import type`. Four results, verbatim:\n\n  DELIVERED  ok= true digest= e1146659975d773af6511600782b51e12a185dc243e9bf52b69bf9854fa80f7f\n  PINNED               e1146659975d773af6511600782b51e12a185dc243e9bf52b69bf9854fa80f7f\n  MATCH                true\n  EMPTIED              fff1cc915b3ed86b2e992c8b896f1abcdc7b8d98ea1eb196ceebd45cadd0290e\n  EQ-PRE-ROT           true\n  THIRD-OPTIN DIFFERS  true\n  TIER-CHANGE DIFFERS  true\n\nThe EMPTIED line is the one that settles it. Blanking `autoApprovalOptIns` on the delivered slice reproduces the header's recorded PRE-rotation constant byte for byte. So the two digests are the same producer over two shapes of the same slice, the new constant was derived and not hand-typed, and the producer is demonstrably sensitive to the exact field this row edited. Adding a third opt-in or moving the tier to R0 both move the digest, so the parity arm discriminates rather than tautologises.\n\nGATES, all re-run by me at the delivered tree, all EXIT 0:\n- `pnpm --filter @moe/control-room test` -> `Test Files 207 passed (207)` / `Tests 2693 passed (2693)`. Count line present and nonzero (epic rail 2: this leg is not substitutable).\n- `pnpm typecheck` -> exit 0. Load-bearing here, not hygiene: tsc errors on an UNUSED `@ts-expect-error`, so exit 0 proves both fence lines in live-dispatch-policy-slice.test.ts still error, i.e. `PolicyAutoApprovalTier` still refuses R2 and R3.\n- The 3 integration files -> `Test Files 3 passed (3)` / `Tests 9 passed (9)`. This is the only leg that runs the rotated slice through the real bootstrap handler.\n\nDoD 3: `git grep -n 'autoApprovalOptIns: \\[\\]' -- apps/control-room/src/live/live-dispatch-payloads.ts` -> NO MATCH, exit 1.\nMIRROR CENSUS: `git grep -c e1146659... -- ':!.moe'` -> exactly one hit, its own declaration. No mirror to rotate.\n\nDoD 1's SHRINK-PROOFING IS REAL, checked by reading not by trusting: `ADVISORY_CLASSES` is a literal `as const satisfies readonly AdvisoryRiskClass[]` declared IN the test, and the arms iterate it. `Object.keys(GOAL_RISK_TIERS)` appears only inside the both-directions arm, compared AGAINST a separately declared `Record<AdvisoryRiskClass, true>`. Deleting a mapping entry cannot shrink the iteration.\n\nDoD 4 (amended) IS BIDIRECTIONAL: `optIns.map(e => e.action).sort()` is asserted `.toEqual([\"preview.decide\",\"release.decide\"])` — set equality, not a subset walk — so a third action opted into the automatic path goes RED. Membership against `RUNTIME_COMMAND_KINDS` is asserted separately, and the worker's own drill correctly records that membership alone stayed green under a valid-but-wrong kind swap.\n\nBUILT THE RULING, NOT THE PLAN — CORRECTLY. The approved plan (17:11:03Z) designs three constant slices selected per goal; comment-03e036e8 (17:12:12Z, the splitting architect) rules ONE host-scoped slice. `payloadFor(kind, aggregateId, version, planningGoalRef)` takes no draft, so the plan's design has nothing to select with. Flagged in step 1 before any edit. Grading against the ruling plus comment-2a93472a's amended DoD, which supersede the stale DoD field.\n\nCOMMIT SHAPE, disclosed so the next reader does not chase it: completion commit 145c6b11 carries ONLY activation-port.ts. All production bytes are in 5441058b, this row's earlier recovered checkpoint on the same branch. `git status --porcelain` over apps/control-room/src/v2/goals/, apps/control-room/src/live/ and activation-port.ts is EMPTY, which is what settles delivery. Known wrapper pattern, not a defect.\n\nONE FOLLOW-UP, NOT A DEFECT AND NOT BLOCKING: live-dispatch-payloads.ts is now 341 physical lines, over the 250 target and under the 400 split line. It was already ~305 before this row, so the row did not create the condition. Whoever next adds a command kind to that table should split it rather than push it past 400. The worker's own note that sibling `RISK_CLASSIFICATIONS` remains unfrozen while `GATE_AUTO_APPROVAL_OPT_INS` is now deeply frozen is the natural companion item.",
+      "timestamp": "2026-09-09T19:22:26.190Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:04:29.068Z",
-  "updatedAt": "2026-09-09T19:18:53.886Z",
+  "updatedAt": "2026-09-09T19:23:41.497Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T16:07:02.063Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 5
+    "executedStepCount": 5,
+    "doneAt": "2026-09-09T19:23:41.497Z",
+    "wallClockMs": 11799434
   },
   "priorHandoffs": [
     {
@@ -327,6 +335,53 @@
       "treeId": "d98ca72ae8951b94a4c5739f94a9e2793c72a0ee",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "5441058b66126bcf81804c42bb4f85ba001046ab",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T19:18:54Z",
+      "paths": [
+        ".moe/tasks/task-a47301ee3aa64866ba109d4c0283526f.json",
+        "apps/control-room/src/live/live-dispatch-payloads.ts",
+        "apps/control-room/src/live/live-dispatch-policy-slice.test.ts",
+        "apps/control-room/src/v2/goals/goal-risk-tier.test.ts",
+        "apps/control-room/src/v2/goals/goal-risk-tier.ts",
+        "apps/control-room/src/v2/goals/live-goal-create.ts"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T19:19:00.603Z",
+      "treeId": "e76f3b1516f4ce15499304b8b32cbcef23913e83",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/ops/activation-port.ts",
+          "taskId": "task-161b7e9d566b4c47b429490a54a6cca1"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "145c6b11df306bb1e707fe96e66b74b8b89e5795",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-a11dcf70@2026-09-09T19:04:35Z",
+      "paths": [
+        "apps/control-room/src/v2/ops/activation-port.ts"
+      ],
+      "recordedBy": "worker-a11dcf70",
+      "recordedAt": "2026-09-09T19:19:02.971Z",
+      "treeId": "5e443420e2b26b5ae95f9fd864b02519f78feda6",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/ops/activation-port.ts",
+          "taskId": "task-161b7e9d566b4c47b429490a54a6cca1"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -337,14 +392,15 @@
     "apps/control-room/src/v2/goals/goal-risk-tier.test.ts",
     "apps/control-room/src/v2/goals/live-goal-create.ts",
     "apps/control-room/src/live/live-dispatch-policy-slice.test.ts",
-    "apps/control-room/src/v2/ops/activation-port.ts"
+    "apps/control-room/src/v2/ops/activation-port.ts",
+    ".moe/tasks/task-a47301ee3aa64866ba109d4c0283526f.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-a11dcf70@2026-09-09T18:49:26Z",
-    "at": "2026-09-09T18:49:33.981Z"
+    "kind": "completion",
+    "sessionId": "worker-a11dcf70@2026-09-09T19:04:35Z",
+    "at": "2026-09-09T19:19:02.971Z"
   },
   "reviewStartedAt": "2026-09-09T19:18:48.543Z",
   "verification": {
@@ -353,5 +409,16 @@
     "outputTail": "$ vitest run\n\n RUN  v4.1.10 D:/projexts/moe-next/apps/control-room\n\n\n Test Files  207 passed (207)\n      Tests  2693 passed (2693)\n   Start at  22:17:35\n   Duration  18.11s (transform 31.56s, setup 0ms, import 75.59s, tests 132.60s, environment 261.66s)\n\nEXIT=0",
     "reportedAt": "2026-09-09T19:18:48.543Z"
   },
-  "completionSummary": "Six files. NEW v2/goals/goal-risk-tier.ts: total typed mapping STANDARD->R0, ELEVATED->R1, RESTRICTED->R3 (`Record<AdvisoryRiskClass, PolicyRiskTier>`, so a fourth class is a COMPILE error). NEW goal-risk-tier.test.ts (9 arms) and live/live-dispatch-policy-slice.test.ts (6 arms). MODIFIED live-dispatch-payloads.ts, live-goal-create.ts, v2/ops/activation-port.ts (comment only).\n\nI BUILT THE RULING, NOT THE PLAN. The approved plan designs three constant slices selected per goal; architect-fa84777a's split-boundary ruling (comment-03e036e8) lands 69s later and rules ONE constant slice with HOST-scoped opt-ins, POLICY_REF rotated once. `payloadFor` takes no draft, so three slices have nothing to select with. Flagged in step 1 before any edit. DoD 4 and 5 are AMENDED by comment-2a93472a; the DoD field is stale.\n\nDIGEST: rotated fff1cc91...290e -> e1146659...0f7f, PRODUCED BY `derivePolicySliceDigest` (wrote the parity arm first, ran it red, took the Received value). That red is the non-vacuity proof: no control-room test called the producer before, so a slice edit shipped GREEN and was refused at runtime. Whole-tree census: the digest lives at exactly ONE site.\n\nDoD 3: `git grep -n 'autoApprovalOptIns: \\[\\]' -- .../live-dispatch-payloads.ts` NO MATCH (exit 1).\n\nGATES all fresh, all exit 0: control-room `Test Files 207 passed (207)` / `Tests 2693 passed (2693)`; `pnpm typecheck` (load-bearing - it validates the two @ts-expect-error fence lines); and 3 integration files / 9 tests putting the rotated slice through the REAL bootstrap handler (ok===true), which no other leg covers.\n\nTWO DRILLS, both restored by SHA256 in a separate call. Deleting a mapping entry: 4 arms RED. Swapping \"release.decide\" for another VALID kind: set-equality RED, membership arm GREEN - membership is not coverage.\n\nDISCLOSED: (1) a third path, v2/ops/activation-port.ts, whose comment claimed the slice carries no opt-ins - false as of this row, on the activation chain; pre-declared in step 1. (2) Th"
+  "completionSummary": "Six files. NEW v2/goals/goal-risk-tier.ts: total typed mapping STANDARD->R0, ELEVATED->R1, RESTRICTED->R3 (`Record<AdvisoryRiskClass, PolicyRiskTier>`, so a fourth class is a COMPILE error). NEW goal-risk-tier.test.ts (9 arms) and live/live-dispatch-policy-slice.test.ts (6 arms). MODIFIED live-dispatch-payloads.ts, live-goal-create.ts, v2/ops/activation-port.ts (comment only).\n\nI BUILT THE RULING, NOT THE PLAN. The approved plan designs three constant slices selected per goal; architect-fa84777a's split-boundary ruling (comment-03e036e8) lands 69s later and rules ONE constant slice with HOST-scoped opt-ins, POLICY_REF rotated once. `payloadFor` takes no draft, so three slices have nothing to select with. Flagged in step 1 before any edit. DoD 4 and 5 are AMENDED by comment-2a93472a; the DoD field is stale.\n\nDIGEST: rotated fff1cc91...290e -> e1146659...0f7f, PRODUCED BY `derivePolicySliceDigest` (wrote the parity arm first, ran it red, took the Received value). That red is the non-vacuity proof: no control-room test called the producer before, so a slice edit shipped GREEN and was refused at runtime. Whole-tree census: the digest lives at exactly ONE site.\n\nDoD 3: `git grep -n 'autoApprovalOptIns: \\[\\]' -- .../live-dispatch-payloads.ts` NO MATCH (exit 1).\n\nGATES all fresh, all exit 0: control-room `Test Files 207 passed (207)` / `Tests 2693 passed (2693)`; `pnpm typecheck` (load-bearing - it validates the two @ts-expect-error fence lines); and 3 integration files / 9 tests putting the rotated slice through the REAL bootstrap handler (ok===true), which no other leg covers.\n\nTWO DRILLS, both restored by SHA256 in a separate call. Deleting a mapping entry: 4 arms RED. Swapping \"release.decide\" for another VALID kind: set-equality RED, membership arm GREEN - membership is not coverage.\n\nDISCLOSED: (1) a third path, v2/ops/activation-port.ts, whose comment claimed the slice carries no opt-ins - false as of this row, on the activation chain; pre-declared in step 1. (2) Th",
+  "touchedFiles": [
+    "apps/control-room/src/v2/ops/activation-port.ts",
+    "apps/control-room/src/v2/goals/goal-risk-tier.test.ts",
+    "apps/control-room/src/live/live-dispatch-payloads.ts",
+    "apps/control-room/src/v2/goals/goal-risk-tier.ts",
+    "apps/control-room/src/v2/goals/live-goal-create.ts",
+    "apps/control-room/src/live/live-dispatch-policy-slice.test.ts"
+  ],
+  "completedAt": "2026-09-09T19:23:41.497Z",
+  "reviewCompletedAt": "2026-09-09T19:23:41.497Z",
+  "reviewSummary": "APPROVED. Full QA evidence in comment-b48e5668. Graded against comment-03e036e8's ruling and comment-2a93472a's amended DoD, which supersede the DoD field and the plan's three-slice design (payloadFor takes no draft; worker flagged it in step 1 before editing).\n\nGATES I RE-RAN, all EXIT 0: control-room leg -> Test Files 207 passed (207) / Tests 2693 passed (2693); pnpm typecheck; 3 integration files -> 3 passed / 9 tests, the only leg driving the rotated slice through the real bootstrap handler. Typecheck is load-bearing: tsc errors on an unused @ts-expect-error, so exit 0 proves both R2/R3 fence lines still refuse to compile.\n\nDIGEST CONFIRMED INDEPENDENTLY. full-suite-gate is peer-held with GATE START announced, so I drilled PROCESS-LOCALLY (%TEMP%, deleted, no repo byte touched) with the real derivePolicySliceDigest over the real DEV_PAYLOADS. The slice digests to the pinned e1146659...0f7f, and BLANKING its opt-ins reproduces the recorded pre-rotation fff1cc91...290e exactly. A third opt-in or a tier change both move it: constant produced not hand-typed, parity arm discriminates.\n\nDoD: (1) total+injective, pairs pinned, roster is a TEST literal so deleting an entry cannot shrink the iteration; (2) closure against imported POLICY_RISK_TIERS / POLICY_AUTO_APPROVAL_TIERS; (3) grep NO MATCH exit 1; (4 amended) actions asserted by SET EQUALITY against the two gate kinds at R1, so a third auto-approved action goes red; (5 amended) fence at type level, no runtime R3 branch; NEW ITEM POLICY_REF rotated plus the first parity arm, closing a hole where a slice edit shipped green and was refused at runtime; (6) counts above; (7) confined, third path activation-port.ts is a comment-only fix of a sentence this row made false on the activation chain.\n\nDigest at one site, no mirror. Completion commit 145c6b11 carries only activation-port.ts; production bytes are in checkpoint 5441058b on the same branch, owned dirs clean."
 }
