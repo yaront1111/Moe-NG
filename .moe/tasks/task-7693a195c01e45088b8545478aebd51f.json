@@ -209,7 +209,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T09:49:59.862Z",
-  "updatedAt": "2026-09-09T12:26:36.479Z",
+  "updatedAt": "2026-09-09T12:27:15.029Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T10:02:51.986Z",
     "plannedStepCount": 7,
@@ -351,17 +351,52 @@
         }
       ],
       "pushed": false
+    },
+    {
+      "sha": "02ad6fb4ec22f6f31f478268abba9cdc1a6d45ba",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T12:27:07Z",
+      "paths": [
+        ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T12:27:15.029Z",
+      "treeId": "fe12db1d186e6731486721334013402e73118dd1",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/products/live-new-product.test.tsx",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/control-room/src/v2/products/live-new-product.tsx",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        }
+      ],
+      "pushed": false
     }
   ],
   "unattributedPaths": [
-    "apps/daemon/remote-deploy-acceptance.mts",
-    "apps/daemon/src/deployment/deploy-candidate-start.js",
-    "apps/daemon/src/deployment/deploy-ports.ts"
+    "apps/daemon/src/deployment/deploy-candidate-start.js"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-01b7fe3f@2026-09-09T12:19:16Z",
-    "at": "2026-09-09T12:26:36.479Z"
+    "sessionId": "qa-01b7fe3f@2026-09-09T12:27:07Z",
+    "at": "2026-09-09T12:27:15.029Z"
   }
 }
