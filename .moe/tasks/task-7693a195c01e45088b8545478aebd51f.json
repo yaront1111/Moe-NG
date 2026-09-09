@@ -209,7 +209,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T09:49:59.862Z",
-  "updatedAt": "2026-09-09T12:21:33.385Z",
+  "updatedAt": "2026-09-09T12:26:36.479Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T10:02:51.986Z",
     "plannedStepCount": 7,
@@ -270,7 +270,8 @@
     "apps/control-room/src/v2/products/live-new-product.test.tsx",
     ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
     ".moe/tasks/task-5380dbf067eb4eeba1cec7117ffa39b5.json",
-    ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json"
+    ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json",
+    ".moe/tasks/task-4b7f4a857b504ccb9c64ff4e75280ec1.json"
   ],
   "completionSummary": "The generated base docker-compose.yml no longer carries POSTGRES_PASSWORD in Config.Env. The db service now sets POSTGRES_PASSWORD_FILE (a path) and mounts a compose secret; the top-level source is `environment: ${POSTGRES_PASSWORD:+POSTGRES_PASSWORD}`, which emits only the variable NAME. Measured live on Docker Server 29.6.2 / Compose v5.3.1, so the environment-sourced form is supported and the file-sourced fallback was NOT taken: the operator .env flow is unchanged.\n\nFAIL-FAST PRESERVED WITHOUT LEAKING. The plan's suggested `x-required-password: ${POSTGRES_PASSWORD:?...}` was measured and REJECTED because `docker compose config` interpolates it and prints the value (match 1). The `:+` guard keeps match 0 while unset AND empty both refuse exit 1 with `secret \"POSTGRES_PASSWORD\" must declare either \\`file\\` or \\`environment\\`: invalid compose project`, which names the variable. Drilled falsifiable: removing the guard turned the two missing-input arms RED.\n\nLIVE PROOF, three input classes (normal; space+$+trailing-space; trailing newline). Baseline at named SHA b0dc1c5765: docker inspect match 1, compose config match 1. Current: 0 everywhere across Env, Cmd, Entrypoint and Labels. Mounted secret bytes exact for all three. Correct password authenticates, wrong password rejected. Full probe source in comment-ed461460/comment-3a32dc34; results in comment-b4512d36.\n\ncontrolled-3 in all four literals including both hand-transcribed control-room mirrors. Per architect amendment comment-8751c582 NO v3 lock asset is minted: LOCKFILE_ASSET is a hard-coded literal, no dependency moved, so pnpm-lock.yaml's hash is byte-unchanged. Only docker-compose.yml's manifest hash moved, to ca06da38bcf619df20e91998b9982adac55108843c2340ea541a1178eafdd7d8. GOLDEN_FILE_COUNT stays 23. The refusal arm now sweeps controlled-2 and controlled-999 asserting BOOTSTRAP_PROFILE_VERSION_UNKNOWN at DAEMON_INGRESS.\n\nGATES, table in comment-8479c7c0. Owned scope GREEN: daemon 4 files/38 passed EXIT 0; c",
   "commits": [
@@ -312,15 +313,55 @@
         }
       ],
       "pushed": false
+    },
+    {
+      "sha": "04616209df1bf8f7d549d9650a4c7b8e926cee84",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T12:19:16Z",
+      "paths": [
+        ".moe/tasks/task-4b7f4a857b504ccb9c64ff4e75280ec1.json",
+        ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T12:26:36.479Z",
+      "treeId": "fafea7ddc16e42147d77c5a05399353fd264c728",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/products/live-new-product.test.tsx",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/control-room/src/v2/products/live-new-product.tsx",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        }
+      ],
+      "pushed": false
     }
   ],
   "unattributedPaths": [
-    "apps/daemon/src/deployment/deploy-candidate-start.js"
+    "apps/daemon/remote-deploy-acceptance.mts",
+    "apps/daemon/src/deployment/deploy-candidate-start.js",
+    "apps/daemon/src/deployment/deploy-ports.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-a11dcf70@2026-09-09T11:52:28Z",
-    "at": "2026-09-09T12:19:08.086Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-01b7fe3f@2026-09-09T12:19:16Z",
+    "at": "2026-09-09T12:26:36.479Z"
   }
 }
