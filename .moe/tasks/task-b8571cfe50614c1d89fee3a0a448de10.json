@@ -14,8 +14,75 @@
     "pnpm --filter @moe/daemon test EXITS 0 with its `Test Files N passed` count line quoted and NONZERO, and pnpm typecheck exits 0. pnpm --filter @moe/control-room test is run and quoted as well, since apps/control-room is in none of the root vitest include, pnpm typecheck, or the daemon leg."
   ],
   "taskRails": [],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PHASE 1-2, measurement only, no file writes. Record command and result in a row comment. (a) Re-confirm the trigger seam: `grep -n 'previewReceipt' apps/daemon/src/http/affordance-planning-offers.ts` shows the gate is offered at `built && input.previewReceipt(goal.goalId) === \"STARTED\"` - and confirm that file remains a PURE READ, because it is a documented hot path and must not gain a durable write. (b) Read createPreviewStartHandler at apps/daemon/src/preview/preview-start-command.ts:79 and identify the exact point after the receipt is committed where the outcome is known; that is this row's insertion point. (c) Measure the ESTABLISHED evaluation-input shape rather than inventing one: read the existing production call sites at apps/daemon/src/planning/run-policy-evaluation.ts:210 and apps/daemon/src/review/verifier-authority-provider.ts:103, and the concrete example at apps/control-room/src/live/live-dispatch-payloads.ts:104-109, and follow whichever is the daemon's convention for building a PolicyEvaluationInput. Do NOT hand-roll a new input shape. (d) Confirm the row-A host opt-in has landed and the slice carries an opt-in for preview.decide; if it has not, the auto path cannot fire and every arm below would be vacuous - stop and report rather than fabricating an opt-in in production code.",
+      "status": "PENDING",
+      "affectedFiles": []
+    },
+    {
+      "stepId": "step-2",
+      "description": "Carry PROVENANCE on the persisted decision record - the daemon-local shape, NOT the wire payload. In apps/daemon/src/preview/preview-daemon-edge.ts bump PREVIEW_DECISION_VERSION (:62) and add the provenance key to PREVIEW_DECISION_KEYS (:64) so the record states which opt-in the decision acted under: null for a human decision, the opt-in's action and tier for an automatic one. readPreviewDecision (:156-190) returns null on a version mismatch and exactPreviewRecord enforces exact arity, so an optional key is impossible and a naive bump orphans every record already written - keep a read arm that still admits the previous version by treating its provenance as null. WATCH THE LINE CAP: this file is 311 lines against a 400 hard limit; if the change would cross it, put the record shape and its decoder in the new module from step 3 and keep the edge thin. Do NOT touch PREVIEW_APPROVE_PAYLOAD_KEYS or PREVIEW_REJECT_PAYLOAD_KEYS.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/preview/preview-daemon-edge.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Add the auto-decision as a NEW module apps/daemon/src/preview/preview-auto-decision.ts. It CALLS evaluatePolicy from the @moe/core bare specifier for the preview.decide action and REIMPLEMENTS NOTHING - not tier ranking, not opt-in matching, not the dominance lattice. It returns a decision ONLY when both hold: the outcome is ALLOW, and the folded opt-in set contains an entry matching the action whose tier covers the subject's, so the record can NAME it. ALLOW ALONE IS NOT SUFFICIENT - the naming requirement in DoD item 2 is what makes an automatic approval distinguishable from a human one, and returning an unnamed approval would defeat it. Anything else returns no decision and the gate stays pending for a human, which is the correct fail-closed default (the engine already answers HOLD_UNKNOWN when no tier-bearing fact is in scope, and REQUIRE_HUMAN_APPROVAL with AUTO_APPROVAL_NOT_OPTED_IN when no opt-in covers the action). Keep the module under 250 lines.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/preview/preview-auto-decision.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Wire the module at the completion point measured in step 1, inside apps/daemon/src/preview/preview-start-command.ts. Two hard conditions. NEVER FIRE ON A REFUSED RECEIPT: the outcome equivalence at preview-receipt-contracts.ts means REFUSED carries a code and a null url, so auto-approving one would approve a preview that never served - fire only for outcome STARTED. AND BE IDEMPOTENT: the async handler can be retried and PreviewDaemonPort.release is best-effort by contract, so a second run must not commit a second decision; lean on the store's expected-version fence rather than a new guard of your own. The decision reaches the runner through the existing PreviewDaemonPort.release seam at preview-daemon-edge.ts:90/:105 - reuse it, do not open a second path to the supervisor.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/preview/preview-start-command.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "DoD items 2 and 3 - the positive arm and the tier negative, in a NEW file apps/daemon/src/preview/preview-auto-decision.test.ts. POSITIVE: a receipt with outcome STARTED, under a recorded opt-in whose action is the preview decide kind at a tier in POLICY_AUTO_APPROVAL_TIERS, is approved with NO human decision, and the persisted record NAMES the opt-in - assert the recorded action and tier field VALUES, not merely that the outcome was APPROVE, since a verdict-only assertion passes identically against a human decision and would not test this row's subject. NEGATIVES, driven through the evaluation input rather than through the goal form (the form's risk class is prose to the daemon by the owner's 2026-09-09 ruling): an R2 or R3 tier-bearing fact leaves the gate pending with HUMAN_ONLY_TIER, and a valid R0 tier with NO covering opt-in leaves it pending with AUTO_APPROVAL_NOT_OPTED_IN. Assert each code together with the layer that answered. Add the invariant arm that POLICY_AUTO_APPROVAL_TIERS still deep-equals ['R0','R1'] against the imported constant, and that this row modified nothing under packages/core/src/policy/.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/preview/preview-auto-decision.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "DoD items 4 and 6 - precedence and record compatibility. MANUAL REJECT WINS: with a REJECT already persisted and a valid opt-in present, the automatic path must not overturn it; assert the stable refusal code AND the layer. Prefer an existing code - the preview refusal map is CLOSED AT FOUR and preview-contracts.ts states no fifth is minted for a condition the vocabulary does not own; if none fits, report rather than widening a closed vocabulary. Verify non-vacuity by mutating the precedence check in the production module and confirming the arm goes RED. DRILL SAFETY, binding: `git status --porcelain` the exact path FIRST; copy it out of tree to %TEMP% under a name carrying THIS task id (seat ids are reused across relaunches and have held stale vintages); restore by copying the backup back; prove the restore by SHA256 equality against the pre-mutation hash in a call SEPARATE from the restore. Never `git checkout --` or `git restore` on a shared tree mid-delivery. RECORD COMPAT: one arm reads back a record written at the PREVIOUS version and asserts it still decodes with provenance null; another reads the new version with provenance present. Both assert decoded field values, not merely non-null.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/preview/preview-daemon-edge.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/preview/preview-auto-decision.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "DoD items 5, 7 and 8 - the census and the verification gate, concentrated here rather than smeared across the steps above. WIRE CONTRACT UNTOUCHED: assert PREVIEW_APPROVE_PAYLOAD_KEYS still deep-equals ['decision','previewRef'] and PREVIEW_REJECT_PAYLOAD_KEYS still deep-equals ['decision','findings','previewRef'], and that decodePreviewDecidePayload still refuses an APPROVE payload carrying any extra key with PREVIEW_DECISION_INVALID. FENCE UNCHANGED: the preview decide kind is still in OPERATOR_PRINCIPAL_KINDS and still in MCP_EXCLUDED_COMMAND_KINDS, asserted BOTH directions per global rail 9 - enumerate the served set from the dispatch seam, not only from the roster constant, since a test iterating the roster alone shrinks with it and stays green. Per epic rail 3 do not freeze any count literal: run the leg and take the PRINTED expected-vs-received as authoritative. THEN THE GATE: run `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test` and `pnpm typecheck`, quoting each `Test Files N passed` count line verbatim and confirming it is NONZERO. Read the OUTPUT, not the exit code - a --filter leg prints 'No projects matched the filters' and EXITS 0 for a non-package, and 'No test files found' is also exit 0. Finally re-census the four GENERATED_CONTRACT_DIGEST mirrors with a full-tree `git grep` across ALL file types; if no command kind or payload shape changed, say so explicitly and quote the census output rather than claiming it silently.",
+      "status": "PENDING",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/preview/preview-auto-decision.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "PHASE 7 - adversarial self-review before complete_task, reading the diff as an attacker. Specifically: can the auto path fire on a REFUSED receipt, or on a receipt whose url is null - approving a preview that never served? Can a retry of the async handler commit a SECOND decision for one receipt? Does the positive arm assert the recorded provenance VALUES, or would it pass unchanged against a human decision? Does any refusal arm assert only that the operation failed, without pinning the code and the layer? Did the record version bump orphan previously written decisions, and is that proven by an arm rather than assumed? Did anything widen POLICY_AUTO_APPROVAL_TIERS, edit a roster constant, touch the MCP allowlist, or change the wire payload keys - all forbidden here and by the 2026-09-06 governor ruling? Confirm shared-tree discipline: report every path created or modified in complete_step.modifiedFiles, and confirm no foreign dirty path was reverted, stashed or committed. If the record exceeds the 2000-char completionSummary cap put the load-bearing detail in a row comment FIRST - it truncates silently mid-word.",
+      "status": "PENDING",
+      "affectedFiles": []
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -31,11 +98,29 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:06:24.908Z",
-  "updatedAt": "2026-09-09T20:50:37.400Z",
+  "updatedAt": "2026-09-09T20:53:05.313Z",
   "metrics": {
-    "firstClaimAt": "2026-09-09T19:32:30.438Z"
+    "firstClaimAt": "2026-09-09T19:32:30.438Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 4
   },
   "contextFetchedBy": [
     "architect-fa84777a"
-  ]
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-09T20:53:03.219Z",
+  "planningNotes": {
+    "approachesConsidered": "REJECTED - firing the auto-decision from the affordance surface, the obvious place since affordance-planning-offers.ts:269 is where the operator WOULD be asked. It is a PURE READ over a DurableLedger and reader ports, and Serena memory affordances-read-hotpath-fixed-2026-09-05 records it pegging the daemon loop with full scans until ec604baa. A durable write on a read hot path is wrong twice over. ADOPTED - the preview.start async handler's completion, which already writes the receipt and is the moment the machine evidence arrives. REJECTED - provenance on the WIRE payload: decodePreviewDecidePayload demands APPROVE be exactly ['decision','previewRef'] and refuses extras with PREVIEW_DECISION_INVALID, so provenance there rotates all four digest mirrors. Provenance goes in the daemon-local persisted record instead. OWNER RULING 2026-09-09 - per-goal risk tiers are OUT: admitGoalBrief admits exactly ['title','instructions'] via hasExactKeys and refuses any extra key, so the form's risk class reaches the daemon only as prose. The owner chose the host-scoped standing opt-in and to leave the goal-brief contract unchanged.",
+    "codebaseInsights": "MEASURED AT HEAD 2026-09-09. (1) TRIGGER: affordance-planning-offers.ts:269 offers the gate when `built && input.previewReceipt(goal.goalId) === \"STARTED\"` - that file is a pure read and must stay one. The write-capable completion point is createPreviewStartHandler at preview/preview-start-command.ts:79, wired as the asyncHandler at daemon-command-async-entries.ts:325-331. (2) TERM CORRECTION, my error in this row's own title and DoD: there is NO \"DEPLOYED\" preview outcome. preview-receipt-contracts.ts:61 is `outcome: \"REFUSED\" | \"STARTED\"`, structurally tied (STARTED requires url+pid, REFUSED requires both null plus a code). DEPLOYED belongs to the deployments surface (live-deployments.ts:28), a different thing. Read the answerable state as STARTED. (3) THE ENGINE IS GENUINELY FAIL-CLOSED, verified rather than assumed: assessTier returns ALLOW when the tier is null (policy-evaluation.ts:154), which looks like a fail-open, but assessRisk sets `unclassifiable: computedTier === null` (:83) and evaluatePolicy folds `dominant(decision, risk.unclassifiable ? \"HOLD_UNKNOWN\" : \"ALLOW\")` (:189) with HOLD_UNKNOWN dominating ALLOW in POLICY_OUTCOME_DOMINANCE. So a tier-free ALLOW is not reachable as a deciding path. (4) A tier-bearing fact with strong truth is therefore REQUIRED for any auto-approval: no tier, no ALLOW, gate stays human. Under the owner's ruling that tier is host-classified, not per goal. (5) PERSISTED RECORD is daemon-local: PREVIEW_DECISION_VERSION at preview-daemon-edge.ts:62, PREVIEW_DECISION_KEYS :64, written :255-260, read by readPreviewDecision :156-190 which returns null on version mismatch (:170) through exactPreviewRecord. Grep of apps/control-room, packages/control-room-client and packages/contracts for these symbols returns NOTHING. (6) The decision reaches the runner through PreviewDaemonPort.release at preview-daemon-edge.ts:90/:105, best-effort and idempotent by contract.",
+    "risks": "LINE CAP: preview-daemon-edge.ts is 311 lines against a 400 hard cap; adding provenance keys plus a compatibility read arm can breach it. Put the record shape and its decode in the new module if the edge would cross 400. NEVER FIRE ON A REFUSED RECEIPT: the outcome equivalence means REFUSED carries a code and no url; auto-approving one would approve a preview that never served. IDEMPOTENCE: the async handler can be retried and PreviewDaemonPort.release is explicitly best-effort, so the auto-decision must not commit twice for one receipt - the store's expected-version fence is the guard, and an arm should prove a second run does not produce a second decision. ALLOW ALONE IS NOT SUFFICIENT: require a MATCHING opt-in so the record can name it, per DoD item 2. VACUITY: the manual-REJECT-wins arm is one refusal layer away from meaningless; assert which layer answered and verify by mutation. APPS/** COVERAGE: pnpm test runs ZERO tests under apps/**, so the daemon leg is the only evidence for this package. SHARED TREE: peer dirt is never a stop condition; never revert, stash or commit foreign paths.",
+    "keyFiles": [
+      "apps/daemon/src/preview/preview-start-command.ts",
+      "apps/daemon/src/preview/preview-daemon-edge.ts",
+      "apps/daemon/src/preview/preview-contracts.ts",
+      "apps/daemon/src/preview/preview-receipt-contracts.ts",
+      "packages/core/src/policy/policy-evaluation.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-09T20:53:05.313Z"
 }
