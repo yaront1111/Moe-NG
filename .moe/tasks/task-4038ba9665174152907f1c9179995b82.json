@@ -172,7 +172,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T14:58:57.281Z",
-  "updatedAt": "2026-09-09T20:04:18.325Z",
+  "updatedAt": "2026-09-09T20:05:26.624Z",
   "contextFetchedBy": [
     "governor-608c8a78",
     "worker-b42eccd4",
@@ -223,7 +223,8 @@
     "apps/control-room/src/v2/approvals/preview-rejection-invariants.test.tsx",
     "tests/e2e/control-room/preview-approve-live.spec.ts",
     ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
-    ".moe/tasks/task-4038ba9665174152907f1c9179995b82.json"
+    ".moe/tasks/task-4038ba9665174152907f1c9179995b82.json",
+    ".moe/tasks/task-958158c90dd74060a81cc156a68c86ab.json"
   ],
   "completionSummary": "DELIVERY RECOVERY. The six sources were already correct on disk; the BLOCKED->WORKING reset wiped step attestations, not bytes. I REVERIFIED and re-ran every gate rather than reimplementing, per governor comment-0a59e105. Preflight confirmed genuine first: .git/moe/baseline/task-4038ba96...tsv `at=2026-09-09T19:45:29Z head=06d7beaa`.\n\nTHE FIX: `PreviewPort.submit(affordance, receiptId, decision, findings?)` takes the receipt id explicitly (id SECOND, matching goal-close and escalation ports); `previewRefOf` DELETED — `grep -rn previewRefOf apps/control-room/src tests/` returns nothing; live-needs-you.tsx:191 forwards `facts.receiptId`, the value /preview/read answered.\n\nGATES, all fresh, count lines read not exit codes:\n- `pnpm --filter @moe/control-room test` -> Test Files 207 passed (207) / Tests 2693 passed (2693), EXIT 0\n- `playwright ... preview-approve-live` -> 1 passed (3.3m), EXIT 0, and the lane printed the real verdict: `LIVE_DRIVE_DECISION {...\"disposition\":\"COMMITTED\",\"principalId\":\"operator-local\"...}`\n- `pnpm typecheck` EXIT 0; `npx tsc -p tests/e2e/control-room/tsconfig.json` EXIT 0\n- fence tests UNEDITED and green: 2 files / 25 tests, EXIT 0\n\nDoD 4: NO DAEMON OR FENCE FILE MOVED. `git diff` AND `git status --porcelain` are both EMPTY on daemon-command-registry.ts and daemon-command-vocabulary.ts.\n\nPRE-FIX RED IS ARCHIVED, NOT RE-RUN, and I say so rather than implying fresh: comment-4c5e7bcd quotes it verbatim (`- \"previewRef\": \"4f2b8c1d...be93\"` / `+ \"previewRef\": \"preview:goal-7\"`, Tests 2 failed | 4 passed (6)). Reproducing it means reverting the fix on a shared tree.\n\nADVERSARIAL PASS FOUND AND FIXED ONE DEFECT: preview-approve-live.spec.ts's file header still described WALL B in the PRESENT tense, documenting the fixed bug as current behaviour — the same false-record class step 2 removed from the port. Rewritten to past tense.\n\nQA MUST GRADE CONSCIOUSLY: DoD 3 stays NON-LITERAL. WALL B remains the daemon's correct aggregate-id refusal as a labell",
   "blockedReason": null,
@@ -263,17 +264,35 @@
       "treeId": "b408da4cfa3db76b929ac68e297afb157ac24a77",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "f220e6de1476c645cdcc27de122805dddcbef162",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T19:56:13Z",
+      "paths": [
+        ".moe/tasks/task-958158c90dd74060a81cc156a68c86ab.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T20:05:26.624Z",
+      "treeId": "e0d2d820e4468f36896274b9b64b40e5c0c591c5",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
     "tests/e2e/control-room/preview-approve-live.spec.ts"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "tests/e2e/control-room/live-proof-deploy.ts",
+    "tests/e2e/control-room/live-proof-seat.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-b42eccd4@2026-09-09T19:45:28Z",
-    "at": "2026-09-09T19:56:14.305Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-01b7fe3f@2026-09-09T19:56:13Z",
+    "at": "2026-09-09T20:05:26.624Z"
   },
   "completedAt": "2026-09-09T20:04:18.325Z",
   "reviewCompletedAt": "2026-09-09T20:04:18.325Z",
