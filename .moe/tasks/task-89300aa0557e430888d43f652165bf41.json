@@ -127,7 +127,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T23:20:33.910Z",
-  "updatedAt": "2026-09-09T23:48:31.331Z",
+  "updatedAt": "2026-09-09T23:49:23.752Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T23:20:36.760Z",
     "plannedStepCount": 4,
@@ -158,7 +158,8 @@
   "planApprovedAt": "2026-09-09T23:23:20.920Z",
   "contextFetchedBy": [
     "worker-b42eccd4",
-    "qa-01b7fe3f"
+    "qa-01b7fe3f",
+    "governor-608c8a78"
   ],
   "workStartedAt": "2026-09-09T23:24:02.781Z",
   "reviewStartedAt": "2026-09-09T23:40:09.104Z",
@@ -174,7 +175,8 @@
     "tests/security/boundary-roster.security.ts",
     "tests/security/layer-visibility-cases.ts",
     ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
-    ".moe/tasks/task-89300aa0557e430888d43f652165bf41.json"
+    ".moe/tasks/task-89300aa0557e430888d43f652165bf41.json",
+    ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json"
   ],
   "completionSummary": "The three unrostered constants are MODULE-PRIVATE, not roster-backfilled, and the security lane is green: 55/55 on the named file, 1003/1003 across the whole lane, up from 3 and 6 failures.\n\nROUTE, traced not assumed. preview-start-command.ts:207-208 does `if (!auto.ok) return;` — a declination's code, layer and reasonCodes are DISCARDED at the branch, and every previewAutoDecline site is a `return`, never a `throw`, so no DomainRefusal carries these to a codec. They reach no wire, so rostering would advertise a channel that does not exist. Confirming arithmetic: the private route returns the exported scan to exactly 180 with EXPECTED_ROSTER_SIZE UNEDITED (it appears only as diff CONTEXT). No rename to dodge the pattern, no SCAN_ROOTS edit.\n\nFOUR FILES. preview-auto-decision.ts: `export` dropped from the three at :49/:51/:60; types, PREVIEW_AUTO_CODES and previewAutoDecline stay exported (DECLARATION_PATTERN is `^export const`, so a type is invisible to it); the comment now names the private population as the CATEGORY so nobody re-exports them to fix an import. Its test: eight layer arms rewritten to literals; the roster-coverage arm rewritten against the public surface. layer-visibility-cases.ts: EXPECTED_PRIVATE_COUNT 77->80 plus three allowlist entries — PLAN/DISK DELTA, two of the \"four constants in the security file\" are declared here, disclosed at step 1. boundary-roster.security.ts: DENOMINATOR 257->260, SHARE_PER_MILLE 300->308 (the file's own Math.round, not invented), all four stale prose sites (one the plan did not list, found by grep), and a rotation note.\n\nDRILL, four process-local mutants, nothing under src ever written. One code remapped to the wrong layer: this row's shape reds in TWO independent arms (2 failed | 34 passed (36)); the PRE-ROW shape stays 36 passed (36). The old `new Set(Object.values(MAP))` arm could not see a single remap, and eight toBe(CONSTANT) arms had production on both sides — both had to go.\n\nGATES, all foreground, exit via ${",
   "commits": [
@@ -197,6 +199,22 @@
       "treeId": "c7b77cf228cc1d614f0f02cc91a89bd01fcd42b9",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "4c637892460b90042bbb6aebf63469d3863117f5",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T23:40:37Z",
+      "paths": [
+        ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json",
+        ".moe/tasks/task-89300aa0557e430888d43f652165bf41.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T23:49:19.027Z",
+      "treeId": "0fefaeb1a977cf7c9c7092af5204017893700b01",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -208,9 +226,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-b42eccd4@2026-09-09T23:23:43Z",
-    "at": "2026-09-09T23:40:33.919Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-01b7fe3f@2026-09-09T23:40:37Z",
+    "at": "2026-09-09T23:49:19.027Z"
   },
   "completedAt": "2026-09-09T23:48:31.331Z",
   "reviewCompletedAt": "2026-09-09T23:48:31.331Z",
