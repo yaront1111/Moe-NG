@@ -298,7 +298,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T09:49:59.862Z",
-  "updatedAt": "2026-09-09T23:50:06.474Z",
+  "updatedAt": "2026-09-09T23:51:16.342Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T10:02:51.986Z",
     "plannedStepCount": 7,
@@ -787,6 +787,21 @@
       "treeId": "d7683a9c00bbc57267b4eed1a7782f6a457e9d95",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "57414c951e2104cb1a9ca9d537931df4d3591268",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T23:51:07Z",
+      "paths": [
+        ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T23:51:16.342Z",
+      "treeId": "5263d5226801bdfc533db44d1ea1643b9fe8fbd8",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [
@@ -795,8 +810,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-01b7fe3f@2026-09-09T23:49:52Z",
-    "at": "2026-09-09T23:50:06.474Z"
+    "sessionId": "qa-01b7fe3f@2026-09-09T23:51:07Z",
+    "at": "2026-09-09T23:51:16.342Z"
   },
   "priorBlockedReason": "Delivery-only resume, step7 still IN_PROGRESS. Actual acquire returned granted:false, position3; no broad suite or background process started. All5canonical source hashes unchanged;4sources in the existing checkpoint, generator test14b3f311 remains dirty/asserted. Fresh foreground daemon/UI typechecks EXIT0; named scoped command Test Files4passed(4), Tests38passed|5skipped(43) EXIT0; opt-in real Compose file Test Files1passed(1), Tests27passed(27) EXIT0; diff-check0. No source changes or physical mutants. Required full daemon command remains owed and cannot be substituted with old QA or current focused output; full UI evidence is historical, refresh on final gate. Detailed current evidence and resume checklist recorded in the latest worker409 task comment. On grant confirm ownership, run full commands standalone to positive count lines, rerun named scoped completion command fresh, then finish step7/complete_task. Installed launcher attribution issue for the remaining test is documented by governor; source fix is not proof of deployment or landing. Preserve exact bytes and route real postflight outcome. No completion claim.",
   "declaredFiles": [
