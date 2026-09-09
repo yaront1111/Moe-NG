@@ -54,8 +54,13 @@ export { readSurfaceOnce } from "./policy-install-port.js";
  * every `policy.install` (a later `PolicyInstalled` reusing the selected slice makes the
  * derivation refuse SUPERSESSION_POLICY_DECISION_POLICY_REUSED) and the admission table asks
  * only for `policy.install` before it (bootstrap-sequence.ts:30), so it is admissible here.
- * It GRANTS NOTHING: the slice `DEV_PAYLOADS` names carries no rules and no auto-approval
- * opt-ins, and evaluating it only records that the policy was evaluated.
+ * IT GRANTS NO RULES, AND ITS TWO OPT-INS ARE THE OPERATOR'S OWN STANDING DECLARATION. The
+ * slice `DEV_PAYLOADS` names carries no rules; since task-a47301ee it carries auto-approval
+ * opt-ins for `preview.decide` and `release.decide` at the R1 ceiling, which the human operator
+ * declares once for the host rather than anything this evaluation mints. R2 and R3 subjects stay
+ * human-only regardless (HUMAN_ONLY_TIER), and evaluating the slice only records that the policy
+ * was evaluated. This sentence previously read "GRANTS NOTHING ... no auto-approval opt-ins",
+ * which that row made false; it sits on the activation chain, where a reader trusts it.
  */
 export const ACTIVATION_CHAIN_KINDS = Object.freeze([
   "project.register", "project.bind_repository", "provider.probe", "policy.install",
