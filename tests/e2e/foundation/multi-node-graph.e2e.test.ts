@@ -10,6 +10,19 @@ import { approveAndRunCriteria, closeCompletedGoal } from "./multi-node-criteria
 import { claimedWorkItems, closeReadiness, delivered, executionRefFor, goalAggregates,
   landedCommits, readCoverage, removeMultiNodeScratches, sealedNodes, withStore, workItemFor } from "./multi-node-reads.js";
 import { daemonWire, readSurface, stepFor } from "./multi-node-wire.js";
+import type { CriterionCheckExecutionResult } from "../../../packages/runner/src/verification/criterion-check-executor.js";
+
+const { criterionExecutions } = vi.hoisted(() => ({ criterionExecutions: [] as CriterionCheckExecutionResult[] }));
+// Observe the shipped executor without replacing its containment or refusal authority.
+vi.mock("../../../packages/runner/src/verification/criterion-check-executor.js", async (original) => {
+  const actual = await original<typeof import("../../../packages/runner/src/verification/criterion-check-executor.js")>();
+  return { ...actual, createCriterionCheckExecutor: () => {
+    const executor = actual.createCriterionCheckExecutor();
+    return { ...executor, run: async (...args: Parameters<typeof executor.run>) => {
+      const result = await executor.run(...args); criterionExecutions.push(result); return result;
+    } };
+  } };
+});
 
 // Select a separate guarded build without replacing a broker serving another caller.
 vi.mock("../../../packages/runner/src/platform/windows/windows-broker-path.js", async (original) => {
@@ -30,7 +43,8 @@ function dependsTokens(missing: unknown): readonly string[] {
 }
 
 describe("one goal built to completion: a 3-node graph over real processes", () => {
-  it("serializes independent nodes in one repository, withholds their consumer, and closes after exact criterion checks", async () => {
+  it("serializes independent nodes in one repository, withholds their consumer, and closes only after supported exact criterion checks", async () => {
+    criterionExecutions.length = 0;
     const scratch = createMultiNodeScratch(); scratches.push(scratch);
     const daemon = await startDaemon(scratch, environment(scratch));
     const wire = daemonWire(daemon.origin, scratch.credential);
@@ -88,8 +102,26 @@ describe("one goal built to completion: a 3-node graph over real processes", () 
       expect(evidence.planningRunRef).toBe(sealed.runId);
       expect(evidence.contractRef).toEqual(sealed.gateRef);
       expect(evidence.integratedArtifact?.sha).toBe(integratedSha);
-      expect(evidence.run).toMatchObject({ status: "COMPLETED", integratedSha });
       expect(evidence.criteria).toHaveLength(3);
+      if (process.platform !== "win32") {
+        // The current production criterion executor requires native Windows containment.
+        // All nodes still landed above, but an unsupported check must never authorize closure.
+        expect(criterionExecutions).toHaveLength(1);
+        expect(criterionExecutions[0]).toMatchObject({ containment: "UNKNOWN", exitCode: null, byteCount: 0,
+          refusal: { code: "PROCESS_BOUNDARY_PLATFORM_UNSUPPORTED", layer: "WINDOWS_PROCESS_REQUEST" } });
+        expect(evidence.run).toMatchObject({ status: "BLOCKED", integratedSha });
+        expect(evidence.criteria.map((row) => row.evidence?.status ?? null)).toEqual(["UNKNOWN", null, null]);
+        expect(evidence.criteria[0]?.evidence).toMatchObject({ sha: integratedSha,
+          treeSha: evidence.integratedArtifact?.treeSha, exitCode: null, byteCount: 0 });
+        expect((await readCoverage(wire, GOAL_ID)).totals).toEqual({ criteria: 3, planned: 0, verified: 0 });
+        expect(closeReadiness(scratch, GOAL_ID)).toEqual({ criteria: 3, kind: "NOT_READY", verified: 0 });
+        expect((await readSurface(wire, scratch.projectId)).nextAllowedCommands
+          .map((offer) => offer["commandKind"])).not.toContain("goal.close");
+        return;
+      }
+      expect(criterionExecutions.map((result) => result.refusal)).toEqual([null, null, null]);
+      expect(criterionExecutions.map((result) => result.containment)).toEqual(["PROVEN", "PROVEN", "PROVEN"]);
+      expect(evidence.run).toMatchObject({ status: "COMPLETED", integratedSha });
       for (const row of evidence.criteria) expect(row.evidence).toMatchObject({ status: "PASSED",
         sha: integratedSha, treeSha: evidence.integratedArtifact?.treeSha, exitCode: 0 });
       const full = await readCoverage(wire, GOAL_ID);
