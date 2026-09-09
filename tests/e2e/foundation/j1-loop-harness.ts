@@ -226,6 +226,9 @@ export async function startDaemon(
     env: {
       ...process.env,
       ...storeEnvironment(scratch),
+      // Scripted journeys measure their own executable, never an incidental host CLI.
+      // A live canary supplies its real command through extraEnvironment instead.
+      MOE_AGENT_COMMAND: writeAgentShim(scratch, "complete"),
       MOE_APPROVAL_MODE: "SPEED",
       MOE_SPEED_MODE_DELAY_MS: "0",
       ...extraEnvironment,

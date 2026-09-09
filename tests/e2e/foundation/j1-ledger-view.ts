@@ -69,28 +69,34 @@ export async function runPass(
   pass: (scratch: J1Scratch) => Promise<ProcessRun>,
   watch?: PassWatcher,
   scratchOptions: Parameters<typeof createJ1Scratch>[0] = {},
+  daemonEnvironment: Record<string, string> = {},
 ): Promise<ArmRun> {
   const scratch = createJ1Scratch(scratchOptions);
   sink.push(scratch);
-  const daemon = await startDaemon(scratch);
-  const seed = await runSeed(scratch, daemon.origin);
-  if (seed.code !== 0) throw new Error(`seed failed (${String(seed.code)}): ${seed.output}`);
-  const running = pass(scratch);
-  // The watcher owns the DURING window: it must not outlive the pass, so it is handed the
-  // same promise the pass returns rather than a deadline of its own.
-  if (watch !== undefined) await watch(scratch, running);
-  const wrapper = await running;
-  await killTree(daemon.child);
-  const agentPid = readAgentPid(scratch);
-  return {
-    agentPid,
-    daemonBanner: daemon.output(),
-    daemonPid: daemon.pid,
-    origin: daemon.origin,
-    scratch,
-    seed,
-    wrapper,
-  };
+  const daemon = await startDaemon(scratch, daemonEnvironment);
+  try {
+    const seed = await runSeed(scratch, daemon.origin);
+    if (seed.code !== 0) throw new Error(`seed failed (${String(seed.code)}): ${seed.output}`);
+    const running = pass(scratch);
+    // The watcher owns the DURING window; settle the pass even if its observation refuses.
+    try {
+      if (watch !== undefined) await watch(scratch, running);
+    } finally {
+      await running;
+    }
+    const wrapper = await running;
+    return {
+      agentPid: readAgentPid(scratch),
+      daemonBanner: daemon.output(),
+      daemonPid: daemon.pid,
+      origin: daemon.origin,
+      scratch,
+      seed,
+      wrapper,
+    };
+  } finally {
+    await killTree(daemon.child);
+  }
 }
 
 /** The scripted agent writes this file; a REAL agent does not, so null is an honest answer. */

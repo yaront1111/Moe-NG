@@ -220,6 +220,12 @@ function pidPath() {
 }
 
 async function main() {
+  // This is the scripted provider's version, not a claim about an installed Claude CLI.
+  // Activation and wrapper probes execute this same image without starting an agent seat.
+  if (argv.at(-1) === "--version") {
+    stdout.write("moe-e2e-scripted-agent 1.0.0\n");
+    return 0;
+  }
   const arm = flagValue("--arm") ?? "complete";
   const configPath = flagValue("--mcp-config");
   writeFileSync(pidPath(), String(pid), "utf8");
