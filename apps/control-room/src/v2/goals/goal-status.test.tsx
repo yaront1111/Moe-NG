@@ -64,6 +64,23 @@ const WORKING_STEPS: readonly SurfaceStep[] = [
 ];
 
 describe("deriveGoalStatus", () => {
+  it("resolves the approval offer to the successor while preserving the sent-back comparison", () => {
+    const successor = "run-successor";
+    const compiling: SurfaceFrame = {
+      ...surface([{ commandKind: "planning.submit_decomposition", targetAggregateId: GOAL }]),
+      planningGoalRefs: { [successor]: GOAL },
+    };
+    const approvedPlan: SurfaceFrame = {
+      ...surface([{ commandKind: "approval.decide_intent", targetAggregateId: successor }]),
+      planningGoalRefs: { [successor]: GOAL },
+    };
+    expect(successor).not.toBe(RUN);
+    expect(deriveGoalStatus({ coverage: null, goalId: GOAL, runId: RUN, surface: compiling }))
+      .toMatchObject({ stage: "PLAN_REJECTED", next: { label: "Waiting for a new plan" } });
+    expect(deriveGoalStatus({ coverage: null, goalId: GOAL, runId: RUN, surface: approvedPlan }))
+      .toMatchObject({ stage: "PLAN", next: { label: "Review the plan" } });
+  });
+
   it("walks the stages in the order a goal moves through them", () => {
     expect(deriveGoalStatus({ coverage: { code: "DOCUMENT_COVERAGE_READ_GOAL_UNBOUND", layer: "L", status: "REFUSED" }, goalId: GOAL, runId: RUN, surface: null }))
       .toMatchObject({ next: { anchor: "plan" }, stage: "NO_PRD" });

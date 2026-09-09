@@ -4,7 +4,7 @@ import type { PreviewReadOutcome } from "../../live/live-preview.js";
 import { pauseResetWords } from "../shell/pause-context.js";
 import type { ProviderPause } from "../shell/pause-context.js";
 import { previewStage } from "./goal-status-preview.js";
-import { planSentBack } from "./plan-run-resolution.js";
+import { currentRunOf, planSentBack } from "./plan-run-resolution.js";
 import { DEPENDS_TOKEN_PREFIX } from "./work-labels.js";
 
 /**
@@ -200,7 +200,8 @@ export function deriveGoalStatus(input: {
       label: "Review the contract",
     }, { agents, progress });
   }
-  if (offered(surface, "approval.decide_intent", runId)) {
+  // Approval follows the daemon-bound successor; the original ref still identifies a sent-back plan.
+  if (offered(surface, "approval.decide_intent", currentRunOf(surface, goalId, runId))) {
     return status("PLAN", "The plan is waiting for your approval.", {
       anchor: "plan", detail: "Read the steps and the acceptance criteria, then approve to start the agents.", label: "Review the plan",
     }, { agents, progress });

@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+import { frameOfSurface } from "../../live/live-board-feed.js";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import type { LiveGoalCatalogEntry } from "../../live/live-goal-catalog.js";
 import type { RunGoalView, RunNodeView } from "../../live/live-runs.js";
 import { deriveGoalGlance } from "./goal-glance.js";
+import { AFTER_COMPILE_FRAME, AFTER_REJECT_FRAME, RECORDED } from "./plan-reject-frames.fixture.js";
 
 const NOW = Date.parse("2026-09-04T09:00:00.000Z");
 const ENTRY: LiveGoalCatalogEntry = {
@@ -66,6 +68,24 @@ describe("deriveGoalGlance", () => {
     expect(glance.state).toBe("DRAFT");
     expect(glance.rank).toBe(0);
     expect(glance.nodesLine).toBeNull();
+  });
+
+  it.each([
+    { frame: AFTER_COMPILE_FRAME, needsYou: true, stage: "PLAN" },
+    { frame: AFTER_REJECT_FRAME, needsYou: false, stage: "PLAN_REJECTED" },
+  ])("reports $stage from the successor without losing the original run identity", ({ frame, needsYou, stage }) => {
+    const currentSurface = frameOfSurface(frame);
+    expect(currentSurface.outcome).toBe("SURFACE");
+    expect(RECORDED.successorRunId).not.toBe(RECORDED.rejectedRunId);
+    expect(currentSurface.planningGoalRefs).toEqual({ [RECORDED.successorRunId]: RECORDED.goalId });
+    const glance = deriveGoalGlance({
+      coverage: undefined, entry: { ...ENTRY, goalId: RECORDED.goalId, planningRunRef: RECORDED.rejectedRunId },
+      nowMs: NOW, run: undefined, surface: currentSurface,
+    });
+    expect(glance.stage).toBe(stage);
+    expect(glance.needsYou).toBe(needsYou);
+    expect(glance.needsYouLabels).toEqual(needsYou ? ["Plan to approve"] : []);
+    expect(glance.rank).toBe(needsYou ? 0 : 3);
   });
 
   it("counts the nodes in the board's words while agents work, and flags the stuck one on the headline", () => {
