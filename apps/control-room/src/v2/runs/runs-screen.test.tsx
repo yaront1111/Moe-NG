@@ -60,22 +60,27 @@ describe("nodeEvidence", () => {
 });
 
 describe("the runs screen", () => {
+  const stuck = node({
+    nodeKey: "node-c", nodeRef: "node-c", objective: "Refuse edits.",
+    review: { escalated: false, findings: [{ detail: "the guard is missing", round: 1, ruleId: "R1", severity: "HIGH", subject: "s" }], latestRoute: "REJECT_IMPLEMENTATION", rounds: 1, unreadable: false, unsuccessfulRounds: 1, version: 2 },
+  });
   const outcome: RunsOutcome = {
     goals: [
+      { goalId: "goal-2", lifecycle: "DRAFT", nodes: [], publish: null, run: null, title: null },
       {
         goalId: "goal-1", lifecycle: "EXECUTION_ENABLED",
-        nodes: [node(), node({ nodeKey: "node-b", objective: "Refuse edits.", dependsOn: ["node-a"], status: "IN_PROGRESS",
-          claim: { active: true, claimedBy: "sess-wrap-2", expiresAt: "2026-09-02T20:04:00.000Z", status: "OPEN" } })],
-        publish: null, run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-1" }, title: "Build it",
+        nodes: [node(), node({ nodeKey: "node-b", nodeRef: "node-b", objective: "Persist it.", dependsOn: ["node-a"], status: "IN_PROGRESS",
+          claim: { active: true, claimedBy: "sess-wrap-2", expiresAt: "2026-09-02T21:00:00.000Z", status: "OPEN" } }), stuck],
+        publish: { branch: "main", code: null, decisionId: "d-1", outcome: "PUSHED", remoteUrl: "git@github.com:acme/app.git", requestedAt: "2026-09-02T19:00:00.000Z", sha: "0123456789abcdef", url: null },
+        run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-1" }, title: "Build it",
       },
-      { goalId: "goal-2", lifecycle: "DRAFT", nodes: [], publish: null, run: null, title: null },
     ],
     status: "RUNS",
-    totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0, IN_PROGRESS: 1, READY: 1, REPLANNED: 0, UNATTRIBUTABLE: 0, goals: 2, nodes: 2 },
+    totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0, IN_PROGRESS: 1, READY: 2, REPLANNED: 0, UNATTRIBUTABLE: 0, goals: 2, nodes: 3 },
   };
 
   it.each(["PUSHED", "PENDING", "REFUSED"] as const)("keeps later node landings separate from a %s goal receipt", (publishOutcome) => {
-    const nodes = ["a", "b"].map((key) => node({ nodeKey: key, status: "ACCEPTED",
+    const nodes = ["a", "b"].map((key) => node({ nodeKey: key, nodeRef: key, status: "ACCEPTED",
       landing: { branch: "main", code: null, files: [`${key}.ts`], outcome: "COMMITTED", sha: key.repeat(40) },
     }));
     const updated: RunsOutcome = { ...outcome, goals: [{ ...outcome.goals[0]!, nodes,
@@ -84,31 +89,53 @@ describe("the runs screen", () => {
     render(<RunsScreen nowMs={NOW} onOpenBoard={vi.fn()} outcome={updated} />);
     expect(screen.getByTestId("cr.kanban.count.PUBLISHED").textContent).toBe(publishOutcome === "PUSHED" ? "1" : "0");
     expect(screen.getByTestId("cr.kanban.count.LANDED").textContent).toBe(publishOutcome === "PUSHED" ? "1" : "2");
+    expect(screen.getByTestId("cr.runs.total.PUBLISHED").getAttribute("data-count")).toBe(publishOutcome === "PUSHED" ? "1" : "0");
+    expect(screen.getByTestId("cr.runs.total.LANDED").getAttribute("data-count")).toBe(publishOutcome === "PUSHED" ? "1" : "2");
     expect(screen.getByTestId("cr.kanban.line.b").textContent).toBe("landed on the workspace branch");
   });
 
-  it("renders the totals, each goal as a board, and lease words on working cards", async () => {
+  it("counts the project's nodes by column, then shows each goal as a board with stuck goals first", async () => {
     const onOpenBoard = vi.fn();
     render(<RunsScreen nowMs={NOW} onOpenBoard={onOpenBoard} outcome={outcome} />);
-    expect(screen.getByTestId("cr.runs.totals").textContent).toBe("2 goals · 2 nodes · 1 working");
-    expect(screen.getByTestId("cr.runs.goal.goal-1.run").textContent).toBe("activated · approved");
+    expect(screen.getByTestId("cr.runs.totals").textContent).toContain("2 goals · 3 nodes");
+    expect(screen.getByTestId("cr.runs.total.PLANNED").getAttribute("data-count")).toBe("2");
+    expect(screen.getByTestId("cr.runs.total.WORKING").getAttribute("data-count")).toBe("1");
+    // The goal with stuck work comes first although the wire listed it second.
+    const sections = screen.getAllByTestId(/^cr\.runs\.goal\.goal-\d$/u);
+    expect(sections.map((section) => section.getAttribute("data-testid"))).toEqual(["cr.runs.goal.goal-1", "cr.runs.goal.goal-2"]);
+    expect(screen.getByTestId("cr.runs.goal.goal-1").getAttribute("data-stuck")).toBe("true");
     expect(screen.getByTestId("cr.runs.goal.goal-1").textContent).toContain("Active");
+    expect(screen.getByTestId("cr.runs.goal.goal-1.run").textContent).toBe("3 nodes · 1 working · 1 stuck");
+    expect(screen.getByTestId("cr.runs.goal.goal-1.publish").textContent).toBe("Pushed 0123456789 on main to git@github.com:acme/app.git");
+    // The goal's nodes are the same six lanes the opened goal shows.
+    expect(screen.getByTestId("cr.kanban.line.node-a").textContent).toBe("ready for an agent");
+    // A lease a full hour out is not a warning yet; the card names the seat and nothing else.
+    expect(screen.getByTestId("cr.kanban.line.node-b").textContent).toBe("an agent seat");
+    expect(screen.getByTestId("cr.kanban.finding.node-c").textContent).toBe("the guard is missing");
     expect(screen.getByTestId("cr.runs.goal.goal-2").textContent).toContain("Draft");
-    expect(screen.getByTestId("cr.kanban.card.node-a").textContent).toContain("Keep fields.");
-    expect(screen.getByTestId("cr.kanban.line.node-b").textContent).toBe("an agent seat · lease ends in 4 min");
     expect(screen.getByTestId("cr.runs.goal.goal-2.run").textContent).toBe("No plan has been run for this goal yet.");
     expect(screen.getByTestId("cr.runs.goal.goal-2.empty")).toBeTruthy();
+    expect(screen.queryByTestId("cr.runs.goal.goal-2.publish")).toBeNull();
     expect((screen.getByTestId("cr.runs.goal.goal-2.open") as HTMLButtonElement).disabled).toBe(true);
     await userEvent.click(screen.getByTestId("cr.runs.goal.goal-1.open"));
     expect(onOpenBoard).toHaveBeenCalledWith("goal-1", "run-1", "Build it");
   });
 
-  it("shows loading, a refusal at its layer, and the empty project", () => {
+  it("keeps live freshness alongside the six pipeline totals", () => {
+    render(<RunsScreen freshness={{ clockMs: NOW, lastAnswerMs: NOW - 120_000 }}
+      nowMs={NOW} onOpenBoard={vi.fn()} outcome={outcome} />);
+    expect(screen.getByTestId("cr.runs.freshness").textContent).toContain("2 min");
+    expect(screen.getAllByTestId(/^cr\.runs\.total\./u).map((column) => column.getAttribute("data-column")))
+      .toEqual(["PLANNED", "WORKING", "REVIEW", "VERIFIED", "LANDED", "PUBLISHED"]);
+  });
+
+  it("shows loading, a refusal in plain words with the code kept, and the empty project", () => {
     render(<RunsScreen nowMs={NOW} onOpenBoard={vi.fn()} outcome={null} />);
     expect(screen.getByTestId("cr.runs.loading")).toBeTruthy();
     cleanup();
     render(<RunsScreen nowMs={NOW} onOpenBoard={vi.fn()} outcome={{ code: "LISTENER_RUNS_UNAVAILABLE", layer: "CONTROL_ROOM_LISTENER", status: "REFUSED" }} />);
-    expect(screen.getByTestId("cr.runs.refusal").textContent).toBe("The runs could not be read right now.");
+    expect(screen.getByTestId("cr.runs.refusal").textContent).toContain("The runs could not be read right now");
+    expect(screen.getByTestId("cr.runs.refusal").textContent).toContain("LISTENER_RUNS_UNAVAILABLE @ CONTROL_ROOM_LISTENER");
     cleanup();
     render(<RunsScreen nowMs={NOW} onOpenBoard={vi.fn()} outcome={{ ...outcome, goals: [], totals: { ...outcome.totals, goals: 0, nodes: 0, IN_PROGRESS: 0, READY: 0 } }} />);
     expect(screen.getByTestId("cr.runs.empty").textContent).toContain("No goals to run yet.");

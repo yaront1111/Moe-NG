@@ -1,13 +1,13 @@
 import { useEffect, useState } from "react";
 import type { JSX } from "react";
 
+import { RefusalNote } from "../components/outcome-note.js";
+
 import type { ControlRoomTransport } from "@moe/control-room-client";
 
 import { readGoalSource } from "../../live/live-goal-source.js";
 import type { GoalSourceOutcome } from "../../live/live-goal-source.js";
-import { OutcomeNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
-import { readFailedSaid } from "../outcome-words.js";
 import { LivePrdDossier } from "./prd-dossier.js";
 
 /**
@@ -30,18 +30,13 @@ export function PrdPanel({ outcome }: PrdPanelProps): JSX.Element {
     return outcome.status === "REFUSED" && outcome.code === "GOAL_SOURCE_UNBOUND"
       ? <p className="cr2-needs-note" data-testid="cr.prd.unbound">This goal was created without a PRD.</p>
       : (
-        <OutcomeNote
-          code={outcome.code}
-          layer={outcome.layer}
-          said={readFailedSaid("PRD")}
-          testId="cr.prd.refusal"
-        />
+        <RefusalNote refusal={outcome} testId="cr.prd.refusal" />
       );
   }
   return (
     <details className="cr2-approve-inspect cr2-prd" data-testid="cr.prd.root">
       <summary className="cr2-approve-inspect-summary" data-testid="cr.prd.summary">
-        {`PRD ${MIDDOT} ${outcome.displayPath} ${MIDDOT} ${String(outcome.byteLength)} bytes`}
+        {`The PRD ${MIDDOT} ${outcome.displayPath} ${MIDDOT} ${String(outcome.byteLength)} bytes ${MIDDOT} ${outcome.mediaType}`}
       </summary>
       <p className="cr2-approve-mono" data-testid="cr.prd.digest">{`sha256 ${outcome.contentSha256}`}</p>
       <pre className="cr2-prd-text" data-testid="cr.prd.text">{outcome.text}</pre>

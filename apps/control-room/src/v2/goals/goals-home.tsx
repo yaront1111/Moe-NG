@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { JSX } from "react";
 
 import "../styles/cordum-goals.css";
+import { Freshness } from "../components/freshness.js";
 import { ActionButton } from "../components/primitives.js";
 import { EMDASH } from "../glyphs.js";
 import { GoalCard } from "./goal-card.js";
@@ -22,7 +23,7 @@ import type {
  * paths never blur here.
  */
 
-const FILTERS = Object.freeze(["All", "Needs you", "Active", "Blocked"] as const);
+const FILTERS = Object.freeze(["All", "Needs you", "Active", "Blocked", "Done"] as const);
 type Filter = (typeof FILTERS)[number];
 
 function matchesFilter(goal: GoalCardModel, filter: Filter): boolean {
@@ -30,6 +31,7 @@ function matchesFilter(goal: GoalCardModel, filter: Filter): boolean {
     case "Needs you": return goal.needsYou;
     case "Active": return goal.state === "ACTIVE";
     case "Blocked": return goal.state === "BLOCKED";
+    case "Done": return goal.state === "DONE";
     default: return true;
   }
 }
@@ -40,14 +42,6 @@ function matchesSearch(goal: GoalCardModel, query: string): boolean {
   return goal.title.toLowerCase().includes(needle)
     || goal.goalId.toLowerCase().includes(needle)
     || goal.headline.toLowerCase().includes(needle);
-}
-
-function glanceRank(goal: GoalCardModel): number {
-  if (goal.needsYou) return 0;
-  if (goal.state === "BLOCKED" || goal.headlineTone === "danger") return 1;
-  if (goal.state === "ACTIVE") return 2;
-  if (goal.state === "DONE") return 4;
-  return 3;
 }
 
 export interface GoalsHomeProps {
@@ -63,6 +57,8 @@ export interface GoalsHomeProps {
   readonly initialCreating?: boolean;
   /** Honest refusal shown while live goal prose has no durable backend contract. */
   readonly createDisabledReason?: string | undefined;
+  /** When the daemon last answered the list, on a live clock; absent on fixtures. */
+  readonly freshness?: { readonly clockMs: number; readonly lastAnswerMs: number | null } | undefined;
 }
 
 export function GoalsHome({
@@ -71,10 +67,11 @@ export function GoalsHome({
   onCreateGoal,
   initialCreating = false,
   createDisabledReason,
+  freshness,
 }: GoalsHomeProps): JSX.Element {
   const [filter, setFilter] = useState<Filter>("All");
   const [search, setSearch] = useState("");
-  const [creating, setCreating] = useState(initialCreating);
+  const [creating, setCreating] = useState(initialCreating && createDisabledReason === undefined);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [createReport, setCreateReport] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -82,12 +79,14 @@ export function GoalsHome({
   // so no refusal path can discard what the operator typed.
   const [resetToken, setResetToken] = useState(0);
 
+  // What needs a person first, then stuck work, then work in flight, then the rest, done last;
+  // a model without a rank (fixtures) keeps the order it came in.
   const visible = useMemo(
     () => data.goals
-      .filter((goal) => matchesFilter(goal, filter) && matchesSearch(goal, search))
-      .slice()
-      .sort((left, right) => glanceRank(left) - glanceRank(right)
-        || left.title.localeCompare(right.title)),
+      .map((goal, index) => ({ goal, index }))
+      .filter(({ goal }) => matchesFilter(goal, filter) && matchesSearch(goal, search))
+      .sort((left, right) => (left.goal.rank ?? 0) - (right.goal.rank ?? 0) || left.index - right.index)
+      .map(({ goal }) => goal),
     [data.goals, filter, search],
   );
 
@@ -143,6 +142,7 @@ export function GoalsHome({
    * retype from memory.
    */
   const create = (draft: GoalDraft): void => {
+    if (busy || createDisabledReason !== undefined) return;
     setBusy(true);
     onCreateGoal(draft)
       .then((answer) => {
@@ -191,9 +191,12 @@ export function GoalsHome({
           value={search}
         />
         <span className="cr2-goals-count" data-testid="cr.goals.count">{data.goalCountLabel}</span>
+        {freshness === undefined ? null : (
+          <Freshness lastAnswerMs={freshness.lastAnswerMs} nowMs={freshness.clockMs} testId="cr.goals.freshness" />
+        )}
         <div className="cr2-goals-new">
           <ActionButton
-            ariaPressed={creating && createDisabledReason === undefined}
+            ariaPressed={creating}
             disabled={createDisabledReason !== undefined}
             onClick={createDisabledReason === undefined
               ? () => setCreating((open) => !open)
@@ -213,9 +216,10 @@ export function GoalsHome({
         </p>
       )}
 
-      {creating && createDisabledReason === undefined ? (
+      {creating ? (
         <NewGoalForm
           busy={busy}
+          disabledReason={createDisabledReason}
           onCancel={() => setCreating(false)}
           onCreate={create}
           resetToken={resetToken}

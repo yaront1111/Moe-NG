@@ -118,10 +118,11 @@ describe("ActivityPanel", () => {
     // Seat and pairing records fold away behind one line instead of crowding the ledger.
     expect(screen.queryByTestId("cr.activity.entry.2")).toBeNull();
     expect(screen.getByTestId("cr.activity.seats").textContent).toContain("1 seat and pairing records");
-    expect(screen.getByTestId("cr.activity.count").textContent).toContain("Refused commands are not recorded");
+    expect(screen.getByTestId("cr.activity.count").getAttribute("title")).toContain("Refused commands are not recorded");
     expect(screen.getByTestId("cr.activity.entry.0").textContent).toContain("25 min ago");
     expect(screen.getByTestId("cr.activity.entry.0").textContent).toContain("the operator accepted the delivered work");
-    expect(screen.getByTestId("cr.activity.entry.0").textContent).toContain("node-a · v4");
+    expect(screen.getByTestId("cr.activity.entry.0").textContent).toContain("node-a");
+    expect(screen.getByTestId("cr.activity.entry.0").getAttribute("title")).toContain("node-a · v4");
     expect(screen.getByTestId("cr.activity.entry.1").textContent).toContain("an agent seat took a work item (version conflict, nothing changed)");
     expect(screen.getByTestId("cr.activity.entry.1").getAttribute("data-disposition")).toBe("VERSION_CONFLICT");
   });
@@ -131,7 +132,8 @@ describe("ActivityPanel", () => {
     expect(screen.getByTestId("cr.activity.loading")).toBeTruthy();
     cleanup();
     render(<ActivityPanel nowMs={NOW} outcome={{ code: "ACTIVITY_READ_GOAL_UNKNOWN", layer: "ACTIVITY_READ", status: "REFUSED" }} scopeLabel="Alpha" />);
-    expect(screen.getByTestId("cr.activity.refusal").textContent).toContain("The ledger could not be read right now.");
+    expect(screen.getByTestId("cr.activity.refusal").textContent).toContain("The daemon does not know this goal");
+    expect(screen.getByTestId("cr.activity.refusal").textContent).toContain("ACTIVITY_READ_GOAL_UNKNOWN @ ACTIVITY_READ");
     cleanup();
     render(<ActivityPanel nowMs={NOW} outcome={{ ...ACTIVITY, entries: [], totalDecisions: 0 }} scopeLabel="Alpha" />);
     expect(screen.getByTestId("cr.activity.empty").textContent).toContain("Nothing has been decided here yet.");
@@ -147,7 +149,7 @@ describe("SessionsPanel", () => {
     expect(screen.getByTestId("cr.sessions.list").textContent).not.toContain("4be93d1a");
     const live = screen.getByTestId("cr.sessions.row.sess-wrap-abc");
     expect(live.getAttribute("data-liveness")).toBe("LIVE");
-    expect(live.textContent).toContain("live until 2026-09-03T11:00:00.000Z");
+    expect(live.textContent).toContain("live · lease ends in 1 h");
     expect(live.textContent).toContain("an agent seat · working on node.deliver@node-a");
     // Past seats fold away; the row is still there to read.
     expect(screen.getByTestId("cr.sessions.past").textContent).toContain("1 past agent seats");

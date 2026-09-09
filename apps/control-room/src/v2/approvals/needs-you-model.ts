@@ -159,7 +159,7 @@ function itemsFor(
     items.push(Object.freeze({
       ...base,
       actionLabel: "Review the plan",
-      detail: "Read the plan and its acceptance criteria before approving.",
+      detail: "A compiled plan is waiting. Read its steps and the acceptance criteria they cover before approving.",
       headline: "A plan is waiting for your approval",
       kind: "PLAN_APPROVAL",
     }));
@@ -205,8 +205,8 @@ function itemsFor(
         ...base,
         actionLabel: "Review the contract",
         detail: `${String(contract.requirements.length)} requirements`
-          + ` ${MIDDOT} ${String(criteria)} acceptance criteria. Approving it lets agents start.`,
-        headline: "A Product Contract is waiting for your approval",
+          + ` ${MIDDOT} ${String(criteria)} acceptance criteria. Approving it lets the daemon compile the plan.`,
+        headline: "A Product Contract is waiting for your approval (Gate 1)",
         kind: "GATE_1",
       }));
     }
@@ -237,7 +237,7 @@ export function deriveNeedsYou(input: NeedsYouInput): NeedsYouData {
     surface } = input;
   if (catalog === null) {
     return Object.freeze({
-      countLabel: "Waiting for goals", items: Object.freeze([]),
+      countLabel: "Waiting for the goal catalog", items: Object.freeze([]),
       note: "Nothing is listed until the daemon's durable goal catalog answers.",
     });
   }
@@ -257,7 +257,7 @@ export function deriveNeedsYou(input: NeedsYouInput): NeedsYouData {
       || left.title.localeCompare(right.title) || left.goalId.localeCompare(right.goalId));
   const count = items.length;
   return Object.freeze({
-    countLabel: `${String(count)} decision${count === 1 ? "" : "s"} need${count === 1 ? "s" : ""} you`,
+    countLabel: `${String(count)} decision${count === 1 ? "" : "s"} ${MIDDOT} needs you`,
     items: Object.freeze(items),
     note: surface === null
       ? "The daemon's offers have not arrived yet; plan approvals appear once they do."

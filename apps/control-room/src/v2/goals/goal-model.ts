@@ -8,7 +8,7 @@ import type { ProofRow } from "../shell/proof-context.js";
  * gains authority by filling a missing fact itself.
  */
 
-export type GoalStateLabel = "ACTIVE" | "BLOCKED" | "DONE" | "DRAFT";
+export type GoalStateLabel = "ACTIVE" | "BLOCKED" | "DONE" | "DRAFT" | "UNKNOWN";
 
 /** The coloured status dot beside a goal's one-line headline. */
 export type HeadlineTone = "accent" | "agent" | "danger" | "verified";
@@ -66,6 +66,12 @@ export interface GoalCardModel {
   readonly headlineFacts: readonly GoalFact[];
   readonly facts: readonly GoalFact[];
   readonly comingOnlineFacts: readonly ComingOnlineFact[];
+  /** The decisions waiting on a human, in a person's words; empty when nothing does. */
+  readonly needsYouLabels?: readonly string[] | undefined;
+  /** "5 nodes, 3 done, 1 stuck" from the runs read; undefined before any node exists. */
+  readonly nodesLine?: string | undefined;
+  /** List order: lower first. Undefined (fixtures) keeps catalog order. */
+  readonly rank?: number | undefined;
 }
 
 export interface TriageStrip {

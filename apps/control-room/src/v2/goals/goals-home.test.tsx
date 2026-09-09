@@ -345,6 +345,8 @@ describe("a truth chip on a goal fact opens the proof drawer", () => {
         <GoalsHome data={deriveGoalCatalog(catalog())} onCreateGoal={vi.fn()} onOpenBoard={vi.fn()} />
       </CordumShell>,
     );
+    // The identity pills live under the card's details now; the face carries words only.
+    await user.click(screen.getByTestId("cr.goals.card.goal-durable-alpha.expand"));
     const pill = screen.getByTestId("cr.goals.pill.goal-durable-alpha.goal");
     await user.click(within(pill).getByTestId("cr.chip.daemon_verified"));
     const claim = screen.getByTestId("cr.shell.inspector.claim");
@@ -383,7 +385,6 @@ const ONOPENBOARD_CONSUMERS: readonly string[] = Object.freeze([
   "v2/goals/goal-card.test.tsx",
   "v2/goals/goal-card.tsx",
   "v2/goals/goal-create-disabled.test.tsx",
-  "v2/goals/goal-nodes.tsx",
   "v2/goals/goals-home.test.tsx",
   "v2/goals/goals-home.tsx",
   "v2/goals/live-goals.test.tsx",
@@ -416,7 +417,7 @@ describe("the onOpenBoard consumer roster is complete and its arity is pinned", 
     // A sweep that generated nothing would satisfy every assertion below vacuously.
     expect(found.length).toBeGreaterThan(0);
     // EXACT, not `> 0`: a one-member roster satisfies a lower bound.
-    expect(ONOPENBOARD_CONSUMERS).toHaveLength(21);
+    expect(ONOPENBOARD_CONSUMERS).toHaveLength(20);
     expect(Object.isFrozen(ONOPENBOARD_CONSUMERS)).toBe(true);
     // Both directions at once: nothing missing from the roster, nothing stale in it.
     expect(found).toEqual([...ONOPENBOARD_CONSUMERS]);

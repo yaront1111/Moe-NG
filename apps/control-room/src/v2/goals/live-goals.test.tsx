@@ -355,7 +355,7 @@ describe("selecting a PRD writes nothing anywhere", () => {
       .map((call) => String(call[0]));
     // The affordance and catalog polls are reads; nothing here writes.
     expect(paths).not.toContain("/documents/ingest");
-    expect(paths.every((path) => path === "/affordances/read" || path === "/goals/read")).toBe(true);
+    expect(paths.every((path) => path === "/affordances/read" || path === "/goals/read" || path === "/runs/read")).toBe(true);
     expect(state.sent).toHaveLength(0);
   });
 });
@@ -526,7 +526,7 @@ describe("a selected PRD travels inside the goal-creation command", () => {
     const paths = fetchedPaths();
     expect(paths.length).toBeGreaterThan(0);
     expect(paths.filter((path) => path === "/documents/ingest")).toEqual([]);
-    expect(paths.every((path) => path === "/affordances/read" || path === "/goals/read")).toBe(true);
+    expect(paths.every((path) => path === "/affordances/read" || path === "/goals/read" || path === "/runs/read")).toBe(true);
     // One Create, one command: Cancel and a second selection write nothing.
     expect(state.sent).toHaveLength(1);
   });
@@ -623,7 +623,7 @@ describe("the goals list shows the daemon's PRD coverage as each card's progress
         .toBe("10 of 10 acceptance criteria verified");
     });
     expect(readCoverage).toHaveBeenCalledWith("goal-cov");
-    expect(fetchedPaths().every((path) => path === "/affordances/read" || path === "/goals/read")).toBe(true);
+    expect(fetchedPaths().every((path) => path === "/affordances/read" || path === "/goals/read" || path === "/runs/read")).toBe(true);
   });
 
   it("says progress is unavailable when no reader is attached", async () => {

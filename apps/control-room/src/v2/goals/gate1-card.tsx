@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import type { JSX } from "react";
 
-import { OutcomeNote } from "../components/outcome-note.js";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
-import { readFailedSaid, writeFailedSaid } from "../outcome-words.js";
 import type {
   Gate1ApprovalOutcome, Gate1ApprovalPort, Gate1ClarificationView, Gate1PendingView,
   Gate1ReadOutcome,
 } from "./gate1-approval.js";
 import { Gate1ContractDossier } from "./gate1-contract-dossier.js";
+import { RefusalNote } from "../components/outcome-note.js";
 
 /**
  * The GATE 1 card (approve the Product Contract): rendered above the plan
@@ -186,7 +185,7 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
               data-testid={`cr.gate1.question.${row.clarificationId}`}
               key={row.clarificationId}
             >
-              <h3 className="cr2-approve-heading">{row.question}</h3>
+              <h3 className="cr2-approve-heading">{`Question ${MIDDOT} ${row.question}`}</h3>
               {row.options.map((option) => (
                 <ActionButton
                   disabled={busy}
@@ -254,22 +253,10 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
           {`Contract approval accepted ${MIDDOT} no current contract projection was returned.`}
         </p>
       ) : (
-        <OutcomeNote
-          code={shownState.outcome.code}
-          layer={shownState.outcome.layer}
-          role="alert"
-          said={readFailedSaid("contract")}
-          testId="cr.gate1.refusal"
-        />
+        <RefusalNote refusal={shownState.outcome} role="alert" testId="cr.gate1.refusal" />
       )}
       {refusal === null ? null : (
-        <OutcomeNote
-          code={refusal.code}
-          layer={refusal.layer}
-          role="alert"
-          said={writeFailedSaid()}
-          testId="cr.gate1.dispatchrefusal"
-        />
+        <RefusalNote refusal={refusal} role="alert" testId="cr.gate1.dispatchrefusal" />
       )}
     </section>
   );

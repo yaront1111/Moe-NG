@@ -1,16 +1,15 @@
 import { useState } from "react";
 import type { JSX } from "react";
 
-import { OutcomeNote } from "../components/outcome-note.js";
 import { IncidentCard } from "./incident-card.js";
 import { incidentKeyOf } from "./needs-you-incident.js";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
-import { writeFailedSaid } from "../outcome-words.js";
 import type { NeedsYouData, NeedsYouItem, NeedsYouKind } from "./needs-you-model.js";
 import { PreviewCard } from "./preview-card.js";
 import type { PreviewDecision, PreviewFinding } from "./preview-port.js";
 import type { OfferOutcome } from "./offer-wire.js";
+import { RefusalNote } from "../components/outcome-note.js";
 
 /**
  * The NEEDS YOU queue: one card per decision the daemon is waiting on, in the order a person
@@ -110,8 +109,7 @@ function decisionOf(item: NeedsYouItem): InlineDecision | null {
 function resultLine(decision: InlineDecision, result: DecisionResult | undefined): string | null {
   if (result === undefined) return null;
   if (result.busy) return "Recording your decision...";
-  if (result.outcome === null) return null;
-  if (!result.outcome.ok) return null;
+  if (result.outcome === null || !result.outcome.ok) return null;
   return result.choice === "REPLAN" ? REPLAN_DONE_LINE : decision.doneLine;
 }
 
@@ -202,17 +200,11 @@ function DecisionCard({
             {`${item.actionLabel} →`}
           </ActionButton>
         )}
-        {line === null ? null : (
+        {result?.outcome !== undefined && result.outcome !== null && !result.outcome.ok ? (
+          <RefusalNote refusal={result.outcome} role="status" testId={`cr.needsyou.result.${key}`} />
+        ) : line === null ? null : (
           <p aria-live="polite" className="cr2-needs-note" data-testid={`cr.needsyou.result.${key}`} role="status">{line}</p>
         )}
-        {result?.outcome !== undefined && result.outcome !== null && !result.outcome.ok ? (
-          <OutcomeNote
-            code={result.outcome.code}
-            layer={result.outcome.layer}
-            said={writeFailedSaid()}
-            testId={`cr.needsyou.result.${key}`}
-          />
-        ) : null}
       </div>
     </li>
   );
@@ -233,7 +225,7 @@ export function NeedsYou({
         <div className="cr2-goals-empty" data-testid="cr.needsyou.empty">
           <p className="cr2-goals-empty-title">Nothing needs you right now.</p>
           <p className="cr2-goals-empty-body">
-            Agents keep working on their own. A plan to approve, a Product Contract at Gate 1,
+            Agents keep working on their own. A plan to approve, a Product Contract to approve,
             or a goal whose contract is fully verified will appear here.
           </p>
         </div>

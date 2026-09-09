@@ -1,5 +1,8 @@
 import type { JSX } from "react";
 
+import { refusalWords } from "./refusal-words.js";
+import type { RefusalLike } from "./refusal-words.js";
+
 /**
  * A refusal or failed read: the person's sentence first, the daemon's code behind
  * Details so a glance never has to decode CODE @ LAYER.
@@ -24,5 +27,26 @@ export function OutcomeNote({
         <code>{`${code} @ ${layer}`}</code>
       </details>
     </div>
+  );
+}
+
+export interface RefusalNoteProps {
+  readonly refusal: RefusalLike;
+  readonly testId: string;
+  readonly role?: "alert" | "status";
+  readonly said?: string | undefined;
+}
+
+export function RefusalNote({
+  refusal, testId, role = "status", said,
+}: RefusalNoteProps): JSX.Element {
+  return (
+    <OutcomeNote
+      code={refusal.code}
+      layer={refusal.layer}
+      role={role}
+      said={said ?? refusalWords(refusal)}
+      testId={testId}
+    />
   );
 }

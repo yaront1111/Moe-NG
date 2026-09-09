@@ -1,8 +1,7 @@
 import type { JSX } from "react";
 
-import { OutcomeNote } from "../components/outcome-note.js";
+import { RefusalNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
-import { readFailedSaid } from "../outcome-words.js";
 import type {
   PlanningRunAcceptanceView,
   PlanningRunApprovalState,
@@ -26,16 +25,25 @@ export type ApprovePlanLoadState =
   | { readonly phase: "LOADING" }
   | { readonly phase: "LOADED"; readonly outcome: PlanningRunOutcome };
 
+/** The step kinds a sealed plan carries, in a person's words; an unknown kind stays as spelled. */
+const STEP_KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  IMPLEMENTATION: "an agent builds it and the verifier checks it",
+  INTEGRATION: "the daemon accepts the verified work",
+  REVIEW: "a review round on the delivered work",
+  VERIFICATION: "the verifier runs the project's checks",
+  "node.deliver": "an agent builds it and the verifier checks it",
+});
+
 function PlanSection({ plan }: { readonly plan: PlanningRunPlanView }): JSX.Element {
   return (
     <section className="cr2-approve-block" data-testid="cr.approve.plan">
-      <h3 className="cr2-approve-heading">{`PLAN ${MIDDOT} ${plan.steps.length} steps`}</h3>
+      <h3 className="cr2-approve-heading">{`THE PLAN ${MIDDOT} ${plan.steps.length} step${plan.steps.length === 1 ? "" : "s"}`}</h3>
       <ol className="cr2-approve-steps">
-        {plan.steps.map((step) => (
+        {plan.steps.map((step, index) => (
           <li className="cr2-approve-step" data-testid={`cr.approve.step.${step.stepId}`} key={step.stepId}>
             <span className="cr2-approve-step-head">
-              <span className="cr2-approve-mono">{step.stepId}</span>
-              <span className="cr2-approve-kind">{step.kind}</span>
+              <span className="cr2-approve-kind">{`Step ${String(index + 1)} ${MIDDOT} ${STEP_KIND_WORDS[step.kind] ?? step.kind}`}</span>
+              <span className="cr2-approve-mono" title="The step's id in the sealed plan">{step.stepId}</span>
             </span>
             <span className="cr2-approve-step-body">{step.description}</span>
           </li>
@@ -142,12 +150,7 @@ export function OutcomeView({ outcome }: { readonly outcome: PlanningRunOutcome 
   if (outcome.status === "RUN") return <RunView outcome={outcome} />;
   // REFUSED and ERROR both name their code and layer plainly, never a blank.
   return (
-    <OutcomeNote
-      code={outcome.code}
-      layer={outcome.layer}
-      said={readFailedSaid("plan")}
-      testId="cr.approve.refusal"
-    />
+    <RefusalNote refusal={outcome} role="alert" testId="cr.approve.refusal" />
   );
 }
 
