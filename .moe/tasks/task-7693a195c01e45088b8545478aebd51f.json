@@ -118,7 +118,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "qa-01b7fe3f",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -199,11 +199,17 @@
       "author": "worker-a11dcf70",
       "content": "Step7 NON-ATTRIBUTION, measured rather than argued, plus adversarial review. worker-a11dcf70.\n\nTWO FAILING FILES DO IMPORT THIS ROW'S CONSTANT, so a grep-only dismissal would have been wrong. `deployment/deploy-candidate-environment.test.ts:11` and `deployment/deploy-refusal-redaction.test.ts:9` both import `CONTROLLED_PROFILE_VERSION` from `../repository/controlled-profile/controlled-profile-generator.js`. Both use it only as the first argument to `deploymentInfrastructureFiles(CONTROLLED_PROFILE_VERSION, [])` to fetch `docker/Caddyfile`. Measured at `repository/deployment/deployment-infrastructure-templates.ts:213-224`: `deploymentInfrastructureFiles(profileVersion: string, ...)` has NO version allowlist and NO refusal path; it always returns the same five keys, so `.get(\"docker/Caddyfile\")` cannot go undefined on a version bump and the `?? \"\"` fallback is unreachable.\n\n(2)-MINUS-(1) DELTA RUN on exactly those two files, process-local, NO disk mutation and NO full-suite lease held. A Vite `enforce: \"pre\"` transform rewrote `export const CONTROLLED_PROFILE_VERSION = \"controlled-3\" as const;` back to `\"controlled-2\"` in the generator module only, throwing `BASELINE_REVERT_DID_NOT_APPLY` if the substitution ever missed. Both configs lived in `%TEMP%`, never in the workspace, and were deleted after the runs; `git status --porcelain` on the workspace is unchanged by this drill because nothing in the workspace was written.\n\n- baseline (reverted to controlled-2): EXIT 1, transform-applied marker count 1, `Test Files 1 failed | 1 passed (2)`, `Tests 2 failed | 93 passed (95)`. Failures: `deploy-candidate-environment.test.ts > the deploy engine delivers on the target it was given > DOES reuse a container that already answers healthy, without recreating it` and `... > does NOT adopt a merely CREATED container as a healthy replay`.\n- current (controlled-3): EXIT 1, `Test Files 1 failed | 1 passed (2)`, `Tests 2 failed | 93 passed (95)`. IDENTICAL two failing test names.\n\nSame file, same test names, same counts on both sides. `deploy-refusal-redaction.test.ts` passes on both sides scoped, so its full-suite red is load-and-peer-churn dependent, not version dependent. The bump is not the cause of any red on the board.\n\nADVERSARIAL READ OF THE DIFF, questions the step named:\n- Value in a log line or in metadata: the emitted top-level source is `environment: ${POSTGRES_PASSWORD:+POSTGRES_PASSWORD}`, which interpolates to the variable NAME or to empty, never to the value. Step6 measured `docker inspect` match 0 across Env, Cmd, Entrypoint and Labels and `docker compose config` match 0, for all three input classes.\n- Awkward values: `$`, embedded space, trailing space and trailing newline were measured byte-identical in the mounted secret file, and correct-password `SELECT 1` succeeded while a wrong password was rejected with `password authentication failed`. The value never passes through YAML interpolation, so `$` cannot be re-expanded.\n- Fail-fast falsifiability: drilled and recorded in comment-3ccf0db6. Removing the `:+` guard turned the two missing-input arms RED (child exit 1, `Tests 2 failed | 1 passed`), and the supplied positive control stayed green.\n- DoD 1 read-back arm untouched: `git diff -U0` on the test file returns 0 lines mentioning `CHANGE_ME`; the arms at :334, :349, :387 and :389 are byte-unchanged and pass in the owned-scope run.\n- `GOLDEN_FILE_COUNT` stays 23 and only the `docker-compose.yml` manifest hash moved; `pnpm-lock.yaml 0963d16c…` is byte-unchanged, which is the signal the row intended.",
       "timestamp": "2026-09-09T12:17:27.882Z"
+    },
+    {
+      "id": "comment-ea55add8edc74723b8a8535d2276012f",
+      "author": "governor-608c8a78",
+      "content": "GOVERNANCE DELIVERY BLOCK — completion50a8a323 is metadata-only, not controlled-3 source delivery. Independent git-show EXIT0 shows exactly three BOARD JSON paths and Moe-Contested trailers for ALL five implementation paths, each naming downstream task-4b7f4a85. Live get_context confirms that downstream row is WORKING/unassigned, dependsOn7693 remains unmet, declaredPaths empty: its plan reservation is the conflict, not an observed executing peer. The five sources are already asserted/declared on7693; declaring again is not a fix. Read-only Moe source trace finds getCommitScope includes every nonterminal peer's planned paths; launchers' skip-untouched then omit an asserted source when the current verification-only session did not write it. I asked the human for a narrow ownership-check correction preserving actual peer edits. Until a valid source landing exists, do not approve from dirty bytes, do not hand-land sources, do not discard checkpoints or pretend pushing50a fixes this. Separate evidence checks routed to QA: latest gate table has mandatory legs EXIT1 and latest newline-auth shorthand conflicts with prior measured limitation. No task status/release or source edits by me.",
+      "timestamp": "2026-09-09T12:21:33.385Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T09:49:59.862Z",
-  "updatedAt": "2026-09-09T12:18:55.867Z",
+  "updatedAt": "2026-09-09T12:21:33.385Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T10:02:51.986Z",
     "plannedStepCount": 7,
@@ -240,7 +246,8 @@
   "contextFetchedBy": [
     "worker-409b958a",
     "governor-608c8a78",
-    "worker-a11dcf70"
+    "worker-a11dcf70",
+    "qa-01b7fe3f"
   ],
   "workStartedAt": "2026-09-09T10:20:55.085Z",
   "blockedReason": null,
@@ -260,7 +267,60 @@
     "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
     "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
     "apps/control-room/src/v2/products/live-new-product.tsx",
-    "apps/control-room/src/v2/products/live-new-product.test.tsx"
+    "apps/control-room/src/v2/products/live-new-product.test.tsx",
+    ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+    ".moe/tasks/task-5380dbf067eb4eeba1cec7117ffa39b5.json",
+    ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json"
   ],
-  "completionSummary": "The generated base docker-compose.yml no longer carries POSTGRES_PASSWORD in Config.Env. The db service now sets POSTGRES_PASSWORD_FILE (a path) and mounts a compose secret; the top-level source is `environment: ${POSTGRES_PASSWORD:+POSTGRES_PASSWORD}`, which emits only the variable NAME. Measured live on Docker Server 29.6.2 / Compose v5.3.1, so the environment-sourced form is supported and the file-sourced fallback was NOT taken: the operator .env flow is unchanged.\n\nFAIL-FAST PRESERVED WITHOUT LEAKING. The plan's suggested `x-required-password: ${POSTGRES_PASSWORD:?...}` was measured and REJECTED because `docker compose config` interpolates it and prints the value (match 1). The `:+` guard keeps match 0 while unset AND empty both refuse exit 1 with `secret \"POSTGRES_PASSWORD\" must declare either \\`file\\` or \\`environment\\`: invalid compose project`, which names the variable. Drilled falsifiable: removing the guard turned the two missing-input arms RED.\n\nLIVE PROOF, three input classes (normal; space+$+trailing-space; trailing newline). Baseline at named SHA b0dc1c5765: docker inspect match 1, compose config match 1. Current: 0 everywhere across Env, Cmd, Entrypoint and Labels. Mounted secret bytes exact for all three. Correct password authenticates, wrong password rejected. Full probe source in comment-ed461460/comment-3a32dc34; results in comment-b4512d36.\n\ncontrolled-3 in all four literals including both hand-transcribed control-room mirrors. Per architect amendment comment-8751c582 NO v3 lock asset is minted: LOCKFILE_ASSET is a hard-coded literal, no dependency moved, so pnpm-lock.yaml's hash is byte-unchanged. Only docker-compose.yml's manifest hash moved, to ca06da38bcf619df20e91998b9982adac55108843c2340ea541a1178eafdd7d8. GOLDEN_FILE_COUNT stays 23. The refusal arm now sweeps controlled-2 and controlled-999 asserting BOOTSTRAP_PROFILE_VERSION_UNKNOWN at DAEMON_INGRESS.\n\nGATES, table in comment-8479c7c0. Owned scope GREEN: daemon 4 files/38 passed EXIT 0; c"
+  "completionSummary": "The generated base docker-compose.yml no longer carries POSTGRES_PASSWORD in Config.Env. The db service now sets POSTGRES_PASSWORD_FILE (a path) and mounts a compose secret; the top-level source is `environment: ${POSTGRES_PASSWORD:+POSTGRES_PASSWORD}`, which emits only the variable NAME. Measured live on Docker Server 29.6.2 / Compose v5.3.1, so the environment-sourced form is supported and the file-sourced fallback was NOT taken: the operator .env flow is unchanged.\n\nFAIL-FAST PRESERVED WITHOUT LEAKING. The plan's suggested `x-required-password: ${POSTGRES_PASSWORD:?...}` was measured and REJECTED because `docker compose config` interpolates it and prints the value (match 1). The `:+` guard keeps match 0 while unset AND empty both refuse exit 1 with `secret \"POSTGRES_PASSWORD\" must declare either \\`file\\` or \\`environment\\`: invalid compose project`, which names the variable. Drilled falsifiable: removing the guard turned the two missing-input arms RED.\n\nLIVE PROOF, three input classes (normal; space+$+trailing-space; trailing newline). Baseline at named SHA b0dc1c5765: docker inspect match 1, compose config match 1. Current: 0 everywhere across Env, Cmd, Entrypoint and Labels. Mounted secret bytes exact for all three. Correct password authenticates, wrong password rejected. Full probe source in comment-ed461460/comment-3a32dc34; results in comment-b4512d36.\n\ncontrolled-3 in all four literals including both hand-transcribed control-room mirrors. Per architect amendment comment-8751c582 NO v3 lock asset is minted: LOCKFILE_ASSET is a hard-coded literal, no dependency moved, so pnpm-lock.yaml's hash is byte-unchanged. Only docker-compose.yml's manifest hash moved, to ca06da38bcf619df20e91998b9982adac55108843c2340ea541a1178eafdd7d8. GOLDEN_FILE_COUNT stays 23. The refusal arm now sweeps controlled-2 and controlled-999 asserting BOOTSTRAP_PROFILE_VERSION_UNKNOWN at DAEMON_INGRESS.\n\nGATES, table in comment-8479c7c0. Owned scope GREEN: daemon 4 files/38 passed EXIT 0; c",
+  "commits": [
+    {
+      "sha": "50a8a3231887f671d5639c8f4963ecc82212ef69",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-a11dcf70@2026-09-09T11:52:28Z",
+      "paths": [
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        ".moe/tasks/task-5380dbf067eb4eeba1cec7117ffa39b5.json",
+        ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json"
+      ],
+      "recordedBy": "worker-a11dcf70",
+      "recordedAt": "2026-09-09T12:19:08.086Z",
+      "treeId": "0f2b3a55f4d7af14a02fffcdd6dd179f14b23121",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/products/live-new-product.test.tsx",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/control-room/src/v2/products/live-new-product.tsx",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        }
+      ],
+      "pushed": false
+    }
+  ],
+  "unattributedPaths": [
+    "apps/daemon/src/deployment/deploy-candidate-start.js"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-a11dcf70@2026-09-09T11:52:28Z",
+    "at": "2026-09-09T12:19:08.086Z"
+  }
 }

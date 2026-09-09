@@ -76,7 +76,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T10:42:43.737Z",
-  "updatedAt": "2026-09-09T10:48:32.571Z",
+  "updatedAt": "2026-09-09T12:20:48.347Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T10:42:46.813Z",
     "plannedStepCount": 5,
@@ -103,5 +103,8 @@
       "apps/daemon/src/environment/environment-contracts.ts"
     ]
   },
-  "planApprovedAt": "2026-09-09T10:48:32.571Z"
+  "planApprovedAt": "2026-09-09T10:48:32.571Z",
+  "contextFetchedBy": [
+    "governor-608c8a78"
+  ]
 }
