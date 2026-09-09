@@ -133,7 +133,15 @@ it("binds the DESTINATION-BOUND restore surface across the seam and its binding,
   const command = rollbackCommandSource();
   expect(command).toMatch(/from "[^"]*backups\/backup-ports\.js"/u);
   expect(command).toMatch(/nodeBackupPorts\s*\(\)/u);
-  expect(command).toMatch(/applyRollbackRestore\s*\(/u);
+  // BOTH HALVES, SEPARATELY, because the command now calls them at two different points in its
+  // lifecycle with a durable commit in between. A pin on the composition alone would be satisfied
+  // by a handler that had gone back to doing both at once.
+  expect(command).toMatch(/resolveRollbackRestore\s*\(/u);
+  expect(command).toMatch(/applyResolvedRestore\s*\(/u);
+  // AND THE COMPOSITION IS NOT CALLED HERE. Without this negative, a dead `applyRollbackRestore`
+  // left beside the two halves would keep the pins above green while the effect happened at the
+  // pre-admission position again.
+  expect(command).not.toMatch(/applyRollbackRestore\s*\(/u);
 
   const binding = readFileSync(fileURLToPath(new URL("./rollback-restore.ts", import.meta.url)), "utf8");
   expect(binding).toMatch(/\.restoreDatabaseInto\s*\(/u);
@@ -270,8 +278,9 @@ it("(c) still refuses UNAVAILABLE with code and layer when the bound environment
     deployReceiptId(PROJECT_ID, environment, b.input.envelope.commandId)).ok).toBe(false);
 });
 
-it("(d) a FAILING restore refuses with code and layer, attempts exactly once, and rolls back nothing", async () => {
+it("(d) a FAILING restore refuses with code and layer, attempts once, and RELEASES the environment", async () => {
   const b = await boundHarness({ fail: true });
+  const first = b.input.envelope.commandId;
 
   await expect(b.handler({ ...b.input, envelope: b.envelopeFor(true) })).rejects.toMatchObject({
     code: "DEPLOY_ROLLBACK_RESTORE_FAILED", detail: ROLLBACK_RESTORE_DETAILS.DEPLOY_ROLLBACK_RESTORE_FAILED,
@@ -280,13 +289,32 @@ it("(d) a FAILING restore refuses with code and layer, attempts exactly once, an
   // NO AUTOMATIC RETRY. Invisible to an arm that only checks the outcome: a handler that retried
   // three times and then refused would satisfy every other assertion here.
   expect(b.calls).toHaveLength(1);
-  // AND NOTHING ELSE MOVED. The refusal happens before the environment guard is reserved and
-  // before any Docker effect, so the deployment is not half-rolled-back and the operator can
-  // retry once the destination is fixed.
+  // AND NOTHING ELSE MOVED. The apply now sits INSIDE the reserved guard, so "nothing reserved" is
+  // no longer true and is no longer claimed: what holds is that the deployment was never touched
+  // and that the guard did not stay held. The refusal is recorded as a REFUSED TERMINAL decision
+  // with NO deploy receipt -- a receipt would have to be bucketed into the engine's closed refusal
+  // roster and would then stand as this environment's CURRENT deploy.
   expect(b.docker.calls).toEqual([]);
   expect(b.docker.sshCalls).toEqual([]);
-  expect(readDeployReceipt(b.store, PROJECT_ID,
-    deployReceiptId(PROJECT_ID, environment, b.input.envelope.commandId)).ok).toBe(false);
+  expect(readDeployReceipt(b.store, PROJECT_ID, deployReceiptId(PROJECT_ID, environment, first)).ok).toBe(false);
+
+  // THE SAME COMMAND ID ANSWERS FROM THE RECORD, not by trying again. Without this a replay would
+  // either apply a second dump or report RECEIPT_INVALID for a decision that is perfectly valid.
+  await expect(b.handler({ ...b.input, envelope: b.envelopeFor(true) })).rejects.toMatchObject({
+    code: "DEPLOY_ROLLBACK_RESTORE_FAILED", layer: ROLLBACK_RESTORE_STAMP,
+  });
+  expect(b.calls).toHaveLength(1);
+
+  // A FRESH COMMAND ID IS ADMITTED, which is the only proof the guard was really released: it
+  // reaches the port a SECOND time and refuses again because this fixture fails every attempt.
+  const second = "second-rollback-after-failed-restore";
+  await expect(b.handler({ ...b.input, envelope: { ...b.envelopeFor(true), commandId: second } }))
+    .rejects.toMatchObject({ code: "DEPLOY_ROLLBACK_RESTORE_FAILED", layer: ROLLBACK_RESTORE_STAMP });
+  expect(b.calls).toHaveLength(2);
+  expect(b.docker.calls).toEqual([]);
+  // NEITHER id minted a deploy receipt.
+  expect(readDeployReceipt(b.store, PROJECT_ID, deployReceiptId(PROJECT_ID, environment, first)).ok).toBe(false);
+  expect(readDeployReceipt(b.store, PROJECT_ID, deployReceiptId(PROJECT_ID, environment, second)).ok).toBe(false);
 });
 
 it("refuses changed receipt bytes under an already decided command id", async () => {

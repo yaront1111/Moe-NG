@@ -1,0 +1,26 @@
+{
+  "id": "task-958158c90dd74060a81cc156a68c86ab",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "bug: candidate archive test assumes GNU tar owner/group format and fails on Windows bsdtar",
+  "description": "Reproduced before any edits on task-b2b4550835f14b6ebd4a742e1f3b01cf, HEAD2e4ff607 shared tree: pnpm --filter @moe/daemon test exits1 solely at apps/daemon/src/deployment/deploy-candidate-archive.test.ts:66.\nAssertion expects '1000/1000', but native tar -tv emits distinct '1000   1000' columns for both USTAR entries; full evidence in parent comment-5a9bee5feded41a0b263e23bc119094e. Preserve numeric ownership and exact entry checks without hard-coding GNU listing layout.",
+  "definitionOfDone": [
+    "The native tar archive test passes on Windows bsdtar without weakening its numeric uid/gid or exact-entry assertions; tests cover supported GNU and BSD listing shapes or inspect the actual archive numeric fields independently.",
+    "pnpm --filter @moe/daemon test exits0 and records positive Test Files/Tests count lines; any unrelated failures are disclosed with paths."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 84,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-09T17:14:46.514Z",
+  "updatedAt": "2026-09-09T17:14:46.514Z"
+}
