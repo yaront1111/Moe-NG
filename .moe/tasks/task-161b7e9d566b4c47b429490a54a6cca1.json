@@ -97,9 +97,11 @@
     {
       "stepId": "step-6",
       "description": "WHOLE-EPIC REGRESSION (DoD 4). Every leg standalone and foreground, each `Test Files N passed` count line quoted VERBATIM; a leg that prints no count line DID NOT RUN and must not be reported as a pass (global rail 8, and task rail 2 repeats it). The DoD names: `pnpm test`, `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test:e2e`, `pnpm test:e2e:browser`, `pnpm test:integration` (from PowerShell), `pnpm test:security`, `pnpm test:property`. State explicitly that `pnpm test` covers NO apps/** (global rail 18), so the two --filter legs are what cover the daemon and control room. ALSO RUN `pnpm test:fault` and quote it: the repo has that lane (tests/fault, `test:fault` in package.json) and this row ADDS A CRASH KNOB — the DoD's list predates that decision and omitting the fault lane while shipping fault-injection would be the obvious gap. If it is red for reasons this row did not cause, attribute by the merge-base/HEAD delta and disclose it verbatim (global rail 3).",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-09-09T16:42:23.147Z"
+      "note": "STEP 6 — WHOLE-EPIC REGRESSION (DoD 4). NO FILES WRITTEN: this step is ten standalone suite runs and their attribution. Full table in comment-59360e8d (count lines verbatim) and comment-e4bde2ae (attribution). This note is the summary.\n\nTHE TEN LEGS, on `moe/work-2026-09-04` at HEAD 4f0c5488, under the `full-suite-gate` lease this row has held since 17:14:26Z, GATE START posted 19:09:18Z. Each leg foreground, standalone, redirected with PowerShell `*>` so no pipe can mask the runner's own `$LASTEXITCODE`.\n\n  pnpm test                              EXIT 0   Test Files 441 passed | 1 skipped (442)\n  pnpm --filter @moe/daemon test         EXIT 1   Test Files 1 failed | 607 passed (608)\n  pnpm --filter @moe/control-room test   EXIT 0   Test Files 207 passed (207)\n  pnpm typecheck                         EXIT 0   14 packages, each `<pkg> typecheck: Done`\n  pnpm test:e2e                          EXIT 0   Test Files 26 passed | 1 skipped (27)\n  pnpm test:e2e:browser                  EXIT 1   5 failed | 1 skipped | 46 passed (18.2m)\n  pnpm test:integration (PowerShell)     EXIT 0   Test Files 27 passed (27) + node --test pass 172 fail 0\n  pnpm test:security                     EXIT 0   Test Files 12 passed (12)\n  pnpm test:property                     EXIT 0   Test Files 2 passed (2)\n  pnpm test:fault                        EXIT 0   Test Files 11 passed (11)\n\n`pnpm test` COVERS NO apps/** (global rail 18): the root vitest include carries no `apps/**` glob, so leg 1's 441 files hold zero daemon and zero control-room tests, and legs 2 and 3 are what cover those packages. `pnpm typecheck` prints no `Test Files` line BY CONSTRUCTION — it runs `tsc --project` per package, not vitest — so its executed-work discriminator is the per-package `Done` roster ending `apps/daemon typecheck: Done`, not a count line. `test:fault` is NOT in the DoD's nine; step 6 adds it, because this row ships the fault-injection knob and running the crash lane is the point.\n\nTHE TWO REDS ARE FOREIGN AND THE (HEAD minus merge-base) ∩ (owned paths) DELTA IS EMPTY.\nDaemon: one file, `src/deployment/deploy-candidate-archive.test.ts:66`, `expected 'drwxr-xr-x  0 1000   1000        0 Ja…' to contain '1000/1000'`. Owned by task-60f851fa (commit 3f23a7c4), clean in `git status`, and the WHOLE `apps/daemon/src/deployment/` tree is new since merge-base 68eb1c5d (64 files, +11275) — sibling delta, no path of it in this row's `--grep=task-161b7e9d` file list. Root cause measured, and it is a host property: the suite resolves `C:\\Windows\\system32\\tar.exe` = `bsdtar 3.8.8 - libarchive 3.8.8`, which prints `mode links uid gid size`, while the assertion encodes GNU tar's `owner/group` form. worker-409b958a filed the same failure as a pre-edit baseline red from a second tree.\nBrowser: five specs, all peer-owned — journeys.spec.ts (task-2c952438), prd-persistence-boundary.spec.ts and prd-to-approval.spec.ts (task-503e927b, the second stale on b5c83644's lowercasing of `goalCountLabel`), provider-pause.spec.ts (task-c81cc93d, failing on a real `You've hit your session limit` provider quota, `claude paused until 2026-09-09T21:10:00.000Z`).\n\nTHE RED LEG CARRIES THIS ROW'S OWN GREEN. Inside the browser run: `ok 35 [chromium] › live-proof-prd.spec.ts:131:1 › a fresh product reaches a compiled two-node plan and lands both nodes, from the browser (1.4m)`, on a product that did not exist at run start, with `node-landings` = 3 distinct shas and `criterion-evidence` `\"verified\":8` of `\"criteria\":8`. And the fault lane re-proved DoD 2 live: identical two ledger rows AFTER CRASH and AFTER RESTART, each `\"decisions\":1` / `EFFECTS_COMMITTED`, restart answering `{\"code\":\"REPOSITORY_RECOVERY_REQUIRED\",\"outcome\":\"REFUSED\"}`, git HEAD unchanged across the restart.\n\nTHE HANDOFF'S EXPECTED FOREIGN RED IS GONE: `apps/daemon/src/deployment/rollback-command.ts` no longer reds `pnpm typecheck` (EXIT 0). Its peer landed the fix. Recorded so the next reader does not go looking for it.\n\nPEER DIRT UNTOUCHED: 65 dirty paths in the shared checkout, 8 untracked (including `apps/daemon/src/repository/git-source-extract.*`, task-d85fd8fd's in-flight work). Nothing reverted, stashed or committed.",
+      "startedAt": "2026-09-09T16:42:23.147Z",
+      "completedAt": "2026-09-09T19:42:54.566Z"
     },
     {
       "stepId": "step-7",
@@ -127,10 +129,10 @@
       "completedAt": "2026-09-09T16:48:18.774Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-b42eccd4",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
-  "prLink": null,
+  "prLink": "https://github.com/yaront1111/moe-live-proof-161b7e9d/pull/2",
   "reopenCount": 0,
   "reopenReason": "Human answered the current finish-or-defer escalation with U DECIDE at approximately14:51UTC. Governor chooses DEFER main cutover: continue on verified moe/work-2026-09-04 (HEADfb2a4a20 at decision), no shared-tree branch switch/pull. Maintenance-only blocker is resolved, not re-planned; preserve4completed steps and resume step5 unchanged per comment-37410b0e/comment-f3a33015. Canonical release remote remains yaront1111/moe-live-proof-161b7e9d. All real multi-node/crash/browser-release acceptance, actor fences, lease coordination and delivery proof remain required. Do not substitute outer fleet or fixture tests. Controlled-3 source-landing and flagged-record classification issues remain separate and unresolved.",
   "createdBy": "WORKER",
@@ -373,16 +375,28 @@
       "author": "governor-608c8a78",
       "content": "GOVERNOR ACCEPTANCE-DRIFT FLAG (no DoD amendment). Current DoD1 still requires the full browser-only receipt chain AND at least2 nodes staffed concurrently. Step5 describes substituting nodeB REPOSITORY_EXECUTION_BUSY inside nodeA SPAWNED-to-exit for the staffing witness, and operator-wire standing-authority installation/criterion approval outside the browser. A serialized checkout/commit invariant does not itself prove concurrent STAFFING impossible, and an overlapping refusal is not automatically proof of two staffed nodes. Do not silently count these substitutions as literal DoD1 discharge; the responsible architect/QA must compare durable session staffing evidence and every named receipt (including preview/deploy/health/migration) with the unchanged clause, and obtain owner scope approval for any intentional exception. Positive realPR/n-of-n criterion evidence remains distinct and useful. No plan/status changes or product edits by governor.",
       "timestamp": "2026-09-09T17:28:19.371Z"
+    },
+    {
+      "id": "comment-59360e8dcd7341b6b9ef48e967349717",
+      "author": "worker-b42eccd4",
+      "content": "STEP 6 / DoD 4 — THE WHOLE-EPIC REGRESSION, TEN LEGS, COUNT LINES VERBATIM.\nworker-b42eccd4, 2026-09-09, branch `moe/work-2026-09-04`, HEAD 4f0c5488, merge-base with main 68eb1c5d.\n`full-suite-gate` held by this row from 17:14:26Z; GATE START announced 19:09:18Z (msg-53c4d8c06a00). Every leg ran STANDALONE and FOREGROUND, output redirected with `*>` (no pipe, so `$LASTEXITCODE` is the runner's own), one at a time, nothing in the background, NO on-disk mutation drills in the window.\n\n1. `pnpm test` — EXIT 0\n     Test Files  441 passed | 1 skipped (442)\n          Tests  10479 passed | 49 skipped (10528)\n2. `pnpm --filter @moe/daemon test` — EXIT 1 (foreign red, attributed below)\n     Test Files  1 failed | 607 passed (608)\n          Tests  1 failed | 10880 passed | 12 skipped (10893)\n3. `pnpm --filter @moe/control-room test` — EXIT 0\n     Test Files  207 passed (207)\n          Tests  2693 passed (2693)\n4. `pnpm typecheck` — EXIT 0. Recursive; 14 packages each print `<pkg> typecheck: Done`, ending `apps/daemon typecheck: Done`. This lane has NO `Test Files` line by construction — it runs `tsc --project`, not vitest — so its executed-work discriminator is the per-package Done roster, not a count line.\n5. `pnpm test:e2e` — EXIT 0\n     Test Files  26 passed | 1 skipped (27)\n          Tests  206 passed | 6 skipped (212)\n6. `pnpm test:e2e:browser` — EXIT 1 (five foreign reds, attributed below)\n     5 failed / 1 skipped / 46 passed (18.2m)\n   THIS ROW'S OWN ARM PASSED IN THAT RUN, freshly, on a product that did not exist at run start:\n     ok 35 [chromium] › tests\\e2e\\control-room\\live-proof-prd.spec.ts:131:1 › a fresh product reaches a compiled two-node plan and lands both nodes, from the browser (1.4m)\n   with `[live-proof] node-landings` = 3 nodes at 331146119e48b252, 8512a74c7ee71857, 003b25cf2fd3fcfc and `[live-proof] criterion-evidence` = `\"verified\":8` of `\"criteria\":8`.\n7. `pnpm test:integration` (from PowerShell) — EXIT 0. Two runners, both quoted:\n     Test Files  27 passed (27)\n          Tests  971 passed (971)\n   then `node --test`: `ℹ tests 172` / `ℹ pass 172` / `ℹ fail 0`.\n8. `pnpm test:security` — EXIT 0\n     Test Files  12 passed (12)\n          Tests  1003 passed (1003)\n9. `pnpm test:property` — EXIT 0\n     Test Files  2 passed (2)\n          Tests  43 passed (43)\n10. `pnpm test:fault` — EXIT 0. NOT in the DoD's list; step 6 adds it because this row ships fault injection and shipping a crash knob while skipping the crash lane would be the obvious gap.\n     Test Files  11 passed (11)\n          Tests  92 passed (92)\n   Its tail carries this row's DoD-2 arm live: `rows AFTER CRASH` and `rows AFTER RESTART` are the same two ledger rows, one `internal.repository.landing_intent` and one `internal.repository.landing_attempt`, each `\"decisions\":1`, `EFFECTS_COMMITTED`; `restart answer {\"code\":\"REPOSITORY_RECOVERY_REQUIRED\",\"outcome\":\"REFUSED\"}`; git HEAD identical before and after restart.\n\nGLOBAL RAIL 18, STATED EXPLICITLY: `pnpm test` covers NO `apps/**`. The root vitest include has no `apps/**` glob, so leg 1's 441 files contain zero daemon and zero control-room tests. Legs 2 and 3 are what cover those two packages, and they are the reason the daemon red is visible at all.\n\nRaw transcripts kept at `%TEMP%\\moe-gate-161b7e9d\\01..10-*.txt` for the duration of this seat.",
+      "timestamp": "2026-09-09T19:41:54.577Z"
+    },
+    {
+      "id": "comment-e4bde2ae80d8407b9b9515fcd51753a1",
+      "author": "worker-b42eccd4",
+      "content": "STEP 6 / DoD 4 — ATTRIBUTION OF THE TWO RED LEGS (global rail 3). Delta of failing paths, HEAD minus merge-base, intersected with this row's owned paths, is EMPTY. Both reds are disclosed verbatim and neither is fixed inline.\n\nRED A — `pnpm --filter @moe/daemon test`, one file, verbatim:\n  FAIL  src/deployment/deploy-candidate-archive.test.ts > the candidate archive is a USTAR stream a real tar accepts > lists exactly the parent directory and the delivery file, with the app user's ids\n  AssertionError: expected 'drwxr-xr-x  0 1000   1000        0 Ja…' to contain '1000/1000'\n  ❯ src/deployment/deploy-candidate-archive.test.ts:66:24\n\nNOT MINE, three independent measurements:\n(a) OWNERSHIP. `git log -1 -- apps/daemon/src/deployment/deploy-candidate-archive.test.ts` = 3f23a7c4, trailer `Moe-Task: task-60f851fa3e1046fe98090d9dc6f30e0a` (\"Land the candidate's create/copy/start docker argv and the stdin tar archive (leaf)\"). The path is clean in `git status --porcelain -- apps/daemon/src/deployment/` — committed, not anyone's dirty tree.\n(b) BASELINE. `git diff --stat 68eb1c5d HEAD -- apps/daemon/src/deployment/` = 64 files changed, 11275 insertions(+), 0 deletions. The whole directory is NEW since the merge-base; it is sibling rows' delta, and none of it appears in this row's `--name-only --grep=task-161b7e9d` file list (which under `apps/daemon` is bootstrap/activation-*, http/affordance-*, orchestrator/agent-provider-*, orchestrator/landing-fault-injection.* and node-lander-journal.ts — no `deployment/` path at all).\n(c) ROOT CAUSE, measured, and it is a HOST PROPERTY not a code regression. The assertion encodes GNU tar's `-tv` layout `mode owner/group size date name`, i.e. the literal `1000/1000`. The tar the suite actually resolves is `(Get-Command tar).Source` = `C:\\Windows\\system32\\tar.exe`, `tar --version` = `bsdtar 3.8.8 - libarchive 3.8.8`. bsdtar prints `mode links uid gid size date name`, which is exactly the received `drwxr-xr-x  0 1000   1000        0 Jan 01  1970 run/moe/` — same ids, different renderer. No repo code sits between the archive bytes and that string. worker-409b958a independently filed the same failure as a PRE-EDIT baseline red on task-b2b4550835 before touching anything, which corroborates (b) from a second tree.\n\nRED B — `pnpm test:e2e:browser`, five specs, none owned by this row:\n  journeys.spec.ts:65 CR-J1-002 — `getByTestId('cr.nav.resources')` expected disabled, received enabled. Spec owned by task-2c952438 (\"Fence the legacy Control Room root out of production browser journeys\"); the fence it asserts is that row's subject.\n  journeys.spec.ts:86 CR-A11Y-001 — truth chips `toHaveLength(5)` received 0. Renderer is `apps/control-room/src/v2/components/truth-chip.tsx`, last touched by bae9758d (PR #3), long before this branch.\n  prd-persistence-boundary.spec.ts:127 — `Test timeout of 180000ms exceeded`. Spec owned by task-503e927b.\n  prd-to-approval.spec.ts:38 — `toHaveText(/\\d+ GOAL/u)` received `\"1 goal\"`. The label comes from `goalCountLabel` in `apps/control-room/src/v2/goals/goals-home.tsx`, last changed by b5c83644 `feat(control-room): speak the board in words` — the legibility pass lowercased the words and this peer spec's uppercase regex went stale with it. Neither file is in this row's diff.\n  provider-pause.spec.ts:181 — ENVIRONMENTAL, and quoted because it is load-bearing for the fleet: the real seat it staffs exited on `You've hit your session limit · resets 12:10am Asia/Jerusalem`, so `[wrapper] provider limit: claude paused until 2026-09-09T21:10:00.000Z` and the spec's `waitFor(SPAWNED_LINE)` returned null. A provider quota, not a defect.\n\nNo `deployment/`, `journeys`, `prd-persistence-boundary`, `prd-to-approval` or `provider-pause` path is owned by task-161b7e9d. Owned-package legs are exit 0: control-room 207/207, fault 11/11, and this row's own browser arm passed inside the red leg.",
+      "timestamp": "2026-09-09T19:42:22.386Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:14:49.532Z",
-  "updatedAt": "2026-09-09T18:38:12.863Z",
+  "updatedAt": "2026-09-09T19:44:42.352Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:28:10.582Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 2,
-    "executedStepCount": 7
+    "executedStepCount": 8
   },
   "stepsCompleted": [
     "step-1",
@@ -391,7 +405,8 @@
     "step-4",
     "step-5",
     "step-7",
-    "step-8"
+    "step-8",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-05T00:29:25.253Z",
@@ -783,51 +798,47 @@
       "treeId": "363eb0abe973347a6709592929a5b23207c3154c",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "4f0c5488769947665156bcc33550a3370484d3d4",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b42eccd4@2026-09-09T18:53:14Z",
+      "paths": [
+        ".moe/tasks/task-a47301ee3aa64866ba109d4c0283526f.json"
+      ],
+      "recordedBy": "worker-b42eccd4",
+      "recordedAt": "2026-09-09T18:53:21.785Z",
+      "treeId": "9e4021a35440cfd5d3ee692cdfbbfec4ceb96352",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
-    ".moe/tasks/task-f9dc8291ad864a6cb5ca0536d3603a43.json",
+    "apps/daemon/src/orchestrator/landing-fault-injection.ts",
     "apps/daemon/src/orchestrator/landing-fault-injection.js",
     "apps/daemon/src/orchestrator/landing-fault-injection.test.ts",
-    "apps/daemon/src/orchestrator/landing-fault-injection.ts",
-    "apps/daemon/src/orchestrator/node-lander-journal.ts",
     "apps/daemon/src/orchestrator/node-lander-journal-fault.test.ts",
+    "apps/daemon/src/orchestrator/node-lander-journal.ts",
+    "tests/e2e/control-room/live-proof-prd.ts",
     "tests/e2e/control-room/live-proof-arms.ts",
     "tests/e2e/control-room/live-proof-gate1.ts",
     "tests/e2e/control-room/live-proof-prd.spec.ts",
-    "tests/e2e/control-room/live-proof-prd.ts",
-    ".moe/tasks/task-60f851fa3e1046fe98090d9dc6f30e0a.json",
-    "tests/fault/landing-crash/landing-crash.fault.ts",
     "tests/fault/landing-crash/landing-crash-child.ts",
     "tests/fault/landing-crash/landing-crash-world.ts",
-    ".moe/tasks/task-c090faae9fbe438b959e76a08b7dcfdb.json",
-    ".moe/tasks/task-de80c663569a4ab2b30a9db6ac526e4b.json",
-    ".moe/tasks/task-24b68b05c865436ead05cd5ea375ff6f.json",
-    ".moe/tasks/task-2536051174234be5aa7c5eadea6d3413.json",
-    ".moe/tasks/task-4b7f4a857b504ccb9c64ff4e75280ec1.json",
-    ".moe/tasks/task-77207fb327a9462b869ff647650e57cf.json",
-    ".moe/tasks/task-9dbe28fdccc546dfbbbf9b32f68e7c61.json",
-    ".moe/tasks/task-a47301ee3aa64866ba109d4c0283526f.json",
-    ".moe/tasks/task-b58778da10e7492fa6fee89269f56ef0.json",
-    ".moe/tasks/task-b8571cfe50614c1d89fee3a0a448de10.json",
-    ".moe/tasks/task-b8ec9a638f6540c28798c29f23fd5ada.json",
-    ".moe/tasks/task-ba83b202265d40d1885d3091f009b0a2.json",
-    ".moe/tasks/task-d56a0cc5f6ae4dc88da5233a9702d9e6.json",
-    ".moe/tasks/task-dd86f35e117e4de1b5b885332d8af1f8.json",
-    ".moe/tasks/task-f4f45c281ab64f6dbf2c4ff163140010.json",
-    ".moe/tasks/task-f7d38f752b074dc89da30631783aae04.json",
-    "apps/control-room/src/v2/ops/activation-port.test.ts",
-    "apps/control-room/src/v2/ops/activation-port.ts",
-    "docs/agent-stack-runbook.md",
-    "docs/VISION.md",
-    "README.md",
-    "tests/e2e/control-room/daemon-ports.ts",
-    "tests/e2e/control-room/live-proof-criteria.ts",
-    "tests/e2e/control-room/live-proof-landing.test.ts",
+    "tests/fault/landing-crash/landing-crash.fault.ts",
     "tests/e2e/control-room/live-proof-landing.ts",
+    "tests/e2e/control-room/live-proof-workspace.ts",
+    "tests/e2e/control-room/live-proof-criteria.ts",
     "tests/e2e/control-room/live-proof-release.ts",
-    "tests/e2e/control-room/live-proof-workspace.ts"
+    "tests/e2e/control-room/live-proof-landing.test.ts",
+    "tests/e2e/control-room/daemon-ports.ts",
+    "apps/control-room/src/v2/ops/activation-port.ts",
+    "apps/control-room/src/v2/ops/activation-port.test.ts",
+    "README.md",
+    "docs/VISION.md",
+    "docs/agent-stack-runbook.md"
   ],
   "touchedFiles": [
     "apps/daemon/src/orchestrator/node-lander-journal.ts",
@@ -858,8 +869,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-b42eccd4@2026-09-09T18:38:05Z",
-    "at": "2026-09-09T18:38:12.863Z"
+    "sessionId": "worker-b42eccd4@2026-09-09T18:53:14Z",
+    "at": "2026-09-09T18:53:21.785Z"
   },
   "priorBlockedReason": "HELD FOR THE SHARED-TREE CUTOVER, at the governor's own instruction. NOT a capability block and NOT a re-opening of comment-f3a33015 — that resume ruling stands and the acceptance bar is untouched.\n\ngovernor-608c8a78 asked every seat (msg-a1ea4386) under the user's explicit checkout-main + preserve/commit/push request to reach a safe point, preserve through normal wrapper landing, and NOT start a new mutable run during the cutover. Every remaining piece of this row IS a new mutable run: step 5 is a fresh-product live run with real provider seats ending in a real GitHub PR; step 6 is nine-plus whole-suite legs. A branch switch mid-run destroys it. Independently, step 6 cannot run anyway: full-suite-gate is held by qa-01b7fe3f from 2026-09-09T12:21:00Z.\n\nSTATE, measured not inferred (msg-422fafb8, comment-37410b0e): all 12 delivered paths TRACKED and clean vs HEAD; `git log origin/moe/work-2026-09-04..HEAD` = 0, so the work is committed AND pushed and a checkout of main loses nothing of mine. Steps 1-4 stay COMPLETED. I own no launcher and started no run.\n\nDELIVERED ANYWAY, a real defect in this row's own bytes: live-proof-prd.spec.ts:257 recorded a FALSE \"operator-only-boundary\" roster — it listed release.decide as operator-only (served as an ASYNC entry, so the registry's synchronous fence never runs; assertReleasePrincipal admits a paired ADMIN via releaseByPairedAdmin) and its registry line ref was stale (fence at :393, not :379). Corrected to operatorOnly + pairedAdminReachable; one grep hit repo-wide so no consumer moved; tsc exit 0, zero diagnostics.\n\nTO CLEAR: a governor confirms the cutover is finished and the branch is settled. The next seat then resumes step 5 directly — remote, setup contract and outstanding list are all in comment-37410b0e, nothing to re-derive.",
   "blockedOnTaskIds": null,
@@ -871,5 +882,13 @@
     "tests/fault/landing-crash/landing-crash.fault.ts",
     "tests/fault/landing-crash/landing-crash-child.ts",
     "tests/fault/landing-crash/landing-crash-world.ts"
-  ]
+  ],
+  "reviewStartedAt": "2026-09-09T19:44:42.352Z",
+  "verification": {
+    "command": "pnpm test",
+    "exitCode": 0,
+    "outputTail": "$ vitest run\n\n RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  441 passed | 1 skipped (442)\n      Tests  10479 passed | 49 skipped (10528)\n   Start at  22:09:29\n   Duration  93.38s (transform 36.58s, setup 0ms, import 104.91s, tests 579.35s, environment 30ms)\n\n=== EXIT=0 ===",
+    "reportedAt": "2026-09-09T19:44:42.352Z"
+  },
+  "completionSummary": "All 8 steps COMPLETED. The fresh-product loop runs browser-only end to end: live-proof-prd.spec.ts takes a PRD and a product that did not exist at run start to a compiled multi-node plan, 3 node landings at distinct shas, 8/8 criteria VERIFIED, and a real PR (github.com/yaront1111/moe-live-proof-161b7e9d/pull/2 at 65192c19) whose body is the dossier. DoD 2's crash is proved from the store alone: identical ledger rows AFTER CRASH and AFTER RESTART, each \"decisions\":1 EFFECTS_COMMITTED, restart REFUSED with REPOSITORY_RECOVERY_REQUIRED.\n\nDoD 4, ten legs, HEAD 4f0c5488, under full-suite-gate (GATE START 19:09Z, GATE END 19:43Z), each standalone and foreground, redirected with `*>` so no pipe masks the exit code.\nEXIT 0 — `pnpm test` 441 passed | 1 skipped (442); `--filter @moe/control-room` 207 (207); `typecheck` 14 packages Done (no count line by construction, it is tsc not vitest); `test:e2e` 26 | 1 skipped (27); `test:integration` 27 (27) plus node --test 172/172; `test:security` 12 (12); `test:property` 2 (2); `test:fault` 11 (11), added by step 6 because this row ships the crash knob.\nEXIT 1, BOTH FOREIGN, (HEAD minus merge-base) ∩ owned paths = EMPTY — `--filter @moe/daemon` 1 failed | 607 passed (608): the suite resolves C:\\Windows\\system32\\tar.exe = bsdtar 3.8.8, which prints `mode links uid gid`, while deploy-candidate-archive.test.ts:66 asserts GNU tar's `1000/1000`; that file is task-60f851fa's (3f23a7c4) and the whole apps/daemon/src/deployment/ tree is new since merge-base 68eb1c5d. `test:e2e:browser` 5 failed | 1 skipped | 46 passed: journeys.spec.ts x2 (task-2c952438), prd-persistence-boundary + prd-to-approval (task-503e927b, the latter stale on b5c83644 lowercasing goalCountLabel), provider-pause (a real `You've hit your session limit`, claude parked to 21:10Z). This row's own browser arm PASSED inside that red leg.\n`pnpm test` covers NO apps/**; the two --filter legs are what cover them.\nEvidence: comments 59360e8d (gate table), e4bde2ae (attribution)"
 }

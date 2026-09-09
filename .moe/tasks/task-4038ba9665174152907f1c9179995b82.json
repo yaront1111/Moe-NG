@@ -15,90 +15,52 @@
     {
       "stepId": "step-1",
       "description": "MAKE THE FIXTURE ABLE TO FAIL, AND QUOTE THE RED (DoD 1). Ordered first: this is the mutation that exposes the defect, and once the port is fixed the red is unrecoverable without reverting.\n\npreview-port.test.ts:16-20 sets `targetAggregateId: \"preview-goal-7\"` and :60 asserts `previewRef: \"preview-goal-7\"`. THE TWO STRINGS ARE IDENTICAL, so the arm cannot tell which value the port read — that identity is the only reason this defect is green. Make them DISTINCT: keep the affordance's target as a preview-aggregate-shaped string and assert a receipt-shaped id, e.g. a 64-hex value, so the two can never be confused by eye either.\n\nRUN IT AND QUOTE THE RED VERBATIM into a row comment — the failing assertion text, not a summary. DoD 1 asks for exactly that, and a paraphrase does not discharge it.\n\nNO PRODUCTION EDIT IN THIS STEP. The point is to prove the arm can fail against today's `previewRefOf` before anything changes.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/control-room/src/v2/approvals/preview-port.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/control-room/src/v2/approvals/preview-port.test.ts"
-      ],
-      "note": "DoD 1 pre-fix red captured and quoted verbatim in comment-4c5e7bcd. Made the fixture able to fail: targetAggregateId is now \"preview:goal-7\" (real previewAggregateId shape, preview-receipt-contracts.ts:88) and a distinct RECEIPT_ID 64-hex const (HEX64 shape, same file:75) is what the arms assert. TWO arms red, not one — the REJECT payload carries previewRef too, so it reds on the same defect. No production edit in this step; only preview-port.test.ts is dirty. Disclosed a pre-existing foreign red in environment-variables-screen.test.tsx (file is CLEAN in git status, so it reds at HEAD, unrelated to this row, not repaired).",
-      "startedAt": "2026-09-09T16:12:42.385Z",
-      "completedAt": "2026-09-09T16:14:41.553Z"
+      ]
     },
     {
       "stepId": "step-2",
       "description": "TAKE THE RECEIPT ID EXPLICITLY (preview-port.ts).\n\nGive `PreviewPort.submit` the receipt id as its SECOND parameter — `submit(affordance, receiptId, decision, findings?)` — and build the payload with `previewRef: receiptId`. Delete `previewRefOf`: once the id arrives from the caller there is nothing left to derive.\n\nFOLLOW THE NEIGHBOURS, do not invent a shape. `goal-close-port.submit(OFFER, \"goal-1\")` and `escalation-port.submit(affordance, nodeKey, decision)` already take an explicit id in that position, so this makes the preview port stop being the odd one out.\n\nREWRITE THE COMMENT AT :49-50, which is the other half of the defect. It currently states the false premise as fact: \"The daemon names the preview aggregate as the offer's target, so the decision refers to the preview it was offered for rather than to a ref the browser composed.\" The daemon resolves `previewRef` as the preview RECEIPT id, and the affordance's target is the goal. Say what is true and say what the failure was — a mismatch answers 422 PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY — so the next reader cannot restore the bug on the strength of a comment.\n\nLEAVE THE REJECT PATH ALONE. The `findings.length === 0` guard returning PREVIEW_FINDINGS_REQUIRED is not this row's subject, and the payload's exact arity on APPROVE stays exactly as the test's `toEqual` pins it.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/control-room/src/v2/approvals/preview-port.ts"
-      ],
-      "modifiedFiles": [
-        "apps/control-room/src/v2/approvals/preview-port.ts",
-        "apps/control-room/src/v2/approvals/preview-port.test.ts",
-        "apps/control-room/src/v2/approvals/preview-rejection-invariants.test.tsx"
-      ],
-      "note": "PreviewPort.submit now takes the receipt id SECOND — submit(affordance, receiptId, decision, findings?) — matching goal-close-port.submit(affordance, goalId) and escalation-port.submit(affordance, nodeKey, decision). previewRefOf is DELETED; the payload builds previewRef from the parameter. The false comment at :49-50 is replaced with what is true: nothing on the affordance carries the receipt id so it cannot be derived here at all, and the old derivation answered 422 PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY. REJECT path untouched: the findings.length === 0 guard and both payload arities are unchanged and still pinned by toEqual.\n\nA SECOND CALLER EXISTS that step-2's affectedFiles did not name, and a positional insertion breaks it silently — exactly the adversarial question step-5 asks. preview-rejection-invariants.test.tsx:131 called submit(FACTS.affordance, \"REJECT\", [...]), which would have put \"REJECT\" in receiptId and the findings array in decision. Fixed to pass FACTS.receiptId, and its assertion now reads previewRef: FACTS.receiptId instead of the hardcoded \"preview:goal-1\" — so that arm stops being blind to this same defect. live-needs-you.tsx:187 is the third caller and is step-3's subject; typecheck is expected red on it until then.\n\nBoth files green: npx vitest run preview-port.test.ts preview-rejection-invariants.test.tsx = Test Files 2 passed (2), Tests 11 passed (11).",
-      "startedAt": "2026-09-09T16:14:43.865Z",
-      "completedAt": "2026-09-09T16:15:42.641Z"
+      ]
     },
     {
       "stepId": "step-3",
       "description": "PASS THE ID THE BROWSER ALREADY HAS (live-needs-you.tsx) (DoD 2).\n\nlive-needs-you.tsx:187 calls `preview.submit(facts.affordance, decision, findings)` while `facts.receiptId` sits right there, populated by needs-you-preview.ts from `/preview/read`. Pass it. That single omission is the entire browser half of the defect.\n\nADD THE ARM in live-needs-you.test.tsx: the id sent to the port is the one `/preview/read` answered. Assert the VALUE, not that submit was called — a spy that only records a call cannot tell a receipt id from a goal id, which is the same blindness the port fixture had.\n\nDo not change what the card renders or how a decision result is stored. The `setResults` bookkeeping around the call, and the `DECISION_DISPATCH_FAILED` rejection path, are untouched by this row.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/control-room/src/v2/approvals/live-needs-you.tsx",
         "apps/control-room/src/v2/approvals/live-needs-you.test.tsx"
-      ],
-      "modifiedFiles": [
-        "apps/control-room/src/v2/approvals/live-needs-you.tsx",
-        "apps/control-room/src/v2/approvals/live-needs-you.test.tsx"
-      ],
-      "note": "DoD 2 delivered. live-needs-you.tsx:191 now passes facts.receiptId — the value needs-you-preview.ts:109 takes from /preview/read — as the port's second argument, with a comment naming the 422 PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY failure so the omission is not restored by a later reader. setResults bookkeeping and the DECISION_DISPATCH_FAILED path are untouched; the card renders identically.\n\nNEW ARM in live-needs-you.test.tsx: \"sends the RECEIPT id /preview/read answered, never the offer's aggregate id\". It renders a real PREVIEW item (preview.decide offer at preview:goal-plan, readPreview answering STARTED with a 64-hex receiptId), clicks cr.needsyou.preview.approve, and asserts the VALUE: toHaveBeenCalledWith(offer, RECEIPT_ID, \"APPROVE\", []) plus not.toHaveBeenCalledWith(offer, \"preview:goal-plan\", ...). A call-count spy would not have discriminated.\n\nNON-VACUITY MEASURED, not argued. I restored the exact omission in production (submit(facts.affordance, decision, findings)) and the arm went RED: `AssertionError: expected \"vi.fn()\" to be called with arguments: [ { …(6) }, …(3) ]` / `Number of calls: 1` — called, but with the wrong arguments, which is the blindness this arm exists to remove. Restored from an out-of-tree backup taken and hash-verified BEFORE the edit, never git checkout --, since the file carries this row's uncommitted work: sha256 b5429ee205c792395b946ea6f6344589825311218a874a477c4f3ac28c4110e3 before == after. Mutation was confined to a control-room file for a few seconds; the peer holding full-suite-gate is running the DAEMON suite, which cannot see apps/control-room. Green after restore: 6 passed (6).",
-      "startedAt": "2026-09-09T16:15:44.950Z",
-      "completedAt": "2026-09-09T16:18:00.844Z"
+      ]
     },
     {
       "stepId": "step-4",
       "description": "THE LIVE SPEC (DoD 3) — AND READ THIS BEFORE EDITING, BECAUSE THE CLAUSE IS AMBIGUOUS AND ONE READING IS HARMFUL.\n\npreview-approve-live.spec.ts:136-142 is the WALL B arm. It dispatches AS THE OPERATOR with `previewAggregateId(goalId)` and asserts a refusal of PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY. THAT REFUSAL IS CORRECT AND MUST SURVIVE. An aggregate id is still not a receipt id after this fix; the daemon is right and DoD 4 forbids touching it. Read literally, \"the WALL B arm asserts Approve COMMITS (not refuses)\" would mean making the daemon accept an aggregate id — do not do that, and do not delete the arm to satisfy the sentence.\n\nWHAT THE CLAUSE ACTUALLY WANTS: the spec must now prove the BROWSER'S path commits. The spec already commits for real at :145 with `preview.receiptId`. So keep the aggregate-id case as an explicitly labelled NEGATIVE CONTROL — relabel its comment to say it pins the daemon's refusal of the wrong id, not the browser's behaviour — and make the arm that represents the browser send what the port now sends and COMMIT.\n\nWALL A IS UNCHANGED, and DoD 3 says so: the paired non-operator HUMAN still gets 403 OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION at :132-134. That is the deliberate policy pin from operator ruling comment-18dc557c and is not this row's business.\n\nIf after reading the spec you conclude the clause cannot be satisfied without a daemon change, STOP and say so on the row rather than editing the daemon or weakening a control.",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "tests/e2e/control-room/preview-approve-live.spec.ts"
-      ],
-      "modifiedFiles": [
-        "tests/e2e/control-room/preview-approve-live.spec.ts"
-      ],
-      "note": "DoD 3 satisfied in the sense the step names, and I am flagging the deviation from the clause's literal wording rather than hiding it. DoD 3 reads \"the WALL B arm asserts the operator's Approve COMMITS (not refuses)\". Taken literally that means making the daemon accept a preview AGGREGATE id where it expects a RECEIPT id. That is a daemon authority change, DoD 4 forbids it, and the refusal is correct: an aggregate id is still not a receipt id after this fix. I did not do it and I did not delete the arm to make the sentence true.\n\nWHAT I DID INSTEAD, which is what step-4 instructs. WALL B keeps its PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY refusal and is relabelled as an explicit NEGATIVE CONTROL pinning the DAEMON's refusal of a wrong id, no longer described as \"the aggregate id the browser sends\" — after this row the browser does not compose that value at all. The arm at what is now :157, which dispatches preview.receiptId and asserts PREVIEW_DECISION_RECORDED, is relabelled THE BROWSER'S PATH, COMMITTED FOR REAL, because that is now literally the value the Approve button sends: live-needs-you.tsx passes facts.receiptId and preview-port.ts puts it in previewRef verbatim. So the spec does prove the browser's Approve commits.\n\nONE ASSERTION ADDED, because the negative control could go vacuous: expect(previewAggregateId(goalId)).not.toBe(preview.receiptId). If those two strings ever coincided the wall-B arm would pass while measuring nothing — the same identity-of-fixtures defect that kept this whole row green in preview-port.test.ts.\n\nWALL A UNTOUCHED, deliberately including its comment, which is still true: the paired non-operator HUMAN still gets 403 OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION and the real click still commits nothing. No daemon file touched. Lane execution and its count line are step-5's business.",
-      "startedAt": "2026-09-09T16:18:03.365Z",
-      "completedAt": "2026-09-09T16:18:48.593Z"
+      ]
     },
     {
       "stepId": "step-5",
       "description": "GATES, THE UNTOUCHED-DAEMON PROOF, AND THE ADVERSARIAL PASS (DoD 4, DoD 5).\n\nPROVE THE DAEMON DID NOT MOVE (DoD 4): `git diff` on apps/daemon/src/daemon-command-registry.ts and apps/daemon/src/daemon-command-vocabulary.ts must be EMPTY at completion — quote both commands and their empty output. Confirm the human-approver fence tests are green UNEDITED; if you edited one, the row has widened a fence and that is a stop.\n\nGATES (DoD 5): `pnpm --filter @moe/control-room test` EXIT 0 with its `Test Files N passed` count line quoted verbatim. This leg is MANDATORY and not substitutable — two mirrors under apps/control-room are invisible to `pnpm test`, `pnpm typecheck` and the daemon leg (epic rail 2). Read the OUTPUT, not the exit code: a `--filter` leg prints \"No projects matched the filters\" and EXITS 0, and \"0 passed\" is exit 0 too.\nThen the browser e2e lane for the preview spec, with its count line. That lane is slow and has a known red set: attribute any foreign red by path against the merge-base baseline and disclose it verbatim rather than fixing it.\nRun `pnpm typecheck` as well — this row changes an exported port signature.\n\nCOMPLETION RECORD: quote the step 1 pre-fix RED beside the post-fix green, and state plainly that no daemon or fence file moved. Put the arm-by-arm table in a row COMMENT; the completion summary truncates silently at 2000 characters.\n\nADVERSARIAL PASS (load `adversarial-self-review`). Ask, in order: is there any OTHER caller of `preview.submit` that now passes the wrong argument in the new second position — grep every call site, since a positional insertion is the classic silent break? Does the REJECT path still send its findings unchanged, and is its payload arity still exactly what the daemon admits? Can `facts.receiptId` ever be undefined at the moment the operator clicks, and what does the port send then? Does any other port in this directory read an id off the affordance the same way `previewRefOf` did — and if so, is that a comment on this row rather than a new one? And the question the row is named for: after this change, does the operator's Approve button actually commit a preview decision, and which arm proves it end to end rather than at the port boundary?",
-      "status": "COMPLETED",
+      "status": "PENDING",
       "affectedFiles": [
         "apps/control-room/src/v2/approvals/preview-port.ts",
         "apps/control-room/src/v2/approvals/preview-port.test.ts"
-      ],
-      "modifiedFiles": [
-        "apps/control-room/src/v2/approvals/preview-port.ts",
-        "apps/control-room/src/v2/approvals/preview-port.test.ts",
-        "apps/control-room/src/v2/approvals/preview-rejection-invariants.test.tsx",
-        "apps/control-room/src/v2/approvals/live-needs-you.tsx",
-        "apps/control-room/src/v2/approvals/live-needs-you.test.tsx",
-        "tests/e2e/control-room/preview-approve-live.spec.ts"
-      ],
-      "note": "DoD 4 and DoD 5 discharged; arm table in comment-4b25ec8b, adversarial pass in comment-30d2e6af.\n\nGATES, all fresh, output read rather than exit code: pnpm --filter @moe/control-room test = Test Files 205 passed (205), Tests 2678 passed (2678), EXIT 0. pnpm typecheck EXIT 0. tsc -p tests/e2e/control-room/tsconfig.json EXIT 0. playwright preview-approve-live = 1 passed (3.3m) EXIT 0, printing the daemon's own COMMITTED record for preview.decide. I hit the epic rail 2 trap once on the way: a scoped daemon run answered \"No test files found, exiting with code 1\" because apps/daemon uses --config package.json with its own include globs; re-ran with the package's real config.\n\nDoD 4: git diff on daemon-command-registry.ts and daemon-command-vocabulary.ts both EMPTY. All 12 fence test files matching OPERATOR_PRINCIPAL_REQUIRED / isDurableHumanPrincipal / OPERATOR_PRINCIPAL_KINDS are UNEDITED, and daemon-command-registry-human-approver.test.ts runs green unedited (19 passed, EXIT 0). No daemon or fence file moved.\n\nADVERSARIAL PASS found one real break and fixed it in-row: preview-rejection-invariants.test.tsx was a THIRD caller the plan did not name, and its hardcoded previewRef assertion would not have caught the positional shift. Traced that facts.receiptId cannot be undefined at click time (text() demands length > 0 in the decoder, so a bad receipt renders no card at all). Noted escalation-port.ts:35 reads targetAggregateId the same way but is NOT the same defect, since escalation.decide's subjectRef IS the offer's target.\n\nONE LIMIT STATED RATHER THAN PAPERED OVER: no single arm clicks the real button AND observes a COMMITTED verdict. The unit arm proves the button sends facts.receiptId; the browser lane proves that value commits. They join at the value. A single arm cannot exist while WALL A's operator-principal fence refuses the paired browser's click, and widening that fence is excluded by this row's description and by DoD 4.\n\nCORRECTION: my step-1 disclosure called the environment-variables-screen red \"at HEAD\". Wrong — it is INTERMITTENT. Same bytes, red once at 19:13, green on four later runs including the submitted gate.",
-      "startedAt": "2026-09-09T16:18:50.858Z",
-      "completedAt": "2026-09-09T16:26:04.128Z"
+      ]
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
-  "reopenCount": 0,
-  "reopenReason": null,
+  "reopenCount": 1,
+  "reopenReason": "Human U DECIDE authorized delivery recovery; preserve existing six sources, deliberately reset step attestations, reverify instead of reimplement, normal preflight-tracked wrapper landing then delivered-tree QA. Evidence/DoD3 limits preserved in comment-0a59e10570ff4aa589f61df7937e92b5. No release/hand-landing.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "MEDIUM",
@@ -145,15 +107,18 @@
       "author": "qa-01b7fe3f",
       "content": "⚠️ DoD 3 WAS NOT SATISFIED LITERALLY — READ THIS BEFORE TREATING THE ROW AS FULLY PASSED. Raised to its own comment at governor-608c8a78's direction, because in comment-23c70f6f the word PASS sits next to it and a skimming reader would carry the clause forward as met-as-written. It is not. The architect and the delivered-tree reviewer should decide on this consciously.\n\nTHE CLAUSE, verbatim: \"preview-approve-live.spec.ts's WALL B arm asserts the operator's Approve COMMITS a preview decision (not 'refuses'), while the WALL A arm (paired non-operator HUMAN -> 403 OPERATOR_PRINCIPAL_REQUIRED) is unchanged.\"\n\nWHAT WALL B ACTUALLY IS: a dispatch of `previewAggregateId(goalId)` as the operator. Making that arm assert COMMITS would require the daemon to accept an aggregate id where it expects a receipt id. That refusal — `PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY` — is correct behaviour, and it is precisely the refusal this bug was hitting. Complying literally would have deleted a valid negative control in order to satisfy a sentence.\n\nWHAT WAS DELIVERED INSTEAD:\n- WALL B is relabelled a NEGATIVE CONTROL and keeps asserting the refusal, with a new guard against its own vacuity: `expect(previewAggregateId(goalId), \"the negative control must not be the receipt id\").not.toBe(preview.receiptId)`. If those two ids ever coincided the arm would fail rather than pass while measuring nothing.\n- The COMMITS assertion exists, moved onto the value the button now actually sends: `decideLanePreview(lane, preview.receiptId, \"APPROVE\", …)` reaching `PREVIEW_DECISION_RECORDED`.\n- WALL A is untouched, as the clause requires.\n\nMY GRADE, and it is a judgement rather than a measurement: the refusal is CORRECT delivery. The clause's SUBSTANCE — the operator's Approve commits — is asserted; only the arm it was pinned to moved, and the worker stated the reason in the spec rather than quietly repointing it. A worker who refuses a literal instruction and shows the measurement behind the refusal is doing the job, and this is that case.\n\nBUT IT IS A JUDGEMENT I DO NOT OWN. The clause is the architect's. If architect-978f68c6 intended something WALL B specifically had to prove that the relocated assertion does not, this is a gap and not a pass, and my reading is the thing that is wrong. I would rather that be decided explicitly than inherited from a table cell.\n\nALSO STILL OPEN, unrelated to the above: DoD 5's `pnpm --filter @moe/control-room test` and the browser e2e leg have NEVER run against a delivered tree. The worker's 205 files / 2678 tests EXIT 0 is pre-delivery evidence; I ran no suite for this row at all. Both legs are the delivered-tree reviewer's to run.",
       "timestamp": "2026-09-09T16:55:35.299Z"
+    },
+    {
+      "id": "comment-0a59e10570ff4aa589f61df7937e92b5",
+      "author": "governor-608c8a78",
+      "content": "HUMAN-AUTHORIZED RECOVERY HANDOFF (latest 'U DECIDE'). This is delivery recovery, not a new implementation or code rejection. BLOCKED -> WORKING intentionally resets step attestations; existing sources MUST remain intact. Before reset the five steps were COMPLETED (16:14:41 through 16:26:04 UTC). Archived evidence pointers: step 1 original red comment-4c5e7bcd; step 5 gate/arm table comment-4b25ec8b; adversarial review comment-30d2e6af. Historical worker evidence: 2 files/11 tests then caller 6 tests; full control-room 205 files/2678 tests EXIT 0; root typecheck EXIT 0; e2e tsconfig EXIT 0; preview Playwright 1 passed EXIT 0; human-approver fence 19 passed and daemon registry/vocabulary diffs empty. These are historical claims, NOT freshly re-run governor gates or delivered-tree QA. QA's comment-23c70f6f is CODE REVIEW ONLY and ran no tests. Third caller preview-rejection-invariants.test.tsx belongs in the six-source scope. Reverify current bytes and required gates, do not regenerate or fake edits to make a commit.\n\nACCEPTANCE LIMITS SURVIVE RESET: DoD 3 is NON-LITERAL: WALL B remains the correct aggregate-id refusal; the receipt-id path COMMITTED. No single arm clicks the real button AND observes COMMITTED: unit proves receipt-id forwarding, browser lane proves that value commits, paired-browser operator fence unchanged. Architect/QA must explicitly grade the unchanged acceptance, not silently turn this into literal success. See comment-61d73470f09b40668d52f54c14858aca. Prior environment-variable-screen red was intermittent, not proven baseline-only; old no-peer-impact mutation assertions are not fresh proof.\n\nFresh postflight scope: six canonical sources already ASSERTED, zero exact peer intersections. declare_files is being added to retain assertion through reset, NOT because null declaredFiles meant measured-only. Sources must land by normal tracked wrapper; no hand-landing and no approval from shared dirty bytes. Confirm genuine wrapper preflight/claim and baseline before proceeding, then inspect recorded source commit and landing evidence. Backups/history bundle are preservation only, not delivery.",
+      "timestamp": "2026-09-09T19:39:05.779Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T14:58:57.281Z",
-  "updatedAt": "2026-09-09T18:08:16.010Z",
+  "updatedAt": "2026-09-09T19:41:26.728Z",
   "contextFetchedBy": [
-    "architect-978f68c6",
-    "worker-a11dcf70",
-    "qa-01b7fe3f",
     "governor-608c8a78"
   ],
   "metrics": {
@@ -162,13 +127,7 @@
     "plannedDistinctFileCount": 5,
     "executedStepCount": 5
   },
-  "stepsCompleted": [
-    "step-1",
-    "step-2",
-    "step-3",
-    "step-4",
-    "step-5"
-  ],
+  "stepsCompleted": [],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-09T16:12:03.059Z",
   "planningNotes": {
@@ -185,7 +144,6 @@
   },
   "planApprovedAt": "2026-09-09T16:12:05.540Z",
   "workStartedAt": "2026-09-09T16:12:42.385Z",
-  "reviewStartedAt": "2026-09-09T16:27:05.042Z",
   "verification": {
     "command": "pnpm --filter @moe/control-room test",
     "exitCode": 0,
@@ -201,8 +159,18 @@
     "tests/e2e/control-room/preview-approve-live.spec.ts"
   ],
   "completionSummary": "The preview Approve button now sends the RECEIPT id, so the operator's verdict commits instead of dying at 422.\n\nDoD 1 PRE-FIX RED (comment-4c5e7bcd, verbatim there): `- \"previewRef\": \"4f2b8c1d…be93\"` / `+ \"previewRef\": \"preview:goal-7\"`, two arms red. POST-FIX GREEN: same arms pass.\n\nThe fixture's two strings were IDENTICAL, which is the only reason this was ever green. They are now distinct and each carries its real shape: the offer targets `preview:goal-7` (previewAggregateId) and the assertion pins a 64-hex receipt id (HEX64).\n\nPORT: `submit(affordance, receiptId, decision, findings?)`, id second like goal-close-port and escalation-port; `previewRefOf` deleted, and the comment that stated the false premise as fact replaced. COMPOSITION: live-needs-you.tsx passes `facts.receiptId`, the value /preview/read answered. REJECT path, findings guard and both payload arities unchanged.\n\nNon-vacuity MEASURED on both halves: restoring the composition omission reds the DoD 2 arm (`expected \"vi.fn()\" to be called with arguments`, `Number of calls: 1`). Restored from an out-of-tree backup hashed before the edit, b5429ee2… before == after.\n\nDoD 4: `git diff` EMPTY on daemon-command-registry.ts and daemon-command-vocabulary.ts. NO daemon or fence file moved; all 12 fence test files unedited and daemon-command-registry-human-approver.test.ts green unedited (19 passed).\n\nGATES: control-room 205 files / 2678 tests EXIT 0; pnpm typecheck EXIT 0; e2e tsc EXIT 0; playwright preview-approve-live 1 passed EXIT 0, printing the daemon's own `disposition: \"COMMITTED\"`.\n\nDoD 3 NOT taken literally, and step-4 says why: asserting wall B COMMITS would mean the daemon accepting an aggregate id. Wall B stays a labelled NEGATIVE CONTROL with a new not.toBe guard so it cannot go vacuous; the browser's path arm commits for real. Wall A untouched.\n\nLIMIT: no single arm clicks the button AND sees COMMITTED — the operator-principal fence refuses the paired browser's click by design. Detail in comment",
-  "blockedReason": "DELIVERY-BLOCKED, NOT A CODE REJECTION. No defect, no failed DoD item. Parked to match architect-978f68c6's comment-56a00838: the next legitimate output is a NORMAL WRAPPER COMMIT of this row's source, then QA on the delivered tree. qa-01b7fe3f.\n\nQA CODE REVIEW IS DONE AND PASSING — full record in comment-23c70f6f, preserved by this park. The fix is correct and minimal: 100 insertions / 24 deletions over six files. `previewRefOf` deleted with the comment that stated its false premise as fact; `submit` takes `receiptId` second, matching goal-close-port and escalation-port; `live-needs-you.tsx` forwards `facts.receiptId`, the value /preview/read answered.\n\nDoD 1, 2, 4 PASS. DoD 4 verified BY ME: `git diff --stat` on daemon-command-registry.ts and daemon-command-vocabulary.ts is EMPTY. DoD 3 delivered NON-LITERALLY and the refusal is CORRECT — complying literally would mean asserting the daemon COMMITS on an aggregate id, deleting a valid negative control. WALL B stays a negative control with a new `not.toBe` guard against vacuity, WALL A unchanged, and the refused direction is still covered: the COMMITS assertion exists on the value the button now sends, reaching PREVIEW_DECISION_RECORDED.\n\nWHAT I DID NOT RUN: no test suite at all. DoD 5's control-room leg (205 files / 2678 tests EXIT 0) is the WORKER's evidence, not mine — full-suite-gate was held for a daemon baseline and a second heavy lane risked reddening it. Delivered-tree QA must run DoD 5 and the e2e leg itself.\n\nWHY BLOCKED: commits [], lastCommitOutcome null, landing {}, all six declared paths unstaged-modified. HEAD still carries the OLD code (previewRefOf, 3-arg submit); the fix exists only in the working tree. get_commit_scope asserts all six paths with ZERO peer overlap. No hand-landing, no hand-commit, no rejection reset.\n\nRESUME: a preflight-tracked seat commits the six paths, DELIVERY ONLY. set_task_status to WORKING RESETS STEPS here. Sequence AFTER task-2536051.\n\nDO NOT DISCARD THE WORKING TREE.",
+  "blockedReason": null,
   "blockedResourceId": null,
-  "blockedFromStatus": "REVIEW",
-  "blockedAt": "2026-09-09T16:52:22.021Z"
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "declaredFiles": [
+    "apps/control-room/src/v2/approvals/preview-port.test.ts",
+    "apps/control-room/src/v2/approvals/preview-port.ts",
+    "apps/control-room/src/v2/approvals/preview-rejection-invariants.test.tsx",
+    "apps/control-room/src/v2/approvals/live-needs-you.tsx",
+    "apps/control-room/src/v2/approvals/live-needs-you.test.tsx",
+    "tests/e2e/control-room/preview-approve-live.spec.ts"
+  ],
+  "priorBlockedReason": "DELIVERY-BLOCKED, NOT A CODE REJECTION. No defect, no failed DoD item. Parked to match architect-978f68c6's comment-56a00838: the next legitimate output is a NORMAL WRAPPER COMMIT of this row's source, then QA on the delivered tree. qa-01b7fe3f.\n\nQA CODE REVIEW IS DONE AND PASSING — full record in comment-23c70f6f, preserved by this park. The fix is correct and minimal: 100 insertions / 24 deletions over six files. `previewRefOf` deleted with the comment that stated its false premise as fact; `submit` takes `receiptId` second, matching goal-close-port and escalation-port; `live-needs-you.tsx` forwards `facts.receiptId`, the value /preview/read answered.\n\nDoD 1, 2, 4 PASS. DoD 4 verified BY ME: `git diff --stat` on daemon-command-registry.ts and daemon-command-vocabulary.ts is EMPTY. DoD 3 delivered NON-LITERALLY and the refusal is CORRECT — complying literally would mean asserting the daemon COMMITS on an aggregate id, deleting a valid negative control. WALL B stays a negative control with a new `not.toBe` guard against vacuity, WALL A unchanged, and the refused direction is still covered: the COMMITS assertion exists on the value the button now sends, reaching PREVIEW_DECISION_RECORDED.\n\nWHAT I DID NOT RUN: no test suite at all. DoD 5's control-room leg (205 files / 2678 tests EXIT 0) is the WORKER's evidence, not mine — full-suite-gate was held for a daemon baseline and a second heavy lane risked reddening it. Delivered-tree QA must run DoD 5 and the e2e leg itself.\n\nWHY BLOCKED: commits [], lastCommitOutcome null, landing {}, all six declared paths unstaged-modified. HEAD still carries the OLD code (previewRefOf, 3-arg submit); the fix exists only in the working tree. get_commit_scope asserts all six paths with ZERO peer overlap. No hand-landing, no hand-commit, no rejection reset.\n\nRESUME: a preflight-tracked seat commits the six paths, DELIVERY ONLY. set_task_status to WORKING RESETS STEPS here. Sequence AFTER task-2536051.\n\nDO NOT DISCARD THE WORKING TREE.",
+  "blockedOnTaskIds": null
 }

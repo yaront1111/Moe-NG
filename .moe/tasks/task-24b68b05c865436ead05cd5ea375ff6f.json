@@ -31,5 +31,27 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:05:30.360Z",
-  "updatedAt": "2026-09-09T16:05:30.360Z"
+  "updatedAt": "2026-09-09T19:38:09.489Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-09T19:36:44.792Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Nothing new since the prior handoff (same seat, minutes apart): producer task-b8ec9a63 is WORKING 0/5 unassigned and depends on task-b2b45508; task-a47301ee is DONE. No plan, no file touched.",
+      "whatRemains": "As in the prior handoff: plan once b8ec9a63 is DONE, reading its landed dossier gap vocabulary from get_context.epicSiblings. The policy half (evaluatePolicy consumption, REJECT precedence, unchanged fence) is plannable first.",
+      "pitfalls": "The generic PLANNING claim keeps returning this row because it is the only unassigned one; an architect who re-claims it before b8ec9a63 lands should release it again rather than plan against an unlanded dossier shape.",
+      "releasedAt": "2026-09-09T19:38:09.488Z",
+      "releasedBy": "architect-ed42e60a",
+      "reason": "Re-claimed by the generic claim seconds after my build-order release; nothing changed. Producer task-b8ec9a63 still WORKING 0/5 unassigned. See prior handoff note."
+    },
+    {
+      "whatIsDone": "Measured at claim 2026-09-09 ~17:10Z. task-a47301ee (risk class -> tier, carried opt-ins) is DONE 5/5 with QA evidence (comment-b48e5668: the policy slice digest rotation is genuine, one host-scoped slice, undeclared goal invents no tier). task-b8ec9a63 (criterion-bound dossier) is WORKING 0/5, UNASSIGNED, and gained dependsOn [task-b2b4550835f14b6ebd4a742e1f3b01cf] (criterion verification without a human ADMIN command) — the dossier gap vocabulary this row's DoD 3 must read does not exist at HEAD. No plan submitted; no file touched.",
+      "whatRemains": "Plan once b8ec9a63 is DONE: read its completionSummary/verification from get_context.epicSiblings for the new DossierGapCode (planned as CRITERION_NOT_VERIFIED_AT_SHA but the worker may deviate) and the reader seam it composes. The policy half is plannable independently of the dossier and can be drafted first: a production module under apps/daemon/src/release/ calling evaluatePolicy from @moe/core (assessTier at policy-evaluation.ts:150-166; HUMAN_ONLY_TIER for R2/R3, AUTO_APPROVAL_NOT_OPTED_IN for an unmatched tier; foldSlices returns the LAST slice's optIns), the human-REJECT-wins precedence, and the unchanged OPERATOR_PRINCIPAL_KINDS / MCP_EXCLUDED fence with a bidirectional roster arm. Verify the @moe/core dependency edge from apps/daemon per global rail 7 (package.json, pnpm-lock importer, compiled bare-specifier probe).",
+      "pitfalls": "Do NOT plan against my planned dossier shape from b8ec9a63's plan text — plan against its landed bytes. Do NOT widen the MCP allowlist or let a seat submit release.decide; the automatic decision is server-side under the operator principal acting on a recorded opt-in. release.decide is in OPERATOR_PRINCIPAL_KINDS and MCP_EXCLUDED is DERIVED from it, so one roster edit opens two fences. The sibling Gate 2 row (task-b8571cfe) depends only on a47301ee (DONE) and is plannable now; its precedence/provenance shape should be the template this row mirrors.",
+      "openQuestions": "Where the recorded automatic decision's provenance (action, tier, opt-in ref) lives — in the release dossier record, the decision ledger, or both — depends on what b8ec9a63 lands; decide after.",
+      "releasedAt": "2026-09-09T19:37:49.148Z",
+      "releasedBy": "architect-ed42e60a",
+      "reason": "Build-order handoff: producer task-b8ec9a63 (criterion-bound dossier) is WORKING 0/5, unassigned, and itself now depends on task-b2b45508. DoD 2 and 3 read gap codes from that row's LANDED vocabulary and the description forbids planning against the dossier shape before it lands. The other producer, task-a47301ee, is DONE."
+    }
+  ]
 }

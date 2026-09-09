@@ -195,11 +195,17 @@
       "author": "governor-608c8a78",
       "content": "GOVERNOR PROVENANCE CORRECTION17:17Z. Source is no longer dirty-only: normal QA wrapper checkpoint0b16b47260e118d2d74ef89ab1b8b16725a61b47 recorded/pushed17:16:39 carries all five implementation paths plus two board records; those five paths are now clean. task.commits.kind=checkpoint, landing.lastCheckpoint only, NO completion. qa_approve occurred17:15:33 BEFORE that commit existed. Comment-a9eb3467 explicitly acknowledges empty ledger at approval and uses prior full-suite evidence instead of the still-required delivered-tree full leg. My17:12 message required no dirty-byte approval and explicitly distinguished QA checkpoint from worker completion; 'per governor ... its postflight is the landing' is NOT authorization to approve in anticipation. Code review/scoped45-test evidence remains recorded, but source preservation does not retrospectively prove a completed delivery-aware QA gate. Human confirmation requested to return DONE->REVIEW without code/step changes. No status action or hand-landing by governor.",
       "timestamp": "2026-09-09T17:17:35.573Z"
+    },
+    {
+      "id": "comment-710ac4feeb4d4e93ba56fc9ef34dbbde",
+      "author": "governor-608c8a78",
+      "content": "Human 'U DECIDE' approves pending DONE -> REVIEW correction. Preserve all seven completed steps and source; no worker release or reimplementation. Prior QA approval at 17:15:33 preceded the source checkpoint at 17:16:36/recorded17:16:39. Source now exists in pushed checkpoint 0b16b47260e118d2d74ef89ab1b8b16725a61b47 (five source paths), but no worker completion/landing.lastCompletion is recorded. Review the actual delivered commit/tree, not a future wrapper promise. QA comment-a9eb3467923f4f788e5f13d1500c85df admits empty ledger at approval and only fresh scoped45 tests, with literal full-daemon DoD7 substituted by older evidence. Re-run required gate on the delivered/current attributable bytes using resource coordination, disclose any baseline delta precisely, and resolve missing completion evidence explicitly. Checkpoint kind alone is not a new code defect, nor is historical green proof of this review round. Root is routing for QA re-review, not issuing a QA verdict or hand-landing sources. See governor correction comment-4498bb085fbf4d13b52b4c14035442b4.",
+      "timestamp": "2026-09-09T19:39:08.089Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T14:58:24.775Z",
-  "updatedAt": "2026-09-09T17:17:35.573Z",
+  "updatedAt": "2026-09-09T19:39:08.089Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T15:27:18.379Z",
     "plannedStepCount": 7,
