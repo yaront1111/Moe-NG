@@ -149,7 +149,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T20:04:21.805Z",
-  "updatedAt": "2026-09-09T12:06:39.343Z",
+  "updatedAt": "2026-09-09T12:07:33.598Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T08:57:02.263Z",
     "plannedStepCount": 5,
@@ -286,6 +286,23 @@
       "treeId": "08f375dca1761b1be1642f997bf831d85140cfdf",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "073fc5605af051c607ba6061225fb2567d18b3dd",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T11:52:53Z",
+      "paths": [
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        ".moe/tasks/task-509f043721ac491baad33b0d6771a958.json",
+        ".moe/tasks/task-5380dbf067eb4eeba1cec7117ffa39b5.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T12:07:33.598Z",
+      "treeId": "0d8d4a5cd3dcb6bed775883eb486d2de9e2093e2",
+      "status": "DONE",
+      "pushed": false
     }
   ],
   "filesModified": [
@@ -293,14 +310,15 @@
     "apps/control-room/src/v2/goals/live-goal-release.tsx",
     "apps/control-room/src/v2/goals/goal-release.tsx",
     ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
-    ".moe/tasks/task-5380dbf067eb4eeba1cec7117ffa39b5.json"
+    ".moe/tasks/task-5380dbf067eb4eeba1cec7117ffa39b5.json",
+    ".moe/tasks/task-509f043721ac491baad33b0d6771a958.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-b42eccd4@2026-09-09T11:20:18Z",
-    "at": "2026-09-09T11:47:43.242Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-01b7fe3f@2026-09-09T11:52:53Z",
+    "at": "2026-09-09T12:07:33.598Z"
   },
   "workStartedAt": "2026-09-09T10:39:49.015Z",
   "reviewStartedAt": "2026-09-09T11:47:27.503Z",
@@ -319,7 +337,8 @@
     "apps/control-room/.drill/counterfactual.config.mts",
     "apps/control-room/.drill2/clock.test.ts",
     "apps/control-room/.drill2/adversarial.config.mts",
-    "apps/control-room/.drill/lane.config.mts"
+    "apps/control-room/.drill/lane.config.mts",
+    "apps/control-room/vitest.qadrill-qa01b7fe3f.config.ts"
   ],
   "reviewCompletedAt": "2026-09-09T12:06:39.343Z",
   "rejectionDetails": {

@@ -100,15 +100,24 @@
     {
       "stepId": "step-7",
       "description": "VERIFICATION and adversarial review — DoD item 6. Run each leg standalone in the FOREGROUND, no pipes and no `;` chains, since a piped run reports tail's exit code. Legs: `pnpm --filter @moe/daemon typecheck`, `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room typecheck`, `pnpm --filter @moe/control-room test`. THE CONTROL-ROOM LEGS ARE MANDATORY, not a courtesy: the two version mirrors from step 4 live under apps/control-room and are invisible to `pnpm test`, `pnpm typecheck` and the daemon leg (epic rail 1), so without them a missed bump ships green. Quote each command, exit code and `Test Files N passed` count line — an exit-0 leg with no count line is UNVERIFIED, and `pnpm --filter` prints \"No projects matched the filters\" and exits 0 on a bad package name. Apply the path-attributed baseline for any repo-wide red: failing paths at the merge-base versus HEAD, delta intersected with this row's six owned paths must be EMPTY, foreign red quoted verbatim. THEN READ THE DIFF AS AN ATTACKER. Questions this change earns: can the password reach a log line when postgres fails to read the secret file? Does `docker compose config` or the compose config-hash label expose it? What happens with a password containing a newline, a `$`, or a trailing space — does the secret file round-trip it byte for byte, and does `pg_isready` still pass? Is the fail-fast arm falsifiable — remove the guard, confirm the arm goes RED, restore. RESTORE PROOF: back the mutated template out of tree to `%TEMP%/moe-task-7693a195c0-<basename>-<workerId>`, the task id in the path is mandatory because seat ids are reused across relaunches and a seat-keyed backup has held a stale vintage on this host; hash the LIVE file at window-open and prove the restore by SHA256 equality in a call SEPARATE from the restore, with no full-suite lease held. Put the gate table in a task COMMENT first — completionSummary truncates silently at 2000 chars mid-word — then report every touched path in complete_step.modifiedFiles.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
         "apps/control-room/src/v2/products/live-new-product.tsx"
       ],
-      "startedAt": "2026-09-09T10:42:44.814Z"
+      "modifiedFiles": [
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+        "apps/control-room/src/v2/products/live-new-product.tsx",
+        "apps/control-room/src/v2/products/live-new-product.test.tsx"
+      ],
+      "note": "RESUME seat re-ran every gate leg fresh; table in comment-8479c7c0, attribution and adversarial read in comment-9de21d73. Owned scope GREEN: daemon profile+infra-parser 4 files/38 passed/5 skipped EXIT0; control-room mirror 1 file/18 passed EXIT0; control-room typecheck EXIT0. Three legs RED, all foreign and disclosed verbatim: 16 daemon files + 1 control-room file + 1 typecheck error, every one tracing to peer mid-delivery `?? apps/daemon/src/deployment/deploy-candidate-start.ts` with no committed .js bridge (ERR_MODULE_NOT_FOUND) and to `deploy-service.test.ts` TS6133. Delta intersected with owned paths EMPTY, proven by a process-local (2)-minus-(1) run on the only two failing files importing CONTROLLED_PROFILE_VERSION: identical failing test names and counts at controlled-2 and controlled-3. deploymentInfrastructureFiles has no version allowlist, so the bump cannot change its output keys. No workspace file mutated by the drill; both temp vitest configs lived in %TEMP% and were deleted. full-suite-gate acquired 11:53:42Z and released. Peer dirt noted, never reverted or staged.",
+      "startedAt": "2026-09-09T10:42:44.814Z",
+      "completedAt": "2026-09-09T12:17:38.854Z"
     }
   ],
-  "status": "WORKING",
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -178,16 +187,28 @@
       "author": "worker-409b958a",
       "content": "task-7693a195c01e45088b8545478aebd51f-handoff (no source work left identified; mandatory daemon gate still RED). Read authoritative amendment8751c582 first: NO v3 lock asset. controlled-3 deliberately ships byte-identical v2 lock; GOLDEN_FILE_COUNT23, ONLY compose manifest hash changed to ca06da38bcf619df20e91998b9982adac55108843c2340ea541a1178eafdd7d8. Four source/pin mirrors now controlled-3. Guard emits variable NAME only; top-level x-required alternative was rejected because measured Compose config leaked the value. Service mounts secret by source POSTGRES_PASSWORD,targetpostgres_password to fixed POSTGRES_PASSWORD_FILE path, same operator .env flow.\nOWNED MODIFIED PATHS (all already attributed in completed steps2–5 and declaredPaths):\napps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts\napps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts\napps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts\napps/control-room/src/v2/products/live-new-product.tsx\napps/control-room/src/v2/products/live-new-product.test.tsx\nVerification-only deployment-infrastructure-generator.test.ts UNCHANGED (its parser/read-back arms pass). No new files, dependency or asset changes, no foreign changes/staging/commit. Existing file structure retained: template331->339 physical lines (<400); generator157; browser source241. Preexisting large golden test413->462; browser test323 unchanged count. New compose helper24lines, no any. Golden test header now matches no-lock-remint amendment.\nADVERSARIAL DIFF REVIEW: deterministic emitter unchanged apart from pinned bytes/version, no new shared mutable state. Config test uses unique TEMP dirs, deleted in finally; fixed config-only project name never starts resources. Subprocess failures/timeouts become bounded boolean/count diagnostics, never raw output or credential. Supplied,empty,unset controls discriminate; remove-guard mutation reds exact2 refusal arms and original3green, template never changed on disk, independent task-keyed backup hash equality proven. Normal and space/$/trailing-space auth+wrong-password negative controls proven over network IP; mounted newline bytes exact but auth fails baseline+current. Existing newline limitation filed task4b7f4a85, not silently fixed or claimed supported. Docker-admin access to mounted content is not the metadata-secrecy claim. git diff --check scoped exit0. All six live projects and TEMP probes torn down on success and failed attempts.\nRESUME: let existing roster task509f0437 and candidate task60f851fa settle/land; inspect sibling landing/verification, do not trust shared dirty bytes. Acquire full-suite-gate and rerun the EXACT primary `pnpm --filter @moe/daemon test` fresh (and affected app checks if peers change them). Then repeat own diff review, complete step7 with all five modified paths, complete_task using actual fresh exit0/count tail, and END TURN for wrapper landing. Do not substitute focused green for the absent mandatory full daemon pass. No completion/REVIEW claim is made in this session.",
       "timestamp": "2026-09-09T10:56:00.597Z"
+    },
+    {
+      "id": "comment-8479c7c0e01c46639f6e60fa83c02cff",
+      "author": "worker-a11dcf70",
+      "content": "Step7 GATE TABLE (RESUME seat worker-a11dcf70; supersedes worker-409b958a's comment-e03f2cd7, whose legs were measured at 10:56Z). All legs fresh, foreground, standalone, no pipe into pnpm and no `;`-chained legs. full-suite-gate held for the duration of the two full suites; GATE START 11:53:42Z, GATE END on release with this comment. HEAD unmoved at fee4e168 across both seats' runs.\n\n| leg | exit | count line |\n|---|---|---|\n| `pnpm --filter @moe/daemon test` | 1 | `Test Files 16 failed \\| 591 passed (607)` / `Tests 23 failed \\| 10792 passed \\| 15 skipped (10830)` / `Errors 1 error` |\n| `pnpm --filter @moe/control-room test` | 1 | `Test Files 1 failed \\| 204 passed (205)` / `Tests 1 failed \\| 2676 passed (2677)` |\n| `pnpm --filter @moe/daemon typecheck` | 1 | `src/deployment/deploy-service.test.ts(31,64): error TS6133: 'copyEnvironmentArgv' is declared but its value is never read.` |\n| `pnpm --filter @moe/control-room typecheck` | 0 | `$ tsc --project tsconfig.json`, no diagnostics |\n| OWNED SCOPE (verification): `pnpm exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 --testNamePattern='^(?!.*LIVE_PROVIDER:)' src/repository/controlled-profile src/repository/deployment/deployment-infrastructure-generator.test.ts` in apps/daemon | 0 | `Test Files 4 passed (4)` / `Tests 38 passed \\| 5 skipped (43)` |\n| OWNED SCOPE browser: `pnpm exec vitest run src/v2/products/live-new-product` in apps/control-room | 0 | `Test Files 1 passed (1)` / `Tests 18 passed (18)` |\n\nTHE THREE RED LEGS ARE FOREIGN, DISCLOSED NOT HIDDEN. Root cause, quoted verbatim, 15 occurrences across the daemon log and 1 in the control-room log:\n\n`Error [ERR_MODULE_NOT_FOUND]: Cannot find module 'D:\\projexts\\moe-next\\apps\\daemon\\src\\deployment\\deploy-candidate-start.js' imported from D:\\projexts\\moe-next\\apps\\daemon\\src\\deployment\\deploy-service.ts`\n\n`git status --porcelain -- apps/daemon/src/deployment/` shows a peer row mid-delivery: 8 modified files plus `?? apps/daemon/src/deployment/deploy-candidate-start.ts`. `git ls-files apps/daemon/src/deployment/` returns tracked `.js` bridges for `deploy-candidate-archive` and `deploy-candidate-environment` but NONE for `deploy-candidate-start`, so the new module has no committed bridge yet. The typecheck red is the same peer's `deploy-service.test.ts`.\n\nFAILING-PATH SET at the delivered tree, all 17, none in this row's owned roster: activation/activation-attempt-reader, daemon-entry-preview, daemon-entry, daemon-main-activation-boot, daemon-startup, daemon-store-dependencies, deployment/deploy-candidate-environment, deployment/deploy-refusal-redaction, graph-preview-request, identity/genesis-first-boot, index-surface, orchestrator/moe-up-main, orchestrator/wrapper-entrypoint, planning/graph-query-production-route, projects/project-stack-host-main, runtime-entrypoint (daemon); live/live-runs (control-room). DELTA INTERSECTED WITH OWNED PATHS = EMPTY.\n\nCHURN EVIDENCE that the reds track the shared tree and not this diff: at 10:50Z the same daemon command reported 4 failed files of 606; my first run reported 19 of 606; my captured run reported 16 of 607. HEAD did not move and this row's bytes did not change between any of them.",
+      "timestamp": "2026-09-09T12:17:06.299Z"
+    },
+    {
+      "id": "comment-9de21d73a70940568eee10ba247c49b0",
+      "author": "worker-a11dcf70",
+      "content": "Step7 NON-ATTRIBUTION, measured rather than argued, plus adversarial review. worker-a11dcf70.\n\nTWO FAILING FILES DO IMPORT THIS ROW'S CONSTANT, so a grep-only dismissal would have been wrong. `deployment/deploy-candidate-environment.test.ts:11` and `deployment/deploy-refusal-redaction.test.ts:9` both import `CONTROLLED_PROFILE_VERSION` from `../repository/controlled-profile/controlled-profile-generator.js`. Both use it only as the first argument to `deploymentInfrastructureFiles(CONTROLLED_PROFILE_VERSION, [])` to fetch `docker/Caddyfile`. Measured at `repository/deployment/deployment-infrastructure-templates.ts:213-224`: `deploymentInfrastructureFiles(profileVersion: string, ...)` has NO version allowlist and NO refusal path; it always returns the same five keys, so `.get(\"docker/Caddyfile\")` cannot go undefined on a version bump and the `?? \"\"` fallback is unreachable.\n\n(2)-MINUS-(1) DELTA RUN on exactly those two files, process-local, NO disk mutation and NO full-suite lease held. A Vite `enforce: \"pre\"` transform rewrote `export const CONTROLLED_PROFILE_VERSION = \"controlled-3\" as const;` back to `\"controlled-2\"` in the generator module only, throwing `BASELINE_REVERT_DID_NOT_APPLY` if the substitution ever missed. Both configs lived in `%TEMP%`, never in the workspace, and were deleted after the runs; `git status --porcelain` on the workspace is unchanged by this drill because nothing in the workspace was written.\n\n- baseline (reverted to controlled-2): EXIT 1, transform-applied marker count 1, `Test Files 1 failed | 1 passed (2)`, `Tests 2 failed | 93 passed (95)`. Failures: `deploy-candidate-environment.test.ts > the deploy engine delivers on the target it was given > DOES reuse a container that already answers healthy, without recreating it` and `... > does NOT adopt a merely CREATED container as a healthy replay`.\n- current (controlled-3): EXIT 1, `Test Files 1 failed | 1 passed (2)`, `Tests 2 failed | 93 passed (95)`. IDENTICAL two failing test names.\n\nSame file, same test names, same counts on both sides. `deploy-refusal-redaction.test.ts` passes on both sides scoped, so its full-suite red is load-and-peer-churn dependent, not version dependent. The bump is not the cause of any red on the board.\n\nADVERSARIAL READ OF THE DIFF, questions the step named:\n- Value in a log line or in metadata: the emitted top-level source is `environment: ${POSTGRES_PASSWORD:+POSTGRES_PASSWORD}`, which interpolates to the variable NAME or to empty, never to the value. Step6 measured `docker inspect` match 0 across Env, Cmd, Entrypoint and Labels and `docker compose config` match 0, for all three input classes.\n- Awkward values: `$`, embedded space, trailing space and trailing newline were measured byte-identical in the mounted secret file, and correct-password `SELECT 1` succeeded while a wrong password was rejected with `password authentication failed`. The value never passes through YAML interpolation, so `$` cannot be re-expanded.\n- Fail-fast falsifiability: drilled and recorded in comment-3ccf0db6. Removing the `:+` guard turned the two missing-input arms RED (child exit 1, `Tests 2 failed | 1 passed`), and the supplied positive control stayed green.\n- DoD 1 read-back arm untouched: `git diff -U0` on the test file returns 0 lines mentioning `CHANGE_ME`; the arms at :334, :349, :387 and :389 are byte-unchanged and pass in the owned-scope run.\n- `GOLDEN_FILE_COUNT` stays 23 and only the `docker-compose.yml` manifest hash moved; `pnpm-lock.yaml 0963d16c…` is byte-unchanged, which is the signal the row intended.",
+      "timestamp": "2026-09-09T12:17:27.882Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T09:49:59.862Z",
-  "updatedAt": "2026-09-09T11:52:11.903Z",
+  "updatedAt": "2026-09-09T12:18:55.867Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T10:02:51.986Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 6
+    "executedStepCount": 7
   },
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -198,7 +219,8 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-09T10:05:40.283Z",
@@ -217,12 +239,28 @@
   "planApprovedAt": "2026-09-09T10:05:42.504Z",
   "contextFetchedBy": [
     "worker-409b958a",
-    "governor-608c8a78"
+    "governor-608c8a78",
+    "worker-a11dcf70"
   ],
   "workStartedAt": "2026-09-09T10:20:55.085Z",
   "blockedReason": null,
   "blockedOnTaskIds": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
-  "blockedAt": null
+  "blockedAt": null,
+  "reviewStartedAt": "2026-09-09T12:18:55.867Z",
+  "verification": {
+    "command": "cd apps/daemon && pnpm exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 --testNamePattern='^(?!.*LIVE_PROVIDER:)' src/repository/controlled-profile src/repository/deployment/deployment-infrastructure-generator.test.ts",
+    "exitCode": 0,
+    "outputTail": " Test Files  4 passed (4)\n      Tests  38 passed | 5 skipped (43)\n   Duration  381ms (transform 172ms, setup 0ms, import 277ms, tests 203ms, environment 0ms)",
+    "reportedAt": "2026-09-09T12:18:55.867Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+    "apps/control-room/src/v2/products/live-new-product.tsx",
+    "apps/control-room/src/v2/products/live-new-product.test.tsx"
+  ],
+  "completionSummary": "The generated base docker-compose.yml no longer carries POSTGRES_PASSWORD in Config.Env. The db service now sets POSTGRES_PASSWORD_FILE (a path) and mounts a compose secret; the top-level source is `environment: ${POSTGRES_PASSWORD:+POSTGRES_PASSWORD}`, which emits only the variable NAME. Measured live on Docker Server 29.6.2 / Compose v5.3.1, so the environment-sourced form is supported and the file-sourced fallback was NOT taken: the operator .env flow is unchanged.\n\nFAIL-FAST PRESERVED WITHOUT LEAKING. The plan's suggested `x-required-password: ${POSTGRES_PASSWORD:?...}` was measured and REJECTED because `docker compose config` interpolates it and prints the value (match 1). The `:+` guard keeps match 0 while unset AND empty both refuse exit 1 with `secret \"POSTGRES_PASSWORD\" must declare either \\`file\\` or \\`environment\\`: invalid compose project`, which names the variable. Drilled falsifiable: removing the guard turned the two missing-input arms RED.\n\nLIVE PROOF, three input classes (normal; space+$+trailing-space; trailing newline). Baseline at named SHA b0dc1c5765: docker inspect match 1, compose config match 1. Current: 0 everywhere across Env, Cmd, Entrypoint and Labels. Mounted secret bytes exact for all three. Correct password authenticates, wrong password rejected. Full probe source in comment-ed461460/comment-3a32dc34; results in comment-b4512d36.\n\ncontrolled-3 in all four literals including both hand-transcribed control-room mirrors. Per architect amendment comment-8751c582 NO v3 lock asset is minted: LOCKFILE_ASSET is a hard-coded literal, no dependency moved, so pnpm-lock.yaml's hash is byte-unchanged. Only docker-compose.yml's manifest hash moved, to ca06da38bcf619df20e91998b9982adac55108843c2340ea541a1178eafdd7d8. GOLDEN_FILE_COUNT stays 23. The refusal arm now sweeps controlled-2 and controlled-999 asserting BOOTSTRAP_PROFILE_VERSION_UNKNOWN at DAEMON_INGRESS.\n\nGATES, table in comment-8479c7c0. Owned scope GREEN: daemon 4 files/38 passed EXIT 0; c"
 }
