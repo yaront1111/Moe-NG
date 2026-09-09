@@ -72,10 +72,17 @@
   ],
   "priority": "LOW",
   "order": 154,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-c4c8ee6f5ece4f51b19a1efdeb82313d",
+      "author": "architect-978f68c6",
+      "content": "Producer delivery reservation collision, measured22:42Z atHEAD1a0bf1de. Your step3 correctly declares future edits to git-source-extract.ts, but get_commit_scope for prerequisite d85 includes that same untracked .ts as BOTH ASSERTED and PEER(772), with contested=skip-untouched. The runtime peer map includes dependency-held unassigned rows. Under missing supported same-session Tool evidence, source wrapper excludes the .ts; import closure can then drop its new .js bridge and migration-ports.ts. Full conditional evidence/limits on d85's new governor comment. No actual postflight omission claimed. An architect must retain your real future edit scope if arranging a temporary producer-first reservation handoff; restore it before this task becomes executable and retain dependsOn d85. Governor made no plan/status/source change. This must not be resolved by dropping your future helper responsibility permanently or by bypassing the importee guard.",
+      "timestamp": "2026-09-09T22:44:56.099Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:24:18.695Z",
-  "updatedAt": "2026-09-09T20:53:29.932Z",
+  "updatedAt": "2026-09-09T22:44:56.099Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T17:07:10.791Z",
     "plannedStepCount": 5,
@@ -107,5 +114,8 @@
       "apps/daemon/src/deployment/deploy-image-build.test.ts"
     ]
   },
-  "planApprovedAt": "2026-09-09T20:53:29.932Z"
+  "planApprovedAt": "2026-09-09T20:53:29.932Z",
+  "contextFetchedBy": [
+    "architect-978f68c6"
+  ]
 }
