@@ -201,7 +201,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T09:29:50.537Z",
-  "updatedAt": "2026-09-09T11:41:20.067Z",
+  "updatedAt": "2026-09-09T11:42:27.052Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T09:31:30.504Z",
     "plannedStepCount": 8,
@@ -287,7 +287,8 @@
     "tests/e2e/control-room/fake-docker-dependencies.ts",
     "tests/e2e/control-room/fake-docker-health-seed.test.ts",
     ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
-    ".moe/tasks/task-60f851fa3e1046fe98090d9dc6f30e0a.json"
+    ".moe/tasks/task-60f851fa3e1046fe98090d9dc6f30e0a.json",
+    ".moe/tasks/task-509f043721ac491baad33b0d6771a958.json"
   ],
   "completionSummary": "BUILDERS AND DOUBLES ONLY — nothing wired, no refusal removed, no consumer edited.\n\nTHE GO/NO-GO CAME BACK BETTER THAN THE PLAN FEARED. `docker cp - <c>:/` HONOURS the USTAR header's uid/gid WITHOUT `-a`/`--archive` (docker 29.6.2). `node:24.16.0-alpine` measures uid/gid 1000/1000. The counterfactual is what makes it a measurement: the identical archive at uid/gid 0 lands root-owned and the app user gets `Permission denied`. Neither escape (USER root, world-readable) was used. Evidence + probe source: comment-501efe2255c6405f936b3731cc96ca65.\n\nDELIVERED (10 paths):\n- deploy-docker-double.ts (253) + .js — the double moved out, 163 of 166 lines byte-identical by `grep -Fxq` per origin line; the 3 changed are the factory signature and its two argv call sites. `createDockerDoubleWithArgv` RECEIVES the argv builders, deploy-ports binds them once, so ZERO of the twenty importers were edited. New verbs create/cp/start, new `CREATED` state, new `copies` recording cp payloads off stdin.\n- deploy-candidate-archive.ts (164) + .js + .test.ts (13 arms) — USTAR encoder, verified against REAL bsdtar AND real docker (create + cp - + start, asserting `-rw------- 1 1000 1000` and the payload read back as the app user). Container removed in a `finally`; zero leaks.\n- deploy-candidate-environment.ts 217->250 — createCandidateArgv / copyEnvironmentArgv / startCandidateArgv. `runCandidateArgv` BYTE-IDENTICAL, proved by `diff` against `git show HEAD:` (33 insertions, 0 deletions).\n- fake-docker-dependencies.ts 120->151 + new fake-docker-health-seed.test.ts.\n\nONE DELIBERATE DEPARTURE from step 6's literal wording: `createCandidateArgv` carries NO `--mount`. A mount source resolves on the DOCKER host, which is the exact defect this row exists to make fixable; keeping it would have reproduced it. Its 4th param is `readonly string[] | null`, not `CandidateEnvironmentMount` — a type that cannot express a host path stops one reappearing.\n\nDoD 5 MEASURED: `git diff -- deploy-service.ts` EMPTY; D",
   "commits": [
@@ -359,14 +360,30 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "c97349971406c7d8bb9c4290be1a299ec05192b2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T11:23:15Z",
+      "paths": [
+        ".moe/tasks/task-509f043721ac491baad33b0d6771a958.json",
+        ".moe/tasks/task-60f851fa3e1046fe98090d9dc6f30e0a.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T11:42:27.052Z",
+      "treeId": "aecdf4c82da924e9b758613cefd67e51ea321011",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-a11dcf70@2026-09-09T10:18:42Z",
-    "at": "2026-09-09T11:23:23.749Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-01b7fe3f@2026-09-09T11:23:15Z",
+    "at": "2026-09-09T11:42:27.052Z"
   },
   "touchedFiles": [
     "apps/daemon/src/deployment/deploy-candidate-archive.ts",
