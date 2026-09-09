@@ -43,6 +43,11 @@ const SERVER = "server.mjs";
  * never ambiguous. The image installs nothing: this application declares no dependencies.
  */
 const MANIFEST = `${JSON.stringify({
+  // THE MIGRATION TOOL IS THE SCAFFOLD'S OWN CHOICE, restored rather than invented: the
+  // controlled profile declares `node-pg-migrate` 9.0.0 (controlled-profile-package-templates.ts)
+  // and this manifest REPLACES the scaffold's, so without these two lines the product's own
+  // deploy-time migration refuses MIGRATION_TOOL_MISSING on a tree that never declared a tool.
+  devDependencies: { "node-pg-migrate": "9.0.0", pg: "8.16.3" },
   name: "standup", private: true, scripts: { start: "node server.mjs" }, type: "module",
 }, null, 2)}
 `;

@@ -14,11 +14,15 @@ import {
 import { approvePlanInBrowser, askClarification, driveGate1InBrowser, proposeContract }
   from "./live-proof-gate1.js";
 import { installStandingAuthority, landLiveProofNodes } from "./live-proof-landing.js";
-import { prepareLiveProductWorkspace } from "./live-proof-workspace.js";
+import { MIGRATION_FILE, prepareLiveProductWorkspace } from "./live-proof-workspace.js";
 import { LIVE_ENVIRONMENT, cleanupDeployment } from "./live-proof-deploy.js";
 import { DEPLOY_BUILD_CONTEXT_ENV_KEY } from "../../../apps/daemon/src/deployment/deploy-command.js";
 import { deployLiveProof, previewLiveProof } from "./live-proof-operate.js";
-import { removeMigrationDatabase } from "./live-proof-migration.js";
+import {
+  installProductDependencies, probeHealthUrl, startPreviewEnvironment, stopPreviewEnvironment,
+} from "./live-proof-environment.js";
+import type { LivePreviewEnvironment } from "./live-proof-environment.js";
+import { reconcileLandingInBrowser } from "./live-proof-recover.js";
 import { readRecoveryEvidence } from "./live-proof-recovery.js";
 import { verifyLiveProofCriteria } from "./live-proof-criteria.js";
 import { LIVE_RELEASE, releaseLiveProof } from "./live-proof-release.js";
@@ -165,6 +169,7 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
   const containerPrefix = `moe-liveproof-${String(Date.now())}`;
   let deployedContainer = "";
   let deployedImageSha = "";
+  let environment: LivePreviewEnvironment | null = null;
 
   const outcome = await withDaemonBackedControlRoom({
     approval: "HUMAN", liveCredentials: "ATTACHED", nodeWorkspace: productDir,
@@ -295,13 +300,39 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
             lane, productDir, PLAN_NODES.map((node) => node.nodeKey), CONCURRENT_NODES,
             Object.fromEntries(PLAN_NODES.map((node) => [node.nodeKey, node.objective])),
             // ---- DoD 2: THE FORCED CRASH, ARMED INSIDE THIS REAL DRIVE. ----
-            // `before-intent` is the point at which RESUMPTION is the product's designed
-            // answer, and choosing it is a measurement rather than a preference:
-            // `repositoryLandingMayRetry` admits a retry only when the attempt journal reads
-            // NO_EFFECT, so `after-intent` (STARTED) and `after-commit` both resolve to
-            // REPOSITORY_RECOVERY_REQUIRED by design -- one outcome, never duplicated, but
-            // deliberately NOT auto-resumed. Those two points are proved in the fault lane.
-            { point: "before-intent" });
+            // `after-completion` IS MID-WRITE and the choice is a MEASUREMENT, not a taste.
+            // A landing write is a sequence, and this point sits between the durable completion
+            // the store journaled and the landing receipt that records the outcome -- the last
+            // window in which the ledger can still end up with none or two.
+            //
+            // THE OTHER THREE POINTS WERE MEASURED AND REJECTED, each for a reason in the
+            // product's own source rather than in this file's convenience:
+            //   `before-intent`  nothing durable exists, so `readRecoveryNoEffectEvidence`
+            //                    answers REPOSITORY_RECOVERY_EVIDENCE_MISSING and the shipped
+            //                    recovery cannot release the reservation at all. DRIVEN LIVE
+            //                    2026-09-09 20:55:00Z: the restarted wrapper produced no
+            //                    landing in twenty minutes.
+            //   `after-intent`   an attempt is STARTED with no commit; the journal cannot prove
+            //                    what Git did.
+            //   `after-commit`   Git committed and NOTHING journaled it, so
+            //                    `repository-recovery-evidence.ts:74` answers
+            //                    REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN by design and the
+            //                    checkout stays held. Fail-closed, and recorded as such.
+            // All three are pinned in the fault lane; only this one has a recovery to prove.
+            { point: "after-completion" },
+            // AND THE RECOVERY IS A HUMAN'S CLICK IN THE BROWSER, because the product allows
+            // nothing else: `repository.recover` refuses every agent transport and demands a
+            // durable human with `project.admin`.
+            async (crash) => {
+              // THE DAEMON'S OWN RECOVERY VIEW FIRST, so a card that offers nothing is read with
+              // the code the daemon gave rather than as an unexplained absence.
+              const view = await askDaemon(lane, "/repository/recovery/read", {});
+              record("recovery-view", { status: view.status, tail: view.text.slice(0, 1200) });
+              const reading = await reconcileLandingInBrowser(page, crash.nodeRef,
+                `Daemon killed mid-write by ${crash.knob} at ${crash.at}; reconciling the landing the store already completed.`);
+              record("crash-recovery-click", reading);
+              return reading.confirmed ? null : reading.refusal ?? "RECOVERY_NOT_CONFIRMED";
+            });
           record("node-landings", landed.ok
             ? { crash: landed.crash, landings: landed.landings, seats: landed.seats,
               staffing: landed.staffing }
@@ -327,23 +358,37 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
             expect(landed.crash, "the armed knob must have fired").not.toBeNull();
             const crash = landed.crash;
             if (crash !== null) {
+              // THE LANDING LEDGER'S OWN AGGREGATE, not the node's. MEASURED 2026-09-09: a
+              // node's ref carries `review.submit`, the verifier receipt and
+              // `integration.accept_output` and NO landing decision at all -- landing outcomes
+              // are committed under `landing:<nodeRef>` (`landingAggregateId`,
+              // landing-receipt-contracts.ts:137). Counting on the node ref answers zero for
+              // every node ever landed, which is a query that cannot fail for the right reason.
               const others = landed.landings
-                .filter((row) => row.nodeKey !== crash.nodeKey).map((row) => row.nodeRef);
+                .filter((row) => row.nodeKey !== crash.nodeKey).map((row) => `landing:${row.nodeRef}`);
               const recovery = readRecoveryEvidence({
-                crashAt: crash.at, crashedNodeRef: crash.nodeRef,
-                landingKindSuffix: "landing", otherNodeRefs: others,
+                crashAt: crash.at, crashedNodeRef: `landing:${crash.nodeRef}`,
+                landingKindSuffix: "landing_receipt", otherNodeRefs: others,
                 storePath: scratch.storePath,
               });
               record("crash-and-recovery", { crash, recovery });
               // ONE OUTCOME. Counted from rows, because a DUPLICATE landing looks fine too.
+              // The one that exists was written by the BROWSER'S reconcile, since the pass that
+              // would have written it was killed after the completion and before the receipt.
               expect(recovery.crashedNodeLandings,
                 `landing outcomes for ${crash.nodeRef}: ${JSON.stringify(recovery.crashedNode)}`)
                 .toBe(1);
-              // AND THE GOAL RESUMES: the OTHER nodes' refs carry decisions committed strictly
-              // after the instant the dying process stamped, so resumption is anchored to the
-              // crash rather than to when this assertion happened to run.
+              // AND NOTHING IN THE LANDING JOURNAL IS DOUBLED EITHER: every intent, attempt and
+              // completion aggregate carries exactly one decision. A landing that ran twice
+              // shows up here as a two, whichever half of the write it repeated.
+              expect(recovery.ledger.filter((row) => row.decisions !== 1),
+                `doubled landing decisions: ${JSON.stringify(recovery.ledger)}`).toEqual([]);
+              // AND THE GOAL RESUMES: the OTHER nodes' LANDING aggregates carry decisions
+              // committed strictly after the instant the dying process stamped -- so resumption
+              // is anchored to the crash, and it is resumption all the way to a LANDING rather
+              // than merely to some activity.
               expect(recovery.resumedNodes.length,
-                `no decision on ${others.join(",")} after ${crash.at}`).toBeGreaterThan(0);
+                `no landing decision on ${others.join(",")} after ${crash.at}`).toBeGreaterThan(0);
               expect(others.length, "the goal must carry more than the interrupted node")
                 .toBeGreaterThan(0);
             }
@@ -408,9 +453,27 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
               // migration. AFTER the release because `deployment.deploy`'s prerequisite table
               // reads a COMMITTED `repository.publish` DECISION, which Gate 3 is what commits.
               const deployedSha = String(released.receipt?.["sha"] ?? releasedSha);
+              // THE ENVIRONMENT COMES UP FIRST, AND THE OPERATOR BRINGS IT UP. A deploy is an
+              // UPDATE to a running topology: the engine discovers the proxy, reads its
+              // Caddyfile and flips the upstream to the candidate. MEASURED 2026-09-09 without
+              // one: DEPLOY_BUILD_FAILED / DEPLOY_PROXY_MISSING_OR_AMBIGUOUS.
+              environment = startPreviewEnvironment({
+                databasePort: 35_000 + (Date.now() % 900), hostPort: 34_000 + (Date.now() % 900),
+                prefix: containerPrefix, workspace: productDir,
+              });
+              record("preview-environment", environment);
+              expect(environment.refusal, environment.refusal ?? "").toBeNull();
+              // THE PRODUCT'S MIGRATION TOOL IS INSTALLED INTO THE PRODUCT, and this is an
+              // OPERATOR STEP, disclosed as one: `node-pg-migrate` is declared in the product's
+              // manifest at the deployed sha, but no Moe command installs a product's
+              // dependencies, and `migration-ports.ts` resolves the tool from the workspace.
+              const installed = installProductDependencies(productDir);
+              record("product-install", installed);
+              expect(installed.status, installed.tail).toBe(0);
               const operated = await deployLiveProof({
-                containerPrefix: containerPrefix, goalId, lane, sha: deployedSha,
-                storePath: scratch.storePath, workspace: productDir,
+                database: environment.database, databaseUrl: environment.databaseUrl, goalId, lane,
+                network: environment.network, sha: deployedSha,
+                storePath: scratch.storePath, url: environment.url,
               });
               deployedContainer = operated.deploy.receipt?.containerName ?? "";
               deployedImageSha = deployedSha;
@@ -440,14 +503,28 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
                 JSON.stringify(operated.deploy.health)).toBe("healthy");
               expect(operated.deploy.health?.probeStatus,
                 operated.deploy.health?.probeOutput ?? "").toBe(0);
+              // AND THE RECEIPT'S URL IS ASKED, FROM THE HOST, THROUGH THE PROXY THE DEPLOY
+              // FLIPPED. This is the only probe that crosses every hop the receipt claims; the
+              // two above are docker quoting itself and the container quoting itself.
+              const served = await probeHealthUrl(
+                String(operated.deploy.receipt?.url ?? ""), "/health");
+              record("health-url", served);
+              expect(served.status, served.body).toBe(200);
+              expect(served.body).toContain("\"status\":\"UP\"");
 
-              // THE MIGRATION RECEIPT, written by the SHIPPED writer against a real database.
+              // THE MIGRATION RECEIPT, WRITTEN BY THE PRODUCT ITSELF during the deploy and read
+              // back here, then cross-checked against what PostgreSQL says happened.
               expect(operated.migration?.ok, JSON.stringify(operated.migration?.log ?? []))
                 .toBe(true);
               expect(operated.migration?.receipt?.outcome).toBe("APPLIED");
               expect(operated.migration?.receipt?.environment).toBe(LIVE_ENVIRONMENT);
               expect(operated.migration?.receipt?.backupRef ?? "")
                 .toMatch(/^.+\.sql@sha256:[a-f0-9]{64}$/u);
+              // AND IT NAMES THE FILE THE PRODUCT COMMITTED, so a receipt that applied some
+              // OTHER tree's migrations cannot pass. `MIGRATION_FILE` is the path the acceptance
+              // baseline committed, and the receipt lists basenames.
+              expect(operated.migration?.receipt?.applied ?? [])
+                .toContain(MIGRATION_FILE.slice("migrations/".length));
               // ASKED OF THE DATABASE, not of the DDL this drive sent: the only authority on
               // what a database calls its constraint is the database.
               expect(operated.migration?.constraintFromDatabase)
@@ -517,8 +594,8 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
 
   // EVERYTHING THIS DRIVE CREATED ON THE DOCKER HOST, REMOVED BY NAME AND TAG. Never by
   // wildcard: this host runs other lanes, and a pattern sweep would take their containers too.
-  removeMigrationDatabase(`${containerPrefix}-db`);
   cleanupDeployment(deployedContainer, deployedImageSha);
+  stopPreviewEnvironment(environment);
   if (priorBuildContext === undefined) delete process.env[DEPLOY_BUILD_CONTEXT_ENV_KEY];
   else process.env[DEPLOY_BUILD_CONTEXT_ENV_KEY] = priorBuildContext;
 

@@ -190,15 +190,28 @@ clicks of the release card — opening
 `65192c19a8cf5197462647926c130a0c12c2c1ad`, its body the dossier with a row for
 every criterion. The drive is `tests/e2e/control-room/live-proof-prd.spec.ts`;
 the pull-request leg is opt-in on `MOE_LIVE_RELEASE_PR=1` and records its own
-absence otherwise. THE CRASH BAR IS SEPARATELY MET: `tests/fault/landing-crash`
-kills a real daemon mid-landing-write and proves from the store alone that the
-landing has exactly one outcome. TWO LIMITS STAND. Nodes of one goal are
+absence otherwise. THE CRASH BAR IS NOW MET INSIDE THAT SAME DRIVE, not only in a
+unit lane (re-measured 2026-09-09, superseding the line that pointed only at
+`tests/fault/landing-crash`). The development-only knob `MOE_FAULT_INJECT_LANDING`
+SIGKILLs the process performing the landing in the window between the durable
+completion and the receipt that records it; after the restart a HUMAN takes the
+recovery BY CLICK on the shipped repository-recovery card, because
+`repository.recover` requires `project.admin` with a durable human principal and
+refuses every agent transport. The store then shows exactly ONE landing outcome
+for that node, no doubled row anywhere in the landing journal, and both remaining
+nodes landing after the crash instant — the goal resumes and runs on to its
+criteria, its preview and its release. Recovery is provable from durable records
+alone, which is the proposed Stage 1 bar, with one honest limit: only a crash
+AFTER the completion is reconcilable; the three earlier points leave the journal
+unable to prove what Git did and the checkout stays contained. THREE LIMITS
+STAND. Nodes of one goal are
 delivered ONE AT A TIME — the delivery coordinator admits a single checkout owner
 per repository root and answers `REPOSITORY_EXECUTION_BUSY` to the second, so
 "staffed in parallel" means claimed and attempted together, never two commits
-being made at once. And the browser ships no screen that installs the standing
+being made at once. The browser ships no screen that installs the standing
 verifier authority (`moe-verifier-policy/1`, `moe-reviewer-calibration/1`), so
-that one step is the operator's.
+that one step is the operator's. And only a crash after the landing COMPLETION is
+recoverable; the three earlier points contain the checkout and offer no button.
 
 **Stage 2 — PRD → deployed MVP:** repository bootstrapping (the unseeded local
 browser path creates one commit, binds and catalogs the repository, and creates
@@ -207,6 +220,28 @@ unproven); infrastructure
 generation; preview and production deployment; secrets and environment
 management; database migrations; monitoring, backup, and rollback; release
 evidence.
+*Status, measured 2026-09-09:* FOUR OF THESE RAN ON THE FRESH PRODUCT, in the
+same drive that closed Stage 1, past Gate 3 and against real Docker. PREVIEW
+DEPLOYMENT: `deployment.deploy` built the released sha with `git archive` into
+`docker build`, started a candidate, waited for docker's own health verdict and
+flipped a real Caddy proxy to it; the receipt's own URL answers
+`{"product":true,"status":"UP"}` from the host. SECRETS AND ENVIRONMENT:
+`environment.set_variable` bound two variables that come back only as sha256
+fingerprints — the value never returns on any read. DATABASE MIGRATIONS: the
+deploy ran the PRODUCT'S OWN migration against a real PostgreSQL 17, keyed by the
+deploy decision, with a pre-migration `pg_dump` backup referenced by path and
+sha256, and the schema was then read back out of `pg_constraint` and the tool's
+own ledger rather than trusted from the DDL. RELEASE EVIDENCE: the dossier is the
+pull request's body, 8/8 criteria at the released sha.
+THREE THINGS IN THIS STAGE ARE NOT YET THE PRODUCT'S and the drive says so
+rather than implying otherwise. INFRASTRUCTURE GENERATION EXISTS BUT IS DARK:
+`deployment-infrastructure-templates.ts` emits the Dockerfile, the compose
+override, the Caddyfile and the healthcheck, and
+`planDeploymentInfrastructure` has ZERO callers — no command kind asks a
+repository for its infrastructure. Standing the environment UP is therefore the
+operator's `docker compose`, and installing the product's own dependencies is the
+operator's too. PRODUCTION deployment, monitoring, backup and rollback are
+untouched by this run: only the `preview` environment was deployed.
 
 **Stage 3 — PRD → polished product:** competitive research; multiple UX
 concepts before implementation; visual-quality evaluation; accessibility and

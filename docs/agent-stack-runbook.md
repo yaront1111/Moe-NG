@@ -1203,6 +1203,14 @@ operator has to take them:
 | Install `moe-verifier-policy/1` and `moe-reviewer-calibration/1` | No screen installs them; see *Verifier authority* above | wrapper prints "standing authority incomplete"; no node is ever accepted |
 | Approve each criterion CHECK | Needs a durable HUMAN principal, and no criterion-approval surface ships | `CRITERION_CHECK_HUMAN_REQUIRED @ CRITERION_EVIDENCE` on the operator wire |
 | Preview and deploy | Both run the product on the daemon's own host and are operator-only by design | `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION` |
+| Stand the preview environment UP (`docker compose`) | A deploy is an UPDATE: `deploy-service.ts` discovers a container labelled `com.docker.compose.service=proxy` on the target network, reads its Caddyfile and flips the upstream to the candidate. No command kind brings an environment up | `DEPLOY_BUILD_FAILED / DEPLOY_PROXY_MISSING_OR_AMBIGUOUS`, and `DEPLOY_PROXY_INCUMBENT_MISSING` when the config's upstream resolves to no container |
+| Install the product's own dependencies | `deployment.deploy` runs the PRODUCT's migration, and `migration-ports.ts` resolves `node-pg-migrate` from the product workspace | the deploy refuses with the migration's own `MIGRATION_TOOL_MISSING` in its detail |
+
+The proxy's Caddyfile must match the generated one byte for byte after the
+upstream is normalised, or the deploy refuses `DEPLOY_PROXY_CONFIG_UNSUPPORTED`:
+only the generated topology is the engine's to flip. `deployment.deploy` also
+requires a COMMITTED `repository.publish` decision, so a deploy can only follow
+Gate 3.
 
 `policy.validate` IS now driven by the browser's activation chain (added
 2026-09-09). Without it `approval.decide_intent` refuses
@@ -1210,10 +1218,42 @@ operator has to take them:
 derives its policy ref from the newest replay-verified `PolicyEvaluated` and
 nothing else writes that row.
 
-Two more kinds the operator drives directly: `repository.recover` (ADMIN,
-operator-only) re-binds a store's recovery genesis, and `qualification.replan`
-opens a successor run when a review has exhausted its attempts (see *Replan*).
-`session.renew` extends a minted session without re-pairing.
+`repository.recover` IS A HUMAN'S KIND, NOT AN OPERATOR-ONLY ONE, and the
+distinction matters after a crash. It requires `project.admin` AND a durable
+HUMAN principal, and it REFUSES the MCP, wrapper and verifier transports
+(`repository-recovery-command.ts:20-25`) — so no agent seat can take it and the
+paired browser ADMIN can. It releases a wedged repository reservation with a
+proof: `ABORT_UNEXECUTED` for a reservation that never executed, or
+`RECONCILE_LANDED` for one whose durable evidence proves Git already committed.
+Measured 2026-09-09 on a real crashed landing: the Health screen's **Repository
+recovery** card offered `RECONCILE_LANDED` and refused `ABORT_UNEXECUTED` with
+`REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN`, one click reconciled the landing, and
+the reservation left the view. `qualification.replan` opens a successor run when
+a review has exhausted its attempts (see *Replan*). `session.renew` extends a
+minted session without re-pairing.
+
+### The landing crash knob (DEVELOPMENT ONLY)
+
+`apps/daemon/src/orchestrator/landing-fault-injection.ts` kills the process
+performing a landing write at a NAMED point, which is the only way to reach the
+window between the Git effect and the completion that records it. It is off in
+every normal run and refuses with a stable code:
+
+| Environment | Effect |
+| --- | --- |
+| nothing set | `FAULT_INJECTION_DISARMED` |
+| `MOE_FAULT_INJECT_LANDING=<point>` without `MOE_DEVELOPMENT_ONLY=1` | `FAULT_INJECTION_NOT_DEVELOPMENT` (the development fence answers FIRST, so an unarmed caller learns nothing about which names exist) |
+| both set, unknown point | `FAULT_INJECTION_POINT_UNKNOWN` |
+| both set, known point | SIGKILL at that point, after a synchronous note on fd 2 |
+
+The points are `before-intent`, `after-intent`, `after-commit` and
+`after-completion`. ONLY `after-completion` HAS A RECOVERY: the other three leave
+the journal unable to prove what Git did, so the reservation stays contained —
+`before-intent` reads `REPOSITORY_RECOVERY_EVIDENCE_MISSING` and `after-commit`
+reads `REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN`. That is fail-closed by design;
+an operator whose daemon died at one of those points has a held checkout and no
+button, which is the honest state of the product today. `MOE_DEVELOPMENT_ONLY=1`
+must never be set on a daemon that matters.
 
 ### Nodes of one goal deliver ONE AT A TIME
 

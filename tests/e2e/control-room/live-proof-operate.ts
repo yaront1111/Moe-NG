@@ -25,14 +25,22 @@ import {
 } from "./live-proof-deploy.js";
 import type { EnvironmentFingerprint, LiveDeployReceipt, LiveHealthProbe } from "./live-proof-deploy.js";
 import { IMAGE_HEALTHCHECK_PATH } from "./live-proof-image.js";
-import { applyLiveMigration } from "./live-proof-migration.js";
+import { readProductMigration } from "./live-proof-migration.js";
 import type { LiveMigrationOutcome } from "./live-proof-migration.js";
 
-/** The variables the PRD's app needs. Values are inert: the daemon never returns them. */
-const VARIABLES: readonly { readonly name: string; readonly value: string }[] = Object.freeze([
-  { name: "DATABASE_URL", value: "postgres://postgres@standup-db:5432/standup" },
-  { name: "SESSION_SECRET", value: "live-proof-session-secret-not-in-any-record" },
-]);
+/**
+ * The variables the PRD's app needs. Values are inert: the daemon never returns them.
+ *
+ * DATABASE_URL IS LOAD-BEARING, not decoration. `resolveDeployMigrationContext` reads it out of
+ * the environment slice and hands it to the product's own migration, so a value nothing listens
+ * on refuses the DEPLOY. It is supplied by the caller because only the caller knows which
+ * database it started.
+ */
+const variables = (databaseUrl: string): readonly { readonly name: string; readonly value: string }[] =>
+  Object.freeze([
+    { name: "DATABASE_URL", value: databaseUrl },
+    { name: "SESSION_SECRET", value: "live-proof-session-secret-not-in-any-record" },
+  ]);
 
 export interface LivePreviewLeg {
   readonly actor: "CONFIGURED_OPERATOR";
@@ -93,26 +101,33 @@ export async function previewLiveProof(
 /**
  * Runs the post-Gate-3 DoD 1 legs against the released sha and answers what each one produced.
  *
- * `containerPrefix` names the database container so a caller can remove exactly what this pass
- * created; nothing here removes anything by pattern.
+ * `database` names the postgres container the caller's environment brought up; this pass starts
+ * nothing of its own and therefore removes nothing.
  */
 export async function deployLiveProof(options: {
-  readonly containerPrefix: string;
+  /** The postgres container the environment brought up, asked directly for what the DDL did. */
+  readonly database: string;
+  readonly databaseUrl: string;
   readonly goalId: string;
   readonly lane: DaemonLane;
+  /** The docker network the running environment is on; the candidate joins THAT one. */
+  readonly network: string;
   readonly sha: string;
   readonly storePath: string;
-  readonly workspace: string;
+  /** Where the environment's proxy answers from the host. It reaches the deploy receipt. */
+  readonly url: string;
 }): Promise<LiveOperateOutcome> {
   const { goalId, lane, sha } = options;
   const written: Record<string, unknown>[] = [];
-  for (const variable of VARIABLES) {
+  for (const variable of variables(options.databaseUrl)) {
     written.push(await setEnvironmentVariable(lane, LIVE_ENVIRONMENT, variable.name, variable.value));
   }
   const fingerprints = await readEnvironmentFingerprints(lane, LIVE_ENVIRONMENT);
 
-  const target = await bindDeployTarget(lane, LIVE_ENVIRONMENT,
-    `standup-${LIVE_ENVIRONMENT}`, `http://127.0.0.1:3000`);
+  // THE NETWORK IS THE RUNNING ENVIRONMENT'S, MEASURED FROM DOCKER, not a name this file
+  // invents: `createProxyPort` discovers the proxy with `--filter network=<target.network>`, so a
+  // target bound to a network nothing runs on refuses DEPLOY_PROXY_MISSING_OR_AMBIGUOUS.
+  const target = await bindDeployTarget(lane, LIVE_ENVIRONMENT, options.network, options.url);
   const deployed = await deployEnvironment(lane, goalId, LIVE_ENVIRONMENT, sha);
   const health = deployed.receipt === null || deployed.receipt.containerName === ""
     ? null
@@ -122,14 +137,11 @@ export async function deployLiveProof(options: {
   // id this file invented would decode, persist and resolve to nothing.
   const migration = deployed.receipt === null || deployed.receipt.decisionId === ""
     ? null
-    : applyLiveMigration({
-      containerName: `${options.containerPrefix}-db`,
-      environment: LIVE_ENVIRONMENT,
+    : readProductMigration({
+      database: options.database,
       projectId: lane.projectId,
       requestId: deployed.receipt.decisionId,
-      sha,
       storePath: options.storePath,
-      workspace: options.workspace,
     });
 
   return {

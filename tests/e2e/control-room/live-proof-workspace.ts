@@ -84,6 +84,15 @@ export const NODE_KEYS: readonly string[] = Object.freeze([
   "node-auth-api", "node-entries", "node-integration",
 ]);
 
+/**
+ * The PRD's own table, as a migration the PRODUCT runs at deploy time.
+ *
+ * The stamp is fixed rather than generated: `checkOrder: true` orders migrations by filename and a
+ * clock-derived name would make two runs of this drive order differently. It sorts AFTER the
+ * scaffold's own `1700000000000-initial.js`, which is where it belongs.
+ */
+export const MIGRATION_FILE = "migrations/1700000000001-standup-entry.js";
+
 /** Where a node's delivered module lives, relative to the product repository root. */
 export const modulePath = (nodeKey: string): string => `${nodeKey}/module.mjs`;
 
@@ -131,6 +140,35 @@ export function prepareLiveProductWorkspace(workspace: string): readonly string[
     ].join("\n"), "utf8");
     paths.push(file);
   }
+  // THE SCHEMA THE PRD ASKS FOR, AS THE PRODUCT'S OWN MIGRATION. `deployment.deploy` runs the
+  // migrations committed AT THE DEPLOYED SHA through the product's own `node-pg-migrate`
+  // (migration-ports.ts), so this file is what makes the deploy's migration real rather than a
+  // side script: the daemon extracts `migrations/` at that sha and applies it. The filename must
+  // match the engine's own `^\d{13,17}[-_][A-Za-z0-9_-]+\.(js|cjs|mjs|sql)$`, and the constraint
+  // is NAMED rather than left to PostgreSQL so the read-back asserts a name the DDL chose.
+  mkdirSync(join(workspace, "migrations"), { recursive: true });
+  writeFileSync(join(workspace, MIGRATION_FILE), [
+    '/** @param {import("node-pg-migrate").MigrationBuilder} pgm */',
+    "export function up(pgm) {",
+    '  pgm.createTable("standup_entry", {',
+    '    id: { type: "bigserial", primaryKey: true },',
+    '    author_email: { type: "text", notNull: true },',
+    '    entry_date: { type: "date", notNull: true },',
+    '    yesterday: { type: "text", notNull: true },',
+    '    today: { type: "text", notNull: true },',
+    '    blockers: { type: "text" },',
+    "  });",
+    '  pgm.addConstraint("standup_entry", "standup_entry_author_email_entry_date_key",',
+    '    { unique: ["author_email", "entry_date"] });',
+    "}",
+    "",
+    '/** @param {import("node-pg-migrate").MigrationBuilder} pgm */',
+    "export function down(pgm) {",
+    '  pgm.dropTable("standup_entry");',
+    "}",
+    "",
+  ].join("\n"), "utf8");
+  paths.push(MIGRATION_FILE);
   // THE DEPLOYABLE SURFACE RIDES THE SAME COMMIT. `docker build` is fed by `git archive <sha>`
   // (deploy-image-build.ts:63), so a Dockerfile added later than the landed sha is invisible to
   // the deploy; it has to be an ancestor of every sha this product will ever deploy.

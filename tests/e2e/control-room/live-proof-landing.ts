@@ -79,6 +79,21 @@ const CRASH_NOTE_BUDGET_MS = 900_000;
 /** Arms the DEVELOPMENT-ONLY crash knob for the FIRST node's landing write, and only that one. */
 export interface LiveLandingFault { readonly point: LandingFaultPoint }
 
+/**
+ * How the caller recovers the interrupted landing. Answers null when the product accepted the
+ * recovery, or the refusal code when it did not -- never a boolean, because "it did not work"
+ * is not evidence and this row's whole value is that its records carry codes.
+ */
+export type LiveCrashRecovery = (crash: LiveLandingCrash) => Promise<string | null>;
+
+/**
+ * How long the reconciled commit is given to be readable in Git after the recovery is recorded.
+ *
+ * Short by design: the commit was written BEFORE the crash, so this waits on a filesystem read
+ * rather than on any work. A budget that had to be long would mean the commit was never there.
+ */
+const RECOVERED_LANDING_MS = 60_000;
+
 /** What the knob left behind, read from the dead pass's own fd 2 rather than from memory. */
 export interface LiveLandingCrash {
   /** The knob's timestamp, as the dying process wrote it. */
@@ -214,6 +229,21 @@ function landedSha(workspace: string, nodeRef: string): string | null {
 }
 
 /**
+ * The same read, given a budget. EXACTLY ONE matching commit is still the answer: `landedSha`
+ * returns null for two, so a duplicated landing reads as ABSENT here rather than as success.
+ */
+async function landedShaWithin(
+  workspace: string, nodeRef: string, budgetMs: number,
+): Promise<string | null> {
+  const deadline = Date.now() + budgetMs;
+  for (;;) {
+    const sha = landedSha(workspace, nodeRef);
+    if (sha !== null || Date.now() >= deadline) return sha;
+    await delay(1_000);
+  }
+}
+
+/**
  * TWO NODES LIVE ON THE BOARD AT ONE MOMENT, taken from the WRAPPER'S OWN transcript.
  *
  * WHY IT IS NOT "TWO SEATS ALIVE AT ONCE". MEASURED 2026-09-09: the repository delivery
@@ -313,6 +343,7 @@ export async function landLiveProofNodes(
   lane: DaemonLane, workspace: string, keys: readonly string[],
   rendezvous: readonly string[], objectives: Readonly<Record<string, string>> = {},
   fault: LiveLandingFault | null = null,
+  onCrash: LiveCrashRecovery | null = null,
 ): Promise<LiveProofLanded | LiveProofLandingRefused> {
   const scratch = resolveLaneScratch(lane);
   if (scratch === null) {
@@ -367,12 +398,17 @@ export async function landLiveProofNodes(
   // THE NOISE ITEM IS FILTERED OUT OF THE DIAGNOSIS, not out of the run: the board's
   // `plan.propose` retries fill the tail and would hide the node lines a refusal is read for.
   const refuse = (detail: string): LiveProofLandingRefused => {
-    // DEDUPLICATED, because a poll that repeats one refusal 300 times is one fact, and the tail
-    // is the only place a reader looks. Order is preserved and nothing is rewritten.
-    const seen = new Set<string>();
-    const lines = [...priorTranscripts, watched.transcript()].join("\n").split(/\r?\n/u)
-      .filter((line) => !line.includes("plan.propose@") && line.trim() !== "")
-      .filter((line) => { const had = seen.has(line); seen.add(line); return !had; });
+    // DEDUPLICATED PER PASS, because a poll that repeats one refusal 300 times is one fact --
+    // but a line the SECOND pass printed is a different fact from the identical line the first
+    // pass printed, and deduplicating across the restart boundary erased the whole recovery
+    // pass from the tail (measured 2026-09-09: the restarted wrapper looked silent when it was
+    // merely repeating itself). Order is preserved and nothing is rewritten.
+    const lines = [...priorTranscripts, watched.transcript()].flatMap((pass) => {
+      const seen = new Set<string>();
+      return pass.split(/\r?\n/u)
+        .filter((line) => !line.includes("plan.propose@") && line.trim() !== "")
+        .filter((line) => { const had = seen.has(line); seen.add(line); return !had; });
+    });
     return { detail: `${detail}\n${lines.slice(-40).join("\n")}`, ok: false, wrapperPid };
   };
   try {
@@ -421,10 +457,38 @@ export async function landLiveProofNodes(
         // told nothing about what happened and works it out from the store, which is the whole
         // claim. The dead pass's transcript is kept, so a refusal after this point still carries
         // the crash in its tail.
-        priorTranscripts.push(watched.transcript());
+        priorTranscripts.push(watched.transcript(), `--- RESTART AFTER ${note} ---`);
         await killTree(watched.child);
         armed = null;
         watched = startPass(null);
+        // AND THEN THE PRODUCT'S OWN RECOVERY RUNS, driven by the caller.
+        //
+        // MEASURED 2026-09-09/10, and this is why re-driving a ROUND is NOT what happens here.
+        // The delivery coordinator persists `phase: LANDING` before it calls the lander
+        // (`repository-delivery-coordinator.ts:163`), so the restarted pass finds a reservation
+        // in LANDING, reads durable facts that say ACCEPTED rather than LANDED, and BLOCKS it
+        // (`:180`, and BLOCKED is terminal in the phase table). A second round then has nowhere
+        // to run: a first drive armed at `before-intent` re-submitted one and twenty minutes of
+        // a fresh pass produced no landing at all. The shipped way out is `repository.recover`,
+        // which is human-only by construction -- so the caller drives it, from the browser.
+        //
+        // THIS IS ALSO WHERE A DUPLICATE WOULD COME FROM, and that is the point: the reconcile
+        // writes a landing receipt only when the durable evidence proves Git already committed
+        // and no receipt exists yet, so a second outcome for this node would be exactly what
+        // DoD 2's row count catches.
+        const recovered = onCrash === null
+          ? "NO_RECOVERY_DRIVER" : await onCrash(crash);
+        priorTranscripts.push(recovered === null
+          ? "--- RECOVERY RECONCILED ---" : `--- RECOVERY REFUSED: ${recovered} ---`);
+        if (recovered !== null) return refuse(`RECOVERY_REFUSED ${recovered}`);
+        // THE COMMIT IS ALREADY IN GIT: the knob fired after the landing journaled its
+        // completion, so the lander never prints a COMMITTED line for this node and waiting for
+        // one would time out on a landing that really happened. Git is the durable answer.
+        const recoveredSha = await landedShaWithin(workspace, nodeRef, RECOVERED_LANDING_MS);
+        if (recoveredSha === null) return refuse(`RECOVERED_LANDING_ABSENT ${key}`);
+        landings.push({ nodeKey: key, nodeRef, sha: recoveredSha });
+        remaining.splice(remaining.indexOf(key), 1);
+        continue;
       }
       const committed = await watched.waitFor(
         new RegExp(`^\\[lander\\] (${nodeRef.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}): COMMITTED `, "mu"),
@@ -448,7 +512,14 @@ export async function landLiveProofNodes(
     });
     return {
       crash, landings: resolved, ok: true, seats,
-      staffing: concurrentStaffing(watched.transcript(), rendezvous.map((key) => refs[key]!)),
+      // EVERY PASS, NOT THE LAST ONE. The concurrency window belongs to the FIRST node's
+      // delivery, and when the knob is armed that pass is the one the crash killed -- its
+      // transcript is in `priorTranscripts` and the live handle holds only the restarted pass.
+      // MEASURED 2026-09-09: reading `watched.transcript()` alone reported concurrent:false on a
+      // run whose dead pass carried the BUSY line verbatim.
+      staffing: concurrentStaffing(
+        [...priorTranscripts, watched.transcript()].join("\n"),
+        rendezvous.map((key) => refs[key]!)),
       wrapperPid,
     };
   } finally {
