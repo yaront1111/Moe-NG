@@ -36,9 +36,12 @@ const EXPECTED_COMMAND_KINDS = [
   "approval.decide", "approval.decide_intent", "blocker.challenge", "blocker.open",
   "blocker.resolve",
   "budget.acknowledge_unknown_liability", "budget.conservative_settle", "budget.propose_raise",
-  "budget.reconcile", "context.repackage", "cutover.abort", "cutover.activate",
-  "cutover.preview", "cutover.quiesce", "dependency.challenge", "effect.activate",
+  "budget.reconcile", "context.repackage", "criterion_check.approve", "criterion_check.verify", "cutover.abort", "cutover.activate",
+  "cutover.preview", "cutover.quiesce", "dependency.challenge",
+  "deployment.deploy", "deployment.migrate_down", "deployment.rollback",
+  "deployment.set_target", "design.read", "design.submit", "effect.activate",
   "effect.adopt_result", "effect.confirm_absent", "effect.observe", "effect.reconcile",
+  "environment.set_variable", "environment.unset_variable",
   "escalation.decide", "events.resume", "evidence.rerun", "evidence.run", "expansion.decline", "export.run",
   "finding.route", "foundation.dispatch", "foundation.verification",
   "goal.cancel", "goal.close", "goal.create", "goal.create_with_source", "goal.pause",
@@ -46,17 +49,21 @@ const EXPECTED_COMMAND_KINDS = [
   "graph.release_preparation", "graph.request_expansion", "graph.supersede",
   "integration.accept_output", "integration.resolve_finding", "integration.seal",
   "integration.start", "integration.submit_finding", "journal.append", "lease.confirm_revoke",
-  "lease.extend", "lease.mark_suspect", "plan.propose", "planning.cancel", "planning.claim",
+  "lease.extend", "lease.mark_suspect",
+  "monitoring.retire_environment", "monitoring.set_probe_interval",
+  "plan.propose", "planning.cancel", "planning.claim",
   "planning.recover_absent", "planning.release", "planning.submit_decomposition",
-  "policy.install", "policy.validate",
+  "policy.install", "policy.validate", "preview.decide", "preview.start",
   "product_contract.answer_clarification", "product_contract.approve_gate_1",
   "product_contract.ask_clarification", "product_contract.propose_revision",
+  "product_contract.sync_env_example",
   "profile.register", "project.activate",
-  "project.bind_repository", "project.register",
+  "project.bind_repository", "project.register", "project.set_agent_provider",
   "provider.probe", "qualification.cancel", "qualification.recover", "qualification.replan",
   "qualification.retry", "quarantine.discard", "quarantine.export_forensic",
   "reconciliation.decide", "recovery.complete", "recovery.inspect_external",
-  "recovery.reconcile_external", "replan.propose_unblock", "repository.publish", "resource.confirm_released",
+  "recovery.reconcile_external", "release.decide", "replan.propose_unblock", "repository.bootstrap",
+  "repository.publish", "repository.recover", "resource.confirm_released",
   "resource.reconcile", "resource.release", "resource.renew", "resource.request",
   "review.release", "review.start", "review.submit", "safe_boundary.observe",
   "session.close", "session.open", "session.renew", "session.rotate", "step.checkpoint",
@@ -101,9 +108,21 @@ describe("runtime vocabulary is closed and disjoint", () => {
       expect(commands.has(kind)).toBe(false);
     }
     expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS);
-    // Literal 102, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
-    expect(commands.size).toBe(103);
+    // Literal 121, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
+    // The comment read 119 against an assertion of 120 at 3a056078 — a prior addition bumped the
+    // number and left the prose behind. Repaired here rather than grown, so the next reader can
+    // trust it.
+    expect(commands.size).toBe(122);
     expect(RUNTIME_COMMAND_KINDS).toContain("plan.propose");
+    // task-749e585a: the operator's per-environment health-probe interval. Named here as well as
+    // in EXPECTED_COMMAND_KINDS so a mistranscription of the hand-written roster above cannot
+    // silently drop the kind while the count literal still adds up.
+    expect(RUNTIME_COMMAND_KINDS).toContain("monitoring.set_probe_interval");
+    // task-509f0437: retiring an environment, on the same terms and for a stronger reason —
+    // retirement SILENCES a probe outright, where the interval only re-times it. Named
+    // separately from EXPECTED_COMMAND_KINDS for the reason the line above gives, and the two
+    // monitoring kinds are named together so a reader cannot take one as covering the other.
+    expect(RUNTIME_COMMAND_KINDS).toContain("monitoring.retire_environment");
     expect(RUNTIME_COMMAND_KINDS).toContain("graph.prepare_supersession");
     expect(RUNTIME_COMMAND_KINDS).toContain("foundation.dispatch");
     expect(RUNTIME_COMMAND_KINDS).toContain("foundation.verification");
@@ -141,7 +160,24 @@ describe("runtime vocabulary is closed and disjoint", () => {
     expect(RUNTIME_COMMAND_KINDS[position - 1]).toBe("product_contract.answer_clarification");
     expect(RUNTIME_COMMAND_KINDS[position + 1]).toBe("product_contract.ask_clarification");
     expect(RUNTIME_COMMAND_KINDS[position + 2]).toBe("product_contract.propose_revision");
-    expect(RUNTIME_COMMAND_KINDS[position - 2]).toBe("policy.validate");
+    // task-c672815d: `preview.decide` now takes the slot between `policy.validate` and the
+    // product_contract family ("policy" < "preview" < "product"), so the left bracket moved out
+    // by one. Both neighbours stay pinned: the new kind's own sorted slot is asserted here
+    // because the generator sorts its copy and therefore cannot catch a misplaced source tuple.
+    // task-0e87ab34: `preview.start` then took the slot between `preview.decide` and the
+    // product_contract family ("preview.decide" < "preview.start" < "product"), so the left
+    // bracket moved out by one again. Both older neighbours stay pinned, one index further out.
+    expect(RUNTIME_COMMAND_KINDS[position - 2]).toBe("preview.start");
+    expect(RUNTIME_COMMAND_KINDS[position - 3]).toBe("preview.decide");
+    expect(RUNTIME_COMMAND_KINDS[position - 4]).toBe("policy.validate");
+    // ...and `preview.start` is pinned by its own neighbours too, so a later insertion elsewhere
+    // in the tuple cannot silently relieve this kind of its sorted-slot guarantee.
+    const previewStartPosition = RUNTIME_COMMAND_KINDS.indexOf("preview.start");
+    expect(previewStartPosition).toBeGreaterThan(-1);
+    expect(RUNTIME_COMMAND_KINDS[previewStartPosition - 1]).toBe("preview.decide");
+    expect(RUNTIME_COMMAND_KINDS[previewStartPosition + 1]).toBe(
+      "product_contract.answer_clarification",
+    );
     // task-b7f71ffe: `goal.create_with_source` is pinned the same way. `goal.create` is a strict
     // prefix of it, so the sorted slot is immediately after `goal.create` and before `goal.pause`
     // ("c" < "p"). The generator sorts before it emits, so no generated-side gate can catch a

@@ -17,6 +17,7 @@ import {
   documentSourceRecordOf,
 } from "./document-source-leg.js";
 import type { AdmittedDocumentSource, DocumentSourceLeg } from "./document-source-leg.js";
+import { readDocumentSourceView } from "./document-source-read.js";
 import { selectDocumentIngestIdentity } from "./document-ingest-legacy.js";
 import { documentWorkAggregateId } from "./document-work-identifiers.js";
 import { durableStoreRefusal, refuse } from "./document-work-result.js";
@@ -42,8 +43,23 @@ function recordSourceText(
   store: DocumentWorkStorePort,
   request: DocumentIngestRequest,
   leg: DocumentSourceLeg,
+  contentSha256: string,
+  sourceRef: string,
 ): TextLeg | { readonly refusal: DocumentWorkServiceRefused } {
   const { aggregateId, commandId, eventId, payload } = leg;
+  // The content-addressed aggregate may ALREADY hold this text, landed by another writer: the
+  // goal binding leg of goal.create_with_source appends the same source record under the
+  // goal's own decision key. Presenting expectedVersion 0 against that version-1 aggregate was
+  // refused EXPECTED_VERSION_CONFLICT, the refusal row replayed on every retry, and the
+  // operator's PRD stayed un-ingestable for good. When the aggregate already carries the same
+  // bytes there is nothing to write: answer the replay the way an identical re-ingest does.
+  if (store.getAggregateVersion(aggregateId) >= 1) {
+    const current = readDocumentSourceView(store, request.projectId, contentSha256, sourceRef);
+    if (current.kind === "VIEW" && current.view.contentSha256 === contentSha256) {
+      return { aggregateId, disposition: "REPLAYED", eventId };
+    }
+    if (current.kind === "REFUSED") return { refusal: current.refusal };
+  }
   try {
     const response = store.commitExpectedVersionDecision({
       commandKind: DOCUMENT_SOURCE_RECORD_COMMAND_KIND,
@@ -141,7 +157,7 @@ export function ingestDocument(
   const { proposalCommandId, sourceRef } = identity.identity;
 
   const textLeg = recordSourceText(
-    store, request, documentSourceLegOf(request.projectId, record, sourceRef),
+    store, request, documentSourceLegOf(request.projectId, record, sourceRef), contentSha256, sourceRef,
   );
   if ("refusal" in textLeg) return textLeg.refusal;
 

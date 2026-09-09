@@ -76,7 +76,8 @@ const DEMO_REASONING_EFFORT: ClaudeReasoningEffort = "medium";
  * Two refs are easy to confuse and each carries its own refusal. `providerMinimumProfileRef`
  * is the profile's IDENTITY and must equal the envelope's ref, or `recordProbe` refuses
  * PROVIDER_PROFILE_REF_MISMATCH at PROVIDER_PROFILE_REGISTRATION; it is the ref
- * `activationWitness` names too. `profileRevisionId` is the identity of this CONTENT and is
+ * the daemon MINTS into the activation witness. `profileRevisionId` is the identity of this
+ * CONTENT and is
  * deliberately a DIFFERENT string, because the durable stream refuses
  * PROVIDER_PROFILE_IMMUTABILITY_CONFLICT when one revision id ever carries two bodies.
  * Every value below is therefore derived from the caller's ids or is a literal — no clock,
@@ -119,21 +120,6 @@ export function probeObservation(input: DemoSeedInput): Record<string, unknown> 
   return {
     profile: providerProfile(input),
     providerMinimumProfileRef: providerProfileRef(input),
-    truthClass: DEMO_VERIFIED,
-  };
-}
-
-/** The activation witness names the SAME minimum profile ref the probe committed. */
-export function activationWitness(input: DemoSeedInput): Record<string, unknown> {
-  return {
-    artifactPathRef: `${input.projectId}-artifact`,
-    backupPathRef: `${input.projectId}-backup`,
-    credentialRef: `${input.projectId}-credential`,
-    distributionManifestHash: hex64("cafe"),
-    policyRevisionHash: hex64("face"),
-    providerMinimumProfileRef: providerProfileRef(input),
-    signingKeyRef: `${input.projectId}-signing`,
-    storeDriverRef: `${input.projectId}-store-driver`,
     truthClass: DEMO_VERIFIED,
   };
 }

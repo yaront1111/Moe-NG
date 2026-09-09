@@ -1,6 +1,4 @@
-import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -20,10 +18,10 @@ import {
   CLAUDE_LAUNCH_SELECTION_FLAGS,
   acquireWindowsLaunchLock,
   launchClaude,
-  reapStaleLaunchLock,
   type ClaudeLaunchRequest,
   type ClaudeLauncherDependencies,
 } from "./claude-launcher.js";
+import { resolveLaunchLockScope } from "./claude-launch-lock.js";
 import { snapshotClaudeLaunchRequest } from "./claude-launcher-input.js";
 import {
   CLAIM, COMMIT, DIGEST, DRIFTED_COMMIT, PROCESS, PROVEN, SELECTED_EFFORT, SELECTED_MODEL,
@@ -54,13 +52,32 @@ function transparentProxy(target: object, counter: TrapCounter): object {
     getOwnPropertyDescriptor: (t, k) => tally(() => Reflect.getOwnPropertyDescriptor(t, k)),
   });
 }
-/** The production lock path for an identity, spelled the way the module spells it. */
-const lockPathFor = (identity: string): string => join(tmpdir(), "moe-claude-launch-locks",
-  `${createHash("sha256").update(identity).digest("hex")}.lock`);
-/** A PID from the ephemeral range that is not alive right now. */
-function firstDeadPid(): number {
-  for (let candidate = 40_000_000; ; candidate += 1) {
-    try { process.kill(candidate, 0); } catch { return candidate; }
+const LAUNCH_LOCK_NAMESPACE_ENV = "MOE_CLAUDE_LAUNCH_LOCK_NAMESPACE";
+const DEFAULT_LAUNCH_LOCK_ROOT = join(tmpdir(), "moe-claude-launch-locks");
+/**
+ * Runs `body` on a pipe namespace nobody else can be holding.
+ *
+ * The lock is a WIN32 named pipe now, and `\\.\pipe\` is MACHINE-GLOBAL — an
+ * arm left on the default namespace contends with a live fleet launch for the
+ * same mutex, so a passing suite could refuse a real provider session (or be
+ * refused by one). The prior value is restored, never assumed absent.
+ */
+async function onTestLaunchLockNamespace<T>(body: () => Promise<T>): Promise<T> {
+  const prior = process.env[LAUNCH_LOCK_NAMESPACE_ENV];
+  process.env[LAUNCH_LOCK_NAMESPACE_ENV] = `runner-${process.pid}-${Date.now()}`;
+  // Resolved WHILE the variable is set, so the cleanup below removes this
+  // arm's own scratch root and never the default one.
+  const scratchRoot = resolveLaunchLockScope("scratch")?.sidecarRoot;
+  try {
+    return await body();
+  } finally {
+    if (prior === undefined) delete process.env[LAUNCH_LOCK_NAMESPACE_ENV];
+    else process.env[LAUNCH_LOCK_NAMESPACE_ENV] = prior;
+    // Guarded, not merely intended: the DEFAULT root holds pre-existing lock
+    // residue that no test may reach.
+    if (scratchRoot !== undefined && scratchRoot !== DEFAULT_LAUNCH_LOCK_ROOT) {
+      rmSync(scratchRoot, { recursive: true, force: true });
+    }
   }
 }
 describe("Windows Claude launcher", () => {
@@ -80,148 +97,42 @@ describe("Windows Claude launcher", () => {
     expect(Object.isFrozen(CLAUDE_LAUNCH_ERROR_CODES)).toBe(true);
   });
 
-  it("holds one real OS-exclusive launch lock until its lease is released", async () => {
-    const identity = `launcher-test-${process.pid}-${Date.now()}`;
-    const first = await acquireWindowsLaunchLock(identity);
-    expect(first.ok).toBe(true);
-    if (!first.ok) throw new Error(`first lock refused: ${first.code}`);
-    try {
-      const duplicate = await acquireWindowsLaunchLock(identity);
-      expect(duplicate).toMatchObject({
-        ok: false, code: "LAUNCH_LOCK_IDENTITY_CONFLICT", layer: "LAUNCH_LOCK",
-      });
-    } finally { await first.lease.release(); }
-    const afterRelease = await acquireWindowsLaunchLock(identity);
-    expect(afterRelease.ok).toBe(true);
-    if (afterRelease.ok) await afterRelease.lease.release();
+  // Native pipe semantics require Windows; injected-port launcher cases remain cross-host.
+  it.skipIf(process.platform !== "win32")("holds one real OS-exclusive launch lock until its lease is released", async () => {
+    await onTestLaunchLockNamespace(async () => {
+      const identity = `launcher-test-${process.pid}-${Date.now()}`;
+      const first = await acquireWindowsLaunchLock(identity);
+      expect(first.ok).toBe(true);
+      if (!first.ok) throw new Error(`first lock refused: ${first.code}`);
+      try {
+        const duplicate = await acquireWindowsLaunchLock(identity);
+        expect(duplicate).toMatchObject({
+          ok: false, code: "LAUNCH_LOCK_IDENTITY_CONFLICT", layer: "LAUNCH_LOCK",
+        });
+      } finally { await first.lease.release(); }
+      const afterRelease = await acquireWindowsLaunchLock(identity);
+      expect(afterRelease.ok).toBe(true);
+      if (afterRelease.ok) await afterRelease.lease.release();
+    });
   });
 
-  it("reclaims a lock whose recorded holder process is dead", async () => {
-    // A crash between open("wx") and release leaves the file behind; without
-    // holder liveness the identity is locked out until a human deletes it.
-    const identity = `launcher-stale-${process.pid}-${Date.now()}`;
-    const first = await acquireWindowsLaunchLock(identity);
-    expect(first.ok).toBe(true);
-    if (!first.ok) throw new Error(first.code);
-    // Simulate holder death: the file survives, the recorded PID does not. A
-    // PID from the ephemeral range that is not alive right now.
-    const deadPid = ((): number => {
-      for (let candidate = 40_000_000; ; candidate += 1) {
-        try { process.kill(candidate, 0); } catch { return candidate; }
-      }
-    })();
-    const { writeFile } = await import("node:fs/promises");
-    const { tmpdir } = await import("node:os");
-    const { join } = await import("node:path");
-    const { createHash } = await import("node:crypto");
-    const path = join(tmpdir(), "moe-claude-launch-locks",
-      `${createHash("sha256").update(identity).digest("hex")}.lock`);
-    await writeFile(path, String(deadPid), "utf8");
-    const reclaimed = await acquireWindowsLaunchLock(identity);
-    expect(reclaimed.ok).toBe(true);
-    if (reclaimed.ok) await reclaimed.lease.release();
-    // first.lease.release() must stay safe even though the file moved on.
-    await first.lease.release().catch(() => undefined);
-  });
-
-  it("keeps the conflict when the recorded holder is still alive", async () => {
-    const identity = `launcher-alive-${process.pid}-${Date.now()}`;
-    const first = await acquireWindowsLaunchLock(identity);
-    expect(first.ok).toBe(true);
-    if (!first.ok) throw new Error(first.code);
-    try {
-      // The real holder (this process) is alive, so the conflict stands.
-      const duplicate = await acquireWindowsLaunchLock(identity);
-      expect(duplicate).toMatchObject({ ok: false, code: "LAUNCH_LOCK_IDENTITY_CONFLICT" });
-    } finally { await first.lease.release(); }
-  });
-
-  it("keeps the conflict when the stale record cannot be renamed away", async () => {
-    // Reclaim removes NOTHING it did not first move: a racer that loses the
-    // rename arbitration answers the conflict instead of falling back to
-    // unlink-by-path, because that unlink lands on whatever the name means by
-    // then — including a winner's freshly created live lock. Losing is forced
-    // here by occupying this acquirer's reap name with a directory.
-    const identity = `launcher-reap-blocked-${process.pid}-${Date.now()}`;
-    const path = lockPathFor(identity);
-    const reapPath = `${path}.reap-${process.pid}`;
-    await mkdir(join(tmpdir(), "moe-claude-launch-locks"), { recursive: true });
-    const deadPid = firstDeadPid();
-    await writeFile(path, String(deadPid), "utf8");
-    await mkdir(reapPath, { recursive: true });
-    try {
-      const result = await acquireWindowsLaunchLock(identity);
-      expect(result).toMatchObject({
-        ok: false, code: "LAUNCH_LOCK_IDENTITY_CONFLICT", layer: "LAUNCH_LOCK",
-      });
-      // The stale record survived: no arbitration, no deletion.
-      expect(await readFile(path, "utf8")).toBe(String(deadPid));
-    } finally {
-      await rm(reapPath, { recursive: true, force: true });
-      await rm(path, { force: true });
-    }
-  });
-
-  it("treats a lock already renamed away as a conflict, never a blind retry", async () => {
-    // Between the liveness probe and the rename another racer can win the
-    // reap; the loser's rename answers ENOENT and that IS the conflict —
-    // retrying would re-run reclaim against a file it never judged.
-    const identity = `launcher-reap-gone-${process.pid}-${Date.now()}`;
-    const path = lockPathFor(identity);
-    await mkdir(join(tmpdir(), "moe-claude-launch-locks"), { recursive: true });
-    expect(await reapStaleLaunchLock(path, firstDeadPid())).toBe("CONFLICT");
-    expect(existsSync(path)).toBe(false);
-    expect(existsSync(`${path}.reap-${process.pid}`)).toBe(false);
-  });
-
-  it("renames a live record back instead of reaping it", async () => {
-    // The window between judging the holder dead and the rename can admit a
-    // FRESH live lock. The re-judgment runs on the reaped FILE, not on the
-    // memory of the earlier read, so the live record is restored — never
-    // deleted on the strength of a judgment about bytes that moved on.
-    const identity = `launcher-reap-live-${process.pid}-${Date.now()}`;
-    const path = lockPathFor(identity);
-    await mkdir(join(tmpdir(), "moe-claude-launch-locks"), { recursive: true });
-    await writeFile(path, String(process.pid), "utf8");
-    try {
-      expect(await reapStaleLaunchLock(path, firstDeadPid())).toBe("CONFLICT");
-      expect(await readFile(path, "utf8")).toBe(String(process.pid));
-      expect(existsSync(`${path}.reap-${process.pid}`)).toBe(false);
-    } finally { await rm(path, { force: true }); }
-  });
-
-  it("reaps only the record it judged, and then the name is free", async () => {
-    // Positive control for the two conflicts above: a reap that refused
-    // everything would satisfy both, so the honest arm — same dead PID at
-    // both probes — must actually clear the name and its reap alias.
-    const identity = `launcher-reap-dead-${process.pid}-${Date.now()}`;
-    const path = lockPathFor(identity);
-    await mkdir(join(tmpdir(), "moe-claude-launch-locks"), { recursive: true });
-    const deadPid = firstDeadPid();
-    await writeFile(path, String(deadPid), "utf8");
-    expect(await reapStaleLaunchLock(path, deadPid)).toBe("REAPED");
-    expect(existsSync(path)).toBe(false);
-    expect(existsSync(`${path}.reap-${process.pid}`)).toBe(false);
-  });
-
-  it("releases without unlinking a successor's file once the name is rebound", async () => {
-    // Releasing by NAME what was held by HANDLE deletes whatever the name
-    // means NOW. The crash-reclaim shape is simulated directly: the holder's
-    // file is removed under it and a successor's record appears at the same
-    // name; the displaced holder's release closes its handle and touches
-    // nothing.
-    const identity = `launcher-release-swap-${process.pid}-${Date.now()}`;
-    const path = lockPathFor(identity);
-    const first = await acquireWindowsLaunchLock(identity);
-    expect(first.ok).toBe(true);
-    if (!first.ok) throw new Error(first.code);
-    await rm(path, { force: true });
-    await writeFile(path, "999999", "utf8");
-    try {
-      await first.lease.release();
-      expect(existsSync(path)).toBe(true);
-      expect(await readFile(path, "utf8")).toBe("999999");
-    } finally { await rm(path, { force: true }); }
+  it.skipIf(process.platform !== "win32")("keeps the conflict while the holder is alive, judging no record", async () => {
+    // Renamed from "keeps the conflict when the recorded holder is still
+    // alive": there is no recorded holder any more. The pipe's own binding is
+    // what refuses, so the refusal cannot be talked out of by anything written
+    // to disk -- which is the whole point of retiring the PID-judged file lock.
+    await onTestLaunchLockNamespace(async () => {
+      const identity = `launcher-alive-${process.pid}-${Date.now()}`;
+      const first = await acquireWindowsLaunchLock(identity);
+      expect(first.ok).toBe(true);
+      if (!first.ok) throw new Error(first.code);
+      try {
+        const duplicate = await acquireWindowsLaunchLock(identity);
+        expect(duplicate).toMatchObject({
+          ok: false, code: "LAUNCH_LOCK_IDENTITY_CONFLICT", layer: "LAUNCH_LOCK",
+        });
+      } finally { await first.lease.release(); }
+    });
   });
 
   it("refuses a non-Windows host before reading the request or calling a port", async () => {
@@ -862,44 +773,48 @@ describe("Windows Claude launcher", () => {
     expect(boundary.log).toEqual([]);
   });
 
-  it("lets only one concurrent delivery cross the real OS lock into the provider", async () => {
-    let finish!: (outcome: WindowsProcessOutcome) => void;
-    let opened!: () => void;
-    const openedPromise = new Promise<void>((resolve) => { opened = resolve; });
-    const completed = new Promise<WindowsProcessOutcome>((resolve) => { finish = resolve; });
-    const identity = `concurrent-${process.pid}-${Date.now()}`;
-    const claim = { ...CLAIM, lockIdentity: identity };
-    const firstLog: string[] = [];
-    const firstBoundary = boundaryHarness({ completed });
-    const firstBase = dependencies(firstBoundary, firstLog);
-    const firstDeps = { ...firstBase, acquireLock: acquireWindowsLaunchLock,
-      openBoundary: (value: unknown, options?: { readonly timeoutMs?: number }) => {
-        const result = firstBase.openBoundary(value, options); opened(); return result;
-      } };
-    const first = launchClaude(request({ claim }), { platform: "win32", deps: firstDeps });
-    await openedPromise;
+  it.skipIf(process.platform !== "win32")("lets only one concurrent delivery cross the real OS lock into the provider", async () => {
+    // The real acquireLock port is the machine-global pipe, so this arm runs
+    // on a namespace of its own rather than the fleet's.
+    await onTestLaunchLockNamespace(async () => {
+      let finish!: (outcome: WindowsProcessOutcome) => void;
+      let opened!: () => void;
+      const openedPromise = new Promise<void>((resolve) => { opened = resolve; });
+      const completed = new Promise<WindowsProcessOutcome>((resolve) => { finish = resolve; });
+      const identity = `concurrent-${process.pid}-${Date.now()}`;
+      const claim = { ...CLAIM, lockIdentity: identity };
+      const firstLog: string[] = [];
+      const firstBoundary = boundaryHarness({ completed });
+      const firstBase = dependencies(firstBoundary, firstLog);
+      const firstDeps = { ...firstBase, acquireLock: acquireWindowsLaunchLock,
+        openBoundary: (value: unknown, options?: { readonly timeoutMs?: number }) => {
+          const result = firstBase.openBoundary(value, options); opened(); return result;
+        } };
+      const first = launchClaude(request({ claim }), { platform: "win32", deps: firstDeps });
+      await openedPromise;
 
-    const secondLog: string[] = [];
-    const secondBoundary = boundaryHarness();
-    let second;
-    let firstResult;
-    try {
-      second = await launchClaude(request({ claim }), { platform: "win32", deps: {
-        ...dependencies(secondBoundary, secondLog), acquireLock: acquireWindowsLaunchLock,
-      } });
-    } finally {
-      finish(PROVEN);
-      firstResult = await first;
-    }
-    expect(failureOf(second)).toEqual({
-      code: "LAUNCH_LOCK_IDENTITY_CONFLICT", layer: "LAUNCH_LOCK",
+      const secondLog: string[] = [];
+      const secondBoundary = boundaryHarness();
+      let second;
+      let firstResult;
+      try {
+        second = await launchClaude(request({ claim }), { platform: "win32", deps: {
+          ...dependencies(secondBoundary, secondLog), acquireLock: acquireWindowsLaunchLock,
+        } });
+      } finally {
+        finish(PROVEN);
+        firstResult = await first;
+      }
+      expect(failureOf(second)).toEqual({
+        code: "LAUNCH_LOCK_IDENTITY_CONFLICT", layer: "LAUNCH_LOCK",
+      });
+      expect(secondLog).not.toContain("open");
+      expect(secondBoundary.log).toEqual([]);
+
+      expect(firstResult.truthClass).toBe("PROVEN");
+      expect(firstLog.filter((entry) => entry === "open")).toHaveLength(1);
+      expect(firstBoundary.log.filter((entry) => entry === "close")).toHaveLength(1);
     });
-    expect(secondLog).not.toContain("open");
-    expect(secondBoundary.log).toEqual([]);
-
-    expect(firstResult.truthClass).toBe("PROVEN");
-    expect(firstLog.filter((entry) => entry === "open")).toHaveLength(1);
-    expect(firstBoundary.log.filter((entry) => entry === "close")).toHaveLength(1);
   });
 
   it("closes and unlocks when post-start durable registration refuses", async () => {

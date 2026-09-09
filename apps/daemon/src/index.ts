@@ -7,6 +7,16 @@
  * reviewed surface for each area lives in that area's own module.
  */
 export {
+  ACTIVATION_RECEIPT_CODES, ACTIVATION_RECEIPT_MEMBERS, activationWitnessOf,
+  repositoryObservationOf,
+  type ActivationReceiptMember, type ActivationReceipts, type ActivationReceiptsLayer,
+  type MeasuredReceipt, type UnmeasuredReceipt,
+} from "./bootstrap/activation-receipts.js";
+export {
+  measureActivationReceipts, nodeActivationReceiptPorts,
+  type ActivationReceiptInput, type ActivationReceiptPorts,
+} from "./bootstrap/activation-receipts-measure.js";
+export {
   BOOTSTRAP_COMMAND_KINDS, BOOTSTRAP_REFUSAL_CODES, BOOTSTRAP_REQUEST_KEYS,
   BOOTSTRAP_SCHEMA_VERSION, decodeBootstrapRequestBytes,
   type BootstrapCommandKind, type BootstrapDecodeRefusal, type BootstrapDecodeResult,
@@ -22,6 +32,12 @@ export {
 export { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-services.js";
 export { GOAL_HANDLERS } from "./goals/goal-services.js";
 export { PLANNING_HANDLERS } from "./planning/planning-services.js";
+// The goal's CURRENT run: a rejected run names its successor on its rejection event, so every
+// reader that starts from the goal's immutable `planningRunRef` resolves through this.
+export {
+  CURRENT_RUN_HOP_LIMIT, currentPlanningRun, foldCurrentRun, type CurrentPlanningRun,
+  type PlanningRunEventReader, type RejectedRunHop,
+} from "./planning/current-planning-run.js";
 // v2 compiler composition is public only through its server-bound factory; the
 // factory captures every authority reader and never accepts caller-owned readers.
 export {

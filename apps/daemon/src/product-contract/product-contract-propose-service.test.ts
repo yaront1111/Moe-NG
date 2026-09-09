@@ -157,7 +157,8 @@ describe("runProductContractProposeRevision", () => {
       goalRef: GOAL_ID,
     }));
     expect(outcome).toMatchObject({
-      code: "PRODUCT_CONTRACT_PROPOSE_LINEAGE_UNSUPPORTED", ok: false,
+      code: "PRODUCT_CONTRACT_PROPOSE_LINEAGE_UNSUPPORTED",
+      detail: "draft.lineage must be null: v0 admits no parent revision", ok: false,
     });
   });
 
@@ -201,5 +202,12 @@ describe("runProductContractProposeRevision", () => {
         code: "PRODUCT_CONTRACT_PROPOSE_MALFORMED", ok: false,
       });
     }
+    // A draft with everything but its contractId names THAT fence, not the payload shape.
+    expect(runProductContractProposeRevision(store, inputOf({
+      draft: draftOf({ contractId: "" }), goalRef: GOAL_ID,
+    }))).toMatchObject({
+      code: "PRODUCT_CONTRACT_PROPOSE_MALFORMED",
+      detail: "draft.contractId must be a non-empty string", ok: false,
+    });
   });
 });

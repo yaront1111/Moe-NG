@@ -26,6 +26,8 @@ import type {
   HumanReviewWitness,
   ServiceOutcome,
 } from "./bootstrap-ledger.js";
+import { activationWitnessOf, signingReceipt } from "./activation-receipts.js";
+import type { ActivationReceipts } from "./activation-receipts.js";
 import { installPolicy, validatePolicy } from "./bootstrap-policy-services.js";
 import { admitProviderProfile } from "../provider-profile/provider-profile-codec.js";
 import {
@@ -105,17 +107,63 @@ const bindRepository: CommandHandler = (context): ServiceOutcome => {
   } as unknown as ProjectCommand);
 };
 
+/**
+ * What a composition that wired NOTHING is judged against. Every member is absent, so
+ * `activationWitnessOf` answers with all six refusals and the activation fails closed: an
+ * unwired daemon gets an honest ACTIVATION_REPOSITORY_UNMEASURED rather than an invented ref.
+ */
+const UNMEASURED_RECEIPTS: ActivationReceipts = Object.freeze({
+  distribution: null,
+  measuredAt: "",
+  members: Object.freeze([]),
+  provider: null,
+  repository: null,
+  schemaVersion: "moe-activation-receipts/1" as const,
+  signing: signingReceipt(),
+  store: null,
+});
+
+/**
+ * THE DAEMON MINTS THE ACTIVATION WITNESS. IT NEVER ACCEPTS ONE.
+ *
+ * This handler used to read `payload.witness` and hand the CALLER'S OBJECT straight to the core
+ * reducer, so any caller (the browser, the seed, an authenticated agent session) could invent an
+ * artifact path, a backup ref and two digests and have the daemon commit them as DAEMON_VERIFIED
+ * authority. The nine keys now come from receipts THIS daemon measured.
+ *
+ * A caller-supplied witness is REFUSED with its own code rather than silently ignored. The
+ * distinction is not cosmetic: dropping the field would let an operator watch an activation
+ * succeed and believe they had supplied the authority behind it, which is the same false belief
+ * the old behaviour created, only quieter. `"witness"` therefore deliberately STAYS in the
+ * command vocabulary's payload-key roster: the HTTP ingress allow-list refuses an UNLISTED key
+ * with a generic INPUT_INVALID at PAYLOAD_SHAPE before any handler runs, and that generic
+ * refusal is exactly the unhelpful answer this code exists to replace.
+ *
+ * FAIL CLOSED, WHOLE, PER MEMBER: one unmeasurable receipt refuses the ENTIRE activation with
+ * that member's own code and its own layer, and commits nothing. There is no partial witness and
+ * no defaulted key, because a padded member would be an invented ref wearing a measurement's
+ * clothes. `activationWitnessOf` reports EVERY gap and the first is surfaced as the outcome's
+ * code, so an operator is told which receipt to go and fix.
+ */
 const activateProject: CommandHandler = (context): ServiceOutcome => {
-  const { request } = context;
-  const witness = payloadObject(request.payload, "witness");
-  if (witness === null) {
-    return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
+  const { receipts, request } = context;
+  // Key PRESENCE, not object shape: a caller-supplied `witness` of any type — string, number,
+  // boolean, array, null — is the same attempt to present a witness, and used to be ignored
+  // silently while only an object was refused.
+  if (Object.hasOwn(request.payload, "witness")) {
+    return refuse(request.kind, "ACTIVATION_WITNESS_CALLER_SUPPLIED", "DAEMON_INGRESS");
+  }
+  const assembly = activationWitnessOf(receipts ?? UNMEASURED_RECEIPTS);
+  if (!assembly.ok) {
+    const [first] = assembly.refusals;
+    if (first === undefined) return refuse(request.kind, "UNKNOWN_ERROR", "DAEMON_INGRESS");
+    return refuse(request.kind, first.code, first.layer);
   }
   return reduceAndCommit(context, {
     commandId: request.commandId,
     expectedVersion: request.expectedVersion,
     kind: "project.activate",
-    witness,
+    witness: assembly.witness,
   } as unknown as ProjectCommand);
 };
 
@@ -195,27 +243,59 @@ export function runBootstrapCommand(
   input: unknown,
   handlers: HandlerTable = BOOTSTRAP_HANDLERS,
   humanReview?: HumanReviewWitness,
+  receipts?: ActivationReceipts,
 ): ServiceOutcome {
+  const admitted = admitBootstrapCommand(store, input, handlers);
+  if ("outcome" in admitted) return admitted.outcome;
+  const { handler, ledger, request } = admitted;
+  // BOTH witnesses travel only from this call's own arguments — never off the decoded
+  // bytes — so a payload can present neither the human review (see HumanReviewWitness)
+  // nor the activation receipts the daemon measured for itself.
+  return handler(Object.freeze({
+    ledger,
+    request,
+    store,
+    ...(humanReview === undefined ? {} : { humanReview }),
+    ...(receipts === undefined ? {} : { receipts }),
+  }));
+}
+
+export type BootstrapAdmission =
+  | { readonly outcome: ServiceOutcome }
+  | {
+    readonly handler: CommandHandler;
+    readonly ledger: HandlerContext["ledger"];
+    readonly request: BootstrapRequest;
+  };
+
+/**
+ * The gates that answer BEFORE any handler: ingress decode, the replay fence, a known kind and
+ * the durable prerequisites. Exposed on its own so a caller whose witness is EXPENSIVE to make
+ * (project.activate measures receipts, which takes a full store backup) can ask "would this
+ * command reach its handler at all?" first and skip the measurement for a replay or a refusal —
+ * every activate attempt used to take a backup, replays and payload-refused ones included.
+ */
+export function admitBootstrapCommand(
+  store: SqliteEventStore,
+  input: unknown,
+  handlers: HandlerTable = BOOTSTRAP_HANDLERS,
+): BootstrapAdmission {
   const decoded = decodeBootstrapRequestBytes(input);
-  if (!decoded.ok) return refuse(null, decoded.code, "DAEMON_INGRESS");
+  if (!decoded.ok) return { outcome: refuse(null, decoded.code, "DAEMON_INGRESS") };
 
   const request: BootstrapRequest = decoded.request;
   const replay = replayOf(store, request);
-  if (replay !== null) return replay;
+  if (replay !== null) return { outcome: replay };
 
   const handler = handlers[request.kind];
   if (handler === undefined) {
-    return refuse(request.kind, "BOOTSTRAP_COMMAND_UNKNOWN", "DAEMON_INGRESS");
+    return { outcome: refuse(request.kind, "BOOTSTRAP_COMMAND_UNKNOWN", "DAEMON_INGRESS") };
   }
 
   const ledger = readDurableLedger(store, request.projectId);
   const missing = missingPrerequisites(ledger, request.kind);
   if (missing.length > 0) {
-    return refuse(request.kind, "BOOTSTRAP_PREREQUISITE_MISSING", "DAEMON_PREREQUISITE");
+    return { outcome: refuse(request.kind, "BOOTSTRAP_PREREQUISITE_MISSING", "DAEMON_PREREQUISITE") };
   }
-  // The witness travels only from this call's own arguments — never off the
-  // decoded bytes — so a payload cannot present one (see HumanReviewWitness).
-  return handler(humanReview === undefined
-    ? { ledger, request, store }
-    : { humanReview, ledger, request, store });
+  return { handler, ledger, request };
 }

@@ -1,0 +1,874 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+
+import { closeStores, openStore, openRestartableStore } from "../review/review-test-fixtures.js";
+import { deploymentInfrastructureFiles } from "../repository/deployment/deployment-infrastructure-templates.js";
+import { CONTROLLED_PROFILE_VERSION } from "../repository/controlled-profile/controlled-profile-generator.js";
+import {
+  DEPLOY_BUILD_FAILED, DEPLOY_DOCKER_UNAVAILABLE, DEPLOY_ENGINE_STAMP, DEPLOY_HEALTH_TIMEOUT,
+  DEPLOY_TARGET_MISSING, deployImageTag,
+} from "./deploy-receipt-contracts.js";
+import {
+  createDockerDouble, dockerSaveArgv, sshDockerLoadArgv, nodeDockerRunner, DEPLOY_COMMAND_TIMEOUT_MS,
+} from "./deploy-ports.js";
+import type {
+  DockerDouble, DockerDoubleOptions, DeployMigrationPort, DeployTarget, DockerRunner,
+} from "./deploy-ports.js";
+import { readDeployLedger, readPreviousDeployReceipt } from "./deploy-ledger.js";
+import { BACKUP_DIRECTORY, BACKUP_LEAF, PRE_MIGRATION_BACKUP_LEAF }
+  from "../bootstrap/activation-receipts-measure.js";
+import { MIGRATION_LOCK_LEAF, migrateWithBackup } from "../repository/migrations/migration-service.js";
+import { readMigrationReceipt } from "../repository/migrations/migration-receipt.js";
+import { MigrationExecutionError } from "../repository/migrations/migration-ports.js";
+import type { MigrationPorts } from "../repository/migrations/migration-ports.js";
+import {
+  NO_RELEASE_DECISION_NOTE, buildArgv, candidateContainerName, createDeployService, healthArgv,
+  runCandidateArgv,
+} from "./deploy-service.js";
+
+/**
+ * OFFLINE. Every port is the state-machine double: no test here reaches the
+ * network or a real docker daemon, and none spawns a child.
+ *
+ * Every store handle is registered with the shared fixture and closed by
+ * `afterEach(closeStores)`, which vitest runs on the THROWING path too — so a
+ * failing assertion cannot leak a handle or a temp directory.
+ */
+
+afterEach(closeStores);
+// `execFile` is mocked alongside `spawn` because the migration arms below import the real
+// `migration-service.js`, whose `nodeMigrationPorts` default reaches for it at module load.
+// Those arms inject their own `dump`/`apply`, so the default is never CALLED — but an
+// unmocked export would make this file fail to load, and mocking it keeps the OFFLINE
+// guarantee in the header literally true rather than merely intended.
+vi.mock("node:child_process", () => ({ execFile: vi.fn(), spawn: vi.fn() }));
+
+const PROJECT = "project-review-1";
+/**
+ * WHAT A DECLASSIFIED REFUSAL DETAIL READS AS. `recordDeployReceipt` replaces every detail that
+ * is not one of the engine's own public phase words before the receipt becomes durable, because
+ * docker's stderr, ssh's stderr and a migration engine's free text can all carry a connection
+ * string or a token (epic rail 3). The refusal CODE and LAYER are untouched, so every arm below
+ * still asserts which layer refused and why; only the tool's raw words stop being durable.
+ * Restated here rather than imported: an arm importing the production constant would follow it to
+ * any other value and keep passing. Its own exhaustive coverage is in
+ * `deploy-refusal-redaction.test.ts`.
+ */
+const REDACTED_DETAIL = "[REDACTED]";
+const ENVIRONMENT = "production";
+const STAGING = "staging";
+const SHA = "0123456789abcdef0123456789abcdef01234567";
+const OTHER_SHA = "fedcba9876543210fedcba9876543210fedcba98";
+const CONTEXT = "/workspace/app";
+const INCUMBENT = "app";
+const PROXY_CONFIG = deploymentInfrastructureFiles(CONTROLLED_PROFILE_VERSION, []).get("docker/Caddyfile") ?? "";
+const LOCAL: DeployTarget = { network: "moe-net", sshTarget: null, url: "https://app.example.test" };
+const REMOTE: DeployTarget = { ...LOCAL, sshTarget: "deployer@host.example.test" };
+
+interface Harness {
+  readonly candidate: string;
+  readonly docker: DockerDouble;
+  readonly store: ReturnType<typeof openStore>;
+  deploy(overrides?: { decisionId?: string; sha?: string }): ReturnType<
+    ReturnType<typeof createDeployService>["deploy"]
+  >;
+}
+
+/**
+ * The candidate reports `starting` once and then `healthy`, so the poll loop is
+ * genuinely exercised rather than short-circuited on its first probe.
+ */
+function harness(options: {
+  readonly decisionId?: string;
+  readonly double?: DockerDoubleOptions;
+  readonly environment?: string;
+  readonly migrate?: DeployMigrationPort;
+  readonly release?: string | null;
+  readonly sha?: string;
+  readonly target?: DeployTarget | null;
+  readonly wrapDocker?: (runner: DockerRunner) => DockerRunner;
+} = {}): Harness {
+  const environment = options.environment ?? ENVIRONMENT;
+  const sha = options.sha ?? SHA;
+  const decisionId = options.decisionId ?? "decision-1";
+  const candidate = candidateContainerName(environment, sha, decisionId);
+  const docker = createDockerDouble({
+    proxyConfig: PROXY_CONFIG,
+    health: { [candidate]: ["STARTING", "HEALTHY"] },
+    running: { [INCUMBENT]: "HEALTHY" },
+    ...options.double,
+  });
+  const store = openStore();
+  const runDocker = options.wrapDocker?.(docker.docker) ?? docker.docker;
+  const service = createDeployService({
+    clock: () => "2026-09-06T00:00:00.000Z",
+    // Zero-cost time: the budget is exercised in poll COUNTS, never in wall clock.
+    pollMs: 1, healthBudgetMs: 10, sleep: () => Promise.resolve(),
+    ports: {
+      build: request => runDocker(buildArgv(request.tag)),
+      docker: runDocker,
+      releaseDecision: () => options.release ?? null,
+      ssh: docker.ssh,
+      target: () => (options.target === undefined ? LOCAL : options.target),
+      transfer: docker.transfer,
+      // Spread, not assigned: an explicit `undefined` is a DIFFERENT thing from an absent key
+      // under exactOptionalPropertyTypes, and only the absent key means "this composition did
+      // not ask for a migration" — which is what every pre-existing arm in this file relies on.
+      ...(options.migrate === undefined ? {} : { migrate: options.migrate }),
+    },
+    projectId: PROJECT, store,
+  });
+  return {
+    candidate, deploy: (overrides = {}) => service.deploy({
+      context: CONTEXT, decisionId: overrides.decisionId ?? decisionId,
+      environment, sha: overrides.sha ?? sha,
+    }),
+    docker, store,
+  };
+}
+
+const argvFor = (docker: DockerDouble, verb: string): readonly string[] | undefined =>
+  docker.calls.find((call) => call[0] === verb);
+
+describe("the deploy engine builds at the landed sha (DoD 1)", () => {
+  it("tags the image with the sha VALUE and passes the context, byte for byte", async () => {
+    const context = harness();
+    const report = await context.deploy();
+
+    expect(report.outcome).toBe("DEPLOYED");
+    // BYTE-FOR-BYTE against the sha VALUE bound above. `toMatch(/[0-9a-f]{40}/)`
+    // would pass for the WRONG sha, and every later rollback resolves through
+    // this tag.
+    expect(argvFor(context.docker, "build")).toEqual([
+      "build", "--tag", `moe-deploy-production:${SHA}`, "-",
+    ]);
+    expect(argvFor(context.docker, "build")?.[2]).toBe(deployImageTag(ENVIRONMENT, SHA));
+    expect(argvFor(context.docker, "build")?.[2]?.split(":")[1]).toBe(SHA);
+  });
+
+  it("starts the candidate with NO published host port and probes it BY NAME", async () => {
+    const context = harness();
+    await context.deploy();
+
+    const run = argvFor(context.docker, "run");
+    expect(run).toEqual(runCandidateArgv(context.candidate, "moe-net", deployImageTag(ENVIRONMENT, SHA)));
+    expect(run).toEqual([
+      "run", "--detach", "--name", context.candidate, "--network", "moe-net",
+      `moe-deploy-production:${SHA}`,
+    ]);
+    // No `-p` / `--publish` anywhere: a published host port is bound at container
+    // create, so a candidate that published one could not start beside the incumbent.
+    expect(run?.some((token) => token === "-p" || token === "--publish")).toBe(false);
+    // The probe argv NAMES THE CANDIDATE. A probe addressed at the environment's
+    // url would be answered by the OLD container and pass instantly.
+    expect(context.docker.calls.filter((call) => call[0] === "inspect")
+      .every((call) => call[call.length - 1] === context.candidate)).toBe(true);
+    expect(argvFor(context.docker, "inspect")).toEqual(healthArgv(context.candidate));
+  });
+
+  it("sends `docker save` and `ssh docker load` as two argv arrays, asserted independently", async () => {
+    const context = harness({ target: REMOTE });
+    const report = await context.deploy();
+
+    expect(report.outcome).toBe("DEPLOYED");
+    const tag = deployImageTag(ENVIRONMENT, SHA);
+    expect(context.docker.calls).toContainEqual(["save", tag]);
+    expect(dockerSaveArgv(tag)).toEqual(["save", tag]);
+    expect(context.docker.sshCalls).toContainEqual([REMOTE.sshTarget, "docker", "load"]);
+    expect(sshDockerLoadArgv(REMOTE.sshTarget as string)).toEqual([
+      REMOTE.sshTarget, "docker", "load",
+    ]);
+  });
+
+  it("surfaces the FIRST child's failure, the exit code a shell pipe would swallow", async () => {
+    const context = harness({
+      double: { saveStderr: "Error response from daemon: no such image: sha-not-built" },
+      target: REMOTE,
+    });
+    const report = await context.deploy();
+
+    expect(report.outcome).toBe("REFUSED");
+    const receipt = readDeployLedger(context.store, PROJECT).get(ENVIRONMENT)?.current;
+    expect(receipt?.refusal?.code).toBe(DEPLOY_BUILD_FAILED);
+    expect(receipt?.refusal?.layer).toBe(DEPLOY_ENGINE_STAMP);
+    // The DETAIL is declassified at the write (epic rail 3, `deploy-ledger.ts`): `docker save`'s
+    // stderr is external free text and a pull/push failure is exactly where a registry credential
+    // appears. THE ROW'S CLAIM SURVIVES WITHOUT IT — the second child (`ssh docker load`) would
+    // have exited 0, so a shell pipe reporting only the LAST status would have read DEPLOYED here.
+    // REFUSED is therefore the whole evidence that the FIRST child's exit code was not swallowed.
+    expect(receipt?.refusal?.detail).toBe(REDACTED_DETAIL);
+    expect(receipt?.refusal?.detail).not.toContain("no such image");
+    expect(context.docker.calls).toContainEqual(dockerSaveArgv(deployImageTag(ENVIRONMENT, SHA)));
+    expect(context.docker.sshCalls).toContainEqual(sshDockerLoadArgv(REMOTE.sshTarget as string));
+    // `save` failing means `load` must never be treated as the whole answer.
+    expect(context.docker.state(context.candidate)).toBe("ABSENT");
+  });
+});
+
+describe("a health refusal leaves a DEFINED state (DoD 3)", () => {
+  it("refuses with code AND layer when the candidate never reports healthy", async () => {
+    const context = harness({ double: { health: {}, running: { [INCUMBENT]: "HEALTHY" } } });
+    const report = await context.deploy();
+
+    expect(report.outcome).toBe("REFUSED");
+    const receipt = readDeployLedger(context.store, PROJECT).get(ENVIRONMENT)?.current;
+    expect(receipt?.refusal?.code).toBe(DEPLOY_HEALTH_TIMEOUT);
+    expect(receipt?.refusal?.layer).toBe(DEPLOY_ENGINE_STAMP);
+    expect(receipt?.imageDigest).toBeNull();
+    expect(context.docker.state(INCUMBENT)).toBe("HEALTHY");
+    expect(context.docker.state(context.candidate)).toBe("REMOVED");
+    expect(context.docker.config()).toBe(PROXY_CONFIG);
+    expect(context.docker.upstream()).toBe(INCUMBENT);
+    expect(context.docker.writes).toEqual([]);
+    expect(context.docker.calls.some((call) => call.includes("reload"))).toBe(false);
+  });
+
+  it("leaves the incumbent RUNNING and the candidate REMOVED, read from the port's final state", async () => {
+    const context = harness({
+      double: { health: { [candidateContainerName(ENVIRONMENT, SHA, "decision-1")]: ["STARTING"] },
+        running: { [INCUMBENT]: "HEALTHY" } },
+    });
+    await context.deploy();
+
+    // The STATE, not the return value: a half-deployed environment reporting a
+    // refusal while leaking a stray container is as undefined as a half-deploy.
+    expect(context.docker.state(INCUMBENT)).toBe("HEALTHY");
+    expect(context.docker.state(context.candidate)).toBe("REMOVED");
+    expect(context.docker.serving()).toEqual([INCUMBENT]);
+    expect(context.docker.calls).toContainEqual(["rm", "--force", context.candidate]);
+  });
+});
+
+describe("every refusal names its code and its layer (DoD 4)", () => {
+  it("refuses DEPLOY_TARGET_MISSING when no target is bound", async () => {
+    const context = harness({ target: null });
+    const report = await context.deploy();
+
+    expect(report.outcome).toBe("REFUSED");
+    const receipt = readDeployLedger(context.store, PROJECT).get(ENVIRONMENT)?.current;
+    expect(receipt?.refusal?.code).toBe(DEPLOY_TARGET_MISSING);
+    expect(receipt?.refusal?.layer).toBe(DEPLOY_ENGINE_STAMP);
+    // Nothing was invoked: a missing target is answered before any effect.
+    expect(context.docker.calls).toEqual([]);
+  });
+
+  it("refuses DEPLOY_DOCKER_UNAVAILABLE when docker does not answer at all", async () => {
+    const context = harness({ double: { dockerUnavailable: true } });
+    const report = await context.deploy();
+
+    expect(report.outcome).toBe("REFUSED");
+    const receipt = readDeployLedger(context.store, PROJECT).get(ENVIRONMENT)?.current;
+    expect(receipt?.refusal?.code).toBe(DEPLOY_DOCKER_UNAVAILABLE);
+    expect(receipt?.refusal?.layer).toBe(DEPLOY_ENGINE_STAMP);
+    expect(context.docker.state(context.candidate)).toBe("ABSENT");
+  });
+
+  it("declassifies docker's build stderr instead of making it durable", async () => {
+    const planted = "failed to solve: process \"/bin/sh -c pnpm build\" did not complete successfully: exit code: 137";
+    const context = harness({ double: { buildStderr: `Step 7/9 : RUN pnpm build\n${planted}\n` } });
+    const report = await context.deploy();
+
+    expect(report.outcome).toBe("REFUSED");
+    const receipt = readDeployLedger(context.store, PROJECT).get(ENVIRONMENT)?.current;
+    // THE CODE AND THE LAYER STILL NAME THE CAUSE. A build refusal is not degraded to a bare
+    // failure — what changes is that docker's own words no longer become durable, because a
+    // failing `RUN` step routinely echoes a token, a registry URL or a `--build-arg` value.
+    expect(receipt?.refusal?.code).toBe(DEPLOY_BUILD_FAILED);
+    expect(receipt?.refusal?.layer).toBe(DEPLOY_ENGINE_STAMP);
+    expect(receipt?.refusal?.detail).toBe(REDACTED_DETAIL);
+    expect(receipt?.refusal?.detail).not.toContain("exit code: 137");
+  });
+});
+
+describe("the previous receipt is kept and readable (DoD 6)", () => {
+  it("keeps BOTH receipts retrievable and distinguishable by sha across two deploys", async () => {
+    const first = harness({ decisionId: "decision-1" });
+    await first.deploy();
+    const second = createDeployService({
+      clock: () => "2026-09-06T01:00:00.000Z",
+      pollMs: 1, healthBudgetMs: 10, sleep: () => Promise.resolve(),
+      ports: {
+        build: first.docker.build,
+        docker: createDockerDouble({
+          proxyConfig: PROXY_CONFIG,
+          running: { [INCUMBENT]: "HEALTHY" },
+          health: { [candidateContainerName(ENVIRONMENT, OTHER_SHA, "decision-2")]: ["HEALTHY"] },
+        }).docker,
+        releaseDecision: () => null, ssh: first.docker.ssh, target: () => LOCAL,
+        transfer: first.docker.transfer,
+      },
+      projectId: PROJECT, store: first.store,
+    });
+    const later = await second.deploy({
+      context: CONTEXT, decisionId: "decision-2", environment: ENVIRONMENT, sha: OTHER_SHA,
+    });
+
+    expect(later.outcome).toBe("DEPLOYED");
+    // THE CALL task-da60dc4b39c SHOULD USE:
+    // readPreviousDeployReceipt(store, projectId, environment): DeployReceiptV1 | null
+    const previous = readPreviousDeployReceipt(first.store, PROJECT, ENVIRONMENT);
+    const state = readDeployLedger(first.store, PROJECT).get(ENVIRONMENT);
+    expect(previous?.sha).toBe(SHA);
+    expect(state?.current.sha).toBe(OTHER_SHA);
+    expect(previous?.sha).not.toBe(state?.current.sha);
+    expect(previous?.receiptId).not.toBe(state?.current.receiptId);
+    expect(state?.receipts).toHaveLength(2);
+  });
+
+  it("replays the same decision rather than losing the previous entry", async () => {
+    const context = harness({ decisionId: "decision-1" });
+    await context.deploy();
+    const calls = context.docker.calls.length;
+    const replay = await context.deploy();
+
+    expect(replay.outcome).toBe("DEPLOYED");
+    const state = readDeployLedger(context.store, PROJECT).get(ENVIRONMENT);
+    // ONE row, not two: the receipt id is a pure function of the decision.
+    expect(state?.receipts).toHaveLength(1);
+    expect(state?.current.sha).toBe(SHA);
+    expect(context.docker.calls).toHaveLength(calls);
+  });
+
+  it("replays a refusal before effects, rather than deploying behind a REFUSED receipt", async () => {
+    const context = harness({ double: { lockHeld: true } });
+    try {
+      const first = await context.deploy();
+      expect(first.receipt?.refusal).toEqual({ code: DEPLOY_BUILD_FAILED, layer: DEPLOY_ENGINE_STAMP,
+        detail: "DEPLOY_PROXY_BUSY" });
+      await context.docker.docker(["exec", "proxy", "rmdir", "/tmp/moe-deploy-lock"]);
+      const calls = context.docker.calls.length;
+      const replay = await context.deploy();
+      expect(replay.outcome).toBe("REFUSED");
+      expect(replay.receipt).toEqual(first.receipt);
+      expect(context.docker.calls).toHaveLength(calls);
+      expect(context.docker.state(context.candidate)).toBe("ABSENT");
+    } finally { closeStores(); }
+  });
+
+  it("answers null for an environment that has deployed only once, and nothing for one that never has", async () => {
+    const context = harness();
+    await context.deploy();
+
+    // Null means "nothing to roll back TO" — never the CURRENT receipt, which
+    // would make a rollback a no-op wearing a success.
+    expect(readPreviousDeployReceipt(context.store, PROJECT, ENVIRONMENT)).toBeNull();
+    expect(readPreviousDeployReceipt(context.store, PROJECT, STAGING)).toBeNull();
+  });
+});
+
+describe("a production deploy reads the release decision, and never decides one (DoD 7)", () => {
+  it("CITES the release decision when the port answers one, and does not refuse", async () => {
+    const context = harness({ release: "release-2026-09-06-a" });
+    const report = await context.deploy();
+
+    expect(report.outcome).toBe("DEPLOYED");
+    expect(report.detail).toContain("cites release decision release-2026-09-06-a");
+    expect(readDeployLedger(context.store, PROJECT).get(ENVIRONMENT)?.current.releaseDecision)
+      .toBe("release-2026-09-06-a");
+  });
+
+  it("states 'no release decision' when the port answers null, and does not refuse", async () => {
+    const context = harness({ release: null });
+    const report = await context.deploy();
+
+    expect(report.outcome).toBe("DEPLOYED");
+    expect(report.detail).toContain("no release decision");
+    expect(NO_RELEASE_DECISION_NOTE).toBe("no release decision");
+    expect(readDeployLedger(context.store, PROJECT).get(ENVIRONMENT)?.current.releaseDecision)
+      .toBeNull();
+  });
+});
+
+describe("the probe reads the candidate, not the container it replaces", () => {
+  it("does NOT succeed while the OLD container is healthy and the candidate is only starting", async () => {
+    // The subtlest bug available here: a probe addressed at the environment's
+    // public url is answered by the incumbent, so every deploy 'passes' health
+    // instantly while proving nothing about the image just built.
+    const candidate = candidateContainerName(ENVIRONMENT, SHA, "decision-1");
+    const context = harness({
+      double: { health: { [INCUMBENT]: ["HEALTHY"], [candidate]: ["STARTING"] },
+        running: { [INCUMBENT]: "HEALTHY" } },
+    });
+    const report = await context.deploy();
+
+    expect(report.outcome).toBe("REFUSED");
+    const receipt = readDeployLedger(context.store, PROJECT).get(ENVIRONMENT)?.current;
+    expect(receipt?.refusal?.code).toBe(DEPLOY_HEALTH_TIMEOUT);
+    expect(context.docker.state(INCUMBENT)).toBe("HEALTHY");
+  });
+});
+
+describe("the proxy flip keeps a healthy public route", () => {
+  it.each(["\u00a0reverse_proxy app:3000", "\treverse_proxy app:3000\u00a0"])(
+    "refuses Unicode directive whitespace before an unchanged route can be retired: %s", async (directive) => {
+      const proxyConfig = PROXY_CONFIG.replace("\treverse_proxy app:3000", directive);
+      expect(proxyConfig).not.toBe(PROXY_CONFIG);
+      const context = harness({ double: { proxyConfig } });
+      try {
+        const report = await context.deploy();
+        expect(report.receipt?.refusal).toEqual({ code: DEPLOY_BUILD_FAILED, layer: DEPLOY_ENGINE_STAMP,
+          detail: "DEPLOY_PROXY_CONFIG_UNSUPPORTED" });
+        expect(context.docker.state(context.candidate)).toBe("ABSENT");
+        expect(context.docker.state(INCUMBENT)).toBe("HEALTHY");
+        expect(context.docker.config()).toBe(proxyConfig);
+        expect(context.docker.writes).toEqual([]);
+      } finally { closeStores(); }
+    },
+  );
+
+  it("refuses a custom topology that would flip an unpublished listener instead of public 3000", async () => {
+    const proxyConfig = ":3000 {\n\treverse_proxy {\n\t\tto app:3000\n\t}\n}\n:3001 {\n\treverse_proxy app:3000\n}\n";
+    const context = harness({ double: { proxyConfig } });
+    try {
+      const report = await context.deploy();
+      expect(report.receipt?.refusal).toEqual({ code: DEPLOY_BUILD_FAILED, layer: DEPLOY_ENGINE_STAMP,
+        detail: "DEPLOY_PROXY_CONFIG_UNSUPPORTED" });
+      expect(context.docker.state(context.candidate)).toBe("ABSENT");
+      expect(context.docker.state(INCUMBENT)).toBe("HEALTHY");
+      expect(context.docker.config()).toBe(proxyConfig);
+      expect(context.docker.writes).toEqual([]);
+    } finally { closeStores(); }
+  });
+
+  it("rechecks a replay after acquiring the lease, refusing a raced different sha before effects", async () => {
+    let release = () => {}; let versions = 0;
+    const wait = new Promise<void>((resolve) => { release = resolve; });
+    const laterName = candidateContainerName(ENVIRONMENT, OTHER_SHA, "decision-1");
+    const context = harness({
+      double: { health: { [candidateContainerName(ENVIRONMENT, SHA, "decision-1")]: ["HEALTHY"], [laterName]: ["HEALTHY"] } },
+      wrapDocker: (base) => async (args, stdin) => {
+        if (args[0] === "version" && ++versions === 2) await wait;
+        return base(args, stdin);
+      },
+    });
+    const first = context.deploy(); const second = context.deploy({ sha: OTHER_SHA });
+    try {
+      expect((await first).outcome).toBe("DEPLOYED");
+      release();
+      expect(await second).toEqual({ outcome: "REFUSED", detail: "DEPLOY_DECISION_REPLAY_MISMATCH", environment: ENVIRONMENT, receipt: null });
+      expect(context.docker.upstream()).toBe(context.candidate);
+      expect(context.docker.state(laterName)).toBe("ABSENT");
+    } finally { release(); await Promise.all([first, second]); closeStores(); }
+  });
+
+  it("treats SSH exit 255 as uncertain completion, not a refused remote reload", async () => {
+    const context = harness({ target: REMOTE, double: { reloadCodes: [255], reloadAppliesOnFailure: true } });
+    try {
+      const report = await context.deploy();
+      expect(report.receipt?.refusal).toEqual({ code: DEPLOY_BUILD_FAILED, layer: DEPLOY_ENGINE_STAMP,
+        detail: "DEPLOY_PROXY_RECOVERY_REQUIRED" });
+      expect(context.docker.state(INCUMBENT)).toBe("HEALTHY");
+      expect(context.docker.state(context.candidate)).toBe("HEALTHY");
+      expect(context.docker.locked()).toBe(true);
+    } finally { closeStores(); }
+  });
+  it("rewrites the directive, never an upstream mentioned in a comment", async () => {
+    const context = harness({ double: { proxyConfig: `# reverse_proxy app:3000\n${PROXY_CONFIG}` } });
+    try {
+      const report = await context.deploy();
+      expect(report.outcome).toBe("DEPLOYED");
+      expect(context.docker.config()).toContain("# reverse_proxy app:3000\n");
+      expect(context.docker.config()).toContain(`\treverse_proxy ${context.candidate}:3000\n`);
+      expect(context.docker.upstream()).toBe(context.candidate);
+      expect(context.docker.serving()).toEqual([context.candidate]);
+    } finally { closeStores(); }
+  });
+
+  it.each([
+    { double: { reloadCodes: [1] }, detail: "DEPLOY_PROXY_RELOAD_FAILED" },
+    { double: { rewriteCodes: [1] }, detail: "DEPLOY_PROXY_WRITE_FAILED" },
+  ])("restores the old route after $detail", async ({ double, detail }) => {
+    const context = harness({ double });
+    try {
+      const report = await context.deploy();
+      expect(report.receipt?.refusal).toEqual({ code: DEPLOY_BUILD_FAILED, layer: DEPLOY_ENGINE_STAMP, detail });
+      expect(context.docker.state(INCUMBENT)).toBe("HEALTHY");
+      expect(context.docker.upstream()).toBe(INCUMBENT);
+      expect(context.docker.config()).toBe(PROXY_CONFIG);
+      expect(context.docker.state(context.candidate)).toBe("REMOVED");
+      expect(context.docker.locked()).toBe(false);
+      for (const transition of context.docker.transitions) expect(transition.serving.length).toBeGreaterThan(0);
+    } finally { closeStores(); }
+  });
+
+  it.each([
+    { reloadCodes: [null], reloadAppliesOnFailure: true },
+    { reloadCodes: [1, 1] },
+    { rewriteCodes: [null] },
+  ])("keeps both containers and the lock on uncertain commands or failed restoration", async (double) => {
+    const context = harness({ double });
+    try {
+      const report = await context.deploy();
+      expect(report.receipt?.refusal).toEqual({ code: DEPLOY_BUILD_FAILED, layer: DEPLOY_ENGINE_STAMP,
+        detail: "DEPLOY_PROXY_RECOVERY_REQUIRED" });
+      expect(context.docker.state(INCUMBENT)).toBe("HEALTHY");
+      expect(context.docker.state(context.candidate)).toBe("HEALTHY");
+      expect(context.docker.locked()).toBe(true);
+    } finally { closeStores(); }
+  });
+
+  it.each([
+    { double: { proxyNames: [] }, detail: "DEPLOY_PROXY_MISSING_OR_AMBIGUOUS" },
+    { double: { proxyNames: ["proxy", "another"] }, detail: "DEPLOY_PROXY_MISSING_OR_AMBIGUOUS" },
+    { double: { lockHeld: true }, detail: "DEPLOY_PROXY_BUSY" },
+    { double: { proxyConfig: "unsupported configuration" }, detail: "DEPLOY_PROXY_CONFIG_UNSUPPORTED" },
+  ])("refuses $detail before starting a candidate", async ({ double, detail }) => {
+    const context = harness({ double });
+    try {
+      const report = await context.deploy();
+      expect(report.receipt?.refusal).toEqual({ code: DEPLOY_BUILD_FAILED, layer: DEPLOY_ENGINE_STAMP, detail });
+      expect(context.docker.state(INCUMBENT)).toBe("HEALTHY");
+      expect(context.docker.state(context.candidate)).toBe("ABSENT");
+    } finally { closeStores(); }
+  });
+
+  it("serializes concurrent deploys at the proxy rather than per service instance", async () => {
+    const context = harness();
+    try {
+      const reports = await Promise.all([context.deploy(), context.deploy({ decisionId: "decision-2" })]);
+      expect(reports.map((report) => report.outcome).sort()).toEqual(["DEPLOYED", "REFUSED"]);
+      expect(reports.find((report) => report.outcome === "REFUSED")?.receipt?.refusal)
+        .toEqual({ code: DEPLOY_BUILD_FAILED, layer: DEPLOY_ENGINE_STAMP, detail: "DEPLOY_PROXY_BUSY" });
+      expect(context.docker.locked()).toBe(false);
+    } finally { closeStores(); }
+  });
+
+  it("never returns DEPLOYED behind a concurrent refusal for the same decision", async () => {
+    const context = harness();
+    try {
+      const reports = await Promise.all([context.deploy(), context.deploy()]);
+      expect(reports.map((report) => report.outcome)).toEqual(["REFUSED", "REFUSED"]);
+      for (const report of reports) expect(report.receipt?.refusal).toEqual({
+        code: DEPLOY_BUILD_FAILED, layer: DEPLOY_ENGINE_STAMP, detail: "DEPLOY_PROXY_BUSY",
+      });
+      expect(context.docker.state(INCUMBENT)).toBe("HEALTHY");
+      expect(context.docker.state(context.candidate)).toBe("ABSENT");
+      expect(context.docker.calls.some((call) => call[0] === "run")).toBe(false);
+      expect(context.docker.upstream()).toBe(INCUMBENT);
+    } finally { closeStores(); }
+  });
+
+  it("reloads before stopping the incumbent, with no gap at any transition", async () => {
+    const context = harness();
+    try {
+      const report = await context.deploy();
+      expect(report.outcome).toBe("DEPLOYED");
+      expect(context.docker.state(INCUMBENT)).toBe("STOPPED");
+      expect(context.docker.upstream()).toBe(context.candidate);
+      expect(context.docker.transitions.length).toBeGreaterThan(5);
+      for (const [index, state] of context.docker.transitions.entries()) {
+        expect(state.serving.length, `transition ${index}: ${state.argv.join(" ")}`).toBeGreaterThan(0);
+      }
+
+    } finally { closeStores(); }
+  });
+
+  it("records exact rewrite and reload argv before the incumbent stop", async () => {
+    const context = harness();
+    try {
+      expect((await context.deploy()).outcome).toBe("DEPLOYED");
+      const rewrite = ["exec", "-i", "proxy", "tee", "/etc/caddy/Caddyfile"];
+      const reload = ["exec", "proxy", "caddy", "reload", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"];
+      expect(context.docker.calls).toContainEqual(rewrite);
+      expect(context.docker.calls).toContainEqual(reload);
+      const index = (argv: string[]) => context.docker.calls.findIndex((call) => JSON.stringify(call) === JSON.stringify(argv));
+      expect(index(reload)).toBeGreaterThan(index(rewrite));
+      expect(index(["stop", INCUMBENT])).toBeGreaterThan(index(reload));
+      expect(context.docker.writes[0]).toContain(`reverse_proxy ${context.candidate}:3000`);
+      expect(context.docker.locked()).toBe(false);
+    } finally { closeStores(); }
+  });
+
+  it("refuses a malformed sha BEFORE any effect, so no container outlives its receipt", async () => {
+    // The receipt decoder would refuse to record this, so the container must
+    // never start: an effect with no durable trace is worse than a refusal.
+    const context = harness({ sha: "not-a-sha" });
+    const report = await context.deploy({ sha: "not-a-sha" });
+
+    expect(report.outcome).toBe("REFUSED");
+    expect(context.docker.calls).toEqual([]);
+    expect(context.docker.serving()).toEqual([INCUMBENT]);
+    expect(readDeployLedger(context.store, PROJECT).size).toBe(0);
+  });
+
+  it("refuses an environment name the receipt decoder would reject, before any effect", async () => {
+    const context = harness({ environment: "Production DB" });
+    const report = await context.deploy();
+
+    expect(report.outcome).toBe("REFUSED");
+    expect(context.docker.calls).toEqual([]);
+  });
+
+  it("builds argv through the shipped builders, so an assertion is about shipped bytes", async () => {
+    const context = harness();
+    await context.deploy();
+
+    expect(buildArgv(deployImageTag(ENVIRONMENT, SHA)))
+      .toEqual(argvFor(context.docker, "build"));
+  });
+});
+
+describe("the host argv port handles failed stdin without leaking a child", () => {
+  it("finally removes a real temporary store even when the test arm throws", () => {
+    const fixture = openRestartableStore();
+    expect(existsSync(fixture.path)).toBe(true);
+    try {
+      expect(() => { try { throw new Error("DRILL_THROW"); } finally { closeStores(); } }).toThrow("DRILL_THROW");
+      expect(existsSync(dirname(fixture.path))).toBe(false);
+    } finally { closeStores(); }
+  });
+
+  it("restores the old route if the receipt id is consumed while reload is in flight", async () => {
+    let ready = () => {}; let release = () => {}; let paused = false;
+    const arrived = new Promise<void>((resolve) => { ready = resolve; });
+    const wait = new Promise<void>((resolve) => { release = resolve; });
+    const context = harness({ wrapDocker: (base) => async (args, stdin) => {
+      if (args.includes("reload") && !paused) { paused = true; ready(); await wait; }
+      return base(args, stdin);
+    } });
+    const first = context.deploy();
+    try {
+      await arrived;
+      const second = await context.deploy();
+      expect(second.receipt?.refusal).toEqual({ code: DEPLOY_BUILD_FAILED, layer: DEPLOY_ENGINE_STAMP,
+        detail: "DEPLOY_PROXY_BUSY" });
+      release();
+      const report = await first;
+      expect(report.outcome).toBe("REFUSED");
+      expect(report.detail).toContain("DEPLOY_RECEIPT_CONFLICT");
+      expect(report.receipt?.refusal).toEqual(second.receipt?.refusal);
+      expect(context.docker.state(INCUMBENT)).toBe("HEALTHY");
+      expect(context.docker.state(context.candidate)).toBe("REMOVED");
+      expect(context.docker.upstream()).toBe(INCUMBENT);
+      expect(context.docker.locked()).toBe(false);
+    } finally { release(); await first; closeStores(); }
+  });
+  it.each(["stdin", "timeout"])("waits for close after %s uncertainty", async (failure) => {
+    const child = Object.assign(new EventEmitter(), {
+      stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(), kill: vi.fn(() => true),
+    });
+    vi.mocked(spawn).mockReturnValue(child as unknown as ChildProcess);
+    vi.useFakeTimers();
+    const pending = nodeDockerRunner(["exec", "-i", "proxy", "tee", "/etc/caddy/Caddyfile"], PROXY_CONFIG);
+    let settled = false;
+    void pending.then(() => { settled = true; });
+    try {
+      expect(spawn).toHaveBeenLastCalledWith("docker", ["exec", "-i", "proxy", "tee", "/etc/caddy/Caddyfile"],
+        { shell: false, windowsHide: true });
+      if (failure === "stdin") expect(() => child.stdin.emit("error", new Error("pipe closed"))).not.toThrow();
+      else await vi.advanceTimersByTimeAsync(DEPLOY_COMMAND_TIMEOUT_MS);
+      expect(child.kill).toHaveBeenCalledOnce();
+      expect(settled).toBe(false);
+      child.emit("close", 1);
+      expect(await pending).toMatchObject({ code: null,
+        stderr: failure === "stdin" ? "\nDEPLOY_STDIN_UNAVAILABLE" : "\nDEPLOY_COMMAND_TIMED_OUT" });
+    } finally {
+      child.emit("close", null); await pending;
+      child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy();
+      vi.useRealTimers(); vi.mocked(spawn).mockReset();
+    }
+  });
+});
+
+/**
+ * BACKUP-BEFORE-MIGRATE, COMPOSED INTO THE DEPLOY SEQUENCE (DoD 1, 3, 4).
+ *
+ * These arms drive the REAL `migrateWithBackup` — its ordering, its receipt, its project-wide
+ * lock — behind the injectable port. The ONLY doubles are docker (already this file's discipline)
+ * and the two migration host effects, `dump` and `apply`, which is the same line
+ * `migrate-down-test-fixtures.ts:43` draws. Nothing about the engine is restated here, so an
+ * assertion below is an assertion about shipped bytes.
+ *
+ * WHY THE ORDER IS THE SUBJECT: migrating before the image is proven could move the schema and
+ * then fail to produce an image; migrating after `startCandidate` boots the candidate against the
+ * OLD schema. Both neighbours are wrong, so the arms assert the OBSERVED SEQUENCE rather than
+ * that the calls happened.
+ */
+describe("the deploy composes backup-before-migrate before activating the candidate", () => {
+  const roots: string[] = [];
+  const DATABASE = "postgres://app:s3cr3t@db.internal:5432/app";
+  /**
+   * REAL MIGRATION FILENAMES. `migrationFilename` (migration-receipt.ts:42) admits only
+   * `/^\d{13,17}[-_][A-Za-z0-9_-]+\.(?:js|cjs|mjs|sql)$/`, and the receipt decoder applies it to
+   * BOTH `applied[]` and a MIGRATION_FAILED detail. A convenient `"0001_orders"` makes the engine
+   * answer MIGRATION_RECEIPT_INVALID and `"0007_add_orders.sql"` collapses to
+   * MIGRATION_FILE_UNKNOWN — so using the real grammar is what keeps these arms about ORDERING
+   * and REFUSAL rather than about receipt validation.
+   */
+  const APPLIED_BATCH = "1725660000000_orders.sql";
+  const FAILING_FILE = "1725660000007_add_orders.sql";
+
+  afterEach(() => {
+    while (roots.length > 0) {
+      const root = roots.pop();
+      if (root === undefined) continue;
+      try { rmSync(root, { force: true, recursive: true }); } catch { /* a held handle must not mask a failure */ }
+    }
+  });
+
+  function migrationRoot(): string {
+    const root = mkdtempSync(join(tmpdir(), "moe-deploy-migration-"));
+    roots.push(root);
+    return root;
+  }
+
+  interface Journal {
+    readonly events: string[];
+    readonly schema: string[];
+  }
+
+  /**
+   * The real engine behind the port, with a JOURNAL recording the ORDER of the two host effects.
+   * `dump` writes real bytes because `backupFileHash` reads the file back: a dump that only
+   * counted would make the retained-backup assertion vacuous.
+   */
+  function realMigration(
+    store: ReturnType<typeof openStore>, root: string, journal: Journal,
+    overrides: Partial<MigrationPorts> = {},
+  ): DeployMigrationPort {
+    return async (environment, sha, decisionId) => {
+      try {
+        const receipt = await migrateWithBackup(store, {
+          databaseUrl: DATABASE, environment, projectId: PROJECT, projectRoot: root,
+          requestId: decisionId, sha, workspace: root,
+        }, {
+          dump: overrides.dump ?? (async (_connection: string, path: string): Promise<void> => {
+            journal.events.push("dump:start");
+            writeFileSync(path, "-- " + journal.schema.join(",") + "\n");
+            journal.events.push("dump:end");
+          }),
+          apply: overrides.apply ?? (async (): Promise<readonly string[]> => {
+            journal.events.push("apply:start");
+            journal.schema.push(APPLIED_BATCH);
+            journal.events.push("apply:end");
+            return [APPLIED_BATCH];
+          }),
+        });
+        return receipt.outcome === "APPLIED"
+          ? { applied: receipt.applied, ok: true }
+          : { code: receipt.refusal?.code ?? "MIGRATION_FAILED", detail: receipt.refusal?.detail ?? "",
+            layer: receipt.refusal?.layer ?? "DAEMON_INGRESS", ok: false };
+      } catch (error) {
+        const thrown = error as { code?: unknown; layer?: unknown };
+        return typeof thrown.code === "string" && typeof thrown.layer === "string"
+          ? { code: thrown.code, detail: "", layer: thrown.layer, ok: false }
+          : { code: "MIGRATION_UNAVAILABLE", detail: "", layer: "DAEMON_INGRESS", ok: false };
+      }
+    };
+  }
+
+  it("(b) completes the DUMP before the APPLY begins, and both before the candidate starts", async () => {
+    const journal: Journal = { events: [], schema: [] };
+    const context = harness({ migrate: realMigration(openStore(), migrationRoot(), journal) });
+    const report = await context.deploy();
+
+    expect(report.outcome).toBe("DEPLOYED");
+    // THE OBSERVED SEQUENCE, not merely that both happened: `dump:end` must precede
+    // `apply:start`. An implementation that awaited neither would interleave here.
+    expect(journal.events).toEqual(["dump:start", "dump:end", "apply:start", "apply:end"]);
+    // AND the whole migration precedes the container start. `docker.calls` is in call order, so
+    // comparing indices is the ordering claim this row is actually about.
+    const inspected = context.docker.calls
+      .findIndex((call) => call[0] === "image" && call[1] === "inspect");
+    const started = context.docker.calls.findIndex((call) => call[0] === "run");
+    expect(inspected).toBeGreaterThanOrEqual(0);
+    expect(started).toBeGreaterThan(inspected);
+  });
+
+  it("(c) MIGRATION_BACKUP_FAILED leaves the schema unchanged and starts NOTHING", async () => {
+    const journal: Journal = { events: [], schema: ["accounts"] };
+    const root = migrationRoot();
+    // A FILE where the backup directory must be. `migrationBackupDirectory` lstats every path
+    // component and refuses anything that is not a directory. Nothing is mocked.
+    writeFileSync(join(root, BACKUP_DIRECTORY), "not a directory\n");
+    const migrationStore = openStore();
+    const context = harness({ migrate: realMigration(migrationStore, root, journal) });
+    const report = await context.deploy();
+
+    expect(report.outcome).toBe("REFUSED");
+    // THE DEPLOY'S OWN CODE AND LAYER. The migration's `code@layer` used to be copied into this
+    // detail; it is declassified now, because the same field also carries the engine's free text
+    // (a resolver's message, a failing path) and the writer cannot tell the two apart.
+    expect(report.receipt?.refusal).toMatchObject({
+      code: DEPLOY_BUILD_FAILED, detail: REDACTED_DETAIL, layer: DEPLOY_ENGINE_STAMP,
+    });
+    // THE AUTHORITATIVE MIGRATION CODE IS UNAFFECTED — it never lived in the deploy's detail. It
+    // is on the migration's OWN receipt, read back from the store rather than inferred, which is
+    // what makes the declassification above lossless for an operator.
+    expect(readMigrationReceipt(migrationStore, PROJECT, "decision-1")).toMatchObject({
+      outcome: "REFUSED", refusal: { code: "MIGRATION_BACKUP_FAILED", layer: "DAEMON_INGRESS" },
+    });
+    // THE SCHEMA IS UNTOUCHED and neither host effect ran — not "it returned a refusal".
+    expect(journal.schema).toEqual(["accounts"]);
+    expect(journal.events).toEqual([]);
+    // NO ACTIVATION AND NO FLIP. `run` starts the candidate and `tee` writes the proxy config, so
+    // asserting the ABSENCE of both is what "prevents activation and traffic flip" means here.
+    expect(context.docker.calls.filter((call) => call[0] === "run")).toEqual([]);
+    expect(context.docker.calls.filter((call) => call[0] === "exec" && call.includes("tee"))).toEqual([]);
+  });
+
+  it("(d) MIGRATION_FAILED names the failing file, persists a REFUSED receipt, retains the backup, and never reads DEPLOYED", async () => {
+    const journal: Journal = { events: [], schema: ["accounts"] };
+    const store = openStore();
+    const context = harness({
+      migrate: realMigration(store, migrationRoot(), journal, {
+        apply: async (): Promise<readonly string[]> => {
+          journal.events.push("apply:start");
+          throw new MigrationExecutionError(FAILING_FILE);
+        },
+      }),
+    });
+    const report = await context.deploy();
+
+    expect(report.outcome).toBe("REFUSED");
+    expect(report.receipt?.outcome).not.toBe("DEPLOYED");
+    // THE FAILING FILE DOES NOT reach the deploy's durable detail. A migration's free text is the
+    // one place a connection string is most likely to appear, so the deploy receipt keeps only
+    // its own code and layer; the failing FILE is read below off the migration's own receipt,
+    // which is the record that names it authoritatively anyway.
+    expect(report.receipt?.refusal?.detail).toBe(REDACTED_DETAIL);
+    expect(report.receipt?.refusal?.detail).not.toContain(FAILING_FILE);
+    expect(report.receipt?.refusal?.code).toBe(DEPLOY_BUILD_FAILED);
+    expect(report.receipt?.refusal?.layer).toBe(DEPLOY_ENGINE_STAMP);
+    // THE MIGRATION RECEIPT IS PERSISTED AND REFUSED — read back from the store, never inferred.
+    const persisted = readMigrationReceipt(store, PROJECT, "decision-1");
+    expect(persisted).toMatchObject({
+      outcome: "REFUSED",
+      refusal: { code: "MIGRATION_FAILED", detail: FAILING_FILE, layer: "DAEMON_INGRESS" },
+    });
+    // (f) THE BACKUP IS RETAINED after a post-dump failure: the receipt carries its ref and the
+    // file is still on disk. Discarding it is the one thing an operator cannot undo.
+    expect(persisted?.backupRef).toMatch(/@sha256:[0-9a-f]{64}$/u);
+    expect(existsSync((persisted?.backupRef ?? "").split("@sha256:")[0] ?? "")).toBe(true);
+    expect(journal.schema).toEqual(["accounts"]);
+    expect(context.docker.calls.filter((call) => call[0] === "run")).toEqual([]);
+  });
+
+  it("(e) a REPLAYED decision applies no second batch, and the EXISTING project lock refuses MIGRATION_IN_PROGRESS", async () => {
+    const journal: Journal = { events: [], schema: [] };
+    const root = migrationRoot();
+    const port = realMigration(openStore(), root, journal);
+
+    expect((await harness({ migrate: port }).deploy()).outcome).toBe("DEPLOYED");
+    expect(journal.schema).toEqual([APPLIED_BATCH]);
+
+    // SAME decisionId, so the engine's `requestId` replay answers from the receipt. A second batch
+    // would push a second "orders", which makes the SCHEMA the thing that proves no duplicate ran.
+    expect(await port(ENVIRONMENT, SHA, "decision-1")).toMatchObject({ ok: true });
+    expect(journal.schema).toEqual([APPLIED_BATCH]);
+    expect(journal.events.filter((event) => event === "apply:start")).toHaveLength(1);
+
+    // THE EXISTING PROJECT LOCK, taken by hand at the leaf the engine itself EXPORTS — not a
+    // second lock this row invented. A different decisionId cannot slip past it.
+    mkdirSync(join(root, BACKUP_DIRECTORY, BACKUP_LEAF, PRE_MIGRATION_BACKUP_LEAF, MIGRATION_LOCK_LEAF));
+    expect(await port(ENVIRONMENT, SHA, "decision-2"))
+      .toMatchObject({ code: "MIGRATION_IN_PROGRESS", layer: "DAEMON_INGRESS", ok: false });
+    expect(journal.schema).toEqual([APPLIED_BATCH]);
+  });
+});

@@ -27,7 +27,7 @@ engine — not the product promise.
 1. PRD
 2. Clarify and validate
 3. **Product Contract** — Gate 1: approve
-4. UX and architecture
+4. **UX and architecture** — running since 2026-09-06
 5. Implementation plan
 6. Parallel development
 7. **Contract amendment** when a requirement is measured unbuildable as written — Gate 1½ *(proposed)*
@@ -35,6 +35,13 @@ engine — not the product promise.
 9. **Working preview** — Gate 2: approve
 10. **Production release** — Gate 3: approve
 11. Observe users and iterate
+
+The four operator decisions above — Gate 1, the design step, Gate 2 and Gate 3 —
+COMPOSE ON ONE GOAL, measured 2026-09-09 rather than assumed:
+`apps/daemon/src/gates-compose-journey.test.ts` drives a single goal through all
+four through the real command path against a real store, in both variants (a
+design AUTHORED and a design DECLARED SKIPPED), and asserts each out-of-order
+attempt refuses with its own code AND the layer that answered.
 
 ## What Moe takes and returns
 
@@ -124,7 +131,8 @@ always spawning a fixed agent team.
 
 "Any PRD" would fail. Start with **TypeScript web applications: React, Node,
 PostgreSQL, GitHub, containerized deployment, browser-based acceptance tests.**
-Support exceptionally well: new repository creation; authentication and
+Support exceptionally well: new repository creation (local browser bootstrap
+measured 2026-09-06; GitHub creation not live-proven); authentication and
 authorization; database schema and migrations; responsive UI; API; testing;
 deployment; observability; security; documentation. Build a benchmark of 20–30
 representative PRDs. Do not expand to mobile, desktop, embedded, games, or
@@ -137,8 +145,42 @@ Contract; requirement-to-code traceability; canonical Foundation execution;
 Claude and Codex; isolated verifier; working browser preview; proof-carrying
 GitHub PR. *(proposed bar)* survives a crash **mid-write**, with recovery
 provable from durable records alone, never from agent memory.
+*Status, measured 2026-09-09:* THE PREVIEW GATE HAS BEEN DRIVEN against a real
+landed product, superseding the older line here that called it undriven. That
+line reasoned from a browser: `internal.repository.landing_receipt` has no HTTP
+ingress, so no BROWSER path produces the landed goal a preview requires — but the
+WRAPPER lands without HTTP, so the lane always could.
+`tests/e2e/control-room/preview-approve-live.spec.ts` and
+`preview-reject-live.spec.ts` land a preview scaffold through the real wrapper
+and the real `node-lander`, start a real `preview.start` that spawns a real dev
+server on loopback, and read both verdicts back out of `/activity/read`.
+WHAT IS STILL BROKEN IS THE BUTTON, not the gate: the verdicts are committed by
+the CONFIGURED OPERATOR rather than by a click, because the shipped browser pairs
+into a non-operator credential and is refused `OPERATOR_PRINCIPAL_REQUIRED @
+DAEMON_AUTHORIZATION`, and because `preview-port.ts` sends the preview AGGREGATE
+id where the decide edge spends a RECEIPT id (`PREVIEW_GOAL_NOT_LANDED @
+GOAL_AUTHORITY`). README.md carries both halves with their file and line.
+THE RELEASE GATE HAS BEEN DRIVEN. `release.decide` ships with a closed three-code
+refusal vocabulary, a daemon-rendered evidence dossier served over an
+authenticated read, and a browser card that keeps covered and UNKNOWN counts
+apart before asking for the verdict - and on 2026-09-08 that whole chain ran
+against github.com with nothing faked. A contract-bound goal, landed by the real
+wrapper's lander and published by the real publisher, was approved by the browser
+card's two clicks, and the product opened
+<https://github.com/yaront1111/Moe-NG/pull/33> at sha
+`205d51eb26322056fafcdc60ab98c247d1cd135e`. The proof-carrying PR is no longer
+the piece with no run behind it: the pull request BODY IS the stored dossier,
+byte for byte, its sha256 equal to the receipt's `dossierSha256`, listing every
+acceptance criterion with the verifier command, exit code, receipt sha and
+landing sha that carried it. Two limits stand and are not softened here: the
+landing still originates outside the browser, and a live `release.decide` outruns
+the browser's 15s transport abort, so the operator sees the link on the next look
+rather than in the ordering session.
 
-**Stage 2 — PRD → deployed MVP:** repository bootstrapping; infrastructure
+**Stage 2 — PRD → deployed MVP:** repository bootstrapping (the unseeded local
+browser path creates one commit, binds and catalogs the repository, and creates
+a PRD-bound goal, measured 2026-09-06; owner-directed GitHub creation remains
+unproven); infrastructure
 generation; preview and production deployment; secrets and environment
 management; database migrations; monitoring, backup, and rollback; release
 evidence.

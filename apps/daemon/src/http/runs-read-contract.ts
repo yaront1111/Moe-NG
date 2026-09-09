@@ -7,11 +7,12 @@
  *
  * `status` is a derived word for the card, spelled from those facts in one fixed order
  * (see `runs-read.ts`); every fact it was derived from travels beside it, so the card can
- * show the evidence and never has to trust the word. A node whose key is carried by more
- * than one activated plan is UNATTRIBUTABLE: the review ledger is keyed by bare node key,
- * so nothing durable says which plan's work a round or an acceptance belongs to.
+ * show the evidence and never has to trust the word. A node with legacy bare-key execution
+ * facts is UNATTRIBUTABLE: those records contain no sealed owner and cannot be migrated
+ * into the new scoped execution subject.
  */
 import type { PlanningRunApprovalState } from "./planning-run-read.js";
+import type { DeployRefusalCode } from "../deployment/deploy-receipt-contracts.js";
 
 export const RUNS_READ_PATH = "/runs/read" as const;
 const LAYER = "RUNS_READ" as const;
@@ -45,6 +46,7 @@ export interface RunNodeFinding {
   readonly subject: string;
 }
 export interface RunNodeReceipt {
+  readonly testedTreeSha: string | null;
   readonly byteCount: number;
   readonly exitCode: number;
   readonly outputSha256: string;
@@ -75,16 +77,21 @@ export interface RunNodeView {
   readonly accepted: { readonly verifierReceiptId: string } | null;
   readonly claim: RunNodeClaim | null;
   readonly criterionIds: readonly string[];
+  /** Authored order, never sorted or deduped. `null` means the node's authority body
+   * declares nothing at all (UNKNOWN); `[]` means the author declared none. */
+  readonly declaredMigrations: readonly string[] | null;
   readonly dependsOn: readonly string[];
   /** The git landing of the accepted delivery, when the lander recorded one. */
   readonly landing: RunNodeLanding | null;
   readonly lastActivityAt: string | null;
   readonly nodeKey: string;
+  /** Opaque execution identity; nodeKey remains the local graph/display name. */
+  readonly nodeRef: string;
   readonly objective: string;
   /** The verifier's own execution evidence, when its receipt decision decodes. */
   readonly receipt: RunNodeReceipt | null;
   readonly review: RunNodeReview;
-  /** True when another activated plan carries the same node key (see the header). */
+  /** Legacy execution attribution is unresolved, including a dependency's legacy identity. */
   readonly sharedKey: boolean;
   readonly status: RunNodeStatus;
 }
@@ -93,13 +100,28 @@ export interface RunGoalPublish {
   readonly branch: string | null;
   readonly code: string | null;
   readonly decisionId: string;
-  readonly outcome: "PENDING" | "PUSHED" | "REFUSED";
+  readonly outcome: "PENDING" | "PUSHED" | "REFUSED" | "UNKNOWN";
   readonly remoteUrl: string;
   readonly requestedAt: string;
   readonly sha: string | null;
   readonly url: string | null;
 }
+/** Project-scoped observation, not evidence that this goal owns a deployment.
+ * Target exposes only network and host (SSH username withheld); never raw sshTarget,
+ * binding URLs or refusal diagnostics. url is the admitted last receipt URL only.
+ * Absent receipt means absent status/sha/time/code, not a fabricated never-deployed receipt.
+ */
+export interface RunDeploymentView {
+  readonly environment: string;
+  readonly target?: { readonly network: string; readonly host?: string };
+  readonly sha?: string;
+  readonly time?: string;
+  readonly url?: string;
+  readonly status?: "DEPLOYED" | "REFUSED";
+  readonly code?: DeployRefusalCode;
+}
 export interface RunGoalView {
+  readonly deployments: readonly RunDeploymentView[];
   readonly goalId: string;
   readonly lifecycle: string | null;
   readonly nodes: readonly RunNodeView[];

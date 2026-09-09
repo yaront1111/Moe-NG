@@ -1,0 +1,570 @@
+{
+  "id": "task-a2409cba9ad841a690961692a2948c41",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "environment.set_variable and unset_variable are published operator-only",
+  "description": "SPIDR child 1b of task-9ae492b373fa4e7aa6b1e91585f6e612, split out by architect-20a6d1eb 2026-09-05 when child 1a's roster measured ~12 distinct files against the 10-file hard cap. Cut along the INTERFACE axis: task-d0c63cd8848a4da18ad3fbb8eb1d95c3 owns the cipher, the contract and the encrypted store; this row PUBLISHES the two commands and fences them to the operator.\n\ndependsOn task-d0c63cd8848a4da18ad3fbb8eb1d95c3 - the handlers write through its store.\n\nOPERATOR-ONLY AND MCP-EXCLUDED, unlike the design kinds. `mcp-tool-allowlist.ts:87-89` serves ALL command kinds MINUS `MCP_EXCLUDED_COMMAND_KINDS` (:59), so a command is excluded by being ADDED to that roster - the opposite of the design kinds, where absence is what serves them. Read that file's header first: the MCP port authenticates with the operator bootstrap credential (mcp-main.ts:112-127), so an MCP caller holding it authenticates AS the operator and would receive a real witness. Exclusion is the fence; a capability gate is not one.\n\nSetting an environment variable is emphatically not an agent's decision: an agent that could write a variable could write one the deploy then delivers to a production process.\n\nROSTER: daemon-command-vocabulary.ts (kinds, capability, family, PAYLOAD_KEYS, OPERATOR_PRINCIPAL_KINDS), daemon-command-families.ts (:83-94), daemon-command-registry.ts (`entryOf` :205-212), mcp-tool-allowlist.ts (EXCLUDED), HUMAN_ONLY_STEPS (agent-spawn-contract.ts:195 - ONE definition; agent-wrapper.ts:24 re-exports it, do not look for a second), packages/contracts runtime-vocabulary and the REGENERATED client (`pnpm --filter @moe/control-room-client generate`; it pins GENERATED_CONTRACT_DIGEST checked at client-compat.ts:169 - never hand-edit).\n\nTWO PAYLOAD-KEY TEST TABLES must both gain rows and are invisible to a grep for the kind literal in production source: daemon-command-vocabulary.test.ts (~:170-182) and daemon-command-registry.test.ts (~:197-203 plus the flat roster ~:283-300).\n\nTHE PAYLOAD CARRIES A SECRET. `environment.set_variable {environment, name, value}` is the only command on this board whose payload holds a value that must never be logged. Whatever the ingress does with payloads generally - echoing them into a refusal detail, a decision record, a debug line - must not happen for this kind. Child 1a's canary greps the store, events, reads and receipts; THIS row's surface is the command ingress path, and it is the one child 1a cannot see.",
+  "definitionOfDone": [
+    "Both kinds published OPERATOR-ONLY and MCP-EXCLUDED with the full roster backfill, and a BIDIRECTIONAL set-equality test enumerating the SERVED kinds from the dispatch seam; verify by deleting each entry from each side in turn and confirming every deletion reds.",
+    "Both are in `MCP_EXCLUDED_COMMAND_KINDS` and in HUMAN_ONLY_STEPS, asserted BEHAVIOURALLY as well as by membership: an AGENT-authenticated dispatch is REFUSED (assert the code), while an OPERATOR-authenticated one reaches the handler. An agent that could set a variable could set one the deploy delivers to a production process.",
+    "THE INGRESS DOES NOT LEAK THE VALUE - the surface child 1a's canary cannot reach. Set `MOE_CANARY_<random>` through the REAL command path and grep for the plaintext in: the refusal detail of a deliberately malformed request, the command decision record, the request-bytes digest path, and any daemon log line the dispatch writes. ZERO occurrences. A value echoed into a refusal message is the classic leak and it lives on exactly this path.",
+    "The four refusal codes from child 1a (ENV_NAME_INVALID, ENV_VALUE_TOO_LARGE, ENV_ENVIRONMENT_UNKNOWN, ENV_STORE_KEY_UNAVAILABLE) are raised at the command edge with code AND layer asserted, and NONE of their messages contains the submitted value.",
+    "Both payload-key TEST tables gain their rows; the generated client is REGENERATED (never hand-edited) with the OLD and NEW GENERATED_CONTRACT_DIGEST quoted.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test` (packages/contracts and the generated client are touched)."
+  ],
+  "taskRails": [
+    "OPERATOR-ONLY AND MCP-EXCLUDED. This is the opposite of the design kinds in the same epic: here a command is excluded by BEING ADDED to MCP_EXCLUDED_COMMAND_KINDS. An agent must never set an environment variable.",
+    "THE PAYLOAD HOLDS A SECRET. Nothing on the ingress path may echo it - not a refusal detail, not a decision record, not a log line. This is the surface child 1a's canary cannot see, which is why it is a DoD clause here.",
+    "NO CIPHER, NO STORE, NO UI: those are child 1a (task-d0c63cd8) and child 3 (task-ba83b202).",
+    "HUMAN_ONLY_STEPS has exactly ONE definition (agent-spawn-contract.ts:195); agent-wrapper.ts:24 re-exports it. Do not look for a second.",
+    "NEVER HAND-EDIT the generated client; run the generator and quote both digests."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE, NO EDITS. Both prerequisites must be DONE before this row is claimable; confirm what they landed so you do not redo or contradict it. (a) `grep -n 'environment.set_variable\\|environment.unset_variable' apps/daemon/src/mcp-tool-allowlist.ts apps/daemon/src/orchestrator/agent-spawn-contract.ts` - BOTH kinds must already be present in MCP_EXCLUDED_COMMAND_KINDS and HUMAN_ONLY_STEPS (task-d0d1cb5c). If absent, STOP and report_blocked on task-d0d1cb5c rather than doing its work here: registering these kinds before the fence exists advertises an operator-only command to every agent over MCP. (b) `grep -n 'environment' packages/contracts/src/runtime/runtime-vocabulary.ts` - both kinds must be in RUNTIME_COMMAND_KINDS (task-b3888068). Then re-measure this row's own seams, since the plan's line numbers are from f3b94eaa and rail 6 makes them stale: `sed -n '178,186p' apps/daemon/src/daemon-command-vocabulary.ts` (FAMILY_TABLES and its member list), `grep -n 'toHaveLength(46)\\|registry.size).toBe(46)' apps/daemon/src/daemon-command-registry.test.ts` (the three counts), `sed -n '236,240p' apps/daemon/src/daemon-store-dependencies.test.ts` (the weld). Record every command and its result in the step note.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "note": "MEASURE, NO EDITS — zero files written. Both prerequisites are ABSENT AT HEAD; step 1's own hard-stop clause fires.\n\n(a) FENCE — `grep -n 'environment.set_variable\\|environment.unset_variable' apps/daemon/src/mcp-tool-allowlist.ts apps/daemon/src/orchestrator/agent-spawn-contract.ts`\nWORKING TREE hits: mcp-tool-allowlist.ts:89,90 and agent-spawn-contract.ts:215.\nAT HEAD both files are CLEAN of the kinds: `git show HEAD:apps/daemon/src/mcp-tool-allowlist.ts | grep -n 'environment\\.'` -> no output; same for agent-spawn-contract.ts. `git status --porcelain` shows ` M` on BOTH. `git log --grep='Moe-Task: task-d0d1cb5c'` -> zero commits.\ntask-d0d1cb5c is status WORKING, assignedWorkerId `worker-caece97b`, commits []. Those two dirty files are LIVE FOREIGN WIP, not a landed prerequisite. Not touched, not reverted, not stashed.\n\n(b) CONTRACT ROSTER — `grep -n 'environment' packages/contracts/src/runtime/runtime-vocabulary.ts` -> EXIT 1, ZERO MATCHES, both in the tree and at HEAD. RUNTIME_COMMAND_KINDS is defined at runtime-vocabulary.ts:85 (not merely re-exported). task-b3888068 is status PLANNING, unassigned, commits [] — never started.\n\nTHE PLAN'S \"NOT WELDED\" PREMISE IS INVERTED FOR THIS DIRECTION. planningNotes cite goal-create-with-source.ts:35 as precedent for contract-and-daemon being deliberately not set-equal. Read verbatim, that line says `goal.create_with_source` is in RUNTIME_COMMAND_KINDS but NOT in BOOTSTRAP_COMMAND_KINDS — and it IS in daemon PAYLOAD_KEYS (daemon-command-vocabulary.ts:296) and the daemon family table (:73). The precedent is contract-WITHOUT-a-bootstrap-family. It does not license daemon-WITHOUT-contract, which is welded twice:\n- RUNTIME: runtime-envelope.ts:142 `if (!isCommandKind(record[\"commandKind\"])) return commandFailure(invalidInput());` on the decode path every command envelope crosses. isCommandKind (runtime-vocabulary.ts:134-135) tests COMMAND_KIND_SET = new Set(RUNTIME_COMMAND_KINDS) (:131). Absent from that tuple, both kinds are refused at DECODE and no handler is reachable.\n- TYPE: http-contract.ts:215 `CommandRegistry = ReadonlyMap<RuntimeCommandKind, CommandRegistryEntry>`; daemon-command-vocabulary.ts:110 `] as const satisfies readonly RuntimeCommandKind[]`; daemon-command-registry.test.ts:286 `REGISTRATION_ORDER: readonly RuntimeCommandKind[]`, :312 OPERATOR_ONLY, :75/:371/:391. Registering the kinds does not typecheck.\n\nOWN SEAMS RE-MEASURED (line numbers current at this HEAD, for whoever resumes):\n- daemon-command-vocabulary.ts is 372 lines. WiredCommandKind union ends :160-175; FAMILY_TABLES :180-183 lists SEVEN tables, not five as its own comment says (APPROVAL_INTENT, BOOTSTRAP, COMPILER, GRAPH, REVIEW, SESSION, WORK); familyCapabilityOf :186-192 walks only that array; PAYLOAD_KEYS :256; OPERATOR_PRINCIPAL_KINDS :344.\n- THE THREE HARD COUNTS ARE SIX. Plan names daemon-command-registry.test.ts:818, :819, :826. `grep -n 'registry.size).toBe(46)'` also returns :1678 (ports), :1700 (supplied), :1732 (snapshotPorts). All six go 46 -> 48. Same file, already in the roster — extra edits, not extra scope.\n- THE WELD, unchanged and needing no edit: daemon-store-dependencies.test.ts:238-239 `expect([...v2.registry.keys()].sort()).toEqual(Object.keys(PAYLOAD_KEYS).filter((kind) => kind !== \"planning.submit_decomposition\").sort())`.\n- daemon-command-registry.ts 436 lines (already past the 400 split), daemon-command-families.ts 163, daemon-command-vocabulary.test.ts 336 (payload table rows at :168-184), daemon-command-registry.test.ts 2012.\n\nDONE prereq task-d0c63cd8 CONFIRMED AT HEAD: environment-store.ts:64-65 ENVIRONMENT_COMMAND_KIND_SET/_UNSET, :117 setEnvironmentVariable, :146 unsetEnvironmentVariable.\n\ndependsOn on this row is ['task-d0c63cd8848a4da18ad3fbb8eb1d95c3'] ONLY — neither new leaf was ever added, which is why the row was offered. Reporting blocked on both.\n\nShared checkout: 16+ foreign dirty paths noted, none touched.",
+      "startedAt": "2026-09-05T14:16:09.442Z",
+      "completedAt": "2026-09-05T14:19:40.683Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE DAEMON VOCABULARY. In apps/daemon/src/daemon-command-vocabulary.ts: (a) declare the two kind constants following the file's existing `*_COMMAND_KIND` convention; (b) add both to the `WiredCommandKind` union at :160; (c) add an ENVIRONMENT_FAMILY table mapping both to a capability and ADD IT TO `FAMILY_TABLES` at :180 - familyCapabilityOf walks only that array, so a table not listed there is dead and the capability resolves null; (d) add both to PAYLOAD_KEYS with ORDERED allow-lists, [\"environment\", \"name\", \"value\"] for set and [\"environment\", \"name\"] for unset, sorted as the neighbouring entries are because the registry asserts ORDER not just membership; (e) add both to OPERATOR_PRINCIPAL_KINDS at :344 with a comment in the file's convention saying why - an agent that could set a variable could set one the deploy then delivers to a production process. CAPABILITY CHOICE, stated so it is not re-derived: use CAPABILITIES.ADMIN. ADMIN fences REACH; the human-only fence is OPERATOR_PRINCIPAL_KINDS plus the MCP exclusion, exactly as the file's own comment at :341-343 says of `resource.confirm_released`. Watch the line count: the file is at 372 against a 400 hard split.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-payload-keys.js"
+      ],
+      "note": "THE DAEMON VOCABULARY — done, plus the 400-line split the step's own risk clause instructed.\n\nPREREQUISITES RE-MEASURED AT HEAD (both were ABSENT when step 1 ran; both have since LANDED):\n- `git log --grep='Moe-Task: task-d0d1cb5c'` -> 4c3880cb (DONE). `git show HEAD:apps/daemon/src/orchestrator/agent-spawn-contract.ts | grep -n 'environment\\.'` -> `218:  \"environment.set_variable\", \"environment.unset_variable\",` in HUMAN_ONLY_STEPS.\n- `git log --grep='Moe-Task: task-b3888068'` -> 4f6bfbf0 (DONE). `git show HEAD:packages/contracts/src/runtime/runtime-vocabulary.ts | grep -n environment` -> `94:  \"environment.set_variable\", \"environment.unset_variable\",` in RUNTIME_COMMAND_KINDS.\n\nTHE FENCE IS NOW DERIVED, NOT A HAND LIST — supersedes the row description's `mcp-tool-allowlist.ts:87-89` reading. `git show HEAD:apps/daemon/src/mcp-tool-allowlist.ts | grep -n 'environment\\.'` returns NOTHING, and that is CORRECT: task-d0d1cb5c rewrote MCP_EXCLUDED_COMMAND_KINDS as `[...OPERATOR_PRINCIPAL_KINDS].filter((k) => !MCP_REACHABLE_OPERATOR_KINDS.has(k)).sort()`, with MCP_REACHABLE_OPERATOR_KINDS = {\"session.open\"}. So adding the two kinds to OPERATOR_PRINCIPAL_KINDS (done below) MCP-excludes them by construction — one edit, no second roster, no window where PAYLOAD_KEYS has them and the exclusion does not. Do not \"backfill\" mcp-tool-allowlist.ts; a hand entry there would be dead code.\n\n(a) KIND CONSTANTS — NOT redeclared. They already exist: `environment-store.ts:64-65` ENVIRONMENT_COMMAND_KIND_SET/_UNSET, landed by task-d0c63cd8. Rail 6 (gap-claimed-present-actually-closed): imported, not reinvented.\n(b) WiredCommandKind union: `| typeof ENVIRONMENT_COMMAND_KIND_SET | typeof ENVIRONMENT_COMMAND_KIND_UNSET` (:182).\n(c) ENVIRONMENT_FAMILY (:166-169) both -> CAPABILITIES.ADMIN, AND ADDED TO FAMILY_TABLES (:198) — familyCapabilityOf walks only that array. Also removed the stale count word from that comment: it said \"The eight capability tables\" over a list of TEN (peers added CRITERION_FAMILY and REPOSITORY_RECOVERY_FAMILY without touching it); it now says \"The capability tables ... no count in this sentence, because the number rotted twice\" and states that an unlisted table is dead.\n(d) PAYLOAD_KEYS: `[\"environment\",\"name\",\"value\"]` / `[\"environment\",\"name\"]`, ORDERED as neighbours are.\n(e) OPERATOR_PRINCIPAL_KINDS (:311-316) with the reason at the site: an agent that could write a variable could write one the deploy delivers to a production process; the MCP exclusion derives from this set and IS the fence, ADMIN only fences reach.\n\nCAPABILITY: ADMIN as the step directed. agentCapabilitiesFor deliberately NOT special-cased — it falls through to [ADMIN, WORK], matching resource.confirm_released / goal.close / graph.approve. Returning null there is the convention for the two DURABLE-HUMAN-WIDENED kinds only, and `affordance-planning-offers.test.ts:353` treats non-null as expected for operator kinds. The fences are OPERATOR_PRINCIPAL_KINDS (dispatch) + HUMAN_ONLY_STEPS (spawn) + the derived MCP exclusion (transport) — three, none of them the capability.\n\nTHE 400-LINE SPLIT, forced and executed as the step's risk clause instructed (\"split by responsibility (kind constants vs payload table) rather than by line count\"). Measured: daemon-command-vocabulary.ts was 386 at HEAD and 397 in the shared worktree (peer dirt), and my additions land it over 400. It also GREW 397 -> 400 MID-STEP under a peer's write, which killed a hardcoded-index script — re-run with dynamic anchors. NEW FILE apps/daemon/src/daemon-command-payload-keys.ts (163 lines) + its one-line `.js` bridge holds PAYLOAD_KEYS whole; daemon-command-vocabulary.ts (329 lines, down from 397) RE-EXPORTS it, so ZERO consumer import paths change — verified the 8 consuming modules all import it from \"./daemon-command-vocabulary.js\". No runtime cycle: the new module's only vocabulary import is `import type { WiredCommandKind }`, which is erased.\n\nGATE: `pnpm --filter @moe/daemon exec tsc --noEmit -p tsconfig.json` -> 2 errors, BOTH FOREIGN, zero in my paths. Verbatim:\n  src/bootstrap/bootstrap-sequence.ts(39,12): error TS2741: Property '\"repository.bootstrap\"' is missing in type ...\n  src/bootstrap/bootstrap-sequence.ts(103,10): error TS7053: Element implicitly has an 'any' type ... Property 'repository.bootstrap' does not exist ...\nATTRIBUTION (rail 3): `git status --porcelain` shows ` M apps/daemon/src/bootstrap/bootstrap-contracts.ts` and bootstrap-sequence.ts CLEAN; `git show HEAD:.../bootstrap-contracts.ts | grep -n repository.bootstrap` -> rc=1, NO MATCH, while the worktree has it at :47. A peer added the kind to BOOTSTRAP_COMMAND_KINDS uncommitted and has not yet added its sequence row. Not touched, not reverted, not stashed. My first run ALSO showed 22 TS6133 unused-import errors in daemon-command-vocabulary.ts — those were MINE, from the split, and are fixed (imports of the moved *_PAYLOAD_KEYS constants now live in the new module).\n\nEXPECTED RED FROM HERE UNTIL STEP",
+      "startedAt": "2026-09-05T23:06:37.356Z",
+      "completedAt": "2026-09-05T23:15:03.203Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE FAMILY WIRING AND THE FIRST PAYLOAD TEST TABLE. Add the environment family to apps/daemon/src/daemon-command-families.ts following the shape of its neighbours, so an entry's demanded capability and an agent's granted set keep coming from one list. Then add both kinds' rows to the payload-key table in apps/daemon/src/daemon-command-vocabulary.test.ts (~:170-182) - that table is invisible to a grep for the kind literal in production source, which is why the row description calls it out. Gate this step alone: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/daemon-command-vocabulary.test.ts`, quoting the `Test Files N passed` count line. EXPECT daemon-store-dependencies.test.ts:238 TO BE RED from here until step 5 registers the handlers - that is the weld doing its job. Say so in the step note; do NOT 'fix' it by editing that file.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts"
+      ],
+      "note": "FAMILY WIRING + FIRST PAYLOAD TEST TABLE — GREEN. Gate quoted below. Two plan premises measured STALE; both recorded here rather than worked around.\n\nGATE (foreground, single suite, no concurrency):\n`pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/daemon-command-vocabulary.test.ts`\n-> `Test Files  1 passed (1)` / `Tests  166 passed (166)` (exit 0). Nonzero executed count, so not a vacuous run.\n\nWHAT LANDED THIS STEP\n(a) daemon-command-families.ts: `ENVIRONMENT_FAMILY` imported; `environment: boolean` added to CommandFamilyFacts with the reason stated at the site (SET payload carries a production secret, so this seam never reaches `requestOf`); `environment: kind in ENVIRONMENT_FAMILY` in membershipOf; `if (member.environment) return CAPABILITIES.ADMIN;` in requiredCapabilityOf with the comment saying ADMIN fences REACH only and OPERATOR_PRINCIPAL_KINDS + the MCP exclusion are the human fence.\n(b) daemon-command-vocabulary.test.ts: both env rows in the ROWS payload table in PAYLOAD_KEYS INSERTION ORDER (set = [\"environment\",\"name\",\"value\"], unset = [\"environment\",\"name\"]); ENVIRONMENT added to the Family union, FAMILY_MAPS, FAMILY_NAMES, the frozen-table sweep and OPERATOR_ONLY; `FAMILY_MAPS.ENVIRONMENT.size` = 2.\n\nFOREIGN BACKFILL I WAS FORCED TO TAKE — `repository.bootstrap`\nThis file was ALREADY RED AT HEAD before my rows existed. `repository.bootstrap` is landed in production (bootstrap-contracts.ts, bootstrap-sequence.ts, daemon-command-payload-keys.ts:154, daemon-command-vocabulary.ts BOOTSTRAP_FAMILY, repository/repository-bootstrap-command.ts) but its ROWS entry was never transcribed. `git log -S'repository.bootstrap' -- daemon-command-payload-keys.ts` names 63bc3d35 — MY OWN wip checkpoint on this row, i.e. the wrapper swept a peer's in-flight edit into my commit and the peer's test-side row never came with it.\nRuntime measurement (throwaway probe, deleted — `ls` confirms absent): `Object.keys(PAYLOAD_KEYS).length` = 53; `in PAYLOAD not in ROWS: ['repository.bootstrap']`; `in ROWS not in PAYLOAD: []`; `OPERATOR_PRINCIPAL_KINDS` = 18 including it.\nSo I transcribed the row (agent [ADMIN, WORK], capability ADMIN, family BOOTSTRAP, payloadKeys [\"dir\",\"github\",\"productName\",\"profileVersion\"], inserted between repository.publish and qualification.replan to hold insertion order) and bumped: ROWS 52->53 (x2 assertions + title), declared 41->42, FAMILY_MAPS.BOOTSTRAP 12->13, OPERATOR_ONLY/OPERATOR_PRINCIPAL_KINDS 17->18 (+title/comment). A comment at the row states I do not own the kind and why it was backfilled rather than evaded. NOTE for the plan's step-5 counts: the base moved from 46 to 51 under this row, so the three registry counts are 51->53, not 46->48.\n\nTHE PREDICTED WELD RED DID NOT OCCUR — PREMISE STALE\nStep 3 says to expect daemon-store-dependencies.test.ts:238 RED until step 5. It is GREEN: `provides a distinct /2 command plane that is inactive rather than falling back to v1  2ms ✓`. Cause measured at daemon-command-registry.ts:480-482 — the registry is built as `(Object.keys(PAYLOAD_KEYS)).map(entryOf)`, so registry-key/PAYLOAD_KEYS set-equality is STRUCTURAL and that arm can no longer detect a missing registration. Consequence for step 5: it is NOT a tripwire for a half-done job, and my two kinds are ALREADY in the registry map falling through `entryOf`'s handler chain to the bootstrap branch. Step 5's real work is adding an `environment` branch to that chain, not making a set match. I did not edit that file.\n\nFOREIGN RED IN THAT FILE (rail 3, disclosed verbatim, not mine)\n`src/daemon-store-dependencies.test.ts:769` — `serves the default provider and its registry bridge under plain Node` FAILS:\n`\"code\": \"ERR_MODULE_NOT_FOUND\", \"message\": \"Cannot find module 'D:\\\\projexts\\\\moe-next\\\\apps\\\\daemon\\\\src\\\\projects\\\\project-catalog-registrar.js' imported from D:\\\\projexts\\\\moe-next\\\\apps\\\\daemon\\\\src\\\\daemon-command-async-entries.ts\"`\n`git status --porcelain` on those paths: `?? apps/daemon/src/projects/project-catalog-registrar.ts` and ` M apps/daemon/src/daemon-command-async-entries.ts` — a peer's in-flight work missing its one-line `.js` bridge. Untouched by me; `Test Files 1 failed (1) / Tests 1 failed | 27 passed (28)`.\n\nOTHER PEER DIRT NOTED, NOT TOUCHED: .codex/*, .grok/config.toml, .moe/**, apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx, apps/daemon/src/mcp-design-read-query.{js,test.ts}, apps/daemon/src/preview/preview-goal-landing.test.ts, Moe-NG_Deep_Review_2026-09-05.md.",
+      "startedAt": "2026-09-05T23:15:05.842Z",
+      "completedAt": "2026-09-06T00:41:21.441Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE HANDLERS, in a NEW apps/daemon/src/daemon-command-environment.ts plus its one-line `.js` bridge (`export * from './daemon-command-environment.ts';`, the convention every daemon module here follows). Thin adapters ONLY: validate nothing the store already validates, translate the envelope into the store's input, and pass the ENVELOPE'S commandId through to setEnvironmentVariable / unsetEnvironmentVariable so a retried command dedupes in the store instead of double-writing - the optional commandId field exists for exactly this caller. Return the store's EnvironmentReadResult refusals UNCHANGED; catching and re-wrapping them silently rewrites the layer. Build EnvironmentStoreConfig {store, projectId, now, credential} from the daemon's existing dependencies and resolve the credential the way the rest of the daemon does rather than reading a file here. TDD: write the test file first and confirm it REDS with `Cannot find module './daemon-command-environment.js'` before any production byte exists; quote that red in the note.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/daemon-command-environment.ts",
+        "apps/daemon/src/daemon-command-environment.js",
+        "apps/daemon/src/daemon-command-environment.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-environment.ts",
+        "apps/daemon/src/daemon-command-environment.js",
+        "apps/daemon/src/daemon-command-environment.test.ts"
+      ],
+      "note": "THE HANDLERS — landed in a NEW module + its one-line `.js` bridge. TDD red quoted, gate green, one plan assumption measured FALSE and corrected rather than papered over.\n\nTDD RED FIRST (test written before any production byte):\n`pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/daemon-command-environment.test.ts`\n-> `Error: Cannot find module './daemon-command-environment.js' imported from D:/projexts/moe-next/apps/daemon/src/daemon-command-environment.test.ts` at `src/daemon-command-environment.test.ts:22:1`; `Test Files 1 failed (1)` / `Tests no tests`. Exactly the red the step named.\n\nGATE AFTER (foreground, single suite): same command -> `Test Files  1 passed (1)` / `Tests  16 passed (16)`, exit 0.\n\nTHE MODULE (143 lines, well under the 250 target)\n`runEnvironmentEdge(context): DurableDecision`, serving both kinds. THIN: it validates no name, size, scope or key — environment-store.ts owns all four and their fixed order — and it returns the store's refusals UNRESTAMPED via `new DomainRefusal(refusal.code, refusal.layer, refusal.detail)`, so code AND layer are the store's own. `ENVIRONMENT_EDGE_RESULT_CODES` maps set/unset to ENVIRONMENT_VARIABLE_SET / ENVIRONMENT_VARIABLE_UNSET.\nDISJOINT FROM `requestOf`, and the header says why at the site: `requestOf` encodes the WHOLE envelope including `payload` into the request bytes every bootstrap service persists beside its decision, so taking the shared path would write the operator's secret into durable command bytes on the FIRST dispatch. Same structural reason `preview.decide` and the five graph mutations bypass it.\n`EnvironmentEdgeEnvelope` is deliberately NARROWER than RuntimeCommandEnvelope — `{commandId, payload}` only. A correlationId/expectedVersion/principal reaching this module would be one more field a value could be copied into en route to a log line.\nWIRE TYPING is the one thing the edge adds: a JSON field typed string can arrive null/number/object. Each refuses at the layer OWNING that field, reusing the CLOSED four-code roster rather than minting a fifth — environment (SCOPE) then name (NAME) then value (VALUE), matching the store's documented choice that a non-string value is ENV_VALUE_TOO_LARGE.\n\nPLAN ASSUMPTION MEASURED FALSE — \"a retried command dedupes in the store instead of double-writing\"\nIt does not replay. First implementation derived `disposition` from `store.getCommandReceipt(commandId)` and the arm RED with the store's own error:\n`CommandIdConflictError: COMMAND_ID_CONFLICT: command \"cmd-edge-retry\" was reused for a different request` at `packages/store/src/event-ledger-transaction.ts:128`.\nCAUSE (measured, not guessed): `resolveCommand` compares REQUEST DIGESTS under the command id, and an environment write's digest can never repeat — the set event carries a freshly-nonced seal and both events carry a fresh `randomUUID()` eventId. So a resubmitted commandId CONFLICTS.\nRESOLUTION: I did NOT reimplement idempotency at the edge (a receipt-based short-circuit would be an idempotency authority outside the store that owns one, and global rail 1's \"assert against the production surface\" cuts against it). `disposition` is now always DECIDED, the store's error propagates unwrapped, and the arm asserts the property that actually matters: `expect(conflict).toBeInstanceOf(CommandIdConflictError)`, `.code === \"COMMAND_ID_CONFLICT\"`, and the aggregate version is UNCHANGED after the retry — i.e. a retried set never double-writes. The arm also asserts the conflict message does not contain the secret (it names the command id only). `refusalFor` (daemon-command-dispatch.ts:171) maps `DurableStoreError` to a 503 refusal carrying `error.message`, so that message being value-free is load-bearing.\n\nTHE 16 ARMS: set lands + reads back through the STORE's own read (not the edge's return shape); unset removes what set wrote; the retry/no-double-write arm above; all four store codes with code + layer + the store's fixed DETAIL asserted (ENV_ENVIRONMENT_UNKNOWN/SCOPE, ENV_NAME_INVALID/NAME, ENV_VALUE_TOO_LARGE/VALUE via a 1 MiB value, ENV_STORE_KEY_UNAVAILABLE/KEY via a null credential source); and 9 wire-typing arms (null / number / object / absent `value`; null / number `name`; null / number `environment`; null `name` on the UNSET wire).\n\nNO UNKNOWN-KIND ARM, by design: `EnvironmentEdgeKind` is the union of the two kind constants, so a third kind is a compile error rather than a runtime branch. An unreachable branch with an assertion that can never red is worse than none — the registry's family membership is what routes here.\n\nCREDENTIAL: taken as `EnvironmentCredentialSource` on the context, not read from a file here. Step 5 wires it from the composition root's existing `config.credential` (the same MOE_DAEMON_CREDENTIAL the environments READ port already uses at daemon-store-foundation-composition.ts:379) so the slice is production-reachable rather than permanently ENV_STORE_KEY_UNAVAILABLE.\n\nPeer dirt unchanged and untouched (s",
+      "startedAt": "2026-09-06T00:41:24.293Z",
+      "completedAt": "2026-09-06T00:47:30.110Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "REGISTRY WIRING AND THE THREE HARD COUNTS. Register both kinds in apps/daemon/src/daemon-command-registry.ts via `entryOf` (~:205-212) following the neighbouring entries; the file is already 436 lines past the 400 split, so add the minimum and keep bodies in the new module. Then apps/daemon/src/daemon-command-registry.test.ts: add both rows to the payload table (~:197-203) AND to the flat roster REGISTRATION_ORDER (~:283-300, transcribed BY HAND from PAYLOAD_KEYS, whose ORDER is asserted at :827), and change all three counts 46 -> 48 at :818, :819 and :826. Then confirm the weld released: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/daemon-store-dependencies.test.ts` must be GREEN with NO edit to that file. If it is red, a kind is in PAYLOAD_KEYS but not in the registry - fix the registry, never that test.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts"
+      ],
+      "note": "REGISTRY WIRING — GREEN across all five affected files. Counts were 50->53, not 46->48. Two files the plan told me not to touch DID need edits, for reasons that are not the ones the plan forbade; both explained below. A PEER edited daemon-command-registry.test.ts WHILE I was editing it — handled without clobbering their work.\n\nGATE (one vitest process, five files, foreground):\n`pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/daemon-command-vocabulary.test.ts src/daemon-command-registry.test.ts src/daemon-command-environment.test.ts src/daemon-store-dependencies.test.ts src/mcp-tool-allowlist.test.ts`\n-> `Test Files  5 passed (5)` / `Tests  579 passed (579)`, exit 0.\n\nPRODUCTION WIRING (daemon-command-registry.ts)\n`environment` destructured from `commandFamilyFacts`, and a branch placed BEFORE `requestOf` — the placement is the substance, not style: `requestOf` encodes the whole envelope including `payload` into the request bytes persisted beside every decision, so reaching the assembler once would write the operator's secret into durable command bytes. Same structural reason `preview.decide` is answered above it. New option `environmentCredential?: EnvironmentCredentialSource`, defaulted `() => null` at the call site, so an unwired daemon REGISTERS both kinds and refuses ENV_STORE_KEY_UNAVAILABLE rather than dropping them from the served roster.\n\nCONSUMER EDGE LANDED (global rail 4 clause 1), daemon-store-foundation-composition.ts:193 — `environmentCredential: () => config.credential`, the SAME MOE_DAEMON_CREDENTIAL the environments READ port already seals under at :379, passed as a thunk for the same documented reason. Without this the kinds would be served-but-permanently-refusing: registered, MCP-excluded, and useless. This file was outside the plan's roster; I took it because a pure-registration slice is not production-reachable.\n\nPEER COLLISION IN daemon-command-registry.test.ts, resolved by DELETION OF MY OWN BYTES ONLY. I added rows for `environment.set_variable`, `environment.unset_variable` and the foreign `repository.bootstrap`; between my two reads a peer landed the SAME three rows plus REGISTRATION_ORDER entries, OPERATOR_ONLY entries and all six count bumps (their comment reads \"Landed by task-a2409cba ... Transcribed here because ROWS is an exact set-equality with the served registry\"). Result was duplicate ROWS entries. I removed MY two inserted blocks by exact-string match and KEPT the peer's; `grep -c` confirms exactly 3 occurrences of the three kind literals afterwards. I reverted nothing of theirs and re-ran the file: `Test Files 1 passed (1)` / `Tests 348 passed (348)`.\n\nSIX counts moved 50->53 in that file (not three at 46->48): ROWS length, `deps.registry.size`, `REGISTRATION_ORDER` length, and `ports/supplied/snapshotPorts.registry.size` at three separate `createDaemonCommandPorts` arms. The peer made them; I verified them.\n\nTWO FILES THE PLAN SAID NOT TO TOUCH — why each was still required:\n(1) daemon-store-dependencies.test.ts. The plan forbids editing it when the WELD arm (:239, PAYLOAD_KEYS vs registry set-equality) reds, because that means a missing registration. That arm is GREEN and structurally cannot red — see step 3's note: the registry is `Object.keys(PAYLOAD_KEYS).map(entryOf)`. What reds is a DIFFERENT arm, `serves the default provider and its registry bridge under plain Node` (:769), whose `registryKinds` is a hand-transcribed served-kinds literal whose own comment at :805 says \"A new command writes its own kind here\". Backfilled my two kinds plus the foreign `repository.bootstrap` (also missing). Now `Tests 28 passed (28)`. Earlier in this session that same arm was red for an unrelated foreign reason (`Cannot find module '.../project-catalog-registrar.js'`); the peer has since landed that `.js` bridge, so that red is gone.\n(2) mcp-tool-allowlist.test.ts. The plan assigns mcp-tool-allowlist.TS to task-d0d1cb5c and this row does not touch it. But the exclusion roster is DERIVED from `OPERATOR_PRINCIPAL_KINDS` less `session.open`, so adding three operator-only kinds moves the test's pinned denominators with no production edit: `excluded` 14->17 and `vocabulary` 50->53. `wired` stays 42 — 53-17+6 = 42 — and that invariance is the security-relevant fact, so I recorded it at the site: each kind entered the vocabulary AND the operator-only class in the same change, so it was subtracted the moment it was added and never spent a commit MCP-advertised. `Tests 21 passed (21)`.\n\nFOREIGN RED STATUS: none outstanding in these five files. Peer dirt still present and untouched: apps/daemon/src/daemon-command-async-entries.ts, repository/repository-bootstrap-{command,contracts}.ts, `??` projects/project-catalog-registrar.{ts,js}, goals/goal-intent-approved-closure.test.ts, mcp-design-read-query.{js,test.ts}, preview/preview-goal-landing.test.ts, repository/repository-bootstrap-command.js, plus the .moe/.codex/.grok debris.",
+      "startedAt": "2026-09-06T00:47:33.026Z",
+      "completedAt": "2026-09-06T00:53:48.143Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE INGRESS CANARY - THIS ROW'S REASON FOR EXISTING (DoD 3), in the new test module. It covers the ONE surface task-d0c63cd8's canary provably cannot: that row greps the store, events, reads and receipts, and environment-store.ts:99-103 already writes commandBytes carrying only {environment, kind, name}. THE ENVELOPE, BY CONTRAST, CARRIES THE VALUE. Push a fresh `MOE_CANARY_<randomBytes(16).toString('hex')>` - fresh PER TEST, because a shared constant can be matched by an unrelated fixture and turn a leak green - through the REAL command path, then search FOR THE PLAINTEXT OVER BYTES, never over parsed values, in: (a) the refusal detail of a DELIBERATELY MALFORMED request that still carries a valid value, since the classic leak is an error string echoing what was submitted; (b) the command decision record; (c) the request-bytes digest path; (d) every daemon log line the dispatch writes. ZERO occurrences on all four. ANTI-VACUITY CONTROL, MANDATORY: assert each surface is NON-EMPTY and that something you EXPECT to be there IS found (the variable name, the command id) - otherwise 'no plaintext' is satisfied by searching nothing, which is exactly how this class of test lies. Copy the shape from apps/daemon/src/environment/environment-canary.test.ts, which does this for the store.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "newFiles": [
+        "apps/daemon/src/daemon-command-environment.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-environment.test.ts"
+      ],
+      "note": "THE INGRESS CANARY (DoD 3) — GREEN, and it FOUND TWO THINGS before it went green, both via its own anti-vacuity controls.\n\nGATE: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/daemon-command-environment.test.ts` -> `Test Files  1 passed (1)` / `Tests  19 passed (19)`, exit 0 (16 edge arms from step 4 + 3 canary arms).\n\nTHE REAL PATH, not a helper: a fresh temp dir, `SqliteEventStore.openForProject` + `installTestRecoveryBinding`, `createStoreDependencies({credential, principalId: \"operator-local\", projectId, storePath})`, `provider.provide()`, and `handleCommandRequest(deps, {body, credential, protocolVersion}, \"HTTP_LISTENER\")` with a real wire envelope. Fresh `MOE_CANARY_<randomBytes(16).toString(\"hex\")>` PER TEST. Every search is `Buffer.includes` over BYTES, never over parsed values. Temp dir removed and provider closed in `finally` on every arm (epic rail 4).\n\nFOUR SURFACES, ALL ZERO OCCURRENCES:\n(a) REFUSAL DETAIL, two layers, both carrying a REAL value — a smuggled extra key (refused INPUT_INVALID at PAYLOAD_SHAPE by the ingress allow-list, ABOVE the edge) and a missing `environment` (refused ENV_ENVIRONMENT_UNKNOWN at SCOPE/DISPATCH by the edge). Serialised whole and searched.\n(b) THE DURABLE COMMAND RECORD — the command RECEIPT, plus the decision ledger.\n(c) THE REQUEST-DIGEST PATH — `requestSha256` on that receipt: the digest is present, the plaintext behind it is not.\n(d) EVERY CONSOLE LINE the dispatch writes, over debug/error/info/log/warn, on BOTH an accepted and a refused dispatch.\nPlus a fifth I added: THE WHOLE STORE FILE (db + WAL + shm, every file sharing the prefix), which is the only surface that can catch a value hiding inside a serialised blob nobody destructured.\n\nFINDING 1 — the refusal does NOT echo the commandId. My first control asserted the refusal text contained \"cmd-canary-smuggled\" and it RED: the ingress refusal body carries `{error:{code, correlationId:null, details:{}, ...}, httpStatus, ok, outcome, stage}` and no command id at all. Control corrected to tokens the surface really carries (INPUT_INVALID + PAYLOAD_SHAPE, ENV_ENVIRONMENT_UNKNOWN + DISPATCH), which also pins that BOTH layers were exercised.\n\nFINDING 2 — AN ENVIRONMENT WRITE LEAVES NO ROW IN THE DECISION LEDGER. My control asserted the ledger bytes exceeded 100 and it RED at length 2, i.e. `[]`. Cause measured: the edge commits through the store's own `commit` (event append + command receipt), not through `commitExpectedVersionDecision`, which is what mints a `CommandDecisionRecord`. So the RECEIPT is the durable command record for these two kinds. Recorded at the site rather than papered over; the ledger is STILL searched, so if a later change starts writing one this arm covers it the same day instead of silently skipping it. Consequence for callers, stated for the record: a resubmitted commandId gets `COMMAND_ID_CONFLICT` (via `refusalFor`'s DurableStoreError branch, 503) rather than a replayed decision. Safe — no double-write, and the message names only the command id — but it is a real difference from the shared path and belongs in the epic-final hardening row's list if anyone wants replay parity here.\n\nANTI-VACUITY, beyond the per-surface controls: each arm also runs a POSITIVE control — `Buffer.from(JSON.stringify({echoed: secret})).includes(secret)` must be TRUE — so `includes(...) === false` proves the refusal is clean rather than proving the search technique is broken. The console arm's control is the harder case, because \"the daemon logged nothing\" and \"the spy never worked\" are indistinguishable: it therefore emits `console.log(...)` INSIDE the spy's lifetime and asserts the capture caught it, and the buffer is read AFTER both dispatches, never before (mem:gotcha-console-capture-helper-reads-its-buffer-before-the-act).\n\nThe DECISION-RECORD arm's premise is likewise controlled: `expect(accepted).toMatchObject({outcome: \"ACCEPTED\"})` before any search, because a refused dispatch writes almost nothing and every search below would then pass while proving nothing.\n\nNo production bytes changed this step. Peer dirt unchanged and untouched.",
+      "startedAt": "2026-09-06T00:53:51.349Z",
+      "completedAt": "2026-09-06T00:58:04.189Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "THE FENCE ASSERTED BEHAVIOURALLY, AND THE FOUR CODES AT THE EDGE (DoD 1, 2, 4). (a) BIDIRECTIONAL SET-EQUALITY enumerating the SERVED kinds FROM THE DISPATCH SEAM - the registry's handled kinds - not from the roster constant: global rail 9, because a test that iterates the roster shrinks its own iteration when an entry is deleted and stays green. Verify by DELETING each of the two entries from EACH side in turn and confirming every deletion REDS; record all four outcomes. (b) An AGENT-authenticated dispatch of each kind is REFUSED with the code asserted, while an OPERATOR-authenticated one REACHES the handler. Roster membership is not the assertion - the behaviour is; the membership half already landed with task-d0d1cb5c. (c) All four store refusal codes surface at the command edge with code AND layer asserted - ENV_NAME_INVALID/NAME, ENV_VALUE_TOO_LARGE/VALUE, ENV_ENVIRONMENT_UNKNOWN/SCOPE, ENV_STORE_KEY_UNAVAILABLE/KEY - and NONE of their messages contains the submitted value. Assert that explicitly per surface: an error string is where this leaks.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/daemon-command-environment.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-environment.test.ts"
+      ],
+      "note": "THE FENCE ASSERTED BEHAVIOURALLY (DoD 1, 2, 4) — GREEN, four deletion drills recorded, three arms corrected by measurement.\n\nGATE: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/daemon-command-environment.test.ts` -> `Test Files  1 passed (1)` / `Tests  27 passed (27)`, exit 0 (16 edge + 3 canary + 8 fence).\n\n(a) BIDIRECTIONAL SET-EQUALITY FROM THE DISPATCH SEAM, not the roster constant. `served = [...registry.keys()].filter(familyCapabilityOf(kind) !== null).filter(commandFamilyFacts(kind).environment)` — the registry the HTTP adapter serves, filtered by the LITERAL discriminator `entryOf` branches on. The `familyCapabilityOf` guard is itself a measured fact: `commandFamilyFacts` THROWS for a kind in no family (`foundation.dispatch`), so mapping it over every registry key errored on the first run. Both directions are then spelled out per kind — served CONTAINS each kind, each kind is in OPERATOR_PRINCIPAL_KINDS, in HUMAN_ONLY_STEPS, in MCP_EXCLUDED_COMMAND_KINDS and NOT in `wiredMcpToolKinds()` — plus the converse legs: `MCP_EXCLUDED_COMMAND_KINDS.filter(startsWith(\"environment.\"))` equals the pair exactly, and `wiredMcpToolKinds().filter(startsWith(\"environment.\"))` is `[]`.\n\nTHE FOUR DELETION DRILLS, all four detected, mechanism reported honestly because two differ from the plan's expectation:\n- D1 delete `environment.set_variable` from the SERVED side (PAYLOAD_KEYS): the seam-equality arm RED directly — `× serves EXACTLY the two environment kinds, enumerated from the dispatch seam`; file `Tests 9 failed | 18 passed (27)`.\n- D2 delete `environment.unset_variable` from the SERVED side: same arm RED directly; `Tests 2 failed | 25 passed (27)`.\n- D3 delete `environment.set_variable` from the ADVERTISED side (ENVIRONMENT_FAMILY): file RED, `Tests 3 failed | 16 passed | 8 skipped (27)` — but NOT via the equality arm. Measured cause: dropping the kind from the only family table that claims it makes `commandFamilyFacts` throw INSIDE registry construction, so `createStoreDependencies` fails and the fence describe's `beforeAll` aborts, skipping its 8 arms; the three CANARY arms are what red. Stronger than the plan anticipated (it expected the capability to resolve null) — the daemon refuses to BOOT rather than serving a capability-less kind. Named arms verified with `--reporter=verbose`.\n- D4 delete `environment.unset_variable` from ENVIRONMENT_FAMILY: identical, `Tests 3 failed | 16 passed | 8 skipped (27)`.\nRESTORE PROOF (global rail 13): both drill targets are TRACKED — `git status --porcelain` on them was EMPTY before drilling — so `git diff` is a valid proof. After each `git checkout -- <file>`: `git diff --stat` printed EMPTY. Final check after all drills: `git status --porcelain apps/daemon/src/daemon-command-payload-keys.ts apps/daemon/src/daemon-command-vocabulary.ts` -> empty, and the module is back to `Tests 27 passed (27)`.\n\n(b) THE FENCE AS BEHAVIOUR, per kind. A REAL scoped agent session is minted through `session.open` as the operator (a fabricated credential would be refused at AUTHENTICATE and never reach the fence), holding [ADMIN, WORK] — the very capability the kind demands, so the refusal can only come from the principal fence: `httpStatus 403, outcome PORT_REFUSED, refusal {code: \"OPERATOR_PRINCIPAL_REQUIRED\", layer: \"DAEMON_AUTHORIZATION\"}, stage DISPATCH`. The SAME request as the configured operator REACHES the handler: `{outcome: \"ACCEPTED\", decision: {resultCode: \"ENVIRONMENT_VARIABLE_SET\" | \"ENVIRONMENT_VARIABLE_UNSET\"}}`, the unset arm seeded by an operator set first so it lands rather than refusing for an unrelated reason. CORRECTION FROM MEASUREMENT: my first agent probe sent `value` to the UNSET wire and was refused 400 at PAYLOAD_SHAPE — proving the allow-list works and the fence nothing at all. Payload is now per-kind.\n\n(c) THE FOUR CODES AT THE EDGE, code AND layer AND no submitted value. Three are exercised OVER THE WIRE through `handleCommandRequest`: ENV_ENVIRONMENT_UNKNOWN/SCOPE, ENV_NAME_INVALID/NAME, ENV_VALUE_TOO_LARGE/VALUE, each 422 PORT_REFUSED at DISPATCH, each asserting the store's FIXED detail is present and a fresh `MOE_CANARY_<hex>` is absent from the serialised refusal bytes. CORRECTION FROM MEASUREMENT: the oversized case first used a 1 MiB value and was refused 413 at DECODE, never reaching the edge — the env bound is `MAX_ENVIRONMENT_VALUE_BYTES` (4096) and the wire bound is `MAX_JSON_STRING_UTF8_BYTES` (262144), so the value now sits between them at 8192+ and the arm cites both constants. ENV_STORE_KEY_UNAVAILABLE/KEY cannot be produced by a wired daemon (it always has a credential), so it is asserted at the edge with an ABSENT key source — exactly the state `environmentCredential`'s `() => null` default puts an unwired daemon in — with the same no-value assertion over message + detail. A separate arm proves the AGENT refusal itself carries no submitted value.\n\nEvery no-value assertion carries a POSITIVE control: `Buffer.from(JSO",
+      "startedAt": "2026-09-06T00:58:07.141Z",
+      "completedAt": "2026-09-06T01:03:17.926Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "ADVERSARIAL REVIEW AND DRILLS (global rail 1). Read your own diff as an attacker first. Then drill, each recorded with its outcome: (1) make the refusal detail interpolate the submitted value - the step-6 canary MUST red; (2) delete one kind from OPERATOR_PRINCIPAL_KINDS - the agent-refused arm MUST red; (3) delete one kind from the registry while leaving it in PAYLOAD_KEYS - daemon-store-dependencies.test.ts:238 MUST red. RESTORE PROOF (global rail 13): run `git status --porcelain` on the mutated paths FIRST. The new module and its test are UNTRACKED, so `git diff` is blind to them and certifies nothing - prove those restores by SHA256 against an out-of-tree backup in %TEMP% suffixed with your worker id, in a call SEPARATE from the restore. Tracked files may use `git diff`. Also answer in the note: what happens on a concurrent double-set of the same variable (you pass the envelope commandId - show the store dedupes rather than double-writing), and what happens when a null, undefined or non-string value arrives over the wire.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/daemon-command-environment.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-environment.test.ts"
+      ],
+      "note": "ADVERSARIAL REVIEW AND DRILLS — three drills all RED as required, every restore PROVEN, and the review found one real defect in my own diff which is now guarded.\n\nPOST-DRILL STATE: `Test Files 5 passed (5)` / `Tests 592 passed (592)` across the environment module, the weld file, the registry test, the vocabulary test and the allowlist test.\n\nDEFECT FOUND BY READING MY OWN DIFF AS AN ATTACKER, then fixed\n`entryOf` reaches the edge through `kind as EnvironmentEdgeKind`, and a cast proves NOTHING at runtime. A third kind added to ENVIRONMENT_FAMILY later would route here and index `ENVIRONMENT_EDGE_RESULT_CODES` to `undefined`, shipping an ACCEPTED decision with no result code instead of refusing. Guarded by set-equality between what the seam ROUTES (`Object.keys(ENVIRONMENT_FAMILY)`) and what the edge can ANSWER (`Object.keys(ENVIRONMENT_EDGE_RESULT_CODES)`), so the third kind reds on the day it is added — no unreachable branch bought, which is why I did not add a runtime else-arm.\nOther attacks considered and dismissed with reasons: a value smuggled under an unlisted key is refused at PAYLOAD_SHAPE by the registry allow-list (canary arm (a) covers it); `value` sent to the UNSET wire is refused 400 at PAYLOAD_SHAPE and the edge never reads it for that kind anyway (defence in depth, measured in step 7); `__proto__` in the payload is an own property after JSON.parse and is refused by the allow-list besides; `DomainRefusal`'s message is `${code}: ${detail}` where detail is fixed prose keyed by code, so the message cannot carry input; `readString` only ever reads the three named keys.\n\nDRILL 1 — make the refusal detail interpolate the submitted value. Mutation: `refuse()` gained a `leaked?: string` arm interpolating `${refusal.detail}: ${leaked}`, and the SCOPE refusal passed `String(envelope.payload[\"value\"])`.\nRESULT: RED, and precisely the intended arm — `× the ingress canary ... > leaves ZERO plaintext in the REFUSAL of a malformed request carrying a valid value`; `Tests 1 failed | 27 passed (28)`. The canary is not decorative.\nRESTORE: `daemon-command-environment.ts` is UNTRACKED (`?? ` in the pre-drill `git status --porcelain`), so `git diff` certifies nothing. Restored by copy-back from `%TEMP%/moe-drill-caece97b/env-module.ts` and proven in a SEPARATE call: sha256 `37efab82ff16b766a89c237e1853b47897a1133f29024ab417ea4016fb0cdd7a` on both worktree file and backup.\n\nDRILL 2 — delete `environment.set_variable` from OPERATOR_PRINCIPAL_KINDS.\nRESULT: RED on THREE arms, including the two the drill targets — `× ... environment.set_variable refuses an AGENT-authenticated dispatch and admits the OPERATOR's`, `× ... carries the agent refusal WITHOUT the value the agent submitted`, and `× ... serves EXACTLY the two environment kinds` (the roster leg); `Tests 3 failed | 25 passed (28)`. Note the blast radius: dropping the kind from that set ALSO re-admits it to the MCP roster, since `MCP_EXCLUDED_COMMAND_KINDS` is derived from it — which is why the equality arm reds too.\nRESTORE: `daemon-command-vocabulary.ts` is TRACKED and was CLEAN pre-drill (`git status --porcelain` empty), so `git checkout --` is valid; proof `git diff --stat` [] and `git status --porcelain` [].\n\nDRILL 3 — drop a kind from the REGISTRY while leaving it in PAYLOAD_KEYS. Mutation: `.filter((kind) => kind !== \"environment.set_variable\")` before `.map(entryOf)`.\nRESULT: RED — `× createStoreDependencies > provides a distinct /2 command plane that is inactive rather than falling back to v1` (that IS the weld the plan calls :238) AND `× serves the default provider and its registry bridge under plain Node`; `Tests 2 failed | 26 passed (28)`. This settles step 3's open question: the weld CAN still red, just not for a missing PAYLOAD_KEYS entry — the registry being PAYLOAD_KEYS-derived means the only way to desync is to filter the map, and the weld catches exactly that.\nRESTORE, and the trap avoided: `daemon-command-registry.ts` is TRACKED but DIRTY (it carries my step-5 edit), so `git checkout --` would have DESTROYED that work. Restored by copy-back from `%TEMP%/moe-drill-caece97b/registry.ts`, proven in a SEPARATE call: sha256 `7a6c10c5167cee7aabb41bf93f8f1684039c67405ed8b0dba2a9ff834eb515d0` on both, plus `grep -c 'runEnvironmentEdge\\|environmentCredential'` = 4, confirming step 5 survived.\n\nTHE TWO QUESTIONS THE STEP ASKS\nCONCURRENT DOUBLE-SET OF THE SAME VARIABLE. Same commandId: the store keys a receipt by command id and compares request digests; an environment write's digest can never repeat (fresh seal nonce, fresh eventId), so the second call raises `CommandIdConflictError` / `COMMAND_ID_CONFLICT` and the aggregate version does NOT advance — asserted in `passes the ENVELOPE's commandId through, so a retried set never double-writes`, on the store's own error class, not on \"it threw\". So it does not double-write; it refuses. DIFFERENT commandIds racing: each reads the aggregate version and commits under it, so the loser gets the store's `ExpectedV",
+      "startedAt": "2026-09-06T01:03:20.830Z",
+      "completedAt": "2026-09-06T01:06:57.918Z"
+    },
+    {
+      "stepId": "step-9",
+      "description": "GATES AND COMPLETION (DoD 6). Run both legs in the FOREGROUND, quoting each `Test Files N passed` count line - an exit code alone is not evidence (global rail 8) and a background run dies with a one-shot session. (1) `pnpm --filter @moe/daemon test`; (2) `pnpm typecheck`, confirming the `apps/daemon typecheck$ tsc` script echo is present since that echo is the execution evidence. `pnpm test` is NOT required of this row as re-scoped: the root vitest include is [adapters,packages,tests,tools]/** with no apps/**, and the packages/** half of the original DoD moved to task-b3888068. SAY THAT EXPLICITLY rather than quoting a vacuous run. For any foreign red apply global rail 3: record failures at the merge-base and at HEAD, subtract, intersect with this row's owned paths, and disclose the red VERBATIM with file and line. Known at plan time: src/work/foundation-* reds with timeout-only failures unrelated to this row. Do NOT run two suites concurrently while measuring - it moves the red count on an unchanged tree. The completion record must carry: the three 46->48 counts, the four roster-deletion drill outcomes, the canary's four surfaces, and the confirmation that daemon-store-dependencies.test.ts is green UNEDITED.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+        "apps/daemon/src/mcp-main.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts"
+      ],
+      "note": "GATES (DoD 6) — owned-path leg GREEN at exit 0; the repo-wide leg's 19 reds are attributed line by line and 15 of them are foreign, each with evidence.\n\nLEG 1 — OWNED-PATH VERIFICATION, foreground, exit 0\n`pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/daemon-command-environment.test.ts src/daemon-command-vocabulary.test.ts src/daemon-command-registry.test.ts src/daemon-store-dependencies.test.ts src/mcp-tool-allowlist.test.ts src/mcp-main.test.ts src/mcp-http/mcp-http-host.test.ts src/daemon-v2-command-registry.test.ts`\n-> `Test Files  8 passed (8)` / `Tests  624 passed (624)`; `PIPESTATUS0=0` captured explicitly (global rail 8: a piped run reports tail's status).\n\nLEG 2 — `pnpm typecheck` -> `TYPECHECK_EXIT=0`, with the execution echo `apps/daemon typecheck$ tsc --project tsconfig.json` followed by `apps/daemon typecheck: Done`. Zero `error TS` lines.\n\nLEG 3 — `pnpm test` NOT RUN, and deliberately so, not skipped: the root vitest include is [adapters,packages,tests,tools]/** with NO apps/**, so it would execute zero tests from this row's files and printing its count line would be a vacuous pass. The packages/** half of the original DoD moved to task-b3888068, which has landed.\n\nLEG 4 — REPO-WIDE BASELINE, `pnpm --filter @moe/daemon test`, run alone in the foreground (no concurrent suite):\n`Test Files  12 failed | 493 passed (505)` / `Tests  19 failed | 9218 passed | 2 skipped (9239)`, EXIT=1.\nAttribution of all 19, per global rail 3:\n\n(A) MINE — 4 tests, 3 files, ALL FIXED and re-run green. Roster denominators that moved because this row added two OPERATOR-ONLY kinds:\n  - `mcp-http/mcp-http-host.test.ts` HTTP-1 and HTTP-2: `EXCLUSION_CASES.length` 14->17 (x2) and `EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT` 28->34.\n  - `mcp-main.test.ts` STDIO-1: same two literals.\n  - `daemon-v2-command-registry.test.ts`: `ports.registry.size` 49->52.\n  Re-run: `Test Files 3 passed (3)` / `Tests 32 passed (32)`.\n\n(B) FOREIGN — `repository.bootstrap`'s own roster backfill, owed by whoever landed it. 4 tests:\n  `bootstrap/bootstrap-services.test.ts:89` \"covers exactly the twelve command kinds this surface owns\"; `bootstrap/bootstrap-durability.test.ts:205` \"drives every owned command kind\"; `goals/j1-command-path.test.ts` \"publishes exactly the twelve owned kinds from the package root\" (`expected Set{...(12)} to deeply equal Set{...(11)}`); `http/affordance-read.test.ts` \"cards the non-planning dispatch roster\" (`- \"repository.bootstrap\"`).\n  PROOF IT IS NOT MINE: `bootstrap/bootstrap-contracts.ts:47` shows a peer APPENDED `\"repository.bootstrap\"` to BOOTSTRAP_COMMAND_KINDS (now 13 entries), and `grep -rn 'environment\\.\\(set\\|unset\\)_variable' apps/daemon/src/bootstrap/ apps/daemon/src/goals/` returns ZERO occurrences. Deleting this row's two kinds would not green one of them. `http/affordance-read.test.ts` is also `M` in another session's hands.\n\n(C) FOREIGN — peer in-flight files. 5 tests:\n  `runtime-entrypoint.test.ts` \"has an exact .js bridge...\" -> `unexpected: [\"repository\\\\deployment\\\\deployment-docker-probe.js\"]`, a bridge for a peer's module this row never touched (my own `daemon-command-environment.js` is in neither `missing` nor `unexpected` nor `wrongContent`).\n  `repository/controlled-profile/controlled-profile-generator.test.ts` x4 (.env.example arms) — the peer row landing `environment/environment-required-variables.*`; its `.ts` and `.test.ts` are both dirty in another session.\n\n(D) FOREIGN — HOST SUBPROCESS FAILURE, not a logic red. 6 tests: `criterion-evidence/criterion-integrated.test.ts`, `goals/goal-live-evidence.test.ts`, `goals/goal-services.test.ts`, and three closure arms in `goals/j1-command-path.test.ts` (25-30s each; the file took 86710ms).\n  SIGNATURE, quoted: `\"status\":\"UNKNOWN\",\"exitCode\":null,\"outputSha256\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\",\"byteCount\":0` — the spawned `C:\\Program Files\\nodejs\\node.exe` produced NO output and NO exit code, and that outputSha256 is the SHA256 of the empty string. `criterion-integrated` fails as `byteCount: 16` expected vs `0` received. `ps -W | grep -c node` measured **135** node processes on the box during the run. This is the spawn-latency cliff the row's planningNotes and `mem:spawn-latency-cliff-reds-every-shell-out-test` record. NOT `Test timed out in` — zero such lines — so it is a real subprocess failure, and it is the host's.\n  4 + 4 + 5 + 6 = 19. Every failure is accounted for.\n\nINTERSECTION (B)+(C)+(D) with this row's owned paths: EMPTY. Owned-package legs: exit 0.\n\nPEER SWEEP DISCLOSED: my `daemon-store-foundation-composition.ts:199` (`environmentCredential: () => config.credential`) and my `daemon-store-dependencies.test.ts` registryKinds backfill were swept into ANOTHER session's exit commit, `cce7435c` (task-ef76a7f4). Verified present at HEAD by `git show HEAD:<path> | grep`. Bytes are on the branch; the attribution is wrong and I did not re-apply them.\n\nTHE COMPLETION FACTS",
+      "startedAt": "2026-09-06T01:07:01.765Z",
+      "completedAt": "2026-09-06T01:20:30.342Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-9ae492b373fa4e7aa6b1e91585f6e612",
+  "dependsOn": [
+    "task-d0c63cd8848a4da18ad3fbb8eb1d95c3",
+    "task-d0d1cb5c3f034d50bd84b7ed56b7e812",
+    "task-b3888068c0e2481cb1463524ee7f2895"
+  ],
+  "priority": "HIGH",
+  "order": 101.5,
+  "comments": [
+    {
+      "id": "comment-1e2ff9eaf4dc448bab3f983216527ec1",
+      "author": "worker-2739fee7",
+      "content": "STEP-1 HARD STOP RE-MEASURED IN A FRESH SESSION (worker-2739fee7, 2026-09-05). Zero production bytes written by me this session or the last. The prior session (wip 8a534255) touched only `.moe/tasks/*.json` — confirmed by `git show --stat 8a534255`, which lists exactly two board JSON files and no source.\n\nSTEP 1(a) — THE FENCE, `task-d0d1cb5c`. Absent at HEAD, half-present in the shared working tree:\n```\ngit grep -n 'environment.set_variable' HEAD -- apps/daemon/src/mcp-tool-allowlist.ts \\\n    apps/daemon/src/orchestrator/agent-spawn-contract.ts\n  -> (no output, exit 1)\n\ngrep -n 'environment.set_variable\\|environment.unset_variable' \\\n    apps/daemon/src/mcp-tool-allowlist.ts apps/daemon/src/orchestrator/agent-spawn-contract.ts\n  -> apps/daemon/src/orchestrator/agent-spawn-contract.ts:215:  \"environment.set_variable\", \"environment.unset_variable\",\n```\nSo HUMAN_ONLY_STEPS has both kinds in the WORKING TREE only; `MCP_EXCLUDED_COMMAND_KINDS` (`mcp-tool-allowlist.ts:59`) has NEITHER, in the tree or at HEAD. `agent-spawn-contract.ts` shows ` M` in git status and `task-d0d1cb5c` is WORKING assigned to worker-caece97b — that is their in-flight half, not a landed prerequisite. Per the shared-checkout rail I did not touch, revert or count it.\n\nSTEP 1(b) — THE CONTRACT, `task-b3888068`. Absent, and the row has not started:\n```\ngrep -c 'environment' packages/contracts/src/runtime/runtime-vocabulary.ts  -> 0\n```\n`RUNTIME_COMMAND_KINDS` is at `runtime-vocabulary.ts:85`; it contains no environment kind. `task-b3888068` status = PLANNING.\n\nWHY THIS IS A HARD BLOCK AND NOT A PARTIAL LAND. `mcp-tool-allowlist.ts:84-90` computes the MCP-served set as `Object.keys(PAYLOAD_KEYS)` MINUS `MCP_EXCLUDED_COMMAND_KINDS`. Step 2 of this plan adds both kinds to `PAYLOAD_KEYS`. With the exclusion not yet landed, the instant those keys exist both kinds become MCP-ADVERTISED, and the MCP port authenticates with the operator bootstrap credential (`mcp-main.ts:112-127`) — so an agent holding it arrives AS the operator and gets a real witness for a command whose payload sets a production environment variable. That is this plan's step-1 stop clause verbatim and taskRail 1; it is a security ordering constraint, not sequencing paperwork.\n\nSecond, independent reason: `daemon-store-dependencies.test.ts:238` set-equality welds `PAYLOAD_KEYS` to the v2 registry. Any partial land of steps 2-3 without steps 4-5 reds that arm for every agent in this shared checkout.\n\nWHY THE ROW WAS CLAIMABLE AT ALL — a board defect, not a worker judgement call. `dependsOn` on this row is `['task-d0c63cd8848a4da18ad3fbb8eb1d95c3']` only. Its DONE. The two leaves the architect carved out of this row on 2026-09-05 (`task-d0d1cb5c`, `task-b3888068`) were never added to the field — `mem:task-a2409cba-env-command-publishing-split` records why: `set_task_dependencies` refuses a worker seat with `[NOT_ALLOWED] architect or governor role required`, so the splitting architect made step 1 a hard-stop precisely so the chain would fail closed if the field was never set. It was never set. The stop clause is doing its designed job. Requesting a governor/architect add both ids to this row's `dependsOn` so the next session is not offered the row early again.\n\nNOTHING DELIVERABLE WAS LEFT ON THE TABLE. Every remaining step (2-9) is downstream of registering the kinds; there is no earlier slice that is production-reachable without opening the advertisement window.\n\nHOST NOTE for whoever resumes: the spawn-latency cliff is active (worker-d6e44333 measured 168 ms steady vs 8 ms healthy, mtkbtsvc pid 6352 at 9.7M handles). Step 9's daemon leg will produce `Test timed out in 5000ms` reds in `src/work/foundation-*` that are NOT attributable to this diff; re-run the file in isolation before attributing, and do not run two suites concurrently on this box (planningNotes record that moving 3 -> 8 reds on an unchanged tree).",
+      "timestamp": "2026-09-05T14:22:53.052Z"
+    },
+    {
+      "id": "comment-7b5f780e4b42494a9c260e371c066de0",
+      "author": "worker-8c5af680",
+      "content": "YOUR STEP-1 HARD STOP IS NOW HALF-TRUE AND WILL RE-BLOCK THIS ROW FOR THE WRONG REASON. Read this before claiming. From worker-8c5af680 holding task-d0d1cb5c (your prerequisite), measured at HEAD e70730c5, tree clean.\n\nStep 1 says: \"BOTH kinds must already be present in MCP_EXCLUDED_COMMAND_KINDS and HUMAN_ONLY_STEPS (task-d0d1cb5c). If absent, STOP.\" Half of that is now permanently wrong.\n\n**HUMAN_ONLY_STEPS — PRESENT, and it is real.**\n    git grep -n 'environment.set_variable' HEAD -- apps/daemon/src/orchestrator/agent-spawn-contract.ts\n    -> HEAD:...agent-spawn-contract.ts:215:  \"environment.set_variable\", \"environment.unset_variable\",\nLanded in commit **cd893020**. As of today it also carries a BEHAVIOURAL arm I just added: `agent-wrapper.test.ts > createAgentWrapper > never staffs the human approval, goal-closure or environment-variable actions` feeds both kinds to `runOnce()` as READY steps and asserts `spawned: []`. Drilled: deleting `environment.set_variable` from the set makes it RED. So your DoD 2's HUMAN_ONLY half is already discharged behaviourally — extend that arm, do not rebuild it.\n\n**MCP_EXCLUDED_COMMAND_KINDS — ABSENT, DELIBERATELY, AND STAYING ABSENT UNTIL YOU LAND IT.**\n    grep -n 'environment\\.' apps/daemon/src/mcp-tool-allowlist.ts   -> zero hits\ntask-d0d1cb5c tried and the attempt is refuted, not merely deferred. That roster means \"kinds this daemon WIRES but refuses to ADVERTISE\", and four guards enforce it: mcp-tool-allowlist.test.ts:101-113 (every member must be a real PAYLOAD_KEYS key), :244-257 C2 (every member must be SERVED by the registry), :126-151 (the identity wired === vocabulary - excluded + queries), and the mcp-main / mcp-http-host sweeps (a tool must have been GENERATED for each member). Fencing a kind before it exists fails all four: measured `Tests 7 failed | 47 passed (54)`, five of them semantic. The arm built to catch a MISSPELLED member catches an UNWIRED one, because to it they are the same thing.\n\n**THEREFORE THIS ROW OWNS THE EXCLUSION, IN THE SAME COMMIT AS PAYLOAD_KEYS.** That is not extra scope — your DoD 1 already says it (\"published OPERATOR-ONLY and MCP-EXCLUDED with the full roster backfill, and a BIDIRECTIONAL set-equality test enumerating the SERVED kinds from the dispatch seam\"), and your step 7 already plans it. The only thing that changes is step 1's precondition. The result is strictly SAFER than the original two-row split: vocabulary + exclusion landing together makes the advertisement window zero-width instead of one-row wide. Full reasoning on the prerequisite: comment-ca6eb1f80b3f4794b28dd57f95c5f9ee on task-d0d1cb5c.\n\n**SUGGESTED REPLACEMENT for step 1 (a)/(b), if a governor or architect amends the step:**\n> (a) `grep -n 'environment.set_variable\\|environment.unset_variable' apps/daemon/src/orchestrator/agent-spawn-contract.ts` — BOTH kinds MUST be present in `HUMAN_ONLY_STEPS` (task-d0d1cb5c, commit cd893020). If absent, STOP: the fence regressed. (b) `grep -n 'environment\\.' apps/daemon/src/mcp-tool-allowlist.ts` MUST be EMPTY. Their absence is CORRECT and expected — the roster's own guards require a member to be wired, served and tool-generating, so the exclusion cannot precede the vocabulary. THIS ROW adds both kinds to `MCP_EXCLUDED_COMMAND_KINDS` in the SAME commit as the `PAYLOAD_KEYS` entries, so the kinds are never advertised for even one commit. If the grep HITS, stop instead: someone landed a fence this row was to own and its guards are presumably relaxed.\n\n**STALE COUNT WARNING, and it will bite your step 5.** Every \"6 -> 8\" style number written while d0d1cb5c was blocked is dead. Measured now: `daemon-command-registry-human-approver.test.ts:325-326` reads `toHaveLength(11)` TWICE — peer rows (preview.decide and siblings) grew the exclusion roster from 6 to 11 while that row sat blocked. RE-MEASURE the roster length at the moment you edit it; never carry a remembered number, and never a number quoted in a task description.\n\nI did not edit this row's JSON, plan or fields — only this comment. @governors: step-1's precondition is unamended and I could not amend another row's plan from a worker seat.",
+      "timestamp": "2026-09-05T18:23:43.729Z"
+    },
+    {
+      "id": "comment-fb462ee785534136bb6e72852a1aee06",
+      "author": "worker-caece97b",
+      "content": "EVIDENCE DETAIL for QA — the counts, the drills, and the full foreign-red attribution. (Overflow from the completion summary's 2000-char cap.)\n\nTHE NUMBERS, WITH DENOMINATORS. The plan said \"three counts 46 -> 48\". Both halves were stale: the base had moved to 50, and a peer had landed `repository.bootstrap` in PAYLOAD_KEYS and BOOTSTRAP_FAMILY with NO roster backfill, so several files were ALREADY RED at HEAD before this row added a byte. Final measured state (runtime probe, deleted after use): `Object.keys(PAYLOAD_KEYS).length` = 53; `OPERATOR_PRINCIPAL_KINDS.size` = 18; `MCP_EXCLUDED_COMMAND_KINDS.length` = 17; `wiredMcpToolKinds().length` = 42, UNCHANGED, because 53 - 17 + 6 = 42 — each kind entered the vocabulary AND the operator-only class in the same change, so it was subtracted the moment it was added and never spent one commit MCP-advertised. v2 registry 52. BOOTSTRAP_COMMAND_KINDS 13 (foreign).\nRoster edits: daemon-command-vocabulary.test.ts (ROWS 52->53 hmm read as 50->53 including the foreign row, declared 41->42, FAMILY_MAPS.BOOTSTRAP 12->13, ENVIRONMENT 2, OPERATOR_ONLY 15->18); daemon-command-registry.test.ts (six counts 50->53 — a peer raced me in this file and I removed MY duplicate rows, keeping theirs); daemon-store-dependencies.test.ts registryKinds; mcp-tool-allowlist.test.ts (excluded 14->17, vocabulary 50->53); mcp-http-host.test.ts + mcp-main.test.ts (14->17, 28->34); daemon-v2-command-registry.test.ts (49->52).\n\nSEVEN DRILLS, ALL RED, ALL RESTORED WITH PROOF.\nFour roster deletions (step 7): D1 delete set_variable from the SERVED side (PAYLOAD_KEYS) -> seam-equality arm RED directly, `Tests 9 failed | 18 passed (27)`. D2 same for unset_variable -> RED directly, `Tests 2 failed | 25 passed (27)`. D3 delete set_variable from the ADVERTISED side (ENVIRONMENT_FAMILY) -> file RED `Tests 3 failed | 16 passed | 8 skipped (27)`, but via the CANARY arms, not the equality arm: dropping the kind from its only family table makes `commandFamilyFacts` throw inside registry construction, so `createStoreDependencies` fails and the fence describe's beforeAll aborts. The daemon refuses to BOOT rather than serving a capability-less kind — stronger than the plan's \"capability resolves null\", and reported as measured rather than as expected. D4 identical for unset_variable.\nThree mutations (step 8): (1) make the refusal detail interpolate the submitted value -> `× ... leaves ZERO plaintext in the REFUSAL of a malformed request carrying a valid value`, `Tests 1 failed | 27 passed (28)`. (2) delete a kind from OPERATOR_PRINCIPAL_KINDS -> three arms RED including the agent-refused one, `Tests 3 failed | 25 passed (28)`; note the blast radius, since MCP_EXCLUDED_COMMAND_KINDS is DERIVED from that set. (3) filter a kind out of the registry while leaving it in PAYLOAD_KEYS -> `× provides a distinct /2 command plane...` (the weld) AND `× serves the default provider... under plain Node`, `Tests 2 failed | 26 passed (28)`.\nRESTORE PROOFS (global rail 13): pre-drill `git status --porcelain` on every target FIRST. `daemon-command-vocabulary.ts` and `daemon-command-payload-keys.ts` were TRACKED+CLEAN, so `git checkout --` with `git diff --stat` [] is valid. `daemon-command-environment.ts` is UNTRACKED and `daemon-command-registry.ts` is TRACKED BUT DIRTY (a `git checkout --` there would have DESTROYED the step-5 edit) — both restored by copy-back from %TEMP%/moe-drill-caece97b/ and proven by SHA256 in calls SEPARATE from the restore: env module `37efab82ff16b766a89c237e1853b47897a1133f29024ab417ea4016fb0cdd7a`, registry `7a6c10c5167cee7aabb41bf93f8f1684039c67405ed8b0dba2a9ff834eb515d0`, env test `638fdf74b2784f49f52f594e8ed8915cf886c4b78c221bc36246a39c97d6ce91`. Step-5 survival re-checked by grep after the restore.\n\nTHE CANARY'S SURFACES (DoD 3), fresh `MOE_CANARY_<randomBytes(16).toString(\"hex\")>` per test, searched over BYTES through the REAL `handleCommandRequest` path: (a) the refusal detail, at TWO layers, both carrying a real value — a smuggled key (INPUT_INVALID at PAYLOAD_SHAPE, above the edge) and a missing `environment` (ENV_ENVIRONMENT_UNKNOWN at SCOPE, at the edge); (b) the durable command record; (c) the request-digest path, `receipt.requestSha256`; (d) every console line over debug/error/info/log/warn on BOTH an accepted and a refused dispatch. Plus a fifth: the whole store file (db + WAL + shm). ZERO occurrences on all five. Every arm carries a POSITIVE control — `Buffer.from(JSON.stringify({echoed: secret})).includes(secret)` must be TRUE — so a false `includes` proves the surface is clean, not that the search is broken; and each surface asserts a token that MUST be there (the variable name in the store bytes, the command id in the receipt, INPUT_INVALID/PAYLOAD_SHAPE + ENV_ENVIRONMENT_UNKNOWN/DISPATCH in the refusals).\nTWO FINDINGS the controls produced: the ingress refusal body does NOT carry the commandId at all (my first control asserted it did, and RED); and an environment write leaves NO row in the decision ledger — the edge commits through the store's `commit` (event + receipt), not `commitExpectedVersionDecision`, so the RECEIPT is the durable command record. The ledger is still searched, so a future change that starts writing one is covered the same day.\n\nFULL-SUITE ATTRIBUTION, `pnpm --filter @moe/daemon test` = `Test Files 12 failed | 493 passed (505)` / `Tests 19 failed | 9218 passed | 2 skipped (9239)`, run ALONE. 4 mine (fixed, re-run `Tests 32 passed (32)`); 4 owed by `repository.bootstrap`'s row (bootstrap-services:89, bootstrap-durability:205, j1-command-path \"twelve owned kinds\", affordance-read) — proof: `bootstrap-contracts.ts:47` shows a peer appended the kind, and `grep -rn 'environment\\.\\(set\\|unset\\)_variable' apps/daemon/src/bootstrap/ apps/daemon/src/goals/` returns ZERO; 5 from peer in-flight files (runtime-entrypoint's `unexpected: [\"repository\\\\deployment\\\\deployment-docker-probe.js\"]`, controlled-profile-generator x4); 6 from a HOST subprocess failure — `\"status\":\"UNKNOWN\",\"exitCode\":null,\"byteCount\":0,\"outputSha256\":\"e3b0c442...b7852b855\"` (the SHA256 of the empty string) with 135 node processes measured on the box. 4+4+5+6 = 19, all accounted for.",
+      "timestamp": "2026-09-06T01:21:08.956Z"
+    },
+    {
+      "id": "comment-783d551a5d3d4d0c8ac9f3883046c594",
+      "author": "qa-d81848bc",
+      "content": "QA REVIEW EVIDENCE (qa-d81848bc, 2026-09-06) — APPROVED. Full detail; the approval summary is the short form.\n\nVERIFIED AT HEAD. All owned paths clean, disk == HEAD. NOTE ON THE COMMIT RECORD: the completion commit 3a7e54de carries ONLY the task JSON (1 path); the production bytes rode in on the qa-role wip 7804b4d4. Bytes are correct and present at HEAD — a future reader must verify delivered bytes at HEAD, not read the thin completion commit as a missing delivery.\n\nGATES RE-RUN BY QA, not taken from the note.\n(1) task.verification command: `Test Files 8 passed (8)` / `Tests 624 passed (624)`, exit 0.\n(2) `pnpm typecheck` exit 0, with the `apps/daemon typecheck$ tsc` script echo present (execution evidence, not a bare exit code).\n(3) Literal DoD-6 gate `pnpm --filter @moe/daemon test`: `Test Files 5 failed | 501 passed (506)` / `Tests 8 failed | 9237 passed | 2 skipped (9247)`.\n\nALL 8 REDS FOREIGN — rail-3 intersection with owned paths EMPTY.\nPer-FILE grep of all five failing files for this row's symbols (environment.set_variable / unset_variable / daemon-command-environment / daemon-command-payload-keys / runEnvironmentEdge / ENVIRONMENT_COMMAND_KIND) returns env-refs=0 on EVERY one.\n(a) runtime-entrypoint.test.ts — orphan bridge `repository/deployment/deployment-docker-probe.js` from task-3706b7e7. `git cat-file -e 7804b4d4^:<path>` SUCCEEDS, so the red predates this row's bytes. This row's own bridges are correct: `missing: []` is the positive control, and both new `.js` files read `export * from \"./<module>.ts\";`.\n(b) goals/j1-command-path.test.ts \"publishes exactly the twelve owned kinds\" — Set diff's extra member is `repository.bootstrap`, a peer's kind, NOT an environment kind. bootstrap-contracts.ts is dirty: HEAD has 1 occurrence, disk has 2, so the red is driven by UNCOMMITTED peer dirt (worker-d6e44333 / task-facff1d1) and would not exist in a clean checkout of the delivered bytes.\n(c) The remaining 6 (goal-live-evidence, goal-services, criterion-integrated, 3 more j1 arms) are cascade + 32s timeouts, load-dependent: the worker measured 19 reds at ~135 node processes, QA measured 8 on a quieter host. Same tree, different count — attribute by failing FILE, never by count.\n\nDoD 1 — MET. Both kinds in OPERATOR_PRINCIPAL_KINDS (daemon-command-vocabulary.ts:315-316). MCP_EXCLUDED_COMMAND_KINDS is DERIVED (`[...OPERATOR_PRINCIPAL_KINDS].filter(k => !MCP_REACHABLE_OPERATOR_KINDS.has(k))`), so a zero-hit grep for the kind literal in mcp-tool-allowlist.ts is CORRECT and must not be read as a gap. The set-equality arm enumerates SERVED kinds from the dispatch seam — `registry.keys()` filtered by `familyCapabilityOf(kind) !== null` then by `commandFamilyFacts(kind).environment`, the literal discriminator entryOf branches on — with both directions spelled out per kind plus a converse leg over MCP_EXCLUDED and wiredMcpToolKinds().\n\nDoD 2 — MET BEHAVIOURALLY, which is the part that matters. Agent-authenticated dispatch through the REAL handleCommandRequest returns `{httpStatus: 403, outcome: \"PORT_REFUSED\", refusal: {code: \"OPERATOR_PRINCIPAL_REQUIRED\", layer: \"DAEMON_AUTHORIZATION\"}, stage: \"DISPATCH\"}`; the operator's identical request reaches the handler and returns ENVIRONMENT_VARIABLE_SET / _UNSET. The agent session is genuinely minted via session.open holding [ADMIN, WORK] — the capability the kind DEMANDS — so the refusal provably comes from the principal fence and not from a capability check. The unset arm seeds with an operator set first, so both arms end in an accepted decision rather than a fence that is simply closed to everyone.\n\nDoD 3 — MET, AND I DRILLED IT RATHER THAN TRUSTING THE NOTE. Mutated the production edge so the ENV_ENVIRONMENT_UNKNOWN refusal detail interpolates the submitted value (the classic leak). The canary went RED on exactly the intended arm: `1 failed | 27 passed`, \"leaves ZERO plaintext in the REFUSAL of a malformed request carrying a valid value\". Precise blast radius, no collateral. RESTORE PROVEN in a call SEPARATE from the restore, two ways: SHA256 37efab82ff16b766a89c237e1853b47897a1133f29024ab417ea4016fb0cdd7a equal to the pre-drill backup, and `git diff` + `git status --porcelain` both empty (file is tracked). The canary is not vacuous: fresh randomBytes(16) secret PER TEST, every surface asserted non-empty AND carrying a token that must be there, plus a positive control proving the byte search finds that exact secret when present, and the console arm exercises its own spy inside the spy's lifetime so a broken spy reds instead of silently no-opping.\n\nDoD 4 — MET. All four codes assert code AND layer AND `detail === ENVIRONMENT_REFUSAL_DETAILS[code]`, i.e. the fixed constant, so no message can carry input by construction. The agent-refusal arm additionally byte-searches the refusal for a fresh secret.\n\nDoD 5 — MET. Both payload-key test tables backfilled: daemon-command-vocabulary.test.ts:158/160 and daemon-command-registry.test.ts:240/243, plus the flat rosters at :329 and :372. The generated-client clause was re-scoped AT PLAN TIME to prereq task-b3888068 (DONE), whose completionSummary quotes OLD ed5f6b87…b8076 -> NEW 31f0e8a4…a520c and notes the tree now reads f07b77e4…1bfd after three concurrent rows composed. Delegated, not dropped. Same for `pnpm test`: the root vitest include has no apps/**, and the packages/contracts half moved to that same prereq.\n\nSECURITY PROPERTY CONFIRMED ON DISK. runEnvironmentEdge is registered at daemon-command-registry.ts:448, BEFORE `const bytes = requestOf(...)` at :457, so the secret-bearing payload never reaches the assembler that writes request bytes beside every decision. The consumer edge is real rather than merely exported: `environmentCredential: () => config.credential` at daemon-store-foundation-composition.ts:199, with a fail-closed `?? (() => null)` default in the registry — without that wiring the kinds would be served-but-permanently-refusing.\n\nPER-FILE LINE CAPS. New modules 143 and 164 lines; the worker split daemon-command-vocabulary.ts 372 -> 329 by extracting daemon-command-payload-keys.ts, as the plan's risk clause instructed. daemon-command-registry.ts is 509 lines, past the 400 hard split, and is NOT chargeable to this row: it crossed 400 four commits earlier (61471143 at 397 -> 9d02d33d at 436) via task-40e52fa8 and task-54b74b80. This row added +24 lines, ~7 of them the comment documenting why the edge precedes requestOf, and kept all handler bodies in the new module — exactly what the plan directed. Splitting it now would collide with peers actively editing it; it needs its own row.\n\nCOVERAGE CAVEAT worth carrying to the epic-final row. daemon-store-dependencies.test.ts is NOT a tripwire for a missing entryOf branch — the registry is built by mapping entryOf over Object.keys(PAYLOAD_KEYS), so that set-equality is structurally satisfied by any kind added to PAYLOAD_KEYS. Nor would this row's own seam arm catch a deleted dispatch branch, since registry.keys() and the family flag both survive it. What actually catches it is the BEHAVIOURAL arm asserting resultCode — so DoD 2 is load-bearing for DoD 1's seam claim. That is sound as delivered, but a future editor must not \"simplify\" the behavioural arm into a membership check.\n\nNON-BLOCKING, for the epic-final integration-and-hardening row (delivery-bias rail — recorded here, not filed as rows):\n1. `repository.bootstrap` still owes its roster backfill; a peer appended it to BOOTSTRAP_COMMAND_KINDS without updating the \"twelve owned kinds\" arms (4 reds).\n2. An environment write leaves no decision-ledger row, so a resubmitted commandId answers COMMAND_ID_CONFLICT instead of replaying. Safe — the aggregate never advances twice — but not parity with the shared path. The worker documented the mechanism honestly on runEnvironmentEdge rather than minting a fifth refusal code.\n3. The orphan `.js` bridge under repository/deployment/ (task-3706b7e7) should be deleted or its module promoted to runtime tier.",
+      "timestamp": "2026-09-06T01:38:42.943Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T08:42:20.804Z",
+  "updatedAt": "2026-09-06T01:40:14.289Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T14:01:30.843Z",
+    "plannedStepCount": 9,
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 9,
+    "doneAt": "2026-09-06T01:39:48.860Z",
+    "wallClockMs": 41898017
+  },
+  "contextFetchedBy": [
+    "worker-caece97b",
+    "worker-2739fee7",
+    "qa-d81848bc"
+  ],
+  "planSizeWarnings": [
+    "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T14:11:33.649Z",
+  "planningNotes": {
+    "approachesConsidered": "SPLIT DAEMON VOCABULARY FROM DAEMON REGISTRY - the obvious cut, tried first. REJECTED on measurement: daemon-store-dependencies.test.ts:238 welds them by set-equality. Do not re-propose it.\n\nONE KIND PER ROW (set_variable, then unset_variable) - REJECTED: the same files are touched twice and the second row re-opens every roster. Reduces nothing, doubles the merge surface.\n\nSPLIT THE FENCE OUT (task-d0d1cb5c) - ADOPTED. The only piece that detaches, and only in the exclude-before-register direction.\n\nSPLIT THE SHARED CONTRACT OUT (task-b3888068) - ADOPTED after checking the seam is not welded: goal-create-with-source.ts:35 documents that `goal.create_with_source` is in RUNTIME_COMMAND_KINDS but NOT in the daemon table, so contract-without-daemon-entry is an established deliberate state.\n\nPUT THE HANDLERS IN AN EXISTING FILE to save a path against the cap - REJECTED: daemon-command-registry.ts is already 436 lines, past the 400 hard split, and daemon-command-edges.ts is 273. A new module is the compliant home and the two leaves bought the budget for it.",
+    "codebaseInsights": "MEASURED AT HEAD f3b94eaa by worker-caece97b 2026-09-05. Every claim in the row description was re-checked; two were incomplete and one seam was wrong.\n\nSCOPE NARROWED TWICE AT PLAN TIME. The row as filed measured 13 forced file edits and submit_plan refused it at 11 with [CONSTRAINT_VIOLATION] (newFiles count toward the 10 cap). Two prerequisite leaves were carved out and this row now owns the DAEMON HALF ONLY:\n- task-d0d1cb5c (order 101.2) - the MCP exclusion + HUMAN_ONLY_STEPS fence. Must land FIRST: excluding a kind that does not exist is a provable no-op, whereas registering before excluding advertises an operator-only command to every agent over MCP. Ordering here is SAFETY, not paperwork.\n- task-b3888068 (order 101.3) - RUNTIME_COMMAND_KINDS in packages/contracts plus the regenerated client.\nThis row therefore does NOT touch mcp-tool-allowlist.ts, agent-spawn-contract.ts, daemon-command-registry-human-approver.test.ts, packages/contracts or packages/control-room-client. DoD 5's client-regeneration clause and the MCP/HUMAN_ONLY half of DoD 1 and 2 moved with those leaves; what remains here is the daemon roster, the handlers, the behavioural fence assertions and the ingress canary.\n\nCONFIRMED AS THE DESCRIPTION SAYS: OPERATOR_PRINCIPAL_KINDS is a ReadonlySet at daemon-command-vocabulary.ts:344. FAMILY_TABLES at :180 is the searched list and familyCapabilityOf walks ONLY that array, so a new family table not added there is dead code and the kind's capability resolves null. PAYLOAD_KEYS is at :256 and the registry asserts payload ORDER, not just membership.\n\nINCOMPLETE IN THE DESCRIPTION - forced edits it does not name, invisible to a grep for the kind literals: daemon-command-registry.test.ts:818-826 carries `expect(ROWS).toHaveLength(46)`, `expect(deps.registry.size).toBe(46)` and `expect(REGISTRATION_ORDER).toHaveLength(46)`. All three become 48. REGISTRATION_ORDER (~:281) is transcribed BY HAND from PAYLOAD_KEYS and its ORDER is asserted separately at :827.\n\nTHE WELD THAT DEFINES THIS ROW'S SHAPE: daemon-store-dependencies.test.ts:238 asserts set-equality between the v2 plane's registry keys and Object.keys(PAYLOAD_KEYS) minus `planning.submit_decomposition`. Adding to PAYLOAD_KEYS without registering BOTH handlers reds it. That is why vocabulary and registry are one row. THAT FILE NEEDS NO EDIT - it stays green once both kinds are registered, and it is the TRIPWIRE for a half-done job, not a file to change.\n\nTHE STORE SURFACE THIS ROW CONSUMES (landed by task-d0c63cd8, which I reviewed and approved): setEnvironmentVariable(config, {commandId?, environment, name, value}) and unsetEnvironmentVariable(config, {commandId?, environment, name}), both returning EnvironmentReadResult; readEnvironmentVariables(config, environment). EnvironmentStoreConfig = {store, projectId, now, credential: EnvironmentCredentialSource}. The optional commandId was added BY THAT ROW SPECIFICALLY SO THIS ONE CAN PASS THE ENVELOPE'S commandId and get store-level dedupe - use it, do not let the store mint its own. Same package (apps/daemon), relative import, so global rail 7's dependency-edge check does not apply.\n\nALREADY SAFE UPSTREAM, do not redo it: environment-store.ts:99-103 writes commandBytes carrying only {environment, kind, name} - the command record deliberately holds NO value. This row's exposure is the DAEMON ENVELOPE path, which DOES carry the value.",
+    "risks": "LINE CAPS ARE ALREADY BREACHED BEFORE THIS ROW STARTS. daemon-command-registry.ts is 436 lines (past the 400 hard split) and daemon-command-vocabulary.ts is 372 and rising. Adding two kinds to each pushes both further. Add the minimum, keep handler BODIES in the new module, and if vocabulary crosses 400 split it by responsibility (kind constants vs payload table) rather than by line count, saying so in the step note. A pre-existing breach is not licence to widen it.\n\nTHE VALUE IS IN THE ENVELOPE ON THIS PATH, unlike child 1a's. Everything generic the ingress does with payloads - a refusal detail echoing the request, a decision record, a request-bytes digest, a debug line - is a leak for environment.set_variable and for no other kind on this board. Step 6 is the row's reason for existing; do not thin it because the store already passed a canary. Child 1a's canary provably cannot see this surface.\n\nTHE FOUR REFUSAL CODES ARE RAISED BY THE STORE. A handler that catches and re-wraps them silently changes the layer. Pass them through and assert code AND layer at the command edge (global rail 1).\n\nA LOST VERSION-CONFLICT RACE propagates the store's ExpectedVersionConflictError and is deliberately NOT a fifth refusal code (task-d0c63cd8's step-7 note records the reasoning). Do not convert it into one; pass the envelope commandId so the store dedupes a retry instead.\n\nIF daemon-store-dependencies.test.ts:238 REDS, a kind reached PAYLOAD_KEYS without reaching the registry. Fix the registry; never edit that arm.\n\nBOTH PREREQUISITES MUST BE DONE FIRST. If the fence (task-d0d1cb5c) has not landed, the moment this row registers the kinds they are MCP-ADVERTISED to every agent. That is the one ordering in this chain that is a security constraint rather than a convenience.\n\nHOST CONDITION as of 2026-09-05: the daemon suite takes 13-14 minutes and reds in src/work/foundation-* with timeout-only failures unrelated to this work (evidence in my review comment on task-d0c63cd8). Attribute by reachability, and NEVER run two suites at once on this box - doing so moved the red count from 3 to 8 on an unchanged tree.",
+    "keyFiles": [
+      "apps/daemon/src/daemon-store-dependencies.test.ts",
+      "apps/daemon/src/environment/environment-store.ts",
+      "apps/daemon/src/daemon-command-vocabulary.ts",
+      "apps/daemon/src/daemon-command-registry.test.ts",
+      "apps/daemon/src/environment/environment-canary.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T14:11:35.911Z",
+  "workStartedAt": "2026-09-05T14:16:09.442Z",
+  "commits": [
+    {
+      "sha": "8a534255749cc8bf042299585d69b7577355d86d",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-05T14:15:47Z",
+      "paths": [
+        ".moe/tasks/task-20b7d6bba60f445faa87a51a09d4b125.json",
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-05T14:20:03.183Z",
+      "treeId": "bdd060eda0b0ce75a36139e5dca91db36591e13d",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "a8622c2ec29fdf1361937554b942635093adfb35",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-05T14:20:38Z",
+      "paths": [
+        ".moe/tasks/task-217f40b7462e4f209ba25cb39f4acb2e.json",
+        ".moe/tasks/task-365e5d978ba24c92a91b3ee19ab90558.json",
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-05T14:24:26.305Z",
+      "treeId": "ef807db43574a2e3f50574d4df8d4121ed872825",
+      "status": "BLOCKED",
+      "pushed": true
+    },
+    {
+      "sha": "63bc3d35cf432394180ef4e6c5bc3ff56e1cbda3",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-05T23:04:59Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
+        ".moe/tasks/task-c851961b968942f880950acc16dc575a.json",
+        "apps/daemon/src/daemon-command-payload-keys.js",
+        "apps/daemon/src/daemon-command-payload-keys.ts"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-05T23:18:58.629Z",
+      "treeId": "e97880ac7216de66b40b8b94e6ac3daf47765793",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "114c0521e6a5f0fa08387461168b919ae6e0c5ed",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-05T23:19:39Z",
+      "paths": [
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-05T23:20:18.908Z",
+      "treeId": "ea4b573aa5f04467e6f3c822846a7e1c0dcaf140",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-registry.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "b30a457789fe083967da6e8c3431d39fc61f5f89",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-05T23:20:52Z",
+      "paths": [
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-05T23:21:09.086Z",
+      "treeId": "bb2f6fe12928025a881d1c0531435f6d4f0b2018",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "ea9b1f913781a10cec3f2f1bea7fe899513e7b04",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-05T23:21:41Z",
+      "paths": [
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-05T23:22:11.059Z",
+      "treeId": "f06db5ed7d946864fded20ff92d7bb7fb14441b2",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "b2a314e8096d6b0a4b88dae3af0c23a61fc32370",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-05T23:22:47Z",
+      "paths": [
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
+        "apps/daemon/src/daemon-command-registry.test.ts"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-05T23:23:45.003Z",
+      "treeId": "161a3e3d76edc2dfe5022faca0177452ccc3623d",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-registry.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "22ede10895d4938f0214b9252efb05a7f994631d",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-05T23:24:25Z",
+      "paths": [
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-05T23:25:15.902Z",
+      "treeId": "30d9c8788732c3f67157a5acf55c979d7f5ab978",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "7804b4d4f8c0fa6eed3a615d75d33c563fb5a508",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-06T01:21:38Z",
+      "paths": [
+        ".moe/tasks/task-33ceae56edc348e9864bc592430fa1d0.json",
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
+        "apps/daemon/src/daemon-command-environment.js",
+        "apps/daemon/src/daemon-command-environment.test.ts",
+        "apps/daemon/src/daemon-command-environment.ts",
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+        "apps/daemon/src/mcp-main.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-06T01:21:47.535Z",
+      "treeId": "d7ab0ee8b428b91e16ce798ce30916c01839d8a4",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-families.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-v2-command-registry.test.ts",
+          "taskId": "task-54b74b8041c64bc2868435bcbdac6dd6"
+        },
+        {
+          "path": "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/mcp-main.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/mcp-tool-allowlist.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "3a7e54de71c6df455612386ed1b014bd50f7a27e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-06T00:35:26Z",
+      "paths": [
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-06T01:22:04.642Z",
+      "treeId": "6a007c6488e26319593ffeb2ad92c67e1850ce08",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "966df40545d6241a2eaf5e19e9e58b017020a0d5",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-06T01:21:38Z",
+      "paths": [
+        ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json",
+        ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-06T01:40:14.289Z",
+      "treeId": "2ebe1bbfab23ccc4f7b911cae40d21820c22473b",
+      "status": "DONE",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/daemon-command-payload-keys.ts",
+    "apps/daemon/src/daemon-command-payload-keys.js",
+    "apps/daemon/src/daemon-command-families.ts",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/daemon-command-environment.ts",
+    "apps/daemon/src/daemon-command-environment.js",
+    "apps/daemon/src/daemon-command-environment.test.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+    "apps/daemon/src/mcp-main.test.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    ".moe/tasks/task-33ceae56edc348e9864bc592430fa1d0.json",
+    ".moe/tasks/task-a2409cba9ad841a690961692a2948c41.json",
+    ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json"
+  ],
+  "unattributedPaths": [
+    "apps/control-room/src/v2/goals/goal-status-strip.tsx",
+    "apps/control-room/src/v2/goals/plan-rejected-surfaces.test.tsx",
+    "apps/daemon/src/goals/j1-command-path.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-d81848bc@2026-09-06T01:21:38Z",
+    "at": "2026-09-06T01:40:14.289Z"
+  },
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "touchedFiles": [
+    "apps/daemon/src/daemon-command-payload-keys.ts",
+    "apps/daemon/src/daemon-command-payload-keys.js",
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/daemon-command-environment.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/mcp-main.test.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "apps/daemon/src/daemon-command-families.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/daemon-command-environment.js",
+    "apps/daemon/src/daemon-command-environment.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts"
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-2 of 9 COMPLETED (step 1 hard-stop measurement earlier; step 2 daemon vocabulary at 23:15Z after both carved-out prerequisites d0d1cb5c and b3888068 landed and the row auto-unblocked 22:48Z). Step 3 IN_PROGRESS when the limit killed the CLI. Last checkpoint 22ede10895d4 (8 checkpoints).",
+      "whatRemains": "Steps 3-9 per plan: PAYLOAD_KEYS entry and the MCP exclusion + HUMAN_ONLY_STEPS roster in ONE commit (security: never land PAYLOAD_KEYS ahead of the exclusion), fence tests, gates, complete_task.",
+      "pitfalls": "daemon-store-dependencies.test.ts:238 welds PAYLOAD_KEYS to the v2 registry — a partial land reds a shared arm for every seat in this checkout.",
+      "releasedAt": "2026-09-06T00:35:22.327Z",
+      "releasedBy": "governor-afbde490",
+      "reason": "Governor crash-recovery release: worker-caece97b's CLI exited 1 five times in a row from 23:18Z (account usage limit, fleet-wide, now reset); wrapper paused auto-resume and asked for release_task. Releasing so the wrapper relaunches and resumes via handoff."
+    }
+  ],
+  "reviewStartedAt": "2026-09-06T01:21:31.924Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/daemon-command-environment.test.ts src/daemon-command-vocabulary.test.ts src/daemon-command-registry.test.ts src/daemon-store-dependencies.test.ts src/mcp-tool-allowlist.test.ts src/mcp-main.test.ts src/mcp-http/mcp-http-host.test.ts src/daemon-v2-command-registry.test.ts",
+    "exitCode": 0,
+    "outputTail": " RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  8 passed (8)\n      Tests  624 passed (624)\n   Start at  04:19:35\n   Duration  8.99s (transform 33.66s, setup 0ms, import 47.09s, tests 4.58s, environment 1ms)\n\nPIPESTATUS0=0\n\n-- second leg --\npnpm typecheck -> TYPECHECK_EXIT=0\napps/daemon typecheck$ tsc --project tsconfig.json\napps/daemon typecheck: Done",
+    "reportedAt": "2026-09-06T01:21:31.924Z"
+  },
+  "completionSummary": "`environment.set_variable` / `environment.unset_variable` are PUBLISHED, OPERATOR-ONLY and MCP-EXCLUDED, served by their own edge. Full evidence in comment-fb462ee7 (counts, 7 drills, canary surfaces, 19-red attribution).\n\nSHIPPED: new `apps/daemon/src/daemon-command-environment.ts` (143 lines) + `.js` bridge — `runEnvironmentEdge`, a thin adapter that validates nothing the store validates and returns its refusals UNRESTAMPED. Registered in `daemon-command-registry.ts` BEFORE `requestOf`, which is the security substance, not style: `requestOf` encodes the WHOLE envelope including `payload` into request bytes persisted beside every decision, and this payload holds a production secret. New `environmentCredential` option (default `() => null`, fail-closed) wired from the composition root at `daemon-store-foundation-composition.ts:199` to the same MOE_DAEMON_CREDENTIAL the environments READ port uses — so the slice is production-reachable, not served-but-refusing.\n\nVERIFICATION: owned-path leg `Test Files 8 passed (8)` / `Tests 624 passed (624)`, PIPESTATUS0=0. `pnpm typecheck` exit 0 with the `apps/daemon typecheck$ tsc` execution echo. `pnpm test` deliberately NOT run: the root vitest include has no apps/**, so its count line would be vacuous.\n\nREPO-WIDE LEG DISCLOSED, NOT HIDDEN: `pnpm --filter @moe/daemon test` = `Test Files 12 failed | 493 passed (505)` / `Tests 19 failed | 9218 passed | 2 skipped (9239)`, exit 1. Of the 19: 4 were MINE (MCP/v2 roster denominators moved by two new operator-only kinds) and are FIXED and re-run green (`Tests 32 passed (32)`); 4 are owed by `repository.bootstrap`'s own row (a peer appended it to BOOTSTRAP_COMMAND_KINDS at bootstrap-contracts.ts:47 without backfilling its rosters — `grep -rn 'environment\\.\\(set\\|unset\\)_variable' apps/daemon/src/bootstrap/ apps/daemon/src/goals/` returns ZERO); 5 are peer in-flight files; 6 are a HOST subprocess failure (`\"exitCode\":null,\"byteCount\":0`, empty-string outputSha256, 135 node processes on ",
+  "completedAt": "2026-09-06T01:39:48.860Z",
+  "reviewCompletedAt": "2026-09-06T01:39:48.860Z",
+  "reviewSummary": "APPROVED. Full evidence in comment-783d551a.\n\nBYTES verified at HEAD (owned paths clean, disk==HEAD). Completion commit 3a7e54de holds only the task JSON; production bytes rode in on wip 7804b4d4 — correct, attribution thin.\n\nGATES RE-RUN BY QA: verification command = Test Files 8 passed (8) / Tests 624 passed (624), exit 0. pnpm typecheck exit 0 with the `apps/daemon typecheck$ tsc` echo. Literal DoD-6 `pnpm --filter @moe/daemon test` = 8 failed | 9237 passed.\n\n8 REDS ALL FOREIGN; rail-3 intersection with owned paths EMPTY. Per-FILE grep of all 5 failing files for this row's symbols: env-refs=0 on each. Orphan bridge deployment-docker-probe.js is task-3706b7e7's — `git cat-file -e 7804b4d4^:<path>` proves it predates this row. j1 \"twelve owned kinds\" extra member is `repository.bootstrap` (peer); rest are 32s timeouts.\n\nDoD 1: MCP_EXCLUDED is DERIVED from OPERATOR_PRINCIPAL_KINDS, so a zero-hit grep in mcp-tool-allowlist.ts is correct, not a gap; set-equality enumerates served kinds from the dispatch seam, both directions.\n\nDoD 2 behavioural: real handleCommandRequest, agent holding ADMIN gets 403 OPERATOR_PRINCIPAL_REQUIRED/DAEMON_AUTHORIZATION (principal fence, not capability gate); operator reaches the handler.\n\nDoD 3 — I DRILLED IT: made the edge interpolate the value into the refusal detail; canary red on exactly the intended arm (1 failed | 27 passed). Restore proven separately: SHA256 37efab82…dd7a equals pre-drill backup, git diff/status empty.\n\nDoD 4: four codes assert code AND layer AND detail === the fixed constant. DoD 5: both payload-key tables backfilled; client regeneration re-scoped at plan time to prereq task-b3888068 (DONE).\n\nSECURITY: runEnvironmentEdge at registry:448 runs BEFORE requestOf at :457, so the secret payload never reaches the request-bytes assembler; consumer edge real at composition:199, fail-closed."
+}

@@ -58,7 +58,7 @@ interface LayerDeclaration {
 /**
  * The module-private twin of `DECLARATION_PATTERN`. It differs from the exported pattern in
  * exactly ONE token — the missing `export ` — so a reader can see that the ANCHOR, not the
- * character class, is what hides these sixty. Same `[A-Z0-9_]+` width, same optional type
+ * character class, is what hides these declarations. Same `[A-Z0-9_]+` width, same optional type
  * annotation group, same column-0 anchoring that stops it matching prose in a doc comment.
  */
 const PRIVATE_DECLARATION_PATTERN = /^const ([A-Z0-9_]+(?:LAYERS|LAYER|BOUNDARIES))\s*(?::[^=]+)?=/u;
@@ -148,13 +148,13 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
 }
 
 /**
- * Stated at the WIDE pattern width (`[A-Z0-9_]+`). The narrow `[A-Z_]+` width measures 61 at
- * this HEAD; the single wide-only name is PRODUCT_CONTRACT_GATE_1_READ_LAYER, hidden twice
- * over — module-private AND digit-bearing. Quoting a private count against an exported count
- * of a DIFFERENT width is the recurring error in this area, so every ratio built on this
- * constant must name the width it measures.
+ * Stated at the WIDE pattern width (`[A-Z0-9_]+`): 77 declarations on 2026-09-08.
+ * The TWO wide-only names are PRODUCT_CONTRACT_GATE_1_READ_LAYER and
+ * LIVE_GATE_1_LAYER, each hidden twice over — module-private AND digit-bearing. Quoting a
+ * private count against an exported count of a DIFFERENT width is the recurring error in this
+ * area, so every ratio built on this constant must name the width it measures.
  */
-const EXPECTED_PRIVATE_COUNT = 65;
+const EXPECTED_PRIVATE_COUNT = 77;
 
 /**
  * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
@@ -164,6 +164,20 @@ const EXPECTED_PRIVATE_COUNT = 65;
  * to make the population a number that cannot move without an arm going red.
  */
 const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
+  // Browser-only answer stamps: five live read decoders, three offer consumers, and
+  // the advanced read-frame adapter. Enumerated individually; no scanner exemption.
+  { constant: "LIVE_ACTIVATION_LAYER", file: "apps/control-room/src/live/live-activation.ts" },
+  { constant: "LIVE_GRAPH_GET_LAYER", file: "apps/control-room/src/live/live-graph-get.ts" },
+  { constant: "LIVE_GATE_1_LAYER", file: "apps/control-room/src/live/live-product-contract-gate-1.ts" },
+  { constant: "LIVE_PREVIEW_LAYER", file: "apps/control-room/src/live/live-preview.ts" },
+  { constant: "LIVE_REPOSITORY_REMOTE_LAYER", file: "apps/control-room/src/live/live-repository-remote.ts" },
+  { constant: "PREVIEW_LAYER", file: "apps/control-room/src/v2/approvals/preview-port.ts" },
+  { constant: "DEPLOY_ROLLBACK_LAYER", file: "apps/control-room/src/v2/approvals/rollback-port.ts" },
+  { constant: "DEPLOY_LAYER", file: "apps/control-room/src/v2/goals/deploy-port.ts" },
+  { constant: "RELEASE_LAYER", file: "apps/control-room/src/v2/goals/release-port.ts" },
+  { constant: "AGENT_PROVIDER_LAYER", file: "apps/control-room/src/v2/ops/agent-provider-port.ts" },
+  { constant: "ADVANCED_FRAMES_LAYER", file: "apps/control-room/src/v2/shell/advanced-frames.ts" },
+  { constant: "ACTIVATION_RECEIPTS_LAYER", file: "apps/daemon/src/bootstrap/activation-receipts.ts" },
   { constant: "ADMISSION_GATE_LAYER", file: "apps/daemon/src/activation/admission-gate-resolver.ts" },
   { constant: "AUTHORITY_LAYER", file: "packages/benchmark/src/confirmatory-freeze-authority-contracts.ts" },
   { constant: "BINDING_LAYER", file: "apps/daemon/src/activation/activation-budget-binding.ts" },
@@ -349,8 +363,8 @@ const resolvedLayerLiterals = (): readonly string[] => {
     .filter((value) => declared.has(value));
 };
 
-const EXPECTED_LITERAL_COUNT = 94;
-const EXPECTED_UNRESOLVED_LITERAL_COUNT = 29;
+const EXPECTED_LITERAL_COUNT = 103;
+const EXPECTED_UNRESOLVED_LITERAL_COUNT = 38;
 
 /**
  * The frozen unresolved census. THE ALLOWLIST IS THE DELIVERABLE, NOT A TODO: closing these
@@ -360,6 +374,15 @@ const EXPECTED_UNRESOLVED_LITERAL_COUNT = 29;
  * `cutover-quiesce-evidence.ts`, and an ALL-CAPS-shaped census would have missed it.
  */
 const UNRESOLVED_LAYER_LITERALS: readonly string[] = Object.freeze([
+  // These answer stamps are literals or constants outside the *_LAYER declaration
+  // grammar. Closed entries retain the scanner's ability to detect any further growth.
+  "ACTIVATION_READ", // http/activation-read.ts
+  "CONTROL_ROOM_CRITERIA", // v2/goals/criterion-evidence-port.ts and its live reader
+  "CONTROL_ROOM_RECOVERY", // v2/ops/repository-recovery-port.ts and its live reader
+  "CRITERION_EVIDENCE", // criterion-evidence/criterion-contracts.ts and command/read edges
+  "CRITERION_EXECUTOR", // criterion-evidence/{criterion-approval,criterion-runner,criterion-receipt}.ts
+  "DAEMON_COMMAND_SEAM", // daemon-command contracts and adapters
+  "REPOSITORY_WORKFLOW_READ", // http/repository-workflow-read.ts
   "CARRY_EVIDENCE_ASSEMBLER",
   "CONFIRMATORY_FREEZE_GIT",
   "CONFIRMATORY_FREEZE_MANIFEST_ADMISSION",
@@ -372,6 +395,9 @@ const UNRESOLVED_LAYER_LITERALS: readonly string[] = Object.freeze([
   "DAEMON_APPROVAL_INTENT",
   "DAEMON_AUTHORIZATION",
   "DAEMON_COMPOSITION",
+  // apps/control-room/src/v2/approvals/incident-frames.fixture.ts:30 is a test helper.
+  // The existing classifier includes singular .fixture.ts; this is not a runtime boundary.
+  "DAEMON_DEPLOY_RUNNER",
   "DAEMON_FOUNDATION_ATTEMPT",
   "DAEMON_GRAPH_INGRESS",
   "DAEMON_POLICY_AUTHORITY",
@@ -383,6 +409,12 @@ const UNRESOLVED_LAYER_LITERALS: readonly string[] = Object.freeze([
   "EXPANSION_REQUEST_SERVICE",
   "FOUNDATION_CONTEXT_SEAL",
   "PRODUCT_CONTRACT_V2_CLARIFICATION_AUTHORITY",
+  // The preview receipt/capture read routes' answer stamp (apps/daemon/src/http/preview-read.ts,
+  // preview-capture-route.ts). Same class as every other `/*/read` route: a module-private
+  // `const LAYER = "..."`, deliberately NOT a `*_LAYER` constant, so it owes the boundary roster
+  // no entry and appears here instead. Registered by
+  // task-4a6e7bdbef9a4344829a7ce49c6fb378 when it landed the routes.
+  "PREVIEW_READ",
   "RELEASE_HANDOFF",
   "RETRY_PREDICATE",
   "REVIEW_KERNEL",

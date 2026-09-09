@@ -5,6 +5,8 @@ import "./cordum-fonts.js";
 import type { SurfaceFrame } from "../live/live-board-feed.js";
 import { readDocumentCoverage } from "../live/live-document-coverage.js";
 import { readPlanningRun } from "../live/live-planning-run.js";
+import { readProductContractGate1 } from "../live/live-product-contract-gate-1.js";
+import type { ProductContractRevisionRefInput } from "../live/live-product-contract-gate-1.js";
 import {
   LiveRefusalNotice, NoOperatorChannel, useLiveHandshake,
 } from "./cordum-handshake.js";
@@ -14,9 +16,17 @@ import { ApprovePlan } from "./goals/approve-plan.js";
 import type { PlanApprovalSurface } from "./goals/approve-plan-gate.js";
 import { createGate1ApprovalPort, readPendingContract } from "./goals/gate1-approval.js";
 import { Gate1Card } from "./goals/gate1-card.js";
+import { LiveGoalEnvironments } from "./goals/goal-environments.js";
 import { createGate1ApprovalPortV1, readPendingContractV1 } from "./goals/gate1-v1-approval.js";
 import { Gate1CardV1 } from "./goals/gate1-v1-card.js";
 import { BoardStub } from "./goals/board-stub.js";
+import { LiveContractDossier } from "./goals/contract-dossier.js";
+import { LiveCriterionEvidence } from "./goals/live-criterion-evidence.js";
+import { LiveDesign } from "./goals/design-card.js";
+import { LiveDesignVersionNote } from "./goals/design-version-note.js";
+import { LiveGoalDeployments } from "./goals/live-goal-deployments.js";
+import { LiveGoalRelease } from "./goals/live-goal-release.js";
+import type { Gate1Reader } from "./goals/contract-gates.js";
 import type { GoalDraft, GoalsData } from "./goals/goal-model.js";
 import { FIXTURE_GOALS_DATA } from "./goals/goals-fixtures.js";
 import { GoalsHome } from "./goals/goals-home.js";
@@ -28,15 +38,23 @@ import { GOAL_SECTION_IDS } from "./goals/goal-status-strip.js";
 import { LiveBoard } from "./board/board-screen.js";
 import { createPublishPort } from "./goals/publish-port.js";
 import { authorizeApproval, createPlanApprovalPort } from "./goals/plan-approval.js";
+import { currentRunOf, planSentBack } from "./goals/plan-run-resolution.js";
 import { PairingConfirmation } from "./live/pairing-confirmation.js";
+import { LiveNewProduct } from "./products/live-new-product.js";
 import { ProjectBoundary } from "./projects/project-boundary.js";
+import { useAdvancedFrames } from "./shell/advanced-frames.js";
 import { CordumShell } from "./shell/cordum-shell.js";
 import { boardRoute } from "./shell/shell-routes.js";
 import type { BoardRoute, CordumRoute } from "./shell/shell-routes.js";
 import type { NavBadge } from "./shell/nav-rail.js";
 import { LiveNeedsYou } from "./approvals/live-needs-you.js";
 import { LiveRuns } from "./runs/live-runs.js";
-import { LiveHealth, LivePolicy } from "./ops/live-ops.js";
+import { HEALTH_FAILURE, LiveHealth, LivePolicy, useOpsRead } from "./ops/live-ops.js";
+import { LiveResources } from "./resources/live-resources.js";
+import { LiveActivate } from "./ops/activation-screen.js";
+import { readHealth } from "../live/live-ops.js";
+import type { HealthOutcome } from "../live/live-ops.js";
+import { ProviderPauseProvider } from "./shell/pause-context.js";
 import { describeConnection } from "./shell/shell-model.js";
 import type { ConnectionState, NavId } from "./shell/shell-model.js";
 
@@ -83,6 +101,14 @@ const HANDSHAKE_PENDING_DATA: GoalsData = Object.freeze({
 /** Re-exported so `main.tsx` keeps importing it from the entry it composes. */
 export type { LiveAttempts } from "./cordum-handshake.js";
 
+/** The ONE shell-wide pause poll: slower than a screen's own 5 s read, because a
+ * provider limit lifts on the daemon's clock. Published through the context, so no
+ * two screens can disagree about it. */
+const PAUSE_POLL_MS = 15_000;
+
+/** Unattached (fixtures, pairing, refused): answer without touching the wire at all. */
+const DETACHED_HEALTH = (): Promise<HealthOutcome> => Promise.resolve(HEALTH_FAILURE);
+
 export interface CordumAppProps {
   /** The raw location.search; fixtures mode is `?...&fixtures=1`. */
   readonly search?: string;
@@ -103,9 +129,10 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   const [open, setOpen] = useState<BoardRoute | null>(null);
   // Which home the operator is on when no board is open: the goals list or the Needs-you
   // queue. Both are routes from the shell's source of truth; a board opens over either.
-  const [view, setView] = useState<"approvals" | "goals" | "health" | "policy" | "runs">("goals");
+  const [view, setView] = useState<"approvals" | "goals" | "health" | "policy" | "resources" | "runs">("goals");
   const [needsYouCount, setNeedsYouCount] = useState<number | null>(null);
   const [connection, setConnection] = useState<ConnectionState | null>(null);
+  const [answeredAtMs, setAnsweredAtMs] = useState<number | null>(null);
   // The board's own affordance frame, held here because the approval gate and the
   // board read the SAME daemon answer. A second poll for the same bytes would be a
   // second source of truth for what this session is offered.
@@ -122,6 +149,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   }, []);
   const reportConnection = useCallback((next: SurfaceFrame["connection"]) => {
     setConnection(next);
+    if (next === "CONNECTED") setAnsweredAtMs(Date.now());
   }, []);
   const reportFrame = useCallback((next: SurfaceFrame) => {
     setBoardFrame(next);
@@ -140,7 +168,8 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
 
   const title = open !== null ? open.title
     : view === "approvals" ? "Needs you" : view === "runs" ? "Runs"
-      : view === "policy" ? "Policy" : view === "health" ? "Health" : "Goals";
+      : view === "policy" ? "Policy" : view === "health" ? "Health"
+        : view === "resources" ? "Resources" : "Goals";
 
   // Only an attached operator session carries the authenticated header set the
   // plan-review read requires; unattached (fixtures / pending / refused) the open
@@ -150,6 +179,20 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   // null until the session attaches, and the chrome says PAIRING rather than
   // naming a project this tab is not yet bound to.
   const projectId = attached?.projectId ?? null;
+  const healthReader = useMemo(() => (attached === null
+    ? DETACHED_HEALTH
+    : (): Promise<HealthOutcome> => readHealth(attached.headers)), [attached]);
+  const health = useOpsRead(healthReader, HEALTH_FAILURE, PAUSE_POLL_MS, undefined);
+  // The raw reads the Advanced panel renders. Fetched HERE, at the composition
+  // root, because the panel lives in the shell frame and every screen is inside
+  // it: a panel handed no frames renders a load that never completes, which is a
+  // served read no operator can reach. Unattached this reads nothing at all.
+  const advanced = useAdvancedFrames(attached);
+  // A refused or errored answer reads as NO PAUSE KNOWN. Keeping the last pause
+  // alive past the read that failed to confirm it would be state this app invented.
+  const paused = health.outcome !== null && health.outcome.status === "HEALTH"
+    ? health.outcome.agents.paused
+    : null;
   const eyebrow = open === null
     ? `PROJECT ${MIDDOT} ${projectId ?? "PAIRING"}`
     : `${MIDDOT} ${open.goalId}`;
@@ -187,6 +230,19 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
       ? null : (goalId: string) => readDocumentCoverage(attached.headers, goalId)),
     [attached],
   );
+  /**
+   * The DURABLE Gate 1 verdict for one revision triple. Plane-independent on purpose: the
+   * route derives its answer from the stored human grant, so it is the same question whether
+   * the revision was proposed on the `/1` writer or the `/2` family, and a refusal is the
+   * honest answer rather than a reason to withhold the read.
+   */
+  const readGate = useMemo<Gate1Reader | null>(
+    () => (attached === null
+      ? null
+      : (ref: ProductContractRevisionRefInput) =>
+        readProductContractGate1(attached.headers, ref)),
+    [attached],
+  );
   const plane = attached === null ? null : attached.commandAuthorityPlane;
   const gate1Read = useMemo<((goalId: string) => ReturnType<typeof readPendingContract>) | null>(
     () => (attached === null || projectId === null || plane !== "V2"
@@ -208,6 +264,10 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
     () => (attached === null || plane !== "V1" ? null : createGate1ApprovalPortV1(attached)),
     [attached, plane],
   );
+  // THE RUN THE PLAN GATE ACTS ON: after a reject the goal's immutable `planningRunRef`
+  // still names the run the operator sent back. Resolved ONCE and fed to both the grant
+  // and the screen; two resolutions could disagree (see plan-run-resolution.ts).
+  const planRunId = open === null ? "" : currentRunOf(boardFrame, open.goalId, open.planningRunRef);
   /**
    * The approval surface handed to the plan-review screen: the daemon's OWN verdict
    * on whether this run may be approved, plus the wire to spend that grant. Nothing
@@ -218,10 +278,11 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   const approval = useMemo<PlanApprovalSurface | undefined>(() => {
     if (attached === null || open === null) return undefined;
     return {
-      authorization: authorizeApproval(boardFrame, open.planningRunRef),
+      authorization: authorizeApproval(boardFrame, planRunId),
+      sentBack: planSentBack(boardFrame, open.goalId, open.planningRunRef),
       submit: createPlanApprovalPort(attached).submit,
     };
-  }, [attached, boardFrame, open]);
+  }, [attached, boardFrame, open, planRunId]);
 
   let body: JSX.Element;
   if (open !== null) {
@@ -242,12 +303,29 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
             surface={boardFrame}
             title={open.title}
           />
+          <LiveGoalDeployments setup={attached} goalRef={open.goalId} frame={boardFrame} />
+          {/* What the approved contract REQUIRES of each environment, what is actually set, and
+              the one place a value is typed. Above the deploy fold on purpose: a deploy that
+              fails on a missing variable fails for a reason nobody can see. */}
+          <LiveGoalEnvironments goalId={open.goalId} setup={attached} />
+          <LiveGoalRelease frame={boardFrame} goalId={open.goalId} setup={attached} />
           <div id={GOAL_SECTION_IDS.contract}>
             {gate1Read !== null && gate1Port !== null ? (
               <Gate1Card goalId={open.goalId} port={gate1Port} read={gate1Read} />
             ) : gate1ReadV1 !== null && gate1PortV1 !== null ? (
               <Gate1CardV1 goalId={open.goalId} port={gate1PortV1} read={gate1ReadV1} />
             ) : null}
+            {/* What the approved contract asks for and how far it is covered, with the
+                daemon's DURABLE Gate 1 verdict per revision beside it. */}
+            {readCoverage === null ? null : (
+              <LiveContractDossier
+                goalId={open.goalId}
+                readCoverage={readCoverage}
+                readGate={readGate ?? undefined}
+              />
+            )}
+            <LiveCriterionEvidence goalRef={open.goalId} setup={attached} />
+            <LiveDesign goalRef={open.goalId} headers={attached.headers} />
           </div>
           {/* The plan stays in the open while it waits for a decision; once decided (or not
               yet proposed) it folds, so the board and the decisions come first. */}
@@ -267,9 +345,16 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
               goalId={open.goalId}
               onBack={back}
               read={readRun}
-              runId={open.planningRunRef}
+              runId={planRunId}
               title={open.title}
             />
+            {/*
+              THE VERSION THE PLAN WAS COMPILED AGAINST, on the approval surface itself.
+              Approving the plan is how the human accepts the design, so the card has to
+              name that design or the acceptance is uninformed. It sits INSIDE the fold,
+              under the plan it qualifies, rather than beside the Design tab above.
+            */}
+            <LiveDesignVersionNote goalRef={open.goalId} planningRunRef={planRunId} headers={attached.headers} />
           </details>
           {/* Reference material, folded: the raw daemon offers (which also feed the one
               affordance frame of the page), PRD coverage, the PRD itself, and the project boundary
@@ -321,7 +406,9 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
       : view === "policy" && live.setup.ok
       ? <LivePolicy headers={live.setup.headers} onConnection={reportConnection} setup={live.setup} />
       : view === "health" && live.setup.ok
-      ? <LiveHealth headers={live.setup.headers} onConnection={reportConnection} />
+      ? <LiveHealth headers={live.setup.headers} setup={live.setup} onConnection={reportConnection} />
+      : view === "resources" && live.setup.ok
+      ? <LiveResources headers={live.setup.headers} />
       : view === "approvals" && live.setup.ok
       ? (
         <LiveNeedsYou
@@ -336,6 +423,24 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
         <>
           {!live.setup.ok && <LiveRefusalNotice
             busy={handshake.busy} onRetry={handshake.retry} setup={live.setup}
+          />}
+          {/*
+            THE NEW PRODUCT CARD LIVES HERE, above Activate and for the same reason Activate
+            is not behind a nav id: it is where the operator hits the wall, and this wall is
+            one step HARDER than the next one. Activate is refused until a project exists;
+            before this card there was no way to make one from the browser at all, so a fresh
+            operator had nothing to activate and no route to a first goal. ORDER IS THE
+            ARGUMENT - a project must EXIST before it can be ACTIVATED - so it renders first.
+          */}
+          {live.setup.ok && <LiveNewProduct setup={live.setup} />}
+          {/*
+            THE ACTIVATE CARD LIVES HERE, not behind a nav id of its own: this is where the
+            operator hits the wall, because New goal below is refused until the project is
+            activated. It reads on the pause poll's cadence rather than the ops screens' 5 s
+            one - the daemon MEASURES on every activation read (git HEAD, store, manifest).
+          */}
+          {live.setup.ok && <LiveActivate
+            headers={live.setup.headers} pollMs={PAUSE_POLL_MS} setup={live.setup}
           />}
           <LiveGoalsHome
             createDisabledReason={createDisabledReason}
@@ -365,24 +470,30 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
       : live.setup.ok ? connection : "DISCONNECTED";
 
   return (
-    <CordumShell
-      activeNav={view}
-      backLabel={view === "approvals" ? "NEEDS YOU" : view === "runs" ? "RUNS"
-        : view === "policy" ? "POLICY" : view === "health" ? "HEALTH" : "GOALS"}
-      connection={shellConnection}
-      eyebrow={eyebrow}
-      initialConnection={fixtures ? "CONNECTED" : null}
-      navBadges={fixtures
-        ? FIXTURE_BADGES
-        : needsYouCount === null || needsYouCount === 0
-          ? undefined
-          : { approvals: { count: String(needsYouCount), tone: "info" } }}
-      onBack={open === null ? undefined : back}
-      onNavigate={navigate}
-      simulatable={fixtures}
-      title={title}
-    >
-      {content}
-    </CordumShell>
+    <ProviderPauseProvider value={paused}>
+      <CordumShell
+        activeNav={view}
+        advancedEvents={advanced.events}
+        advancedGraph={advanced.graph}
+        answeredAtMs={answeredAtMs}
+        backLabel={view === "approvals" ? "Needs you" : view === "runs" ? "Runs"
+          : view === "policy" ? "Policy" : view === "health" ? "Health"
+            : view === "resources" ? "Resources" : "Goals"}
+        connection={shellConnection}
+        eyebrow={eyebrow}
+        initialConnection={fixtures ? "CONNECTED" : null}
+        navBadges={fixtures
+          ? FIXTURE_BADGES
+          : needsYouCount === null || needsYouCount === 0
+            ? undefined
+            : { approvals: { count: String(needsYouCount), tone: "info" } }}
+        onBack={open === null ? undefined : back}
+        onNavigate={navigate}
+        simulatable={fixtures}
+        title={title}
+      >
+        {content}
+      </CordumShell>
+    </ProviderPauseProvider>
   );
 }

@@ -2,9 +2,12 @@ import type { AgentAuthorityCleanup } from "./agent-authority-cleanup.js";
 import type { AgentSessionFence, AgentStaffingRefusal } from "./agent-session-fence.js";
 import { createStaffingGate } from "./agent-staffing-gate.js";
 import type { StaffingGate } from "./agent-staffing-gate.js";
+import { AgentProcessFailureError } from "./agent-spawn-contract.js";
 import type {
   AgentSpawnStart,
   AgentSpawnStartResult,
+  SeatExitReading,
+  SeatExitReport,
   SpawnReport,
 } from "./agent-spawn-contract.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
@@ -13,6 +16,11 @@ export interface AgentWrapperStaffingStart {
   readonly claimAggregateVersion: number;
   readonly cleanupAuthority: AgentAuthorityCleanup;
   readonly kind: string;
+  /**
+   * Reads this seat's exit for attempt reporting and provider pause bookkeeping.
+   * Observer failures remain fatal even when the child failure was contained.
+   */
+  readonly onExit?: ((report: SeatExitReport) => SeatExitReading) | undefined;
   readonly request: SpawnRequest;
   readonly sessionId: string;
   readonly spawnAgent: AgentSpawnStart;
@@ -41,6 +49,15 @@ function uncoded(input: AgentWrapperStaffingStart, outcome: string): SpawnReport
 
 function processFailure(error: unknown): Error {
   return error instanceof Error ? error : new Error("AGENT_PROCESS_FAILED:UNKNOWN");
+}
+
+/** What one exit left behind, for a lifetime that settled without a report. */
+const CLEAN_EXIT: SeatExitReport = { exitCode: 0, signal: null, tail: [] };
+
+function factsOf(error: unknown): SeatExitReport {
+  return error instanceof AgentProcessFailureError
+    ? { exitCode: error.exitCode, signal: error.signal, tail: error.tail }
+    : { exitCode: null, signal: null, tail: [] };
 }
 
 class AgentWrapperStaffingState implements AgentWrapperStaffing {
@@ -73,17 +90,44 @@ class AgentWrapperStaffingState implements AgentWrapperStaffing {
     return ordered.length === 0 ? null : ordered.map((error) => error.message).join("|");
   };
 
-  /** Every admitted lifetime cleans authority, retires its durable row, then
-   * releases the in-process slot, whether exit resolves or rejects. */
+  /**
+   * Reports the attempt before cleaning authority, retiring the durable row and
+   * releasing the slot once on both paths. Failure to observe remains a wrapper fault.
+   */
+  private observe(
+    input: AgentWrapperStaffingStart, facts: SeatExitReport,
+  ): { readonly failures: readonly Error[]; readonly reading: SeatExitReading } {
+    try {
+      return { failures: [], reading: input.onExit?.(facts) ?? "FAILED" };
+    } catch {
+      // An observer that cannot read an exit must not change how the exit is handled.
+      return {
+        failures: [new Error("AGENT_EXIT_OBSERVER_FAILED:UNEXPECTED_ERROR")],
+        reading: "FAILED",
+      };
+    }
+  }
+
   private trackLifetime(
     input: AgentWrapperStaffingStart,
-    exit: Promise<void>,
+    exit: Promise<SeatExitReport | void>,
     retire: () => readonly Error[],
   ): void {
     const tracked = exit.then(
-      () => { this.recordFailures(...input.cleanupAuthority(true), ...retire()); },
+      (report) => {
+        const { failures } = this.observe(input, report ?? CLEAN_EXIT);
+        this.recordFailures(...failures, ...input.cleanupAuthority(true), ...retire());
+      },
       (error: unknown) => {
-        this.recordFailures(processFailure(error), ...input.cleanupAuthority(true), ...retire());
+        const { failures } = this.observe(input, factsOf(error));
+        // A typed process failure is a completed attempt; the wrapper's existing
+        // attempt bound controls retry. Unknown errors and containment failures
+        // cannot prove completion and remain fatal, regardless of provider reading.
+        const process = error instanceof AgentProcessFailureError && failures.length === 0
+          ? [] : [processFailure(error)];
+        this.recordFailures(
+          ...failures, ...process, ...input.cleanupAuthority(true), ...retire(),
+        );
       },
     ).finally(() => { this.active.delete(input.workItemId); });
     this.active.set(input.workItemId, tracked);

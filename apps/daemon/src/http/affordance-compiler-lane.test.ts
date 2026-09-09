@@ -86,7 +86,18 @@ describe("createCompilerLanePort", () => {
   it("routes a source-bound goal to the COMPILER lane, pre-Gate-1", () => {
     const { store } = boundWorld();
     expect(laneFor(store).factsFor(GOAL_ID)).toEqual({
+      approvedGateRef: null, lane: "COMPILER", pendingRevision: null,
+    });
+  });
+
+  it("reports a revision citing the goal's sha that Gate 1 has not approved yet", () => {
+    const { sha, store } = boundWorld();
+    commitRow(store, "revision",
+      deriveProductContractRevisionAggregateId(PROJECT_ID, CONTRACT_ID, REVISION_ID),
+      { contractId: CONTRACT_ID, revisionId: REVISION_ID, sourceDocumentDigests: [sha] });
+    expect(laneFor(store).factsFor(GOAL_ID)).toEqual({
       approvedGateRef: null, lane: "COMPILER",
+      pendingRevision: { contractId: CONTRACT_ID, revisionId: REVISION_ID },
     });
   });
 
@@ -112,6 +123,7 @@ describe("createCompilerLanePort", () => {
         contractId: CONTRACT_ID, revisionDigest: REVISION_DIGEST, revisionId: REVISION_ID,
       },
       lane: "COMPILER",
+      pendingRevision: null,
     });
   });
 
@@ -128,7 +140,7 @@ describe("createCompilerLanePort", () => {
       revisionDigest: REVISION_DIGEST, revisionId: REVISION_ID, workRef: "work-lane-1",
     });
     expect(laneFor(store).factsFor(GOAL_ID)).toEqual({
-      approvedGateRef: null, lane: "COMPILER",
+      approvedGateRef: null, lane: "COMPILER", pendingRevision: null,
     });
   });
 

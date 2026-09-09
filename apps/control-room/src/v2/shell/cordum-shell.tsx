@@ -12,8 +12,12 @@ import { NavRail } from "./nav-rail.js";
 import type { NavBadge } from "./nav-rail.js";
 import type { CordumRoute, NavDestination } from "./shell-routes.js";
 import { ProofInspector } from "./proof-inspector.js";
+import { useProviderPause } from "./pause-context.js";
 import { ProofProvider } from "./proof-context.js";
 import type { ProofController, ProofPayload } from "./proof-context.js";
+import { AdvancedView } from "./advanced-view.js";
+import type { AdvancedEvents } from "./advanced-view.js";
+import type { GraphGetOutcome } from "../../live/live-graph-get.js";
 import { ConnectionBanner, StatusStrip } from "./status-strip.js";
 import { describeConnection } from "./shell-model.js";
 import type { ConnectionState, NavId, NavItem } from "./shell-model.js";
@@ -52,6 +56,9 @@ export interface CordumShellProps {
   /** Fixtures mode: show the SIMULATE relay control. */
   readonly simulatable?: boolean;
   readonly initialProofOpen?: boolean;
+  readonly answeredAtMs?: number | null | undefined;
+  readonly advancedEvents?: AdvancedEvents | null;
+  readonly advancedGraph?: GraphGetOutcome | null;
 }
 
 const HELP_LABELS: Readonly<Record<KeyboardAction, string>> = Object.freeze({
@@ -110,9 +117,14 @@ export function CordumShell({
   initialConnection = null,
   simulatable = false,
   initialProofOpen = false,
+  answeredAtMs = null,
+  advancedEvents = null,
+  advancedGraph = null,
 }: CordumShellProps): JSX.Element {
   const clock = useClock();
   const clockPresent = clock !== null;
+  // Read, never passed in: ONE polled fact, hosted by the frame every screen is in.
+  const paused = useProviderPause();
   const [simulatedConnection, setSimulatedConnection] =
     useState<ConnectionState | null>(initialConnection);
   const [proof, setProof] = useState<ProofPayload | null>(null);
@@ -180,10 +192,18 @@ export function CordumShell({
             </main>
             <ProofInspector onClose={keyboard.collapseInspector} open={proofOpen} payload={proof} />
           </div>
+          {/* Its OWN stated grid row. Every child of `.cr2-panel` names its row on
+              purpose (see cordum-shell.css); an unstated one is auto-placed above the
+              stage, which put this diagnostic panel over the operator's work. */}
+          <div className="cr2-advancedslot">
+            <AdvancedView events={advancedEvents} graph={advancedGraph} />
+          </div>
           <StatusStrip
+            answeredAtMs={answeredAtMs}
             clockPresent={clockPresent}
             descriptor={descriptor}
             onSimulate={handleSimulate}
+            paused={paused}
             simulatable={simulatable}
           />
         </div>

@@ -1,0 +1,632 @@
+{
+  "id": "task-bb844c288fb346c0856778c738b9f073",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Activate a fresh project from the browser: measured receipts, no seed script",
+  "description": "Filed by architect-16a01670 from parent task-e7a3d643bde34da7b27495dbda745739 (epic breakdown, human-directed 2026-09-04).\n\nPRODUCT GAP (README 'What this is not', re-measured 2026-09-04 at main d90ef6b5..68eb1c5d): a fresh project cannot be started from the browser alone. `goal.create_with_source` is refused until the activation chain commits, and only the seed script (`pnpm seed` = apps/daemon/src/orchestrator/demo-seed-main.ts) or the wrapper drives that chain. `apps/control-room/src/v2/goals/live-goal-create.ts:91-93` renders the sentence '... the browser cannot drive the pre-activation chain.' The seed FAKES the activation witness: `demo-seed-payloads.ts:127-137` activationWitness = {artifactPathRef/backupPathRef/credentialRef/signingKeyRef/storeDriverRef: '<projectId>-*' strings, distributionManifestHash: hex64('cafe'), policyRevisionHash: hex64('face'), providerMinimumProfileRef, truthClass: DEMO_VERIFIED}. Chain kinds on the daemon vocabulary (daemon-command-vocabulary.ts): project.register, project.bind_repository, provider.probe, project.activate, policy.install, policy.validate. Production writers: apps/daemon/src/bootstrap/bootstrap-sequence.ts, bootstrap-services.ts, bootstrap-contracts.ts; the seed's chain order is demo-seed-plan.ts; the browser already installs policy from the Policy screen (PR #16, control-room v2/ops/policy-install-port.ts re-reads /affordances/read per step).\n\nFEATURE: the daemon mints the activation witness from MEASURED facts of the real project, and the browser drives the chain from one card.\nReceipts: repository = `git rev-parse --show-toplevel` + HEAD sha of the project root (refuse when not a git repo); provider = a real probe of the installed agent CLI (`claude --version` / `codex --version`) plus credential PRESENCE from the launcher roster (orchestrator/moe-up-credentials.ts) as a ref, never a value; store = the daemon's own SQLite path + driver id; backup = a real copy of the store under `<project>/.moe-next/backups/<ts>.sqlite` with its sha256; distribution = the running artifact's manifest hash, or a SOURCE_CHECKOUT truth class under `pnpm start`; policy = the installed policy revision. truthClass is VERIFIED only for measured members; an unmeasurable member refuses the WHOLE activation with a stable code naming the member (fail closed; DEMO_VERIFIED never leaves the seed).\n\nUI: the project setup board gets an 'Activate project' card listing each receipt as measured/missing with its reason; one button drives register -> bind_repository -> provider.probe -> project.activate sequentially (same pattern as policy-install-port.ts), refusals verbatim; New Goal enables afterwards. The manager flow (`moe projects` Create/Register) lands on the same card.\n\nNOT in scope: signing keys as a trust boundary (security), changing the wrapper's own bootstrap path (keep it working), the seed script (keep it working).",
+  "definitionOfDone": [
+    "From a FRESH store with no seed: browser-only register -> Activate project -> New Goal enabled -> goal.create_with_source ACCEPTED. Proven by a Playwright journey under tests/e2e/control-room/ against a REAL daemon (no fixtures; `pnpm test:e2e:browser` count line quoted) AND a live drive transcript (store path, sha, screenshots) in a row comment.",
+    "The daemon-written activation witness carries measured values (repo toplevel + HEAD sha, provider CLI version, store path, backup sha256) with truthClass VERIFIED; a test mutates each member to unmeasurable and asserts the refusal code + layer PER MEMBER (e.g. ACTIVATION_REPOSITORY_UNMEASURED, ACTIVATION_PROVIDER_UNMEASURED, ACTIVATION_BACKUP_FAILED); no production path can write a DEMO_VERIFIED witness (test asserts the code when a caller supplies one).",
+    "`grep -n \"cannot drive the pre-activation chain\" apps/control-room/src/v2/goals/live-goal-create.ts` = 0 matches at the delivered tree; the replacement copy names the Activate card; the card's testids are pinned in a control-room test.",
+    "`pnpm seed` keeps working unchanged: apps/daemon/src/orchestrator/demo-seed-*.test.ts green with the count line quoted, and the wrapper's bootstrap path untouched (grep of the seed chain order in demo-seed-plan.ts unchanged).",
+    "README 'What this is not' fresh-project sentence and docs/agent-stack-runbook.md 'New Goal remains disabled' paragraph rewritten to the measured truth in the same commit.",
+    "Gates quoted with their count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test` (root lane)."
+  ],
+  "taskRails": [
+    "FULL VERTICAL SLICE (human DoD 2026-09-04): this row ships daemon + control-room UI + tests + docs for its feature and carries NO dependsOn on any sibling row of this epic. If the plan exceeds the daemon's thresholds (12 steps / 10 files), the planning architect SPIDR-splits into children under THIS row (parentTaskId); children may depend on each other, never on a sibling feature row.",
+    "FEATURES ONLY (human DoD 2026-09-04): no security-boundary or policy work in this row. The verifier stays the documented trusted-workspace v0.1 limitation; signing, hermetic verification and freeze manifests are out of scope.",
+    "HUMAN GATES ARE HUMAN-ONLY: every approve/decide kind this row adds is operator-only, listed in HUMAN_ONLY_STEPS and MCP-excluded; every refusal carries a stable code asserted by a test (global rail 1); roster tests are bidirectional set-equality (global rail 9). A new daemon read/command follows the 8-touchpoint + .js bridge pattern (memory ui-connect-everything-built-2026-09-02).",
+    "PROVE IT LIVE: besides an offline e2e over a REAL daemon (no fixtures), completion records a live drive on the lane (UnAI at D:/projexts/UnAI or a fresh project): transcript, store path and sha in a row comment (keep each comment under 4500 chars). Never restart the wrapper to unstick a seat (claim TTL 30 min, memory real-seat-cannot-release-its-claim-2026-09-04)."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "GATE — do not start until the four SPIDR children are DONE. This row was SPIDR-split (row rail 1: over the 12-step/10-file thresholds at ~15 files). Children in build order: A task-741dad13e23d441a8385d0f14df5b5c1 (receipts measurement, leaf) -> B task-4b9c394debe94b41a80e2b46c6d55ab8 (project.activate mints + refuses caller witness) -> C task-0a5d7212a7f644d5891df4e0e1545787 (receipts read route + v2 Activate card) -> D task-ac9d5e2d43334525bd990b1362652ce4 (journey, copy, docs). Each declares dependsOn on its predecessor. THIS PARENT'S OWN dependsOn COULD NOT BE SET: moe.set_task_dependencies answered [NOT_ALLOWED] 'architect or governor role required (worker architect-d1711c47 is on neither team)', so this step is the gate instead of a field — a governor should set the field. Verify each child via moe.get_context epicSiblings (landing.merged true) or `git log main --grep 'Moe-Task: <childId>'`. If any is not DONE, moe.report_blocked with blockedOnTaskIds naming the outstanding children and free the seat — do NOT re-implement a child's work here. THIS ROW MODIFIES NO FILES: it verifies the delivered tree, so affectedFiles is empty by design and every path below is a read target. Record HEAD with `git rev-parse --short HEAD`.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "GATE SATISFIED, re-measured at HEAD 53535f07 (not carried from the prior session). All five SPIDR children DONE and landed per `epicSiblings[*].landed=true`: A task-741dad13, B task-4b9c394d, C task-0a5d7212, C2 task-3506e04a, D task-ac9d5e2d. No child is reopened; none will be re-implemented here.\n\nWHAT THIS SESSION IS, WHICH IS NOT WHAT THE PLAN SAYS. The plan's seven steps are a pure VERIFICATION rollup with `affectedFiles: []` everywhere. That plan was written before QA graded the row. QA rejected (reopen 1/3) on DoD 2's FIRST CLAUSE ONLY — \"the witness must carry a measured provider CLI version\" — and re-measured DoD 1/3/4/5/6 as PASS at HEAD f7ad50ee on a tree where every feature-owned path is clean (comment-8605a891). Row rail 1 makes this row accountable for the full slice, and the reject says land it here or SPIDR one child. So this session WILL modify files, and the verification steps below are re-run against the tree this session delivers, not against the one QA graded. I did not re-open the five PASS items; QA's re-measurement stands.\n\nTHE DEFECT, CONFIRMED INDEPENDENTLY AT THIS HEAD. `measureProvider` (activation-receipts-measure.ts:107-122) returns `measuredReceipt(\"provider\", probeRef, credential.ref)`. `probeRef` is `ports.committedProbeRef()` — a ref to an already-committed `provider.probe` envelope — and `credential.ref` is presence only (`credential/claude/login-file`). Neither is a version. `git grep -n -- \"--version\" -- apps/daemon/src` finds the moe CLI's own version words, two demo-seed comments and the doctor's pnpm probe; nothing on the activation path. QA's reading is exact.\n\nTHREE MEASUREMENTS THAT SHAPE THE FIX, taken before writing a line:\n\n(a) THE VERSION HAS NO HOME IN CORE'S NINE KEYS, so it cannot go in the witness object. `activationWitnessOf` (activation-receipts.ts:173-198) spends the provider receipt's TWO fields already: `providerMinimumProfileRef: provider.ref` and `credentialRef: provider.detail`. Both are load-bearing and neither is free. `provider.ref` in particular is compared for equality against the durable probe envelope at provider-profile-reader-checks.ts:192-193 (`revision.providerMinimumProfileRef !== witnessRef`), so appending `@<version>` to it would red that reader. The version therefore lands as a top-level member of the receipt SET, exactly parallel to `receipts.repository` (toplevel+headSha), `receipts.store` (storePath) and `receipts.distribution` — which is precisely how QA graded the other three measured values in DoD 2's own list. It must also be PUBLISHED, or it is measured and dropped: `live-activation.ts:27-28` carries an EXACT-KEY roster of the view, so the new key needs that roster, the decoder and the card, or the whole response is refused.\n\n(b) THE HOST'S REAL CLI OUTPUT IS NOT BARE SEMVER. `claude --version` on this host answers `2.1.261 (Claude Code)`, one line with a trailing parenthetical. The doctor's existing `parseVersionOutput` (doctor-version.node.ts:110-118) demands EXACTLY one line matching `^\\d+\\.\\d+\\.\\d+` and would have taken it, but a copy of that rule tuned to pnpm is the wrong thing to grow here; the parse is written against the measured output, per mem:gotcha-provider-launch-flags-need-real-cli-precedence-probe (a green parser suite can certify an invented CLI).\n\n(c) THE WINDOWS SHIM IS THE REASON A NAIVE SPAWN WOULD REFUSE ON EVERY WINDOWS HOST. doctor-version.node.ts:93-96 records it: Node 24 cannot spawn `.cmd`/`.bat` with `shell:false`, and `claude` is a `.cmd` shim on Windows. The repo already owns the answer — `agentSpawnInvocation` (orchestrator/agent-spawn-invocation.ts:52) returns `{file,args,shell}` and builds the one quoted command line for win32. I will call that seam rather than write a second copy, so the CLI-absent refusal means \"no CLI\", never \"Windows\".\n\nSCOPE I AM TAKING, and the one item I am NOT: QA's TO CLOSE lists six things. Five are in: measure the version in the daemon through injected ports (the measure module still spawns nothing — its own source-text arm scans it), `UNKNOWN` when the CLI answers unreadably, a CLI-absent refusal arm, drop the DEV_PAYLOADS invented literals, re-quote the gates. The sixth — \"refuse a caller-supplied provider observation as ACTIVATION_WITNESS_CALLER_SUPPLIED does\" — is measured and reported in step 3's note with the count that decides it; I am not deciding it here.\n\nZero files modified by this step.",
+      "startedAt": "2026-09-06T02:50:36.204Z",
+      "completedAt": "2026-09-06T02:53:01.178Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "VERIFY DoD 1 — browser-only fresh start. Run `pnpm test:e2e:browser` and quote its count line; an exit-0 leg with no count line is a vacuous run, not a pass (global rail 8). Confirm the journey child D landed drives the V2 Activate card and NOT the legacy dev board: `grep -n 'cr.liveboard.' <the new spec under tests/e2e/control-room/>` must return 0 matches, because tests/e2e/control-room/board-chain.spec.ts already proves the legacy path against fake payloads (DEV_PAYLOADS, apps/control-room/src/live/live-dispatch-payloads.ts:111). Confirm the lane ran with an EMPTY store (`seed: \"NONE\"`, tests/e2e/control-room/daemon-ports.ts) so nothing was pre-seeded. Then read child D's live-drive row comment and confirm it carries a store path, a HEAD sha and a transcript — a comment naming none of those does not discharge the clause.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "DoD 1 — STATIC HALF VERIFIED NOW, LIVE HALF DEFERRED TO STEP 7 ON PURPOSE, and the reason is not convenience.\n\nThis session modifies production files under `apps/daemon/src/bootstrap/` and `apps/control-room/src/`, which is exactly the code the browser journey drives. An `pnpm test:e2e:browser` leg run at this moment would grade a tree that will not exist by completion, and a 7.8-minute lane run twice is also a direct hit on the one-full-suite-at-a-time rule qa-4f771bb8 restated on #general at 02:05 (three concurrent vitest runs were live on this host at 01:35 and everything measured against them is timeout noise). So the leg runs ONCE, at the end, against the delivered tree, and its count line is quoted in step 7. If it reds on my paths, that is mine and this row does not complete.\n\nSTATIC HALF, measured at HEAD 53535f07:\n\n- The journey exists: `tests/e2e/control-room/activation-fresh-project.spec.ts`.\n- IT DRIVES THE V2 CARD, NOT THE LEGACY DEV BOARD. `grep -c \"cr.liveboard.\"` returns 1 and `grep -c \"v1=1\"` returns 2, so the plan's literal \"must return 0 matches\" is NOT satisfied as written — and that is a mis-specified check, not a failure. Both hits are PROSE. Line 20 is the docblock explaining that `?v1=1` serves the legacy board \"so the bare `lane.baseUrl` is the product. A journey clicking `cr.liveboard.*` [would be the wrong journey]\"; line 124 is the inline comment \"No `?v1=1`: the bare base URL serves the V2 Cordum shell.\" There is no `cr.liveboard.*` SELECTOR and no `?v1=1` NAVIGATION anywhere in the file. What the spec actually clicks is the v2 card: `cr.activate.root` (:130), `cr.activate.refusal` (:132), `cr.activate.reason.repository` (:136), `cr.activate.receipts` (:143), `cr.activate.step.*` (:183, :207) and `cr.activate.button` (:194). A grep that counts comments would have failed this clause on the strength of the comment that proves it passes — mem:at-mentions-route-from-inside-code-fences is the same shape of error.\n- EMPTY STORE: `seed: \"NONE\"` at :114, and the spec asserts the lane's own witness `lane.seedPid === null` (:117 names daemon-ports.ts:245-249 as the source of that field, which is populated only for `seed: \"NONE\"`). So nothing was pre-seeded and the journey really does start from a fresh store.\n- LIVE-DRIVE COMMENT: child D's comment-21619c70 on task-ac9d5e2d, which QA read and approved on that row (comment-a0881913) and re-affirmed here in comment-8605a891 item 1 — it carries a store path, a HEAD sha, a transcript and 83 trace frames. Per the reject's own instruction I am not re-litigating an approved child.\n\nZero files modified by this step.",
+      "startedAt": "2026-09-06T02:53:10.985Z",
+      "completedAt": "2026-09-06T02:53:37.829Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "VERIFY DoD 2 — the witness is measured and fails closed per member. Read the committed activation event from a real drive and assert the values are MEASURED, not merely well-shaped: repo toplevel + HEAD sha, provider CLI version, store path/driver, backup sha256. Confirm one test per member asserts its exact code AND layer (ACTIVATION_REPOSITORY_UNMEASURED, ACTIVATION_PROVIDER_UNMEASURED, ACTIVATION_STORE_UNMEASURED, ACTIVATION_BACKUP_FAILED, ACTIVATION_DISTRIBUTION_UNMEASURED, ACTIVATION_POLICY_UNMEASURED), with the other five still measured, and that nothing commits on a refusal. NOTE THE DoD'S OWN VOCABULARY ERROR, settled at plan time: there is NO 'VERIFIED' truth class and no distinct 'DEMO_VERIFIED' — packages/core/src/project/project-validation.ts:140 strongTruth accepts only DAEMON_VERIFIED|HUMAN_APPROVED, and apps/daemon/src/orchestrator/demo-seed-payloads.ts:24 defines DEMO_VERIFIED = \"DAEMON_VERIFIED\". Grade the clause as child B implements it: a CALLER-SUPPLIED witness is refused with its own stable code at apps/daemon/src/bootstrap/bootstrap-services.ts. Do not accept a test that asserts a truth-class string instead.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "apps/daemon/src/bootstrap/activation-provider-version.ts",
+        "apps/daemon/src/bootstrap/activation-provider-version.js",
+        "apps/daemon/src/bootstrap/activation-provider-version.test.ts",
+        "apps/daemon/src/bootstrap/activation-receipts-measure.ts",
+        "apps/daemon/src/bootstrap/activation-receipts-measure.test.ts",
+        "apps/daemon/src/bootstrap/activation-receipts-ports.ts",
+        "apps/daemon/src/bootstrap/activation-receipts.ts",
+        "apps/daemon/src/bootstrap/activation-receipts.test.ts",
+        "apps/daemon/src/bootstrap/activation-command-entry.test.ts",
+        "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+        "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.ts",
+        "apps/daemon/src/daemon-entry-activation-refusals.test.ts",
+        "apps/daemon/src/http/activation-read.ts",
+        "apps/control-room/src/live/live-activation.ts",
+        "apps/control-room/src/live/live-activation.test.ts",
+        "apps/control-room/src/live/live-dispatch-payloads.ts",
+        "apps/control-room/src/live/live-dispatch-production.test.ts",
+        "apps/control-room/src/v2/ops/activation-screen.tsx",
+        "apps/control-room/src/v2/ops/activation-screen.test.tsx",
+        "tests/e2e/control-room/activation-fresh-project.spec.ts",
+        "README.md",
+        "docs/agent-stack-runbook.md"
+      ],
+      "note": "DoD 2 CLOSED — the provider CLI version is now MEASURED, and the CLI-absent path fails closed.\n\nRESUME NOTE: a prior session (post-rejection) left ~227 lines of uncommitted work in the shared checkout under apps/daemon/src/bootstrap/ and apps/control-room/src/. I re-verified it from disk rather than trusting it: the production half was sound but NO test moved with it (9 daemon reds from a missing `providerVersion` port, 4 control-room reds, 4 typecheck errors), and one shipped comment claimed a pin in live-dispatch-production.test.ts that did not exist. All closed here.\n\nWHAT THE READING IS NOW. `measureProvider` (activation-receipts-measure.ts) calls `ports.providerVersion(input.agentCommand)` and publishes `receipts.provider = {command, version}` beside `repository`/`store`/`distribution` — core's witness roster is exactly 9 keys and the provider receipt's two fields are already spent (ref = committed probe envelope, detail = credential PRESENCE ref), so the reading rides beside the members, not inside them. `activation-read.ts` publishes it bound to the provider member's own verdict and scrubbed; the card renders `claude --version · 2.1.261` on the provider row and nowhere else.\n\nTHREE OUTCOMES, and the second/third distinction is the point:\n- CLI could not be RUN -> ACTIVATION_PROVIDER_UNMEASURED @ DAEMON_ACTIVATION_RECEIPTS, whole activation refused, `provider` null.\n- CLI RAN, output unparseable -> MEASURED with version `UNKNOWN` (a reading taken, reported honestly — what demo-seed-policy.ts:106 does).\n- CLI RAN, version parsed -> MEASURED with the real string.\n\nA REAL PRODUCTION FAIL-OPEN FOUND BY THE NEW ARM (not in QA's report). On win32 `agentSpawnInvocation` hands the line to cmd.exe, and cmd.exe answers an ABSENT command with EXIT 1, not a spawn error. Measured on this host:\n  execFile(\"moe-no-such-cli-xyz --version\", [], {shell:true}) -> code 1, stderr \"'moe-no-such-cli-xyz' is not recognized as an internal or external command,\"\nThe prior session's reader trusted that exit code, so EVERY Windows host with no agent CLI installed would have been recorded as \"the CLI ran and said nothing\" -> UNKNOWN -> MEASURED -> witness minted. That is the same fail-open in a new place. Closed by resolving the image on PATH+PATHEXT BEFORE any spawn (locale-independent; matching cmd.exe's sentence would bind the daemon to an English Windows).\n\nNEW MODULE. The spawn moved out of activation-receipts-ports.ts (275 -> 215 lines) into apps/daemon/src/bootstrap/activation-provider-version.ts + its .js bridge: the only production spawn on this path, findable on its own, and it keeps the measurer's spawn-free source-text arm meaningful.\n\nTESTS ADDED (all against the production surface):\n- measure: both real CLI shapes (`2.1.261 (Claude Code)` version-first, `codex-cli 0.153.4` name-first); calls the CONFIGURED command not a hard-coded \"claude\"; CLI-absent refusal with code+layer and the other 5 members still measured and `provider` null; empty-stderr detail; thrown runner -> refusal not rejection; 3 UNKNOWN arms (prose, empty, non-zero exit); source-text arm pinning the module spawn-free as CODE (`/from \"node:child_process\"/`, `/\\b(execFile|spawn|...)\\s*\\(/`) — matched as code because the module's own comments say \"unspawnable\".\n- activation-provider-version.test.ts (8 arms): PATHEXT resolution, extension already named, no PATHEXT off win32, PATH order + empty entries, directory-named command bypassing PATH, no PATH at all; plus a REAL spawn of process.execPath and a real absent command. win32 is driven EXPLICITLY on every platform so the guard is not untested on a Linux runner.\n- live-activation: 10-key frame, null reading, UNKNOWN verbatim, 5 half-reading shapes refused ACTIVATION_RESPONSE_INVALID @ CONTROL_ROOM_LIVE_ACTIVATION.\n- activation-screen: reading on the provider row and NOWHERE else (getAllByTestId length 1), UNKNOWN printed verbatim, absent reading renders no line while the code@layer still shows.\n- live-dispatch-production: DEV_PAYLOADS swept WHOLE-ROSTER for \"DATED_SNAPSHOT\"/\"BUILD_STAMP\"/`--version`, with a non-emptiness arm so the sweep cannot pass vacuously. This is the pin the shipped comment claimed and did not have.\n- e2e spec: asserts `cr.activate.version` matches `--version <cmd> (semver|UNKNOWN)` — a semver there cannot have come from a bundle literal.\n\nTWO NON-VACUITY DRILLS, both bit. (a) `resolveAgentImage` short-circuited to return the command -> 12 red. (b) `measureProvider` version replaced by the literal \"2.1.261\" -> included in that 12. RESTORE PROVEN IN A SEPARATE CALL by sha256 against out-of-tree backups (activation-provider-version.ts is UNTRACKED, so `git diff` certifies nothing): 977e7a2d…5aac and 3194ec38…1b73 both byte-identical after restore, `grep -c \"DRILL MUTANT\"` = 0/0.\n\nPUSHBACK, one item. rejectionDetails issue #2 says \"refuse a caller-supplied provider observation\". I dropped the invented literals (done) but did NOT refuse the observation, and will not: `recordProbe` (boot",
+      "startedAt": "2026-09-06T02:53:40.760Z",
+      "completedAt": "2026-09-06T08:00:55.605Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "VERIFY DoD 3 — the copy no longer contradicts the product. Run `grep -n \"cannot drive the pre-activation chain\" apps/control-room/src/v2/goals/live-goal-create.ts` and require 0 matches at the delivered tree (it sits at :93 today). Confirm the replacement copy NAMES the Activate card and that apps/control-room/src/v2/goals/live-goal-create.test.ts asserts the new sentence — an absence-only assertion is vacuous, since deleting the branch entirely would also make it pass. Confirm the card's testids are pinned in a control-room test. Run `pnpm --filter @moe/control-room test` and quote the count line; a bare `pnpm test` is NOT evidence for an apps/** claim, because the root vitest include carries no apps/** (global rail 18).",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/resources/resources-frames.fixture.ts",
+        "apps/control-room/src/v2/cordum-app.test.tsx"
+      ],
+      "note": "DoD 3 PASSES at the delivered tree, and the control-room gate is GREEN.\n\nCOPY. `grep -c \"cannot drive the pre-activation chain\" apps/control-room/src/v2/goals/live-goal-create.ts` = 0. Replacement copy at :92-98 NAMES the card: \"Next step: use the Activate project card on this screen; it drives the whole chain\". Asserted POSITIVELY, not by absence — live-goal-create.test.ts:104, :114-115 and the BLOCKED_ON_ACTIVATE constants at :201-205 compare the exact sentence, so deleting the branch would go red rather than green.\n\nTESTIDS. 13 distinct `cr.activate.*` testids in activation-screen.tsx (root, count, loading, nowire, receipts, signing, steps, version, plus the per-member code/reason/receipt and per-kind refusal/step families); 35 `cr.activate` assertions in activation-screen.test.tsx. `cr.activate.version` is the one this session added and it is pinned in three arms.\n\nGATE: `pnpm --filter @moe/control-room test` -> `Test Files 167 passed (167)` / `Tests 2077 passed (2077)`, exit 0, 68.38s. Non-zero executed count, so not a vacuous run.\n\nTWO CONSUMERS THE FRAME CHANGE BROKE, FOUND AND FIXED HERE (global rail 19 — the `provider` key widened an EXACT key roster from 9 to 10, and `exactDataRecord` refuses a frame missing it):\n- apps/control-room/src/v2/resources/resources-frames.fixture.ts:91 — 9 reds across resources-screen.test.tsx and resources-refusals.test.tsx, all decoding to ERROR instead of ACTIVATION. Added `provider: { command: \"claude\", version: \"2.1.261\" }`.\n- apps/control-room/src/v2/cordum-app.test.tsx:956 — 2 reds. Added `provider: null`, which is the CORRECT value there: that fixture's provider member is refused ACTIVATION_PROVIDER_UNMEASURED, and the read route binds the reading to the member's own verdict, so a refused provider publishes no reading.\nEnumerated by grepping the SHAPE, not the symbol: `grep -rn \"moe-activation-receipts/1\"` over apps/control-room/src and tests found exactly 3 frame fixtures (these two plus activation-screen.test.tsx, already handled). The e2e journey builds no fixture — it reads a real daemon.\n\nFLAKE, disclosed and settled. The first full run after the fixture fix had ONE red: `src/scaffold.test.tsx > loads the whole shell module graph without any Node-only API`, \"Test timed out in 5000ms\". Re-run IN ISOLATION: `Test Files 1 passed (1) / Tests 37 passed (37)` in 3.34s — a ~1500x margin against the 5s bound. It is the known spawn/transform-latency cliff on this host under a 167-file concurrent load (cumulative transform 628s), not a defect and not mine: control-room never imports apps/daemon, so the new `node:child_process` module cannot enter the shell graph. The immediately following full run was 167/167 green, quoted above.",
+      "startedAt": "2026-09-06T08:00:58.465Z",
+      "completedAt": "2026-09-06T08:09:55.413Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "VERIFY DoD 4 — the seed and the wrapper still work. Run `pnpm --filter @moe/daemon test`, quote the count line, and confirm apps/daemon/src/orchestrator/demo-seed-*.test.ts are green. Prove the seed's chain ORDER is unchanged by grep, not by reading: apps/daemon/src/orchestrator/demo-seed-plan.ts:190-196 is project.register -> project.bind_repository -> provider.probe -> project.activate -> policy.install x3. Child B necessarily changed WHAT the seed sends (it may no longer supply a witness) — that is expected and in scope; what must not change is the chain order or the fact that `pnpm seed` completes. Confirm the wrapper's own bootstrap path is untouched with `git diff --stat` against the merge-base over the wrapper paths.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-entry-activation-refusals.test.ts"
+      ],
+      "note": "DoD 4 PASSES. Seed untouched by this session and green; wrapper bootstrap path untouched; the full daemon suite is red for reasons measurably not mine.\n\nSEED CHAIN ORDER, by grep not by reading. demo-seed-plan.ts declares register(196) -> bind_repository(197) -> provider.probe(198) -> policy.install x3(211-213) -> project.activate(216), and the kind roster at :89-112 agrees. This is the order child B landed and it is UNCHANGED by this session: `git status --porcelain -- apps/daemon/src/orchestrator/` is EMPTY. (The activate-after-policy ordering is child B's deliberate, settled change — the policy receipt is the digest of the INSTALLED slice set, so activating first refuses ACTIVATION_POLICY_UNMEASURED. Not relitigated here.)\n\nSEED TESTS: `demo-seed-env|http|main|payloads|plan .test.ts` -> `Test Files 5 passed (5)` / `Tests 69 passed (69)`, exit 0.\n\nWRAPPER: `git status --porcelain -- apps/daemon/src/orchestrator/ tools/` EMPTY, so nothing I did touches it. (`git diff --stat 68eb1c5d..HEAD` shows moe-up-main.ts moved between merge-base and HEAD — a peer's landed commit, not this row's.)\n\nOWNED-PACKAGE LEG, GREEN: the 8 daemon files this row owns or edits — activation-receipts, activation-receipts-measure, activation-provider-version, activation-command-entry, daemon-entry-activation-refusals, http/activation-read, demo-seed-plan, demo-seed-payloads -> `Test Files 8 passed (8)` / `Tests 123 passed (123)`, exit 0, 27.57s.\n\nFULL DAEMON GATE, RED, AND THE RED IS FOREIGN — quoted verbatim, not hidden:\n  `pnpm --filter @moe/daemon test` -> `Test Files 28 failed | 484 passed (512)` / `Tests 154 failed | 9194 passed | 47 skipped (9395)`, exit 1, 966.60s.\nZERO of those 155 failing tests is in an activation file: `grep -cE \"^ FAIL\" | grep -c activation` = 0. All four activation suites plus the read route and the refusal arms pass inside the same run.\n\nROOT CAUSE, measured. A peer's UNCOMMITTED edit to apps/daemon/src/bootstrap/bootstrap-contracts.ts appends \"deployment.set_target\" and \"deployment.deploy\" to BOOTSTRAP_COMMAND_KINDS without adding the matching rows to BOOTSTRAP_PREREQUISITES in bootstrap-sequence.ts. `unmetPrerequisites` then indexes an absent key:\n  TypeError: Cannot read properties of undefined (reading 'filter')\n   at unmetPrerequisites src/bootstrap/bootstrap-sequence.ts:109:38\nThat stack appears 80 times in the log, and every affordance read calls it — which is why affordance-read (30), affordance-read-planning (26), affordance-planning-offers (4), goal-close-readiness (3) and the registry/vocabulary roster tests fall over together. The roster tests fail by exactly +2 (`expected 19 to be 17` in mcp-tool-allowlist; \"fifty-four characterized kinds\"; \"thirteen owned kinds\"). A second, unrelated cluster is the known host defect: `Error: nothing spawned` in agent-wrapper*, plus the criterion-check zero-byte child processes recorded in this row's handoff memory.\n\nATTRIBUTION IS AIRTIGHT, not asserted: `git show HEAD:apps/daemon/src/bootstrap/bootstrap-contracts.ts | grep -c \"deployment\\.\"` = 0, and bootstrap-sequence.ts is not dirty at all. Neither file is in my modifiedFiles, so the tree my commit produces has bootstrap-contracts.ts at HEAD and the cascade cannot exist in it. Rail 3 delta over owned paths: EMPTY. Per the shared-checkout rule I am not reverting, stashing or committing the peer's file.",
+      "startedAt": "2026-09-06T08:09:57.685Z",
+      "completedAt": "2026-09-06T08:28:21.073Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "VERIFY DoD 5 — the docs tell the measured truth. Confirm README.md:88-91 no longer says a fresh project cannot be started from the browser alone, and that the 'Measured on 2026-09-03' date stamp on line 88 was re-dated. Confirm docs/agent-stack-runbook.md:47-52 no longer says the fresh-project browser flow has no production writer for that receipt set. THE DoD'S ANCHOR IS MIS-QUOTED: the literal string in the runbook is bolded markdown, `**New Goal** remains disabled`, found by `grep -n \"New Goal\" docs/agent-stack-runbook.md` at :47; `grep -rn \"New Goal remains disabled\" --include=*.md .` returns 0 matches, so do not grade against the unbolded phrase. Confirm both doc edits ride the SAME commit as the journey with `git show --stat <sha>`.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "README.md",
+        "docs/agent-stack-runbook.md"
+      ],
+      "note": "DoD 5 PASSES, and both docs were extended to cover what this session added.\n\nREADME. `grep -rn \"cannot be started from the browser\" README.md` = 0. The \"What this is not\" section no longer carries a fresh-project sentence at all; the claim now lives as a POSITIVE bullet at :31-37, \"Fresh start, from the browser alone\". This session extended that bullet to name the version: \"Every receipt is minted by the daemon from a fact it measured itself -- the repository's real HEAD sha, the store's own driver, the backup's sha256, and the agent CLI's version read by running `<agent command> --version` on the host\", plus the new consequence: \"an agent CLI that is not installed refuses activation outright\".\n\nDoD 5's README anchor is STALE, as planned. It names README.md:88-91 with a \"Measured on 2026-09-03\" stamp; that content moved to :31-37 in the rewrite and the surviving stamp at :129 reads \"Measured on 2026-09-05\" and belongs to an unrelated multi-node-graph paragraph a peer wrote. Re-dating it would falsely restamp someone else's measurement, so I left it.\n\nRUNBOOK. The DoD's phrase is mis-quoted, as the plan already settled: `grep -rn \"New Goal remains disabled\" --include=*.md .` = 0 matches; the real line is bolded, `**New Goal** remains disabled`, at :47. That paragraph tells the measured truth — New Goal IS still gated on durable receipts, and what changed is WHO writes them (the Activate card, `POST /activation/read`, the four-command chain). This session added the provider half at :54-63: the version the daemon read by running `<agent command> --version`, shown on the provider row; a host with no agent CLI on PATH now refuses with `ACTIVATION_PROVIDER_UNMEASURED` rather than activating against a provider nobody could reach; and a CLI that runs but answers unparseably is recorded `UNKNOWN`, \"a reading taken, not a gap\". `grep -rn \"no production writer\" docs/agent-stack-runbook.md` = 0.\n\nKept ASCII: an earlier draft printed the card's U+00B7 separator literally in the runbook; reworded to \"`claude --version` beside `2.1.263`\" so the file stays consistent with its own `--` convention.\n\nSAME-COMMIT CLAUSE — DEVIATION, disclosed. DoD 5 says the doc edits ride the SAME commit as the journey. They already did NOT at the reopened tree (child D's docs rode 6d759782/b16bc455 and the spec rode d0c69621 + a peer sweep — a wrapper-sweep artifact recorded in the prior session's handoff, all ancestors of HEAD). This session edits README.md, docs/agent-stack-runbook.md AND tests/e2e/control-room/activation-fresh-project.spec.ts together, and all three are in this row's modifiedFiles, so the CURRENT delta does ride one commit. I cannot retroactively merge commits that already landed, and rewriting shared history to satisfy a paperwork clause would be far worse than the deviation.",
+      "startedAt": "2026-09-06T08:28:23.259Z",
+      "completedAt": "2026-09-06T08:28:53.565Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "VERIFY DoD 6 and close — run every gate, attribute any red, then the adversarial pass. Run and quote count lines for `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, and `pnpm test` (root lane — label it explicitly 'root lane only, apps/** not covered'). Repo-wide legs are a PATH-ATTRIBUTED BASELINE (global rail 3): record failures at the merge-base, failures at HEAD, and the delta intersected with this feature's owned paths; completion is permitted only when that intersection is empty. Disclose any foreign red verbatim with its exact failing lines; never fabricate green. Then run the adversarial pass over the whole parent feature: a second concurrent Activate click (two chains racing the same aggregate version), a non-git project directory, a read-only store, a daemon restart mid-chain, and a backup directory that already exists. Record findings and gate output in the completion summary; put anything over the 2000-char cap in a row comment under 4500 chars.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "apps/daemon/src/bootstrap/activation-provider-version.ts",
+        "apps/daemon/src/bootstrap/activation-provider-version.test.ts",
+        "apps/daemon/src/bootstrap/activation-receipts-measure.ts",
+        "apps/daemon/src/bootstrap/activation-receipts-measure.test.ts",
+        "tests/e2e/control-room/activation-fresh-project.spec.ts",
+        "docs/agent-stack-runbook.md"
+      ],
+      "note": "DoD 6 run in full, every red attributed, adversarial pass done and it changed the code three times. Live evidence in comment-3019436e.\n\nGATES, count lines quoted, no exit code trusted on its own:\n- `pnpm --filter @moe/control-room test` -> `Test Files 167 passed (167)` / `Tests 2077 passed (2077)`, exit 0, 47.76s. FRESH at the final tree.\n- daemon owned leg (activation-receipts, -measure, -provider-version, -command-entry, activation-read, daemon-entry-activation-refusals, index-surface, demo-seed-plan, demo-seed-payloads) -> `Test Files 9 passed` inside a 10-file run of `Tests 405 passed | 1 failed (406)`; the single red is bootstrap-durability's \"drives every owned command kind\" (15 vs 13), the foreign vocabulary count.\n- `pnpm --filter @moe/daemon test` -> `Test Files 28 failed | 484 passed (512)` / `Tests 154 failed | 9194 passed | 47 skipped (9395)`, exit 1, 966.60s. ZERO failures in any activation file.\n- `pnpm typecheck` -> every workspace `Done` EXCEPT apps/daemon, which reports exactly 2 errors, both `src/bootstrap/bootstrap-sequence.ts` (45,12 and 109,10). Zero in any file I own.\n- `pnpm test` ROOT LANE ONLY, apps/** NOT COVERED -> `Test Files 12 failed | 418 passed | 2 skipped (432)` / `Tests 50 failed | 10277 passed | 71 skipped (10398)`, exit 1, 463.84s.\n- `pnpm test:e2e:browser` -> exit 1 at its `tsc` leg, on the same two foreign bootstrap-sequence errors. Playwright driven directly: the journey passes the card, the new count-0 version arm, the placeholder sweep and the pre-activation refusal, then dies at chain step 1 because `/affordances/read` throws in this tree. Full transcript and cause in comment-3019436e.\n\nRAIL-3 ATTRIBUTION, one cause for nearly all of it. A peer's UNCOMMITTED `apps/daemon/src/bootstrap/bootstrap-contracts.ts` appends `deployment.set_target`/`deployment.deploy` without the matching BOOTSTRAP_PREREQUISITES rows, so `unmetPrerequisites` indexes an absent key: `TypeError: Cannot read properties of undefined (reading 'filter') at src/bootstrap/bootstrap-sequence.ts:109:38` — 80 occurrences, and every affordance read calls it. `git show HEAD:...bootstrap-contracts.ts | grep -c \"deployment\\.\"` = 0. The root lane's 12 red files are a different, known set: `tools/packaging/pack-source.test.ts` (32) is ALL \"Test timed out in 5000ms\" and is WORSE in isolation (39 red, 392s for 145 tests) — the documented host packaging-timeout defect, and QA already proved that file byte-identical at the merge-base; `packages/runner/.../criterion-check-executor` and `tests/e2e/foundation/*` are the recorded zero-byte-child / \"nothing spawned\" host defects. NOT ONE failing file is in my modifiedFiles. Delta over owned paths: EMPTY.\n\nADVERSARIAL PASS. The plan's five items belong to the parent feature and were settled by the prior session (comment-eee73ff5); my delta touches one of them — two concurrent Activate clicks now spawn two `--version` children, which is read-only with no shared state, and the backup race remains the decider. The pass over MY diff found THREE real defects, all fixed here rather than noted:\n1. A DIRECTORY named `claude` on PATH satisfied `existsSync`, cmd.exe would answer it exit 1, and the measurer would read that as \"ran, said nothing\" -> UNKNOWN -> MEASURED. The fail-open again. Now `statSync().isFile()`, with an arm that also proves a real shim in the SAME directory still resolves, so it is not \"always null\".\n2. A CLI printing 64 KB on its first line put 64 KB into a ledger receipt and onto a card. `VERSION_TOKEN` tail is now bounded to 48 chars; arm feeds `1.2.3-` + 4096 `a` and pins the result at 53 chars.\n3. `execFile` rejects on non-zero exit AND on maxBuffer overrun, and the old catch threw the child's stdout away — turning a readable answer into UNKNOWN. It now keeps `failure.stdout`; arm writes a REAL script that prints `9.9.9` and exits 3, asserting code 3 and the output both survive.\nConsidered and left as-is, deliberately: a 10s timeout kills the child with `killed: true` and refuses (correct, fail closed); `agentCommand` comes from MOE_AGENT_COMMAND host config and cannot be set from the browser; a version string can only ever be the bounded regex match or the literal \"UNKNOWN\", so no lone surrogate or injection shape can reach the wire.\n\nBEHAVIOURAL CHANGE WORTH SAYING OUT LOUD: a host with no agent CLI on PATH now REFUSES activation where it previously activated. Intended fail-closed, documented in the runbook, and it means any CI runner driving the browser journey must actually have `claude` or `codex` installed.",
+      "startedAt": "2026-09-06T08:28:57.834Z",
+      "completedAt": "2026-09-06T09:09:57.632Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "ONE DoD ITEM FAILS: DoD 2, first clause. FULL EVIDENCE IN comment-8605a891 — read it first. DoD 1, 3, 4, 5, 6 all PASS; I re-measured them at HEAD f7ad50ee on a tree where every feature-owned path is clean. Do not redo them.\n\nDoD 2 requires a measured \"provider CLI version\". It is not measured. measureProvider (activation-receipts-measure.ts:107-122) returns measuredReceipt(\"provider\", probeRef, credential.ref): probeRef is a REF to an already-committed provider.probe, credential.ref is presence only. `git grep -n -- \"--version\" -- apps/daemon/src/**/*.ts` finds only the moe CLI's own version words, two demo-seed comments and fixtures. measure.test.ts:215 pins ref to \"probe/abc\".\n\nThat probe is minted by this feature's own card (activation-screen.tsx -> driveActivationChain -> activation-port.ts:70 -> live-dispatch-payloads.ts:127-149), hardcoding modelSnapshotKind \"DATED_SNAPSHOT\", modelSnapshotEvidence \"claude --version reported a dated snapshot\", truthClass \"DAEMON_VERIFIED\". The witness is minted VERIFIED on an invented reading — the defect this row exists to remove. Less honest than the seed: demo-seed-policy.ts:106 uses \"UNKNOWN\" to avoid asserting a version nobody took.\n\nYour FINDING F1 (comment-86207d32) found this and the summary names it a SHORTFALL. That is why this rejection is narrow — but a written DoD clause is not discharged by disclosing it is unmet.\n\nTO CLOSE: measure provider.probe in the daemon — real `claude --version`/`codex --version` through the injected ports (never spawn from that module; a source-text arm pins it), \"UNKNOWN\" when unreadable, refuse a caller-supplied provider observation as ACTIVATION_WITNESS_CALLER_SUPPLIED does, drop the DEV_PAYLOADS literals, add a CLI-absent refusal arm, re-quote the gates.\n\nSCOPE: rail 1 makes this row accountable for the full slice — land it here or SPIDR one child. Do NOT reopen the five DONE children. bind_repository's hex64(\"beef\") is NOT charged. Root-lane reds are foreign.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 10,
+  "comments": [
+    {
+      "id": "comment-16ff251f55b14af28dc2ddb91ea51be2",
+      "author": "architect-d1711c47",
+      "content": "PLANNING RECORD (architect-d1711c47, 2026-09-04, measured at main 68eb1c5d)\n\nSPIDR-SPLIT into 4 children under this row (row rail 1; ~15 files, over the 12-step/10-file thresholds). Build order, each dependsOn its predecessor:\n- A task-741dad13e23d441a8385d0f14df5b5c1 — receipts measurement (pure leaf)\n- B task-4b9c394debe94b41a80e2b46c6d55ab8 — project.activate mints the witness, refuses a caller-supplied one\n- C task-0a5d7212a7f644d5891df4e0e1545787 — receipts read route + v2 Activate card\n- D task-ac9d5e2d43334525bd990b1362652ce4 — Playwright journey, copy, docs, gates, live drive\nThis row's plan is VERIFICATION ONLY (7 steps, 0 files modified).\n\nTWO DoD CLAUSES ARE MIS-ANCHORED AGAINST THE TREE. Both are recorded here so QA grades the measured truth, not the wording:\n\n1) DoD 2 — \"truthClass VERIFIED\" and \"no production path can write a DEMO_VERIFIED witness\" are UNSATISFIABLE AS WRITTEN. `grep -rn \"DEMO_VERIFIED\"` finds apps/daemon/src/orchestrator/demo-seed-payloads.ts:24 `export const DEMO_VERIFIED = \"DAEMON_VERIFIED\" as const` — an ALIAS, not a distinct truth class. packages/core/src/project/project-validation.ts:140 `strongTruth` accepts ONLY \"DAEMON_VERIFIED\" | \"HUMAN_APPROVED\"; there is no \"VERIFIED\". The real defect this row closes is INVENTED REFS (`${projectId}-artifact`, hex64(\"cafe\")), not the truth class. Child B therefore grades \"a CALLER-SUPPLIED witness is refused with a stable code\", which is the enforceable form of the same intent.\n\n2) DoD 5 — the runbook anchor does not exist. `grep -rn \"New Goal remains disabled\" --include=*.md .` returns 0 matches. The real line is docs/agent-stack-runbook.md:47, bolded markdown: `**New Goal** remains disabled until the project ledger contains ...`. README's sentence is at :88-91 and carries a \"Measured on 2026-09-03\" stamp that also needs re-dating.\n\nTHIRD FINDING, not in the description: THERE ARE TWO FAKERS. Besides the seed, apps/control-room/src/live/live-dispatch-payloads.ts:111-119 `DEV_PAYLOADS` carries artifact-1/backup-1/hex64(\"cafe\"), and tests/e2e/control-room/board-chain.spec.ts clicks the ENTIRE chain from an empty store against it. So \"the browser cannot drive the pre-activation chain\" is true only of the V2 UI — the legacy dev board drives it today with fake refs. Consequences: child B must move the seed, DEV_PAYLOADS and board-chain.spec.ts together or the tree goes red; child D's journey must drive the V2 Activate card, because a journey clicking `cr.liveboard.*` re-proves the pre-existing fake-witness path and certifies nothing.\n\nHUMAN DECISION (owner, AskUserQuestion 2026-09-04): `signingKeyRef` is required by core's exact 9-key roster but signing is out of scope (row rail 2). Resolution: mint the fixed honest ref `signing/unsigned-source-checkout`, displayed on the card as NOT a trust boundary in v0.1 with that reason. Rejected: refusing activation without a signing key (ships the feature unusable), and the daemon artifact digest (reads as provenance the repo does not have).\n\nACTION NEEDED FROM A GOVERNOR: this row's own `dependsOn` could NOT be set — moe.set_task_dependencies answered `[NOT_ALLOWED] architect or governor role required (worker architect-d1711c47 is on neither team)`. The four children carry their A→B→C→D chain correctly, but this parent is not field-gated on them and is claimable for WORKING before they land. Step 1 of the plan is the manual gate (verify children DONE, else report_blocked with blockedOnTaskIds). Please set dependsOn = [A, B, C, D] on this row.",
+      "timestamp": "2026-09-04T09:40:36.141Z"
+    },
+    {
+      "id": "comment-f403ea63fa33489baa8079eb8d5e1f3b",
+      "author": "worker-c846071b",
+      "content": "STEP-1 GATE MEASUREMENT (worker-c846071b, 2026-09-04, HEAD ddc5fa05 on moe/work-2026-09-04). Gate NOT satisfied: 0 of 4 SPIDR children are DONE. This row modifies no files and is a pure verification plan, so there is nothing to deliver until the children land. No production file was touched this session.\n\nCOMMANDS AND RESULTS\n\n1. Child status, read from disk (.moe/tasks/task-<id>.json via node -e):\n   - A task-741dad13e23d441a8385d0f14df5b5c1 \"Activation receipts: measure the real project, refuse per member\" -> status=PLANNING, assignee=null, commits=0, implementationPlan=0 steps, dependsOn=[]\n   - B task-4b9c394debe94b41a80e2b46c6d55ab8 \"project.activate mints its own measured witness and refuses a caller-supplied one\" -> status=PLANNING, commits=0, 0 steps, dependsOn=[\"task-741dad13e23d441a8385d0f14df5b5c1\"]\n   - C task-0a5d7212a7f644d5891df4e0e1545787 \"Activate project card: receipts read plus one button that drives the chain\" -> status=PLANNING, commits=0, 0 steps, dependsOn=[\"task-4b9c394debe94b41a80e2b46c6d55ab8\"]\n   - D task-ac9d5e2d43334525bd990b1362652ce4 \"Prove the browser-only fresh start: journey, copy, docs\" -> status=PLANNING, commits=0, 0 steps, dependsOn=[\"task-0a5d7212a7f644d5891df4e0e1545787\"]\n   All four carry parentTaskId=task-bb844c288fb346c0856778c738b9f073. The A->B->C->D chain is correctly field-declared; none is planned yet.\n\n2. `git log main --grep \"Moe-Task: task-<id>\"` and the same against HEAD, per child -> 0 matches on both refs for all four. Nothing landed; nothing is in flight in a peer checkout that reached the branch.\n\n3. Delivered-tree spot checks confirming the feature gap is still fully OPEN (i.e. no child silently landed under a different trailer):\n   - `grep -n \"cannot drive the pre-activation chain\" apps/control-room/src/v2/goals/live-goal-create.ts` -> 1 match at :93 (`+ \" seed); the browser cannot drive the pre-activation chain.\";`). DoD 3 requires 0.\n   - `grep -rn \"ACTIVATION_REPOSITORY_UNMEASURED\\|ACTIVATION_PROVIDER_UNMEASURED\\|ACTIVATION_BACKUP_FAILED\" --include=*.ts .` -> 0 matches. Child A's refusal codes do not exist.\n   - `ls apps/daemon/src/bootstrap/` -> no activation-receipts module; the directory is unchanged from the architect's measurement (bootstrap-services.ts, bootstrap-sequence.ts, bootstrap-contracts.ts, policy-* only).\n\nWHY THIS ROW WAS CLAIMABLE AT ALL (the defect step 1 named, now confirmed on disk)\n`node -e` over this row's JSON prints `deps= [] parent= -`. The parent's own dependsOn is EMPTY, so the runtime offered it for a WORKING claim while every child sits unplanned. The planning architect recorded that moe.set_task_dependencies answered [NOT_ALLOWED] \"architect or governor role required (worker architect-d1711c47 is on neither team)\". ASK FOR A GOVERNOR: call moe.set_task_dependencies on task-bb844c288fb346c0856778c738b9f073 with the four child ids, so the manual step-1 gate becomes a field and this row stops being handed to a worker seat ahead of its children. The report_blocked I am filing now carries the same four ids, which gets the auto-unblock behaviour for this cycle, but the field fix is what prevents a repeat if the block is ever cleared by hand.\n\nNEXT WORK ON THIS FEATURE is child A (task-741dad13e23d441a8385d0f14df5b5c1): it is the only one of the four with dependsOn=[], it is in PLANNING with no plan, and it is the leaf the other three wait on. It needs an architect to plan it. I did not touch it — re-implementing a child's work inside this parent is what step 1 forbids.\n\nDirty peer paths noted and left alone (not a stop condition): .moe/messages/chan-*.jsonl (3 modified), .moe/tasks/task-c4321b6f*.json and task-e60b874b*.json (deleted by a peer), 14 untracked .moe/ rows + .moe/epics/epic-8ebe6417.json, scripts/up.ps1, scripts/watch.ps1.",
+      "timestamp": "2026-09-04T09:42:39.007Z"
+    },
+    {
+      "id": "comment-8bf791470b16454682c6c4f9754c8ad0",
+      "author": "governor-cde654b2",
+      "content": "🧭 GOVERNOR: the `blockedReason` on this row is STALE. Do not act on it. Both of its \"NEEDED FROM A GOVERNOR\" items are already satisfied — checked 2026-09-05 11:17Z.\n\nAsk 1, \"set this row's dependsOn to the four child ids; it is EMPTY on disk\" — **already done.** `dependsOn` now carries all four (`task-741dad13`, `task-4b9c394d`, `task-0a5d7212`, `task-ac9d5e2d`) and the daemon reports `dependsOnUnmet: 1`. Nothing to set.\n\nAsk 2, \"route child A (task-741dad13) to an architect; it gates the other three\" — **already done.** task-741dad13 is DONE.\n\nChild status now, against the reason's claim that all four were PLANNING/unassigned/0-commits:\n- A task-741dad13 — DONE\n- B task-4b9c394d — DONE (reopened once, QA-rejected, fixed, closed)\n- C task-0a5d7212 — DONE\n- D task-ac9d5e2d — BLOCKED, and it is the only one left\n\nSo the step-1 gate reads 3 of 4 children DONE, not 0 of 4.\n\n**No governor action is needed on this row and none is being taken.** It is not orphaned and it is not a cycle, despite what the blocked-timeout sweep says. The sweep fires because it only looks one hop and sees a BLOCKED prerequisite. The real shape is a three-deep chain with a live seat at the head:\n\n  task-316bb83b [WORKING, worker-61579b07] → task-ac9d5e2d [BLOCKED] → this row [BLOCKED]\n\nWhen 316bb83b lands, ac9d5e2d auto-unblocks, then this row auto-unblocks. Both hops fire on their own. Leave it alone.\n\nWhoever picks this row up when it clears: the banked work in the reason's last paragraph (comment-02defeb7, the Serena handoff, the corrected doc anchors, the `?v1=1` trap) is still good — that part has not gone stale. It is only the two governor asks and the 0-of-4 child tally that are out of date.",
+      "timestamp": "2026-09-05T11:17:31.452Z"
+    },
+    {
+      "id": "comment-86207d32c657443e9d881be1fa1ae015",
+      "author": "worker-d6e44333",
+      "content": "PROBE SOURCE + FINDING F1 (step 3) — worker-d6e44333, 2026-09-06.\n\n=== THE PROBE, FULL SOURCE (global rail 12b: recreatable, deleted after use). Written to %TEMP%\\activation-probe-d6e44333.mjs, run with `node <probe> \"<store.sqlite>\"`, Node v24.16.0. ===\n\n    import { measureActivationReceipts, nodeActivationReceiptPorts } from\n      \"file:///D:/projexts/moe-next/apps/daemon/src/bootstrap/activation-receipts-measure.js\";\n    import { activationWitnessOf } from\n      \"file:///D:/projexts/moe-next/apps/daemon/src/bootstrap/activation-receipts.js\";\n\n    const root = \"D:/projexts/moe-next\";\n    const receipts = await measureActivationReceipts({\n      agentCommand: \"claude\",\n      artifactRoot: root,\n      projectId: \"probe-bb844c28\",\n      projectRoot: root,\n      storePath: process.argv[2],\n    }, nodeActivationReceiptPorts({\n      committedProbeRef: () => Promise.resolve(\"probe/committed-provider-probe-ref\"),\n      installedPolicySliceRefs: () => Promise.resolve([\"policy/slice-a\", \"policy/slice-b\"]),\n    }));\n\n    for (const m of receipts.members) {\n      console.log(`${m.member.padEnd(13)} measured=${m.measured} ` +\n        (m.measured ? `ref=${m.ref} hash=${m.hash ?? \"-\"} detail=${m.detail}`\n                    : `code=${m.code} layer=${m.layer} detail=${m.detail}`));\n    }\n    console.log(\"signing      \", JSON.stringify(receipts.signing));\n    console.log(\"repository   \", JSON.stringify(receipts.repository));\n    console.log(\"store        \", JSON.stringify(receipts.store));\n    console.log(\"distribution \", JSON.stringify(receipts.distribution));\n    const w = activationWitnessOf(receipts);\n    console.log(\"WITNESS ok=\", w.ok);\n    console.log(JSON.stringify(w.ok ? w.witness : w.refusals, null, 2));\n\nThe two overrides stand in for the daemon's durable readers (activation-command-entry.ts:37-48 wires exactly these two against the real store). WITHOUT them the production default is `null`/`[]` and activation refuses ACTIVATION_PROVIDER_UNMEASURED / ACTIVATION_POLICY_UNMEASURED — the fail-closed behaviour, reproduced live on the first run of this probe, which also refused store+backup against a path that had been pruned out from under it.\n\nSTORE ARG used for the green run: a real 225280-byte moe SQLite store copied out of tree. Backup written by the run: `.moe-next/backups/20260906020626290.sqlite`, sha256 `afede285f646a01b2782e66131ca9281f321386bbf1fb22b6b774a983e61c101`, re-computed by me and byte-identical to the source. `.moe-next/` is gitignored (.gitignore:76) and `BACKUP_RETENTION = 5` prunes, so repeated activations do not accumulate or dirty the tree — verified: exactly 5 files present throughout.\n\n=== FINDING F1 — the browser's chain still sends TWO invented caller observations. NOT chargeable to any child (all five DONE+approved); recorded here per the DELIVERY-BIAS rail as a follow-up, not a new row. ===\n\nThe daemon-minted WITNESS is honest — that is what this epic's row set fixed and it holds. But the two chain steps that carry a CALLER half still ship fixture literals, and the card reads them from `DEV_PAYLOADS` (`activation-port.ts:70` -> `apps/control-room/src/live/live-dispatch-payloads.ts`):\n\n1. `provider.probe` (:118-149) registers a profile asserting a version reading nobody took:\n     modelSnapshotKind:     \"DATED_SNAPSHOT\"\n     modelSnapshotEvidence: \"claude --version reported a dated snapshot\"\n     capabilitySchemaDigest: hex64(\"ca9ab111\")\n     truthClass:            \"DAEMON_VERIFIED\"\n   The demo seed deliberately refuses to do this: `demo-seed-policy.ts:106` uses `modelSnapshotKind: \"UNKNOWN\"` with the comment \"refuses to assert a `claude --version` the demo never took\". So on this one axis the browser card is now LESS honest than the seed it replaced. This is why DoD 2's literal \"provider CLI version\" is unmet: `grep -rn '\\-\\-version' apps/daemon/src --include=*.ts` shows no version probe anywhere on the activation path.\n\n2. `project.bind_repository` (:120-126) sends `baseRevisionHash: hex64(\"beef\")`, `repositoryRef: \"repo-1\"`, `truthClass: \"DAEMON_VERIFIED\"` — while the MEASURED equivalent already exists and is exported: `repositoryObservationOf` (`activation-receipts.ts:205`, derives the observation from the measured repository receipt). `git grep repositoryObservationOf -- apps/` returns only tests, the index barrel and one comment: ZERO production callers.\n\nSUGGESTED CLOSE (one row, daemon-side, mirrors what child B did for `project.activate`): make `project.bind_repository` and `provider.probe` daemon-measured too — bind from `repositoryObservationOf`, probe from a real `claude --version` / `codex --version` with `modelSnapshotKind: \"UNKNOWN\"` when it cannot be read — and refuse a caller-supplied observation the same way `ACTIVATION_WITNESS_CALLER_SUPPLIED` refuses a caller witness.",
+      "timestamp": "2026-09-06T02:14:56.294Z"
+    },
+    {
+      "id": "comment-eee73ff55e3d437a86ebbeff5c52bde1",
+      "author": "worker-d6e44333",
+      "content": "ADVERSARIAL PASS + GATE BASELINE (step 7) — worker-d6e44333, 2026-09-06. Branch head moved 3x under peers during this session: b04a3621 -> c494d809 -> 51fbfc88. Merge-base with main = 68eb1c5d.\n\n=== ADVERSARIAL PASS. Driven against the PRODUCTION measurement surface (`measureActivationReceipts` + `activationWitnessOf`), not a fixture. All six scenarios FAIL CLOSED with the right member's code and layer; not one fabricates a receipt. ===\n\nA. NON-GIT PROJECT DIRECTORY (fresh mkdtemp, no .git)\n   witness.ok=false; `repository=ACTIVATION_REPOSITORY_UNMEASURED@DAEMON_ACTIVATION_RECEIPTS (fatal: not a git repository (or any of the parent directories): .git)` and the same for `distribution=ACTIVATION_DISTRIBUTION_UNMEASURED`. Git's own words reach the receipt; no invented sha.\n\nB. TWO CONCURRENT ACTIVATIONS racing the same backup stamp (`Promise.all` of two measurements sharing one frozen clock, so both compute the identical `<ts>.sqlite` destination)\n   **winners: 1 of 2.** #1 witness.ok=true. #2 witness.ok=false, `backup=ACTIVATION_BACKUP_FAILED@DAEMON_ACTIVATION_RECEIPTS (backup destination already exists)`. No overwrite, no torn copy, no double-commit. measure.ts:163-166 is an explicit check-then-act guard and SAYS so in the source (\"NOT mutual exclusion: serialising concurrent activations is the caller's gate\").\n   CONFIRMS THE OPEN FINDING on task-741dad13 (comment-9cc1ff43) AT HEAD: the loser's operator-visible detail is \"backup destination already exists\", which reads as a stale-file accident rather than \"another activation is in flight\". Diagnosability only — the fail-closed behaviour is correct. Still open, still low severity.\n\nC. BACKUP DIRECTORY PATH OCCUPIED BY A FILE (`.moe-next/backups` is a regular file)\n   `backup=ACTIVATION_BACKUP_FAILED@… (Error: EEXIST: file already exists, mkdir '…\\.moe-next\\backups')`. mkdir failure is caught and becomes a member refusal, never a rejected promise.\n\nD. STORE PATH IS NOT A SQLITE DATABASE\n   `store=ACTIVATION_STORE_UNMEASURED@… (store could not be read through node:sqlite)` AND `backup=ACTIVATION_BACKUP_FAILED@… (Error: file is not a database)`. Two members refuse independently; `activationWitnessOf` reports BOTH, not just the first.\n\nE. PRE-EXISTING **FULL** BACKUP DIRECTORY (6 files planted, `BACKUP_RETENTION = 5`)\n   backup MEASURED, and after prune the directory holds exactly 5: `…003, …004, …005, …006, 20260906023138949.sqlite`. The two oldest were removed, the just-written one kept. Repeated activations cannot grow without bound. `.moe-next/` is gitignored (.gitignore:76), so none of this dirties the tree — verified: exactly 5 files before and after every probe I ran.\n\nF. READ-ONLY STORE FILE (chmod 0444)\n   witness.ok=TRUE, all six MEASURED. Correct and deliberate: the measurer opens the store read-only and copies it, so a read-only store is not a reason to refuse activation. Recording it because \"read-only store\" reads like a refusal case and is not one.\n\nG. DAEMON RESTART MID-CHAIN — covered by design and by test, not by me re-killing a daemon. Every chain step commits durably before the next is offered, and `driveActivationChain` re-reads `/affordances/read` between steps; a kind the daemon already reports COMMITTED comes back `state: \"ALREADY_COMMITTED\"` (activation-port.ts:137), which is NOT rendered as a refusal. `activation-port.test.ts:153` pins exactly a resumed chain: `[\"ALREADY_COMMITTED\",\"ALREADY_COMMITTED\",\"ANSWERED\",\"ANSWERED\",\"ANSWERED\"]`. Receipts are measured PER COMMAND and explicitly \"NOT hoisted to daemon startup\" (activation-command-entry.ts), so a restart cannot serve stale receipts. Related trap, already in memory: an e2e arm asserting only `data-ok=\"true\"` cannot tell ALREADY_COMMITTED from a fresh accept — the shipped journey asserts the word `accepted` too.\n\n=== RAIL-3 PATH-ATTRIBUTED BASELINE, root lane ===\nI did NOT re-run the suite at merge-base: checking out 68eb1c5d in a shared worktree carrying 46-56 peer dirty paths is forbidden, and `pnpm install` in a scratch worktree would purge the shared `.pnpm` store and take the fleet down. Attribution instead, per failing FILE:\n- `tools/packaging/pack-source.test.ts`, `tools/packaging/pack-windows-main.test.ts`, `packages/benchmark/src/freeze-manifest-admission.test.ts` -> `git diff --stat 68eb1c5d..HEAD -- <paths>` is EMPTY. Byte-identical at the baseline, so nothing in this diff can have caused them. Their reds are `Test timed out in 5000ms`, and pack-source's own subject is *untracked drift from the labeled commit* in a checkout that has 46 dirty paths.\n- `packages/runner/src/verification/criterion-check-executor.test.ts` (+95 lines, `31339efb`) and `tests/e2e/foundation/multi-node-graph.e2e.test.ts` (+136, `4b6d2bc2`) DID change since merge-base — by peers.\n- THIS FEATURE'S FIVE CHILDREN TOUCHED **ZERO** PATHS under `packages/`, `tools/` or `tests/e2e/foundation/` (`git log --grep \"Moe-Task: <childId>\" --name-only` over all five). Delta INTERSECT owned paths = EMPTY.",
+      "timestamp": "2026-09-06T02:37:26.027Z"
+    },
+    {
+      "id": "comment-8605a891378e4e57b519fedce6a3fc92",
+      "author": "qa-f2906c26",
+      "content": "QA VERIFICATION LEDGER (qa-f2906c26, 2026-09-06, HEAD f7ad50ee). Reject on DoD 2 only. Everything else PASSES and I re-measured it rather than reading the completion record.\n\n=== TREE IS HONEST FOR THIS FEATURE (the precondition, checked first) ===\n`git status --porcelain --` on every feature-owned path — apps/control-room/src/v2/ops/, apps/control-room/src/live/, v2/goals/live-goal-create.ts, apps/daemon/src/bootstrap/, tests/e2e/control-room/activation-fresh-project.spec.ts, README.md, docs/agent-stack-runbook.md — is EMPTY. So my gate runs grade HEAD, not worktree dirt. (The rest of apps/control-room IS dirty with live peer work; none of it is this feature's.)\n\n=== WHAT I RE-RAN ===\n1. `pnpm --filter @moe/control-room test` — REPRODUCES the recorded verification exactly: `Test Files 167 passed (167)` / `Tests 2060 passed (2060)`, exit 0, 22.29s.\n2. Targeted daemon, `node ../../node_modules/vitest/vitest.mjs run --root . --config package.json` over activation-receipts.test.ts, activation-receipts-measure.test.ts, activation-command-entry.test.ts, demo-seed-plan.test.ts, demo-seed-payloads.test.ts: `Test Files 5 passed (5)` / `Tests 81 passed (81)`. I did NOT re-run the 674s full daemon suite; it is measured inadmissible on this host and this row owns zero daemon paths.\n3. Rail-3 spot check, not taken on trust: `git diff --stat 68eb1c5d..HEAD -- tools/packaging/pack-source.test.ts tools/packaging/pack-windows-main.test.ts packages/benchmark/src/freeze-manifest-admission.test.ts` = EMPTY. Byte-identical at merge-base, so those root-lane reds cannot come from this diff. Foreign, confirmed.\n\n=== DoD BY ITEM ===\n1 PASS. All 5 children DONE with completion commits (741dad13 47ba19aa, 4b9c394d c0a154a2, 0a5d7212 6c0986ea, 3506e04a 13e1282c, ac9d5e2d d0c69621). Journey `tests/e2e/control-room/activation-fresh-project.spec.ts` present at HEAD. Live-drive transcript is child D's comment-21619c70 — I approved that row myself (comment-a0881913), so I am not re-litigating it here.\n3 PASS. `git show HEAD:apps/control-room/src/v2/goals/live-goal-create.ts | grep -c \"cannot drive the pre-activation chain\"` = 0. Replacement copy names the Activate card (README:31-34). Testids pinned: `cr.activate.root/receipts/count/step.*/refusal.*/receipt.*/reason.*/code.*/signing` in activation-screen.tsx, asserted in activation-screen.test.tsx.\n4 PASS. demo-seed-plan.ts chain order intact at :89-110 (register, bind_repository, provider.probe, policy.install x2 ...); seed tests green above.\n5 PASS. README:31-34 and docs/agent-stack-runbook.md:49-51 both rewritten to the measured truth.\n6 PASS in substance, with disclosed foreign red, verified per item 3.\n2 **FAIL** — see below.\n\n=== DoD 2 FAILS ON ITS FIRST CLAUSE: \"provider CLI version\" IS NOT MEASURED ===\nTwo of three clauses PASS: the per-member mutation drill exists (`it.each(ACTIVATION_RECEIPT_MEMBERS)` at activation-receipts-measure.test.ts:160, asserting code AND layer with the other members still measured), and a caller-supplied witness is refused ACTIVATION_WITNESS_CALLER_SUPPLIED. The first clause does not.\n\n`measureProvider` (activation-receipts-measure.ts:107-122) returns `measuredReceipt(\"provider\", probeRef, credential.ref)`. `probeRef` is `ports.committedProbeRef()` — a REF TO AN ALREADY-COMMITTED `provider.probe` DECISION — and `credential.ref` is presence only. No version is read. `git grep -n -- \"--version\" -- apps/daemon/src/**/*.ts` returns only the moe CLI's own `--version` words, two demo-seed COMMENTS, and fixtures: zero probes on the activation path. The test agrees — :215 pins `ref` to `\"probe/abc\"`.\n\nSo \"measured\" here means \"points at whatever the caller committed\". And the caller is this feature's own card: activation-screen.tsx -> driveActivationChain -> activation-port.ts:70 `DEV_PAYLOADS`, which at HEAD (live-dispatch-payloads.ts:127-149) sends verbatim:\n    modelSnapshotKind:      \"DATED_SNAPSHOT\"\n    modelSnapshotEvidence:  \"claude --version reported a dated snapshot\"\n    capabilitySchemaDigest: hex64(\"ca9ab111\")\n    truthClass:             \"DAEMON_VERIFIED\"\nThe witness is then minted VERIFIED on top of that. That is the exact failure this row exists to remove (\"The seed FAKES the activation witness\"), and on this one axis the browser is now LESS honest than the seed it replaced: demo-seed-policy.ts:106 deliberately uses `modelSnapshotKind: \"UNKNOWN\"` with the comment \"refuses to assert a `claude --version` the demo never took\".\n\nCredit where due: the worker found and disclosed this itself as FINDING F1 (comment-86207d32) and named the shortfall in the completion summary. I am rejecting rather than accepting the disclosure because DoD 2 names \"provider CLI version\" as a measured value in the same breath as repo HEAD sha and backup sha256, and a written DoD gate is not discharged by disclosing that it is unmet.\n\n`project.bind_repository` has the identical shape (`baseRevisionHash: hex64(\"beef\")`, truthClass DAEMON_VERIFIED) while the measured equivalent `repositoryObservationOf` (activation-receipts.ts:205) has ZERO production callers. That one is NOT part of DoD 2's literal text — fix it in the same pass or file it, your call, but do not let it block this row.\n\nNo completion commit is recorded after reviewStartedAt. Expected here: the row modifies no files by design, so I am not charging it.",
+      "timestamp": "2026-09-06T02:43:36.177Z"
+    },
+    {
+      "id": "comment-3019436ebf7d41dfa02e09b48fbe00dd",
+      "author": "worker-adefb11e",
+      "content": "LIVE PROOF OF THE MEASURED PROVIDER VERSION (worker-adefb11e, 2026-09-06, HEAD eb549e03). Probe source inline per the evidence rail, so a grader can recreate and re-run it. Run: `node %TEMP%/moe-provider-live-worker-adefb11e.mjs`.\n\n```js\nconst base = \"file:///D:/projexts/moe-next/apps/daemon/src/\";\nconst { nodeActivationReceiptPorts, measureActivationReceipts } =\n  await import(base + \"bootstrap/activation-receipts-measure.js\");\nconst { readProviderVersion, resolveAgentImage } =\n  await import(base + \"bootstrap/activation-provider-version.js\");\nconst { activationViewOf } = await import(base + \"http/activation-read.js\");\nconsole.log(\"resolveAgentImage('claude') =\", resolveAgentImage(\"claude\"));\nconsole.log(\"readProviderVersion('claude') =\", JSON.stringify(await readProviderVersion(\"claude\")));\nconsole.log(\"readProviderVersion('not-installed') =\",\n  JSON.stringify(await readProviderVersion(\"moe-definitely-not-installed\")));\nconst ports = nodeActivationReceiptPorts({\n  committedProbeRef: () => Promise.resolve(\"provider-profile-1\"),\n  installedPolicySliceRefs: () => Promise.resolve([\"a\".repeat(64)]),\n});\nconst receipts = await measureActivationReceipts({\n  agentCommand: \"claude\", artifactRoot: \"D:/projexts/moe-next\", projectId: \"probe-project\",\n  projectRoot: \"D:/projexts/moe-next\", storePath: \"D:/projexts/moe-next/.moe-next/store.sqlite\",\n}, ports);\nconsole.log(\"receipts.provider =\", JSON.stringify(receipts.provider));\nconsole.log(\"view.provider     =\", JSON.stringify(activationViewOf(receipts, []).provider));\nfor (const r of receipts.members) {\n  console.log(\" \", r.member, r.measured ? \"MEASURED \" + r.ref : \"REFUSED \" + r.code);\n}\n```\n\nOUTPUT, verbatim:\n```\nresolveAgentImage('claude') = C:\\Users\\Yaron\\.local\\bin\\claude.EXE\nreadProviderVersion('claude') = {\"code\":0,\"stderr\":\"\",\"stdout\":\"2.1.263 (Claude Code)\\n\"}\nreadProviderVersion('not-installed') = {\"code\":null,\"stderr\":\"moe-definitely-not-installed was not found on PATH\",\"stdout\":\"\"}\nreceipts.provider = {\"command\":\"claude\",\"version\":\"2.1.263\"}\nview.provider     = {\"command\":\"claude\",\"version\":\"2.1.263\"}\n  repository MEASURED repository/D:/projexts/moe-next@db16a103107623ea2e4de208f8d22da36e650275\n  provider MEASURED provider-profile-1\n  store REFUSED ACTIVATION_STORE_UNMEASURED\n  backup REFUSED ACTIVATION_BACKUP_FAILED\n  distribution MEASURED source-checkout/D:/projexts/moe-next@db16a103107623ea2e4de208f8d22da36e650275\n  policy MEASURED policy/1-slices\n```\n\nWHY THIS IS NOT A FIXTURE ECHO: `2.1.263` appears NOWHERE in the repo. Every test fixture deliberately says `2.1.261`, and an independent `execFile(\"claude --version\")` taken separately in this session returned the same `2.1.263 (Claude Code)`. A literal cannot produce a number that is only on this host today. `store`/`backup` refuse only because the probe points at a store path that does not exist — the fail-closed path, working.\n\nE2E, PARTIAL, AND THE REASON IS FOREIGN — disclosed, not worked around.\n`pnpm test:e2e:browser` FAILS AT ITS `tsc` LEG before Playwright starts, on the two peer errors in `apps/daemon/src/bootstrap/bootstrap-sequence.ts(45,12)` and `(109,10)`. Running Playwright directly, the journey gets THROUGH: card mounts, `cr.activate.refusal` count 0, repository row carries the lane's real HEAD sha, the new `cr.activate.version` count-0 arm passes (correct: no committed probe yet on an empty store), the `<projectId>-*` placeholder sweep passes, and the pre-activation `goal.create` is refused with the rewritten copy. It then dies at the FIRST chain step:\n```\nchain step project.register accepted\n  14 x locator resolved to <li data-ok=\"false\" ... data-testid=\"cr.activate.step.project.register\">\n```\nCause, measured not inferred: the card spends offers from `/affordances/read`, and that route throws in this working tree —\n```\nTypeError: Cannot read properties of undefined (reading 'filter')\n at unmetPrerequisites src/bootstrap/bootstrap-sequence.ts:109:38\n   109| return COMMAND_PREREQUISITES[kind].filter(...)\n```\n80 occurrences in the daemon gate log, 30 of them in `src/http/affordance-read.test.ts` alone. A peer's UNCOMMITTED `bootstrap-contracts.ts` appends `deployment.set_target`/`deployment.deploy` to BOOTSTRAP_COMMAND_KINDS without the matching BOOTSTRAP_PREREQUISITES rows. `git show HEAD:apps/daemon/src/bootstrap/bootstrap-contracts.ts | grep -c \"deployment\\.\"` = 0; the file was already dirty at session start; neither it nor bootstrap-sequence.ts is in my modifiedFiles. The tree my commit produces cannot contain the cascade. The prior session recorded this same journey green (`ok 1 activation-fresh-project.spec.ts:98:1 (6.7s)`) before that edit existed.\n\nThe version arm was MOVED as a result of running it live: it sat before the chain, where a reading correctly does not exist. It now runs after the chain, paired with a `toHaveCount(0)` arm before it — the before/after pairing is what proves the reading was measured rather than rendered from something the page already held.",
+      "timestamp": "2026-09-06T09:09:30.067Z"
+    },
+    {
+      "id": "comment-b4d901fcf10c4bffa20769bbd4e1c207",
+      "author": "qa-4f771bb8",
+      "content": "QA VERIFICATION LEDGER — ROUND 2, APPROVE (qa-4f771bb8, 2026-09-06). Delivered tree = commit 5ab9640f (kind=completion, REVIEW, recorded 09:13:16Z > reviewStartedAt 09:11:51Z, on moe/work-2026-09-04, 29 paths, +1112/-58). Every feature-owned path was CLEAN in the worktree at review time.\n\nTHE REOPENED CLAUSE (DoD 2, \"provider CLI version\") IS CLOSED. Not taken on the record — measured:\n- `measureProvider` (activation-receipts-measure.ts:170) calls `ports.providerVersion(input.agentCommand)`; the DEFAULT port in `nodeActivationReceiptPorts` is the real reader, not an absent stub, so an unwired caller cannot get a silent pass.\n- `activation-provider-version.ts` (NEW, 145 lines + .js bridge) resolves the image on PATH+PATHEXT with `statSync().isFile()` BEFORE any spawn, then runs `<cmd> --version`. `code === null` (absent / unspawnable / timed out / killed) refuses the WHOLE activation under ACTIVATION_PROVIDER_UNMEASURED. The cmd.exe-exit-1 fail-open the worker found is real and this is the correct close for it; matching cmd.exe's sentence would have bound the daemon to an English Windows.\n- Live receipt in comment-3019436e: `receipts.provider = {\"command\":\"claude\",\"version\":\"2.1.263\"}`. 2.1.263 is nowhere in the repo — every fixture says 2.1.261 — so no literal can produce it.\n\nMY OWN NON-VACUITY DRILL on exactly the clause that was rejected. Mutated `if (run.code === null)` to `-999999` in activation-receipts-measure.ts. Result: `Test Files 1 failed | 2 passed (3)` / `Tests 2 failed | 43 passed (45)`, failing at `refusalOf ... Error: provider was measured: probe/abc`. The CLI-absent arm is load-bearing. RESTORE PROVEN IN A SEPARATE CALL: `git status --porcelain` blank, sha256 `deb8bc3c4d459aa496afad6cfc90ddb55ca592f6815ea3ab84743e497e55960d` identical to the pre-drill out-of-tree backup, `grep -c \"DRILL MUTANT\"` = 0.\n\nDoD 1'S LIVE HALF — I RAN IT GREEN MYSELF, which the worker could not.\n`ok 1 [chromium] › activation-fresh-project.spec.ts:98:1 › a fresh project goes from empty store to a created goal, in the browser alone (16.6s)` / `1 passed (17.3s)`, exit 0. The e2e `tsc` leg also exited 0. The ONLY difference from the delivered tree was a 3-line peer-owned patch (below), restored after.\n\nTHE FOREIGN RED IS ATTRIBUTED BY EXPERIMENT, NOT BY ASSERTION. `pnpm typecheck` at the delivered tree = every workspace Done except apps/daemon, exactly 2 errors, both `src/bootstrap/bootstrap-sequence.ts` (45,12 TS2739 and 109,10 TS7053), and the TS2739 text NAMES the two missing keys: `\"deployment.deploy\"`, `\"deployment.set_target\"`. I added those two rows to COMMAND_PREREQUISITES — 3 lines, zero feature code — and `pnpm --filter @moe/daemon typecheck` returned exit 0 with ZERO errors. That is the (2)-minus-(1) delta run for real: the entire daemon red, the affordance-read TypeError cascade and the journey's chain-step-1 death are the peer's `bootstrap-contracts.ts` edit (task-537320ee), not this row. Intersection with this feature's owned paths: EMPTY. Restore proven separately: status blank, sha256 `ae74ba1df827ad087899b6fa4f8838daa05b3a45f0c7ba5c53bf77fac88c1fbe` identical, marker count 0.\n\nGATES I RE-RAN (count lines, no exit code trusted alone):\n- `pnpm --filter @moe/control-room test` -> `Test Files 167 passed (167)` / `Tests 2077 passed (2077)`, PIPESTATUS[0]=0. Reproduces task.verification.outputTail exactly.\n- daemon activation-owned leg (provider-version, receipts-measure, receipts, command-entry, activation-read, daemon-entry-activation-refusals) -> `Test Files 6 passed (6)` / `Tests 86 passed (86)`.\n\nOTHER DoD ITEMS RE-MEASURED AT 5ab9640f: DoD 3 — forbidden sentence count 0, replacement at live-goal-create.ts:92-98 NAMES the Activate card. DoD 4 — demo-seed-plan.ts is not in this delta at all. DoD 5 — README forbidden sentence 0; the runbook rewrite rides THIS commit and adds the fail-closed consequence in prose.\n\nRAIL CHECKS. Per-member sweep `it.each(ACTIVATION_RECEIPT_MEMBERS)` asserts exact code + layer + all five others still measured, breaking only via PORTS so the surface under test is never patched (rail 1). Roster arm is bidirectional set-equality (rail 9). The DEV_PAYLOADS sweep carries an explicit non-emptiness arm (`>= 8` kinds, contains provider.probe), so it cannot pass vacuously. Five half-reading provider shapes refuse ACTIVATION_RESPONSE_INVALID @ CONTROL_ROOM_LIVE_ACTIVATION. The measurer's spawn-free source-text arm matches as CODE, not prose.\n\nPUSHBACK ON ROUND-1 ISSUE #2 — ACCEPTED. The invented literals ARE gone (`modelSnapshotKind: \"UNKNOWN\"`, `\"the browser ran no provider CLI probe\"`), pinned whole-roster. Refusing a caller-supplied `provider.probe` observation is a security-boundary change to a command this row does not own, and task rail 2 puts security-boundary work out of scope here. The residual is disclosed at the literal itself rather than hidden. That is the right call.\n\nNON-BLOCKING, RECORDED SO IT IS NOT LOST — do NOT reopen for these:\n1. Five production files exceed the 250 soft target: activation-receipts-measure.ts 333, bootstrap-services.ts 301, live-dispatch-payloads.ts 296, activation-read.ts 276, live-activation.ts 264. None is near the 400 cap, and this delta moved the right way (the spawn split out of activation-receipts-ports.ts, 275 -> 217). Next edit to activation-receipts-measure.ts should split, not grow.\n2. The completion commit SWEPT the contested peer file `apps/daemon/src/bootstrap/bootstrap-contracts.ts` (+9, the deployment.* kinds), trailer-attributed to task-537320ee. Not the worker's doing and correctly disclosed, but task-537320ee's owner should know their lines rode in on 5ab9640f and that their COMMAND_PREREQUISITES rows are still missing at HEAD 95d10020.\n3. `repositoryObservationOf` (activation-receipts.ts) still has no production caller while bind_repository sends hex64(\"beef\") — carried forward from round 1, still not charged, still worth a row.",
+      "timestamp": "2026-09-06T09:28:06.956Z"
+    },
+    {
+      "id": "comment-1b87ea7df06d4ab2b92652c1afd2d284",
+      "author": "worker-deb4c7d8",
+      "content": "FROM task-e7a20a498ed0436380e5aca23cb81607 (parent roll-up, gate sweep at HEAD 95d10020). Not charging this row anything — filing the measurement where its owner will see it.\n\n`5ab9640f fix(task-bb844c288fb346c0856778c738b9f073)` appended two kinds to `BOOTSTRAP_COMMAND_KINDS` (apps/daemon/src/bootstrap/bootstrap-contracts.ts:51-52):\n\n```\n  \"deployment.set_target\",\n  \"deployment.deploy\",\n```\n\n`COMMAND_PREREQUISITES` in apps/daemon/src/bootstrap/bootstrap-sequence.ts:45 was not extended to match, and it is declared `as const satisfies Readonly<Record<BootstrapCommandKind, readonly BootstrapCommandKind[]>>` — so the union widened underneath the record.\n\nCOMPILE: `pnpm typecheck` EXIT 1.\n```\napps/daemon/src/bootstrap/bootstrap-sequence.ts(45,12): error TS2739: Type '{ ... }' is missing the following properties from type 'Readonly<Record<\"approval.decide\" | \"deployment.deploy\" | ... >>': \"deployment.deploy\", \"deployment.set_target\"\napps/daemon/src/bootstrap/bootstrap-sequence.ts(109,10): error TS7053: Element implicitly has an 'any' type ...\n```\n\nRUNTIME — this is the part that matters. `unmetPrerequisites` does `COMMAND_PREREQUISITES[kind].filter(...)` at :109, so an unkeyed kind throws and takes the whole affordance surface with it:\n```\nTypeError: Cannot read properties of undefined (reading 'filter')\n ❯ unmetPrerequisites apps/daemon/src/bootstrap/bootstrap-sequence.ts:109:38\n ❯ missingPrerequisites apps/daemon/src/bootstrap/bootstrap-ledger.ts:140:10\n ❯ surfaceMissing apps/daemon/src/http/affordance-read.ts:207:19\n ❯ Object.readSurface apps/daemon/src/http/affordance-read.ts:339:32\n```\n(from `tests/integration/control-room/compiled-product-journey.test.ts` in the root lane.)\n\nCONSEQUENCE for every other row on moe/work-2026-09-04:\n- `pnpm test:e2e:browser` cannot start. Its script is `tsc -p tests/e2e/control-room/tsconfig.json && playwright test -c ...`; the tsc leg dies on the two errors above, so NOBODY can quote an e2e count line.\n- Driving Playwright directly past the dead tsc leg: `13 failed / 15 passed` of 28. Nine specs die inside the demo seed on `refused at affordances/read: code=LISTENER_REQUEST_FAILED layer=CONTROL_ROOM_LISTENER stage=(none stated) source=LISTENER` — including this row's own `activation-fresh-project.spec.ts:98` (`chain step project.register accepted` -> `data-ok=\"false\"`).\n- `pnpm --filter @moe/daemon test`: `Test Files 30 failed | 482 passed (512)` / `Tests 153 failed | 9207 passed | 47 skipped (9407)`.\n\nFIX looks like two entries in `COMMAND_PREREQUISITES` keyed to whatever `deployment.set_target` / `deployment.deploy` actually require (probably `[\"repository.bootstrap\"]` and `[\"deployment.set_target\"]`, but that is the owner's call, not mine). I deliberately did not patch it: the file is outside my row's owned paths and this row is live. Also raised in #governors as msg-a35dc64bbdc14fe2b195a318f0e2c533.",
+      "timestamp": "2026-09-06T10:22:49.744Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T09:10:20.830Z",
+  "updatedAt": "2026-09-06T10:22:49.744Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T09:19:28.202Z",
+    "plannedStepCount": 7,
+    "plannedDistinctFileCount": 0,
+    "executedStepCount": 14,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-09-06T09:30:37.717Z",
+    "wallClockMs": 173469515
+  },
+  "contextFetchedBy": [
+    "worker-8c5af680",
+    "worker-adefb11e",
+    "qa-4f771bb8"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7"
+  ],
+  "failedDodItems": [
+    {
+      "item": "DoD 2 — the witness must carry measured values including 'provider CLI version' with truthClass VERIFIED: that member is not measured; the provider receipt is only a ref to a caller-committed provider.probe carrying invented version literals.",
+      "rejectedAt": "2026-09-06T02:45:49.916Z",
+      "rejectedBy": "qa-f2906c26"
+    }
+  ],
+  "planSubmittedAt": "2026-09-04T09:40:07.906Z",
+  "planningNotes": {
+    "approachesConsidered": "SPIDR-split into 4 children under this row (row rail 1 mandates children, never sibling rows). Asked the owner between 4/3/2 children; they chose 4, leaf-first. Rejected 3 children (folding the read route into the UI child) because that child would land ~11 files and breach the very cap the split exists to respect; rejected 2 children because the daemon half would be ~9 files of dense refusal-code work and the browser half would carry the entire proof burden alone.\n\nFor the witness itself, rejected 'daemon states the measured witness on a read, browser spends the offer carrying it' (the policy-install shape) — a witness that crosses the wire can be altered by a hostile caller, which is the defect being closed. Chose: the browser sends project.activate with no witness and the DAEMON measures; a caller-supplied witness is REFUSED with its own code rather than silently ignored, so an operator cannot believe they supplied authority they did not.\n\nOWNER DECISION (AskUserQuestion, 2026-09-04): signingKeyRef is a REQUIRED key in core's exact 9-key roster but signing is out of scope (row rail 2). Chose the honest unsigned ref `signing/unsigned-source-checkout` with 'not a trust boundary in v0.1' as its reason, displayed as NOT-measured on the card. Rejected refusing activation without a signing key (ships the feature unusable, contradicting the row's own rail) and rejected the daemon artifact digest (a measured value that would read as provenance the repo does not have).\n\nThis parent's plan is a VERIFICATION plan and modifies no files, so every affectedFiles is empty by design and the read targets are named inline in each step. An earlier submission naming them in affectedFiles was refused CONSTRAINT_VIOLATION at 11 distinct files; merging steps to dodge the cap would have been the wrong fix, and the split is what actually carries the work.",
+    "codebaseInsights": "MEASURED AT main 68eb1c5d (commands and results):\n\n1. `grep -n \"cannot drive the pre-activation chain\" apps/control-room/src/v2/goals/live-goal-create.ts` -> 1 match at :93. Gap confirmed OPEN for the v2 UI.\n\n2. THE DESCRIPTION'S TRUTH-CLASS PREMISE IS WRONG. `grep -rn \"DEMO_VERIFIED\"` -> apps/daemon/src/orchestrator/demo-seed-payloads.ts:24 `export const DEMO_VERIFIED = \"DAEMON_VERIFIED\" as const`. It is an ALIAS, not a distinct class. packages/core/src/project/project-validation.ts:140 strongTruth accepts ONLY \"DAEMON_VERIFIED\"|\"HUMAN_APPROVED\" — there is no \"VERIFIED\". DoD 2's 'truthClass VERIFIED' and 'no production path can write a DEMO_VERIFIED witness' are therefore unsatisfiable AS LITERALLY WRITTEN. The real defect is INVENTED REFS (`${projectId}-artifact`, hex64(\"cafe\")), and the children grade that instead.\n\n3. THE WITNESS KEY ROSTER IS EXACT. project-validation.ts:21-24 ACTIVATION_KEYS = 9 keys; :158 validActivation uses `exact()`, so no key may be added OR omitted. :132 validProjectRef = any non-empty string; :136 validHash = /^[0-9a-f]{64}$/ — only distributionManifestHash and policyRevisionHash must be real digests. This is why measured facts ride inside the existing 9 refs and why core is not edited.\n\n4. THERE ARE TWO FAKERS, NOT ONE. Besides the seed, apps/control-room/src/live/live-dispatch-payloads.ts:111-119 DEV_PAYLOADS carries artifact-1/backup-1/hex64(\"cafe\"), and tests/e2e/control-room/board-chain.spec.ts clicks the WHOLE chain from an empty store against it. So 'the browser cannot drive the pre-activation chain' is true only of the v2 UI — the legacy dev board drives it today with fake refs. Any journey proving the product must drive the V2 card.\n\n5. `activateProject` (apps/daemon/src/bootstrap/bootstrap-services.ts:108-120) passes the caller's witness object STRAIGHT into the core reducer; nothing measures anything. daemon-command-vocabulary.ts:314 declares `\"project.activate\": [\"witness\"]` as the payload roster.\n\n6. MEASUREMENT SEAMS ALREADY EXIST — do not write second copies. apps/daemon/src/repository/git-landing-port.ts:127 runs `rev-parse --show-toplevel`, :195 `rev-parse HEAD`. apps/daemon/src/orchestrator/moe-up-credentials.ts exports present/providerCredentials/providerFor/loginCredentialPath (PRESENCE only). apps/daemon/src/cli/moe-init.ts:154 owns storePath.\n\n7. THE UI PATTERN IS ALREADY SHIPPED: apps/control-room/src/v2/ops/policy-install-port.ts (83 lines) re-reads /affordances/read between steps because each commit moves the aggregate version, finds the offer by commandKind, spends it, and stops at the first refusal keeping the daemon's code+layer. Consumer at v2/ops/live-ops.tsx:95. Mirror it.\n\n8. apps/daemon/src/http/affordance-read.ts is 422 lines — ALREADY over the 400 hard cap. A new read must be its own module beside policy-read.ts / runs-read.ts.\n\n9. THE DoD'S RUNBOOK ANCHOR IS MIS-QUOTED. `grep -rn \"New Goal remains disabled\" --include=*.md .` -> 0 matches. The real line is docs/agent-stack-runbook.md:47 `**New Goal** remains disabled ...` (bolded). README's sentence is at :88-91 with a 'Measured on 2026-09-03' stamp to re-date.\n\n10. The e2e lane is real: package.json:22 test:e2e:browser = tsc + playwright; tests/e2e/control-room/daemon-ports.ts exports withDaemonBackedControlRoom with seed:\"NONE\"/approval:\"HUMAN\". tests/e2e/control-room/tsconfig.json cannot reach apps/ (TS6059), so expected strings are hand-transcribed by design (board-chain.spec.ts:35-43).\n\n11. NAMING TRAP: apps/daemon/src/activation/ is the SCHEDULER's run-activation domain (slot occupancy, ledger). Project-activation receipts go under apps/daemon/src/bootstrap/ or they will be misread by every later reader.",
+    "risks": "1. THIS ROW'S dependsOn COULD NOT BE SET. moe.set_task_dependencies answered [NOT_ALLOWED] 'architect or governor role required (worker architect-d1711c47 is on neither team)'. The children carry their A->B->C->D chain correctly, but the PARENT is not field-gated on them — so this row is claimable for WORKING before its children land. Step 1 is the manual gate; a governor should set the field. Same role-resolution defect the parent architect hit (createdBy resolved to WORKER).\n\n2. CHILD B BREAKS THE SEED AND THE DEV BOARD ON PURPOSE. Once the daemon mints the witness, the seed's witness and DEV_PAYLOADS' witness become caller-supplied and are refused. All three must move in child B's commit or the tree goes red — board-chain.spec.ts asserts against DEV_PAYLOADS, so it moves too. Named in child B's rails; a worker who finds only one of the three has not finished.\n\n3. FAIL-CLOSED IS THE POINT AND IT WILL BITE. A machine with no `claude` on PATH, no git repo, or a read-only store will now refuse activation outright where it previously succeeded with fabricated refs. Intended — but it means the e2e lane host must actually have a provider CLI installed; confirm that before blaming the code.\n\n4. BACKUP WRITES REAL BYTES on every activation attempt (<project>/.moe-next/backups/<ts>.sqlite). Repeated attempts accumulate files, and a concurrent double-click could race two copies onto the same timestamped name. Child D's adversarial pass covers the concurrent click; child A must not silently overwrite.\n\n5. distributionManifestHash and policyRevisionHash MUST be real 64-hex. Under `pnpm start` there is no built artifact, so the source-checkout digest must still be a genuine 64-hex digest of something real — the description's phrase 'a SOURCE_CHECKOUT truth class' is NOT expressible in the witness (strongTruth forbids it); that fact belongs in the receipts read, not in truthClass.\n\n6. Windows: the backup path and the git runner must use node:path and shell:false with an argv array. `pnpm --filter <pkg>` prints 'No projects matched the filters' and EXITS 0 for a non-package, so every gate leg is graded on its `Test Files N passed` count line, never its exit code.",
+    "keyFiles": [
+      "apps/daemon/src/bootstrap/bootstrap-services.ts",
+      "packages/core/src/project/project-validation.ts",
+      "apps/daemon/src/orchestrator/demo-seed-payloads.ts",
+      "apps/control-room/src/live/live-dispatch-payloads.ts",
+      "apps/control-room/src/v2/ops/policy-install-port.ts",
+      "apps/control-room/src/v2/goals/live-goal-create.ts",
+      "apps/daemon/src/http/affordance-read.ts",
+      "tests/e2e/control-room/board-chain.spec.ts",
+      "docs/agent-stack-runbook.md",
+      "README.md"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T09:40:10.190Z",
+  "commits": [
+    {
+      "sha": "ddc5fa051fa79528a4a970452956821c07a0014a",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-c846071b@2026-09-04T09:41:05Z",
+      "paths": [
+        ".moe/tasks/task-0a5d7212a7f644d5891df4e0e1545787.json",
+        ".moe/tasks/task-4b9c394debe94b41a80e2b46c6d55ab8.json",
+        ".moe/tasks/task-741dad13e23d441a8385d0f14df5b5c1.json",
+        ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json",
+        ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json"
+      ],
+      "recordedBy": "worker-c846071b",
+      "recordedAt": "2026-09-04T09:41:09.237Z",
+      "treeId": "78b4e67f02c5852db803e58549f8bdc55c9a319a",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "6855d75417f8b2c7c7b74120be32d014c1c3cf63",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-c846071b@2026-09-04T09:41:05Z",
+      "paths": [
+        ".moe/tasks/task-4423d2a4c3084d579c132b253d36b502.json",
+        ".moe/tasks/task-5f5d873e72b546d4a30942bea5c80b97.json",
+        ".moe/tasks/task-6061e05cd17540a1bbe08b965da58b64.json",
+        ".moe/tasks/task-a8317bb46e36476e8399c611b41d9612.json",
+        ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json",
+        ".moe/tasks/task-d1c815ebc33346dfb0e837692e2166b5.json"
+      ],
+      "recordedBy": "worker-c846071b",
+      "recordedAt": "2026-09-04T09:44:00.767Z",
+      "treeId": "bd136ae6177d7066627c2e7fc9e9ea55348c384a",
+      "status": "BLOCKED",
+      "pushed": true
+    },
+    {
+      "sha": "01c1c71aa09bf821c31c0d00af73a8627a1b7022",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-d6e44333@2026-09-06T02:01:36Z",
+      "paths": [
+        ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
+        ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json"
+      ],
+      "recordedBy": "worker-d6e44333",
+      "recordedAt": "2026-09-06T02:40:31.503Z",
+      "treeId": "f6badaa3603cd9b5e516d76909d252b1edad9b4e",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "09518ce08a39957ef83953c2929d9a9b60cd6218",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-8c5af680@2026-09-06T02:57:51Z",
+      "paths": [
+        ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json"
+      ],
+      "recordedBy": "worker-8c5af680",
+      "recordedAt": "2026-09-06T02:58:01.274Z",
+      "treeId": "242d64b6851f94a2662e60ec68401d6afdd6d0ff",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "ad4516888e2d6ed4c703984c627bfd481ed3e7bd",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-8c5af680@2026-09-06T02:58:32Z",
+      "paths": [
+        ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json"
+      ],
+      "recordedBy": "worker-8c5af680",
+      "recordedAt": "2026-09-06T02:58:42.033Z",
+      "treeId": "50a852b9e484cd74996e01e9cea23573581b264c",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "e16cbbc6545af6bc0ae175e267036d7836b0b26d",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-8c5af680@2026-09-06T02:59:13Z",
+      "paths": [
+        ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json"
+      ],
+      "recordedBy": "worker-8c5af680",
+      "recordedAt": "2026-09-06T02:59:22.680Z",
+      "treeId": "771f09191c33ef8f63198a27354e29bf332c45e5",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "f8ea6133cbf1d88ba6410217f50f39ee691c2a4d",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-8c5af680@2026-09-06T02:59:54Z",
+      "paths": [
+        ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json"
+      ],
+      "recordedBy": "worker-8c5af680",
+      "recordedAt": "2026-09-06T03:00:03.305Z",
+      "treeId": "f36babe7d38a1415da69bb15e44316df49d25eaf",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "533ce588a8cfffbda7c1ce8211d59035382f012e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-8c5af680@2026-09-06T03:00:35Z",
+      "paths": [
+        ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json"
+      ],
+      "recordedBy": "worker-8c5af680",
+      "recordedAt": "2026-09-06T03:00:44.701Z",
+      "treeId": "ef9bba8cfe5b3037c83c6dc4f047be1ffb81df87",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "5ab9640fd251406b5221e52dd0b279ccccdfc877",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-adefb11e@2026-09-06T07:42:22Z",
+      "paths": [
+        ".moe/tasks/task-358b6ec8ee884ca6b6bc96bbf1f54d84.json",
+        ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json",
+        ".moe/tasks/task-db63dacc7cbe49cab9826e9b49c8669f.json",
+        "apps/control-room/src/live/live-activation.test.ts",
+        "apps/control-room/src/live/live-activation.ts",
+        "apps/control-room/src/live/live-dispatch-payloads.ts",
+        "apps/control-room/src/live/live-dispatch-production.test.ts",
+        "apps/control-room/src/v2/cordum-app.test.tsx",
+        "apps/control-room/src/v2/ops/activation-screen.test.tsx",
+        "apps/control-room/src/v2/ops/activation-screen.tsx",
+        "apps/control-room/src/v2/resources/resources-frames.fixture.ts",
+        "apps/daemon/src/bootstrap/activation-command-entry.test.ts",
+        "apps/daemon/src/bootstrap/activation-provider-version.js",
+        "apps/daemon/src/bootstrap/activation-provider-version.test.ts",
+        "apps/daemon/src/bootstrap/activation-provider-version.ts",
+        "apps/daemon/src/bootstrap/activation-receipts.test.ts",
+        "apps/daemon/src/bootstrap/activation-receipts.ts",
+        "apps/daemon/src/bootstrap/activation-receipts-measure.test.ts",
+        "apps/daemon/src/bootstrap/activation-receipts-measure.ts",
+        "apps/daemon/src/bootstrap/activation-receipts-ports.ts",
+        "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+        "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+        "apps/daemon/src/bootstrap/bootstrap-services.ts",
+        "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
+        "apps/daemon/src/daemon-entry-activation-refusals.test.ts",
+        "apps/daemon/src/http/activation-read.ts",
+        "docs/agent-stack-runbook.md",
+        "README.md",
+        "tests/e2e/control-room/activation-fresh-project.spec.ts"
+      ],
+      "recordedBy": "worker-adefb11e",
+      "recordedAt": "2026-09-06T09:13:16.026Z",
+      "treeId": "98cea72a0675587c47340860a4bc3d672a8b1bd6",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/live/live-dispatch-payloads.ts",
+          "taskId": "task-80322112a48d44c69c6c55f846f8d43f"
+        },
+        {
+          "path": "apps/daemon/src/bootstrap/activation-receipts-measure.test.ts",
+          "taskId": "task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4"
+        },
+        {
+          "path": "apps/daemon/src/bootstrap/activation-receipts-measure.ts",
+          "taskId": "task-0a56ecee17b740a3abb7f850e5250c99"
+        },
+        {
+          "path": "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+          "taskId": "task-537320eed95348dc9bc3afc879dc0563"
+        },
+        {
+          "path": "docs/agent-stack-runbook.md",
+          "taskId": "task-6cbcf5ff05084f3ea2a2e3ea89c3fb54"
+        },
+        {
+          "path": "README.md",
+          "taskId": "task-161b7e9d566b4c47b429490a54a6cca1"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "7be56433921b56cabefa1b3890e3688e2002c6ef",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-06T09:12:05Z",
+      "paths": [
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+        ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-06T09:31:18.822Z",
+      "treeId": "48036fa8727e7b9a634b1744dddec9802e7913f0",
+      "status": "DONE",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    "apps/daemon/src/bootstrap/activation-provider-version.ts",
+    "apps/daemon/src/bootstrap/activation-provider-version.js",
+    "apps/daemon/src/bootstrap/activation-provider-version.test.ts",
+    "apps/daemon/src/bootstrap/activation-receipts-measure.ts",
+    "apps/daemon/src/bootstrap/activation-receipts-measure.test.ts",
+    "apps/daemon/src/bootstrap/activation-receipts-ports.ts",
+    "apps/daemon/src/bootstrap/activation-receipts.ts",
+    "apps/daemon/src/bootstrap/activation-receipts.test.ts",
+    "apps/daemon/src/bootstrap/activation-command-entry.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+    "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
+    "apps/daemon/src/bootstrap/bootstrap-services.ts",
+    "apps/daemon/src/daemon-entry-activation-refusals.test.ts",
+    "apps/daemon/src/http/activation-read.ts",
+    "apps/control-room/src/live/live-activation.ts",
+    "apps/control-room/src/live/live-activation.test.ts",
+    "apps/control-room/src/live/live-dispatch-payloads.ts",
+    "apps/control-room/src/live/live-dispatch-production.test.ts",
+    "apps/control-room/src/v2/ops/activation-screen.tsx",
+    "apps/control-room/src/v2/ops/activation-screen.test.tsx",
+    "tests/e2e/control-room/activation-fresh-project.spec.ts",
+    "README.md",
+    "docs/agent-stack-runbook.md",
+    "apps/control-room/src/v2/resources/resources-frames.fixture.ts",
+    "apps/control-room/src/v2/cordum-app.test.tsx",
+    ".moe/tasks/task-358b6ec8ee884ca6b6bc96bbf1f54d84.json",
+    ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json",
+    ".moe/tasks/task-db63dacc7cbe49cab9826e9b49c8669f.json",
+    "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+    ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-4f771bb8@2026-09-06T09:12:05Z",
+    "at": "2026-09-06T09:31:18.822Z"
+  },
+  "workStartedAt": "2026-09-04T09:41:24.952Z",
+  "blockedReason": null,
+  "blockedOnTaskIds": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "dependsOn": [
+    "task-741dad13e23d441a8385d0f14df5b5c1",
+    "task-4b9c394debe94b41a80e2b46c6d55ab8",
+    "task-0a5d7212a7f644d5891df4e0e1545787",
+    "task-3506e04abcef4fc3a69299ca238ae1b3",
+    "task-ac9d5e2d43334525bd990b1362652ce4"
+  ],
+  "reviewStartedAt": "2026-09-06T09:11:51.325Z",
+  "verification": {
+    "command": "pnpm --filter @moe/control-room test",
+    "exitCode": 0,
+    "outputTail": " Test Files  167 passed (167)\n      Tests  2077 passed (2077)\n   Start at  12:08:14\n   Duration  47.76s (transform 325.82s, setup 0ms, import 711.55s, tests 102.71s, environment 104.62s)\n\nEXIT=0",
+    "reportedAt": "2026-09-06T09:11:51.325Z"
+  },
+  "completionSummary": "DoD 2's failing clause is closed: the provider CLI version is MEASURED by the daemon.\n\n`measureProvider` calls `ports.providerVersion(input.agentCommand)`; the new\n`apps/daemon/src/bootstrap/activation-provider-version.ts` (+ .js bridge) runs\n`<agent command> --version` and is the ONLY production spawn on this path — the measurer stays\nspawn-free, pinned by a source-text arm matched as CODE (its own comments say \"unspawnable\").\nThree outcomes: CLI unrunnable -> ACTIVATION_PROVIDER_UNMEASURED @ DAEMON_ACTIVATION_RECEIPTS,\nwhole activation refused, provider null; CLI ran but unreadable -> MEASURED with \"UNKNOWN\";\nCLI ran -> the real string. The reading rides on ActivationReceipts.provider (core's witness\nroster is exactly 9 keys and the provider receipt's two fields are spent), is published bound\nto the provider member's own verdict and scrubbed, and renders as cr.activate.version.\n\nLIVE (comment-3019436e, probe source inline): receipts.provider =\n{\"command\":\"claude\",\"version\":\"2.1.263\"}, same through activationViewOf. 2.1.263 is nowhere in\nthe repo — every fixture says 2.1.261 on purpose — so no literal can produce it.\nreadProviderVersion(\"moe-definitely-not-installed\") -> {\"code\":null,\"stderr\":\"... was not found\non PATH\"}.\n\nA REAL FAIL-OPEN, found by the new arms, not in the rejection: cmd.exe answers an ABSENT\ncommand with EXIT 1, so every Windows host with no agent CLI would have been recorded \"ran,\nsaid nothing\" -> UNKNOWN -> MEASURED -> witness minted. Closed by resolving on PATH+PATHEXT\nbefore any spawn (locale-independent; matching cmd.exe's sentence would bind us to English\nWindows). Adversarial pass found three more, all fixed with arms: a DIRECTORY named `claude`\npassing existsSync; a 64 KB \"version\" reaching a ledger receipt; stdout dropped on execFile's\nreject path. DEV_PAYLOADS literals dropped, now swept whole-roster with a non-vacuity arm.\n\nPUSHBACK, accepted-by-argument: I did NOT \"refuse a caller-supplied provider observation\".\nrecordProbe is by desi",
+  "reviewCompletedAt": "2026-09-06T09:30:37.717Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "DoD 2 — the witness must carry measured values including 'provider CLI version' with truthClass VERIFIED: that member is not measured; the provider receipt is only a ref to a caller-committed provider.probe carrying invented version literals."
+    ],
+    "issues": [
+      {
+        "type": "missing_feature",
+        "file": "apps/daemon/src/bootstrap/activation-receipts-measure.ts",
+        "line": 107,
+        "description": "measureProvider never reads a provider CLI version: it returns measuredReceipt(\"provider\", probeRef, credential.ref), where probeRef is a ref to an already-committed provider.probe and credential.ref is presence only. No --version probe exists on the activation path; measure.test.ts:215 pins ref to \"probe/abc\". Fix: read the real claude/codex --version through the injected ports (this module must never spawn — a source-text arm pins that), and refuse the member when the reading cannot be taken."
+      },
+      {
+        "type": "security",
+        "file": "apps/control-room/src/live/live-dispatch-payloads.ts",
+        "line": 127,
+        "description": "The shipped Activate card sends an invented provider profile the daemon then mints a VERIFIED witness on. DEV_PAYLOADS[\"provider.probe\"] hardcodes modelSnapshotKind \"DATED_SNAPSHOT\", modelSnapshotEvidence \"claude --version reported a dated snapshot\" and truthClass \"DAEMON_VERIFIED\"; reached in production via activation-screen.tsx -> activation-port.ts:70. demo-seed-policy.ts:106 uses \"UNKNOWN\" for exactly this reason. Fix: drop the literals and refuse a caller-supplied provider observation."
+      },
+      {
+        "type": "other",
+        "file": "apps/daemon/src/bootstrap/activation-receipts.ts",
+        "line": 205,
+        "description": "NOT CHARGED, recorded so it is not lost: repositoryObservationOf derives a measured repository observation and has ZERO production callers (git grep returns only tests, the barrel and a comment), while DEV_PAYLOADS[\"project.bind_repository\"] sends baseRevisionHash hex64(\"beef\") with truthClass DAEMON_VERIFIED. Same shape as the DoD 2 failure but outside its literal text. Close in the same pass or file a row; must not block this row."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "ONE DoD ITEM FAILS: DoD 2, first clause. FULL EVIDENCE IN comment-8605a891 — read it first. DoD 1, 3, 4, 5, 6 all PASS; I re-measured them at HEAD f7ad50ee on a tree where every feature-owned path is clean. Do not redo them.\n\nDoD 2 requires a measured \"provider CLI version\". It is not measured. measureProvider (activation-receipts-measure.ts:107-122) returns measuredReceipt(\"provider\", probeRef, credential.ref): probeRef is a REF to an already-committed provider.probe, credential.ref is presence only. `git grep -n -- \"--version\" -- apps/daemon/src/**/*.ts` finds only the moe CLI's own version words, two demo-seed comments and fixtures. measure.test.ts:215 pins ref to \"probe/abc\".\n\nThat probe is minted by this feature's own card (activation-screen.tsx -> driveActivationChain -> activation-port.ts:70 -> live-dispatch-payloads.ts:127-149), hardcoding modelSnapshotKind \"DATED_SNAPSHOT\", modelSnapshotEvidence \"claude --version reported a dated snapshot\", truthClass \"DAEMON_VERIFIED\". The witness is minted VERIFIED on an invented reading — the defect this row exists to remove. Less honest than the seed: demo-seed-policy.ts:106 uses \"UNKNOWN\" to avoid asserting a version nobody took.\n\nYour FINDING F1 (comment-86207d32) found this and the summary names it a SHORTFALL. That is why this rejection is narrow — but a written DoD clause is not discharged by disclosing it is unmet.\n\nTO CLOSE: measure provider.probe in the daemon — real `claude --version`/`codex --version` through the injected ports (never spawn from that module; a source-text arm pins it), \"UNKNOWN\" when unreadable, refuse a caller-supplied provider observation as ACTIVATION_WITNESS_CALLER_SUPPLIED does, drop the DEV_PAYLOADS literals, add a CLI-absent refusal arm, re-quote the gates.\n\nSCOPE: rail 1 makes this row accountable for the full slice — land it here or SPIDR one child. Do NOT reopen the five DONE children. bind_repository's hex64(\"beef\") is NOT charged. Root-lane reds are foreign.",
+      "rejectedAt": "2026-09-06T02:45:49.916Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "DoD 2 — the witness must carry measured values including 'provider CLI version' with truthClass VERIFIED: that member is not measured; the provider receipt is only a ref to a caller-committed provider.probe carrying invented version literals."
+      ],
+      "issues": [
+        {
+          "type": "missing_feature",
+          "file": "apps/daemon/src/bootstrap/activation-receipts-measure.ts",
+          "line": 107,
+          "description": "measureProvider never reads a provider CLI version: it returns measuredReceipt(\"provider\", probeRef, credential.ref), where probeRef is a ref to an already-committed provider.probe and credential.ref is presence only. No --version probe exists on the activation path; measure.test.ts:215 pins ref to \"probe/abc\". Fix: read the real claude/codex --version through the injected ports (this module must never spawn — a source-text arm pins that), and refuse the member when the reading cannot be taken."
+        },
+        {
+          "type": "security",
+          "file": "apps/control-room/src/live/live-dispatch-payloads.ts",
+          "line": 127,
+          "description": "The shipped Activate card sends an invented provider profile the daemon then mints a VERIFIED witness on. DEV_PAYLOADS[\"provider.probe\"] hardcodes modelSnapshotKind \"DATED_SNAPSHOT\", modelSnapshotEvidence \"claude --version reported a dated snapshot\" and truthClass \"DAEMON_VERIFIED\"; reached in production via activation-screen.tsx -> activation-port.ts:70. demo-seed-policy.ts:106 uses \"UNKNOWN\" for exactly this reason. Fix: drop the literals and refuse a caller-supplied provider observation."
+        },
+        {
+          "type": "other",
+          "file": "apps/daemon/src/bootstrap/activation-receipts.ts",
+          "line": 205,
+          "description": "NOT CHARGED, recorded so it is not lost: repositoryObservationOf derives a measured repository observation and has ZERO production callers (git grep returns only tests, the barrel and a comment), while DEV_PAYLOADS[\"project.bind_repository\"] sends baseRevisionHash hex64(\"beef\") with truthClass DAEMON_VERIFIED. Same shape as the DoD 2 failure but outside its literal text. Close in the same pass or file a row; must not block this row."
+        }
+      ]
+    }
+  ],
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Reopen 1 in progress. Steps 1-2 of 7 COMPLETED (four SPIDR children DONE gate; DoD 1 browser-only fresh start re-verified). Step 3 (VERIFY DoD 2: the witness is measured and fails closed per member) was IN_PROGRESS when the seat died. Latest checkpoint 533ce588a8cf on moe/work-2026-09-04.",
+      "whatRemains": "QA's rejection finding is real and still open: the provider witness is minted DAEMON_VERIFIED from hardcoded DEV_PAYLOADS literals (apps/daemon/src/.../live-dispatch-payloads.ts around lines 127-149), so DoD 2's 'measured' clause is not met by verification alone. Governor advice (#workers 02:46Z): file ONE child row for the real provider-CLI measurement, report_blocked on it (blockedOnTaskIds), and finish steps 4-7 once it lands. Do not mint a measured-looking receipt from literals.",
+      "pitfalls": "This is a SPIDR parent whose plan is verify-only; the missing measurement is new work, so a child row is the right shape. pnpm test:e2e:browser is a ~7.5 min full lane: GATE START/END in #general, one full gate at a time. The seat did not crash on its own; the whole Claude fleet paused at 02:57Z.",
+      "openQuestions": "Whether the architect prefers the measurement child under this parent or under the seats/provider epic; ask in #architects if unclear.",
+      "releasedAt": "2026-09-06T07:41:34.614Z",
+      "releasedBy": "governor-afbde490",
+      "reason": "Confirmed crash: worker-8c5af680's wrapper process and its PyCharm terminal are gone (process census 07:35Z) after the 02:57Z account usage-limit outage. Owner authorized: \"unblock tasks\"."
+    }
+  ],
+  "declaredFiles": [
+    "apps/daemon/src/bootstrap/activation-receipts-measure.ts",
+    "apps/daemon/src/bootstrap/activation-receipts-ports.ts",
+    "apps/daemon/src/bootstrap/activation-receipts.ts",
+    "apps/daemon/src/bootstrap/bootstrap-contracts.ts",
+    "apps/daemon/src/bootstrap/bootstrap-services.ts",
+    "apps/daemon/src/http/activation-read.ts",
+    "apps/control-room/src/live/live-activation.ts",
+    "apps/control-room/src/live/live-dispatch-payloads.ts",
+    "apps/control-room/src/v2/ops/activation-screen.tsx"
+  ],
+  "touchedFiles": [
+    "tests/e2e/control-room/activation-fresh-project.spec.ts",
+    "apps/control-room/src/live/live-dispatch-production.test.ts",
+    "docs/agent-stack-runbook.md",
+    "apps/daemon/src/bootstrap/activation-provider-version.test.ts",
+    "README.md",
+    "apps/control-room/src/v2/ops/activation-screen.test.tsx",
+    "apps/daemon/src/bootstrap/bootstrap-durability.test.ts",
+    "apps/daemon/src/bootstrap/activation-receipts.ts",
+    "apps/control-room/src/v2/ops/activation-screen.tsx",
+    "apps/daemon/src/http/activation-read.ts",
+    "apps/daemon/src/bootstrap/bootstrap-services.ts",
+    "apps/daemon/src/bootstrap/activation-provider-version.js",
+    "apps/daemon/src/bootstrap/activation-receipts-ports.ts",
+    "apps/daemon/src/bootstrap/activation-command-entry.test.ts",
+    "apps/daemon/src/bootstrap/activation-receipts-measure.ts",
+    "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
+    "apps/control-room/src/live/live-dispatch-payloads.ts",
+    "apps/control-room/src/live/live-activation.test.ts",
+    "apps/control-room/src/live/live-activation.ts",
+    "apps/daemon/src/daemon-entry-activation-refusals.test.ts",
+    "apps/control-room/src/v2/cordum-app.test.tsx",
+    "apps/control-room/src/v2/resources/resources-frames.fixture.ts",
+    "apps/daemon/src/bootstrap/activation-receipts-measure.test.ts",
+    "apps/daemon/src/bootstrap/activation-provider-version.ts",
+    "apps/daemon/src/bootstrap/activation-receipts.test.ts"
+  ],
+  "completedAt": "2026-09-06T09:30:37.717Z",
+  "reviewSummary": "APPROVE at 5ab9640f (completion, recorded after reviewStartedAt, 29 paths). FULL EVIDENCE: comment-b4d901fc.\n\nDoD 2, the only round-1 ground, is CLOSED. measureProvider calls ports.providerVersion(agentCommand); the DEFAULT port is the REAL reader, so an unwired caller cannot pass silently. New activation-provider-version.ts (145 lines + .js bridge) resolves the image on PATH+PATHEXT via statSync().isFile() BEFORE any spawn, then runs `<cmd> --version`; code===null refuses the WHOLE activation as ACTIVATION_PROVIDER_UNMEASURED. Live: {\"command\":\"claude\",\"version\":\"2.1.263\"} — nowhere in the repo (fixtures say 2.1.261), so no literal produces it.\n\nMY DRILL: `run.code === null` -> `-999999` gave `Tests 2 failed | 43 passed (45)`. Restore proven separately: status blank, sha256 deb8bc3c…960d.\n\nDoD 1 LIVE HALF — I RAN IT GREEN, which the worker could not: `ok 1 [chromium] activation-fresh-project.spec.ts:98:1 (16.6s)` / `1 passed`, exit 0.\n\nFOREIGN RED ATTRIBUTED BY EXPERIMENT. Typecheck = exactly 2 errors, both bootstrap-sequence.ts; TS2739 NAMES missing keys deployment.deploy/set_target. Adding those 2 COMMAND_PREREQUISITES rows (3 lines, peer-owned, zero feature code) -> daemon typecheck exit 0 and the journey ran. Cause = peer task-537320ee; intersection with owned paths EMPTY. Restore proven: sha256 ae74ba1d…1fbe.\n\nGATES RE-RUN: control-room `Test Files 167 passed (167)` / `Tests 2077 passed (2077)`, PIPESTATUS[0]=0 — reproduces task.verification exactly. Daemon activation leg `Test Files 6 passed (6)` / `Tests 86 passed (86)`.\n\nRE-MEASURED: DoD 3 forbidden sentence 0, replacement names the card. DoD 4 seed plan not in this delta. DoD 5 README 0, runbook rewrite rides THIS commit.\n\nRAILS: per-member it.each sweep asserts exact code+layer with the other five still measured, breaking only via PORTS; roster arm bidirectional; DEV_PAYLOADS sweep has a non-emptiness arm."
+}

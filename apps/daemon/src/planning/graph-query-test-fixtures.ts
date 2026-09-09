@@ -195,10 +195,19 @@ const hardEdgeRequirement = (edge: GraphEdge, binding: string): Record<string, u
   },
 });
 
+/**
+ * A per-node migration declaration, keyed by nodeKey. Absent from the map means the node's
+ * author declared NOTHING (the member stays off the draft, so `createNodeDefinition` mints a
+ * schema-2 body); a present `[]` means the author declared NONE, which is a stated fact and
+ * mints schema 3. The distinction is the codec's (`node-authority-codec.ts:124-127`), not this
+ * fixture's — the draft only forwards what it was handed.
+ */
+export type MigrationDeclarations = ReadonlyMap<string, readonly string[]>;
+
 /** Admitted by PRODUCTION or not built at all: a body the codec refuses could never reach
  *  the encode this fixture exists to feed. */
 function nodeDefinitionFor(
-  nodeKey: string, snapshot: GraphSnapshot, binding: string,
+  nodeKey: string, snapshot: GraphSnapshot, binding: string, declared?: readonly string[],
 ): NodeDefinition {
   const nodeKeys = snapshot.nodes.map((node) => node.nodeKey);
   const plan = createPlanRevision(planDraftFor(nodeKeys));
@@ -216,6 +225,10 @@ function nodeDefinitionFor(
       capability: "capability-implement",
       completionLinkage: completes ? nodeKey : null,
       constraints: ["constraint-a"],
+      // Spread, never an assigned `undefined`: an own key holding `undefined` is a STATED
+      // member to the draft reader, and would mint a schema-3 body for a node that declared
+      // nothing. Order is forwarded exactly as handed — this fixture never sorts or dedups.
+      ...(declared === undefined ? {} : { declaredMigrations: [...declared] }),
       directHardDependencies: snapshot.edges
         .filter((edge) => edge.kind === "HARD" && edge.consumerNodeKey === nodeKey)
         .map((edge) => hardEdgeRequirement(edge, binding)),
@@ -246,7 +259,9 @@ function nodeDefinitionFor(
  * `bindAuthority` re-derives and refuses GRAPH_CONTENT_AUTHORITY_DISAGREEMENT on any
  * stated set that is not the derived one.
  */
-export function authoritySectionFor(snapshot: GraphSnapshot): NodeAuthoritySection {
+export function authoritySectionFor(
+  snapshot: GraphSnapshot, declared?: MigrationDeclarations,
+): NodeAuthoritySection {
   const validated = validateGraphSnapshot(snapshot);
   if (!validated.ok) {
     throw new Error(`graph fixture refused: ${validated.issues[0]?.code ?? "?"}`);
@@ -256,7 +271,7 @@ export function authoritySectionFor(snapshot: GraphSnapshot): NodeAuthoritySecti
     .map((node) => node.nodeKey)
     .slice()
     .sort()
-    .map((nodeKey) => nodeDefinitionFor(nodeKey, snapshot, binding));
+    .map((nodeKey) => nodeDefinitionFor(nodeKey, snapshot, binding, declared?.get(nodeKey)));
   const derived = deriveNodeAuthoritySet(snapshot, definitions);
   if (!derived.ok) {
     throw new Error(derived.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
@@ -264,19 +279,25 @@ export function authoritySectionFor(snapshot: GraphSnapshot): NodeAuthoritySecti
   return { authorities: derived.value, definitions };
 }
 
-export function encoded(author: string): GraphContent {
-  const snapshot = baseSnapshot();
-  const content: GraphRevisionContent = {
+/** The unencoded half, so a caller that needs a `GraphRevisionContent` (an activated-graph
+ *  fixture, say) does not have to decode the bytes back out of `encoded()`. */
+export function revisionContentFor(
+  author: string, snapshot: GraphSnapshot, declared?: MigrationDeclarations,
+): GraphRevisionContent {
+  return {
     author,
-    completionNode: "dev-c",
+    completionNode: snapshot.completionNodeKey,
     decompositionBudget: 24,
-    nodeAuthority: authoritySectionFor(snapshot),
+    nodeAuthority: authoritySectionFor(snapshot, declared),
     parentRevision: "rev-000000000000",
     policyRevision: "pol-000000000001",
     repositoryBaseTree: "4".repeat(40),
     snapshot,
   };
-  const result = encodeGraphContent(content);
+}
+
+export function encoded(author: string): GraphContent {
+  const result = encodeGraphContent(revisionContentFor(author, baseSnapshot()));
   if (!result.ok) throw new Error(`fixture failed to encode: ${JSON.stringify(result.issues)}`);
   return result.value;
 }

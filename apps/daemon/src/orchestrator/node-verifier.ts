@@ -16,6 +16,8 @@ import {
 import type { VerifierAuthorityFacts } from "../review/verifier-receipt-ledger.js";
 import { verifierReceiptId } from "../review/verifier-receipt-contracts.js";
 import type { NodeMission } from "./agent-wrapper.js";
+import type { VerifiedWorkspacePort } from "../repository/verified-workspace-contracts.js";
+import { checkVerifiedWorkspace, runBoundVerification } from "./node-verifier-workspace.js";
 
 /**
  * The daemon-side verifier: acceptance is EARNED from a test run the daemon
@@ -49,6 +51,8 @@ export interface VerifierRunCapture {
 }
 
 export interface NodeVerifierConfig {
+  /** Daemon-owned immutable artifact capture; absence refuses before test or acceptance. */
+  readonly verifiedWorkspace?: Pick<VerifiedWorkspacePort, "capture">;
   readonly deps: CommandAdapterDeps;
   readonly mintId: () => string;
   readonly nodeMission: (nodeRef: string) => NodeMission | null;
@@ -154,6 +158,13 @@ export function createNodeVerifier(config: NodeVerifierConfig) {
           reports.push({ detail: "stale verifier receipt", nodeRef, outcome: "VERIFIER_RECEIPT_STALE" });
           continue;
         }
+        const unchanged = pending.receipt.execution.test !== brief.test || pending.receipt.execution.workspace !== brief.workspace
+          ? { code: "VERIFIER_WORKSPACE_CHANGED", detail: "verification command or workspace changed" }
+          : await checkVerifiedWorkspace(brief, pending.receipt.execution.workspaceBinding, config.verifiedWorkspace);
+        if (unchanged !== null) {
+          reports.push({ detail: unchanged.detail, nodeRef, outcome: unchanged.code });
+          continue;
+        }
         const sent = dispatch(
           "integration.accept_output",
           { receiptId, subjectRef: nodeRef },
@@ -177,12 +188,18 @@ export function createNodeVerifier(config: NodeVerifierConfig) {
         });
         continue;
       }
-      const capture = await config.runTest(brief);
+      const verified = await runBoundVerification(brief, config.runTest, config.verifiedWorkspace);
+      if (!verified.ok) {
+        reports.push({ detail: verified.detail, nodeRef, outcome: verified.code });
+        continue;
+      }
+      const { capture } = verified;
       if (capture.exitCode === 0) {
         const recorded = recordVerifierReceipt(config.store, {
           authority,
           decidedAt: new Date().toISOString(),
           execution: {
+            workspaceBinding: verified.binding,
             byteCount: capture.byteCount,
             outputSha256: capture.sha256,
             test: brief.test,

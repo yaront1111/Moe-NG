@@ -222,7 +222,7 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
           </p>
           <Gate1ContractDossier revision={shownState.outcome.revision} />
           <section className="cr2-approve-block" data-testid="cr.gate1.current-slot">
-            <h3 className="cr2-approve-heading">CURRENT SLOT PROVENANCE</h3>
+            <h3 className="cr2-approve-heading">Provenance</h3>
             <dl className="cr2-approve-hashes">
               <dt>project</dt>
               <dd className="cr2-approve-mono">{shownState.outcome.slot.projectId}</dd>

@@ -34,6 +34,12 @@ function wireWith(answer: unknown, delivered = true): { readonly built: unknown[
 }
 
 describe("createEscalationPort", () => {
+  it("takes the execution subject from the offer even when the display key is shared", async () => {
+    const { built, wire } = wireWith({ ok: true });
+    await createEscalationPort(wire).submit({ ...OFFER, targetAggregateId: "execution-own" }, "node-a", "REPLAN");
+    expect((built[0] as { input: { payload: unknown } }).input.payload)
+      .toEqual({ decision: "REPLAN", escalationRef: "ui-escalation-execution-own-v4", subjectRef: "execution-own" });
+  });
   it("builds escalation.decide from the daemon's offer with only escalationRef and subjectRef", async () => {
     const { built, sent, wire } = wireWith({ ok: true });
     const outcome = await createEscalationPort(wire).submit(OFFER, "node-a", "ALLOW_MORE_ATTEMPTS");

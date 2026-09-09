@@ -677,4 +677,89 @@ describe("createVerifierProcessRunner", () => {
       fake.stdout.write("late output");
     }).not.toThrow();
   });
+
+  /**
+   * The host the delivery arms measure against: two keys the private allowlist admits and three
+   * it does not, one of which (`DATABASE_URL`) is also the NAME an operator is most likely to
+   * deliver - so the arms below can tell "arrived because it was delivered" apart from "arrived
+   * because the filter let the host copy through".
+   */
+  const deliveryHost: NodeJS.ProcessEnv = {
+    ANTHROPIC_API_KEY: "provider-secret",
+    DATABASE_URL: "sqlite:///host-copy-never-delivered",
+    HOST_ONLY_SECRET: "host-secret-never-delivered",
+    LANG: "C.UTF-8",
+    MOE_DAEMON_CREDENTIAL: "operator-secret",
+    TMPDIR: "/safe/tmp",
+  };
+
+  const spawnedEnvironment = async (
+    options: VerifierProcessRunnerOptions,
+  ): Promise<NodeJS.ProcessEnv | undefined> => {
+    const fake = fakeChild();
+    let seen: SpawnOptions | undefined;
+    const runner = createVerifierProcessRunner({
+      ...options,
+      platform: "linux",
+      spawn: (_file, _args, received) => { seen = received; return fake.child; },
+      timeoutMs: 10_000,
+    });
+    const done = runner(brief);
+    fake.emitter.emit("close", 0);
+    await done;
+    return seen?.env;
+  };
+
+  it("delivers an operator variable while still excluding every host key outside the allowlist", async () => {
+    const environment = await spawnedEnvironment({
+      delivered: { DATABASE_URL: "postgres://delivered", STRIPE_KEY: "sk_live_delivered" },
+      environment: deliveryHost,
+    });
+
+    // THE PAIR, ON THE SAME CONSTRUCTED ENV. The exclusion half is the load-bearing one: an
+    // assertion that the delivered variable arrived is equally satisfied by a runner that handed
+    // the child `process.env` plus extras, which is the widened surface the closed roster exists
+    // to prevent and the hardest kind of regression to notice in review. Set equality, so a key
+    // this arm did not think to name cannot slip in either.
+    expect(environment).toEqual({
+      DATABASE_URL: "postgres://delivered",
+      LANG: "C.UTF-8",
+      STRIPE_KEY: "sk_live_delivered",
+      TMPDIR: "/safe/tmp",
+    });
+    // Named individually too, so a failure says WHICH host secret escaped.
+    expect(environment?.["HOST_ONLY_SECRET"]).toBeUndefined();
+    expect(environment?.["ANTHROPIC_API_KEY"]).toBeUndefined();
+    expect(environment?.["MOE_DAEMON_CREDENTIAL"]).toBeUndefined();
+    // The host's own DATABASE_URL never reached the child; the DELIVERED value did.
+    expect(environment?.["DATABASE_URL"]).not.toContain("host-copy-never-delivered");
+  });
+
+  it("cannot be made to displace an allowlisted runtime key", async () => {
+    const environment = await spawnedEnvironment({
+      // A delivered PATH would decide which `node` and which shell the daemon's own verifier
+      // spawns. The allowlisted runtime value wins; `deliverEnvironment` reports the collision.
+      delivered: { PATH: "/attacker/bin", TMPDIR: "/attacker/tmp" },
+      environment: { ...deliveryHost, PATH: "/safe/bin" },
+    });
+    expect(environment?.["PATH"]).toBe("/safe/bin");
+    expect(environment?.["TMPDIR"]).toBe("/safe/tmp");
+  });
+
+  it("builds a byte-identical environment when the project has no variables set", async () => {
+    // DoD-4. Compared against the construction as it behaved BEFORE delivery existed - which is
+    // what `delivered: undefined` still runs - rather than against "the spawn succeeded". This is
+    // the arm that catches an unconditional overlay adding an empty object, an undefined-valued
+    // key, or a re-ordered key set.
+    // The expected shape is an ABSOLUTE literal, not `before`: comparing the new construction
+    // against itself is satisfied by any overlay that is merely CONSISTENT. And the key roster is
+    // asserted separately because `toEqual` and `JSON.stringify` both IGNORE undefined-valued
+    // properties - an overlay that adds `SOMETHING: undefined` passes both and changes the object.
+    const expected = { LANG: "C.UTF-8", TMPDIR: "/safe/tmp" };
+    for (const delivered of [undefined, {}]) {
+      const after = await spawnedEnvironment({ delivered, environment: deliveryHost });
+      expect(after).toStrictEqual(expected);
+      expect(Object.keys(after ?? {})).toEqual(["LANG", "TMPDIR"]); // ORDER and arity
+    }
+  });
 });

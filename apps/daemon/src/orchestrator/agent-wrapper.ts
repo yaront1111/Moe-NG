@@ -10,12 +10,21 @@ import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import { workItemIdFor } from "../http/affordance-read.js";
 import { createAgentAuthorityCleanup } from "./agent-authority-cleanup.js";
-import { codeMission, compilerMission, mission } from "./agent-mission-text.js";
-import { AGENT_STAFFING_REFUSAL_CODES } from "./agent-session-fence.js";
+import { DESIGN_STEP_KIND, byStaffingRank } from "./agent-staffing-order.js";
+import { type DesignBrief, codeMission, compilerMission, designMission, mission }
+  from "./agent-mission-text.js";
 import type { AgentSessionFence } from "./agent-session-fence.js";
-import type { AgentSpawnStart, RunOnceReport,
+import { PROVIDER_PAUSED_OUTCOME } from "./agent-provider-pause.js";
+import type { ProviderPauseGate } from "./agent-provider-pause.js";
+import { decideSeatProvider, pauseProviderOf } from "./agent-provider-resolve.js";
+import { COMPILER_STEPS, GATE_REFUSALS, HUMAN_ONLY_STEPS } from "./agent-spawn-contract.js";
+import type { AgentSpawnStart, ProviderPauseFacts, RunOnceReport,
   SpawnReport } from "./agent-spawn-contract.js";
 import { createAgentWrapperStaffing } from "./agent-wrapper-staffing.js";
+
+// The kind rosters live in the contract file (data, not behaviour); re-exported here so
+// the offer surface's test keeps importing HUMAN_ONLY_STEPS from the wrapper it guards.
+export { HUMAN_ONLY_STEPS } from "./agent-spawn-contract.js";
 
 /**
  * The wrapper: watches the daemon's own offer surface and staffs it — the
@@ -42,6 +51,8 @@ export interface SpawnRequest {
   readonly expiresAt: string;
   readonly kind: string;
   readonly mission: string;
+  /** The agent command THIS seat is spawned with; absent keeps the spawner's own chain. */
+  readonly provider?: string;
   readonly sessionId: string;
   readonly workItemId: string;
   /** For code nodes: the directory the agent works in; null for chain steps. */
@@ -58,6 +69,9 @@ export interface NodeMission {
 
 export interface AgentWrapperConfig {
   readonly affordances: AffordancePort;
+  /** The durable agent-provider setting for one scope ("" is the project default), or
+   *  null when it has none. A fact, not a store handle. */
+  readonly agentProvider?: ((goalId: string) => string | null) | undefined;
   /**
    * Claim lifetime per spawn: the reap horizon when a child dies without
    * releasing. The agent renews it if the work runs longer.
@@ -73,6 +87,11 @@ export interface AgentWrapperConfig {
   readonly nodeMission?: ((nodeRef: string) => NodeMission | null) | undefined;
   readonly operatorCredential: string;
   /**
+   * Provider-limit pause: reads every seat exit, refunds a limit exit's attempt and
+   * parks staffing until the reset; absent = today's behaviour.
+   */
+  readonly providerPause?: ProviderPauseGate | undefined;
+  /**
    * Optional development payload suggestion embedded in the mission, so a real
    * model does not have to guess witness hashes. Advisory text only — the
    * daemon's decoder remains the sole payload authority.
@@ -87,6 +106,11 @@ export interface AgentWrapperConfig {
   readonly compilerGateRef?: ((goalId: string | null) => JsonObject | null) | undefined;
   /** The goal's own operator instructions (a replan's findings live there); null when absent. */
   readonly compilerInstructions?: ((goalId: string | null) => string | null) | undefined;
+  /** The goal's design outcome for briefs that plan from it. A null answer is STATED as ABSENT
+   *  in the brief, never omitted: a seat that cannot tell a skip from a failed read guesses. */
+  readonly designBrief?: ((kind: string, target: string | null) => DesignBrief | null) | undefined;
+  /** The project the seat's MCP host serves, named in every brief so graph_get is callable. */
+  readonly projectId?: string | undefined;
   /**
    * Bearer lifetime per spawn, independent of the claim's. The exit-path
    * release runs under the agent's own secret, so the bearer must outlive the
@@ -108,37 +132,6 @@ export interface AgentWrapperConfig {
 }
 
 const encoder = new TextEncoder();
-/**
- * Kinds the wrapper must NEVER staff, exported so the offer surface's test can
- * hold every offered `approval.*` kind against it — an approval kind offered but
- * absent here would let the wrapper mint an agent session to take a human act.
- */
-export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
-  // GOAL CREATION IS A PRODUCT INTENT, not a chain chore: since the affordance
-  // surface began offering goal.create on EVERY read of an active project
-  // (task-9d2d44aa), a wrapper that staffs it mints a fresh junk goal each pass
-  // forever — each successful creation clears the attempts counter, so the loop
-  // never exhausts. Measured live on the first real project: 8 junk goals in
-  // minutes. Goals come from the operator's browser (or the PRD lane), never
-  // from a self-staffed agent.
-  "approval.decide", "approval.decide_intent",
-  "goal.close", "goal.create", "goal.create_with_source",
-  // Pushing the operator's repository to a remote is the operator's decision; the wrapper
-  // performs it as an effect of that decision, never as staffed work.
-  "repository.publish",
-]);
-/** The compiler lane: staffed with `compilerMission`, never the demo payload hint. */
-const COMPILER_STEPS: ReadonlySet<string> = new Set([
-  "planning.submit_decomposition", "product_contract.propose_revision",
-]);
-/**
- * Outcomes the durable staffing gate answers BEFORE any identity is minted.
- * They are not attempts: nothing was spent, and the condition they report
- * (a live predecessor, a held claim, a record the fence cannot read) clears
- * on its own time, not the wrapper's.
- */
-const GATE_REFUSALS: ReadonlySet<string> = new Set(AGENT_STAFFING_REFUSAL_CODES);
-
 function setupError(action: string): Error {
   return new Error(`AGENT_SETUP_FAILED:${action}:UNEXPECTED_ERROR`);
 }
@@ -191,7 +184,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     kind: string, outcome: string, sessionId: string | null, workItemId: string,
   ): SpawnReport => ({ kind, outcome, refusal: null, sessionId, workItemId });
 
-  const staff = async (step: ChainStep): Promise<SpawnReport> => {
+  const staff = async (step: ChainStep, command: string): Promise<SpawnReport> => {
     const workItemId = workItemIdFor(step.kind, step.aggregateId);
     const capabilities = agentCapabilitiesFor(step.kind);
     if (capabilities === null) return uncoded(step.kind, "UNWIRED_KIND", null, workItemId);
@@ -293,7 +286,10 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
         missionText = codeMission(workItemId, step.aggregateId ?? "", expiresAt, brief, {
           accept: null,
           submit: config.payloadHint?.("review.submit", step.aggregateId) ?? null,
-        });
+        }, config.projectId ?? null, config.designBrief?.(step.kind, step.aggregateId) ?? null);
+      } else if (step.kind === DESIGN_STEP_KIND) {
+        missionText = designMission(workItemId, step.kind, expiresAt, step.aggregateId,
+          config.projectId ?? null);
       } else if (COMPILER_STEPS.has(step.kind)) {
         // The planning lane gets its OWN brief and NO payload hint: the demo
         // `payloadFor` table proposing a hard-coded graph against a real PRD is
@@ -302,23 +298,28 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
           step.kind === "planning.submit_decomposition"
             ? config.compilerGateRef?.(step.aggregateId) ?? null
             : null,
-          config.compilerInstructions?.(step.aggregateId) ?? null);
+          config.compilerInstructions?.(step.aggregateId) ?? null, config.projectId ?? null,
+          config.designBrief?.(step.kind, step.aggregateId) ?? null);
       } else {
         const hint = config.payloadHint?.(step.kind, step.aggregateId) ?? null;
-        missionText = mission(workItemId, step.kind, expiresAt, hint);
+        missionText = mission(workItemId, step.kind, expiresAt, hint, config.projectId ?? null);
       }
     } catch {
       return failSetup("mission", true);
     }
 
-    const request = {
-      credential: secret, expiresAt, kind: step.kind,
-      mission: missionText, sessionId, workItemId, workspace,
-    };
+    const request = { credential: secret, expiresAt, kind: step.kind, mission: missionText,
+      provider: command, sessionId, workItemId, workspace };
     return staffing.start({
       claimAggregateVersion: step.claimAggregateVersion,
       cleanupAuthority,
       kind: step.kind,
+      // The attempt is charged when the seat spawns. A PROVIDER_LIMIT exit hands it
+      // back, so the item's count on the next pass equals its pre-spawn count: the
+      // provider refused, the item never got its turn.
+      onExit: config.providerPause?.exitObserver(sessionId, workItemId, () => {
+        attempts.set(workItemId, Math.max(0, (attempts.get(workItemId) ?? 0) - 1));
+      }, pauseProviderOf(command)),
       request,
       sessionId,
       spawnAgent: config.spawnAgent,
@@ -332,6 +333,10 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     if (priorFailure !== null) {
       return { active: staffing.activeCount(), spawned: [], surfaceOutcome: priorFailure };
     }
+    // MANY providers per wrapper, one resolved per spawn, so the pause is consulted PER
+    // STEP against that seat's own provider (decideSeatProvider) and PROVIDER_PAUSED is
+    // reported only when a pause is why the pass staffed NOTHING. See that module.
+    let stalled: ProviderPauseFacts | null = null;
     const surface = config.affordances.readSurface();
     if (surface.outcome !== "SURFACE") {
       return { active: staffing.activeCount(), spawned: [], surfaceOutcome: surface.code };
@@ -345,12 +350,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     for (const item of [...attempts.keys()]) {
       if (!ready.has(item)) attempts.delete(item);
     }
-    // Code nodes come first; visible human actions are never delegated.
-    const ordered = [...surface.steps].sort((a, b) => {
-      const rank = (step: ChainStep): number =>
-        step.kind === "node.deliver" ? 0 : step.kind === "goal.close" ? 2 : 1;
-      return rank(a) - rank(b);
-    });
+    const ordered = [...surface.steps].sort(byStaffingRank);
     for (const step of ordered) {
       if (HUMAN_ONLY_STEPS.has(step.kind)) continue;
       if (staffing.activeCount() >= config.maxAgents) break;
@@ -364,18 +364,21 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
         spawned.push(uncoded(step.kind, "STAFFING_ATTEMPTS_EXHAUSTED", null, workItemId));
         continue;
       }
-      const report = await staff(step);
+      const seat = decideSeatProvider({ aggregateId: step.aggregateId, kind: step.kind,
+        nowMs: config.clock(), pauseGate: config.providerPause,
+        settingFor: config.agentProvider });
+      if (seat.pause !== null) { stalled = seat.pause; continue; }
+      const report = await staff(step, seat.command);
       // Charged only for a try that got past the gate: a fence refusal spent
       // nothing and must not exhaust the item while its predecessor lives.
       if (!GATE_REFUSALS.has(report.outcome)) attempts.set(workItemId, tried + 1);
       spawned.push(report);
       if (staffing.failureOutcome() !== null) break;
     }
-    return {
-      active: staffing.activeCount(),
-      spawned,
-      surfaceOutcome: staffing.failureOutcome() ?? "SURFACE",
-    };
+    const idled = stalled !== null && spawned.length === 0;
+    return { active: staffing.activeCount(), spawned,
+      ...(idled && stalled !== null ? { paused: stalled } : {}),
+      surfaceOutcome: staffing.failureOutcome() ?? (idled ? PROVIDER_PAUSED_OUTCOME : "SURFACE") };
   };
 
   // Serialize passes, not child lifetimes: overlapping surface snapshots could

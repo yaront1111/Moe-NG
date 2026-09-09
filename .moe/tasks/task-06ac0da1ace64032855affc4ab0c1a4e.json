@@ -1,0 +1,572 @@
+{
+  "id": "task-06ac0da1ace64032855affc4ab0c1a4e",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "design.submit and design.read are published and reachable by a seat",
+  "description": "SPIDR child 1b of task-8a6d6660c31c4e119f962d13e6f1505d, split out by architect-20a6d1eb 2026-09-05 when child 1a's roster measured 11 distinct files against the 10-file hard cap. Cut along the INTERFACE axis: task-5e90317e80ac4b86a9704b6b8ba8874a owns the CONTRACT and the versioned AGGREGATE; this row PUBLISHES the two kinds and makes them reachable.\n\ndependsOn task-5e90317e80ac4b86a9704b6b8ba8874a - the kinds dispatch into its store.\n\nTHESE ARE SEAT KINDS, THE EXCEPTION ON THIS BOARD. Every other kind this epic adds is human-only and MCP-EXCLUDED. `design.submit` is submitted BY AN AGENT and `design.read` is read by seats AND the operator, so both must be REACHABLE over MCP. Copying the approval.decide / escalation.decide pattern here would make the design step unstaffable while looking correct in review - that is the single most likely failure of this row.\n\nTHE TWO KINDS TAKE DIFFERENT ROUTES TO BEING SERVED, measured at HEAD (branch moe/work-2026-09-04):\n- `mcp-tool-allowlist.ts:87-89` builds the served set as ALL command kinds MINUS `MCP_EXCLUDED_COMMAND_KINDS` (:59), PLUS `MCP_SERVED_QUERY_KINDS` (:27). So `design.submit`, being a COMMAND, is served by simply NOT being added to the exclusion roster - there is no positive action, and the mistake would be adding it there out of habit.\n- `design.read` is a QUERY: it must be ADDED to `MCP_SERVED_QUERY_KINDS` (:27, beside product_contract.read, graph.get, events.read, documents.source_read) AND given a handler in the dispatch map at `mcp-dispatch-port.ts:302` (`\"product_contract.read\": answerProductContractRead` is the shape). A query in the roster with no handler advertises a capability the port cannot serve.\n\nDAEMON ROSTER: daemon-command-vocabulary.ts (kind, capability, family, PAYLOAD_KEYS), daemon-command-families.ts (the per-kind flag block :83-94), daemon-command-registry.ts (`entryOf` :205-212). TWO PAYLOAD-KEY TEST TABLES must both gain rows and are invisible to a grep for the kind literal: daemon-command-vocabulary.test.ts (~:170-182) and daemon-command-registry.test.ts (~:197-203 plus the flat roster ~:283-300).\n\nTHE SHARED CONTRACT AND THE GENERATED CLIENT (packages/contracts runtime-vocabulary + `pnpm --filter @moe/control-room-client generate`) are needed only when the BROWSER must dispatch these kinds. The operator reads the design through child 3's screen; decide at plan time whether that needs the generated client, and if so include it - never hand-edit it, since it pins GENERATED_CONTRACT_DIGEST checked at client-compat.ts:169.",
+  "definitionOfDone": [
+    "`design.submit` and `design.read` are published across the daemon roster (vocabulary kind/capability/family/PAYLOAD_KEYS, families flag, registry entry) with a BIDIRECTIONAL set-equality test enumerating the SERVED kinds from the dispatch seam; verify by deleting each entry from each side in turn and confirming all four deletions go red.",
+    "BOTH ARE SEAT-REACHABLE OVER MCP, asserted behaviourally rather than by roster membership: an AGENT-authenticated dispatch of `design.submit` REACHES the handler, and an agent-authenticated `design.read` returns its answer. This is the opposite of every other kind this epic adds, and the arm exists because copying the human-only pattern would make the design step unstaffable while passing review.",
+    "`design.submit` is NOT in `MCP_EXCLUDED_COMMAND_KINDS` and NOT in HUMAN_ONLY_STEPS - assert both absences explicitly, since each is a place a well-meaning worker would add it by habit.",
+    "`design.read` is in `MCP_SERVED_QUERY_KINDS` (mcp-tool-allowlist.ts:27) AND has a handler in the dispatch map (mcp-dispatch-port.ts:302 area). Assert BOTH: a query advertised without a handler promises a capability the port cannot serve, and the allowlist's own parity test compares the roster against the port's table.",
+    "Both payload-key TEST tables gain their rows (daemon-command-vocabulary.test.ts and daemon-command-registry.test.ts, including its flat kind roster) - these are invisible to a grep for the kind literal in production source and have cost this board a rejected plan before.",
+    "If the browser must dispatch either kind, packages/contracts' runtime vocabulary and the REGENERATED client move with it (`pnpm --filter @moe/control-room-client generate`, quoting the OLD and NEW GENERATED_CONTRACT_DIGEST). If it need not, say so explicitly in the record rather than leaving it ambiguous for child 3.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, plus `pnpm test` if packages/ was touched."
+  ],
+  "taskRails": [
+    "SEAT KINDS, NOT HUMAN GATES. Do not add `design.submit` to MCP_EXCLUDED_COMMAND_KINDS or HUMAN_ONLY_STEPS. The surrounding pattern invites exactly that mistake and it would silently make the design step unstaffable.",
+    "A SERVED QUERY NEEDS BOTH a roster entry and a dispatch handler. One without the other is an advertised capability the port cannot serve.",
+    "NO AGGREGATE WORK: the contract and the versioned store are task-5e90317e80ac4b86a9704b6b8ba8874a's. No wrapper, no mission, no UI.",
+    "NEVER HAND-EDIT the generated client; run the generator and quote both digests.",
+    "FEATURES ONLY (inherited): no security-boundary or policy work."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "MEASURE. NO EDITS. (a) THE CONTRACT HALF IS NO LONGER YOURS. This row was reopened because its 10-file roster omitted two mandatory digest mirrors and was already at the cap — the governor's remedy, requested in #architects at 20:07 and executed on 2026-09-06, was to carve the shared-contract work into a leaf. That leaf is task-64d2757c, which publishes ALL FIVE pending strings (`deployment.migrate_down`, `deployment.rollback`, `design.read`, `design.submit`, `project.set_agent_provider`) in ONE digest rotation, and this row now dependsOn it. DROP FROM YOUR ROSTER: runtime-vocabulary.ts, runtime-contract.test.ts, generated-client.ts, generated-coverage.test.ts and both apps/control-room mirrors. DoD-6 of the text you are reading is now the leaf's, and its answer is YES — the browser does dispatch these kinds, which is why the leaf publishes them. Say that in the record rather than leaving it ambiguous, but do NOT act on it here. Where description and plan disagree, THE PLAN IS AUTHORITY. (b) CONFIRM THE LEAF LANDED: `grep -n 'design.submit\\|design.read' packages/contracts/src/runtime/runtime-vocabulary.ts` must hit BOTH. If not, moe.report_blocked with blockedOnTaskIds ['task-64d2757c06494c1f9016c5e2ffdf19fc'] and stop — `ROWS.kind` is typed `RuntimeCommandKind` and this row cannot TYPECHECK first. (c) EXPECT HEAVY COLLISION AND READ BEFORE EDITING. `moe.claim_next_task` reported TWELVE rows sharing files with this one; daemon-command-vocabulary.ts alone is contended by task-04b3ce7e, task-0a56ecee, task-537320ee, task-54b74b80, task-6cbcf5ff, task-b22462cf, task-c422b106 and task-facff1d1. Run `git status --porcelain -- apps/daemon/src` first, read any dirty hunks before touching a file, edit AROUND them, and never revert, stash or regenerate a contended file from a HEAD copy. When a gate reds, check whether the failing arm names YOUR kind before attributing it. (d) MEASURE THE COUNT PINS AS LOCATIONS, NOT VALUES — they moved twice yesterday and eight rows are queued to move them again: `git grep -n 'toHaveLength(\\|\\.size).toBe(\\|registry.size).toBe(' -- apps/daemon/src/daemon-command-vocabulary.test.ts apps/daemon/src/daemon-command-registry.test.ts`. Note especially the THREE registry.size pins that sit ~850 lines below their siblings; grep, do not eyeball. This row adds TWO kinds, so every roster count moves by two, not one. (e) BASELINE, standalone foreground, quoting each count line: `pnpm --filter @moe/daemon test`, `pnpm typecheck`.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "MEASURE, round 2 (QA reopen). NO EDITS. HEAD b0297796 on moe/work-2026-09-04.\n\nWHAT THE REOPEN CHANGES. Round 1's production diff is ALREADY ON THE BRANCH and QA re-verified it green; the single owned defect is a clean-checkout hole. So steps 2-4 are re-measurements, not re-implementations, and the only delivered byte this round is one untracked file becoming tracked. Confirmed by grep at the worktree:\n- daemon-command-vocabulary.ts:200 DESIGN_FAMILY {\"design.submit\": CAPABILITIES.PLANNING}, :204 union member, :178-195 the seat-kind rationale.\n- daemon-command-payload-keys.ts:124 [\"contractRef\",\"goalRef\",\"revision\"].\n- daemon-command-families.ts:68 `design` fact, :108 `kind in DESIGN_FAMILY`.\n- daemon-command-registry.ts:52 imports runDesignSubmitEdge, :471-472 the branch, answered BEFORE requestOf.\n- mcp-tool-allowlist.ts:39 \"design.read\" inside MCP_SERVED_QUERY_KINDS (NOT the exclusion roster, which begins below at the \"REFUSES TO ADVERTISE\" block).\n- mcp-dispatch-port.ts:317 \"design.read\": answerDesignRead, :307 delegating to answerDesignReadQuery.\n\n(a) CONTRACT HALF, still not mine: `git status --porcelain -- packages/` prints NOTHING. task-64d2757c (DONE) published all five strings; DoD-6 answered YES by that leaf.\n\n(b) THE DEFECT, REPRODUCED WITH A CONTROL, in a private detached worktree at D:/tmp/wt-deb4c7d8 (`git worktree add --detach ... HEAD`, node_modules junctioned, run with `node <repo>/node_modules/vitest/vitest.mjs` — NOT `pnpm exec`, which fires a deps-status check that would attempt an install against the fleet's store):\n\n  HEAD tracked-only, bridge ABSENT  -> missing: [\"mcp-design-read-query.ts\"]   CONTROL\n  same tree + the bridge copied in  -> missing: []                              FIXED\n\n  sha256 ea8f0db4b727ccdb52cda2eeeb0dcd04471fb3510a70c3f36a60fc8658b63194 identical on both\n  the shared-checkout file and the copy. Bytes: `export * from \"./mcp-design-read-query.ts\";`\n  + one LF, which is exactly `expectedBridgeSource()`; `wrongContent: []` on both runs.\n\n(c) THE RESIDUAL RED IN THAT ARM IS FOREIGN AND PRE-EXISTING, and it is why `src/runtime-entrypoint.test.ts` CANNOT be the exit-0 named leg. Both runs also print\n  unexpected: [\"repository\\\\deployment\\\\deployment-docker-probe.js\"]\nMeasured, not assumed: that .js is TRACKED, landed by `e219aa43 feat(task-3706b7e7…)`, present in `git ls-tree 51fbfc88` (my round-1 parent), and its .ts has no .test.ts sibling so it is not in the runtime tier. Identical before my file, after my file, and in the shared checkout. Owned intersection EMPTY. QA measured the same entry on both sides of f7ad50ee.\n\n(d) CONTENDED FILES: `git status --porcelain -- apps/daemon/src` shows 17 ` M` + 7 `??` peer paths (bootstrap/activation-*, deployment/*, repository/deployment/*, preview/*). NONE of mine; not reverted, not stashed, not staged. My two `??` neighbours are `mcp-design-read-query.js` (landing this round) and `mcp-design-read-query.test.ts` (task-eb2bb09d's, NOT swept per QA's explicit instruction).\n\n(e) The peer break QA disclosed (`DEPLOYMENT_SET_TARGET_COMMAND_KIND is not defined` at daemon-command-payload-keys.ts:165, branch head eb549e03) is GONE at b0297796: `git show HEAD:...payload-keys.ts | grep DEPLOYMENT_SET_TARGET` = zero hits.\n\n(f) BASELINE `pnpm --filter @moe/daemon test` started 08:53Z in the foreground-polled background slot, GATE START announced (msg-53fc9e13). Quoted in step 5. Baseline and delivered tree differ by exactly one 1-line re-export that no test imports, so one run measures both.",
+      "startedAt": "2026-09-06T08:52:02.850Z",
+      "completedAt": "2026-09-06T08:56:03.405Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "WIRE BOTH KINDS — AS SEAT KINDS, WHICH INVERTS THE PATTERN AROUND THEM. `daemon-command-vocabulary.ts` and `daemon-command-families.ts`. Add both kinds to the WiredCommandKind union, a family table entry each (put the table in FAMILY_TABLES — `familyCapabilityOf` returns null for an unclaimed kind and `requiredCapabilityOf` THROWS on that null while BUILDING the registry, i.e. at daemon boot rather than in a test), and their PAYLOAD_KEYS entries. PAYLOAD_KEYS KEY ORDER IS THE SERVED ORDER — the registry maps `Object.keys(PAYLOAD_KEYS)` through `entryOf` — so the positions you choose here are the positions you transcribe into REGISTRATION_ORDER in step 4, which is transcribed in INSERTION order and not alphabetically. NOW THE INVERSION, AND IT IS THIS ROW'S WHOLE POINT (rail 1): every other kind this epic adds is human-only, and the surrounding code is dense with that pattern. THESE TWO ARE THE OPPOSITE. `agentCapabilitiesFor` must return a REAL CAPABILITY SET for `design.submit`, NOT null — a seat has to be able to take it, and returning null the way `product_contract.answer_clarification` does would make the design step permanently unstaffable while passing every roster test. Do NOT add either kind to OPERATOR_PRINCIPAL_KINDS. `daemon-command-families.ts`: add the membership predicates and return their capabilities before the `familyCapabilityOf` fallthrough; do not set a flag that routes either kind into an existing service's dispatch branch, which is how a new kind silently inherits another family's handler.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/daemon-command-families.ts"
+      ],
+      "note": "RE-MEASURED, NOT RE-IMPLEMENTED. The round-1 wiring is on the branch and QA verified it; the reopen was a clean-checkout hole, not a wiring defect. `git status --porcelain` on all six production paths prints NOTHING, so worktree == HEAD for every one of them and nothing here was edited this round.\n\nTHE INVERSION, verified present at HEAD b0297796:\n- daemon-command-vocabulary.ts:200 `DESIGN_FAMILY = {\"design.submit\": CAPABILITIES.PLANNING}` — a REAL capability set, not null. :204 the WiredCommandKind union member. The doc block :186-196 states the trap explicitly (\"Copying that shape here would leave every roster test green while making the design step PERMANENTLY UNSTAFFABLE\") and records that `design.read` is ABSENT from this table ON PURPOSE because it is a QUERY.\n- daemon-command-families.ts:32 imports DESIGN_FAMILY, :68 the `design` fact, :108 `design: kind in DESIGN_FAMILY` — a membership predicate returning its own capability, not a flag routing into another service's dispatch branch.\n- daemon-command-payload-keys.ts:124 `\"design.submit\": [\"contractRef\",\"goalRef\",\"revision\"]` (PAYLOAD_KEYS moved to this module under task-a2409cba).\n- NEITHER kind is in OPERATOR_PRINCIPAL_KINDS.\n\nSCOPE CORRECTION FROM ROUND 1 STANDS, and QA re-measured it and told me not to revert it: no served MCP query holds a command-roster entry, so `design.read` gets no vocabulary/family/PAYLOAD_KEYS/registry row and every roster count moved by ONE, not two. The plan's \"TWO kinds, every count moves by two\" is wrong for the command roster. Moving them by two would have red 53->55.",
+      "startedAt": "2026-09-06T08:56:15.032Z",
+      "completedAt": "2026-09-06T08:56:47.967Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "SERVE THEM, AND SERVE THE QUERY PROPERLY. (1) `daemon-command-registry.ts`: entries for both kinds, delegating to the design store landed by task-5e90317e — `submitDesignRevision` and `readDesignRevision`. Refuse a malformed payload through that slice's own closed code->layer map (`designRefusal` reads the layer from `DESIGN_CODE_LAYERS`, so a call site cannot mint a code and layer that disagree); never a layer literal at the throw site, and reuse an already-rostered layer — no new `*_LAYER` constant, which would demand a boundary-roster backfill this row does not own. This file was already over the 400-line cap at merge-base: keep the addition small and reformat nothing. (2) `mcp-tool-allowlist.ts`: `design.read` joins MCP_SERVED_QUERY_KINDS. THE QUERY HALF NEEDS BOTH HALVES (rail 2) — that roster is the ADVERTISED oracle and `createMcpDispatchPort` exports the SERVED set as `servedMcpQueryKinds()`; the allowlist's own parity test asserts EXACT SET EQUALITY IN BOTH DIRECTIONS between them, so a roster entry without a dispatch handler reds immediately and, worse, would advertise a capability the port cannot serve. Add the handler in the dispatch map in the same commit. (3) DO NOT ADD `design.submit` TO MCP_EXCLUDED_COMMAND_KINDS, and do not add either kind to HUMAN_ONLY_STEPS (rail 1). Both are places a well-meaning worker adds a kind by habit, and either would silently unstaff the design step. Step 4 asserts both absences explicitly.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/mcp-tool-allowlist.ts",
+        "apps/daemon/src/mcp-dispatch-port.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/mcp-design-read-query.js"
+      ],
+      "note": "RE-MEASURED, NOT RE-IMPLEMENTED — plus the one delivered byte of this round, which lives exactly here.\n\n(1) REGISTRY, landed and clean vs HEAD: daemon-command-registry.ts:52 `import { runDesignSubmitEdge } from \"./daemon-command-design.js\"`, :464-472 the branch, answered BEFORE `requestOf` so the shared assembler cannot pre-empt the design slice's closed DESIGN_CODE_LAYERS map with its own generic INPUT_INVALID. No layer literal at any throw site, no new `*_LAYER` constant.\n\n(2) THE QUERY HALF, both edits present in the same commit: mcp-tool-allowlist.ts:39 `\"design.read\"` inside MCP_SERVED_QUERY_KINDS (the advertised oracle) AND mcp-dispatch-port.ts:317 `\"design.read\": answerDesignRead` in QUERY_HANDLERS (the served set, enumerable from production at :336 `servedMcpQueryKinds()`). mcp-tool-allowlist.test.ts:303 sorts `servedMcpQueryKinds()` against the roster for exact set equality in BOTH directions.\n\n(3) THE THREE ABSENCES, asserted not assumed, daemon-command-design.test.ts:247-249 + :244:\n    OPERATOR_PRINCIPAL_KINDS.has(\"design.submit\")        -> false\n    MCP_EXCLUDED_COMMAND_KINDS not.toContain             -> \"design.submit\"\n    HUMAN_ONLY_STEPS.has(\"design.submit\") / (\"design.read\") -> false\nMCP_EXCLUDED_COMMAND_KINDS is at mcp-tool-allowlist.ts:73 and the served set is built at :90 as all commands MINUS it; `design.submit` is served by NOT being there, which is the no-op the description warned would be inverted by habit.\n\n(4) THE DELIVERED BYTE. `apps/daemon/src/mcp-design-read-query.js` declared to this task (moe.declare_files, addedPaths: [that path]) so the wrapper commits it. NOT hand-written, NOT edited: sha256 ea8f0db4b727ccdb52cda2eeeb0dcd04471fb3510a70c3f36a60fc8658b63194 both before and after declaring, content `export * from \"./mcp-design-read-query.ts\";` + one LF, which the guard's own `expectedBridgeSource()` reproduces (`wrongContent: []` in both worktree runs). `mcp-design-read-query.ts` itself was NOT touched — it is task-eb2bb09d's, landed at 5cde885c. Its `??` test sibling `mcp-design-read-query.test.ts` is also task-eb2bb09d's and is deliberately NOT claimed, per QA's instruction; that is why the honest count line for this row is 7 tracked files, not the 8 round 1 quoted.\n\nTRACKING AUDIT — the class of defect that caused the reject, run over EVERY declared path, since one hole is evidence the check was never made: 13 of 14 TRACKED, the 14th being the bridge now declared. `daemon-command-design.js` (the other bridge this row introduced) is TRACKED, so it was never at risk. `git status --porcelain` on all six production paths prints nothing.",
+      "startedAt": "2026-09-06T08:56:51.823Z",
+      "completedAt": "2026-09-06T08:57:24.029Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE ROSTERS AND THE BEHAVIOURAL ARMS. (1) COUNT PINS, remembering this row adds TWO kinds so every roster count moves by two: `daemon-command-vocabulary.test.ts` — two ROWS entries (agent capability NON-NULL for design.submit, its family, its payloadKeys) and the ROWS/distinct-kind pins; `daemon-command-registry.test.ts` — two matching ROWS entries, both kinds transcribed into REGISTRATION_ORDER at THE SAME INDICES they occupy in PAYLOAD_KEYS, and SIX registry.size/ROWS/REGISTRATION_ORDER pins including the three ~850 lines down; `daemon-store-dependencies.test.ts` — both kinds inserted into the hand-written `registryKinds` SET in SORTED order, a third roster whose own comment says a new command writes its own kind there. Take every number from the PRINTED expected-vs-received. (2) DoD-1's BIDIRECTIONAL CHECK ALREADY EXISTS — `daemon-command-registry.test.ts` compares `[...deps.registry.keys()].sort()` (the DISPATCH SEAM, which is what global rail 9 requires) against `ROWS.map(kind).sort()`, both directions spelled out. Adding your ROWS and PAYLOAD_KEYS entries makes it cover both kinds automatically. Do NOT write a parallel arm; the DoD's \"delete each entry from each side in turn and confirm all four deletions go red\" is a DRILL against that existing assertion, and step 5 runs it. (3) DoD-2, THE ARMS THAT MAKE THIS ROW DIFFERENT, asserted BEHAVIOURALLY and not by roster membership: an AGENT-authenticated dispatch of `design.submit` REACHES THE HANDLER, and an agent-authenticated `design.read` RETURNS ITS ANSWER. A membership assertion would pass while a capability check refused the seat at dispatch. (4) DoD-3, the two absences: `design.submit` is NOT in MCP_EXCLUDED_COMMAND_KINDS and NEITHER kind is in HUMAN_ONLY_STEPS — assert both explicitly, because each is exactly where habit would put them. (5) DoD-4: `design.read` is in MCP_SERVED_QUERY_KINDS AND has a dispatch handler — the allowlist parity test covers the set equality; add an arm proving the handler answers.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "note": "ROSTERS RE-MEASURED (landed, unedited this round) + THE BRANCH HAS ACQUIRED A FOREIGN ROSTER RED SINCE ROUND 1, measured with a control.\n\nMY ROWS, present at HEAD b0297796:\n- daemon-command-vocabulary.test.ts:170 `{ agent: [PLANNING, WORK], capability: PLANNING, family: \"DESIGN\", kind: \"design.submit\", ... }` with the :167-169 comment naming the null trap; :362 `FAMILY_MAPS.DESIGN.size` = 1.\n- daemon-command-registry.test.ts:128 the refusal row (`layer: \"REQUEST\"`), :338 the flat kind roster entry.\n- daemon-store-dependencies.test.ts:815 `\"design.submit\"` in the hand-written `registryKinds` set.\n- DoD-1's bidirectional arm is REUSED, not duplicated: daemon-command-registry.test.ts:912 `expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort())` — enumerated from the DISPATCH SEAM, both directions, per global rail 9. No parallel arm was written.\n- DoD-2/3/4 arms all in daemon-command-design.test.ts: :237-239 advertised AND served (`MCP_SERVED_QUERY_KINDS` + `servedMcpQueryKinds()`), :247-249 the three absences, :252-259 the real capability set `[PLANNING, WORK]` frozen, with `agentCapabilitiesFor(\"product_contract.answer_clarification\") === null` as the CONTROL that keeps the assertion from being vacuous.\n\nTHE FOREIGN RED, and it is new since round 1. At f7ad50ee this leg was `Test Files 8 passed`. At HEAD it is `Test Files 4 failed | 3 passed (7)` / `Tests 8 failed | 614 passed (622)`. Cause measured, not guessed: PAYLOAD_KEYS grew from 25 to 27 kinds between f7ad50ee and HEAD —\n  diff of the two key sets = `> deployment.deploy`, `> deployment.set_target`\n— landed into PRODUCTION without their test-roster rows, so every derived count is +2 while the pins still read the old value. The eight anchors and their printed expected-vs-received:\n  daemon-command-registry.test.ts:911  expected 56 to be 54\n  daemon-command-registry.test.ts:957  expected [ 'criterion_check.approve', …(55) ] to deeply equal [ …(53) ]\n  daemon-command-registry.test.ts:1809 / :1831 / :1863   expected 56 to be 54\n  daemon-store-dependencies.test.ts:769  registry-bridge roster object diff\n  daemon-v2-command-registry.test.ts:271  expected 55 to be 53\n  mcp-tool-allowlist.test.ts:147          expected 19 to be 17\nEvery delta is exactly +2 and NOT ONE failing arm names `design.submit` or `design.read`.\n\n(2)-MINUS-(1) RUN AS A CONTROL, both in the private detached worktree at HEAD so the shared checkout was never mutated:\n  bridge PRESENT (delivered tree):  Test Files 4 failed | 3 passed (7) | Tests 8 failed | 614 passed (622)\n  bridge ABSENT  (my merge-base):   Test Files 4 failed | 3 passed (7) | Tests 8 failed | 614 passed (622)\nByte-identical failure sets at the same eight file:line anchors. DELTA = EMPTY, so the owned intersection is EMPTY.\n\nNOT FIXING IT, ON PURPOSE. Bumping 54->56 and writing the two missing ROWS entries is the deployment rows' work (task-04b3ce7e is in planning for exactly these kinds); global rail \"NEVER FREEZE A ROSTER COUNT\" plus \"a worker who finds an unnamed consumer mid-step must stop and report rather than take the extra path\" both point the same way, and two rows bumping the same literal at once is how this board got here.\n\nCONSEQUENCE FOR DoD-1's arm: :912's set-equality sits in the same `it` as the :911 count pin, so the foreign pin throws first and the equality never executes at HEAD. That is why step 5 drills it in the worktree where the SET DIFFERENCE, not the count, is the readout.",
+      "startedAt": "2026-09-06T08:57:26.988Z",
+      "completedAt": "2026-09-06T09:00:42.481Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "DRILLS, GATES, SELF-REVIEW. (a) DRILLS. `git status --porcelain` the exact mutated paths FIRST — and note that several are contended by other rows, so an empty `git diff` is only YOUR restore proof if the file was clean when you started; if it carried peer hunks, capture a SHA256 before drilling and prove equality after, in a call SEPARATE from the restore. Say which proof applies to which path. FOUR DRILLS, and DoD-1 names them: delete the `design.submit` PAYLOAD_KEYS entry only; delete its ROWS entry only; then the same two for `design.read`. Each must red the existing set-equality arm, and the two directions differ — quote the SET DIFFERENCE each time rather than a bare count, because a count tells you something moved and the difference tells you which side. A FIFTH DRILL, and it is the one this row exists for: make `agentCapabilitiesFor` return null for `design.submit` (the human-only shape every neighbouring kind uses) and confirm the DoD-2 agent-reachability arm goes RED. If it stays green, that arm is asserting roster membership rather than behaviour, and the design step could ship permanently unstaffable. (b) GATES — standalone foreground, one command per call, no pipes and no `;` chains, quoting each `Test Files N passed` count line: `pnpm --filter @moe/daemon test`, `pnpm typecheck`. Root `pnpm test` is NOT evidence for this row — vitest.config.ts has no `apps/**`, and after the narrowing this row touches NO packages/** file at all, so say that plainly rather than quoting a root count line. Attribute red by failing paths at HEAD minus the step-1 baseline, intersected with this row's owned paths — with twelve rows sharing these files, check whether a failing arm names YOUR kind before attributing it. (c) ADVERSARIAL PASS on this diff only: is `design.submit` reachable by a seat holding only the capability you granted, or did you grant more than it needs; does `design.read` answer over MCP for an agent principal AND refuse a principal with no capability at all; did either kind land in OPERATOR_PRINCIPAL_KINDS, MCP_EXCLUDED_COMMAND_KINDS or HUMAN_ONLY_STEPS by habit; do the REGISTRATION_ORDER indices match the PAYLOAD_KEYS insertion positions for BOTH kinds; did you touch any packages/** file (the leaf's, not yours); did you overwrite a peer hunk in a contended file. (d) COMPLETION RECORD must state: that the contract half is task-64d2757c's and this row touched no packages/** file, with `git status --porcelain -- packages/` proving it; that DoD-6's question is answered YES by that leaf; every pin moved by file:line with before/after counts; the FIFTH drill verbatim, since it is the proof the design step is actually staffable; and that the bidirectional set-equality was REUSED rather than duplicated, naming the arm so a QA reading DoD-1 does not hunt for a new test.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "apps/daemon/src/mcp-design-read-query.js"
+      ],
+      "note": "DRILLS, GATES, SELF-REVIEW. Full ledger with verbatim transcripts: row comment-20a9488b.\n\n(a) DRILLS — ALL FIVE RUN, ALL IN A THROWAWAY DETACHED WORKTREE, so the shared checkout was never mutated. That is a stronger restore proof than an empty diff and it sidesteps the drill-restore hazard entirely: `git status --porcelain` on all six contended production paths in the shared tree is EMPTY, and the worktree's only delta at teardown was the intended `??` bridge (sha256 ea8f0db4… equal to the shared copy). Each drill restored with `git checkout --` + empty porcelain verified BEFORE the next.\n  D1 delete design.submit PAYLOAD_KEYS row -> 10 failed vs baseline 8; set difference `-   \"design.submit\",`.\n  D2 delete its registry.test ROWS row -> `expected [...] to have a length of 54 but got 53`, and the file's test count fell 354 -> 349 because 5 generated per-kind arms vanished — the rail-9 hazard itself, caught by the ROWS-side pin.\n  D3 delete design.read from MCP_SERVED_QUERY_KINDS -> `-   \"design.read\",`, \"Q1 advertises exactly the queries the production port serves\" RED.\n  D4 delete its QUERY_HANDLERS entry -> `+   \"design.read\",` — OPPOSITE sign. Bidirectional proven with both directions printed.\n  D5, the one this row exists for: `if (kind === \"design.submit\") return null;` -> `Tests 4 failed | 4 passed (8)`, verbatim `Error: design.submit is unstaffable: agentCapabilitiesFor answered null`, killing both behavioural dispatch arms (:139, :201), the refusal-code arm (:179) and the capability arm (:254).\n  DoD-1's bidirectional set-equality was REUSED, not duplicated: daemon-command-registry.test.ts:912.\n\n(b) GATES, standalone foreground, one per call.\n  NAMED (exit 0): `pnpm exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/daemon-command-design.test.ts src/daemon-command-vocabulary.test.ts src/daemon-command-environment.test.ts` (cwd apps/daemon) -> `Test Files 3 passed (3)` / `Tests 211 passed (211)` EXIT=0. Nonzero count line, so the run is proven executed.\n  `pnpm --filter @moe/daemon test` -> `Test Files 29 failed | 483 passed (512)` / `Tests 152 failed | 9201 passed | 47 skipped (9400)` EXIT=1, 928s. FOREIGN.\n  `pnpm typecheck` -> EXIT=1, 19 `$ tsc` echoes. Both errors in `src/bootstrap/bootstrap-sequence.ts` (45,12 TS2739 / 109,10 TS7053) naming `deployment.deploy` and `deployment.set_target`. FOREIGN. Baseline control, daemon tsc at HEAD with the bridge removed: also EXIT=1, every error naming the same two kinds, none naming design.\n  Root `pnpm test` NOT quoted and is evidence for nothing here: vitest.config.ts has no `apps/**`, and this row touches no packages/** file.\n  ATTRIBUTION, (2)-minus-(1) with a real control: the round-1 scoped 7-file leg run in the worktree with the bridge PRESENT and ABSENT gave byte-identical `Test Files 4 failed | 3 passed (7)` / `Tests 8 failed | 614 passed (622)` at the same 8 file:line anchors. Delta EMPTY. Grepping the whole 928s log for `design.` against FAIL/×/Assertion lines returns ZERO hits. Root cause of the wide red is a single foreign gap — `deployment.deploy`/`deployment.set_target` in production PAYLOAD_KEYS with no test-roster rows and no COMMAND_PREREQUISITES entry — raised in #general (msg-38195ec6). Their pins were deliberately NOT bumped by me.\n\n(c) ADVERSARIAL PASS on this diff. The diff this round is ONE 1-line re-export becoming tracked: no logic, no IO, no state, no concurrency or input surface to attack. So the pass was run against the delivered behaviour instead.\n  - A seat with NO capability is refused, and at the right layer: `:160 refuses a seat that holds no capability for it, at AUTHORIZE and not at the edge`. Unauthenticated MCP caller: `:221 refuses … before it decides anything about the payload`.\n  - Capability granted is `[PLANNING, WORK]` against a required capability of PLANNING — the seat's own planning+work authority, rationale at daemon-command-vocabulary.ts:176-196, pinned frozen and ordered at :253 with a null control on a genuinely human-only kind so the assertion cannot go vacuous.\n  - Neither kind in OPERATOR_PRINCIPAL_KINDS, MCP_EXCLUDED_COMMAND_KINDS or HUMAN_ONLY_STEPS (:242-250).\n  - REGISTRATION_ORDER vs `registry.keys()` (:957) reports ONLY the foreign pair as its difference, so design.submit's index agrees on both sides.\n  - No packages/** file edited: task.declaredFiles contains zero packages/ paths. `git status --porcelain -- packages/` is NOT empty, but its 4 entries are peer dirt (runtime-vocabulary.ts et al, task-6cbcf5ff / task-0e87ab34) — noted, never reverted, never staged.\n  - Exhaustiveness check on the defect CLASS rather than the instance: the bridge guard's `missing: []` is what proves no OTHER `.js` specifier this row added lacks its bridge, and `daemon-command-design.js` was independently confirmed TRACKED.",
+      "startedAt": "2026-09-06T09:00:46.242Z",
+      "completedAt": "2026-09-06T09:12:55.249Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "REJECT on ONE owned defect — a clean-checkout hole. Everything else verified green by me. FULL EVIDENCE IN ROW COMMENT `comment-94063988`; read it first — it lists what NOT to redo (I re-ran your drill 5 and your DoD-1 scope correction; both correct).\n\nDEFECT. `apps/daemon/src/mcp-design-read-query.js`, the runtime `.js` bridge, is NOT ON THE BRANCH — it exists only as an untracked `??` file in the shared checkout, which is why your run was green and the delivered tree is not. Your imports at `mcp-dispatch-port.ts:22-23` and `mcp-http/mcp-http-host.ts:14` promote that module into the runtime tier via the `.js`-specifier closure in `runtime-entrypoint.test.ts:155-172`, so the bridge becomes required.\n\nPROVEN NEW, with a control, in a private detached worktree (shared tree untouched):\n  f7ad50ee (your completion tree): missing: [\"mcp-design-read-query.ts\"] <- YOURS\n  51fbfc88 (f7ad50ee^, your parent): missing: []                         <- CONTROL\n`unexpected: [deployment-docker-probe.js]` identical both sides — foreign. `git grep mcp-design-read-query 51fbfc88 -- apps/daemon/src` = zero hits.\n\nSo `mcp-dispatch-port.js` -> `.ts` -> `./mcp-design-read-query.js` resolves to a file absent from a fresh clone. That port is the surface this row's title claims to have made reachable.\n\nFIX — one file, no code change. The untracked bridge is byte-exact already. Land it: list `apps/daemon/src/mcp-design-read-query.js` in `complete_step.modifiedFiles`, or claim it with `moe.declare_files`. Do not hand-write a replacement; do not edit `mcp-design-read-query.ts` (task-eb2bb09d's). Add `src/runtime-entrypoint.test.ts` to your verification leg, require `missing: []`.\n\nALSO correct the record: it names `foundation-attempt-windows.test.ts` as the ONLY daemon delta with the owned intersection EMPTY. `runtime-entrypoint.test.ts` was a second, owned delta.\n\nNOT YOURS: branch head `eb549e03` does not load (peer task-04b3ce7e bytes). See the comment.",
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-8a6d6660c31c4e119f962d13e6f1505d",
+  "dependsOn": [
+    "task-5e90317e80ac4b86a9704b6b8ba8874a",
+    "task-64d2757c06494c1f9016c5e2ffdf19fc"
+  ],
+  "priority": "HIGH",
+  "order": 61.5,
+  "comments": [
+    {
+      "id": "comment-9fc668721d9745beaad2fc89362b285a",
+      "author": "architect-3c27f2ab",
+      "content": "PLAN NOTE (architect-3c27f2ab). DoD-2 (MCP behavioural read) and DoD-4 (MCP_SERVED_QUERY_KINDS + dispatch handler) moved to sibling task-7f9f20c7cddf4d50b49054951ab177fb so this row stays at 10 files. This row still: publishes both kinds on the shared contract + generated client, wires design.submit into the daemon command roster, asserts it is NOT MCP-excluded and NOT human-only.\n\ndependsOn now includes task-40e52fa8 (in-flight on the same roster files). WORKING stays gated until that lands. Re-measure ROWS length before incrementing — do not assume 46.\n\nQA: grade DoD-2 read-half and DoD-4 as owned by task-7f9f20c7.",
+      "timestamp": "2026-09-05T11:31:15.219Z"
+    },
+    {
+      "id": "comment-f6d51faf142a411b8a7d5402006b0023",
+      "author": "worker-f72a1438",
+      "content": "Step-1 pre-edit audit (zero source edits). Prerequisites 5e90317e and 40e52fa8 are DONE/landed per epicSiblings, verification/completion read. Gap still real: git grep design.submit/design.read in daemon-command-vocabulary.ts + runtime-vocabulary.ts + generated client => zero roster hits; store free-form commandKind is not publication. Existing exports submitDesignRevision/readDesignRevision and designRefusal(code,sourceCode=null,sourceLayer=null) verified; layer derives DESIGN_CODE_LAYERS.\nCounts at production-at-claim: vocabulary ROWS47; registry ROWS47, REGISTRATION_ORDER47; OPERATOR_ONLY12 in both (must stay12); runtime commands110 in dirty peer roster; queries18; registryKinds literal47 entries, no length assertion. vocabulary386 physical lines, registry462 pre-existing. Daemon six owned paths are clean; four shared contract/client paths contain peer edits adding deployment.deploy/set_target, environment.set_variable/unset_variable, release.decide, repository.bootstrap. Preserved all.\nBLOCKING SCOPE DISCOVERY: extracting GENERATED_CONTRACT_DIGEST then `git grep -n -F <hex> -- . ':!.moe' ':!.serena'` gives FOUR paths. Current hex f07b77e49025d5fd8a6bd391f5848f24103390d23e4db11523346b87f0891bfd at generated-client.ts:919; generated-coverage.test.ts:36; apps/control-room/src/data/data-adapter.test.ts:18; apps/control-room/src/v2/goals/approve-plan.test.tsx:255. The latter TWO are not in planningNotes.keyFiles (10 paths). Both feed the literal to createCompatGate and throw on !gate.ok (lines20/257), so a real regeneration necessarily requires these mirrors or breaks consumers. Independent read-only audit confirms. No activeAmendmentId/amendments returned for any step in freshly fetched context; step1(e) explicitly STOP for any file outside keyFiles. Epic rail2 independently requires literal census and full UI gate; base step6 omits UI gate. Need architect amend/split shared-contract leaf+all four mirrors and sequence daemon consumer, or explicitly resolve ownership/scope without expanding silently. This is a guaranteed consumer break, not peer-dirt blocking or denominator polish. No generator/tests run and no path claimed.",
+      "timestamp": "2026-09-05T20:05:10.301Z"
+    },
+    {
+      "id": "comment-94063988d7024e758e0cebc76873875e",
+      "author": "qa-4f771bb8",
+      "content": "QA REJECT EVIDENCE (qa-4f771bb8, 2026-09-06). Full detail for the reject; reason field is capped.\n\n== THE DEFECT, MEASURED WITH A POSITIVE CONTROL ==\nRan in a PRIVATE detached worktree (`git worktree add --detach`, node_modules junctioned, removed after). The shared tree was never mutated.\n\nat f7ad50ee (your completion tree), `src/runtime-entrypoint.test.ts:255`:\n    missing:    [\"mcp-design-read-query.ts\"]        <-- NEW, YOURS\n    unexpected: [\"repository\\deployment\\deployment-docker-probe.js\"]\n    Test Files 1 failed (1) | Tests 1 failed | 4 passed (5)\n\nat 51fbfc88 (= f7ad50ee^, your merge parent):\n    missing:    []                                   <-- CONTROL\n    unexpected: [\"repository\\deployment\\deployment-docker-probe.js\"]\n\n`missing` moves [] -> one entry across your diff; `unexpected` is identical on both sides (foreign, not charged). Structural confirmation: `git grep -n mcp-design-read-query 51fbfc88 -- apps/daemon/src` = ZERO hits, and `mcp-design-read-query.test.ts` is untracked, so at the parent the module was neither seeded nor reached by closure and owed no bridge. Your `mcp-dispatch-port.ts:22-23` and `mcp-http/mcp-http-host.ts:14` imports of `./mcp-design-read-query.js` are what promote it into the runtime tier (`runtime-entrypoint.test.ts:155-172`, `.js` specifiers only).\n\n== WHY A REJECT, NOT A FOLLOW-UP ==\n`mcp-dispatch-port.js` -> `mcp-dispatch-port.ts` -> `./mcp-design-read-query.js` resolves to a file absent from a clean checkout. The MCP dispatch port is the surface this row's title claims to have made reachable. Delivered bytes do not work from a fresh clone — the one class the delivery-bias rail keeps as a hard stop.\n\n== FIX: ONE FILE, NO CODE CHANGE ==\nThe bridge already exists untracked with byte-exact correct content (`cat -A`):\n    export * from \"./mcp-design-read-query.ts\";$\nOne line, LF, no CRLF. Land it: list `apps/daemon/src/mcp-design-read-query.js` in `complete_step.modifiedFiles`, or claim it with `moe.declare_files`. Do NOT hand-write a replacement. Do NOT edit `mcp-design-read-query.ts` — task-eb2bb09d's; only the bridge is at issue, and only because your import promoted it. Add `src/runtime-entrypoint.test.ts` to your verification leg and require `missing: []`; its absence from the recorded command is how this got past you.\n\n== VERIFIED GREEN — DO NOT REDO ==\n- Your recorded leg, re-run by me at f7ad50ee: `Test Files 7 passed (7) | Tests 616 passed (616)`, EXIT=0. (7 not 8: `mcp-design-read-query.test.ts` is untracked, so absent from the delivered tree — itself a hint its `.js` sibling never landed.)\n- DoD-2, the row's point. I ran drill 5 myself: inserted `if (kind === \"design.submit\") return null;` at `daemon-command-vocabulary.ts:243` -> `Tests 4 failed | 4 passed (8)`. Both behavioural dispatch arms, the refusal-code arm and the capability arm went RED. The seat-kind inversion is asserted behaviourally, not by roster membership. Exactly right, and the easiest thing on this row to have faked.\n- DoD-1 scope correction re-measured: `git grep '\"product_contract.read\"\\|\"graph.get\"\\|\"events.read\"\\|\"documents.source_read\"' -- daemon-command-{payload-keys,registry,vocabulary,families}.ts` = ZERO. No served MCP query holds a command-roster entry, so `design.read` cannot, and counts move by ONE. The plan's \"two kinds / counts move by two\" was wrong; you measured and said so.\n- DoD-3/4: `mcp-tool-allowlist.ts:39` has `design.read`; `mcp-dispatch-port.ts:317` has `\"design.read\": answerDesignRead`; `daemon-command-design.test.ts:246-249` asserts all three absences + `servedMcpQueryKinds()` parity.\n- DoD-6: `packages/` untouched; contract half is task-64d2757c's; answered YES.\n- Per-file caps: design 116, dispatch-port 396, vocabulary 359, families 195, allowlist 101 — all under 400. `daemon-command-registry.ts` 531, but 509 at merge-base and the plan authorised a small addition. NOT a rejection reason, do not fix this round.",
+      "timestamp": "2026-09-06T07:46:59.722Z"
+    },
+    {
+      "id": "comment-20a9488ba2ce4591af1fb584f93ced92",
+      "author": "worker-deb4c7d8",
+      "content": "ROUND 2 EVIDENCE LEDGER (worker-deb4c7d8). Answers comment-94063988. Measured at HEAD b0297796; HEAD moved to db16a103 mid-session but `git diff b0297796..db16a103 -- apps/daemon/src` touches ONLY `deployment/*` — no owned path.\n\n## 1. THE DEFECT, FIXED, WITH THE CONTROL YOU ASKED FOR\n`apps/daemon/src/mcp-design-read-query.js` is now declared to this row (moe.declare_files, addedPaths: exactly that one path) so the wrapper commits it. NOT hand-written, NOT edited — sha256 `ea8f0db4b727ccdb52cda2eeeb0dcd04471fb3510a70c3f36a60fc8658b63194` identical before and after, content `export * from \"./mcp-design-read-query.ts\";` + one LF.\n\nReproduced in a PRIVATE detached worktree (`git worktree add --detach D:/tmp/wt-deb4c7d8 HEAD`, node_modules junctioned, run with `node <repo>/node_modules/vitest/vitest.mjs` — never `pnpm exec` in a worktree). Same tree, one file toggled:\n\n    bridge ABSENT  -> missing: [\"mcp-design-read-query.ts\"]   <- your finding, reproduced\n    bridge PRESENT -> missing: []                             <- fixed\n    wrongContent: [] on BOTH, so the bytes match expectedBridgeSource()\n\nThe full shared-tree `pnpm --filter @moe/daemon test` prints the same `missing: []`.\n\n## 2. WHY runtime-entrypoint.test.ts IS NOT THE NAMED EXIT-0 LEG\nBoth runs also print `unexpected: [\"repository\\\\deployment\\\\deployment-docker-probe.js\"]`. Measured, not assumed: that `.js` is TRACKED, landed by `e219aa43 feat(task-3706b7e7…)`, present in `git ls-tree 51fbfc88` (your control commit), and its `.ts` has no `.test.ts` sibling so it is not in the runtime tier. That arm therefore CANNOT exit 0 on this branch for anyone. Your instruction was \"require `missing: []`\" and that is satisfied and quoted above.\n\n## 3. A NEW FOREIGN RED ARRIVED AFTER f7ad50ee — with (2)-minus-(1)\nPAYLOAD_KEYS went 25 -> 27 kinds since f7ad50ee; the key-set diff is exactly `deployment.deploy`, `deployment.set_target`, landed into PRODUCTION with no test-roster rows and no `COMMAND_PREREQUISITES` entry. Consequences: every roster pin off by +2 (56/54, 55/53, 19/17) and a `TypeError … (reading 'filter')` at `bootstrap-sequence.ts:109` reached via `answerWorkContext`.\n\nControl run in the worktree, the round-1 scoped 7-file leg, bridge toggled:\n    bridge PRESENT: Test Files 4 failed | 3 passed (7) | Tests 8 failed | 614 passed (622)\n    bridge ABSENT : Test Files 4 failed | 3 passed (7) | Tests 8 failed | 614 passed (622)\nByte-identical at the same 8 file:line anchors. DELTA EMPTY. NOT ONE failing arm names `design.submit` or `design.read` — grepped the whole 928s suite log for `design.` against FAIL/×/Assertion lines: zero hits. Raised with the owners in #general (msg-38195ec6). I did not touch their pins.\n\n## 4. DRILLS — ALL FIVE, ALL IN THE THROWAWAY WORKTREE\nThe shared checkout was NEVER mutated, which is a stronger restore proof than a diff: `git status --porcelain` on all six production paths is EMPTY, and the worktree's only delta was the intended `??` bridge. Each drill restored with `git checkout --` + empty porcelain, verified before the next.\n\nD1 delete `design.submit` PAYLOAD_KEYS row  -> 10 failed (baseline 8); set difference printed `-   \"design.submit\",`; 4 arms named it.\nD2 delete its registry.test ROWS row        -> `expected [...] to have a length of 54 but got 53`; the file's test count fell 354 -> 349 because 5 generated per-kind arms VANISHED — the exact rail-9 hazard, caught by the ROWS-side pin.\nD3 delete `design.read` from MCP_SERVED_QUERY_KINDS -> `-   \"design.read\",`; \"Q1 advertises exactly the queries the production port serves\" RED.\nD4 delete its QUERY_HANDLERS entry          -> `+   \"design.read\",` — the OPPOSITE direction. Bidirectional, both signs printed.\nD5 (the one this row exists for) insert `if (kind === \"design.submit\") return null;` -> `Tests 4 failed | 4 passed (8)`, verbatim:\n    Error: design.submit is unstaffable: agentCapabilitiesFor answered null\n  killing BOTH behavioural dispatch arms (:139 submit, :201 read), the refusal-code arm (:179) and the capability arm (:254). Behaviour, not roster membership.\n\n## 5. ADVERSARIAL PASS\n- Refusals exist and are separate arms: `:160 refuses a seat that holds no capability for it, at AUTHORIZE and not at the edge`; `:221 refuses an unauthenticated caller before it decides anything about the payload`.\n- Capability granted `[PLANNING, WORK]`, required capability PLANNING; pinned frozen and ordered at :253 with `agentCapabilitiesFor(\"product_contract.answer_clarification\") === null` as the anti-vacuity control.\n- Index parity: `registry.keys()` vs REGISTRATION_ORDER (:957) reports ONLY the foreign pair as the difference, so `design.submit`'s position agrees on both sides.\n- `packages/` porcelain is NOT empty — 4 peer-dirty files (runtime-vocabulary.ts et al, task-6cbcf5ff / task-0e87ab34). None are mine: task.declaredFiles contains ZERO packages/ paths and I made no edit there. DoD-6 answered YES by task-64d2757c.\n\n## 6. RECORD CORRECTION YOU ASKED FOR\nRound 1 named `src/work/foundation-attempt-windows.test.ts` as the only daemon delta with an empty owned intersection. Inaccurate: `src/runtime-entrypoint.test.ts` was a second, owned delta, caused by this diff, and it is the defect you found. It is now in the disclosed ledger above rather than absent from it.",
+      "timestamp": "2026-09-06T09:12:28.751Z"
+    },
+    {
+      "id": "comment-bb33061d3f1d4664bd2ccdac2bc75588",
+      "author": "qa-f2906c26",
+      "content": "QA ROUND-2 VERIFICATION LEDGER (qa-f2906c26). APPROVED. Answers comment-20a9488b. Everything below was re-measured by me at HEAD via `git show HEAD:<path>` — never the dirty shared tree.\n\n## 1. THE ROUND-1 DEFECT IS FIXED, RE-PROVEN INDEPENDENTLY\n`apps/daemon/src/mcp-design-read-query.js` is TRACKED. `git log --diff-filter=A` names `62a5863e`; content at HEAD is exactly `export * from \"./mcp-design-read-query.ts\";`. I ran `src/runtime-entrypoint.test.ts` myself: **`missing: []`**. My round-1 ask is met.\nIts `unexpected:` now lists TWO, both foreign, both deployment: `deployment\\deploy-target-contracts.js` (untracked `??`, task-04b3ce7e) and `repository\\deployment\\deployment-docker-probe.js` (tracked since `e219aa43`). Your §2 claim that the arm cannot exit 0 for anyone on this branch is CORRECT and I accept it — `missing: []` was the requirement, not exit 0.\n\n## 2. DoD, ITEM BY ITEM, AT HEAD\n- **DoD-1** — bidirectional set-equality REUSED (`daemon-command-registry.test.ts`, `registry.keys()` vs `ROWS`), not duplicated. Confirmed by reading, and by the fact that the failing delta lists ONLY the foreign pair, which is itself proof `design.submit` matched on both sides.\n- **DoD-2** — arms are BEHAVIOURAL, not membership (`daemon-command-design.test.ts:136-260`): agent-authenticated dispatch → `DECIDED`/`ACCEPTED` **plus a durable read-back through `readDesignRevision`** (version 1, versions [1]); WORK-only seat → `CAPABILITY_DENIED` at **stage AUTHORIZE** with the aggregate proven still `DESIGN_REVISION_ABSENT`; malformed → `DESIGN_SHAPE_INVALID` with the layer taken from `DESIGN_CODE_LAYERS`, not a literal. `design.read` answered for an agent principal; unauthenticated caller refused before payload. Reason code AND layer pinned — global rail 1 satisfied.\n- **DoD-3** — `:242-250` asserts all three absences. Additionally structural: `MCP_EXCLUDED_COMMAND_KINDS` is now **derived** (`[...OPERATOR_PRINCIPAL_KINDS].filter(!MCP_REACHABLE_OPERATOR_KINDS)`), so adding `design.submit` there by habit was not even possible without touching the operator roster the same arm pins.\n- **DoD-4** — `design.read` in `MCP_SERVED_QUERY_KINDS` (mcp-tool-allowlist.ts) **and** `QUERY_HANDLERS[\"design.read\"] = answerDesignRead` at `mcp-dispatch-port.ts:317`, bridged at :22.\n- **DoD-5** — all three roster tables carry rows: `daemon-command-vocabulary.test.ts:170`, `daemon-command-registry.test.ts:128` + flat roster `:338`, `daemon-store-dependencies.test.ts:815`.\n- **DoD-6** — zero `packages/` paths in `task.commits` and in `declaredFiles`. Answered YES, owned by leaf task-64d2757c. Unambiguous for child 3.\n- **DoD-7** — gates below.\n\n## 3. GATES I RE-RAN\nOwned 7-file leg (`daemon-command-design`, `-vocabulary`, `-registry`, `daemon-store-dependencies`, `mcp-tool-allowlist`, `daemon-v2-command-registry`, `runtime-entrypoint`):\n`Test Files 5 failed | 2 passed (7)` / `Tests 11 failed | 588 passed (599)`.\n**`daemon-command-design.test.ts` and `daemon-command-vocabulary.test.ts` BOTH PASS.**\n`pnpm typecheck` EXIT=1 — exactly two errors, both in `src/bootstrap/bootstrap-sequence.ts` `(45,12)` TS2739 and `(109,10)` TS7053, naming ONLY `deployment.deploy` / `deployment.set_target`. Zero design symbols. Matches your §(b) verbatim; not an owned path.\n\n## 4. ATTRIBUTION — BY DELTA ENTRIES, NOT BY COUNT\nAll 11 reduce to `+deployment.set_target` / `+deployment.deploy`: 56/54 registry size, 55/53 REGISTRATION_ORDER, 19/17 on the derived exclusion roster, plus `TypeError (reading 'filter')` at `bootstrap-sequence.ts:109` = no `COMMAND_PREREQUISITES` entry. `git grep -c 'deployment.deploy' HEAD -- daemon-command-registry.test.ts` = **0**: production kinds landed with no test-roster rows.\n\n**THE TRAP I CHECKED, AND OTHER GRADERS SHOULD.** `git log -S'\"deployment.deploy\"' -- daemon-command-payload-keys.ts` returns `4ad67796`, a commit **bearing THIS task's id**. Read naively that is a scope-creep reject. It is not: `role=qa`, `wip(...)` — a wrapper session-end sweep by qa-4f771bb8 of a peer's dirty file. Its diff is\n`-[DEPLOYMENT_SET_TARGET_COMMAND_KIND]: …` → `+\"deployment.set_target\": [...]`\ni.e. the repair of the peer ReferenceError I flagged as NOT-YOURS in round 1 — a resolved symbol reference, not a new key. The repair made the module LOAD, which **un-masked** pins that had been unmeasurable while all 8 daemon files threw at import. The red is older than its first observation. Owned intersection **EMPTY**.\n\n## 5. RECORD CORRECTION — ACCEPTED\n§6 restates `runtime-entrypoint.test.ts` as the second owned delta. That was my ask and it is now in the ledger rather than absent from it.\n\n## 6. TWO NOTES, NEITHER A REJECTION\n- `daemon-command-registry.ts` is 547 lines, over the 400 per-file cap — but **pre-existing** (531 at parent `51fbfc88`). This row added +16 and extracted the bulk into new `daemon-command-design.ts` (116 lines). That is the compliant response, not a violation. The split is owed by whoever owns that file.\n- `apps/daemon/src/mcp-design-read-query.test.ts` is still untracked `??`. It is **task-eb2bb09d's** sibling to the `.ts` it landed at `5cde885c`, not this row's, and the `.js`-specifier runtime closure is unaffected by it. Flagging for that row's grader, not for you.",
+      "timestamp": "2026-09-06T09:24:36.527Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T08:40:28.076Z",
+  "updatedAt": "2026-09-06T09:26:33.757Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T11:26:39.278Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 8,
+    "executedStepCount": 10,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-09-06T09:25:42.314Z",
+    "wallClockMs": 79143036
+  },
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
+  "failedDodItems": [
+    {
+      "item": "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck` -- FAILS: at the delivered tree f7ad50ee the daemon suite carries a NEW owned red, runtime-entrypoint.test.ts reporting missing: [\"mcp-design-read-query.ts\"], absent at the merge parent 51fbfc88 (missing: []). The completion record attributes the daemon delta to foundation-attempt-windows.test.ts only and never discloses this one.",
+      "rejectedAt": "2026-09-06T07:49:19.978Z",
+      "rejectedBy": "qa-4f771bb8"
+    },
+    {
+      "item": "BOTH ARE SEAT-REACHABLE OVER MCP -- the assertions are correct and drill-proven, but the DELIVERED BYTES are not reachable from a clean checkout: mcp-dispatch-port.ts:22 imports ./mcp-design-read-query.js and that file is not on the branch, so the MCP dispatch port that serves design.read cannot resolve its own import outside the shared worktree.",
+      "rejectedAt": "2026-09-06T07:49:19.978Z",
+      "rejectedBy": "qa-4f771bb8"
+    }
+  ],
+  "planSubmittedAt": "2026-09-05T22:19:44.423Z",
+  "planningNotes": {
+    "approachesConsidered": "RE-PLAN AFTER A GOVERNOR REOPEN, and the remedy is structural rather than a wider roster. The prior plan sat at the 10-file ceiling and omitted two mandatory digest mirrors; worker-f72a1438 stopped pre-edit under the plan's own STOP clause and global rail 19. Widening to 12 was impossible (submit_plan hard-rejects >10), so the contract half had to leave.\n\nTHE CHOICE I MADE BEYOND THE GOVERNOR'S ASK. The #architects request was to carve THIS row's contract work into a leaf. Measured, that would have fixed one row and left three identical collisions queued: task-37a50989 (deployment.rollback), task-5a8c3166 (deployment.migrate_down) and task-bb0a7131 (project.set_agent_provider) each had their own plan to edit THE SAME SIX FILES and rotate THE SAME DIGEST. Whoever landed second would re-do the census and regeneration against a digest the first one moved — which is precisely the failure that has now happened three times in one day (40e52fa8 14:15, c2b5a9f0 19:39, this row tonight).\nSo the leaf publishes ALL FIVE remaining strings in ONE rotation (task-64d2757c), and all four consumer rows now dependsOn it. All four were WORKING with NO assignee, so nothing was mid-flight and this was fixable rather than a workaround. Their plans still contain contract steps and will need narrowing when they are next claimed — flagged to the governor.\nREJECTED — a design-only contract leaf: fixes one row, leaves three collisions.\nREJECTED — letting the four serialise on dependsOn without merging: four sequential digest rotations, four censuses, four regenerations, and three more chances to miss the two apps/control-room mirrors that nothing but `pnpm --filter @moe/control-room test` can see.\n\nTHE ROW'S OWN SUBJECT IS AN INVERSION AND THAT IS WHERE ITS RISK LIVES. Every other kind this epic adds is human-only; these two are seat kinds. The surrounding code is dense with the human-only shape (`agentCapabilitiesFor` returning null, OPERATOR_PRINCIPAL_KINDS, MCP_EXCLUDED_COMMAND_KINDS, HUMAN_ONLY_STEPS), and copying it would make the design step permanently unstaffable while passing every roster test. Hence DoD-2's behavioural arms and the fifth drill, which is the only thing that distinguishes a correct wiring from a plausible one.",
+    "codebaseInsights": "MEASURED 2026-09-06 by architect-b63fabf3 at HEAD 3891a2a0 on moe/work-2026-09-04.\n\n1. THE ROSTER STATE: runtime-vocabulary.ts already carries deployment.deploy, deployment.set_target (:91), environment.set_variable, environment.unset_variable (:93), preview.decide (:103), release.decide, repository.bootstrap (:111). STILL ABSENT and queued across four rows: deployment.migrate_down, deployment.rollback, design.read, design.submit, project.set_agent_provider — now all five on the single leaf task-64d2757c.\n\n2. THE FOUR COLLIDING ROWS were ALL `WORKING` with `assignedWorkerId: null` — planned but unclaimed — which is what made a structural fix possible rather than a workaround. dependsOn set on all four to the leaf.\n\n3. CONTENTION IS EXTREME ON THE DAEMON FILES. `claim_next_task` reported TWELVE rows sharing paths with this one. daemon-command-vocabulary.ts is contended by task-04b3ce7e, 0a56ecee, 537320ee, 54b74b80, 6cbcf5ff, b22462cf, c422b106 and facff1d1; daemon-command-registry.test.ts by nearly the same set. Read before editing; a red naming another kind is not this row's.\n\n4. THE INVERSION, and the row's rail 1: these are SEAT kinds. `agentCapabilitiesFor` must return a real capability set for design.submit, NOT null. Neither kind goes in OPERATOR_PRINCIPAL_KINDS, MCP_EXCLUDED_COMMAND_KINDS or HUMAN_ONLY_STEPS. The surrounding pattern invites all three mistakes.\n\n5. THE QUERY HALF NEEDS TWO EDITS: MCP_SERVED_QUERY_KINDS (mcp-tool-allowlist.ts) is the ADVERTISED oracle, `servedMcpQueryKinds()` (mcp-dispatch-port.ts) is the SERVED set, and the allowlist test asserts EXACT SET EQUALITY IN BOTH DIRECTIONS — its header states the two enumerations are deliberately kept independent so the parity assertion is not tautological. A roster entry without a handler reds there.\n\n6. THE BIDIRECTIONAL SET-EQUALITY FOR COMMANDS ALREADY EXISTS at daemon-command-registry.test.ts — `[...deps.registry.keys()].sort()` against `ROWS.map(kind).sort()`, both directions. DoD-1's four deletions are a DRILL against it, not a new test.\n\n7. THREE ROSTERS, NOT TWO: daemon-command-vocabulary.test.ts, daemon-command-registry.test.ts, and a third hand-written `registryKinds` SET in daemon-store-dependencies.test.ts whose comment says a new command writes its own kind there. Registry.size pins sit at six places, three of them ~850 lines below the others.\n\n8. THE DESIGN STORE IS LANDED (task-5e90317e, DONE): `submitDesignRevision`, `readDesignRevision`, and a closed `DESIGN_CODE_LAYERS` map read by `designRefusal` so no call site can mint a disagreeing code/layer pair.\n\n9. THIS ROW ADDS TWO KINDS, so every roster count moves by TWO. A worker who moves them by one passes nothing.\n\n10. GATE REACH: vitest.config.ts has no `apps/**`; after the narrowing this row touches no packages/** file, so root `pnpm test` is evidence for nothing here.",
+    "risks": "FIRST — THE INVERSION IS THE ROW'S REAL RISK. Copying the human-only shape that surrounds these files (null `agentCapabilitiesFor`, OPERATOR_PRINCIPAL_KINDS, MCP_EXCLUDED_COMMAND_KINDS, HUMAN_ONLY_STEPS) makes the design step PERMANENTLY UNSTAFFABLE while every roster test passes. DoD-2's arms must be BEHAVIOURAL — an agent-authenticated dispatch reaching the handler — because a membership assertion passes while a capability check refuses the seat. The fifth drill reproduces the mistake and requires the arm to red.\n\nSECOND — TWELVE ROWS SHARE THESE FILES. Read dirty hunks before editing, edit around them, never revert or regenerate a contended file from a HEAD copy, and when a gate reds check whether the failing arm names YOUR kind. An empty `git diff` is only a restore proof if the file was clean when you started.\n\nTHIRD — EVERY COUNT MOVES BY TWO, not one, and the pins moved twice yesterday with eight more rows queued to move them again. Locations from the plan, VALUES from the printed expected-vs-received.\n\nFOURTH — THE QUERY HALF IS TWO EDITS IN ONE COMMIT. A roster entry without a dispatch handler advertises a capability the port cannot serve, and the parity test reds immediately — but the worse outcome is shipping the advertisement.\n\nFIFTH — THE THREE DISTANT registry.size PINS and the third hand-written roster in daemon-store-dependencies.test.ts are the classic omissions. Grep, do not eyeball.\n\nSIXTH — A NULL FAMILY CAPABILITY THROWS AT REGISTRY BUILD TIME, i.e. at daemon boot rather than in a test. Add the family entry with the union member, never after it.\n\nSEVENTH — DO NOT TOUCH packages/**. The contract half is task-64d2757c's; a packages file in this diff means the leaf's work leaked back in, and the completion record must prove its absence.\n\nEIGHTH — DO NOT WRITE A PARALLEL SET-EQUALITY TEST. It exists and covers both kinds once the rosters gain them; DoD-1's four deletions are drills against it.\n\nNINTH — shared checkout. Peer dirt under .moe/ and .grok/ is NEVER a stop condition: note it, never revert, stash or `git add -A`. Report every path you touch in complete_step.modifiedFiles.",
+    "keyFiles": [
+      "apps/daemon/src/daemon-command-vocabulary.ts",
+      "apps/daemon/src/daemon-command-families.ts",
+      "apps/daemon/src/daemon-command-registry.ts",
+      "apps/daemon/src/mcp-tool-allowlist.ts",
+      "apps/daemon/src/mcp-dispatch-port.ts",
+      "apps/daemon/src/daemon-command-vocabulary.test.ts",
+      "apps/daemon/src/daemon-command-registry.test.ts",
+      "apps/daemon/src/daemon-store-dependencies.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T22:19:46.537Z",
+  "contextFetchedBy": [
+    "qa-4f771bb8",
+    "worker-deb4c7d8",
+    "qa-f2906c26"
+  ],
+  "workStartedAt": "2026-09-05T20:02:21.637Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "Step1 explicitly STOP for files outside the 10-file keyFiles; fresh plan has no amendment overlay. Literal generated digest census proves two mandatory consumer mirrors omitted: apps/control-room/src/data/data-adapter.test.ts:18 and apps/control-room/src/v2/goals/approve-plan.test.tsx:255. Both pass hard-coded hash to real createCompatGate and throw when it mismatches. Step2 regeneration changes digest, so implementing as approved breaks those consumers; silently adding them violates exact scope. Need architect split/amend shared-contract+all-four-mirror leaf and dependency or equivalent explicit scope resolution. Prerequisites are DONE/landed, foreign dirty bytes preserved, no source edited. Full measurements in latest comment.",
+  "blockedOnTaskIds": null,
+  "declaredFiles": [
+    "apps/daemon/src/daemon-command-payload-keys.ts",
+    "apps/daemon/src/daemon-command-families.ts",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "apps/daemon/src/mcp-tool-allowlist.ts",
+    "apps/daemon/src/mcp-dispatch-port.ts",
+    "apps/daemon/src/daemon-command-design.ts",
+    "apps/daemon/src/daemon-command-design.js",
+    "apps/daemon/src/daemon-command-design.test.ts",
+    "apps/daemon/src/mcp-design-read-query.js"
+  ],
+  "reviewStartedAt": "2026-09-06T09:13:46.229Z",
+  "verification": {
+    "command": "pnpm exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/daemon-command-design.test.ts src/daemon-command-vocabulary.test.ts src/daemon-command-environment.test.ts   (cwd apps/daemon)",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  3 passed (3)\n      Tests  211 passed (211)\n   Start at  12:13:07\n   Duration  6.80s (transform 9.27s, setup 0ms, import 12.50s, tests 283ms, environment 0ms)\n\nEXIT=0   (${PIPESTATUS[0]}, not tail's)",
+    "reportedAt": "2026-09-06T09:13:46.229Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/daemon-command-families.ts",
+    "apps/daemon/src/mcp-design-read-query.js",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+    ".moe/project.json",
+    ".moe/tasks/task-358b6ec8ee884ca6b6bc96bbf1f54d84.json",
+    ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json",
+    ".moe/tasks/task-7f9f20c7cddf4d50b49054951ab177fb.json",
+    ".moe/tasks/task-dbc79d2556ab44bbbf87e2194d9e9e53.json",
+    ".moe/tasks/task-dd86f35e117e4de1b5b885332d8af1f8.json",
+    ".moe/tasks/task-f1e402960ada4be7adc6410ec04c945a.json"
+  ],
+  "completionSummary": "ROUND 2. The one owned defect is fixed and the fix is proven with a control. FULL LEDGER: comment-20a9488b. No production logic changed this round — the round-1 diff was already on the branch and QA verified it.\n\nTHE FIX. `apps/daemon/src/mcp-design-read-query.js` declared to this row (moe.declare_files, addedPaths = exactly that path) so the wrapper lands it. NOT hand-written, NOT edited: sha256 ea8f0db4b727ccdb52cda2eeeb0dcd04471fb3510a70c3f36a60fc8658b63194, `export * from \"./mcp-design-read-query.ts\";` + one LF. Private detached worktree at HEAD, one file toggled:\n  bridge ABSENT  -> missing: [\"mcp-design-read-query.ts\"]\n  bridge PRESENT -> missing: []      wrongContent: [] both sides\nSo `mcp-dispatch-port.js` -> `.ts` -> `./mcp-design-read-query.js` now resolves from a fresh clone.\n\nWHY runtime-entrypoint.test.ts IS NOT THE EXIT-0 LEG: both runs also print `unexpected: [repository\\deployment\\deployment-docker-probe.js]`. That `.js` is TRACKED, landed by e219aa43 (task-3706b7e7), and present in `git ls-tree 51fbfc88` — your own control commit. The arm cannot exit 0 for anyone. Your ask was `missing: []`; that is met and quoted.\n\nRECORD CORRECTION: round 1 named foundation-attempt-windows.test.ts as the only daemon delta. Wrong — runtime-entrypoint.test.ts was a second, owned delta, and it was the defect.\n\nNEW FOREIGN RED SINCE f7ad50ee, with (2)-minus-(1). PAYLOAD_KEYS grew 25->27; diff = exactly `deployment.deploy`, `deployment.set_target`, landed to production with no test-roster rows and no COMMAND_PREREQUISITES entry. Round-1's scoped 7-file leg in the worktree, bridge toggled, is byte-identical both ways: `Test Files 4 failed | 3 passed (7)` / `Tests 8 failed | 614 passed (622)`, same 8 anchors. DELTA EMPTY. Grep of the whole 928s suite log for `design.` on FAIL/×/Assertion lines: ZERO hits. Their pins deliberately NOT bumped by me; raised in #general msg-38195ec6.\n\nGATES.\n  NAMED, exit 0, fresh 12:13Z: `Test Files 3 passed (3)` / `Tests 211 passed (211)` —",
+  "commits": [
+    {
+      "sha": "f7ad50eeab290fe7c4a69832c0e7833a5bfa4940",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-0520a42e@2026-09-06T01:21:53Z",
+      "paths": [
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+        ".moe/tasks/task-53267f860c5a420baf3c743ef94954b8.json",
+        ".moe/tasks/task-80322112a48d44c69c6c55f846f8d43f.json",
+        ".moe/tasks/task-a988ca1c240347178c54348c470d07ed.json",
+        ".moe/tasks/task-facff1d1e7ce44a6b1101490524890a9.json",
+        "apps/daemon/src/daemon-command-design.js",
+        "apps/daemon/src/daemon-command-design.test.ts",
+        "apps/daemon/src/daemon-command-design.ts",
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts",
+        "apps/daemon/src/mcp-dispatch-port.ts",
+        "apps/daemon/src/mcp-http/mcp-http-host.ts",
+        "apps/daemon/src/mcp-main.ts",
+        "apps/daemon/src/mcp-tool-allowlist.test.ts",
+        "apps/daemon/src/mcp-tool-allowlist.ts",
+        "apps/daemon/src/orchestrator/agent-wrapper-main.ts"
+      ],
+      "recordedBy": "worker-0520a42e",
+      "recordedAt": "2026-09-06T02:38:54.614Z",
+      "treeId": "884aaf87dd68812b4157edc491d4335c5681cdc0",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-families.ts",
+          "taskId": "task-b22462cf9d9e41cd9472415da2c1fb7d"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-store-dependencies.test.ts",
+          "taskId": "task-54b74b8041c64bc2868435bcbdac6dd6"
+        },
+        {
+          "path": "apps/daemon/src/daemon-v2-command-registry.test.ts",
+          "taskId": "task-54b74b8041c64bc2868435bcbdac6dd6"
+        },
+        {
+          "path": "apps/daemon/src/mcp-dispatch-port.ts",
+          "taskId": "task-7f9f20c7cddf4d50b49054951ab177fb"
+        },
+        {
+          "path": "apps/daemon/src/mcp-tool-allowlist.test.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/mcp-tool-allowlist.ts",
+          "taskId": "task-166d375f8ce9492aaf50587233545992"
+        },
+        {
+          "path": "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+          "taskId": "task-3a0478f57eec44579269b2ed27c91d92"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "ac31d6f151c29e61c058872a32bd745e2b61807e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-06T02:59:00Z",
+      "paths": [
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-06T02:59:09.645Z",
+      "treeId": "113861639b8bb9060978f277d48ae13ac8a6c6da",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "22e052ed696f7836a858f85aa0aa5f1d167efd40",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-06T02:59:41Z",
+      "paths": [
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-06T02:59:50.585Z",
+      "treeId": "3cc3686d0f8e9c89ceb3552654faf514aa75347f",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "991ee4400021723177a87ef403d3b46206146da7",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-06T03:00:22Z",
+      "paths": [
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-06T03:00:30.870Z",
+      "treeId": "29de12788e54850a86a9f976fc9986e6ef6ac770",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "bbda990bb9072bbf17b4cd72a351fac0fffc1ca9",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-06T03:01:02Z",
+      "paths": [
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-06T03:01:11.298Z",
+      "treeId": "4120a12a3dd91d1c9084cb0b63a54b1abc0acde3",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "36bea1051277ef760d7dd01726e488044da1cc3c",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-06T03:01:42Z",
+      "paths": [
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-06T03:01:51.875Z",
+      "treeId": "5c1efad3decb08d47eb9814f60e64c951792bb56",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "4ad67796abc937a4bdf6e81a3cac1121f1def9b1",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-06T07:38:08Z",
+      "paths": [
+        ".moe/project.json",
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+        ".moe/tasks/task-0e87ab347a6a42bda88d1ec539c01731.json",
+        ".moe/tasks/task-463f195efd2f4fd2886790029a474194.json",
+        ".moe/tasks/task-53267f860c5a420baf3c743ef94954b8.json",
+        ".moe/tasks/task-5a8c3166b98b4614952068242993bf2b.json",
+        ".moe/tasks/task-6061e05cd17540a1bbe08b965da58b64.json",
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
+        ".moe/tasks/task-95e68a8dd2464e7b8ad4b1f8c4d2b2e4.json",
+        ".moe/tasks/task-e651725c92434127a7b8d72f0ac5246b.json",
+        ".moe/tasks/task-e7a20a498ed0436380e5aca23cb81607.json",
+        "apps/daemon/src/daemon-command-payload-keys.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-06T07:51:02.660Z",
+      "treeId": "68653cd228ce7975d99f1a45ddb51960bda80684",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "62a5863e758ed569a0b3a5c220a76355a0a29c33",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-06T09:13:52Z",
+      "paths": [
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+        "apps/daemon/src/mcp-design-read-query.js"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-06T09:14:15.779Z",
+      "treeId": "339e0075780c44dbd2d3d11434766daf32e70d2d",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/mcp-design-read-query.js",
+          "taskId": "task-7f9f20c7cddf4d50b49054951ab177fb"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "b3682c14ffb27a672353771c6c3b6742db31214f",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-deb4c7d8@2026-09-06T08:50:14Z",
+      "paths": [
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json"
+      ],
+      "recordedBy": "worker-deb4c7d8",
+      "recordedAt": "2026-09-06T09:14:58.628Z",
+      "treeId": "d353f5ca8c18bdb467b673195234050a728c29fb",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "575fc4fe167975514076511302c7485839e7a2c2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-06T09:13:52Z",
+      "paths": [
+        ".moe/project.json",
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+        ".moe/tasks/task-358b6ec8ee884ca6b6bc96bbf1f54d84.json",
+        ".moe/tasks/task-54b74b8041c64bc2868435bcbdac6dd6.json",
+        ".moe/tasks/task-7f9f20c7cddf4d50b49054951ab177fb.json",
+        ".moe/tasks/task-dbc79d2556ab44bbbf87e2194d9e9e53.json",
+        ".moe/tasks/task-dd86f35e117e4de1b5b885332d8af1f8.json",
+        ".moe/tasks/task-f1e402960ada4be7adc6410ec04c945a.json"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-06T09:26:33.757Z",
+      "treeId": "9bedce769201095ac5decad146745ac3feef0f68",
+      "status": "DONE",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/mcp-main.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper-main.ts",
+    "apps/daemon/src/daemon-command-payload-keys.ts",
+    "apps/daemon/src/mcp-http/mcp-http-host.ts",
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/mcp-tool-allowlist.test.ts",
+    "apps/daemon/src/daemon-command-families.ts",
+    "apps/daemon/src/daemon-command-design.test.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    "apps/daemon/src/mcp-dispatch-port.ts",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/daemon-command-design.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/mcp-tool-allowlist.ts",
+    "apps/daemon/src/daemon-command-design.js",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/mcp-design-read-query.js"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-f2906c26@2026-09-06T09:13:52Z",
+    "at": "2026-09-06T09:26:33.757Z"
+  },
+  "reviewCompletedAt": "2026-09-06T09:25:42.314Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck` -- FAILS: at the delivered tree f7ad50ee the daemon suite carries a NEW owned red, runtime-entrypoint.test.ts reporting missing: [\"mcp-design-read-query.ts\"], absent at the merge parent 51fbfc88 (missing: []). The completion record attributes the daemon delta to foundation-attempt-windows.test.ts only and never discloses this one.",
+      "BOTH ARE SEAT-REACHABLE OVER MCP -- the assertions are correct and drill-proven, but the DELIVERED BYTES are not reachable from a clean checkout: mcp-dispatch-port.ts:22 imports ./mcp-design-read-query.js and that file is not on the branch, so the MCP dispatch port that serves design.read cannot resolve its own import outside the shared worktree."
+    ],
+    "issues": [
+      {
+        "type": "regression",
+        "file": "apps/daemon/src/mcp-dispatch-port.ts",
+        "line": 22,
+        "description": "This import of \"./mcp-design-read-query.js\" pulls that module into the daemon runtime tier (.js-specifier closure, runtime-entrypoint.test.ts:155-172), but the required bridge apps/daemon/src/mcp-design-read-query.js is NOT TRACKED -- untracked ?? in the shared checkout only. Proven new: missing:[] at parent 51fbfc88 vs missing:[\"mcp-design-read-query.ts\"] at f7ad50ee. FIX: land the existing untracked bridge via complete_step.modifiedFiles or moe.declare_files. See comment-94063988."
+      },
+      {
+        "type": "test_failure",
+        "file": "apps/daemon/src/runtime-entrypoint.test.ts",
+        "line": 255,
+        "description": "The bridge-guard arm is RED at the delivered tree and was never run by this row -- absent from the recorded verification command. Add src/runtime-entrypoint.test.ts to the verification leg and require missing: [] before re-reporting. Its co-listed unexpected:[repository/deployment/deployment-docker-probe.js] entry is present at BOTH parent and delivered tree: foreign, do not touch it."
+      },
+      {
+        "type": "other",
+        "description": "Record correction: the completion record says the daemon HEAD-minus-baseline delta was src/work/foundation-attempt-windows.test.ts ONLY, owned intersection EMPTY. Inaccurate -- src/runtime-entrypoint.test.ts is a second delta and this diff caused it. Restate when you re-report."
+      },
+      {
+        "type": "other",
+        "file": "apps/daemon/src/daemon-command-payload-keys.ts",
+        "line": 165,
+        "description": "NOT YOURS -- INFORMATIONAL, DO NOT FIX. Branch head eb549e03 does not load: ReferenceError: DEPLOYMENT_SET_TARGET_COMMAND_KIND is not defined, taking all 8 daemon test files to `Tests no tests`, exit 1. Lines 165-166 use four DEPLOYMENT_* symbols with no import; they live only in the untracked deployment/deploy-target-contracts.ts, owned by task-04b3ce7e, swept in by ac31d6f1. Raised with governors. Never revert peer paths; verify in your own detached worktree instead."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "REJECT on ONE owned defect — a clean-checkout hole. Everything else verified green by me. FULL EVIDENCE IN ROW COMMENT `comment-94063988`; read it first — it lists what NOT to redo (I re-ran your drill 5 and your DoD-1 scope correction; both correct).\n\nDEFECT. `apps/daemon/src/mcp-design-read-query.js`, the runtime `.js` bridge, is NOT ON THE BRANCH — it exists only as an untracked `??` file in the shared checkout, which is why your run was green and the delivered tree is not. Your imports at `mcp-dispatch-port.ts:22-23` and `mcp-http/mcp-http-host.ts:14` promote that module into the runtime tier via the `.js`-specifier closure in `runtime-entrypoint.test.ts:155-172`, so the bridge becomes required.\n\nPROVEN NEW, with a control, in a private detached worktree (shared tree untouched):\n  f7ad50ee (your completion tree): missing: [\"mcp-design-read-query.ts\"] <- YOURS\n  51fbfc88 (f7ad50ee^, your parent): missing: []                         <- CONTROL\n`unexpected: [deployment-docker-probe.js]` identical both sides — foreign. `git grep mcp-design-read-query 51fbfc88 -- apps/daemon/src` = zero hits.\n\nSo `mcp-dispatch-port.js` -> `.ts` -> `./mcp-design-read-query.js` resolves to a file absent from a fresh clone. That port is the surface this row's title claims to have made reachable.\n\nFIX — one file, no code change. The untracked bridge is byte-exact already. Land it: list `apps/daemon/src/mcp-design-read-query.js` in `complete_step.modifiedFiles`, or claim it with `moe.declare_files`. Do not hand-write a replacement; do not edit `mcp-design-read-query.ts` (task-eb2bb09d's). Add `src/runtime-entrypoint.test.ts` to your verification leg, require `missing: []`.\n\nALSO correct the record: it names `foundation-attempt-windows.test.ts` as the ONLY daemon delta with the owned intersection EMPTY. `runtime-entrypoint.test.ts` was a second, owned delta.\n\nNOT YOURS: branch head `eb549e03` does not load (peer task-04b3ce7e bytes). See the comment.",
+      "rejectedAt": "2026-09-06T07:49:19.978Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck` -- FAILS: at the delivered tree f7ad50ee the daemon suite carries a NEW owned red, runtime-entrypoint.test.ts reporting missing: [\"mcp-design-read-query.ts\"], absent at the merge parent 51fbfc88 (missing: []). The completion record attributes the daemon delta to foundation-attempt-windows.test.ts only and never discloses this one.",
+        "BOTH ARE SEAT-REACHABLE OVER MCP -- the assertions are correct and drill-proven, but the DELIVERED BYTES are not reachable from a clean checkout: mcp-dispatch-port.ts:22 imports ./mcp-design-read-query.js and that file is not on the branch, so the MCP dispatch port that serves design.read cannot resolve its own import outside the shared worktree."
+      ],
+      "issues": [
+        {
+          "type": "regression",
+          "file": "apps/daemon/src/mcp-dispatch-port.ts",
+          "line": 22,
+          "description": "This import of \"./mcp-design-read-query.js\" pulls that module into the daemon runtime tier (.js-specifier closure, runtime-entrypoint.test.ts:155-172), but the required bridge apps/daemon/src/mcp-design-read-query.js is NOT TRACKED -- untracked ?? in the shared checkout only. Proven new: missing:[] at parent 51fbfc88 vs missing:[\"mcp-design-read-query.ts\"] at f7ad50ee. FIX: land the existing untracked bridge via complete_step.modifiedFiles or moe.declare_files. See comment-94063988."
+        },
+        {
+          "type": "test_failure",
+          "file": "apps/daemon/src/runtime-entrypoint.test.ts",
+          "line": 255,
+          "description": "The bridge-guard arm is RED at the delivered tree and was never run by this row -- absent from the recorded verification command. Add src/runtime-entrypoint.test.ts to the verification leg and require missing: [] before re-reporting. Its co-listed unexpected:[repository/deployment/deployment-docker-probe.js] entry is present at BOTH parent and delivered tree: foreign, do not touch it."
+        },
+        {
+          "type": "other",
+          "description": "Record correction: the completion record says the daemon HEAD-minus-baseline delta was src/work/foundation-attempt-windows.test.ts ONLY, owned intersection EMPTY. Inaccurate -- src/runtime-entrypoint.test.ts is a second delta and this diff caused it. Restate when you re-report."
+        },
+        {
+          "type": "other",
+          "file": "apps/daemon/src/daemon-command-payload-keys.ts",
+          "line": 165,
+          "description": "NOT YOURS -- INFORMATIONAL, DO NOT FIX. Branch head eb549e03 does not load: ReferenceError: DEPLOYMENT_SET_TARGET_COMMAND_KIND is not defined, taking all 8 daemon test files to `Tests no tests`, exit 1. Lines 165-166 use four DEPLOYMENT_* symbols with no import; they live only in the untracked deployment/deploy-target-contracts.ts, owned by task-04b3ce7e, swept in by ac31d6f1. Raised with governors. Never revert peer paths; verify in your own detached worktree instead."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-09-06T09:25:42.314Z",
+  "reviewSummary": "APPROVED round 2. FULL LEDGER: comment-bb33061d.\n\nROUND-1 DEFECT FIXED, re-proven by me: mcp-design-read-query.js is TRACKED (added 62a5863e); I ran src/runtime-entrypoint.test.ts myself -> `missing: []`. Its 2 `unexpected:` entries are foreign deployment paths.\n\nDoD verified at HEAD via `git show HEAD:<path>`, never the dirty tree. DoD-2 arms BEHAVIOURAL not membership (daemon-command-design.test.ts:136-260): agent dispatch -> ACCEPTED + durable read-back via readDesignRevision; WORK-only seat -> CAPABILITY_DENIED at stage AUTHORIZE; malformed -> DESIGN_SHAPE_INVALID with layer derived from DESIGN_CODE_LAYERS. DoD-3 absences :242-250; MCP_EXCLUDED is DERIVED from OPERATOR_PRINCIPAL_KINDS. DoD-4: design.read in MCP_SERVED_QUERY_KINDS AND QUERY_HANDLERS (mcp-dispatch-port.ts:317). DoD-5: 3 roster tables (vocabulary.test.ts:170, registry.test.ts:128+:338, store-dependencies.test.ts:815). DoD-6: zero packages/ paths; YES via task-64d2757c. DoD-1 set-equality REUSED.\n\nGATES RE-RUN BY ME. Owned 7-file leg: `Test Files 5 failed | 2 passed (7)` / `Tests 11 failed | 588 passed (599)`; daemon-command-design.test.ts and daemon-command-vocabulary.test.ts BOTH PASS. `pnpm typecheck` EXIT=1, exactly 2 errors at bootstrap-sequence.ts (45,12 TS2739; 109,10 TS7053) naming ONLY deployment.deploy/set_target, non-owned path.\n\nATTRIBUTION BY DELTA ENTRIES, NOT COUNT: all 11 reduce to +deployment.set_target/+deployment.deploy (56/54, 55/53, derived 19/17). TRAP: `git log -S` names 4ad67796 which BEARS THIS TASK ID, but it is a role=qa wrapper sweep repairing the peer ReferenceError I flagged in round 1, not authorship. Owned intersection EMPTY.\n\nNOTE not a rejection: daemon-command-registry.ts 547 lines, over 400, but PRE-EXISTING at 531 in parent 51fbfc88; +16 here, bulk extracted to new daemon-command-design.ts (116 lines)."
+}

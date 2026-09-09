@@ -15,9 +15,9 @@ import { MAX_BUDGET_METERS, type BudgetAccountRecord, type BudgetAccountState, t
 export const BUDGET_ACCOUNT_ISSUE_CODES = Object.freeze([
   "BUDGET_ACCOUNT_COMMAND_MALFORMED", "BUDGET_ACCOUNT_COUNTER_EXHAUSTED",
   "BUDGET_ACCOUNT_DUPLICATE_IDENTITY", "BUDGET_ACCOUNT_ILLEGAL_CLOSE",
-  "BUDGET_ACCOUNT_INSUFFICIENT_AVAILABLE", "BUDGET_ACCOUNT_PARENT_MISMATCH",
-  "BUDGET_ACCOUNT_STALE_VERSION", "BUDGET_ACCOUNT_UNKNOWN_ACCOUNT",
-  "BUDGET_ACCOUNT_UNKNOWN_METER"] as const);
+  "BUDGET_ACCOUNT_INSUFFICIENT_AVAILABLE", "BUDGET_ACCOUNT_NOT_OPEN",
+  "BUDGET_ACCOUNT_PARENT_MISMATCH", "BUDGET_ACCOUNT_STALE_VERSION",
+  "BUDGET_ACCOUNT_UNKNOWN_ACCOUNT", "BUDGET_ACCOUNT_UNKNOWN_METER"] as const);
 export type BudgetAccountIssueCode = (typeof BUDGET_ACCOUNT_ISSUE_CODES)[number];
 export interface BudgetAccountIssue { readonly code: BudgetAccountIssueCode; readonly message: string }
 export interface BudgetMeterAmount { readonly meter: string; readonly amount: number }
@@ -107,10 +107,15 @@ export function openBudgetRoot(authorization: BudgetAuthorization): BudgetLedger
 }
 /**
  * Published check order — malformed, duplicate identity, unknown account, exhausted counter,
- * stale version, parent mismatch, unknown meter, insufficient available. The FIRST failing check
- * decides the single reported code (lease-fencing.ts:87-95), so one rejected command never
- * reports two causes. Nothing is constructed until every check passes, and every rejection hands
- * back the prior state BY REFERENCE with no entry appended.
+ * stale version, parent mismatch, not open, unknown meter, insufficient available. The FIRST
+ * failing check decides the single reported code (lease-fencing.ts:87-95), so one rejected
+ * command never reports two causes. Nothing is constructed until every check passes, and every
+ * rejection hands back the prior state BY REFERENCE with no entry appended.
+ *
+ * "Not open" is the state fence design 664 names: a CLOSED, SETTLING, OVERDRAWN or
+ * CLOSED_WITH_UNKNOWN_LIABILITY account moves no units again in either direction. Without it a
+ * drained-and-closed child could be re-funded into a CLOSED record with available > 0 — a state
+ * the close transition can never produce and that replay would carry faithfully.
  */
 function applyMovement(
   state: BudgetLedgerState, command: BudgetMovementCommand, kind: "ALLOCATED" | "RETURNED",
@@ -140,6 +145,9 @@ function applyMovement(
   }
   if (existing !== undefined && existing.parentRef !== pid) {
     return fail(state, "BUDGET_ACCOUNT_PARENT_MISMATCH", "child is not bound to the named parent");
+  }
+  if (parent.state !== "OPEN" || (existing !== undefined && existing.state !== "OPEN")) {
+    return fail(state, "BUDGET_ACCOUNT_NOT_OPEN", "an account in the movement is not OPEN");
   }
   const child: BudgetAccountRecord = existing ?? {
     accountId: cid, ownerRef: command.childOwnerRef, parentRef: pid,

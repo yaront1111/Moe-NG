@@ -16,6 +16,8 @@
  * byte-for-byte at finalize, so the producer never prettifies.
  */
 
+import { MAX_GRAPH_KEY_CODE_UNITS } from "@moe/scheduler";
+
 export const COMPILED_PLAN_CODES = Object.freeze([
   "COMPILED_PLAN_MALFORMED",
   "COMPILED_PLAN_BUDGET_EXCEEDED",
@@ -41,6 +43,14 @@ export const COMPILED_PLAN_NODE_BUDGET = 24;
  * the risk facts from this profile, and the seed installs the classifications
  * for exactly these four ids. Widening the vocabulary means widening BOTH.
  */
+/**
+ * A node key must fit BOTH ends of a compiled edge key, `dep-<producer>--<consumer>`, inside
+ * the graph codec's key bound. A longer key passed the producer's shape fence and refused one
+ * layer down as a malformed EDGE, where the reason no longer named the node (2026-09-05).
+ */
+export const COMPILED_NODE_KEY_MAX_CHARS =
+  Math.floor((MAX_GRAPH_KEY_CODE_UNITS - "dep---".length) / 2);
+
 export const COMPILED_NODE_RISK_PROFILE = Object.freeze({
   capability: "capability-implement",
   readScopes: Object.freeze(["workspace"]),

@@ -19,6 +19,7 @@ import {
   NODE_AUTHORITY_LIMITS,
   NODE_AUTHORITY_SCHEMA_TAG,
   NODE_AUTHORITY_SCHEMA_VERSION,
+  NODE_AUTHORITY_UNDECLARED_SCHEMA_VERSION,
   NODE_DEFINITION_KEYS,
   NODE_JOIN_ROLES,
 } from "./node-authority-contract.js";
@@ -217,6 +218,16 @@ const withDraft = (change: (draft: AuthorityDraft) => void): Record<string, unkn
   return createInput({ draft });
 };
 
+/**
+ * A fresh mint that DECLARES, and therefore the only kind minted at the CURRENT
+ * schema version. Fixtures needing v3 framing must go through this: an undeclared
+ * mint is v2 by policy, so `createInput()` no longer exercises the current tag.
+ */
+const declaringInput = (declared: readonly string[] = ["migration-a"]) =>
+  withDraft((draft) => {
+    (draft as unknown as Record<string, unknown>)["declaredMigrations"] = [...declared];
+  });
+
 function acceptedOrThrow(input: unknown = createInput()) {
   const result = createNodeDefinition(input);
   if (!result.ok) throw new Error(result.issues.map((i) => `${i.code}@${i.layer}`).join(","));
@@ -306,9 +317,15 @@ describe("node authority admission", () => {
   });
   it("covers every nonrecursive design-255 field with a closed, versioned roster", () => {
     const { definition } = acceptedOrThrow();
-    expect(Object.keys(definition).sort()).toEqual([...NODE_DEFINITION_KEYS]);
+    // `declaredMigrations` is the one OPTIONAL roster member: absent here because
+    // this fixture declares nothing, and absence is UNKNOWN, not an empty list.
+    expect(Object.keys(definition).sort())
+      .toEqual(NODE_DEFINITION_KEYS.filter((key) => key !== "declaredMigrations"));
     expect(NODE_DEFINITION_KEYS.length).toBeGreaterThanOrEqual(18);
-    expect(definition.schemaVersion).toBe(NODE_AUTHORITY_SCHEMA_VERSION);
+    expect(NODE_DEFINITION_KEYS).toContain("declaredMigrations");
+    // The UNDECLARED version, not the current one: this fixture declares nothing,
+    // so promoting it would move its identity for a member it does not carry.
+    expect(definition.schemaVersion).toBe(NODE_AUTHORITY_UNDECLARED_SCHEMA_VERSION);
     expect(definition.objective).toBe("Land the canonical node authority body.");
     expect(definition.capability).toBe("capability-implement");
     expect(definition.constraints).toEqual(["constraint-a", "constraint-b"]);
@@ -391,9 +408,9 @@ describe("node authority admission", () => {
     expect(Object.isFrozen(accepted)).toBe(true);
     const callable = Object.values(accepted.definition).filter((v) => typeof v === "function");
     expect(callable).toEqual([]);
-    const first = bytesOrThrow();
+    const first = bytesOrThrow(declaringInput());
     first.fill(0);
-    expect(decoder.decode(bytesOrThrow())).toContain(NODE_AUTHORITY_SCHEMA_TAG);
+    expect(decoder.decode(bytesOrThrow(declaringInput()))).toContain(NODE_AUTHORITY_SCHEMA_TAG);
   });
 
   it("admits its own accepted definition back through the production reader", () => {
@@ -436,14 +453,18 @@ describe("typed budget authority", () => {
   });
 
   it("rotates the schema and digest domain for the typed authority body", () => {
-    expect(NODE_AUTHORITY_SCHEMA_VERSION).toBe(2);
-    expect(NODE_AUTHORITY_SCHEMA_TAG).toBe("MOE-NODE-AUTHORITY/2");
-    expect(NODE_AUTHORITY_DIGEST_DOMAIN).toBe("MOE-NODE-AUTHORITY-BODY-HASH/2");
+    expect(NODE_AUTHORITY_SCHEMA_VERSION).toBe(3);
+    expect(NODE_AUTHORITY_SCHEMA_TAG).toBe("MOE-NODE-AUTHORITY/3");
+    expect(NODE_AUTHORITY_DIGEST_DOMAIN).toBe("MOE-NODE-AUTHORITY-BODY-HASH/3");
+    // The SUPERSEDED pair is pinned too, and never rotated: a stored schema-2 body
+    // frames and digests under these exact literals for as long as one exists.
     expect(new Set([
       NODE_AUTHORITY_SCHEMA_TAG,
       PRIOR_NODE_AUTHORITY_DIGEST_DOMAIN,
       NODE_AUTHORITY_DIGEST_DOMAIN,
-    ]).size).toBe(3);
+      "MOE-NODE-AUTHORITY/2",
+      "MOE-NODE-AUTHORITY-BODY-HASH/2",
+    ]).size).toBe(5);
   });
 
   it("round-trips a deeply frozen five-purpose budget on one meter", () => {
@@ -845,15 +866,17 @@ describe("refusal vocabulary", () => {
   });
 
   it("digests the canonical body under its own domain", () => {
-    const accepted = acceptedOrThrow();
-    const body = decoder.decode(bytesOrThrow());
+    // A DECLARING mint, so this arm still covers the CURRENT digest domain: an
+    // undeclared body digests under the legacy one, which arm (a) pins separately.
+    const accepted = acceptedOrThrow(declaringInput());
+    const body = decoder.decode(bytesOrThrow(declaringInput()));
     const canonical = JSON.parse(body) as { readonly body: unknown; readonly digest: string };
     const payload = JSON.stringify(canonical.body);
     expect(createHash("sha256")
       .update(`${NODE_AUTHORITY_DIGEST_DOMAIN}\n${payload.length}:`, "utf8")
       .update(payload, "utf8").digest("hex")).toBe(accepted.bodyContentDigest);
     expect(canonical.digest).toBe(accepted.bodyContentDigest);
-    const round = decodeNodeDefinitionBytes(bytesOrThrow());
+    const round = decodeNodeDefinitionBytes(bytesOrThrow(declaringInput()));
     expect(round.ok).toBe(true);
   });
 });
@@ -1137,6 +1160,9 @@ describe("byte stability", () => {
         registry.proofRationale = "A different durable rationale.";
         return wideInput({ predicateRegistry: [registry] });
       }],
+      ["declaredMigrations", () => wideDraft((d) => {
+        (d as unknown as Record<string, unknown>)["declaredMigrations"] = ["migration-a"];
+      })],
     ];
     expect(probes.length).toBeGreaterThanOrEqual(16);
     let swept = 0;
@@ -1145,5 +1171,178 @@ describe("byte stability", () => {
       expect(`${name}:${decoder.decode(bytesOrThrow(build()))}`).not.toBe(`${name}:${control}`);
     }
     expect(swept).toBe(probes.length);
+  });
+});
+
+/**
+ * `declaredMigrations` — the schema-3 declaration this row adds.
+ *
+ * THE PINS BELOW WERE MEASURED AT THE PRE-CHANGE TREE and are literals on purpose:
+ * a v2 body's digest is history, so a recomputation-based assertion would agree
+ * with a preimage regression instead of catching it.
+ */
+const LEGACY_V2_BODY_DIGEST =
+  "37e1154af358d0c0213d2efa0a6d4210ed84d45ce9786291002e9146e727c8ed";
+const LEGACY_V2_SCHEMA_TAG = "MOE-NODE-AUTHORITY/2";
+const LEGACY_V2_DIGEST_DOMAIN = "MOE-NODE-AUTHORITY-BODY-HASH/2";
+
+const definitionOf = (input: unknown = createInput()): Record<string, unknown> =>
+  ({ ...(acceptedOrThrow(input).definition as unknown as Record<string, unknown>) });
+
+/** A STORED body from before this row: the same content, restated at schema 2. */
+function legacyV2Body(): Record<string, unknown> {
+  const body = definitionOf();
+  delete body["declaredMigrations"];
+  body["schemaVersion"] = 2;
+  return body;
+}
+
+function declaringBody(declared: unknown): Record<string, unknown> {
+  // `definitionOf()` now mints at the UNDECLARED version, so a body that states
+  // the member must state the version that can carry it: a v2 body stating a
+  // declaration is a forged pairing and arm (f) asserts it refuses.
+  return { ...definitionOf(), declaredMigrations: declared, schemaVersion: 3 };
+}
+
+function encodeOrThrow(body: unknown): Uint8Array {
+  const result = encodeNodeDefinition(body);
+  if (!result.ok) {
+    throw new Error(result.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  return result.bytes;
+}
+
+function admittedOrThrow(body: unknown) {
+  const result = admitNodeDefinition(body);
+  if (!result.ok) {
+    throw new Error(result.issues.map((issue) => `${issue.code}@${issue.layer}`).join(","));
+  }
+  return result.value;
+}
+
+describe("declaredMigrations — the schema-3 declaration", () => {
+  it("(a) re-encodes a stored v2 body byte-identically and mints no declaration", () => {
+    const stored = legacyV2Body();
+    const admitted = admittedOrThrow(stored);
+    expect(admitted.bodyContentDigest).toBe(LEGACY_V2_BODY_DIGEST);
+    expect(admitted.schemaVersion).toBe(2);
+    // ABSENT, not `[]`: an empty list would be a declaration nobody authored.
+    expect("declaredMigrations" in admitted.definition).toBe(false);
+    const text = decoder.decode(admitted.bytes);
+    expect(text).toContain(`"schema":"${LEGACY_V2_SCHEMA_TAG}"`);
+    expect(text).not.toContain("declaredMigrations");
+    const round = decodeNodeDefinitionBytes(admitted.bytes);
+    expect(round.ok).toBe(true);
+    if (!round.ok) return;
+    expect(decoder.decode(round.value.bytes)).toBe(text);
+    // The LEGACY domain, not the current one: a v2 body keeps digesting under /2.
+    const payload = JSON.stringify((JSON.parse(text) as { readonly body: unknown }).body);
+    expect(createHash("sha256")
+      .update(`${LEGACY_V2_DIGEST_DOMAIN}\n${payload.length}:`, "utf8")
+      .update(payload, "utf8").digest("hex")).toBe(LEGACY_V2_BODY_DIGEST);
+  });
+
+  it("(b) round-trips two declared identifiers by value, by count and in authored order", () => {
+    const declared = ["1730000000002_add-orders", "1730000000001_add-users"];
+    const bytes = encodeOrThrow(declaringBody(declared));
+    const round = decodeNodeDefinitionBytes(bytes);
+    expect(round.ok).toBe(true);
+    if (!round.ok) return;
+    const readBack = round.value.definition.declaredMigrations;
+    expect(readBack).toHaveLength(2);
+    // AUTHORED ORDER, never sorted: migration identifiers are applied in sequence,
+    // so reordering them would silently restate what the author declared.
+    expect(readBack).toEqual(declared);
+    expect(round.value.schemaVersion).toBe(3);
+  });
+
+  it("(c) keeps an explicit empty declaration present and distinct from a v2 body", () => {
+    const empty = admittedOrThrow(declaringBody([]));
+    expect("declaredMigrations" in empty.definition).toBe(true);
+    expect(empty.definition.declaredMigrations).toEqual([]);
+    expect(empty.schemaVersion).toBe(3);
+    expect(empty.bodyContentDigest).not.toBe(LEGACY_V2_BODY_DIGEST);
+    expect(decoder.decode(empty.bytes)).toContain("\"declaredMigrations\":[]");
+  });
+
+  it("(d) refuses a duplicate identifier with its OWN code rather than deduplicating", () => {
+    const duplicate = admitNodeDefinition(declaringBody(["migration-a", "migration-a"]));
+    expectRefusal(duplicate, "NODE_AUTHORITY_DUPLICATE_MIGRATION", "NODE_AUTHORITY_ADMISSION");
+    // ANTI-VACUITY (global rail 1): a generic list refusal must NOT be what answered,
+    // so the same shape through the generic id reader carries a DIFFERENT code.
+    const generic = admitNodeDefinition({ ...definitionOf(), constraints: ["c-a", "c-a"] });
+    expect(generic.ok).toBe(true);
+    const twoAccepted = admittedOrThrow(declaringBody(["migration-a", "migration-b"]));
+    expect(twoAccepted.definition.declaredMigrations).toHaveLength(2);
+  });
+
+  it("(e) refuses a malformed, inadmissible or oversized declaration by code and layer", () => {
+    expectRefusal(admitNodeDefinition(declaringBody("migration-a")),
+      "NODE_AUTHORITY_FIELD_INVALID", "NODE_AUTHORITY_ADMISSION");
+    expectRefusal(admitNodeDefinition(declaringBody([7])),
+      "NODE_AUTHORITY_FIELD_INVALID", "NODE_AUTHORITY_ADMISSION");
+    expectRefusal(admitNodeDefinition(declaringBody(["a".repeat(129)])),
+      "NODE_AUTHORITY_FIELD_INVALID", "NODE_AUTHORITY_ADMISSION");
+    const over = Array.from(
+      { length: NODE_AUTHORITY_LIMITS.maxMigrationEntries + 1 },
+      (_unused, index) => `migration-${index}`,
+    );
+    expectRefusal(admitNodeDefinition(declaringBody(over)),
+      "NODE_AUTHORITY_LIMIT_EXCEEDED", "NODE_AUTHORITY_LIMITS");
+  });
+
+  it("(f) accepts a version SET, and the two schema gates must agree rather than merely pass", () => {
+    expect(admitNodeDefinition(legacyV2Body()).ok).toBe(true);
+    expect(admitNodeDefinition(definitionOf()).ok).toBe(true);
+    // The v3 half of the SET: an undeclared mint is v2, so a declaring body is
+    // what actually exercises the current version through the same gate.
+    expect(admitNodeDefinition(declaringBody(["migration-a"])).ok).toBe(true);
+    for (const version of [1, 4]) {
+      expectRefusal(admitNodeDefinition({ ...definitionOf(), schemaVersion: version }),
+        "NODE_AUTHORITY_UNSUPPORTED_SCHEMA", "NODE_AUTHORITY_SCHEMA");
+    }
+    // A v2 body may not STATE the member: that pairing is refused at the SCHEMA layer,
+    // not silently accepted and then caught as an alternate encoding.
+    expectRefusal(
+      admitNodeDefinition({ ...legacyV2Body(), declaredMigrations: ["migration-a"] }),
+      "NODE_AUTHORITY_SCHEMA_MISMATCH", "NODE_AUTHORITY_SCHEMA");
+    const unknownTag = reencode(encodeOrThrow(legacyV2Body()), (envelope) => {
+      envelope["schema"] = "MOE-NODE-AUTHORITY/9";
+    });
+    expectRefusal(decodeNodeDefinitionBytes(unknownTag),
+      "NODE_AUTHORITY_UNSUPPORTED_SCHEMA", "NODE_AUTHORITY_CODEC");
+    // THE FORGED PAIRING: a v3 body inside an envelope tagged /2. Both gates pass
+    // alone; only their agreement catches it.
+    const forged = reencode(encodeOrThrow(declaringBody(["migration-a"])), (envelope) => {
+      envelope["schema"] = LEGACY_V2_SCHEMA_TAG;
+    });
+    expectRefusal(decodeNodeDefinitionBytes(forged),
+      "NODE_AUTHORITY_SCHEMA_MISMATCH", "NODE_AUTHORITY_CODEC");
+  });
+
+  it("(g) mints a fresh body at the LOWEST version that carries it, not the current one", () => {
+    // THE REGRESSION THIS ARM EXISTS FOR. Every arm above hands a body to the
+    // re-admit path, so all of them stayed green while the FRESH MINT stamped the
+    // module's current version on a body that declares nothing. That moved four
+    // pinned daemon digests, two of which are historical APPROVAL DECISIONS
+    // (task rail 1: no silent rewrite of historical hashes).
+    const undeclared = acceptedOrThrow();
+    expect(undeclared.schemaVersion).toBe(2);
+    expect("declaredMigrations" in undeclared.definition).toBe(false);
+    // Byte-identical to the hand-built stored body of arm (a): the mint of a node
+    // that declares nothing must be indistinguishable from what it minted before
+    // this row existed, and the literal digest is what proves it.
+    expect(undeclared.bodyContentDigest).toBe(LEGACY_V2_BODY_DIGEST);
+    const text = decoder.decode(undeclared.bytes);
+    expect(text).toContain(`"schema":"${LEGACY_V2_SCHEMA_TAG}"`);
+    expect(text).not.toContain("declaredMigrations");
+    // A draft that DOES declare mints at 3: the version is chosen by CONTENT, so
+    // the promotion is exactly as wide as the declaration and no wider.
+    const declared = acceptedOrThrow(withDraft((draft) => {
+      (draft as unknown as Record<string, unknown>)["declaredMigrations"] = ["migration-a"];
+    }));
+    expect(declared.schemaVersion).toBe(3);
+    expect(declared.definition.declaredMigrations).toEqual(["migration-a"]);
+    expect(declared.bodyContentDigest).not.toBe(LEGACY_V2_BODY_DIGEST);
   });
 });

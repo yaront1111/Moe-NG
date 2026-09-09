@@ -10,6 +10,10 @@ import type { SqliteEventStore } from "@moe/store";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
 import { readSessionLedger } from "../identity/session-read-model.js";
 import type { SessionLedger } from "../identity/session-read-model.js";
+import { agentProviderFact, resolveAgentProvider } from "../orchestrator/agent-provider-resolve.js";
+import { providerFor } from "../orchestrator/moe-up-credentials.js";
+import { SEAT_START_UNKNOWN, readSeatStartLedger } from "../orchestrator/seat-start-ledger.js";
+import type { SeatStartLedger } from "../orchestrator/seat-start-ledger.js";
 import { readWorkClaimLedger } from "../work/work-claim-read-model.js";
 import type { WorkClaimLedger } from "../work/work-claim-read-model.js";
 import { activeClaim } from "../work/work-claim-services.js";
@@ -24,17 +28,115 @@ export const SESSIONS_READ_CODES = Object.freeze([
 ] as const);
 
 export type SessionLiveness = "CLOSED" | "EXPIRED" | "LIVE";
+/**
+ * How many agents may work at once, and how many are. The two halves are NOT the same
+ * kind of fact and the names say so.
+ *
+ * `configuredAgentLimit` is CONFIGURED, never observed: the MOE_WRAPPER_MAX_AGENTS this
+ * DAEMON PROCESS was launched with, parsed by the wrapper's own `readWrapperKnobs`. The
+ * daemon and the wrapper are separate processes; `moe up` spawns both from one child
+ * environment, so in the launched configuration they agree. A daemon started standalone,
+ * or beside a wrapper launched separately with a different value, reports a limit no
+ * wrapper is honouring. Nothing here measures the wrapper.
+ *
+ * `activeSeats` IS measured, from the same ledgers this read already folds: live seats
+ * holding at least one active claim at `readAt`. It can lag the wrapper's own in-process
+ * count by one pass — a seat is counted from the moment its claim commits, not from the
+ * moment its child process starts.
+ */
+export interface SessionsConcurrency {
+  /** Live seats holding at least one active claim, at this read's clock. Measured. */
+  readonly activeSeats: number;
+  /** The agent limit this daemon process was launched with. Configured, not observed. */
+  readonly configuredAgentLimit: number;
+}
+/**
+ * WHICH AGENT COMMAND THIS PROJECT IS CONFIGURED TO STAFF SEATS WITH, and whether the host
+ * environment is what decided it. CONFIGURED, never observed — the name says `configured`,
+ * not `effective`, for the reason `configuredAgentLimit` says it above.
+ *
+ * The two inputs are not the same kind of fact. The durable per-project setting IS read
+ * from this daemon's own store and is authoritative: the same ledger
+ * `project.set_agent_provider` writes and the wrapper reads per spawn. `MOE_AGENT_COMMAND`
+ * is read from THIS DAEMON PROCESS'S environment, and the daemon and the wrapper are
+ * separate processes; `moe up` spawns both from one child environment, so in the launched
+ * configuration they agree. A daemon started standalone, or beside a wrapper launched
+ * separately, reports an override no wrapper is applying — and a standalone daemon with no
+ * override reports `envOverride: false` plus whatever its store says, which is what the
+ * next `moe up` would resolve. Nothing here measures the wrapper.
+ *
+ * SECOND STATED LIMIT: this read is PROJECT-scoped (`createSessionsReadPort` takes a
+ * projectId and no goal), so `configured` is the PROJECT default. A per-GOAL override
+ * exists in the durable store and outranks the project setting at spawn for a
+ * goal-targeted step; it is NOT disclosable here and this member never reflects one.
+ *
+ * Precedence is not re-derived: `resolveAgentProvider` — the orchestrator's own resolver,
+ * the one the wrapper spawns through — answers, so no second copy can drift from it.
+ */
+export interface SessionsAgentProvider {
+  /**
+   * The command a seat would be staffed with, as a provider NAME where the command maps to
+   * a known one (`C:\tools\codex.exe` reads `codex`, the same name the pause ledger and the
+   * pause banner use) and VERBATIM where it does not. An off-roster `MOE_AGENT_COMMAND` is
+   * published exactly as it stands — full path included — rather than collapsed to `claude`
+   * the way `pauseProviderOf` deliberately collapses it for ledger keying: an operator must
+   * never be shown a provider nobody configured, and reducing an unknown command to its
+   * basename would manufacture a provider identity that does not exist.
+   */
+  readonly configured: string;
+  /** True when `MOE_AGENT_COMMAND` in THIS daemon's environment is what decided it. */
+  readonly envOverride: boolean;
+}
+/**
+ * WHAT THIS SEAT WAS STARTED WITH — a THIRD kind of fact, and neither of the two above.
+ *
+ * `activeSeats` IS measured, by this read, from ledgers it folds itself. `configuredAgentLimit`
+ * is CONFIGURED and never observed. These two are MEASURED BUT SECOND-HAND: the WRAPPER measured
+ * them, in the wrapper's own process, at the instant it spawned this seat's child, and wrote them
+ * to a durable record (`orchestrator/seat-start-ledger.ts`). This read is quoting that note. It is
+ * not observing a live process, and the daemon could not: the daemon and the wrapper are separate
+ * processes and the daemon cannot see a child it did not spawn. That limit is why both names end
+ * in `AtStart` — a `provider` or `agentVersion` here would claim a present-tense observation
+ * nothing performs.
+ *
+ * WHAT A READER MAY THEREFORE CONCLUDE. These say what this seat WAS ACTUALLY STARTED WITH, which
+ * is the useful answer and NOT a stale one: after `project.set_agent_provider` changes the setting,
+ * a seat still running from before keeps reporting what it really runs, while the frame-level
+ * `agentProvider` reports what the NEXT seat would get. The two disagreeing is the disclosure
+ * working — it is exactly the window in which an operator needs to see both.
+ *
+ * WHAT THEY DO NOT SAY: nothing about now. A seat whose CLI was upgraded on disk mid-run still
+ * reports the version measured at its start, because that is the version its running process
+ * loaded. Nothing here re-probes.
+ */
 export interface SessionView {
+  /**
+   * The version this seat's agent CLI reported to `--version` when the wrapper started it, or
+   * `SEAT_FACT_UNMEASURED` — never an empty string and never a plausible default. Four causes
+   * collapse to that one token on purpose: no start record (every session opened before this
+   * ledger existed, and every paired browser that never had a seat), an unreadable record, a
+   * probe that failed or timed out, and output that was not shaped like a version.
+   */
+  readonly agentVersionAtStart: string;
   readonly capabilities: readonly string[];
   readonly expiresAt: string;
   /** Work items this seat holds an OPEN, unexpired claim on, at the daemon's clock. */
   readonly holding: readonly string[];
   readonly liveness: SessionLiveness;
   readonly principalId: string;
+  /**
+   * The agent command the wrapper ACTUALLY spawned this seat with, as a roster name where the
+   * command maps to a known provider and verbatim where it does not — the same rule
+   * `agentProvider.configured` uses, so the two never disagree about what to call one command.
+   * `SEAT_FACT_UNMEASURED` under the same one-unknown rule as the version beside it.
+   */
+  readonly providerAtStart: string;
   readonly sessionId: string;
   readonly status: "CLOSED" | "OPEN";
 }
 export interface SessionsView {
+  readonly agentProvider: SessionsAgentProvider;
+  readonly concurrency: SessionsConcurrency;
   readonly outcome: "SESSIONS";
   readonly readAt: string;
   readonly sessions: readonly SessionView[];
@@ -52,10 +154,54 @@ const refused = (code: string): SessionsRefused => Object.freeze({ code, layer: 
 
 export interface SessionsReadOptions {
   readonly clock?: () => string;
+  /**
+   * REQUIRED, and not defaulted on purpose: a member that quietly falls back to the
+   * wrapper's default would publish "2" from a daemon that was never told the limit,
+   * and no test could tell that apart from the real knob. Production supplies
+   * `readWrapperKnobs(process.env).maxAgents` at the composition site.
+   */
+  readonly configuredAgentLimit: number;
+  /**
+   * `MOE_AGENT_COMMAND` as THIS daemon process was launched with. Optional and defaulted
+   * to the live `process.env` rather than required, because unlike the agent limit there
+   * is no silent-fallback hazard here: absent means absent, and absent is precisely the
+   * fact `envOverride: false` publishes. Injectable so an arm can set and unset it
+   * without mutating the test runner's own environment.
+   */
+  readonly envAgentCommand?: string | null | undefined;
   readonly projectId: string;
   readonly readClaims?: (store: SqliteEventStore, projectId: string) => WorkClaimLedger;
+  /**
+   * The wrapper's seat-start notes, defaulted to the production fold exactly as `readSessions`
+   * and `readClaims` are, so the port stays drivable without sqlite. A default cannot publish an
+   * untold value here: absent notes ARE the fact `SEAT_FACT_UNMEASURED` states.
+   */
+  readonly readSeatStarts?: (store: SqliteEventStore, projectId: string) => SeatStartLedger;
+  /**
+   * The durable agent-provider setting for one scope, defaulted to the production store
+   * read exactly as `readSessions`/`readClaims` are. A default here cannot publish an
+   * untold value the way a defaulted `configuredAgentLimit` would: the default IS the
+   * production reader, so the fallback and the real thing are the same code path.
+   */
+  readonly readProvider?: (store: SqliteEventStore, projectId: string) => (goalId: string) => string | null;
   readonly readSessions?: (store: SqliteEventStore, projectId: string) => SessionLedger;
   readonly store: SqliteEventStore;
+}
+
+/**
+ * The provider disclosure for THIS read's project scope. `resolveAgentProvider` is called
+ * with no goalRef on purpose — see SessionsAgentProvider — and `envOverride` is decided by
+ * the same `present()` rule the resolver uses for rung 1, so the flag can never say "the
+ * env decided this" about a blank or whitespace variable the resolver ignored.
+ */
+function agentProviderOf(
+  envCommand: string | null | undefined, settingFor: (goalId: string) => string | null,
+): SessionsAgentProvider {
+  const command = resolveAgentProvider({ envCommand, settingFor });
+  return Object.freeze({
+    configured: providerFor(command)?.leaf ?? command,
+    envOverride: typeof envCommand === "string" && envCommand.trim().length > 0,
+  });
 }
 
 export function createSessionsReadPort(options: SessionsReadOptions): SessionsReadPort {
@@ -63,11 +209,26 @@ export function createSessionsReadPort(options: SessionsReadOptions): SessionsRe
   const clock = options.clock ?? ((): string => new Date().toISOString());
   const readSessions = options.readSessions ?? readSessionLedger;
   const readClaims = options.readClaims ?? readWorkClaimLedger;
+  const readSeatStarts = options.readSeatStarts ?? readSeatStartLedger;
+  const readProvider = options.readProvider ?? agentProviderFact;
+  const envAgentCommand = "envAgentCommand" in options
+    ? options.envAgentCommand : process.env["MOE_AGENT_COMMAND"];
   const read = (): SessionsReadResult => {
     try {
       const now = clock();
       const ledger = readSessions(store, projectId);
       const claims = readClaims(store, projectId);
+      // A SEAT-START READ MAY NEVER WEDGE THIS READ. The session and claim folds are load
+      // bearing — a Seats screen without them says nothing true — but a note about which
+      // version a seat started with is decoration on top of them. A reader that throws
+      // degrades every seat to the stated unknown instead of refusing the whole frame, which
+      // is the same answer the read gives for every seat opened before this ledger existed.
+      let seatStarts: SeatStartLedger;
+      try {
+        seatStarts = readSeatStarts(store, projectId);
+      } catch {
+        seatStarts = new Map();
+      }
       const holdings = new Map<string, string[]>();
       for (const record of claims.claims.values()) {
         if (activeClaim(record, now) === null) continue;
@@ -77,16 +238,27 @@ export function createSessionsReadPort(options: SessionsReadOptions): SessionsRe
       }
       const sessions: SessionView[] = [];
       const totals = { closed: 0, expired: 0, live: 0 };
+      let activeSeats = 0;
       for (const record of ledger.sessions.values()) {
         const liveness: SessionLiveness = record.status === "CLOSED" ? "CLOSED"
           : record.expiresAt > now ? "LIVE" : "EXPIRED";
         totals[liveness === "CLOSED" ? "closed" : liveness === "LIVE" ? "live" : "expired"] += 1;
+        const holding = Object.freeze([...(holdings.get(record.principalId) ?? []), ...(record.principalId === record.sessionId ? [] : holdings.get(record.sessionId) ?? [])].sort());
+        // A seat counts against the limit when it is LIVE and holding work. A paired
+        // browser holds nothing and an expired seat is not working, so neither is a seat
+        // the wrapper could have staffed instead.
+        if (liveness === "LIVE" && holding.length > 0) activeSeats += 1;
+        // No note for this seat is the NORMAL case, not an error, so it takes the same stated
+        // unknown a failed probe takes rather than a second vocabulary.
+        const started = seatStarts.get(record.sessionId) ?? SEAT_START_UNKNOWN;
         sessions.push(Object.freeze({
+          agentVersionAtStart: started.agentVersion,
           capabilities: record.capabilities,
           expiresAt: record.expiresAt,
-          holding: Object.freeze([...(holdings.get(record.principalId) ?? []), ...(record.principalId === record.sessionId ? [] : holdings.get(record.sessionId) ?? [])].sort()),
+          holding,
           liveness,
           principalId: record.principalId,
+          providerAtStart: started.provider,
           sessionId: record.sessionId,
           status: record.status,
         }));
@@ -95,6 +267,8 @@ export function createSessionsReadPort(options: SessionsReadOptions): SessionsRe
         ? right.expiresAt.localeCompare(left.expiresAt)
         : (left.liveness === "LIVE" ? -1 : right.liveness === "LIVE" ? 1 : left.liveness === "EXPIRED" ? -1 : 1)));
       return Object.freeze({
+        agentProvider: agentProviderOf(envAgentCommand, readProvider(store, projectId)),
+        concurrency: Object.freeze({ activeSeats, configuredAgentLimit: options.configuredAgentLimit }),
         outcome: "SESSIONS" as const, readAt: now, sessions: Object.freeze(sessions),
         totals: Object.freeze(totals), unreadable: ledger.unreadable || claims.unreadable,
       });

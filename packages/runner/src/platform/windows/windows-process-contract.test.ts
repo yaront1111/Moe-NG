@@ -31,11 +31,11 @@ describe("the closed vocabularies", () => {
     }
   });
 
-  it("names four broker layers and three layers on this side of the pipe", () => {
+  it("names five broker layers and three layers on this side of the pipe", () => {
     const broker = WINDOWS_PROCESS_LAYERS.filter((layer) => layer.startsWith("BROKER_"));
     const local = WINDOWS_PROCESS_LAYERS.filter((layer) => layer.startsWith("WINDOWS_PROCESS_"));
     expect(broker).toEqual([
-      "BROKER_DESCRIPTOR", "BROKER_PROTOCOL", "BROKER_NATIVE", "BROKER_STORE_LOCK",
+      "BROKER_DESCRIPTOR", "BROKER_PROTOCOL", "BROKER_NATIVE", "BROKER_STORE_LOCK", "BROKER_APPROVED_IMAGE",
     ]);
     expect(local).toEqual([
       "WINDOWS_PROCESS_REQUEST",
@@ -69,17 +69,18 @@ describe("the broker refusal layer wire mapping", () => {
     expect(brokerLayerFromWire(2)).toBe("BROKER_PROTOCOL");
     expect(brokerLayerFromWire(3)).toBe("BROKER_NATIVE");
     expect(brokerLayerFromWire(4)).toBe("BROKER_STORE_LOCK");
+    expect(brokerLayerFromWire(5)).toBe("BROKER_APPROVED_IMAGE");
     expect(Object.isFrozen(BROKER_LAYER_BY_WIRE)).toBe(true);
   });
 
   it("answers null for every other byte, so the set is closed over all 256", () => {
     const unmapped = [];
     for (let byte = 0; byte < 256; byte += 1) {
-      if (byte >= 1 && byte <= 4) continue;
+      if (byte >= 1 && byte <= 5) continue;
       unmapped.push(brokerLayerFromWire(byte));
     }
     // A sweep that generates zero cases passes while testing nothing.
-    expect(unmapped.length).toBe(252);
+    expect(unmapped.length).toBe(251);
     expect(unmapped.every((layer) => layer === null)).toBe(true);
   });
 });

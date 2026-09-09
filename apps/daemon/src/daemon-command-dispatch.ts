@@ -1,3 +1,4 @@
+import type { RuntimeError } from "@moe/contracts";
 import { DurableStoreError, IdempotencyConflictError, type SqliteEventStore } from "@moe/store";
 
 import type { ActivationIngressOutcome } from "./activation/activation-ingress-contracts.js";
@@ -46,6 +47,21 @@ export class DomainRefusal extends Error {
   }
 }
 
+/**
+ * The refusing authority's OWN words, when it has any. Every edge used to pass the code as
+ * its own detail, so a seat read `{"code":"X","detail":"X"}` and could correct nothing: one
+ * real planning seat bisected seven graph shapes against a refusal whose cause it was never
+ * told (2026-09-05). The code stays the floor for authorities that never say more.
+ */
+export function domainRefusalOf(
+  outcome: Readonly<{ code: string; detail?: unknown; layer: string }>,
+): DomainRefusal {
+  const detail = typeof outcome.detail === "string" && outcome.detail.length > 0
+    ? outcome.detail
+    : outcome.code;
+  return new DomainRefusal(outcome.code, outcome.layer, detail);
+}
+
 export interface CommandAuthorityGate {
   readonly assert: () => void;
   readonly wrapAsync: (entry: CommandRegistryEntry) => CommandRegistryEntry;
@@ -69,9 +85,7 @@ export function createCommandAuthorityGate(
     const authority = authorityPlane === "V2"
       ? admitV2ActiveInstallation(store, { projectId })
       : admitV1AuthoritativeCommand(store, { projectId });
-    if (!authority.ok) {
-      throw new DomainRefusal(authority.code, authority.layer, authority.code);
-    }
+    if (!authority.ok) throw domainRefusalOf(authority);
   };
   const wrapAsync = (entry: CommandRegistryEntry): CommandRegistryEntry => {
     if (authorityPlane === "V1") return entry;
@@ -93,17 +107,34 @@ export function createCommandAuthorityGate(
   return Object.freeze({ assert, wrapAsync });
 }
 
+/**
+ * The refusal detail a caller reads on the wire. Generic on purpose: the error's own code,
+ * then every registered detail key as `key=value` in sorted order. A caller told only
+ * "EXPECTED_VERSION_CONFLICT" has nothing to retry at; told
+ * `EXPECTED_VERSION_CONFLICT actualVersion=1 expectedVersion=0` it knows the one version to
+ * resend at. No code is special-cased here, so every registered detail key becomes readable
+ * the same way and there is nothing to keep in sync.
+ *
+ * The details are already sanitised to safe scalars by the runtime error registry, so no value
+ * that reaches this string can carry attacker bytes or a separator.
+ */
+function detailOf(outcome: { readonly code: string; readonly error: RuntimeError | null }): string {
+  const error = outcome.error;
+  if (error === null) return outcome.code;
+  const details = error.details;
+  return [
+    error.code,
+    ...Object.keys(details).sort().map((key) => `${key}=${String(details[key])}`),
+  ].join(" ");
+}
+
 export function decisionOf(
   outcome: ActivationIngressOutcome | JournalAppendOutcome | ProductContractGate1Outcome
     | RecoveryCompletionOutcome | ReviewOutcome | ServiceOutcome | SessionOutcome
     | StepLifecycleOutcome | WorkClaimOutcome,
 ): DurableDecision {
   if (!outcome.ok) {
-    throw new DomainRefusal(
-      outcome.code,
-      outcome.refusedBy,
-      outcome.error === null ? outcome.code : outcome.error.code,
-    );
+    throw new DomainRefusal(outcome.code, outcome.refusedBy, detailOf(outcome));
   }
   return Object.freeze({
     commandId: outcome.decision.key.commandId,

@@ -53,8 +53,9 @@ const emptyVersionedRoot = (): string => {
   git("init", "--quiet");
   writeFileSync(join(root, "README.md"), "no pinned documents here\n");
   git("add", "--all");
+  // Disposable fixture history must not invoke the host's configured signing process.
   git("-c", "user.email=worker@moe.test", "-c", "user.name=moe worker",
-    "commit", "--quiet", "--message", "empty corpus fixture");
+    "commit", "--no-gpg-sign", "--quiet", "--message", "empty corpus fixture");
   return root;
 };
 
@@ -111,7 +112,9 @@ describe("pre-freeze audit entry point (task-71a4fac5d15044c08f6617f50a561e39)",
    * different fence. The arm below poses that other condition on purpose, and the two
    * expectations differ — which is what proves the two fences are not one.
    */
-  it("refuses rather than passing when a pinned document cannot be read", () => {
+  // Real Git setup crossed the 5s unit budget in the full gate. Only this integration
+  // arm receives a longer bound; the source-reader refusal assertions remain exact.
+  it("refuses rather than passing when a pinned document cannot be read", { timeout: 30_000 }, () => {
     process.env[PINNED_DOCUMENT_ROOT_ENV] = emptyVersionedRoot();
     const report = runPreFreezeAudit();
     expect(report.ok).toBe(false);

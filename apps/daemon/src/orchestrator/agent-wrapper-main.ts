@@ -1,7 +1,5 @@
 #!/usr/bin/env node
 import { randomUUID } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
 
 import { SqliteEventStore } from "@moe/store";
 
@@ -9,36 +7,35 @@ import {
   createStoreDependencies,
   readStoreDependencyEnv,
 } from "../daemon-store-dependencies.js";
-import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
-import { createCompilerLanePort } from "../http/affordance-compiler-lane.js";
-import { NODE_DELIVER_KIND } from "../http/affordance-contract.js";
-import { decodeGoalCatalogEntry } from "../http/goal-catalog-entry.js";
 import { createMcpHttpHost } from "../mcp-http/mcp-http-host.js";
-import { createGitLandingPort } from "../repository/git-landing-port.js";
 import { createProductContractReadPort } from "../product-contract/product-contract-read-port.js";
 import {
   createVerifierAuthorityProvider, readVerifierStandingAuthority,
 } from "../review/verifier-authority-provider.js";
+import { launchDelivery } from "../environment/environment-launch-resolver.js";
+import { createProviderPauseGate } from "./agent-provider-pause.js";
+import { agentProviderFact } from "./agent-provider-resolve.js";
 import { createAgentSessionFence } from "./agent-session-fence.js";
 import { claudeSpawnStarter } from "./agent-spawner.js";
 import type { AgentSpawnStart, AgentSpawnStarter } from "./agent-spawner.js";
 import { createAgentWrapper } from "./agent-wrapper.js";
-import type { NodeMission } from "./agent-wrapper.js";
+import { runReclaimPass } from "./agent-wrapper-reclaim.js";
 import { createCompiledNodeSource } from "./compiled-node-source.js";
-import { createNodeLander } from "./node-lander.js";
-import { createNodePublisher } from "./node-publisher.js";
-import { createNodeVerifier } from "./node-verifier.js";
+import { createRepositoryDeliveryRuntime } from "./repository-delivery-runtime.js";
+import { createWrapperNodeMissions } from "./wrapper-node-missions.js";
+import { createCompilerMissionInputs, createDesignBriefResolver }
+  from "./wrapper-mission-inputs.js";
 import {
   createWrapperStopSignal,
   probeProcessAlive,
   shutdownWrapperRuntime,
 } from "./process-runner-lifecycle.js";
 import type { WrapperStopSignal } from "./process-runner-lifecycle.js";
-import {
-  createVerifierProcessRunner,
-  VerifierProcessCancelledError,
-} from "./verifier-process-runner.js";
+import { VerifierProcessCancelledError } from "./verifier-process-runner.js";
+import { createVerifierDatabaseRunner } from "./verifier-database.js";
 import type { VerifierProcessRunner } from "./verifier-process-runner.js";
+import { providerFor } from "./moe-up-credentials.js";
+import { createSeatStartRecorder } from "./seat-start-recorder.js";
 import { readWrapperKnobs } from "./wrapper-knobs.js";
 
 export {
@@ -51,6 +48,7 @@ export type {
   WrapperRuntimeShutdownResources,
   WrapperStopSignal,
 } from "./process-runner-lifecycle.js";
+import { enrollDecisionLedgerMemo } from "../decision-ledger-memo.js";
 
 /**
  * The process wrapper: `node src/orchestrator/agent-wrapper-main.ts` staffs the
@@ -75,6 +73,7 @@ async function main(): Promise<void> {
   const provider = createStoreDependencies(config);
   let verifierStore: SqliteEventStore | undefined;
   let verifierRunner: VerifierProcessRunner | undefined;
+  let delivery: ReturnType<typeof createRepositoryDeliveryRuntime> | undefined;
   let agentSpawner: AgentSpawnStarter | undefined;
   let wrapper: ReturnType<typeof createAgentWrapper> | undefined;
   let mcpHost: ReturnType<typeof createMcpHttpHost> | undefined;
@@ -83,6 +82,7 @@ async function main(): Promise<void> {
     // Signal callbacks cannot await. Starting both idempotent closes here wakes
     // an in-flight verifier immediately; the finally gate below observes them.
     void verifierRunner?.close().catch(() => undefined);
+    void delivery?.close().catch(() => undefined);
     void agentSpawner?.close().catch(() => undefined);
   });
 
@@ -111,7 +111,7 @@ async function main(): Promise<void> {
     // durable graph plus two HOST facts the operator sets: MOE_NODE_WORKSPACE
     // (where the code is built) and MOE_NODE_TEST_COMMAND (how it is verified,
     // default "pnpm test"). Absent workspace = compiled nodes stay unstaffed
-    // (fail closed); spec-dir briefs below always win on a nodeRef collision.
+    // (fail closed); compiled execution refs belong exclusively to the graph source.
     const compiledWorkspace = (process.env["MOE_NODE_WORKSPACE"] ?? "") === ""
       ? null
       : process.env["MOE_NODE_WORKSPACE"] as string;
@@ -129,35 +129,10 @@ async function main(): Promise<void> {
       });
     };
 
-    // Full coding briefs come from the same spec dir the affordance surface
-    // lists nodes from; a spec without instructions/test/workspace is no brief.
-    // A nodeRef with no spec falls through to the compiled-graph brief above.
-    const nodeMission = (nodeRef: string): NodeMission | null =>
-      specMission(nodeRef) ?? compiledSource()?.mission(nodeRef) ?? null;
-    const specMission = (nodeRef: string): NodeMission | null => {
-      const dir = config.nodeSpecsDir;
-      if (dir === undefined) return null;
-      let names: string[];
-      try {
-        names = readdirSync(dir).filter((name) => name.endsWith(".json"));
-      } catch {
-        return null;
-      }
-      for (const name of names) {
-        try {
-          const spec = JSON.parse(readFileSync(join(dir, name), "utf8")) as
-            Partial<NodeMission> & { nodeRef?: string };
-          if (spec.nodeRef !== nodeRef) continue;
-          if (typeof spec.instructions !== "string" || typeof spec.test !== "string"
-            || typeof spec.workspace !== "string") return null;
-          return {
-            instructions: spec.instructions, test: spec.test,
-            title: spec.title ?? nodeRef, workspace: spec.workspace,
-          };
-        } catch { /* skipped */ }
-      }
-      return null;
-    };
+    const { nodeMission, listNodes } = createWrapperNodeMissions({
+      compiled: compiledSource, nodeSpecsDir: config.nodeSpecsDir,
+      log: (line) => { process.stderr.write(`${line}\n`); },
+    });
 
     // Opened BEFORE the wrapper because the durable staffing fence needs it, and
     // an unfenced wrapper is the defect this binary exists to close: without a
@@ -169,86 +144,72 @@ async function main(): Promise<void> {
     // those refuse PROJECT_SCOPE_REQUIRED on an unasserted handle — which would
     // fail every ONCE pass at its staffing commit.
     verifierStore = SqliteEventStore.openForProject(config.storePath, config.projectId);
+    enrollDecisionLedgerMemo(verifierStore);
 
-    // Every node the verifier and the lander look at: spec-dir nodes, plus the
-    // compiled nodes of every active graph (a compiled delivery would otherwise
-    // sit awaiting a verifier that never looks).
-    const listNodes = (): readonly { nodeRef: string }[] => {
-      const specs: { nodeRef: string }[] = [];
-      const dir = config.nodeSpecsDir;
-      if (dir !== undefined) {
-        try {
-          specs.push(...readdirSync(dir).filter((name) => name.endsWith(".json"))
-            .map((name) => {
-              const parsed = JSON.parse(readFileSync(join(dir, name), "utf8")) as
-                { nodeRef?: unknown };
-              return typeof parsed.nodeRef === "string" ? { nodeRef: parsed.nodeRef } : null;
-            }).filter((entry): entry is { nodeRef: string } => entry !== null));
-        } catch { /* an unreadable dir contributes nothing */ }
-      }
-      const listed = new Set(specs.map((spec) => spec.nodeRef));
-      for (const node of compiledSource()?.nodes() ?? []) {
-        if (!listed.has(node.nodeRef)) specs.push({ nodeRef: node.nodeRef });
-      }
-      return specs;
-    };
-
-    // GIT LANDING: an accepted node's files become one local commit on the
-    // workspace's current branch (never pushed). MOE_NODE_LANDING=0 turns it off.
+    // Disabling landing also disables new coding admission: ownership cannot be
+    // safely released on acceptance alone.
     const landingOn = !["0", "off", "false"].includes(
       (process.env["MOE_NODE_LANDING"] ?? "").toLowerCase(),
     );
-    const lander = createNodeLander({
-      git: createGitLandingPort(),
-      nodeMission,
-      nodes: listNodes,
-      projectId: config.projectId,
-      store: verifierStore,
+    const staffingFence = createAgentSessionFence({
+      isProcessAlive: probeProcessAlive, projectId: config.projectId, store: verifierStore,
     });
-    const NODE_DELIVER_PREFIX = `${NODE_DELIVER_KIND}@`;
-    // PUBLISHING: the effect behind a human's repository.publish decision — the workspace's
-    // current branch pushed to the remote the decision names, one receipt per decision.
-    const publisher = createNodePublisher({
-      git: createGitLandingPort(),
-      projectId: config.projectId,
-      store: verifierStore,
-      workspace: compiledWorkspace,
+    const seatStart = createSeatStartRecorder({
+      log: (line) => { process.stdout.write(`${line}\n`); },
+      projectId: config.projectId, store: verifierStore,
+    });
+    const verifierDelivered = launchDelivery({
+      credential: () => config.credential, now: () => new Date().toISOString(),
+      projectId: config.projectId, store: verifierStore }, "VERIFIER");
+    // THE ONLY DELIVERING BOUNDARY IN THIS PROCESS. The recipe under test needs the project's own
+    // variables; `claudeSpawnStarter` below launches CODING seats and must NOT get them, so it
+    // keeps calling `agentEnvironment(...)` with ONE argument (agent-spawner.ts:156 and :159).
+    // The resolver takes a purpose and no environment name, so a verifier run cannot reach
+    // `production`, and CODING_SEAT resolves to a delivery whose value type is `never`. An
+    // `undefined` here (no credential, or no `verify` variables) spawns byte-identically to
+    // before. Collisions stay environment-delivery.ts's call: the allowlisted runtime wins.
+    verifierRunner = createVerifierDatabaseRunner({
+      ...(verifierDelivered === undefined ? {} : { delivered: verifierDelivered }),
+      onFatalContainment: () => { stop.request(); },
+    });
+    delivery = createRepositoryDeliveryRuntime({
+      publisher: provider.releasePublisher(),
+      compiledWorkspace, fence: staffingFence, landingOn,
+      log: (line) => { process.stdout.write(`${line}\n`); },
+      nodes: listNodes, storePath: config.storePath,
+      verifier: {
+        deps: provider.provide(), mintId: () => randomUUID(), nodeMission,
+        operatorCredential: config.credential, projectId: config.projectId,
+        runTest: verifierRunner, store: verifierStore,
+        verificationAuthority: createVerifierAuthorityProvider({ projectId: config.projectId, store: verifierStore }),
+      },
+    });
+
+    // The mission inputs that read durable state, all three from one scope. They live in
+    // ./wrapper-mission-inputs.ts because this file stood at exactly the 400-line split
+    // threshold: the design edge below could not be wired until the first two moved out.
+    const missionInputs = createCompilerMissionInputs({
+      projectId: config.projectId, store: verifierStore,
     });
 
     let secureSpawn: AgentSpawnStart | null = null;
     wrapper = createAgentWrapper({
       nodeMission,
+      // Named in every brief: the MCP port does not know the project, and a seat has no
+      // read that answers it, so graph_get was uncallable without this (2026-09-05).
+      projectId: config.projectId,
       payloadHint: (kind, target) =>
         (hintModule?.payloadFor?.(kind, target) ?? null) as never,
-      // The dispatcher mission's Gate 1 triple, resolved fresh per staffing from
-      // the same durable state the offer ladder read. Convenience, not
-      // authority: the compile dispatcher re-verifies every submit.
-      compilerGateRef: (goalId) => {
-        const laneStore = verifierStore;
-        if (goalId === null || laneStore === undefined) return null;
-        const facts = createCompilerLanePort({
-          ledger: readDurableLedger(laneStore, config.projectId),
-          projectId: config.projectId,
-          store: laneStore,
-        }).factsFor(goalId);
-        return facts.lane === "COMPILER" && facts.approvedGateRef !== null
-          ? { ...facts.approvedGateRef }
-          : null;
-      },
+      compilerGateRef: missionInputs.compilerGateRef,
       affordances,
-      // The goal's operator instructions, read from its durable catalog entry: a replan's
-      // successor goal carries the exhausted attempt's findings there.
-      compilerInstructions: (goalId) => {
-        const laneStore = verifierStore;
-        if (goalId === null || laneStore === undefined) return null;
-        const event: unknown = laneStore.readAggregateEvents(goalId, 0, 1).items[0];
-        if (event === undefined) return null;
-        const decoded = decodeGoalCatalogEntry(
-          event as Parameters<typeof decodeGoalCatalogEntry>[0], config.projectId,
-        );
-        return decoded.ok && decoded.entry.goalId === goalId
-          ? decoded.entry.brief?.instructions ?? null : null;
-      },
+      compilerInstructions: missionInputs.compilerInstructions,
+      // THE GOAL'S DESIGN, threaded for real. Declared and consumed since the design row landed
+      // but never SUPPLIED, so every live compiler seat evaluated `undefined ?? null` and read
+      // "NO DESIGN ACCOMPANIES THIS BRIEF" even where a design was submitted. A compiler seat
+      // reads the LATEST design; a node seat reads the version its plan was compiled against.
+      designBrief: createDesignBriefResolver({
+        projectId: config.projectId, store: verifierStore,
+      }),
       // Both horizons come from the knobs, where the bearer TTL is derived from
       // the agent lifetime: a session bound to the claim TTL expired under a
       // long task that was still renewing its claim, and the exit-path release
@@ -261,45 +222,27 @@ async function main(): Promise<void> {
       mintSecret: () => randomUUID().replaceAll("-", ""),
       operatorCredential: config.credential,
       sessionTtlMs: knobs.sessionTtlMs,
-      spawnAgent: async (request) => {
+      // THE SEAT-START RECORD IS WRITTEN HERE, AFTER ADMISSION AND NOWHERE ELSE. A wrapper that
+      // dies between deciding to staff and getting a child must not leave a note claiming a seat
+      // ran; `started.ok` is the first instant a child exists. Fire-and-forget on purpose: the
+      // write never rejects, and a spawn must not wait on a ledger commit to return.
+      spawnAgent: delivery.start(async (request) => {
         if (secureSpawn === null) throw new Error("MCP_HTTP_HOST_NOT_STARTED");
-        // The baseline is taken BEFORE the seat exists: whatever is dirty now
-        // is the operator's, and stays out of the landing.
-        if (landingOn && request.workspace !== null
-          && request.workItemId.startsWith(NODE_DELIVER_PREFIX)) {
-          const baseline = await lander.baseline(request.workItemId.slice(NODE_DELIVER_PREFIX.length));
-          process.stdout.write(`[lander] ${baseline.nodeRef}: ${baseline.outcome} (${baseline.detail})\n`);
-        }
-        return secureSpawn(request);
-      },
-      staffingFence: createAgentSessionFence({
-        isProcessAlive: probeProcessAlive,
+        const started = await secureSpawn(request);
+        if (started.ok) void seatStart.record(request);
+        return started;
+      }),
+      // Durable per-scope setting, read per staffed seat: NO provider is frozen at process
+      // start. `provider` below is only a fallback for a caller that resolved none.
+      agentProvider: agentProviderFact(verifierStore, config.projectId),
+      providerPause: createProviderPauseGate({
+        clock: () => Date.now(),
+        log: (line) => { process.stdout.write(`${line}\n`); },
         projectId: config.projectId,
+        provider: providerFor(process.env["MOE_AGENT_COMMAND"] ?? "claude")?.leaf ?? "claude",
         store: verifierStore,
       }),
-    });
-
-    // Daemon-side verification runs with a reduced environment and bounded
-    // capture. This is authority reduction, not same-UID/workspace hermeticity.
-    verifierRunner = createVerifierProcessRunner({
-      onFatalContainment: () => { stop.request(); },
-    });
-
-    const verifier = createNodeVerifier({
-      deps: provider.provide(),
-      mintId: () => randomUUID(),
-      nodeMission,
-      nodes: listNodes,
-      operatorCredential: config.credential,
-      projectId: config.projectId,
-      runTest: verifierRunner,
-      store: verifierStore,
-      // Reads calibration, policy and package facts from the durable store; a
-      // fact that is not installed still yields VERIFICATION_AUTHORITY_UNAVAILABLE.
-      verificationAuthority: createVerifierAuthorityProvider({
-        projectId: config.projectId,
-        store: verifierStore,
-      }),
+      staffingFence,
     });
 
     // Say at startup what the verifier would otherwise only say per node, after a delivery:
@@ -324,7 +267,16 @@ async function main(): Promise<void> {
       // The planning seat's contract read: the approved revision's criteria, by id.
       contract: createProductContractReadPort({ projectId: config.projectId, store: verifierStore }),
       deps: provider.provide(),
+      // The seat's design read, on the same reasoning as the contract read one line up: this is
+      // the seats' only MCP host, so without the port every `design.read` a seat makes would
+      // refuse INPUT_INVALID however correct its payload. The port binds NO projectId -- the
+      // handler feeds it from the authenticated principal, so a cross-project read refuses
+      // instead of agreeing with itself (`daemon-store-foundation-composition.ts:355`).
+      design: provider.designReads?.(),
       documents: provider.goalSource?.(),
+      // The seats' only MCP host is THIS one: without the graph reader every graph_get a
+      // seat made refused INPUT_INVALID, whatever the brief told it to send (2026-09-05).
+      graph: provider.graph?.(),
       subscriptions,
     });
     const mcpStarted = await mcpHost.start();
@@ -341,34 +293,32 @@ async function main(): Promise<void> {
     });
     secureSpawn = agentSpawner;
 
+    // Boot reclaim, ONCE before the first staffing pass: a restart otherwise leaves
+    // its own dead children's claims fenced for the full 30-minute claim expiry.
+    const reclaimed = runReclaimPass({
+      clock: () => Date.now(), deps: provider.provide(), isProcessAlive: probeProcessAlive,
+      log: (line: string) => { process.stdout.write(`${line}\n`); },
+      mintSecret: () => randomUUID().replaceAll("-", ""), operatorCredential: config.credential,
+      projectId: config.projectId, store: verifierStore,
+    });
+    const kept = reclaimed.filter((done) => done.outcome !== "RECLAIMED").length;
+    process.stdout.write(`[wrapper] reclaim pass: ${String(reclaimed.length - kept)} `
+      + `reclaimed, ${String(kept)} kept\n`);
+    if (stop.requested()) return;
+
     const { intervalMs, once } = knobs;
     let lastIdle = "";
     for (;;) {
       if (stop.requested()) return;
-      // Verify BEFORE staffing: a clean submission earns its acceptance (or its
-      // failure round) before any new agent is spawned against stale state.
-      let verdicts: Awaited<ReturnType<typeof verifier.verifyOnce>>;
+      // Repository ownership gates every effect, including submissions made by
+      // children that are still alive and wrappers sharing another project store.
       try {
-        verdicts = await verifier.verifyOnce();
+        await delivery.advance();
       } catch (error) {
         if (stop.requested() && error instanceof VerifierProcessCancelledError) return;
         throw error;
       }
       if (stop.requested()) return;
-      for (const verdict of verdicts) {
-        process.stdout.write(
-          `[verifier] ${verdict.nodeRef}: ${verdict.outcome} (${verdict.detail})\n`,
-        );
-      }
-      // Land AFTER verifying: an acceptance earned this pass is committed this pass.
-      if (landingOn) {
-        for (const landed of await lander.landOnce()) {
-          process.stdout.write(`[lander] ${landed.nodeRef}: ${landed.outcome} (${landed.detail})\n`);
-        }
-      }
-      for (const published of await publisher.publishOnce()) {
-        process.stdout.write(`[publisher] ${published.goalId}: ${published.outcome} (${published.detail})\n`);
-      }
       if (stop.requested()) return;
       // Awaits STARTUP ADMISSION only. Every agent's exit stays in flight, so a
       // staffed run never blocks this loop on a child's lifetime.
@@ -383,7 +333,11 @@ async function main(): Promise<void> {
         // Say so: a silent pass reads as a hung wrapper to an operator watching it.
         // Once per distinct idle state, not once per interval — the continuous
         // loop would otherwise print the same line every few seconds.
-        const idle = `[wrapper] nothing to staff (surface ${report.surfaceOutcome}, active ${String(report.active)})\n`;
+        // A parked fleet is not an idle one: say which provider and until when.
+        const idle = report.paused === undefined
+          ? `[wrapper] nothing to staff (surface ${report.surfaceOutcome}, active ${String(report.active)})\n`
+          : `[wrapper] provider paused: ${report.paused.provider} until ${report.paused.resetAt}`
+            + ` (active ${String(report.active)})\n`;
         if (idle !== lastIdle) process.stdout.write(idle);
         lastIdle = idle;
       } else {
@@ -392,20 +346,11 @@ async function main(): Promise<void> {
       if (once) {
         await wrapper.settle();
         if (stop.requested()) return;
-        let finalVerdicts: Awaited<ReturnType<typeof verifier.verifyOnce>>;
         try {
-          finalVerdicts = await verifier.verifyOnce();
+          await delivery.advance();
         } catch (error) {
           if (stop.requested() && error instanceof VerifierProcessCancelledError) return;
           throw error;
-        }
-        for (const verdict of finalVerdicts) {
-          process.stdout.write(`[verifier] ${verdict.nodeRef}: ${verdict.outcome} (${verdict.detail})\n`);
-        }
-        if (landingOn) {
-          for (const landed of await lander.landOnce()) {
-            process.stdout.write(`[lander] ${landed.nodeRef}: ${landed.outcome} (${landed.detail})\n`);
-          }
         }
         return;
       }
@@ -425,6 +370,7 @@ async function main(): Promise<void> {
         closeAgentSpawner: agentSpawner?.close,
         closeProvider: provider.close,
         closeVerifierRunner: verifierRunner?.close,
+        closeRepositoryDelivery: delivery?.close,
         closeVerifierStore: verifierStore === undefined ? undefined : () => { verifierStore?.close(); },
         settleAgents: wrapper?.settle,
         stopAuthorityHost: mcpHost?.stop,

@@ -5,6 +5,22 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { CordumShell } from "../shell/cordum-shell.js";
+import { NAV_IDS } from "../shell/shell-model.js";
+import type { NavDestination } from "../shell/shell-routes.js";
+
+/**
+ * A roster in which every destination is UNBUILT, injected into the shell.
+ *
+ * The two render arms below are about the SOON chip and about a daemon-supplied count
+ * staying inside a disabled button's accessible name. They used `cr.nav.resources` only
+ * because it happened to be the one destination this build had not shipped. It has since
+ * been given a route, so nothing in the live roster is unavailable and reading these arms
+ * off it would assert nothing. The roster is injected so each arm keeps testing exactly
+ * what it always tested - the rail takes `destinations` as a prop for this reason.
+ */
+const UNBUILT_ROSTER: readonly NavDestination[] = Object.freeze(NAV_IDS.map((id) => Object.freeze({
+  id, reason: "NAV_DESTINATION_NOT_BUILT" as const, route: null,
+})));
 
 /**
  * What the shell does to itself below 980px, and why it may not use display:none
@@ -120,7 +136,7 @@ describe("the narrow rail keeps every name it stops drawing", () => {
     // No onNavigate: every non-active item is disabled and wears the product's
     // SOON chip. The chip must be what NAV_BADGE selects, and at 64px the item
     // still has to explain itself by some visible route - its title.
-    render(<CordumShell title="Goals" />);
+    render(<CordumShell navDestinations={UNBUILT_ROSTER} title="Goals" />);
     const approvals = screen.getByTestId("cr.nav.resources");
     expect(approvals.hasAttribute("disabled")).toBe(true);
     const badge = approvals.querySelector(".cr2-statuschip");
@@ -134,8 +150,8 @@ describe("the narrow rail keeps every name it stops drawing", () => {
 
   it("keeps a daemon-supplied count inside the button's own text, which is its name", () => {
     render(
-      <CordumShell navBadges={{ resources: { count: "7", tone: "info" } }} onNavigate={() => undefined}
-        title="Goals" />,
+      <CordumShell navBadges={{ resources: { count: "7", tone: "info" } }}
+        navDestinations={UNBUILT_ROSTER} onNavigate={() => undefined} title="Goals" />,
     );
     const approvals = screen.getByTestId("cr.nav.resources");
     const badge = approvals.querySelector(".cr2-statuschip");

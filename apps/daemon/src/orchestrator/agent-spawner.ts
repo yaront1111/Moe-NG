@@ -5,12 +5,16 @@ import { tmpdir } from "node:os";
 import { join, win32 as windowsPath } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { CHAIN_TOOLS, CODING_BUILTIN_TOOLS, CODING_TOOLS, agentEnvironment,
+import { agentEnvironment,
   trustedMcpOrigin } from "./agent-spawn-environment.js";
+import { agentRoleForWorkspace } from "./agent-role-contract.js";
 import { AgentProcessContainmentError, AgentProcessFailureError } from "./agent-spawn-contract.js";
 import type { AgentProcessContainmentReason, AgentProcessFailureReason, AgentSpawnStartResult,
-  AgentSpawnStarter, AgentSpawner, AgentSpawnerOptions, SpawnAttempt } from "./agent-spawn-contract.js";
+  AgentSpawnStarter, AgentSpawner, AgentSpawnerOptions, SeatExitReport,
+  SpawnAttempt } from "./agent-spawn-contract.js";
 import { agentSpawnInvocation, SpawnInvocationRefusal, SPAWN_INVOCATION_LAYER } from "./agent-spawn-invocation.js";
+import { spawnSeatFor } from "./agent-provider-resolve.js";
+import { createOutputTail } from "./seat-output-tail.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 
 export { AgentProcessContainmentError, AgentProcessFailureError } from "./agent-spawn-contract.js";
@@ -45,7 +49,6 @@ function spawnRuntime(
   const trustedOrigin = trustedMcpOrigin(mcpOrigin);
   const configDir = mkdtempSync(join(tmpdir(), "moe-wrapper-"));
   CONFIG_DIRS.add(configDir);
-  const command = options.command ?? process.env["MOE_AGENT_COMMAND"] ?? "claude";
   const spawn = options.spawn ?? nodeSpawn;
   const log = options.log ?? ((line: string): void => { process.stdout.write(`${line}\n`); });
   const envTimeout = Number(process.env["MOE_AGENT_TIMEOUT_MS"] ?? "");
@@ -55,28 +58,63 @@ function spawnRuntime(
   const killGraceMs = options.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
   const killProcessGroup = options.killProcessGroup ?? process.kill.bind(process);
   const active = new Set<{
-    readonly done: Promise<void>;
+    readonly done: Promise<SeatExitReport | void>;
     readonly terminate: () => void;
   }>();
   const containmentFailures: AgentProcessContainmentError[] = [];
   let closed = false;
   let closing: Promise<void> | undefined;
-  // The seat's PROVIDER decides the invocation shape. `codex exec` (measured
-  // against codex-cli 0.151.0): the mission arrives on stdin via `-`, the MCP
-  // server is a streamable-HTTP config override, and the scoped bearer travels
-  // through an env var codex reads by name (`bearer_token_env_var`) — never
-  // through argv or a file. `--ignore-user-config` keeps the HOST's codex
-  // config (and any MCP servers it names) out, the parallel of claude's
-  // `--strict-mcp-config`; its help states auth still uses CODEX_HOME.
-  // Config values stay QUOTE-FREE on purpose: codex parses each `-c` value as
-  // TOML and falls back to the raw literal, and a quote-free arg is what the
-  // Windows cmd quoting fence admits.
-  const codexSeat = /(?:^|[\\/])codex(?:\.[a-z]+)?$/iu.test(command);
+  // EACH SEAT's PROVIDER decides its own invocation shape, resolved per spawn from
+  // the request (see agent-provider-resolve.ts). `codex exec` (measured
+  // 2026-09-07 against codex-cli 0.153.4 on host Yaron-PC, superseding an earlier reading of
+  // 0.151.0 — this surface is unchanged between them): the mission arrives on stdin via `-`,
+  // the MCP server is a streamable-HTTP config override, and the scoped bearer travels through
+  // an env var codex reads by name (`bearer_token_env_var`) — never through argv or a file.
+  // `--ignore-user-config` keeps the HOST's codex config (and any MCP servers it names) out,
+  // the parallel of claude's `--strict-mcp-config`; its help states auth still
+  // uses CODEX_HOME. Config values carry NO DOUBLE QUOTE AND NO WHITESPACE: codex parses each
+  // `-c` value as TOML and falls back to the raw literal, and that is what the cmd fence admits
+  // (`UNQUOTABLE` in agent-spawn-invocation.ts refuses `"`). The roster value must be a TOML
+  // SEQUENCE, so it uses single-quoted literals — agent-codex-roster.ts owns that measurement.
+  // THE APPROVAL PAIR (measured 2026-09-07, codex-cli 0.153.4, host Yaron-PC, graded on whether
+  // a real MCP server RECORDED a `tools/call` — the banner disagrees with argv here and grades
+  // nothing). Without it `exec` defaults to `approval_policy = never` and REFUSES every MCP tool
+  // call — `MCP tool call requires approval, but approval policy is never` — so no codex seat
+  // could reach `work_get_context`, hence none could deliver. `approval_policy=on-request` ALONE
+  // DOES NOT FIX IT: the parser accepts the key and the banner still reads `never`, because the
+  // policy is discarded until a NON-INTERACTIVE reviewer is named (`user | auto_review |
+  // guardian_subagent`). Narrower tiers were measured, not assumed: there is NO per-server
+  // approval knob (9 `mcp_servers.<name>.*` spellings answer `unknown configuration field` under
+  // `--strict-config`, which validates `-c` overrides — `enabled_tools` accepted in the same
+  // sweep proves the oracle discriminates), `--ask-for-approval` is not an `exec` flag, and
+  // `--approve-for-me` is this same mechanism but MUTUALLY EXCLUSIVE with `--sandbox`, so it
+  // would delete the role's sandbox from this argv.
+  //
+  // SECURITY NOTE — THIS WIDENS THE SEAT. Under `on-request` + `auto_review` the sandbox stops
+  // containing: a seat spawned `--sandbox read-only` was measured WRITING OUTSIDE ITS WORKSPACE,
+  // banner still `sandbox: read-only`. The model requests escalation, `auto_review` grants it
+  // with no human, and the escalated command runs unsandboxed — so `role.sandbox` below is now
+  // ADVISORY. Every tier that completes an MCP call also loses containment, so this is not a
+  // safe-vs-wide choice. `--ignore-user-config` still earns its place: it keeps the host's
+  // config and its MCP servers off the seat, which is what stops a seat reaching the real board.
+  //
+  // SEPARATE codex-cli 0.153.4 BEHAVIOUR, NOT A DEFECT IN THIS FILE — the flag is passed
+  // correctly, and reading "argv says workspace-write, banner says read-only" as a bug HERE is
+  // the obvious inference and it is FALSE; only the controls below separate the two. Measured:
+  // `--sandbox` CANNOT RAISE the mode above the `read-only` default when no config.toml supplies
+  // `sandbox_mode`. Controls: bare `--sandbox workspace-write` -> workspace-write; + `--ignore-
+  // user-config` -> read-only with NO error; + `--ephemeral` -> read-only (so `--ephemeral` is
+  // EXONERATED); + `danger-full-access` -> honoured. `--ignore-user-config` is NOT the cause
+  // either — a scratch CODEX_HOME with no config.toml downgrades identically; the host config
+  // sets `sandbox_mode = "danger-full-access"`, so control one was the flag NARROWING that.
+  // Moot for containment while the pair above makes the mode advisory anyway. Full table:
+  // `mem:gotcha-codex-exec-approval-pair-and-the-sandbox-mode-floor`.
   const attemptSpawn = (request: SpawnRequest): SpawnAttempt => {
     if (closed) throw new Error("AGENT_SPAWNER_CLOSED");
+    const { codex: codexSeat, command } = spawnSeatFor(request.provider, options.command);
     const mcpConfigPath = join(configDir, `${request.sessionId}.json`);
     // Code-node agents get coding tools; chain-step agents keep the MCP-only surface.
-    const coding = request.workspace !== null;
+    const role = agentRoleForWorkspace(request.workspace);
     // Build before writing the credential: Windows shell quoting can refuse the invocation.
     let invocation;
     try {
@@ -85,9 +123,14 @@ function spawnRuntime(
         "--ignore-user-config",
         "--skip-git-repo-check",
         "--ephemeral",
-        "--sandbox", coding ? "workspace-write" : "read-only",
+        "--sandbox", role.sandbox,
+        // BOTH halves or neither: the policy is discarded unless a non-interactive
+        // reviewer is named, and without the policy every MCP tool call is refused.
+        "-c", "approval_policy=on-request",
+        "-c", "approvals_reviewer=auto_review",
         "-c", `mcp_servers.moe-next.url=${trustedOrigin}`,
         "-c", `mcp_servers.moe-next.bearer_token_env_var=${CODEX_BEARER_VARIABLE}`,
+        ...role.codexRosterArgs,
         "-",
       ] : [
         "-p",
@@ -103,8 +146,8 @@ function spawnRuntime(
         "--no-session-persistence",
         "--strict-mcp-config",
         "--mcp-config", mcpConfigPath,
-        "--tools", coding ? CODING_BUILTIN_TOOLS : "",
-        "--allowedTools", coding ? CODING_TOOLS : CHAIN_TOOLS,
+        "--tools", role.builtinTools,
+        "--allowedTools", role.allowedTools,
       ], platform);
     } catch (error) {
       // ONLY the landed typed refusal owns a stable code. Anything else — an
@@ -126,7 +169,8 @@ function spawnRuntime(
         },
       }), "utf8");
     }
-    let owned: { readonly done: Promise<void>; readonly terminate: () => void } | undefined;
+    let owned: { readonly done: Promise<SeatExitReport | void>; readonly terminate: () => void }
+      | undefined;
     let terminateOwned: () => void = () => undefined;
     let completedBeforeRegistration = false;
     // Captured out of the `done` executor's scope so an accepted start can report
@@ -141,7 +185,7 @@ function spawnRuntime(
       admit = resolve;
       denyStart = reject;
     });
-    const done = new Promise<void>((resolve, reject) => {
+    const done = new Promise<SeatExitReport | void>((resolve, reject) => {
       let child: ChildProcess;
       try {
         child = spawn(invocation.file, [...invocation.args], {
@@ -154,7 +198,9 @@ function spawnRuntime(
             }
             : agentEnvironment(options.environment ?? process.env),
           shell: invocation.shell,
-          stdio: ["pipe", "inherit", "inherit"],
+          // All three PIPED: the seat's output is teed below, byte for byte, to the
+          // wrapper's own console AND to a bounded tail the exit is read from.
+          stdio: ["pipe", "pipe", "pipe"],
         });
       } catch (error) {
         rmSync(mcpConfigPath, { force: true });
@@ -163,11 +209,24 @@ function spawnRuntime(
         return;
       }
       childPid = child.pid;
+      // Attached in the SAME TICK as the spawn: a chunk emitted before a listener
+      // exists is lost, and an unread pipe eventually blocks the child.
+      const tail = createOutputTail();
+      const sinks = options.output ?? { stderr: process.stderr, stdout: process.stdout };
+      const tee = (sink: NodeJS.WritableStream) => (chunk: Buffer): void => {
+        sink.write(chunk);
+        tail.push(chunk);
+      };
+      child.stdout?.on("data", tee(sinks.stdout));
+      child.stderr?.on("data", tee(sinks.stderr));
       // The config file carries the agent's credential; it must not outlive the
       // owned process. Every settlement path removes it; a missing file is fine.
       let settled = false;
       let terminating = false;
       let childClosed = false;
+      /** The close facts, captured before settling so every arm reports the same exit. */
+      let lastClose: { code: number | null; signal: NodeJS.Signals | null }
+        = { code: null, signal: null };
       let treeKillConfirmed = false;
       let killHelper: ChildProcess | undefined;
       let killTimer: ReturnType<typeof setTimeout> | undefined;
@@ -191,7 +250,7 @@ function spawnRuntime(
         if (settled) return;
         settled = true;
         cleanup();
-        resolve();
+        resolve({ exitCode: lastClose.code, signal: lastClose.signal, tail: tail.lines() });
       };
       const failProcess = (
         reason: AgentProcessFailureReason,
@@ -201,7 +260,7 @@ function spawnRuntime(
         if (settled) return;
         settled = true;
         cleanup();
-        reject(new AgentProcessFailureError(reason, exitCode, signal));
+        reject(new AgentProcessFailureError(reason, exitCode, signal, tail.lines()));
       };
       const failContainment = (reason: AgentProcessContainmentReason): void => {
         if (settled) return;
@@ -313,6 +372,7 @@ function spawnRuntime(
       child.on("close", (code, signal) => {
         log(`[wrapper] ${request.workItemId} agent exited ${String(code)}`);
         childClosed = true;
+        lastClose = { code, signal };
         if (terminating) maybeFinishTermination();
         else if (code === 0) finish();
         else failProcess(code === null ? "EXIT_SIGNAL" : "EXIT_NONZERO", code, signal);
@@ -369,7 +429,9 @@ function spawnRuntime(
     // settles exactly as this caller has always observed.
     if (!("admitted" in attempt)) throw new SpawnInvocationRefusal(attempt.code);
     void attempt.admitted.catch(() => undefined);
-    return await attempt.done;
+    // The legacy contract answers VOID; the seat report the lifetime now carries is
+    // handed to `startAgent`'s caller, not to this one.
+    await attempt.done;
   };
 
   const own = <Callable extends object>(callable: Callable): Callable => {

@@ -4,57 +4,38 @@ import { types } from "node:util";
 import {
   encodeAcceptanceCriteriaContent,
   encodePlanExecutionContent,
-  type AcceptanceContractCode,
   type AcceptanceCriteriaContent,
-  type PlanRevisionCode,
   type PlanExecutionContent,
 } from "@moe/core";
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 
 import type { MonotonicPredicateRegistryEntry }
   from "../dependencies/dependency-contract.js";
-import {
-  hasOnlyOwnStringKeys, isPlainRecord, readOwnDataProperty,
-} from "../runtime-shape.js";
+import { hasOnlyOwnStringKeys, isPlainRecord } from "../runtime-shape.js";
 import {
   NODE_AUTHORITY_LIMITS, canonicalText,
-  type NodeAuthorityEdgeInput, type NodeAuthorityIssueCode, type NodeDependencyEntry,
+  type NodeAuthorityEdgeInput, type NodeDependencyEntry,
 } from "./node-authority-contract.js";
+import {
+  NODE_PLANNING_SOURCE_DECLARED_MIGRATIONS_ENVELOPE_KEY as DECLARED_MIGRATIONS_ENVELOPE_KEY,
+  NODE_PLANNING_SOURCE_DECLARED_MIGRATIONS_KEY as DECLARED_MIGRATIONS_KEY,
+  NODE_PLANNING_SOURCE_DIGEST_DOMAINS as DIGEST_DOMAINS,
+  NODE_PLANNING_SOURCE_SCHEMA_TAGS as SCHEMA_TAGS,
+  nodePlanningSourceVersionOf,
+  own,
+  refuse,
+  type NodePlanningSourceRefusal,
+  type NodePlanningSourceSchemaVersion,
+} from "./node-planning-source-schema.js";
 
-export const NODE_PLANNING_SOURCE_SCHEMA_VERSION = 1 as const;
-const NODE_PLANNING_SOURCE_SCHEMA_TAG = "MOE-NODE-PLANNING-SOURCE/1" as const;
-export const NODE_PLANNING_SOURCE_DIGEST_DOMAIN =
-  "MOE-NODE-PLANNING-SOURCE-CONTENT-HASH/1" as const;
-export const NODE_PLANNING_SOURCE_CODES = Object.freeze([
-  "NODE_PLANNING_SOURCE_MALFORMED",
-  "NODE_PLANNING_SOURCE_LIMIT_EXCEEDED",
-  "NODE_PLANNING_SOURCE_NODE_ROSTER_INVALID",
-  "NODE_PLANNING_SOURCE_CRITERIA_MISMATCH",
-  "NODE_PLANNING_SOURCE_RECIPE_MISMATCH",
-  "NODE_PLANNING_SOURCE_DEPENDENCY_CONSUMER_MISMATCH",
-  "NODE_PLANNING_SOURCE_DEPENDENCY_CRITERIA_MISMATCH",
-  "NODE_PLANNING_SOURCE_PROOF_ROSTER_INVALID",
-  "NODE_PLANNING_SOURCE_NOT_BYTES",
-  "NODE_PLANNING_SOURCE_UNREADABLE",
-  "NODE_PLANNING_SOURCE_NONCANONICAL",
-  "NODE_PLANNING_SOURCE_UNSUPPORTED_SCHEMA",
-] as const);
-export type NodePlanningSourceCode = (typeof NODE_PLANNING_SOURCE_CODES)[number];
-export type NodePlanningSourceIssueCode = NodePlanningSourceCode | AcceptanceContractCode
-  | NodeAuthorityIssueCode | PlanRevisionCode;
-const LAYER_NAMES = Object.freeze([
-  "ACCEPTANCE_CRITERIA_CONTENT",
-  "NODE_AUTHORITY",
-  "NODE_PLANNING_SOURCE_ADMISSION",
-  "NODE_PLANNING_SOURCE_CODEC",
-  "NODE_PLANNING_SOURCE_DEPENDENCIES",
-  "NODE_PLANNING_SOURCE_IDENTITY",
-  "NODE_PLANNING_SOURCE_LIMITS",
-  "NODE_PLANNING_SOURCE_PROOFS",
-  "NODE_PLANNING_SOURCE_SCHEMA",
-  "PLAN_EXECUTION_CONTENT",
-] as const);
-export type NodePlanningSourceLayer = (typeof LAYER_NAMES)[number];
+/**
+ * The codes, layers, versions, tags, digest domains, refusal constructor and the
+ * declaration reader live in `node-planning-source-schema.ts` and are re-exported
+ * here so every existing importer of this module keeps its specifier. The split is
+ * the 400-line cap, not a new seam: this module owns the WIRE, that one owns the
+ * VOCABULARY the wire is spelled in.
+ */
+export * from "./node-planning-source-schema.js";
 
 export interface NodePlanningSourceDependency extends NodeAuthorityEdgeInput {
   readonly requirement: Readonly<{
@@ -64,25 +45,26 @@ export interface NodePlanningSourceDependency extends NodeAuthorityEdgeInput {
 }
 export interface NodePlanningSourceContent {
   readonly acceptanceCriterionContent: AcceptanceCriteriaContent;
+  /**
+   * OPTIONAL, and the absence is load-bearing: ABSENT means the source predates the
+   * member or its author stated nothing knowable, `[]` means the author stated that
+   * this node declares NO migration. Defaulting absent to `[]` would mint a
+   * declaration nobody authored. `authority-contracts.ts:74` derives
+   * `V2CompilerNodePlanningAuthority = Omit<NodePlanningSourceContent, "version">`
+   * from this type, so the compiler reads exactly this shape and inherits the
+   * optionality rather than restating it.
+   */
+  readonly declaredMigrations?: readonly string[];
   readonly directHardDependencies: readonly NodePlanningSourceDependency[];
   readonly planExecutionContent: PlanExecutionContent;
   readonly predicateRegistry: readonly MonotonicPredicateRegistryEntry[];
-  readonly version: typeof NODE_PLANNING_SOURCE_SCHEMA_VERSION;
-}
-export interface NodePlanningSourceIssue {
-  readonly code: NodePlanningSourceIssueCode;
-  readonly layer: NodePlanningSourceLayer;
-  readonly message: string;
+  readonly version: NodePlanningSourceSchemaVersion;
 }
 export type NodePlanningSourceResult = Readonly<{
   readonly content: NodePlanningSourceContent;
   readonly ok: true;
   readonly sourceDigest: string;
 }> | NodePlanningSourceRefusal;
-export type NodePlanningSourceRefusal = Readonly<{
-  readonly issues: readonly NodePlanningSourceIssue[];
-  readonly ok: false;
-}>;
 export type NodePlanningSourceBytesResult = Readonly<{
   readonly bytes: Uint8Array;
   readonly ok: true;
@@ -93,20 +75,10 @@ const ENVELOPE_KEYS = Object.freeze([
   "acceptanceCriterionContentBytesBase64", "dependencyContentBytesBase64",
   "planExecutionContentBytesBase64", "schema",
 ]);
+const DECLARING_ENVELOPE_KEYS = Object.freeze([
+  ...ENVELOPE_KEYS, DECLARED_MIGRATIONS_ENVELOPE_KEY,
+]);
 const encoder = new TextEncoder();
-
-export function refuse(
-  code: NodePlanningSourceCode, layer: NodePlanningSourceLayer, message: string,
-): NodePlanningSourceRefusal {
-  return Object.freeze({
-    issues: Object.freeze([Object.freeze({ code, layer, message })]), ok: false as const,
-  });
-}
-
-export function own(value: object, key: string): unknown {
-  const read = readOwnDataProperty(value, key);
-  return read.ok && read.present ? read.value : undefined;
-}
 
 function framed(hash: ReturnType<typeof createHash>, bytes: Uint8Array): void {
   const length = Buffer.allocUnsafe(8);
@@ -126,26 +98,42 @@ export function nodePlanningSourceWireOf(
   const plan = encodePlanExecutionContent(content.planExecutionContent);
   const acceptance = encodeAcceptanceCriteriaContent(content.acceptanceCriterionContent);
   if (!plan.ok || !acceptance.ok) return undefined;
+  // Not `content.version`: the version rides the CONTENT, so a caller that supplied
+  // a version could frame a declaring source with the version-1 tag and domain.
+  const declared = content.declaredMigrations;
+  const version = nodePlanningSourceVersionOf(declared);
   let dependencies: Uint8Array;
+  let migrations: Uint8Array | undefined;
   let bytes: Uint8Array;
   try {
     dependencies = encoder.encode(canonicalText({
       directHardDependencies: content.directHardDependencies,
       predicateRegistry: content.predicateRegistry,
     }));
+    migrations = declared === undefined
+      ? undefined
+      : encoder.encode(canonicalText({ [DECLARED_MIGRATIONS_KEY]: declared }));
     bytes = encoder.encode(canonicalText({
       acceptanceCriterionContentBytesBase64:
         Buffer.from(acceptance.bytes).toString("base64"),
+      // Spread, never an assigned `undefined`: `canonicalText` throws on undefined
+      // and an own key holding it is not an absent key to `Object.keys`.
+      ...(migrations === undefined ? {} : {
+        [DECLARED_MIGRATIONS_ENVELOPE_KEY]: Buffer.from(migrations).toString("base64"),
+      }),
       dependencyContentBytesBase64: Buffer.from(dependencies).toString("base64"),
       planExecutionContentBytesBase64: Buffer.from(plan.bytes).toString("base64"),
-      schema: NODE_PLANNING_SOURCE_SCHEMA_TAG,
+      schema: SCHEMA_TAGS[version],
     }));
   } catch { return undefined; }
   const hash = createHash("sha256");
-  framed(hash, encoder.encode(NODE_PLANNING_SOURCE_DIGEST_DOMAIN));
+  framed(hash, encoder.encode(DIGEST_DOMAINS[version]));
   framed(hash, plan.bytes);
   framed(hash, acceptance.bytes);
   framed(hash, dependencies);
+  // Framed LAST and only when stated, so a source that declares nothing hashes over
+  // exactly the three segments it always did, under exactly the domain it always did.
+  if (migrations !== undefined) framed(hash, migrations);
   return Object.freeze({ bytes, sourceDigest: hash.digest("hex") });
 }
 
@@ -172,6 +160,8 @@ function base64Bytes(value: unknown): Uint8Array | undefined {
 export interface NodePlanningSourceWireContent {
   readonly acceptanceBytes: Uint8Array;
   readonly bytes: Uint8Array;
+  /** ABSENT when the wire states none; the codec must not turn that into `[]`. */
+  readonly declaredMigrations?: unknown;
   readonly directHardDependencies: unknown;
   readonly ok: true;
   readonly planBytes: Uint8Array;
@@ -194,13 +184,22 @@ export function readNodePlanningSourceWire(value: unknown): NodePlanningSourceWi
   if (!decoded.ok) return refuse(
     "NODE_PLANNING_SOURCE_UNREADABLE", "NODE_PLANNING_SOURCE_CODEC", decoded.code,
   );
-  if (!exactRecord(decoded.value, ENVELOPE_KEYS)) return refuse(
+  const declaring = exactRecord(decoded.value, DECLARING_ENVELOPE_KEYS);
+  if (!declaring && !exactRecord(decoded.value, ENVELOPE_KEYS)) return refuse(
     "NODE_PLANNING_SOURCE_UNREADABLE", "NODE_PLANNING_SOURCE_CODEC",
     "planning source envelope is malformed",
   );
-  if (own(decoded.value, "schema") !== NODE_PLANNING_SOURCE_SCHEMA_TAG) return refuse(
+  const tag = own(decoded.value, "schema");
+  if (tag !== SCHEMA_TAGS[1] && tag !== SCHEMA_TAGS[2]) return refuse(
     "NODE_PLANNING_SOURCE_UNSUPPORTED_SCHEMA", "NODE_PLANNING_SOURCE_SCHEMA",
     "planning source wire schema is unsupported",
+  );
+  // The tag and the envelope roster must agree, and the disagreement is NOT merely
+  // noncanonical: the declaration key is the whole reason the version moved, so a
+  // v2 tag over a v1 envelope is a schema the reader has to be able to name.
+  if (declaring !== (tag === SCHEMA_TAGS[2])) return refuse(
+    "NODE_PLANNING_SOURCE_SCHEMA_MISMATCH", "NODE_PLANNING_SOURCE_SCHEMA",
+    "planning source wire schema disagrees with its envelope",
   );
   const planBytes = base64Bytes(own(decoded.value, "planExecutionContentBytesBase64"));
   const acceptanceBytes = base64Bytes(
@@ -216,14 +215,34 @@ export function readNodePlanningSourceWire(value: unknown): NodePlanningSourceWi
     "NODE_PLANNING_SOURCE_UNREADABLE", "NODE_PLANNING_SOURCE_CODEC",
     "planning source dependency component is malformed",
   );
+  const declared = declaring
+    ? readDeclaredComponent(own(decoded.value, DECLARED_MIGRATIONS_ENVELOPE_KEY))
+    : undefined;
+  if (declared !== undefined && !declared.ok) return declared;
   return Object.freeze({
     acceptanceBytes,
     bytes,
+    // Spread: a wire that states none must not arrive carrying an own key holding
+    // `undefined`, which the codec's re-encode would treat as a stated declaration.
+    ...(declared === undefined ? {} : { declaredMigrations: declared.value }),
     directHardDependencies: own(dependencies.value, "directHardDependencies"),
     ok: true as const,
     planBytes,
     predicateRegistry: own(dependencies.value, "predicateRegistry"),
   });
+}
+
+function readDeclaredComponent(
+  value: unknown,
+): Readonly<{ ok: true; value: unknown }> | NodePlanningSourceRefusal {
+  const bytes = base64Bytes(value);
+  const decoded = bytes === undefined ? undefined : decodeBoundedJsonBytes(bytes);
+  if (decoded === undefined || !decoded.ok
+    || !exactRecord(decoded.value, [DECLARED_MIGRATIONS_KEY])) {
+    return refuse("NODE_PLANNING_SOURCE_UNREADABLE", "NODE_PLANNING_SOURCE_CODEC",
+      "planning source declared-migration component is malformed");
+  }
+  return Object.freeze({ ok: true as const, value: own(decoded.value, DECLARED_MIGRATIONS_KEY) });
 }
 
 export const sameNodePlanningSourceBytes = (

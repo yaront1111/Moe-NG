@@ -14,7 +14,10 @@ import {
 } from "../bootstrap/bootstrap-ledger.js";
 import type { CommandHandler, HandlerTable, ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
 import { admitDocumentSource } from "../documents/document-source-leg.js";
-import { GOAL_PREREQUISITE_LAYER } from "./goal-close-prerequisite.js";
+import {
+  GOAL_CLOSE_CRITERIA_UNVERIFIED, GOAL_PREREQUISITE_LAYER,
+} from "./goal-close-prerequisite.js";
+import { goalCloseReadinessFor } from "./goal-close-readiness.js";
 import { createGoalWithSource } from "./goal-create-with-source.js";
 import {
   briefBearingFacts,
@@ -23,7 +26,8 @@ import {
   refsOfGoal,
 } from "./goal-identity.js";
 import { qualifyGoalClosure } from "./goal-qualification.js";
-import { admitRemoteUrl, publishAggregateId } from "../repository/publish-receipt-contracts.js";
+import { publishRepository } from "../repository/publish-services.js";
+import { setDeployTarget } from "../deployment/deploy-target-command.js";
 
 /**
  * Goal creation.
@@ -146,6 +150,22 @@ const closeGoal: CommandHandler = (context): ServiceOutcome => {
   if (goalId === null || declaredClosure === null || declaredZeroAuthority === null) {
     return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
   }
+
+  // THE GOAL-LEVEL GATE, and it runs BEFORE qualification for two reasons: it is the cheaper
+  // read, and a goal whose product is not built must never mint closure witnesses on the way to
+  // being refused. FAIL CLOSED BY DEFAULT — only a goal with no approved Product Contract, or
+  // one whose every approved criterion the coverage read calls VERIFIED, proceeds. NOT_READY
+  // and an UNREADABLE coverage both refuse here, and a kind added to the union later refuses
+  // until someone decides it should not. The counts behind the refusal are not restated on the
+  // wire: `ServiceRefused` carries only code, layer and a RuntimeError whose code must be one
+  // the `@moe/contracts` registry knows, so an unregistered one would surface as UNKNOWN_ERROR
+  // with its details stripped — strictly worse than the code itself. The numbers live on
+  // `goalCloseReadinessFor`, which is what the coverage screen and the offer ladder read.
+  const readiness = goalCloseReadinessFor(store, request.projectId, goalId);
+  if (readiness.kind !== "NO_CONTRACT" && readiness.kind !== "READY") {
+    return refuse(request.kind, GOAL_CLOSE_CRITERIA_UNVERIFIED, GOAL_PREREQUISITE_LAYER);
+  }
+
   const qualified = qualifyGoalClosure(store, request.projectId, goalId);
   if (!qualified.ok) {
     return refuse(request.kind, qualified.code, GOAL_PREREQUISITE_LAYER);
@@ -176,48 +196,11 @@ const closeGoal: CommandHandler = (context): ServiceOutcome => {
 };
 
 /** Lifecycles whose goal may be published: the graph was activated, so work may be landed. */
-const PUBLISHABLE_LIFECYCLES: ReadonlySet<string> = new Set(["EXECUTION_ENABLED", "CLOSING", "COMPLETED"]);
-
-/**
- * The human names a remote; the wrapper's publisher pushes the workspace's current branch
- * there and records a receipt beside this decision. The decision lands on the goal's publish
- * aggregate (`publish:<goalId>`), so its version fence never moves the goal's own. Nothing
- * here touches git: a refusal is about the goal or the URL, never about the push.
- */
-const publishRepository: CommandHandler = (context): ServiceOutcome => {
-  const { ledger, request, store } = context;
-  const goalId = payloadRef(request.payload, "goalId");
-  const remoteUrl = admitRemoteUrl(request.payload["remoteUrl"]);
-  if (goalId === null || remoteUrl === null) {
-    return refuse(request.kind, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_INGRESS");
-  }
-  const goal = stateOf(ledger, goalId);
-  const state = typeof goal === "object" && goal !== null && !Array.isArray(goal)
-    ? goal as Record<string, unknown> : null;
-  if (state === null || state["goalId"] !== goalId) {
-    return refuse(request.kind, "BOOTSTRAP_PREREQUISITE_MISSING", "DAEMON_PREREQUISITE");
-  }
-  if (!PUBLISHABLE_LIFECYCLES.has(String(state["lifecycle"]))) {
-    return refuse(request.kind, "BOOTSTRAP_PREREQUISITE_MISSING", "DAEMON_PREREQUISITE");
-  }
-  const aggregateId = publishAggregateId(goalId);
-  if (request.expectedVersion !== versionOf(ledger, aggregateId)) {
-    return refuse(request.kind, "BOOTSTRAP_EXPECTED_VERSION_STALE", "DAEMON_PREREQUISITE");
-  }
-  const result = { goalId, remoteUrl, requestedAt: request.decidedAt };
-  return commitAccepted(store, request, {
-    aggregateId,
-    eventPayload: result,
-    eventType: "RepositoryPublishRequested",
-    expectedVersion: versionOf(ledger, aggregateId),
-    result,
-  });
-};
-
 /** Appended, never reordered: existing suites assert against this table's key order. */
 export const GOAL_HANDLERS: HandlerTable = Object.freeze({
   "goal.create": createGoal,
   "goal.close": closeGoal,
   "goal.create_with_source": createGoalWithSourceHandler,
   "repository.publish": publishRepository,
+  "deployment.set_target": setDeployTarget,
 });

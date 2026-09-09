@@ -1,19 +1,28 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import { readActivation } from "../../live/live-activation.js";
+import type { ActivationReadOutcome } from "../../live/live-activation.js";
 import { readActivity } from "../../live/live-activity.js";
 import type { ActivityOutcome } from "../../live/live-activity.js";
 import { readHealth, readPolicy } from "../../live/live-ops.js";
 import type { HealthOutcome, PolicyOutcome } from "../../live/live-ops.js";
 import type { LiveSetup } from "../../live/live-config.js";
+import { readRepositoryRemote } from "../../live/live-repository-remote.js";
+import type { RepositoryRemoteOutcome } from "../../live/live-repository-remote.js";
 import { readSessions } from "../../live/live-sessions.js";
 import type { SessionsOutcome } from "../../live/live-sessions.js";
+import { useProviderPause } from "../shell/pause-context.js";
 import { ActivityPanel, SessionsPanel } from "./activity-screens.js";
+import { AGENT_PROVIDER_COMMAND_KIND, createAgentProviderPort } from "./agent-provider-port.js";
+import type { AgentProviderPort } from "./agent-provider-port.js";
+import { LiveEnvironments } from "./live-environments.js";
 import { HealthScreen, PolicyScreen } from "./ops-screens.js";
 import type { PolicyInstallState } from "./ops-screens.js";
 import { createPolicyInstallPort, installStandardPolicy, readSurfaceOnce } from "./policy-install-port.js";
 import type { PolicyInstallPort } from "./policy-install-port.js";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
+import { LiveRepositoryRecovery } from "./live-repository-recovery.js";
 
 /**
  * The LIVE policy and health screens: one read on mount and every few seconds after, each
@@ -25,7 +34,7 @@ const POLL_MS = 5_000;
 
 type Connection = "CONNECTED" | "DISCONNECTED";
 
-function useOpsRead<T extends { readonly status: string; readonly code?: string }>(
+export function useOpsRead<T extends { readonly status: string; readonly code?: string }>(
   read: () => Promise<T>, failure: T, pollMs: number, onConnection: ((connection: Connection) => void) | undefined,
 ): { readonly nowMs: number; readonly outcome: T | null; readonly refresh: () => void } {
   const [outcome, setOutcome] = useState<T | null>(null);
@@ -60,9 +69,24 @@ function useOpsRead<T extends { readonly status: string; readonly code?: string 
 }
 
 const POLICY_FAILURE: PolicyOutcome = Object.freeze({ code: "POLICY_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
-const HEALTH_FAILURE: HealthOutcome = Object.freeze({ code: "HEALTH_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
+export const HEALTH_FAILURE: HealthOutcome = Object.freeze({ code: "HEALTH_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
 const ACTIVITY_FAILURE: ActivityOutcome = Object.freeze({ code: "ACTIVITY_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
 const SESSIONS_FAILURE: SessionsOutcome = Object.freeze({ code: "SESSIONS_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
+const ACTIVATION_FAILURE: ActivationReadOutcome = Object.freeze({ code: "ACTIVATION_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
+export const REPOSITORY_REMOTE_FAILURE: RepositoryRemoteOutcome = Object.freeze({ code: "REPOSITORY_REMOTE_READ_FAILED", layer: "CONTROL_ROOM_OPS", status: "ERROR" as const });
+
+/**
+ * THE PROJECT'S BOUND REMOTE, on the same poller as every other ops read. It joins the poll
+ * rather than fetching once on mount, because a remote bound from a goal Publish card has to
+ * appear on Health without a reload; a one-shot read here would look like a stale daemon.
+ */
+export function useRepositoryRemote(
+  headers: Readonly<Record<string, string>>, pollMs?: number | undefined,
+  read?: (() => Promise<RepositoryRemoteOutcome>) | undefined,
+): RepositoryRemoteOutcome | null {
+  const [reader] = useState(() => read ?? ((): Promise<RepositoryRemoteOutcome> => readRepositoryRemote(headers)));
+  return useOpsRead(reader, REPOSITORY_REMOTE_FAILURE, pollMs ?? POLL_MS, undefined).outcome;
+}
 
 export interface LiveOpsProps<T> {
   readonly headers: Readonly<Record<string, string>>;
@@ -102,22 +126,76 @@ export function LivePolicy({ headers, installPort, onConnection, pollMs, read, r
   return <PolicyScreen install={install} nowMs={nowMs} outcome={outcome} />;
 }
 
-export function LiveHealth({ headers, onConnection, pollMs, read }: LiveOpsProps<HealthOutcome>): JSX.Element {
+export interface LiveHealthProps extends LiveOpsProps<HealthOutcome> {
+  readonly setup?: LiveSetup | undefined;
+  /** Injectable for tests; the default reads POST /repository/remote/read with the same headers. */
+  readonly readRemote?: (() => Promise<RepositoryRemoteOutcome>) | undefined;
+}
+
+export function LiveHealth({ headers, onConnection, pollMs, read, readRemote, setup }: LiveHealthProps): JSX.Element {
   const [reader] = useState(() => read ?? ((): Promise<HealthOutcome> => readHealth(headers)));
   const { nowMs, outcome } = useOpsRead(reader, HEALTH_FAILURE, pollMs ?? POLL_MS, onConnection);
+  const remote = useRepositoryRemote(headers, pollMs, readRemote);
   return (
     <>
-      <HealthScreen nowMs={nowMs} outcome={outcome} />
-      <LiveSessions headers={headers} pollMs={pollMs} />
+      <HealthScreen nowMs={nowMs} outcome={outcome} remote={remote} />
+      <LiveEnvironments headers={headers} pollMs={pollMs} />
+      {setup !== undefined && <LiveRepositoryRecovery setup={setup} />}
+      <LiveSessions headers={headers} pollMs={pollMs} setup={setup} />
       <LiveActivity goalRef={null} headers={headers} pollMs={pollMs} scopeLabel="THIS PROJECT" />
     </>
   );
 }
 
-export function LiveSessions({ headers, pollMs, read }: LiveOpsProps<SessionsOutcome>): JSX.Element {
+export interface LiveSessionsProps extends LiveOpsProps<SessionsOutcome> {
+  /** The attached session; absent (fixtures, tests) means the screen can read but not choose. */
+  readonly setup?: LiveSetup | undefined;
+  /** Injectable for tests; the default spends the attached session's own wire. */
+  readonly providerPort?: AgentProviderPort | undefined;
+  /** Injectable for tests; the default reads the credential SOURCE off /activation/read. */
+  readonly readActivationOnce?: (() => Promise<ActivationReadOutcome>) | undefined;
+  /** Injectable for tests; the default reads the daemon's offers off /affordances/read. */
+  readonly readSurface?: (() => Promise<SurfaceFrame>) | undefined;
+}
+
+export function LiveSessions({
+  headers, pollMs, providerPort, read, readActivationOnce, readSurface, setup,
+}: LiveSessionsProps): JSX.Element {
   const [reader] = useState(() => read ?? ((): Promise<SessionsOutcome> => readSessions(headers)));
   const { nowMs, outcome } = useOpsRead(reader, SESSIONS_FAILURE, pollMs ?? POLL_MS, undefined);
-  return <SessionsPanel nowMs={nowMs} outcome={outcome} />;
+  // The pause comes from the shell's one health poll, never a second one of this screen's own.
+  const paused = useProviderPause();
+  // The CREDENTIAL SOURCE is an activation fact, not a sessions one, so it rides its own read
+  // on the same poller rather than widening the sessions frame - whose decoder is EXACT-KEY.
+  const [activationReader] = useState(() => readActivationOnce ?? ((): Promise<ActivationReadOutcome> => readActivation(headers)));
+  const activation = useOpsRead(activationReader, ACTIVATION_FAILURE, pollMs ?? POLL_MS, undefined).outcome;
+  const [port] = useState<AgentProviderPort | null>(() => providerPort ?? (setup === undefined ? null : createAgentProviderPort(setup)));
+  const [surfaceReader] = useState(() => readSurface ?? ((): Promise<SurfaceFrame> => readSurfaceOnce(headers)));
+  const [offer, setOffer] = useState<Readonly<Record<string, unknown>> | null>(null);
+  // The offer carries the aggregate's CURRENT version, so it is re-read on the same poll: a
+  // stale one is refused by the daemon rather than silently writing at the wrong version.
+  useEffect(() => {
+    let live = true;
+    const tick = (): void => {
+      void surfaceReader().then((surface) => {
+        if (!live) return;
+        setOffer(surface.offers.find((candidate) => candidate["commandKind"] === AGENT_PROVIDER_COMMAND_KIND) ?? null);
+      }, () => { if (live) setOffer(null); });
+    };
+    tick();
+    const timer = setInterval(tick, pollMs ?? POLL_MS);
+    return (): void => { live = false; clearInterval(timer); };
+  }, [pollMs, surfaceReader]);
+  return (
+    <SessionsPanel
+      activation={activation}
+      nowMs={nowMs}
+      outcome={outcome}
+      paused={paused}
+      providerOffer={offer}
+      providerPort={port}
+    />
+  );
 }
 
 export interface LiveActivityProps extends LiveOpsProps<ActivityOutcome> {

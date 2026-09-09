@@ -173,6 +173,22 @@
   color: var(--cr-ink-soft);
 }
 
+.cr2-newgoal-more {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cr2-newgoal-more > summary {
+  cursor: pointer;
+  font-weight: 600;
+  font-size: var(--cr-fs-body);
+  color: var(--cr-accent-text);
+  list-style: none;
+}
+
+.cr2-newgoal-more > summary::-webkit-details-marker { display: none; }
+
 .cr2-newgoal-actions {
   display: flex;
   gap: 8px;
@@ -335,7 +351,7 @@
 .cr2-goal-state {
   font-family: var(--cr-font-mono);
   font-size: var(--cr-fs-micro);
-  letter-spacing: 0.14em;
+  letter-spacing: 0.04em;
   padding: 2px 8px;
   border-radius: var(--cr-radius-pill);
   color: var(--cr-accent-text);
@@ -1081,13 +1097,9 @@
   color: var(--cr-ink-soft);
 }
 
-.cr2-run-ladder {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.cr2-run-goal .cr2-kanban-lanes {
+  grid-column: auto;
+  margin-top: 10px;
 }
 
 .cr2-run-node {

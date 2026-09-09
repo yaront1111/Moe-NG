@@ -8,7 +8,7 @@ import {
 import { isGraphKey } from "../graph-key.js";
 import {
   hasExactDenseArrayShape, hasOnlyOwnStringKeys, isPlainArray, isPlainRecord,
-  readPlainArrayLength,
+  readOwnDataProperty, readPlainArrayLength,
 } from "../runtime-shape.js";
 import {
   NODE_AUTHORITY_LIMITS, deepFreeze,
@@ -16,10 +16,14 @@ import {
 import { composePlanningEdges } from "./node-authority-compose.js";
 import { measureNodePlanningDependencyContent } from "./node-planning-source-bounds.js";
 import {
+  NODE_PLANNING_SOURCE_DECLARED_MIGRATIONS_KEY as DECLARED_MIGRATIONS_KEY,
   NODE_PLANNING_SOURCE_SCHEMA_VERSION,
+  NODE_PLANNING_SOURCE_UNDECLARED_SCHEMA_VERSION,
+  nodePlanningSourceVersionOf,
   nodePlanningSourceWireOf,
   own,
   readNodePlanningSourceWire,
+  readSourceDeclaredMigrations,
   refuse,
   sameNodePlanningSourceBytes,
   type NodePlanningSourceBytesResult,
@@ -35,6 +39,7 @@ export {
   NODE_PLANNING_SOURCE_CODES,
   NODE_PLANNING_SOURCE_DIGEST_DOMAIN,
   NODE_PLANNING_SOURCE_SCHEMA_VERSION,
+  NODE_PLANNING_SOURCE_UNDECLARED_SCHEMA_VERSION,
 } from "./node-planning-source-format.js";
 export type {
   NodePlanningSourceBytesResult,
@@ -52,6 +57,14 @@ const DRAFT_KEYS = Object.freeze([
   "predicateRegistry",
 ]);
 const CONTENT_KEYS = Object.freeze([...DRAFT_KEYS, "version"]);
+/**
+ * A SECOND roster, not a widened one. `hasOnlyOwnStringKeys` plus every-key-present
+ * makes every member of a roster REQUIRED, so appending the declaration to the one
+ * roster would refuse every source already in the store. Accepting EITHER roster is
+ * what makes the member optional without loosening the exactness of either.
+ */
+const DECLARING_DRAFT_KEYS = Object.freeze([...DRAFT_KEYS, DECLARED_MIGRATIONS_KEY]);
+const DECLARING_CONTENT_KEYS = Object.freeze([...CONTENT_KEYS, DECLARED_MIGRATIONS_KEY]);
 
 function forward(
   issues: readonly Readonly<{
@@ -83,17 +96,51 @@ function admit(value: unknown, allowDraft: boolean): NodePlanningSourceResult {
     return refuse("NODE_PLANNING_SOURCE_MALFORMED", "NODE_PLANNING_SOURCE_ADMISSION",
       "planning source is not a plain record");
   }
-  const full = hasOnlyOwnStringKeys(value, CONTENT_KEYS)
-    && CONTENT_KEYS.every((key) => own(value, key) !== undefined);
-  const draft = hasOnlyOwnStringKeys(value, DRAFT_KEYS)
-    && DRAFT_KEYS.every((key) => own(value, key) !== undefined);
+  const migrations = readOwnDataProperty(value, DECLARED_MIGRATIONS_KEY);
+  if (!migrations.ok) {
+    return refuse("NODE_PLANNING_SOURCE_MALFORMED", "NODE_PLANNING_SOURCE_ADMISSION",
+      "declaredMigrations is not a data property");
+  }
+  // AN ASSIGNED `undefined` IS REFUSED HERE, and that differs from the layer below
+  // on purpose. `readDraftFields` treats it as absent because its decode path states
+  // every roster key, so a body that never declared arrives present-and-undefined.
+  // Nothing on THIS layer's decode path does that — the wire reader spreads the
+  // member conditionally — so an assigned `undefined` can only come from a caller
+  // who meant to state something, and silently minting a version-1 source from it
+  // would answer a declaration they believed they made with a source that has none.
+  if (migrations.present && migrations.value === undefined) {
+    return refuse("NODE_PLANNING_SOURCE_MALFORMED", "NODE_PLANNING_SOURCE_ADMISSION",
+      "declaredMigrations is stated as undefined");
+  }
+  const declares = migrations.present;
+  const contentKeys = declares ? DECLARING_CONTENT_KEYS : CONTENT_KEYS;
+  const draftKeys = declares ? DECLARING_DRAFT_KEYS : DRAFT_KEYS;
+  const full = hasOnlyOwnStringKeys(value, contentKeys)
+    && contentKeys.every((key) => own(value, key) !== undefined);
+  const draft = hasOnlyOwnStringKeys(value, draftKeys)
+    && draftKeys.every((key) => own(value, key) !== undefined);
   if (!full && (!allowDraft || !draft)) {
     return refuse("NODE_PLANNING_SOURCE_MALFORMED", "NODE_PLANNING_SOURCE_ADMISSION",
       "planning source is not an exact source record");
   }
-  if (full && own(value, "version") !== NODE_PLANNING_SOURCE_SCHEMA_VERSION) {
-    return refuse("NODE_PLANNING_SOURCE_UNSUPPORTED_SCHEMA", "NODE_PLANNING_SOURCE_SCHEMA",
-      "planning source version is unsupported");
+  const declared = declares ? readSourceDeclaredMigrations(migrations.value) : undefined;
+  if (declared !== undefined && !declared.ok) return declared;
+  // The version a caller STATES must equal the one its CONTENT implies. Unsupported
+  // and mismatched are different facts and get different codes: 3 is a version this
+  // module cannot read at all, while a stated 2 over a declaration-free source is a
+  // version it can read and the content contradicts.
+  const version = nodePlanningSourceVersionOf(declared?.value);
+  if (full) {
+    const stated = own(value, "version");
+    if (stated !== NODE_PLANNING_SOURCE_UNDECLARED_SCHEMA_VERSION
+      && stated !== NODE_PLANNING_SOURCE_SCHEMA_VERSION) {
+      return refuse("NODE_PLANNING_SOURCE_UNSUPPORTED_SCHEMA", "NODE_PLANNING_SOURCE_SCHEMA",
+        "planning source version is unsupported");
+    }
+    if (stated !== version) {
+      return refuse("NODE_PLANNING_SOURCE_SCHEMA_MISMATCH", "NODE_PLANNING_SOURCE_SCHEMA",
+        "planning source states a version its content does not imply");
+    }
   }
   const planEncoded = encodePlanExecutionContent(own(value, "planExecutionContent"));
   if (!planEncoded.ok) return forward([planEncoded], "PLAN_EXECUTION_CONTENT");
@@ -179,10 +226,13 @@ function admit(value: unknown, allowDraft: boolean): NodePlanningSourceResult {
     }));
   const content = deepFreeze<NodePlanningSourceContent>({
     acceptanceCriterionContent: acceptance.content,
+    // Spread, never an assigned `undefined`, and placed so a source that declares
+    // nothing keeps the exact five-key shape and order it has always had.
+    ...(declared === undefined ? {} : { declaredMigrations: declared.value }),
     directHardDependencies: Object.freeze(directHardDependencies),
     planExecutionContent: plan.content,
     predicateRegistry: composed.value.proofs,
-    version: NODE_PLANNING_SOURCE_SCHEMA_VERSION,
+    version,
   });
   const wire = nodePlanningSourceWireOf(content);
   if (wire === undefined) {
@@ -219,6 +269,11 @@ export function decodeNodePlanningSourceContentBytes(value: unknown): NodePlanni
   if (!acceptance.ok) return forward([acceptance], "ACCEPTANCE_CRITERIA_CONTENT");
   const admitted = admit({
     acceptanceCriterionContent: acceptance.content,
+    // The wire reader spreads the member only when the envelope stated one, so an
+    // absent declaration reconstructs as an ABSENT key rather than an assigned
+    // `undefined` — which `admit` refuses and the canonical re-encode would notice.
+    ...(DECLARED_MIGRATIONS_KEY in decoded
+      ? { declaredMigrations: decoded.declaredMigrations } : {}),
     directHardDependencies: decoded.directHardDependencies,
     planExecutionContent: plan.content,
     predicateRegistry: decoded.predicateRegistry,

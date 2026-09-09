@@ -17,7 +17,9 @@ Implementation modules stay deliberately focused; see [CONTRIBUTING.md](./CONTRI
 The loop the vision describes runs, on a real project, with real agents: a PRD
 dropped in the browser becomes a Product Contract a planning agent proposes and a
 human approves (Gate 1), a decomposition the daemon compiles and a human approves
-(the plan gate), code a coding agent writes in the project's repository, a
+- or sends back with a reason, which re-plans it into a successor run the gate
+then follows - at the plan gate, code a coding agent writes in the project's
+repository, a
 verification the daemon runs itself, and a local git commit of exactly the
 files that delivery changed. This was live-proven on 2026-09-02/03 on a real
 TypeScript project with real `claude -p` seats (the first proof of the
@@ -26,13 +28,43 @@ not a release or security-boundary claim; see
 [docs/agent-stack-runbook.md](./docs/agent-stack-runbook.md) for the exact
 entry points, environment, and knobs.
 
+- **Fresh start, from the browser alone**: the Activate project card reads the
+  daemon's measured activation receipts and drives `project.register`,
+  `project.bind_repository`, `provider.probe` and `project.activate` from one
+  button, after which New goal is enabled. No seed script and no wrapper pass are
+  needed to take an empty store to a created goal. Every receipt is minted by the
+  daemon from a fact it measured itself -- the repository's real HEAD sha, the
+  store's own driver, the backup's sha256, and the agent CLI's version read by
+  running `<agent command> --version` on the host. Unmeasurable receipts stay
+  `UNKNOWN` with their code and layer, an agent CLI that is not installed refuses
+  activation outright, and the card never fabricates one.
+  The New product from a PRD form also creates a new local repository, makes
+  exactly one scaffold commit, binds and catalogs it, then creates the PRD-bound
+  goal. This unseeded browser path was measured on 2026-09-06. GitHub is optional;
+  remote creation was not live-proven because no owner or visibility was supplied.
+
 - **PRD lane**: `goal.create_with_source` binds a PRD to a goal; a planning
   agent reads it (paged) and proposes a versioned Product Contract with
   requirements and falsifiable criteria, asking the human only material
   clarifications; the human approves at Gate 1; a second planning run submits
   the decomposition the daemon compiles into a sealed plan; the human approves
   the plan; the PRD coverage read joins every criterion to the node that
-  verified it. Two goals over the same PRD share the approved contract.
+  verified it. Two goals over the same PRD share the approved contract. That
+  one plan approval seals the WHOLE dependency graph, not a single node: an
+  initial run admits N nodes, independent nodes are staffed in parallel up to
+  the configured seat limit, and a node stays BLOCKED — naming each producer as
+  `depends:<nodeKey>` — until every HARD dependency it declares has been
+  accepted. Growth therefore happens inside one goal; replanning into a
+  successor goal remains the path for a review that has exhausted its attempts,
+  not the path for adding work.
+- **Design step** ([VISION.md](./docs/VISION.md) journey item 4, UX and
+  architecture): running as of 2026-09-06. After Gate 1 approves the contract, a
+  design revision — screens, data model, API surface, components, non-functional
+  decisions — is submitted against it and the operator reads it on the goal, with
+  the version named on the plan-approval fold, so approving a plan states which
+  design that plan was compiled against. A goal planned without a design says so
+  in words rather than showing an empty section. Resubmitting bumps the version
+  and the superseded revision stays readable.
 - **Daemon** (`apps/daemon`): loopback HTTP ingress serving `/command`, the
   event stream, the affordance surface, and the operator's reads (goals, goal
   source, planning run, product-contract gate, document coverage, runs, policy,
@@ -52,10 +84,31 @@ entry points, environment, and knobs.
   contract). A daemon-side verifier reruns the node's test before acceptance;
   the lander then commits exactly the paths the seat changed, on the
   workspace's current branch, and the publisher pushes only when a human
-  names a remote on the goal.
+  decides to publish — to the one git remote the project is bound to, named
+  once by a human on the first publish and reused, never typed again.
 - **Review loop**: three unsuccessful review rounds block a node on a human,
   who either allows more attempts or replans the work into a successor goal
   that carries the findings.
+- **Goal closure**: a goal is closed by a human, never by an agent, and the
+  daemon derives every witness from its own records rather than trusting the
+  browser. It offers `goal.close` only once every approved acceptance criterion
+  of the goal's Product Contract reads VERIFIED on the coverage read; the
+  command then additionally requires, for each approved node, a durable review
+  acceptance, the verifier receipt that acceptance names, and the node's
+  landing, plus no activation still holding authority. A goal that does not
+  qualify is refused at the daemon's own code — the `GOAL_CLOSE_*` family
+  (`GOAL_CLOSE_CRITERIA_UNVERIFIED`, `GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED`,
+  `GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT`,
+  `GOAL_CLOSE_VERIFICATION_RECEIPT_AMBIGUOUS`,
+  `GOAL_CLOSE_VERIFICATION_RECEIPT_UNREADABLE`,
+  `GOAL_CLOSE_VERIFICATION_NOT_PASSED`, `GOAL_CLOSE_RESULT_DIGEST_MISMATCH`,
+  `GOAL_CLOSE_REVIEW_PACKAGE_STALE`, `GOAL_CLOSE_AUTHORITY_REMAINS`), all at
+  layer `DAEMON_PREREQUISITE` and all rendered verbatim on the card, so the
+  reason is searchable rather than a shrug. `goal.close` also sits behind the
+  bootstrap sequence, which requires the project to have committed an
+  `approval.decide`; a project approved only through the browser's
+  `approval.decide_intent` path is refused the generic
+  `BOOTSTRAP_PREREQUISITE_MISSING` before any of the codes above can speak.
 - **Control room** (`apps/control-room`): the operating surface. Goals with
   progress from coverage; an opened goal that opens on a board: where it
   stands and what to do next, its nodes in six columns (queued, working, in
@@ -69,6 +122,65 @@ entry points, environment, and knobs.
   states dispatches from its card, refusals render verbatim, and cards move
   only when the ledger does. Frozen fixtures are available only from the Vite
   development server behind `?fixtures=1`.
+
+- **Deploying an environment** (VISION Stage 2, the deployment item only): a
+  target is bound per (project, environment) with `deployment.set_target`, and
+  `deployment.deploy` builds an image from a landed sha, starts a candidate,
+  probes it and records ONE receipt -- `DEPLOYED` with the image digest and the
+  url, or `REFUSED` with the tool's own last stderr line. The Deployments card
+  renders that receipt per environment and arms before it confirms; Needs you
+  lists a goal the daemon offers a deploy for and stops listing it once a
+  `DEPLOYED` receipt exists; Runs distinguishes a refused deploy from a
+  successful one rather than reading both as "deployed". Both deploy commands
+  are reserved to the CONFIGURED operator principal: a paired browser is a
+  durable human and is still refused `OPERATOR_PRINCIPAL_REQUIRED @
+  DAEMON_AUTHORIZATION`, and the refused dispatch writes no receipt.
+  **Measured 2026-09-07, and the limits stated rather than implied**: the
+  machinery above was driven against a REAL daemon -- composition, admission,
+  the operator fence, the durable receipt, `/activity/read` carrying its verdict
+  and the browser rendering the url -- with a faked container runtime. **A
+  separate drive on the same day used a REAL docker engine (29.6.2
+  linux/amd64)**: an image was built from the generated Dockerfile, a candidate
+  container ran, `GET /health` answered `200 {"status":"ok"}`, the proxy flipped
+  to the candidate and the incumbent was stopped only afterwards. A container
+  has been started and the url served bytes. **What that drive does NOT prove**:
+  it went through the deploy service directly, so the OPERATOR path -- the same
+  deploy dispatched as a command from the goal -- is still unproven. It is
+  refused here with `BOOTSTRAP_PREREQUISITE_MISSING @ DAEMON_PREREQUISITE`:
+  `deployment.deploy` requires a `repository.publish` whose effects are
+  committed, and no goal here is publication-integrated yet. It also composed no
+  migration port, and the candidate ran with **no environment variables**, which
+  a product needing a database would experience as a health timeout rather than
+  as the configuration error it is. The other Stage 2 items (infrastructure
+  generation, monitoring, backup and rollback) are NOT claimed here; database
+  migrations are claimed only to the extent the next bullet states.
+
+- **Database migrations** (VISION Stage 2, the migrations item only): a
+  `pg_dump` is taken BEFORE any migration runs, and a failed dump refuses the
+  whole run with `MIGRATION_BACKUP_FAILED @ DAEMON_INGRESS` leaving the schema
+  untouched -- nothing is applied after a backup that did not succeed. The dump
+  lands at
+  `<project>/.moe-next/backups/pre-migration/<env>/<timestamp>.sql`, reusing the
+  existing `.moe-next/backups` root rather than inventing a second location, and
+  every run records one `moe-migration-receipt/1` carrying `{environment, sha,
+  applied[], backupRef, outcome}` with `outcome` `APPLIED`, `REFUSED(code)` or
+  `REVERTED`. `backupRef` is nullable and carries the backup's **sha256, never
+  its path** -- the path stays inside the daemon module, and the Deployments
+  card renders the digest as a reference with no link and no download.
+  `deployment.migrate_down` reverts the last batch, is reserved to the
+  CONFIGURED operator principal and is EXCLUDED from the MCP roster, because
+  reverting a production schema destroys the data the forward migration created
+  and is never an agent's decision. **Measured 2026-09-08 against a real
+  disposable PostgreSQL** (`postgres:17-alpine`, engine 29.6.2): a migration
+  created a table, the receipt was read back from the store byte-equal to the
+  call's return, the backup's sha256 recomputed on disk equalled the digest in
+  the receipt, and `DROP SCHEMA public CASCADE` followed by restoring that dump
+  returned the pre-migration schema at column level -- the restore path is
+  exercised, not assumed. **What that does NOT prove**: no preview environment
+  exists on this host (no environments store, and no `pre-migration` leaf under
+  this project's `.moe-next/backups`), so **no environment of this project has
+  ever been migrated**, and the deploy drive composed no migration port, so no
+  migration has yet run as part of a deploy. Both wait on sibling work.
 
 - **Packages**: `contracts` (dependency-free types, limits, codecs), `core`,
   `scheduler` (zero-authority structural preview), `store` (durable event and
@@ -85,13 +197,95 @@ missing or unverifiable evidence is `UNKNOWN` and gains no authority.
 
 ## What this is not
 
-Nothing here is a readiness, GA, or comparative claim. Measured on 2026-09-03,
-these are still missing or manual: a fresh project cannot be started from the
-browser alone (goal creation waits on the project activation chain, which the
-seed script or the wrapper drives); an initial plan seals one node, so a goal
-is built one node at a time and growth goes through a successor goal; there is
-no working preview and no release gate, so the vision's Gates 2 and 3 do not
-exist yet; a Codex seat is wired but was last proven only to reach the API; and
+Nothing here is a readiness, GA, or comparative claim. Measured on 2026-09-05,
+these are still missing or manual: a multi-node goal was driven on a live
+project on 2026-09-05 — a real `claude` planning seat sealed a five-node DAG,
+a human approved it in the browser, the two independent nodes were staffed on
+one pass while the rest waited on their dependencies, and two nodes landed as
+commits on that one goal — but three of the five landings refused
+`NOTHING_TO_COMMIT`, because every node of a goal shares one
+`MOE_NODE_WORKSPACE` and a later node's commit sweeps an earlier node's
+uncommitted paths, so the code lands and its attribution does not; the sealed
+graph, the parallel staffing, the `depends:` gate and the coverage close are
+exercised over real daemon, wrapper and agent processes in
+`tests/e2e/foundation/multi-node-graph.e2e.test.ts`, and the coverage close and
+its negative arm are proven only there, not on the lane; there is
+Gate 2 IS NOW DRIVEN END TO END AGAINST A REAL LANDED PRODUCT, WITH ONE PART
+STILL BROKEN, AND BOTH HALVES ARE MEASURED (2026-09-07):
+`tests/e2e/control-room/preview-approve-live.spec.ts` and
+`preview-reject-live.spec.ts` commit a preview scaffold into a lane's own git
+workspace, land it through the REAL wrapper and the REAL `node-lander` (nothing
+is seeded), start a REAL `preview.start` that spawns a REAL dev server on
+loopback, and then commit an APPROVE and a REJECT whose verdicts are read back
+out of `/activity/read` - so a decision that never reached the daemon cannot
+pass. The old claim that this was unreachable, because a landed goal is recorded
+by `internal.repository.landing_receipt` and that kind has no HTTP ingress, was
+true of a BROWSER but never of the lane: the wrapper lands without HTTP. WHAT IS
+STILL BROKEN IS THE BUTTON. The Gate-2 card renders against a really-running
+product, but its Approve control cannot commit, for two independent reasons,
+each asserted by code AND layer in those specs: `preview.decide` is operator-only
+(`OPERATOR_PRINCIPAL_KINDS`) while the shipped browser pairs into a non-operator
+credential, so a paired human is refused `OPERATOR_PRINCIPAL_REQUIRED @
+DAEMON_AUTHORIZATION`; and `preview-port.ts` sends the preview AGGREGATE id where
+the decide edge spends a RECEIPT id, which refuses `PREVIEW_GOAL_NOT_LANDED @
+GOAL_AUTHORITY` even past the first wall. The verdicts above are therefore
+committed by the CONFIGURED OPERATOR, not by a click. A REAL PREVIEW HAS BEEN
+SERVED AND SCREENSHOTTED, but against the lane's own scaffold app, NOT against
+UnAI: `D:/projexts/UnAI/package.json` declares only `test` and `typecheck`, so it
+resolves no `preview`, `dev` or `start` script and `resolvePreviewCommand`
+refuses it `PREVIEW_COMMAND_MISSING`.
+**GATE 3 HAS BEEN DRIVEN, AND THE PRODUCT HAS OPENED A REAL PULL REQUEST**
+(measured 2026-09-08, superseding "wired but blocked behind the same missing
+landing"): `release.decide` is a published, operator-fenced command with a closed
+three-code refusal vocabulary, the daemon builds the evidence dossier and serves
+it over an authenticated read route, the affordance surface offers the decision
+once a commit has landed, and the browser renders the evidence with its covered
+and UNKNOWN counts kept apart, an arm-then-confirm approve, and the pull request
+link a released receipt carries. On 2026-09-08 that chain ran end to end against
+github.com with nothing faked: a contract-bound goal whose three nodes were
+landed by the real wrapper's lander, published to a throwaway branch by the real
+publisher, and approved by the two clicks of the browser card - which opened
+<https://github.com/yaront1111/Moe-NG/pull/33>, base `main`, head
+`205d51eb26322056fafcdc60ab98c247d1cd135e`. It is proof-carrying in fact and not
+in name: the PR BODY IS the stored dossier, byte for byte - its sha256 equals the
+receipt's `dossierSha256` `fbb2d0ad...5845` - and it renders every criterion with
+its verifier command, exit code, receipt sha and landing sha. The drive is kept
+as the opt-in `release-approval-live.spec.ts` (`MOE_LIVE_RELEASE_PR=1`), which
+spawns the production `gh` rather than the lane's double. TWO LIMITS STAND. The
+landing still comes from the wrapper's lander, not from a browser action -
+`internal.repository.landing_receipt` has no HTTP ingress - so an operator cannot
+originate one from the screen. And a live `release.decide` outruns the browser's
+15s command-transport abort, so the ordering session shows a read error and the
+link appears only on the next look; the pull request is opened and the receipt
+recorded either way. **A REAL `codex exec` SEAT HAS
+DELIVERED A NODE** (measured 2026-09-07, superseding "wired but last proven only
+to reach the API"): codex-cli 0.153.4, argv read from the OS while the process
+was alive, three `seat_start` rows reporting provider `codex`, and the lander
+committing `ca4abc80a37e80aff51f1600d58afffb6e57b818` on a fresh lane project --
+read back from the durable store after both processes were dead, and re-read
+independently at review. It was the DURABLE SETTING, not `MOE_AGENT_COMMAND`,
+that chose the provider: the override printed `<UNSET>` at wrapper launch.
+**Provider choice from the browser (measured 2026-09-07)**: the agent provider is
+a durable project setting the wrapper resolves per spawn; `/affordances/read`
+offers `project.set_agent_provider`, the toggle builds a real envelope from that
+offer, and A PAIRED BROWSER HUMAN HOLDING `ADMIN` NOW COMPLETES THE WRITE
+end to end against a real daemon. The fence that refused it is narrowed, not
+removed, and the remaining limit is stated rather than implied -- TWO
+INDEPENDENT LAYERS, which refuse with DIFFERENT codes depending on how far the
+caller gets. The kind's required capability is `ADMIN`, so over HTTP a caller
+without it is refused `CAPABILITY_DENIED @ AUTHORIZE` at ingress and never
+reaches the operator fence at all. A caller that DOES hold `ADMIN` but is not a
+durably paired HUMAN -- a non-human principal, for instance -- is then refused
+`OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION` at the handler seam, because
+the kind stays in `OPERATOR_PRINCIPAL_KINDS`. The gate is pairing PLUS `ADMIN`,
+never `ADMIN` alone. The Seats screen discloses, per seat,
+the provider and agent CLI version the WRAPPER measured at spawn, plus WHERE the
+credential comes from -- a sign-in file, or an environment variable NAME, never a
+value -- and names `MOE_AGENT_COMMAND` when a launcher override is quietly
+ignoring the browser choice; a SCRIPTED codex double also drives the real MCP
+wire to verifier `ACCEPTED` and lander `COMMITTED`, offline and quota-free. What
+remains unproven for Codex is BREADTH, not capability: one node on one lane
+project, never a multi-node goal and never UnAI; and
 the verifier is a trusted-workspace shell recipe, not an adversarial boundary. The design's Phase 0
 freeze manifest and independent `FREEZE_READY` decision are not recorded; the
 `node:sqlite` driver decision in
@@ -120,6 +314,9 @@ decision 2026-08-18), and a hermetic verifier is v0.2. The unsigned artifact and
 the unproven canary remain release blockers, not operator configuration issues.
 The next major milestone is Stage 1 of the vision — a small but real PRD taken
 to a proof-carrying, verified pull request (see [docs/VISION.md](./docs/VISION.md)).
+The machinery for that last step now exists and is described above; what is
+missing is a run, not a design. No pull request has been opened by this product
+as of 2026-09-07, and nothing here should be read as saying one has.
 
 ## Windows: start your first project
 

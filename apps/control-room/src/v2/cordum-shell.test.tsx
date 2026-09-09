@@ -5,6 +5,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { ClockProvider } from "../performance/command-latency.js";
 import { FactRow } from "./components/primitives.js";
 import { CordumShell } from "./shell/cordum-shell.js";
+import { ProviderPauseProvider } from "./shell/pause-context.js";
 import { CORDUM_NAV_ITEMS } from "./shell/shell-model.js";
 import type { NavDestination } from "./shell/shell-routes.js";
 import { CORDUM_TRUTH_CLASSES, cordumTruthPresentation, sayWho } from "./truth-class.js";
@@ -232,5 +233,81 @@ describe("SaysWho maps daemon truth classes to Cordum presentations (UI-1)", () 
     const shown = sayWho("UNKNOWN");
     expect(shown.name).toBe("Unknown — evidence absent, corrupt, stale, or irreconcilable");
     expect(shown.name).not.toContain("no class supplied");
+  });
+});
+
+/**
+ * The shell HOST reads the one pause fact and hands it to the strip. It takes no
+ * `paused` prop of its own: one fact, one source. Every screen renders inside this
+ * frame, so wiring the banner here is what makes it shell-wide instead of a Health
+ * screen ornament.
+ */
+
+/** 3a's own five-key fixture, verbatim from live/live-ops.test.ts. */
+const PAUSE = Object.freeze({
+  lastLine: "You've hit your weekly limit - resets Sep 8, 10:46am (Asia/Jerusalem)",
+  provider: "claude",
+  resetAt: "2026-09-02T20:30:00.000Z",
+  since: "2026-09-02T20:00:00.000Z",
+  workItemId: "node.deliver@node-1",
+});
+
+function pausedWords(): string | null {
+  return screen.queryByTestId("cr.shell.paused")?.textContent ?? null;
+}
+
+describe("the shell says the fleet is waiting out a provider limit, on every screen", () => {
+  it("reads the pause from the context and states it on the strip", () => {
+    render(
+      <ProviderPauseProvider value={PAUSE}>
+        <CordumShell initialConnection="CONNECTED" />
+      </ProviderPauseProvider>,
+    );
+    expect(pausedWords())
+      .toBe(`Agents paused: claude limit, resumes ${new Date(PAUSE.resetAt).toLocaleString()}`);
+  });
+
+  it("says nothing with no provider above it, so an unwrapped shell never invents a pause", () => {
+    render(<CordumShell initialConnection="CONNECTED" />);
+    expect(pausedWords()).toBeNull();
+  });
+
+  it("says nothing when the provider carries null", () => {
+    render(
+      <ProviderPauseProvider value={null}>
+        <CordumShell initialConnection="CONNECTED" />
+      </ProviderPauseProvider>,
+    );
+    expect(pausedWords()).toBeNull();
+  });
+
+  it("states it on an opened board too, which is the same frame with a breadcrumb", () => {
+    // A board is not a nav destination - the app opens it INSIDE this frame by
+    // setting onBack/backLabel/title, so the roster sweep below cannot reach it.
+    render(
+      <ProviderPauseProvider value={PAUSE}>
+        <CordumShell backLabel="Goals" initialConnection="CONNECTED"
+          onBack={() => undefined} title="Ship the J1 vertical slice"
+        />
+      </ProviderPauseProvider>,
+    );
+    expect(pausedWords())
+      .toBe(`Agents paused: claude limit, resumes ${new Date(PAUSE.resetAt).toLocaleString()}`);
+  });
+
+  it("states it identically whichever view the shell is framing", () => {
+    // The pause is a fleet fact, not a Health-screen detail. Every nav destination
+    // in the roster gets the same sentence - an empty sweep would prove nothing.
+    expect(CORDUM_NAV_ITEMS.length).toBeGreaterThan(1);
+    const expected = `Agents paused: claude limit, resumes ${new Date(PAUSE.resetAt).toLocaleString()}`;
+    for (const item of CORDUM_NAV_ITEMS) {
+      const view = render(
+        <ProviderPauseProvider value={PAUSE}>
+          <CordumShell activeNav={item.id} initialConnection="CONNECTED" title={item.label} />
+        </ProviderPauseProvider>,
+      );
+      expect(pausedWords(), item.id).toBe(expected);
+      view.unmount();
+    }
   });
 });

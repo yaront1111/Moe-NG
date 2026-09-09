@@ -178,7 +178,7 @@ type IntentCommandRequest = Omit<BootstrapRequest, "kind"> & {
   readonly kind: typeof APPROVAL_DECIDE_INTENT_COMMAND_KIND;
 };
 
-function intentCommandRequest(command: IntentActivationCommand): BootstrapRequest {
+export function intentCommandRequest(command: IntentActivationCommand): BootstrapRequest {
   const request: IntentCommandRequest = Object.freeze({
     ...command,
     kind: APPROVAL_DECIDE_INTENT_COMMAND_KIND,

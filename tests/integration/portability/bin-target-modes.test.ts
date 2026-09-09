@@ -101,7 +101,7 @@ function nulPaths(output: Buffer | undefined): readonly string[] | undefined {
   return paths.every((path) => path !== "" && !path.includes("\\")) ? paths : undefined;
 }
 
-function binEntries(manifestPath: string, bytes: Buffer | undefined): readonly [string, string][] | undefined {
+function binEntries(bytes: Buffer | undefined): readonly [string, string][] | undefined {
   if (bytes === undefined || bytes.includes(0)) return undefined;
   let parsed: unknown;
   try { parsed = JSON.parse(bytes.toString("utf8")); } catch { return undefined; }
@@ -172,7 +172,7 @@ function observeRepositoryBinTargets(root: string): BinTargetObservation {
     BIN_TARGET_CODES.manifestInvalid, { manifestPath: "<workspace-roster>" },
   )]);
   for (const manifestPath of manifests) {
-    const entries = binEntries(manifestPath, tryGit(root, ["cat-file", "-p", `${head}:${manifestPath}`]));
+    const entries = binEntries(tryGit(root, ["cat-file", "-p", `${head}:${manifestPath}`]));
     if (entries === undefined) {
       findings.push(finding(BIN_TARGET_CODES.manifestInvalid, { manifestPath }));
       continue;

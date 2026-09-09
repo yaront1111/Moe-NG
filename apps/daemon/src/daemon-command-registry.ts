@@ -1,14 +1,23 @@
+import { AGENT_PROVIDER_COMMAND_KIND, runAgentProviderCommand }
+  from "./orchestrator/agent-provider-command.js";
+import { setAgentProvider } from "./orchestrator/agent-provider-store.js";
 import type { SqliteEventStore } from "@moe/store";
 import type { JsonObject } from "@moe/contracts";
 
 import { runEffectActivateCommand } from "./activation/activation-ingress.js";
-import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-services.js";
+import {
+  BOOTSTRAP_HANDLERS, admitBootstrapCommand, runBootstrapCommand,
+} from "./bootstrap/bootstrap-services.js";
 import { activateCutover } from "./cutover/cutover-activate-service.js";
 import type { CutoverActivateResult } from "./cutover/cutover-activate-contracts.js";
 import { humanReviewWitness, type HandlerTable } from "./bootstrap/bootstrap-ledger.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
 import { runJournalAppendCommand } from "./journal/journal-append.js";
 import { isDurableHumanPrincipal } from "./identity/human-approver.js";
+import { createPublishRepository } from "./repository/publish-services.js";
+import type { PublicationCandidateReader } from "./repository/publication-approval-contracts.js";
+import { createRepositoryRecoveryCommandEntry } from "./repository/repository-recovery-command.js";
+import type { RepositoryRecoveryCommandPort } from "./repository/repository-recovery-command.js";
 import { createSessionAuthority } from "./identity/session-authority.js";
 import { runSessionCommand } from "./identity/session-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
@@ -18,11 +27,17 @@ import { PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND }
   from "./product-contract/product-contract-command-contracts.js";
 import { createProductContractGate1Authority, runProductContractGate1Command }
   from "./product-contract/product-contract-gate-1-command.js";
+import { runPreviewDecideEdge } from "./preview/preview-daemon-edge.js";
+import type { PreviewDaemonPort } from "./preview/preview-daemon-edge.js";
+import type { PreviewSupervisor } from "./preview/preview-supervisor.js";
 import { runRecoveryCompleteCommand } from "./recovery/recovery-completion.js";
 import { createRecoveryCompletionAuthority }
   from "./recovery/recovery-completion-authority.js";
 import { runReviewCommand } from "./review/review-services.js";
 import { NODE_VERIFIER_PRINCIPAL_ID } from "./review/verifier-receipt-ledger.js";
+import { CRITERION_PRINCIPAL } from "./criterion-evidence/criterion-contracts.js";
+import { runCriterionCommandEdge } from "./criterion-evidence/criterion-command-edge.js";
+import type { CriterionCommandPort } from "./criterion-evidence/criterion-command-edge.js";
 import type { FoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 import type { FoundationContextSealPort } from "./work/foundation-context-record.js";
 import { runStepLifecycleCommand } from "./work/step-lifecycle-command.js";
@@ -34,9 +49,26 @@ import { readCommandTransportOrigin } from "./http/http-adapter.js";
 import {
   createCommandAuthorityGate, DomainRefusal, decisionOf, encoder,
 } from "./daemon-command-dispatch.js";
-import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type GraphMutationCommandKind,
-  type WiredCommandKind } from "./daemon-command-vocabulary.js";
+import { CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS,
+  type GraphMutationCommandKind, type WiredCommandKind } from "./daemon-command-vocabulary.js";
 import { createAsyncCommandEntries } from "./daemon-command-async-entries.js";
+import type { DeploymentDeploySeams, MigrateDownSeams, RepositoryBootstrapSeams,
+  ReleaseDecideSeams } from "./daemon-command-async-entries.js";
+import { runDesignSubmitEdge } from "./daemon-command-design.js";
+import { runEnvironmentEdge } from "./daemon-command-environment.js";
+import type { EnvironmentEdgeKind } from "./daemon-command-environment.js";
+import { runProbeIntervalCommand } from "./monitoring/probe-interval-command.js";
+import { createProbeIntervalRecord } from "./monitoring/probe-interval-record.js";
+import { runEnvironmentRetirementCommand }
+  from "./monitoring/environment-retirement-command.js";
+import { ENVIRONMENT_RETIREMENT_COMMAND_KIND }
+  from "./monitoring/environment-retirement-command-contracts.js";
+import { createEnvironmentRetirementRecord }
+  from "./monitoring/environment-retirement-record.js";
+import type { EnvironmentCredentialSource } from "./environment/environment-store.js";
+import { createActivationReceiptMeasurer } from "./bootstrap/activation-command-entry.js";
+import type { AsyncCommandHandler } from "./http/http-async-contract.js";
+import { foundationSyncHandler } from "./daemon-foundation-command.js";
 import { createCommandDecisionPort } from "./daemon-command-decision-port.js";
 import {
   runAnswerClarificationEdge, runAskClarificationEdge,
@@ -86,6 +118,10 @@ export interface CutoverActivationWiring {
 }
 
 export interface DaemonCommandPortOptions {
+  readonly releaseDecide?: ReleaseDecideSeams;
+  readonly criterionEvidence?: CriterionCommandPort;
+  readonly repositoryRecovery?: RepositoryRecoveryCommandPort;
+  readonly readPublicationCandidate?: PublicationCandidateReader;
   /** Which durable cutover authority must admit every registry entry. */
   readonly authorityPlane?: "V1" | "V2";
   readonly clock: () => string;
@@ -93,6 +129,11 @@ export interface DaemonCommandPortOptions {
   /** Daemon-owned event reader bound to authenticated WORK principals. An absent
    *  binding leaves events.resume registered but fail-closed. */
   readonly eventSubscriberId?: string;
+  /** The key the environment variable store seals under, as a THUNK so a throw reads as an
+   *  absent key rather than an error naming where the credential lives. ABSENT is a REFUSING
+   *  state, never a skipped one: an unwired daemon answers ENV_STORE_KEY_UNAVAILABLE instead
+   *  of writing a variable it could not decrypt back. */
+  readonly environmentCredential?: EnvironmentCredentialSource;
   /** The prepare-before-launch workspace authority. OPTIONAL, and its absence is
    *  a refusing state rather than a skipped one: an unsupplied lifecycle becomes
    *  one with no configured catalog, so Foundation preparation refuses and no
@@ -104,7 +145,32 @@ export interface DaemonCommandPortOptions {
   readonly foundationLifecycle?: FoundationCaptureLifecycle;
   /** The operator principal id: a session id may not collide with it. */
   readonly operatorPrincipalId: string;
+  /** The daemon's ONE preview supervisor, as the decide edge and the shutdown sweep see it.
+   *  OPTIONAL, and its absence is a REFUSING state rather than a skipped one, exactly as the
+   *  environment credential and the Foundation seal are: an unwired daemon still REGISTERS
+   *  `preview.decide` and refuses every dispatch of it PREVIEW_COMMAND_MISSING @ RUNNER, so
+   *  the served roster never depends on host configuration. */
+  readonly preview?: PreviewDaemonPort;
+  /** The SAME daemon supervisor, in the half `preview.start` needs. Separate from `preview`
+   *  above rather than a widening of it: that option is the NARROW port (close + release) the
+   *  decide edge and the shutdown sweep hold, and widening it to `PreviewDaemonRuntime` would
+   *  make every existing test double grow a `supervisor` member it has no use for. ABSENT is a
+   *  REFUSING state -- the kind is still SERVED and refuses PREVIEW_COMMAND_MISSING @ RUNNER,
+   *  so the roster never depends on host configuration. */
+  readonly previewSupervisor?: PreviewSupervisor;
+  /** The daemon's own bound product workspace, forwarded RAW to the start edge. NEVER a payload
+   *  value: the runner reads `<workspace>/package.json` and spawns a script out of it. */
+  readonly previewWorkspace?: string | null;
   readonly projectId: string;
+  /** `repository.bootstrap`'s two injectable halves. ABSENT means the real `gh` CLI and the
+   *  real manager catalog — production passes nothing. */
+  readonly repositoryBootstrap?: RepositoryBootstrapSeams;
+  readonly deploymentDeploy?: DeploymentDeploySeams;
+  /** `deployment.migrate_down`'s host authority, as a PER-ENVIRONMENT resolver rather than a
+   *  daemon-wide database URL. ABSENT is a REFUSING state (MIGRATE_DOWN_UNCONFIGURED @ the
+   *  command seam), never a skipped one, and the kind stays SERVED either way -- the roster
+   *  never depends on host configuration. Nothing here may be sourced from a request payload. */
+  readonly migrateDown?: MigrateDownSeams;
   readonly store: SqliteEventStore;
   /** The daemon-startup VERIFICATION catalog: the host-scoped argv authority the
    *  recipe seal derives its command from. OPTIONAL on the same terms as the
@@ -151,7 +217,7 @@ function cutoverDecisionOf(result: CutoverActivateResult): DurableDecision {
 export function createDaemonCommandPorts(options: DaemonCommandPortOptions): DaemonCommandPorts {
   const { clock, operatorPrincipalId, projectId, store } = options;
   const commandAuthority = createCommandAuthorityGate(store, projectId, options.authorityPlane);
-  if (operatorPrincipalId === NODE_VERIFIER_PRINCIPAL_ID) {
+  if (operatorPrincipalId === NODE_VERIFIER_PRINCIPAL_ID || operatorPrincipalId === CRITERION_PRINCIPAL) {
     throw new Error("OPERATOR_PRINCIPAL_RESERVED");
   }
   const authorityClock = (): number => Date.parse(clock());
@@ -166,6 +232,22 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
   // Takes NO clock: the only moment a Gate 1 grant carries is the `decidedAt`
   // `requestOf` stamps below, so the authority cannot read one even by accident.
   const gate1Authority = createProductContractGate1Authority({ projectId, sessions, store });
+  // The interval PORT, built once for the same reason `sessions` is: it is a stateless facade
+  // that replays the aggregate on every call, so a second instance would only give two readers of
+  // one aggregate the chance to drift. `now` reads the daemon clock, never a payload.
+  const probeIntervals = createProbeIntervalRecord({
+    now: authorityClock, projectId, store,
+  });
+  // The retirement PORT, built once on exactly the same terms and for the same reason. Like the
+  // interval record it is a STATELESS FACADE -- every `read`/`stored`/`write` replays the
+  // aggregate off `store` (`environment-retirement-record.ts`), nothing is memoised -- so what
+  // makes a retirement visible to the health sweep is not instance identity but the fact that
+  // the sweep's own record (`daemon-store-foundation-composition.ts`, composed from this same
+  // config) replays the SAME `store` under the SAME `projectId`. A retirement written here is
+  // therefore visible on the sweep's next tick, not at the next restart.
+  const probeRetirements = createEnvironmentRetirementRecord({
+    now: authorityClock, projectId, store,
+  });
 
   const requestOf = (
     kind: string,
@@ -187,11 +269,77 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
 
   const bootstrapTable: HandlerTable = Object.freeze({
     ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS,
+    "repository.publish": createPublishRepository({ ...(options.readPublicationCandidate === undefined
+      ? {} : { readPublicationCandidate: options.readPublicationCandidate }) }),
   });
 
-  const asyncEntries: Partial<Record<WiredCommandKind, CommandRegistryEntry>> =
-    createAsyncCommandEntries({
-      projectId, store,
+  /**
+   * `project.activate` IS SERVED ONLY ON THE ASYNCHRONOUS ENTRY (task-4b9c394d).
+   *
+   * The daemon now MINTS the activation witness from receipts it measures for itself, and that
+   * measurement reads a git HEAD and takes a store backup — both asynchronous, and neither
+   * expressible from a synchronous `CommandHandler`. Measuring once at startup instead was
+   * rejected: a set captured at boot would certify a tree the operator has since changed.
+   *
+   * NOT A TRANSPORT CHANGE. `/command` already routes every request through
+   * `handleAsyncCommandRequest` (http-listener-command-stream-routes.ts:108), which serves BOTH
+   * entry shapes, so the browser, the seed and every HTTP caller reach this unchanged. Only the
+   * SYNCHRONOUS `handleCommandRequest` now refuses the kind, under the same
+   * ASYNC_ENTRY_REQUIRED code the two Foundation kinds have always used.
+   */
+  const measureActivation = createActivationReceiptMeasurer({ projectId, store });
+  const activateFacts = commandFamilyFacts("project.activate");
+  const activateAsyncHandler: AsyncCommandHandler = async ({ envelope, principal }) => {
+    const bytes = requestOf(
+      "project.activate", activateFacts.schemaVersion, envelope, principal.principalId,
+    );
+    // Admit FIRST, measure second. Measuring takes a full store backup under
+    // .moe-next/backups, and every attempt used to take one — replays and refused ones
+    // included — so a retried or resubmitted activate grew the directory without bound. The
+    // gates that answer before any handler (decode, replay, kind, prerequisites) cost nothing
+    // and decide the same way with or without receipts, so a command they answer never measures.
+    const admitted = admitBootstrapCommand(store, bytes, bootstrapTable);
+    if ("outcome" in admitted) return decisionOf(admitted.outcome);
+    return decisionOf(runBootstrapCommand(
+      store,
+      bytes,
+      bootstrapTable,
+      // No human-review witness: activation authority is MEASURED, never reviewed, so passing
+      // one here would imply an approval seam this command does not have.
+      undefined,
+      await measureActivation(),
+    ));
+  };
+  const activateEntry: CommandRegistryEntry = Object.freeze({
+    asyncHandler: activateAsyncHandler,
+    handler: foundationSyncHandler,
+    kind: "project.activate",
+    payloadKeys: PAYLOAD_KEYS["project.activate"],
+    requiredCapability: activateFacts.requiredCapability,
+  });
+
+  const asyncEntries: Partial<Record<WiredCommandKind, CommandRegistryEntry>> = {
+    "repository.recover": createRepositoryRecoveryCommandEntry({ store, projectId, operatorPrincipalId,
+      port: options.repositoryRecovery, assertAuthority: commandAuthority.assert }),
+    "project.activate": activateEntry,
+    ...createAsyncCommandEntries({
+      operatorPrincipalId, projectId, store,
+      ...(options.releaseDecide === undefined ? {} : { releaseDecide: options.releaseDecide }),
+      ...(options.previewSupervisor === undefined
+        ? {} : { previewSupervisor: options.previewSupervisor }),
+      ...(options.previewWorkspace === undefined
+        ? {} : { previewWorkspace: options.previewWorkspace }),
+      ...(options.repositoryBootstrap === undefined
+        ? {} : { repositoryBootstrap: options.repositoryBootstrap }),
+      ...(options.deploymentDeploy === undefined
+        ? {} : { deploymentDeploy: options.deploymentDeploy }),
+      ...(options.migrateDown === undefined
+        ? {} : { migrateDown: options.migrateDown }),
+      // THE SAME credential thunk the environment edge below uses at :512, not a second reader:
+      // the composed deploy migration must derive its seal from the daemon's one credential, and
+      // a resolver-only change would leave every real migration ENV_STORE_KEY_UNAVAILABLE@KEY.
+      ...(options.environmentCredential === undefined
+        ? {} : { environmentCredential: options.environmentCredential }),
       ...(options.foundationCatalogSource === undefined
         ? {} : { foundationCatalogSource: options.foundationCatalogSource }),
       ...(options.foundationContextSeal === undefined
@@ -200,7 +348,8 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         ? {} : { foundationLifecycle: options.foundationLifecycle }),
       ...(options.verificationCatalogSource === undefined
         ? {} : { verificationCatalogSource: options.verificationCatalogSource }),
-    });
+    }),
+  };
 
   const entryOf = (kind: WiredCommandKind): CommandRegistryEntry => {
     // Answered first and returned whole: these kinds' services are asynchronous, so each
@@ -211,9 +360,10 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       return commandAuthority.wrapAsync(asyncEntry);
     }
     const { activation, approvalIntent, clarification, compilerDecompose, compilerPropose,
-      confirmReleased, continuation, cutover, eventResume,
-      graph, journal, productContractGate1, reconcile, recovery, requiredCapability, review,
-      schemaVersion, session, step, work } = commandFamilyFacts(kind);
+      confirmReleased, continuation, criterion, cutover, design, environment, eventResume,
+      graph, journal, monitoring, preview, productContractGate1, reconcile, recovery,
+      requiredCapability,
+      review, schemaVersion, session, step, work } = commandFamilyFacts(kind);
     const handler: CommandHandler = (input) => {
       const { envelope, principal } = input;
       commandAuthority.assert();
@@ -229,17 +379,32 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           payload: envelope.payload, principalId: principal.principalId, projectId, store,
         });
       }
+      // `project.set_agent_provider` is the ONE widened kind that ALSO demands ADMIN
+      // explicitly, where the four beside it demand none: choosing which vendor CLI
+      // staffs every seat is an administrative act on the project, not an approval the
+      // paired human is already the subject of. This mirrors the SOFT_POLICY_WAIVER
+      // POLICY above (paired HUMAN *and* `project.admin`) rather than its module shape,
+      // so no new code and no new layer constant are minted. The check is deliberately
+      // redundant with the ingress capability gate -- defence in depth, and the thing a
+      // mutation drill removes to prove the arm is load-bearing. Owner-approved for THIS
+      // KIND ONLY (task-136cbab2, governor comment-b0d0a809, 2026-09-07 13:16Z).
+      const providerByPairedAdmin = kind === AGENT_PROVIDER_COMMAND_KIND
+        && principal.capabilities.includes(CAPABILITIES.ADMIN);
       if (OPERATOR_PRINCIPAL_KINDS.has(kind)
         && principal.principalId !== operatorPrincipalId
-        // TWO kinds are widened, not the seat: a session the operator approved
+        // The widening is by KIND and never by seat: a session the operator approved
         // at pairing (durable HUMAN principal, minted under the id it
-        // authenticates as) may dispatch the intent wire and ANSWER a material
-        // clarification — both are the paired human's own acts on the browser.
+        // authenticates as) may dispatch the intent wire, ANSWER a material
+        // clarification, and -- holding ADMIN -- choose the agent provider; all are
+        // the paired human's own acts on the browser.
         // Trustworthy on principal identity alone only while each kind stays
         // MCP-excluded — same contract as `approval.decide` (comment-4d026de3);
-        // operator ruling comment-18dc557c.
-        && !((approvalIntent
-          || kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND)
+        // operator ruling comment-18dc557c. `MCP_EXCLUDED_COMMAND_KINDS` is DERIVED
+        // from `OPERATOR_PRINCIPAL_KINDS`, so widening HERE is the narrow instrument
+        // and editing that roster would silently open the MCP fence too.
+        && !((approvalIntent || criterion || kind === "repository.publish"
+          || kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND
+          || providerByPairedAdmin)
           && isDurableHumanPrincipal(store, principal.principalId))) {
         throw new DomainRefusal(
           "OPERATOR_PRINCIPAL_REQUIRED",
@@ -248,6 +413,11 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           403,
         );
       }
+      if (criterion) {
+        return runCriterionCommandEdge(store, input, options.criterionEvidence);
+      }
+      if (kind === AGENT_PROVIDER_COMMAND_KIND) return runAgentProviderCommand({
+        store, projectId, now: clock, envelope, setProvider: setAgentProvider });
       // goal.create carried a `goalId` comparison here while the payload could still name one.
       // It cannot: the kind's allow-list is prose only, so `prepareCommand` refuses `goalId`
       // INPUT_INVALID at PAYLOAD_SHAPE in BOTH entries before any dispatch, and the goal
@@ -342,6 +512,95 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         if (reconcile) return runResourceReconcileEdge(context);
         return runResourceConfirmReleasedEdge(context);
       }
+      // Answered BEFORE `requestOf`: preview has no codec, so the assembler would refuse with
+      // the wrong code entirely. Every code and layer comes from PREVIEW_CODE_LAYERS through
+      // `previewRefusal` inside the edge, never a literal here. An ABSENT port is passed
+      // through as an absent port rather than shortcut here: the edge fails closed with
+      // PREVIEW_COMMAND_MISSING @ RUNNER, so an unwired daemon still answers a preview code
+      // instead of a generic one minted at the wrong layer.
+      if (preview) {
+        return runPreviewDecideEdge({
+          envelope: {
+            commandId: envelope.commandId,
+            correlationId: envelope.correlationId,
+            expectedVersion: envelope.expectedVersion,
+            payload: envelope.payload,
+          },
+          now: clock,
+          ...(options.preview === undefined ? {} : { port: options.preview }),
+          principalId: principal.principalId,
+          projectId,
+          store,
+        });
+      }
+      // Answered BEFORE `requestOf`, and that placement is the whole point rather than a
+      // stylistic choice: `requestOf` encodes the WHOLE envelope -- `payload` included -- into
+      // the request bytes persisted beside every decision, and `environment.set_variable`'s
+      // payload holds a production secret. Reaching the assembler even once would write that
+      // plaintext into durable command bytes. The edge owns the translation; the store owns
+      // every check and every refusal code, which travel back unrestamped.
+      // Answered BEFORE `requestOf`, for the reason `daemon-command-design.js` states in full:
+      // the design slice owns a CLOSED code->layer map, and the shared assembler would answer a
+      // malformed submit with its own generic INPUT_INVALID before `decodeDesignRevision` saw
+      // the bytes -- collapsing DESIGN_SHAPE_INVALID @ REQUEST and
+      // DESIGN_CONTRACT_NOT_APPROVED @ CONTRACT_AUTHORITY into one unactionable answer. The
+      // authority fields are assembled HERE from the authenticated principal and the daemon
+      // clock, never from the payload, exactly as the environment edge below does.
+      if (design) {
+        return runDesignSubmitEdge({
+          envelope: {
+            commandId: envelope.commandId,
+            correlationId: envelope.correlationId,
+            expectedVersion: envelope.expectedVersion,
+            payload: envelope.payload,
+          },
+          now: clock,
+          principalId: principal.principalId,
+          projectId,
+          store,
+        });
+      }
+      // THE ONE PORT, SHARED. `probeIntervals` is constructed ONCE above against this registry's
+      // own store and project, so the edge holds no store of its own and there is no second write
+      // path to the interval aggregate. The project comes from the AUTHENTICATED principal's
+      // registry composition, never from the payload -- a caller-supplied one would re-time
+      // another project's production probe.
+      // THE FAMILY ADMITS, THE KIND DISPATCHES. `monitoring` is true for EVERY member of
+      // MONITORING_FAMILY, so once the family held a second kind it stopped being a handler
+      // selector: routing on it alone would have served retirement through the interval edge,
+      // which decodes a field retirement does not carry. The per-kind branch below is what makes
+      // the two disjoint, and a THIRD monitoring kind that forgot to add its own branch would
+      // reach the interval edge -- caught, not silently, by `daemon-command-registry.test.ts`'s
+      // characterization table, which pins each wired kind's refusal CODE and layer and would
+      // read the interval record's vocabulary where it expected the new kind's.
+      if (monitoring) {
+        // THE SAME ONE PORT, SHARED, and the same project discipline as the interval port:
+        // `probeRetirements` is constructed ONCE above against this registry's own store and
+        // project, so the edge holds no store of its own and there is no second write path to
+        // the retirement aggregate. The project comes from the AUTHENTICATED principal's
+        // registry composition, never from the payload -- a caller-supplied one would silence
+        // another project's monitoring.
+        if (kind === ENVIRONMENT_RETIREMENT_COMMAND_KIND) {
+          return runEnvironmentRetirementCommand({
+            envelope: { commandId: envelope.commandId, payload: envelope.payload },
+            retirements: probeRetirements,
+          });
+        }
+        return runProbeIntervalCommand({
+          envelope: { commandId: envelope.commandId, payload: envelope.payload },
+          intervals: probeIntervals,
+        });
+      }
+      if (environment) {
+        return runEnvironmentEdge({
+          credential: options.environmentCredential ?? (() => null),
+          envelope: { commandId: envelope.commandId, payload: envelope.payload },
+          kind: kind as EnvironmentEdgeKind,
+          now: clock,
+          projectId,
+          store,
+        });
+      }
       const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId);
       if (activation) return decisionOf(runEffectActivateCommand(store, bytes));
       if (journal) return decisionOf(runJournalAppendCommand(store, bytes));
@@ -365,7 +624,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           store,
           bytes,
           undefined,
-          [operatorPrincipalId, NODE_VERIFIER_PRINCIPAL_ID],
+          [operatorPrincipalId, NODE_VERIFIER_PRINCIPAL_ID, CRITERION_PRINCIPAL],
         ));
       }
       if (work) return decisionOf(runWorkClaimCommand(store, bytes));

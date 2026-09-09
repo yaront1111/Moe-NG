@@ -8,190 +8,145 @@
  * gate picks it up. Refusal arms: no Gate 1 approval; digest retarget;
  * crash-restart resume (second dispatch REPLAYS, no duplicate records).
  */
-import { createHash } from "node:crypto";
-
-import { productContractGate1Authority } from "@moe/core";
 import { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
-import {
-  GOAL_CREATE_COMMAND_ID,
-  GOAL_ID,
-  PROJECT_ID,
-  RUN_ID,
-  closeStores,
-  driveThrough,
-  envelope,
-  openStore,
-  send,
-} from "../bootstrap/bootstrap-test-fixtures.js";
-import { OPERATOR_CAPABILITIES } from "../daemon-command-vocabulary.js";
-import { createSessionAuthority } from "../identity/session-authority.js";
-import { createOperatorSessionHandshakePort } from "../identity/session-handshake.js";
-import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
-import {
-  createProductContractGate1Authority, runProductContractGate1Command,
-} from "../product-contract/product-contract-gate-1-command.js";
-import { PRODUCT_CONTRACT_GATE_1_COMMAND_KIND, PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION, productContractGate1SubjectDigest }
-  from "../product-contract/product-contract-gate-1-contract.js";
-import {
-  runProductContractProposeRevision,
-} from "../product-contract/product-contract-propose-service.js";
 import type { ProductContractRevisionRef } from "@moe/core";
-import { runSubmitDecomposition } from "./compile-dispatcher.js";
 
-const PRD = "# Build the widget\n\nRequirements the operator wrote.\n";
-const PRD_SHA = createHash("sha256").update(PRD, "utf8").digest("hex");
-const NOW_MS = Date.parse("2026-08-30T12:00:00.000Z");
-const encoder = new TextEncoder();
+import { GOAL_ID, PROJECT_ID, RUN_ID, closeStores } from "../bootstrap/bootstrap-test-fixtures.js";
+import { runSubmitDecomposition } from "./compile-dispatcher.js";
+// THE WORLD BUILDERS LIVE IN ONE MODULE, not two. They were authored here (this file's :43-233
+// before task-138fab30) and moved to `plan-reject-test-fixtures.ts` when the REJECT journey's
+// suites needed the SAME world: the successor run id is derived from the run id and the compile
+// ids from the revision digest, so two hand-copied builders that drifted by a literal would
+// produce two different worlds that both still looked plausible, and an arm written against one
+// would assert nothing about the other. Every literal is unchanged, which is why every INITIAL
+// arm below is byte-identical to the one that passed before the move.
+import {
+  approveGate1, boundWorld, committedRevision, nodeOf, structureOf, submit,
+} from "./plan-reject-test-fixtures.js";
 
 afterEach(closeStores);
 
-function boundWorld(): SqliteEventStore {
-  const store = openStore();
-  installTestRecoveryBinding(store);
-  driveThrough(store, "goal.create");
-  const outcome = send(store, envelope("goal.create_with_source", 0, {
-    instructions: "Bind a PRD for the dispatcher journey.",
-    source: { displayPath: "docs/prd.md", mediaType: "text/markdown", text: PRD },
-    title: "Dispatcher journey goal",
-  }, GOAL_CREATE_COMMAND_ID));
-  if (!outcome.ok) throw new Error(`fixture bind refused: ${outcome.code}`);
-  return store;
+/** c -> b -> a: a REAL hard chain, each criterion bound by exactly one node. Nothing depends
+ *  on node-c, so it is the completion node (a dependency ON the completion node is refused). */
+const CHAIN_NODES: readonly Record<string, unknown>[] = Object.freeze([
+  nodeOf("node-a", ["crit-api"]),
+  nodeOf("node-b", ["crit-ui"], ["node-a"]),
+  nodeOf("node-c", ["crit-worker"], ["node-b"]),
+]);
+
+function chainStructure(
+  nodes: readonly Record<string, unknown>[] = CHAIN_NODES,
+): Record<string, unknown> {
+  return structureOf(nodes, "node-c");
 }
 
-function committedRevision(store: SqliteEventStore): ProductContractRevisionRef {
-  const committed = runProductContractProposeRevision(store, {
-    correlationId: "corr-dispatch-writer",
-    decidedAt: "2026-08-30T12:00:00.000Z",
-    payload: {
-      draft: {
-        authorRef: "compiler-agent-1",
-        contractId: "contract-widget",
-        criteria: [
-          {
-            criterionId: "crit-api", requirementId: "req-api",
-            statement: "The API answers a signed request with the record.",
-            supersedesCriterionId: null,
-          },
-          {
-            criterionId: "crit-ui", requirementId: "req-ui",
-            statement: "The page renders the record the API answered.",
-            supersedesCriterionId: null,
-          },
-        ],
-        lineage: null,
-        requirements: [
-          {
-            requirementId: "req-api",
-            statement: "Operators can read the record over the API.",
-            supersedesRequirementId: null,
-          },
-          {
-            requirementId: "req-ui",
-            statement: "Operators can see the record in the page.",
-            supersedesRequirementId: null,
-          },
-        ],
-        retiredCriterionIds: [],
-        retiredRequirementIds: [],
-        revisionId: "revision-0001",
-        sourceDocumentDigests: [PRD_SHA],
-      },
-      goalRef: GOAL_ID,
-    },
-    principalId: "compiler-agent-1",
-    projectId: PROJECT_ID,
-  });
-  if (!committed.ok) throw new Error(`writer refused: ${committed.code}`);
-  return committed.ref;
-}
+/** The layer the DAG-coherence refusals carry. The dispatcher forwards the producer's own code
+ *  AND layer (`refused(compiled.code, compiled.layer)`), so the arms below pin BOTH: more than
+ *  one layer can refuse a malformed structure, and a bare "it refused" assertion would stay
+ *  green if the wrong one answered first — which is exactly what the node-count fence did. */
+const PRODUCER = "COMPILED_PLAN_PRODUCER";
 
-/** Gate 1 through the PRODUCTION command: a real paired session approves over the
- *  BEARER arm, which the transport-origin fence now admits from MCP transports only
- *  (the browser journey signs instead - task-ffa05408 family). */
-function approveGate1(store: SqliteEventStore, ref: ProductContractRevisionRef): void {
-  const minted = createOperatorSessionHandshakePort({
-    capabilities: OPERATOR_CAPABILITIES,
-    clock: () => NOW_MS,
-    operatorPrincipalId: "principal-1",
-    projectId: PROJECT_ID,
-    sessionTtlMs: 60 * 60 * 1000,
-    store,
-  }).mint();
-  if (!minted.ok) throw new Error(`pairing mint refused: ${minted.code}`);
-  const authority = createProductContractGate1Authority({
-    projectId: PROJECT_ID,
-    sessions: createSessionAuthority(store, { clock: () => NOW_MS, projectId: PROJECT_ID }),
-    store,
-  });
-  const gate = productContractGate1Authority(ref);
-  const commandId = "cmd-gate1-approve";
-  const requestDigest = productContractGate1SubjectDigest({
-    commandId, projectId: PROJECT_ID, workRef: gate.workRef,
-  });
-  const outcome = runProductContractGate1Command(store, encoder.encode(JSON.stringify({
-    commandId,
-    correlationId: "corr-gate1",
-    decidedAt: "2026-08-30T12:00:30.000Z",
-    expectedVersion: 0,
-    kind: PRODUCT_CONTRACT_GATE_1_COMMAND_KIND,
-    payload: {
-      authentication: { issuedAt: NOW_MS, kind: "BEARER", requestDigest, requestId: commandId },
-      contractId: ref.contractId,
-      revisionDigest: ref.revisionDigest,
-      revisionId: ref.revisionId,
-    },
-    principalId: minted.principalId,
-    projectId: PROJECT_ID,
-    schemaVersion: PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION,
-  })), authority, { sessionId: minted.principalId, transportOrigin: "MCP_HTTP" });
-  if (!outcome.ok) throw new Error(`gate 1 refused: ${outcome.code}`);
-}
-
-const NODE_SCOPES = Object.freeze({
-  capability: "capability-implement",
-  readScopes: ["services/api/src"],
-  resources: ["resource-a"],
-  verificationRecipeRefs: ["recipe-a"],
-  writeScopes: ["services/api/src/node"],
-});
-
-function structureOf(): Record<string, unknown> {
-  // ONE node: an INITIAL run seals exactly one execution-bearing node by core
-  // design (multi-node arrives through EXPANSION runs). The single slice covers
-  // every criterion of the approved revision.
-  return {
-    completionNodeKey: "node-slice",
-    nodes: [
-      { ...NODE_SCOPES, criterionIds: ["crit-api", "crit-ui"], dependsOn: [],
-        nodeKey: "node-slice", objective: "Land the record read and its page." },
-    ],
-  };
-}
-
-function submit(
-  store: SqliteEventStore, ref: ProductContractRevisionRef,
-  overrides: Record<string, unknown> = {},
-): ReturnType<typeof runSubmitDecomposition> {
-  return runSubmitDecomposition(store, {
-    correlationId: "corr-submit-decomp",
-    decidedAt: "2026-08-30T12:01:00.000Z",
-    payload: {
-      gateRef: {
-        contractId: ref.contractId, revisionDigest: ref.revisionDigest,
-        revisionId: ref.revisionId,
-      },
-      goalRef: GOAL_ID,
-      structure: structureOf(),
-      ...overrides,
-    },
-    principalId: "principal-1",
-    projectId: PROJECT_ID,
-  });
+function refusalOf(
+  store: SqliteEventStore, ref: ProductContractRevisionRef, structure: Record<string, unknown>,
+): string {
+  const result = submit(store, ref, { structure });
+  return result.ok ? "ACCEPTED" : `${result.code} @ ${result.layer}`;
 }
 
 describe("runSubmitDecomposition", () => {
+  it("SEALS a three-node INITIAL graph with a hard c->b->a chain: node count is not a fence", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store, true);
+    approveGate1(store, ref);
+
+    const sealed = submit(store, ref, { structure: chainStructure() });
+    if (!sealed.ok) throw new Error(`three-node dispatch refused: ${sealed.code} @ ${sealed.layer}`);
+    // NOT merely "it did not refuse": a refusal arm that stopped returning a code would pass
+    // that. The graph is only sealed if BOTH hashes came back and the run actually decided.
+    expect(sealed.disposition).toBe("DECIDED");
+    expect(typeof sealed.graphContentHash).toBe("string");
+    expect(sealed.graphContentHash.length).toBeGreaterThan(0);
+    expect(typeof sealed.submissionHash).toBe("string");
+    expect(sealed.submissionHash.length).toBeGreaterThan(0);
+    expect(sealed.runId).toBe(RUN_ID);
+    // Proposed (one fold decision) + finalized (a second): sealed exactly like a single slice.
+    expect(store.getAggregateVersion(RUN_ID)).toBe(2);
+  });
+
+  it("still seals N=1: lifting the count fence did not trade one node limit for another", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+
+    const sealed = submit(store, ref);
+    if (!sealed.ok) throw new Error(`single-node dispatch refused: ${sealed.code}`);
+    expect(sealed.disposition).toBe("DECIDED");
+    expect(sealed.graphContentHash.length).toBeGreaterThan(0);
+    expect(sealed.submissionHash.length).toBeGreaterThan(0);
+  });
+
+  it("refuses an incoherent DAG at the compiled-plan producer, with the count fence irrelevant", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+    const bothCriteria = ["crit-api", "crit-ui"];
+    // SINGLE-node forms, so no node-count arm can answer instead: these prove the coherence
+    // fence stands on its own. It is what REPLACES the retired count fence.
+    expect(refusalOf(store, ref, structureOf([
+      nodeOf("node-slice", bothCriteria, ["node-ghost"]),
+    ]))).toBe(`COMPILED_PLAN_MALFORMED @ ${PRODUCER}`);
+    expect(refusalOf(store, ref, structureOf([
+      nodeOf("node-slice", bothCriteria, ["node-slice"]),
+    ]))).toBe(`COMPILED_PLAN_MALFORMED @ ${PRODUCER}`);
+    expect(refusalOf(store, ref, structureOf([
+      nodeOf("node-slice", ["crit-api"]),
+    ]))).toBe(`COMPILED_PLAN_CRITERION_UNBOUND @ ${PRODUCER}`);
+    expect(store.getAggregateVersion(RUN_ID)).toBe(0);
+  });
+
+  it("keeps refusing an incoherent DAG once N>1 is admitted: the coherence fence is the fence", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store, true);
+    approveGate1(store, ref);
+    const [nodeA, nodeB, nodeC] = CHAIN_NODES as readonly Record<string, unknown>[];
+    const malformed = `COMPILED_PLAN_MALFORMED @ ${PRODUCER}`;
+    // An unknown dependsOn target anywhere in the chain.
+    expect(refusalOf(store, ref, chainStructure([
+      nodeA!, nodeB!, { ...nodeC!, dependsOn: ["node-ghost"] },
+    ]))).toBe(malformed);
+    // A self-edge in the middle of the chain.
+    expect(refusalOf(store, ref, chainStructure([
+      nodeA!, { ...nodeB!, dependsOn: ["node-b"] }, nodeC!,
+    ]))).toBe(malformed);
+    // A dependency ON the completion node — the chain read backwards, which cannot execute.
+    expect(refusalOf(store, ref, chainStructure([
+      { ...nodeA!, dependsOn: ["node-c"] }, nodeB!, nodeC!,
+    ]))).toBe(malformed);
+    // A criterion bound by no node: the coverage duty is per GRAPH, not per node.
+    expect(refusalOf(store, ref, chainStructure([
+      nodeA!, nodeB!, { ...nodeC!, criterionIds: [] },
+    ]))).toBe(`COMPILED_PLAN_CRITERION_UNBOUND @ ${PRODUCER}`);
+    expect(store.getAggregateVersion(RUN_ID)).toBe(0);
+  });
+
+  it("refuses a dependsOn CYCLE, which only a multi-node graph can express", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store, true);
+    approveGate1(store, ref);
+    // a <-> b: every target is a known node, no self-edge, nothing depends on the completion
+    // node, every criterion bound once — so it clears every arm in `shapeRefusal` and is caught
+    // deeper, by the graph codec's own admission. Pinned because a cycle that SEALED would
+    // deadlock the dependency gate rather than refuse at the surface: no node is ever READY.
+    expect(refusalOf(store, ref, chainStructure([
+      nodeOf("node-a", ["crit-api"], ["node-b"]),
+      nodeOf("node-b", ["crit-ui"], ["node-a"]),
+      nodeOf("node-c", ["crit-worker"], ["node-b"]),
+    ]))).toBe(`COMPILED_PLAN_ADMISSION_REFUSED @ ${PRODUCER}`);
+    expect(store.getAggregateVersion(RUN_ID)).toBe(0);
+  });
+
   it("drives the approved contract to a REVIEWABLE single-slice plan, and resumes idempotently", () => {
     const store = boundWorld();
     const ref = committedRevision(store);
@@ -233,6 +188,51 @@ describe("runSubmitDecomposition", () => {
     expect(shuffled.disposition).toBe("DECIDED");
     expect(shuffled.submissionHash).toBe(canonical.submissionHash);
     expect(shuffled.graphContentHash).toBe(canonical.graphContentHash);
+  });
+
+  it("seals the roster in the AGENT'S listing order: completion node last is the natural shape", () => {
+    const [nodeA, nodeB, nodeC] = CHAIN_NODES as readonly Record<string, unknown>[];
+    const sealedHash = (nodes: readonly Record<string, unknown>[]): string => {
+      const store = boundWorld();
+      const ref = committedRevision(store, true);
+      approveGate1(store, ref);
+      const sealed = submit(store, ref, { structure: chainStructure(nodes) });
+      if (!sealed.ok) throw new Error(`sealed refused: ${sealed.code} ${sealed.detail ?? ""}`);
+      return sealed.graphContentHash;
+    };
+    // c, b, a is how a planner writes a chain — and what refused GRAPH_CONTENT_FIELD_INVALID
+    // for every real seat on 2026-09-05, because the graph codec wants the roster ascending.
+    expect(sealedHash([nodeC!, nodeB!, nodeA!])).toBe(sealedHash([nodeA!, nodeB!, nodeC!]));
+    // A producer named twice is one edge, not a duplicate-edge refusal one layer down.
+    expect(sealedHash([nodeA!, { ...nodeB!, dependsOn: ["node-a", "node-a"] }, nodeC!]))
+      .toBe(sealedHash([nodeA!, nodeB!, nodeC!]));
+  });
+
+  it("answers a criterion-free join node with the producer's words, never a bare 500", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store, true);
+    approveGate1(store, ref);
+    const [nodeA, nodeB, nodeC] = CHAIN_NODES as readonly Record<string, unknown>[];
+    // Coverage holds — node-a takes crit-worker — so the join node's emptiness is the refusal.
+    expect(submit(store, ref, { structure: chainStructure([
+      { ...nodeA!, criterionIds: ["crit-api", "crit-worker"] }, nodeB!,
+      { ...nodeC!, criterionIds: [] },
+    ]) })).toMatchObject({
+      code: "COMPILED_PLAN_MALFORMED", detail: "node node-c binds no criterion",
+      layer: PRODUCER, ok: false,
+    });
+    // Every refusal the dispatcher forwards keeps the refusing authority's detail.
+    expect(submit(store, ref, { structure: chainStructure([
+      nodeA!, nodeB!, { ...nodeC!, dependsOn: ["node-ghost"] },
+    ]) })).toMatchObject({ detail: "dependsOn node-ghost of node-c", ok: false });
+    expect(runSubmitDecomposition(store, {
+      correlationId: "c", decidedAt: "2026-08-30T12:01:00.000Z", payload: {},
+      principalId: "principal-1", projectId: PROJECT_ID,
+    })).toMatchObject({
+      code: "SUBMIT_DECOMPOSITION_MALFORMED",
+      detail: "payload must be exactly {gateRef, goalRef, structure}", ok: false,
+    });
+    expect(store.getAggregateVersion(RUN_ID)).toBe(0);
   });
 
   it("refuses node text the plan codec cannot admit as a SHAPE refusal, never a producer throw", () => {

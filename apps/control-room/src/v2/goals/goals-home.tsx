@@ -71,7 +71,7 @@ export function GoalsHome({
 }: GoalsHomeProps): JSX.Element {
   const [filter, setFilter] = useState<Filter>("All");
   const [search, setSearch] = useState("");
-  const [creating, setCreating] = useState(initialCreating);
+  const [creating, setCreating] = useState(initialCreating && createDisabledReason === undefined);
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(() => new Set());
   const [createReport, setCreateReport] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -142,6 +142,7 @@ export function GoalsHome({
    * retype from memory.
    */
   const create = (draft: GoalDraft): void => {
+    if (busy || createDisabledReason !== undefined) return;
     setBusy(true);
     onCreateGoal(draft)
       .then((answer) => {
@@ -186,6 +187,7 @@ export function GoalsHome({
           data-testid="cr.goals.search"
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search goals"
+          type="search"
           value={search}
         />
         <span className="cr2-goals-count" data-testid="cr.goals.count">{data.goalCountLabel}</span>
@@ -194,7 +196,7 @@ export function GoalsHome({
         )}
         <div className="cr2-goals-new">
           <ActionButton
-            ariaPressed={creating && createDisabledReason === undefined}
+            ariaPressed={creating}
             disabled={createDisabledReason !== undefined}
             onClick={createDisabledReason === undefined
               ? () => setCreating((open) => !open)
@@ -214,9 +216,10 @@ export function GoalsHome({
         </p>
       )}
 
-      {creating && createDisabledReason === undefined ? (
+      {creating ? (
         <NewGoalForm
           busy={busy}
+          disabledReason={createDisabledReason}
           onCancel={() => setCreating(false)}
           onCreate={create}
           resetToken={resetToken}

@@ -7,15 +7,22 @@ const bytes = (column: string): string =>
  * Matches a receipt/event only when the canonical decision row or its persisted
  * leg roster names that exact command ID. Prefix resemblance grants no durable
  * authority.
+ *
+ * Spelled as `column IN (<the decision's command ids>)`, never as
+ * `decisions.receipt_command_id = column OR EXISTS (...)`: the OR form made the
+ * planner SCAN every receipt, scope, event and outbox row for EVERY candidate
+ * decision (four full-table scans per row), so one 200-row page cost ~130 ms
+ * and a control-room surface read, which walks the ledger 23 times, ~14 s of
+ * CPU (measured 2026-09-05 on a 612-decision store). The list form probes the
+ * unique index each of those tables already carries on its command-id column
+ * (2 ms per page, byte-identical estimates for every decision).
  */
-export const decisionReceiptMatchSql = (commandIdColumn: string): string => `(
-      decisions.receipt_command_id = ${commandIdColumn}
-      OR EXISTS (
-        SELECT 1
-        FROM command_decision_legs AS decision_legs
-        WHERE decision_legs.decision_id = decisions.decision_id
-          AND decision_legs.receipt_command_id = ${commandIdColumn}
-      )
+export const decisionReceiptMatchSql = (commandIdColumn: string): string => `${commandIdColumn} IN (
+      SELECT decisions.receipt_command_id
+      UNION ALL
+      SELECT decision_legs.receipt_command_id
+      FROM command_decision_legs AS decision_legs
+      WHERE decision_legs.decision_id = decisions.decision_id
     )`;
 
 const decisionIdForReceiptSql = (commandIdColumn: string): string => `COALESCE(

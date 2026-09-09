@@ -10,7 +10,7 @@
  *     -> agent session proposes the Product Contract (writer commit)
  *     -> Gate 1 card read answers the pending revision + daemon-minted template
  *     -> paired durable HUMAN principal approves over the BROWSER origin
- *     -> ladder flips to planning.submit_decomposition
+ *     -> agent records the optional design skip; ladder offers planning.submit_decomposition
  *     -> agent submits PLAN ONLY (no scopes, no capability - the dispatcher
  *        states the closed risk profile, so no RUN_POLICY park is reachable)
  *     -> run REVIEWABLE, ladder offers both human approval wires
@@ -47,8 +47,11 @@ import {
   installTestRecoveryBinding,
 } from "../../../apps/daemon/src/identity/session-test-fixtures.ts";
 import {
+  activeCompiledGraphs,
   createCompiledNodeSource,
 } from "../../../apps/daemon/src/orchestrator/compiled-node-source.ts";
+import { compiledExecutionRef }
+  from "../../../apps/daemon/src/orchestrator/compiled-execution-ref.ts";
 
 const PRD = [
   "# Uai identity kernel",
@@ -180,6 +183,8 @@ it("compiles one PRD into an ACTIVE buildable node through every live seam", () 
   expect(preKinds).toContain("product_contract.propose_revision");
   expect(preKinds).not.toContain("plan.propose");
   expect(preKinds).not.toContain("planning.submit_decomposition");
+  // Before Gate 1 the design rung is not reached at all, whatever the design state says.
+  expect(preKinds).not.toContain("design.submit");
 
   // ---- the AGENT writes the Product Contract from the PRD it can read ----
   const source = provider.goalSource?.().read(GOAL_ID);
@@ -286,12 +291,27 @@ it("compiles one PRD into an ACTIVE buildable node through every live seam", () 
   expect(provider.productContractPending?.().readPending(GOAL_ID))
     .toEqual({ outcome: "NONE" });
 
-  // ---- LADDER 2: post-Gate-1 the goal offers the dispatcher ----
+  // This compiler journey explicitly skips design through its real offered command.
+  const designOffer = surface().nextAllowedCommands.find((offer) => offer.commandKind === "design.submit");
+  expect(designOffer).toBeDefined();
+  if (designOffer === undefined) throw new Error("design offer missing after Gate 1");
+  accepted("skip_design", dispatch("design.submit", {
+    contractRef: { ...pending.ref }, goalRef: GOAL_ID,
+    revision: { skipped: true, reason: "This journey exercises compilation from the approved contract." },
+  }, AGENT_SECRET, designOffer.commandId, String(designOffer.targetAggregateId),
+  designOffer.expectedVersion));
+
+  // ---- LADDER 2: post-Gate-1 and explicit skip, the goal offers the dispatcher ----
   const postGate = surface();
   const postKinds = offered(postGate.nextAllowedCommands);
   expect(postKinds).toContain("planning.submit_decomposition");
   expect(postKinds).not.toContain("product_contract.propose_revision");
   expect(postKinds).not.toContain("plan.propose");
+  // A design that was SKIPPED is never offered again — end to end, through a real dispatch of
+  // the skip rather than a stubbed state. A PRESENT design DOES keep its resubmit offered
+  // (affordance-planning-offers.ts), so this line is what proves the two are not collapsed:
+  // if `design.submit` ever appears here, the skip arm was folded into the PRESENT arm.
+  expect(postKinds).not.toContain("design.submit");
 
   // ---- the AGENT submits PLAN ONLY; the daemon compiles and drives the chain ----
   accepted("submit_decomposition", dispatch("planning.submit_decomposition", {
@@ -326,14 +346,20 @@ it("compiles one PRD into an ACTIVE buildable node through every live seam", () 
   accepted("approval.decide_intent", intentResult);
   expect(intentResult.decision?.disposition).toBe("DECIDED");
 
-  // ---- ENABLED: the goal is execution-enabled and offers only closure ----
+  // ---- ENABLED: activation offers execution; unbuilt work cannot close ----
   const enabled = surface();
-  expect(offered(enabled.nextAllowedCommands)).toContain("goal.close");
+  expect(offered(enabled.nextAllowedCommands)).not.toContain("goal.close");
   expect(offered(enabled.nextAllowedCommands)).not.toContain("approval.decide_intent");
 
   // ---- the compiled node is durable, listed, and briefed (PRODUCTION reader) ----
   const reader = SqliteEventStore.openForProject(storePath, PROJECT_ID);
   cleanups.push(() => { reader.close(); });
+  const activeGraphs = activeCompiledGraphs(reader, PROJECT_ID);
+  expect(activeGraphs).toHaveLength(1);
+  const graph = activeGraphs[0];
+  if (graph === undefined) throw new Error("activated graph missing");
+  const nodeRef = compiledExecutionRef(PROJECT_ID, graph, NODE_KEY);
+  expect(nodeRef).toMatch(/^node:v1:[0-9a-f]{64}$/u);
   const compiled = createCompiledNodeSource({
     projectId: PROJECT_ID,
     store: reader,
@@ -341,10 +367,12 @@ it("compiles one PRD into an ACTIVE buildable node through every live seam", () 
     workspace: "D:/projexts/UnAI",
   });
   expect(compiled.nodes()).toEqual([{
-    nodeRef: NODE_KEY,
+    dependsOn: [],
+    nodeRef,
     title: "Implement the belief-key identity codec with round-trip tests.",
   }]);
-  const mission = compiled.mission(NODE_KEY);
+  expect(compiled.mission(NODE_KEY)).toBeNull();
+  const mission = compiled.mission(nodeRef);
   if (mission === null) throw new Error("compiled node has no brief");
   expect(mission.workspace).toBe("D:/projexts/UnAI");
   expect(mission.test).toBe("pnpm test");
@@ -354,6 +382,6 @@ it("compiles one PRD into an ACTIVE buildable node through every live seam", () 
   // The board itself lists the node as READY buildable work for the wrapper.
   const active = surface();
   const nodeStep = active.steps.find((step) =>
-    step.kind === "node.deliver" && step.aggregateId === NODE_KEY);
+    step.kind === "node.deliver" && step.aggregateId === nodeRef);
   expect(nodeStep?.status).toBe("READY");
 }, 120_000);

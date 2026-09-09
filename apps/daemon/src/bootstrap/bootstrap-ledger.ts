@@ -10,8 +10,16 @@ import type {
 } from "@moe/store";
 
 import { BOOTSTRAP_COMMAND_KINDS } from "./bootstrap-contracts.js";
+import { conflictError } from "./bootstrap-conflict-error.js";
 import { unmetPrerequisites } from "./bootstrap-sequence.js";
 import type { BootstrapCommandKind, BootstrapRequest } from "./bootstrap-contracts.js";
+
+/**
+ * Re-exported so the conflict decode has ONE public name even though it lives in its own module
+ * (this file is already near the line cap). Every commit seam that can receive a store conflict
+ * imports the same function; a second copy of the decode would drift.
+ */
+export { conflictError } from "./bootstrap-conflict-error.js";
 
 /** Re-exported so a service imports its whole composition surface from one module. */
 export {
@@ -52,6 +60,7 @@ export type {
   ServiceRefused,
   ServiceRefusedBy,
 } from "./bootstrap-ledger-vocabulary.js";
+import { decisionsOf } from "../decision-ledger-memo.js";
 
 const LEDGER_PAGE_SIZE = 200;
 const encoder = new TextEncoder();
@@ -89,21 +98,15 @@ export function readDurableLedger(store: SqliteEventStore, projectId: string): D
   const aggregates = new Map<string, DurableAggregate>();
   const kinds = new Set<string>();
   let decisionCount = 0;
-  let cursor = 0n;
-  for (;;) {
-    const page = store.readCommandDecisionsAfter(cursor, LEDGER_PAGE_SIZE);
-    for (const decision of page.items) {
-      if (decision.key.projectId !== projectId) continue;
-      decisionCount += 1;
-      if (decision.effectDisposition !== "EFFECTS_COMMITTED") continue;
-      kinds.add(decision.commandKind);
-      aggregates.set(decision.targetAggregateId, {
-        currentVersion: decision.currentVersion,
-        result: decodeResult(decision.resultBytes),
-      });
-    }
-    if (!page.hasMore || page.nextCursor === null) break;
-    cursor = page.nextCursor;
+  for (const decision of decisionsOf(store, LEDGER_PAGE_SIZE)) {
+    if (decision.key.projectId !== projectId) continue;
+    decisionCount += 1;
+    if (decision.effectDisposition !== "EFFECTS_COMMITTED") continue;
+    kinds.add(decision.commandKind);
+    aggregates.set(decision.targetAggregateId, {
+      currentVersion: decision.currentVersion,
+      result: decodeResult(decision.resultBytes),
+    });
   }
   return Object.freeze({ aggregates, decisionCount, kinds });
 }
@@ -165,7 +168,10 @@ function decided(
   response: { readonly decision: CommandDecisionRecord; readonly disposition: "DECIDED" | "REPLAYED" },
 ): ServiceOutcome {
   if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
-    return refuse(request.kind, response.decision.resultCode, "DURABLE_STORE");
+    return refuse(
+      request.kind, response.decision.resultCode, "DURABLE_STORE",
+      conflictError(response.decision),
+    );
   }
   return Object.freeze({
     advisoryOnly: false as const,
@@ -265,10 +271,15 @@ export function replayOf(
   }
   // No same-bytes evidence, no replay: a refused decision's receipt commits the rejection audit
   // payload, so its `replayRequestSha256` is null and nothing here could prove the resubmit is
-  // the command that was decided. Falling through is not a fail-open — the command is decided
-  // again from scratch — and it must stay AHEAD of the byte compare below, which reads a digest
-  // only an accepted decision carries.
-  if (existing.effectDisposition !== "EFFECTS_COMMITTED") return null;
+  // the command that was decided. It used to fall through as "decided again from scratch", but
+  // the store folds the presented version into the request identity, so a resubmit at the
+  // refreshed version was never re-decided — it raised IdempotencyConflictError from the commit
+  // seam (a bare 409 at the transport), and a resubmit at the stale version only replayed the
+  // refusal. The id is spent: say so, under this layer's own code, and stay AHEAD of the byte
+  // compare below, which reads a digest only an accepted decision carries.
+  if (existing.effectDisposition !== "EFFECTS_COMMITTED") {
+    return refuse(request.kind, "BOOTSTRAP_COMMAND_ID_SPENT", "DAEMON_PREREQUISITE");
+  }
   // The key does not cover the payload either, so a caller reusing a commandId under the SAME
   // kind with DIFFERENT bytes would otherwise be handed the earlier result as an accepted
   // replay: authority for a command never decided with those bytes. The store's own conflict arm

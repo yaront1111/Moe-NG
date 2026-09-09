@@ -11,6 +11,7 @@ import {
   encodeLaunchPayloadWithAllowedEnvironment,
 } from "./windows-launch-request.js";
 import { isLocalAbsolutePath } from "./windows-path-guard.js";
+import { APPROVED_IMAGE_LAUNCH_OPCODE, prefixApprovedImageDigest } from "./windows-approved-image-launch.js";
 import {
   unknownOutcome,
   type WindowsProcessUnknown,
@@ -53,6 +54,8 @@ export interface WindowsBoundaryDeps {
 }
 
 export interface WindowsBoundaryOptions {
+  /** Opt-in native image lock/hash authority. Existing launch callers keep opcode 1. */
+  readonly approvedImageSha256?: string;
   readonly timeoutMs?: number;
   readonly deps?: WindowsBoundaryDeps;
   /**
@@ -186,7 +189,9 @@ export function openWindowsProcessBoundary(
   if (!(payload instanceof Uint8Array)) {
     return payload;
   }
-  const launch = encodeFrame("CONTROL", LAUNCH_OPCODE, payload);
+  const guarded = options.approvedImageSha256 === undefined ? payload : prefixApprovedImageDigest(options.approvedImageSha256, payload);
+  if (!(guarded instanceof Uint8Array)) return guarded;
+  const launch = encodeFrame("CONTROL", options.approvedImageSha256 === undefined ? LAUNCH_OPCODE : APPROVED_IMAGE_LAUNCH_OPCODE, guarded);
   if (!(launch instanceof Uint8Array)) {
     return launch;
   }

@@ -3,16 +3,31 @@
  * entry is a decision record's own facts; the goal scope is proven by a second goal whose
  * decisions must not leak into the first goal's list.
  */
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, it } from "vitest";
 
 import {
   GOAL_CREATE_COMMAND_ID, GOAL_ID, PROJECT_ID, closeStores, driveThrough, envelope, openStore, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { MIGRATION_RECEIPT_COMMAND_KIND, migrationReceiptId } from "../repository/migrations/migration-receipt.js";
+import { revertLastBatch } from "../repository/migrations/migration-down-service.js";
+import { migrateWithBackup } from "../repository/migrations/migration-service.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
+import { DEPLOY_RECEIPT_COMMAND_KIND } from "../deployment/deploy-receipt-contracts.js";
 import { activitySelectorOf, createActivityReadPort, handleActivityReadRequest, isSeatRecord, verdictOf } from "./activity-read.js";
 import type { ActivityReadPort, ActivityView } from "./activity-read.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
+import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
+import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
+import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
 import { GOOD_CREDENTIAL, authenticator } from "./http-test-fixtures.js";
+import type { SqliteEventStore } from "@moe/store";
+import {
+  approveGate1, approvePlan, boundWorld, committedRevision, rejectedWorld, submit,
+} from "../planning/plan-reject-test-fixtures.js";
 
 afterEach(closeStores);
 const encoder = new TextEncoder();
@@ -24,6 +39,24 @@ function activity(result: ReturnType<ActivityReadPort["readActivity"]>): Activit
 }
 
 describe("createActivityReadPort", () => {
+  it("attributes node activity by scoped execution subject and excludes bare and sibling records", () => {
+    const store = boundWorld();
+    const contract = committedRevision(store);
+    approveGate1(store, contract);
+    const sealed = submit(store, contract);
+    if (!sealed.ok) throw new Error(sealed.code);
+    approvePlan(store, sealed.runId);
+    const graph = activeCompiledGraphs(store, PROJECT_ID)[0]!;
+    const key = graph.content.snapshot.nodes[0]!.nodeKey;
+    const own = compiledExecutionRef(PROJECT_ID, graph, key);
+    const sibling = compiledExecutionRef(PROJECT_ID, { ...graph, goalRef: "another-goal" }, key);
+    seedVerifierReceipt(store, own, PROJECT_ID);
+    seedVerifierReceipt(store, sibling, PROJECT_ID);
+    seedVerifierReceipt(store, key, PROJECT_ID);
+    const view = activity(createActivityReadPort({ projectId: PROJECT_ID, store }).readActivity({ goalRef: GOAL_ID }));
+    const reviews = view.entries.filter((row) => row.commandKind === "review.submit");
+    expect(reviews.map((row) => row.targetAggregateId)).toEqual([own]);
+  });
   it("lists the project's committed decisions latest first with the record's own facts", () => {
     const store = openStore();
     driveThrough(store, "goal.create");
@@ -72,6 +105,31 @@ describe("createActivityReadPort", () => {
     expect(view.entries.some((entry) => entry.targetAggregateId === "goal-2")).toBe(false);
     expect(port.readActivity({ goalRef: "goal-never" })).toMatchObject({ code: "ACTIVITY_READ_GOAL_UNKNOWN" });
   });
+
+  it("answers UNREADABLE, not GOAL_UNKNOWN, when the goal catalog cannot be decoded", () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    const first = send(store, envelope("goal.create_with_source", 0, {
+      instructions: "Build it.", source: { displayPath: "docs/prd.md", mediaType: "text/markdown", text: PRD },
+      title: "Watched goal",
+    }, GOAL_CREATE_COMMAND_ID));
+    if (!first.ok) throw new Error(`fixture bind refused: ${first.code}`);
+    // A GoalCreated row whose payload is not the catalog's one-element array: the catalog walk
+    // refuses it, and the goal-scoped read used to report every goal — this real one included —
+    // as unknown, absence claimed on evidence that was never read.
+    const bytes = encoder.encode("{}");
+    const response = store.commitExpectedVersionDecision({
+      commandKind: "goal.create", committedResultBytes: bytes, correlationId: "corr-broken-goal",
+      decidedAt: "2026-09-05T12:00:00.000Z",
+      events: [{ eventId: "evt-broken-goal", eventType: "GoalCreated", payload: bytes }],
+      expectedVersion: 0, key: { commandId: "cmd-broken-goal", principalId: "operator-local", projectId: PROJECT_ID },
+      requestBytes: bytes, targetAggregateId: "goal-broken",
+    });
+    if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") throw new Error("fixture row refused");
+    const port = createActivityReadPort({ projectId: PROJECT_ID, store, readActive: () => [] });
+    expect(port.readActivity({ goalRef: GOAL_ID })).toMatchObject({ code: "ACTIVITY_READ_UNREADABLE" });
+    expect(port.readActivity({ goalRef: "goal-never" })).toMatchObject({ code: "ACTIVITY_READ_UNREADABLE" });
+  });
 });
 
 describe("handleActivityReadRequest", () => {
@@ -118,9 +176,89 @@ describe("verdictOf", () => {
     expect(verdictOf("escalation.decide", bytes({ decision: "ALLOW_MORE_ATTEMPTS" }))).toBe("ALLOW_MORE_ATTEMPTS");
     expect(verdictOf("review.submit", bytes({ lineage: {}, routing: { layer: "REVIEW", route: "REJECT_IMPLEMENTATION" } }))).toBe("REJECT_IMPLEMENTATION");
     expect(verdictOf("review.submit", bytes({ routing: { route: "ACCEPT" } }))).toBe("ACCEPT");
-    // approval.decide_intent commits a GoalState, not a decision word: it is APPROVE by construction.
-    expect(verdictOf("approval.decide_intent", bytes({ decision: "APPROVE" }))).toBeNull();
     expect(verdictOf("integration.accept_output", bytes({ decision: "REPLAN" }))).toBeNull();
+  });
+
+  it("reads the approval verdict from the committed result of BOTH approval kinds", () => {
+    // A REJECT commits the run's whole record with the decision word on it
+    // (approval-intent-rejection.ts `rejectionRecord`), so the word is read, never inferred.
+    expect(verdictOf("approval.decide_intent", bytes({
+      decision: "REJECT", decisionReason: "needs two nodes", findingsRef: "f".repeat(64),
+      runId: "run-1", successorRunId: "run-2",
+    }))).toBe("REJECT");
+    expect(verdictOf("approval.decide_intent", bytes({ decision: "APPROVE" }))).toBe("APPROVE");
+    expect(verdictOf("approval.decide", bytes({ decision: "APPROVE" }))).toBe("APPROVE");
+    // An APPROVE commits a GoalState, which carries a lifecycle and NO decision word: the seam
+    // admits APPROVE only (planning-services.ts:290), so the lifecycle IS the verdict. Asserted
+    // with a real goal lifecycle, not a placeholder, because that is the shape on disk.
+    expect(verdictOf("approval.decide", bytes({
+      goalId: "goal-1", lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-1",
+    }))).toBe("APPROVE");
+    expect(verdictOf("approval.decide_intent", bytes({
+      goalId: "goal-1", lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-1",
+    }))).toBe("APPROVE");
+  });
+
+  it("reads DEPLOYED and REFUSED off the deploy receipt, from the receipt's OWN durable shape", () => {
+    // A deploy receipt carries `outcome`, never `decision` or `lifecycle`, so without its own
+    // branch this kind reads back as a decision with nothing decided and the feed renders a
+    // REFUSED deploy exactly like a DEPLOYED one - the one distinction an operator scans for.
+    // Asserted against the shape `deploy-ledger.ts` actually commits (a whole DeployReceiptV1),
+    // not a `{ outcome }` stub, so a decoder that only tolerates the minimal record still reds.
+    const receipt = {
+      decidedAt: "2026-09-07T09:00:00.000Z", decisionId: "cmd-1", environment: "preview",
+      imageDigest: `sha256:${"a".repeat(64)}`, outcome: "DEPLOYED", projectId: "proj-1",
+      receiptId: "receipt-1", refusal: null, releaseDecision: null, sha: "b".repeat(40),
+      url: "http://127.0.0.1:8080/", version: "moe-deploy-receipt/1",
+    };
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, bytes(receipt))).toBe("DEPLOYED");
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, bytes({
+      ...receipt, imageDigest: null, outcome: "REFUSED", url: null,
+      refusal: { code: "DEPLOY_BUILD_FAILED", detail: "docker said no", layer: "DAEMON_DEPLOY_ENGINE" },
+    }))).toBe("REFUSED");
+  });
+
+  it("does not let the deploy branch leak `outcome` into any other kind, and answers null when the receipt carries no outcome", () => {
+    // `outcome` is a common member across this codebase's committed results, so a branch that
+    // read it for every kind would start captioning unrelated records with a deploy word.
+    expect(verdictOf("integration.accept_output", bytes({ outcome: "DEPLOYED" }))).toBeNull();
+    expect(verdictOf("approval.decide", bytes({ outcome: "DEPLOYED" }))).toBeNull();
+    expect(verdictOf("internal.repository.publish_receipt", bytes({ outcome: "PUSHED" }))).toBeNull();
+    // The migration branch shares the deploy branch's scoping and must not widen it either: a
+    // publish receipt's PUSHED is not a migration word.
+    expect(verdictOf("internal.repository.publish_receipt", bytes({ outcome: "APPLIED" }))).toBeNull();
+    expect(verdictOf("integration.accept_output", bytes({ outcome: "REVERTED" }))).toBeNull();
+    expect(verdictOf("approval.decide", bytes({ outcome: "REFUSED" }))).toBeNull();
+    expect(verdictOf(MIGRATION_RECEIPT_COMMAND_KIND, bytes({}))).toBeNull();
+    expect(verdictOf(MIGRATION_RECEIPT_COMMAND_KIND, bytes({ outcome: "" }))).toBeNull();
+    expect(verdictOf(MIGRATION_RECEIPT_COMMAND_KIND, bytes({ outcome: 7 }))).toBeNull();
+    expect(verdictOf(MIGRATION_RECEIPT_COMMAND_KIND, bytes({ decision: "APPROVE" }))).toBeNull();
+    expect(verdictOf(MIGRATION_RECEIPT_COMMAND_KIND, bytes({ lifecycle: "EXECUTION_ENABLED" }))).toBeNull();
+    expect(verdictOf(MIGRATION_RECEIPT_COMMAND_KIND, encoder.encode("{not json"))).toBeNull();
+    expect(verdictOf(MIGRATION_RECEIPT_COMMAND_KIND, new Uint8Array())).toBeNull();
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, bytes({}))).toBeNull();
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, bytes({ outcome: "" }))).toBeNull();
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, bytes({ outcome: 7 }))).toBeNull();
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, bytes({ decision: "APPROVE" }))).toBeNull();
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, bytes({ lifecycle: "EXECUTION_ENABLED" }))).toBeNull();
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, encoder.encode("{not json"))).toBeNull();
+    expect(verdictOf(DEPLOY_RECEIPT_COMMAND_KIND, new Uint8Array())).toBeNull();
+  });
+
+  it("answers null for an approval result that carries neither a decision nor a lifecycle", () => {
+    // The fallback is a LIFECYCLE, not a bare "it decoded": a result with neither field must not
+    // be read as an approval, or an unrelated record would render as one in the feed.
+    for (const kind of ["approval.decide", "approval.decide_intent"]) {
+      expect(verdictOf(kind, bytes({}))).toBeNull();
+      expect(verdictOf(kind, bytes({ decision: "" }))).toBeNull();
+      expect(verdictOf(kind, bytes({ decision: 7 }))).toBeNull();
+      expect(verdictOf(kind, bytes({ lifecycle: 7 }))).toBeNull();
+      expect(verdictOf(kind, bytes({ lifecycle: "" }))).toBeNull();
+      expect(verdictOf(kind, bytes("x"))).toBeNull();
+      expect(verdictOf(kind, bytes([1, 2]))).toBeNull();
+      expect(verdictOf(kind, encoder.encode("{not json"))).toBeNull();
+      expect(verdictOf(kind, new Uint8Array())).toBeNull();
+    }
   });
 
   it("answers null, never throws, for a result that carries no word or does not decode", () => {
@@ -131,5 +269,138 @@ describe("verdictOf", () => {
     expect(verdictOf("review.submit", bytes([1, 2]))).toBeNull();
     expect(verdictOf("review.submit", encoder.encode("{not json"))).toBeNull();
     expect(verdictOf("escalation.decide", new Uint8Array())).toBeNull();
+  });
+});
+
+/**
+ * The verdict words the feed renders, read off REAL decisions rather than hand-built bytes:
+ * `activity-words.ts` turns them into "rejected the plan" / "approved the plan", so a verdict
+ * that stopped being read would silently downgrade every approval row to a bare command name.
+ */
+describe("approval verdicts over a real store", () => {
+  const rowsFor = (world: { readonly store: SqliteEventStore }): readonly {
+    readonly commandKind: string; readonly targetAggregateId: string;
+    readonly verdict: string | null;
+  }[] => activity(
+    createActivityReadPort({ projectId: PROJECT_ID, store: world.store }).readActivity({}),
+  ).entries.filter((entry) => entry.commandKind.startsWith("approval."));
+
+  it("carries REJECT on the row for the run the operator rejected", () => {
+    const world = rejectedWorld("needs two nodes, not one");
+    expect(rowsFor(world)).toEqual([{
+      commandKind: "approval.decide_intent",
+      decidedAt: expect.any(String),
+      disposition: "COMMITTED",
+      principalId: expect.any(String),
+      targetAggregateId: world.originalRunId,
+      verdict: "REJECT",
+      version: expect.any(Number),
+    }]);
+  });
+
+  it("carries APPROVE on the row for a run the operator approved", () => {
+    // Same seam, same fixture, opposite word: a rule that hard-coded REJECT would pass the arm
+    // above and fail here.
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+    const sealed = submit(store, ref);
+    if (!sealed.ok) throw new Error(`submit refused: ${sealed.code} @ ${sealed.layer}`);
+    approvePlan(store, sealed.runId);
+    expect(rowsFor({ store }).map((row) => `${row.commandKind}=${row.verdict ?? "null"}`))
+      .toEqual(["approval.decide_intent=APPROVE"]);
+  });
+});
+
+/**
+ * MIGRATION RECEIPTS IN THE FEED, over receipts written by the PRODUCTION engines rather than
+ * hand-built bytes. Three outcomes, three words: a feed that rendered APPLIED, REFUSED and
+ * REVERTED identically would say a migration was decided while never saying whether the schema
+ * moved. The row is a PROJECT observation and must stay out of every goal-filtered read.
+ */
+describe("migration receipt verdicts over a real store", () => {
+  const roots: string[] = [];
+  afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+  const BATCH = ["1700000000001-first.js"];
+  const at = (hour: number) => new Date(`2026-09-06T0${hour}:00:00.000Z`);
+
+  async function seeded() {
+    const projectRoot = mkdtempSync(join(tmpdir(), "moe-activity-migration-")); roots.push(projectRoot);
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    const bound = send(store, envelope("goal.create_with_source", 0, {
+      instructions: "Build it.", source: { displayPath: "docs/prd.md", mediaType: "text/markdown", text: PRD },
+      title: "Watched goal",
+    }, GOAL_CREATE_COMMAND_ID));
+    if (!bound.ok) throw new Error(`fixture bind refused: ${bound.code}`);
+    const base = { projectRoot, workspace: projectRoot, projectId: PROJECT_ID,
+      environment: "production", databaseUrl: "postgresql://localhost/fixture" };
+    const dump = async (_connection: string, path: string) => { writeFileSync(path, "fixture backup"); };
+    const applied = await migrateWithBackup(store, { ...base, requestId: "m-applied", sha: "a".repeat(40), now: at(1) },
+      { dump, apply: async () => BATCH });
+    const refused = await migrateWithBackup(store, { ...base, requestId: "m-refused", sha: "a".repeat(40), now: at(2) },
+      { dump: async () => { throw new Error("unavailable"); }, apply: async () => BATCH });
+    const reverted = await revertLastBatch(store, { ...base, requestId: "m-reverted",
+      toMigrationRequestId: "m-applied", now: at(3) },
+      { dump, revert: async (_workspace, _connection, batch) => [...batch].reverse() });
+    return { applied, refused, reverted, store };
+  }
+
+  const migrationRows = (store: ReturnType<typeof openStore>, selector: { readonly goalRef: string } | Record<never, never>) =>
+    activity(createActivityReadPort({ projectId: PROJECT_ID, store, readActive: () => [] }).readActivity(selector))
+      .entries.filter((entry) => entry.commandKind === MIGRATION_RECEIPT_COMMAND_KIND);
+
+  it("renders each outcome as its own word on the project feed", async () => {
+    const world = await seeded();
+    expect([world.applied.outcome, world.refused.outcome, world.reverted.outcome])
+      .toEqual(["APPLIED", "REFUSED", "REVERTED"]);
+    const rows = migrationRows(world.store, {});
+    // Keyed by the receipt's own aggregate so a shared default word cannot pass this.
+    expect(new Map(rows.map((row) => [row.targetAggregateId, row.verdict]))).toEqual(new Map([
+      [`migration:${world.applied.receiptId}`, "APPLIED"],
+      [`migration:${world.refused.receiptId}`, "REFUSED"],
+      [`migration:${world.reverted.receiptId}`, "REVERTED"],
+    ]));
+    expect(rows.every((row) => row.principalId === "daemon:migration-engine")).toBe(true);
+  });
+
+  it("keeps migration rows out of a GOAL-filtered read", async () => {
+    const world = await seeded();
+    // Asserted directly, not inferred: `migration:<receiptId>` is in no goal's target set, and a
+    // goal-scoped read that started returning these rows would be exactly the bleed DoD 2 forbids.
+    expect(migrationRows(world.store, {})).not.toHaveLength(0);
+    expect(migrationRows(world.store, { goalRef: GOAL_ID })).toEqual([]);
+    const scoped = activity(createActivityReadPort({ projectId: PROJECT_ID, store: world.store, readActive: () => [] })
+      .readActivity({ goalRef: GOAL_ID }));
+    expect(scoped.entries.some((entry) => entry.targetAggregateId.startsWith("migration:"))).toBe(false);
+  });
+
+  it("carries a migration row in the SAME seven members every other kind uses", async () => {
+    const world = await seeded();
+    const row = migrationRows(world.store, {})
+      .find((entry) => entry.targetAggregateId === `migration:${world.applied.receiptId}`);
+    // The browser decodes this feed with an exact-key roster, so an eighth member added here
+    // would be refused there rather than rendered. Pin the key set so that cannot happen quietly.
+    expect(Object.keys(row ?? {}).toSorted()).toEqual([
+      "commandKind", "decidedAt", "disposition", "principalId", "targetAggregateId", "verdict", "version",
+    ]);
+  });
+
+  it("degrades a corrupt migration decision to no word instead of throwing", async () => {
+    const store = openStore();
+    driveThrough(store, "goal.create");
+    const id = migrationReceiptId(PROJECT_ID, "m-broken");
+    const bytes = encoder.encode('{"version":"moe-migration-receipt/1"}');
+    const response = store.commitExpectedVersionDecision({ commandKind: MIGRATION_RECEIPT_COMMAND_KIND,
+      committedResultBytes: bytes, correlationId: "m-broken", decidedAt: "2026-09-06T05:00:00.000Z",
+      events: [{ eventId: `${id}-recorded`, eventType: "MigrationRecorded", payload: bytes }],
+      expectedVersion: 0, key: { commandId: id, principalId: "daemon:migration-engine", projectId: PROJECT_ID },
+      requestBytes: bytes, targetAggregateId: `migration:${id}` });
+    if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") throw new Error("fixture corruption refused");
+    // `verdictOf` never throws by contract: a record with no readable outcome is a row with no
+    // word, never a propagated failure that would take the whole feed down with it.
+    const rows = migrationRows(store, {});
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ targetAggregateId: `migration:${id}`, verdict: null });
   });
 });

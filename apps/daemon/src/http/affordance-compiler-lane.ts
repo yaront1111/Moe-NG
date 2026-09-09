@@ -29,6 +29,7 @@ import { deriveProductContractRevisionAggregateId }
   from "../product-contract/product-contract-revision-store.js";
 
 const GATE_1_AGGREGATE_PREFIX = "product-contract-gate-1-";
+const REVISION_AGGREGATE_PREFIX = "product-contract-revision:";
 
 /** The Gate 1 approval's revision triple, exactly what `submit_decomposition`'s
  *  `gateRef` payload member carries. */
@@ -38,11 +39,27 @@ export interface CompilerGateRef {
   readonly revisionId: string;
 }
 
+/** A revision that cites the goal's source and that no Gate 1 approval names yet. */
+export interface PendingRevisionRef {
+  readonly contractId: string;
+  readonly revisionId: string;
+}
+
 export type CompilerLaneFacts =
   /** No source binding: the legacy plan.propose journey, untouched. */
   | { readonly lane: "LEGACY" }
   /** Source-bound: the compiler lane. `approvedGateRef` null = pre-Gate-1. */
-  | { readonly approvedGateRef: CompilerGateRef | null; readonly lane: "COMPILER" }
+  | {
+    readonly approvedGateRef: CompilerGateRef | null;
+    readonly lane: "COMPILER";
+    /**
+     * Pre-Gate-1 only: the revision the human is looking at. While it is set the goal is the
+     * HUMAN's turn and the ladder offers nothing — offering the writer again staffed a fresh
+     * seat every pass that re-proposed the same revision until the goal exhausted its
+     * attempts (measured 2026-09-05). Absent (fixtures built before the field) reads as none.
+     */
+    readonly pendingRevision?: PendingRevisionRef | null;
+  }
   /** A binding is present but will not re-prove: offer nothing, fail closed. */
   | { readonly lane: "WITHHELD" };
 
@@ -89,11 +106,28 @@ export function createCompilerLanePort(options: {
     }
     return null;
   };
+  const pendingRevision = (contentSha256: string): PendingRevisionRef | null => {
+    for (const [aggregateId] of options.ledger.aggregates) {
+      if (!aggregateId.startsWith(REVISION_AGGREGATE_PREFIX)) continue;
+      const revision = dataRecord(stateOf(options.ledger, aggregateId));
+      const digests = revision?.["sourceDocumentDigests"];
+      const contractId = revision?.["contractId"];
+      const revisionId = revision?.["revisionId"];
+      if (Array.isArray(digests) && digests.includes(contentSha256)
+        && typeof contractId === "string" && typeof revisionId === "string") {
+        return Object.freeze({ contractId, revisionId });
+      }
+    }
+    return null;
+  };
   const factsFor = (goalId: string): CompilerLaneFacts => {
     const read = source.read(goalId);
     if (read.ok) {
+      const approved = approvedGateRef(read.contentSha256);
       return Object.freeze({
-        approvedGateRef: approvedGateRef(read.contentSha256), lane: "COMPILER" as const,
+        approvedGateRef: approved,
+        lane: "COMPILER" as const,
+        pendingRevision: approved === null ? pendingRevision(read.contentSha256) : null,
       });
     }
     // UNBOUND covers "no binding at all" (a plain goal.create goal, or a goal

@@ -19,6 +19,9 @@ import type {
 import type { GraphQueryPort } from "./planning/graph-query.js";
 import { COMMAND_AUTHORITY_PLANES, WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import { DAEMON_COMMAND_SEAM } from "./http/http-async-contract.js";
+import { answerDesignReadQuery } from "./mcp-design-read-query.js";
+import type { DesignReadPort } from "./mcp-design-read-query.js";
+import { answerWorkContextQuery } from "./mcp-work-context-query.js";
 
 /**
  * The production dispatch port behind both MCP servers: the same committed adapter pipeline
@@ -51,6 +54,8 @@ export interface McpDispatchPortConfig {
   readonly affordances?: AffordancePort | undefined;
   /** The goal's approved Product Contract reader; absent means product_contract.read refuses. */
   readonly contract?: ProductContractReadPort | undefined;
+  /** The goal's design-revision reader; absent means design.read refuses, as `contract` does. */
+  readonly design?: DesignReadPort | undefined;
   /** The goal-scoped full-PRD reader; absent means documents.source_read refuses. */
   readonly documents?: GoalSourceReadPort | undefined;
   /** Stdio has one identity per process; HTTP always supplies its authenticated request bearer. */
@@ -152,10 +157,19 @@ type QueryHandler = (
 ) => Uint8Array;
 
 // The agent's "what should I do": the affordance surface — chain standing,
-// daemon-minted offers, and active claims — exactly what the board renders.
-const answerWorkContext: QueryHandler = (_envelope, _context, config) => {
+// daemon-minted offers, and active claims — exactly what the board renders. A payload naming
+// one `workItemId` narrows the answer to that step; the decision lives in
+// `answerWorkContextQuery` so this handler stays a delegate and the port owns only the clock,
+// the refusal mapping and the bytes.
+const answerWorkContext: QueryHandler = (envelope, _context, config) => {
   if (config.affordances === undefined) return queryRefusal();
-  return bytesOf(config.affordances.readSurface());
+  const answer = answerWorkContextQuery(
+    envelope["payload"], config.affordances.readSurface(), new Date().toISOString(),
+  );
+  // INPUT_INVALID is the ONLY answer without an `outcome`: a product refusal carries
+  // `outcome: "REFUSED"`, so key absence — not the code alone — is what selects the
+  // port's generic envelope.
+  return "outcome" in answer ? bytesOf(answer) : queryRefusal();
 };
 
 // The one query that needs an identity. The shared handler owns the whole
@@ -283,8 +297,24 @@ const answerProductContractRead: QueryHandler = (envelope, context, config) => {
   return bytesOf(config.contract.read(request["goalRef"]));
 };
 
+// The seat's read of the goal's design revision. A DELEGATE and nothing else: the whole answer
+// -- absent-port refusal, authentication, the `{goalRef, version?}` payload vocabulary, and the
+// rule that `projectId` comes off the AUTHENTICATED PRINCIPAL and never off the payload -- lives
+// in `mcp-design-read-query.ts`, so the table keeps its shape and the security decision stays
+// beside the code that makes it. `design.read` is the ONE kind this row serves over MCP for a
+// SEAT rather than an operator: the design step is authored by an agent, so a human-only fence
+// here would leave it permanently unstaffable while every roster test stayed green.
+const answerDesignRead: QueryHandler = (envelope, context, config) => answerDesignReadQuery({
+  authenticator: authenticatorOf(config.deps),
+  body: envelope["payload"],
+  credential: context?.credential ?? config.fallbackCredential ?? null,
+  port: config.design,
+  protocolVersion: WIRE_PROTOCOL_VERSION,
+});
+
 /** Every query kind this port serves, and the only place that set is decided. */
 const QUERY_HANDLERS: Readonly<Record<string, QueryHandler>> = Object.freeze({
+  "design.read": answerDesignRead,
   "documents.source_read": answerDocumentsSourceRead,
   "events.read": answerEventsRead,
   "graph.get": answerGraphGet,

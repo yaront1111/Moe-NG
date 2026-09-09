@@ -10,17 +10,25 @@ const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
   OPEN_SESSION: "paired a browser seat",
   "approval.decide": "decided the plan",
   "approval.decide_intent": "approved the plan",
+  "deployment.deploy": "asked to deploy an environment",
+  "deployment.set_target": "bound where an environment deploys to",
   "escalation.decide": "decided an exhausted review",
   "goal.close": "closed the goal",
   "goal.create": "created a goal",
   "goal.create_with_source": "created a goal from a PRD",
   "integration.accept_output": "accepted the delivered work",
+  "internal.deployment.deploy_receipt": "recorded the deploy",
   "internal.integration.verifier_receipt": "recorded the verifier's receipt",
+  "internal.release.dossier": "recorded the release evidence",
+  "internal.release.receipt": "recorded the release",
   "internal.repository.landing_receipt": "landed the accepted work as a commit",
+  "internal.repository.migration_receipt": "recorded the migration",
   "internal.repository.publish_receipt": "recorded the publish",
   "plan.propose": "proposed a plan",
   "planning.submit_decomposition": "submitted a compiled plan",
   "policy.install": "installed a policy slice",
+  "preview.decide": "decided the preview",
+  "preview.start": "started a preview of the product",
   "policy.validate": "evaluated the policy",
   "product_contract.answer_clarification": "answered a contract question",
   "product_contract.approve_gate_1": "approved the Product Contract at Gate 1",
@@ -30,6 +38,7 @@ const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
   "project.register": "registered the project",
   "provider.probe": "probed the provider",
   "qualification.replan": "requested a re-plan",
+  "release.decide": "decided the release",
   "repository.publish": "asked to publish the landed commits",
   "review.submit": "submitted a review round",
   "session.close": "closed a seat",
@@ -39,6 +48,12 @@ const KIND_WORDS: Readonly<Record<string, string>> = Object.freeze({
   "work.release": "released a work item",
   "work.renew": "renewed a work item",
 });
+
+/** The daemon's own receipt kind (`deploy-receipt-contracts.ts`), matched here rather than
+ *  imported: this package must not take a build dependency on the daemon's sources. */
+const DEPLOY_RECEIPT_KIND = "internal.deployment.deploy_receipt";
+/** The migration receipt kind (`migration-receipt.ts:10`), matched here for the same reason. */
+const MIGRATION_RECEIPT_KIND = "internal.repository.migration_receipt";
 
 export function kindWords(commandKind: string): string {
   return KIND_WORDS[commandKind] ?? commandKind;
@@ -65,10 +80,84 @@ export function decisionWords(commandKind: string, verdict: string | null): stri
     if (verdict === "ALLOW_MORE_ATTEMPTS") return "allowed more review attempts";
     return `decided the exhausted review: ${verdict}`;
   }
+  if (commandKind === "preview.decide") {
+    if (verdict === "APPROVE") return "approved the running product";
+    if (verdict === "REJECT") return "sent the running product back with findings";
+    return `decided the preview: ${verdict}`;
+  }
+  if (commandKind === "release.decide") {
+    // The only two the command admits (`release-decide-command.ts:46` refuses anything else),
+    // and a third would still print the verdict rather than swallow it.
+    if (verdict === "APPROVE") return "released the work to users";
+    if (verdict === "REJECT") return "held the release back";
+    return `decided the release: ${verdict}`;
+  }
+  if (commandKind === DEPLOY_RECEIPT_KIND) {
+    // A REFUSED deploy left the environment untouched, and saying so is the point: an operator
+    // scanning this feed after an incident needs to know whether what is serving changed. The
+    // two sentences share no leading word, so they stay distinguishable when the row is
+    // truncated. An unrecognised outcome still prints rather than reading as a success.
+    if (verdict === "DEPLOYED") return "deployed the product to the environment";
+    if (verdict === "REFUSED") return "could not deploy: the environment was left as it was";
+    return `${kindWords(commandKind)}: ${verdict}`;
+  }
+  if (commandKind === MIGRATION_RECEIPT_KIND) {
+    // THREE DIFFERENT THINGS TO HAVE HAPPENED TO A SCHEMA. A feed rendering all three as the
+    // kind's own words would say a migration was RECORDED while never saying whether the
+    // database moved, which is the one question an operator has after an incident. The three
+    // sentences share no leading word, so they stay distinguishable when the row truncates.
+    // REFUSED deliberately does NOT claim the schema is untouched: MIGRATION_BACKUP_FAILED
+    // applies nothing, but MIGRATION_FAILED can stop partway, so the sentence sends the reader
+    // to the receipt rather than offering a reassurance the verdict alone cannot support.
+    if (verdict === "APPLIED") return "applied the migrations to this environment";
+    if (verdict === "REFUSED") return "could not migrate: read the receipt for what the schema did";
+    if (verdict === "REVERTED") return "reverted the last migration batch";
+    return `${kindWords(commandKind)}: ${verdict}`;
+  }
   if (commandKind === "approval.decide" || commandKind === "approval.decide_intent") {
     return verdict === "APPROVE" ? "approved the plan" : verdict === "REJECT" ? "rejected the plan" : kindWords(commandKind);
   }
   return `${kindWords(commandKind)} (${verdict})`;
+}
+
+/**
+ * WHY A PREVIEW DID NOT RUN, in a person's words. Every sentence says what happened AND what
+ * the operator can do about it, because a refusal an operator cannot act on is just a wall.
+ *
+ * THE CODE IS SHOWN ALONGSIDE THE WORDS, NEVER INSTEAD OF THEM - `previewCodeSaid` composes
+ * both - and an UNROSTERED code falls through to the code ITSELF rather than to nothing. A map
+ * that silently swallowed an unknown code would leave a person staring at an empty card with
+ * no string to search for; the daemon can mint a fifth code without this file being edited.
+ */
+const PREVIEW_CODE_WORDS: Readonly<Record<string, string>> = Object.freeze({
+  PREVIEW_COMMAND_MISSING: "The preview command is not installed on this machine, so there was"
+    + " nothing to run. Install it, or set the command this project previews with, then start"
+    + " the preview again.",
+  PREVIEW_DECISION_INVALID: "The daemon refused the verdict as written. Send it back with at"
+    + " least one finding against a node, or approve it; an empty finding is not a decision.",
+  PREVIEW_GOAL_NOT_LANDED: "This goal has no landed commit yet, so there is no build to preview."
+    + " Wait for the work to land, then start the preview.",
+  PREVIEW_START_TIMEOUT: "The product did not answer before the daemon stopped waiting. It may"
+    + " still be starting, or it may be failing on launch - start the preview again, and read"
+    + " the board if it times out twice.",
+});
+
+/**
+ * The sentence for a refusal code; an unrostered code renders VERBATIM, never blank.
+ *
+ * `Object.hasOwn` AND NOT a bare index: a plain-object map answers `toString` and
+ * `constructor` from Object.prototype, so `PREVIEW_CODE_WORDS[code] ?? code` would render
+ * `[Function toString]` to an operator for a code spelled that way. A refusal code arrives
+ * from the wire, so "no daemon would send that" is not a guarantee this function may rely on.
+ */
+export function previewCodeWords(code: string): string {
+  return Object.hasOwn(PREVIEW_CODE_WORDS, code) ? PREVIEW_CODE_WORDS[code] ?? code : code;
+}
+
+/** The words AND the code, in that order, so a person can read it and still search for it. */
+export function previewCodeSaid(code: string): string {
+  const words = Object.hasOwn(PREVIEW_CODE_WORDS, code) ? PREVIEW_CODE_WORDS[code] : undefined;
+  return words === undefined ? code : `${words} (${code})`;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
@@ -102,9 +191,32 @@ export function principalWords(principalId: string): string {
 export function agoWords(iso: string, nowMs: number): string {
   const at = Date.parse(iso);
   if (Number.isNaN(at)) return iso;
-  const minutes = Math.max(0, Math.round((nowMs - at) / 60_000));
-  if (minutes < 1) return "just now";
+  return freshnessWords(at, nowMs);
+}
+
+/** "3 s ago" / "just now" from two millisecond instants. Never a live region. */
+export function freshnessWords(readAtMs: number, nowMs: number): string {
+  const seconds = Math.max(0, Math.round((nowMs - readAtMs) / 1000));
+  if (seconds < 2) return "just now";
+  if (seconds < 60) return `${String(seconds)} s ago`;
+  const minutes = Math.round(seconds / 60);
   if (minutes < 60) return `${String(minutes)} min ago`;
   const hours = Math.round(minutes / 60);
   return hours < 24 ? `${String(hours)} h ago` : `${String(Math.round(hours / 24))} d ago`;
+}
+
+/**
+ * Why only so many nodes are moving, in a person's words. Says "is set to run" rather than
+ * "is running": the daemon states the limit it was LAUNCHED with, and it does not observe
+ * the wrapper — a daemon started with no wrapper beside it is still, truthfully, set to
+ * that number. Nothing here interprets: both numbers come from the daemon's own answer.
+ */
+export function seatLimitWords(concurrency: { readonly activeSeats: number; readonly configuredAgentLimit: number }): string {
+  const { activeSeats, configuredAgentLimit } = concurrency;
+  const setting = `This daemon is set to run ${String(configuredAgentLimit)} agent${configuredAgentLimit === 1 ? "" : "s"} at once.`;
+  if (activeSeats === 0) return `${setting} No agent is working right now.`;
+  if (activeSeats >= configuredAgentLimit) {
+    return `${setting} Every seat is busy, so the next ready node waits for one to finish.`;
+  }
+  return `${setting} ${String(activeSeats)} of them ${activeSeats === 1 ? "is" : "are"} working.`;
 }

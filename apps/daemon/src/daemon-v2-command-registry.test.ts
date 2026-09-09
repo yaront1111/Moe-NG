@@ -264,7 +264,14 @@ describe("daemon /2 command registry", () => {
     } satisfies DaemonV2CommandPortOptions;
     try {
       const ports = createDaemonV2CommandPorts(options);
-      expect(ports.registry.size).toBe(45);
+      // FOURTH roster: the /2 plane composes from the SAME `PAYLOAD_KEYS`, so a kind wired on
+      // the /1 side moves this count too. 52 -> 53 for `design.submit` (task-06ac0da1); the /2
+      // registry stays one short of /1's 54 because it withholds `planning.submit_decomposition`
+      // until that kind's /2 service lands.
+      // 61 -> 62 for `monitoring.set_probe_interval` (task-eb37494e), which is wired on the
+      // shared PAYLOAD_KEYS and therefore reaches this plane too.
+      // 62 -> 63 for `monitoring.retire_environment` (task-509f0437), on the same shared table.
+      expect(ports.registry.size).toBe(63);
       expect(reads).toEqual({ clock: 1, operatorPrincipalId: 1, projectId: 1, store: 1 });
     } finally {
       closeStores();

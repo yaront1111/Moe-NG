@@ -12,19 +12,59 @@ const REQUEST_TIMEOUT_MS = 15_000;
 export const SESSION_LIVENESS = ["CLOSED", "EXPIRED", "LIVE"] as const;
 export type SessionLiveness = (typeof SESSION_LIVENESS)[number];
 
+/**
+ * What the daemon STATED about ONE seat. `providerAtStart` and `agentVersionAtStart` are what
+ * the WRAPPER measured when it spawned this seat and wrote down — second-hand facts about the
+ * past, never a live reading, which is why both names end in `AtStart`. Either can be the
+ * daemon's stated unknown; the browser shapes them verbatim and never substitutes a default.
+ */
 export interface SessionView {
+  readonly agentVersionAtStart: string;
   readonly capabilities: readonly string[];
   readonly expiresAt: string;
   readonly holding: readonly string[];
   readonly liveness: SessionLiveness;
   readonly principalId: string;
+  readonly providerAtStart: string;
   readonly sessionId: string;
   readonly status: "CLOSED" | "OPEN";
+}
+
+/**
+ * THE ONE STATED UNKNOWN the daemon publishes when nobody measured a seat's start, mirrored
+ * here so a screen can ask "is this a reading or an absence?" without matching a bare literal.
+ * Kept in step with `SEAT_FACT_UNMEASURED` in apps/daemon/src/orchestrator/seat-start-contracts.ts.
+ */
+export const SEAT_FACT_UNMEASURED = "UNKNOWN";
+
+/**
+ * What the daemon STATED about concurrency. `configuredAgentLimit` is the agent limit the
+ * daemon process was launched with — configured, not a live measurement of the wrapper;
+ * `activeSeats` is live seats holding work at the read's clock. Shaped verbatim: the
+ * browser adds no interpretation of its own.
+ */
+export interface SessionsConcurrency {
+  readonly activeSeats: number;
+  readonly configuredAgentLimit: number;
+}
+
+/**
+ * What the daemon STATED about the agent provider. `configured` is the provider this
+ * PROJECT is configured to staff seats with — the daemon's own env plus its durable
+ * project setting, never a measurement of what the wrapper actually spawned, and never a
+ * per-goal override (that read is project-scoped). `envOverride` says MOE_AGENT_COMMAND in
+ * the daemon's environment is what decided it. Shaped verbatim: no interpretation here.
+ */
+export interface SessionsAgentProvider {
+  readonly configured: string;
+  readonly envOverride: boolean;
 }
 
 export type SessionsOutcome =
   | {
     readonly status: "SESSIONS";
+    readonly agentProvider: SessionsAgentProvider;
+    readonly concurrency: SessionsConcurrency;
     readonly readAt: string;
     readonly sessions: readonly SessionView[];
     readonly totals: { readonly closed: number; readonly expired: number; readonly live: number };
@@ -88,29 +128,57 @@ const count = (value: unknown): value is number => typeof value === "number" && 
 const stringList = (value: unknown): readonly string[] | null =>
   Array.isArray(value) && value.every((entry) => typeof entry === "string") ? Object.freeze([...(value as string[])]) : null;
 
+/**
+ * ONE SEAT, key for key. Exported for the same reason `SESSIONS_FRAME_KEYS` is: this decode is
+ * EXACT-ARITY too, so a PER-SEAT member added on the daemon and not here does not degrade the
+ * Seats screen, it BLANKS it — `sessionOf` returns null and the whole frame becomes an ERROR.
+ */
+export const SESSION_KEYS = [
+  "agentVersionAtStart", "capabilities", "expiresAt", "holding", "liveness", "principalId",
+  "providerAtStart", "sessionId", "status",
+] as const;
+
 function sessionOf(value: unknown): SessionView | null {
-  const record = exactDataRecord(value, ["capabilities", "expiresAt", "holding", "liveness", "principalId", "sessionId", "status"]);
+  const record = exactDataRecord(value, SESSION_KEYS);
+  // `providerAtStart` and `agentVersionAtStart` are STRINGS, checked as strings: a truthiness
+  // test would accept `0`, `false` or `[]` and render an absence as if it were a reading. The
+  // daemon states its unknown as a word, so "empty" is never a value this decode may accept.
   if (record === null || !nonEmptyString(record.expiresAt) || !nonEmptyString(record.principalId) || !nonEmptyString(record.sessionId)
+    || !nonEmptyString(record.providerAtStart) || !nonEmptyString(record.agentVersionAtStart)
     || (record.status !== "CLOSED" && record.status !== "OPEN") || typeof record.liveness !== "string"
     || !(SESSION_LIVENESS as readonly string[]).includes(record.liveness)) return null;
   const capabilities = stringList(record.capabilities);
   const holding = stringList(record.holding);
   if (capabilities === null || holding === null) return null;
   return Object.freeze({
-    capabilities, expiresAt: record.expiresAt, holding, liveness: record.liveness as SessionLiveness,
-    principalId: record.principalId, sessionId: record.sessionId, status: record.status,
+    agentVersionAtStart: record.agentVersionAtStart, capabilities, expiresAt: record.expiresAt,
+    holding, liveness: record.liveness as SessionLiveness, principalId: record.principalId,
+    providerAtStart: record.providerAtStart, sessionId: record.sessionId, status: record.status,
   });
 }
+
+/**
+ * The daemon's SESSIONS frame, key for key. Exported so a test can hold it against the
+ * daemon's own `SessionsView` members: this decode is EXACT-ARITY, so a member added on
+ * one side and not the other does not degrade the Seats screen, it BLANKS it.
+ */
+export const SESSIONS_FRAME_KEYS = ["agentProvider", "concurrency", "outcome", "readAt", "sessions", "totals", "unreadable"] as const;
 
 /** Maps only an exact daemon SESSIONS frame; every other answer is REFUSED or ERROR. PURE. */
 export function mapSessionsAnswer(status: number, response: unknown): SessionsOutcome {
   const refusal = refusalFrom(response);
   if (refusal !== null) return refusal;
   if (status !== 200) return invalidResponse();
-  const record = exactDataRecord(response, ["outcome", "readAt", "sessions", "totals", "unreadable"]);
+  const record = exactDataRecord(response, SESSIONS_FRAME_KEYS);
   if (record === null || record.outcome !== "SESSIONS" || !nonEmptyString(record.readAt) || typeof record.unreadable !== "boolean") return invalidResponse();
   const totals = exactDataRecord(record.totals, ["closed", "expired", "live"]);
   if (totals === null || !count(totals.closed) || !count(totals.expired) || !count(totals.live) || !Array.isArray(record.sessions)) return invalidResponse();
+  const concurrency = exactDataRecord(record.concurrency, ["activeSeats", "configuredAgentLimit"]);
+  if (concurrency === null || !count(concurrency.activeSeats) || !count(concurrency.configuredAgentLimit)) return invalidResponse();
+  // `envOverride` is a FLAG, so it is type-checked as one: a truthiness test would let the
+  // string "false" through and render an override that the daemon never claimed.
+  const agentProvider = exactDataRecord(record.agentProvider, ["configured", "envOverride"]);
+  if (agentProvider === null || !nonEmptyString(agentProvider.configured) || typeof agentProvider.envOverride !== "boolean") return invalidResponse();
   const sessions: SessionView[] = [];
   for (const raw of record.sessions) {
     const session = sessionOf(raw);
@@ -118,6 +186,8 @@ export function mapSessionsAnswer(status: number, response: unknown): SessionsOu
     sessions.push(session);
   }
   return Object.freeze({
+    agentProvider: Object.freeze({ configured: agentProvider.configured, envOverride: agentProvider.envOverride }),
+    concurrency: Object.freeze({ activeSeats: concurrency.activeSeats, configuredAgentLimit: concurrency.configuredAgentLimit }),
     readAt: record.readAt, sessions: Object.freeze(sessions), status: "SESSIONS" as const,
     totals: Object.freeze({ closed: totals.closed, expired: totals.expired, live: totals.live }), unreadable: record.unreadable,
   });

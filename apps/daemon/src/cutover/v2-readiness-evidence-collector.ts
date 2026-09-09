@@ -1,4 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
+
+/** Captured gate output bound: a full e2e run is several MiB, far past spawnSync's 1 MiB default. */
+export const GATE_OUTPUT_MAX_BYTES = 64 * 1024 * 1024;
 import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -67,10 +70,20 @@ export function createSystemEvidencePorts(): V2ReadinessEvidencePorts {
     readFile: (path) => new Uint8Array(readFileSync(path)),
     removeDirectory: (path) => { rmSync(path, { force: true, recursive: true }); },
     runGate: (script, cwd) => {
+      // A full e2e run prints well past spawnSync's 1 MiB default; at that bound the child was
+      // SIGTERMed with ENOBUFS, the count line was cut off, and a GREEN gate graded RED.
       const run = spawnSync("pnpm", ["run", script], {
-        cwd, encoding: "utf8", env: { ...process.env, NO_COLOR: "1" }, shell: process.platform === "win32",
+        cwd, encoding: "utf8", env: { ...process.env, NO_COLOR: "1" }, maxBuffer: GATE_OUTPUT_MAX_BYTES,
+        shell: process.platform === "win32",
       });
-      return { exitCode: run.status ?? 1, output: `${run.stdout ?? ""}${run.stderr ?? ""}` };
+      const output = `${run.stdout ?? ""}${run.stderr ?? ""}`;
+      // No exit status is an UNOBSERVED outcome, not exit 1: name the reason and let the
+      // producer refuse the evidence as unreadable instead of reporting a failing gate.
+      if (run.error !== undefined || run.status === null) {
+        const code = (run.error as NodeJS.ErrnoException | undefined)?.code;
+        return { exitCode: null, failure: code ?? run.signal ?? "no exit status", output };
+      }
+      return { exitCode: run.status, output };
     },
     temporaryDirectory: (prefix) => mkdtempSync(join(tmpdir(), prefix)),
     writeFile: (path, bytes) => { writeFileSync(path, bytes, { flag: "wx" }); },

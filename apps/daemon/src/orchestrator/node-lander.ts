@@ -1,13 +1,22 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import type { SqliteEventStore } from "@moe/store";
 
 import type { GitLandingPort } from "../repository/git-landing-port.js";
 import {
-  readLandingReceipt, readLatestLandingBaseline, recordLandingBaseline, recordLandingReceipt,
+  readEarliestLandingBaseline, readLandingBaseline, readLandingReceipt, readLatestLandingBaseline,
+  recordLandingBaseline, recordLandingReceipt,
 } from "../repository/landing-ledger.js";
-import { landingReceiptId } from "../repository/landing-receipt-contracts.js";
+import { DELETED_BLOB, landingReceiptId } from "../repository/landing-receipt-contracts.js";
 import type { LandingBaselineEntry, LandingRefusal } from "../repository/landing-receipt-contracts.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import type { NodeMission } from "./agent-wrapper.js";
+import { untrackedImports } from "./landing-imports.js";
+import { checkLandingVerification } from "./node-lander-verification.js";
+import type { VerifiedWorkspaceBinding, VerifiedWorkspacePort } from "../repository/verified-workspace-contracts.js";
+import type { RepositoryExecutionHandle } from "../repository/repository-execution-contracts.js";
+import { commitJournaledLanding, landingJournalGate } from "./node-lander-journal.js";
 
 /**
  * THE LANDER: once the daemon has accepted a node (a verifier receipt consumed
@@ -28,6 +37,12 @@ import type { NodeMission } from "./agent-wrapper.js";
  */
 
 export interface NodeLanderConfig {
+  readonly reservationHandle?: RepositoryExecutionHandle;
+  readonly verifiedWorkspace?: VerifiedWorkspacePort;
+  /** Test injection; production reads the exact accepted verifier receipt from the store. */
+  readonly readVerifiedBinding?: (nodeRef: string, receiptId: string) => VerifiedWorkspaceBinding | null;
+  /** Original reservation baseline; absent keeps the legacy test composition readable. */
+  readonly baselineId?: (nodeRef: string) => string | null;
   readonly clock?: () => string;
   readonly git: GitLandingPort;
   readonly nodeMission: (nodeRef: string) => NodeMission | null;
@@ -35,10 +50,13 @@ export interface NodeLanderConfig {
   readonly projectId: string;
   /** INJECTED in tests; production reads the node's review ledger. */
   readonly readAccepted?: (nodeRef: string) => { readonly verifierReceiptId: string } | null;
+  /** A root-relative path's current text, or null; production reads the workspace. */
+  readonly readText?: (root: string, path: string) => string | null;
   readonly store: SqliteEventStore;
 }
 
 export interface LanderReport {
+  readonly baselineId?: string;
   readonly detail: string;
   readonly nodeRef: string;
   readonly outcome: "BASELINE_RECORDED" | "COMMITTED" | "REFUSED" | string;
@@ -50,6 +68,26 @@ function subjectLine(title: string): string {
   const first = title.split(/\r?\n/u)[0]?.trim() ?? "";
   const text = first === "" ? "Moe: landed a verified node" : first;
   return text.length <= SUBJECT_MAX ? text : `${text.slice(0, SUBJECT_MAX - 1)}…`;
+}
+
+/**
+ * The node's OWN earlier attempts' files: untracked now, unchanged since the latest baseline
+ * (so not "delivered" by this seat), and absent from the node's FIRST baseline. A seat that
+ * dies mid-node leaves its files in the tree; the re-staffed seat finds them, writes nothing,
+ * and the latest baseline calls them operator dirt — kernel-redaction on UnAI (2026-09-05) was
+ * verified ACCEPTED and then refused NOTHING_TO_COMMIT, leaving HEAD without it. Files the
+ * operator had before the node was ever staffed stay the operator's.
+ */
+export function earlierAttemptPaths(
+  first: readonly LandingBaselineEntry[], latest: readonly LandingBaselineEntry[],
+  observed: readonly LandingBaselineEntry[], untracked: ReadonlySet<string>,
+): readonly string[] {
+  const before = new Set(first.map((entry) => entry.path));
+  const staffed = new Map(latest.map((entry) => [entry.path, entry.blobId]));
+  return observed
+    .filter((entry) => entry.blobId !== DELETED_BLOB && untracked.has(entry.path)
+      && !before.has(entry.path) && staffed.get(entry.path) === entry.blobId)
+    .map((entry) => entry.path);
 }
 
 /** The paths whose content the seat changed: present now, and not identical in the baseline. */
@@ -75,8 +113,17 @@ export function landingMessage(
   ].join("\n");
 }
 
+function readWorkspaceText(root: string, path: string): string | null {
+  try {
+    return readFileSync(join(root, path), "utf8");
+  } catch {
+    return null;
+  }
+}
+
 export function createNodeLander(config: NodeLanderConfig) {
   const clock = config.clock ?? ((): string => new Date().toISOString());
+  const readText = config.readText ?? readWorkspaceText;
   const readAccepted = config.readAccepted ?? ((nodeRef: string) => {
     const ledger = readReviewLedger(config.store, config.projectId, nodeRef);
     return ledger.accepted === undefined
@@ -98,6 +145,7 @@ export function createNodeLander(config: NodeLanderConfig) {
     });
     if (!recorded.ok) return { detail: recorded.code, nodeRef, outcome: recorded.code };
     return {
+      baselineId: recorded.baselineId,
       detail: `${String(observed.observation.entries.length)} dirty path(s) before the seat`,
       nodeRef,
       outcome: "BASELINE_RECORDED",
@@ -125,9 +173,15 @@ export function createNodeLander(config: NodeLanderConfig) {
     if (existing.code === "LANDING_RECEIPT_INVALID") {
       return { detail: existing.code, nodeRef, outcome: existing.code };
     }
+    const journalCode = landingJournalGate(config.store, config.reservationHandle);
+    if (journalCode !== null) return { detail: journalCode, nodeRef, outcome: journalCode };
     const brief = config.nodeMission(nodeRef);
     if (brief === null) return { detail: "no spec brief", nodeRef, outcome: "NODE_BRIEF_MISSING" };
-    const before = readLatestLandingBaseline(config.store, config.projectId, nodeRef);
+    const selectedBaseline = config.baselineId?.(nodeRef);
+    const before = config.baselineId === undefined
+      ? readLatestLandingBaseline(config.store, config.projectId, nodeRef)
+      : selectedBaseline === null || selectedBaseline === undefined ? null
+        : readLandingBaseline(config.store, config.projectId, nodeRef, selectedBaseline);
     if (before === null) {
       return refuse(nodeRef, brief.workspace, verifierReceiptId, {
         code: "LANDING_BASELINE_MISSING",
@@ -144,20 +198,43 @@ export function createNodeLander(config: NodeLanderConfig) {
       // A git failure that is not structural is reported, not recorded: the next pass retries.
       return { detail: observed.detail, nodeRef, outcome: observed.code };
     }
-    const paths = deliveredPaths(before.entries, observed.observation.entries);
-    if (paths.length === 0) {
+    const untracked = new Set(observed.observation.untracked ?? []);
+    const first = readEarliestLandingBaseline(config.store, config.projectId, nodeRef) ?? before;
+    const earlier = earlierAttemptPaths(
+      first.entries, before.entries, observed.observation.entries, untracked,
+    );
+    const delivered = [...deliveredPaths(before.entries, observed.observation.entries), ...earlier];
+    if (delivered.length === 0) {
       return refuse(nodeRef, brief.workspace, verifierReceiptId, {
         code: "NOTHING_TO_COMMIT", detail: "no path in the workspace differs from the staffing baseline",
       });
     }
+    // Untracked modules the delivered code imports ride the same commit — see landing-imports.ts.
+    // The verifier ran with them present, so the state it accepted is the state HEAD gets.
+    const { root } = observed.observation;
+    const carried = untrackedImports(delivered, untracked, (path) => readText(root, path));
+    const paths = [...delivered, ...carried];
     const message = landingMessage(brief, nodeRef, verifierReceiptId);
-    const committed = await config.git.commit(brief.workspace, paths, message);
+    const checked = await checkLandingVerification({
+      brief, nodeRef, port: config.verifiedWorkspace, projectId: config.projectId,
+      readBinding: config.readVerifiedBinding, receiptId: verifierReceiptId, store: config.store,
+    });
+    if (!checked.ok) return refuse(nodeRef, brief.workspace, verifierReceiptId, { code: checked.code, detail: checked.detail });
+    const committed = await commitJournaledLanding({ handle: config.reservationHandle, store: config.store,
+      port: checked.port, workspace: brief.workspace, paths, message, binding: checked.binding, verifierReceiptId });
     if (!committed.ok) {
+      if (committed.code.startsWith("REPOSITORY_RECOVERY_")) return { detail: committed.detail, nodeRef, outcome: committed.code };
+      // Only the strict port's no-effect refusal permits retry. Error prose cannot prove
+      // whether a commit or ref update happened before the failure.
+      if (committed.code === "VERIFIED_WORKSPACE_INDEX_LOCKED") {
+        return { detail: committed.detail, nodeRef, outcome: "GIT_INDEX_LOCKED" };
+      }
       return refuse(nodeRef, brief.workspace, verifierReceiptId, {
         code: committed.code, detail: committed.detail,
       });
     }
-    const recorded = recordLandingReceipt(config.store, {
+    let recorded: ReturnType<typeof recordLandingReceipt>;
+    try { recorded = recordLandingReceipt(config.store, {
       commit: {
         branch: committed.receipt.branch, files: paths, message,
         parentSha: committed.receipt.parentSha, sha: committed.receipt.sha,
@@ -168,10 +245,12 @@ export function createNodeLander(config: NodeLanderConfig) {
       subjectRef: nodeRef,
       verifierReceiptId,
       workspace: brief.workspace,
-    });
+    }); } catch { return { detail: "LANDING_RECEIPT_INVALID", nodeRef, outcome: "LANDING_RECEIPT_INVALID" }; }
     if (!recorded.ok) return { detail: recorded.code, nodeRef, outcome: recorded.code };
+    const imports = carried.length === 0 ? "" : `, ${String(carried.length)} imported untracked file(s) carried`;
+    const attempts = earlier.length === 0 ? "" : `, ${String(earlier.length)} from an earlier attempt`;
     return {
-      detail: `${committed.receipt.sha.slice(0, 10)} on ${committed.receipt.branch}, ${String(paths.length)} file(s)`,
+      detail: `${committed.receipt.sha.slice(0, 10)} on ${committed.receipt.branch}, ${String(paths.length)} file(s)${imports}${attempts}`,
       nodeRef,
       outcome: "COMMITTED",
     };

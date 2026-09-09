@@ -155,6 +155,25 @@ describe("bytes the decoder refuses rather than guesses", () => {
     expect(report.refusals.length).toBe(2);
   });
 
+  it("refuses a top-level directory named after an Object.prototype member", () => {
+    // `in` on the family table answered true for these, so the file decoded with
+    // Object.prototype.toString (or Object.prototype itself) as its kind instead of refusing.
+    const report = decode(tree([
+      ...GOOD,
+      ["constructor/x.json", '{"legacyId":"c","owner":"me"}'],
+      ["toString/y.json", '{"legacyId":"t","owner":"me"}'],
+      ["hasOwnProperty/z.json", '{"legacyId":"h","owner":"me"}'],
+    ]));
+
+    for (const path of ["constructor/x.json", "toString/y.json", "hasOwnProperty/z.json"]) {
+      expect(refusalAt(report, path).refusal.code).toBe("IMPORT_SOURCE_UNSUPPORTED");
+      expect(refusalAt(report, path).refusal.layer).toBe("DECODE");
+    }
+    expect(report.records.length).toBe(3);
+    expect(report.records.every((record) => typeof record.kind === "string")).toBe(true);
+    expect(report.refusals.length).toBe(3);
+  });
+
   it("refuses malformed bytes and a non-record document with the same exact code", () => {
     const report = decode(tree([
       ["tasks/truncated.json", '{"legacyId":"t","owner":'],
@@ -174,6 +193,23 @@ describe("bytes the decoder refuses rather than guesses", () => {
     }
     expect(report.records).toEqual([]);
     expect(report.refusals.length).toBe(4);
+  });
+
+  it("refuses a non-canonical time at DECODE so one file cannot abort the whole import", () => {
+    // `provenance.sourceTime` is compared lexically and read by the store's clock: a
+    // second-precision or offset time used to decode fine and then fail every sibling at APPLY.
+    const report = decode(tree([
+      ...GOOD,
+      ["tasks/seconds.json", '{"legacyId":"s","time":"2026-01-01T00:00:00Z"}'],
+      ["tasks/offset.json", '{"legacyId":"o","time":"2026-01-01T02:00:00.000+02:00"}'],
+      ["tasks/impossible.json", '{"legacyId":"i","time":"2026-13-45T00:00:00.000Z"}'],
+    ]));
+    for (const path of ["tasks/seconds.json", "tasks/offset.json", "tasks/impossible.json"]) {
+      expect(refusalAt(report, path).refusal.code).toBe("IMPORT_SOURCE_MALFORMED");
+      expect(refusalAt(report, path).refusal.layer).toBe("DECODE");
+    }
+    expect(report.records.length).toBe(3);
+    expect(report.refusals.length).toBe(3);
   });
 
   it("refuses bytes that admit two readings rather than picking one", () => {

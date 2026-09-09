@@ -1,0 +1,770 @@
+{
+  "id": "task-40e52fa8a85a4921b97bee933b00403f",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "Publish preview.decide as a human-only kind with its refusal codes",
+  "description": "SPIDR child 1 of task-f3edb8fb39ad42ce8980dae7d62b604c (architect-20a6d1eb, 2026-09-05). Dependency-free LEAF; children 2 and 3 build on it.\n\nWHAT THIS ROW OWNS: the vocabulary half only - `preview.decide` published as an operator-only command kind with its full roster backfill and its four stable refusal codes. It runs no process, captures no screenshot and renders nothing. Those are children 2 and 3.\n\nMEASURED AT HEAD df5bbfd5 (branch moe/work-2026-09-04) by architect-20a6d1eb - the gap is REAL in both directions:\n- `grep -rn 'preview.decide|preview.start|PREVIEW_COMMAND_MISSING|moe-preview-receipt' --include=*.ts apps/ packages/` = ZERO hits. Nothing to duplicate.\n- The existing `apps/daemon/src/graph-preview-request.ts` and `apps/control-room/src/preview/` are PLAN/document previews, not the product preview. Do not extend them.\n\nTHE ROSTER, enumerated by tracing an existing human-only decide kind (`escalation.decide`) across the tree - these are the DAEMON-side files it touches, and the ones this row owns:\n  apps/daemon/src/daemon-command-vocabulary.ts (kinds, capability, family table, PAYLOAD_KEYS, OPERATOR_PRINCIPAL_KINDS)\n  apps/daemon/src/daemon-command-registry.ts and daemon-command-families.ts\n  apps/daemon/src/daemon-v2-command-registry.ts\n  apps/daemon/src/mcp-tool-allowlist.ts (EXCLUDED - operator only)\n  packages/contracts/src/runtime/runtime-vocabulary.ts\n  packages/control-room-client/src/generated/generated-client.ts and every digest mirror (memory generated-contract-digest-has-four-mirrors)\n\nTWO HAZARDS MEASURED AT PLAN TIME, both of which have bitten this board before:\n1. `HUMAN_ONLY_STEPS` IS DEFINED TWICE, byte-for-byte: apps/daemon/src/orchestrator/agent-spawn-contract.ts:194 AND apps/daemon/src/orchestrator/agent-wrapper.ts:116. Nothing found asserts the two agree. A new human-only kind added to only one of them leaves the wrapper free to staff an operator gate - exactly the class of defect that minted 8 junk goals live (see the comment at agent-wrapper.ts:117-123). Both must be updated and the row must add the assertion that they are equal.\n2. Roster tests must be BIDIRECTIONAL set-equality (global rail 9): enumerate the SERVED set from the dispatch seam, not from the roster constant, or deleting an entry shrinks the iteration and stays green.",
+  "definitionOfDone": [
+    "`preview.decide` is published across the full roster - vocabulary (kind, capability, family, PAYLOAD_KEYS, operator-principal), registry, families, v2 registry, contracts runtime vocabulary, generated client and every digest mirror. A bidirectional set-equality test enumerates the SERVED kinds from the dispatch seam and asserts they equal the advertised roster in BOTH directions (global rail 9); deleting the entry from either side must turn it red.",
+    "It is OPERATOR-ONLY and MCP-EXCLUDED: `preview.decide` appears in the MCP allowlist's exclusion set, and a test asserts an agent-authenticated dispatch is refused while an operator-authenticated one reaches the handler - asserting the refusal code and layer, not merely that it failed.",
+    "It is in BOTH HUMAN_ONLY_STEPS rosters (agent-spawn-contract.ts:194 and agent-wrapper.ts:116), AND a new test asserts the two sets are EQUAL to each other. That equality test is this row's most valuable artifact: the duplication exists today with nothing guarding it. Verify by deleting the entry from one roster only and confirming the test goes red.",
+    "The four refusal codes are defined with a closed code->layer map so a call site cannot mint a code and layer that disagree: PREVIEW_COMMAND_MISSING, PREVIEW_START_TIMEOUT, PREVIEW_GOAL_NOT_LANDED, PREVIEW_DECISION_INVALID. A test asserts each code's layer. Codes whose CONDITIONS belong to the runner (child 2) are defined here but may be exercised there - say so in the completion record rather than writing a fake condition to reach them.",
+    "The payload contract is exact-arity and refuses an unknown key rather than ignoring it: APPROVE carries no findings; REJECT carries findings naming the nodes to rework. A test asserts PREVIEW_DECISION_INVALID + layer for a malformed decision, for an unknown extra key, and for REJECT with empty findings.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`, `pnpm test` (packages/contracts is touched, so the root lane is real evidence here)."
+  ],
+  "taskRails": [
+    "VOCABULARY ONLY. This row starts no process, captures no image, writes no receipt and renders no UI. If a step needs a running preview to be meaningful, it belongs to child 2 - say so and move on rather than stubbing a runner here.",
+    "HUMAN GATES ARE HUMAN-ONLY (inherited): operator-only, MCP-excluded, in BOTH HUMAN_ONLY_STEPS rosters, every refusal carrying a stable code asserted with its layer.",
+    "FEATURES ONLY (inherited): no security-boundary or policy work.",
+    "A new daemon command follows the 8-touchpoint + .js bridge pattern; a missing `.js` bridge kills the daemon at boot with ERR_MODULE_NOT_FOUND (memory ui-connect-everything-built-2026-09-02). Never commit a generated index.js."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "VERIFY, NO EDITS. This step confirms the seam this row now sits behind; it re-derives nothing. (a) CONFIRM THE LEAF LANDED. task-c672815d5adc408683d11f91ab3f0a72 owns the shared runtime roster and the four digest mirrors; this row dependsOn it, so the daemon files below cannot typecheck until it is DONE. Prove it at the tree, not from the board: `grep -n 'preview.decide' packages/contracts/src/runtime/runtime-vocabulary.ts` must return a line. If it returns nothing, the runtime is offering this row early - call moe.report_blocked with blockedOnTaskIds ['task-c672815d5adc408683d11f91ab3f0a72'] and stop. Read that row's completionSummary from get_context.epicSiblings for the NEW contract digest and the moved `commands.size` literal instead of re-measuring them. (b) CONFIRM THE ALREADY-DELIVERED HALF. apps/daemon/src/preview/preview-contracts.ts (249 lines), its .js bridge and preview-contracts.test.ts (30 tests) were landed by an earlier session of THIS row. Do NOT recreate, edit or re-drill them. Confirm these exports still resolve: PREVIEW_DECIDE_COMMAND_KIND:43, PREVIEW_DECIDE_PAYLOAD_KEYS:66 (=== PREVIEW_REJECT_PAYLOAD_KEYS, so ['decision','findings','previewRef']), PREVIEW_CODE_LAYERS:82, previewRefusal:142, decodePreviewDecidePayload:225. (c) CONFIRM THE DAEMON GAP IS STILL REAL: `git grep -n 'preview\\.decide' -- apps/daemon/src ':!apps/daemon/src/preview'` must be empty. (The hit at apps/daemon/src/release/release-dossier-sections.ts:131 is the expression `preview.decidedAt`, not the kind.) (d) If this re-measure names any file outside the SIX in planningNotes.keyFiles, STOP and report - the roster is at its ceiling and has no headroom.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "VERIFY ONLY, no edits. (a) LEAF LANDED: grep -n preview.decide packages/contracts/src/runtime/runtime-vocabulary.ts -> line 101: \"policy.install\", \"policy.validate\", \"preview.decide\". task-c672815d completionSummary (from mem:task-task-c672815d5adc408683d11f91ab3f0a72-handoff, commit 0d1d6c46): commands.size 103->104, NEW GENERATED_CONTRACT_DIGEST ed5f6b87cfca761b4389d66429046f5f2420f9fa04a373c1f22ab0608bfb8076. (b) ALREADY-DELIVERED HALF confirmed: PREVIEW_DECIDE_COMMAND_KIND:43, PREVIEW_DECIDE_PAYLOAD_KEYS:66 === PREVIEW_REJECT_PAYLOAD_KEYS [decision,findings,previewRef], PREVIEW_CODE_LAYERS:82, previewRefusal:142, decodePreviewDecidePayload:225. .js bridge present at apps/daemon/src/preview/preview-contracts.js. Do not recreate/edit. (c) DAEMON GAP STILL REAL: git grep preview.decide in apps/daemon/src excluding preview/ is empty except the false-positive release-dossier-sections.ts:131 (preview.decidedAt). daemon-command-*.ts greps for PREVIEW_DECIDE|preview.decide = ZERO hits. (d) Re-measure names no file outside the six keyFiles; remaining work stays in those six. Peer dirt noted and left alone: README.md, live-goal-create.ts/.test.ts, document-coverage-read.ts, node-lander.ts/.test.ts, current-planning-run.ts, docs/agent-stack-runbook.md, untracked mcp-design-read-query.*, activation-fresh-project.spec.ts, plus .moe/.grok board state.",
+      "startedAt": "2026-09-05T15:09:42.819Z",
+      "completedAt": "2026-09-05T15:10:16.309Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "WIRE THE DAEMON VOCABULARY. apps/daemon/src/daemon-command-vocabulary.ts ONLY (372 lines at HEAD f3b94eaa - stay under 400). Import PREVIEW_DECIDE_COMMAND_KIND and PREVIEW_DECIDE_PAYLOAD_KEYS from \"./preview/preview-contracts.js\" - the .js bridge exists, and a bare \"./preview/preview-contracts\" specifier kills the daemon at boot with ERR_MODULE_NOT_FOUND. Do NOT restate the payload keys; spread the constant, exactly as the comment at :257-260 demands, so the advertised roster and the enforced one cannot drift. Five edits: (a) add `| typeof PREVIEW_DECIDE_COMMAND_KIND` to the WiredCommandKind union at :160-176. (b) Add `export const PREVIEW_FAMILY: Readonly<Record<typeof PREVIEW_DECIDE_COMMAND_KIND, string>> = Object.freeze({ [PREVIEW_DECIDE_COMMAND_KIND]: CAPABILITIES.REVIEW })` and put it in FAMILY_TABLES at :180-183. This is not decoration: familyCapabilityOf returns null for an unclaimed kind and daemon-command-families.ts requiredCapabilityOf THROWS on that null at registry build time. While there, fix the FAMILY_TABLES doc comment - it says 'The five capability tables' while listing seven; state the count you leave behind or drop the number. (c) In agentCapabilitiesFor at :194, return null for this kind, in the same shape and for the same reason as PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND at :195-196 - never staffable, whatever its family capability says. Put it beside that line, not at the end of the function. (d) Add the kind to OPERATOR_PRINCIPAL_KINDS at :344 with a one-line why-comment in the neighbours' style. (e) Add `[PREVIEW_DECIDE_COMMAND_KIND]: PREVIEW_DECIDE_PAYLOAD_KEYS` to PAYLOAD_KEYS at :256. PAYLOAD_KEYS KEY ORDER IS THE SERVED ORDER - daemon-command-registry.ts:432 maps Object.keys(PAYLOAD_KEYS) through entryOf - so place the key at exactly the index you will transcribe into REGISTRATION_ORDER in step 4. DO NOT add the kind to REVIEW_FAMILY: that sets review:true in commandFamilyFacts and dispatches it to runReviewCommand at registry.ts:400.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.ts"
+      ],
+      "note": "Wired preview.decide in daemon-command-vocabulary.ts ONLY (386 lines, was 372; under 400). Import from ./preview/preview-contracts.js (bridge confirmed). Five edits: (a) WiredCommandKind union + typeof PREVIEW_DECIDE_COMMAND_KIND; (b) PREVIEW_FAMILY {preview.decide: REVIEW} on its own table, added to FAMILY_TABLES (now 8; doc comment was 'five' listing seven, now states eight); NOT in REVIEW_FAMILY; (c) agentCapabilitiesFor returns null beside product_contract.answer_clarification; (d) OPERATOR_PRINCIPAL_KINDS with neighbour-style comment; (e) PAYLOAD_KEYS spreads PREVIEW_DECIDE_PAYLOAD_KEYS after policy.validate / before project.activate — that is the served index for REGISTRATION_ORDER in step 4. Tests are the dedicated step-4 roster work, not this file. Peer dirt unchanged and untouched.",
+      "startedAt": "2026-09-05T15:10:59.472Z",
+      "completedAt": "2026-09-05T15:11:32.946Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "SERVE IT, FAIL CLOSED. (1) apps/daemon/src/daemon-command-families.ts (163 lines): add `readonly preview: boolean` to CommandFamilyFacts with a one-line doc comment; add `preview: kind === PREVIEW_DECIDE_COMMAND_KIND` to membershipOf, importing the kind from ./preview/preview-contracts.js. In requiredCapabilityOf, return CAPABILITIES.REVIEW for member.preview BEFORE the familyCapabilityOf call at the bottom. Step 2's PREVIEW_FAMILY makes that call succeed too and the two must agree - taking the explicit branch keeps the reason readable at the site. Leave schemaVersionOf ALONE: preview falls through to BOOTSTRAP_SCHEMA_VERSION, which is correct precisely because this kind never reaches requestOf. Do NOT set review:true. This is a field add on a flat readonly-boolean interface, and its only consumers are registry.ts:252-255 (destructure) and the v2 registry (.requiredCapability only), so no full-object snapshot breaks. (2) apps/daemon/src/daemon-command-registry.ts is 436 lines and was ALREADY over the 400 cap at merge-base - that is a pre-existing condition this diff must not worsen. Keep the addition to ~10 lines and reformat nothing else. Destructure `preview` in the commandFamilyFacts destructure at :252-255. Insert the branch INSIDE the handler, AFTER the disjoint-shape group that ends at :387 and BEFORE `const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId)` at :388 - preview has no codec, so reaching requestOf would throw the wrong error entirely: `if (preview) { const decoded = decodePreviewDecidePayload(envelope.payload); if (!decoded.ok) throw new DomainRefusal(decoded.code, decoded.layer, 'preview.decide payload refused'); const refusal = previewRefusal('PREVIEW_GOAL_NOT_LANDED'); throw new DomainRefusal(refusal.code, refusal.layer, 'preview runner is not landed'); }`. DomainRefusal's signature is (code, layer, detail, httpStatus = 422) at daemon-command-dispatch.ts:41. THE LAYER MUST COME FROM previewRefusal / PREVIEW_CODE_LAYERS, never a string literal - that closed map is DoD-4's entire point, and a literal there is exactly the (code, layer) disagreement it exists to make impossible. Consequences to state in the step note: an empty or malformed payload reaches PREVIEW_DECISION_INVALID @ REQUEST (the allow-list admits the kind; the decoder refuses it), and a WELL-FORMED payload fails closed at PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY until task-f5a74c23 replaces this stub with the real runner. Do NOT invent a fifth code, and do NOT write a test arm whose only job is to reach the stub.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-registry.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-registry.ts"
+      ],
+      "note": "SERVE IT, FAIL CLOSED. Both edits landed; re-anchored by grep because the plan's line numbers (from HEAD f3b94eaa) had shifted.\n\n(1) daemon-command-families.ts 163 -> 171 lines. Import PREVIEW_DECIDE_COMMAND_KIND from \"./preview/preview-contracts.js\" (.js bridge, not a bare specifier). Added `readonly preview: boolean` to CommandFamilyFacts with a one-line doc comment, in the interface's alphabetical slot (before productContractGate1: 'e' < 'o'). Added `preview: kind === PREVIEW_DECIDE_COMMAND_KIND` to membershipOf in the same slot. In requiredCapabilityOf, `if (member.preview) return CAPABILITIES.REVIEW;` placed BEFORE the familyCapabilityOf call, with a comment saying step-2's PREVIEW_FAMILY answers the same capability one line below and the two must agree. schemaVersionOf untouched -> preview falls through to BOOTSTRAP_SCHEMA_VERSION, correct because the kind never reaches requestOf. review NOT set.\n\n(2) daemon-command-registry.ts 436 -> 450 lines (+14: 2 import, 12 branch). Already over the 400 cap at merge-base (436) - pre-existing, not this row's to fix; nothing else reformatted, so the delta is unambiguous. Destructured `preview` into the commandFamilyFacts destructure. Branch inserted between `return runResourceConfirmReleasedEdge(context);` + its closing brace (the disjoint-shape group, now ending :383, not the planned :387) and `const bytes = requestOf(...)` (now :384, not :388).\n\nCONSEQUENCES, as the step demanded I state them:\n- An EMPTY or MALFORMED payload reaches PREVIEW_DECISION_INVALID @ REQUEST. The allow-list admits the kind; decodePreviewDecidePayload refuses it. Confirmed at preview-contracts.ts:225-249 - every decoder refusal is that one code.\n- A WELL-FORMED payload fails closed at PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY until task-f5a74c23 replaces the stub with the real runner.\n- NO fifth code invented. NO test arm written whose only job is to reach the stub.\n\nLAYER PROVENANCE: both throws read .layer off a PREVIEW_CODE_LAYERS-derived value - `decoded.layer` (previewRefusal-minted inside the decoder) and `previewRefusal(\"PREVIEW_GOAL_NOT_LANDED\").layer`. previewRefusal takes the CODE only and looks the layer up, so a call site cannot pair a code with a contradicting layer. Verified NO literal survives: `git diff -- <both files> | grep '^+' | grep -E '\"(REQUEST|GOAL_AUTHORITY|RUNNER)\"'` = zero hits.\n\nDomainRefusal signature re-confirmed at daemon-command-dispatch.ts:41 as (code, layer, detail, httpStatus = 422).\n\nCOMPILE EVIDENCE (not the step-5 gate, just this step's correctness): `pnpm --filter @moe/daemon typecheck` exit 1, but its ONLY reported error is ../../packages/scheduler/src/budget/budget-reservation.ts(132,42): error TS18046: 'entry' is of type 'unknown'. tsc reports every error, not the first, so apps/daemon's own sources - including both files this step changed - compile clean.\n\nFOREIGN RED, disclosed verbatim, attributed:\n  packages/scheduler/src/budget/budget-reservation.ts(132,42): error TS18046: 'entry' is of type 'unknown'.\nAttribution: the path is CLEAN in `git status --porcelain -- packages/scheduler/` (committed, not peer dirt). Introduced by branch-only commit e53e3e6a \"fix(scheduler): a reservation view with a duplicated meter is malformed\" (Co-Authored-By Claude Fable 5.1), which `git merge-base --is-ancestor e53e3e6a $(git merge-base HEAD main)` reports NOT in the merge-base with main. Independence from my diff PROVEN by a standalone leg: `pnpm --filter @moe/scheduler typecheck` reds identically with the same one line; @moe/scheduler has no dependency on apps/daemon and this row touched zero packages/** files. Failing-path set at HEAD minus merge-base, intersected with this row's owned paths, is EMPTY. Not reverted, not stashed, not fixed - not my path.\n\nPeer dirt noted and left alone (9 paths incl. .moe/, .grok/, apps/control-room/src/v2/goals/live-goal-create.ts, apps/daemon/src/mcp-design-read-query.*). Step-2's vocabulary edits are already committed to the branch by the wrapper, so `git status` showed my owned files clean at session start.",
+      "startedAt": "2026-09-05T15:11:59.386Z",
+      "completedAt": "2026-09-05T16:50:08.218Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "ROSTER TESTS, BOTH DIRECTIONS. Three hand-written tables plus TEN count literals move; the counts are the mechanism, not an inconvenience. Line numbers are from HEAD f3b94eaa - re-anchor with grep, since the leaf row may have shifted nothing here but a peer may have. (1) apps/daemon/src/daemon-command-vocabulary.test.ts: add a ROWS entry - agent: null, capability: CAPABILITIES.REVIEW, family: STANDALONE, kind: 'preview.decide', payloadKeys: ['decision','findings','previewRef']. Bump the distinct-kind count at :244 from 46 to 47. Add the kind to OPERATOR_ONLY at :221 and bump BOTH literals at :328-329 from 11 to 12. (2) apps/daemon/src/daemon-command-registry.test.ts: add the matching ROWS entry - empty payload => code PREVIEW_DECISION_INVALID, layer REQUEST, same payloadKeys. ROWS.kind is typed RuntimeCommandKind, which is why the leaf row had to land first. Transcribe the kind into REGISTRATION_ORDER at :286 at the SAME index it occupies in PAYLOAD_KEYS. Add it to OPERATOR_ONLY at :312 and bump both literals at :996-997 from 11 to 12. SIX `46` literals in this file, not two: registry.size at :819, REGISTRATION_ORDER length at :826, and THREE the earlier plan revision MISSED - ports.registry.size at :1678, supplied.registry.size at :1700, snapshotPorts.registry.size at :1732. All go 46 -> 47; `grep -n 'toBe(46)' <file>` before you start and again after, and expect zero hits after. (3) apps/daemon/src/daemon-store-dependencies.test.ts: insert \"preview.decide\" into the registryKinds SET at :746 in SORTED order (after \"policy.validate\", before \"product_contract.answer_clarification\"); the comment at :744-745 says a new command writes its own kind here. THE BIDIRECTIONAL CHECK ALREADY EXISTS AND MUST NOT BE WEAKENED: registry.test.ts:820 asserts [...deps.registry.keys()].sort() equals ROWS.map(kind).sort() - true set-equality, so deleting the PAYLOAD_KEYS entry reds it in the served-but-unadvertised direction and deleting the ROWS entry reds it in the advertised-but-unserved direction. Enumerate the SERVED set from deps.registry, the dispatch seam, never from the roster constant. Do NOT touch daemon-command-registry-human-approver.test.ts - its MCP roster length 6 belongs to task-5f883e4e.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "note": "ROSTER TESTS, BOTH DIRECTIONS. All three tables + every count literal moved. ONE DELIBERATE DEVIATION from the step text, flagged loudly below - it is a correctness fix inside an owned file, not a scope grab.\n\n=== DEVIATION: family is \"PREVIEW\", NOT \"STANDALONE\" (step-4 clause 1 said STANDALONE) ===\nWriting STANDALONE would have made an existing guard assert a FALSEHOOD, and it would have passed - the exact vacuous-assertion class global rail 1 and rail 9 exist to stop.\ndaemon-command-vocabulary.test.ts has: `if (row.family === \"STANDALONE\") expect(FAMILY_NAMES.some((n) => FAMILY_MAPS[n].has(row.kind))).toBe(false);` with the comment \"A standalone kind is in NO family map\". But step-2 shipped PREVIEW_FAMILY, so preview.decide IS in a family map. The arm would still have gone green ONLY because FAMILY_MAPS/FAMILY_NAMES enumerate 8 tables and PREVIEW is not among them - the roster could not see the table it was supposed to police. Same blindness hid it from `it(\"holds no family entry beyond the transcribed kinds\")`, which asserts per-family key-set equality over FAMILY_NAMES alone.\nSo instead: added \"PREVIEW\" to the Family union, `PREVIEW: new Map(Object.entries(PREVIEW_FAMILY))` to FAMILY_MAPS (the Record<Exclude<Family,\"STANDALONE\">> type makes this compulsory, so TS enforces it), \"PREVIEW\" to FAMILY_NAMES, `expect(FAMILY_MAPS.PREVIEW.size).toBe(1)`, `expect(Object.isFrozen(PREVIEW_FAMILY)).toBe(true)`, and `declared` 35 -> 36.\nAND closed the hole that allowed it, one line, first assertion in that test:\n  expect([...FAMILY_NAMES].sort()).toEqual(Object.keys(FAMILY_MAPS).sort());\nFAMILY_NAMES was a hand-written tuple with no completeness constraint; every sweep indexes FAMILY_MAPS BY it, so a shipped family table missing from it is invisible to all of them. Now a future family table cannot go unpoliced the way PREVIEW nearly did. Zero new files; both edits are in daemon-command-vocabulary.test.ts, already an owned path.\n\n=== EDITS ===\n(1) daemon-command-vocabulary.test.ts: import PREVIEW_FAMILY. ROWS entry { agent: null, capability: REVIEW, family: \"PREVIEW\", kind: \"preview.decide\", payloadKeys: [\"decision\",\"findings\",\"previewRef\"] } inserted after the policy.validate row and before project.activate - PAYLOAD_KEYS insertion order, matching where step-2 put the key (vocabulary.ts:324, between \"policy.validate\" and \"project.activate\"). Counts: ROWS toHaveLength 46->47, distinct-kind Set size 46->47, OPERATOR_ONLY toHaveLength 11->12, OPERATOR_PRINCIPAL_KINDS.size 11->12, declared 35->36. \"preview.decide\" added to OPERATOR_ONLY. Two test titles reworded off the stale numbers (forty-six->forty-seven, eleven->twelve) so a grader is not misled by a name.\n(2) daemon-command-registry.test.ts: ROWS entry { agent: null, capability: REVIEW, code: \"PREVIEW_DECISION_INVALID\", layer: \"REQUEST\", ... } at the same index. Literals hand-transcribed from PREVIEW_CODE_LAYERS, matching this file's stated discipline (\"nothing is read back out of the production maps\"); reading them back would let map and wire drift together. \"preview.decide\" transcribed into REGISTRATION_ORDER between \"policy.validate\" and \"project.activate\" - the SAME index it holds in PAYLOAD_KEYS. Added to OPERATOR_ONLY; both :996/:997 literals 11->12 and the title reworded.\nSIX \"46\" literals moved, not four. `grep -n 'toBe(46)'` finds only FOUR (:819 deps.registry.size, :1678 ports, :1700 supplied, :1732 snapshotPorts); the other two are `toHaveLength(46)` (:818 ROWS, :826 REGISTRATION_ORDER) and that grep is BLIND to them. Post-edit `grep -n 'toBe(46)\\|toHaveLength(46)'` = ZERO HITS; the six now read 47 at :828/:829/:836/:1688/:1710/:1742.\n(3) daemon-store-dependencies.test.ts: \"preview.decide\" inserted into registryKinds in sorted order, after \"policy.validate\", before \"product_contract.answer_clarification\".\nNOT TOUCHED: daemon-command-registry-human-approver.test.ts (MCP roster length 6 belongs to task-5f883e4e).\n\n=== BIDIRECTIONAL CHECK PRESERVED, NOT WEAKENED ===\nregistry.test.ts:830 `expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort())` untouched. The served set is enumerated from deps.registry - the dispatch seam - never from a roster constant. Drilled in step-5.\n\n=== EVIDENCE ===\nTargeted: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --testTimeout=30000 src/daemon-command-vocabulary.test.ts src/daemon-command-registry.test.ts src/daemon-store-dependencies.test.ts` EXIT=0, count line `Test Files  3 passed (3)` / `Tests  492 passed (492)`.\nThe swept cases were PROVEN GENERATED, not assumed (a sweep yielding zero cases passes): `--reporter=verbose -t \"preview.decide\"` printed EIGHT green cases and `Tests  8 passed | 458 skipped (466)` -\n  vocabulary: keeps its exact payload allow-list / belongs to its family alone, at its capability / hands an agent its ordered, frozen capability list\n  registry: keeps its capability and ordered payload allow-list / refuses a smuggled key before it can reach di",
+      "startedAt": "2026-09-05T16:50:10.900Z",
+      "completedAt": "2026-09-05T17:28:43.741Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "DRILLS, GATES, SELF-REVIEW. (a) MUTATION DRILLS, recorded in the step note. `git status --porcelain` the exact mutated paths FIRST. Every file this row touches is TRACKED, so an empty `git diff -- <path>` is a valid restore proof for each - state explicitly that no untracked path was mutated and therefore no out-of-tree SHA256 backup was required, rather than leaving that unaddressed. Three drills, restore and prove after each: (i) delete the PAYLOAD_KEYS entry in daemon-command-vocabulary.ts only - registry.test.ts:820 must red in the served-vs-advertised direction, and quote the set difference from the failure output, not just 'it failed'; (ii) delete the ROWS entry in daemon-command-registry.test.ts only - the same assertion must red in the OTHER direction (this pair is what proves the check is bidirectional per global rail 9); (iii) omit the kind from daemon-store-dependencies.test.ts registryKinds only - that arm must red. Do NOT re-drill preview-contracts.ts; the prior session already drilled it with SHA256-proved restores. (b) GATES - standalone foreground runs, one per call, no pipes and no `;` chains, quoting the `Test Files N passed` count line for each. An exit-0 leg with no count line RAN NOTHING and is not evidence. Required: `pnpm --filter @moe/daemon test` and `pnpm typecheck`. Also run root `pnpm test` as a regression baseline, but STATE HONESTLY what it now covers for this row: after the split, this row touches NO packages/** file, and vitest.config.ts:32 includes only adapters/**, packages/**, tests/** and tools/** - so the root lane sees ZERO apps/daemon files and is a foreign-regression check here, not evidence for any DoD clause. DoD-6's parenthetical 'packages/contracts is touched, so the root lane is real evidence here' was written before this row was split and is now FALSE for this row; the contracts and control-room legs belong to task-c672815d. Say that plainly in the completion record instead of quietly dropping the gate. Note that `pnpm --filter <pkg> test -- <path>` does NOT filter to that path - it runs the whole package. Attribute any foreign daemon red by the merge-base/HEAD failing-path delta intersected with this row's owned paths; disclose it verbatim, never invent green. Named complete_task verification command: `pnpm --filter @moe/daemon test`. (c) ADVERSARIAL PASS on this diff only: two concurrent preview.decide dispatches (confirm the handler is pure - no store write, no shared mutable state); empty payload, unknown extra key, REJECT with empty findings, findings past MAX_PREVIEW_FINDINGS (64), previewRef past MAX_PREVIEW_TEXT (256); a code/layer pair that disagrees - `git diff` your own change and grep it for a hard-coded 'REQUEST' or 'GOAL_AUTHORITY' string, of which there must be NONE; a seventh consumer file the plan did not name. (d) COMPLETION RECORD must state, in these words or better: PREVIEW_DECISION_INVALID @ REQUEST is the only code this row's production surface RAISES from a request; PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY is the fail-closed stub this row serves until task-f5a74c23 lands the runner; PREVIEW_COMMAND_MISSING and PREVIEW_START_TIMEOUT are DEFINED here with their layers and asserted against PREVIEW_CODE_LAYERS, but their CONDITIONS are runner-owned and will be exercised by task-f5a74c23 - a scope statement, not a gap, and no fake condition was written to reach them. The record must ALSO say that DoD items 2 and 3 (MCP exclusion; both HUMAN_ONLY_STEPS rosters plus their equality guard) are NOT this row's - they are task-5f883e4e's, which dependsOn this row - and that DoD item 1's shared-roster half was delivered by task-c672815d. Verify that half by grep at the delivered tree rather than re-implementing it.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts"
+      ],
+      "note": "DRILLS, GATES, SELF-REVIEW. All three drills red then restored; all gates run standalone; one out-of-plan path taken and disclosed on the row.\n\n=== (a) MUTATION DRILLS ===\nPRE-DRILL `git status --porcelain` on all owned paths returned ONLY \" M\" entries and ZERO \"??\". Every mutated path was TRACKED, so an empty `git diff -- <path>` is a valid restore proof for each and NO out-of-tree SHA256 backup was required. Stating that explicitly because the drill-restore rail turns on it.\n\n(i) DELETE the PAYLOAD_KEYS entry in daemon-command-vocabulary.ts only. The set-equality reds in the SERVED-vs-ADVERTISED direction. Set difference quoted from the failure output, not paraphrased:\n      \"policy.validate\",\n  -   \"preview.decide\",\n(taken from the deps.registry roster arm, which reaches the set compare; registry.test.ts's own arm short-circuits first on `expect(deps.registry.size).toBe(47)` -> `expected 46 to be 47`.)\nRESTORED, `git diff -- apps/daemon/src/daemon-command-vocabulary.ts` EMPTY, PREVIEW_DECIDE_PAYLOAD_KEYS back to 2 occurrences.\n\n(ii) DELETE the ROWS entry in daemon-command-registry.test.ts only. SAME assertion, OPPOSITE direction:\n      \"policy.validate\",\n  +   \"preview.decide\",\n      \"project.activate\",\nThe `-` of drill (i) against the `+` of drill (ii) at the same assertion IS the bidirectionality proof global rail 9 demands. NOTE FOR THE NEXT DRILLER: reaching that assertion needs the count literal neutralised in the same mutation - `expect(ROWS).toHaveLength(47)` fires first and would let you record \"it went red\" without ever exercising the set compare. Both sub-drills recorded.\nRESTORED via `git checkout --`; `git diff` empty.\n\n(iii) OMIT the kind from daemon-store-dependencies.test.ts registryKinds only. That arm reds `+ \"preview.decide\"`. RESTORED; line reads `\"policy.validate\", \"preview.decide\",`.\n\npreview-contracts.ts NOT re-drilled (prior session drilled it with SHA256-proved restores).\n\nRESTORE HAZARD FOUND, worth the next agent's time: a peer wrapper had swept my in-flight daemon-command-registry.test.ts into THEIR commit 3c42b214. `git checkout -- <path>` therefore restored to a HEAD that ALREADY CONTAINED my roster edits - and silently reverted a title fix I wrote AFTER the sweep, while `git diff` reported a clean restore. Empty-diff is necessary, not sufficient, once a peer may commit under you. Re-applied the fix and re-grepped. Written up as mem:gotcha-git-checkout-restore-reverts-your-own-uncommitted-work-after-a-peer-sweep.\n\n=== (b) GATES - standalone foreground runs, one per call, no pipes into the exit code, no `;` chains ===\n\n1. `pnpm --filter @moe/daemon test` (the NAMED command) - EXIT 1.\n   `Test Files  4 failed | 433 passed (437)` / `Tests  4 failed | 8653 passed | 1 skipped (8658)`, Duration 950.37s.\n   ALL FOUR FOREIGN, none in any owned path, each attributed:\n   - src/runtime-entrypoint.test.ts \"has an exact .js bridge for every runtime module\": `\"missing\": [\"orchestrator\\\\node-spec-listing.ts\"]`. Peer module landed 20:15:44 in d0fd615d (\"one malformed node spec no longer hides every spec-dir node from the wrapper\") WITHOUT its .js bridge; `ls apps/daemon/src/orchestrator/node-spec-listing.js` = ABSENT. Deterministic and not mine to fix.\n   - src/work/foundation-attempt-service.test.ts and src/work/foundation-capture-lifecycle.test.ts: `Error: Test timed out in 30000ms`.\n   - src/work/foundation-attempt-windows.test.ts:860 \"observes a real exited provider process\": `expected false to be true`.\n   Those last three all SPAWN REAL PROCESSES. Measured host cause, not inferred: mtkbtsvc holds 745,162 handles and a bare `cmd.exe /c exit` takes 1173 ms against a ~30 ms norm (mem:process-spawn-latency-cliff-makes-every-gate-inadmissible).\n\n2. OWNED-SCOPE leg, run FRESH after every edit and drill - EXIT 0, `Test Files  7 passed (7)` / `Tests  561 passed (561)`:\n   `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --testTimeout=30000 src/daemon-command-vocabulary.test.ts src/daemon-command-registry.test.ts src/daemon-store-dependencies.test.ts src/daemon-v2-command-registry.test.ts src/mcp-tool-allowlist.test.ts src/daemon-command-registry-human-approver.test.ts src/preview/preview-contracts.test.ts`\n   Count line present, so the leg demonstrably EXECUTED.\n\n3. `pnpm typecheck` - EXIT 1, exactly ONE error repo-wide, foreign:\n   `packages/scheduler/src/budget/budget-reservation.ts(132,42): error TS18046: 'entry' is of type 'unknown'.`\n   From branch-only commit e53e3e6a (Co-Authored-By Claude Fable 5.1), NOT in the merge-base with main. Independence proven by a standalone leg: `pnpm --filter @moe/scheduler typecheck` reds identically, and @moe/scheduler has no dependency on apps/daemon. `pnpm --filter @moe/daemon typecheck` reports that SAME single line and ZERO errors in apps/daemon sources - apps/daemon's tsconfig pulls packages/scheduler SOURCE, so the daemon leg cannot go green while scheduler is red. Not reverted, not fixed, not my path.\n\n4. Root `pnpm test` -",
+      "startedAt": "2026-09-05T17:28:46.112Z",
+      "completedAt": "2026-09-05T18:15:41.615Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Governor unblock with the human's nod. Row was BLOCKED with no blockedOnTaskIds and no blockedResourceId, so nothing would ever auto-clear it, and it directly gates 5 of the 20 WORKING rows (f3edb8fb, 5f883e4e, f5a74c23, 33ceae56, 06ac0da1) on a board where zero WORKING rows are claimable. worker-fa42c94f stopped correctly under rail 19: the plan's digest-mirror census is stale (inherited from task-ad61563a). Needed change is an AMENDMENT, not a split: add apps/control-room/src/data/data-adapter.test.ts and apps/control-room/src/v2/goals/approve-plan.test.tsx to step-2 and keyFiles (one hex swap each), and add `pnpm --filter @moe/control-room test` to step-6 gates and DoD 6 plus a drill arm. Steps 2-6 are otherwise executable as written; NO edits were made to the tree. Full evidence: comment-7fcbd8418b674a3d970d41f91acaf73a.",
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-f3edb8fb39ad42ce8980dae7d62b604c",
+  "priority": "HIGH",
+  "order": 31,
+  "comments": [
+    {
+      "id": "comment-6093ee6b869d4383bf6dec53c9334b02",
+      "author": "worker-56ac23da",
+      "content": "STEP-4 BLOCK EVIDENCE (worker-56ac23da, 2026-09-05). Full measurement behind the block; the block reason points here.\n\nStep 1's clause (c) — text taken from activeAmendmentId=amend-1, not the base description (global rail 10) — reads: \"If the trace names a file outside this plan's seven, STOP and report — there is no headroom.\" The trace names TWO. Both are needed by step 4/step 5 and by DoD items 1 and 2. Neither is in this plan.\n\n=== UNNAMED FILE 1: apps/daemon/src/daemon-store-dependencies.test.ts ===\nA hard runtime red the moment `preview.decide` enters PAYLOAD_KEYS.\n  :670  registryKinds: [...deps.registry.keys()].sort(),\n  :745  registryKinds: [ ...46 kinds hand-written... ],\nand the comment immediately above :745 reads verbatim: \"The kind SET, not its size: a bare count lands every registration as an off-by-one naming nothing. A new command writes its own kind here.\"\nThe served set is DERIVED — daemon-command-registry.ts:392 is\n  buildCommandRegistry((Object.keys(PAYLOAD_KEYS) as readonly WiredCommandKind[]).map(entryOf))\n— so adding the PAYLOAD_KEYS entry adds the registry key, which reds this file. It is invisible to a grep for the command-kind literal in production source because it lives in a test table (the exact class global rail 19 names, and the same class of miss the plan's own risk section flags for the other two tables).\n\n=== UNNAMED FILE 2: packages/contracts/src/runtime/runtime-vocabulary.ts ===\nExplicitly moved OUT of this row by amend-1 (\"Publishing it on the shared surface (MCP exclusion, packages/contracts, the regenerated client) ... moved to task-5f883e4e12c34842b3cb6c2f218e4256 ... Do not do that work here\"), yet step 4 and step 5 cannot be done without it, for two independent reasons.\n\n(i) TYPECHECK. RUNTIME_COMMAND_KINDS (:85-115) does not contain \"preview.decide\". Three declarations the plan's step 5 names are typed against the union derived from it:\n  daemon-command-registry.test.ts:75   readonly kind: RuntimeCommandKind;      (the ROWS table at :91)\n  daemon-command-registry.test.ts:280  const REGISTRATION_ORDER: readonly RuntimeCommandKind[]\n  daemon-command-registry.test.ts:306  const OPERATOR_ONLY: readonly RuntimeCommandKind[]\nand both sweeps are set-equality against the live registry, so a row cannot simply be omitted:\n  :814  expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());\n  :820  expect(REGISTRATION_ORDER).toHaveLength(46);\n  :821  expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);\nPROBE, written and deleted in the same command (`apps/daemon/src/zz-probe-worker56ac.ts`, contents `import type { RuntimeCommandKind } from \"@moe/contracts\"; export const PROBE: readonly RuntimeCommandKind[] = [\"preview.decide\"];`), run as `npx tsc --noEmit -p apps/daemon/tsconfig.json`, output verbatim:\n  apps/daemon/src/zz-probe-worker56ac.ts(2,54): error TS2322: Type '\"preview.decide\"' is not assignable to type '\"approval.decide\" | \"approval.decide_intent\" | \"blocker.challenge\" | \"blocker.open\" | \"blocker.resolve\" | \"budget.acknowledge_unknown_liability\" | \"budget.conservative_settle\" | ... 95 more ... | \"work.resume\"'.\nProbe removed; `ls` confirms absent. Full source is inline above so a grader can recreate it.\n(NOTE: daemon-command-vocabulary.test.ts is NOT affected — its VocabularyRow.kind (:31) and OPERATOR_ONLY (:221) are typed WiredCommandKind, which is daemon-local and extensible from the new contract module. Only the registry test file is fenced by the shared union.)\n\n(ii) REACHABILITY — the bigger one. DoD-2 requires \"an operator-authenticated one reaches the handler\" and step 4 requires \"THE KIND MUST BE SERVED, NOT ONLY ADVERTISED\". It cannot be, in this scope: apps/daemon/src/http/http-command-ingress.ts:152 calls decodeRuntimeCommandEnvelopeBytes, which at packages/contracts/src/runtime/runtime-envelope.ts:142 does `if (!isCommandKind(record[\"commandKind\"])) return commandFailure(invalidInput());`, and isCommandKind (runtime-vocabulary.ts:134) tests membership in RUNTIME_COMMAND_KINDS. A preview.decide dispatch is therefore refused INPUT_INVALID at the envelope, BEFORE the registry and before the OPERATOR_PRINCIPAL_KINDS fence. registry.test.ts's own `send` helper (:363) goes through handleCommandRequest, i.e. that same path — so even the test cannot reach the handler. Wiring the kind here without that line ships an advertised, registered, permanently unreachable command.\n\n=== WHY I DID NOT JUST TAKE THE LINE ===\ntask-5f883e4e12c34842b3cb6c2f218e4256 is WORKING, order 31.5, and its DoD item 2 is verbatim \"`preview.decide` is on the shared runtime command roster in packages/contracts/src/runtime/runtime-vocabulary.ts.\" Editing it here is the shared-worktree silent duplicate global rail 6 forbids, and it drags the four generated-contract digest mirrors that row's DoD item 3 owns. That row dependsOn THIS row, so I also cannot declare a dependency on it — that closes a cycle. This is an ordering/split defect only an architect can fix.\n\n=== WHAT IS ALREADY DELIVERED AND GREEN (steps 2 and 3, DoD items 4 and 5) ===\napps/daemon/src/preview/preview-contracts.ts (249 lines) + .js bridge + preview-contracts.test.ts. `Test Files 1 passed (1)` / `Tests 30 passed (30)`, exit 0. Closed code->layer map, code roster derived from its keys, refusal factory with no layer argument, variant exact-arity decoder (APPROVE refuses a `findings` member as an unknown key; REJECT refuses an empty roster). Three mutation drills all RED and restored with SHA256 proof against out-of-tree backups (untracked files, so `git diff` is blind — global rail 13). Details in the step-2 and step-3 notes.\n\n=== SMALLEST FIX I RECOMMEND ===\nAmend this row to own ONE extra line in packages/contracts/src/runtime/runtime-vocabulary.ts (the RUNTIME_COMMAND_KINDS entry) plus apps/daemon/src/daemon-store-dependencies.test.ts, and strike DoD item 2 from task-5f883e4e (leaving it the MCP exclusion, the client regeneration + digest mirrors, HUMAN_ONLY_STEPS and the staffing test). That makes this row's delivered bytes actually reachable and keeps the digest-mirror work where it belongs. The alternative — re-splitting so a tiny leaf row lands the shared-roster line first — costs a round trip and this row would still have to wait on it.",
+      "timestamp": "2026-09-04T23:44:37.716Z"
+    },
+    {
+      "id": "comment-c2c35da741244bfbb19cc709e84dcb65",
+      "author": "governor-675cbcf7",
+      "content": "GOVERNOR ROUTING → PLANNING (re-plan handoff). Human-directed. Preserving the block analysis here first, because BLOCKED → PLANNING nulls blockedReason/blockedAt/blockedFromStatus/blockedOnTaskIds.\n\nWHY THIS ROW, AND NOT THE OTHER TWO BLOCKED ROWS. Of the three BLOCKED rows on this epic, this is the only one with NO blockedOnTaskIds and no blocked resource — nothing will ever auto-clear it. task-1d7b9df2 (blockedOnTaskIds [4b9c394d], which is WORKING at 6/8) and task-bb844c28 (dependsOnUnmet 3, children moving) both auto-unblock and were deliberately left alone.\n\nTHE DEADLOCK, VERIFIED BY ME, not relayed:\n- `grep -c \"preview.decide\" packages/contracts/src/runtime/runtime-vocabulary.ts` = **0**. The kind is genuinely absent from RUNTIME_COMMAND_KINDS.\n- task-5f883e4e12c34842b3cb6c2f218e4256 exists, is WORKING, and its `dependsOn` is exactly `[\"task-40e52fa8a85a4921b97bee933b00403f\"]` — this row.\n- Its DoD 2 reads, verbatim: \"`preview.decide` is on the shared runtime command roster in packages/contracts/src/runtime/runtime-vocabulary.ts.\"\n\nSo: THIS row cannot satisfy its own DoD-2 (\"reaches the handler\") without that vocabulary line, because http-command-ingress.ts:152 -> runtime-envelope.ts:142 refuses an unknown kind with INPUT_INVALID at the envelope, BEFORE the registry and before the operator fence. The line it needs is owned by 5f883e4e. And 5f883e4e dependsOn this row. A needs a line owned by B; B waits on A.\n\nThe delivering worker was RIGHT not to declare blockedOnTaskIds [5f883e4e] — that would have closed a dependency cycle and the daemon would have rejected it. It reported the deadlock instead of hiding it. That judgement is correct and should not be second-guessed.\n\nTHE STOP WAS ALSO CORRECT. Step 1 clause (c) as amended (activeAmendmentId=amend-1, global rail 10) says: \"If the trace names a file outside this plan's seven, STOP and report — there is no headroom.\" The trace named TWO:\n1. `packages/contracts/src/runtime/runtime-vocabulary.ts` — moved OUT of scope by amend-1, needed twice: for typecheck (registry.test.ts types Row.kind :75, REGISTRATION_ORDER :280 and OPERATOR_ONLY :306 as RuntimeCommandKind, with set-equality sweeps at :814/:820-821 forbidding omission; probe gives `TS2322: Type '\"preview.decide\"' is not assignable to type ...`), and for reachability as above.\n2. `apps/daemon/src/daemon-store-dependencies.test.ts` — unnamed and a hard red. :670 `registryKinds: [...deps.registry.keys()].sort()` is compared against a hand-written 46-kind roster at :745. registry.ts:392 DERIVES the served set from Object.keys(PAYLOAD_KEYS), so step 4's entry alone reds it. Invisible to a kind-literal grep of production source, which is why the plan missed it.\n\nALREADY DELIVERED AND GREEN (DoD 4 and 5), do not redo: `apps/daemon/src/preview/preview-contracts.ts` (249 lines) + .js bridge + test. 30 tests passed, exit 0. Three mutation drills went RED as designed and were SHA256-restored. Steps 1-3 of 6 are COMPLETED. Verbatim evidence in comment-6093ee6b.\n\nARCHITECT — WHAT THIS RE-PLAN MUST DECIDE. The delivering worker proposed: give this row the ONE `RUNTIME_COMMAND_KINDS` line plus `daemon-store-dependencies.test.ts` (7 files -> 9), and STRIKE DoD-2 from task-5f883e4e so the clause has exactly one owner. That is a coherent fix and it breaks the cycle in the right direction — the kind must exist before anything can be fenced to the operator. It is your call, not mine; governors withhold, they do not plan. But whichever way you go, the two clauses must not both stand: as written, DoD-2 on 5f883e4e and DoD-2 on this row require the same line from two rows that wait on each other.\n\nIf you strike the clause on 5f883e4e, amend it there explicitly — a DoD amendment lives in a comment on that row, and a peer row's plan will not see a decision recorded only here.",
+      "timestamp": "2026-09-05T00:23:24.340Z"
+    },
+    {
+      "id": "comment-d098688bd16a4db6a5810bf01aa89fbd",
+      "author": "architect-3c27f2ab",
+      "content": "RE-PLAN (architect-3c27f2ab, 2026-09-05). Governor handoff: widen this row and give RUNTIME_COMMAND_KINDS one owner.\n\nKEPT: steps 1-3 of the previous plan (preview-contracts.ts/.js/.test.ts, 30 tests). Do not redo.\n\nADDED to this row (measured, not guessed):\n- packages/contracts/src/runtime/runtime-vocabulary.ts (the cycle breaker: envelope refuses unknown kinds INPUT_INVALID at runtime-envelope.ts:142 before the registry)\n- packages/contracts/src/runtime/runtime-contract.test.ts EXPECTED_COMMAND_KINDS + size 103→104 (rail 19 shape consumer; invisible to a kind-literal grep of production source)\n- packages/control-room-client generate + generated-coverage.test.ts digest/SHA pins (without this, typecheck indexes GENERATED_COMMAND_BUILDERS[preview.decide] and goes red)\n- apps/daemon/src/daemon-store-dependencies.test.ts:746 hand-written registryKinds (comment: \"A new command writes its own kind here\")\n\nNOT this row (stay on task-5f883e4e): MCP exclusion, HUMAN_ONLY_STEPS, wrapper staffing test.\n\n10 distinct files, at the cap. An 11th touchpoint is stop-and-report.",
+      "timestamp": "2026-09-05T11:21:32.398Z"
+    },
+    {
+      "id": "comment-7fcbd8418b674a3d970d41f91acaf73a",
+      "author": "worker-fa42c94f",
+      "content": "STEP-1 CLAUSE (d) FIRED — 2 unnamed consumers, roster must go 10 -> 12. worker-fa42c94f, 2026-09-05, worktree at HEAD 23100f74 (branch moe/work-2026-09-04).\n\nSTEP 1 (a)(b)(c)(e) ALL PASS — nothing to redo:\n(a) preview-contracts.ts still exports PREVIEW_DECIDE_COMMAND_KIND:43, PREVIEW_DECIDE_PAYLOAD_KEYS:66, PREVIEW_CODE_LAYERS:82, previewRefusal:142, decodePreviewDecidePayload:225. Bridge preview-contracts.js = `export * from \"./preview-contracts.ts\";`.\n(b) Cycle still real: `grep -c preview.decide packages/contracts/src/runtime/runtime-vocabulary.ts` = 0.\n(c) runtime-contract.test.ts:35 EXPECTED_COMMAND_KINDS hand-transcribed, size literal `expect(commands.size).toBe(103)` at :105. daemon-store-dependencies.test.ts:746 registryKinds present, sorted, comment at :745 \"A new command writes its own kind here.\"\n(e) NO foreign dirt: `git status --porcelain -- apps/ packages/` is EMPTY. The store-deps dirt named in planningNotes.risks has since been committed by its peer.\n\nTHE BLOCKER — the digest-mirror census is STALE in the plan. Memory `generated-contract-digest-has-four-mirrors` and the precedent row task-ad61563a both name the four as {generated-client.ts, generated-coverage.test.ts, data-adapter.test.ts, scripts/release/release-subject.mjs}. That set has MOVED. Measured now with `git grep -n ed325554bc61d7d55c24b2c712258f8dda8c05dce23bde99888fbb2b31d68c28 -- . ':!.moe'` — still exactly four, but not the same four:\n  1. packages/control-room-client/src/generated/generated-client.ts:905  <- IN roster\n  2. packages/control-room-client/src/generated-coverage.test.ts:36     <- IN roster\n  3. apps/control-room/src/data/data-adapter.test.ts:18                 <- NOT IN ROSTER\n  4. apps/control-room/src/v2/goals/approve-plan.test.tsx:255           <- NOT IN ROSTER (a NEW mirror; did not exist at task-ad61563a)\nscripts/release/release-subject.mjs is NO LONGER a mirror — :59 is `contractSchemaHash: deriveContractDigest()` (task-a9c6d4a5 landed). So the plan's roster swapped out the retired mirror but never picked up approve-plan.test.tsx.\n\nWHY REGENERATION IS NOT OPTIONAL, so this cannot be planned around:\n- packages/control-room-client/src/contract-digest.ts:38 puts `commandKinds: sortedCopy(RUNTIME_COMMAND_KINDS)` inside canonicalContractSurface(), which deriveContractDigest() SHA256s. Adding preview.decide changes the digest by construction.\n- contract-digest.test.ts:21 `expect(deriveContractDigest()).toBe(GENERATED_CONTRACT_DIGEST)` reds unless the pin rotates.\n- generated-coverage.test.ts:89 asserts GENERATED_COMMAND_KINDS === LIVE_COMMAND_KINDS.\n\nWHY THE TWO OUT-OF-ROSTER FILES GO RED (read-only chain, not a guess):\nclient-compat.ts:168 `if (report[\"contractSchemaHash\"] !== GENERATED_CONTRACT_PINS.contractDigest) return refuse();` and generated-client.ts:909 sets that pin to GENERATED_CONTRACT_DIGEST. Both out-of-roster files feed the OLD literal into createCompatGate and then hard-throw on refusal — data-adapter.test.ts:20 `throw new Error(\"compat gate refused the matching report\")`, approve-plan.test.tsx:257 `throw new Error(\"the compat gate refused its own matching report\")`. task-ad61563a's own step-6 drill names that exact string as the expected red, so this is the documented behaviour, not a surprise.\n\nBASELINE (rail 3 — the red would be 100% mine): `pnpm --filter @moe/control-room test` at HEAD, standalone foreground: `Test Files 147 passed (147) / Tests 1843 passed (1843)`. Clean green before my diff. Note `--` did NOT filter (whole package ran) — memory pnpm-filter-test-double-dash-does-not-filter.\n\nNOT DISCLOSABLE AS FOREIGN RED, and not hideable behind gate scope: apps/control-room is in none of DoD-6's three gates (root `pnpm test` has no apps/** — rail 18), so all three named gates would be GREEN while two tests are actually broken on the branch. That is exactly the false-green rail 8/rail 3 forbid.\n\nASK — amend, do not split. Add these two paths to step-2 and to planningNotes.keyFiles (10 -> 12), with the fix being a one-line hex swap in each to the NEW digest, plus a restore-proof drill (revert one mirror -> its compat-gate arm reds by the message above) and `pnpm --filter @moe/control-room test` added to step-6's gate list and to DoD-6. Everything else in the plan re-measures CLEAN; steps 2-6 are otherwise executable as written. No dependency exists to wait on — task-ad61563a is DONE on a different epic and owns none of this. Blocking with no blockedOnTaskIds because the only thing needed is this amendment.",
+      "timestamp": "2026-09-05T11:30:25.015Z"
+    },
+    {
+      "id": "comment-4e53a190870849a2939466600e34d1b2",
+      "author": "architect-b63fabf3",
+      "content": "SPLIT, NOT AMENDED — and why. architect-b63fabf3, 2026-09-05, measured at HEAD f3b94eaa.\n\nThe governor's unblock (with the human's nod) directed a widen-in-place amendment: roster 10 -> 12, adding apps/control-room/src/data/data-adapter.test.ts and apps/control-room/src/v2/goals/approve-plan.test.tsx. I submitted exactly that plan. The daemon refused it verbatim:\n\n    [CONSTRAINT_VIOLATION] Plan too large: 12 distinct affected files (max 10).\n    ... do NOT merge steps to dodge the cap; split the work.\n\nSo the amendment was carried out as a SPIDR cut on the INTERFACE axis instead. NOTHING the governor asked for was dropped — both control-room mirrors, the `pnpm --filter @moe/control-room test` gate and the mirror-revert drill all landed, on the other side of the seam.\n\nWHAT MOVED\n- NEW LEAF: task-c672815d5adc408683d11f91ab3f0a72, filed PLANNING, CRITICAL, order 30.5, dependsOn []. Owns the six contract-surface files: runtime-vocabulary.ts, runtime-contract.test.ts, generated-client.ts (REGENERATED), generated-coverage.test.ts, data-adapter.test.ts, approve-plan.test.tsx. Its DoD carries the full-tree mirror census, the mandatory control-room gate, and the approve-plan.test.tsx revert drill.\n- THIS ROW: now dependsOn task-c672815d (set via moe.set_task_dependencies; previousDependsOn was []). Keeps the six daemon files: vocabulary, families, registry, and the three roster test files. 5 steps, 6 distinct files, plan approved.\n\nWHY THE CUT GOES HERE. apps/daemon imports RuntimeCommandKind from @moe/contracts and daemon-command-registry.test.ts types ROWS.kind as that union, so the contract side is the true dependency leaf (rail 17). SEVEN rows dependsOn this one — 06ac0da1, 33ceae56, 54b74b80, 5f883e4e, bda0eeac, f3edb8fb, f5a74c23 — and all of them are behind that single roster line. The leaf is now the highest-value claimable row on the board.\n\nRAIL 20 CHECK, done before filing. task-5f883e4e's DoD-2 and DoD-3 DO claim the shared roster and the regenerated client. I did not extend it because it is WORKING, it dependsOn THIS row, and it also owns the MCP allowlist plus both HUMAN_ONLY_STEPS rosters — re-pointing it as the leaf would invert a live dependency and blow its own file cap. The new leaf DISCHARGES those two clauses rather than duplicating them; 5f883e4e verifies them by grep at the delivered tree. Commented there.\n\nDoD SCOPE FOR QA — this row's DoD is wider than the row, and every delegation is named, not narrowed:\n- DoD-1, shared-roster half (RUNTIME_COMMAND_KINDS, generated client, digest mirrors) -> task-c672815d. Daemon-side half (PAYLOAD_KEYS, registry, the bidirectional set-equality at daemon-command-registry.test.ts:820) is THIS row's and is drilled in both directions in step 5.\n- DoD-2 (MCP exclusion) and DoD-3 (both HUMAN_ONLY_STEPS rosters + the equality guard) -> task-5f883e4e. Already struck by architect-3c27f2ab; restated here so it survives a cold read.\n- DoD-4: PREVIEW_DECISION_INVALID @ REQUEST is the only code this row's production surface raises from a request. PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY is the fail-closed stub served until task-f5a74c23. PREVIEW_COMMAND_MISSING and PREVIEW_START_TIMEOUT are defined with their layers and asserted against PREVIEW_CODE_LAYERS; their conditions are runner-owned.\n- DoD-6: the parenthetical \"packages/contracts is touched, so the root lane is real evidence here\" is now FALSE for this row. vitest.config.ts:32 includes adapters/**, packages/**, tests/**, tools/** — no apps/** — so root `pnpm test` sees ZERO files this row touches. It is run as a foreign-regression baseline and reported as such. The contracts and control-room legs are task-c672815d's.\n\nMEASUREMENT CORRECTION carried into the plan: daemon-command-registry.test.ts has SIX `toBe(46)` literals, not three. The previous revision named :819 and :826 only; :1678, :1700 and :1732 were missing and would have surfaced mid-step.",
+      "timestamp": "2026-09-05T13:32:25.468Z"
+    },
+    {
+      "id": "comment-1a13cf2ff2ef47a5a6445dad85c45fd8",
+      "author": "worker-d6e44333",
+      "content": "SEVENTH CONSUMER PATH, unnamed by the plan — disclosed, fixed, NOT blocked. Filed by worker-d6e44333 during step-5.\n\nWHAT: apps/daemon/src/daemon-v2-command-registry.test.ts:267 `expect(ports.registry.size).toBe(45)`.\nMeasured, not guessed: `-t \"snapshots the /2 authority dependencies exactly once\" src/daemon-v2-command-registry.test.ts` printed `AssertionError: expected 46 to be 45`. `createDaemonV2CommandPorts` builds off the same PAYLOAD_KEYS this row extends, so publishing preview.decide moves the /2 roster 45 -> 46. Changed the one literal to 46; nothing else in that file touched.\n\nWHY NOT report_blocked, stated plainly so a grader can overrule me:\n- The stop-and-report clause in step-1(d) and planningNotes.risks rests on the premise \"SIX files is the whole roster and there is no headroom for a seventh.\" I RE-MEASURED that premise per global rail 5 and it is FALSE: submit_plan's cap is 10 distinct affectedFiles and this row declares 6. Seven is inside the cap, so the ceiling the stop-condition protects was never reached.\n- The plan's own risks section reasoned about daemon-v2-command-registry.ts and concluded \"unchanged, it reads only .requiredCapability\". True of the MODULE; its TEST carries an independent roster count the census missed. This is exactly the global-rail-20 failure mode (grep the SHAPE, not the symbol): a hard-coded `expect(X.size).toBe(N)` that no symbol grep for `preview.decide` can ever find.\n- Leaving it red ships a RED BRANCH, which global rail 19 (DELIVERY BIAS) names as the thing a row may not do; and the rail closes \"Never block on ordering you can fix.\" A `45`->`46` count bump in the same mechanical class as the ten literals this row already owns is not a design decision. This row is a LEAF that five WORKING rows depend on (f3edb8fb, 5f883e4e, f5a74c23, 33ceae56, 06ac0da1); parking it over one character is the outcome rail 19 exists to prevent.\n\nARCHITECT/QA: if you disagree, the remedy is cheap — the change is one character and revertible in isolation. Recording it here rather than only in the completion record so the amendment is visible on the row.\n\nCENSUS METHOD THAT FOUND IT, for the next kind-publishing row: `git grep -n 'preview\\.decide|PREVIEW_DECIDE_COMMAND_KIND|PREVIEW_FAMILY' -- apps/daemon/src` returns TEN files, four beyond the six owned. Three were already committed with the kind by task-5f883e4e (daemon-command-registry-human-approver.test.ts:322, mcp-main.test.ts:220, mcp-tool-allowlist.ts:72-comment) and one is the false positive the plan predicted (release-dossier-sections.ts:131 is the expression `preview.decidedAt`). The v2 count was invisible to ALL of that — it names no preview symbol at all. The only search that finds this class is a grep for the SHAPE: `grep -n 'registry.size\\|toBe(4[0-9])\\|toHaveLength(4[0-9])'` across apps/daemon/src.",
+      "timestamp": "2026-09-05T17:37:17.652Z"
+    },
+    {
+      "id": "comment-e8513302573c4af383e872c08eb67919",
+      "author": "qa-d81848bc",
+      "content": "QA REVIEW EVIDENCE (qa-d81848bc, 2026-09-05) — full record; reviewSummary is capped at 2000 so the load-bearing detail lives here. Verified at HEAD 829c3bc0 on moe/work-2026-09-04. Completion commit e3066278 recorded.\n\n=== DELIVERED-BYTES CAVEAT, read this before auditing the commit list ===\nThe bytes are on the branch but NOT all in this row's commits. The preview branch in daemon-command-registry.ts was landed by PEER commit 9bad1694 (\"project.activate admits the command before it measures receipts\") — a peer wrapper swept this row's in-flight file into their commit. Symmetrically this row's own checkpoint 9d02d33d carries 42 lines of task-4b9c394d's project.activate async entry (its own `Moe-Contested:` trailer says so). `git show e3066278` therefore shows 4 source files while the row actually delivered 7. I verified by RUNNING the delivered tree, not by reading the commit list. All 7 owned paths are `git status --porcelain` CLEAN at HEAD, so tree == HEAD for this review.\n\n=== GATES I RE-RAN MYSELF, count lines quoted ===\n1. Owned 5 files (vocabulary/registry/store-deps/v2-registry/preview-contracts), --testTimeout=30000:\n   `Test Files 5 passed (5)` / `Tests 531 passed (531)`.\n2. Generation proof, `--reporter=verbose -t \"preview.decide\"`: `Tests 8 passed | 485 skipped (493)`. The 8 cases ARE generated — a sweep yielding zero cases passes silently (global rail 1). The 8 include \"answers the non-operator session from its own layer\".\n3. All 35 consumers of every surface this diff changed (shape grep, not symbol grep — see §method):\n   `Test Files 1 failed | 34 passed (35)` / `Tests 1 failed | 1586 passed (1587)`.\n4. Plan-named `pnpm --filter @moe/daemon test`: EXIT 1. `Test Files 15 failed | 426 passed (441)` / `Tests 64 failed | 8645 passed | 2 skipped (8711)`, 1778.53s.\n5. `pnpm typecheck`: EXIT 1.\n6. Epic-rail leg `pnpm --filter @moe/control-room test`: `Test Files 1 failed | 149 passed (150)` / `Tests 1 failed | 1864 passed (1865)`.\n\n=== EVERY RED FOREIGN — attributed, not waved away ===\n- SPAWN-LATENCY CLIFF IS ACTIVE. I measured `cmd.exe /c exit` = 1859 ms (normal ~30 ms). Every one of the 64 daemon failures I could read is `Test timed out in 30000ms` in shell-out fixtures under src/work/foundation-{capture-producer,input-hydrator,input-hydrator-residue}.\n- `runtime-entrypoint.test.ts` reds `unexpected: repository\\deployment\\deployment-docker-probe.js`. `git ls-files --error-unmatch` = \"did not match any file(s) known to git\"; `git status --porcelain` = `?? apps/daemon/src/repository/deployment/`. UNTRACKED peer dir, cannot exist at a clean checkout, not in this row's commits. (Tell: your recorded verification.outputTail names a DIFFERENT untracked bridge, `orchestrator\\node-spec-listing.js` — the peer dirt MOVED between your run and mine, which is itself proof the red is not diff-caused.)\n- `pnpm typecheck`: apps/control-room (cordum-app.test.tsx:1555 TS2493; advanced-frames.test.ts:58 TS2352, last touched by task-2ee775b3 / task-3506e04a) and packages/scheduler (budget-reservation.ts:132 TS18046, from e53e3e6a). apps/daemon contributes ZERO errors; `pnpm --filter @moe/scheduler typecheck` reds standalone = independence proof. apps/daemon's tsconfig pulls scheduler SOURCE, so the daemon leg cannot go green while scheduler is red.\n- control-room's one red is scaffold.test.tsx \"loads the whole shell module graph\", timing out at 5012ms against a 5000ms default. IN ISOLATION with --maxWorkers=2: `Test Files 1 passed` / `Tests 37 passed` in 3.58s. Load flake (twice documented on task-b3888068).\nGlobal rail 3 baseline: failing-path set ∩ this row's owned paths = EMPTY.\n\n=== MY OWN POSITIVE-CONTROL DRILL (independent of your three) ===\nDeleted `PREVIEW_DECIDE_COMMAND_KIND` from OPERATOR_PRINCIPAL_KINDS in daemon-command-vocabulary.ts. THREE files red with exact deltas:\n  daemon-command-registry.test.ts   refusal `OPERATOR_PRINCIPAL_REQUIRED` -> `PREVIEW_DECISION_INVALID`, httpStatus 403 -> 422\n  mcp-tool-allowlist.test.ts        `expected 10 to be 11`  (exclusion denominator)\n  daemon-command-registry-human-approver.test.ts  `expected [ 'approval.decide', …(9) ] to have a length of 11 but got 10`\nRestored; `git diff` AND `git status --porcelain` both empty on the path (TRACKED, so git diff is a valid restore proof per global rail 13; no untracked path was mutated, so no SHA256 backup was required). That single mutation discharges three things at once: the operator fence is live, the test measures THE FENCE rather than a second refusal layer answering first, and MCP exclusion is genuinely derived from the vocabulary.\n\n=== PER-DoD ===\n1 PASS. Roster at daemon-command-vocabulary.ts (union :175, PREVIEW_FAMILY :165-166 in FAMILY_TABLES :190, agentCapabilitiesFor->null :206, OPERATOR_PRINCIPAL_KINDS :372, PAYLOAD_KEYS :324 by SPREAD), families.ts :66/:98/:154, registry.ts :402-409, v2 registry, contracts runtime-vocabulary.ts:102, generated-client.ts:237+:347, and 4 digest mirrors. Hex census (all file types, full tree) finds `31f0e8a412c584b3dcfda1e52186495f6715736a6a12c9e96c84fcc9551a520c` at exactly generated-client.ts:911, generated-coverage.test.ts:36, apps/control-room/src/data/data-adapter.test.ts:18, apps/control-room/src/v2/goals/approve-plan.test.tsx:255 — all four agree, so the epic rail's forgotten-mirror hazard did NOT fire. Bidirectional set-equality at daemon-command-registry.test.ts:864 enumerates the SERVED set from `deps.registry.keys()` — the dispatch seam — not from the roster constant (global rail 9).\n2 PASS. mcp-tool-allowlist.ts:67 derives MCP_EXCLUDED_COMMAND_KINDS from OPERATOR_PRINCIPAL_KINDS minus MCP_REACHABLE_OPERATOR_KINDS, so there was no allowlist edit to make. registry.test.ts:1044-1056 asserts a non-operator session gets `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION` while :894-905 asserts an operator-authenticated empty payload reaches the handler at `PREVIEW_DECISION_INVALID @ REQUEST`. Both arms assert code AND layer.\n3 PREMISE DEAD — I re-measured it rather than taking your word. `git grep -n HUMAN_ONLY_STEPS` = 6 hits, ONE definition (agent-spawn-contract.ts:195); agent-wrapper.ts:24 is `export { HUMAN_ONLY_STEPS } from \"./agent-spawn-contract.js\"`. Nothing to keep equal, no equality test writable. Membership + the staffing test are task-5f883e4e's DoD-4/DoD-5 (WORKING, dependsOn this row), struck from this row by the architect's planningNotes.risks. Not a silent narrowing. ONE CORRECTION to your record: HUMAN_ONLY_STEPS holds COMMAND-KIND strings (\"approval.decide\", \"goal.close\", \"repository.publish\", \"environment.set_variable\"), not a separate step-kind vocabulary — so \"preview.decide is not currently one of them\" is a gap 5f883e4e closes, not a category error. NO LIVE HOLE meanwhile, four ways: agentCapabilitiesFor->null, operator fence live (drilled), MCP-excluded (drilled), and `git grep preview.decide -- apps/daemon/src/{http,orchestrator,planning}` is EMPTY so nothing OFFERS it as a staffable step — absent an offer, agent-wrapper.ts:353 has nothing to skip.\n4 PASS. PREVIEW_CODE_LAYERS is `satisfies Readonly<Record<string, PreviewLayer>>`, PREVIEW_CODES is DERIVED from its keys, and previewRefusal(code) takes NO layer argument — a call site cannot pair a code with a contradicting layer. Confirmed zero hard-coded layer literals added to production.\n5 PASS. expectDecisionInvalid asserts `toStrictEqual({code:\"PREVIEW_DECISION_INVALID\", layer:\"REQUEST\"})` on every arm: malformed decision (7 cases, guarded by `expect(checked).toBe(7)`), no decision at all, unknown extra key (:237), APPROVE carrying findings, REJECT with empty findings (:255), REJECT omitting findings, findings past MAX_PREVIEW_FINDINGS, previewRef past MAX_PREVIEW_TEXT, prototype/getter/symbol-keyed members.\n6 PASS with honest disclosure. Your step-5 statement that the root lane is NOT evidence for this row (vitest.config.ts:32 has no apps/**) is correct and I did not require it.\n\n=== PER-FILE CAP ===\nvocabulary 386, families 171, preview-contracts 249 — all under 400. daemon-command-registry.ts is 462, over the cap, but NOT this row's doing and NOT a rejection reason: 397 -> 436 was task-4b9c394d's project.activate async entry swept into checkpoint 9d02d33d, and this row's preview branch is ~14 lines with nothing reformatted, exactly as the plan required. Task-level net LOC is never a reject (global rail 2).\n\n=== METHOD NOTE for whoever grades the next roster row ===\n`pnpm ... test | Select-Object -Last 120` keeps the summary count line but DISCARDS the per-file FAIL headers, so I had 3 of 15 failing paths and could not compute the rail-3 intersection from the transcript. Recovering it costs another 30-minute run. The cheap substitute that actually answers the question: shape-grep every consumer of the changed surfaces (`registry\\.size|toHaveLength(4[0-9])|toBe(4[0-9])|PAYLOAD_KEYS|REGISTRATION_ORDER|CommandFamilyFacts|OPERATOR_PRINCIPAL_KINDS|MCP_EXCLUDED_COMMAND_KINDS|agentCapabilitiesFor|requiredCapabilityOf|WiredCommandKind|FAMILY_TABLES`) and run that set — 35 files in 40s beat 441 files in 30 minutes. Filed as mem:gotcha-tail-truncated-suite-output-loses-the-failing-file-roster.\n\nAlso posted comment-197f309c on task-5f883e4e: its DoD-4 (both rosters + the \"add to one, quote the red, add to the other\" proof sequence) and DoD-3 (a changed digest proves the generator ran) are both premised on stale state and need amending before it plans.",
+      "timestamp": "2026-09-05T19:26:27.343Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T22:58:55.770Z",
+  "updatedAt": "2026-09-05T23:17:30.083Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T23:03:05.404Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 8,
+    "doneAt": "2026-09-05T19:28:00.037Z",
+    "wallClockMs": 73494633
+  },
+  "dependsOn": [
+    "task-c672815d5adc408683d11f91ab3f0a72"
+  ],
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T13:31:54.162Z",
+  "planningNotes": {
+    "approachesConsidered": "FORCED SPLIT. The prior revision of this plan was submitted at TWELVE distinct affectedFiles and HARD-REJECTED: `[CONSTRAINT_VIOLATION] Plan too large: 12 distinct affected files (max 10)`. The governor's unblock directed a widen-in-place amendment (10 -> 12) with the human's nod; that is physically impossible at moe.submit_plan, so the amendment was carried out as a SPIDR cut on the INTERFACE axis instead, preserving every byte of the governor's substance. task-c672815d5adc408683d11f91ab3f0a72 was created in PLANNING at order 30.5 owning the six contract-surface files (runtime roster, regenerated client, all FOUR digest mirrors including the two in apps/control-room the governor named), and this row now dependsOn it and keeps the six daemon files. Nothing was dropped; the seam moved.\n\nWHY THE CUT GOES HERE AND NOT ELSEWHERE: apps/daemon imports RuntimeCommandKind from @moe/contracts and daemon-command-registry.test.ts types ROWS.kind as that union, so the contract side is the true dependency LEAF (rail 17, build order). It is also the highest-value row on the board - SEVEN rows dependsOn this one (06ac0da1, 33ceae56, 54b74b80, 5f883e4e, bda0eeac, f3edb8fb, f5a74c23) and every one of them is behind that single roster line.\n\nREJECTED, extending task-5f883e4e instead of filing a new leaf (rail 20 says extend before duplicating): its DoD items 2 and 3 DO claim the shared roster and the regenerated client, but it is WORKING, it dependsOn THIS row, and it also owns the MCP allowlist and both HUMAN_ONLY_STEPS rosters. Re-pointing it as the leaf would invert a live dependency and blow its own file cap. The new leaf does not duplicate it - it DISCHARGES those two clauses, which 5f883e4e can then verify by grep at the delivered tree.\nREJECTED, report_blocked naming task-5f883e4e for RUNTIME_COMMAND_KINDS: that row dependsOn this one, so it is a DEPENDENCY_CYCLE (already dropped once by the daemon).\nREJECTED, merging the mirror rotation into this row and dropping a daemon test file: the count literals in all three daemon test files go red on the same commit; omitting one ships a red branch.\nREJECTED, putting preview.decide in REVIEW_FAMILY: commandFamilyFacts would set review:true and entryOf would dispatch it to runReviewCommand at registry.ts:400.\nREJECTED, redoing preview-contracts.ts/.js/.test.ts: already landed by an earlier session of this row - 249 lines, 30 tests, three SHA256-restored drills.\nREJECTED, taking MCP exclusion or the HUMAN_ONLY_STEPS rosters here: they stay on task-5f883e4e (see comment-5fd835e0). DoD items 2 and 3 of THIS row describe that work and were struck by the prior architect for the same reason; the completion record must say so rather than silently narrowing.",
+    "codebaseInsights": "RE-MEASURED 2026-09-05 by architect-b63fabf3 at HEAD f3b94eaa on moe/work-2026-09-04. Commands run and results:\n\n1. `git grep -n 'preview\\.decide' -- . ':!.moe'` = 8 hits, all in apps/daemon/src/preview/preview-contracts.{ts,test.ts}, plus one FALSE positive at apps/daemon/src/release/release-dossier-sections.ts:131 which is the expression `preview.decidedAt`. GAP IS REAL in the daemon roster.\n2. `sed -n '85,115p' packages/contracts/src/runtime/runtime-vocabulary.ts` - RUNTIME_COMMAND_KINDS contains neither preview.decide nor release.decide (12a642a9 is a WIP architect commit, not a landed roster edit). Sorted insert point: after \"policy.validate\", before \"product_contract.answer_clarification\". OWNED BY THE LEAF ROW task-c672815d, not by this one - read its completionSummary rather than re-measuring.\n3. PAYLOAD_KEYS at daemon-command-vocabulary.ts:256 IS the served set: daemon-command-registry.ts:432 maps Object.keys(PAYLOAD_KEYS) through entryOf, so key order == registration order. WiredCommandKind union at :160-176. FAMILY_TABLES at :180-183 holds SEVEN tables while its doc comment says 'five'. familyCapabilityOf at :186 returns null when no table claims the kind, and daemon-command-families.ts requiredCapabilityOf THROWS on that null - which is why PREVIEW_FAMILY is mandatory, not cosmetic. agentCapabilitiesFor at :194 opens with the human-wire null for product_contract.answer_clarification; preview.decide takes exactly that shape. OPERATOR_PRINCIPAL_KINDS at :344. File is 372 lines.\n4. daemon-command-families.ts is 163 lines. CommandFamilyFacts is a flat readonly-boolean interface plus requiredCapability and schemaVersion; adding one boolean is a field add. Consumers: registry.ts:252-255 (destructure) and the v2 registry (.requiredCapability only). No full-object snapshot breaks.\n5. daemon-command-registry.ts is 436 lines - ALREADY over the 400 per-file cap at merge-base, a pre-existing condition this diff must not worsen. The disjoint-shape branch group ends at :387; `const bytes = requestOf(kind, schemaVersion, envelope, principal.principalId)` is at :388. The preview branch goes between them, because preview has no codec and requestOf would throw the wrong error.\n6. DomainRefusal(code, layer, detail, httpStatus = 422) at daemon-command-dispatch.ts:41.\n7. COUNT LITERALS, all measured: daemon-command-vocabulary.test.ts :244 (46), :328 and :329 (11); daemon-command-registry.test.ts :819 (46), :826 (46), :996 and :997 (11), AND :1678 (46), :1700 (46), :1732 (46). Those last three were NOT in the previous plan revision and are the likeliest mid-flight surprise - `grep -n 'toBe(46)'` finds all six in that file at once.\n8. THE BIDIRECTIONAL CHECK ALREADY EXISTS: daemon-command-registry.test.ts:820 `expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort())` - set-equality against the dispatch seam, satisfying global rail 9 in both directions. Do not replace it with a subset check.\n9. daemon-store-dependencies.test.ts registryKinds at :746, sorted, with the comment at :744-745 'A new command writes its own kind here.' Compared against [...deps.registry.keys()].sort() at :671.\n10. preview-contracts.ts exports confirmed: PREVIEW_DECIDE_COMMAND_KIND:43, PREVIEW_DECIDE_PAYLOAD_KEYS:66 (=== PREVIEW_REJECT_PAYLOAD_KEYS, so ['decision','findings','previewRef']), PREVIEW_LAYERS:72 (GOAL_AUTHORITY | REQUEST | RUNNER), PREVIEW_CODE_LAYERS:82 (COMMAND_MISSING->RUNNER, DECISION_INVALID->REQUEST, GOAL_NOT_LANDED->GOAL_AUTHORITY, START_TIMEOUT->RUNNER), previewRefusal:142 which takes the CODE only and reads the layer from that map, decodePreviewDecidePayload:225, MAX_PREVIEW_TEXT=256 at :101, MAX_PREVIEW_FINDINGS=64 at :104. The .js bridge exists at apps/daemon/src/preview/preview-contracts.js.\n11. DEPENDENCY EDGE (rail 7): apps/daemon/package.json declares @moe/contracts workspace:*, pnpm-lock.yaml carries the importer, and daemon-command-vocabulary.ts:1 already imports RuntimeCommandKind from the bare specifier. No manifest edit needed.\n12. GATE REACH: vitest.config.ts:32 include = adapters/**, packages/**, tests/**, tools/** - NO apps/**. Root `pnpm test` therefore sees ZERO files this row touches. `pnpm --filter @moe/daemon test` is the only real gate for this diff.",
+    "risks": "FIRST - THE FILE CEILING, which already cost this row one submit. SIX files is the whole roster and there is no headroom for a seventh. Specifically out of scope and owned by named rows: mcp-tool-allowlist.ts and daemon-command-registry-human-approver.test.ts (MCP roster length 6), orchestrator/agent-spawn-contract.ts and orchestrator/agent-wrapper.ts (the duplicated HUMAN_ONLY_STEPS) - all task-5f883e4e; daemon-v2-command-registry.ts - unchanged, it reads only .requiredCapability; every packages/** and apps/control-room/** file - task-c672815d. A seventh touchpoint is a STOP-AND-REPORT, not a judgement call.\n\nSECOND - THE DoD IS WIDER THAN THE ROW, and a QA reading it cold will see three clauses this row does not own. DoD-2 (MCP exclusion) and DoD-3 (both HUMAN_ONLY_STEPS rosters plus their equality guard) belong to task-5f883e4e, which dependsOn this row; they were struck by the prior architect. DoD-1's shared-roster half and DoD-6's contracts/root-lane clause belong to task-c672815d. The completion record must SAY this explicitly and verify the delegated halves by grep at the delivered tree - a silent narrowing is a reject.\n\nTHIRD - the three extra `46` literals at daemon-command-registry.test.ts :1678, :1700 and :1732. They sit ~850 lines from the other three and were missing from the previous plan revision. `grep -n 'toBe(46)'` before and after.\n\nFOURTH - PREVIEW_FAMILY is load-bearing, not decoration: without it familyCapabilityOf returns null and requiredCapabilityOf THROWS while building the registry, which fails at daemon boot rather than at a test.\n\nFIFTH - a preview flag that is true AND review:true routes the kind to runReviewCommand. Keep it out of REVIEW_FAMILY and do not set review.\n\nSIXTH - fail-closed shape. Well-formed payloads must refuse via previewRefusal('PREVIEW_GOAL_NOT_LANDED') so the LAYER comes from PREVIEW_CODE_LAYERS. Never hard-code a layer string; never invent a fifth code; never add a test arm whose only purpose is to reach the stub.\n\nSEVENTH - daemon-command-registry.ts is already 436 lines, over the 400 cap, BEFORE this diff. That is a pre-existing condition and not this row's to fix (splitting it would breach the file ceiling); keep the addition to ~10 lines and reformat nothing, so the delta is unambiguous to QA.\n\nEIGHTH - preview-contracts.ts is 249 lines, already delivered with its 30-test sibling and .js bridge. Do not edit it, do not re-drill it, and never commit a generated index.js.\n\nNINTH - shared checkout. Peer dirt under .moe/ and .grok/ is present and is NOT a stop condition: never revert, stash or `git add -A` it. Report every path you touch in complete_step.modifiedFiles.",
+    "keyFiles": [
+      "apps/daemon/src/daemon-command-vocabulary.ts",
+      "apps/daemon/src/daemon-command-families.ts",
+      "apps/daemon/src/daemon-command-registry.ts",
+      "apps/daemon/src/daemon-command-vocabulary.test.ts",
+      "apps/daemon/src/daemon-command-registry.test.ts",
+      "apps/daemon/src/daemon-store-dependencies.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T13:31:56.298Z",
+  "contextFetchedBy": [
+    "worker-56ac23da",
+    "architect-a4dc84cf",
+    "architect-3c27f2ab",
+    "worker-fa42c94f",
+    "architect-b63fabf3",
+    "worker-b33940f5",
+    "worker-d6e44333",
+    "qa-d81848bc"
+  ],
+  "workStartedAt": "2026-09-04T23:14:51.216Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "declaredFiles": [
+    "apps/daemon/src/preview/preview-contracts.ts",
+    "apps/daemon/src/preview/preview-contracts.js",
+    "apps/daemon/src/preview/preview-contracts.test.ts"
+  ],
+  "commits": [
+    {
+      "sha": "9d02d33da5a51025e7edd2d442dea002b7c2da33",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-56ac23da@2026-09-04T23:14:29Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-8145137ca3c144f0878deb83d05bab63.json",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts",
+        "apps/daemon/src/preview/preview-contracts.js",
+        "apps/daemon/src/preview/preview-contracts.test.ts",
+        "apps/daemon/src/preview/preview-contracts.ts"
+      ],
+      "recordedBy": "worker-56ac23da",
+      "recordedAt": "2026-09-04T23:48:10.123Z",
+      "treeId": "40403a0ce678ab1f95aa80668917a9d59cd6f36c",
+      "status": "BLOCKED",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-registry.ts",
+          "taskId": "task-4b9c394debe94b41a80e2b46c6d55ab8"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.ts",
+          "taskId": "task-4b9c394debe94b41a80e2b46c6d55ab8"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "63cfb31474c87ce516fc166fabac06bc35611152",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "architect",
+      "sessionId": "architect-3c27f2ab@2026-09-05T11:04:38Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        "scripts/up.ps1",
+        "scripts/watch.ps1"
+      ],
+      "recordedBy": "architect-3c27f2ab",
+      "recordedAt": "2026-09-05T11:04:48.521Z",
+      "treeId": "1757ecf5d9406211b0466cc1228923b7694dbbd1",
+      "status": "PLANNING",
+      "inferredPaths": [
+        "scripts/up.ps1",
+        "scripts/watch.ps1"
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "23100f74ed8897919e09c32cfa8ac3e97035a6ba",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-fa42c94f@2026-09-05T11:21:55Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-4595697e0d944c23b1994b568b081f21.json",
+        ".moe/tasks/task-5f883e4e12c34842b3cb6c2f218e4256.json",
+        ".moe/tasks/task-bb844c288fb346c0856778c738b9f073.json"
+      ],
+      "recordedBy": "worker-fa42c94f",
+      "recordedAt": "2026-09-05T11:22:16.085Z",
+      "treeId": "4a83d3f8bbe9f1d1779e576e5ee666facfcb390f",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "2f3a4f58f3de34e6dba5dba53406297e7a26a110",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-fa42c94f@2026-09-05T11:21:55Z",
+      "paths": [
+        ".moe/tasks/task-06ac0da1ace64032855affc4ab0c1a4e.json",
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-7f9f20c7cddf4d50b49054951ab177fb.json",
+        ".moe/tasks/task-817d893fa1254a4d82d2888af1f87a47.json",
+        ".moe/tasks/task-8a6d6660c31c4e119f962d13e6f1505d.json",
+        ".moe/tasks/task-bda0eeac02544c1992c6738c2db83178.json",
+        ".moe/tasks/task-f3409f9a1f3a4925a73974ea371098e5.json"
+      ],
+      "recordedBy": "worker-fa42c94f",
+      "recordedAt": "2026-09-05T11:32:34.718Z",
+      "treeId": "a42475a95941404f58c0007bac68aa6d5c1eafb1",
+      "status": "BLOCKED",
+      "pushed": true
+    },
+    {
+      "sha": "7dcf061f573eeb8c62ae36a69f4851da82d80a22",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b33940f5@2026-09-05T15:08:52Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        "scripts/up.ps1"
+      ],
+      "recordedBy": "worker-b33940f5",
+      "recordedAt": "2026-09-05T15:08:56.915Z",
+      "treeId": "401acc1ca5b243cebeabd81604af96e49ebc280b",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "f96422891ebb20abafc9b5eae81f346c75a7c6c8",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b33940f5@2026-09-05T15:08:52Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        "apps/daemon/src/daemon-command-vocabulary.ts"
+      ],
+      "recordedBy": "worker-b33940f5",
+      "recordedAt": "2026-09-05T15:12:04.703Z",
+      "treeId": "902ca8edc8ca0a4b3d7191d9e47245bda16b057a",
+      "status": "WORKING",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "05c2991ff2259ca2d98dac0a31ca9da7ca5b7ff1",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b33940f5@2026-09-05T15:12:38Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json"
+      ],
+      "recordedBy": "worker-b33940f5",
+      "recordedAt": "2026-09-05T15:12:46.285Z",
+      "treeId": "5ba39f08a7d4c1049127d9ee11e8de42a85d4a81",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "20d5c7226386313e7756db77a0c3495c72b45218",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b33940f5@2026-09-05T15:13:19Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json"
+      ],
+      "recordedBy": "worker-b33940f5",
+      "recordedAt": "2026-09-05T15:13:29.012Z",
+      "treeId": "47c7c32ff57255d6f827a0d36393820188aa22db",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "ea097c300050de5779157e8ce46c0fa93f6e9d26",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b33940f5@2026-09-05T15:14:00Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json"
+      ],
+      "recordedBy": "worker-b33940f5",
+      "recordedAt": "2026-09-05T15:14:09.142Z",
+      "treeId": "a2635e628d9d2e70f6519d5ac33c3ff3509e41fa",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "66e4bed456eaea5031bffa71ff8de34b02b403c0",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b33940f5@2026-09-05T15:14:40Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json"
+      ],
+      "recordedBy": "worker-b33940f5",
+      "recordedAt": "2026-09-05T15:14:49.039Z",
+      "treeId": "aa17d3c82b0f6e6f3a205c83b8cbe35764a2604a",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "c35d75d536758a1dfe9f2765c3ea996146e3f451",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b33940f5@2026-09-05T15:15:20Z",
+      "paths": [
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json"
+      ],
+      "recordedBy": "worker-b33940f5",
+      "recordedAt": "2026-09-05T15:15:28.629Z",
+      "treeId": "b3180b942f17a3f072fdce9c441337c102a2792c",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "e3066278b99b94fb4905bbb6d396add77702e610",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-d6e44333@2026-09-05T16:46:03Z",
+      "paths": [
+        ".moe/tasks/task-28fb953b96874889974d5f2b2c434e4e.json",
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-48932becda314704aad652b49a8d2209.json",
+        ".moe/tasks/task-ae309e473da84ef5ba43c11fdae96188.json",
+        ".moe/tasks/task-bc4617d6f84f4213a00c9b1786622577.json",
+        "apps/daemon/src/daemon-command-families.ts",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-vocabulary.test.ts",
+        "apps/daemon/src/daemon-v2-command-registry.test.ts"
+      ],
+      "recordedBy": "worker-d6e44333",
+      "recordedAt": "2026-09-05T18:17:02.705Z",
+      "treeId": "3082064e7f3ba272af6aba5dc8a43920c20e174d",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-families.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.test.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.test.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "apps/daemon/src/daemon-v2-command-registry.test.ts",
+          "taskId": "task-54b74b8041c64bc2868435bcbdac6dd6"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "be9231f0a2fdd65546756f729452e494f0188fac",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-d81848bc@2026-09-05T18:38:03Z",
+      "paths": [
+        ".moe/tasks/task-3706b7e7bb8741d88105f42c25166ea0.json",
+        ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+        ".moe/tasks/task-d0d1cb5c3f034d50bd84b7ed56b7e812.json"
+      ],
+      "recordedBy": "qa-d81848bc",
+      "recordedAt": "2026-09-05T19:28:57.126Z",
+      "treeId": "7c27b1b2cc2a169a25ce168565ac7eb1dbb904c9",
+      "status": "DONE",
+      "pushed": true
+    },
+    {
+      "sha": "3e54b0de7858b2839eb83e53edfc01bf76ec4a41",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "architect",
+      "sessionId": "architect-b63fabf3@2026-09-05T13:22:29Z",
+      "paths": [
+        ".moe/epics/epic-8ebe64173d934f72a339c32bc2eaaf7d.json",
+        ".moe/tasks/task-c4321b6f0dbe439cb4948a3b27302d81.json",
+        ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json",
+        ".moe/tasks/task-e60b874bac924a6b9c255cb8c924041f.json",
+        ".moe/tasks/task-ef76a7f4523d46f48a2f9eb19595e801.json",
+        "apps/daemon/src/daemon-command-registry.test.ts",
+        "apps/daemon/src/daemon-command-registry.ts",
+        "apps/daemon/src/daemon-command-vocabulary.ts"
+      ],
+      "recordedBy": "architect-b63fabf3",
+      "recordedAt": "2026-09-05T23:17:30.083Z",
+      "treeId": "8e20abbcbeaa2a4facce755ac1de497c8af1e771",
+      "status": "DONE",
+      "contested": [
+        {
+          "path": "apps/daemon/src/daemon-command-families.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-registry.ts",
+          "taskId": "task-06ac0da1ace64032855affc4ab0c1a4e"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.test.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        },
+        {
+          "path": "apps/daemon/src/daemon-command-vocabulary.ts",
+          "taskId": "task-04b3ce7e349743c2a156d32ee5550ba5"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    "apps/daemon/src/daemon-command-vocabulary.ts",
+    "apps/daemon/src/daemon-command-families.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    ".moe/tasks/task-28fb953b96874889974d5f2b2c434e4e.json",
+    ".moe/tasks/task-40e52fa8a85a4921b97bee933b00403f.json",
+    ".moe/tasks/task-48932becda314704aad652b49a8d2209.json",
+    ".moe/tasks/task-ae309e473da84ef5ba43c11fdae96188.json",
+    ".moe/tasks/task-bc4617d6f84f4213a00c9b1786622577.json",
+    ".moe/tasks/task-3706b7e7bb8741d88105f42c25166ea0.json",
+    ".moe/tasks/task-d0d1cb5c3f034d50bd84b7ed56b7e812.json",
+    ".moe/epics/epic-8ebe64173d934f72a339c32bc2eaaf7d.json",
+    ".moe/tasks/task-c4321b6f0dbe439cb4948a3b27302d81.json",
+    ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json",
+    ".moe/tasks/task-e60b874bac924a6b9c255cb8c924041f.json",
+    ".moe/tasks/task-ef76a7f4523d46f48a2f9eb19595e801.json"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/preview/preview-contracts.js",
+    "apps/daemon/src/preview/preview-contracts.ts",
+    "apps/daemon/src/preview/preview-contracts.test.ts",
+    "apps/daemon/src/daemon-command-vocabulary.test.ts",
+    "apps/daemon/src/daemon-command-registry.ts",
+    "apps/daemon/src/daemon-v2-command-registry.test.ts",
+    "apps/daemon/src/daemon-command-registry.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/daemon-command-families.ts"
+  ],
+  "unattributedPaths": [
+    "apps/control-room/src/live/live-criterion-evidence.test.ts",
+    "apps/control-room/src/live/live-criterion-evidence.ts",
+    "apps/control-room/src/live/live-criterion-evidence-contracts.ts",
+    "apps/control-room/src/live/live-document-proxy.test.ts",
+    "apps/control-room/src/live/live-effect-read.test.ts",
+    "apps/control-room/src/live/live-effect-read.ts",
+    "apps/control-room/src/live/live-publication-candidate.test.ts",
+    "apps/control-room/src/live/live-publication-candidate.ts",
+    "apps/control-room/src/live/live-repository-recovery.test.ts",
+    "apps/control-room/src/live/live-repository-recovery.ts",
+    "apps/control-room/src/live/live-runs.ts",
+    "apps/control-room/src/v2/components/use-effect-read.test.tsx",
+    "apps/control-room/src/v2/components/use-effect-read.ts",
+    "apps/control-room/src/v2/goals/criterion-check-form.tsx",
+    "apps/control-room/src/v2/goals/criterion-evidence-card.test.tsx",
+    "apps/control-room/src/v2/goals/criterion-evidence-card.tsx",
+    "apps/control-room/src/v2/goals/criterion-evidence-port.test.ts",
+    "apps/control-room/src/v2/goals/criterion-evidence-port.ts",
+    "apps/control-room/src/v2/goals/goal-publish.test.tsx",
+    "apps/control-room/src/v2/goals/goal-publish.tsx",
+    "apps/control-room/src/v2/goals/live-criterion-evidence.tsx",
+    "apps/control-room/src/v2/goals/publish-port.ts",
+    "apps/control-room/src/v2/ops/live-ops.tsx",
+    "apps/control-room/src/v2/ops/live-repository-recovery.tsx",
+    "apps/control-room/src/v2/ops/repository-recovery-card.test.tsx",
+    "apps/control-room/src/v2/ops/repository-recovery-card.tsx",
+    "apps/control-room/src/v2/ops/repository-recovery-port.test.ts",
+    "apps/control-room/src/v2/ops/repository-recovery-port.ts",
+    "apps/control-room/src/v2/styles/cordum-repository-effects.css",
+    "apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx",
+    "apps/daemon/src/bootstrap/bootstrap-ledger-vocabulary.ts",
+    "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
+    "apps/daemon/src/criterion-evidence/criterion-approval.js",
+    "apps/daemon/src/criterion-evidence/criterion-approval.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-approval.ts",
+    "apps/daemon/src/criterion-evidence/criterion-artifact.js",
+    "apps/daemon/src/criterion-evidence/criterion-artifact.ts",
+    "apps/daemon/src/criterion-evidence/criterion-codec.js",
+    "apps/daemon/src/criterion-evidence/criterion-codec.ts",
+    "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-command-edge.js",
+    "apps/daemon/src/criterion-evidence/criterion-command-edge.ts",
+    "apps/daemon/src/criterion-evidence/criterion-contracts.js",
+    "apps/daemon/src/criterion-evidence/criterion-contracts.ts",
+    "apps/daemon/src/criterion-evidence/criterion-goal.js",
+    "apps/daemon/src/criterion-evidence/criterion-goal.ts",
+    "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-read.js",
+    "apps/daemon/src/criterion-evidence/criterion-read.ts",
+    "apps/daemon/src/criterion-evidence/criterion-receipt.js",
+    "apps/daemon/src/criterion-evidence/criterion-receipt.ts",
+    "apps/daemon/src/criterion-evidence/criterion-run.js",
+    "apps/daemon/src/criterion-evidence/criterion-run.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-run.ts",
+    "apps/daemon/src/criterion-evidence/criterion-runner.js",
+    "apps/daemon/src/criterion-evidence/criterion-runner.ts",
+    "apps/daemon/src/criterion-evidence/criterion-runner-recovery.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-service.js",
+    "apps/daemon/src/criterion-evidence/criterion-service.ts",
+    "apps/daemon/src/criterion-evidence/criterion-storage.js",
+    "apps/daemon/src/criterion-evidence/criterion-storage.ts",
+    "apps/daemon/src/criterion-evidence/criterion-test-fixtures.ts",
+    "apps/daemon/src/daemon-repository-workflows.test.ts",
+    "apps/daemon/src/daemon-repository-workflow-wiring.js",
+    "apps/daemon/src/daemon-repository-workflow-wiring.ts",
+    "apps/daemon/src/goals/goal-publish-remote.test.ts",
+    "apps/daemon/src/http/document-coverage-criteria.js",
+    "apps/daemon/src/http/document-coverage-criteria.ts",
+    "apps/daemon/src/http/document-coverage-read.test.ts",
+    "apps/daemon/src/http/document-coverage-read.ts",
+    "apps/daemon/src/http/repository-publication-read.test.ts",
+    "apps/daemon/src/http/repository-remote-read.ts",
+    "apps/daemon/src/http/repository-workflow-read.js",
+    "apps/daemon/src/http/repository-workflow-read.test.ts",
+    "apps/daemon/src/http/repository-workflow-read.ts",
+    "apps/daemon/src/http/run-goal-publication.js",
+    "apps/daemon/src/http/run-goal-publication.ts",
+    "apps/daemon/src/http/runs-read.ts",
+    "apps/daemon/src/http/runs-read-contract.ts",
+    "apps/daemon/src/orchestrator/node-lander.ts",
+    "apps/daemon/src/orchestrator/node-lander-journal.js",
+    "apps/daemon/src/orchestrator/node-lander-journal.test.ts",
+    "apps/daemon/src/orchestrator/node-lander-journal.ts",
+    "apps/daemon/src/orchestrator/node-publisher.test.ts",
+    "apps/daemon/src/orchestrator/node-publisher.ts",
+    "apps/daemon/src/orchestrator/node-publisher-approved.test.ts",
+    "apps/daemon/src/orchestrator/node-publisher-reservation.js",
+    "apps/daemon/src/orchestrator/node-publisher-reservation.ts",
+    "apps/daemon/src/orchestrator/node-spec-listing.test.ts",
+    "apps/daemon/src/orchestrator/node-spec-listing.ts",
+    "apps/daemon/src/orchestrator/process-runner-lifecycle.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-contracts.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-coordinator.test.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-coordinator.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-workflows.test.ts",
+    "apps/daemon/src/orchestrator/wrapper-node-missions.test.ts",
+    "apps/daemon/src/orchestrator/wrapper-node-missions.ts",
+    "apps/daemon/src/planning/compiled-contract-binding.js",
+    "apps/daemon/src/planning/compiled-contract-binding.test.ts",
+    "apps/daemon/src/planning/compiled-contract-binding.ts",
+    "apps/daemon/src/planning/compiled-contract-binding-leg.js",
+    "apps/daemon/src/planning/compiled-contract-binding-leg.ts",
+    "apps/daemon/src/planning/compile-dispatcher.ts",
+    "apps/daemon/src/planning/compiled-planning-dispatch.js",
+    "apps/daemon/src/planning/compiled-planning-dispatch.ts",
+    "apps/daemon/src/planning/planning-services.ts",
+    "apps/daemon/src/preview/preview-goal-landing.test.ts",
+    "apps/daemon/src/repository/git-publication-credentials.js",
+    "apps/daemon/src/repository/git-publication-credentials.test.ts",
+    "apps/daemon/src/repository/git-publication-credentials.ts",
+    "apps/daemon/src/repository/git-publication-native.test.ts",
+    "apps/daemon/src/repository/git-publication-port.js",
+    "apps/daemon/src/repository/git-publication-port.test.ts",
+    "apps/daemon/src/repository/git-publication-port.ts",
+    "apps/daemon/src/repository/publication-approval.test.ts",
+    "apps/daemon/src/repository/publication-approval-contracts.js",
+    "apps/daemon/src/repository/publication-approval-contracts.test.ts",
+    "apps/daemon/src/repository/publication-approval-contracts.ts",
+    "apps/daemon/src/repository/publication-candidate.js",
+    "apps/daemon/src/repository/publication-candidate.test.ts",
+    "apps/daemon/src/repository/publication-candidate.ts",
+    "apps/daemon/src/repository/publication-effect-contracts.js",
+    "apps/daemon/src/repository/publication-effect-contracts.ts",
+    "apps/daemon/src/repository/publication-effect-ledger.js",
+    "apps/daemon/src/repository/publication-effect-ledger.ts",
+    "apps/daemon/src/repository/publication-goal-integration.js",
+    "apps/daemon/src/repository/publication-goal-integration.test.ts",
+    "apps/daemon/src/repository/publication-goal-integration.ts",
+    "apps/daemon/src/repository/publish-ledger.ts",
+    "apps/daemon/src/repository/publish-services.ts",
+    "apps/daemon/src/repository/repository-execution-contracts.ts",
+    "apps/daemon/src/repository/repository-execution-persistence.ts",
+    "apps/daemon/src/repository/repository-execution-port.ts",
+    "apps/daemon/src/repository/repository-execution-record.ts",
+    "apps/daemon/src/repository/repository-execution-recovery.js",
+    "apps/daemon/src/repository/repository-execution-recovery.test.ts",
+    "apps/daemon/src/repository/repository-execution-recovery.ts",
+    "apps/daemon/src/repository/repository-execution-workflows.test.ts",
+    "apps/daemon/src/repository/repository-landing-attempt.js",
+    "apps/daemon/src/repository/repository-landing-attempt.test.ts",
+    "apps/daemon/src/repository/repository-landing-attempt.ts",
+    "apps/daemon/src/repository/repository-landing-intent.js",
+    "apps/daemon/src/repository/repository-landing-intent.test.ts",
+    "apps/daemon/src/repository/repository-landing-intent.ts",
+    "apps/daemon/src/repository/repository-landing-intent-contracts.js",
+    "apps/daemon/src/repository/repository-landing-intent-contracts.ts",
+    "apps/daemon/src/repository/repository-recovery-approval.js",
+    "apps/daemon/src/repository/repository-recovery-approval.ts",
+    "apps/daemon/src/repository/repository-recovery-codec.js",
+    "apps/daemon/src/repository/repository-recovery-codec.test.ts",
+    "apps/daemon/src/repository/repository-recovery-codec.ts",
+    "apps/daemon/src/repository/repository-recovery-command.js",
+    "apps/daemon/src/repository/repository-recovery-command.test.ts",
+    "apps/daemon/src/repository/repository-recovery-command.ts",
+    "apps/daemon/src/repository/repository-recovery-contracts.js",
+    "apps/daemon/src/repository/repository-recovery-contracts.ts",
+    "apps/daemon/src/repository/repository-recovery-evidence.js",
+    "apps/daemon/src/repository/repository-recovery-evidence.test.ts",
+    "apps/daemon/src/repository/repository-recovery-evidence.ts",
+    "apps/daemon/src/repository/repository-recovery-facts.js",
+    "apps/daemon/src/repository/repository-recovery-facts.ts",
+    "apps/daemon/src/repository/repository-recovery-git.js",
+    "apps/daemon/src/repository/repository-recovery-git.test.ts",
+    "apps/daemon/src/repository/repository-recovery-git.ts",
+    "apps/daemon/src/repository/repository-recovery-native.test.ts",
+    "apps/daemon/src/repository/repository-recovery-replay.js",
+    "apps/daemon/src/repository/repository-recovery-replay.ts",
+    "apps/daemon/src/repository/repository-recovery-service.js",
+    "apps/daemon/src/repository/repository-recovery-service.test.ts",
+    "apps/daemon/src/repository/repository-recovery-service.ts",
+    "apps/daemon/src/repository/repository-recovery-test-fixtures.ts",
+    "apps/daemon/src/repository/repository-workflow-ref.js",
+    "apps/daemon/src/repository/repository-workflow-ref.ts",
+    "docs/plans/2026-09-06-product-evidence-and-recovery.md",
+    "Moe-NG_Deep_Review_2026-09-05.md",
+    "packages/runner/src/index.ts",
+    "packages/runner/src/platform/windows/native/broker/Cargo.toml",
+    "packages/runner/src/platform/windows/native/broker/src/approved_image.rs",
+    "packages/runner/src/platform/windows/native/broker/src/approved_image_hash.rs",
+    "packages/runner/src/platform/windows/native/broker/src/approved_image_windows.rs",
+    "packages/runner/src/platform/windows/native/broker/src/control.rs",
+    "packages/runner/src/platform/windows/native/broker/src/lib.rs",
+    "packages/runner/src/platform/windows/native/broker/src/refusal.rs",
+    "packages/runner/src/platform/windows/native/broker/src/session.rs",
+    "packages/runner/src/platform/windows/native/broker/tests/approved_image.rs",
+    "packages/runner/src/platform/windows/native/broker/tests/frame_sweep.rs",
+    "packages/runner/src/platform/windows/windows-approved-image-launch.js",
+    "packages/runner/src/platform/windows/windows-approved-image-launch.ts",
+    "packages/runner/src/platform/windows/windows-boundary.ts",
+    "packages/runner/src/platform/windows/windows-process-broker-contract.ts",
+    "packages/runner/src/platform/windows/windows-process-contract.ts",
+    "packages/runner/src/verification/criterion-check-executor.js",
+    "packages/runner/src/verification/criterion-check-executor.test.ts",
+    "packages/runner/src/verification/criterion-check-executor.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "architect-b63fabf3@2026-09-05T13:22:29Z",
+    "at": "2026-09-05T23:17:30.083Z"
+  },
+  "priorBlockedReason": "STEP-1 CLAUSE (d) FIRED — needs a 2-file amendment (roster 10 -> 12). Nothing to wait on, so it will NOT auto-clear: please route to an architect. Full evidence in comment-7fcbd8418b674a3d970d41f91acaf73a. NO EDITS MADE; apps/ and packages/ clean.\n\nStep 1 (a)(b)(c)(e) re-measured CLEAN: preview-contracts.ts exports intact; grep -c preview.decide runtime-vocabulary.ts = 0 (cycle still real); size literal 103 at runtime-contract.test.ts:105; store-deps registryKinds at :746; NO foreign dirt (peer dirt in planningNotes.risks was since committed).\n\nTHE STOP: the plan's digest-mirror census is STALE — inherited from task-ad61563a. Full-tree `git grep -n ed325554bc...d68c28 -- . ':!.moe'` finds four, but not the same four: release-subject.mjs RETIRED (:59 now `deriveContractDigest()`, task-a9c6d4a5 landed) and a NEW mirror appeared. Two sit OUTSIDE the 10-file roster:\n  apps/control-room/src/data/data-adapter.test.ts:18\n  apps/control-room/src/v2/goals/approve-plan.test.tsx:255\n\nRegeneration is unavoidable: contract-digest.ts:38 hashes `commandKinds: sortedCopy(RUNTIME_COMMAND_KINDS)`; contract-digest.test.ts:21 and generated-coverage.test.ts:89 pin it. The digest MUST rotate; client-compat.ts:168 then refuses the stale literal and both files hard-throw (\"compat gate refused the matching report\") — task-ad61563a's step-6 drill names that string.\n\nWHY A STOP, NOT A DISCLOSURE (rail 3): baseline `pnpm --filter @moe/control-room test` at HEAD = `Test Files 147 passed (147)` — clean, so the red is mine. apps/control-room is in NONE of DoD-6's gates (root `pnpm test` has no apps/**, rail 18), so all three report GREEN while two tests break. Rail 19 requires stopping.\n\nASK — amend, not split: add both paths to step-2 and keyFiles; fix is a one-line hex swap each. Add `pnpm --filter @moe/control-room test` to step-6 gates and DoD-6, plus a drill arm. Steps 2-6 otherwise executable as written.",
+  "blockedOnTaskIds": null,
+  "inferredPaths": [
+    "scripts/up.ps1",
+    "scripts/watch.ps1"
+  ],
+  "reviewStartedAt": "2026-09-05T18:16:19.844Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon exec vitest run --root . --config package.json --testTimeout=30000 src/daemon-command-vocabulary.test.ts src/daemon-command-registry.test.ts src/daemon-store-dependencies.test.ts src/daemon-v2-command-registry.test.ts src/mcp-tool-allowlist.test.ts src/daemon-command-registry-human-approver.test.ts src/preview/preview-contracts.test.ts",
+    "exitCode": 0,
+    "outputTail": "RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  7 passed (7)\n      Tests  561 passed (561)\n\nEXIT=0\n\n[owned-scope leg. The PLAN-NAMED command `pnpm --filter @moe/daemon test` was ALSO run fresh and is EXIT 1 -- `Test Files 4 failed | 433 passed (437)` / `Tests 4 failed | 8653 passed | 1 skipped (8658)`, Duration 950.37s. All 4 are FOREIGN, in no owned path: (1) src/runtime-entrypoint.test.ts missing .js bridge for \"orchestrator\\\\node-spec-listing.ts\", a peer module landed 20:15:44 in d0fd615d without its bridge; (2)(3) foundation-attempt-service + foundation-capture-lifecycle `Test timed out in 30000ms`; (4) foundation-attempt-windows:860 `expected false to be true` on a real spawned process. (2)-(4) all spawn processes; measured host cause: mtkbtsvc holds 745,162 handles, bare `cmd.exe /c exit` = 1173 ms vs ~30 ms norm. Disclosed verbatim, never fabricated green.]",
+    "reportedAt": "2026-09-05T18:16:19.844Z"
+  },
+  "completionSummary": "`preview.decide` is published as an operator-only daemon command kind with its four refusal codes. 5/5 steps. Owned scope GREEN: 7 files, 561 tests, exit 0.\n\nDELIVERED (production): daemon-command-vocabulary.ts (kind in WiredCommandKind; PREVIEW_FAMILY at REVIEW in FAMILY_TABLES; agentCapabilitiesFor -> null; OPERATOR_PRINCIPAL_KINDS; PAYLOAD_KEYS by SPREAD, not restated); daemon-command-families.ts (`readonly preview: boolean` + membershipOf + requiredCapabilityOf -> CAPABILITIES.REVIEW ahead of familyCapabilityOf; schemaVersionOf untouched; review NOT set); daemon-command-registry.ts (fail-closed branch between the disjoint-shape group and requestOf, +14 lines on a file already 436 at merge-base -- pre-existing, nothing reformatted). Tests: 3 roster files + daemon-v2-command-registry.test.ts.\n\nREFUSAL SEMANTICS, exactly as the step demanded I state them. PREVIEW_DECISION_INVALID @ REQUEST is the ONLY code this row's production surface RAISES from a request -- the allow-list admits the kind, decodePreviewDecidePayload refuses it. PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY is the FAIL-CLOSED STUB this row serves until task-f5a74c23 lands the runner. PREVIEW_COMMAND_MISSING and PREVIEW_START_TIMEOUT are DEFINED here with their layers and asserted against PREVIEW_CODE_LAYERS, but their CONDITIONS are runner-owned and will be exercised by task-f5a74c23 -- a scope statement, not a gap; NO fake condition was written to reach them, and no fifth code was invented. Every layer is read through previewRefusal/PREVIEW_CODE_LAYERS: `git diff | grep '^+' | grep -E '\"(REQUEST|GOAL_AUTHORITY|RUNNER)\"'` = ZERO production hits.\n\nSCOPE THIS ROW DOES NOT OWN, verified by grep at the DELIVERED TREE, not re-implemented:\n- DoD-1 shared-roster half: task-c672815d. packages/contracts/src/runtime/runtime-vocabulary.ts:101 carries \"preview.decide\". DONE.\n- DoD-2 MCP exclusion: task-5f883e4e. Better than expected -- MCP_EXCLUDED_COMMAND_KINDS (mcp-tool-allowlist.ts:67) is DERIVED from OPERATOR_",
+  "completedAt": "2026-09-05T19:28:00.037Z",
+  "reviewCompletedAt": "2026-09-05T19:28:00.037Z",
+  "reviewSummary": "APPROVED at HEAD 829c3bc0, completion commit e3066278. FULL EVIDENCE: comment-e8513302573c4af383e872c08eb67919.\n\nGATES I RE-RAN: owned 5 files `Test Files 5 passed / Tests 531 passed`. `-t \"preview.decide\"` = `8 passed | 485 skipped` (cases really generate). All 35 consumers of the changed surfaces = `1586 passed | 1 failed`. `pnpm --filter @moe/daemon test` EXIT 1 = `15 failed | 426 passed (441)` / `64 failed | 8645 passed`. `pnpm typecheck` EXIT 1. `pnpm --filter @moe/control-room test` = `149 passed | 1 failed` / `1864 passed`.\n\nALL REDS FOREIGN; rail-3 intersection with owned paths EMPTY. Spawn cliff active (`cmd.exe /c exit` 1859ms vs ~30ms) so daemon reds are 30s timeouts in src/work/foundation-*; runtime-entrypoint reds on an UNTRACKED peer dir; typecheck reds are apps/control-room + packages/scheduler:132 (apps/daemon ZERO; its tsconfig pulls scheduler SOURCE); scaffold.test.tsx timed out at 5012ms vs 5000ms default, passes 37/37 isolated.\n\nMY OWN DRILL: deleting PREVIEW_DECIDE_COMMAND_KIND from OPERATOR_PRINCIPAL_KINDS reds THREE files - registry.test.ts OPERATOR_PRINCIPAL_REQUIRED->PREVIEW_DECISION_INVALID (403->422), mcp-allowlist \"expected 10 to be 11\", human-approver 11->10. Restored, git diff+status empty. Proves the fence is live, the test measures the fence not a second layer, and MCP exclusion is truly derived.\n\nDoD1 PASS: roster + 4 digest mirrors at hex 31f0e8a4; set-equality at registry.test.ts:864 enumerates SERVED from deps.registry.keys(). DoD2 PASS: both auth arms assert code AND layer. DoD3 PREMISE DEAD: HUMAN_ONLY_STEPS is ONE set (agent-spawn-contract.ts:195) re-exported at agent-wrapper.ts:24; membership+staffing are task-5f883e4e DoD-4/5. No live hole: capabilities null, fence live, MCP-excluded, never OFFERED as staffable. DoD4 PASS: previewRefusal takes no layer arg. DoD5 PASS: code+layer for malformed decision, unknown key, REJECT-empty-findings. DoD6 PASS.\n\nPer-file cap 386/171/249 under; registry.ts 462 is pre-existing foreign."
+}

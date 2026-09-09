@@ -52,6 +52,7 @@ import { hasExactKeys } from "../provider-profile/provider-profile-fields.js";
 import {
   admitCapabilities, admitRenderedContext, boundedText, isOwnRefusal, isRefusal, refuse,
 } from "./launch-template-authority.js";
+import type { SeatProvider } from "./launch-template-authority.js";
 
 export {
   LAUNCH_TEMPLATE_PRODUCER_CODES,
@@ -101,8 +102,32 @@ const RUNTIME_FACTS_KEYS: readonly string[] = Object.freeze([
 ]);
 const RESUME_FLAGS: ReadonlySet<string> = new Set(CLAUDE_LAUNCH_RESUME_FLAGS);
 
+/**
+ * The codex form of the same three facts, measured 2026-09-07 on codex-cli 0.153.4. `exec` is the
+ * non-interactive subcommand standing where claude's `-p` stands; `--model` is accepted on it;
+ * reasoning effort has NO flag, so it travels as a `model_reasoning_effort` config override.
+ *
+ * `--config` IS THE LONG FORM ON PURPOSE. `-c` is a member of `CLAUDE_LAUNCH_RESUME_FLAGS`, and
+ * the gate below refuses any argv carrying one — the short spelling would die as a resume.
+ *
+ * NO TOOL ROSTER TRAVELS HERE, and that is measured rather than forgotten. Codex takes its roster
+ * as a key under `mcp_servers.<name>`, and naming a server with no transport is refused outright:
+ * `codex exec --strict-config --config mcp_servers.moe-next.disabled_tools=[]` answers
+ * `Error loading config.toml: invalid transport in mcp_servers.moe-next`. This template holds no
+ * MCP origin and no bearer; the spawner holds both and passes the roster together with the `.url`
+ * that makes it loadable (see agent-codex-roster.ts). A roster emitted here would compose an argv
+ * codex refuses to start on.
+ */
+function codexArgv(selection: ClaudeLaunchSelection): readonly string[] {
+  return Object.freeze(["exec", "--model", selection.selectedModelId,
+    "--config", `model_reasoning_effort=${selection.reasoningEffort}`]);
+}
+
 /** Positional, never built by iterating a record: key iteration order is a latent instability. */
-function composeArgv(selection: ClaudeLaunchSelection, coding: boolean): readonly string[] {
+function composeArgv(
+  selection: ClaudeLaunchSelection, coding: boolean, provider: SeatProvider,
+): readonly string[] {
+  if (provider === "codex") return codexArgv(selection);
   const argv = ["-p", "--allowedTools", coding ? CODING_TOOLS : CHAIN_TOOLS];
   if (coding) argv.push("--tools", CODING_BUILTIN_TOOLS);
   argv.push(CLAUDE_LAUNCH_SELECTION_FLAGS.model, selection.selectedModelId);
@@ -134,7 +159,7 @@ function compose(input: LaunchTemplateInput): LaunchTemplateResult {
   }
   const admitted = admitCapabilities(input.capabilities);
   if (isRefusal(admitted)) return admitted;
-  const { capabilitySchemaDigest, limits, selection } = admitted;
+  const { agentProvider, capabilitySchemaDigest, limits, selection } = admitted;
   const admittedMission = admitMission(input.mission);
   if (isOwnRefusal(admittedMission)) return admittedMission as LaunchTemplateResult;
   // `isOwnRefusal` is a predicate over the refusal, so the negative branch is still a union;
@@ -160,7 +185,7 @@ function compose(input: LaunchTemplateInput): LaunchTemplateResult {
     return refuse("LAUNCH_TEMPLATE_LIMITS_INADMISSIBLE", `limit ${admittedLimits.issue.field}`,
       Object.freeze({ code: admittedLimits.issue.code, layer: admittedLimits.issue.layer }));
   }
-  const argv = composeArgv(selection, (mission["workspace"] as string).length > 0);
+  const argv = composeArgv(selection, (mission["workspace"] as string).length > 0, agentProvider);
   for (const argument of argv) {
     if (RESUME_FLAGS.has(argument)) {
       return refuse("LAUNCH_TEMPLATE_ARGV_RESUMES", "argv would attach to a prior session");

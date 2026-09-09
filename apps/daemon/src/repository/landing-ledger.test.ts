@@ -4,6 +4,7 @@ import { PROJECT_ID, closeStores, hex64, openStore } from "../review/review-test
 import {
   readLandingReceipt, readLatestLandingBaseline, recordLandingBaseline, recordLandingReceipt,
 } from "./landing-ledger.js";
+import * as landingLedger from "./landing-ledger.js";
 import {
   DELETED_BLOB, LANDING_RECEIPT_COMMAND_KIND, NODE_LANDER_PRINCIPAL_ID, decodeLandingBaselineBytes,
   decodeLandingReceiptBytes, landingAggregateId, landingReceiptId,
@@ -74,6 +75,23 @@ describe("landing receipts", () => {
 });
 
 describe("landing baselines", () => {
+  it("returns an exact baseline identity that still selects the original attempt after retries", () => {
+    const store = openStore();
+    const first = recordLandingBaseline(store, {
+      entries: [{ blobId: DELETED_BLOB, path: "original.ts" }], observedAt: "2026-09-03T11:00:00.000Z",
+      projectId: PROJECT_ID, subjectRef: NODE, workspace: "D:/ws",
+    });
+    expect(first).toMatchObject({ baselineId: expect.stringMatching(/^[a-f0-9]{64}$/u), ok: true });
+    if (!first.ok) throw new Error(first.code);
+    recordLandingBaseline(store, {
+      entries: [], observedAt: "2026-09-03T11:01:00.000Z", projectId: PROJECT_ID, subjectRef: NODE, workspace: "D:/ws",
+    });
+    expect(landingLedger.readLandingBaseline(store, PROJECT_ID, NODE, first.baselineId)).toEqual(first.baseline);
+    expect(landingLedger.readLandingBaseline(store, PROJECT_ID, "other-node", first.baselineId)).toBeNull();
+    expect(landingLedger.readLandingBaseline(store, "other-project", NODE, first.baselineId)).toBeNull();
+    expect(landingLedger.readLandingBaseline(store, PROJECT_ID, NODE, "f".repeat(64))).toBeNull();
+  });
+
   it("records a baseline per staffing and reads back the latest one", () => {
     const store = openStore();
     const first = recordLandingBaseline(store, {

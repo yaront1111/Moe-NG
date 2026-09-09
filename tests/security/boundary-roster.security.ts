@@ -22,12 +22,12 @@
  * OVER EXPORTED DECLARATIONS ONLY. `DECLARATION_PATTERN` is anchored `^export const`, so three
  * populations sit outside every arm above, and this paragraph carries its own falsifier for
  * each — the file's convention is that a prose claim names the assertion that reds if it rots.
- *   MODULE-PRIVATE DECLARATIONS, 60 at the wide `[A-Z0-9_]+` width — a column-0 `const *_LAYER`
+ *   MODULE-PRIVATE DECLARATIONS, 77 at the wide `[A-Z0-9_]+` width — a column-0 `const *_LAYER`
  *   no `^export const` anchor can ever reach. Reddened by "TASK-LV allowlists every scanned
  *   module-private declaration (scan minus allowlist is empty)" when one appears, by "TASK-LV
  *   has no allowlist entry absent from source" when one vanishes, and by "TASK-LV counts
  *   exactly EXPECTED_PRIVATE_COUNT module-private declarations at the wide pattern width".
- *   BARE LITERALS AT REFUSAL SITES, 94 distinct values of which 29 resolve to NO declared
+ *   BARE LITERALS AT REFUSAL SITES, 103 distinct values of which 38 resolve to NO declared
  *   constant — a layer that is never a declaration, so no pattern width reaches it. Reddened by
  *   "TASK-LV allowlists every unresolved literal (scan minus allowlist is empty)", its
  *   allowlist-minus-scan twin, and "TASK-LV counts exactly
@@ -39,9 +39,9 @@
  * and every other arm in this file stays green while sixteen live boundaries leave the scan,
  * because the roster would then be compared against the same narrowed scan that produced it.
  *
- * ALWAYS STATE THE PATTERN WIDTH WHEN QUOTING THESE. The invisible share is 60 of 228 (26.3%)
- * with a WIDE numerator over a WIDE denominator; the narrow width measures 65 of 233 and is
- * equally correct at its own width. Two seats argued 45 versus 46 across two rounds as though
+ * ALWAYS STATE THE PATTERN WIDTH WHEN QUOTING THESE. On 2026-09-08 the invisible share is
+ * 77 of 257 (30.0%) with a WIDE numerator over a WIDE denominator; a narrow-width census
+ * must use its own denominator. Two seats argued 45 versus 46 across two rounds as though
  * it were a factual dispute; it was a units mismatch. Pinned by "TASK-LV pins the invisible
  * share at the wide pattern width, numerator and denominator both named".
  *
@@ -148,8 +148,8 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * AXIS TOTALS FOR THE SIBLING SLICES, and this paragraph carries its own falsifier because
- * the previous one did not: transport 26, integrity 41, durable-store 22, runtime-provider
- * 33, scheduler-activation 46 — sums to 168, which must equal `EXPECTED_ROSTER_SIZE` below.
+ * the previous one did not: transport 30, integrity 47, durable-store 22, runtime-provider
+ * 33, scheduler-activation 48 — sums to 180, which must equal `EXPECTED_ROSTER_SIZE` below.
  * These tags, NOT the subset counts in the siblings' own descriptions, are the authority.
  *
  * WHICH NAMED ASSERTIONS RED IF THESE NUMBERS ROT. The five-way sum is asserted by "partitions
@@ -185,6 +185,21 @@ interface ScannedBoundary {
  * task-bdbe0519/task-2ae75398; roster row and hostile arms task-12465418.)
  */
 const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
+  // Browser response decoding and offer spending are transport boundaries. Design,
+  // environment and preview input guards are integrity boundaries. Delivery and recovery
+  // gate repository execution authority. All eleven have BEFORE/AFTER/RACE cases in
+  // recent-workflow-{transport,integrity}- and recent-repository-scheduler-hostile-cases.ts.
+  { constant: "BOOTSTRAP_RECEIPT_LAYER", file: "apps/control-room/src/live/live-bootstrap-receipt.ts", axis: "transport" },
+  { constant: "ACTIVATION_LAYER", file: "apps/control-room/src/v2/ops/activation-port.ts", axis: "transport" },
+  { constant: "RESOURCES_LAYER", file: "apps/control-room/src/v2/resources/resources-credential.ts", axis: "transport" },
+  { constant: "DESIGN_LAYERS", file: "apps/daemon/src/design/design-contracts.ts", axis: "integrity" },
+  { constant: "DESIGN_CODE_LAYERS", file: "apps/daemon/src/design/design-contracts.ts", axis: "integrity" },
+  { constant: "ENVIRONMENT_LAYERS", file: "apps/daemon/src/environment/environment-contracts.ts", axis: "integrity" },
+  { constant: "ENVIRONMENT_CODE_LAYERS", file: "apps/daemon/src/environment/environment-contracts.ts", axis: "integrity" },
+  { constant: "PREVIEW_LAYERS", file: "apps/daemon/src/preview/preview-contracts.ts", axis: "integrity" },
+  { constant: "PREVIEW_CODE_LAYERS", file: "apps/daemon/src/preview/preview-contracts.ts", axis: "integrity" },
+  { constant: "REPOSITORY_DELIVERY_LAYER", file: "apps/daemon/src/orchestrator/repository-delivery-contracts.ts", axis: "scheduler-activation" },
+  { constant: "REPOSITORY_RECOVERY_LAYER", file: "apps/daemon/src/repository/repository-recovery-contracts.ts", axis: "scheduler-activation" },
   { constant: "IDE_ADAPTER_LAYER", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
   { constant: "IDE_ADAPTER_LAYERS", file: "adapters/ide-contract/src/index.ts", axis: "transport" },
   { constant: "LIVE_BUDGET_COMMITMENT_LAYER", file: "apps/control-room/src/live/live-budget-commitment.ts", axis: "transport" },
@@ -192,6 +207,12 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "EFFORT_COLLECTOR_LAYER", file: "apps/control-room/src/performance/effort-records.ts", axis: "transport" },
   { constant: "EFFORT_LAYERS", file: "apps/control-room/src/performance/effort-records.ts", axis: "transport" },
   { constant: "TIMELINE_REFUSAL_LAYERS", file: "apps/control-room/src/timeline/timeline-contract.ts", axis: "transport" },
+  // The Environments screen's WRITE port: it carries an operator-typed variable value from the
+  // browser to `environment.set_variable`/`unset_variable`. `transport` by SUBJECT — the port
+  // moves a command across the process seam and stamps the layer on the undelivered refusal; the
+  // value's own validation (name, size, scope, store key) is the daemon's ENVIRONMENT_LAYERS
+  // above, not this one. Rostered here because it is EXPORTED, so the live source scan sees it.
+  { constant: "ENVIRONMENT_WRITE_LAYER", file: "apps/control-room/src/v2/ops/environment-variables-port.ts", axis: "transport" },
   // The Gate 1 card's mapping of a daemon answer into the browser model: a UI surface
   // carrying authority between processes.
   { constant: "GATE1_LAYER", file: "apps/control-room/src/v2/goals/gate1-pending-contract.ts", axis: "transport" },
@@ -565,8 +586,14 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * services), two durable-store (delivery persistence and readers) and one transport
  * (the Gate 1 card mapping). Forty-eight arms across recent-delivery-v2-,
  * recent-product-contract-v2- and recent-v2-cutover-hostile-cases.ts.
+ *
+ * 179 -> 180 on 2026-09-07 for ENVIRONMENT_WRITE_LAYER, the Environments screen's browser-side
+ * write port (task-ba83b202). `transport` by SUBJECT. It is the reason this file exists as a
+ * gate: the declaring row's own package leg (`pnpm --filter @moe/control-room test`) is EXIT 0
+ * with the constant unrostered, and so is `pnpm typecheck` — only `pnpm test:security` sees it.
+ * A row that exports a layer constant owes this backfill in the same commit that exports it.
  */
-const EXPECTED_ROSTER_SIZE = 168;
+const EXPECTED_ROSTER_SIZE = 180;
 
 /**
  * The per-area split. A scanner that silently matched only one directory
@@ -574,13 +601,13 @@ const EXPECTED_ROSTER_SIZE = 168;
  * distribution catches it.
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
-  "apps/daemon": 81,
+  "apps/daemon": 89,
   "packages/benchmark": 5,
   "packages/runner": 23,
   "packages/core": 22,
   "packages/scheduler": 10,
   "packages/store": 5,
-  "apps/control-room": 11,
+  "apps/control-room": 15,
   "packages/contracts": 3,
   "adapters/ide-contract": 2,
   "packages/review": 1,
@@ -791,7 +818,7 @@ describe("scanner matches the annotated declaration form", () => {
  *
  * Every arm before this one measures EXPORTED declarations, because `DECLARATION_PATTERN` is
  * anchored `^export const`. A column-0 `const FOO_LAYER` is structurally unreachable by that
- * anchor no matter how wide its character class gets, and sixty of them stamp live refusals.
+ * anchor no matter how wide its character class gets; the current scan finds 77 declarations.
  * These four arms make that population a DECLARED NUMBER instead of an unmeasured remainder.
  *
  * SET EQUALITY IN BOTH DIRECTIONS, and the reason is the defect this closes. An arm that walks
@@ -803,11 +830,11 @@ describe("scanner matches the annotated declaration form", () => {
  */
 /**
  * The invisible share, stated once so no arm re-derives it. WIDE numerator, WIDE denominator:
- * 62 module-private declarations against those 62 plus the 168 exported ones.
+ * 77 module-private declarations against those 77 plus the 180 exported ones.
  */
 const EXPECTED_INVISIBLE_NUMERATOR = EXPECTED_PRIVATE_COUNT;
-const EXPECTED_INVISIBLE_DENOMINATOR = 233;
-const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 279;
+const EXPECTED_INVISIBLE_DENOMINATOR = 257;
+const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 300;
 
 describe("TASK-LV module-private layer declarations are bounded", () => {
   it("TASK-LV scans a non-empty module-private population", () => {
@@ -837,9 +864,8 @@ describe("TASK-LV module-private layer declarations are bounded", () => {
 
   it("TASK-LV pins the invisible share at the wide pattern width, numerator and denominator both named", () => {
     // NUMERATOR: module-private declarations. DENOMINATOR: those plus every EXPORTED one.
-    // Both at the WIDE `[A-Z0-9_]+` width — the narrow width measures 65 of 233 and is equally
-    // correct at its own width, which is exactly the units mismatch that was twice mistaken for
-    // a factual dispute. Naming both sides is what stops the ratio drifting by moving one:
+    // Both at the WIDE `[A-Z0-9_]+` width, avoiding the narrow/wide units mismatch that was
+    // twice mistaken for a factual dispute. Naming both sides stops ratio drift by moving one:
     // export ten private layers and the numerator falls while the denominator holds, so the
     // per-mille pin reds even though the total population never moved.
     const numerator = scanPrivateLayerDeclarations().length;

@@ -229,6 +229,10 @@ describe("cutover attempt contracts", () => {
   it.each([
     ["garbage", new TextEncoder().encode("not-json")],
     ["truncated", new TextEncoder().encode('{"admitted":null')],
+    // A stored kind named after an Object.prototype member resolved to an inherited function
+    // through the bare key table and the decoder THREW from `keys.every` instead of refusing.
+    ["prototype-named kind", new TextEncoder().encode('{"admitted":null,"command":{"kind":"constructor"}}')],
+    ["hasOwnProperty kind", new TextEncoder().encode('{"admitted":null,"command":{"kind":"hasOwnProperty","witness":{}}}')],
   ])("refuses %s bytes as unreadable evidence", (_case, bytes) => {
     const decoded = decodeCutoverAttemptEvent(bytes);
 

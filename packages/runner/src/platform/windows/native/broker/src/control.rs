@@ -1,7 +1,7 @@
 //! The CLOSED inbound control vocabulary on fd0, and the minimal accept state
 //! that makes sequence violations visible.
 //!
-//! EXACTLY THREE COMMANDS EXIST: one ordinary launch request shape, CANCEL,
+//! FOUR COMMANDS EXIST: one ordinary launch request shape, CANCEL,
 //! and the curated project-stack launch, whose payload also carries the project
 //! STORE PATH — a path this layer decodes and hands on, nothing more.
 //! There is still no catch-all variant and no open string command space — a
@@ -40,6 +40,8 @@ pub enum Inbound {
     /// store path, which this layer DECODES and passes on. Taking ownership of
     /// that store is a different authority and is not done here.
     ProjectStackLaunch,
+    /// Launch only after locking and hashing the approved executable image.
+    ApprovedImageLaunch,
 }
 
 impl Inbound {
@@ -49,8 +51,8 @@ impl Inbound {
     /// round-trips every entry through [`Self::opcode`] and
     /// [`Self::from_opcode`], so a command that is unreachable from the wire
     /// fails the suite.
-    pub const ALL: [Inbound; 3] =
-        [Inbound::Launch, Inbound::Cancel, Inbound::ProjectStackLaunch];
+    pub const ALL: [Inbound; 4] =
+        [Inbound::Launch, Inbound::Cancel, Inbound::ProjectStackLaunch, Inbound::ApprovedImageLaunch];
 
     /// The frozen wire byte for this command.
     pub const fn opcode(self) -> u8 {
@@ -58,6 +60,7 @@ impl Inbound {
             Self::Launch => 1,
             Self::Cancel => 2,
             Self::ProjectStackLaunch => 3,
+            Self::ApprovedImageLaunch => 4,
         }
     }
 
@@ -71,6 +74,7 @@ impl Inbound {
             1 => Some(Self::Launch),
             2 => Some(Self::Cancel),
             3 => Some(Self::ProjectStackLaunch),
+            4 => Some(Self::ApprovedImageLaunch),
             _ => None,
         }
     }
@@ -88,6 +92,7 @@ pub struct LaunchRequest {
     cwd: String,
     environment: Vec<(String, String)>,
     store_path: Option<String>,
+    approved_image_sha256: Option<String>,
 }
 
 impl LaunchRequest {
@@ -111,6 +116,7 @@ impl LaunchRequest {
     pub fn store_path(&self) -> Option<&str> {
         self.store_path.as_deref()
     }
+    pub fn approved_image_sha256(&self) -> Option<&str> { self.approved_image_sha256.as_deref() }
 }
 
 impl core::fmt::Debug for LaunchRequest {
@@ -184,22 +190,27 @@ impl AcceptState {
         match (self.phase, command) {
             // Spelled out rather than `_`, so adding a command forces a decision
             // here instead of silently inheriting this arm.
-            (Phase::Terminated, Inbound::Launch | Inbound::Cancel | Inbound::ProjectStackLaunch) => {
+            (Phase::Terminated, Inbound::Launch | Inbound::Cancel | Inbound::ProjectStackLaunch | Inbound::ApprovedImageLaunch) => {
                 Err(ProtocolError::refused(ProtocolReason::FrameAfterTerminal))
             }
             (Phase::ExpectingLaunch, Inbound::Cancel) => {
                 Err(ProtocolError::refused(ProtocolReason::FrameOutOfOrder))
             }
-            (Phase::Launched, Inbound::Launch | Inbound::ProjectStackLaunch) => {
+            (Phase::Launched, Inbound::Launch | Inbound::ProjectStackLaunch | Inbound::ApprovedImageLaunch) => {
                 Err(ProtocolError::refused(ProtocolReason::DuplicateLaunch))
             }
             (Phase::ExpectingLaunch, Inbound::Launch) => {
-                let request = decode_launch(frame.payload(), false)?;
+                let request = decode_launch(frame.payload(), false, false)?;
                 self.phase = Phase::Launched;
                 Ok(Accepted::Launch(request))
             }
             (Phase::ExpectingLaunch, Inbound::ProjectStackLaunch) => {
-                let request = decode_launch(frame.payload(), true)?;
+                let request = decode_launch(frame.payload(), true, false)?;
+                self.phase = Phase::Launched;
+                Ok(Accepted::Launch(request))
+            }
+            (Phase::ExpectingLaunch, Inbound::ApprovedImageLaunch) => {
+                let request = decode_launch(frame.payload(), false, true)?;
                 self.phase = Phase::Launched;
                 Ok(Accepted::Launch(request))
             }
@@ -215,13 +226,20 @@ impl AcceptState {
 }
 
 /// Optional project store path, then executable, argv, cwd and environment.
-fn decode_launch(payload: &[u8], project_stack: bool) -> Result<LaunchRequest, ProtocolError> {
+fn decode_launch(payload: &[u8], project_stack: bool, approved_image: bool) -> Result<LaunchRequest, ProtocolError> {
     let mut cursor = Cursor::new(payload);
     let store_path = if project_stack { Some(cursor.text()?) } else { None };
+    let approved_image_sha256 = if approved_image {
+        let digest = cursor.text()?;
+        if !crate::approved_image::valid_digest(&digest) {
+            return Err(ProtocolError::refused(ProtocolReason::PayloadMalformed));
+        }
+        Some(digest)
+    } else { None };
     let executable = cursor.text()?;
     let argv = cursor.list()?;
     let cwd = cursor.text()?;
     let environment = cursor.pairs()?;
     cursor.finish()?;
-    Ok(LaunchRequest { executable, argv, cwd, environment, store_path })
+    Ok(LaunchRequest { executable, argv, cwd, environment, store_path, approved_image_sha256 })
 }

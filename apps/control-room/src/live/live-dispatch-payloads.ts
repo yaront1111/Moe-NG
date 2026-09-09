@@ -108,14 +108,12 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
       policyRevisionRef: POLICY_REF, requiredFactIds: [], scope: [],
     },
   },
-  "project.activate": {
-    witness: {
-      artifactPathRef: "artifact-1", backupPathRef: "backup-1", credentialRef: "credential-1",
-      distributionManifestHash: hex64("cafe"), policyRevisionHash: hex64("face"),
-      providerMinimumProfileRef: "provider-profile-1", signingKeyRef: "signing-1",
-      storeDriverRef: "store-driver-1", truthClass: "DAEMON_VERIFIED",
-    },
-  },
+  // EMPTY ON PURPOSE (task-4b9c394d). The daemon measures its own activation receipts -- repo
+  // HEAD, provider probe, store driver, backup sha256, distribution manifest, installed policy
+  // -- and mints the nine-key witness itself. A witness sent from the browser is refused
+  // ACTIVATION_WITNESS_CALLER_SUPPLIED @ DAEMON_INGRESS, which is the whole point: this dev
+  // board used to hand the daemon invented refs and have them committed as DAEMON_VERIFIED.
+  "project.activate": {},
   "project.bind_repository": {
     observation: {
       baseRevisionHash: hex64("beef"), repositoryRef: "repo-1", scopeRef: "scope-1",
@@ -123,6 +121,14 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
     },
   },
   "project.register": { owner: "operator-local" },
+  // THE OPERATOR'S PROVIDER CHOICE OVERLAYS `provider`; the other two keys are the whole
+  // caller half and belong here rather than at the toggle. `goalId: ""` is the command
+  // contract's PROJECT-DEFAULT SENTINEL, documented at agent-provider-store.ts:72 - an
+  // empty string is not a missing goal, it is the setting every goal inherits, and the
+  // browser writes the project default rather than a per-goal override. `provider` is
+  // spelled with the daemon's own first-named value so this body is valid on its own; a
+  // value outside KNOWN_PROVIDERS is refused AGENT_PROVIDER_UNKNOWN at the store.
+  "project.set_agent_provider": { base: "main", goalId: "", provider: "claude" },
   "provider.probe": {
     // The PROFILE is what the probe registers; an observation without one
     // refuses PROVIDER_PROFILE_INPUT_INVALID at the codec, which silently
@@ -134,8 +140,19 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
         capabilitySchemaDigest: hex64("ca9ab111"),
         concurrencyCeiling: 4,
         limits: { stderrBytes: 65_536, stdoutBytes: 131_072, tailBytes: 4_096, timeoutMs: 900_000 },
-        modelSnapshotEvidence: "claude --version reported a dated snapshot",
-        modelSnapshotKind: "DATED_SNAPSHOT",
+        // THE BROWSER TAKES NO READING, SO IT ASSERTS NONE. These two keys used to
+        // read `DATED_SNAPSHOT` / "claude --version reported a dated snapshot" and
+        // were committed to the real ledger as DAEMON_VERIFIED authority on the
+        // strength of a probe nobody ran -- less honest than the demo seed, which
+        // says UNKNOWN here for exactly this reason (demo-seed-policy.ts:106).
+        // The CLI version IS measured now, by the daemon, on the activation path:
+        // `measureProvider` runs `<agent command> --version` through the ports and
+        // publishes the reading at `/activation/read`.provider, where the Activate
+        // card renders it. A caller-supplied snapshot would still be accepted by
+        // `recordProbe` today, so this literal is the enforcement -- pinned in
+        // live-dispatch-production.test.ts, which fails if a reading reappears here.
+        modelSnapshotEvidence: "the browser ran no provider CLI probe",
+        modelSnapshotKind: "UNKNOWN",
         profileRevisionId: "profile-revision-1",
         provider: "claude",
         providerMinimumProfileRef: "provider-profile-1",

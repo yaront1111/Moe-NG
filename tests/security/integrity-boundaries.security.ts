@@ -50,6 +50,7 @@ import {
   policySliceDigestPositiveControl,
 } from "./policy-slice-hostile-cases.js";
 import { RECENT_INTEGRITY_HOSTILE_CASES } from "./recent-integrity-hostile-cases.js";
+import { RECENT_WORKFLOW_INTEGRITY_CASES } from "./recent-workflow-integrity-hostile-cases.js";
 import { RECENT_CORE_CONTRACT_HOSTILE_CASES } from "./recent-core-contract-hostile-cases.js";
 import { RECENT_DELIVERY_V2_INTEGRITY_CASES } from "./recent-delivery-v2-hostile-cases.js";
 import {
@@ -75,6 +76,7 @@ const HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
   ...PROJECT_INTEGRITY_HOSTILE_CASES,
   ...POLICY_SLICE_HOSTILE_CASES,
   ...RECENT_INTEGRITY_HOSTILE_CASES,
+  ...RECENT_WORKFLOW_INTEGRITY_CASES,
   ...RECENT_CORE_CONTRACT_HOSTILE_CASES,
   ...RECENT_DELIVERY_V2_INTEGRITY_CASES,
   ...RECENT_PRODUCT_CONTRACT_V2_INTEGRITY_CASES,
@@ -162,7 +164,8 @@ describe("integrity axis versus the declared-boundary roster", () => {
     // authority and both `/2` manifests, the delivery-v2 authority and resolution-selection
     // codec, and five product-contract `/2` codecs/bindings/validators. Arms in
     // recent-v2-cutover-, recent-delivery-v2- and recent-product-contract-v2-hostile-cases.ts.
-    expect(ROSTER_INTEGRITY).toHaveLength(41);
+    // Design, environment and preview each declare a layer roster and code-to-layer map.
+    expect(ROSTER_INTEGRITY).toHaveLength(47);
   });
 
   it("covers every integrity boundary the roster declares (roster minus covered is empty)", () => {

@@ -31,6 +31,10 @@ import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { createCompilerLanePort } from "../http/affordance-compiler-lane.js";
 import type { NodeSpec } from "../http/affordance-contract.js";
 import { readGraphBody } from "../planning/graph-body-record.js";
+import { currentPlanningRun } from "../planning/current-planning-run.js";
+import { readApprovedRunWitness } from "../planning/planning-authority-reader-witness.js";
+import { legacyCompiledNodeKeys, nodesBlockedByIdentity } from "./compiled-node-identity.js";
+import { compiledExecutionRef } from "./compiled-execution-ref.js";
 import { deriveProductContractRevisionAggregateId }
   from "../product-contract/product-contract-revision-store.js";
 
@@ -47,6 +51,8 @@ export interface CompiledNodeMission {
 export interface ActiveCompiledGraph {
   readonly content: GraphRevisionContent;
   readonly goalRef: string;
+  /** Present on durable reads; fixtures may supply only the sealed graph. */
+  readonly planningRunRef?: string;
 }
 
 export interface CompiledNodeSource {
@@ -78,7 +84,8 @@ const ENABLED_LIFECYCLES = new Set(["EXECUTION_ENABLED", "CLOSING"]);
 
 /**
  * Every enabled goal's sealed compiled plan, read from durable state alone: the
- * folded goal names its run; the folded run names the sealed content hash core's
+ * folded goal names its initial run; rejection history resolves its successor and the
+ * activation witness must approve that successor. The run names the sealed content hash core's
  * own submission fold wrote; `readGraphBody` re-proves the bytes. A goal whose
  * chain does not re-prove contributes NOTHING (an unreadable plan is never
  * staffed), it does not take the listing down.
@@ -95,39 +102,60 @@ export function activeCompiledGraphs(
     const goal = dataRecord(stateOf(ledger, aggregateId));
     if (goal?.["goalId"] !== aggregateId || goal["projectId"] !== projectId) continue;
     if (!lifecycles.has(String(goal["lifecycle"]))) continue;
-    const planningRunRef = goal["planningRunRef"];
-    if (typeof planningRunRef !== "string") continue;
+    const initialRunRef = goal["planningRunRef"];
+    if (typeof initialRunRef !== "string") continue;
+    const current = currentPlanningRun(store, initialRunRef);
+    if (current.unreadable) continue;
+    const planningRunRef = current.runId;
+    // A rejection's successor is only executable once the goal's activation names it.
+    // Following the latest chain alone would also admit a compiled, unapproved successor.
+    if (current.hops > 0) {
+      const approval = readApprovedRunWitness(store, aggregateId);
+      if ("ok" in approval || approval.runId !== planningRunRef) continue;
+    }
     const run = dataRecord(stateOf(ledger, planningRunRef));
-    const sealed = dataRecord(dataRecord(run?.["state"])?.["sealedHashes"]);
+    const runState = dataRecord(run?.["state"]);
+    if (runState?.["goalRef"] !== aggregateId) continue;
+    const sealed = dataRecord(runState?.["sealedHashes"]);
     const graphContentHash = sealed?.["graphContentHash"];
     if (typeof graphContentHash !== "string" || !HEX_64.test(graphContentHash)) continue;
     const body = readGraphBody(store, projectId, graphContentHash);
     if (!body.ok) continue;
-    active.push(Object.freeze({ content: body.content, goalRef: aggregateId }));
+    active.push(Object.freeze({ content: body.content, goalRef: aggregateId, planningRunRef }));
   }
   return active;
 }
 
 interface SealedNode {
   readonly criterionIds: readonly string[];
+  readonly dependsOn: readonly string[];
   readonly goalRef: string;
   readonly nodeKey: string;
+  readonly nodeRef: string;
   readonly objective: string;
 }
 
-function sealedNodesOf(graphs: readonly ActiveCompiledGraph[]): readonly SealedNode[] {
+function sealedNodesOf(projectId: string, graphs: readonly ActiveCompiledGraph[]): readonly SealedNode[] {
   const nodes: SealedNode[] = [];
   const listed = new Set<string>();
   for (const graph of graphs) {
-    const bearing = new Set(graph.content.snapshot.nodes
+    const { edges, nodes: snapshotNodes } = graph.content.snapshot;
+    const bearing = new Set(snapshotNodes
       .filter((node) => node.executionBearing).map((node) => node.nodeKey));
     for (const definition of graph.content.nodeAuthority.definitions) {
-      if (!bearing.has(definition.nodeKey) || listed.has(definition.nodeKey)) continue;
-      listed.add(definition.nodeKey);
+      const nodeRef = compiledExecutionRef(projectId, graph, definition.nodeKey);
+      if (!bearing.has(definition.nodeKey) || listed.has(nodeRef)) continue;
+      listed.add(nodeRef);
       nodes.push(Object.freeze({
         criterionIds: definition.criterionBindings.map((binding) => binding.criterionId),
+        // The SAME derivation the runs projection uses (runs-read.ts), read off
+        // this node's sealed graph: two spellings of build order are how
+        // the board and the affordance surface come to disagree about it.
+        dependsOn: edges.filter((edge) => edge.consumerNodeKey === definition.nodeKey)
+          .map((edge) => compiledExecutionRef(projectId, graph, edge.producerNodeKey)),
         goalRef: graph.goalRef,
         nodeKey: definition.nodeKey,
+        nodeRef,
         objective: definition.objective,
       }));
     }
@@ -169,17 +197,21 @@ export function createCompiledNodeSource(options: CompiledNodeSourceOptions): Co
   const readActive = options.readActive ?? activeCompiledGraphs;
   const sealed = (): readonly SealedNode[] => {
     try {
-      return sealedNodesOf(readActive(options.store, options.projectId));
+      const graphs = readActive(options.store, options.projectId);
+      const ambiguous = legacyCompiledNodeKeys(options.store, options.projectId, graphs);
+      const blocked = nodesBlockedByIdentity(graphs, ambiguous);
+      return sealedNodesOf(options.projectId, graphs).filter((node) => !blocked.has(node.nodeKey));
     } catch {
       // A degraded read lists nothing rather than throwing the surface down.
       return [];
     }
   };
-  const nodes = (): readonly NodeSpec[] => sealed().map((node) =>
-    Object.freeze({ nodeRef: node.nodeKey, title: node.objective }));
+  const nodes = (): readonly NodeSpec[] => sealed().map((node) => Object.freeze({
+    dependsOn: Object.freeze([...node.dependsOn]), nodeRef: node.nodeRef, title: node.objective,
+  }));
   const mission = (nodeRef: string): CompiledNodeMission | null => {
     if (options.workspace === null || options.testCommand === null) return null;
-    const node = sealed().find((candidate) => candidate.nodeKey === nodeRef);
+    const node = sealed().find((candidate) => candidate.nodeRef === nodeRef);
     if (node === undefined) return null;
     let statements: readonly string[];
     try {

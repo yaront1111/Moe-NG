@@ -46,10 +46,22 @@ For a newly created directory, this makes the project list, daemon controls,
 switching, and isolated setup board usable immediately. It does **not** fabricate
 activation. **New Goal** remains disabled until the project ledger contains
 legitimate durable repository, provider, distribution, backup, credential, and
-store receipts. The current fresh-project browser flow has no production writer
-for that complete receipt set, so the project activation and goal cards remain
-blocked with their exact missing-authority reasons. Development fixtures cannot
-clear those gates in a production build.
+store receipts. What has changed is who writes them: the **Activate project** card
+on the Goals screen reads `POST /activation/read` and drives `project.register`,
+`project.bind_repository`, `provider.probe` and `project.activate` from a single
+button, so the browser alone takes an empty store to a created goal. The daemon
+mints each receipt from a MEASURED fact -- the repository row carries the real
+HEAD sha of the bound checkout, and the provider row carries the version the
+daemon read by running `<agent command> --version` on this host, shown on the
+provider row as `claude --version` beside `2.1.263` -- and a receipt it cannot measure is
+rendered `UNKNOWN` with its code and layer rather than filled in, so the cards
+still block with their exact missing-authority reasons when a prerequisite
+genuinely fails. Note the consequence: a host with no agent CLI on `PATH` now
+refuses activation with `ACTIVATION_PROVIDER_UNMEASURED` instead of activating
+against a provider nobody could reach. A CLI that runs but answers something the
+daemon cannot parse as a version is recorded `UNKNOWN`, which is a reading taken,
+not a gap.
+Development fixtures cannot clear those gates in a production build.
 
 The manager stores non-secret catalog metadata in
 `%LOCALAPPDATA%\Moe\projects.json` and supervises one contained runtime per
@@ -71,6 +83,379 @@ command if it expires. Use `moe projects` when you need a durable list and switc
 Moe never launches either bearer-bearing URL itself because another Windows
 process running as the same user can read process command lines. Keep console
 scrollback private and open printed URLs immediately.
+
+## New product from PRD
+
+In a paired project's Control Room, open **New product from a PRD**. Choose a
+new or empty directory, enter the product name, and attach the PRD. **Create
+product** writes the controlled TypeScript web/API/PostgreSQL scaffold at that
+directory, makes the first scaffold commit, binds the repository to the project,
+registers it in the manager catalog, and continues through activation to PRD goal
+creation. Read the reported outcome: repository creation can succeed while a
+later activation or goal step refuses, with its code and layer shown separately.
+
+Leave the GitHub owner blank for a local-only repository. This browser-only path
+was live-proven on 2026-09-06; live GitHub creation is deferred until the owner
+supplies an account and visibility. No remote is requested by the local-only
+path. If the optional GitHub step does not complete, keep the committed local
+repository: a remote repository may already exist under the supplied account
+even when the push failed. Check that account before retrying the GitHub step.
+
+Do not repeat bootstrap over the populated directory: it refuses
+`BOOTSTRAP_DIR_NOT_EMPTY`. Preserve the existing repository and read its receipt
+before deciding how to continue; a missing receipt is not proof nothing was
+created. Bootstrap creates the scaffold but does not start PostgreSQL or deploy
+the product; use the generated README for its development commands.
+
+## Releasing: the `gh` prerequisite and what its absence looks like
+
+Gate 3 asks you whether the evidence is strong enough to expose the work to
+users, and approving it opens a pull request. **The daemon opens that pull
+request by spawning the GitHub CLI, so `gh` must be installed and authenticated
+on the machine running the daemon** — not on the machine running the browser.
+Check before you need it:
+
+```
+gh --version
+gh auth status
+```
+
+`gh auth status` must show an active account for the host holding the remote,
+and the token needs the `repo` scope.
+
+**What you see when it is missing.** The release refuses
+`RELEASE_PR_FAILED @ RUNNER_WORKSPACE`, and the Release card prints that code
+verbatim beside the refusing layer. The daemon carries the CLI's own last stderr
+line as the refusal detail, so the card tells you which of these happened rather
+than making you guess: `gh` not installed at all (the spawn never starts), `gh`
+installed but not logged in, or GitHub itself declining — for example
+`head branch "main" is the same as base branch "main", cannot create a pull
+request`. **A refused release is recorded, not lost:** the daemon writes a
+REFUSED release receipt before it refuses, so the attempt and its code survive a
+restart, and the goal stays in Needs you until a release actually succeeds.
+
+Two things people mistake for a broken `gh`, both from earlier in the chain:
+
+- `RELEASE_HEAD_CHANGED` — not a refusal code of its own; it arrives as the
+  DETAIL of `RELEASE_PR_FAILED`. The branch the release would open a PR from is
+  not on the remote at the approved sha. The daemon proves this with
+  `git ls-remote --exit-code -- <remote> refs/heads/<branch>` before it spawns
+  anything, so this refusal means the push has not happened or the branch moved.
+  Publish the goal again, then release.
+- `RELEASE_EVIDENCE_INCOMPLETE @ DAEMON_PREREQUISITE` — nothing to do with
+  GitHub. Some acceptance criteria have no verified evidence; the detail names
+  the criterion ids, and the card shows them under the UNKNOWN count. Fix the
+  evidence, do not retry the release.
+
+`RELEASE_REMOTE_MISSING @ PROJECT_REDUCER` is the third and last code: no remote
+is bound to the project at all. Bind one, publish, then release.
+
+## Deploying: binding a target and what each refusal means
+
+A deploy takes a landed, published sha, builds an image from it, starts a
+candidate container and probes it. It records exactly ONE receipt per decision —
+`DEPLOYED` with the image digest and the url, or `REFUSED` with the tool's own
+last stderr line — so an attempt survives a restart either way.
+
+**Bind a target first.** `deployment.set_target` binds one target per
+(project, environment): a network, an optional ssh target, and the url the
+environment answers on. Until a target is bound the daemon offers no deploy at
+all, and the Deployments card renders `DEPLOY_TARGET_MISSING` in words with a
+control to set one — an absent card, not a dead button.
+
+**Then deploy from the goal.** The Deployments card lists every environment with
+its target, the last deploy's sha, time, url and status. The Deploy button ARMS
+first and only the second click on the SAME row dispatches, so arming preview can
+never fire production; the confirm names the environment it is about to deploy
+to. A PRODUCTION deploy additionally states its release standing — it cites the
+release decision id when the goal has a `RELEASED` receipt for that commit, and
+says so plainly when it has none. That citation is real: the command handler
+binds `releaseDecision` to the admitted goal and requested sha and reads the
+release receipt (`deploy-command.ts`), so the line is produced by the product
+rather than by a test double.
+
+**Both deploy commands are the operator's, not an agent's and not the
+browser's.** `deployment.set_target` and `deployment.deploy` require the
+CONFIGURED operator principal. A paired browser session is a durable HUMAN
+principal and is still refused `OPERATOR_PRINCIPAL_REQUIRED` at layer
+`DAEMON_AUTHORIZATION`, and that refusal writes no receipt — nothing is
+half-committed. Both kinds are also excluded from the MCP roster, so an agent
+holding the operator bootstrap credential cannot reach them.
+
+**The four refusal codes, and what to do about each.** All four are recorded on
+a REFUSED receipt at layer `DAEMON_DEPLOY_ENGINE` and render verbatim on the
+card:
+
+- `DEPLOY_TARGET_MISSING` — no target is bound for that environment. Bind one;
+  nothing was attempted.
+- `DEPLOY_DOCKER_UNAVAILABLE` — the daemon could not talk to docker at all. The
+  detail carries docker's own last stderr line. **Check with `docker version`,
+  never `docker --version`**: the second only proves the CLI is installed, and
+  an installed CLI with a stopped engine is the common case. Nothing was built
+  and no container was started — the probe runs before anything else.
+- `DEPLOY_BUILD_FAILED` — `docker build` refused, and the detail is docker's own
+  last stderr line so the failure is diagnosable from the browser without
+  shelling into the host.
+- `DEPLOY_HEALTH_TIMEOUT` — the candidate started but never reported healthy
+  inside the budget. The environment was left as it was; this is a candidate
+  that failed its probe, not a half-replaced environment.
+
+**Where the surfaces disagree, as of 2026-09-07.** The offer surface advertises
+`deployment.deploy` as soon as a goal has a publish REQUEST, while
+`/deployments/read` reports a deployable sha only once that publish has PUSHED.
+On a project whose remote is unreachable you will therefore see the goal listed
+in Needs you as ready to deploy while the card's buttons are disabled under
+"Nothing is landed to deploy yet." That is not a broken card: publish the goal
+to a reachable remote and the buttons enable.
+
+**What has been driven, measured 2026-09-07.** Everything above, including the
+container runtime. Two drives, and they prove different halves:
+
+- **Over the command edge, with a FAKED container runtime**: a real daemon
+  composed the deploy port, admitted the command, enforced the operator fence,
+  wrote a durable `DEPLOYED` receipt, carried its verdict through
+  `/activity/read`, and the browser rendered the receipt's url.
+- **Against a REAL docker engine (2026-09-07, engine 29.6.2 linux/amd64)**: an
+  image was built from the generated Dockerfile, a candidate container ran, and
+  it answered `GET /health` with `200 {"status":"ok"}`. The proxy flipped to the
+  candidate and the incumbent was stopped only afterwards. So **a container has
+  now been started by this path** and the url served bytes.
+
+**What is still NOT proven, stated rather than implied.** The live drive was
+driven through the deploy service directly. The OPERATOR path — the same deploy
+dispatched as a command from the goal — is refused on this host with
+`BOOTSTRAP_PREREQUISITE_MISSING @ DAEMON_PREREQUISITE`, because
+`deployment.deploy` requires a `repository.publish` whose effects are committed
+and no goal here is publication-integrated yet. The engine is proven; the
+goal-lineage gate in front of it is not. That drive also composed no `migrate`
+port, so no migration ran, and the candidate started with **no environment
+variables at all**: `docker run` is invoked with no `-e` and no `--env-file`, so
+a product that needs a `DATABASE_URL` would fail its health probe and the
+operator would read `DEPLOY_HEALTH_TIMEOUT` — a refusal naming HEALTH when the
+real cause is CONFIGURATION. Supplying them is a separate row, now filed as
+`task-0ca117e389df43ee9b458255f0752842` and re-measured on 2026-09-08 against a
+candidate the deploy service itself started.
+
+**What has been driven, measured 2026-09-08 (engine 29.6.2).** The whole chain,
+end to end, on ONE product, with no double anywhere in it — scaffold, real
+`docker compose` topology, real archive build from a real commit, variables
+through the encrypted store, the real migration, deploy, and rollback. This
+supersedes two claims in the 2026-09-07 paragraph above: **a `migrate` port WAS
+composed and a real migration DID run** against the disposable PostgreSQL, and
+the rollback is no longer unexercised. Both directions are proven by an HTTP
+RESPONSE from the running environment rather than by a receipt: the deployed
+build answers with its own marker, and after the rollback the PREVIOUS build's
+marker answers. The rollback was dispatched through the control an operator
+actually has — the `deployment.rollback` offer from `/affordances/read` and the
+receipt the shared `resolveRollbackTarget` names — not from a test's own
+variables. Reproduce with
+`MOE_PLATFORM_PIPELINE=1 pnpm exec vitest run tests/e2e/foundation/platform-pipeline.e2e.test.ts --no-file-parallelism`.
+
+**A ROLLBACK DOES NOT REVERT YOUR SCHEMA, and this is the sentence to read
+twice.** The deploy engine runs its migration step on the rollback leg too, with
+the previous sha, so the forward migration is re-attempted, finds nothing to
+apply, and the schema is left exactly where the forward deploy put it. Measured
+by querying `pg_tables` immediately before and after the rollback: the migrated
+table is present both times. `migrate_down` is a separate operator action and
+nothing on the rollback path invokes it. An operator who reads "rolled back" and
+infers their schema moved with it will be wrong.
+
+**A migration needs the product's workspace INSTALLED.** The migration tool is a
+dependency of the generated product, so a freshly scaffolded or freshly cloned
+tree cannot migrate until its workspace is installed. Today that failure arrives
+as `DEPLOY_BUILD_FAILED` with a redacted detail, and underneath it
+`MIGRATION_FAILED / MIGRATION_FILE_UNKNOWN` — a code naming a FILE when the real
+cause is a missing TOOL. Filed as `task-61f826e50332498eaaaf44f2043845fc`.
+
+**Nothing leaks when a deploy, a migration or a verifier fails.** Proven on the
+failure paths specifically, with live resources enumerated by `docker ps`,
+`docker network ls` and an OS port probe before and after each arm, because a
+cleanup function that returned is not evidence:
+`tests/e2e/foundation/platform-teardown-failure-paths.e2e.test.ts`.
+
+**No variable value surfaces anywhere along the pipeline.** A canary planted
+through the encrypted store is proven to have reached the deployed database
+process — postgres authenticates a connection with it — and is then absent from
+all 45 swept artifacts: both deploy receipts, both report details, the ledger,
+the migration receipt, the probe response, the candidate's `docker inspect` and
+logs, the proxy's Caddyfile after the flip, every generated infrastructure file
+and every committed fixture. `.env` holds it and is not committed.
+`tests/e2e/foundation/platform-secret-canary.e2e.test.ts`.
+
+**These three live files publish the product's real ports (3000 and 5432), so
+run them one at a time** — `--no-file-parallelism` — and only with
+`MOE_PLATFORM_PIPELINE=1`. Without the flag they neither bind nor build, which
+is why the shared root gate is unaffected by them.
+
+**An environment can never be retired.** There is no destroy or teardown command
+at any layer, and the health sweep takes its roster from the append-only deploy
+ledger, so an environment whose containers you removed by hand is probed forever
+and keeps recording DOWN. Filed as `task-de80c663569a4ab2b30a9db6ac526e4b`.
+
+**The three days this cost, so nobody repeats it.** `DEPLOY_DOCKER_UNAVAILABLE`
+collapses two different states: docker *not installed* (needs a host change) and
+docker *installed with the engine stopped* (needs the application started, and
+any seat can do it). Three seats over three days read the second as the first
+and left the clause unmet. A refusal that names a transport — `npipe:…`, a
+socket path — is evidence the CLI exists and could not reach a server, which is
+much closer to "stopped" than to "absent". **Try starting Docker Desktop before
+concluding the host lacks docker.**
+
+## Migrations: the backup comes first, and what each refusal means
+
+**A `pg_dump` runs BEFORE any migration, and a failed dump means NOTHING was
+applied.** That ordering is the whole point of the feature: it is the only thing
+standing between a bad migration and production data nobody can get back. If the
+dump cannot be taken the run is refused with `MIGRATION_BACKUP_FAILED` and the
+schema is left exactly as it was -- not "mostly applied", not "applied and then
+rolled back". A migration that ran after a failed backup is the precise scenario
+the receipt exists to make impossible.
+
+**Where the backup lives.**
+`<project>/.moe-next/backups/pre-migration/<environment>/<17-digit-timestamp>.sql`
+-- the same `.moe-next/backups` root the activation receipts already use, not a
+second location to search during an incident. The receipt carries the file's
+**sha256**; it does NOT carry the path, and the path deliberately never leaves
+the daemon module. The control room shows `Backup verified` plus the digest and
+offers no link, no href and no download: a database dump is a reference you
+quote to this runbook, never something a browser hands out.
+
+**The receipt.** Every run records exactly one `moe-migration-receipt/1`:
+`{version, projectId, requestId, receiptId, environment, sha, decidedAt,
+applied[], backupRef, outcome, refusal}` with `outcome` one of `APPLIED`,
+`REFUSED` or `REVERTED`. Read it back with `readMigrationReceipt(store,
+projectId, requestId)`; its verdict is served verbatim through
+`/activity/read`, so a refused migration reads differently from an applied one
+in the decision feed.
+
+**`backupRef` is NULLABLE, and a null backup is not a successful one.** A
+`MIGRATION_BACKUP_FAILED` receipt carries `backupRef: null` and `applied: []`.
+When `backupRef` IS present it is `<path>@sha256:<digest>`.
+
+**`REFUSED` alone does not tell you the schema's physical state -- read the
+code.** `MIGRATION_BACKUP_FAILED` means nothing ran. `MIGRATION_FAILED` means a
+migration file threw, and its `detail` NAMES THE FAILING FILE. All nine codes
+answer at layer `DAEMON_INGRESS`:
+
+- `MIGRATION_BACKUP_FAILED` -- the dump could not be taken (or its directory is
+  missing, is a symlink, or already holds that timestamp). Nothing was applied.
+- `MIGRATION_FAILED` -- a migration threw; `detail` is the file. Whatever ran
+  before it may have committed, which is why the backup is taken first.
+- `MIGRATION_IN_PROGRESS` -- another run holds `.migration.lock`. Wait; do not
+  delete the lock to force a second concurrent migration.
+- `MIGRATION_RECEIPT_INVALID` / `MIGRATION_RECEIPT_CONFLICT` /
+  `MIGRATION_RECEIPT_WRITE_FAILED` -- the record could not be decoded, collided
+  with a different record under the same id, or could not be persisted.
+- `MIGRATION_DOWN_BATCH_UNKNOWN` -- no such applied batch. **Nothing ran.**
+- `MIGRATION_DOWN_NOT_LAST_BATCH` -- the named batch is not the tail. **Nothing
+  ran**, checked before reverting rather than discovered half way.
+- `MIGRATION_DOWN_FAILED` -- a `down()` actually failed part way. This is the
+  one where the schema may now be in neither state, and it is the case the
+  restore paragraph below exists for.
+
+**`deployment.migrate_down` is HUMAN-ONLY.** It takes `{environment,
+toMigrationRequestId}`, dumps the database first (same ordering, same backup
+location), reverts the last batch, and records a `REVERTED` receipt -- or one of
+the three `MIGRATION_DOWN_*` refusals above. Like the other deployment commands
+it requires the CONFIGURED operator principal and is EXCLUDED from the MCP
+roster, so no agent session can reach it, for a sharper reason than the deploy
+fence: **reverting a production schema destroys the data the forward migration
+created, and only a human can weigh that loss.** The database URL comes from a
+per-environment host resolver configured on the daemon, never from the request
+payload; an unconfigured daemon REFUSES with `MIGRATE_DOWN_UNCONFIGURED` at the
+command seam rather than silently skipping the revert.
+
+**When a down-migration cannot revert: restore the recorded backup.** This is
+the paragraph you are reading during an incident, so these are the actual
+commands. First choose the snapshot by its receipt, not by the newest filename:
+
+- The failed **`deployment.migrate_down` receipt's `backupRef`** names the dump
+  taken immediately BEFORE `down()`. Restoring it recovers the **migrated,
+  pre-down state**, including the data present when that attempt began.
+- The original **forward migration's APPLIED receipt's `backupRef`** names the
+  dump taken BEFORE `up()`. Restoring that one returns the **pre-migration
+  state**, discarding later changes. That is a different recovery decision,
+  requiring explicit human approval of that data loss.
+
+Both dumps live in `.moe-next/backups/pre-migration/<env>/`; the directory name
+does not identify the recovery direction. Use the chosen receipt's exact path
+and digest. If its `backupRef` is null, STOP: that receipt provides no backup.
+Substitute the bracketed snapshot values below from that reference.
+
+Find the digest and confirm the file has not changed since it was written:
+
+```
+sha256sum "<project>/.moe-next/backups/pre-migration/<env>/<ts>.sql"
+# Windows: certutil -hashfile "<project>\.moe-next\backups\pre-migration\<env>\<ts>.sql" SHA256
+```
+
+It must equal the `sha256:` half of the receipt's `backupRef`. If it does not,
+STOP -- you are about to restore a file that is not the one the receipt
+describes.
+
+**Before the destructive reset:** stop application writers, preserve the failed
+database for investigation, and have the operator verify the selected receipt,
+snapshot digest, environment, server/container and database together. Confirm
+the approved loss of changes since that snapshot. Do not proceed on a mismatch
+or an unverified backup. The confirmation below is required for either form.
+
+Against a reachable database (Bash). Configure `<service>` using protected
+PostgreSQL service/password files for the verified destination; never put a
+connection string or password in shell history or command arguments:
+
+```bash
+read -r -p "Type RESTORE <env>/<database> to replace the public schema: " confirm
+[ "$confirm" = "RESTORE <env>/<database>" ] || exit 1
+psql "service=<service>" -X -q -v ON_ERROR_STOP=1 --single-transaction \
+  -c "SET client_min_messages TO warning; DROP SCHEMA public CASCADE; CREATE SCHEMA public;" \
+  -f "<project>/.moe-next/backups/pre-migration/<env>/<ts>.sql"
+```
+
+Against a database inside a container (Bash; the reset/restore sequence driven
+on 2026-09-08). Use its already configured authentication, not a password argument:
+
+```bash
+read -r -p "Type RESTORE <env>/<database> to replace the public schema: " confirm
+[ "$confirm" = "RESTORE <env>/<database>" ] || exit 1
+docker exec -i <container> psql -X -q -U <user> -d <database> \
+  -v ON_ERROR_STOP=1 --single-transaction \
+  -c "SET client_min_messages TO warning; DROP SCHEMA public CASCADE; CREATE SCHEMA public;" \
+  -f - < "<project>/.moe-next/backups/pre-migration/<env>/<ts>.sql"
+```
+
+Run ONE attempt and check its exit status; a nonzero exit is a failed restore,
+not a reason to retry without these safeguards. The `-c` reset and `-f` dump
+apply are in the SAME `--single-transaction`: `ON_ERROR_STOP=1` stops at a
+failure and the transaction rolls back BOTH, rather than leaving a half-restored
+schema. Resetting first avoids collisions with the still-migrated objects.
+Keep `-f -` for the container's stdin dump so psql processes its meta-commands.
+These flags and the reset match `apps/daemon/src/backups/backup-ports.ts`'s
+`restoreIntoDatabase`; do not split the reset into a separate committed command.
+`client_min_messages=warning` suppresses cascading-drop notices; `-X -q` avoids
+startup-file effects and quiets routine output, but does not sanitize errors.
+Do not paste raw diagnostics or dump contents into chat, logs or receipts.
+
+**What has been driven, measured 2026-09-08.** Against a REAL disposable
+PostgreSQL (`postgres:17-alpine`, engine 29.6.2 linux/amd64): a migration
+created a table (`\dt` went from 2 relations to 3), the
+`moe-migration-receipt/1` was read back from the store byte-equal to what the
+call returned, the backup file was present at the path above and its sha256
+RECOMPUTED ON DISK equalled the digest in the receipt, `DROP SCHEMA public
+CASCADE` followed by restoring that dump returned the pre-migration schema at
+column level, and the `MIGRATION_BACKUP_FAILED` path left the SCHEMA -- not just
+the return value -- untouched. `MIGRATION_FAILED` named the failing file and
+left `pgmigrations` holding only the initial migration. Re-run it yourself with
+`MOE_MIGRATION_RESTORE=1` and the daemon package's own vitest config; the opt-in
+performs real work and FAILS rather than skipping when docker is unavailable.
+
+**What is NOT proven, stated rather than implied.** No preview environment
+exists on this host: there is no environments store, and this project's
+`.moe-next/backups` has no `pre-migration` leaf, so **no environment of this
+project has ever been migrated**. The machinery above is verified against a
+disposable database; applying it to a real preview environment waits on the
+environments model and the deploy path, which are sibling work. The deploy drive
+in the section above composed no `migrate` port, so **no migration has yet run
+as part of a deploy** either.
 
 ## Source development launcher
 
@@ -183,6 +568,81 @@ Re-probe after a CLI upgrade; this landscape moves.
 The two gates are independent: a `codex` command holding only Claude variables
 is refused naming the Codex roster, and vice versa. Neither gate reads the
 other's names.
+
+#### Choosing the provider from the browser, and reading it back
+
+`MOE_AGENT_COMMAND` is no longer the only way to pick a provider. The agent
+provider is a DURABLE PROJECT SETTING (`project.set_agent_provider`), and a
+paired operator sets it from **Health -> Seats**. The setting is
+operator-fenced and MCP-excluded: an agent seat cannot change which provider
+staffs the fleet, only a human at a paired browser can.
+
+Seats then discloses, so a fleet is readable without reading the launcher's
+console:
+
+- **Per seat, what the WRAPPER measured at spawn** -- the provider and the agent
+  CLI version, both named `...AtStart` because they are second-hand facts about
+  the past, not a live probe. A seat that has never been measured says so in
+  words rather than printing a bare `UNKNOWN`.
+- **WHERE the credential comes from** -- a signed-in credential file on this
+  host, or the NAME of the environment variable that carries it. **Never the
+  value.** The screen builds that sentence only from a closed grammar over the
+  daemon's credential ref, so a value substituted for the source renders as
+  `RESOURCES_CREDENTIAL_SOURCE_UNRECOGNISED` instead of as itself.
+- **When the chosen provider has NO credential**, the launcher's own
+  `MOE_UP_ENV_MISSING` line above is repeated VERBATIM, naming every accepted
+  variable and the sign-in path that was looked for. It is the launcher's single
+  roster, carried through `/activation/read`, not a second copy in the browser.
+- **`MOE_AGENT_COMMAND` when it is overriding the choice.** The environment wins
+  at spawn, so the screen names the variable rather than silently flipping a
+  label -- a browser choice that is being ignored is otherwise unreadable.
+
+A seat keeps the provider it started under; the setting applies to the next one,
+and Seats says so when a running seat disagrees with it.
+
+**Measured 2026-09-07, and the remaining limit stated rather than implied:** the
+toggle, the disclosure and the credential-source fence were driven against a REAL
+daemon in the browser lane, and THE WRITE NOW COMPLETES: a paired operator clicks
+`codex`, the envelope is built from the daemon's own offer, and the daemon
+answers `AGENT_PROVIDER_SET`. The journey
+(`tests/e2e/control-room/agent-provider-seats.spec.ts`) asserts that round trip
+-- no refusal element, the toggle enabled, the configured provider reading
+`codex` -- rather than the refusal code it pinned before task-136cbab2 landed.
+THE FENCE IS NARROWED, NOT REMOVED. The kind stays in
+`OPERATOR_PRINCIPAL_KINDS`; what was widened is one disjunct inside
+`isDurableHumanPrincipal`, for this ONE kind, requiring `ADMIN`.
+
+**Two independent layers refuse it, with DIFFERENT codes, and which one you see
+tells you where you stopped.** `SETTINGS_FAMILY` binds the kind's required
+capability to `ADMIN`, so `http-command-ingress.ts` answers
+`CAPABILITY_DENIED @ AUTHORIZE` FIRST for any caller lacking `ADMIN` -- that
+caller never reaches the operator fence, which is exactly why an HTTP-only test
+stays green even with the `ADMIN` check deleted, and why the two layers are
+pinned by separate arms. A caller that DOES hold `ADMIN` but is not a durably
+paired HUMAN -- a non-human principal, say -- gets
+`OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION` ("this command requires the
+configured operator principal") at the handler seam instead. The gate is pairing
+PLUS `ADMIN`, never `ADMIN` alone.
+A **real `codex exec` binary HAS now delivered a node** (task-117a3cd9,
+codex-cli 0.153.4): three `seat_start` rows reporting provider `codex`, the
+`codex exec` argv captured from the OS while the process was alive, and lander
+`COMMITTED` at `ca4abc80a37e80aff51f1600d58afffb6e57b818` on a fresh lane
+project, with `MOE_AGENT_COMMAND` `<UNSET>` so the DURABLE SETTING chose it. The
+quota-free path -- a SCRIPTED codex double over the real MCP wire -- still runs
+offline in `pnpm test:e2e`. Not yet driven: a multi-node goal, or UnAI.
+
+**If the toggle is greyed out with "cannot change the provider", read
+`/affordances/read`, not the pairing.** The browser can only dispatch a kind the
+daemon has OFFERED it: `commandBuilderFor` reads `commandId`, `expectedVersion`
+and `targetAggregateId` off the affordance and refuses `INPUT_INVALID` without
+one. `project.set_agent_provider` is minted by
+`apps/daemon/src/http/affordance-agent-provider-offers.ts`, which withholds the
+offer only when the setting's own scope check refuses -- so an absent offer means
+`AGENT_PROVIDER_SCOPE_INVALID` or `AGENT_PROVIDER_STORE_UNREADABLE` on the
+daemon, never an unpaired browser. Being registered, capability-bound and
+MCP-excluded is NOT enough for a browser to reach a command; the offer is. And
+the offer is not enough either: an `OPERATOR_PRINCIPAL_KINDS` member also needs
+the principal fence widened, which is the second half described above.
 
 The daemon binds an EPHEMERAL port on purpose, so read the printed origin rather
 than assuming `39123`. Ctrl-C in this console stops both children; either child
@@ -345,7 +805,12 @@ credential or store path.
 
 One tool per runtime kind (108) plus queries: `work_get_context` returns the
 affordance surface — chain standing, daemon-minted offers, work-claim overlay,
-code-node steps — and `events_read` serves ledger pages. An agent session is
+code-node steps — and `events_read` serves ledger pages. With a payload of
+`{"workItemId": "<the item you hold>"}` it returns only that step (outcome
+`SURFACE_ITEM`, with its claim and `claimAggregateVersion`, and the commands
+offered on that aggregate) — under 8 KB, so a harness that truncates large
+results still reaches the version; an id that names no step refuses
+`WORK_ITEM_UNKNOWN`. An agent session is
 minted with `session.open` (capabilities scoped per kind family; the working
 principal is the session id, never the opener).
 
@@ -356,7 +821,9 @@ node src/orchestrator/agent-wrapper-main.ts
 ```
 
 Each pass: for every READY, unclaimed non-human step (code nodes first;
-`approval.decide`, `goal.close`, and session plumbing skipped; capped by
+`approval.decide`, `goal.close`, and session plumbing skipped — these are the
+human-only kinds, and `goal.close` in particular is never staffed because
+closing a goal is a person's decision; capped by
 `MOE_WRAPPER_MAX_AGENTS`, default 2)
 it opens a scoped session, claims the item under the AGENT'S credential (the
 claim's expiry is also the reap horizon), and spawns
@@ -371,6 +838,85 @@ config file lives in a wrapper-owned temp directory, is removed when that
 agent exits, and the directory goes when the wrapper process does. The wrapper
 also closes the durable scoped session after the child exits; expiry is the
 fallback if cleanup cannot reach the daemon.
+
+### Provider limits
+
+A seat that exits NONZERO is classified from its OWN output: the last 40 lines are
+scanned newest-first against a frozen roster of provider limit sentences
+(`seat-exit-classifier.ts`). A match is read `PROVIDER_LIMIT` - the staffing attempt is
+REFUNDED (the provider refused, not the item), the provider is parked until its reset,
+and the claim is released and the scoped session closed exactly as for any other exit.
+Anything else nonzero is `FAILED`; exit 0 is `COMPLETED` whatever it printed on the way.
+
+| Provider | Sample line | Reset in the line | Captured from |
+| --- | --- | --- | --- |
+| claude | `You've hit your session limit · resets 12:10am Asia/Jerusalem` | yes: wall clock + zone, resolved to the NEXT such instant | live seat exit 1, 2026-09-03 |
+| claude | `You've hit your usage limit · resets 12:10am (Asia/Jerusalem)` | yes: wall clock + zone | claude.exe 2.1.260 composer |
+| claude | `You've hit your weekly limit · resets Sep 8, 10:46am (Asia/Jerusalem)` | yes: dated, not rolled forward | claude.exe 2.1.260 composer |
+| claude | `Fast limit reached and temporarily disabled · resets in 5m` | NO - it carries a DURATION | claude.exe 2.1.260 `SDo()` |
+| codex | `ERROR: You've hit your usage limit. Visit https://chatgpt.com/codex/settings/usage to purchase more credits or try again at Sep 8th, 2026 10:46 AM.` | yes: host-local clock, no zone | live `codex exec`, codex-cli 0.152.0 |
+
+The separator in the claude samples is U+00B7 MIDDLE DOT, which is what the CLI composes
+with - not a hyphen. When a line carries no readable instant, or one already past, the
+pause is bounded by `DEFAULT_PROVIDER_PAUSE_MS` = 30 minutes. A second limit exit DURING a
+live pause REUSES that pause's reset and never slides it forward, so a busy fleet cannot
+park itself indefinitely.
+
+Three lines say it, on the wrapper's own stdout:
+
+```
+[wrapper] provider limit: <provider> paused until <resetAt> (<seat's last line>)
+[wrapper] provider limit: <provider> paused until <resetAt> (DEFAULT_PROVIDER_PAUSE_MS) (<seat's last line>)
+[wrapper] provider paused: <provider> until <resetAt> (active N)
+[wrapper] seat exit not recorded: <code>
+```
+
+The `(DEFAULT_PROVIDER_PAUSE_MS)` form appears only when the reset was bounded rather than
+parsed. `provider paused:` is printed once per DISTINCT idle state, not once per pass.
+
+In the browser the same pause shows in four places: the shell strip (`Agents paused:
+<provider> limit, resumes <time>`), Seats (that sentence plus `- last line from the seat:
+<line>`, or `(no output)`), Health (the `Agents` fact, `paused: <provider> limit, resumes
+<time>`), and an opened goal's next step while it is WORKING (`Waiting for the provider
+limit to reset at <time>`). `/health/read` carries it raw at `agents.paused`.
+
+WHICH provider is parked comes from `MOE_AGENT_COMMAND`: `providerFor()` matches the
+extension-stripped basename, and a command it does not recognise reads as `claude`.
+
+The pause is a durable record on aggregate `provider-pause:<projectId>:<provider>`. NO
+browser control clears it. The supported early clear is `clearProviderPause`
+(`apps/daemon/src/orchestrator/provider-pause-ledger.ts`) run against the store: it writes a
+pause whose reset is NOW - one event type and one read rule, not a second path - and the
+wrapper staffs again on its next pass.
+
+### Reclaim after a restart
+
+A seat claims under its OWN credential and that secret dies with the wrapper's
+child, so after a restart nothing -- you included -- could release what its dead
+seats held. The 30-minute claim expiry was the only way out.
+
+THE RULE: the daemon admits a `work.release` from a non-claimant only when the
+holder has NO live session -- every session naming that principal closed,
+expired, or absent. A LIVE holder is never overridden, and an unreadable session
+ledger still refuses `WORK_CLAIM_NOT_CLAIMANT`. `work.renew` is unchanged.
+
+THE PASS: the wrapper reclaims ONCE at boot, before its first staffing pass
+(`MOE_WRAPPER_ONCE=1` runs it, then that one pass). For a recorded, never-retired
+child whose pid is known AND dead it closes the seat's session, releases the
+claim, then retires the record -- in that order, because the daemon refuses the
+release while the session is open. A live child, an unknown pid or an unreadable
+record is left untouched; a recycled pid reads alive and waits out the expiry.
+
+```
+[wrapper] reclaimed <item> from <session>
+[wrapper] kept <item>: child alive
+[wrapper] kept <item>: pid unknown
+[wrapper] reclaim pass: <n> reclaimed, <m> kept
+```
+
+The summary prints even at zero, so "ran, found nothing" differs from "never
+ran". The Seats screen needs no change: a reclaimed seat is a CLOSED session
+with an empty `holding` -- already what it renders.
 
 ### Git landing (what happens to the files after acceptance)
 
@@ -399,14 +945,82 @@ it), `NOTHING_TO_COMMIT`, `NOT_A_REPOSITORY`, `GIT_COMMIT_FAILED` (git's own
 words, e.g. a hook). A transient git failure (`GIT_FAILED`, e.g. a lock) is
 only reported and retried next pass. `MOE_NODE_LANDING=0` turns landing off.
 
-### Publishing (your decision, your remote)
+### Closing a goal (your decision, the daemon's evidence)
+
+Closing is human-only and operator-only, like approval and publishing: the
+wrapper skips `goal.close`, and it is never reachable over MCP. Needs you shows
+a "Ready to close" card for a goal whose contract is fully verified, and its
+Close control asks twice before it sends.
+
+WHAT THE DAEMON REQUIRES. The browser sends only who declared the decision; the
+daemon derives every witness from its own durable records. It OFFERS
+`goal.close` only when the goal's approved Product Contract has every acceptance
+criterion at VERIFIED on the coverage read (a goal with no contract — the seed
+and Foundation journeys — is offered as it always was, since this gate has
+nothing to say about it). When you spend that offer, the command additionally
+requires, for each node the approval's scope names: a durable review acceptance,
+the verifier receipt that acceptance names and still matching it, the node's
+landing, and no activation still holding authority.
+
+WHEN IT REFUSES, THE CARD SHOWS THE DAEMON'S CODE VERBATIM — search for it here.
+All of these refuse at layer `DAEMON_PREREQUISITE`:
+
+| Code | What it means |
+| --- | --- |
+| `GOAL_CLOSE_CRITERIA_UNVERIFIED` | the approved contract still has a criterion the coverage read does not call VERIFIED (or the coverage read could not be completed) |
+| `GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED` | no durable review acceptance names an approved node |
+| `GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT` | no verification receipt names the node |
+| `GOAL_CLOSE_VERIFICATION_RECEIPT_AMBIGUOUS` | more than one receipt names it, so which one attests is unknown |
+| `GOAL_CLOSE_VERIFICATION_RECEIPT_UNREADABLE` | the receipt exists but will not read back |
+| `GOAL_CLOSE_VERIFICATION_NOT_PASSED` | the durable verification or landing evidence does not say the work passed |
+| `GOAL_CLOSE_RESULT_DIGEST_MISMATCH` | the accepted result's digest does not match what was verified |
+| `GOAL_CLOSE_REVIEW_PACKAGE_STALE` | a later review round or a re-plan supersedes the acceptance being relied on |
+| `GOAL_CLOSE_AUTHORITY_REMAINS` | an activation still holds authority over a node of this goal |
+
+ONE EARLIER GATE, WITH A GENERIC CODE. `goal.close` is a bootstrap-family
+command, and the bootstrap sequence requires the project to have committed an
+`approval.decide` before it will run any handler. A project whose goals were
+approved only through the browser's `approval.decide_intent` path has no such
+decision, so the answer is `BOOTSTRAP_PREREQUISITE_MISSING` @
+`DAEMON_PREREQUISITE` — a code that names nothing about goals, because nothing
+goal-specific has been consulted yet. If you see it on a goal whose criteria all
+read VERIFIED, the goal is not the problem: the project has never committed an
+`approval.decide`.
+
+### Publishing (your decision, one remote for the project)
 
 Landed commits stay in the workspace's repository until a human publishes them.
-The opened goal carries a PUBLISH card: type the git remote (an `https://` or
-ssh URL, no embedded credentials) and confirm. That spends the daemon's
-`repository.publish` offer for the goal — a bootstrap-family, operator-only
-command that is never reachable over MCP — and records the decision on the
-goal's publish aggregate. Nothing is pushed by the browser or the daemon.
+
+**The remote belongs to the PROJECT, and you name it once.** The first publish
+binds it; every publish after that reuses it. There is no per-goal remote and
+nothing is remembered in your browser.
+
+A goal carries a PUBLISH card only once at least one of its nodes has LANDED as
+a commit — with nothing to push there is no card at all. The card has one
+control:
+
+- **No remote bound yet** — it asks for the git remote once (an `https://` or
+  ssh URL, no embedded credentials). Confirming binds that URL to the project
+  and publishes to it.
+- **A remote is bound** — it says `Publish to <remote>`, lists the landed
+  commits it will push, and asks for nothing. Confirm and it goes.
+- **Changing it** — `Change` on the card reveals the field again; the next
+  publish rebinds the project to what you type. `Change` on Health says the same
+  thing but does not rebind from there, because the binding is an effect of
+  publishing.
+
+Either way the browser spends the daemon's `repository.publish` offer for the
+goal — a bootstrap-family, operator-only command never reachable over MCP — and
+records the decision on the goal's publish aggregate. Nothing is pushed by the
+browser or the daemon. On the wire a typed URL rides as `remoteUrl: <url>` and
+means BIND-AND-PUSH; a reused one rides as `remoteUrl: null` and means "the
+remote this project is already bound to". Publishing with nothing bound is
+refused `PUBLISH_REMOTE_UNBOUND` at `DAEMON_PREREQUISITE`.
+
+**Health shows the binding.** The Repository card on the Health screen states
+the bound remote with who bound it and when, read from `POST
+/repository/remote/read`, or says no remote is bound yet. Unbound is a state,
+not an error.
 
 The wrapper's PUBLISHER performs the push as the effect of that decision on its
 next pass: `git push <remote> HEAD:refs/heads/<current branch>` in
@@ -415,8 +1029,77 @@ next pass: `git push <remote> HEAD:refs/heads/<current branch>` in
 `REFUSED (GIT_PUSH_FAILED: <git's words>)`. A refused push is never retried
 under the same decision; decide again to retry. The card reads the runs read's
 `publish` state: waiting for the wrapper, pushed with the branch link (GitHub
-remotes get a browse link), or refused with the code. The remote you typed last
-is remembered in this browser only.
+remotes get a browse link), or refused with the code.
+
+### Environment variables (what is set, never what it is)
+
+A goal carries an **Environments** section listing the three environments every
+project has — `preview`, `production` and `verify`. That roster is closed: the
+daemon refuses any other name `ENV_ENVIRONMENT_UNKNOWN` @ `SCOPE`. They exist
+from the moment the project does, so you can set `preview` variables before
+anything has ever been deployed.
+
+**The required names come from the APPROVED CONTRACT, not from a config file.**
+A Gate 1 deployment requirement may name the environment variables it needs
+(`environmentVariableNames`); the union of those names, deduped and sorted, is
+what the screen calls Required. A variable that is set but the contract does not
+name is still listed, marked Extra — you should be able to see what is actually
+in the environment. If the contract names nothing, or could not be read, the
+unset-count card is ABSENT rather than reading zero.
+
+**`N required variables unset for <environment>`** is the card, one per
+environment, linking down to the table. It is what stops a deploy failing for a
+reason nobody can see. It names the environment because `preview` and
+`production` are different facts and fixing the wrong one is easy.
+
+**A VALUE IS NEVER READABLE BACK. Not by you, not by the screen, not by any
+read.** `POST /environments/read` answers four fields per variable — `name`,
+`isSet`, `fingerprintSha256`, `updatedAt` — and there is no field a value could
+occupy. The store seals each value under a key derived from the daemon's own
+credential and drops the plaintext after fingerprinting it. Read this sentence
+before you type a secret into a browser: **if you lose the value, it is gone,
+and the only thing you can do is set it again.**
+
+**The fingerprint is your only confirmation an update took.** It is the full
+sha256 of the stored bytes, and the screen shows the first 12 characters of it
+labelled `sha256 fingerprint`. It is NOT a truncated value and no part of your
+secret is in it. Set a variable, watch the fingerprint change, and that is the
+update landing — there is nothing else to check, which is why it is rendered at
+all. A variable that is not set shows `Not set` rather than an empty
+fingerprint.
+
+**Typing one.** `Set` (or `Replace` on a variable that is already set) opens one
+field, `type="password"` and `autocomplete="off"` so a password manager does not
+capture it. The browser spends `environment.set_variable`; `Unset` spends
+`environment.unset_variable`. Both are operator-only and never reachable over
+MCP. **The screen never echoes the value back — including after a refusal.** A
+rejected submit clears the field, so correcting a typo means typing the whole
+value again; that is deliberate, because a repopulated field is how a secret
+ends up in a screenshot.
+
+The four refusals, each at the layer that answered:
+
+| Code | Layer | What to do |
+| --- | --- | --- |
+| `ENV_ENVIRONMENT_UNKNOWN` | `SCOPE` | Pick one of `preview`, `production`, `verify`. |
+| `ENV_NAME_INVALID` | `NAME` | Names are an uppercase letter, then uppercase letters, digits or underscores. |
+| `ENV_VALUE_TOO_LARGE` | `VALUE` | The value must be under 4096 bytes. The daemon never states your value or its size. |
+| `ENV_STORE_KEY_UNAVAILABLE` | `KEY` | The daemon could not derive its store key. Check the daemon credential is set, restart it, and try again — nothing was stored. |
+
+None of these messages contains what you submitted. The daemon's refusal details
+are fixed prose keyed by code and are asserted to contain no digits at all, so
+an interpolated `value X is too large` cannot creep in; the limit above is
+stated by the browser from a constant.
+
+**Writing needs the configured operator principal — a paired browser cannot.**
+Both kinds sit in `OPERATOR_PRINCIPAL_KINDS`, and unlike `repository.publish`
+they are NOT in the widening that lets a paired browser session act. A paired
+session holds ADMIN, so it READS the table fine; a `Set` or `Unset` from it is
+refused `OPERATOR_PRINCIPAL_REQUIRED` @ `DAEMON_AUTHORIZATION` and the screen
+says so in those words. Set variables from the daemon host. The fence is
+deliberate — an agent that could write a variable could write one the deploy
+then delivers to a production process — and widening it to paired humans is an
+authority decision nobody has taken yet.
 
 ### Replan (when a review is exhausted)
 
@@ -506,6 +1189,34 @@ TWO APPROVAL MODES, both real:
   bytes still answers `APPROVAL_HUMAN_REVIEW_REQUIRED`, and an explicit
   `humanAuthorityGate` on the run outranks any click
   (`APPROVAL_HUMAN_AUTHORITY_REQUIRED` until its own GO is granted).
+
+SENDING THE PLAN BACK, from the same gate. The plan gate offers two decisions over
+the ONE `approval.decide_intent` offer the daemon minted for the run: **Approve
+plan**, and **Send the plan back**, which requires a reason and stays disabled
+until one is typed (whitespace does not count). Both spend the same grant and
+differ only in the payload's `decision` and `decisionReason`; the browser composes
+no authority, and a reason travels VERBATIM because the daemon fences it into the
+successor's compiler mission (`rejection-instructions.ts`). A reject with no reason
+is refused `APPROVAL_REJECT_REASON_REQUIRED` at `APPROVAL_INTENT_REJECTION` and
+the code is rendered on the gate unchanged.
+
+After a reject the daemon binds the goal to a SUCCESSOR run and offers
+`planning.submit_decomposition` instead of an approval, so the browser stops acting
+on the run you sent back: the goal's `planningRunRef` is IMMUTABLE and still names
+it, and the gate resolves the current run by inverting the surface's
+`planningGoalRefs` (`plan-run-resolution.ts`). While the successor compiles the gate
+reads *Plan sent back - waiting for a new plan* and offers no decision, the goal's
+status strip reads **Plan sent back** with the next step *Waiting for a new plan*,
+and Needs you lists a **PLAN_REJECTED** item that CLEARS on the same frame that
+offers the successor for approval. The decision feed shows *rejected the plan* with
+a bad tone. Acting on the run you rejected would be refused
+`APPROVAL_RUN_NOT_REVIEWABLE` @ `APPROVAL_RUN_BINDING`, which is the fence the gate
+exists to keep you away from.
+
+The rejection REASON is not read back into the browser today: `/activity/read`
+entries carry a verdict word (`REJECT`) and no reason field, so the surfaces above
+name the re-plan without quoting your text. The reason is committed and reaches the
+successor's agent; only the read-back is missing.
 
 The DAEMON must ALSO see the same `MOE_NODE_SPECS_DIR`. It loads the node specs
 itself (`daemon-store-dependencies.ts`), so a daemon started without it publishes

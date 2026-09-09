@@ -50,7 +50,9 @@ const EXPECTED_VERSION_SURFACE_FILES = Object.freeze([
   ".github/workflows/cross-host.yml",
   "README.md",
   "apps/control-room/src/v2/shell/nav-rail.tsx",
+  "apps/daemon/src/bootstrap/activation-receipts.ts",
   "apps/daemon/src/cli/moe-cli-main.ts",
+  "apps/daemon/src/http/activation-read.ts",
   "docs/release-provenance.md",
   "tools/packaging/pack-docs.ts",
   "tools/packaging/smoke-windows-artifact.ps1",
@@ -69,6 +71,18 @@ interface ReleaseVersionSurface {
 }
 
 const RELEASE_VERSION_SURFACES: readonly ReleaseVersionSurface[] = Object.freeze([
+  {
+    id: "activation-unsigned-reason-series",
+    path: "apps/daemon/src/bootstrap/activation-receipts.ts",
+    pattern: /SIGNING_UNSIGNED_REASON = "not a trust boundary in v([0-9]+\.[0-9]+)"/u,
+    version: "series",
+  },
+  {
+    id: "activation-read-signing-scope-series",
+    path: "apps/daemon/src/http/activation-read.ts",
+    pattern: /Signing is required by core's exact nine-key roster but is NOT a trust boundary in v([0-9]+\.[0-9]+)/u,
+    version: "series",
+  },
   {
     id: "cli-help-series",
     path: "apps/daemon/src/cli/moe-cli-main.ts",
@@ -193,6 +207,43 @@ const VERSION_OCCURRENCE_EXCLUSIONS: readonly VersionOccurrenceExclusion[] = Obj
     id: "pack-inventory-history",
     path: "tools/packaging/pack-inventory.ts",
     pattern: /shipping (v[0-9]+\.[0-9]+) once carried/u,
+  },
+  {
+    expectedCurrentCaptureCount: 1,
+    id: "activation-unsigned-owner-decision-history",
+    path: "apps/daemon/src/bootstrap/activation-receipts.ts",
+    pattern: /\* (v[0-9]+\.[0-9]+) \(owner decision, 2026-09-04\)/u,
+  },
+  {
+    expectedCurrentCaptureCount: 1,
+    id: "activation-unsigned-reason-fixture",
+    path: "apps/daemon/src/bootstrap/activation-receipts.test.ts",
+    pattern: /reason: "not a trust boundary in (v[0-9]+\.[0-9]+)"/u,
+  },
+  {
+    expectedCurrentCaptureCount: 1,
+    id: "activation-read-unsigned-reason-fixture",
+    path: "apps/daemon/src/http/activation-read.test.ts",
+    pattern: /reason: "not a trust boundary in (v[0-9]+\.[0-9]+)"/u,
+  },
+  // A generated product starts its own version; these are not Moe release stamps.
+  {
+    expectedCurrentCaptureCount: 1,
+    id: "controlled-profile-initial-version-fixture",
+    path: "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+    pattern: /\\"version\\": \\"([0-9]+\.[0-9]+\.[0-9]+)\\"/u,
+  },
+  {
+    expectedCurrentCaptureCount: 2,
+    id: "controlled-profile-package-initial-versions",
+    path: "apps/daemon/src/repository/controlled-profile/controlled-profile-package-templates.ts",
+    pattern: /"version": "([0-9]+\.[0-9]+\.[0-9]+)"/u,
+  },
+  {
+    expectedCurrentCaptureCount: 1,
+    id: "controlled-profile-root-initial-version",
+    path: "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+    pattern: /"version": "([0-9]+\.[0-9]+\.[0-9]+)"/u,
   },
 ]);
 
@@ -788,11 +839,11 @@ describe("release version surfaces", () => {
     expect(difference.unexpected, "internal Cargo.lock rows absent from the release roster").toEqual([]);
   });
 
-  it("maps every declared release version surface onto the seven reviewed source files", () => {
+  it("maps every declared release version surface onto the nine reviewed source files", () => {
     const observedFiles = [...new Set(RELEASE_VERSION_SURFACES.map(({ path }) => path))].sort();
     const difference = rosterDifference(EXPECTED_VERSION_SURFACE_FILES, observedFiles);
 
-    expect(RELEASE_VERSION_SURFACES.length).toBe(11);
+    expect(RELEASE_VERSION_SURFACES.length).toBe(13);
     expect(observedFiles.length).toBeGreaterThan(0);
     expect(difference.missing, "release version files without a structural observation").toEqual([]);
     expect(difference.unexpected, "structural version observations outside the public roster")
@@ -812,13 +863,13 @@ describe("release version surfaces", () => {
       discovered.map(({ key }) => key),
     );
 
-    expect(VERSION_OCCURRENCE_EXCLUSIONS.length).toBe(8);
+    expect(VERSION_OCCURRENCE_EXCLUSIONS.length).toBe(14);
     for (const exclusion of VERSION_OCCURRENCE_EXCLUSIONS) {
       expect(exclusion.expectedCurrentCaptureCount, `empty exclusion: ${exclusion.id}`)
         .toBeGreaterThan(0);
     }
-    expect(surfaces.length).toBe(11);
-    expect(exclusions.length).toBe(12);
+    expect(surfaces.length).toBe(13);
+    expect(exclusions.length).toBe(19);
     expect(discovered.length).toBeGreaterThan(0);
     expect(new Set(discovered.map(({ key }) => key)).size).toBe(discovered.length);
     expect(new Set(declared.map(({ key }) => key)).size).toBe(declared.length);

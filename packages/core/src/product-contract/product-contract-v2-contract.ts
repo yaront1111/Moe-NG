@@ -51,6 +51,8 @@ export const PRODUCT_CONTRACT_V2_LIMITS = Object.freeze({
   maxBytes: MAX_JSON_BODY_BYTES,
   maxCriteria: 1_024,
   maxDecisions: 256,
+  maxEnvironmentVariableNameBytes: 128,
+  maxEnvironmentVariableNames: 256,
   maxIdBytes: 512,
   maxItemsPerSection: 512,
   maxOptionsPerDecision: 64,
@@ -97,6 +99,16 @@ export interface ProductContractV2Requirement extends ProductContractV2Statement
   readonly priority: ProductContractV2Priority;
   readonly requirementId: string;
   readonly supersedesRequirementId: string | null;
+}
+
+/**
+ * A deployment requirement may NAME the environment variables it needs. Names only:
+ * this is contract text that is displayed, stored, and published, so a value must never
+ * reach it. The carrier is optional — absent means the requirement names no variables,
+ * which is the common case and keeps every contract written before this field valid.
+ */
+export interface ProductContractV2DeploymentRequirement extends ProductContractV2Requirement {
+  readonly environmentVariableNames?: readonly string[];
 }
 
 export interface ProductContractV2Criterion extends ProductContractV2Statement {
@@ -151,7 +163,7 @@ export interface ProductContractRevisionV2Draft {
   readonly budgets: readonly ProductContractV2Budget[];
   readonly contractId: string;
   readonly criteria: readonly ProductContractV2Criterion[];
-  readonly deploymentRequirements: readonly ProductContractV2Requirement[];
+  readonly deploymentRequirements: readonly ProductContractV2DeploymentRequirement[];
   readonly functionalRequirements: readonly ProductContractV2Requirement[];
   readonly journeys: readonly ProductContractV2Journey[];
   readonly lineage: ProductContractV2Lineage | null;

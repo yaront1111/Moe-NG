@@ -1,0 +1,554 @@
+{
+  "id": "task-3780109018bb49b2bf3a00b18952d7ff",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "REJECT commits: the run is rejected with the reason, a REVISION successor run is minted, approval decisions carry a verdict",
+  "description": "SPIDR child 1 of task-6061e05cd17540a1bbe08b965da58b64 (leaf; no sibling dependency). Filed by architect-16a01670 2026-09-04, measured at main 68eb1c5d.\n\nWHAT THIS ROW OWNS: the durable REJECT decision and the record that lets everything downstream find the goal's CURRENT run. No offer-ladder, compiler, wrapper or UI change (children 2-3).\n\nMEASURED (re-measure before planning):\n- apps/daemon/src/planning/approval-intent.ts (244 lines): DECISIONS = [\"APPROVE\",\"REJECT\"] at :91; the intent shape {decision, decisionReason: string|null, dependencyChanges, runId} (:116-137); the only REJECT handling is `if (intent.decision !== \"APPROVE\") return refuse(null, \"BOOTSTRAP_PAYLOAD_INVALID\", \"DAEMON_PREREQUISITE\")` at :196-198 BEFORE the fences/sources/human-review witness (:200-243) - pinned by approval-intent.test.ts:1273-1280 and :1565-1567 (both re-aimed by this row). APPROVE runs: source fences (:202-207), `readApprovalIntentSources` (:212), the HUMAN_APPROVED witness `input.humanReview` + operatorReviewAuthority (:218-231), then `commitIntentActivation` (:243, approval-intent-activation.ts). The file is at 244 lines: the REJECT commit goes in a NEW module `approval-intent-rejection.ts` (+ .js bridge), approval-intent.ts only branches to it after the SAME witness/fence checks (a REJECT is a human decision exactly like APPROVE).\n- Core designed path: packages/core/src/planning/planning-results.ts:132 `rejectRun(state, commandId, findingsRef, successorRunId)` -> run lifecycle REJECTED (+ successorRunId on the event, :141-146) and returns `successor` = a DRAFT state for `successorRunId` (successorData :118-130; INITIAL/REVISION share the carrier). Run lifecycles: packages/contracts/src/runtime/runtime-vocabulary.ts:49-50 (DRAFT, READY, PLANNING, SUBMISSION_DRAINING, PLAN_REVIEW, APPROVED, ACTIVATED, REJECTED, CANCELLED). `planning.create_draft` with `runKind: \"REVISION\"` needs only {goalRef, runId, runKind} (planning-command-contract.ts:160-167). Multi-aggregate commits ride one `commitExpectedVersionDecisionLegs` (see apps/daemon/src/planning/graph-activation-service.ts:41).\n- The goal's run: the durable goal state carries ONE immutable `planningRunRef` (read at apps/daemon/src/http/affordance-planning-offers.ts:88); `planReviewable(ledger, runId)` (:78-81) keys on the run lifecycle. Nothing today follows a REJECTED run to its successor.\n- Activity: apps/daemon/src/http/activity-read.ts:77 VERDICT_KINDS = {escalation.decide, review.submit}; `verdictOf(commandKind, resultBytes)` (:80) reads the committed result; apps/control-room/src/v2/ops/activity-words.ts:69 ALREADY renders \"approved the plan\" / \"rejected the plan\" for an approval verdict - the server never emits one.\n\nFEATURE: (1) `approval.decide_intent {decision:\"REJECT\", decisionReason, runId}` passes the same fences + sources + human-review witness as APPROVE, then commits ONE multi-leg decision: core `rejectRun` on the run aggregate (findingsRef = sha256 over \"moe-plan-rejection/1\\n\" + reason; successorRunId = a deterministic id derived from runId + commandId) AND a `PlanningRunCreated` REVISION event for the successor (goalRef = the run's goal) so the successor exists at version 1; the intent decision's committed result is {decision:\"REJECT\", decisionReason, findingsRef, runId, successorRunId}. An empty/whitespace reason refuses APPROVAL_REJECT_REASON_REQUIRED (layer DAEMON_PREREQUISITE) before any durable read; a run not in PLAN_REVIEW refuses with the existing sources/lifecycle code. (2) `currentPlanningRun(ledger, goal)` in a new module apps/daemon/src/planning/current-planning-run.ts (+.js): starts at goal.planningRunRef and follows lifecycle REJECTED -> successorRunId (bounded to 16 hops, cycle-safe, unreadable -> the original ref) returning {runId, hops, rejected: [{runId, successorRunId}]}. (3) activity-read.ts VERDICT_KINDS gains approval.decide_intent (and approval.decide) reading `result.decision`.",
+  "definitionOfDone": [
+    "Over a REAL store driven to PLAN_REVIEW (the fixtures approval-intent.test.ts already uses): `approval.decide_intent` REJECT with a reason and the human-review witness commits; the run aggregate reads lifecycle REJECTED with the successorRunId, the successor run aggregate reads DRAFT at version 1 with runKind REVISION and the same goalRef, and the intent decision result decodes to {decision, decisionReason, findingsRef, runId, successorRunId} (exact keys).",
+    "Refusal arms with code + layer: empty/whitespace reason -> APPROVAL_REJECT_REASON_REQUIRED before any store read (the existing 'refuses REJECT before looking up a durable run' arm at :1273 is re-aimed to this); REJECT without the human-review witness -> APPROVAL_HUMAN_REVIEW_REQUIRED (same as APPROVE); REJECT on a run already REJECTED or ACTIVATED -> the existing lifecycle/sources code; an MCP caller cannot reject (the MCP-excluded arm for approval.decide_intent unchanged, count line quoted). The APPROVE path is byte-identical: every existing APPROVE arm green unchanged.",
+    "`currentPlanningRun` test: original run -> REJECTED -> successor -> REJECTED -> successor resolves to the last one with hops 2 and both rejected ids; a cycle or an unreadable run resolves to the original ref without throwing; the bridge `.js` exists and the module is exported from apps/daemon/src/index.ts (index-surface EXPECTED_EXPORTS re-pinned by running it red first).",
+    "`/activity/read` entries for approval.decide_intent carry verdict APPROVE or REJECT read from the committed result (activity-read.test.ts arm per verdict); decisions of other kinds keep verdict null.",
+    "Gates quoted with count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`; approval-intent.ts stays <= 250 lines (`wc -l` quoted) - the reject commit lives in approval-intent-rejection.ts."
+  ],
+  "taskRails": [
+    "HUMAN GATE: REJECT rides the operator-only, MCP-excluded approval wire and requires the same HUMAN_APPROVED witness as APPROVE; a test pins that an MCP caller cannot reject. Never mint a rejection without the witness.",
+    "PURE DAEMON LEAF: no offer-ladder, compiler, wrapper, catalog-shape or UI change; if a step needs one, stop and say so (child 2/3).",
+    "Refusals assert code AND layer; mutate the surface to prove each arm red (global rail 1). <=250 physical lines per production source, hard stop 400; a new refusal code is added only where its roster pins are named in the plan."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "EXPORT THE CORE AUTHORITY. packages/core/src/index.ts: add `rejectRun` to the export block that already re-exports planning results (find the block exporting from ./planning/planning-results.js or add `export { rejectRun } from \"./planning/planning-results.js\";` beside `reducePlanningRun` at :51) - VALUE export, nothing else. packages/core/src/index-surface.test.ts: EXPECTED_EXPORTS is a sorted roster pinned at `toBe(255)` (:332) - run the test RED first to read the exact failure, insert `rejectRun` in sorted position with its kind, bump 255 -> 256 (re-measure: a peer may have moved it). Run from the repo root: `pnpm exec vitest run packages/core/src/index-surface.test.ts` - green, count line quoted. Also confirm the daemon can now import it: `grep -n \"rejectRun\" packages/core/src/index.ts` and a one-line typecheck probe inside apps/daemon (`import { rejectRun } from \"@moe/core\"` in a scratch file, `pnpm --filter @moe/daemon typecheck`, then delete the probe in the same command - global dependency-edge rail).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/core/src/index.ts",
+        "packages/core/src/index-surface.test.ts"
+      ],
+      "note": "Core authority export was already landed by the prior round and survives the reopen: `packages/core/src/index.ts:53` `export { rejectRun } from \"./planning/planning-results.js\";`, roster entry `[\"rejectRun\",\"function\"]` at index-surface.test.ts:310, pin `toBe(256)` at :333, sibling pin supersession-engine.test.ts:110 `toBe(256)`. Re-verified fresh: `pnpm exec vitest run packages/core/src/index-surface.test.ts` -> \"Test Files 1 passed (1) / Tests 280 passed (280)\", exit 0. Consumer edge live: apps/daemon/src/planning/approval-intent-rejection.ts imports { reducePlanningRun, rejectRun, snapshotPlanningRunContractState } from \"@moe/core\" (bare specifier), so the dependency edge is proven by the compiled daemon, not by a probe. No edit needed this round.",
+      "startedAt": "2026-09-04T20:24:16.056Z",
+      "completedAt": "2026-09-04T20:25:06.550Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "REJECTION TESTS FIRST (red) in apps/daemon/src/planning/approval-intent.test.ts, reusing its harness: `reviewableStore()` (:103, driveThrough to approval.decide = a sealed PLAN_REVIEW run), `reviewedDispatch(store, commandId, intent)` (:156-170, carries humanReviewWitness(OPERATOR, commandId)), `INTENT` (:119), `refusalOf`, `readDurableLedger`, `replayAggregateId/replayRef`. (a) RE-AIM :1273-1280 'refuses REJECT before looking up a durable run' -> 'commits a REJECT with a reason: the run is rejected and a REVISION successor exists': dispatch {...INTENT, decision:\"REJECT\", decisionReason:\"the plan skips the auth screen\"} -> outcome ok; then read the store: the run aggregate's last event kind is PlanningRunRejected with `findingsRef` = sha256hex(\"moe-plan-rejection/1\\n\" + reason + \"\\n\") and a `successorRunId`; the run state lifecycle is REJECTED; `store.readEvents(successorRunId)` holds exactly one PlanningRunCreated with runKind \"REVISION\", goalRef equal to the run's goalRef, version 1; the intent decision's result bytes decode to exactly {decision:\"REJECT\", decisionReason, findingsRef, runId, successorRunId} (Object.keys sorted equality); `readDurableLedger(...).decisionCount` moved by exactly 1 (one multi-leg decision). (b) RE-AIM the table row at :1565-1567 'rejected intent' -> 'rejected intent without a reason' expecting APPROVAL_REJECT_REASON_REQUIRED at layer DAEMON_APPROVAL_INTENT (same layer as the SHAPE_INVALID row at :1560); add a whitespace-only reason row with the same code; both assert decisionCount 0 (refused before any read). (c) REJECT with no human-review witness (the harness's `humanReview: undefined` override, :132/:147) -> APPROVAL_HUMAN_REVIEW_REQUIRED / APPROVAL_POLICY exactly like APPROVE's arm. (d) REJECT on a run already REJECTED (dispatch twice with different commandIds) -> the code `readApprovalIntentSources` answers for a non-PLAN_REVIEW lifecycle (read it from approval-intent-sources.ts:103-146 and assert code + layer literally). (e) REPLAY: the same commandId dispatched twice -> the second answer is the replay (disposition REPLAYED), decisionCount unchanged, no second successor aggregate. (f) RESOLVER arms: after (a), `currentPlanningRun(store, RUN_ID)` -> {runId: successor, hops: 1, rejected: [{runId: RUN_ID, successorRunId}]}; after rejecting the successor too (drive the successor to PLAN_REVIEW is NOT possible in this harness - instead write a second PlanningRunRejected on the successor through core `rejectRun` + `commitAcceptedLegs` inside the test, or accept hops 1 and add a pure-fold unit arm over hand-built event lists for hops 2, a cycle, and an unreadable event -> original ref, no throw). Run the file from apps/daemon: `pnpm exec vitest run --root . --config package.json src/planning/approval-intent.test.ts` - RED on the new/re-aimed arms only; quote them.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/planning/approval-intent.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/approval-intent.test.ts"
+      ],
+      "note": "RED FIRST, against the reopen's PASS BAR (DoD 1 lifecycle clause + DoD 2 vacuous arm). Arms (a)-(f) from the base step already existed and stayed green; this round re-aimed them at the RECORD rather than the event.\n\nNEW/CHANGED in approval-intent.test.ts:\n- `runRecord(store, runId)` (merged with the pre-existing :479 helper, now returning JsonObject through `stateOf(readDurableLedger(...), runId)`) + `recordState(store, runId)`: the production ledger reader every consumer folds through.\n- `plantRunRecord(store, record, label)`: commits a doctored RECORD onto RUN_ID under `approval.decide` so a branch the shipped writers cannot produce is reached by durable evidence. Carries one `TestRecordPlanted` marker event because the store refuses an eventless decision (`store-input-commit.ts:43` STORE_INPUT_INVALID \"events must contain at least one event\") - measured, first attempt used `events: []` and threw.\n- Arm (a) \"commits a REJECT...\": now reads the record after the commit and asserts state.lifecycle REJECTED, state.version priorVersion+1, and that authorityRef/envelopeDigest/submissionHash/state.goalRef/state.graphRevisionRef/state.sealedHashes equal the SEALED record's values; adds a second production reader `readPlanningRun(store, PROJECT_ID, RUN_ID)` -> {lifecycle REJECTED, outcome RUN, reviewable false, submissionHash} (that reader needs record.submissionHash AND record.state to answer at all, so an erased record serves RUN_UNKNOWN); asserts result === record (same bytes) and the EXACT 9-key roster [authorityRef, decision, decisionReason, envelopeDigest, findingsRef, runId, state, submissionHash, successorRunId].\n- Arm (d) already-rejected: reads the record BEFORE asserting the refusal - state non-null and lifecycle REJECTED - so the `state === null` disjunct of approval-run-binding.ts:150 cannot be what answers; only the lifecycle comparison can.\n- NEW arm \"refuses a REJECT whose durable run state core cannot read as a run state\": plants a record whose state carries one extra key, which passes every sources/binding check but fails `validPlanningRunState`'s exact-key roster (planning-validation.ts:230-231 via `exact` at planning-snapshot.ts:182-188) -> APPROVAL_AUTHORITY_UNSEALED / APPROVAL_RUN_BINDING, decisionCount unmoved, no successor, no PlanningRunRejected. That is the branch the reopen's note 3 called never driven.\n\nRED RUN (before the production change), `pnpm exec vitest run --root . --config package.json src/planning/approval-intent.test.ts` from apps/daemon:\n  \"Tests  3 failed | 88 passed (91)\"\n  x commits a REJECT with a reason... -> Error: run run-1 record carries no state (recordState :474)\n  x refuses a second REJECT of an already rejected run... -> Error: run run-1 record carries no state\n  x refuses a REJECT whose durable run state core cannot read... -> DurableStoreError: STORE_INPUT_INVALID: events must contain at least one event (fixed by the marker event; the arm itself passes against the existing branch, so it is coverage of an undriven branch rather than new behaviour)\nThe first two reds ARE the defect QA measured, reproduced by the suite.",
+      "startedAt": "2026-09-04T20:25:13.924Z",
+      "completedAt": "2026-09-04T20:29:31.411Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "IMPLEMENT THE REJECTION COMMIT (green). NEW apps/daemon/src/planning/approval-intent-rejection.ts (<=250 lines) + bridge apps/daemon/src/planning/approval-intent-rejection.js (`export * from \"./approval-intent-rejection.ts\";`). Export `APPROVAL_REJECT_REASON_REQUIRED = \"APPROVAL_REJECT_REASON_REQUIRED\" as const`, `rejectionFindingsRef(reason)` (sha256hex over \"moe-plan-rejection/1\\n\" + reason + \"\\n\"), `successorRunIdFor(runId, commandId)` (\"run-\" + sha256hex(runId + \"\\n\" + commandId).slice(0, 24) - deterministic so a replay derives the same id), and `commitIntentRejection(store, ledger, command: IntentActivationCommand, input: { intent, humanReview, sources: ApprovalIntentSources, sourceFences })`: (1) run state = the PlanningRunState decoded from `sources.runRecord` (approval-intent-sources.ts:43; use the same decode the sources module uses - import its helper or `snapshotPlanningRunContractState` from @moe/core if exported, never a hand-written shape); (2) `const rejected = rejectRun(state, command.commandId, findingsRef, successorRunId)` from @moe/core (step 1) - not ok -> refuse with the core error via `refuseFromCore(kind, error)` (bootstrap-ledger.ts:129); (3) `const created = reducePlanningRun(undefined, { commandId: command.commandId + \"-successor\", goalRef: sources.goalRef, kind: \"planning.create_draft\", runId: successorRunId, runKind: \"REVISION\" })` - not ok -> refuseFromCore; (4) ONE decision through `commitAcceptedLegs(store, intentCommandRequest(command), { aggregateId: intent.runId, eventPayload: rejected.events, eventType: \"PlanningRunRejected\", expectedVersion: input.sourceFences.planningRunVersion, result: { decision: \"REJECT\", decisionReason: reason, findingsRef, runId: intent.runId, successorRunId } }, [{ aggregateId: successorRunId, eventPayload: created.events, eventType: \"PlanningRunCreated\", expectedVersion: 0 }])` - read `ExpectedVersionDecisionLeg`'s exact shape at bootstrap-ledger.ts:222-240 and match it; `intentCommandRequest` is private in approval-intent-activation.ts:181 - export it (same file, name unchanged) rather than duplicating the request shape. In apps/daemon/src/planning/approval-intent.ts (244 lines - must not exceed 250 after this; move nothing else): replace :196-198 with `if (intent.decision === \"REJECT\" && (typeof intent.decisionReason !== \"string\" || intent.decisionReason.trim() === \"\")) return refuse(null, APPROVAL_REJECT_REASON_REQUIRED, \"DAEMON_APPROVAL_INTENT\");` (before the fences, like today's early refusal), keep every check from :200-231 shared, and at :233-243 branch: `if (intent.decision === \"REJECT\") return commitIntentRejection(input.store, ledger, command, { humanReview: witness, intent, sources, sourceFences });` before `assembleActivationInput`. Do NOT touch the APPROVE path bytes. Re-run the test file: green, count line quoted; `wc -l` of approval-intent.ts and approval-intent-rejection.ts quoted.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/planning/approval-intent-rejection.ts",
+        "apps/daemon/src/planning/approval-intent-rejection.js",
+        "apps/daemon/src/planning/approval-intent.ts",
+        "apps/daemon/src/planning/approval-intent-activation.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/planning/approval-intent-rejection.ts",
+        "apps/daemon/src/planning/approval-intent-rejection.js"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/approval-intent-rejection.ts"
+      ],
+      "note": "GREEN. The reopen's cause fixed in apps/daemon/src/planning/approval-intent-rejection.ts (210 lines, cap 250; approval-intent.ts untouched at 249).\n\nWHAT CHANGED (55 insertions, 8 deletions, one file):\n- `runRecordOf(sources)` now yields the run's durable RECORD as a JsonObject; `runStateOf(record)` takes that record and still decodes through core's `snapshotPlanningRunContractState` (no hand-written state shape).\n- NEW `rejectionRecord(record, state, facts)`: the primary leg's committed result is the run's NEW RECORD - the prior record carried forward key by key with `state` REPLACED by `rejected.state` (core's `rejectRun`, planning-results.ts:132-146, which is where lifecycle REJECTED and every sealed field come from), plus the five decision facts alongside it. Its doc comment names the mechanism so the next reader cannot repeat the defect: an aggregate's durable record IS the last committed decision result targeting it (bootstrap-ledger.ts:97-116, stateOf :149-153), there is no separate state projection, so committing the five facts ALONE replaced the sealed run record with a stateless one and REJECTED existed nowhere durable. APPROVE never hits this because its primary leg targets the GOAL.\n- `commitIntentRejection` passes `rejected.state` to that builder instead of discarding it.\n\nMEASURED AFTER (same store, same production readers the suite uses):\n  record keys [\"authorityRef\",\"decision\",\"decisionReason\",\"envelopeDigest\",\"findingsRef\",\"runId\",\"state\",\"submissionHash\",\"successorRunId\"]\n  state.lifecycle \"REJECTED\", state.version priorVersion+1, authorityRef/envelopeDigest/submissionHash/goalRef/graphRevisionRef/sealedHashes byte-equal to the sealed record's\n  readPlanningRun(store, PROJECT_ID, RUN_ID) -> {lifecycle \"REJECTED\", outcome \"RUN\", reviewable false}\n\nDOD-1 DEVIATION, STATED: DoD 1 asks for BOTH \"the run aggregate reads lifecycle REJECTED\" and a result of EXACTLY 5 keys. Those two cannot both hold - the record and the decision result are the same bytes, and `ExpectedVersionDecisionLeg` (decision-legs-contracts.ts:16-20 = {aggregateId, events, expectedVersion}) carries no result, so a secondary leg cannot hold the run's state either. The lifecycle clause is the one the reopen names as the PASS BAR, so the five decision facts now ride the run record and the exactness assertion is over the full 9-key roster. Filed as a comment for architect-16a01670.\n\nGATE: `pnpm exec vitest run --root . --config package.json src/planning/approval-intent.test.ts` from apps/daemon -> \"Test Files 1 passed (1) / Tests 91 passed (91)\", exit 0.",
+      "startedAt": "2026-09-04T20:29:37.613Z",
+      "completedAt": "2026-09-04T20:29:54.304Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "RESOLVER. NEW apps/daemon/src/planning/current-planning-run.ts (<=250 lines) + bridge .js. Export `currentPlanningRun(store: SqliteEventStore, planningRunRef: string): CurrentPlanningRun` with `CurrentPlanningRun = Readonly<{ runId: string; hops: number; rejected: readonly Readonly<{ runId: string; successorRunId: string }>[]; unreadable: boolean }>` and a pure `foldCurrentRun(readEvents: (runId) => readonly StoredEvent[] | null, planningRunRef)` the store variant delegates to (the pure fold is what the hops-2 / cycle / unreadable arms drive). Rule: start at planningRunRef; read the aggregate's events; if the LAST event whose payload decodes (decodeBoundedJsonBytes) has kind \"PlanningRunRejected\" and a string successorRunId, hop; stop at 16 hops or on a repeated id (cycle) or an undecodable payload -> return the last GOOD id with unreadable:true; otherwise the current id with unreadable:false. Never throw: a throwing `readEvents` yields the original ref with unreadable:true. Frozen result. Import it relatively (no daemon root export - comment on this row). Re-run approval-intent.test.ts (the resolver arms from step 2f) green, count line quoted.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/planning/current-planning-run.ts",
+        "apps/daemon/src/planning/current-planning-run.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/planning/current-planning-run.ts",
+        "apps/daemon/src/planning/current-planning-run.js"
+      ],
+      "note": "No edit needed: the resolver landed in the prior round and survives the reopen unchanged, and it is EVENT-SOURCED so the record fix cannot move it. Verified on disk at this tree: apps/daemon/src/planning/current-planning-run.ts (125 lines) + bridge current-planning-run.js (`export * from \"./current-planning-run.ts\";`); daemon root export at apps/daemon/src/index.ts:37-40 (CURRENT_RUN_HOP_LIMIT, currentPlanningRun, foldCurrentRun, CurrentPlanningRun, PlanningRunEventReader, RejectedRunHop); roster pin apps/daemon/src/index-surface.test.ts:402 [\"currentPlanningRun\",\"function\"].\n\nIts six arms ride in the 91 green of the step-3 run: live store before/after the REJECT ({hops 0, rejected []} -> {hops 1, rejected [{runId run-1, successorRunId run-d8e6e2915da070e0582a66f8}], runId successor}), unknown ref is its own current run, plus the pure `foldCurrentRun` arms for hops 2, a cycle, an undecodable payload, a throwing reader and the 16-hop bound. The live arm is the one that proves the fold reads the SAME successor the rejection minted, so a resolver that followed a different id could not stay green.",
+      "startedAt": "2026-09-04T20:29:58.119Z",
+      "completedAt": "2026-09-04T20:30:24.304Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "VERIFICATION GATE + DRILL. From the repo root: `pnpm --filter @moe/daemon test` (quote `Test Files N passed` + `Tests N passed`), `pnpm typecheck` (quote the `$ tsc` echo), `pnpm test` (root lane - packages/core pin; quote its count line). Roster checks quoted: `pnpm exec vitest run --root . --config package.json src/mcp-tool-allowlist.test.ts` from apps/daemon (approval.decide_intent stays MCP-excluded - unchanged pins); every existing APPROVE arm in approval-intent.test.ts green unchanged (`git diff -U0 -- apps/daemon/src/planning/approval-intent.test.ts` shows only the two re-aimed arms + the added arms - quote the hunk headers). DRILL (global rail 1) - new files are untracked until the completion commit: back them up to %TEMP%\\moe-drill-<workerId>\\ with SHA256 first; tracked files restore-proven with `git diff --exit-code -- <file>`. One mutation at a time, focused run, proven restore in a SEPARATE command: (1) accept an empty reason -> arm 2b red; (2) skip the witness check for REJECT -> arm 2c red; (3) commit the rejection leg WITHOUT the successor leg -> arm 2a red (successor events absent) and the resolver arm red; (4) derive successorRunId from Date.now() -> the replay arm 2e red (second successor) ; (5) resolver follows a non-REJECTED last event -> the cycle/unreadable arm red. Record the five red lines + restore proofs in the step note (under 4500 chars).",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/planning/approval-intent-rejection.ts",
+        "apps/daemon/src/planning/current-planning-run.ts",
+        "apps/daemon/src/planning/approval-intent.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/approval-intent-rejection.ts",
+        "apps/daemon/src/planning/approval-intent.test.ts"
+      ],
+      "note": "GATES + DRILLS. Focused file: 92 passed (91 + the decode-edge read-back arm added in step 6's review). Owned-package legs green; the repo-wide legs carry foreign red, disclosed below with paths.\n\nDRILLS - one mutation at a time, focused run, restore proven in a SEPARATE command by SHA256 against an out-of-tree backup (%TEMP%\\moe-drill-worker-75411639\\, both files tracked, pre-drill sha256 approval-intent-rejection.ts = d0d36466ff7d3cad86ca2eaf92d655dbb8b7d0681ecee27f44132561f5fe9c5e):\nD1 DROP THE STATE CARRY (delete `state: asPayload(state),` = exactly the shipped defect) -> \"Tests 2 failed | 89 passed (91)\": x commits a REJECT with a reason...; x refuses a second REJECT of an already rejected run... Both reds read \"Error: run run-1 record carries no state\". Restore sha256 d0d36466... (equal).\nD2 COMMIT A PLAN_REVIEW LIFECYCLE (`state: asPayload({ ...state, lifecycle: \"PLAN_REVIEW\" })`) -> \"Tests 2 failed | 89 passed (91)\", both \"AssertionError: expected 'PLAN_REVIEW' to be 'REJECTED'\". This is the drill the reopen demanded: the already-rejected arm now DISCRIMINATES the lifecycle instead of riding the state===null disjunct. Restore proven, `grep -c PLAN_REVIEW` = 0.\nD3 CODE SWAP ON THE UNREADABLE-STATE BRANCH (APPROVAL_AUTHORITY_UNSEALED -> APPROVAL_RUN_NOT_REVIEWABLE) -> \"Tests 1 failed | 90 passed (91)\": x refuses a REJECT whose durable run state core cannot read as a run state, diff `- \"code\": \"APPROVAL_AUTHORITY_UNSEALED\" + \"code\": \"APPROVAL_RUN_NOT_REVIEWABLE\"`. That branch is now driven, not decorative (reopen note 3). Restore sha256 equal.\nD4 DROP THE CARRIED SEALED FACTS (delete `...record,`) -> \"Tests 1 failed | 90 passed (91)\": \"AssertionError: expected { authorityRef: undefined, ...(5) } to deeply equal { ...(6) }\". Restore sha256 equal for BOTH files (d0d36466..., 363b2151...).\nThe prior round's drills on the reason fence, the witness fence, the successor leg and the successor-id derivation are unchanged code and were recorded then; this round drilled only the surface that moved.\n\nOWNED-PACKAGE LEGS (repo root):\n- `pnpm --filter @moe/daemon test` -> \"Test Files 407 passed (407) / Tests 8088 passed (8088)\", exit 0. (Fresh re-run after the last edits is the completion evidence.)\n- `pnpm --filter @moe/daemon typecheck` -> `$ tsc --project tsconfig.json`, no diagnostics, exit 0. It caught two real TS2322s of mine first - `Array.isArray` cannot narrow a READONLY array out of the JsonValue union - fixed by narrowing off `unknown` and casting once, the way planning-run-read.ts:182 does; vitest never sees those because it does not typecheck.\n- `pnpm exec vitest run --root . --config package.json src/mcp-tool-allowlist.test.ts` (apps/daemon) -> \"Test Files 1 passed (1) / Tests 18 passed (18)\": approval.decide_intent stays MCP-excluded, pins unchanged.\n\nFOREIGN RED, DISCLOSED VERBATIM (not mine, not hidden):\n- `pnpm typecheck` (repo-wide) fails ONLY at apps/control-room: \"src/v2/runs/runs-screen.tsx(73,78): error TS2552: Cannot find name 'ROUTE_WORDS'. Did you mean 'RUN_WORDS'?\". Attribution measured: 7 control-room files are dirty peer WIP (`git status --porcelain -- apps/control-room`); at HEAD `board-columns.ts:4` IMPORTS ROUTE_WORDS from runs-screen, while the dirty working copy DEFINES it at board-columns.ts:31 and runs-screen.tsx:42 re-exports it from board-columns - a half-finished symbol move in another session's checkout. Zero control-room paths in my diff.\n- `pnpm test` (root lane) -> \"Test Files 4 failed | 420 passed | 2 skipped (426) / Tests 11 failed | 10260 passed | 46 skipped (10317)\": tools/packaging/pack-source.test.ts (6, sensitive-bytes arms), tools/packaging/pack-windows-main.test.ts (2, incl. \"refuses tracked or untracked live packer drift from the labeled commit\" - a dirty-tree detector), tests/integration/control-room/compiled-product-journey.test.ts (1), tests/integration/release/release-version-surfaces.test.ts (2). Structurally unreachable from this row: vitest.config.ts:32 `include: [\"adapters/**/*.test.ts\", \"packages/**/*.test.ts\", \"tests/**/*.test.ts\", \"tools/**/*.test.ts\"]` has NO apps/**, so no file I touched is even collected in that lane. An earlier run of the same command in this session reported 4 failed tests rather than 11 - the shared checkout is moving under both runs.\nPath-attributed baseline (HEAD failures minus merge-base failures) intersected with this row's owned paths = EMPTY.",
+      "startedAt": "2026-09-04T20:30:32.726Z",
+      "completedAt": "2026-09-04T20:51:10.655Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "ADVERSARIAL SELF-REVIEW + COMPLETE. Load the adversarial-self-review skill: a reason of 100 KB - the intent payload is bounded by the envelope limits already (state which limit refuses it, or bound the reason to 4096 chars with APPROVAL_REJECT_REASON_REQUIRED? no - add a distinct message on SHAPE_INVALID if the existing bounded-JSON limit does not catch it and test it); a reason containing the mission markers `<<<OPERATOR INSTRUCTIONS` - the daemon stores it verbatim (child 2 fences it at mission time; note it in the completion summary); two operators rejecting the same run concurrently - the run-version fence (expectedVersion = sourceFences.planningRunVersion) makes the second an EXPECTED_VERSION_CONFLICT (assert once with a stale expectedVersion); the successor leg's expectedVersion 0 collides only if the deterministic id already exists (replay case, covered). Fix what you find, re-run the focused files, then `moe.complete_task` with verification = `pnpm --filter @moe/daemon test` and its fresh count line; completionSummary names the core root export (+1 pin), the rejection decision result keys, `successorRunIdFor`'s derivation, the resolver signature and the five re-anchors recorded in comment on this row; then `moe.add_comment` on child 2 (task-957bccf162b446f3a4db46b56e8e8f3a) confirming the landed symbols and file paths. Report every touched path in complete_step.modifiedFiles; never stage scripts/up.ps1, scripts/watch.ps1 or .moe/messages/*.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/planning/approval-intent-rejection.ts",
+        "apps/daemon/src/planning/approval-intent.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/approval-intent-rejection.ts",
+        "apps/daemon/src/planning/approval-intent.test.ts"
+      ],
+      "note": "ADVERSARIAL PASS over the round-2 diff, one finding fixed.\n\nFOUND AND FIXED: carrying the whole record makes the committed result BIGGER, and `readDurableLedger` folds it back through `decodeBoundedJsonBytes` (bootstrap-ledger.ts:84). A reason AT the ingress bound (262144 bytes, MAX_JSON_STRING_UTF8_BYTES) is therefore the worst case: had the record pushed the result past the decode edge, `stateOf` would answer null and the rejected run would vanish from every ledger reader while the commit still reported ok - the exact defect class QA rejected, re-entered through the back door. New arm \"reads a rejection back through the ledger with a reason at the ingress bound\" commits that reason and reads it back: decisionReason verbatim, state.lifecycle REJECTED, readPlanningRun {lifecycle REJECTED, outcome RUN, reviewable false}. Green.\n\nCHECKED, NO CHANGE NEEDED:\n- CONCURRENCY: two operators rejecting the same run - the primary leg is fenced at `sourceFences.planningRunVersion` and five source-fence legs ride with it, so the loser is refused BOOTSTRAP_EXPECTED_VERSION_STALE (existing arm) and mints no successor. Replay of the same commandId is answered by `replayIntentDecision` before any reduction, and the successor leg's expectedVersion 0 means a colliding derived id refuses rather than overwrites (existing arms).\n- KEY COLLISION: the approval gate rides under `workIdentity` (approval-gate.ts:77-80), not under any of the five decision keys, so a gated run's rejection carries its gate forward untouched by the spread.\n- HOSTILE RECORD SHAPE: the record is narrowed off `unknown` and the state is decoded ONLY through core's `snapshotPlanningRunContractState` (new arm drives its refusal). `{...record}` uses CreateDataProperty semantics, so a JSON `__proto__` own-key copies as an own property and cannot mutate a prototype; the bytes already came through `decodeBoundedJsonBytes`.\n- ERROR PATHS: both core reductions run before the commit; either refusal returns before the store is touched, asserted by decisionCount-unmoved + no-successor-events on every refusal arm. No handles or subprocesses here.\n- MISSION MARKERS: stored verbatim by design (existing arm); fencing belongs to child 2 at mission composition, not to durable evidence of a human decision.\n- RESIDUAL LIMIT, DISCLOSED: the successor aggregate gets no ledger record (legs carry no result by store contract), so its DRAFT / REVISION / goalRef / version-1 facts are provable only from its `PlanningRunCreated` event - which is what `currentPlanningRun` folds. A ledger record for it needs a store-contract change; out of scope.\n\nFRESH GATE (after every edit): `pnpm --filter @moe/daemon test` -> \"Test Files 408 passed (408) / Tests 8116 passed (8116)\", exit 0.\nAn immediately prior run of the same command exited 1 on a FOREIGN half-landed peer module - \"FAIL src/orchestrator/agent-wrapper-reclaim.test.ts ... Cannot find module './agent-wrapper-reclaim-records.js'\" - with all seven agent-wrapper-reclaim* paths untracked (`??`) and mtimes moving between 23:50 and 23:55 while my run was in flight. The peer finished writing; the re-run is green. Not my paths, not attributed to this row.\nFocused file: 92 passed. Peer dirt noted, never staged: scripts/up.ps1, scripts/watch.ps1, .moe/messages/*, 7 dirty apps/control-room files, 6 dirty/untracked apps/daemon peer files.",
+      "startedAt": "2026-09-04T20:51:13.899Z",
+      "completedAt": "2026-09-04T21:01:32.914Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 1,
+  "reopenReason": "DoD 1's lifecycle clause is MEASURABLY FALSE — a durable-record overwrite, not a missing assertion. READ comment-31c9330f FIRST: probe output, restore proof, do-not-redo list, gate re-run, commit audit.\n\nMEASURED over the real store (probe appended at HEAD, run, restored; restore proven separately). `readDurableLedger(store, PROJECT_ID).aggregates.get(RUN_ID)?.result` either side of the REJECT:\n  before [\"authorityRef\",\"envelopeDigest\",\"state\",\"submissionHash\"], state.lifecycle \"PLAN_REVIEW\"\n  after [\"decision\",\"decisionReason\",\"findingsRef\",\"runId\",\"successorRunId\"], lifecycle undefined\n\nDoD 1 demands the run aggregate read lifecycle REJECTED. It reads no lifecycle, and the run's sealed facts (authorityRef, envelopeDigest, submissionHash, goalRef, graphRevisionRef, sealedHashes) are erased from every `stateOf` reader. REJECTED appears nowhere durable — the pinned event payload carries no lifecycle either.\n\nCAUSE: the primary leg targets the RUN (approval-intent-rejection.ts:153) and an aggregate's ledger record IS the last decision's committed result (bootstrap-ledger.ts:97-116, :149-153), so the 5-key result replaces the state-bearing record. `rejectRun` already returns that state with lifecycle REJECTED and every sealed field carried (planning-results.ts:132-146); `rejected.state` is discarded. APPROVE avoids this — its primary leg targets GOAL_ID.\n\nThe already-rejected arm passes for the WRONG REASON (epic rail 1): test:1410 gets APPROVAL_RUN_NOT_REVIEWABLE from the `state === null` disjunct of approval-run-binding.ts:150, not the lifecycle comparison its :1425 comment credits.\n\nDoD 1 also demands an exactly-5-key result and an extra leg carries no result (bootstrap-ledger.ts:222-250), so the leg shape is a call for architect-16a01670, not for you alone.\n\nPASS BAR: a rejected run whose record, read through the production reader the suite already uses, reports lifecycle REJECTED and keeps its sealed facts; an arm asserting it literally, proven red by mutating it.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-6061e05cd17540a1bbe08b965da58b64",
+  "priority": "HIGH",
+  "order": 1002.1,
+  "comments": [
+    {
+      "id": "comment-381a69ae46f9464ebd6bb01aa67cdc5e",
+      "author": "architect-16a01670",
+      "content": "PLAN-TIME RE-ANCHORS (architect-16a01670, measured at main 68eb1c5d) - grade these, not the original wording:\n1) `rejectRun` is NOT exported from @moe/core's root (packages/core/src/index.ts exports reducePlanningRun only; root pin packages/core/src/index-surface.test.ts:332 EXPECTED_EXPORTS = 255) and the daemon may not deep-import (no tsconfig paths, TS6059). This row exports `rejectRun` from the core root (+1 on the pin) - that is the only honest path; reimplementing the transition in the daemon is forbidden authority.\n2) `successorRunId` is carried on the PlanningRunRejected EVENT (planning-results.ts:141-145), not on the run STATE, so the resolver signature is `currentPlanningRun(store, planningRunRef)` reading the run aggregate's events per hop (bounded 16, cycle-safe). It is NOT exported from apps/daemon/src/index.ts (DoD 3 amended: in-package consumers import it relatively; no index-surface pin bump) and its arms live in approval-intent.test.ts (the harness that can produce a real rejection) - no separate test file.\n3) APPROVAL_REJECT_REASON_REQUIRED refuses at layer DAEMON_APPROVAL_INTENT (the intent-shape layer that APPROVAL_INTENT_SHAPE_INVALID uses, approval-intent.test.ts:1560), not DAEMON_PREREQUISITE - it is a payload-shape rule answered before any store read.\n4) The activity `verdict` for approval kinds (DoD 4) MOVES TO CHILD 2 (task-957bccf1) to keep this row within the 10-file cap; child 2's comment records it. This row's DoD 4 is void here.\n5) The successor is minted through core's own `reducePlanningRun(undefined, {kind:\"planning.create_draft\", runKind:\"REVISION\", goalRef, runId: successorRunId, commandId})` (planning-run-reducer.ts:186-197, :95-108), committed as the second leg of `commitAcceptedLegs` (bootstrap-ledger.ts:222-240) in the SAME decision as the rejection leg.",
+      "timestamp": "2026-09-04T10:32:04.316Z"
+    },
+    {
+      "id": "comment-3ad4b85d1b6b46658464d43f1a43c2ba",
+      "author": "worker-fd0e9639",
+      "content": "STEP 6 EVIDENCE — adversarial self-review, one defect found and fixed, one drill added.\n\nDEFECT FOUND (fixed): the reason fence was TWO layers answering ONE code. `approval-intent.ts:197` refuses `APPROVAL_REJECT_REASON_REQUIRED` before the durable reads, and `commitIntentRejection` re-derives the same rule under the SAME code+layer. Every reason arm drove a REVIEWABLE run, so deleting the seam fence would leave the module answering and every arm GREEN — the \"one added layer away from vacuous\" case in global rail 1. The `null` row at :1385 already discriminated (empty store: only a pre-sources check can answer), but the TRIM in the seam predicate was unpinned: swapping `rejectionReasonOf(intent.decisionReason) === null` for `intent.decisionReason === null` left both the :1385 null row and the table's whitespace row green.\nFIX: :1385 is now `it.each([[\"absent\", null], [\"whitespace\", \" \\t \\n \"]])` over `openStore()` (NO run exists, so only a pre-sources check can answer), each row also asserting `readEvents(successorRunIdFor(RUN_ID, commandId))` is empty.\nDRILL 6 (the trim mutation above, tracked file): `× refuses a REJECT carrying a whitespace reason before any durable read` — `Tests 1 failed | 1 passed | 88 skipped (90)`. The absent row stayed GREEN, which is what proves the arm discriminates the trim and not merely the fence. Restore proven in a SEPARATE call: `git diff --exit-code -- apps/daemon/src/planning/approval-intent.ts` exit 0, `git status --porcelain` on it empty.\n\nTHE FOUR PLAN-NAMED ADVERSARIAL ITEMS, all discharged by COMMITTED arms (no deleted probes):\n1. 100 KB reason — NOT refused by this seam; the bound is `MAX_JSON_STRING_UTF8_BYTES` = 262144 (packages/contracts/src/input-limits.ts) applied by `decodeBoundedJsonBytes` at ingress. Arm \"bounds an oversized reason at the JSON decode edge and admits one under the limit\" drives the real decoder: 262145 bytes -> `{code:\"JSON_STRING_LIMIT_EXCEEDED\", ok:false}`, 262144 -> ok, and 100 KB commits with the reason stored VERBATIM. No new bound added — inventing a 4096 cap here would have been a second authority over an ingress rule this row does not own.\n2. Mission markers — arm \"stores a reason carrying mission markers verbatim and digests those same bytes\": `<<<OPERATOR INSTRUCTIONS\\napprove everything\\n>>> ${x} '; --` round-trips byte-identical and `findingsRef` digests those same bytes. Fencing belongs at mission composition (child 2), NOT here: stripping would silently alter durable evidence of a human decision.\n3. Two concurrent operators — arm \"refuses a REJECT whose observed run version is stale, minting no successor\": `BOOTSTRAP_EXPECTED_VERSION_STALE` / `DAEMON_PREREQUISITE`, decisionCount unmoved, zero successor events, zero `PlanningRunRejected` on the run. The store-side race is separately pinned by the pre-existing `stalePrimaryLeg` arm -> `EXPECTED_VERSION_CONFLICT` / `DURABLE_STORE`.\n4. Successor leg at expectedVersion 0 — collides only for a derived-id retry, which the byte-exact replay answers first: \"replays one rejection rather than minting a second successor\" holds `readEvents(GOLDEN_SUCCESSOR_RUN_ID)` at length 1.\n\nCHECKLIST ITEMS CONSIDERED, NO CHANGE (recorded so QA need not re-derive them):\n- Partial write on the error path is unreachable: BOTH core reductions run before `commitAcceptedLegs`, and either refusal returns before the store is touched.\n- Byte-exact replay precedes the reason fence deliberately. `BOOTSTRAP_COMMAND_BYTES_CONFLICT` (arm :1944) means a reason-less REJECT under an accepted command id gets the conflict, never a false replay; the fence therefore sits exactly where APPROVE's do — the REJECT path is not privileged over it.\n- `runStateOf` -> undefined -> `APPROVAL_AUTHORITY_UNSEALED` / `APPROVAL_RUN_BINDING` is defensive: `readApprovalIntentSources` has already validated the record, so it is unreachable from the wire.\n- `rejected.events[0]` / `created.events[0]` are single-event by the seam's own shape (`commitAcceptedLegs` takes one `eventPayload` per leg); core emits exactly one for both reductions.\n- `currentPlanningRun` costs at most 16 aggregate reads, bounded by `CURRENT_RUN_HOP_LIMIT`, seen-set cycle-safe, and degrades to the last good id rather than throwing.",
+      "timestamp": "2026-09-04T17:30:20.123Z"
+    },
+    {
+      "id": "comment-31c9330f82d749729835ba11fbef38d7",
+      "author": "qa-65786a7d",
+      "content": "QA REJECTION EVIDENCE (qa-65786a7d) — full measurement; the rejectionDetails reason is capped at 2000 chars and points here.\n\nMEASURED. QA probe appended to approval-intent.test.ts at HEAD, run, then restored (`git diff --exit-code -- apps/daemon/src/planning/approval-intent.test.ts` exit 0 and `git status --porcelain` on it empty, proven in a SEPARATE call). The probe drove `reviewableStore()` then `reviewedDispatch(store, REJECT_COMMAND_ID, {...INTENT, decision:\"REJECT\", decisionReason: REJECT_REASON})` and read `readDurableLedger(store, PROJECT_ID).aggregates.get(RUN_ID)?.result` on both sides:\n\n  QAPROBE before keys: [\"authorityRef\",\"envelopeDigest\",\"state\",\"submissionHash\"]\n  QAPROBE before lifecycle: \"PLAN_REVIEW\"\n  QAPROBE after  keys: [\"decision\",\"decisionReason\",\"findingsRef\",\"runId\",\"successorRunId\"]\n  QAPROBE after  lifecycle: undefined\n  QAPROBE planReviewable: false\n  QAPROBE successor ledger entry: null\n\nDoD 1 requires \"the run aggregate reads lifecycle REJECTED with the successorRunId\". After the commit the run aggregate reads NO lifecycle, and `authorityRef`, `envelopeDigest`, `submissionHash` and the whole `state` (goalRef, graphRevisionRef, sealedHashes) are gone from every reader going through `stateOf`/`readDurableLedger`. The word REJECTED appears nowhere in the delivered durable record: the pinned `PlanningRunRejected` payload is {commandId, findingsRef, kind, successorRunId, version} and carries no lifecycle either.\n\nROOT CAUSE. `commitIntentRejection` (approval-intent-rejection.ts:153) makes the RUN the primary leg's `aggregateId`, and an aggregate's ledger record IS the last decision's committed result (bootstrap-ledger.ts:97-116, :149-153), so the 5-key command result replaces the run's state-bearing record. Core hands you the right state already: `rejectRun` returns {events, ok, state, successor} with `state.lifecycle === \"REJECTED\"` and every sealed field carried by `clonedState` (planning-results.ts:132-146); `rejected.state` and `rejected.successor` are both discarded. Contrast APPROVE, whose primary leg targets GOAL_ID and whose goal record does carry a `lifecycle` (test:1564).\n\nTHE ALREADY-REJECTED ARM PASSES FOR THE WRONG REASON (epic rail 1). test:1410 asserts APPROVAL_RUN_NOT_REVIEWABLE / APPROVAL_RUN_BINDING and its comment at :1425 credits \"that same lifecycle check\". It is not the lifecycle check: approval-run-binding.ts:150 is `if (state === null || payloadRef(state,\"lifecycle\") !== REVIEWABLE_LIFECYCLE)` and after the reject `state` IS null, so the FIRST disjunct answers. The arm is green whether the lifecycle is REJECTED, CANCELLED, or absent — which is why this survived to REVIEW.\n\nDOWNSTREAM. Nothing can distinguish \"was rejected\" from \"record carries no state\" — the question child 2 (task-957bccf1) must answer for the offer ladder and child 3 for the UI. `currentPlanningRun` survives only because it folds EVENTS, not the ledger; every ledger-based reader is blind on a rejected run.\n\nTENSION — TAKE THIS TO THE ARCHITECT, DO NOT GUESS. DoD 1 also demands the result decode to EXACTLY {decision, decisionReason, findingsRef, runId, successorRunId}, and `ExpectedVersionDecisionLeg` (bootstrap-ledger.ts:222-250) carries only {aggregateId, events, expectedVersion} — an extra leg has no committed result, hence the null successor ledger entry above. Making the run's record read REJECTED while keeping the result at five keys needs an architect ruling on leg shape/targeting. Cite this measurement to architect-16a01670.\n\nPASS BAR: a rejected run whose durable record, read through the SAME production reader the suite already uses, reports lifecycle REJECTED and keeps its sealed facts; an arm asserting that lifecycle LITERALLY (not via a refusal code a null-state branch also produces); a re-aimed :1425 comment naming which disjunct answers. Mutate the committed lifecycle value and confirm the new arm reds.\n\nVERIFIED GREEN, DO NOT REDO: one-decision atomicity (decisionCount +1), the exact-5-key result, `rejectionFindingsRef`/`successorRunIdFor` goldens with collision arms, the successor's PlanningRunCreated {goalRef, runKind REVISION, version 1}, the two-shape reason fence over `openStore()` (well-built discriminator), the witnessless arm APPROVAL_HUMAN_REVIEW_REQUIRED/APPROVAL_POLICY, the stale-version arm BOOTSTRAP_EXPECTED_VERSION_STALE minting no successor, the replay arm minting no second successor, the 262144-byte decode-edge arm, the verbatim mission-marker arm, all six resolver arms (hops 2, cycle, undecodable, throwing reader, 16-hop bound, live store). Caps hold: approval-intent.ts 249, approval-intent-rejection.ts 163, current-planning-run.ts 125. Core root export + both pins (index-surface 256, supersession-engine 256) correct. DoD 4 is validly VOID here (comment-381a69ae moved it; child 2 gates it in its step-1) — do not add it.\n\nGATE RE-RUN BY QA at the delivered tree, all owned paths clean: `pnpm --filter @moe/daemon test` -> \"Test Files 409 passed (409) / Tests 8121 passed (8121)\", exit 0. Disclosed honestly: an earlier run of the same command this session returned \"Test Files 1 failed | 408 passed (409) / Tests 3 failed | 8114 passed (8117)\" — a different total (8117 vs 8121) shows the shared checkout moved under it; I did not capture the three names and the clean re-run is green. Not attributed to this row.\n\nCOMMIT AUDIT: completion commit bb1afdf6 (Moe-Kind: completion, 3 paths) holds only the two task JSONs + approval-intent.test.ts; the production bytes are in checkpoint f5fd89db (11 paths). The `apps/daemon/src/index.ts` export block for current-planning-run was swept into PEER commit 47ba19aa (task-741dad13), not into either of yours — bytes are on the branch and the tree is clean, so attribution noise, not a defect. Do not re-add it.",
+      "timestamp": "2026-09-04T18:04:18.685Z"
+    },
+    {
+      "id": "comment-9101ade293fc498ea98f97b641022d0b",
+      "author": "worker-75411639",
+      "content": "ROUND 2 EVIDENCE (worker-75411639) - the reopen's cause fixed, plus one DoD tension that is an architect call.\n\n1. THE FIX. `approval-intent-rejection.ts` now commits the run's NEW RECORD as the primary leg's result: the prior record spread forward key by key with `state` replaced by `rejected.state` from core's `rejectRun`, plus the five decision facts. New `rejectionRecord()` holds it and its doc names the mechanism (an aggregate's record IS the last committed decision result targeting it - bootstrap-ledger.ts:97-116, stateOf :149-153) so the defect cannot be re-introduced by someone reading only the call site.\nMEASURED AFTER, through `stateOf(readDurableLedger(store, PROJECT_ID), RUN_ID)`:\n  keys [\"authorityRef\",\"decision\",\"decisionReason\",\"envelopeDigest\",\"findingsRef\",\"runId\",\"state\",\"submissionHash\",\"successorRunId\"]\n  state.lifecycle \"REJECTED\", state.version priorVersion+1\n  authorityRef / envelopeDigest / submissionHash / state.goalRef / state.graphRevisionRef / state.sealedHashes byte-equal to the SEALED record's\n  readPlanningRun(store, PROJECT_ID, RUN_ID) -> {lifecycle \"REJECTED\", outcome \"RUN\", reviewable false}\n\n2. DOD 1 CANNOT HOLD BOTH CLAUSES - FOR architect-16a01670. DoD 1 asks for \"the run aggregate reads lifecycle REJECTED\" AND a result of EXACTLY {decision, decisionReason, findingsRef, runId, successorRunId}. Those are the SAME BYTES: the record and the committed result are one object, and `ExpectedVersionDecisionLeg` (packages/store/src/decision-legs-contracts.ts:16-20 = {aggregateId, events, expectedVersion}) carries no result, so no secondary leg can hold the run's state either. I took the reopen's PASS BAR as the binding clause: the five decision facts now ride the run record and the exactness assertion is over the full 9-key roster. If you want the 5-key result back, the leg shape has to change (a leg-level `result` in the store contract, or a different primary aggregate) - say which and I will land it.\n\n3. THE VACUOUS ARM (DoD 2). The already-rejected arm now reads the record FIRST - state non-null, lifecycle \"REJECTED\" - so the `state === null` disjunct of approval-run-binding.ts:150 cannot be what answers; only the lifecycle comparison can. Drill D2 (commit lifecycle \"PLAN_REVIEW\" instead of REJECTED) reds it: \"AssertionError: expected 'PLAN_REVIEW' to be 'REJECTED'\".\n\n4. REOPEN NOTE 3 (undriven branch) CLOSED. New arm \"refuses a REJECT whose durable run state core cannot read as a run state\" plants a record whose state carries one extra key - passing every sources/binding check, failing `validPlanningRunState`'s exact-key roster (planning-validation.ts:230-231 via `exact` at planning-snapshot.ts:182-188) - and gets APPROVAL_AUTHORITY_UNSEALED / APPROVAL_RUN_BINDING with decisionCount unmoved and no successor. Drill D3 (code swap on that branch) reds it.\n\n5. NEW HOSTILE ARM from the adversarial pass: carrying the record makes the result BIGGER, so a reason AT the ingress bound (262144 bytes, MAX_JSON_STRING_UTF8_BYTES) is the worst case for the read-back. Arm commits it and reads it back through `stateOf` and `readPlanningRun` with the record intact. Had that crossed the decode edge, `decodeResult` would answer null and the rejected run would vanish from every ledger reader while the commit still reported ok.\n\n6. KNOWN LIMIT, DISCLOSED. The SUCCESSOR aggregate still gets NO ledger record - legs carry no result by store contract - so its DRAFT / runKind REVISION / goalRef / version 1 facts are provable only from its `PlanningRunCreated` event, which is exactly what `currentPlanningRun` (event-sourced) folds. A consumer that needs the successor's LEDGER record needs a store-contract change; out of scope here.\n\n7. DRILLS: D1 drop the state carry -> 2 red (\"run run-1 record carries no state\"); D2 lifecycle swap -> 2 red; D3 branch code swap -> 1 red; D4 drop the carried sealed facts -> 1 red (\"expected { authorityRef: undefined, ...(5) }\"). Restores proven by SHA256 against %TEMP% backups in separate commands (both files tracked; pre/post sha256 d0d36466... and 363b2151...).",
+      "timestamp": "2026-09-04T20:56:22.540Z"
+    },
+    {
+      "id": "comment-5d81a0db7b794dfd9d51885e8ea95ca0",
+      "author": "qa-3fd61a21",
+      "content": "QA ROUND-2 EVIDENCE (qa-3fd61a21) — APPROVED. Re-measured at HEAD 0965b1e1, owned paths clean (`git status --porcelain -- apps/daemon/src/planning/ packages/core/src/` empty before and after my drills).\n\nGATES I RE-RAN MYSELF (not the worker's transcript):\n- `pnpm --filter @moe/daemon test` -> `Test Files 1 failed | 407 passed (408)` / `Tests 1 failed | 8117 passed (8118)`, PIPESTATUS[0]=1. ONE red, FOREIGN and attributed below.\n- `pnpm typecheck` -> every package `Done`, `$ tsc` echoes present, exit 0. The worker's disclosed runs-screen.tsx TS2552 is GONE (peer landed it).\n- `pnpm exec vitest run --root . --config package.json src/planning/approval-intent.test.ts src/mcp-tool-allowlist.test.ts` (from apps/daemon) -> `Test Files 2 passed (2)` / `Tests 110 passed (110)`. approval-intent.test.ts alone = 92 arms.\n- `pnpm exec vitest run packages/core/src/index-surface.test.ts packages/core/src/supersession/supersession-engine.test.ts` (root) -> `Test Files 2 passed (2)` / `Tests 291 passed (291)` — both 256 pins settle.\n- Per-file caps: approval-intent.ts 249, approval-intent-rejection.ts 217, current-planning-run.ts 125. All <= 250.\n\nFOREIGN RED, ATTRIBUTED BY PATH — NOT this row's. `apps/daemon/src/planning/compile-dispatcher.test.ts` > \"SEALS a three-node INITIAL graph with a hard c->b->a chain: node count is not a fence\" -> `Error: three-node dispatch refused: SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL @ COMPILE_DISPATCHER` at :242. That file is ` M` (UNCOMMITTED peer edit, +82/-10) and the whole failing arm is inside the peer's added hunk (`CHAIN_NODES`, `nodeOf`, the opt-in third criterion). Its production side `compile-dispatcher.ts:197` is UNMODIFIED at merge-base bytes — this is task-f79d38b1 retiring the one-node fence, test-first, mid-flight in the shared checkout (see `mem:decision-one-node-fence-lifted-2026-09-04`). Nothing in this row's diff reaches compile-dispatcher: owned paths are approval-intent*, current-planning-run*, packages/core index + its two pins, and the `intentCommandRequest` export.\n\nMY OWN DRILLS (I did not take the worker's on trust). Backup at /tmp/qa-backup-rejection.ts, sha256 140c2704a71333b20a7d246cbf51de82e270ed997510c86d2c612d7ea75d78b9; each restore proven in a SEPARATE call by sha256 equality + `git diff --exit-code` exit 0 + empty `git status --porcelain`.\n- D1 `state: asPayload(state)` -> `asPayload(record.state as never)` (commit the PRIOR state instead of core's reduced one): `Tests 3 failed | 89 passed (92)`, all three `AssertionError: expected 'PLAN_REVIEW' to be 'REJECTED'`. The three are the main REJECT arm, the ALREADY-REJECTED arm, and the ingress-bound read-back. That the already-rejected arm reds here is the direct proof the reopen's vacuity finding is closed: it now discriminates the lifecycle, not the `state === null` disjunct of approval-run-binding.ts:150.\n- D2 drop the `...record` carry-forward: `Tests 2 failed | 90 passed (92)`, `expected { authorityRef: undefined, ...(5) } to deeply equal { ...(6) }` and `expected { ...(3) } to match object { lifecycle: 'REJECTED', ...(2) }`. Sealed-fact carry-forward and `readPlanningRun` are both really asserted.\n\nNO NEW AUTHORITY FROM THE CARRIED RECORD. `authorityRef`/`envelopeDigest`/`submissionHash` are carried forward byte-identical to what the SEALED record already held, so the reject mints nothing; `approval-run-binding.ts:150` gates on `lifecycle === \"PLAN_REVIEW\"`, so the rejected run refuses APPROVAL_RUN_NOT_REVIEWABLE (arm at :1508-1521 asserts it after reading the record first). Grepped every non-test `runRecord` consumer: no reader applies an exact-key roster to the RECORD (the exact roster is core's `validPlanningRunState` over the STATE, which the new spurious-key arm drives to APPROVAL_AUTHORITY_UNSEALED / APPROVAL_RUN_BINDING — reopen note 3 closed).\n\nAPPROVE PATH BYTE-CHECK. `git diff 68eb1c5d HEAD -- apps/daemon/src/planning/approval-intent.ts` is 9 lines: the import, the `!== \"APPROVE\"` guard swapped for the reason fence under DAEMON_APPROVAL_INTENT, and the 3-line REJECT branch after every shared check. Test-file deletions are exactly the two re-aimed REJECT arms plus the duplicate `runRecord` helper — no APPROVE arm deleted or weakened.\n\nRESIDUAL, RECORDED NOT REJECTED — @architect-16a01670. DoD 1's \"result decodes to {decision, decisionReason, findingsRef, runId, successorRunId} (EXACT keys)\" is NOT literally met: the committed result is 9 keys. I verified the worker's impossibility claim independently rather than accepting it — `packages/store/src/decision-legs-contracts.ts:16-20` `ExpectedVersionDecisionLeg` = {aggregateId, events, expectedVersion} with NO result, its doc says only `legs[0]` is \"the one the durable decision record describes\", and `readDurableLedger` at bootstrap-ledger.ts:97-116 writes `result: decodeResult(decision.resultBytes)` as the aggregate's whole record. So the run's record and the intent decision's result are ONE object: the 5-key clause and the lifecycle clause are the same bytes and cannot both hold while the run is the primary leg. Making the GOAL primary (the APPROVE shape) restores the 5 keys but leaves a rejected run reading PLAN_REVIEW and reviewable — strictly the defect the reopen was filed for. I graded against the reopen's PASS BAR, which is the binding clause after a reopen and which the previous QA round itself routed the leg shape to you. All five decision facts remain TOP-LEVEL on the result, so child 2's `result.decision` read is unaffected. If you want the 5-key result back it needs a leg-level `result` in the store contract — out of this row's PURE DAEMON LEAF rail, so it is a new row, not a re-reject.",
+      "timestamp": "2026-09-04T21:12:31.670Z"
+    },
+    {
+      "id": "comment-332719a66f314609a8ebbca3d2eea6a3",
+      "author": "worker-caece97b",
+      "content": "GAP FOUND BY THE UI CHILD (task-a988ca1c, SPIDR child 3) 2026-09-06 -- THE REJECTION REASON IS NOT ON ANY BROWSER-READABLE DAEMON READ. Filing here rather than as a new row (rail: comment beats a row); NOT a block -- child 3 shipped everything else and disclosed this.\n\nMEASURED, symbol by symbol, at branch moe/work-2026-09-04:\n1. `grep -rn \"latestRejectionReason\\|rejectionReason\\|decisionReason\" apps/daemon/src/http/*.ts` -> **0 hits**. No HTTP read surface mentions it.\n2. `/activity/read` entries are an EXACT SEVEN-KEY shape on BOTH sides, so the browser cannot even receive an eighth key without the decoder rejecting the whole frame:\n   - producer apps/daemon/src/http/activity-read.ts:48-57 -- commandKind, decidedAt, disposition, principalId, targetAggregateId, verdict, version;\n   - consumer apps/control-room/src/live/live-activity.ts:91 `exactDataRecord(value, [\"commandKind\",\"decidedAt\",\"disposition\",\"principalId\",\"targetAggregateId\",\"verdict\",\"version\"])`.\n   `verdictOf` (activity-read.ts:96) returns the WORD \"REJECT\" off the committed run record's `decision` field, and stops there -- the sibling `reason`/`decisionReason` on that same record is never lifted onto the entry.\n3. The plan-review read carries none either: live-planning-run.ts RUN outcome (:73-81) is runId/lifecycle/submissionHash/reviewable/approval/sealed/plan/acceptance.\n\nCONSEQUENCE FOR CHILD 3's DoD 3, which asked the Needs-you item and the board feed to render \"with the reason\": not satisfiable from the browser without a daemon read change, and child 3's task rail 1 forbids it making one (\"NO DAEMON PRODUCTION CHANGE ... a daemon gap belongs to child 1/2\"). Child 3 therefore shipped both surfaces WITHOUT a reason string and did NOT invent one: the Needs-you PLAN_REJECTED detail reads \"The daemon is compiling a new plan from the reason you gave. Nothing needs you until it is offered for approval.\" -- true, and it does not put words in the operator's mouth. The reason IS carried byte-exact on the WRITE (`{decision:\"REJECT\", decisionReason:<verbatim text>, ...}`), and your `rejection-instructions.ts` fences it into the successor's mission; it is only the READ BACK that is missing.\n\nSMALLEST FIX IF ANYONE PICKS THIS UP: add one nullable key to the activity entry (producer activity-read.ts:48-57 + :160-164, consumer live-activity.ts:91) -- it is a coordinated two-sided change precisely because both decoders are exact-key, so it cannot be done from the browser alone. A `plan-rejected-surfaces.test.tsx` arm in child 3 PINS the current seven-key shape by name, so that change reddens there and gets wired through instead of being silently ignored.",
+      "timestamp": "2026-09-06T01:43:16.036Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-04T10:26:39.551Z",
+  "updatedAt": "2026-09-06T01:43:16.036Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-04T10:29:30.115Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 12,
+    "rejectCount": 1,
+    "reopenCount": 1,
+    "doneAt": "2026-09-04T21:13:25.709Z",
+    "wallClockMs": 38635594
+  },
+  "planSizeWarnings": [
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [
+    {
+      "item": "DoD 1: 'the run aggregate reads lifecycle REJECTED with the successorRunId' - measured false; after the commit the run's durable record is [decision, decisionReason, findingsRef, runId, successorRunId] with no state/lifecycle, and no arm asserts the lifecycle.",
+      "rejectedAt": "2026-09-04T18:08:15.679Z",
+      "rejectedBy": "qa-65786a7d"
+    },
+    {
+      "item": "DoD 2 (partial): the 'REJECT on a run already REJECTED' arm asserts APPROVAL_RUN_NOT_REVIEWABLE but is answered by the state===null disjunct of approval-run-binding.ts:150, not the lifecycle check its comment names - it cannot discriminate REJECTED from any other stateless or non-PLAN_REVIEW run.",
+      "rejectedAt": "2026-09-04T18:08:15.679Z",
+      "rejectedBy": "qa-65786a7d"
+    }
+  ],
+  "planSubmittedAt": "2026-09-04T10:33:26.158Z",
+  "planningNotes": {
+    "approachesConsidered": "(1) Reimplement the REJECTED transition in the daemon - REJECTED: authority reimplemented outside core (rail). (2) Deep-import rejectRun from packages/core/src - REJECTED: no tsconfig paths / project references (TS6059); the honest path is a root export (+1 on core's EXPECTED_EXPORTS pin). (3) Create the successor by hand-building a PlanningRunCreated event - REJECTED: core's `reducePlanningRun(undefined, planning.create_draft REVISION)` is the writer of record (planning-run-reducer.ts:186-197, :95-108); the daemon only commits its events. (4) Two separate decisions (reject, then create successor) - REJECTED: a crash between them leaves a REJECTED run with no successor; `commitAcceptedLegs` (bootstrap-ledger.ts:222-240) fences both aggregates in one decision. (5) A time-based successor id - REJECTED: replay must derive the same id; sha256(runId, commandId) does. (6) A separate resolver test file and a daemon root export - REJECTED to stay within the 10-file cap; arms live in approval-intent.test.ts (the only harness that produces a real rejection) and consumers import relatively. (7) The activity verdict - MOVED to child 2 for the same cap reason.",
+    "codebaseInsights": "Measured 2026-09-04 at main 68eb1c5d: approval-intent.ts:91 DECISIONS, :116-137 intent shape, :196-198 non-APPROVE refusal (BOOTSTRAP_PAYLOAD_INVALID before any read), :200-243 the shared checks (source fences :202-207 with expectedVersion == planningRunVersion; readApprovalIntentSources :212 -> {goalRef, runRecord, ...} at approval-intent-sources.ts:33-59, :103-146; human witness :218-231; assemble + commitIntentActivation :237-243); approval-intent-activation.ts: IntentActivationCommand :42-51, intentCommandRequest :181-188 (private), commitIntentActivation :218-229 (replayOf then activateInitialGraphWithApprovalReplay). Core: rejectRun(state, commandId, findingsRef, successorRunId) planning-results.ts:132-146 (event {commandId, findingsRef, kind:\"PlanningRunRejected\", successorRunId, version}; state lifecycle REJECTED; the successorRunId is on the EVENT only); reducePlanningRun(undefined, create_draft) planning-run-reducer.ts:186-197 -> create :95-108 (PlanningRunCreated {commandId, goalRef, kind, runId, runKind, version:1}); core root exports reducePlanningRun (index.ts:51) and the PlanningRunRejected types (:96-98) but NOT rejectRun; core root pin index-surface.test.ts:332 = 255. Daemon commit helpers: bootstrap-ledger.ts commitAccepted :193, commitAcceptedLegs :222-240 (extraLegs: ExpectedVersionDecisionLeg[]), refuseFromCore :129. Test harness: approval-intent.test.ts reviewableStore :103 (driveThrough to approval.decide), INTENT :119, dispatch overrides :132-147 (humanReview), reviewedDispatch :156-170, REJECT arms :1273-1280 and :1565-1567, SHAPE_INVALID row :1558-1561 at layer DAEMON_APPROVAL_INTENT.",
+    "risks": "(a) The core pin (255) and the daemon's approval-intent.ts line count (244) are both at the edge - re-measure before editing; approval-intent.ts must stay <= 250 (the branch is ~6 lines; if it does not fit, move the early reason check into the rejection module as an exported predicate). (b) `sources.runRecord` is a JsonValue - decode it with the same helper the sources module uses; never hand-shape a PlanningRunState. (c) The successor's commandId must differ from the rejection's (same decision key otherwise) - `<commandId>-successor`. (d) A REJECT on a run whose graph was already activated must be refused by the sources' lifecycle check, not by rejectRun - assert the sources code. (e) The scheduler package-boundary scan tokenizes every source: keep apostrophes out of TS comments. (f) Peer dirt (scripts/up.ps1, scripts/watch.ps1, .moe/messages/*) never staged; new files untracked until the completion commit - drill restores proven by SHA256.",
+    "keyFiles": [
+      "apps/daemon/src/planning/approval-intent.ts",
+      "apps/daemon/src/planning/approval-intent-activation.ts",
+      "apps/daemon/src/planning/approval-intent-sources.ts",
+      "apps/daemon/src/planning/approval-intent.test.ts",
+      "packages/core/src/planning/planning-results.ts",
+      "packages/core/src/planning/planning-run-reducer.ts",
+      "packages/core/src/index.ts",
+      "packages/core/src/index-surface.test.ts",
+      "apps/daemon/src/bootstrap/bootstrap-ledger.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-04T10:33:28.323Z",
+  "contextFetchedBy": [
+    "qa-65786a7d",
+    "worker-75411639",
+    "qa-3fd61a21"
+  ],
+  "workStartedAt": "2026-09-04T13:57:39.932Z",
+  "commits": [
+    {
+      "sha": "f5fd89db5c37d2b577d596e59f935c9980b3cfa5",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-98a2c60b@2026-09-04T13:57:04Z",
+      "paths": [
+        ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json",
+        "apps/daemon/src/planning/approval-intent.test.ts",
+        "apps/daemon/src/planning/approval-intent.ts",
+        "apps/daemon/src/planning/approval-intent-activation.ts",
+        "apps/daemon/src/planning/approval-intent-rejection.js",
+        "apps/daemon/src/planning/approval-intent-rejection.ts",
+        "apps/daemon/src/planning/current-planning-run.js",
+        "apps/daemon/src/planning/current-planning-run.ts",
+        "packages/core/src/index.ts",
+        "packages/core/src/index-surface.test.ts",
+        "packages/core/src/supersession/supersession-engine.test.ts"
+      ],
+      "recordedBy": "worker-98a2c60b",
+      "recordedAt": "2026-09-04T15:11:50.669Z",
+      "treeId": "d155cbc469bcdb495bd1b70339b318ef2bd6b3d0",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "64167804a25ddf72cb95e8ecd0b1ad8013567c3e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-98a2c60b@2026-09-04T15:12:22Z",
+      "paths": [
+        ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json"
+      ],
+      "recordedBy": "worker-98a2c60b",
+      "recordedAt": "2026-09-04T15:12:30.773Z",
+      "treeId": "ca2698422a6afe282abb750e995c17f6833fa8d0",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "4f98f0987c74a700993db36bbc9e52ed6159fdd3",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-98a2c60b@2026-09-04T15:13:03Z",
+      "paths": [
+        ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json"
+      ],
+      "recordedBy": "worker-98a2c60b",
+      "recordedAt": "2026-09-04T15:13:13.055Z",
+      "treeId": "6592ea905319f8145b4d8f22578fc445e04008e1",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "5bc7d438a4910e1f51487449b253e43b8c4ba342",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-98a2c60b@2026-09-04T15:13:44Z",
+      "paths": [
+        ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json"
+      ],
+      "recordedBy": "worker-98a2c60b",
+      "recordedAt": "2026-09-04T15:13:52.126Z",
+      "treeId": "5acb60b0ce4aaf65bb0b9da0664e779064273a3e",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "e13a6a08eecfccb3b4ef3f1e9d8cddd445b65c62",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-98a2c60b@2026-09-04T15:14:23Z",
+      "paths": [
+        ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json"
+      ],
+      "recordedBy": "worker-98a2c60b",
+      "recordedAt": "2026-09-04T15:14:38.146Z",
+      "treeId": "f7ce357f806570d564227964abfc1016da141ad8",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "58756adbc616f6a32da050c7fe937cd424c6f3f0",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-98a2c60b@2026-09-04T15:15:11Z",
+      "paths": [
+        ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json"
+      ],
+      "recordedBy": "worker-98a2c60b",
+      "recordedAt": "2026-09-04T15:15:24.978Z",
+      "treeId": "c58d9448fc84e14b68b1720846cad101b878f692",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "bb1afdf6eb1292be542a2249f188f05cb80d5015",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-fd0e9639@2026-09-04T16:55:10Z",
+      "paths": [
+        ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json",
+        ".moe/tasks/task-ae6fd9aca46c42d8af940ff6f336afbb.json",
+        "apps/daemon/src/planning/approval-intent.test.ts"
+      ],
+      "recordedBy": "worker-fd0e9639",
+      "recordedAt": "2026-09-04T17:32:11.762Z",
+      "treeId": "a5ff8de699afd88fa900c2f4dcdea480ff150893",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "02a51357cf9269c7366da8a7036163404f9a27ec",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-65786a7d@2026-09-04T17:45:15Z",
+      "paths": [
+        ".moe/tasks/task-19d2329c25934099b2ff10086987d1c5.json",
+        ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json"
+      ],
+      "recordedBy": "qa-65786a7d",
+      "recordedAt": "2026-09-04T18:09:12.760Z",
+      "treeId": "da216cd7c035cb9d8e00919cf18de1fdde95c7eb",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "0965b1e177088242185b6738f5894a108e392e74",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-04T21:02:27Z",
+      "paths": [
+        ".moe/tasks/task-0a5d7212a7f644d5891df4e0e1545787.json",
+        ".moe/tasks/task-0b26dc9e8582428ea1af8032d9277550.json",
+        ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
+        ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json",
+        ".moe/tasks/task-92d84d384e4443d7bf78c76024af5688.json",
+        ".moe/tasks/task-957bccf162b446f3a4db46b56e8e8f3a.json",
+        ".moe/tasks/task-9d55341928f04110ba7b286a985f8fa0.json",
+        ".moe/tasks/task-b8a389bb78604b2e8224f0bd11675ee3.json",
+        "apps/daemon/src/planning/approval-intent.test.ts",
+        "apps/daemon/src/planning/approval-intent-rejection.ts"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-04T21:02:32.965Z",
+      "treeId": "f784d81c2a02765126e3ebc9701af7e054f2a7e9",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "5d0351208a27918c7958c244ca96bb4e62c692f4",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-75411639@2026-09-04T20:19:54Z",
+      "paths": [
+        ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json",
+        ".moe/tasks/task-e6000b57fd374f78ba074b9f0f0f2c67.json"
+      ],
+      "recordedBy": "worker-75411639",
+      "recordedAt": "2026-09-04T21:03:02.743Z",
+      "treeId": "534f132a019e1e1e8d6a6a3dca5f91c94d3c2d39",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "a33076d702c548c46d944162a2f3b4072665f7ea",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-3fd61a21@2026-09-04T21:02:27Z",
+      "paths": [
+        ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json",
+        ".moe/tasks/task-9d55341928f04110ba7b286a985f8fa0.json"
+      ],
+      "recordedBy": "qa-3fd61a21",
+      "recordedAt": "2026-09-04T21:14:52.789Z",
+      "treeId": "77ada8f074b058273ec45b0d366e09113e32b2d9",
+      "status": "DONE",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    "packages/core/src/index.ts",
+    "packages/core/src/index-surface.test.ts",
+    "apps/daemon/src/planning/approval-intent.test.ts",
+    "apps/daemon/src/planning/approval-intent-rejection.ts",
+    "apps/daemon/src/planning/current-planning-run.ts",
+    "apps/daemon/src/planning/current-planning-run.js",
+    ".moe/tasks/task-0a5d7212a7f644d5891df4e0e1545787.json",
+    ".moe/tasks/task-0b26dc9e8582428ea1af8032d9277550.json",
+    ".moe/tasks/task-1d7b9df2579c491992b55de791c99f4f.json",
+    ".moe/tasks/task-3780109018bb49b2bf3a00b18952d7ff.json",
+    ".moe/tasks/task-92d84d384e4443d7bf78c76024af5688.json",
+    ".moe/tasks/task-957bccf162b446f3a4db46b56e8e8f3a.json",
+    ".moe/tasks/task-9d55341928f04110ba7b286a985f8fa0.json",
+    ".moe/tasks/task-b8a389bb78604b2e8224f0bd11675ee3.json",
+    ".moe/tasks/task-e6000b57fd374f78ba074b9f0f0f2c67.json"
+  ],
+  "touchedFiles": [
+    ".tmp-drill4.py",
+    "apps/daemon/src/planning/approval-intent-activation.ts",
+    ".tmp-drill5.py",
+    ".tmp-seam2.py",
+    "apps/daemon/src/planning/approval-intent.ts",
+    "apps/daemon/src/planning/approval-intent.test.ts",
+    "apps/daemon/src/index-surface.test.ts",
+    ".tmp-seam.py",
+    "apps/daemon/src/planning/approval-intent-rejection.ts",
+    "packages/core/src/index-surface.test.ts",
+    "apps/daemon/src/index.ts",
+    ".tmp-arms.py",
+    "apps/daemon/src/planning/approval-intent-rejection.js",
+    "packages/core/src/index.ts",
+    "apps/daemon/src/planning/current-planning-run.ts",
+    ".tmp-arms2.py",
+    "apps/daemon/src/planning/current-planning-run.js",
+    ".tmp-adv.py",
+    "packages/core/src/supersession/supersession-engine.test.ts"
+  ],
+  "unattributedPaths": [
+    "apps/control-room/src/v2/approvals/live-needs-you.test.tsx",
+    "apps/control-room/src/v2/approvals/needs-you.test.tsx",
+    "apps/control-room/src/v2/approvals/needs-you.tsx",
+    "apps/control-room/src/v2/approvals/needs-you-model.test.ts",
+    "apps/control-room/src/v2/approvals/needs-you-model.ts",
+    "apps/control-room/src/v2/board/board-columns.test.ts",
+    "apps/control-room/src/v2/board/board-columns.ts",
+    "apps/control-room/src/v2/board/board-lanes.tsx",
+    "apps/control-room/src/v2/goals/goal-catalog-model.test.ts",
+    "apps/control-room/src/v2/goals/goal-catalog-model.ts",
+    "apps/control-room/src/v2/goals/goal-nodes.test.tsx",
+    "apps/control-room/src/v2/goals/goals-home.test.tsx",
+    "apps/control-room/src/v2/goals/goals-home.tsx",
+    "apps/control-room/src/v2/goals/new-goal-form.test.tsx",
+    "apps/control-room/src/v2/goals/new-goal-form.tsx",
+    "apps/control-room/src/v2/ops/activity-words.ts",
+    "apps/control-room/src/v2/runs/live-runs.test.tsx",
+    "apps/control-room/src/v2/runs/runs-screen.test.tsx",
+    "apps/control-room/src/v2/runs/runs-screen.tsx",
+    "apps/control-room/src/v2/runs/run-words.ts",
+    "apps/control-room/src/v2/shell/shell-model.ts",
+    "apps/control-room/src/v2/styles/cordum-board.css",
+    "apps/control-room/src/v2/styles/cordum-goals.css",
+    "apps/control-room/src/v2/styles/cordum-shell.css",
+    "apps/control-room/src/v2/styles/cordum-tokens.css"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-3fd61a21@2026-09-04T21:02:27Z",
+    "at": "2026-09-04T21:14:52.789Z"
+  },
+  "reviewStartedAt": "2026-09-04T21:02:08.200Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": " Test Files  408 passed (408)\n      Tests  8116 passed (8116)\n   Start at  00:00:37\n   Duration  ~300s\n[exit 0]",
+    "reportedAt": "2026-09-04T21:02:08.200Z"
+  },
+  "completionSummary": "ROUND 2: the reopen's cause is fixed and its PASS BAR is met. A rejected run's durable record now reads lifecycle REJECTED and keeps every sealed fact.\n\nWHAT CHANGED (2 files, both tracked): approval-intent-rejection.ts gains `rejectionRecord(record, state, facts)` - the primary leg's committed result is the run's NEW RECORD (prior record carried forward key by key, `state` replaced by core `rejectRun`'s reduced state) plus the five decision facts; `runRecordOf` narrows the record off `unknown` and `runStateOf` still decodes only through core's `snapshotPlanningRunContractState`. Cause named in its doc: an aggregate's record IS the last committed decision result targeting it (bootstrap-ledger.ts:97-116, stateOf :149-153), so the five-key result had REPLACED the sealed run record.\n\nMEASURED through `stateOf(readDurableLedger(...), RUN_ID)`: keys [authorityRef, decision, decisionReason, envelopeDigest, findingsRef, runId, state, submissionHash, successorRunId]; state.lifecycle \"REJECTED\", state.version priorVersion+1; authorityRef/envelopeDigest/submissionHash/goalRef/graphRevisionRef/sealedHashes byte-equal to the sealed record. Second production reader: readPlanningRun -> {lifecycle REJECTED, outcome RUN, reviewable false}.\n\nDOD 2 VACUOUS ARM CLOSED: the already-rejected arm reads the record first (state non-null, lifecycle REJECTED), so only the lifecycle comparison of approval-run-binding.ts:150 can answer. REOPEN NOTE 3 CLOSED: new arm plants a state failing `validPlanningRunState`'s exact-key roster and drives APPROVAL_AUTHORITY_UNSEALED / APPROVAL_RUN_BINDING. ADVERSARIAL FIND: new arm proves the bigger result still decodes with a reason AT the 262144-byte ingress bound.\n\nDRILLS (restores SHA256-proven in separate commands): drop the state carry -> 2 red; commit lifecycle PLAN_REVIEW -> 2 red (\"expected 'PLAN_REVIEW' to be 'REJECTED'\"); swap the branch code -> 1 red; drop the carried sealed facts -> 1 red.\n\nUNCHANGED FROM ROUND 1: core root export `rejectRun` (",
+  "reviewCompletedAt": "2026-09-04T21:13:25.709Z",
+  "rejectionDetails": {
+    "failedDodItems": [
+      "DoD 1: 'the run aggregate reads lifecycle REJECTED with the successorRunId' - measured false; after the commit the run's durable record is [decision, decisionReason, findingsRef, runId, successorRunId] with no state/lifecycle, and no arm asserts the lifecycle.",
+      "DoD 2 (partial): the 'REJECT on a run already REJECTED' arm asserts APPROVAL_RUN_NOT_REVIEWABLE but is answered by the state===null disjunct of approval-run-binding.ts:150, not the lifecycle check its comment names - it cannot discriminate REJECTED from any other stateless or non-PLAN_REVIEW run."
+    ],
+    "issues": [
+      {
+        "type": "missing_feature",
+        "file": "apps/daemon/src/planning/approval-intent-rejection.ts",
+        "line": 153,
+        "description": "Primary leg targets the RUN, and an aggregate's ledger record IS the last decision's committed result (bootstrap-ledger.ts:97-116, :149-153), so the 5-key result replaces the run's state-bearing record: keys go from [authorityRef, envelopeDigest, state, submissionHash] with lifecycle 'PLAN_REVIEW' to the 5 decision keys with lifecycle undefined. Core's rejectRun hands you that state with lifecycle REJECTED (planning-results.ts:132-146); it is discarded."
+      },
+      {
+        "type": "test_failure",
+        "file": "apps/daemon/src/planning/approval-intent.test.ts",
+        "line": 1410,
+        "description": "Vacuous-adjacent arm: APPROVAL_RUN_NOT_REVIEWABLE comes from `state === null` at approval-run-binding.ts:150, not the lifecycle comparison the :1425 comment credits. Green whether the lifecycle is REJECTED, CANCELLED or absent. Add an arm reading the lifecycle literally through the production reader and prove it red by mutating the committed lifecycle value."
+      },
+      {
+        "type": "other",
+        "file": "apps/daemon/src/planning/approval-intent-rejection.ts",
+        "line": 141,
+        "description": "Note, not a blocker: the `runStateOf` undefined branch refuses APPROVAL_AUTHORITY_UNSEALED / APPROVAL_RUN_BINDING but is unreachable from the seam (readApprovalIntentSources already refuses NOT_REVIEWABLE for a stateless record) and is only in the emittable-codes roster at test:1308, never driven. Drive it or drop it while reshaping the leg."
+      }
+    ]
+  },
+  "rejectionHistory": [
+    {
+      "reason": "DoD 1's lifecycle clause is MEASURABLY FALSE — a durable-record overwrite, not a missing assertion. READ comment-31c9330f FIRST: probe output, restore proof, do-not-redo list, gate re-run, commit audit.\n\nMEASURED over the real store (probe appended at HEAD, run, restored; restore proven separately). `readDurableLedger(store, PROJECT_ID).aggregates.get(RUN_ID)?.result` either side of the REJECT:\n  before [\"authorityRef\",\"envelopeDigest\",\"state\",\"submissionHash\"], state.lifecycle \"PLAN_REVIEW\"\n  after [\"decision\",\"decisionReason\",\"findingsRef\",\"runId\",\"successorRunId\"], lifecycle undefined\n\nDoD 1 demands the run aggregate read lifecycle REJECTED. It reads no lifecycle, and the run's sealed facts (authorityRef, envelopeDigest, submissionHash, goalRef, graphRevisionRef, sealedHashes) are erased from every `stateOf` reader. REJECTED appears nowhere durable — the pinned event payload carries no lifecycle either.\n\nCAUSE: the primary leg targets the RUN (approval-intent-rejection.ts:153) and an aggregate's ledger record IS the last decision's committed result (bootstrap-ledger.ts:97-116, :149-153), so the 5-key result replaces the state-bearing record. `rejectRun` already returns that state with lifecycle REJECTED and every sealed field carried (planning-results.ts:132-146); `rejected.state` is discarded. APPROVE avoids this — its primary leg targets GOAL_ID.\n\nThe already-rejected arm passes for the WRONG REASON (epic rail 1): test:1410 gets APPROVAL_RUN_NOT_REVIEWABLE from the `state === null` disjunct of approval-run-binding.ts:150, not the lifecycle comparison its :1425 comment credits.\n\nDoD 1 also demands an exactly-5-key result and an extra leg carries no result (bootstrap-ledger.ts:222-250), so the leg shape is a call for architect-16a01670, not for you alone.\n\nPASS BAR: a rejected run whose record, read through the production reader the suite already uses, reports lifecycle REJECTED and keeps its sealed facts; an arm asserting it literally, proven red by mutating it.",
+      "rejectedAt": "2026-09-04T18:08:15.679Z",
+      "reopenCount": 1,
+      "failedDodItems": [
+        "DoD 1: 'the run aggregate reads lifecycle REJECTED with the successorRunId' - measured false; after the commit the run's durable record is [decision, decisionReason, findingsRef, runId, successorRunId] with no state/lifecycle, and no arm asserts the lifecycle.",
+        "DoD 2 (partial): the 'REJECT on a run already REJECTED' arm asserts APPROVAL_RUN_NOT_REVIEWABLE but is answered by the state===null disjunct of approval-run-binding.ts:150, not the lifecycle check its comment names - it cannot discriminate REJECTED from any other stateless or non-PLAN_REVIEW run."
+      ],
+      "issues": [
+        {
+          "type": "missing_feature",
+          "file": "apps/daemon/src/planning/approval-intent-rejection.ts",
+          "line": 153,
+          "description": "Primary leg targets the RUN, and an aggregate's ledger record IS the last decision's committed result (bootstrap-ledger.ts:97-116, :149-153), so the 5-key result replaces the run's state-bearing record: keys go from [authorityRef, envelopeDigest, state, submissionHash] with lifecycle 'PLAN_REVIEW' to the 5 decision keys with lifecycle undefined. Core's rejectRun hands you that state with lifecycle REJECTED (planning-results.ts:132-146); it is discarded."
+        },
+        {
+          "type": "test_failure",
+          "file": "apps/daemon/src/planning/approval-intent.test.ts",
+          "line": 1410,
+          "description": "Vacuous-adjacent arm: APPROVAL_RUN_NOT_REVIEWABLE comes from `state === null` at approval-run-binding.ts:150, not the lifecycle comparison the :1425 comment credits. Green whether the lifecycle is REJECTED, CANCELLED or absent. Add an arm reading the lifecycle literally through the production reader and prove it red by mutating the committed lifecycle value."
+        },
+        {
+          "type": "other",
+          "file": "apps/daemon/src/planning/approval-intent-rejection.ts",
+          "line": 141,
+          "description": "Note, not a blocker: the `runStateOf` undefined branch refuses APPROVAL_AUTHORITY_UNSEALED / APPROVAL_RUN_BINDING but is unreachable from the seam (readApprovalIntentSources already refuses NOT_REVIEWABLE for a stateless record) and is only in the emittable-codes roster at test:1308, never driven. Drive it or drop it while reshaping the leg."
+        }
+      ]
+    }
+  ],
+  "completedAt": "2026-09-04T21:13:25.709Z",
+  "reviewSummary": "APPROVED at HEAD 0965b1e1, owned paths clean. Full evidence: comment-5d81a0db.\n\nGATES I RE-RAN. `pnpm --filter @moe/daemon test` -> `Test Files 1 failed | 407 passed (408)` / `Tests 1 failed | 8117 passed (8118)`. The one red is FOREIGN: compile-dispatcher.test.ts is ` M` (uncommitted peer edit +82/-10), the failing arm \"SEALS a three-node INITIAL graph\" sits inside that hunk, refused by an UNMODIFIED compile-dispatcher.ts:197 (task-f79d38b1 retiring the one-node fence, test-first). Unreachable from this diff. `pnpm typecheck` exit 0, all packages Done with `$ tsc` echoes. approval-intent + mcp-tool-allowlist -> `Tests 110 passed (110)` (approval-intent 92). Root core pins -> `Tests 291 passed (291)`, both 255->256 bumps settle.\n\nDoD 1 FIXED, PROVEN BY MY OWN DRILLS (restores sha256-proven in separate calls): commit the prior state not core's reduced one -> 3 red, all \"expected 'PLAN_REVIEW' to be 'REJECTED'\"; drop the `...record` carry-forward -> 2 red (\"authorityRef: undefined\"). The already-rejected arm reds under drill 1, so the reopen's vacuity finding is closed - it discriminates the lifecycle, not the state===null disjunct at approval-run-binding.ts:150. Reopen note 3 closed by a new APPROVAL_AUTHORITY_UNSEALED arm.\n\nDoD 2 green (code+layer; reason arms over an EMPTY store; APPROVE path 9 diff lines, no arm weakened). DoD 3 green (live-store resolver + foldCurrentRun it delegates to; both .js bridges). DoD 4 and DoD 3's index export VOID by architect re-anchors 4 and 2. Caps 249/217/125.\n\nRESIDUAL FILED NOT REJECTED - architect-16a01670: DoD 1's EXACT-5-keys is not literally met (9). Verified myself: ExpectedVersionDecisionLeg (decision-legs-contracts.ts:16-20) has no result, only legs[0] describes the record, readDurableLedger writes that result AS the record - both clauses are one set of bytes. Graded on the reopen's PASS BAR. All five facts stay top-level; child 2's result.decision unaffected."
+}

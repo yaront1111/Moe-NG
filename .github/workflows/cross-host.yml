@@ -69,6 +69,9 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
 
+      - name: Install Chromium for daemon preview tests
+        run: pnpm --filter @moe/daemon exec playwright install --with-deps chromium
+
       - name: Platform identity
         run: |
           node -p "JSON.stringify({platform: process.platform, arch: process.arch, node: process.version})"
@@ -244,6 +247,9 @@ jobs:
       - name: Install
         id: install
         run: pnpm install --frozen-lockfile
+
+      - name: Install Chromium for daemon preview tests
+        run: pnpm --filter @moe/daemon exec playwright install chromium
 
       - name: Platform identity
         run: |

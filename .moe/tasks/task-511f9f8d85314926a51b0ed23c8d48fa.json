@@ -1,0 +1,202 @@
+{
+  "id": "task-511f9f8d85314926a51b0ed23c8d48fa",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "bug: store runtime-entrypoint test can leave its temp directory after EPERM",
+  "description": "Parent task-78eedd8ebc2b43c581ac21ea28648a9a verification: first pnpm verify:store failed only packages/store/src/store-runtime-entrypoint.test.ts:39 rmSync with EPERM; immediate same-command rerun passed 53 files/677 tests unchanged.\nFailed-run temp directory C:/Users/Yaron/AppData/Local/Temp/moe-runtime-entrypoint-jdEnkX still exists with one child. Read-only check confirms ordinary directory; this session's explicit cleanup was denied by execution policy. Investigate child lifecycle/Windows handle release, not retries that hide the failure; no store code changed here.",
+  "definitionOfDone": [
+    "Measure the runtime child and handle lifecycle behind the EPERM and add a focused regression for guaranteed teardown without deleting foreign paths.",
+    "Verify store runtime-entrypoint test and full store gate with nonzero test counts; ensure both success/failure cleanup paths close handles and remove their owned temporary directories."
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "Prepare the two-file TDD seam without changing production store APIs. In store-runtime-entrypoint.test.ts factor the existing Worker/mkdtemp invocation into a private local helper used by the original assertion and upcoming regressions; initially retain message-settlement behavior so the new ordering test can go red. Allow test-local observation of the created Worker and exact directory for emergency teardown and failure injection; no public helper/export or new package dependency. In store-entrypoint-smoke-worker.mjs add optional workerData fixture controls for a SharedArrayBuffer rendezvous after postMessage but before store.close(), throwing after a result, setting a nonzero process.exitCode after normal finally, and exiting zero without a result. Preserve its real ./index.ts import, real SqliteEventStore.open(), finally close, and the original eight-key success message exactly. Default fixture behavior remains unchanged. Capture the named pre-diff revision and existing owned-path status for the final gate's baseline attribution; preserve all foreign WIP.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/store-runtime-entrypoint.test.ts",
+        "packages/store/src/store-entrypoint-smoke-worker.mjs"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/store-runtime-entrypoint.test.ts",
+        "packages/store/src/store-entrypoint-smoke-worker.mjs"
+      ],
+      "note": "Prepared private helper/observation seam, retaining original resolve-on-message and pre-exit removal. Added fixture modes and SharedArrayBuffer rendezvous after original eight-key result but before real store.close(). A finite generic startup watchdog is preparatory safety, not the fix/diagnostic. Original focused test green (1 file/1 test), store typecheck EXIT 0. Pre-diff revision and root/store baseline evidence in prior comments; no foreign files touched.",
+      "startedAt": "2026-09-08T17:42:09.056Z",
+      "completedAt": "2026-09-08T17:57:14.477Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "Use test-driven-development: add and run focused RED regression cases before changing the corresponding lifecycle branches. Through the same private helper and real mjs fixture cover normal result; held-after-message success; throw after result; nonzero exit after result; zero exit with no result; deadline while a real SQLite handle is held; synchronous Worker-construction failure; and a throwing caller assertion. For the held-success case positively observe the rendezvous, establish that settlement/removal has not occurred across a parent event-loop turn, then release the gate; assert actual worker exit precedes recursive removal, rather than relying on Windows EPERM. Pin stable helper diagnostic codes at layer STORE_SMOKE_WORKER: STORE_SMOKE_WORKER_ERROR (original cause retained), STORE_SMOKE_NONZERO_EXIT (actual exitCode pinned), STORE_SMOKE_NO_RESULT, STORE_SMOKE_TIMEOUT; constructor/assertion errors retain their original identity or exact native code/cause. The timeout regression must observe readiness before arming its short injected test deadline; retain a separate bounded startup guard so slow startup cannot yield a vacuous timeout pass. Assert unique owned directory absent after each outcome and every created worker exited. Add a sibling-directory isolation case using a separate test-owned directory that must remain intact during helper cleanup and is explicitly removed by its own finally. All red and injected-failure cases independently release the gate, await termination/exit and remove only their captured exact directories in safety-finally, so a failing assertion cannot leak. Never sweep %TEMP% or delete the historical jdEnkX path.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/store-runtime-entrypoint.test.ts",
+        "packages/store/src/store-entrypoint-smoke-worker.mjs"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/store-runtime-entrypoint.test.ts"
+      ],
+      "note": "RED verified foreground: focused suite EXIT 1, 11 failed/1 passed of 12. Held-worker regression positively reached SQLite rendezvous then failed intended assertion: 'message is not exit: removal must wait', actual events [message, remove]. Normal completion still had threadId1, late ERROR returned success, NO_RESULT hit generic watchdog not required code, other lifecycle arms exposed EPERM/early removal; paired cleanup lost original error. Constructor identity already passed as existing behavior. Safety-finally released/terminated each exact captured Worker, awaited all outcomes and deleted only its own captured directory; final absence/exited assertions passed. Added explicit EPERM and termination-failure propagation tests within two-file scope. Store typecheck EXIT 0.",
+      "startedAt": "2026-09-08T17:57:14.857Z",
+      "completedAt": "2026-09-08T18:00:03.978Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "Implement the local helper's ownership lifecycle in store-runtime-entrypoint.test.ts: allocate and retain only its own mkdtemp result; retain the Worker outside the result Promise; subscribe to error/message/exit immediately. A message records the result but never settles success. Settle normal success only after exit code 0 with a recorded result. Treat a late error or nonzero exit after a message as failure; fail a zero exit without a result rather than hanging. Add a finite owned deadline shorter than the enclosing test timeout. On any premature failure/deadline await worker.terminate() and the exit barrier before rmSync; on natural exit do not terminate a completed worker. Cover construction failure even when there is no Worker. Always clear owned timers/listeners without losing late errors. Use the exact local diagnostic codes and STORE_SMOKE_WORKER layer pinned in step 2; retain original errors as causes and do not let a termination-induced exit code replace the initiating reason. Do not swallow removal/termination errors; retain both primary and cleanup failures if both occur. Keep rmSync single-attempt, recursive/force on the exact owned path, with no maxRetries, retryDelay, delay-to-close, prefix sweep, or public store API change. Add only the short inline why-comment needed to explain message versus exit.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/store-runtime-entrypoint.test.ts",
+        "packages/store/src/store-entrypoint-smoke-worker.mjs"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/store-runtime-entrypoint.test.ts"
+      ],
+      "note": "GREEN: 1 file/12 tests passed, 1.44s; store typecheck EXIT 0. Message only records payload; exit0 plus recorded result succeeds, all failure arms use exact stable codes/layer. Early failures clear deadline, await terminate and actual exit before one exact rmSync attempt; natural exits never terminate. Original causes/constructor/assertion errors retained; paired cleanup failures aggregate. If termination itself fails, no removal of live-worker directory occurs and exit/error listeners remain until actual exit; regression's independent safety-finally then releases/terminates and proves directory absence. Helper result resolves an Outcome rather than rejecting internally, avoiding dangling rejection races. Test file269 lines, functions under50; no public store changes.",
+      "startedAt": "2026-09-08T18:00:04.371Z",
+      "completedAt": "2026-09-08T18:01:10.696Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "One concentrated verification step. Exact primary complete_task command from repository root: pnpm verify:store. First run pnpm exec vitest run packages/store/src/store-runtime-entrypoint.test.ts and pnpm --filter @moe/store typecheck as foreground commands; require nonzero Test Files/Tests counts for both focused and full store test legs. Run required repository legs pnpm typecheck, pnpm test, pnpm verify:foundation, and pnpm --filter @moe/daemon test under the repository resource-lease procedure; disclose fresh exact exit statuses and counts. Evaluate foreign failures against a named pre-diff/merge-base baseline and delivered HEAD, intersecting new failing paths with the two owned files; if verify:store is short-circuited by foreign typecheck red, record its actual failure and separately run pnpm test:store with counts, never invent primary exit 0. Root pnpm test does not cover apps/**. Whole-platform integration/docs sweep remains with the already WORKING integration-and-hardening row task-99f364e3a6104ee993b6820c580a52fb, not this incidental highest-order bug row. No probe/transcript/generated evidence files in the commit; put concise results in task comments/step notes.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/store-runtime-entrypoint.test.ts",
+        "packages/store/src/store-entrypoint-smoke-worker.mjs"
+      ],
+      "note": "Required foreground gates under full-suite lease: focused 1 file/12 tests EXIT0; store typecheck EXIT0; pnpm verify:store EXIT0 (53 files/688 tests,9.44s); pnpm typecheck EXIT0; pnpm test EXIT0 (438 passed/1 skipped files,10423 passed/49 skipped tests,203.68s); pnpm verify:foundation EXIT0 (35 files/756 tests,9.07s); pnpm --filter @moe/daemon test EXIT0 (596 files,10644 passed/8 skipped tests,669.22s). Initial unchanged-owned c2f726d3 root3 timeout failures did not recur, and standalone3files/30tests EXIT0 in26.24s with no other Vitest/docker containers. Filed task-0126aacd per foreign-bug rail, then appended explicit failure-to-reproduce/contended-versus-quiet evidence: no proven code defect, no timeout inflation. New failures intersect owned paths = empty. HEAD advanced concurrently to00c88cd8; only these two owned files differ, wrapper/QA will bind delivered commit later. No generated evidence files added.",
+      "startedAt": "2026-09-08T18:01:11.034Z",
+      "completedAt": "2026-09-08T18:18:37.363Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "One final adversarial review using adversarial-self-review: inspect both diffs for message-before-exit, error-after-result, double settlement, unhandled rejection, missed early exit, timer/listener leaks, termination failure, concurrent directory ownership and Windows/Mac/Linux unlink differences. In a quiet scoped drill restore the old resolve-on-message behavior and require the held-worker ordering test to fail for its intended assertion, then exercise failure-code mutations against the helper to verify each failure arm is not vacuous. Before drilling record git status --porcelain of exact paths; use out-of-tree backups suffixed by worker ID; restore in finally and independently verify tracked diff or SHA256 equality if untracked. Re-run the focused tests after restoration (repeat the final primary gate if implementation bytes changed). Document remaining unrelated evidence polish on the existing epic hardening row, not a new task. Report every changed path in complete_step.modifiedFiles and complete_task with honest fresh verification; wrapper owns explicit-path commits and QA owns approval.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "packages/store/src/store-runtime-entrypoint.test.ts",
+        "packages/store/src/store-entrypoint-smoke-worker.mjs"
+      ],
+      "modifiedFiles": [
+        "packages/store/src/store-runtime-entrypoint.test.ts",
+        "packages/store/src/store-entrypoint-smoke-worker.mjs"
+      ],
+      "note": "Adversarial review completed: per-call mkdtemp ownership, private trusted controls, no public input/API, no retry/sweep, message/error/exit ordering, first-failure retention, no dangling rejected Promise, timer clear and listeners retained through exit, construction/noresult/timeout/cleanup/termination failure paths covered. Termination failure never removes live path; test emergency finally proves eventual own teardown. Six quiet mutants18:19–18:21Z each RED for intended behavior/code/layer. First old-message run failed final no-terminate instead of harness's early-removal label: strengthened same assertion before gate release, GREEN then mutant RED [message,terminate]. Layer harness rejected ambiguous anchor before mutation, reran unique anchor RED. Restore finally + independent separate-call SHA match for both files; test4D7EC392...,fixture743BB760..., no mutant tokens, backups removed. Postrestore focused12/12 + store typecheck0. Final pnpm verify:store at18:23Z EXIT0,53files/688tests9.22s. Prior final attempt honestly EXIT1 on peer's transient live-goal-release.test.tsx TS2339; separately store53/6880, peer fixed union narrowing, rerun primary0. No foreign edits. Root/foundation/daemon green from step4 on identical helper bytes, before added one-line held-boundary assertion. Full-suite lease released; no further code edits. Both owned paths explicitly reported; handoff/gotcha in Serena.",
+      "startedAt": "2026-09-08T18:18:37.725Z",
+      "completedAt": "2026-09-08T18:24:55.503Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "LOW",
+  "order": 137,
+  "comments": [
+    {
+      "id": "comment-15bcc2709e914a2795ed9f2b8f3374a1",
+      "author": "governor-12ae245c",
+      "content": "GOVERNOR NOTE — a read-only look at the failing test, offered as a HYPOTHESIS with its evidence, not a verdict. I have not run it. DoD 1 asks for the child/handle lifecycle to be measured; this is where I would point the measurement first.\n\nTHE SHAPE IS NOT THE ONE THIS BOARD HAS SEEN BEFORE. Our prior Windows EPERM-at-teardown case (`seamHarness`, apps/daemon/src/http/foundation-registry-fixtures.ts) was a MISSING try/finally: a handle opened before a throwing seed step, with its closer bound only on the success path. That is NOT this. `store-runtime-entrypoint.test.ts` has a correct `try { … } finally { rmSync(directory, …) }`. Do not go looking for a missing finally here; it is present.\n\nWHAT LOOKS WRONG INSTEAD — the promise settles on the wrong event. The test resolves on `worker.once(\"message\", resolve)` (:19). The `exit` listener (:21-25) only ever REJECTS, and only on a nonzero code — so on the success path the promise is already settled by `resolve` and nothing ever awaits the worker actually exiting. The `finally` then runs `rmSync` on a directory whose `store.sqlite` (:16, `workerData.databasePath`) may still be held by a worker thread that has posted its message but not yet torn down its sqlite handle. On Windows, unlinking a directory containing a file with a live handle is exactly EPERM.\n\nThis predicts every symptom in the description: intermittent rather than deterministic (it is a race between worker teardown and `rmSync`); an immediate rerun passing clean; and the leaked directory surviving with EXACTLY ONE CHILD — which on this reading is `store.sqlite`, the one file the worker had open.\n\nIF THAT HOLDS, the fix is to await the worker's real termination before leaving the try block — resolve only once the worker has exited (or `await worker.terminate()`), rather than on the message alone. That satisfies DoD 2's \"both success/failure cleanup paths close handles\" at the cause.\n\nTWO TRAPS, since the filer already flagged \"not retries that hide the failure\":\n- `rmSync`'s `maxRetries` / `retryDelay` options are the retry that would hide this. They are purpose-built to spin on EPERM/EBUSY until the handle happens to close. Adding them would make the red disappear while the handle leak stays, and this row would be the last chance to catch it.\n- `force: true` is ALREADY on that call (:38) and does nothing here — it only suppresses errors for a path that does not exist. It is not a handle-contention fix, so its presence is not evidence the cleanup was hardened.\n\nScoping note for whoever plans this: the directory named in the description, `C:/Users/Yaron/AppData/Local/Temp/moe-runtime-entrypoint-jdEnkX`, is outside the repo and is this row's own leaked artifact. Removing that specific stale directory is in scope; DoD 1's \"without deleting foreign paths\" means do not let the regression sweep `%TEMP%` by prefix — a concurrent seat's live `moe-runtime-entrypoint-*` directory would be collateral.",
+      "timestamp": "2026-09-08T14:59:36.577Z"
+    },
+    {
+      "id": "comment-bdfbda3b4f744661a86e86d2a198215a",
+      "author": "architect-9556982c",
+      "content": "PLAN-TIME MEASUREMENT (2026-09-08, shared working tree, owned paths tracked/clean): `Get-Content packages/store/src/store-runtime-entrypoint.test.ts` confirms result Promise resolves on message at line 19; worker's postMessage at line 51 precedes store.close() in finally at line 62. This is a Worker thread, not a spawned OS child. Per-file `Select-String ... -Pattern 'from \"'` found only Node/Vitest plus the fixture's local ./index.ts: no new workspace dependency edge is needed. `git grep -l -E 'store-runtime-entrypoint|store-entrypoint-smoke-worker|shadowMutationRejected|dangerousMembers' -- ':!.moe' ':!.serena' ':!.codex'` found only these two files plus the historical docs/plans/2026-08-06-versioned-command-decision-slice.md path mention. Preserve the result shape; no source-text asserter/export roster change.\n\nRead-only inspection confirms historical jdEnkX contains store.sqlite (200704 bytes); did NOT delete it. A Node v24.16.0 in-memory orchestration of the unmodified fixture observed message(threadId=1,exitObserved=false,files=[store.sqlite,store.sqlite-wal]), then exit(code=0,threadId=-1), then exact-owned-temp cleanup with directoryExists=false. A separate real SqliteEventStore.open probe held the handle using Atomics.wait, then awaited worker.terminate(): exit=1 preceded terminate fulfillment and exact-directory removal succeeded. These are planning leads, not delivered regression evidence. The plan requires the same facts through durable tests. Focused baseline `pnpm exec vitest run packages/store/src/store-runtime-entrypoint.test.ts` EXIT 0, Test Files 1 passed (1), Tests 1 passed (1), 638ms; this does NOT prove the intermittent failure fixed.\n\nDraft approach: two existing files only; keep real runtime import/store behavior and exact result. Add deterministic held-after-message rendezvous plus worker-error/nonzero/no-result fixture controls. Local invocation helper must record messages and settle success only after exit 0; on failure/deadline await termination+exit before removing only its mkdtemp directory. Preserve errors/causes, clear timers/listeners, handle construction failure, and never add rm retries. Durable tests cover success, held success, late error/nonzero, missing result, live-handle timeout, construction/assertion failure and sibling-directory isolation; all red arms own emergency teardown. Primary final gate `pnpm verify:store`; focused gate above plus owned typecheck and required broad path-attributed baseline legs. One final adversarial pass with an old-message-settlement mutation and reason-code pinning. Existing platform integration/hardening owner is task-99f364e3a6104ee993b6820c580a52fb (WORKING); this bug is incidentally task.isEpicFinal by order and must not duplicate that row.\n\nAwaiting the required REPL confirmation of this approach before moe.submit_plan. Asked the human to confirm the two-file no-retry lifecycle plan; no answer yet. No source files modified, no dependencies/splits needed. Foreign runtime/daemon/e2e WIP preserved.",
+      "timestamp": "2026-09-08T16:41:00.978Z"
+    },
+    {
+      "id": "comment-28adf9ecdbce4be4b786852a682355a7",
+      "author": "worker-d0fc1403",
+      "content": "Step 1 pre-diff measurement: HEAD c2f726d3376bc61b0d7d20542fdfa8ecc37044d2; both owned paths tracked with empty path-scoped status. Fresh foreground pnpm verify:store EXIT 0, all workspace typechecks Done, 53 test files / 677 tests passed (9.72s, 17:42Z). No files edited yet. full-suite-gate queued #1 behind integration row; asked its owner for root pre-diff failures and end-of-sweep boundary before test edits. Verified Node v24 Worker documentation: message deliveries precede exit; exit is final event; terminate promise fulfills on exit. Fixture currently posts before finally closes, parent settles on message. Historical jdEnkX untouched.",
+      "timestamp": "2026-09-08T17:49:13.271Z"
+    },
+    {
+      "id": "comment-a40f272e4a4049a29eb7ae7717fff9dd",
+      "author": "worker-d0fc1403",
+      "content": "Pre-diff full root baseline completed 17:54Z, pnpm test EXIT 1 at c2f726d3376bc61b0d7d20542fdfa8ecc37044d2 with owned paths still clean: 3 failed/435 passed/1 skipped files; 3 failed/10409 passed/49 skipped tests, 317.90s. All failures are native child-process timing: tests/integration/portability/bin-target-modes.test.ts > reports only the exact index-mode finding for valid bytes tracked 100644 (30000ms); tools/packaging/pack-windows-process-lease.test.ts > returns a candidate digest observed by the helper after the child job drains (5000ms); tools/packaging/pack-windows.test.ts > physically creates, reopens and verifies the PowerShell archive (5000ms). None intersect owned two files. Store test passed in this baseline. No retries/timeout changes will be made to those foreign files.",
+      "timestamp": "2026-09-08T17:55:11.995Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-08T14:58:43.658Z",
+  "updatedAt": "2026-09-08T18:49:22.048Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-08T16:34:41.799Z",
+    "plannedStepCount": 5,
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 5,
+    "doneAt": "2026-09-08T18:49:22.048Z",
+    "wallClockMs": 8080249
+  },
+  "contextFetchedBy": [
+    "architect-9556982c",
+    "worker-d0fc1403",
+    "qa-2702df88"
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-08T17:41:30.265Z",
+  "planningNotes": {
+    "approachesConsidered": "Human confirmed the proposed two-file no-retry approach with 'continue' after the REPL confirmation question. Choose message capture plus a worker-exit barrier, with awaited termination on exceptional paths, rather than merely moving postMessage after close (which would still miss late worker errors), unconditional early termination (which can conceal successful-path exit failure), or rmSync retries (explicitly forbidden symptom masking). Keep the helper private to the existing test and fixture controls in the existing mjs: no new production package, new exported API, dependency row or general worker framework. Estimated <=60 minutes human-equivalent, five steps/two tracked files. Documentation is an inline lifecycle comment; no user-visible contract change.",
+    "codebaseInsights": "Measured current shared tree; owned paths remain tracked and clean on confirmation. `Get-Content packages/store/src/store-runtime-entrypoint.test.ts` shows worker.once('message', resolve) at line19 and only nonzero-exit rejection at lines21-25; the 41-line test removes its dir in finally. `Get-Content packages/store/src/store-entrypoint-smoke-worker.mjs` shows postMessage before store.close() in finally (63 lines). Per-file `Select-String -Path packages/store/src/store-runtime-entrypoint.test.ts,packages/store/src/store-entrypoint-smoke-worker.mjs -Pattern 'from \"'` found Node/Vitest imports and local ./index.ts only; no cross-package edge is added. `git grep -l -E 'store-runtime-entrypoint|store-entrypoint-smoke-worker|shadowMutationRejected|dangerousMembers' -- ':!.moe' ':!.serena' ':!.codex'` found the two owned files plus a historical docs/plans/2026-08-06-versioned-command-decision-slice.md path mention; preserve result shape and no asserting consumer changes are needed. Package manifest resolves @moe/store; root verify:store is pnpm typecheck && pnpm test:store. Fresh pre-fix focused `pnpm exec vitest run packages/store/src/store-runtime-entrypoint.test.ts`: EXIT0, Test Files 1 passed (1), Tests 1 passed (1),638ms; a pass does not retire this race. Two in-memory Node24.16 probes observed (a) unmodified fixture message with live thread and sqlite/WAL present, followed by exit0 then successful exact-own-dir deletion; (b) held real SQLite handle, terminate awaited through exit1, then successful exact-own-dir deletion. Both probe directories removed; these are planning leads requiring durable regressions, not delivered evidence. Historical jdEnkX read-only inspection found store.sqlite,200704 bytes; left untouched. Full details and governor hypothesis are in task comments. epicSiblings has existing WORKING integration-and-hardening owner task-99f364e3a6104ee993b6820c580a52fb; no missing prerequisite for these already tracked test files.",
+    "risks": "The original EPERM has not been reproduced deterministically or attributed to a uniquely identified OS handle; the measured early-message ownership gap is real and is the scoped fix. Node Worker is a thread, not an OS child. Exit is the final Worker event and all posted messages precede it; terminate() fulfills on exit (Node official docs https://nodejs.org/docs/latest-v24.x/api/worker_threads.html#event-exit and #workerterminate). Unix can unlink live files, so test the ordering itself. Do not let timeout-triggered exit1 replace STORE_SMOKE_TIMEOUT or let a posted result mask a late error. Do not throw uncaught from observation listeners. A rejected termination is not proof of exit: retain the exit observer, surface the cleanup failure and do not claim cleanup succeeded while the worker is live. Worker constructor may throw before any Worker exists; tests must not wait for nonexistent exit. Preserve original errors if cleanup also fails. No rm retries, sleep-based race fixes, temp-prefix cleanup, shared-worktree resets/stashes/commits, or edits to historical docs/runtime state. Record every changed path. Whole-platform hardening remains on its existing owning row; this incidental late bug's numeric isEpicFinal flag does not justify duplicating that implementation scope.",
+    "keyFiles": [
+      "packages/store/src/store-runtime-entrypoint.test.ts",
+      "packages/store/src/store-entrypoint-smoke-worker.mjs",
+      "packages/store/package.json",
+      "package.json",
+      "vitest.config.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-08T17:41:32.626Z",
+  "workStartedAt": "2026-09-08T17:42:09.056Z",
+  "reviewStartedAt": "2026-09-08T18:25:34.185Z",
+  "verification": {
+    "command": "pnpm verify:store",
+    "exitCode": 0,
+    "outputTail": "$ pnpm typecheck && pnpm test:store\nAll 19 workspace project typechecks: Done\napps/daemon typecheck: Done\n$ vitest run packages/store/src\nRUN v4.1.10 D:/projexts/moe-next\nTest Files 53 passed (53)\nTests 688 passed (688)\nStart at 21:23:00\nDuration 9.22s (transform 4.18s, setup 0ms, import 14.49s, tests 27.93s, environment 3ms)\nProcess exit code: 0",
+    "reportedAt": "2026-09-08T18:25:34.185Z"
+  },
+  "filesModified": [
+    "packages/store/src/store-runtime-entrypoint.test.ts",
+    "packages/store/src/store-entrypoint-smoke-worker.mjs"
+  ],
+  "completionSummary": "Fixed store runtime smoke teardown in exactly two test/fixture files: message records result; success requires actual exit0. Late error/nonzero/no-result/timeout have exact STORE_SMOKE_WORKER diagnostics; terminate+exit precedes single exact-directory removal, original and cleanup errors retained. Real SQLite held-worker regression, constructor/assertion errors, sibling isolation and injected cleanup failures:12 tests. TDD RED11/12 -> GREEN12/12;6 quiet mutants fail intended ordering/code/layer assertions and independently hash-restored. Final pnpm verify:store EXIT0:53files/688tests (9.22s,18:23Z); focused12 and store typecheck0. Broader gates: root438passed+1skipped files/10423passed+49skipped tests; foundation35files/756tests; daemon596files/10644passed+8skipped; typecheck0. One held-boundary assertion strengthened after broad gates, then focused+primary rerun. Initial foreign root3 timeouts did not recur and standalone3files/30tests passed; task-0126aacd carries explicit non-reproduction, no timeout changes. Final primary briefly hit peer TS2339 WIP; peer fixed, fresh final primary0. Historical temp/foreign files untouched; no public API changes. Lease released; wrapper/QA own landing/provenance.",
+  "commits": [
+    {
+      "sha": "630d1b3dcb0785b208915a9a858d7ef4d6e85781",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-2702df88@2026-09-08T14:24:00Z",
+      "paths": [
+        "packages/store/src/store-runtime-entrypoint.test.ts",
+        "packages/store/src/store-entrypoint-smoke-worker.mjs"
+      ],
+      "recordedBy": "qa-2702df88",
+      "recordedAt": "2026-09-08T18:48:58.214Z",
+      "treeId": "cdfd0efa2921c49b9f00ab06bde2dc1e0ce67538",
+      "status": "REVIEW",
+      "pushed": false,
+      "message": "QA hand-landing after re-running pnpm verify:store (EXIT 0, 53 files / 688 tests). Two owned paths only."
+    }
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-2702df88@2026-09-08T14:24:00Z",
+    "at": "2026-09-08T18:48:58.214Z"
+  },
+  "completedAt": "2026-09-08T18:49:22.048Z",
+  "reviewCompletedAt": "2026-09-08T18:49:22.048Z",
+  "reviewSummary": "APPROVED. Two owned paths, +264/-25.\n\nRE-RUN BY ME: `pnpm verify:store` EXIT 0 — 53 files / 688 tests, matching the recorded verification. Freshness cross-check: the same gate read 677 before this row's arms, so +11 is precisely the new coverage rather than a re-quoted number.\n\nDoD 1 — the ORDERING is the fix: terminate the worker and AWAIT its exit before the single removal of its own directory, so a still-open SQLite handle can no longer turn cleanup into EPERM. Removal is skipped when the worker did not exit, which is correct — deleting under a live handle is what produced the original failure. Only the run's own `mkdtemp` directory is removed; no foreign path is touched.\n\nERRORS ARE NOT MASKED: lifecycle and cleanup failures are collected into an `AggregateError` with the original as `cause`, so a cleanup problem cannot swallow the failure it followed — the classic way a teardown fix hides its own bug.\n\nDoD 2 — the regression is REAL, not an oracle. It holds a genuine worker open through a `SharedArrayBuffer` + `Atomics` gate and asserts the ordering directly, instead of waiting for the host to hand it an EPERM (which would be green on any machine that never produces one). Diagnostics are exact codes at `STORE_SMOKE_WORKER` — NONZERO_EXIT, NO_RESULT, TIMEOUT, WORKER_ERROR — asserted by code, not by \"threw\". Success now requires an actual exit 0 AND a received message, closing the hole where the result arrives before the worker's `finally` closes SQLite.\n\nDRILL DISCIPLINE matched what was announced in advance: declared UTC window 18:18-18:21Z, one file, backups taken BEFORE the mutants existed and token-scanned, six mutants each failing its own intended assertion, restore verified by SHA256 in a call separate from the restore.\n\nHAND-LANDED as 630d1b3d (tree cdfd0efa): no completion commit existed and both paths sat dirty in the shared tree. Not pushed; rides the next worker push."
+}

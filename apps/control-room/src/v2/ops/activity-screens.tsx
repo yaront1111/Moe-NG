@@ -1,10 +1,16 @@
 import type { JSX } from "react";
 
+import type { ActivationReadOutcome } from "../../live/live-activation.js";
 import type { ActivityOutcome } from "../../live/live-activity.js";
 import type { SessionsOutcome, SessionView } from "../../live/live-sessions.js";
+import { RefusalNote } from "../components/outcome-note.js";
+import { pauseSeatWords } from "../shell/pause-context.js";
+import type { ProviderPause } from "../shell/pause-context.js";
+import { agoWords, decisionWords, isSeatRecord, principalWords, seatLimitWords, seatWords } from "./activity-words.js";
+import type { AgentProviderPort } from "./agent-provider-port.js";
+import { SeatDisclosure, SeatStartFacts } from "./seat-disclosure.js";
 import { ARROW_RIGHT, MIDDOT } from "../glyphs.js";
 import { untilWords } from "../board/board-columns.js";
-import { agoWords, decisionWords, isSeatRecord, kindWords, principalWords, seatWords } from "./activity-words.js";
 
 /** Who or what a project-wide decision landed on, without a goal's objectives to name nodes by. */
 function targetWords(targetAggregateId: string): string {
@@ -15,7 +21,6 @@ function targetWords(targetAggregateId: string): string {
   if (targetAggregateId.startsWith("publish:")) return `the publish of goal ${targetAggregateId.slice(13, 21)}`;
   return targetAggregateId;
 }
-import { RefusalNote } from "../components/outcome-note.js";
 
 /**
  * ACTIVITY and SESSIONS, the pure panels. Activity is the decision ledger in a person's
@@ -25,7 +30,8 @@ import { RefusalNote } from "../components/outcome-note.js";
  */
 
 function Refusal({ outcome, testId }: {
-  readonly outcome: { readonly code: string; readonly layer: string; readonly status: string }; readonly testId: string;
+  readonly outcome: { readonly code: string; readonly layer: string; readonly status: string };
+  readonly testId: string;
 }): JSX.Element {
   return <RefusalNote refusal={outcome} testId={testId} />;
 }
@@ -89,7 +95,7 @@ export function ActivityPanel({ nowMs, outcome, scopeLabel }: ActivityPanelProps
                   {seats.map((entry, index) => (
                     <li className="cr2-activity-row" key={`seat:${entry.decidedAt}:${String(index)}`}>
                       <span className="cr2-activity-when">{agoWords(entry.decidedAt, nowMs)}</span>
-                      <span className="cr2-activity-what">{`${principalWords(entry.principalId)} ${kindWords(entry.commandKind)}`}</span>
+                      <span className="cr2-activity-what">{`${principalWords(entry.principalId)} ${decisionWords(entry.commandKind, entry.verdict)}`}</span>
                       <span className="cr2-approve-mono cr2-activity-target">{`${entry.commandKind} ${MIDDOT} ${entry.targetAggregateId}`}</span>
                     </li>
                   ))}
@@ -106,9 +112,19 @@ export function ActivityPanel({ nowMs, outcome, scopeLabel }: ActivityPanelProps
 export interface SessionsPanelProps {
   readonly nowMs: number;
   readonly outcome: SessionsOutcome | null;
+  /** The shell-wide provider pause, or null/absent when none is known. */
+  readonly paused?: ProviderPause | null | undefined;
+  /** The activation read the credential SOURCE is composed from; absent means not read here. */
+  readonly activation?: ActivationReadOutcome | null | undefined;
+  /** The daemon's `project.set_agent_provider` offer, or null when it offered none. */
+  readonly providerOffer?: Readonly<Record<string, unknown>> | null | undefined;
+  readonly providerPort?: AgentProviderPort | null | undefined;
+  readonly onProviderChosen?: (() => void) | undefined;
 }
 
-export function SessionsPanel({ nowMs, outcome }: SessionsPanelProps): JSX.Element {
+export function SessionsPanel({
+  activation, nowMs, onProviderChosen, outcome, paused, providerOffer, providerPort,
+}: SessionsPanelProps): JSX.Element {
   return (
     <section className="cr2-ops-panel" data-testid="cr.sessions.root">
       <h3 className="cr2-approve-heading">{`Seats ${MIDDOT} who is working`}</h3>
@@ -118,6 +134,24 @@ export function SessionsPanel({ nowMs, outcome }: SessionsPanelProps): JSX.Eleme
         <Refusal outcome={outcome} testId="cr.sessions.refusal" />
       ) : (
         <>
+          {/* Above the list, and above the empty line: an empty Seats panel is exactly when a
+              person needs to be told the wrapper is waiting rather than broken. */}
+          {paused === undefined || paused === null ? null : (
+            <p className="cr2-needs-note" data-testid="cr.sessions.paused">{pauseSeatWords(paused)}</p>
+          )}
+          {/* WHICH provider, on WHAT credential, and whether the browser can still change it -
+              above the seat list, because it decides how to read every row below. */}
+          <SeatDisclosure
+            activation={activation ?? null}
+            agentProvider={outcome.agentProvider}
+            offer={providerOffer ?? null}
+            onChosen={onProviderChosen}
+            port={providerPort ?? null}
+            sessions={outcome.sessions}
+          />
+          {/* Above the seat list: the reason a person is looking at fewer moving nodes
+              than they expected. Only what the daemon stated, both numbers. */}
+          <p className="cr2-needs-note" data-testid="cr.sessions.limit">{seatLimitWords(outcome.concurrency)}</p>
           <p className="cr2-needs-note" data-testid="cr.sessions.count">
             {`${String(outcome.totals.live)} live ${MIDDOT} ${String(outcome.totals.expired)} expired ${MIDDOT} ${String(outcome.totals.closed)} closed`
               + (outcome.unreadable ? ` ${MIDDOT} some session records did not read` : "")}
@@ -138,6 +172,7 @@ export function SessionsPanel({ nowMs, outcome }: SessionsPanelProps): JSX.Eleme
                   {`${seatWords(session.sessionId)}${session.holding.length === 0 ? "" : ` ${MIDDOT} working on ${session.holding.join(", ")}`}`}
                 </span>
                 <span className="cr2-approve-mono cr2-activity-target">{`${session.sessionId} ${MIDDOT} ${session.capabilities.join(" ")}`}</span>
+                <SeatStartFacts session={session} />
               </li>
             );
             return (

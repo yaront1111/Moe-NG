@@ -11,11 +11,15 @@ import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
+import { DEPLOY_RECEIPT_COMMAND_KIND } from "../deployment/deploy-receipt-contracts.js";
+import { MIGRATION_RECEIPT_COMMAND_KIND } from "../repository/migrations/migration-receipt.js";
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
+import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
 import { catalogBoundGoals } from "./document-coverage-goals.js";
 import { authenticateHttpRequest } from "./http-command-ingress.js";
 import type { Authenticator, HttpPortRefused, HttpRefused } from "./http-contract.js";
+import { decisionsOf } from "../decision-ledger-memo.js";
 
 export const ACTIVITY_READ_PATH = "/activity/read" as const;
 const LAYER = "ACTIVITY_READ" as const;
@@ -49,7 +53,9 @@ export interface ActivityEntry {
   readonly targetAggregateId: string;
   /**
    * WHAT the decision decided, when its committed result carries a word for it: the route a
-   * `review.submit` round took (`routing.route`), the `escalation.decide` answer (`decision`).
+   * `review.submit` round took (`routing.route`), the `escalation.decide` answer (`decision`),
+   * the deploy receipt's `outcome` (DEPLOYED or REFUSED), the migration receipt's `outcome`
+   * (APPLIED, REFUSED or REVERTED).
    * Null for every other kind and for a conflict; the browser puts the words on.
    */
   readonly verdict: string | null;
@@ -74,7 +80,34 @@ export interface ActivityReadPort {
 
 const refused = (code: string): ActivityRefused => Object.freeze({ code, layer: LAYER, outcome: "REFUSED" as const });
 
-const VERDICT_KINDS: ReadonlySet<string> = new Set(["escalation.decide", "review.submit"]);
+const VERDICT_KINDS: ReadonlySet<string> = new Set([
+  // `preview.decide` commits `{decision: "APPROVE"|"REJECT", ...}` on the goal's PREVIEW
+  // aggregate (preview/preview-daemon-edge.ts), so `decisionWord` reads its word off the same
+  // `decision` member the approval kinds carry. Without the kind here the operator's own
+  // product verdict would read back as a decision with nothing decided.
+  // The deploy receipt is the ONE kind here whose word is an `outcome` rather than a
+  // `decision`: DEPLOYED and REFUSED are the distinction an operator scans the feed for, and
+  // without this entry both render as the kind's own words and a refused deploy is invisible.
+  // The migration receipt is read the same way and for the same reason. APPLIED, REFUSED and
+  // REVERTED are three different things to have happened to a schema, and a feed that rendered
+  // all three as the bare kind would say a migration was DECIDED while never saying whether the
+  // database moved. The row stays a PROJECT observation: the receipt carries no goalRef or
+  // nodeRef, and nothing here attaches one.
+  "approval.decide", "approval.decide_intent", "escalation.decide", "preview.decide",
+  "review.submit", DEPLOY_RECEIPT_COMMAND_KIND, MIGRATION_RECEIPT_COMMAND_KIND,
+]);
+
+/** A REJECT commits the run record with `decision` on it, so the word is READ. An APPROVE commits
+ *  a GoalState - no decision word, a `lifecycle` - and the approval seams admit APPROVE ONLY
+ *  (planning-services.ts:290), so for those kinds a lifecycle IS the verdict. Narrow on purpose,
+ *  and not offered to `escalation.decide`: wider, and an unrelated record renders as an approval. */
+function decisionWord(commandKind: string, record: Record<string, unknown>): unknown {
+  const decision = record["decision"];
+  if (typeof decision === "string" && decision.length > 0) return decision;
+  const lifecycle = record["lifecycle"];
+  return commandKind !== "escalation.decide" && typeof lifecycle === "string" && lifecycle.length > 0
+    ? "APPROVE" : undefined;
+}
 
 /** The one word a committed result carries for what was decided, or null. Never throws. */
 export function verdictOf(commandKind: string, resultBytes: Uint8Array): string | null {
@@ -84,10 +117,17 @@ export function verdictOf(commandKind: string, resultBytes: Uint8Array): string 
   const result: unknown = decoded.value;
   if (typeof result !== "object" || result === null || Array.isArray(result)) return null;
   const record = result as Record<string, unknown>;
-  const word = commandKind === "escalation.decide"
-    ? record["decision"]
-    : typeof record["routing"] === "object" && record["routing"] !== null && !Array.isArray(record["routing"])
-      ? (record["routing"] as Record<string, unknown>)["route"] : undefined;
+  // READ BEFORE `decisionWord`, and only for this kind. `outcome` is a common member of
+  // committed results across this daemon (a publish receipt carries PUSHED), so offering it to
+  // every kind would start captioning unrelated records with a deploy word.
+  if (commandKind === DEPLOY_RECEIPT_COMMAND_KIND || commandKind === MIGRATION_RECEIPT_COMMAND_KIND) {
+    const outcome = record["outcome"];
+    return typeof outcome === "string" && outcome.length > 0 ? outcome : null;
+  }
+  const word = commandKind === "review.submit"
+    ? typeof record["routing"] === "object" && record["routing"] !== null && !Array.isArray(record["routing"])
+      ? (record["routing"] as Record<string, unknown>)["route"] : undefined
+    : decisionWord(commandKind, record);
   return typeof word === "string" && word.length > 0 ? word : null;
 }
 
@@ -102,16 +142,23 @@ export function createActivityReadPort(options: ActivityReadOptions): ActivityRe
   const readActive = options.readActive
     ?? ((s: SqliteEventStore, p: string) => activeCompiledGraphs(s, p, ACTIVITY_LIFECYCLES));
 
-  /** The aggregates a goal's activity lives on: the goal, its run, its sealed nodes. */
-  const targetsOf = (goalRef: string): ReadonlySet<string> | null => {
+  /**
+   * The aggregates a goal's activity lives on: the goal, its run, its sealed nodes. A catalog
+   * that cannot be read is UNREADABLE, not "the goal does not exist": the two nulls used to
+   * collapse and a store whose first GoalCreated row no longer decodes answered GOAL_UNKNOWN for
+   * every goal — absence claimed on evidence that was never read (the sibling runs and coverage
+   * reads answer their UNREADABLE for the same null).
+   */
+  const targetsOf = (goalRef: string): ReadonlySet<string> | "UNKNOWN" | "UNREADABLE" => {
     const goals = catalogBoundGoals(store, projectId);
-    const goal = goals?.find((row) => row.goalId === goalRef);
-    if (goals === null || goal === undefined) return null;
+    if (goals === null) return "UNREADABLE";
+    const goal = goals.find((row) => row.goalId === goalRef);
+    if (goal === undefined) return "UNKNOWN";
     const targets = new Set<string>([goal.goalId]);
     if (goal.planningRunRef !== null) targets.add(goal.planningRunRef);
     for (const graph of readActive(store, projectId)) {
       if (graph.goalRef !== goalRef) continue;
-      for (const node of graph.content.snapshot.nodes) targets.add(node.nodeKey);
+      for (const node of graph.content.snapshot.nodes) targets.add(compiledExecutionRef(projectId, graph, node.nodeKey));
     }
     return targets;
   };
@@ -119,33 +166,29 @@ export function createActivityReadPort(options: ActivityReadOptions): ActivityRe
   const readActivity = (selector: ActivitySelector): ActivityReadResult => {
     try {
       const goalId = "goalRef" in selector ? selector.goalRef : null;
-      const targets = goalId === null ? null : targetsOf(goalId);
-      if (goalId !== null && targets === null) return refused("ACTIVITY_READ_GOAL_UNKNOWN");
+      const scoped = goalId === null ? null : targetsOf(goalId);
+      if (scoped === "UNREADABLE") return refused("ACTIVITY_READ_UNREADABLE");
+      if (scoped === "UNKNOWN") return refused("ACTIVITY_READ_GOAL_UNKNOWN");
+      const targets = scoped;
       const limit = goalId === null ? PROJECT_LIMIT : GOAL_LIMIT;
       const entries: ActivityEntry[] = [];
       let totalDecisions = 0;
-      let cursor = 0n;
-      for (;;) {
-        const page = store.readCommandDecisionsAfter(cursor, DECISION_PAGE_SIZE);
-        for (const decision of page.items) {
-          if (decision.key.projectId !== projectId) continue;
-          if (targets !== null && !targets.has(decision.targetAggregateId)) continue;
-          if (isSeatRecord(decision.commandKind, decision.targetAggregateId)) continue;
-          totalDecisions += 1;
-          const committed = decision.effectDisposition === "EFFECTS_COMMITTED";
-          entries.push(Object.freeze({
-            commandKind: decision.commandKind,
-            decidedAt: decision.decidedAt,
-            disposition: committed ? "COMMITTED" as const : "VERSION_CONFLICT" as const,
-            principalId: decision.key.principalId,
-            targetAggregateId: decision.targetAggregateId,
-            verdict: committed ? verdictOf(decision.commandKind, decision.resultBytes) : null,
-            version: committed ? decision.currentVersion : null,
-          }));
-          if (entries.length > limit) entries.shift();
-        }
-        if (!page.hasMore || page.nextCursor === null) break;
-        cursor = page.nextCursor;
+      for (const decision of decisionsOf(store, DECISION_PAGE_SIZE)) {
+        if (decision.key.projectId !== projectId) continue;
+        if (targets !== null && !targets.has(decision.targetAggregateId)) continue;
+        if (isSeatRecord(decision.commandKind, decision.targetAggregateId)) continue;
+        totalDecisions += 1;
+        const committed = decision.effectDisposition === "EFFECTS_COMMITTED";
+        entries.push(Object.freeze({
+          commandKind: decision.commandKind,
+          decidedAt: decision.decidedAt,
+          disposition: committed ? "COMMITTED" as const : "VERSION_CONFLICT" as const,
+          principalId: decision.key.principalId,
+          targetAggregateId: decision.targetAggregateId,
+          verdict: committed ? verdictOf(decision.commandKind, decision.resultBytes) : null,
+          version: committed ? decision.currentVersion : null,
+        }));
+        if (entries.length > limit) entries.shift();
       }
       entries.reverse();
       return Object.freeze({

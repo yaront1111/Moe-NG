@@ -52,6 +52,7 @@ class DecisionLedgerStore extends RecoveryInitialInstallStore {
 }
 
 export interface DecisionLedgerCore {
+  readonly readCommandDecisionCacheVersion: () => number;
   readonly close: () => void;
   readonly commit: (input: CommitInput) => CommitResult;
   readonly commitExpectedVersionDecision: (
@@ -153,6 +154,7 @@ export function createDecisionLedgerCore(
         limit,
         maxDecodedBytes,
       ),
+    readCommandDecisionCacheVersion: () => ledger.readCommandDecisionCacheVersion(),
     readCommandDecisionsAfter: (
       afterDecisionPosition: bigint,
       limit?: number,

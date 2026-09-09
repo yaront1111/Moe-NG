@@ -6,8 +6,8 @@
  * node's rounds, findings, escalation, acceptance and verifier receipt, and the decision
  * ledger for last activity.
  *
- * STATUS, in one fixed order, first match wins: UNATTRIBUTABLE (the node key is carried by
- * another activated plan too, so the review ledger cannot be attributed) > ACCEPTED (the
+ * STATUS, in one fixed order, first match wins: UNATTRIBUTABLE (legacy execution has no
+ * scoped owner, or depends on such work) > ACCEPTED (the
  * daemon's acceptance is on the node) > BLOCKED (its review ledger does not read) >
  * ESCALATED > ESCALATION_REQUIRED (three unsuccessful rounds and no escalation decision, so
  * review.submit is refused) > DELIVERED (the latest round routed ACCEPT and awaits the
@@ -15,11 +15,19 @@
  * leaves the node READY, as the affordance surface does; `review.latestRoute` says so.
  */
 import type { SqliteEventStore } from "@moe/store";
+import { productionDeployPorts } from "../deployment/deploy-command.js";
+import { readDeployLedger } from "../deployment/deploy-ledger.js";
+import { admitDeployUrl, deployTargetAggregateId } from "../deployment/deploy-target-contracts.js";
+import { admitEnvironmentName, deployAggregateId } from "../deployment/deploy-receipt-contracts.js";
+import type { DeployReceiptV1 } from "../deployment/deploy-receipt-contracts.js";
 
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
+import { legacyCompiledNodeKeys, nodesBlockedByIdentity } from "../orchestrator/compiled-node-identity.js";
+import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import { readPublishLedger } from "../repository/publish-ledger.js";
 import type { GoalPublishState } from "../repository/publish-ledger.js";
+import { readRunGoalPublication } from "./run-goal-publication.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
 import type { ReviewLedger, ReviewLedgers } from "../review/review-read-model.js";
 import { readWorkClaimLedger } from "../work/work-claim-read-model.js";
@@ -33,26 +41,9 @@ import { createPlanningRunReadPort } from "./planning-run-read.js";
 import type { PlanningRunReadResult } from "./planning-run-read.js";
 import { runsRefused as refused } from "./runs-read-contract.js";
 import type {
-  RunGoalPublish, RunGoalView, RunNodeFinding, RunNodeReview, RunNodeStatus, RunNodeView, RunsReadPort,
+  RunDeploymentView, RunGoalView, RunNodeFinding, RunNodeReview, RunNodeStatus, RunNodeView, RunsReadPort,
   RunsReadResult, RunsSelector, RunsView,
 } from "./runs-read-contract.js";
-
-/** The latest publish request and its receipt, as one view; null when never requested. */
-function publishOf(state: GoalPublishState | undefined): RunGoalPublish | null {
-  const request = state?.requests[state.requests.length - 1];
-  if (state === undefined || request === undefined) return null;
-  const receipt = state.receipts.get(request.decisionId);
-  return Object.freeze({
-    branch: receipt?.branch ?? null,
-    code: receipt?.refusal?.code ?? null,
-    decisionId: request.decisionId,
-    outcome: receipt === undefined ? "PENDING" : receipt.outcome,
-    remoteUrl: request.remoteUrl,
-    requestedAt: request.decidedAt,
-    sha: receipt?.sha ?? null,
-    url: receipt?.url ?? null,
-  });
-}
 
 const RUN_LIFECYCLES: ReadonlySet<string> = new Set(["EXECUTION_ENABLED", "CLOSING", "COMPLETED"]);
 /** The review kernel's escalation limit (`REVIEW_ESCALATION_ROUND_LIMIT`), spelled here so the
@@ -86,13 +77,16 @@ export interface RunsReadOptions {
 
 interface SealedNode {
   readonly criterionIds: readonly string[];
+  /** UNKNOWN (`null`) is the authority body's absence, distinct from a declared-none `[]`. */
+  readonly declaredMigrations: readonly string[] | null;
   readonly dependsOn: readonly string[];
   readonly goalRef: string;
   readonly nodeKey: string;
+  readonly nodeRef: string;
   readonly objective: string;
 }
 
-function sealedNodesOf(graphs: readonly ActiveCompiledGraph[]): readonly SealedNode[] {
+function sealedNodesOf(projectId: string, graphs: readonly ActiveCompiledGraph[]): readonly SealedNode[] {
   const nodes: SealedNode[] = [];
   for (const graph of graphs) {
     const { edges, nodes: snapshotNodes } = graph.content.snapshot;
@@ -101,22 +95,22 @@ function sealedNodesOf(graphs: readonly ActiveCompiledGraph[]): readonly SealedN
       if (!bearing.has(definition.nodeKey)) continue;
       nodes.push(Object.freeze({
         criterionIds: definition.criterionBindings.map((binding) => binding.criterionId),
+        // Read off the SAME `definition` this per-graph loop already turns into `nodeRef`, so
+        // the declaration and the execution identity cannot come apart. A nodeKey-keyed lookup
+        // would serve one goal's declaration on another goal's run; keys are shared across goals.
+        // Copied and frozen rather than aliased: a read may not hand out durable content.
+        declaredMigrations: definition.declaredMigrations === undefined
+          ? null : Object.freeze([...definition.declaredMigrations]),
         dependsOn: edges.filter((edge) => edge.consumerNodeKey === definition.nodeKey)
           .map((edge) => edge.producerNodeKey),
         goalRef: graph.goalRef,
         nodeKey: definition.nodeKey,
+        nodeRef: compiledExecutionRef(projectId, graph, definition.nodeKey),
         objective: definition.objective,
       }));
     }
   }
   return nodes;
-}
-
-/** Node keys carried by more than one activated plan: their review ledgers are shared. */
-function sharedKeysOf(nodes: readonly SealedNode[]): ReadonlySet<string> {
-  const seen = new Map<string, number>();
-  for (const node of nodes) seen.set(node.nodeKey, (seen.get(node.nodeKey) ?? 0) + 1);
-  return new Set([...seen].filter(([, count]) => count > 1).map(([key]) => key));
 }
 
 const EMPTY_FACTS: NodeReviewFacts = Object.freeze({
@@ -158,6 +152,56 @@ function statusOf(
   return "READY";
 }
 
+/** The ledger skips malformed newer decisions: never mislabel an older receipt as last. */
+function deployReceiptIsTip(store: SqliteEventStore, receipt: DeployReceiptV1): boolean {
+  const aggregateId = deployAggregateId(receipt.projectId, receipt.environment);
+  const version = store.getAggregateVersion(aggregateId);
+  if (version < 1) return false;
+  const page = store.readAggregateEvents(aggregateId, version - 1, 1);
+  const event = page.items[0];
+  if (page.hasMore || page.items.length !== 1 || event === undefined
+    || event.eventId !== `${receipt.receiptId}-DeployRecorded`
+    || event.aggregateId !== aggregateId || event.aggregateSequence !== version
+    || event.decisionTrace?.commandId !== receipt.receiptId
+    || event.eventType !== (receipt.outcome === "DEPLOYED" ? "EnvironmentDeployed" : "EnvironmentDeployRefused")) return false;
+  const payload: unknown = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(event.payload));
+  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return false;
+  const row = payload as Record<string, unknown>;
+  return Object.keys(row).length === 4 && row.environment === receipt.environment
+    && row.receiptId === receipt.receiptId && row.outcome === receipt.outcome && row.sha === receipt.sha
+    && store.getAggregateVersion(aggregateId) === version;
+}
+
+function deploymentsOf(store: SqliteEventStore, projectId: string): readonly RunDeploymentView[] {
+  const ledger = readDeployLedger(store, projectId);
+  const prefix = deployTargetAggregateId(projectId, "");
+  const bound = new Set(store.enumerateAggregateIdsByPrefix(prefix).map((id) => id.slice(prefix.length)));
+  const targetOf = productionDeployPorts(store, projectId).target;
+  const rows: RunDeploymentView[] = [];
+  // No binding and no receipt means no environment row; never invent a fixed roster.
+  for (const environment of [...new Set([...bound, ...ledger.keys()])].sort()) {
+    try {
+      if (admitEnvironmentName(environment) === null) continue;
+      const target = targetOf(environment);
+      const receipt = ledger.get(environment)?.current;
+      if ((bound.has(environment) && target === null)
+        || (receipt !== undefined && !deployReceiptIsTip(store, receipt))
+        || (receipt === undefined && store.getAggregateVersion(deployAggregateId(projectId, environment)) > 0)) continue;
+      if (target === null && receipt === undefined) continue;
+      const url = receipt === undefined ? null : admitDeployUrl(receipt.url);
+      rows.push(Object.freeze({
+        environment,
+        ...(target === null ? {} : { target: Object.freeze({ network: target.network,
+          ...(target.sshTarget === null ? {} : { host: target.sshTarget.split("@").at(-1)! }) }) }),
+        ...(receipt === undefined ? {} : { sha: receipt.sha, time: receipt.decidedAt, status: receipt.outcome }),
+        ...(receipt?.refusal == null ? {} : { code: receipt.refusal.code }),
+        ...(url === null ? {} : { url }),
+      }));
+    } catch { /* A malformed environment cannot blank the other goals/environments. */ }
+  }
+  return Object.freeze(rows);
+}
+
 export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
   const { projectId, store } = options;
   const clock = options.clock ?? ((): string => new Date().toISOString());
@@ -174,19 +218,21 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
     goal: BoundGoalRow, nodes: readonly SealedNode[], shared: ReadonlySet<string>,
     claims: ReadonlyMap<string, WorkClaimRecord>, reviews: NodeReviews,
     latest: ReadonlyMap<string, string>, now: string, publishes: ReadonlyMap<string, GoalPublishState>,
+    deployments: readonly RunDeploymentView[],
   ): RunGoalView => {
     const run = goal.planningRunRef === null ? null : readRun(store, projectId, goal.planningRunRef);
     const own = nodes.filter((node) => node.goalRef === goal.goalId);
     return Object.freeze({
+      deployments,
       goalId: goal.goalId,
       lifecycle: goal.lifecycle,
       nodes: Object.freeze(own.map((node): RunNodeView => {
-        const facts = reviews.ledgers.get(node.nodeKey) ?? EMPTY_FACTS;
+        const facts = reviews.ledgers.get(node.nodeRef) ?? EMPTY_FACTS;
         const review = reviewOf(facts);
-        const record = claims.get(workItemIdFor(NODE_DELIVER_KIND, node.nodeKey));
+        const record = claims.get(workItemIdFor(NODE_DELIVER_KIND, node.nodeRef));
         const active = activeClaim(record, now) !== null;
-        const receipt = reviews.receipts.get(node.nodeKey);
-        const landing = reviews.landings.get(node.nodeKey);
+        const receipt = reviews.receipts.get(node.nodeRef);
+        const landing = reviews.landings.get(node.nodeRef);
         const isShared = shared.has(node.nodeKey);
         return Object.freeze({
           accepted: facts.accepted === undefined
@@ -195,6 +241,7 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
             active, claimedBy: record.claimedBy, expiresAt: record.expiresAt, status: record.status,
           }),
           criterionIds: node.criterionIds,
+          declaredMigrations: node.declaredMigrations,
           dependsOn: node.dependsOn,
           landing: landing === undefined ? null : Object.freeze({
             branch: landing.commit?.branch ?? null,
@@ -203,19 +250,20 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
             outcome: landing.outcome,
             sha: landing.commit?.sha ?? null,
           }),
-          lastActivityAt: latest.get(node.nodeKey) ?? null,
+          lastActivityAt: latest.get(node.nodeRef) ?? null,
           nodeKey: node.nodeKey,
+          nodeRef: node.nodeRef,
           objective: node.objective,
           receipt: receipt === undefined ? null : Object.freeze({
             byteCount: receipt.byteCount, exitCode: receipt.exitCode, outputSha256: receipt.outputSha256,
-            test: receipt.test, workspace: receipt.workspace,
+            test: receipt.test, workspace: receipt.workspace, testedTreeSha: receipt.workspaceBinding?.treeSha ?? null,
           }),
           review,
           sharedKey: isShared,
           status: statusOf(review, facts.accepted !== undefined, active, isShared, facts.replanned),
         });
       })),
-      publish: publishOf(publishes.get(goal.goalId)),
+      publish: readRunGoalPublication(store, projectId, publishes.get(goal.goalId)),
       run: run === null || run.outcome !== "RUN" ? null : Object.freeze({
         approval: run.approval, lifecycle: run.lifecycle, reviewable: run.reviewable, runId: run.runId,
       }),
@@ -233,18 +281,20 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
         if (one === undefined) return refused("RUNS_READ_GOAL_UNKNOWN");
         goals = [one];
       }
-      // Every activated plan, not only the selected goals': a shared key is shared with ANY plan.
-      const allNodes = sealedNodesOf(readActive(store, projectId));
-      const shared = sharedKeysOf(allNodes);
+      // Legacy facts can concern any graph; fresh subjects bind their own sealed owner.
+      const graphs = readActive(store, projectId);
+      const allNodes = sealedNodesOf(projectId, graphs);
+      const shared = nodesBlockedByIdentity(graphs, legacyCompiledNodeKeys(store, projectId, graphs));
       const goalIds = new Set(goals.map((goal) => goal.goalId));
       const nodes = allNodes.filter((node) => goalIds.has(node.goalRef));
-      const nodeKeys = new Set(nodes.map((node) => node.nodeKey));
+      const nodeKeys = new Set(nodes.map((node) => node.nodeRef));
       const claims = readClaims(store, projectId);
       const reviews = readReviews(store, projectId, nodeKeys);
       const latest = lastDecidedAt(store, projectId, nodeKeys);
       const now = clock();
       const publishes = readPublish(store, projectId);
-      const views = goals.map((goal) => goalView(goal, nodes, shared, claims, reviews, latest, now, publishes));
+      const deployments = deploymentsOf(store, projectId);
+      const views = goals.map((goal) => goalView(goal, nodes, shared, claims, reviews, latest, now, publishes, deployments));
       const totals: Record<RunNodeStatus, number> = {
         ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0,
         IN_PROGRESS: 0, READY: 0, REPLANNED: 0, UNATTRIBUTABLE: 0,

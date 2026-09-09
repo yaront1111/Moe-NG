@@ -216,6 +216,7 @@ function start(
     readonly fileExists?: (path: string) => boolean;
     readonly originTimeoutMs?: number;
     readonly repoRoot?: string;
+    readonly wrapperStopGraceMs?: number;
   } = {},
 ): Harness {
   const { calls, spawn } = recordingSpawn();
@@ -232,6 +233,8 @@ function start(
     onSignal: (handler) => { signal = handler; },
     repoRoot: REPO_ROOT,
     spawn,
+    // A fake wrapper never reads its stop line, so the grace kill is what ends it; keep it short.
+    wrapperStopGraceMs: 20,
     ...extra,
   });
   return { calls, lines, result, signal: () => { signal(); } };
@@ -725,8 +728,41 @@ describe("runMoeUp teardown", () => {
     harness.signal();
 
     expect(await harness.result).toBe(0);
-    // Exactly once each: the second interrupt must find the latch already thrown.
+    // Exactly once each: the second interrupt must find the latch already thrown. The wrapper
+    // is asked over its stdin first and killed only because this fake never acts on the line.
     expect(harness.calls[0]?.child.killCount).toBe(1);
+    expect(harness.calls[0]?.child.stdinWrites).toEqual([]);
+    expect(harness.calls[1]?.child.stdinWrites).toEqual(["stop\n"]);
+    expect(harness.calls[1]?.child.killCount).toBe(1);
+  });
+
+  it("never kills a wrapper that exits on the stop line within the grace", async () => {
+    // `child.kill()` on Windows is TerminateProcess: the wrapper's exit path, the only thing
+    // that retires the claude seats, never runs. A wrapper that stops when asked keeps it.
+    const harness = start(GOOD_ENV, { wrapperStopGraceMs: 5_000 });
+    await settle();
+    harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
+    await settle();
+
+    harness.signal();
+    expect(harness.calls[1]?.child.stdinWrites).toEqual(["stop\n"]);
+    harness.calls[1]?.child.exit(0);
+
+    expect(await harness.result).toBe(0);
+    expect(harness.calls[1]?.child.killCount).toBe(0);
+    expect(harness.calls[0]?.child.killCount).toBe(1);
+  });
+
+  it("kills the wrapper outright when its stdin pipe is gone", async () => {
+    const harness = start(GOOD_ENV);
+    await settle();
+    harness.calls[0]?.child.say(`listening on ${ORIGIN}`);
+    await settle();
+    harness.calls[1]?.child.closeStdin();
+
+    harness.signal();
+
+    expect(await harness.result).toBe(0);
     expect(harness.calls[1]?.child.killCount).toBe(1);
   });
 });

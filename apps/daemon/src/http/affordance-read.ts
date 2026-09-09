@@ -9,21 +9,36 @@ import {
 } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { aggregateIdFor } from "../bootstrap/bootstrap-sequence.js";
+import { productionDeployPorts } from "../deployment/deploy-command.js";
+import type { DeployTargetPort } from "../deployment/deploy-ports.js";
+import { ENVIRONMENT_NAMES } from "../environment/environment-contracts.js";
+import { goalCloseReadinessFor } from "../goals/goal-close-readiness.js";
+import type { GoalCloseReadiness } from "../goals/goal-close-readiness.js";
 import { SESSION_SCHEMA_VERSION } from "../identity/session-contracts.js";
 import { readSessionLedger } from "../identity/session-read-model.js";
 import { REVIEW_SCHEMA_VERSION } from "../review/review-contracts.js";
 import { REVIEW_ESCALATION_ROUND_LIMIT } from "@moe/review";
+import { currentPlanningRun } from "../planning/current-planning-run.js";
+import { createPreviewReceiptReader } from "../preview/preview-daemon-edge.js";
+import { isDesignSkip } from "../design/design-contracts.js";
+import { readDesignRevision } from "../design/design-store.js";
 
+import { createGoalLandingReader } from "../repository/goal-landing-facts.js";
+import { readPublishLedger } from "../repository/publish-ledger.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { readVerifierStandingAuthority } from "../review/verifier-authority-provider.js";
 import { activeClaim, readWorkClaimLedger } from "../work/work-claim-services.js";
 import type { WorkClaimLedger } from "../work/work-claim-services.js";
 import { AFFORDANCE_SURFACE_LAYER, NODE_DELIVER_KIND } from "./affordance-contract.js";
 import { createCompilerLanePort } from "./affordance-compiler-lane.js";
+import { resolveAgentProviderOffers } from "./affordance-agent-provider-offers.js";
+import { resolveDeployTargetOffers } from "./affordance-deploy-target-offers.js";
+import { resolveRollbackOffers } from "./affordance-rollback-offers.js";
 import { resolvePlanningAuthorities } from "./affordance-planning-authorities.js";
 import { planReviewable, resolvePlanningOffers } from "./affordance-planning-offers.js";
 import type {
   AffordancePort,
+  AffordanceRefused,
   AffordanceSurfaceResult,
   ChainStep,
   ChainStepClaim,
@@ -110,6 +125,12 @@ export interface AffordancePortConfig {
   readonly principalId?: string | undefined;
   readonly projectId: string;
   readonly store: SqliteEventStore;
+  /**
+   * Reads the durable per-environment deploy target. OPTIONAL only so a bounded test can
+   * drive the binding without writing events; production composes the landed reader from
+   * `store` and `projectId` rather than re-deriving the aggregate key or the decoder.
+   */
+  readonly deployTarget?: DeployTargetPort;
 }
 
 /** The shared work-item key: the same one the live board renders per card. */
@@ -139,6 +160,17 @@ function bootstrapAggregateId(
     if (kind === "plan.propose" || kind === "approval.decide") return planningSubject.runId;
     if (kind === "goal.close") return planningSubject.goalId;
     if (kind === "repository.publish") return `publish:${planningSubject.goalId}`;
+    // ONE OFFER PER GOAL, at the exact key the Deployments card matches
+    // (goal-deployments.tsx `deployOffer`). The environment is chosen at DISPATCH and
+    // travels in the payload -- `daemon-command-payload-keys.ts` declares
+    // `deployment.deploy` as ["environment", "sha"] -- so a per-environment offer would
+    // put the environment in two places that can disagree. The durable target is keyed
+    // per (project, environment) (`deployTargetAggregateId`), a DIFFERENT axis that
+    // deliberately does not appear in the offer identity: the card reads the target per
+    // environment and renders its own rows. `aggregateIdFor` cannot answer this -- its
+    // `repository.publish` case reads goalId from the request PAYLOAD, and an affordance
+    // read has none -- so the goal-scoped key is derived here, where the subject lives.
+    if (kind === "deployment.deploy") return `deploy:${planningSubject.goalId}`;
   }
   return aggregateIdFor(
     { kind, projectId } as Parameters<typeof aggregateIdFor>[0],
@@ -175,7 +207,53 @@ function soleLegacyPlanningSubject(
   return hasLegacyOffer ? Object.freeze({ goalId, runId }) : null;
 }
 
+/**
+ * The prerequisite roster the SURFACE reports, which is the admission table's roster plus one
+ * fact the table deliberately does not carry: `project.activate` also needs a committed
+ * `policy.install`.
+ *
+ * That fact belongs to the MEASURED RECEIPTS, not to `COMMAND_PREREQUISITES`. With no policy
+ * installed, `measurePolicy` answers `unmeasuredReceipt("policy", "no policy slices installed")`
+ * (bootstrap/activation-receipts-measure.ts:237) and the command refuses
+ * ACTIVATION_POLICY_UNMEASURED @ DAEMON_ACTIVATION_RECEIPTS. Adding the kind to the admission
+ * table instead does NOT add a prerequisite - it moves which layer answers, so the admission
+ * gate replies BOOTSTRAP_PREREQUISITE_MISSING first and that receipt refusal stops being
+ * reachable. Measured, 39 daemon files red (task-a5a6abcc). Do not tidy this into the table.
+ *
+ * The surface reads the COMMITTED fact rather than the receipt because the measurement is async
+ * and copies the store to disk, and this is a hot read path. One case therefore stays invisible
+ * here by design: a policy committed while the daemon's `installedPolicySliceRefs` is unwired
+ * (it defaults to `[]`, bootstrap/activation-receipts-ports.ts:200) still reads READY, and the
+ * receipt layer remains its only authority. That is the live-override-versus-defaulted
+ * distinction bootstrap/activation-command-entry.test.ts exists to preserve.
+ *
+ * COMPOSED, never substituted: an operator on a fresh store is told the table's primaries AND
+ * the policy in one roster instead of being walked through one refusal at a time.
+ */
+function surfaceMissing(
+  ledger: DurableLedger, kind: BootstrapCommandKind, deployTargetBound: boolean,
+): readonly string[] {
+  const missing = missingPrerequisites(ledger, kind);
+  // WITHHELD MEANS ABSENT, AND THE ABSENCE IS NAMED. `COMMAND_PREREQUISITES` deliberately
+  // does NOT list `deployment.set_target` under `deployment.deploy`: that table reads
+  // COMMITTED KINDS, so naming it there would admit a `production` deploy on the strength
+  // of a `preview` binding (bootstrap-sequence.ts:47-55 states this). The durable target is
+  // per (project, environment), so the check belongs where a per-environment READ is
+  // possible -- here. Missing rather than a silent offer skip because every READY step
+  // carries an offer and no offer exists for a kind no step called READY; withholding by
+  // skipping the push alone would break that invariant instead of expressing the fact.
+  if (kind === "deployment.deploy" && !deployTargetBound) {
+    return Object.freeze([...missing, "deployment.set_target"]);
+  }
+  if (kind !== "project.activate" || ledger.kinds.has("policy.install")) return missing;
+  return Object.freeze([...missing, "policy.install"]);
+}
+
 export function createAffordancePort(config: AffordancePortConfig): AffordancePort {
+  // ONE composition, not one per read: the landed reader from task-79f8c7c0, whose decoder
+  // fails closed to null on an unreadable or invalid binding.
+  const deployTarget: DeployTargetPort = config.deployTarget
+    ?? productionDeployPorts(config.store, config.projectId).target;
   const offer = (
     kind: string, aggregateId: string, version: number, inputSchemaVersion: string,
     commandId: string = config.mintId(kind),
@@ -194,6 +272,13 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
   ): ChainStep[] => {
     const ledger = effectiveLedger(
       durable, bootstrapAggregateId("plan.propose", config.projectId, planningSubject));
+    // BOUND means at least one environment has a target, because the offer is one per GOAL
+    // and the environment is chosen at dispatch. A goal with `preview` bound and
+    // `production` unbound is therefore OFFERED: the per-environment refusal is the
+    // engine's (`DEPLOY_TARGET_MISSING`, before any docker spawn), and the card renders a
+    // row per environment with its own bound/unbound wording.
+    const deployTargetBound = ENVIRONMENT_NAMES
+      .some((environment) => deployTarget(environment) !== null);
     return BOOTSTRAP_COMMAND_KINDS.map((kind) => {
       // Both creation handlers derive the durable goal from request.commandId. The daemon
       // therefore mints and offers a fresh aggregate for each read; a prior GoalCreated row
@@ -232,7 +317,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
           version: versionOf(ledger, aggregateId),
         });
       }
-      const missing = missingPrerequisites(ledger, kind);
+      const missing = surfaceMissing(ledger, kind, deployTargetBound);
       if (missing.length > 0) {
         return Object.freeze({
           aggregateId: null, ...claimFields(claims, kind, null, now), kind,
@@ -242,8 +327,12 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       const version = versionOf(ledger, aggregateId);
       // Planning offers are emitted per durable goal below. These steps remain
       // the demo seed chain's compatibility status until R3-10b scopes the board.
+      // `deployment.set_target` is excluded too: it is minted PER ENVIRONMENT below, at the
+      // aggregate `setDeployTarget` fences. Leaving the generic PROJECT-targeted offer beside
+      // those would let the card match an offer that has never been spendable.
       if (kind !== "plan.propose" && kind !== "approval.decide" && kind !== "goal.close"
-        && kind !== "repository.publish") {
+        && kind !== "repository.publish" && kind !== "deployment.deploy"
+        && kind !== "deployment.set_target") {
         offers.push(offer(kind, aggregateId, version, BOOTSTRAP_SCHEMA_VERSION));
       }
       return Object.freeze({
@@ -261,12 +350,48 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     // within a single answer — one roster is what makes the map and the node steps consistent.
     const nodes = config.nodes?.() ?? [];
     const ledger = readDurableLedger(config.store, config.projectId);
+    const landings = createGoalLandingReader(config.store, config.projectId, ledger);
+    const designFailures: AffordanceRefused[] = [];
     const planning = resolvePlanningOffers({
+      // Derived per call, never cached: an acceptance that lands between two polls shows up on
+      // the next one. The ladder invokes this only for a goal it could offer a close.
+      closeReadiness: (goalId): GoalCloseReadiness["kind"] =>
+        goalCloseReadinessFor(config.store, config.projectId, goalId).kind,
       compilerLane: createCompilerLanePort({
         ledger, projectId: config.projectId, store: config.store,
       }),
-      ledger, mintId: config.mintId, projectId: config.projectId,
+      // Per poll, never cached: a submitted design or skip changes the very next offer.
+      designState: (goalRef) => {
+        const read = readDesignRevision(config.store, { goalRef, projectId: config.projectId });
+        if (read.ok) return isDesignSkip(read.record.revision) ? "SKIPPED" : "PRESENT";
+        if (read.code === "DESIGN_REVISION_ABSENT") return "ABSENT";
+        designFailures.push(Object.freeze({
+          code: read.code, layer: read.layer, outcome: "REFUSED",
+          detail: "the design ledger could not be read",
+        }));
+        return "PRESENT"; // Discard the whole resolution below; unreadable is NOT absence.
+      },
+      // The goal's IMMUTABLE ref resolved to the run that matters NOW. The walk is a bounded
+      // per-aggregate event read (16 hops, cycle-guarded) that never throws: a corrupt chain
+      // degrades to the last id it could read, so one broken goal cannot cost the whole surface.
+      currentRun: (planningRunRef): string =>
+        currentPlanningRun(config.store, planningRunRef).runId,
+      // ONE reader for the whole poll, reusing the ledger folded just above: its graph and
+      // review-ledger walks are deferred to the first publishable goal and then shared by all of
+      // them, so the surface cost does not multiply by the goal count. Derived per call for the
+      // same reason readiness is — a commit that lands between two polls shows up on the next.
+      landedCommit: landings.hasLandedCommit,
+      ledger, mintId: config.mintId,
+      // ONE reader for the whole poll, and the SAME authority the decide edge reads: both go
+      // through `readPreviewReceipt`, so the surface can never offer a decision the command
+      // would refuse, nor withhold one it would accept. The reader memoises its single ledger
+      // walk on the first goal that asks and shares it with the rest — the discipline
+      // `landedCommit` above is held to. Built per call, never cached across calls, so a
+      // receipt written between two polls shows up on the next one.
+      previewReceipt: createPreviewReceiptReader(config.store, config.projectId),
+      projectId: config.projectId,
     });
+    if (designFailures[0] !== undefined) return designFailures[0];
     offers.push(...planning.offers);
     // Derived from the SAME `planning` resolution that produced planningGoalRefs and the offers,
     // so the carried material and the binding it claims cannot disagree.
@@ -280,6 +405,78 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     const claims = readWorkClaimLedger(config.store, config.projectId);
     const planningSubject = soleLegacyPlanningSubject(planning.planningGoalRefs, planning.offers);
     const steps: ChainStep[] = bootstrapSteps(ledger, offers, claims, now, planningSubject);
+    // Deployment follows each goal's own publication, independent of the legacy single-goal
+    // planning card. The environment remains a dispatch choice on that goal's offer.
+    const publications = readPublishLedger(config.store, config.projectId);
+    const deployBound = ENVIRONMENT_NAMES.some((environment) => deployTarget(environment) !== null);
+    const deploymentSteps: ChainStep[] = [];
+    for (const goalId of new Set(Object.values(planning.planningGoalRefs))) {
+      if ((publications.get(goalId)?.requests.length ?? 0) === 0) continue;
+      const aggregateId = `deploy:${goalId}`;
+      const version = versionOf(ledger, aggregateId);
+      if (deployBound) offers.push(offer("deployment.deploy", aggregateId, version, BOOTSTRAP_SCHEMA_VERSION));
+      deploymentSteps.push(Object.freeze({ aggregateId, version, kind: "deployment.deploy",
+        ...claimFields(claims, "deployment.deploy", aggregateId, now),
+        missing: deployBound ? [] : ["deployment.set_target"], status: deployBound ? "READY" : "BLOCKED" }));
+    }
+    if (deploymentSteps.length > 0) {
+      steps.splice(steps.findIndex((step) => step.kind === "deployment.deploy"), 1, ...deploymentSteps);
+    }
+    // Binding a target is a per-(project, environment) act, so it gets ONE OFFER PER
+    // ENVIRONMENT at the aggregate the setter fences — see affordance-deploy-target-offers.ts
+    // for why that axis and not the goal-scoped one. WITHHELD ONLY BY THE PREREQUISITE: the
+    // generic step is the ORACLE for that rule rather than a second reading of
+    // `missingPrerequisites`, so BLOCKED means no offer and its single step names what is
+    // missing. Anything else — READY, or COMMITTED once a first bind has landed — still offers,
+    // because REBINDING IS LEGITIMATE and the COMMITTED branch above re-offers only
+    // `policy.install`. Once per surface read, never inside a goal loop: the resolver's
+    // enumeration is a payload-free indexed range scan and per-goal is the hot-path shape.
+    const setTargetIndex = steps.findIndex((step) => step.kind === "deployment.set_target");
+    const setTargets = setTargetIndex >= 0 && steps[setTargetIndex]?.status !== "BLOCKED"
+      ? resolveDeployTargetOffers({ ledger, projectId: config.projectId, store: config.store }).offers
+      : [];
+    // AN OFFER AND ITS STEP ARE PUSHED TOGETHER OR NOT AT ALL. The offered-kind array and the
+    // READY-step array are compared WITH CARDINALITY, so emitting offers on a path that could
+    // skip the splice would desync them; resolving the list first makes that unrepresentable.
+    if (setTargets.length > 0) {
+      steps.splice(setTargetIndex, 1, ...setTargets.map((entry) => {
+        offers.push(offer("deployment.set_target", entry.aggregateId, entry.version, BOOTSTRAP_SCHEMA_VERSION));
+        return Object.freeze({
+          aggregateId: entry.aggregateId,
+          ...claimFields(claims, "deployment.set_target", entry.aggregateId, now),
+          kind: "deployment.set_target", missing: [], status: "READY" as const, version: entry.version,
+        });
+      }));
+    }
+    // CHOOSING THE AGENT CLI FOR THIS PROJECT, from the browser: one offer per project per
+    // poll, at the aggregate `setAgentProvider` commits to and at the version read off it.
+    // Rationale — the setter's own gate, and why this kind mints NO ChainStep — lives in
+    // affordance-agent-provider-offers.ts. Minted for every reader because this surface holds
+    // no caller principal: OPERATOR_PRINCIPAL_REQUIRED is the registry's refusal at dispatch,
+    // where it already lives for every operator-only kind this surface offers.
+    for (const entry of resolveAgentProviderOffers({
+      projectId: config.projectId, store: config.store,
+    }).offers) {
+      offers.push(offer(
+        entry.kind, entry.aggregateId, entry.version, entry.inputSchemaVersion));
+    }
+    // ROLLING BACK A DEPLOY, from the incident card: at most one project-scoped offer per poll,
+    // at the PROJECT aggregate the handler fences and at the version it commits its empty leg
+    // against. Rationale — why one offer and not one per environment, and why this kind mints NO
+    // ChainStep — lives in affordance-rollback-offers.ts. GATED ON `deployBound` the way the
+    // set_target block above is gated on its own prerequisite: an unbound project refuses
+    // DEPLOY_TARGET_MISSING before any docker spawn, so it can hold no deploy receipt and the
+    // resolver's whole-ledger walk would be pure cost on every affordance poll. Once per surface
+    // read, never inside the goal loop above, for the same reason. Minted for every reader
+    // because this surface holds no caller principal: OPERATOR_PRINCIPAL_REQUIRED is the
+    // handler's own refusal at dispatch (rollback-command.ts:80).
+    if (deployBound) {
+      for (const entry of resolveRollbackOffers({
+        projectId: config.projectId, store: config.store,
+      }).offers) {
+        offers.push(offer(entry.kind, entry.aggregateId, entry.version, entry.inputSchemaVersion));
+      }
+    }
     // Compiler-lane steps: what makes the WRAPPER staff a planning agent onto a
     // source-bound goal. READY at the goal aggregate's own version — the offer
     // above and this step share identity, so claim fencing works unchanged.
@@ -360,8 +557,22 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
         }
         return verificationMissing;
       };
+      // A node is a satisfied dependency exactly when this loop would call it
+      // COMMITTED — the review ledger's acceptance record, nothing else. An
+      // unresolvable producer key has no acceptance, so it blocks rather than
+      // silently un-gating the node that named it.
+      const acceptedByRef = new Map<string, boolean>();
+      const isAccepted = (nodeRef: string): boolean => {
+        const known = acceptedByRef.get(nodeRef);
+        if (known !== undefined) return known;
+        const accepted = readReviewLedger(config.store, config.projectId, nodeRef)
+          .accepted !== undefined;
+        acceptedByRef.set(nodeRef, accepted);
+        return accepted;
+      };
       for (const spec of nodes) {
         const review = readReviewLedger(config.store, config.projectId, spec.nodeRef);
+        acceptedByRef.set(spec.nodeRef, review.accepted !== undefined);
         const claim = claimFields(claims, NODE_DELIVER_KIND, spec.nodeRef, now);
         if (review.accepted !== undefined) {
           steps.push(Object.freeze({
@@ -398,11 +609,24 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
           }));
           continue;
         }
-        offers.push(offer("review.submit", spec.nodeRef, review.version, REVIEW_SCHEMA_VERSION));
+        // Build order. Every dependency whose review is not accepted is named,
+        // so the operator reads WHICH node is in the way rather than "blocked".
+        // A dependency-blocked node is offered nothing: the wrapper staffs from
+        // these offers, and one review.submit here staffs a node beside the
+        // parent it is waiting on. Reported BEFORE the verification tokens —
+        // a node that cannot start yet is not usefully described by its
+        // verifier queue — and the other blocking reasons keep their own
+        // earlier branches untouched.
+        const unmet = spec.dependsOn.filter((nodeRef) => !isAccepted(nodeRef))
+          .map((nodeRef) => `depends:${nodeRef}`);
+        if (unmet.length === 0) {
+          offers.push(offer("review.submit", spec.nodeRef, review.version, REVIEW_SCHEMA_VERSION));
+        }
+        const blocked = unmet.length > 0 || awaitingVerify;
         steps.push(Object.freeze({
           aggregateId: spec.nodeRef, ...claim, kind: NODE_DELIVER_KIND,
-          missing: awaitingVerify ? missingForVerification() : [],
-          status: awaitingVerify ? ("BLOCKED" as const) : ("READY" as const),
+          missing: [...unmet, ...(awaitingVerify ? missingForVerification() : [])],
+          status: blocked ? ("BLOCKED" as const) : ("READY" as const),
           version: review.version,
         }));
       }

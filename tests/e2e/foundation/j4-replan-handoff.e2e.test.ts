@@ -35,7 +35,6 @@ import { OPERATOR_PRINCIPAL, removeScratches, withStore } from "./j1-ledger-view
 import {
   type DaemonHandle,
   type J1Scratch,
-  NODE_REF,
   createJ1Scratch,
   killTree,
   pidIsAlive,
@@ -43,6 +42,7 @@ import {
   runWrapper,
   startDaemon,
 } from "./j1-loop-harness.js";
+import { executionNodeRef } from "./j1-repository-fixture.js";
 import { pidReaped } from "./orphan-reap.js";
 import { seedConfigFor, replayCommand } from "./j3-crash-harness.js";
 import {
@@ -78,20 +78,21 @@ afterAll(async () => {
 
 /** The review ledger for the exclusive node, folded through the daemon's own read model. */
 function reviewLedger(scratch: J1Scratch) {
-  return withStore(scratch, (store) => readReviewLedger(store, scratch.projectId, NODE_REF));
+  return withStore(scratch, (store) => readReviewLedger(store, scratch.projectId, executionNodeRef(scratch)));
 }
 
 describe("J4 rejection, re-plan and safe handoff over real processes", () => {
   it(
     "rejects a failing attempt, classifies the delta, and leaves exactly one owner",
     async () => {
-      const scratch = createJ1Scratch();
+      const scratch = createJ1Scratch({ compiledExecution: true });
       scratches.push(scratch);
       const daemon = await startDaemon(scratch);
       daemons.push(daemon);
       const seed = await runSeed(scratch, daemon.origin);
       if (seed.code !== 0) throw new Error(`seed failed (${String(seed.code)}): ${seed.output}`);
       const config = seedConfigFor(scratch, daemon.origin);
+      const nodeRef = executionNodeRef(scratch);
 
       // The node's bytes BEFORE the attempt, measured rather than assumed: `math.mjs` does not
       // exist yet, so this digest is over the workspace the agent was handed.
@@ -104,9 +105,9 @@ describe("J4 rejection, re-plan and safe handoff over real processes", () => {
       const beforeReplan = durableReadback(scratch);
       const withoutRound = await replayCommand(config, replanCommand({
         expectedVersion: 0,
-        nodes: [deltaNode(NODE_REF)],
+        nodes: [deltaNode(nodeRef)],
         ordinal: 1,
-        subjectRef: NODE_REF,
+        subjectRef: nodeRef,
         successorPlanRef: SUCCESSOR_PLAN_REF,
       }));
       // The literal code AND the layer that refused: two claims, because a second layer
@@ -157,7 +158,7 @@ describe("J4 rejection, re-plan and safe handoff over real processes", () => {
       const record = latest?.lineage.records[latest.lineage.records.length - 1];
       expect(record?.finding.ruleId).toBe("verifier-test-failed");
       expect(record?.finding.severity).toBe("MAJOR");
-      expect(record?.finding.subject).toEqual({ kind: "NODE", locator: NODE_REF });
+      expect(record?.finding.subject).toEqual({ kind: "NODE", locator: nodeRef });
       // "Findings link evidence to required changes": the detail names the exit code and the
       // sha256 of the output the verifier actually captured over the agent's bytes.
       expect(record?.finding.detail).toMatch(/^verifier run exited [1-9]\d* \(output sha256 [0-9a-f]{64}\)/u);
@@ -166,7 +167,7 @@ describe("J4 rejection, re-plan and safe handoff over real processes", () => {
       // rejection, read from the daemon's own affordance surface rather than inferred.
       const afterRejection = await readAffordanceSurface(config);
       expect(afterRejection.outcome).toBe("SURFACE");
-      const rejectedStep = stepFor(afterRejection, NODE_REF);
+      const rejectedStep = stepFor(afterRejection, nodeRef);
       expect(rejectedStep?.status).toBe("READY");
       expect(rejectedStep?.missing).toEqual([]);
 
@@ -176,9 +177,9 @@ describe("J4 rejection, re-plan and safe handoff over real processes", () => {
       // RE-PLAN 1 — carry authority is unavailable, so the daemon conservatively invalidates.
       const invalidating = await replayCommand(config, replanCommand({
         expectedVersion: rejectedStep?.version ?? -1,
-        nodes: [deltaNode(NODE_REF)],
+        nodes: [deltaNode(nodeRef)],
         ordinal: 2,
-        subjectRef: NODE_REF,
+        subjectRef: nodeRef,
         successorPlanRef: SUCCESSOR_PLAN_REF,
       }));
       expect(invalidating.refusal).toBeNull();
@@ -187,7 +188,7 @@ describe("J4 rejection, re-plan and safe handoff over real processes", () => {
       expect(invalidated?.successorPlanRef).toBe(SUCCESSOR_PLAN_REF);
       expect(invalidated?.classifications).toEqual([{
         classification: "INVALIDATED",
-        nodeRef: NODE_REF,
+        nodeRef,
         reasonCodes: [
           "CARRY_EVIDENCE_FACT_UNREADABLE",
           "dependenciesPresent",
@@ -202,10 +203,10 @@ describe("J4 rejection, re-plan and safe handoff over real processes", () => {
       // RE-PLAN 2 — the same production command remains available and fail-closed.
       const carrySurface = await readAffordanceSurface(config);
       const carrying = await replayCommand(config, replanCommand({
-        expectedVersion: stepFor(carrySurface, NODE_REF)?.version ?? -1,
-        nodes: [deltaNode(NODE_REF)],
+        expectedVersion: stepFor(carrySurface, nodeRef)?.version ?? -1,
+        nodes: [deltaNode(nodeRef)],
         ordinal: 3,
-        subjectRef: NODE_REF,
+        subjectRef: nodeRef,
         successorPlanRef: SUCCESSOR_PLAN_REF,
       }));
       expect(carrying.refusal).toBeNull();
@@ -213,7 +214,7 @@ describe("J4 rejection, re-plan and safe handoff over real processes", () => {
       const secondDelta = reviewLedger(scratch).delta;
       expect(secondDelta?.classifications).toEqual([{
         classification: "INVALIDATED",
-        nodeRef: NODE_REF,
+        nodeRef,
         reasonCodes: [
           "CARRY_EVIDENCE_FACT_UNREADABLE",
           "dependenciesPresent",

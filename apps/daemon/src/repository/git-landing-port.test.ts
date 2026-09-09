@@ -49,6 +49,8 @@ describe("createGitLandingPort against a real repository", () => {
     expect(observed.observation.entries[0]?.blobId).toBe(DELETED_BLOB);
     expect(observed.observation.entries[1]?.blobId).toBe(git(root, "hash-object", "src/new.ts"));
     expect(observed.observation.entries[2]?.blobId).toBe(git(root, "hash-object", "src/tracked.ts"));
+    // The untracked subset, root-relative and sorted: new.ts only (tracked.ts is modified).
+    expect(observed.observation.untracked).toEqual(["src/new.ts"]);
   });
 
   it("refuses a directory outside any repository by name", async () => {

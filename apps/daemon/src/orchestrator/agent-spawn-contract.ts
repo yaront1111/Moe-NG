@@ -4,10 +4,15 @@
  *
  * Split out of `agent-spawner.ts` so the contract stays readable next to the
  * lifecycle that implements it, and so that file stays under the per-file line
- * rail while it grows a start-admission surface. Nothing here executes.
+ * rail while it grows a start-admission surface. It also holds the wrapper's
+ * frozen kind rosters, which are data the wrapper reads, never behaviour: this
+ * file declares and freezes, it never executes a decision.
  */
 import type { ChildProcess, SpawnOptions } from "node:child_process";
 
+import { AGENT_STAFFING_REFUSAL_CODES } from "./agent-session-fence.js";
+import { REPOSITORY_DELIVERY_REFUSAL_CODES } from "./repository-delivery-contracts.js";
+import type { RepositoryDeliveryRefusal } from "./repository-delivery-contracts.js";
 import type { SPAWN_INVOCATION_LAYER, SpawnInvocationRefusalCode } from "./agent-spawn-invocation.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 
@@ -23,6 +28,15 @@ export interface AgentSpawnerOptions {
   readonly log?: (line: string) => void;
   /** Fatal containment failures halt the owning runtime; they are never ordinary agent exits. */
   readonly onFatalContainment?: ((error: AgentProcessContainmentError) => void) | undefined;
+  /**
+   * Where the seat's own stdout/stderr are TEED. Production writes the child's raw bytes
+   * straight to the wrapper's console, so the operator sees byte-identical output; a test
+   * substitutes collecting sinks to prove that identity.
+   */
+  readonly output?: {
+    readonly stderr: NodeJS.WritableStream;
+    readonly stdout: NodeJS.WritableStream;
+  };
   readonly spawn?: (file: string, args: readonly string[], options: SpawnOptions) => ChildProcess;
   /** Hard lifetime for one agent process; a hung agent is killed and its slot freed. */
   readonly timeoutMs?: number;
@@ -51,7 +65,7 @@ export type AgentProcessFailureReason = "EXIT_NONZERO" | "EXIT_SIGNAL" | "SPAWN_
 export class AgentProcessFailureError extends Error {
   readonly code = "AGENT_PROCESS_FAILED";
   constructor(readonly reason: AgentProcessFailureReason, readonly exitCode: number | null,
-    readonly signal: NodeJS.Signals | null) {
+    readonly signal: NodeJS.Signals | null, readonly tail: readonly string[] = []) {
     super(`AGENT_PROCESS_FAILED:${reason}${exitCode !== null ? `:${String(exitCode)}`
       : signal !== null ? `:${signal}` : ""}`);
     this.name = "AgentProcessFailureError";
@@ -73,6 +87,7 @@ export interface AgentSpawner {
  * was created, never the readiness of the `claude` command inside it.
  */
 export type AgentSpawnStartResult =
+  | RepositoryDeliveryRefusal
   | {
     readonly ok: false;
     readonly code: SpawnInvocationRefusalCode;
@@ -80,7 +95,7 @@ export type AgentSpawnStartResult =
   }
   | {
     readonly ok: true;
-    readonly exit: Promise<void>;
+    readonly exit: Promise<SeatExitReport | void>;
     /**
      * The started CHILD's pid, or undefined when the runtime never reported one.
      *
@@ -104,10 +119,10 @@ export interface AgentSpawnStarter {
 
 /** Either the coded refusal, or a live attempt whose two facts stay separate. */
 export type SpawnAttempt =
-  | Extract<AgentSpawnStartResult, { readonly ok: false }>
+  | Extract<AgentSpawnStartResult, { readonly ok: false; readonly layer: typeof SPAWN_INVOCATION_LAYER }>
   | {
     readonly admitted: Promise<void>;
-    readonly done: Promise<void>;
+    readonly done: Promise<SeatExitReport | void>;
     /** Read AFTER `admitted` settles; the pid does not exist before the spawn. */
     readonly pid: () => number | undefined;
   };
@@ -140,6 +155,153 @@ export interface SpawnReport {
 
 export interface RunOnceReport {
   readonly active: number;
+  /**
+   * The live provider pause, present ONLY on a pass that staffed nothing because of it.
+   * Absent on every other pass, so an exact-shape assertion on an ordinary report is
+   * unchanged by this key existing.
+   */
+  readonly paused?: ProviderPauseFacts;
   readonly spawned: readonly SpawnReport[];
   readonly surfaceOutcome: string;
 }
+
+/**
+ * What one finished seat left behind: the exit facts plus the bounded tail of
+ * everything it printed. The tail is what a limit reading is decided from — the
+ * provider announces a limit in its output, never in its exit code.
+ */
+export interface SeatExitReport {
+  readonly exitCode: number | null;
+  readonly signal: NodeJS.Signals | null;
+  readonly tail: readonly string[];
+}
+
+/**
+ * How the wrapper READ one seat exit. A `PROVIDER_LIMIT` is the PROVIDER's state,
+ * never the work item's failure: the item keeps its attempt and the provider is
+ * parked until its reset.
+ */
+export type SeatExitReading = "COMPLETED" | "FAILED" | "PROVIDER_LIMIT";
+
+/** The live pause a paused pass reports: which provider, since when, until when. */
+export interface ProviderPauseFacts {
+  readonly provider: string;
+  readonly resetAt: string;
+  readonly since: string;
+}
+
+/**
+ * Kinds the wrapper must NEVER staff, exported so the offer surface's test can
+ * hold every offered `approval.*` kind against it — an approval kind offered but
+ * absent here would let the wrapper mint an agent session to take a human act.
+ */
+export const HUMAN_ONLY_STEPS: ReadonlySet<string> = new Set([
+  "criterion_check.approve", "criterion_check.verify", "repository.recover",
+  // GOAL CREATION IS A PRODUCT INTENT, not a chain chore: since the affordance
+  // surface began offering goal.create on EVERY read of an active project
+  // (task-9d2d44aa), a wrapper that staffs it mints a fresh junk goal each pass
+  // forever — each successful creation clears the attempts counter, so the loop
+  // never exhausts. Measured live on the first real project: 8 junk goals in
+  // minutes. Goals come from the operator's browser (or the PRD lane), never
+  // from a self-staffed agent.
+  "approval.decide", "approval.decide_intent",
+  "goal.close", "goal.create", "goal.create_with_source",
+  // Pushing the operator's repository to a remote is the operator's decision; the wrapper
+  // performs it as an effect of that decision, never as staffed work.
+  "repository.publish",
+  "release.decide",
+  // Writing an environment variable is not staffable work: the value is a production secret
+  // the deploy later hands to a running process, so a wrapper that staffed this could set
+  // what production reads. Unlike the kinds above, which the offer surface can present to a
+  // human, these two have no agent-facing step at all — the entry here is belt-and-braces
+  // beside the MCP exclusion in `mcp-tool-allowlist.ts`, and both are wanted: that one stops
+  // an agent reaching the kind over a transport, this one stops the wrapper minting a
+  // session to take it.
+  "environment.set_variable", "environment.unset_variable",
+  // HOW OFTEN PRODUCTION IS PROBED IS THE OPERATOR'S JUDGEMENT, not an agent's. The interval is
+  // a trade between monitoring cost and alert noise on the operator's own product, and an agent
+  // able to widen it could quietly silence the surface that reports an outage -- the failure
+  // would not look like a refusal, it would look like nothing happening. The damage is the
+  // ABSENCE of a signal, which is the one kind of harm no later gate can notice.
+  //
+  // THIS IS THE ONLY FENCE THE KIND CAN CARRY AT THIS COMMIT, and that is deliberate rather
+  // than an omission. `mcp-tool-allowlist.ts` holds the transport half for every other kind
+  // here, but its `MCP_EXCLUDED_COMMAND_KINDS` is DERIVED from `OPERATOR_PRINCIPAL_KINDS`
+  // (daemon-command-vocabulary.ts), which is typed by `WiredCommandKind` and therefore cannot
+  // name a kind before `PAYLOAD_KEYS` does. Until task-eb37494e wires the dispatch, the kind is
+  // MCP-unreachable for the stronger reason that the advertisement itself derives from
+  // `PAYLOAD_KEYS` and does not contain it; `mcp-tool-allowlist.test.ts` asserts that
+  // unreachability against the production allowlist AND reds if the dispatch lands without the
+  // operator-roster entry. The entry HERE is what stops the wrapper staffing the kind in the
+  // meantime, and it is a staffing decision rather than a capability fact, so it keeps applying
+  // whatever `agentCapabilitiesFor` later returns.
+  "monitoring.set_probe_interval",
+  // Retiring an environment ends its monitoring rather than re-timing it, so an agent holding
+  // the kind could silence the probe that would have paged a human. Unlike the kind above, this
+  // one is wired for dispatch in the SAME row that adds it here, so its MCP exclusion is live
+  // from the start (derived from `OPERATOR_PRINCIPAL_KINDS`) rather than resting on the
+  // advertisement gap. The entry HERE is still wanted and is not redundant: it is the WRAPPER's
+  // half, a staffing decision rather than a capability fact, and it keeps applying whatever
+  // `agentCapabilitiesFor` later returns.
+  "monitoring.retire_environment",
+  // Provider selection chooses which vendor receives source and session credentials. MCP
+  // exclusion blocks transport access; this fence also forbids staffing that human decision.
+  "project.set_agent_provider",
+  // Deciding a product preview is the operator LOOKING AT THE THING and saying yes or no. An
+  // agent pressing APPROVE would be staffing the human gate itself, and the verdict the daemon
+  // then records would be indistinguishable from a human's. This is the WRAPPER's half of the
+  // fence; `mcp-tool-allowlist.ts` holds the other. Different actors, so both are wanted: that
+  // one stops an agent REACHING the kind over a transport, this one stops the wrapper minting a
+  // session to take it as staffed work. Belt-and-braces beside `agentCapabilitiesFor`, which
+  // already returns null for this kind — that gate refuses one step later, after the work item
+  // is reported as UNWIRED_KIND, and it is a capability fact rather than a staffing decision,
+  // so it would stop applying the moment the kind gained any agent capability at all.
+  "preview.decide",
+  // ASKING for one is the same human act. `preview.start` spawns a dev server on the daemon
+  // host and drives a browser against it, off the daemon's OWN bound workspace -- a seat that
+  // could staff it would be running the product on the operator's machine on its own say-so.
+  // `mcp-tool-allowlist.ts` holds the other half of the fence (that one stops an agent REACHING
+  // the kind over a transport, this one stops the wrapper minting a session to take it), and
+  // `agentCapabilitiesFor` already returns null for the kind -- which refuses one step later,
+  // as a capability fact rather than a staffing decision, and would stop applying the moment
+  // the kind gained any agent capability at all.
+  "preview.start",
+  // Creating a product repository at an operator-supplied path is the operator's decision; the
+  // wrapper performs it as an effect of that decision, never as staffed work. The path is
+  // operator input and the command writes a whole tree at it, so a self-staffed session would
+  // be choosing where to write on the operator's disk. `mcp-tool-allowlist.ts` holds the other
+  // half of the fence: that one stops an agent REACHING the kind over a transport, this one
+  // stops the wrapper minting a session to take it.
+  "repository.bootstrap",
+  // DEPLOYING A PRODUCT IS NEVER AN AGENT'S DECISION, and neither is naming the host it deploys
+  // to. Both carry a non-null `agentCapabilitiesFor` (GOAL, like `repository.publish`), so
+  // absence here is exactly a staffed-deployer leak: the capability gate would not refuse, and
+  // the wrapper would mint a session to take the step. `mcp-tool-allowlist.ts` holds the other
+  // half of the fence — that one stops an agent REACHING the kind over a transport, this one
+  // stops the wrapper staffing it — and `deploy-command.ts` fences the dispatch itself, since an
+  // async entry never reaches the registry's synchronous operator check.
+  "deployment.set_target", "deployment.deploy",
+  // Replacing the running production image is an operator decision, never staffed work.
+  "deployment.rollback",
+  // REVERTING A PRODUCTION SCHEMA IS NEVER AN AGENT'S DECISION: it destroys the data the forward
+  // migration created, and the wrapper performs it as an effect of the operator's decision, never
+  // as staffed work. Belt-and-braces even so -- `agentCapabilitiesFor` already answers null for
+  // this kind, so no seat is granted reach in the first place, and `migrate-down-command.ts`
+  // fences the dispatch at handler entry because an async entry never reaches the registry's
+  // synchronous operator check. Each of the three would have to fail for a schema to be reverted
+  // by anything other than a human.
+  "deployment.migrate_down",
+]);
+
+/** The compiler lane: staffed with `compilerMission`, never the demo payload hint. */
+export const COMPILER_STEPS: ReadonlySet<string> = new Set([
+  "planning.submit_decomposition", "product_contract.propose_revision",
+]);
+
+/**
+ * Outcomes the durable staffing gate answers BEFORE any identity is minted.
+ * They are not attempts: nothing was spent, and the condition they report
+ * (a live predecessor, a held claim, a record the fence cannot read) clears
+ * on its own time, not the wrapper's.
+ */
+export const GATE_REFUSALS: ReadonlySet<string> = new Set([...AGENT_STAFFING_REFUSAL_CODES, ...REPOSITORY_DELIVERY_REFUSAL_CODES]);

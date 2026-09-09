@@ -1,0 +1,9 @@
+.cr2-shell .cr2-effect-row { border-top: 1px solid var(--cr-line); padding: 16px 0; overflow-wrap: anywhere; }
+.cr2-shell .cr2-effect-form { display: grid; gap: 12px; margin: 16px 0; max-width: 680px; }
+.cr2-shell .cr2-effect-form form { display: grid; gap: 12px; }
+.cr2-shell .cr2-effect-form label { display: grid; gap: 6px; color: var(--cr-ink-soft); }
+.cr2-shell .cr2-effect-form input,
+.cr2-shell .cr2-effect-form textarea,
+.cr2-shell [data-testid="cr.health.recovery"] textarea { box-sizing: border-box; width: 100%; padding: 10px 12px; border: 1px solid var(--cr-line-strong); border-radius: 6px; background: var(--cr-surface-solid); color: var(--cr-ink); font: inherit; }
+.cr2-shell .cr2-effect-form input:focus-visible,
+.cr2-shell .cr2-effect-form textarea:focus-visible { outline: 2px solid var(--cr-accent-text); outline-offset: 2px; }

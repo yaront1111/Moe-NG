@@ -31,6 +31,7 @@ const STATE_WORDS: Readonly<Record<GoalCardModel["state"], string>> = Object.fre
   BLOCKED: "Blocked",
   DONE: "Done",
   DRAFT: "Planning",
+  UNKNOWN: "State unavailable",
 });
 
 /**

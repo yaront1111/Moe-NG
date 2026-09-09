@@ -18,6 +18,9 @@ import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_SCHEMA_VERSION }
 import {
   PRODUCT_CONTRACT_GATE_1_COMMAND_KIND, PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION,
 } from "./product-contract/product-contract-gate-1-contract.js";
+import { PREVIEW_DECIDE_COMMAND_KIND, PREVIEW_START_COMMAND_KIND }
+  from "./preview/preview-contracts.js";
+import { RELEASE_DECIDE_COMMAND_KIND } from "./release/release-decide-contracts.js";
 import { CONTINUATION_COMMAND_KIND } from "./recovery/continuation-command.js";
 import { RECOVERY_COMPLETION_COMMAND_KIND, RECOVERY_COMPLETION_SCHEMA_VERSION }
   from "./recovery/recovery-completion-digest.js";
@@ -28,10 +31,13 @@ import { RESOURCE_RECONCILE_COMMAND_KIND } from "./work/resource-reconcile-comma
 import { STEP_LIFECYCLE_SCHEMA_VERSION } from "./work/step-lifecycle-contracts.js";
 import { WORK_CLAIM_SCHEMA_VERSION } from "./work/work-claim-contracts.js";
 import {
-  CAPABILITIES, GRAPH_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, STEP_FAMILY, WORK_FAMILY,
-  familyCapabilityOf, type WiredCommandKind,
+  CAPABILITIES, DESIGN_FAMILY, ENVIRONMENT_FAMILY, GRAPH_FAMILY, MONITORING_FAMILY,
+  REVIEW_FAMILY, SESSION_FAMILY,
+  STEP_FAMILY,
+  WORK_FAMILY, familyCapabilityOf, type WiredCommandKind,
 } from "./daemon-command-vocabulary.js";
 import { GRAPH_COMMAND_SCHEMA_VERSION } from "./daemon-command-graph-contracts.js";
+import { CRITERION_APPROVE, CRITERION_VERIFY, CRITERION_SCHEMA_VERSION } from "./criterion-evidence/criterion-contracts.js";
 
 /**
  * Which family answers a kind, and the two facts that follow from it: the request schema
@@ -44,6 +50,7 @@ import { GRAPH_COMMAND_SCHEMA_VERSION } from "./daemon-command-graph-contracts.j
  * kind's mapping lives.
  */
 export interface CommandFamilyFacts {
+  readonly criterion: boolean;
   readonly activation: boolean;
   /** The daemon-owned approval seam, answered by its own edge from an exact intent shape. */
   readonly approvalIntent: boolean;
@@ -57,14 +64,32 @@ export interface CommandFamilyFacts {
   readonly continuation: boolean;
   /** The one-way GA activation, answered by its own service from a ports-bearing seam. */
   readonly cutover: boolean;
+  /** The design authoring wire, answered by its own edge. The ONE SEAT kind in this batch: a
+   *  planning agent submits it, so unlike its neighbours it carries no operator fence. It never
+   *  reaches `requestOf` -- the design slice owns its own closed refusal vocabulary and would
+   *  lose the code the assembler refused with. */
+  readonly design: boolean;
+  /** The two OPERATOR-ONLY environment-variable writes, answered by their own edge from an
+   *  exact request shape. The SET payload carries a production secret, so this seam never
+   *  reaches `requestOf`: a request record would put the value in durable command bytes. */
+  readonly environment: boolean;
   readonly eventResume: boolean;
   /** One of the five graph MUTATION kinds, each answered by its own durable planning service. */
   readonly graph: boolean;
   readonly journal: boolean;
+  /** The OPERATOR-ONLY probe-interval write, answered by its own edge. It never reaches
+   *  `requestOf` for the same reason the environment pair does not: the interval record owns a
+   *  closed three-code refusal vocabulary, and the shared assembler would answer with a code
+   *  from a different roster, erasing which surface actually refused. */
+  readonly monitoring: boolean;
+  /** The operator's product-preview verdict - REGISTERED-BUT-REFUSING until the runner lands. */
+  readonly preview: boolean;
   /** The daemon-owned Gate 1 approval writer, answered by its own durable service. */
   readonly productContractGate1: boolean;
   readonly reconcile: boolean;
   readonly recovery: boolean;
+  /** The operator's release decision, served by its own async entry. */
+  readonly release: boolean;
   /** The capability the seam checks BEFORE the handler runs. */
   readonly requiredCapability: string;
   readonly review: boolean;
@@ -80,6 +105,7 @@ function membershipOf(kind: WiredCommandKind): Omit<
   CommandFamilyFacts, "requiredCapability" | "schemaVersion"
 > {
   return {
+    criterion: kind === CRITERION_APPROVE || kind === CRITERION_VERIFY,
     activation: kind === EFFECT_ACTIVATE_COMMAND_KIND,
     approvalIntent: kind === APPROVAL_DECIDE_INTENT_COMMAND_KIND,
     clarification: kind === PRODUCT_CONTRACT_ASK_CLARIFICATION_COMMAND_KIND
@@ -89,12 +115,19 @@ function membershipOf(kind: WiredCommandKind): Omit<
     confirmReleased: kind === RESOURCE_CONFIRM_RELEASED_COMMAND_KIND,
     continuation: kind === CONTINUATION_COMMAND_KIND,
     cutover: kind === CUTOVER_ACTIVATE_COMMAND_KIND,
+    design: kind in DESIGN_FAMILY,
+    environment: kind in ENVIRONMENT_FAMILY,
     eventResume: kind === EVENT_STREAM_RESUME_COMMAND_KIND,
     graph: kind in GRAPH_FAMILY,
     journal: kind === JOURNAL_APPEND_COMMAND_KIND,
+    monitoring: kind in MONITORING_FAMILY,
+    // AN EQUALITY WIDENED TO A PAIR, not a set membership: both preview kinds are in this
+    // family. Narrowing it back to one kind still COMPILES and reds only in the family arm.
+    preview: kind === PREVIEW_DECIDE_COMMAND_KIND || kind === PREVIEW_START_COMMAND_KIND,
     productContractGate1: kind === PRODUCT_CONTRACT_GATE_1_COMMAND_KIND,
     reconcile: kind === RESOURCE_RECONCILE_COMMAND_KIND,
     recovery: kind === RECOVERY_COMPLETION_COMMAND_KIND,
+    release: kind === RELEASE_DECIDE_COMMAND_KIND,
     review: kind in REVIEW_FAMILY,
     session: kind in SESSION_FAMILY,
     step: kind in STEP_FAMILY,
@@ -103,6 +136,7 @@ function membershipOf(kind: WiredCommandKind): Omit<
 }
 
 function schemaVersionOf(member: ReturnType<typeof membershipOf>): string {
+  if (member.criterion) return CRITERION_SCHEMA_VERSION;
   if (member.graph) return GRAPH_COMMAND_SCHEMA_VERSION;
   if (member.productContractGate1) return PRODUCT_CONTRACT_GATE_1_SCHEMA_VERSION;
   if (member.clarification || member.compilerDecompose || member.compilerPropose) {
@@ -137,6 +171,11 @@ function requiredCapabilityOf(
     || member.reconcile || member.step) {
     return CAPABILITIES.WORK;
   }
+  // Stated AT the site, as `preview` is below: writing an environment variable demands ADMIN.
+  // ADMIN fences REACH only -- `ENVIRONMENT_FAMILY` answers the same capability, and the two
+  // must agree. What makes these two human-only is OPERATOR_PRINCIPAL_KINDS plus the MCP
+  // exclusion derived from it, never this line.
+  if (member.environment) return CAPABILITIES.ADMIN;
   // ADMIN for the same reason as the three above: it fences REACH, keeping scoped agent
   // sessions out. What makes `cutover.activate` human-only is OPERATOR_PRINCIPAL_KINDS, which
   // demands the CONFIGURED operator identity no minted session can hold.
@@ -144,9 +183,16 @@ function requiredCapabilityOf(
     || member.recovery) {
     return CAPABILITIES.ADMIN;
   }
-  // Every remaining kind -- bootstrap, GRAPH, review, session and work-claim -- reads its
-  // capability from the one table search `agentCapabilitiesFor` uses, so an entry's demanded
-  // capability and an agent's granted set can never come from different tables.
+  // Stated explicitly so the reason is readable AT the site: deciding a preview is a REVIEW
+  // act. `PREVIEW_FAMILY` answers the same capability one line below; the two must agree, and
+  // taking the branch here means a reader never has to open the vocabulary to learn why.
+  if (member.preview) return CAPABILITIES.REVIEW;
+  // Every remaining kind -- bootstrap, DESIGN, GRAPH, review, session and work-claim -- reads
+  // its capability from the one table search `agentCapabilitiesFor` uses, so an entry's demanded
+  // capability and an agent's granted set can never come from different tables. `design.submit`
+  // takes NO branch above on purpose: a branch here would be a second place its capability is
+  // decided, and the whole point of that kind is that the seat's granted set and the entry's
+  // demanded one are the SAME PLANNING answer out of `DESIGN_FAMILY`.
   const family = familyCapabilityOf(kind);
   if (family === null) throw new Error(`command kind has no capability family: ${kind}`);
   return family;

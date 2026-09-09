@@ -1,6 +1,6 @@
 import type { SqliteEventStore } from "@moe/store";
 
-import { DomainRefusal } from "./daemon-command-dispatch.js";
+import { DomainRefusal, domainRefusalOf } from "./daemon-command-dispatch.js";
 import { createFoundationVerificationService }
   from "./evidence/foundation-verification-service.js";
 import { createRecipeSealComposition } from "./evidence/recipe-seal-composition.js";
@@ -126,7 +126,7 @@ export function createFoundationVerificationHandler(
         store: options.store,
       }).sealNamed(recipeAggregateId);
       if (!sealed.ok && sealed.code === "FOUNDATION_VERIFICATION_RECIPE_CONFLICT") {
-        throw new DomainRefusal(sealed.code, sealed.layer, sealed.code);
+        throw domainRefusalOf(sealed);
       }
     }
 
@@ -141,7 +141,7 @@ export function createFoundationVerificationHandler(
     // The refusing authority's own code and layer, verbatim: the service already carries
     // the attempt store's, the wrapper's and the evidence builder's refusals unflattened,
     // and re-coding them here would erase which authority actually refused.
-    if (!outcome.ok) throw new DomainRefusal(outcome.code, outcome.layer, outcome.code);
+    if (!outcome.ok) throw domainRefusalOf(outcome);
 
     // THE POST-VERIFICATION FINALIZATION, and this is the ONLY moment it can run.
     // A durable receipt now exists for this attempt, so `finalizeVerifiedAttempt`

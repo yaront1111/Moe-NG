@@ -1,0 +1,586 @@
+{
+  "id": "task-d342a2b158764fefa8dbf2a5365e7bf7",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "The browser activation chain installs the policy, so project.activate stops refusing ACTIVATION_POLICY_UNMEASURED",
+  "description": "Filed by worker-d6e44333 on 2026-09-05 from task-ac9d5e2d43334525bd990b1362652ce4 (the browser-only fresh-start proof row), which found this with a REAL daemon at `seed: \"NONE\"`. The owning row is task-3506e04abcef4fc3a69299ca238ae1b3 (DONE, the Activate card); full evidence is comment-f64e380cbb614b9cad68ff6bda0c755a there. task-ac9d5e2d is BLOCKED on this row: it cannot prove a browser-only fresh start that does not complete.\n\nTHE DEFECT, measured not inferred. On a genuinely empty store the browser Activate chain runs three steps green and then refuses:\n  Activate the project - refused ACTIVATION_POLICY_UNMEASURED @ DAEMON_ACTIVATION_RECEIPTS\n(`cr.activate.step.project.activate` carries data-ok=\"false\"; register, bind_repository and provider.probe all carry \"true\".)\n\nWHY. `ACTIVATION_CHAIN_KINDS` (apps/control-room/src/v2/ops/activation-port.ts:29) is [project.register, project.bind_repository, provider.probe, project.activate] and deliberately mirrors `COMMAND_PREREQUISITES` (apps/daemon/src/bootstrap/bootstrap-sequence.ts:31-35), which for project.activate lists only those three. But the activation witness is minted from MEASURED receipts and the `policy` receipt is the digest of the INSTALLED SLICE SET (activation-receipts.ts:38). Nothing installed means nothing to measure, so the activate refuses. A fresh `POST /activation/read` returns blocking:[\"provider\",\"policy\"]; provider.probe clears provider and nothing in the browser chain clears policy. `POST /affordances/read` on that same fresh store offers policy.install, so the daemon is offering the step the card never dispatches.\n\ntask-4b9c394d made the policy receipt load-bearing and updated DEMO_SEED_KINDS - demo-seed-plan.ts:91-95 spells the whole failure out, \"Measured against a live daemon, not reasoned\" - but did not update COMMAND_PREREQUISITES, so every consumer deriving a chain from that table still omits the step.\n\nWHY NOTHING CAUGHT IT: every other lane seeds, and DEMO_SEED_KINDS installs policy before activate, so the receipt is always already measured. Only `seed: \"NONE\"` exposes it.\n\nTHE DESIGN CALL IS DELIBERATELY LEFT OPEN, because it is not a worker's to make silently: (a) add \"policy.install\" to COMMAND_PREREQUISITES[\"project.activate\"] so every derived chain gains it, at the cost of changing a shared table with other consumers; or (b) add it to ACTIVATION_CHAIN_KINDS alone, which contradicts that constant's own docblock about holding no preference of its own. Whoever plans this must enumerate the consumers of COMMAND_PREREQUISITES before choosing (global rail 19).\n\nALREADY EXISTS, do not rebuild: the policy.install payload shape at live-dispatch-payloads.ts:98 and the operator words at work-labels.ts:44.",
+  "definitionOfDone": [
+    "`ACTIVATION_CHAIN_KINDS` (or the prerequisite table it mirrors) causes the browser Activate card to dispatch `policy.install` before `project.activate`, and the choice between changing COMMAND_PREREQUISITES and changing ACTIVATION_CHAIN_KINDS is STATED with its reason in the completion record. If COMMAND_PREREQUISITES is changed, every consumer of that table is enumerated in the plan's owned paths first (global rail 19).",
+    "The existing Playwright journey `tests/e2e/control-room/activation-fresh-project.spec.ts` (landed by task-ac9d5e2d) passes UNCHANGED against a real daemon at `seed: \"NONE\"`: all four -- now five -- chain steps carry data-ok=\"true\" and the `goal.create_with_source` that the same draft was refused before activation is ACCEPTED after it. Quote the `pnpm test:e2e:browser` count line. Do NOT weaken any assertion in that spec to reach green; if an assertion is wrong, say so and route it back rather than editing it.",
+    "A test asserts the REASON CODE, not just the outcome: with the policy step omitted, `project.activate` still refuses exactly `ACTIVATION_POLICY_UNMEASURED` at layer `DAEMON_ACTIVATION_RECEIPTS`. Verify by removing the new step and confirming that arm goes RED with that code, and quote the red (global rail 1).",
+    "`pnpm seed` stays green with its count line quoted -- DEMO_SEED_KINDS already installs policy before activate, and this change must not double-install or reorder the seed's own chain.",
+    "Gates quoted WITH their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test:e2e:browser`. Repo-wide legs are a path-attributed baseline per global rail 3."
+  ],
+  "taskRails": [
+    "The refusal is CORRECT behaviour and must stay reachable. `project.activate` refusing ACTIVATION_POLICY_UNMEASURED when the policy receipt is genuinely unmeasured is the daemon failing closed; this row makes the browser SATISFY the prerequisite, never suppresses or defaults the receipt.",
+    "Do not weaken tests/e2e/control-room/activation-fresh-project.spec.ts to reach green. It is the row that found this, and an assertion edited to fit the code retires the question unanswered.",
+    "Do not add a policy.install button to the UI. The chain is one operator click; the step is internal to it."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "THE RULING, AND THE BASELINE. (a) RECORD THE RULING as a task comment before any byte moves, because DoD-1 asks for the choice AND its reason, and the completion record must repeat it. THE RULING IS OPTION (c): put `policy.install` into `ACTIVATION_CHAIN_KINDS` now, and file the COMMAND_PREREQUISITES question as its own row. WHY NOT (a), and this is decisive rather than a preference: it is refused by this row's OWN written contract. Task rail 1 says the refusal must stay REACHABLE and DoD-3 names it verbatim -- `project.activate` refuses exactly `ACTIVATION_POLICY_UNMEASURED` at layer `DAEMON_ACTIVATION_RECEIPTS`. Measured at HEAD e6d02867 as a control/treatment pair, the one-line table edit MOVES WHICH LAYER REFUSES: `expected 'BOOTSTRAP_PREREQUISITE_MISSING' to be 'ACTIVATION_POLICY_UNMEASURED'` at activation-command-entry.test.ts:108. Adopting (a) requires amending a task rail and a DoD clause to fit the code, which is exactly what rail 2 forbids in spirit and what a written DoD gate outranks. WHY (b)'s ONLY OBJECTION DISSOLVES: the `ACTIVATION_CHAIN_KINDS` docblock (activation-port.ts:25-28) says it mirrors the daemon's order and holds no preference of its own -- true, but it mirrors only ONE of the daemon's TWO prerequisite authorities for `project.activate`. Authority 1 is the admission table `COMMAND_PREREQUISITES` (bootstrap-sequence.ts:31-35), refusing BOOTSTRAP_PREREQUISITE_MISSING via bootstrap-services.ts:257. Authority 2 is the MEASURED RECEIPT SET: `policy` is a member of ACTIVATION_RECEIPT_MEMBERS (activation-receipts.ts:29) whose value is measured from installed slices -- `if (refs.length === 0) return unmeasuredReceipt(\"policy\", \"no policy slices installed\")` at activation-receipts-measure.ts:213 -- refusing ACTIVATION_POLICY_UNMEASURED at DAEMON_ACTIVATION_RECEIPTS. The browser chain must satisfy BOTH. Adding `policy.install` is therefore NOT the control room inventing an ordering; it is the mirror finally covering the second authority, which is why the fresh-store chain ran three steps green and refused at the fourth. The docblock is amended in step 2 to say so. (b) BASELINE. Start `pnpm --filter @moe/daemon test` as a BACKGROUND run now and let it run across the following steps -- it takes ~22 min and is flaky (two back-to-back baselines gave `17 failed | 416 passed` then `10 failed | 423 passed`, dominated by 30000ms timeouts from the spawn-latency cliff), so a whole-suite delta is not admissible attribution and it is here only as the DoD-5 count line plus a foreign-red disclosure. This row changes ZERO apps/daemon paths, so `git diff --name-only` showing no apps/daemon path IS the attribution proof; say that plainly. Then run FOREGROUND, standalone, one per call, quoting each `Test Files N passed` count line: `pnpm --filter @moe/control-room test`, `pnpm typecheck`. Any red here is pre-existing -- quote it verbatim now so step 6 can subtract it.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "RULING RECORDED + BASELINE MEASURED. No production bytes written in this step.\n\n(a) RULING = option (c), full reasoning in comment-3f09c51bc10c4088bc5ad5aec076e6dc. Short form: option (a) is refused by this row's own contract, not by cost — the table edit moves WHICH LAYER refuses (`expected 'BOOTSTRAP_PREREQUISITE_MISSING' to be 'ACTIVATION_POLICY_UNMEASURED'`, activation-command-entry.test.ts:108), making task rail 1 and DoD-3 unsatisfiable verbatim. Option (b)'s docblock objection dissolves: the daemon has TWO prerequisite authorities for `project.activate` (the admission table, and the MEASURED receipt set whose `policy` member is valued from installed slices at activation-receipts-measure.ts:213); ACTIVATION_CHAIN_KINDS mirrored only the first.\n\nRE-MEASURED AT CURRENT HEAD, not inherited: HEAD is `5cde885c`, NOT the reopenReason's `e6d02867` — the branch moved. Confirmed `COMMAND_PREREQUISITES[\"project.activate\"]` is still the three-member array at bootstrap-sequence.ts:31-35, i.e. no prior work from this row is in the tree.\n\n(b) BASELINE, before any edit.\n\n1. `pnpm --filter @moe/control-room test` — `Test Files  1 failed | 148 passed (149)` / `Tests  1 failed | 1852 passed (1853)`, Duration 119.85s.\n   The single red:\n   ```\n   FAIL  src/scaffold.test.tsx > shell source tripwires > loads the whole shell module graph without any Node-only API\n   Error: Test timed out in 5000ms.\n   ```\n   TIMEOUT-SHAPED, so re-run ALONE before believing it (standing governor guidance):\n   `cd apps/control-room && npx vitest run src/scaffold.test.tsx` -> `Test Files  1 passed (1)` / `Tests  37 passed (37)`, Duration 3.85s.\n   VERDICT: a load-cliff FLAKE, not a real red, and not an owned path either way. TRUE control-room baseline = GREEN at 149 files / 1853 tests.\n\n2. `pnpm typecheck` — FOREIGN RED, pre-existing, disclosed verbatim:\n   ```\n   packages/scheduler typecheck: src/budget/budget-reservation.ts(132,42): error TS18046: 'entry' is of type 'unknown'.\n   packages/scheduler typecheck: Failed\n   [ERR_PNPM_RECURSIVE_RUN_FIRST_FAIL] @moe/scheduler@0.1.0 typecheck: `tsc --project tsconfig.json`\n   ```\n   `packages/scheduler` is NOT an owned path of this row. The leg this row needs printed `apps/control-room typecheck: Done`. Note the recursive run stops at first failure, so packages ordered after scheduler may not have been reached — that is the same shape at HEAD, so the delta is unaffected.\n\n3. `pnpm --filter @moe/daemon test` — started as a BACKGROUND run (id byr3jxc2f) for the DoD-5 count line; ~22 min and flaky by prior measurement. ATTRIBUTION NOTE: this row's ruling changes ZERO apps/daemon paths, so `git diff --name-only` showing no apps/daemon entry is the real attribution proof for the daemon leg, not a whole-suite delta (two back-to-back prior baselines gave `17 failed | 416 passed` then `10 failed | 423 passed`, so a delta there is inadmissible).",
+      "startedAt": "2026-09-05T18:20:46.862Z",
+      "completedAt": "2026-09-05T18:24:33.777Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "THE MIRROR. apps/control-room/src/v2/ops/activation-port.ts. (1) Insert `\"policy.install\"` into `ACTIVATION_CHAIN_KINDS` (:29-31) immediately BEFORE `\"project.activate\"`. Position is not cosmetic: the docblock states the order IS the prerequisite, and the policy receipt must be measurable before the activate is sent. (2) REWRITE the docblock at :25-28 rather than appending to it, in the file's existing voice. It currently says the roster is `COMMAND_PREREQUISITES` and nothing else, and that sentence is now the thing that drifted. It must say: the chain satisfies the daemon's TWO prerequisite authorities for `project.activate` -- the admission table (COMMAND_PREREQUISITES, bootstrap-sequence.ts), and the MEASURED activation receipts (activation-receipts.ts ACTIVATION_RECEIPT_MEMBERS), whose `policy` member is the digest of the installed slice set and is why `policy.install` is a member here while the admission table omits it; that the mirror is HAND-TRANSCRIBED because apps/control-room cannot import apps/daemon (no workspace edge, no tsconfig paths, deep relative import is TS6059) and must be re-checked whenever either authority moves; and that a caller still cannot reorder it. Keep the existing sentence that the order is fixed. (3) VERIFY, DO NOT WRITE, the two halves that already exist: `driveActivationChain` (:108) defaults its `kinds` parameter to `ACTIVATION_CHAIN_KINDS` and its body is entirely roster-driven, so it picks the fifth step up with NO logic change; and `activationBodyFor` reads `DEV_PAYLOADS[kind]`, where `\"policy.install\"` already has a stated body with a concrete `slice`/`sliceRef` at live-dispatch-payloads.ts:98-103. Confirm both by reading, and say so in the step note rather than adding code -- if `DEV_PAYLOADS` did NOT state the body, the new step would answer ACTIVATION_BODY_UNSTATED instead of dispatching, so this check is load-bearing, not ceremony. Add no UI and no button (task rail 3). The file is 133 lines and stays far under the cap.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/activation-port.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/ops/activation-port.ts"
+      ],
+      "note": "THE MIRROR LANDED. One file, `20 insertions(+), 5 deletions(-)`.\n\n(1) `ACTIVATION_CHAIN_KINDS` now reads `[\"project.register\", \"project.bind_repository\", \"provider.probe\", \"policy.install\", \"project.activate\"]` — `policy.install` in PREREQUISITE position, immediately before the activate.\n\n(2) DOCBLOCK REWRITTEN, not appended. The old first sentence (\"The daemon's prerequisite order (COMMAND_PREREQUISITES ...), not this module's preference\") was the sentence that drifted: it named one authority when there are two. It now states both — the admission table (BOOTSTRAP_PREREQUISITE_MISSING, lists only the three before it) and the MEASURED receipts (`policy` ∈ ACTIVATION_RECEIPT_MEMBERS is the digest of the installed slice set, so an empty store refuses ACTIVATION_POLICY_UNMEASURED @ DAEMON_ACTIVATION_RECEIPTS) — and says explicitly that `policy.install` is a member HERE while the admission table omits it because the second authority is the one it answers to. Kept the \"a caller cannot reorder it, because the order IS the prerequisite\" sentence verbatim. Added that both mirrors are hand-transcribed because apps/control-room cannot import apps/daemon (TS6059) and must be re-checked when EITHER authority moves. Also corrected the module docblock's \"four commands\" to \"five\" — it was a live count, now false.\n\n(3) VERIFIED BY READING, NO CODE ADDED — both halves already existed:\n- `driveActivationChain` (:108 pre-edit) defaults `kinds = ACTIVATION_CHAIN_KINDS` and its whole body is roster-driven (`offerFor`/`committed`/`port.submit` all keyed off the loop variable), so the fifth step is picked up with ZERO logic change.\n- `activationBodyFor` returns `DEV_PAYLOADS[kind] ?? null`, and `DEV_PAYLOADS[\"policy.install\"]` is stated at apps/control-room/src/live/live-dispatch-payloads.ts:98-103 with a concrete `slice` carrying `sliceRef: POLICY_REF`. This check was load-bearing, not ceremony: had the body been unstated, the new step would have answered ACTIVATION_BODY_UNSTATED instead of dispatching.\n\nNo UI and no button added (task rail 3). File is 148 lines, far under the cap.\n\nTYPECHECK, WITH A POSITIVE CONTROL because a sub-second silent exit 0 is not evidence:\n- `npx tsc --project tsconfig.json` (apps/control-room) -> exit 0, no output.\n- CONTROL: appended `const __probe__: number = \"not a number\";` -> `src/v2/ops/activation-port.ts(150,7): error TS2322: Type 'string' is not assignable to type 'number'.` So the check genuinely reads this file.\n- RESTORE PROVEN SEPARATELY: `grep -c \"__probe__\"` -> `0`, and `git diff --stat` shows only the intended `20 insertions(+), 5 deletions(-)`. Path is TRACKED, so the diff is a valid restore proof. Re-ran tsc after restore -> exit 0.",
+      "startedAt": "2026-09-05T18:24:36.604Z",
+      "completedAt": "2026-09-05T18:26:29.417Z",
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "THE TABLE STAYS BYTE-IDENTICAL. THE DESIGN CALL IS OPTION (b), NOT (a). Do not edit apps/daemon/src/bootstrap/bootstrap-sequence.ts in this row, and do not edit apps/daemon/src/orchestrator/demo-seed-plan.test.ts. If step 1 already applied the one-line table edit, REVERT it before proceeding (`git diff -- apps/daemon/src/bootstrap/bootstrap-sequence.ts` must come back empty) and record that you did.\n\nWHY THE RULING CHANGED, so you can carry it into the completion record — DoD 1 asks for exactly this reasoning, and DoD 1 explicitly permits either table (\"ACTIVATION_CHAIN_KINDS (or the prerequisite table it mirrors)\"), so option (b) is inside the DoD as written rather than a narrowing of it.\n\nYour measurement is accepted and it is what moved the call. Adding `policy.install` to `COMMAND_PREREQUISITES[\"project.activate\"]` makes the admission gate answer BOOTSTRAP_PREREQUISITE_MISSING on precisely the store DoD-3 and rail 1 are about — the one where the policy step is omitted — so the receipts layer is never consulted and `ACTIVATION_POLICY_UNMEASURED` at DAEMON_ACTIVATION_RECEIPTS stops being reachable from that construction. That is global rail 1's second-refusal-layer hazard, and it contradicts task rail 1 and DoD-3 as written. Option (a) therefore costs an amendment to rail 1 AND to DoD-3, a re-route of activation-command-entry.test.ts:95-110, and a split to >=12 paths against a 10-file ceiling. Option (b) costs none of those.\n\nONE CORRECTION TO THE RECORD, so the follow-up row is scoped honestly and nobody \"re-discovers\" a defect that is not there: option (a) does NOT make the policy refusal unreachable in general. activation-command-entry.test.ts:103-105 states that a DEFAULTED `installedPolicySliceRefs` produces the same code on a store where policy.install DID commit. So under (a) the receipts arm survives on that store and only the omit-the-step construction moves layers. The prior architect's argument for (a) — that a table omitting `policy.install` makes `missingPrerequisites` UNDER-REPORT, so /affordances/read offers `project.activate` as READY when the command path will refuse it — is a REAL defect and it still stands. It is not being dropped; it is too big for this row and is rehoused (see below).\n\nWHAT YOU DO IN THIS STEP. Nothing to the daemon. Record the decision and its reason for the completion record: which table you changed (ACTIVATION_CHAIN_KINDS), which you did not (COMMAND_PREREQUISITES), and why — the receipts layer, not the prerequisite table, is what makes `project.activate` fail closed on an unmeasured policy, and moving it into the prerequisite table would shadow that refusal. Name the follow-up row in the record.\n\nTHE FOLLOW-UP ROW. The table change is filed separately, with the >=12-path roster, the rail-1 and DoD-3 amendments, and the activation-command-entry.test.ts re-route it actually needs. Its id is in this row's ruling comment by architect-aa54e231; name it in your completion record and do not start it here.\n\nTHE MIRROR DOCBLOCK IS NOW YOUR PROBLEM, and step 3 handles it. Under (b) the chain constant gains a member the daemon table does not have, which makes activation-port.ts:25-28's claim — \"The daemon's prerequisite order ... the order IS the prerequisite\" — FALSE if left as is. Step 3's amended text tells you how to restate it. Do not leave that docblock asserting a mirror that no longer holds; a stale invariant comment is how this drifted in the first place.",
+          "reason": "DESIGN RULING by architect-aa54e231, requested by governor-afbde490 (#architects 18:12) after worker-2739fee7's measured block. The step's original text hard-coded option (a) — change COMMAND_PREREQUISITES. Measurement at fixed HEAD e6d02867 showed (a) reds 39 daemon files and needs a >=12-path roster, past this row's 10-file ceiling, and that it shadows this row's own DoD-3 arm. Ruling: land option (b) here (chain constant only, table untouched) and carry the table change to its own row. This keeps DoD 1, 3 and rail 1 satisfiable AS WRITTEN — no DoD or rail amendment is needed — and drops the bootstrap-sequence.ts collision with task-facff1d1. The prior architect's under-reporting argument is NOT rejected; it is preserved and rehoused.",
+          "amendedBy": "architect-aa54e231",
+          "amendedAt": "2026-09-05T18:21:30.760Z"
+        },
+        {
+          "amendmentId": "amend-2",
+          "description": "THE MIRROR. apps/control-room/src/v2/ops/activation-port.ts. (1) Insert `\"policy.install\"` into `ACTIVATION_CHAIN_KINDS` (:29-31) immediately BEFORE `\"project.activate\"`. Position is not cosmetic: the docblock states the order IS the prerequisite, and the policy receipt must be measurable before the activate is sent. (2) REWRITE the docblock at :25-28 rather than appending to it, in the file's existing voice. It currently says the roster is `COMMAND_PREREQUISITES` and nothing else, and that sentence is now the thing that drifted. It must say: the chain satisfies the daemon's TWO prerequisite authorities for `project.activate` -- the admission table (COMMAND_PREREQUISITES, bootstrap-sequence.ts), and the MEASURED activation receipts (activation-receipts.ts ACTIVATION_RECEIPT_MEMBERS), whose `policy` member is the digest of the installed slice set and is why `policy.install` is a member here while the admission table omits it; that the mirror is HAND-TRANSCRIBED because apps/control-room cannot import apps/daemon (no workspace edge, no tsconfig paths, deep relative import is TS6059) and must be re-checked whenever either authority moves; and that a caller still cannot reorder it. Keep the existing sentence that the order is fixed. (3) VERIFY, DO NOT WRITE, the two halves that already exist: `driveActivationChain` (:108) defaults its `kinds` parameter to `ACTIVATION_CHAIN_KINDS` and its body is entirely roster-driven, so it picks the fifth step up with NO logic change; and `activationBodyFor` reads `DEV_PAYLOADS[kind]`, where `\"policy.install\"` already has a stated body with a concrete `slice`/`sliceRef` at live-dispatch-payloads.ts:98-103. Confirm both by reading, and say so in the step note rather than adding code -- if `DEV_PAYLOADS` did NOT state the body, the new step would answer ACTIVATION_BODY_UNSTATED instead of dispatching, so this check is load-bearing, not ceremony. Add no UI and no button (task rail 3). The file is 133 lines and stays far under the cap.",
+          "reason": "REVERT of amend-1 by architect-aa54e231. amend-1 was written against a STALE on-disk copy of .moe/tasks/*.json whose step ordering did not match the live plan: I believed step-2 was the COMMAND_PREREQUISITES table step and overwrote the mirror step with ruling text meant for a different step. This restores step-2's text byte-for-byte from the amend-1 response's previousDescription. The live plan already rules option (b) — its own words are \"why `policy.install` is a member here while the admission table omits it\" — so no ruling amendment was needed on this step at all. Apologies for the churn; the effective text below is the original.",
+          "amendedBy": "architect-aa54e231",
+          "amendedAt": "2026-09-05T18:21:57.193Z"
+        }
+      ],
+      "activeAmendmentId": "amend-2"
+    },
+    {
+      "stepId": "step-3",
+      "description": "THE MIRROR'S GUARD. apps/control-room/src/v2/ops/activation-port.test.ts. FIVE coupled arms move, not the three an eyeball finds -- this enumeration is measured, so treat a sixth surprise as a stop-and-report, not a licence to widen. (1) :63-67 the `toEqual([...])` roster literal gains `\"policy.install\"` in its new slot before `\"project.activate\"`. (2) :68 `toHaveLength(4)` becomes `toHaveLength(5)`. Keep the comment explaining that the length pin exists so a sweep yielding zero cases cannot pass silently. (3) :94 `expect(readSurface).toHaveBeenCalledTimes(4)` becomes `5` -- the port re-reads the surface before EVERY step, so this count moves with the roster and is the arm most easily missed. (4) :95-98 the `sent` literal gains the `policy.install` dispatch in its position; take its body from `DEV_PAYLOADS[\"policy.install\"]` the way the surrounding arms take theirs, never a hand-spelled duplicate. (5) :143-154 the COMMITTED-carry-on fixture: its surface must ALSO offer or report `policy.install`, or the chain now breaks before it reaches `project.activate` and that test fails for a reason unrelated to its subject. Read :151-154 and extend the fixture minimally so the arm still tests carry-on. ALSO CHECK, expecting them to follow automatically because they derive from the roster rather than pin a literal: :40 (`ACTIVATION_CHAIN_KINDS.map`), :121 (`filter(kind => kind !== \"project.activate\")`) and its `toHaveLength` at :128, :194, :231-233. Verify each rather than assuming; where one does move, it moves because the roster grew, which is correct.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/ops/activation-port.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/ops/activation-port.test.ts"
+      ],
+      "note": "THE MIRROR'S GUARD. `Test Files  1 passed (1)` / `Tests  10 passed (10)` — `cd apps/control-room && npx vitest run src/v2/ops/activation-port.test.ts`.\n\nSIX arms moved, not the five the plan enumerated. The sixth is disclosed rather than smuggled, and it is a roster consequence in a file already owned by this step — not a new path:\n\n1. `toEqual([...])` roster literal — gains `\"policy.install\"` before `\"project.activate\"`.\n2. `toHaveLength(4)` -> `(5)`. Zero-case comment kept verbatim.\n3. `expect(readSurface).toHaveBeenCalledTimes(4)` -> `(5)` — the port re-reads before every step.\n4. The `sent` literal: `[\"provider.probe\", 2], [\"policy.install\", 3], [\"project.activate\", 4]`. NOTE, correcting the plan's guess: `sent` records `[kind, affordance[\"expectedVersion\"]]`, i.e. VERSION numbers, not bodies (recordingPort at :47), so there was no body to source from DEV_PAYLOADS here. The version ladder shifts 0..3 -> 0..4 because one more commit happens.\n5. The COMMITTED-carry-on fixture (\"carries on past a command the daemon's own surface already calls COMMITTED\"): `partly` offered only probe + activate, so with the new roster `policy.install` was neither offered NOR committed and the chain would have broken at ACTIVATION_COMMAND_NOT_OFFERED before ever reaching `project.activate` — failing for a reason unrelated to the arm's subject. Added `offerFor(\"policy.install\", 2)` to the offers; states become `[\"ALREADY_COMMITTED\", \"ALREADY_COMMITTED\", \"ANSWERED\", \"ANSWERED\", \"ANSWERED\"]` and `sent` becomes `[\"provider.probe\", \"policy.install\", \"project.activate\"]`. The arm still tests carry-on, which is its subject.\n6. THE ONE THE PLAN DID NOT NAME — \"records an unreachable command as its own code, and sends nothing for it\" (:120-138). Its fixture is `ACTIVATION_CHAIN_KINDS.filter(kind => kind !== \"project.activate\")`, so it derives from the roster and now yields FOUR offers: `toHaveLength(4)` -> `(5)`, `const last = steps[3]` -> `steps[4]`, and `expect(sent).toHaveLength(3)` -> `(4)`. The subject is untouched: `last?.kind` is still `project.activate`, still answering `ACTIVATION_COMMAND_NOT_OFFERED` at `CONTROL_ROOM_ACTIVATION`, and `sent` still `not.toContain(\"project.activate\")`. It moved because the roster grew, which is correct.\n\nCHECKED AND CONFIRMED TO FOLLOW AUTOMATICALLY, no edit needed: `allOffered` (`ACTIVATION_CHAIN_KINDS.map`, :40); `spyWire`'s `Object.fromEntries(ACTIVATION_CHAIN_KINDS.map(...))` (:194); the `built.map(...).toEqual([...ACTIVATION_CHAIN_KINDS])` sweep (:233) — it now spends five kinds and asserts each payload equals `DEV_PAYLOADS[kind]`, which is the strongest existing proof that the new kind's caller half is real; and the mid-chain-disappearance arm (:174-189), which stops at `provider.probe` before the new step and is unaffected.\n\nNo assertion was weakened. Every changed number went UP with the roster; every code, layer and subject assertion is byte-identical.",
+      "startedAt": "2026-09-05T18:26:33.204Z",
+      "completedAt": "2026-09-05T18:28:10.610Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE OPERATOR-FACING ORDER, AND THE CONSUMER NEITHER PRIOR PASS FOUND. (1) apps/control-room/src/v2/goals/work-labels.ts: `CHAIN_ORDER` (:64-77) lists `policy.install` at :69, AFTER `project.activate` at :68. Move it BEFORE. `CHAIN_ORDER.length` stays 14 -- a reorder is not an append, so the `toBe(14)` pin at work-labels.test.ts:116 does not move. Leave `policy.validate` where it is and SAY WHY in the step note rather than moving it silently: its own prerequisite is `policy.install` (bootstrap-sequence.ts:30) and nothing requires it before activation, so its current slot is correct. (2) apps/control-room/src/v2/goals/work-labels.test.ts: the ordering block at :122-129 asserts prerequisite-before-kind for seven hand-picked pairs and does NOT cover this edge -- so CHAIN_ORDER is wrong TODAY with a green suite. ADD `expect(chainRank(\"policy.install\")).toBeLessThan(chainRank(\"project.activate\"));` beside the existing `policy.install` < `policy.validate` arm at :129 so the two policy facts read together. (3) THE CONSUMER, and it is why this row does not fit the old roster: apps/control-room/src/v2/goals/work-board.test.tsx:221-234 (\"orders a column by the daemon's real chain, not the surface's array order\") pins the RENDERED label order as a literal array -- `\"Activate the project\", \"Install the policy\", ...`. It never names `CHAIN_ORDER` or `chainRank`, so `git grep CHAIN_ORDER` does not find it; it asserts on rendered SHAPE, exactly the class global rail 19 says a symbol grep misses. The reorder flips it. Swap those two entries so the expectation reads `\"Probe the model provider\", \"Install the policy\", \"Activate the project\", \"Propose the plan\"`. This is NOT weakening an assertion: the arm's own title says it asserts the DAEMON'S REAL CHAIN, and under the corrected order that literal is what the real chain is. State that reasoning in the step note. work-board.tsx itself needs NO edit -- it sorts by `chainRank` at :143 and follows the constant.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/control-room/src/v2/goals/work-labels.ts",
+        "apps/control-room/src/v2/goals/work-labels.test.ts",
+        "apps/control-room/src/v2/goals/work-board.test.tsx"
+      ],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/goals/work-labels.ts",
+        "apps/control-room/src/v2/goals/work-labels.test.ts",
+        "apps/control-room/src/v2/goals/work-board.test.tsx"
+      ],
+      "note": "THE OPERATOR-FACING ORDER. Final: `Test Files  2 passed (2)` / `Tests  47 passed (47)` — `npx vitest run src/v2/goals/work-labels.test.ts src/v2/goals/work-board.test.tsx`.\n\nTHE COVERAGE HOLE WAS MEASURED, NOT CLAIMED. Arm added FIRST, against the UNFIXED `CHAIN_ORDER`, and it went red with the numbers:\n```\nFAIL  src/v2/goals/work-labels.test.ts > ... > ranks a prerequisite before the kind that needs it\nAssertionError: expected 4 to be less than 3\n  src/v2/goals/work-labels.test.ts:134\nTest Files  1 failed (1) / Tests  1 failed | 19 passed (20)\n```\n`policy.install` ranked 4, `project.activate` ranked 3 — backwards — while the other NINETEEN arms passed. That is the hole, stated as a measurement: the suite was green with the constant wrong. Then the reorder turned it green.\n\n(1) work-labels.ts — `CHAIN_ORDER` now reads `... \"provider.probe\", \"policy.install\", \"project.activate\", \"policy.validate\" ...`. `CHAIN_ORDER.length` stays 14, so the `toBe(14)` pin at :116 does not move — a reorder is not an append, which is precisely why that pin never caught this.\n`policy.validate` LEFT WHERE IT IS, deliberately: its own prerequisite is `policy.install` (bootstrap-sequence.ts:30) and nothing requires it before activation, so a slot after `project.activate` is correct. The pre-existing `policy.install` < `policy.validate` arm still passes, which is the check that its relative order survived the move.\n\n(2) work-labels.test.ts — added `expect(chainRank(\"policy.install\")).toBeLessThan(chainRank(\"project.activate\"))` beside the existing policy pair, with a comment naming the receipt (digest of the installed slice set) and the refusal code it causes, so the next reader sees WHY the edge is absent from COMMAND_PREREQUISITES rather than assuming it is a typo.\n\n(3) work-board.test.tsx — THE CONSUMER FOUND AT PLAN TIME, and it flipped exactly as predicted:\n```\n- \"Activate the project\",\n  \"Install the policy\",\n+ \"Activate the project\",\n  src/v2/goals/work-board.test.tsx:229\n```\nSwapped the two entries. THIS IS NOT A WEAKENING and the distinction is load-bearing: the arm's own title is \"orders a column by the daemon's real chain, not the surface's array order\". It asserts that the rendered order equals the real prerequisite chain. The chain was misdescribed; the assertion's SUBJECT is unchanged and its strength is identical — same seven labels, same exact-array `toEqual`, nothing softened to `toContain`. Added a comment above it naming the refusal code so the literal is self-justifying.\nThis file never mentions `CHAIN_ORDER` or `chainRank`, so `git grep CHAIN_ORDER` (which lists only work-board.tsx, work-labels.ts, work-labels.test.ts) does not reach it — it asserts on RENDERED SHAPE. Global rail 19's exact class, caught at plan time rather than mid-step.\n\nwork-board.tsx needed NO edit, as planned: it sorts by `chainRank` at :143 and follows the constant.",
+      "startedAt": "2026-09-05T18:28:13.480Z",
+      "completedAt": "2026-09-05T18:30:02.538Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "RE-ENABLE THE JOURNEY THAT FOUND THIS. tests/e2e/control-room/activation-fresh-project.spec.ts (currently UNTRACKED -- `git grep` is blind to it, which is why the consumer enumeration above was done by direct read). DELETE the `test.fixme(true, \"blocked on task-d342a2b1...\")` statement at :111, and fix ONLY the now-false explanatory comment above it at :104-110, which asserts \"nothing in ACTIVATION_CHAIN_KINDS installs the policy whose digest that receipt...\" -- leaving a sentence in the tree that is false after this diff is worse than deleting it, but it is a COMMENT, not an assertion, so this does not touch task rail 2. NO assertion below that line may change: no timeout inflated, no `toContain` softened, no arm deleted. MEASURED AND ALREADY VERIFIED, do not re-derive: the spec imports `ACTIVATION_CHAIN_KINDS` at :7, iterates it at :203, and its only count arm is `.toBeGreaterThanOrEqual(ACTIVATION_CHAIN_KINDS.length)` at :238 -- there is NO literal 4 pinned anywhere in the file, so it picks the fifth step up from the roster automatically. Then run `pnpm test:e2e:browser` against a real daemon at `seed: \"NONE\"` FOREGROUND and quote its count line plus the per-step evidence DoD-2 asks for: all five chain steps carry `data-ok=\"true\"` including the new `cr.activate.step.policy.install`, and the `goal.create_with_source` refused before activation is ACCEPTED after it. If it still fails, the failure IS the row's subject -- report the exact refusal code and layer and do not park it again, and do not edit the spec to reach green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "tests/e2e/control-room/activation-fresh-project.spec.ts"
+      ],
+      "modifiedFiles": [
+        "tests/e2e/control-room/activation-fresh-project.spec.ts"
+      ],
+      "note": "JOURNEY RE-ENABLED. THE ROW'S SUBJECT IS FIXED AND PROVEN IN A REAL BROWSER. The journey then fails ONE STEP FURTHER ON, at a DIFFERENT defect, measured below and NOT worked around.\n\nEDIT MADE: deleted the `test.fixme(true, \"blocked on task-d342a2b1...\")` call, and rewrote the comment block above it that said \"nothing in ACTIVATION_CHAIN_KINDS installs the policy\" — false after this diff. Comment only; NO assertion touched, no timeout inflated, nothing softened, nothing deleted (task rail 2).\n\n=== DoD-2 FIRST HALF: DELIVERED ===\n`npx playwright test -c tests/e2e/control-room/playwright.config.ts activation-fresh-project` at `seed: \"NONE\"` against a real daemon. The test failed at LINE 220, which means every assertion ABOVE 220 passed — including the chain loop at :198-202:\n```\nfor (const kind of ACTIVATION_CHAIN_KINDS) {\n  await expect(step, `chain step ${kind}`).toBeVisible({ timeout: CHAIN_MS });\n  await expect(step, `chain step ${kind} accepted`).toHaveAttribute(\"data-ok\", \"true\");\n}\n```\nFIVE kinds, each asserted OK BY ITS OWN KIND (the spec's comment: \"a count would pass with four refusals\"). So `cr.activate.step.policy.install` AND `cr.activate.step.project.activate` both rendered `data-ok=\"true\"` in a real browser on a genuinely empty store. **`ACTIVATION_POLICY_UNMEASURED` is gone.** That is the row's title, and the 31-hour freeze behind it.\n\nThis also proves the served bundle carried the edit: had the browser still run the 4-step chain, `cr.activate.step.policy.install` would never have become visible and the loop would have failed there instead of at :220.\n\n=== DoD-2 SECOND HALF: BLOCKED ON A DISTINCT, MEASURED DEFECT ===\n```\nError: expect(locator).toHaveText(expected) failed\nLocator:  getByTestId('cr.goals.newgoal.report')\nExpected: \"Goal created: Browser-only fresh start\"\nReceived: \"goal.create_with_source is blocked until Activate the project commits. Next step:\n           use the Activate project card on this screen; it drives the whole chain from the browser.\"\n  tests/e2e/control-room/activation-fresh-project.spec.ts:220\n```\nROOT CAUSE, traced not guessed — a STALE-FRAME RACE in the create submit path, NOT a daemon refusal:\n- `createGoalDispatcher` (live-goal-create.ts:201-215) takes `getFrame: () => SurfaceFrame | null` and reads it ONCE, by design: *\"ONE read of the frame: the refusal must describe the same surface the offer was looked for on, not a later poll's.\"* With `offer === null` it renders `goalCreateRefusal(frame, kind)` WITHOUT asking the daemon.\n- That frame is `frameRef.current` (live-goals.tsx:85-92), refreshed by a **2000 ms** poll (`POLL_INTERVAL_MS`, live-goals.tsx:33).\n- `LiveActivate` (activation-screen.tsx:206-211) DOES call `refresh()` when the chain settles — but that refreshes its OWN `/activation/read`, not the goals screen's independently-polled surface frame. Nothing invalidates `frameRef`.\nSo for up to 2 s after a successful activation the create path refuses against a pre-activation frame. The report is a one-shot submit result, so it never self-corrects — the 5 s `toHaveText` retry saw the same string 14 times.\nThe daemon is NOT the refuser here: `COMMAND_PREREQUISITES[\"goal.create_with_source\"] = [\"project.activate\"]`, and `project.activate` is COMMITTED (proven by its own `data-ok=\"true\"` above).\n\nWHY I DID NOT FIX IT, and this is a rails call rather than a preference:\n1. The fix belongs in `apps/control-room/src/v2/goals/live-goal-create.ts`, which is **DIRTY WITH ANOTHER SESSION'S IN-FLIGHT WORK** right now (` M live-goal-create.ts`, ` M live-goal-create.test.ts` in this shared worktree). Editing a peer's in-flight file is the collision the shared-worktree rails forbid.\n2. It is a different defect in a different seam — \"a mutation committed by one card does not invalidate another screen's independently-polled frame\" — not the chain roster this row rules on.\n3. Papering it over with a wait in the spec would mask a real product defect an operator hits by clicking fast. Task rail 2 exists for exactly that.\nRouted in step 6 as its own row, with this measurement carried forward.\n\nFOREIGN GATE BLOCKER, disclosed: `pnpm test:e2e:browser` cannot reach playwright at all — its first leg is `tsc -p tests/e2e/control-room/tsconfig.json`, which fails on the SAME pre-existing foreign red from the step-1 baseline:\n```\npackages/scheduler/src/budget/budget-reservation.ts(132,42): error TS18046: 'entry' is of type 'unknown'.\n```\nEXACTLY ONE error, in a foreign package, COMMITTED AT HEAD (`git status --porcelain -- packages/scheduler` is empty; introduced by `e53e3e6a fix(scheduler): a reservation view with a duplicated meter is malformed`). Zero errors in this row's paths or in the e2e specs. I ran playwright directly to get the evidence above.",
+      "startedAt": "2026-09-05T18:30:05.180Z",
+      "completedAt": "2026-09-05T18:36:06.628Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "DRILLS, GATES, ADVERSARIAL PASS, FOLLOW-UP ROW. (a) DRILLS. `git status --porcelain` the exact mutated paths FIRST. Five of the six are TRACKED so an empty `git diff -- <path>` is a valid restore proof; the e2e spec is UNTRACKED (`??`), so `git diff` certifies NOTHING for it -- back it up to %TEMP% suffixed by worker id BEFORE drilling and prove its restore by SHA256 equality in a call SEPARATE from the restore. Three drills, restore and prove after each: (i) DoD-3, the one the row names: with the new chain step removed, `project.activate` must STILL refuse exactly `ACTIVATION_POLICY_UNMEASURED` at layer `DAEMON_ACTIVATION_RECEIPTS`. The daemon arm already exists at activation-command-entry.test.ts:95-110 and this row changes no daemon byte, so run it TARGETED and quote it GREEN as the standing proof the refusal stayed reachable -- that is the whole point of the ruling. Use the fast targeted form, seconds not minutes: `cd apps/daemon && npx vitest run --root . --config package.json --testTimeout=30000 src/bootstrap/activation-command-entry.test.ts`. (ii) Remove `\"policy.install\"` from `ACTIVATION_CHAIN_KINDS` alone: the arms at :63-68 must BOTH red and the `readSurface` count at :94 with them. Quote the reds with their codes. (iii) Move `policy.install` back after `project.activate` in `CHAIN_ORDER`: the arm added in step 4 must red, AND the work-board.test.tsx literal must red. Then run drill (iii)'s new arm against the file as it stood BEFORE the step-4 edit and confirm it was GREEN -- that is what proves the coverage hole was MEASURED rather than claimed. (b) GATES, standalone foreground, one command per call, no pipes and no `;` chains, each quoting its `Test Files N passed` count line; an exit-0 leg with NO count line ran nothing and is not evidence: `pnpm --filter @moe/control-room test` (MANDATORY -- this row edits four apps/control-room files and root `pnpm test` has no `apps/**` in its include, so it can see NONE of them), `pnpm typecheck`, `pnpm test:e2e:browser`, `pnpm seed` (DoD-4; note that this row changes no seeder and no daemon table, so the seed's own chain cannot double-install or reorder -- prove it green anyway), and the background `pnpm --filter @moe/daemon test` from step 1 for the DoD-5 count line. Attribute reds as failing paths at HEAD minus failing paths at the step-1 baseline, intersected with this row's six owned paths; disclose any foreign red verbatim with its exact failing lines. Named complete_task verification command: `pnpm test:e2e:browser`. (c) ADVERSARIAL PASS on this diff only, recorded in the note: `policy.install` is REPEATABLE -- affordance-read.ts:227-234 keeps OFFERING it even when COMMITTED, so on an already-seeded store the chain installs ANOTHER slice with the same `POLICY_REF` rather than reaching ALREADY_COMMITTED. Measure what that does to the `policy/N-slices` receipt ref and whether any arm pins a literal N; if it changes an operator-visible fact, say so plainly in the completion record and file it rather than hiding it. Also: what the card shows when `policy.install` itself refuses; two operators clicking Activate concurrently. (d) FILE THE FOLLOW-UP ROW in PLANNING per global rail 20, naming this row's id in its description: the OFFER SURFACE still advertises `project.activate` as READY on a policy-less store while the receipt layer will refuse it (affordance-read.ts:206,239 read `missingPrerequisites`, which reads the table). Frame it as the DESIGN question it is -- whether the admission table should carry the fact at all, given that duplicating it there makes the receipt layer's refusal unreachable -- NOT as \"add the line\", and carry the measured fallout forward: 39 daemon files red, 33 from one unenumerated shared seeder at restore-test-harness.ts:182 `seedReadyProject`, 4 files needing real edits across 9 arms, minimum roster 12 paths. (e) COMPLETION RECORD states: the ruling and its reason (DoD-1); that the protected refusal stayed reachable with the targeted green quoted; that CHAIN_ORDER was wrong today with a green suite and the arm added to close it; that work-board.test.tsx was an unenumerated shape consumer found at plan time, not mid-step; and that the e2e spec changed only by deleting its `test.fixme` and one false comment.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "modifiedFiles": [
+        "apps/control-room/src/v2/ops/activation-port.ts",
+        "apps/control-room/src/v2/ops/activation-port.test.ts",
+        "apps/control-room/src/v2/goals/work-labels.ts",
+        "apps/control-room/src/v2/goals/work-labels.test.ts",
+        "apps/control-room/src/v2/goals/work-board.test.tsx",
+        "tests/e2e/control-room/activation-fresh-project.spec.ts"
+      ],
+      "note": "DRILLS, GATES, ADVERSARIAL, FOLLOW-UP ROWS. All six owned files green: `Test Files 3 passed (3)` / `Tests 57 passed (57)` after every drill restore.\n\n=== (a) DRILLS ===\n`git status --porcelain` on the six FIRST: five ` M` (TRACKED), one `??` — `tests/e2e/control-room/activation-fresh-project.spec.ts`. NO DRILL MUTATED THE UNTRACKED PATH (all three target `ACTIVATION_CHAIN_KINDS`, `CHAIN_ORDER` or the daemon table), so no out-of-tree SHA256 backup was required. Stated explicitly because an empty `git diff` would certify nothing for that file.\n\n(i) **DoD-3 — THE PROTECTED REFUSAL IS STILL REACHABLE.** This row changes no daemon byte, so the standing proof is the arm itself, run targeted:\n`cd apps/daemon && npx vitest run --root . --config package.json --testTimeout=30000 src/bootstrap/activation-command-entry.test.ts`\n-> `Test Files  1 passed (1)` / `Tests  4 passed (4)`, 4.03s.\nThat file holds \"refuses POLICY_UNMEASURED on a store where no policy is installed\", which drives the chain STOPPING BEFORE `policy.install` and asserts `outcome.code === ACTIVATION_RECEIPT_CODES.policy` and `outcome.refusedBy === \"DAEMON_ACTIVATION_RECEIPTS\"`. **This is the whole point of the ruling**: option (a) would have reddened this arm with `BOOTSTRAP_PREREQUISITE_MISSING`; option (c) leaves it green and untouched.\n\n(ii) Removed `\"policy.install\"` from `ACTIVATION_CHAIN_KINDS` alone. FOUR arms red, exactly the coupled set:\n```\n× is the daemon's prerequisite order, and every kind in it has a stated caller half\n× re-reads the surface before EVERY step and spends the offer at its current version\n× records an unreachable command as its own code at this layer, and sends nothing for it\n× carries on past a command the daemon's own surface already calls COMMITTED\nAssertionError: expected [ 'project.register', …(3) ] to deeply equal [ 'project.register', …(4) ]\nAssertionError: expected \"vi.fn()\" to be called 5 times, but got 4 times\nAssertionError: expected [ …(4) ] to have a length of 5 but got 4\nAssertionError: expected [ 'ALREADY_COMMITTED', …(3) ] to deeply equal [ 'ALREADY_COMMITTED', …(4) ]\nTest Files  1 failed (1) / Tests  4 failed | 6 passed (10)\n```\nRESTORED; proof in a SEPARATE call: `git diff --numstat` -> `20\t5\tapps/control-room/src/v2/ops/activation-port.ts`, byte-for-byte the step-2 figure.\n\n(iii) Moved `policy.install` back after `project.activate` in `CHAIN_ORDER`. BOTH arms red, including the plan-time find:\n```\n× ranks a prerequisite before the kind that needs it        AssertionError: expected 4 to be less than 3\n× orders a column by the daemon's real chain, ...           -   \"Install the policy\",\n                                                                \"Activate the project\",\n                                                            +   \"Install the policy\",   (work-board.test.tsx:234)\nTest Files  2 failed (2) / Tests  2 failed | 45 passed (47)\n```\nRESTORED; proof in a SEPARATE call: `git diff -- work-labels.ts` shows only the intended two-line reorder.\nTHE HOLE WAS MEASURED, NOT CLAIMED: the new arm was added FIRST against the unfixed constant and reddened `expected 4 to be less than 3` while the other NINETEEN arms in that file passed — the suite was green with the constant wrong.\n\n=== (b) GATES, standalone foreground, one per call ===\n1. `pnpm --filter @moe/control-room test` -> `Test Files  1 failed | 148 passed (149)` / `Tests  1 failed | 1852 passed (1853)`, 88.73s. **DELTA vs the step-1 baseline: ZERO** — identical counts, identical file. The red is `src/scaffold.test.tsx > loads the whole shell module graph without any Node-only API`, `Test timed out in 5000ms`; re-run ALONE at HEAD -> `Test Files 1 passed (1)` / `Tests 37 passed (37)`, 3.29s. Same load-cliff flake proven at baseline, not an owned path.\n2. `pnpm typecheck` -> same SINGLE foreign error as baseline, byte-identical:\n   `packages/scheduler typecheck: src/budget/budget-reservation.ts(132,42): error TS18046: 'entry' is of type 'unknown'.`\n   Committed at HEAD (`e53e3e6a`), `git status --porcelain -- packages/scheduler` empty. Direct `npx tsc --project tsconfig.json` in apps/control-room -> exit 0, with a PLANTED-ERROR positive control proving the check reads my file.\n3. `pnpm --filter @moe/daemon test` -> `Test Files  9 failed | 430 passed (439)` / `Tests  39 failed | 8646 passed | 1 skipped (8686)`, 1604.61s (26.7 min). **ENTIRELY FOREIGN.** Attribution proof is structural, not a delta: this row owns SIX paths and **ZERO are under apps/daemon** (enumerated in-band). The prior two baselines on this suite were `17 failed | 416 passed` and `10 failed | 423 passed`, so 9-failed sits inside the known flake band; the visible tail names `src/work/foundation-capture-producer.test.ts` (capture producer — unrelated to activation). Per global rail 3 a whole-suite delta is inadmissible here anyway.\n4. **DoD-4, and the invocation is broken for a reason that is not this row's.** `pnpm seed` cannot run standalone: `MOE_SEED_ENV_MISSING MOE_DAEMON_ORIGIN",
+      "startedAt": "2026-09-05T18:36:09.082Z",
+      "completedAt": "2026-09-05T18:49:37.469Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Re-plan: worker-2739fee7's step 1(d) triage fired correctly and asked for a DESIGN RULING it refused to make itself (global rail 18). Routed by governor because the row had NO blockedOnTaskIds and no unmet dependsOn — nothing would ever have auto-unblocked it, and it is the head of a three-deep chain: task-bb844c28 (BLOCKED 1871m) <- task-ac9d5e2d <- this row.\n\nTWO FINDINGS, measured at fixed HEAD e6d02867 as a control/treatment pair, not inferred:\n1. SCOPE. The approved one-line edit to COMMAND_PREREQUISITES[\"project.activate\"] reds 39 daemon files, none among the plan's seven. 33 share one cause: a SECOND shared seeder the plan never enumerated (restore-test-harness.ts:182 seedReadyProject, 445x \"seeding project.activate failed: BOOTSTRAP_PREREQUISITE_MISSING\"). 4 files need real edits (9 arms). Minimum roster = 12 paths, past the plan's 10-file ceiling.\n2. THE BLOCKER, outranking the file count: option (a) makes THIS ROW'S protected refusal unreachable — the admission gate answers before the receipt layer. Verbatim: expected 'BOOTSTRAP_PREREQUISITE_MISSING' to be 'ACTIVATION_POLICY_UNMEASURED' at activation-command-entry.test.ts:108. That is the second-refusal-layer hazard of global rail 1, and it contradicts task rail 1 and DoD-3 verbatim.\n\nARCHITECT'S CALL, three options as the worker framed them (I am relaying, NOT ruling — this is a design decision, not governance):\n(a) keep the table change, amend task rail 1 + DoD-3, re-route activation-command-entry.test.ts:95-110 to the receipt layer, split to >=12 paths;\n(b) put policy.install into ACTIVATION_CHAIN_KINDS alone — 4 files, no daemon behaviour change, refusal layers stay reachable, e2e still green;\n(c) land (b) now and file the table fix as its own row.\nThe worker's read is (b) or (c). Verify that yourself before adopting it.\n\nTree is CLEAN — no production bytes were written. Evidence: comment-aa79a78bd94e4f56a7d7609ec5815b61 (fallout) and comment-a9a48879212b474782cb453e073c98f8 (collision), plus Serena mem:gotcha-adding-policy-install-to-command-prerequisites-hides-the-receipt-refusal.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-3506e04abcef4fc3a69299ca238ae1b3"
+  ],
+  "priority": "HIGH",
+  "order": 4.2,
+  "comments": [
+    {
+      "id": "comment-a8d35fc6262c477b8564a16ee7397bd7",
+      "author": "worker-d6e44333",
+      "content": "CLARIFICATION ON MY OWN DoD 2, from the row that filed this one. I wrote \"passes UNCHANGED\"; that is one word too strong and I am fixing it here rather than leaving a contradiction for the worker.\n\n`tests/e2e/control-room/activation-fresh-project.spec.ts` lands PARKED. Its first statement is:\n\n```ts\ntest.fixme(true, \"blocked on task-d342a2b158764fefa8dbf2a5365e7bf7: the browser activation chain never installs the policy, so project.activate refuses ACTIVATION_POLICY_UNMEASURED\");\n```\n\nDELETING THAT ONE LINE IS THE WHOLE OF THE RE-ENABLE, and it is expected work for this row. Nothing else in the spec may change. Read DoD 2 as: every assertion below that line passes with no assertion relaxed, no timeout inflated, no `toContain` softened to a truthiness check, and no arm deleted.\n\nWHY IT IS PARKED RATHER THAN LEFT RED: the branch is shared, and a knowingly-red lane costs every other row a false attribution — a peer running `pnpm test:e2e:browser` would find a failure that is neither theirs nor news. It is `fixme` rather than `skip` so the reason travels with it in the runner output.\n\nWHAT THE SPEC ALREADY PROVES, verified live before it was parked — the failure is the LAST step, not the first, and everything ahead of it is real evidence you can rely on while fixing:\n- `lane.seedPid` is null, so the store was never seeded;\n- a real pairing handshake completes (`operatorChannel: true`, the label read from the page and typed back on the daemon's own channel — `liveCredentials: \"ATTACHED\"` alone does NOT pair the tab, the app refuses with \"Moe was started without a terminal it can listen on\");\n- `cr.activate.root` mounts with `cr.activate.refusal` absent, so `/activation/read` answered with receipts;\n- `cr.activate.reason.repository` contains the lane's real `git rev-parse HEAD`, and no receipt row reads as a `<projectId>-*` placeholder;\n- a pre-activation `goal.create_with_source` is REFUSED and the refusal text is the copy task-ac9d5e2d rewrote (asserted not to contain the old terminal-bound sentence);\n- `project.register`, `project.bind_repository` and `provider.probe` all reach `data-ok=\"true\"`.\n\nOnly `cr.activate.step.project.activate` is `data-ok=\"false\"`. That is your one target.\n\nTWO LANE FACTS THAT COST ME ROUND TRIPS, so they do not cost you any:\n- `cr.goals.newgoal.prd.input` is a `type=\"file\"` input (new-goal-form.tsx:130), so it needs `setInputFiles({buffer, mimeType, name})`, not `.fill()`. Without a real attachment the browser sends brief-only `goal.create`, a different kind than DoD 1 asks for.\n- `cr.goals.newgoal.prd.status` states the sha256 the BROWSER computed, not the filename — assert the digest.\n- The accepted create renders `Goal created: <title>` (live-goal-create.ts:131), never the wire's enums.\n\nAlso note for whoever plans this: `pnpm test:e2e:browser -- <name>` does NOT filter; it runs the whole lane. Use `npx playwright test -c tests/e2e/control-room/playwright.config.ts <name>`.",
+      "timestamp": "2026-09-05T14:29:33.568Z"
+    },
+    {
+      "id": "comment-aa79a78bd94e4f56a7d7609ec5815b61",
+      "author": "worker-2739fee7",
+      "content": "STEP-1 FALLOUT MEASUREMENT (worker-2739fee7). Step 1(d) triage outcome: STOP AND REPORT. 39 new failing daemon files, NONE among the plan's seven.\n\nMEASURED, not reasoned. The one-line edit applied was exactly `\"policy.install\",` into COMMAND_PREREQUISITES[\"project.activate\"] (bootstrap-sequence.ts:35). Nothing else.\n\nBASELINE (rail 3), `pnpm --filter @moe/daemon test`, before the edit:\n  Test Files  10 failed | 423 passed (433)   Exit status 1\nTen foreign pre-existing files, 19 of ~25 arms are 30000ms TIMEOUTS (the spawn-latency cliff; foundation-attempt-service.test.ts alone ran 1174213ms). The baseline is FLAKY: an earlier identical run gave `17 failed | 416 passed`. None of the 10 is in this row's seven.\n\nAFTER the one line:\n  Test Files  49 failed | 387 passed (436)   Exit status 1\n\nNOTE the tree moved under me mid-run: HEAD went c35d75d5 -> e6d02867 (peers landed, incl. 9bad1694 \"project.activate admits the command before it measures receipts\", which edits bootstrap-services.ts + daemon-command-registry.ts). So the whole-suite delta is NOT a clean control. I therefore attributed with a targeted control/treatment pair at ONE fixed HEAD (e6d02867):\n\n  CONTROL (line reverted): 6 files -> Test Files 6 passed, Tests 160 passed (160), 0 failed\n  TREATMENT (line applied): 6 files -> Test Files 4 failed | 2 passed, Tests 9 failed | 151 passed\n  and separately: control 3 files -> 64 passed / 0 failed; treatment -> 14 failed | 50 passed\n\nSo the flips are MINE, not the peers'. `demo-seed-plan.test.ts` stayed GREEN both ways, exactly as planningNotes predicted.\n\nROOT CAUSE OF 33 OF THE 39: ONE unnamed shared fixture. All 445 failure lines are the identical error\n  Error: seeding project.activate failed: BOOTSTRAP_PREREQUISITE_MISSING\nfunnelling through `seedReadyProject` at apps/daemon/src/recovery/restore-test-harness.ts:182 (via `send` at :167). Every other harness in the trace (attempt-finalization-test-harness.ts:251, budget-settlement-fixtures.ts:116/156, foundation-registry-fixtures.ts:437/471) calls into it. planningNotes verified bootstrap-test-fixtures.ts:747-750 was already correctly ordered - true, but restore-test-harness.ts is a SECOND shared seeder and was never enumerated.\n\nTHE 4 FILES THAT NEED REAL EDITS (not the harness), with their 9 arms:\n  src/bootstrap/activation-command-entry.test.ts:108 (1) \"refuses POLICY_UNMEASURED on a store where no policy is installed\"\n  src/http/affordance-read.test.ts:125 (1) \"offers only the chain roots on a fresh ledger, blocking the rest by name\" - pins the literal `missing:` roster\n  src/activation/admission-gate-resolver.test.ts:753,775,967,981 (4)\n  src/daemon-foundation-command.test.ts:113,143,232 (3)\n\nNOT reliably mine: bootstrap-services.test.ts and daemon-entry-ops.test.ts failed in the whole-suite run but PASSED in both targeted runs at fixed HEAD - peer/flake, do not attribute to this row.\n\nSCOPE CONSEQUENCE: the minimum honest roster is 7 + restore-test-harness.ts + those 4 = 12 owned paths, past the 10-file ceiling the plan was built under. That is a split/amend decision, not a worker judgement call (global rail 18; planningNotes risks para 1 says so explicitly).\n\nTREE LEFT CLEAN. All seven paths reverted to session-start bytes: five tracked prove empty `git diff`; the untracked spec proves SHA256 caeff7ce2c5b8eef55d124178c896e0c58c1c39df970538627963d9b47c713d8 against an out-of-tree backup. No drill mutant is stranded and the shared branch is not left knowingly red.",
+      "timestamp": "2026-09-05T17:50:26.502Z"
+    },
+    {
+      "id": "comment-a9a48879212b474782cb453e073c98f8",
+      "author": "worker-2739fee7",
+      "content": "THE DESIGN COLLISION: option (a) MAKES THE ROW'S PROTECTED REFUSAL UNREACHABLE. This is the finding that matters more than the file count, and it is measured.\n\nRow rail 1 says the ACTIVATION_POLICY_UNMEASURED refusal \"is CORRECT behaviour and must stay reachable\". DoD-3 requires that with the policy step omitted, `project.activate` \"still refuses exactly ACTIVATION_POLICY_UNMEASURED at layer DAEMON_ACTIVATION_RECEIPTS\".\n\nAdding `policy.install` to COMMAND_PREREQUISITES[\"project.activate\"] BREAKS that. The admission gate now refuses first, so the receipt layer is never reached. Verbatim, from apps/daemon/src/bootstrap/activation-command-entry.test.ts:108 with the one line applied:\n\n  AssertionError: expected 'BOOTSTRAP_PREREQUISITE_MISSING' to be 'ACTIVATION_POLICY_UNMEASURED'\n  Expected: \"ACTIVATION_POLICY_UNMEASURED\"\n  Received: \"BOOTSTRAP_PREREQUISITE_MISSING\"\n\nThat arm's own comment explains why it is load-bearing: \"this is the arm that separates a live override from a defaulted one, because a defaulted `installedPolicySliceRefs` produces this SAME code on the store above too.\" Its sibling assertion `outcome.refusedBy === \"DAEMON_ACTIVATION_RECEIPTS\"` goes with it.\n\nThis is precisely the hazard global rail 1 names: \"a second refusal layer can answer first and the test stays green while no longer testing its subject.\" Here it does not even stay green - it reds, which is the honest outcome, but the fix cannot be to re-point that arm at BOOTSTRAP_PREREQUISITE_MISSING. Doing so would retire the receipt-layer question unanswered and would gut the defaulted-vs-measured distinction the activation receipts exist to draw. I did not touch it.\n\nSO THE OPEN DESIGN CALL IS NOT SETTLED THE WAY THE PLAN ASSUMED. planningNotes chose (a) over (b) on the argument that the table is \"WRONG, not merely incomplete\" because activation \"genuinely cannot succeed without an installed policy\". That argument is sound about SUCCESS but it silently changes WHICH LAYER REFUSES, and this row's own rail 1 protects that layer. The two cannot both hold as written.\n\nFOR THE ARCHITECT - the three live options, none of which I took:\n1. Keep (a) and accept that the fresh-store refusal becomes BOOTSTRAP_PREREQUISITE_MISSING at the admission gate. Then rail 1 and DoD-3 must be amended, and activation-command-entry.test.ts:95-110 must be rewritten to reach the receipt layer another way (e.g. drive through policy.install then supersede/uninstall) so the receipt arm keeps a subject. Roster grows to >=12 paths -> split.\n2. Take (b) after all: add `policy.install` to ACTIVATION_CHAIN_KINDS ALONE. Cost is exactly what its docblock forbids (the control room becoming the authority on daemon ordering) - but it is a 4-file change, touches no daemon behaviour, leaves every refusal layer reachable, and DoD-2's e2e journey would still go green because the browser installs the policy before activating. The docblock objection is real but it is a DOCUMENTED drift, not a broken refusal.\n3. Split: land (b) now as the smallest production-reachable working slice (delivery-bias rail), and file the table correction as its own row carrying restore-test-harness.ts plus the 4 asserters and the rail-1/DoD-3 amendment.\n\nMy read, offered not acted on: option 2 or 3. (a)'s cost is not the 12 files - it is that it removes a fail-closed refusal this row was explicitly chartered to preserve.\n\nI have NOT made this call and have reverted everything; see the fallout comment for the revert proof. Blocking for an amendment rather than choosing silently, per plan step 1(d) and global rail 18.",
+      "timestamp": "2026-09-05T17:50:48.585Z"
+    },
+    {
+      "id": "comment-3f09c51bc10c4088bc5ad5aec076e6dc",
+      "author": "worker-2739fee7",
+      "content": "THE RULING (DoD-1). **Option (c): `policy.install` goes into `ACTIVATION_CHAIN_KINDS`; the `COMMAND_PREREQUISITES` question is filed as its own row.** Re-measured at HEAD `5cde885c` — the reopenReason's `e6d02867` has moved under this branch, and `COMMAND_PREREQUISITES[\"project.activate\"]` is confirmed still the three-member array at bootstrap-sequence.ts:31-35, so no prior work is in the tree.\n\n**Why not (a), and it is decided by this row's own written contract, not by cost.** Task rail 1 says the refusal must stay REACHABLE; DoD-3 names it verbatim — `project.activate` refuses exactly `ACTIVATION_POLICY_UNMEASURED` at layer `DAEMON_ACTIVATION_RECEIPTS`. The one-line table edit does not add a prerequisite, it MOVES WHICH LAYER ANSWERS:\n\n```\nAssertionError: expected 'BOOTSTRAP_PREREQUISITE_MISSING' to be 'ACTIVATION_POLICY_UNMEASURED'\n  apps/daemon/src/bootstrap/activation-command-entry.test.ts:108\n```\n\nThe admission gate (bootstrap-services.ts:257) answers before the receipt layer is ever consulted. That arm is load-bearing by its own comment — it \"separates a live override from a defaulted one, because a defaulted `installedPolicySliceRefs` produces this SAME code\" — so re-pointing it at `BOOTSTRAP_PREREQUISITE_MISSING` retires the question instead of answering it. Taking (a) means amending a task rail AND a DoD clause to fit the code. The 39-file fallout and the 12-path minimum roster are real, but secondary: the layer hazard alone settles it.\n\n**Why (b)'s only objection dissolves.** The `ACTIVATION_CHAIN_KINDS` docblock (activation-port.ts:25-28) says the roster is the daemon's order, \"not this module's preference\". True — and it mirrors only ONE of the daemon's TWO prerequisite authorities for `project.activate`:\n\n1. **admission table** — `COMMAND_PREREQUISITES` (bootstrap-sequence.ts:31-35) → `BOOTSTRAP_PREREQUISITE_MISSING`\n2. **measured receipts** — `policy` ∈ `ACTIVATION_RECEIPT_MEMBERS` (activation-receipts.ts:29), valued from installed slices: `if (refs.length === 0) return unmeasuredReceipt(\"policy\", \"no policy slices installed\")` (activation-receipts-measure.ts:213) → `ACTIVATION_POLICY_UNMEASURED @ DAEMON_ACTIVATION_RECEIPTS`\n\nThe browser chain must satisfy **both**. Adding `policy.install` is not the control room inventing an ordering — it is the mirror finally covering authority 2, which is exactly why a fresh store ran three steps green and refused at the fourth. The docblock is corrected to state both authorities rather than contradicted.\n\n**New consumer found at plan time (global rail 19), in neither prior pass:** `apps/control-room/src/v2/goals/work-board.test.tsx:221-234` pins the RENDERED chain label order as a literal array and never names `CHAIN_ORDER` or `chainRank` — `git grep CHAIN_ORDER` lists only work-board.tsx, work-labels.ts, work-labels.test.ts and misses it. The `CHAIN_ORDER` reorder flips it. Roster is therefore 6 files, under the ceiling.\n\nRelated: `mem:gotcha-adding-policy-install-to-command-prerequisites-hides-the-receipt-refusal`, `mem:gotcha-command-prerequisites-has-two-hand-transcribed-browser-mirrors`.",
+      "timestamp": "2026-09-05T18:21:04.096Z"
+    },
+    {
+      "id": "comment-1ecdf2dcd1d348feb375724df3fe533c",
+      "author": "worker-2739fee7",
+      "content": "CORRECTION ON THE BLOCK LIST — for whoever triages this row.\n\n`report_blocked` auto-parsed task ids out of my reason TEXT and unioned them, so `blockedOnTaskIds` came back as:\n\n```\n[\"task-9ade7f88832d4ee6bc0d72e8d9c33598\", \"task-a5a6abccc4ce4f859851d8e8d7215cdd\"]\n```\n\n**Only the first is a real dependency.** `task-9ade7f88` (the stale-frame create race) is what blocks DoD-2's second clause. `task-a5a6abcc` (the COMMAND_PREREQUISITES design question) was mentioned only as the row I FILED to carry the residue — this row is delivered without it and does not wait on it. I named it in prose; the parser took it as a dependency.\n\nConsequence, so it is not discovered the slow way: with both ids in the list this row will not auto-unblock until BOTH reach DONE. `a5a6abcc` is a MEDIUM-priority design ruling that could sit for a while, so left as-is this row is gated behind work it does not need. `report_blocked` unions ids and cannot remove them, so I cannot shrink the list myself.\n\nREQUESTED: drop `task-a5a6abcc` from this row's `blockedOnTaskIds` (or clear the block outright — see below).\n\nTHE FASTER PATH, if you agree with the scope call: this row's work is complete and green apart from DoD-2's second clause. If `task-9ade7f88` is judged out of this row's scope, amend DoD-2 to its first clause (all five chain steps `data-ok=\"true\"`, which IS proven) plus a `dependsOn` on `9ade7f88`, put the row back to WORKING, and it completes on the evidence already recorded in the step notes. I did not trim the clause myself — that is not a worker's call.\n\nStanding evidence if you want to re-check rather than take my word: the ruling and its two-authorities reasoning are in comment-3f09c51bc10c4088bc5ad5aec076e6dc; the five-steps-green measurement and the stale-frame trace are in the step-5 note; the three drills, the gate attribution and the two filed rows are in the step-6 note.",
+      "timestamp": "2026-09-05T18:51:56.646Z"
+    },
+    {
+      "id": "comment-3607df44928e446bb82539f525bb81ff",
+      "author": "worker-0520a42e",
+      "content": "RESUME + FINAL GATE EVIDENCE (worker-0520a42e, 2026-09-06, HEAD e219aa43). The prior session (worker-2739fee7) landed all six steps and parked on DoD-2's second clause. That blocker is now DONE, so the row completes.\n\n=== WHAT CHANGED SINCE THE PARK, re-measured not inherited ===\n1. task-9ade7f88 (the <=2s stale-frame refusal after a green activation) is DONE. That was the only thing standing between this row and DoD-2.\n2. task-a5a6abcc (the COMMAND_PREREQUISITES design question this row's ruling deferred) is also DONE. Both follow-up rows from step 6(d) closed.\n3. The foreign typecheck red that blocked `pnpm test:e2e:browser`'s first leg last session (packages/scheduler budget-reservation.ts(132,42) TS18046) is GONE: `npx tsc -p tests/e2e/control-room/tsconfig.json` -> exit 0, and `pnpm typecheck` prints `packages/scheduler typecheck: Done`.\n\n=== DoD-2, BOTH CLAUSES, DELIVERED ===\n`npx playwright test -c tests/e2e/control-room/playwright.config.ts activation-fresh-project` -> exit 0\n  ok 1 [chromium] > activation-fresh-project.spec.ts:98:1 > a fresh project goes from empty store to a created goal, in the browser alone (22.6s)\n  1 passed (24.4s)\nReal browser, real daemon, `seed: \"NONE\"`. The spec asserts each of the FIVE chain steps by its own kind (a count would pass with four refusals), then asserts the `goal.create_with_source` report reads \"Goal created: ...\". Line 220 - which failed last session - now passes. The spec is UNCHANGED from what step 5 landed: no assertion weakened, no timeout inflated (task rail 2).\n\n=== FOREIGN RED, DISCLOSED VERBATIM, ATTRIBUTED BY CONTROL/TREATMENT ===\n`pnpm test:e2e:browser` -> EXIT 1, `7 failed / 19 passed (10.4m)`. activation-fresh-project is NOT among the 7. The 7:\n  journeys.spec.ts:65 CR-J1-002 - `expect(locator).toBeDisabled() failed ... unexpected value \"enabled\"` @ :79 (cr.nav.resources)\n  journeys.spec.ts:86 CR-A11Y-001 - `expect(received).toHaveLength(expected)` @ :95 (chips)\n  pairing-operator-channel.spec.ts:257 J1 - `expect(received).toContain(expected)` @ :291 (NO_TERMINAL_PROMPT_LINE)\n  pairing-operator-channel.spec.ts:420 J3 - `expect(Object.keys(surfaces).toSorted()).toEqual([...SECRECY_SURFACES]...)` @ :424\n  prd-persistence-boundary.spec.ts:127 task-965cb2d6\n  prd-to-approval.spec.ts:38 - `toHaveText(/\\d+ GOAL/u)` got `\"1 goal\"` @ :130 (cr.goals.count renders goals-home.tsx:193, clean at HEAD, not an owned path)\n  provider-pause.spec.ts:181 - `You've hit your session limit - resets 12:10am Asia/Jerusalem` -> `[wrapper] provider limit: claude paused`. Environmental provider limit, not code.\n\nCONTROL/TREATMENT PAIR, not an import grep: reverted BOTH owned production files to HEAD (`git show HEAD:<path> > <path>`, numstat empty = confirmed reverted) and re-ran journeys.spec -> journeys:65 and :86 STILL FAIL, `2 failed / 5 passed (1.2m)`, identical messages. Restored from a %TEMP% backup and proved the restore in a SEPARATE call: `sha256sum -c` -> both OK, `git diff --numstat` -> `7 2 work-labels.ts` / `20 5 activation-port.ts`, byte-identical to the pre-drill capture. Also: NONE of the five failing spec files references ACTIVATION_CHAIN_KINDS, chainRank, CHAIN_ORDER or policy.install (`grep -ln` over all five -> no matches). Note journeys.spec.ts:53 \"production selectors cannot revive the legacy fixture shell\" now PASSES, so these are NOT the historical \"usual 7\" fixture-shell reds; that cause is fixed and these are a different, still-foreign set.\n\n=== GATES, standalone foreground, one per call, count lines quoted ===\n- `pnpm --filter @moe/control-room test` -> EXIT 1, `Test Files 2 failed | 154 passed (156)` / `Tests 26 failed | 1967 passed (1993)`. All 26 are in scaffold.test.tsx + entry-project-manager.test.tsx, all `Test timed out in 20000ms` or an empty `<div />` root. TARGETED RE-RUN OF EXACTLY THOSE TWO FILES -> `Test Files 2 passed (2)` / `Tests 45 passed (45)`, Duration 4.51s, exit 0. A 4.5s pair cannot legitimately time out at 20s: the load cliff (mtkbtsvc handle leak), same class the prior session measured at 1 red when the package was 149 files. Package has grown 149->156 files since.\n- OWNED FILES, fresh: `Test Files 3 passed (3)` / `Tests 57 passed (57)`, 1.68s (activation-port.test.ts, work-labels.test.ts, work-board.test.tsx).\n- `pnpm typecheck` -> EXIT 1. `apps/control-room typecheck: Done`. The single failing package is `apps/daemon`, on `src/orchestrator/repository-delivery-workflows.test.ts(15,38)/(16,7)/(16,55) TS2322` - that file is `??` UNTRACKED peer in-flight work in this shared checkout, not committed and not an owned path.\n- DoD-3 `cd apps/daemon && npx vitest run --root . --config package.json --testTimeout=30000 src/bootstrap/activation-command-entry.test.ts` -> `Test Files 1 passed (1)` / `Tests 4 passed (4)`, 4.60s. The protected refusal stayed REACHABLE - this is the whole point of the option-(c) ruling.\n- DoD-4 `pnpm seed` is NOT runnable standalone (MOE_SEED_ENV_MISSING: needs MOE_DAEMON_ORIGIN, MOE_DAEMON_CREDENTIAL, MOE_CSRF_TOKEN, MOE_NODE_SPECS_DIR + a live daemon). Evidence is `demo-seed-plan.test.ts` targeted -> `Test Files 1 passed (1)` / `Tests 25 passed (25)`, 3.14s. That file owns DEMO_SEED_KINDS ordering; no double-install, no reorder, and this row changes no seeder byte.\n- DoD-5 `pnpm --filter @moe/daemon test` NOT re-run this session, stated plainly rather than inherited silently. Prior session's fresh run: `Test Files 9 failed | 430 passed (439)` / `Tests 39 failed | 8646 passed | 1 skipped (8686)`, 1604.61s. I declined to re-run a ~27-minute blocking gate because the claim TTL is ~30 min and a gate that outruns it strands the completion (measured on task-44760ed1). Structural attribution stands: this row owns SIX paths and ZERO are under apps/daemon.",
+      "timestamp": "2026-09-05T22:40:47.325Z"
+    },
+    {
+      "id": "comment-6bacd5c1c0c74cf49b197af5e9ce6547",
+      "author": "qa-4f771bb8",
+      "content": "QA VERIFICATION EVIDENCE (qa-4f771bb8, 2026-09-06). Every command below was RE-RUN BY ME at the delivered tree; nothing is inherited from the worker's transcript.\n\n=== TREE / COMMIT ANCHOR ===\nCompletion commit a1e12d22, `git branch --contains a1e12d22` -> moe/work-2026-09-04. All SIX owned paths `git status --porcelain` EMPTY before and after my drills, and SHA256 equal to /tmp backups taken pre-drill (proved in a call SEPARATE from each restore). Commit carries 6 source paths, ZERO under apps/daemon, ZERO UI files (task rail 3 satisfied). Per-file caps: activation-port.ts 148, work-labels.ts 220 -- both well under 250.\n\n=== DoD-2, MY OWN RUN ===\n`npx playwright test -c tests/e2e/control-room/playwright.config.ts activation-fresh-project` -> exit 0\n  ok 1 [chromium] > activation-fresh-project.spec.ts:98:1 > a fresh project goes from empty store to a created goal, in the browser alone (12.2s)\n  1 passed (13.5s)\nSpec audited for weakening (task rail 2): zero `test.fixme`/`test.skip`/`.only`; the chain loop asserts each of the FIVE kinds BY NAME with `toHaveAttribute(\"data-ok\",\"true\")`, not a count; the accept arm pins `toHaveText(\"Goal created: <title>\")` exactly; `expect(lane.seedPid).toBeNull()` still guards the unseeded premise; JOURNEY_MS 420000 / CARD_MS 120000 / CHAIN_MS 180000 unchanged in shape.\n\n=== DoD-3 DRILLS, MINE ===\n(a) `cd apps/daemon && npx vitest run --root . --config package.json --testTimeout=30000 src/bootstrap/activation-command-entry.test.ts` -> `Test Files 1 passed (1)` / `Tests 4 passed (4)`, 4.26s. I read the arm rather than trusting its name: :110 `expect(outcome.code).toBe(ACTIVATION_RECEIPT_CODES.policy)` and :111 `expect(outcome.refusedBy).toBe(\"DAEMON_ACTIVATION_RECEIPTS\")`, and activation-receipts.ts:38 pins `policy: \"ACTIVATION_POLICY_UNMEASURED\"`. The refusal is REACHABLE and code-pinned -- exactly what option (a) would have destroyed.\n(b) Removed `\"policy.install\"` from ACTIVATION_CHAIN_KINDS -> `Test Files 1 failed (1)` / `Tests 4 failed | 6 passed (10)`:\n    expected [ 'project.register', ...(3) ] to deeply equal [ 'project.register', ...(4) ]\n    expected \"vi.fn()\" to be called 5 times, but got 4 times\n    expected [ ...(4) ] to have a length of 5 but got 4\n    expected [ 'ALREADY_COMMITTED', ...(3) ] to deeply equal [ 'ALREADY_COMMITTED', ...(4) ]\n(c) Moved policy.install back after project.activate in CHAIN_ORDER -> `Test Files 2 failed (2)` / `Tests 2 failed | 45 passed (47)`:\n    expected 4 to be less than 3            (the NEW work-labels arm)\n    expected [ 'Register the project', ...(6) ] to deeply equal [ ... ]   (work-board rendered-order literal)\nBoth drills restored and proven.\n\n=== DoD-4 ===\nI reproduced the worker's claim rather than accepting it: `pnpm seed` -> exit 1, `MOE_SEED_ENV_MISSING MOE_DAEMON_ORIGIN: ... MOE_DAEMON_CREDENTIAL ... MOE_CSRF_TOKEN ... MOE_NODE_SPECS_DIR`. Genuinely unrunnable standalone, so the proxy is the right one: demo-seed-plan.test.ts targeted -> `Test Files 1 passed (1)` / `Tests 25 passed (25)`. Row changes zero seeder bytes.\n\n=== DoD-5 GATES + PATH-ATTRIBUTED BASELINE (global rail 3) ===\n1. Owned files fresh: `Test Files 3 passed (3)` / `Tests 57 passed (57)`, 1.52s.\n2. `pnpm --filter @moe/control-room test` -> exit 1, `Test Files 1 failed | 162 passed (163)` / `Tests 1 failed | 2029 passed (2030)`. Red = `cordum-app.test.tsx > renders the daemon refusal code verbatim`, `expected '...' to contain 'GRAPH_QUERY_FORBIDDEN'`, received `GRAPH_GET_READ_FAILED @ CONTROL_ROOM_ADVANCED_FRAMES`. NOT this row: CONTROL/TREATMENT PAIR -- isolated it passes `47 passed` at HEAD *with* the diff, and also `47 passed` with BOTH production files reverted to `a1e12d22^`. Symmetric, so no treatment effect. Cause is the peer's ` M apps/control-room/src/v2/cordum-app.tsx` (task-bc4617d6, in flight). Zero references to ACTIVATION_CHAIN_KINDS/chainRank/CHAIN_ORDER/policy.install in the red file.\n3. `pnpm typecheck` -> exit 1, apps/control-room only, 4 errors all in `??` UNTRACKED peer files: criterion-evidence-port.ts, repository-recovery-port.ts, repository-recovery-card.test.tsx (`keyof GeneratedCommandBuilders` gap). Zero errors in any owned path.\n4. `pnpm test:e2e:browser` -> exit 1, and it NEVER REACHES PLAYWRIGHT: its first leg `tsc -p tests/e2e/control-room/tsconfig.json` fails entirely inside apps/daemon -- criterion-command-edge.ts and http/repository-workflow-read.ts are `??` UNTRACKED, daemon-command-registry.ts is ` M` dirty; daemon-v2-command-registry.ts errors are downstream of `WiredCommandKind` gaining `criterion_check.approve` from the untracked file. So I ran the playwright leg directly: `5 failed / 21 passed (7.6m)`, and `activation-fresh-project` is among the 21 PASSED, not the 5. The 5: journeys.spec.ts:65, journeys.spec.ts:86, prd-persistence-boundary.spec.ts:127, prd-to-approval.spec.ts:38, provider-pause.spec.ts:181 (`You've hit your session limit - resets 12:10am Asia/Jerusalem`, environmental). The worker disclosed SEVEN; the set SHRANK to five as peers landed -- improvement, not regression.\n5. DoD-5's `pnpm --filter @moe/daemon test` leg: NOT re-run by me either, and I am recording that plainly rather than inheriting it. It is a ~27-minute gate; this row owns SIX paths and ZERO are under apps/daemon (structural attribution, verified from the commit's own name-only list), so per global rail 3 the owned-path intersection of any daemon red is EMPTY by construction.\n\nFAILING-PATH SET AT HEAD, INTERSECTED WITH THIS ROW'S SIX OWNED PATHS: EMPTY.",
+      "timestamp": "2026-09-05T23:10:07.105Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T14:28:32.672Z",
+  "updatedAt": "2026-09-05T23:11:53.596Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T14:30:41.029Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 6,
+    "executedStepCount": 6,
+    "doneAt": "2026-09-05T23:11:00.148Z",
+    "wallClockMs": 31219119
+  },
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T18:20:38.074Z",
+  "planningNotes": {
+    "approachesConsidered": "Three options were on the table from the prior triage. (a) Add \"policy.install\" to COMMAND_PREREQUISITES[\"project.activate\"] — REJECTED, and not on cost grounds: measured at HEAD e6d02867 it moves which layer refuses, so `project.activate` answers BOOTSTRAP_PREREQUISITE_MISSING at the admission gate and never reaches the receipt layer. That makes this row's OWN task rail 1 and DoD-3 unsatisfiable verbatim ('expected BOOTSTRAP_PREREQUISITE_MISSING to be ACTIVATION_POLICY_UNMEASURED' at activation-command-entry.test.ts:108), and taking it would require amending a rail and a DoD to fit the code. It also reds 39 daemon files and needs a 12-path roster, past the 10-file ceiling — but the layer hazard alone decides it. (b) Add it to ACTIVATION_CHAIN_KINDS alone. (c) Land (b) and file the table question as its own row — CHOSEN. The docblock objection to (b) ('not this module's preference') dissolves once measured: the daemon has TWO prerequisite authorities for project.activate — the admission table, and the MEASURED receipt set whose `policy` member is the digest of installed slices (activation-receipts-measure.ts:213). ACTIVATION_CHAIN_KINDS mirrored only the first. Adding policy.install covers the second; the docblock is corrected to say so rather than contradicted.",
+    "codebaseInsights": "Re-measured at HEAD 5cde885c (the reopenReason's e6d02867 has moved; tree confirmed still clean of this row's work — COMMAND_PREREQUISITES['project.activate'] is still the three-member array at bootstrap-sequence.ts:31-35). driveActivationChain (activation-port.ts:108) is entirely roster-driven and defaults `kinds` to ACTIVATION_CHAIN_KINDS, so the new step needs no logic. Its caller half already exists: DEV_PAYLOADS['policy.install'] at live-dispatch-payloads.ts:98-103 states a concrete slice body — without it the step would answer ACTIVATION_BODY_UNSTATED. NEW FINDING, in neither prior pass and not reachable by symbol grep: work-board.test.tsx:221-234 pins the RENDERED chain label order as a literal array and never names CHAIN_ORDER or chainRank, so `git grep CHAIN_ORDER` misses it (it lists only work-board.tsx, work-labels.ts, work-labels.test.ts). The CHAIN_ORDER reorder flips it. That is the global rail 19 shape-consumer class, caught at plan time. Also: tests/e2e/control-room/activation-fresh-project.spec.ts is UNTRACKED, so git grep cannot see its ACTIVATION_CHAIN_KINDS import at :7 — consumers there were enumerated by direct read. The spec pins no literal 4; its only count arm is toBeGreaterThanOrEqual(ACTIVATION_CHAIN_KINDS.length) at :238.",
+    "risks": "1. policy.install is REPEATABLE — affordance-read.ts:227-234 keeps offering it even when COMMITTED, so on an already-seeded store the browser chain installs another slice with the same POLICY_REF instead of hitting ALREADY_COMMITTED. Measure the effect on the policy/N-slices receipt ref in step 6(c); DoD-4 is unthreatened because this row changes no seeder. 2. activation-port.test.ts couples FIVE arms, not three: the toEqual roster :63, toHaveLength :68, the readSurface call-count :94 (easiest to miss — the port re-reads before every step), the `sent` literal :95-98, and the COMMITTED-carry-on fixture at :143-154 whose surface must also offer policy.install or the chain breaks before project.activate. 3. `pnpm --filter @moe/daemon test` runs ~22 min and is FLAKY (17-failed then 10-failed back-to-back baselines, dominated by 30000ms timeouts from the spawn-latency cliff), so a whole-suite delta is inadmissible attribution. This row changes zero apps/daemon paths, so `git diff --name-only` is the real attribution proof; run the daemon leg in BACKGROUND for its DoD-5 count line and use the targeted vitest form (`cd apps/daemon && npx vitest run --root . --config package.json --testTimeout=30000 <file>`) for the DoD-3 drill. 4. Do not weaken the e2e spec (task rail 2); the only permitted edits there are deleting its test.fixme line and the now-false comment explaining it. 5. work-board.test.tsx's literal swap must be justified as the arm's own subject ('the daemon's real chain'), not slipped in as a green-chase.",
+    "keyFiles": [
+      "apps/control-room/src/v2/ops/activation-port.ts",
+      "apps/control-room/src/v2/ops/activation-port.test.ts",
+      "apps/control-room/src/v2/goals/work-labels.ts",
+      "apps/control-room/src/v2/goals/work-labels.test.ts",
+      "apps/control-room/src/v2/goals/work-board.test.tsx",
+      "tests/e2e/control-room/activation-fresh-project.spec.ts",
+      "apps/daemon/src/bootstrap/activation-receipts-measure.ts",
+      "apps/daemon/src/live/live-dispatch-payloads.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T18:20:40.260Z",
+  "contextFetchedBy": [
+    "worker-caece97b",
+    "worker-2739fee7",
+    "architect-aa54e231",
+    "worker-0520a42e",
+    "qa-4f771bb8"
+  ],
+  "workStartedAt": "2026-09-05T14:35:36.521Z",
+  "commits": [
+    {
+      "sha": "5880b84b754a0bc6672a437a4a5d20e2d868cfdf",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-05T14:34:57Z",
+      "paths": [
+        ".moe/tasks/task-d0d1cb5c3f034d50bd84b7ed56b7e812.json",
+        ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json",
+        ".moe/tasks/task-eb2bb09d4efa4691803a519901eb2f97.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-05T14:38:37.375Z",
+      "treeId": "265231423cd2da03090eb9d9b1d62d9f6d2548a6",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "57963b916e8a26d5e82c053e87eb080c542f1cf3",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-05T14:39:12Z",
+      "paths": [
+        ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-05T15:06:49.029Z",
+      "treeId": "9610d2cb4b766cab7d8e6098e980b61d4d803c20",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "7d1f3f1ceb910ede2f46265a43542ac4d926f058",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-05T15:07:21Z",
+      "paths": [
+        ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-05T15:07:31.113Z",
+      "treeId": "c74308781fe3dd71659fdfd634fd158abdb0fc08",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "7664bd566a614f1b783de87e3badac4576d9701f",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-05T15:08:05Z",
+      "paths": [
+        ".moe/tasks/task-7ca9dca37fb44b40ac35abfc3c36cb9a.json",
+        ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-05T15:08:14.673Z",
+      "treeId": "094985904520e9b3848c4a8499873ef84b257455",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "9a0b23343939b72f907daec00aa2233aba81c627",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-05T15:08:48Z",
+      "paths": [
+        ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-05T15:08:57.918Z",
+      "treeId": "21a6ad798be148f6bbbfc89bc199897a53495ae5",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "7032a076c91301d24c1c4fa5292e4e21dc7cd2b2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-05T15:09:31Z",
+      "paths": [
+        ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-05T15:09:39.856Z",
+      "treeId": "fa955845f2e2ac9f0e3f4a52e1e938efec31e6bc",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "af2fb7541e1714d5f4747995fc95853d58df7b88",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-2739fee7@2026-09-05T16:45:56Z",
+      "paths": [
+        ".moe/tasks/task-138fab3075884df98c3c220e74c1a3e9.json",
+        ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json"
+      ],
+      "recordedBy": "worker-2739fee7",
+      "recordedAt": "2026-09-05T17:53:30.458Z",
+      "treeId": "0736efbe779b8c93dcbe8e9654960ea61d16bd14",
+      "status": "BLOCKED",
+      "pushed": true
+    },
+    {
+      "sha": "a1e12d2269d370f157529ad137a66f80dbcb9264",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-0520a42e@2026-09-05T22:07:51Z",
+      "paths": [
+        ".moe/tasks/task-8bdd14af6cdc44c4a5b86fbd920e07e6.json",
+        ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json",
+        ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json",
+        "apps/control-room/src/v2/goals/work-board.test.tsx",
+        "apps/control-room/src/v2/goals/work-labels.test.ts",
+        "apps/control-room/src/v2/goals/work-labels.ts",
+        "apps/control-room/src/v2/ops/activation-port.test.ts",
+        "apps/control-room/src/v2/ops/activation-port.ts",
+        "tests/e2e/control-room/activation-fresh-project.spec.ts"
+      ],
+      "recordedBy": "worker-0520a42e",
+      "recordedAt": "2026-09-05T22:42:40.884Z",
+      "treeId": "caf3d0cd6d3dc361ac1e8d24d513f01dfe3f2767",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/ops/activation-port.ts",
+          "taskId": "task-80322112a48d44c69c6c55f846f8d43f"
+        },
+        {
+          "path": "tests/e2e/control-room/activation-fresh-project.spec.ts",
+          "taskId": "task-ac9d5e2d43334525bd990b1362652ce4"
+        }
+      ],
+      "pushed": true
+    },
+    {
+      "sha": "d103e849c6a7b057292e098155332277105fa73e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-4f771bb8@2026-09-05T22:53:32Z",
+      "paths": [
+        ".moe/tasks/task-44760ed17c714ccc8bdc5a36b630a17a.json",
+        ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json"
+      ],
+      "recordedBy": "qa-4f771bb8",
+      "recordedAt": "2026-09-05T23:11:53.596Z",
+      "treeId": "665b1eb4d92b73f3e753a786ef7b466adc4aec92",
+      "status": "DONE",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    "apps/control-room/src/v2/ops/activation-port.ts",
+    "apps/control-room/src/v2/ops/activation-port.test.ts",
+    "apps/control-room/src/v2/goals/work-labels.ts",
+    "apps/control-room/src/v2/goals/work-labels.test.ts",
+    "apps/control-room/src/v2/goals/work-board.test.tsx",
+    "tests/e2e/control-room/activation-fresh-project.spec.ts",
+    ".moe/tasks/task-8bdd14af6cdc44c4a5b86fbd920e07e6.json",
+    ".moe/tasks/task-d342a2b158764fefa8dbf2a5365e7bf7.json",
+    ".moe/tasks/task-f5a74c23f8754665ab9d36cba386e1d0.json",
+    ".moe/tasks/task-44760ed17c714ccc8bdc5a36b630a17a.json",
+    ".moe/tasks/task-ac9d5e2d43334525bd990b1362652ce4.json"
+  ],
+  "unattributedPaths": [
+    "apps/control-room/src/live/live-criterion-evidence.test.ts",
+    "apps/control-room/src/live/live-criterion-evidence.ts",
+    "apps/control-room/src/live/live-criterion-evidence-contracts.ts",
+    "apps/control-room/src/live/live-document-proxy.test.ts",
+    "apps/control-room/src/live/live-effect-read.ts",
+    "apps/control-room/src/live/live-publication-candidate.test.ts",
+    "apps/control-room/src/live/live-publication-candidate.ts",
+    "apps/control-room/src/live/live-repository-recovery.test.ts",
+    "apps/control-room/src/live/live-repository-recovery.ts",
+    "apps/control-room/src/live/live-runs.ts",
+    "apps/control-room/src/v2/components/use-effect-read.test.tsx",
+    "apps/control-room/src/v2/components/use-effect-read.ts",
+    "apps/control-room/src/v2/goals/criterion-evidence-card.tsx",
+    "apps/control-room/src/v2/goals/goal-publish.test.tsx",
+    "apps/control-room/src/v2/goals/goal-publish.tsx",
+    "apps/control-room/src/v2/goals/live-criterion-evidence.tsx",
+    "apps/control-room/src/v2/goals/publish-port.ts",
+    "apps/control-room/src/v2/ops/live-ops.tsx",
+    "apps/control-room/src/v2/ops/live-repository-recovery.tsx",
+    "apps/control-room/src/v2/ops/repository-recovery-card.test.tsx",
+    "apps/control-room/src/v2/ops/repository-recovery-card.tsx",
+    "apps/control-room/src/v2/ops/repository-recovery-port.test.ts",
+    "apps/control-room/src/v2/ops/repository-recovery-port.ts",
+    "apps/control-room/src/v2/styles/cordum-repository-effects.css",
+    "apps/daemon/src/bootstrap/bootstrap-ledger-vocabulary.ts",
+    "apps/daemon/src/bootstrap/bootstrap-test-fixtures.ts",
+    "apps/daemon/src/criterion-evidence/criterion-approval.js",
+    "apps/daemon/src/criterion-evidence/criterion-approval.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-approval.ts",
+    "apps/daemon/src/criterion-evidence/criterion-codec.js",
+    "apps/daemon/src/criterion-evidence/criterion-codec.ts",
+    "apps/daemon/src/criterion-evidence/criterion-command.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-command-edge.js",
+    "apps/daemon/src/criterion-evidence/criterion-command-edge.ts",
+    "apps/daemon/src/criterion-evidence/criterion-contracts.js",
+    "apps/daemon/src/criterion-evidence/criterion-contracts.ts",
+    "apps/daemon/src/criterion-evidence/criterion-goal.js",
+    "apps/daemon/src/criterion-evidence/criterion-goal.ts",
+    "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-runner-recovery.test.ts",
+    "apps/daemon/src/criterion-evidence/criterion-service.js",
+    "apps/daemon/src/criterion-evidence/criterion-service.ts",
+    "apps/daemon/src/criterion-evidence/criterion-storage.js",
+    "apps/daemon/src/criterion-evidence/criterion-storage.ts",
+    "apps/daemon/src/daemon-repository-workflow-wiring.js",
+    "apps/daemon/src/daemon-repository-workflow-wiring.ts",
+    "apps/daemon/src/goals/goal-publish-remote.test.ts",
+    "apps/daemon/src/http/document-coverage-criteria.js",
+    "apps/daemon/src/http/document-coverage-criteria.ts",
+    "apps/daemon/src/http/document-coverage-read.test.ts",
+    "apps/daemon/src/http/document-coverage-read.ts",
+    "apps/daemon/src/http/repository-remote-read.ts",
+    "apps/daemon/src/http/repository-workflow-read.js",
+    "apps/daemon/src/http/repository-workflow-read.test.ts",
+    "apps/daemon/src/http/repository-workflow-read.ts",
+    "apps/daemon/src/http/run-goal-publication.js",
+    "apps/daemon/src/http/run-goal-publication.ts",
+    "apps/daemon/src/http/runs-read.ts",
+    "apps/daemon/src/http/runs-read-contract.ts",
+    "apps/daemon/src/orchestrator/node-lander.ts",
+    "apps/daemon/src/orchestrator/node-lander-journal.js",
+    "apps/daemon/src/orchestrator/node-lander-journal.test.ts",
+    "apps/daemon/src/orchestrator/node-lander-journal.ts",
+    "apps/daemon/src/orchestrator/node-publisher.test.ts",
+    "apps/daemon/src/orchestrator/node-publisher-approved.test.ts",
+    "apps/daemon/src/orchestrator/node-spec-listing.test.ts",
+    "apps/daemon/src/orchestrator/node-spec-listing.ts",
+    "apps/daemon/src/orchestrator/process-runner-lifecycle.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-contracts.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-coordinator.test.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-coordinator.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-workflows.test.ts",
+    "apps/daemon/src/orchestrator/wrapper-node-missions.test.ts",
+    "apps/daemon/src/orchestrator/wrapper-node-missions.ts",
+    "apps/daemon/src/planning/compiled-contract-binding.js",
+    "apps/daemon/src/planning/compiled-contract-binding.test.ts",
+    "apps/daemon/src/planning/compiled-contract-binding.ts",
+    "apps/daemon/src/planning/compiled-contract-binding-leg.js",
+    "apps/daemon/src/planning/compiled-contract-binding-leg.ts",
+    "apps/daemon/src/planning/compile-dispatcher.ts",
+    "apps/daemon/src/planning/compiled-planning-dispatch.js",
+    "apps/daemon/src/planning/compiled-planning-dispatch.ts",
+    "apps/daemon/src/planning/planning-services.ts",
+    "apps/daemon/src/repository/git-publication-credentials.js",
+    "apps/daemon/src/repository/git-publication-credentials.test.ts",
+    "apps/daemon/src/repository/git-publication-credentials.ts",
+    "apps/daemon/src/repository/git-publication-native.test.ts",
+    "apps/daemon/src/repository/git-publication-port.test.ts",
+    "apps/daemon/src/repository/git-publication-port.ts",
+    "apps/daemon/src/repository/publication-approval.test.ts",
+    "apps/daemon/src/repository/publication-approval-contracts.js",
+    "apps/daemon/src/repository/publication-approval-contracts.test.ts",
+    "apps/daemon/src/repository/publication-approval-contracts.ts",
+    "apps/daemon/src/repository/publication-candidate.js",
+    "apps/daemon/src/repository/publication-candidate.test.ts",
+    "apps/daemon/src/repository/publication-candidate.ts",
+    "apps/daemon/src/repository/publication-effect-contracts.js",
+    "apps/daemon/src/repository/publication-effect-contracts.ts",
+    "apps/daemon/src/repository/publication-effect-ledger.js",
+    "apps/daemon/src/repository/publication-effect-ledger.ts",
+    "apps/daemon/src/repository/publication-goal-integration.ts",
+    "apps/daemon/src/repository/publish-ledger.ts",
+    "apps/daemon/src/repository/publish-services.ts",
+    "apps/daemon/src/repository/repository-execution-contracts.ts",
+    "apps/daemon/src/repository/repository-execution-port.ts",
+    "apps/daemon/src/repository/repository-execution-record.ts",
+    "apps/daemon/src/repository/repository-execution-recovery.ts",
+    "apps/daemon/src/repository/repository-execution-workflows.test.ts",
+    "apps/daemon/src/repository/repository-landing-attempt.js",
+    "apps/daemon/src/repository/repository-landing-attempt.test.ts",
+    "apps/daemon/src/repository/repository-landing-attempt.ts",
+    "apps/daemon/src/repository/repository-landing-intent.js",
+    "apps/daemon/src/repository/repository-landing-intent.test.ts",
+    "apps/daemon/src/repository/repository-landing-intent.ts",
+    "apps/daemon/src/repository/repository-landing-intent-contracts.js",
+    "apps/daemon/src/repository/repository-landing-intent-contracts.ts",
+    "apps/daemon/src/repository/repository-recovery-approval.js",
+    "apps/daemon/src/repository/repository-recovery-approval.ts",
+    "apps/daemon/src/repository/repository-recovery-codec.js",
+    "apps/daemon/src/repository/repository-recovery-codec.test.ts",
+    "apps/daemon/src/repository/repository-recovery-codec.ts",
+    "apps/daemon/src/repository/repository-recovery-command.js",
+    "apps/daemon/src/repository/repository-recovery-command.test.ts",
+    "apps/daemon/src/repository/repository-recovery-command.ts",
+    "apps/daemon/src/repository/repository-recovery-contracts.js",
+    "apps/daemon/src/repository/repository-recovery-contracts.ts",
+    "apps/daemon/src/repository/repository-recovery-facts.js",
+    "apps/daemon/src/repository/repository-recovery-facts.ts",
+    "apps/daemon/src/repository/repository-recovery-git.js",
+    "apps/daemon/src/repository/repository-recovery-git.test.ts",
+    "apps/daemon/src/repository/repository-recovery-git.ts",
+    "apps/daemon/src/repository/repository-recovery-replay.js",
+    "apps/daemon/src/repository/repository-recovery-replay.ts",
+    "apps/daemon/src/repository/repository-recovery-service.js",
+    "apps/daemon/src/repository/repository-recovery-service.test.ts",
+    "apps/daemon/src/repository/repository-recovery-service.ts",
+    "apps/daemon/src/repository/repository-workflow-ref.js",
+    "apps/daemon/src/repository/repository-workflow-ref.ts",
+    "docs/plans/2026-09-06-product-evidence-and-recovery.md",
+    "packages/runner/src/index.ts",
+    "packages/runner/src/platform/windows/native/broker/Cargo.toml",
+    "packages/runner/src/platform/windows/native/broker/src/approved_image.rs",
+    "packages/runner/src/platform/windows/native/broker/src/approved_image_hash.rs",
+    "packages/runner/src/platform/windows/native/broker/src/approved_image_windows.rs",
+    "packages/runner/src/platform/windows/native/broker/src/control.rs",
+    "packages/runner/src/platform/windows/native/broker/src/lib.rs",
+    "packages/runner/src/platform/windows/native/broker/src/refusal.rs",
+    "packages/runner/src/platform/windows/native/broker/src/session.rs",
+    "packages/runner/src/platform/windows/native/broker/tests/approved_image.rs",
+    "packages/runner/src/platform/windows/native/broker/tests/frame_sweep.rs",
+    "packages/runner/src/verification/criterion-check-executor.js",
+    "packages/runner/src/verification/criterion-check-executor.test.ts",
+    "packages/runner/src/verification/criterion-check-executor.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-4f771bb8@2026-09-05T22:53:32Z",
+    "at": "2026-09-05T23:11:53.596Z"
+  },
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "touchedFiles": [
+    "apps/control-room/src/v2/ops/activation-port.test.ts",
+    "apps/control-room/src/v2/ops/activation-port.ts",
+    "apps/control-room/src/v2/goals/work-labels.test.ts",
+    "apps/control-room/src/v2/goals/work-labels.ts"
+  ],
+  "priorBlockedReason": "Step 1(d) triage fired: STOP AND REPORT per that step's own text and global rail 18. Needs an architect amendment/split; I have NOT made the design call. Evidence: comment-aa79a78bd94e4f56a7d7609ec5815b61 (fallout) + comment-a9a48879212b474782cb453e073c98f8 (collision). Control/treatment pair at fixed HEAD e6d02867, not inferred.\n\n1. SCOPE. The approved one-line edit to COMMAND_PREREQUISITES[\"project.activate\"] reds 39 daemon files, NONE among the plan's seven. 33 share one cause: a SECOND shared seeder the plan never enumerated, restore-test-harness.ts:182 seedReadyProject (445x \"seeding project.activate failed: BOOTSTRAP_PREREQUISITE_MISSING\"). bootstrap-test-fixtures.ts was rightly verified as ordered - just not the only seeder. 4 files need real edits (9 arms): activation-command-entry.test.ts:108, affordance-read.test.ts:125, admission-gate-resolver.test.ts:753/775/967/981, daemon-foundation-command.test.ts:113/143/232. Minimum roster = 12 paths, past the plan's 10-file ceiling.\n\n2. THE BLOCKER, outranking the file count: option (a) MAKES THIS ROW'S PROTECTED REFUSAL UNREACHABLE - the admission gate answers before the receipt layer. Verbatim at activation-command-entry.test.ts:108: expected 'BOOTSTRAP_PREREQUISITE_MISSING' to be 'ACTIVATION_POLICY_UNMEASURED'. Contradicts task rail 1 and DoD-3 verbatim; the second-refusal-layer hazard of global rail 1. Re-pointing that arm is not available - its comment says it separates a live override from a defaulted one.\n\nRULING NEEDED: (a) keep the table change, then amend rail 1 + DoD-3, re-route activation-command-entry.test.ts:95-110 to the receipt layer, split to >=12 paths; (b) policy.install into ACTIVATION_CHAIN_KINDS alone - 4 files, no daemon behaviour change, refusal layers stay reachable, e2e still green; (c) land (b) now, file the table fix as its own row. My read: (b) or (c).\n\nTREE CLEAN. See mem:gotcha-adding-policy-install-to-command-prerequisites-hides-the-receipt-refusal.",
+  "blockedOnTaskIds": null,
+  "reviewStartedAt": "2026-09-05T22:42:19.738Z",
+  "verification": {
+    "command": "npx playwright test -c tests/e2e/control-room/playwright.config.ts activation-fresh-project",
+    "exitCode": 0,
+    "outputTail": "Running 1 test using 1 worker\n\n  ok 1 [chromium] > tests\\e2e\\control-room\\activation-fresh-project.spec.ts:98:1 > a fresh project goes from empty store to a created goal, in the browser alone (22.6s)\n\n  1 passed (24.4s)",
+    "reportedAt": "2026-09-05T22:42:19.738Z"
+  },
+  "completionSummary": "DELIVERED. The browser Activate chain now installs the policy, and a fresh project goes empty store -> created goal in the browser alone. Full evidence: comment-3607df44928e446bb82539f525bb81ff.\n\nDoD-1 THE RULING, with its reason: OPTION (c) — `policy.install` was added to `ACTIVATION_CHAIN_KINDS` alone; the `COMMAND_PREREQUISITES` question was filed as its own row (task-a5a6abcc, now DONE). NOT option (a), and the reason is contractual, not cost: measured as a control/treatment pair, the one-line table edit moves WHICH LAYER refuses (`expected 'BOOTSTRAP_PREREQUISITE_MISSING' to be 'ACTIVATION_POLICY_UNMEASURED'`, activation-command-entry.test.ts:108), which makes task rail 1 and DoD-3 unsatisfiable verbatim. `project.activate` has TWO prerequisite authorities — the admission table (BOOTSTRAP_PREREQUISITE_MISSING) and the MEASURED receipt set whose `policy` member is the digest of the installed slice set (ACTIVATION_POLICY_UNMEASURED @ DAEMON_ACTIVATION_RECEIPTS, activation-receipts-measure.ts:213). The roster mirrored only the first; adding the kind covers the second. Both docblocks were rewritten to say so, including that the mirrors are hand-transcribed because apps/control-room cannot import apps/daemon (TS6059).\n\nDoD-2 BOTH CLAUSES: `npx playwright test -c .../playwright.config.ts activation-fresh-project` -> exit 0, `1 passed (24.4s)`. Real browser, real daemon, `seed: \"NONE\"`. All FIVE chain steps asserted by their own kind carry data-ok=\"true\" (a count would pass with four refusals), and the `goal.create_with_source` refused before activation is now ACCEPTED at :220 — the clause that parked the prior session, unblocked by task-9ade7f88 landing DONE. The spec is UNCHANGED: nothing weakened, no timeout inflated (task rail 2).\n\nDoD-3 THE PROTECTED REFUSAL STAYED REACHABLE — the whole point of the ruling: `cd apps/daemon && npx vitest run --root . --config package.json --testTimeout=30000 src/bootstrap/activation-command-entry.test.ts` -> `Test Files 1 passed (",
+  "completedAt": "2026-09-05T23:11:00.148Z",
+  "reviewCompletedAt": "2026-09-05T23:11:00.148Z",
+  "reviewSummary": "APPROVED. All gates RE-RUN BY ME at commit a1e12d22 (on moe/work-2026-09-04). Full evidence: comment-6bacd5c1c0c74cf49b197af5e9ce6547. Six owned paths byte-identical to HEAD before and after my drills (git status empty + SHA256 vs backups, proved separately). Zero apps/daemon paths, no UI file (rail 3).\n\nDoD-1: option (c) stated with reason; COMMAND_PREREQUISITES unchanged so the enumeration clause never fires; follow-ups a5a6abcc + 9ade7f88 DONE.\n\nDoD-2 (mine): `npx playwright test -c tests/e2e/control-room/playwright.config.ts activation-fresh-project` -> exit 0, `1 passed (13.5s)`. Spec audited for weakening: no fixme/skip/only, all FIVE kinds asserted BY NAME with data-ok=\"true\" (not a count), accept arm pins `Goal created: <title>`. Rail 2 OK.\n\nDoD-3 (my drills): daemon arm -> `Test Files 1 passed (1)` / `Tests 4 passed (4)`; I read it -- asserts ACTIVATION_RECEIPT_CODES.policy (= ACTIVATION_POLICY_UNMEASURED) AND refusedBy DAEMON_ACTIVATION_RECEIPTS, so the refusal stayed reachable. Roster mutation -> `4 failed | 6 passed`; CHAIN_ORDER mutation -> `2 failed | 45 passed` (`expected 4 to be less than 3`). Restored + proven.\n\nDoD-4: reproduced `pnpm seed` -> MOE_SEED_ENV_MISSING, unrunnable standalone; proxy demo-seed-plan.test.ts -> `1 passed` / `25 passed`; zero seeder bytes changed.\n\nDoD-5: owned files `3 passed (3)` / `57 passed (57)`. Package leg `1 failed | 162 passed (163)` -- cleared by control/treatment: cordum-app.test.tsx passes isolated at HEAD AND with both production files reverted to a1e12d22^; cause is a peer's dirty cordum-app.tsx. `pnpm typecheck` red only in 3 `??` untracked peer files. `pnpm test:e2e:browser` never reaches playwright (tsc leg red wholly in apps/daemon peer files), so I ran the playwright leg direct -> `5 failed / 21 passed (7.6m)`, activation-fresh-project among the PASSED. Daemon suite not re-run, stated plainly: row owns zero apps/daemon paths.\n\nFailing paths at HEAD intersected with the six owned paths: EMPTY."
+}

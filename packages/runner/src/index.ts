@@ -392,3 +392,7 @@ export {
   captureFoundationWorkspaceDelta,
   proveFoundationPrelaunchTree,
 } from "./workspace/foundation-workspace-capture.js";
+
+export { createCriterionCheckExecutor, CRITERION_CHECK_EXECUTOR_VERSION,
+  type CriterionCheckExecution, type CriterionCheckExecutionResult, type CriterionCheckExecutor,
+} from "./verification/criterion-check-executor.js";

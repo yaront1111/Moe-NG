@@ -125,12 +125,20 @@ export function cutoverMarkerBindsReadiness(
     && generations.quiesceRecordSha256 === manifest.quiesceRecordSha256;
 }
 
+/**
+ * RECORDED pins, deliberately: this is the post-activation read. The marker binds the
+ * manifest's digest, source commit and four generations, and those are compared exactly; the
+ * static build pins were held to the running build when the manifest was written and when the
+ * marker was activated. Holding them again here meant a build pin bump un-bound every marker:
+ * v2 answered "not active", v1 answered "status unknown", and the activated project was locked
+ * out of both planes with no in-band re-cutover.
+ */
 function markerBindsCurrentReadiness(
   store: CutoverMarkerStore,
   projectId: string,
   marker: CutoverActivationMarker,
 ): boolean {
-  const readiness = readV2ReadinessManifest(store, { projectId });
+  const readiness = readV2ReadinessManifest(store, { pins: "RECORDED", projectId });
   return readiness.ok && cutoverMarkerBindsReadiness(marker, readiness);
 }
 

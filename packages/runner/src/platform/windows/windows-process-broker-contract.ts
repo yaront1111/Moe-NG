@@ -9,11 +9,12 @@ export const BROKER_LAYER_BY_WIRE = Object.freeze({
   2: "BROKER_PROTOCOL",
   3: "BROKER_NATIVE",
   4: "BROKER_STORE_LOCK",
+  5: "BROKER_APPROVED_IMAGE",
 } as const satisfies Readonly<Record<number, WindowsProcessLayer>>);
 
 /** The layer a refusal wire byte names, or null. Null is the closed-set answer. */
 export function brokerLayerFromWire(byte: number): WindowsProcessLayer | null {
-  if (byte === 1 || byte === 2 || byte === 3 || byte === 4) {
+  if (byte === 1 || byte === 2 || byte === 3 || byte === 4 || byte === 5) {
     return BROKER_LAYER_BY_WIRE[byte];
   }
   return null;

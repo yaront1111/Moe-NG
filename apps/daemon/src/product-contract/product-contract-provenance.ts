@@ -36,13 +36,21 @@ export interface ProvenanceJoin {
 }
 export interface ProvenanceRefused {
   readonly code: ProductContractProvenanceCode;
+  /** What the fence saw, in words a compiler seat can correct against. */
+  readonly detail: string;
   readonly layer: string;
   readonly ok: false;
 }
 export type ProvenanceResult = ProvenanceJoin | ProvenanceRefused;
 
-function refused(code: ProductContractProvenanceCode): ProvenanceRefused {
-  return Object.freeze({ code, layer: LAYER, ok: false });
+/** The one shape `sourceDocumentDigests` takes; a real seat guessed thirteen others (2026-09-05).
+ */
+export const SOURCE_DOCUMENT_DIGESTS_SHAPE =
+  "sourceDocumentDigests must be a non-empty array of bare lowercase sha256 hex strings "
+  + "(the contentSha256 values documents_source_read answers), never objects";
+
+function refused(code: ProductContractProvenanceCode, detail: string): ProvenanceRefused {
+  return Object.freeze({ code, detail, layer: LAYER, ok: false });
 }
 
 function firstAggregateEvent(store: SqliteEventStore, aggregateId: string): unknown {
@@ -66,24 +74,35 @@ export function validateRevisionProvenance(
   sourceDocumentDigests: unknown,
 ): ProvenanceResult {
   if (typeof goalRef !== "string" || goalRef.length === 0 || goalRef.length > 512) {
-    return refused("PRODUCT_CONTRACT_PROVENANCE_MALFORMED");
+    return refused(
+      "PRODUCT_CONTRACT_PROVENANCE_MALFORMED",
+      "goalRef must be a non-empty string of at most 512 characters",
+    );
   }
   const digests = exactDataArray(sourceDocumentDigests);
   if (digests === null || digests.length === 0
     || !digests.every((digest) => typeof digest === "string" && LOWER_HEX_64.test(digest))) {
-    return refused("PRODUCT_CONTRACT_PROVENANCE_MALFORMED");
+    return refused("PRODUCT_CONTRACT_PROVENANCE_MALFORMED", SOURCE_DOCUMENT_DIGESTS_SHAPE);
   }
   const event = firstAggregateEvent(store, goalRef);
-  if (event === null) return refused("PRODUCT_CONTRACT_PROVENANCE_GOAL_UNBOUND");
+  if (event === null) {
+    return refused("PRODUCT_CONTRACT_PROVENANCE_GOAL_UNBOUND", `no goal ${goalRef} in this store`);
+  }
   const decoded = decodeGoalCatalogEntry(
     event as Parameters<typeof decodeGoalCatalogEntry>[0], projectId,
   );
   if (!decoded.ok || decoded.entry.goalId !== goalRef || decoded.entry.binding === null) {
-    return refused("PRODUCT_CONTRACT_PROVENANCE_GOAL_UNBOUND");
+    return refused(
+      "PRODUCT_CONTRACT_PROVENANCE_GOAL_UNBOUND",
+      `goal ${goalRef} binds no PRD source in project ${projectId}`,
+    );
   }
   const binding = decoded.entry.binding;
   if (!digests.includes(binding.contentSha256)) {
-    return refused("PRODUCT_CONTRACT_PROVENANCE_DIGEST_MISSING");
+    return refused(
+      "PRODUCT_CONTRACT_PROVENANCE_DIGEST_MISSING",
+      `sourceDocumentDigests must include the goal's own PRD sha ${binding.contentSha256}`,
+    );
   }
   for (const digest of digests as readonly string[]) {
     // The binding's own digest is read WITH its sourceRef (the aggregate id needs
@@ -91,7 +110,12 @@ export function validateRevisionProvenance(
     const view = digest === binding.contentSha256
       ? readDocumentSourceView(store, projectId, digest, binding.sourceRef)
       : readDocumentSourceView(store, projectId, digest);
-    if (view.kind !== "VIEW") return refused("PRODUCT_CONTRACT_PROVENANCE_SOURCE_UNRESOLVED");
+    if (view.kind !== "VIEW") {
+      return refused(
+        "PRODUCT_CONTRACT_PROVENANCE_SOURCE_UNRESOLVED",
+        `no stored source text answers digest ${digest}`,
+      );
+    }
   }
   return Object.freeze({
     contentSha256: binding.contentSha256,

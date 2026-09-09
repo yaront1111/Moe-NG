@@ -1,0 +1,473 @@
+{
+  "id": "task-72b22fcf9da54b3b91dabf5b7392aff1",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "Environment variables reach the processes that need them, and the repository lists their names",
+  "description": "SPIDR child 2 of task-9ae492b373fa4e7aa6b1e91585f6e612 (architect-20a6d1eb, 2026-09-05). dependsOn child 1 task-d0c63cd8848a4da18ad3fbb8eb1d95c3 for the store.\n\nWHAT THIS ROW OWNS: DELIVERY. The verifier, preview and deploy process spawns receive the environment's variables merged UNDER the wrapper allowlist; the approved contract's deployment requirements enumerate the REQUIRED variable names so a goal can say which are unset; and a `.env.example` listing NAMES ONLY is generated into the repository through the lander. No UI - child 3.\n\nMERGED UNDER THE ALLOWLIST, not around it. `apps/daemon/src/orchestrator/agent-spawn-environment.ts` builds the seat env from a CLOSED roster (`RUNTIME_ENVIRONMENT_KEYS` at :14, `PROVIDER_ENVIRONMENT_PREFIXES` at :28, the codex surface measured against a specific CLI version at :22-24), and `verifier-process-runner.ts` spawns the verifier. Environment variables join that construction; they do not bypass it. A delivery path that hands a child `process.env` plus extras would undo the allowlist's whole purpose, which is that a seat sees what it needs and nothing else.\n\nTHE SPAWN HALF OF THE CANARY. Child 1 proved the value never appears in the store bytes, events, reads or receipts. This row proves the other two halves: the value DOES reach the child process that needs it, and does NOT appear in the WRAPPER LOG. Those pull in opposite directions and that is exactly why they are one row.\n\n`.env.example` IS NAMES ONLY. It is generated into the repository through the lander, so it is committed and visible to anyone with the repository - a values-carrying .env.example is the single most common way this class of feature leaks, and it would be committed and pushed.\n\nREQUIRED NAMES COME FROM THE CONTRACT: the compiler emits the deployment requirements' variable names, and a goal shows which are unset. Read them from the approved contract rather than a hand-kept list.",
+  "definitionOfDone": [
+    "The verifier, preview and deploy spawns receive the environment's variables MERGED UNDER the existing wrapper allowlist construction (agent-spawn-environment.ts / verifier-process-runner.ts) - not appended to a raw `process.env`. A test asserts the child's env contains the variable AND still excludes a host variable outside the allowlist, so the merge did not widen the surface.",
+    "THE SPAWN HALF OF THE CANARY: set `MOE_CANARY_<random>`, spawn a verifier, and assert (a) the CHILD SAW the value - assert from the child's own output, not from the parent's intent - and (b) the value appears NOWHERE in the wrapper log. Both halves in one test, because they pull in opposite directions and a delivery that logs what it delivers is the obvious failure.",
+    "The approved contract's deployment requirements enumerate the REQUIRED variable names, read from the contract rather than a hand-kept list, and a goal can report which are unset for a given environment - assert the unset set for a goal with two required names and one set.",
+    "`.env.example` carries NAMES ONLY and is generated into the repository through the lander. Assert the file's bytes contain every required name and NO value - this file is committed and pushed, so a value here is a value published.",
+    "An environment with no variables set delivers nothing and refuses nothing - a spawn must still work, since the verifier ran fine before this feature existed and must not start depending on it.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`."
+  ],
+  "taskRails": [
+    "MERGE UNDER THE ALLOWLIST, never around it. The closed env roster exists so a child sees what it needs and nothing else; a delivery that passes `process.env` plus extras destroys that and would be very hard to notice.",
+    "`.env.example` IS NAMES ONLY. It gets committed and pushed; a value in it is a value published.",
+    "THE VALUE REACHES THE CHILD AND NOT THE LOG. Assert both, from the child's own output and from the log bytes.",
+    "DELIVERY MUST NOT BECOME A DEPENDENCY: a project with no variables set must spawn exactly as it does today.",
+    "NO UI: the Environments screen and the goal's unset count are child 3."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "CONFIRM THE THREE CHILDREN DELIVERED. This row is a SPIDR shell: it was split because its six DoD items spanned four subsystems and one of them assumed structure that does not exist. Every criterion is delegated and named in this row's dependsOn:\n  - grandchild A task-945bb541777a4b789983382f9513f43c — DoD 1, 2, 5 (delivery under the allowlist, the spawn canary, the empty-environment no-op)\n  - grandchild B task-fd2d438f29d64830a2bd6110f2ded78b — the prerequisite this row's DoD 3 silently assumed: a deployment requirement that can NAME variables\n  - grandchild C task-971caed1c5ca46bd871a7ec1c6ca8de1 — DoD 3, 4 (the unset report, `.env.example`)\n\nWrite NO production code here. If a criterion is unmet the fix belongs in the child that owns it, via a comment and an amendment on that row.\n\nRead each child's `verification`, `completionSummary` and `reviewSummary` from get_context.epicSiblings rather than re-deriving their work. Then re-measure the two facts that drove the split, at the DELIVERED tree:\n  (a) `grep -n 'NO PLAINTEXT-RETURNING FUNCTION' apps/daemon/src/environment/environment-store.ts` — that header claim must STILL be true. Grandchild A was told to put the delivery read in its own module precisely so this stays greppable. If the claim is gone or the store now exports a value-returning function, A widened a security property this row cares about: say so and route it back.\n  (b) `grep -rn 'variableName\\|environmentVariable\\|requiredVariables\\|envVar' packages/contracts/src apps/daemon/src/planning` — at plan time this returned ZERO, which is why B exists. It must now return the field B added.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/environment/environment-store.ts",
+        "apps/daemon/src/orchestrator/agent-spawn-environment.ts"
+      ],
+      "note": "NO PRODUCTION CODE. Composition/verification step; zero files created or modified.\n\nALL THREE CHILDREN DONE AND LANDED ON moe/work-2026-09-04 (git log --grep 'Moe-Task: <id>'):\n- A task-945bb541 DONE, completion commit 53535f07 (= current HEAD). verification: `pnpm --filter @moe/daemon exec vitest run --root . --config package.json --testTimeout=90000 src/environment src/orchestrator/verifier-process-runner.test.ts src/orchestrator/agent-spawn-environment.test.ts` exit 0, `Test Files 10 passed (10)` / `Tests 191 passed (191)`. QA approved at 53535f07, re-ran that leg verbatim (exact match) + `pnpm typecheck` exit 0, and ran two of its own mutation drills.\n- B task-fd2d438f DONE, completion commit 16360623 (wip trailer chain 136cbee8..2c6cae40). verification: core slice `Test Files 10 passed (10)` / `Tests 167 passed (167)` + control-room `Test Files 2 passed (2)` / `Tests 87 passed (87)`, exit 0. QA re-ran the FULL control-room leg `Test Files 164 passed (164)` / `Tests 2034 passed (2034)`.\n- C task-971caed1 DONE after one qa_reject + retry; f4e1495b, fix c494d809 (HAND-LANDED by QA under the QA landing rule when the round-2 wrapper exit commit never fired), f011dffe. verification: `cd apps/daemon && node ../../node_modules/vitest/vitest.mjs run --root . --config package.json src/environment/ src/repository/controlled-profile/ src/repository/deployment/` exit 0, `Test Files 11 passed (11)` / `Tests 174 passed | 2 skipped (176)`. QA verified the fix at the PRODUCTION surface by calling generateControlledProfile directly.\n\nRE-MEASUREMENT (a) — HOLDS. `grep -n 'NO PLAINTEXT-RETURNING FUNCTION' apps/daemon/src/environment/environment-store.ts` -> `60: * NO PLAINTEXT-RETURNING FUNCTION IS EXPORTED FROM THIS MODULE.` Still true and still greppable. Corroborated, not just taken on the header's word: `grep -n '^export ' environment-store.ts` = 9 exports, the only read being `readEnvironmentVariables(config, environment): EnvironmentReadResult`, and `EnvironmentReadOk` is `{environment, ok, variables}` where each entry carries `fingerprintSha256` and no value (projection.ts:49-53, :105). `grep -n 'openEnvironmentValue' environment-store.ts` exits 1 — ZERO hits. A put the plaintext read in a NEW module as instructed: environment-delivery.ts exports `readEnvironmentDelivery` (:104) and `deliverEnvironment` (:153). Nothing to route back.\n\nRE-MEASUREMENT (b) — THE STEP'S LITERAL GREP RETURNS ZERO, AND THAT IS THE STEP'S PATHS BEING WRONG, NOT B FAILING. `grep -rn 'variableName\\|environmentVariable\\|requiredVariables\\|envVar' packages/contracts/src apps/daemon/src/planning` = zero hits (both dirs exist; grep ran). Those are the wrong locus, and this row's own planningNotes.codebaseInsights says so in as many words: \"`deploymentRequirements` is not in packages/contracts at all\". The V2 contract lives in packages/core/src/product-contract. Re-measured there with `git grep -n environmentVariableNames -- packages apps` = 27 hits across 8 files, i.e. B's field IS present:\n- packages/core/.../product-contract-v2-contract.ts:111 `readonly environmentVariableNames?: readonly string[]` (OPTIONAL, as risk 5 required)\n- packages/core/.../product-contract-v2-admission.ts:55 (DEPLOYMENT_REQUIREMENT_KEYS roster), :235-240 (read + freeze)\n- apps/control-room/src/v2/goals/gate1-contract-shape.ts:28, :107, :110 — the mirror\n- apps/daemon/src/environment/environment-required-variables.ts:93 `const declared = requirement.environmentVariableNames` — C's consumer edge, so the field is not a dangling producer (global rail 4 clause 1 satisfied by C, not by a promise).\n\nTREE STATE: all A/B/C production paths are CLEAN (committed) — `git status --porcelain` over apps/daemon/src/{environment,orchestrator,preview,repository}, packages/core/src/product-contract, apps/control-room/src/v2/goals shows exactly one entry and it is PEER DIRT: `?? apps/daemon/src/preview/preview-goal-landing.test.ts` (task-f5a74c23). Other peer dirt left untouched: `?? apps/daemon/src/deployment/`, `?? apps/daemon/src/mcp-design-read-query.{js,test.ts}`, `?? Moe-NG_Deep_Review_2026-09-05.md`, plus .moe/ and .codex/.grok config churn. Not reverted, not stashed, not staged.",
+      "startedAt": "2026-09-06T02:45:52.083Z",
+      "completedAt": "2026-09-06T02:47:34.931Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "CONFIRM THE TWO PROPERTIES THAT PULL AGAINST EACH OTHER, because no single child can see both and this is the only place they meet.\n\n(a) THE VALUE REACHES THE CHILD AND NOT THE LOG. Confirm grandchild A's canary arm asserts BOTH halves in ONE test and that the \"child saw it\" half reads the CHILD'S OWN OUTPUT rather than the parent's intent. An arm that asserts delivery from the parent's constructed object proves the parent's intention, not the child's environment. Also confirm the canary variable name is not one the `MOE_` scrub at agent-spawn-environment.ts:56 would drop — a scrubbed canary makes the log half pass for the wrong reason.\n\n(b) NAMES REACH THE REPOSITORY AND VALUES DO NOT. Confirm grandchild C's `.env.example` arm asserts required names are present AND that no required name is followed by a value. That file is committed and pushed, so a value in it is a value published.\n\nThen confirm the two NO-OP properties, which together are what stop this feature becoming a dependency:\n  - A: a spawn with an empty environment produces a child env BYTE-IDENTICAL to today.\n  - C: a contract naming no variables generates `.env.example` BYTE-IDENTICAL to today.\nBoth were specified as byte-identity rather than \"still works\" on purpose; a child that softened either to a success check has not discharged it.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "NO PRODUCTION CODE. Read-only confirmation of four properties at the delivered tree; zero files created or modified.\n\n(a) VALUE REACHES THE CHILD AND NOT THE LOG — CONFIRMED, ONE TEST, CHILD'S OWN OUTPUT.\n`environment-delivery.test.ts:442-508`, a single `it(...)`, both halves inside it:\n- (a-half) the probe the test WRITES prints `CANARY_DIGEST=${sha256(process.env[CANARY_NAME])}`, and the parent asserts `capturedOutput` contains `CANARY_DIGEST=${sha256(secret)}`. Read from the CHILD'S stdout, never from the parent's constructed object. Only a process holding the exact bytes can print that digest. It carries its own negative control: the probe prints `ABSENT` when the key is missing and the arm asserts `not.toContain(\"CANARY_DIGEST=ABSENT\")`, so an undelivered canary cannot read as a pass. The same child also prints `HOST_SEEN=`, asserted `HOST_SEEN=ABSENT` — the exclusion half measured IN THE CHILD, not in the parent's intent.\n- (b-half) `not.toContain(secret)` over the joined wrapper-log bytes (`process.stdout.write`/`process.stderr.write` both spied — the comment at :456 pins those as the sinks `agent-wrapper-main.ts` wires its `log` to at :136/:162/:235/:289), over `run.output`, and over the probe file left in the workspace. `runner.close()` is in a `finally`, so the epic's stop-what-you-start rail holds on the failure path.\n\nCANARY NAME IS NOT SCRUBBED — MEASURED, NOT TAKEN ON TRUST. `CANARY_NAME = \"DEPLOY_CANARY_TOKEN\"` (:50). The scrub is `normalized.startsWith(\"MOE_\")` at agent-spawn-environment.ts:54 (step text says :56; the line MOVED because A's edit added the `delivered` param above it — the scrub itself is intact and unwidened). `DEPLOY_CANARY_TOKEN` is not MOE_-prefixed; it is absent from RUNTIME_ENVIRONMENT_KEYS (28 keys, :14-20); and it matches none of PROVIDER_ENVIRONMENT_PREFIXES (`ANTHROPIC_ AWS_ AZURE_ CLAUDE_ CODEX_ GOOGLE_ OPENAI_ VERTEX_`, :28-31). So it can ONLY arrive through the overlay — which is what makes the arm non-vacuous — and the log half cannot pass for the wrong reason. Stronger still, :287 asserts a delivered `MOE_OPERATOR_SET` DOES arrive while the source's `MOE_DAEMON_CREDENTIAL` does not: positive proof the overlay lands on the filter's RESULT, not inside it.\n\n(b) NAMES REACH THE REPOSITORY, VALUES DO NOT — CONFIRMED, STRICT FORM.\n`controlled-profile-generator.test.ts:207-290`. `it(\"carries every required name, and NO VALUE for any of them\")` asserts per name `toMatch(new RegExp('^NAME=$','m'))` — the line ENDS at the `=` — AND that the filtered assignment list equals exactly `[\"NAME=\"]`, so a second valued declaration elsewhere in the file also reds. A containment check alone would be satisfied by `NAME=secret`; this is not that. A separate arm pins no `CHANGE_ME` beside a contract name, and another keeps the profile's own `POSTGRES_PASSWORD=CHANGE_ME` readable by the `/POSTGRES_PASSWORD=(\\S+)/` parse that deployment-infrastructure-generator.test.ts:305-306 does FROM ANOTHER DIRECTORY. The golden pin was MOVED, not softened: `GOLDEN_ENV_EXAMPLE_WITH_NAMES = a391d228…` and `moves ONLY the .env.example hash` asserts the whole manifest is unchanged elsewhere and `files.size === GOLDEN_FILE_COUNT`.\n\nTWO NO-OP PROPERTIES — BOTH STILL BYTE-IDENTITY, NEITHER SOFTENED TO \"still works\".\n- A, three arms: `deliverEnvironment(allowlisted, undefined|{}).environment` asserted with `toBe(allowlisted)` — SAME REFERENCE, so byte-identity by construction, no copy that could reorder or add a slot. `agentEnvironment` byte-identity (:295) compares against an ABSOLUTE literal key roster in order `[\"LANG\",\"PATH\",\"CLAUDE_CODE_SUBPROCESS_ENV_SCRUB\",\"CLAUDE_CODE_SKIP_PROMPT_HISTORY\",\"MAX_MCP_OUTPUT_TOKENS\",\"NO_PROXY\",\"no_proxy\"]` PLUS `toStrictEqual`, with the reason written in the arm: `toEqual`/`JSON.stringify` both ignore undefined-valued properties, so an overlay adding `X: undefined` would slip past either alone. Preview's twin (:411) does the same with `toStrictEqual({LANG,TMPDIR})` and an explicit `Object.keys` roster, and reaches the real `startPreviewProcess` spawn seam through an injected `spawn` that captures `options.env`.\n- C: `names a contract requires NOTHING leaves the file byte-identical to the profile's own` asserts `envExampleOf(withNames([])) === envExampleOf(tree(...))` AND that that string's sha256 equals the PRE-EXISTING golden-manifest row. Two independent anchors, both byte-level.\n\nALSO CONFIRMED IN PASSING (this row's DoD 3, C's half): `environment-required-variables.test.ts:212` is literally the \"two required names and one set\" case — contract requires `[\"DATABASE_URL\",\"SESSION_KEY\"]`, environment holds `SESSION_KEY`, asserts the unset set EQUALS `[\"DATABASE_URL\"]` (set equality, not containment, with the reason stated: a report echoing the requirement list would pass `toContain`). And `environment-store.ts`'s no-plaintext claim is pinned by a committed arm at :422-439 that also pins an EXACT three-name `export function` roster — so this row's step-1 grep survives t",
+      "startedAt": "2026-09-06T02:47:37.204Z",
+      "completedAt": "2026-09-06T02:49:47.917Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "GATES AND CLOSE. Run each STANDALONE and FOREGROUND — no pipe, no `;` chain, no `&&` (a piped run reports tail's exit code; a chain reports only the last command's):\n  1. `pnpm --filter @moe/daemon test`\n  2. `pnpm --filter @moe/control-room test`  — grandchild B touches apps/control-room/src/v2/goals/gate1-contract-shape.ts, which the root vitest lane does NOT cover.\n  3. `pnpm typecheck`\n\nREAD THE OUTPUT, NOT THE EXIT CODE: `pnpm --filter <pkg> <script>` exits 0 on a missed filter, and \"No test files found\" / \"0 passed\" are also exit 0. The discriminator is the `Test Files N passed` count line with N nonzero — quote it for each leg. A bare `pnpm test` covers no `apps/**` and is not evidence here.\n\nName `pnpm --filter @moe/daemon test` as this row's complete_task verification command.\n\nThe daemon suite is slow and flaky on this branch (~22 min; two back-to-back baselines gave `17 failed | 416 passed` then `10 failed | 423 passed`, dominated by 30000ms spawn-latency timeouts), so a whole-suite delta is not admissible attribution. This row owns NO production paths, so any red belongs to a child or a peer — attribute by path per global rail 3 and report it verbatim with exact failing lines and file paths. Disclosed, never hidden, never fabricated green.",
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "GATES AND CLOSE — ALL THREE LEGS GREEN, each STANDALONE and FOREGROUND, no pipe and no chain. Output was captured by REDIRECTION (`> file 2>&1`), which preserves the command's own exit code; a pipe would have reported tail's.\n\nANCHOR: HEAD a24ac3df59df50927714339e62aa1108299f788f. Tree state quoted beside the sha per the 21:14Z handoff pitfall #2 — `git status --porcelain | wc -l` = 52 immediately BEFORE leg 1 and 57 immediately after leg 3. The five new entries are live peer edits that landed DURING my run (worker-ca28be90's codex-parity row: agent-spawn-environment.ts, launch-template-producer.ts, wrapper-lane.ts, plus untracked agent-codex-roster.{ts,js,test.ts}). NONE are mine. I created exactly one file all session, the planted typecheck control, and deleted it — see below.\n\nLEG 1 — `pnpm --filter @moe/daemon test` (this row's named verification command):\n```\n Test Files  572 passed (572)\n      Tests  10295 passed | 7 skipped (10302)\n   Duration  373.26s\nEXIT=0\n```\nLEG 2 — `pnpm --filter @moe/control-room test`:\n```\n Test Files  185 passed (185)\n      Tests  2321 passed (2321)\n   Duration  14.15s\nEXIT=0\n```\nLEG 3 — `pnpm typecheck`: EXIT 0, `Scope: 19 of 20 workspace projects`, and `grep -c 'typecheck: Done'` = 19, so all nineteen legs EXECUTED. This is the specific check the 21:14Z handoff demanded: pnpm typecheck FAILS FAST, and a control-room red would have left apps/daemon never running. `apps/daemon typecheck: Done` is present in the log (it is the last leg to finish), so the daemon leg is measured, not implied.\n\nPLANTED-ERROR CONTROL for leg 3, in a NEW file so an incremental cache could not short-circuit it:\n```\napps/daemon/src/zz-typecheck-control-767c9887.ts\n  export const plantedControl: number = \"this is not a number\";\n$ pnpm --filter @moe/daemon typecheck\n  src/zz-typecheck-control-767c9887.ts(2,14): error TS2322: Type 'string' is not assignable to type 'number'.\nPLANTED_EXIT=1\n```\nRESTORE, proven in a call SEPARATE from the mutation: file deleted, `git status --porcelain <path>` prints NOTHING (it was untracked, so `git diff` is blind to it and absence from porcelain is the correct proof), and a fresh `pnpm --filter @moe/daemon typecheck` is EXIT 0. Nothing planted remains on disk.\n\nRED ATTRIBUTION: none to make. Zero failures across all three legs. That retires the five-file disclosure every prior handoff on this row carried forward (four win32 criterion-execution files + daemon-command-registry.test.ts) — task-0397287d landed that repair, which I verified at the port earlier tonight in my own prior session on that row. It also retires the `expected 35 to be 34` red in http-listener-read-dispatch.test.ts: task-509c6c16's roster backfill moved the count to 35 at line 351. I therefore did NOT need the governor's 21:14Z COMPLETION FORM (scoped leg as verification, full leg in the summary) — the full leased leg is itself EXIT 0 and goes in as the verification directly.\n\nFILES: NONE. This row is a SPIDR shell owning zero production paths; modifiedFiles is empty by construction, not by omission. The only file I authored was the planted control, created and deleted inside this step.\n\nLEASE: full-suite-gate was held task-keyed to this row since 21:09:06Z through two dead seats. I renewed it under a live seat at 00:19Z rather than force-releasing it, ran under it, and release it on this exit path. GATE START was announced 00:20Z; GATE END follows immediately.",
+      "startedAt": "2026-09-06T02:49:50.688Z",
+      "completedAt": "2026-09-07T00:28:06.416Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": "task-9ae492b373fa4e7aa6b1e91585f6e612",
+  "dependsOn": [
+    "task-945bb541777a4b789983382f9513f43c",
+    "task-fd2d438f29d64830a2bd6110f2ded78b",
+    "task-971caed1c5ca46bd871a7ec1c6ca8de1"
+  ],
+  "priority": "HIGH",
+  "order": 102,
+  "comments": [
+    {
+      "id": "comment-ec1d11baef8e4a01ab85014936ca3f06",
+      "author": "worker-caece97b",
+      "content": "DISCLOSED GAP — BOTH DELIVERY SEAMS EXIST AND ARE PROVEN, NEITHER HAS A PRODUCTION CALLER SUPPLYING DATA YET.\n\nFiled as a comment, not a new row (DELIVERY BIAS rail + \"evidence/quality work is not its own row\"). Recorded here so the row that wires the deploy path picks it up instead of re-deriving it. Neither item is a shortfall against any child's GRADED DoD — both children stated it and QA approved with it disclosed.\n\n1. THE SPAWN SIDE. `delivered` is an OPTIONAL parameter at all three allowlist constructions and nothing in production passes it:\n   - `apps/daemon/src/orchestrator/agent-spawn-environment.ts` `agentEnvironment(source, delivered?)` — `agent-spawner.ts` passes nothing, DELIBERATELY (grandchild A's stated decision: a coding seat is not a deploy target and must not receive an operator's production secrets).\n   - `apps/daemon/src/orchestrator/verifier-process-runner.ts:72` — `delivered` is a runner option.\n   - `apps/daemon/src/preview/preview-process.ts` — same, on the `env:` arg.\n   `git grep readEnvironmentDelivery -- apps packages` outside `environment-delivery.{ts,test.ts}` = ZERO. The consumer is whoever resolves a project's environment PER SPAWN.\n\n2. THE REPOSITORY SIDE, AND THIS ONE IS ONE FIELD WIDE. The lander genuinely reaches the generator — `repository-bootstrap-service.ts:54 generateControlledProfile(input)`, then `ports.tree.write(dir, tree.files)`, then `ports.git.commit(dir)` — so `.env.example` IS generated into the repository and committed. But the request type it forwards carries no names:\n   - `apps/daemon/src/repository/repository-bootstrap-contracts.ts:61-67` — `BootstrapRequest = { projectId, productName, profileVersion, dir, github? }`. No `requiredVariableNames`.\n   - `apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts:63` declares `readonly requiredVariableNames?: readonly string[]` and :138 defaults it `?? []`.\n   CONSEQUENCE, stated plainly: on every REAL bootstrap today the landed `.env.example` is byte-identical to the profile's own — the contract-derived names are emitted only when a caller supplies them, and the only callers that do are tests. `git grep requiredVariableNames -- apps/daemon/src --include='*.ts'` outside tests returns exactly the generator's own declaration/default plus `environment-required-variables.ts:90`, which is the PRODUCER of the list.\n\nWHAT CLOSING IT LOOKS LIKE (measured, so nobody re-derives it): add `requiredVariableNames?: readonly string[]` to `BootstrapRequest`, have the bootstrap command edge read the project's approved contract revision through `requiredVariableNames(revision)` (`apps/daemon/src/environment/environment-required-variables.ts:90`, already exported, already tested, already `.js`-bridged), and pass it through. `generateControlledProfile(input)` is called with the whole request object, so the field flows structurally the moment the type carries it — no call-site edit at :54. The `.env.example` golden pin then MOVES for any product whose contract names variables; `controlled-profile-generator.test.ts` already pins both hashes (`GOLDEN_MANIFEST`'s row and `GOLDEN_ENV_EXAMPLE_WITH_NAMES = a391d228…`), so the pin is there to be moved, never softened.\n\nNEAREST OWNERS. Read side: child 3 `task-ba83b202265d40d1885d3091f009b0a2` (WORKING — the Environments screen and the goal's unset count), which consumes `unsetVariableNames` and may want the bootstrap edge too. Write side: whichever row wires the deploy spawn — which DOES NOT EXIST at HEAD (grandchild A measured it: no `apps/daemon/src/deploy`; `repository/deployment/` is a file generator plus a `spawnSync docker version` capability probe; the live spawn sites are agent-spawner, verifier-process-runner, moe-up-spawn, preview-process, project-stack-host-main).",
+      "timestamp": "2026-09-06T02:50:35.752Z"
+    },
+    {
+      "id": "comment-ad20b756cf4e408687d61a37acb16c81",
+      "author": "worker-f72a1438",
+      "content": "RESUME RE-MEASUREMENT 2026-09-06 07:59Z, HEAD4ad67796abc937a4bdf6e81a3cac1121f1def9b1. NO SOURCE EDITS. Handoff history read; steps1-2 COMPLETED, step3 already IN_PROGRESS (start_step returns INVALID_STATE; not reset). All3 declared children still DONE+landed in epicSiblings; verification/completion/review read there, not inferred from HEAD. store.ts:60 header and exact3 exports117/146/165 intact. B field now in core contract111/admission235-240, CRmirror28/107/110 and Cconsumer93; original packages/contracts/planning grep remains wrong locus.\nFRESH focused characterization: pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=30000 src/environment src/orchestrator/verifier-process-runner.test.ts src/orchestrator/agent-spawn-environment.test.ts src/repository/controlled-profile/controlled-profile-generator.test.ts -> EXIT0, Test Files11passed(11), Tests210passed(210), start10:59:22 local, duration11.69s. Polled to completion, not background claim. This is NOT step3's named full verification.\nATTRIBUTION: earlier8334cdc9 and96aed5d3 are1path task-JSON-only checkpoints; all7 unattributed activation/deploy source paths are foreign. environment-store.ts and agent-spawn-environment.ts appear ASSERTED only because completed read-only step1 had affectedFiles; both clean and this shell changed neither. Governor asked remove stale attribution, not sweep peer WIP.\nMISSING COMPOSITION rechecked via committed commands: git grep -n readEnvironmentDelivery -- apps/daemon/src ':!*.test.ts' returns only declaration environment-delivery.ts:104; git grep -n requiredVariableNames -- apps/daemon/src ':!*.test.ts' shows producer declaration90 and generator/template plumbing only, no bootstrap caller. BootstrapRequest61-67 omits names, command bootstrapRequestOf130 supplies no names, generator138 defaults empty. Existing210green tests prove injected seams, not real project-to-process/repository data flow. Raised to architect/governor before proof closure; no new implementation inside this NO-CODE shell. Whole-package daemon gate is queued AFTER worker7bdbffac (governor priority), no full gate token held.",
+      "timestamp": "2026-09-06T08:00:20.661Z"
+    },
+    {
+      "id": "comment-0bf3296cfc8b4708a386409c49c38cd7",
+      "author": "worker-1d53e70c",
+      "content": "STEP 3 PARTIAL, PARKED ON `full-suite-gate` AT #2. worker-1d53e70c, 2026-09-06 18:47Z, HEAD 9048426d. NO PRODUCTION CODE THIS SESSION — zero files created or modified (this row is a composition shell).\n\nLEG 3 OF 3 DISCHARGED, NO REDO ON GRANT.\n`pnpm typecheck` — EXIT 0, standalone foreground, no pipe/chain.\nExecution evidence (not exit code alone): `$ pnpm --recursive typecheck` / `Scope: 19 of 20 workspace projects`, and every project printed its own `$ tsc --project tsconfig.json` echo followed by `Done` — including the two that matter here: `apps/control-room typecheck$ tsc --project tsconfig.json` / `apps/control-room typecheck: Done`, and `apps/daemon typecheck$ tsc --project tsconfig.json` / `apps/daemon typecheck: Done`. 19 `Done` lines, zero `Failed`.\n\nLEGS 1 AND 2 STILL OWED — deliberately NOT run unleased.\n`pnpm --filter @moe/daemon test` (this row's named complete_task verification command) and `pnpm --filter @moe/control-room test`. Census at 18:46Z: 169 node processes live, 2.49 GB free physical memory, `full-suite-gate` held by worker-deb4c7d8 (task-4a6e7bdbef9a) since 17:58:00Z with worker-adefb11e (task-2ab7b462) at #1. This row's own plan step 3 records the daemon suite as ~22 min and dominated by 30000ms spawn-latency timeouts on a loaded host; an unleased concurrent run here would produce exactly that inadmissible red. Queued at #2 with an ETA of 30 min. NOT force-releasing — the holder took the lease fairly and is running the one command their reopen requires.\n\nTHE COMPOSITION GAP THIS SHELL DISCLOSED IS CLOSED. task-14260d5ec20c43e697521a8a98904136 — the prerequisite row this shell filed after measuring that both delivery symbols had ZERO production callers — has LANDED on moe/work-2026-09-04: `8457ae33` feat (compose delivery into real launches + bootstrap required names) and `ca53eef2` test. Re-measured at the delivered tree, non-test files only:\n- `launchDelivery` (environment-launch-resolver.ts:177) is now imported by TWO production composition sites: `daemon-store-foundation-composition.ts:43` and `orchestrator/agent-wrapper-main.ts:20` — the real spawn seam, which previously supplied no delivery at all.\n- `requiredVariableNames` (environment-required-variables.ts:90) is now consumed by `repository/env-example-sync-command.ts:5,184`, whose handler is wired into the published command roster at `daemon-command-async-entries.ts:262` and `:344` under kind `product_contract.sync_env_example`, and reaches `.env.example` bytes through `controlled-profile-root-templates.ts:191 envExampleBytes` / `:320`.\n- Step 1's security re-check still holds at this tree: `environment-store.ts:60` still carries `NO PLAINTEXT-RETURNING FUNCTION IS EXPORTED FROM THIS MODULE`, so grandchild A's value-returning read remains in its own module and the store's greppable claim was not widened.\n\nON GRANT: run both suites standalone and foreground, quote each `Test Files N passed` count line with N nonzero (an exit-0 leg with no count line is a missed filter, not a pass), attribute any red by path per global rail 3 — this row owns no production paths, so any red is a child's or a peer's and gets reported verbatim with its exact failing lines — then complete_step 3, complete_task, release_resource.",
+      "timestamp": "2026-09-06T18:48:31.640Z"
+    },
+    {
+      "id": "comment-dbdf54b2956e4fb1b1eea02a1e3c7550",
+      "author": "worker-1d53e70c",
+      "content": "GATE EVIDENCE PACKET — task-72b22fcf, step 3, lease held 19:17Z→19:34Z (released, granted on to task-f3409f9a). Tree: HEAD 7d78aa19 = origin/moe/work-2026-09-04, behind=0 ahead=0 (the joined tree including the owner's 11 commits).\n\nRAM floor honoured per the 19:06Z ruling. Before CR leg: 19:17:31Z 4.99 GiB / 19:17:38Z 5.01 GiB. Before daemon leg: 19:20:29Z 7.24 GiB / 19:20:36Z 7.24 GiB. Two samples ≥5s apart each time, all ≥2.5 GiB.\n\nLEG 1 — `pnpm --filter @moe/control-room test`  EXIT 1\n  Test Files  1 failed | 173 passed (174)\n       Tests  1 failed | 2204 passed (2205)      Duration 21.08s\n  Sole failure: src/v2/goals/design-version-note.test.tsx:117, an exact-`toContain` source guard.\n    expected  <LiveDesignVersionNote goalRef={open.goalId} headers={attached.headers} />\n    actual    cordum-app.tsx:350\n              <LiveDesignVersionNote goalRef={open.goalId} planningRunRef={planRunId} headers={attached.headers} />\n  UNTRACKED file, mtime 19:01Z, owned by task-f3409f9a. cordum-app.tsx is clean, mtime 19:14:38Z (the reset), last touched by owner commit 4ac0dbda which added the planningRunRef prop. One-line fix on that row's side. Import assertion still passes; only the render-line string moved.\n\nLEG 2 — `pnpm typecheck`  EXIT 1   Done=15  Failed=1\n  apps/control-room typecheck: Failed\n    design-version-note.test.tsx(89,15)  error TS2741: Property 'planningRunRef' is missing … required in type 'LiveDesignVersionNoteProps'\n    design-version-note.test.tsx(100,15) error TS2741: (same)\n  DO NOT READ DAEMON COVERAGE INTO THIS RUN. pnpm's recursive run fails fast, so apps/daemon and three others never executed — 16 legs of 20. `grep 'apps/daemon typecheck'` over the full log returns ZERO lines; the execution echo is the evidence and there is none.\n  Run standalone: `pnpm --filter @moe/daemon typecheck` EXIT 1\n    src/deployment/migrate-down-journey.test.ts(138,7) error TS2741: Property 'build' is missing … but required in type 'DeployPorts'\n    src/deployment/migrate-down-real.test.ts(133,9)    error TS2741: (same)\n\nLEG 3 — `pnpm --filter @moe/daemon test`  (this row's named verification command)  EXIT 1\n  Test Files  6 failed | 557 passed (563)\n       Tests  17 failed | 10115 passed | 6 skipped (10138)\n  Start at 22:21:09   Duration 752.84s\n\nNOT THE SPAWN CLIFF — checked rather than assumed. `grep 'Test timed out in'` over the full log = ZERO matches. criterion-integrated.test.ts re-run STANDALONE on an unloaded host (7.75 GiB free): Test Files 1 failed (1), 21.63s. Real breaks, not host noise.\n\nTHREE ROOT CAUSES, ALL IN OWNER COMMIT 4ac0dbda \"fix: harden release and deployment review gaps\" (pushed from outside the fleet 18:58–19:09Z; joined into HEAD by the 19:14:38Z reset):\n\n(A) deploy-ports.ts:52 — `readonly build: DeployBuildPort` became REQUIRED (+4 lines).\n    migrate-down-journey.test.ts 9/9 failed in 515ms, every one `Error: DEPLOY_BUILD_FAILED: DEPLOY_BUILD_UNAVAILABLE`.\n    Same root as both TS2741s above. Those two files belong to task-537320ee (DONE, approved 18:45Z, landed 9048426d) which sits BELOW the owner's commits in the join — green when graded, red after.\n\n(B) goal-approved-execution-scope.ts (+6/-1) — the goal's own planningRunRef was replaced:\n      -  const runRef = goal[\"planningRunRef\"]; if (typeof runRef !== \"string\") return null;\n      +  const initialRunRef = goal[\"planningRunRef\"]; if (typeof initialRunRef !== \"string\") return null;\n      +  const current = currentPlanningRun(store, initialRunRef);\n      +  if (current.unreadable) return null;\n      +  const runRef = current.runId;\n    readCompiledContractBinding is keyed on the new runRef, the approved scope stops matching, and scoped criterion execution never runs the check. Identical signature in all six failures:\n      \"status\":\"UNKNOWN\",\"exitCode\":null,\"byteCount\":0,\"outputSha256\":\"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855\"\n    That sha256 is the hash of the EMPTY STRING, and exitCode null means the program never ran to completion — it is not a wrong answer, it is no answer.\n    4 files, 6 tests: criterion-integrated.test.ts(1), goal-live-evidence.test.ts(1), goal-services.test.ts(1), j1-command-path.test.ts(3).\n\n(C) http-listener-read-dispatch.ts (+11/-2) — DEPLOYMENTS_READ_PATH added to JSON_ROUTES and served; the census roster is off by one in BOTH directions:\n      consumes every served JSON route, bar a named census        expected […(5)] to strictly equal […(6)]\n      fetches no daemon-shaped route this listener does not serve  expected […(4)] to strictly equal […(3)]\n    2 tests, 143ms.\n\nOWNERSHIP — `git diff --name-only 0737f06c 4253eba9` = 132 files:\n  goal-live-evidence.test.ts           TOUCHED by owner\n  goal-services.test.ts                TOUCHED by owner\n  http-listener-read-dispatch.test.ts  TOUCHED by owner\n  criterion-integrated.test.ts         not touched  (breaks via goal-approved-execution-scope.ts)\n  j1-command-path.test.ts              not touched  (same)\n  migrate-down-journey.test.ts         not touched  (breaks via deploy-ports.ts)\n\nA TRAP FOR WHOEVER GRADES THIS: the pre-join leased run cited by worker-f72a1438 (67dd3103→3b78e379, 17:18–17:32Z) was 6 failed / 531 passed FILES; I measure 6 failed / 557 passed. The counts match and that means nothing — I cannot show they are the same six, because reaching the merge base needs a checkout of a shared worktree, which is forbidden. worker-f72a1438 was directed at 18:52Z to name that run's six reds by file; that list is the discriminator. If it lacks migrate-down-journey.test.ts, cause (A) is provably join-introduced.\n\nRAIL 3: this row is a SPIDR composition shell owning ZERO production paths; this session created and modified ZERO files. failures ∩ owned paths = ∅ by construction. An empty intersection is not an exit code, so this is disclosed and blocked, not completed.\n\nWHY I FIXED NOTHING FROM HERE: this row's rails say write NO production code; it owns none of these paths; and amending a DONE, approved row's bytes (537320ee) from an unrelated live row would make QA's grade unreproducible. Asked the governor at 19:21Z for either a fix row or explicit authorization to take 537320ee's two fixtures under a scope expansion — still open, and I will do it either way on a word.\n\nSteps 1 and 2 remain COMPLETE and are unaffected; both were confirmation-only and neither depends on the suite.",
+      "timestamp": "2026-09-06T19:37:45.016Z"
+    },
+    {
+      "id": "comment-e7f97fc3b7e3497ab067bbac12873047",
+      "author": "worker-1d53e70c",
+      "content": "CORRECTION 19:52Z to comment-dbdf54b2956e4fb1b1eea02a1e3c7550 — cause (B) is WITHDRAWN. Everything else in that packet stands.\n\nworker-f72a1438 supplied the pre-join failed-file set I asked for (run 67dd3103→3b78e379, 17:18:44–17:32:03Z, 6 failed / 531 passed / 537 files, 8 failed / 9967 passed / 5 skipped of 9980 tests, 797.42s, EXIT 1):\n\n  apps/daemon/src/criterion-evidence/criterion-integrated.test.ts:66\n  apps/daemon/src/goals/goal-live-evidence.test.ts:380\n  apps/daemon/src/goals/goal-services.test.ts:309\n  apps/daemon/src/goals/j1-command-path.test.ts:203/265/314\n  apps/daemon/src/daemon-store-dependencies.test.ts:783\n  apps/daemon/src/runtime-entrypoint.test.ts:255\n\nSet difference against my post-join run (6 failed / 557 passed / 563 files):\n\n  criterion-integrated          BEFORE + AFTER    pre-existing\n  goal-live-evidence            BEFORE + AFTER    pre-existing\n  goal-services                 BEFORE + AFTER    pre-existing\n  j1-command-path               BEFORE + AFTER    pre-existing\n  daemon-store-dependencies     BEFORE only       owner FIXED it\n  runtime-entrypoint            BEFORE only       owner FIXED it\n  migrate-down-journey                   AFTER    owner BROKE it\n  http-listener-read-dispatch            AFTER    owner BROKE it\n\nWHAT I GOT WRONG: cause (B) attributed the four criterion/goal/j1 failures to 4ac0dbda's goal-approved-execution-scope.ts edit (the planningRunRef → currentPlanningRun(...).runId swap). All four were already red at 17:18Z, before that commit existed. The diff is real and it does make that swap; a real diff sitting next to a real symptom is not causation. I reasoned from the diff to the symptom instead of measuring, in the same message where I warned that matching failure counts prove nothing about matching failure sets.\n\nWHAT SURVIVES, STRENGTHENED — the pre-join set is exactly the discriminator that confirms them:\n  (A) migrate-down-journey.test.ts — JOIN-INTRODUCED. Absent from the pre-join set. 9/9 fail in 515ms, DEPLOY_BUILD_FAILED: DEPLOY_BUILD_UNAVAILABLE, from deploy-ports.ts:52 making `build: DeployBuildPort` required. Same root as the two TS2741s. Files belong to task-537320ee (DONE, approved 18:45Z, landed 9048426d below the owner's commits).\n  (C) http-listener-read-dispatch.test.ts — JOIN-INTRODUCED. Absent from the pre-join set. DEPLOYMENTS_READ_PATH added to JSON_ROUTES; census roster off by one in both directions.\n  (B) — pre-existing red of unknown age. Still needs an owner and a fix row, but it is not part of the join cleanup and must not be filed as such.\n\nNET ON THE OWNER'S PUSH: 2 broken, 2 fixed, 4 untouched. My \"broke the suite in three ways\" framing was too strong. The 6=6 coincidence I warned about is what fooled me — I verified the counts were not equal SETS, then reasoned as though the deltas ran one direction only.\n\nFIX LIST IS NOW TWO SMALL ITEMS: (A) add the `build` port to two fixtures in task-537320ee's files; (C) reconcile the read-route census. My 19:21Z request to the governor narrows to (A)'s two fixtures.\n\nROW STATUS UNCHANGED: verification is still `pnpm --filter @moe/daemon test` at EXIT 1. Whether a red is pre-existing or join-introduced does not turn a 1 into a 0. Also unchanged: this row owns ZERO production paths and this session created/modified ZERO files.",
+      "timestamp": "2026-09-06T19:53:11.005Z"
+    },
+    {
+      "id": "comment-b59b331f2f7943d48b7004f96a0b43f8",
+      "author": "governor-afbde490",
+      "content": "GOVERNOR 20:15Z — your 19:52Z attribution is accepted and re-measured at HEAD f213b41d (scoped run 20:09Z: 5 files / 8 tests still red; (A) is fixed by the owner's 5f4f3675, the criterion four and the census two remain). Repair row filed: task-0397287d2e964e7b83c0b4c2be945364 (CRITICAL, order 0.5, PLANNING) and added to this row's dependsOn so no claim runs the gates before it lands. This row stays BLOCKED (nothing owed by a worker); when 0397287d is DONE the governor restores WORKING and the next claimer runs step 3 under the `full-suite-gate` lease.",
+      "timestamp": "2026-09-06T20:14:09.748Z"
+    },
+    {
+      "id": "comment-58a61436a8d545e192d845afdad312ce",
+      "author": "worker-1d53e70c",
+      "content": "SHA-ANCHORED UPDATE 20:19Z — supersedes the attribution in comment-dbdf54b2956e4fb1b1eea02a1e3c7550 and comment-e7f97fc3b7e3497ab067bbac12873047 for causes (A) and (C). Every claim below is anchored to the HEAD it was measured at, per qa-4f771bb8's 20:18Z ask: on this branch a red quoted without its sha is unverifiable within twenty minutes, and 405995e2 is at least the fifth HEAD since 19:00Z.\n\nMEASURED AT HEAD 405995e2 (targeted runs, gate-exempt; host quiet, 19.11s):\n\n(A) FIXED — do not carry it forward.\n  `pnpm --filter @moe/daemon typecheck`  EXIT 0        (was EXIT 1 with two TS2741s at HEAD 7d78aa19, 19:20Z)\n  `migrate-down-journey.test.ts`         PASSES        (was 9/9 failed, DEPLOY_BUILD_UNAVAILABLE, at HEAD 7d78aa19)\n  Healed at f213b41d per worker-d107a8ef; confirmed independently here.\n\n(C) STILL RED AT 405995e2, AND MY ROUTE ATTRIBUTION WAS WRONG.\n  I wrote that the census was off by one because owner commit 4ac0dbda added DEPLOYMENTS_READ_PATH to JSON_ROUTES. The measured missing element is `/preview/read`:\n    src/http/http-listener-read-dispatch.test.ts:462  \"consumes every served JSON route, bar a named census\"\n      AssertionError: expected [ '/budget/commitment/read', …(5) ] to strictly equal [ …(6) ]\n        \"/budget/commitment/read\", \"/documents/ingest\", \"/environments/read\", \"/events/resume\",\n      -  \"/preview/read\",                    <- in the expected census, NOT consumed\n        \"/session/challenge-operands/read\", \"/v2/product-contract/current\",\n    src/http/http-listener-read-dispatch.test.ts:469  \"fetches no daemon-shaped route this listener does not serve, bar pairing\"\n  That is the PREVIEW read route, so this is far more likely task-4a6e7bdbef9a's territory than the owner's. Two arms, one file; the fix is a census entry, not logic.\n  ROOT CAUSE OF MY ERROR, recorded because it is the second instance today: I reasoned from the owner's diff to the symptom instead of reading the assertion output. Same failure mode as the withdrawn cause (B). READ THE ASSERTION, NOT THE DIFF.\n\n(B) STILL RED AT 405995e2, and the test has been REWRITTEN underneath it.\n  Renamed to \"records the native criterion outcome on the integrated Git SHA and invalidates coverage when it changes\" (was \"executes approved criterion checks … invalidates evidence\"), presumably by 6a7e7737 \"test: prove platform-specific criterion outcomes\".\n    src/criterion-evidence/criterion-integrated.test.ts:71\n      run.status                     expected \"COMPLETED\"  received \"BLOCKED\"\n      criteria[].evidence.status     expected \"PASSED\"     received \"UNKNOWN\"\n      criteria[].evidence.byteCount  expected 16           received 0\n  byteCount 0 with exitCode null still means the check program produced no output at all. This matches the newly filed row's framing — scoped criterion execution reports UNKNOWN/BLOCKED on win32 — so that row is aimed correctly. (B) remains PRE-EXISTING, not the owner's: it is in worker-f72a1438's 17:18Z pre-join set.\n\nWHAT I HAVE NOT DONE: no whole-suite re-run. That needs full-suite-gate, held by worker-adefb11e (task-33ceae56) since 19:57:05Z. Treat the above as THREE TARGETED FILES at 405995e2, not a new baseline, and do not subtract it from the 19:34Z sheet as though the two were the same shape of measurement.\n\nTHIS ROW'S STATUS IS UNCHANGED. Verification is `pnpm --filter @moe/daemon test` and the last fresh measurement of it is still EXIT 1 (6 failed | 557 passed, 17 failed | 10115 passed | 6 skipped, 752.84s) at HEAD 7d78aa19, 19:21-19:34Z. One of the two join-introduced causes is now fixed; a fixed cause is not an exit code. The row stays BLOCKED until the named command returns 0 at a named sha.",
+      "timestamp": "2026-09-06T20:19:17.876Z"
+    },
+    {
+      "id": "comment-cdabf40d3adc4481960af1792b3a58bc",
+      "author": "worker-1d53e70c",
+      "content": "FINAL ATTRIBUTION LEDGER 20:25Z — supersedes causes (B) and (C) in every earlier comment on this row. Read this one, not comment-dbdf54b2 or comment-e7f97fc3, for who owns what.\n\nMEASURED AT HEAD 405995e2, IN THIS SHARED CHECKOUT:\n  git show HEAD:apps/daemon/src/http/http-listener-read-dispatch.test.ts | grep -n '\"/preview/read\"'\n    170:  \"/preview/read\",                      <- PRESENT in the census AT HEAD\n  grep -n '\"/preview/read\"' <worktree>          -> line 170 GONE (only the :400/:401 assertions survive)\n  grep -n '\"/preview/capture\"' <worktree>       -> :177, :418, :419, :449   <- ADDED, not at HEAD\n  git diff --numstat -- <file>                  -> 13 insertions, 17 deletions\n  git log --oneline -- <file>                   -> c3943d91, 937fc69a, 17446e73, 2f9083dd\n\nTHE LEDGER, all three causes I filed at 19:36Z:\n  (A) migrate-down-journey.test.ts / DeployPorts.build   STANDS as join-introduced by owner commit 4ac0dbda, and is FIXED at f213b41d. Confirmed: `pnpm --filter @moe/daemon typecheck` EXIT 0 and the file passes targeted, both at 405995e2.\n  (B) criterion-integrated / goal-live-evidence / goal-services / j1-command-path   WITHDRAWN as join-introduced. PRE-EXISTING — all four are in worker-f72a1438's 17:18Z pre-join set (run 67dd3103->3b78e379). Genuinely red at HEAD; owned by task-0397287d.\n  (C) http-listener-read-dispatch.test.ts x2   WITHDRAWN as join-introduced. It is UNCOMMITTED PEER DIRT from task-33ceae56, which retires the \"/preview/read\" census entry in the same edit that adds its consumer; the consumer files are still untracked. 4ac0dbda never touched this .test.ts — it touched the implementation (+9/-2). The arms would be GREEN on a clean checkout of 405995e2. Do not revert or stash that dirt: it is live work mid-row.\n\nNET ON THE OWNER'S 11 COMMITS: ONE file broken (now fixed), TWO fixed (daemon-store-dependencies.test.ts:783, runtime-entrypoint.test.ts:255), four untouched. My \"broke the suite in three ways\" was wrong twice, and both times by the same mechanism: reading a plausible diff and stopping there instead of reading the assertion and the revision.\n\nTHE METHOD FAILURE THIS ROW SHOULD CARRY FORWARD, because it is bigger than the sha rule I wrote at 20:19Z:\n  A SHA IS NOT SUFFICIENT TO IDENTIFY A RED. http-listener-read-dispatch is red at 405995e2-in-this-checkout and green at 405995e2-clean. On a shared checkout with ten live rows, REVISION and TREE STATE are independent variables and a red needs both.\n  CONSEQUENCE FOR THIS ROW'S OWN EVIDENCE: `pnpm --filter @moe/daemon test` run here does NOT measure HEAD. It measures HEAD plus whatever every live row has on disk. The 19:34Z sheet (6 failed | 557 passed at 7d78aa19) was taken in this checkout, so its (C) member was dirt-red even then — and I CANNOT retro-classify it, because I recorded the sha and not the tree state. That is a gap in my recording, not in the reading.\n  FOR THE NEXT GATE ON THIS ROW: capture `git status --porcelain` (count AND paths) immediately before the run and quote it beside the sha. Without it the sheet cannot be reproduced by anyone standing in a different tree.\n\nROW STATUS UNCHANGED — BLOCKED. The named verification command was EXIT 1 at 7d78aa19 and nothing since has produced a 0. A red that turns out to be dirt is still not an exit code, and (B)'s four files are genuinely red at HEAD.",
+      "timestamp": "2026-09-06T20:25:35.752Z"
+    },
+    {
+      "id": "comment-b316cdc5cdc24fab99a71390fdeadac0",
+      "author": "governor-afbde490",
+      "content": "GOVERNOR 20:46Z — REVERSAL of my 20:15Z gating, under the owner's \"unblock more tasks\" (20:43Z): task-0397287d removed from dependsOn; row restored to WORKING and claimable. The repair row's root cause (Windows job-broker containment) may take hours, and this gates-only shell holds task-ba83b202 → task-9ae492b3 → task-99f364e3 hostage. Step 3 for the next claimer: lease `full-suite-gate`, run the three legs standalone + foreground, quote every count line; the daemon leg's failures confined to the four criterion files (criterion-integrated, goal-live-evidence, goal-services, j1-command-path — the win32 UNKNOWN/BLOCKED class, message quoted) are DISCLOSED per the 20:20Z standing ruling with task-0397287d named and the failing FILES listed; http-listener-read-dispatch's pair is worktree-only until task-33ceae56 lands (name it if seen). Any other red is yours to attribute. Then complete; QA grades against that baseline (qa-4f771bb8 / qa-f2906c26 adopted it 20:19Z).",
+      "timestamp": "2026-09-06T20:47:52.723Z"
+    },
+    {
+      "id": "comment-aa052c2323054dc480769e632c54f38b",
+      "author": "qa-97200064",
+      "content": "QA EVIDENCE (approve). This is a SPIDR SHELL: it owns ZERO production paths and its three children are all DONE (task-945bb541 delivery/merge, task-fd2d438f contract requirements, task-971caed1 unset report + `.env.example`). **I did not grade it on its children's say-so — I read each DoD clause's arm at HEAD myself.**\n\n## NO COMPLETION COMMIT, AND THAT IS CORRECT HERE\n`task.commits` is 14 checkpoints, no completion; last is `f99114f7` from a dead session. `qa_approve` will warn NO-COMPLETION-COMMIT. **There are no bytes to land.** I checked for anything strandable: `git status --porcelain` over `apps/daemon/src/environment/`, `agent-spawn-environment.ts` and `env-example-sync-command.ts` returns ONE dirty path, `agent-spawn-environment.ts` — and its hunks are codex-cli 0.153.4 `tool_max_output_tokens` / `--strict-config` prose, which is task-48932bec's vocabulary, not this row's. It is EXCLUDED WHOLE; that row's own landing carries it. Every artifact this row's DoD names is already at HEAD (`git cat-file -e HEAD:<path>` OK for environment-delivery.test.ts, environment-canary.test.ts, environment-required-variables.ts, env-example-sync-command.ts). So there was nothing for QA to hand-land, and I landed nothing.\n\n## GATES — TWO INDEPENDENT MEASUREMENTS, 12 MINUTES APART, AGREEING\nYours, under the lease at HEAD a24ac3df: daemon `Test Files 572 passed (572)` / `Tests 10295 passed | 7 skipped (10302)` EXIT 0; control-room `185 passed (185)` / `2321 passed (2321)` EXIT 0; typecheck EXIT 0.\nMine, taken BEFORE yours and unaware of it: daemon `Test Files 571 passed (571)` / `Tests 10278 passed | 7 skipped (10285)` EXIT 0 (00:04–00:11Z); control-room `185 passed (185)` / `2321 passed (2321)` EXIT 0 (00:15Z); typecheck EXIT 0 (00:16Z).\nThe 571 vs 572 delta is one test file landing in between — the runs corroborate rather than conflict. **I deliberately did NOT re-run a third time:** you now hold full-suite-gate for task-0397287d, I publicly committed to standing down until GATE END, and a third run would add nothing over an independent green I already hold on the same command.\n\nYour typecheck control is the right shape and I want it named: a planted TS2322 in a **NEW** file (`zz-typecheck-control-767c9887.ts`) — new precisely so an incremental cache cannot short-circuit it — EXIT 1 quoting the error, then deleted with absence proven by `git status --porcelain` in a call separate from the mutation (correct: git diff is blind to an untracked path). Your note that `pnpm typecheck` FAILS FAST, so 19 `typecheck: Done` lines are what proves apps/daemon actually ran rather than a bare EXIT 0, is exactly the discriminator the global rail asks for.\n\n## DoD, ITEM BY ITEM — READ AT HEAD, NOT TAKEN ON TRUST\n- **DoD-1 PASS.** `environment-delivery.test.ts:276` — \"delivers the operator variable AND still excludes a host variable outside the allowlist\". `:246` proves the overlay lands on the FILTER'S RESULT (merge under, not around), and `:252` pins collision behaviour naming the dropped variable.\n- **DoD-2 PASS, and it is the best-built security arm I have graded on this board.** `environment-delivery.test.ts:443` \"reaches the spawned child and appears in no log or capture byte\" does both halves in ONE test with a REAL child (`node probe.mjs`): (a) the child prints a **sha256 digest** of what it saw, never the plaintext — so the assertion itself cannot leak — with `not.toContain(\"CANARY_DIGEST=ABSENT\")` as the negative control that stops a missing delivery reading as a pass; (b) the log check spies on `process.stdout.write`/`process.stderr.write`, and the comment cites `agent-wrapper-main.ts:136,162,235,289` to prove those ARE the wrapper's log sinks rather than a stand-in. The same child also measures the host-variable exclusion IN THE CHILD rather than in the parent's intent. And the choice of `DEPLOY_CANARY_TOKEN` over `MOE_CANARY_*` is documented with its reason — `agent-spawn-environment.ts:54` drops every `MOE_`-prefixed key, so a `MOE_CANARY_*` NAME would make half (a) fail and half (b) pass FOR THE WRONG REASON. That is someone thinking about how their own test could lie.\n- **DoD-3 PASS.** `environment-required-variables.test.ts:216` — required names read from the contract, `unsetVariableNames` reports exactly `[\"DATABASE_URL\"]` for a goal with two required names and SESSION_KEY set, plus `not.toContain(\"SESSION_KEY\")`.\n- **DoD-4 PASS.** `env-example-sync-command.test.ts:334` \"(B) writes NAMES ONLY, **with a positive control that the predicates can fail**\" — the same predicates run over hostile bytes carrying `sk_live_...` and DO find them, so the emptiness is a fact about the file and not about a regex that never matches. Plus `not.toContain(\"sk_live\")`. This file is committed and pushed, so that control is load-bearing.\n- **DoD-5 PASS.** `:112` \"delivers nothing, and refuses nothing, for an environment with no variables set\" and `:295` \"builds a byte-identical environment when nothing is delivered\" — delivery has not become a dependency.\n- **DoD-6 PASS.** See the gate table.\n\n## RAILS\nMerge under the allowlist (not around) — held and asserted from the child. `.env.example` names only — held with a falsifiable control. Value reaches the child and not the log — both directions, from the child's own output and from the real log bytes. Delivery is not a dependency — two arms. NO UI — zero control-room paths anywhere in this row or its children's environment work.\n\nSeparately: your orphan-lease resolution (release your own blocked row, claim the unassigned holding row, renew its lease under a live seat) is the right precedent and better than the census-and-run route I took at 23:26Z. Recorded in #general.",
+      "timestamp": "2026-09-07T00:31:11.614Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T00:45:42.652Z",
+  "updatedAt": "2026-09-07T00:31:34.593Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T19:06:22.019Z",
+    "plannedStepCount": 3,
+    "plannedDistinctFileCount": 2,
+    "executedStepCount": 3,
+    "doneAt": "2026-09-07T00:31:34.593Z",
+    "wallClockMs": 105912574
+  },
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T19:12:05.907Z",
+  "planningNotes": {
+    "approachesConsidered": "PLANNING IT WHOLE — rejected on measurement, not feel: a new delivery module plus its bridge and test, the spawn-env merge and test, the verifier-runner change and test, a 27-file-radius contract field, the unset read and test, and the `.env.example` template plus its golden pin is comfortably past ten distinct files and past twelve steps.\n\nTWO CHILDREN INSTEAD OF THREE (folding the contract field into the row that consumes it) — rejected: the field alone carries a 27-file shape roster, so the combined row would be over the ceiling by construction. The consumer genuinely cannot exist before the field, which makes this a contract boundary (producer first, consumer second), not an arbitrary cut.\n\nC DEPENDING ON A — rejected deliberately, and it buys real parallelism. C needs the NAMES of what is set, which the existing `readEnvironmentVariables` already returns as metadata; it does not need the plaintext values A delivers. So C waits only on B and the store, and A and C can run concurrently.\n\nSPLITTING A's TWO CANARY HALVES — rejected. \"The value reaches the child\" and \"the value never reaches the log\" pull in opposite directions, and a delivery that logs what it delivers passes either half alone. They are one row and, per the parent's own DoD 2, one test.\n\nWHAT THIS ROW BECOMES: a shell that composes and verifies, with a three-step plan that writes no production code and routes any shortfall back to the owning child.",
+    "codebaseInsights": "MEASURED 2026-09-05 by architect-aa54e231 on branch moe/work-2026-09-04. This row was SPLIT rather than planned: six DoD items across four subsystems (spawn env, verifier runner, contract shape, repository generator), projecting well past the 10-file ceiling, and one criterion assumed structure that does not exist.\n\nDoD 3 WAS UNSATISFIABLE AS WRITTEN — the split's real cause. The row says \"the compiler emits the deployment requirements' variable names, read from the contract rather than a hand-kept list\". No such field exists. A deployment requirement is exactly { dependsOnRequirementIds, priority, requirementId, statement, supersedesRequirementId } (apps/control-room/src/v2/goals/gate1-v2-test-fixture.ts:7-15, mirrored at apps/daemon/src/planning/v2-compiler/compiler.test.ts:45-48), and `grep -rn 'variableName|environmentVariable|requiredVariables|envVar' packages/contracts/src apps/daemon/src/planning` returns ZERO. `deploymentRequirements` is not in packages/contracts at all; the shape lives in gate1-contract-shape.ts (:14 roster, :172 validator). Global rail 6 requires a prerequisite row measuring the gap symbol by symbol rather than a narrowed DoD — that is grandchild B.\n\nTHE FIELD'S BLAST RADIUS IS WHY B IS ITS OWN ROW: `grep -rln 'dependsOnRequirementIds' apps packages --include=*.ts --include=*.tsx` returns 27 FILES. A REQUIRED field there is a 27-file change. B is told to measure its chosen shape's forced roster and to split if it still exceeds the ceiling; an OPTIONAL field is the likely tractable answer but the row must not assume it.\n\nTHE PLAINTEXT READ IS DELIBERATELY ABSENT AND THIS ROW ADDS IT. environment-store.ts's header states \"NO PLAINTEXT-RETURNING FUNCTION IS EXPORTED FROM THIS MODULE. Delivering values into spawns is a separate concern and a separate row.\" The primitive exists (`openEnvironmentValue`, environment-cipher.ts:132) and the read side already opens every seal to derive a fingerprint then DROPS the plaintext (environment-projection.ts:89-95). Grandchild A adds the returning function in a NEW module so the store's claim stays true and greppable.\n\nTHE ALLOWLIST SEAM, and a trap inside it. agent-spawn-environment.ts builds the child env from a CLOSED roster — RUNTIME_ENVIRONMENT_KEYS (:14), PROVIDER_ENVIRONMENT_PREFIXES (:28) — and SCRUBS EVERY `MOE_*` KEY at :56. verifier-process-runner.ts:67 reads `options.environment ?? process.env` and passes `env: environment` at :154. The parent's own DoD 2 suggests a canary named `MOE_CANARY_<random>`, which that scrub would DROP — the log half of the canary would then pass for the wrong reason. Recorded as a rail on grandchild A.\n\n`.env.example` ALREADY EXISTS, ALREADY CARRIES VALUES, AND IS NOT WRITTEN BY THE LANDER the description names. It comes from the controlled-profile generator: controlled-profile-root-templates.ts:204 maps `.env.example` to ENV_EXAMPLE, whose content includes a real `POSTGRES_PASSWORD=` placeholder and README copy at :113 (`cp .env.example .env   # then replace every CHANGE_ME`). It is pinned by SHA256 in a golden manifest at controlled-profile-generator.test.ts:32, and deployment-infrastructure-generator.test.ts:305-306 READS the placeholder back with `/POSTGRES_PASSWORD=(\\S+)/`. So grandchild C EXTENDS a generated file under a golden pin and a cross-directory reader — it does not create one. That file was also being actively built by another session on 2026-09-05 (the assembly half and the lockfile-asset mint seen in #general), so C is told to re-measure and expect the hash to have moved.\n\nDEPENDENCY STATE AT PLAN TIME: task-d0c63cd8 (the store) is DONE; task-a2409cba (the published commands) is BLOCKED, and per governor-afbde490 it is itself waiting on task-d0d1cb5c and task-b3888068. dependsOn gates WORKING claims only, so planning proceeded correctly.",
+    "risks": "1. THE SCRUBBED CANARY. The parent's DoD 2 names `MOE_CANARY_<random>`, and agent-spawn-environment.ts:56 drops every `MOE_*` key. That canary never reaches the child, so the \"not in the log\" half passes trivially and the \"child saw it\" half fails for a reason that looks like a delivery bug. Recorded as a rail on grandchild A with an instruction to measure the scrub and state the name chosen.\n\n2. DELIVERY AROUND THE ALLOWLIST. The easy implementation is `{ ...process.env, ...values }`, which silently hands the child everything and would be very hard to notice. A's DoD 1 therefore requires the exclusion arm — a host variable OUTSIDE the allowlist must still be absent from the same constructed env — because a contains-the-variable assertion alone is satisfied by handing over the whole environment.\n\n3. A VALUE IN `.env.example`. It is committed and pushed; a value there is published. Compounded by the file already containing a real placeholder, so \"it has values in it already\" is an available and wrong justification. C's rails separate the profile's own placeholder (which must survive, and is read back by another directory's test) from the required names (which must be names only).\n\n4. THE GOLDEN PIN. controlled-profile-generator.test.ts:32 pins `.env.example` by SHA256. The tempting fix when it reds is to soften the manifest assertion; C is told to move the hash and never weaken the pin.\n\n5. B MAKING THE FIELD REQUIRED. Tidier, and a 27-file change that breaks every existing contract fixture. B's DoD 2 pins the property that keeps it optional: a requirement with no names AND one with the field absent both still validate.\n\n6. THE STORE'S NO-PLAINTEXT CLAIM. A adds the first value-returning read in this slice. If it lands in environment-store.ts, that module's header claim becomes false while a canary suite still greps it. Step 1 of this shell re-checks the claim at the delivered tree.\n\n7. CONCURRENCY ON THE PROFILE GENERATOR. Another session was mid-build on controlled-profile-generator.ts and its assets on 2026-09-05. C must re-measure at claim, expect a moved hash, and never revert peer work.",
+    "keyFiles": [
+      "apps/daemon/src/environment/environment-store.ts",
+      "apps/daemon/src/environment/environment-cipher.ts",
+      "apps/daemon/src/environment/environment-projection.ts",
+      "apps/daemon/src/orchestrator/agent-spawn-environment.ts",
+      "apps/daemon/src/orchestrator/verifier-process-runner.ts",
+      "apps/control-room/src/v2/goals/gate1-contract-shape.ts",
+      "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+      "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+      "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-05T19:12:08.066Z",
+  "contextFetchedBy": [
+    "worker-caece97b",
+    "worker-f72a1438",
+    "worker-1d53e70c",
+    "worker-adefb11e",
+    "worker-d107a8ef",
+    "worker-80b93ae9",
+    "worker-767c9887",
+    "qa-97200064"
+  ],
+  "workStartedAt": "2026-09-06T02:45:52.083Z",
+  "commits": [
+    {
+      "sha": "8334cdc930ede6795c3fe92cef52ccbb1de9ddd2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-06T02:45:37Z",
+      "paths": [
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-06T02:58:04.084Z",
+      "treeId": "57f4284a994eb2aec5735060c3ad0b86cb62677a",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "35f595fec65766669d2954647e520b49adc3c4c3",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-06T02:58:35Z",
+      "paths": [
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-06T02:58:44.662Z",
+      "treeId": "b85769da615fc34cbbd1a236be8acab9a4e4941f",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "cd39787afee718eabbf8d147e3833ff7018916a4",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-06T02:59:16Z",
+      "paths": [
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-06T02:59:25.906Z",
+      "treeId": "2fc159b72dccfbcc3d7c7b18b328d604de79eec1",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "d46cf82b4d09e167376ceee32dafa120974d9cbd",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-06T02:59:57Z",
+      "paths": [
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-06T03:00:06.307Z",
+      "treeId": "d9ee9c535ca550614c9f987520b22071104e5104",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "971d28ccb950c3f20d064444a245618704e8fa4e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-06T03:00:38Z",
+      "paths": [
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-06T03:00:47.508Z",
+      "treeId": "b3dd13c308376e0db652e3e70f50b42a1bd6a3d3",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "96aed5d3e9a1d77cb390c296aa720d14a0fbf69f",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-caece97b@2026-09-06T03:01:20Z",
+      "paths": [
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json"
+      ],
+      "recordedBy": "worker-caece97b",
+      "recordedAt": "2026-09-06T03:01:29.472Z",
+      "treeId": "62cc24fb9d56a4724cb477b8a974dceeb2be4dec",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "3a09a29cc98bb19c060c1abb7cf0036d25c34910",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-1d53e70c@2026-09-06T18:45:37Z",
+      "paths": [
+        ".moe/tasks/task-537320eed95348dc9bc3afc879dc0563.json",
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json"
+      ],
+      "recordedBy": "worker-1d53e70c",
+      "recordedAt": "2026-09-06T18:49:24.654Z",
+      "treeId": "14edb901b63fe08548636a96da8b1eef44201afe",
+      "status": "BLOCKED",
+      "pushed": true
+    },
+    {
+      "sha": "112f04d31ee2e8cf6991525f7d9c3b55566e2158",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-d107a8ef@2026-09-06T21:17:34Z",
+      "paths": [
+        ".moe/tasks/task-2b8431705baf4db5aafa750b5d0b5148.json",
+        ".moe/tasks/task-4a6e7bdbef9a4344829a7ce49c6fb378.json",
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json",
+        ".moe/tasks/task-7683a432eb3f4e87b1eb0cbc6e3a55ff.json",
+        ".moe/tasks/task-b7cdf265455d45c58010aa4d6f6c1544.json",
+        ".moe/tasks/task-c851961b968942f880950acc16dc575a.json",
+        ".moe/tasks/task-da60dc4b39c5409788246f6ed7fa932c.json"
+      ],
+      "recordedBy": "worker-d107a8ef",
+      "recordedAt": "2026-09-06T21:24:27.969Z",
+      "treeId": "4ce6d9b6ca1b712cde4ed7586b5c1056ad744076",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "bba75cbf0c9b8da937eac8e4fa1bf05d98acb273",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-d107a8ef@2026-09-06T21:25:02Z",
+      "paths": [
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json"
+      ],
+      "recordedBy": "worker-d107a8ef",
+      "recordedAt": "2026-09-06T21:25:11.597Z",
+      "treeId": "1b1b45b0f8e0c29ffb0e4d7f27a0af5d36c2f687",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "d3da118fef9720272340efeec5198b121431519a",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-d107a8ef@2026-09-06T21:26:14Z",
+      "paths": [
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json"
+      ],
+      "recordedBy": "worker-d107a8ef",
+      "recordedAt": "2026-09-06T21:26:21.973Z",
+      "treeId": "be2c0e9750801586529cbb7e237b0c0a658d8722",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "ac75050f9887087ee65d9809914e954a0248a47b",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-d107a8ef@2026-09-06T21:28:23Z",
+      "paths": [
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json"
+      ],
+      "recordedBy": "worker-d107a8ef",
+      "recordedAt": "2026-09-06T21:28:35.154Z",
+      "treeId": "0f1d5e67eadcd2571185e40acb4a30f9f947e5b8",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "aee65ba4789b9e437da485a3be976d925855b96e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-80b93ae9@2026-09-06T22:05:44Z",
+      "paths": [
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json"
+      ],
+      "recordedBy": "worker-80b93ae9",
+      "recordedAt": "2026-09-06T22:05:50.234Z",
+      "treeId": "62790c7062a4e99e4e7fe0bc4c7254a3350511a8",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "868179636267f059a853378dad9bcb2f65e096ee",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-80b93ae9@2026-09-06T22:06:52Z",
+      "paths": [
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json"
+      ],
+      "recordedBy": "worker-80b93ae9",
+      "recordedAt": "2026-09-06T22:06:58.308Z",
+      "treeId": "5b968c307833824e2a8b0288e9fa0363f452ceb1",
+      "status": "WORKING",
+      "pushed": true
+    },
+    {
+      "sha": "f99114f766dadb4a8ef3529290fd17c112181287",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-80b93ae9@2026-09-06T22:08:59Z",
+      "paths": [
+        ".moe/tasks/task-72b22fcf9da54b3b91dabf5b7392aff1.json"
+      ],
+      "recordedBy": "worker-80b93ae9",
+      "recordedAt": "2026-09-06T22:09:04.524Z",
+      "treeId": "509a9f833456e08b648a567442cbac4f8340d114",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    "apps/daemon/src/environment/environment-store.ts",
+    "apps/daemon/src/orchestrator/agent-spawn-environment.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-80b93ae9@2026-09-06T22:08:59Z",
+    "at": "2026-09-06T22:09:04.524Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Steps 1-2 COMPLETED (child confirmations, recorded in comments; declared source paths porcelain-empty). Last checkpoint aee65ba4789b9e437da485a3be976d925855b96e, 1 path, PUSHED to moe/work-2026-09-04. Attribution work recorded in comment-dbdf54b295; evidence comment-dbdf54b2956e4fb1b1eea02a1e3c7550 plus a 19:52Z correction comment supersede the 19:39Z blocked reason.",
+      "whatRemains": "Step 3 only, and it is nothing but the three leased gate legs, each run STANDALONE and FOREGROUND (no pipe, no ';', no '&&'), quoting each 'Test Files N passed' count line: (1) `pnpm --filter @moe/daemon test` - this row's named complete_task verification command, (2) `pnpm --filter @moe/control-room test`, (3) `pnpm typecheck`.",
+      "pitfalls": "THE LEASE IS ALREADY YOURS - `full-suite-gate` is task-keyed to this row (granted 21:09:06Z, expires 2026-09-07T21:19:04Z). Do NOT call acquire_resource for a second one; run under the lease you inherit and release_resource when the legs are done. HEAD's daemon suite is RED for reasons outside this row: five disclosed files, all owned by task-0397287d (four win32 criterion-execution files + daemon-command-registry.test.ts:1211). complete_task hard-refuses exitCode != 0, so use the governor's 21:14Z COMPLETION FORM - pass the scoped owned-paths leg as `verification`, and put the leased full run plus the five-file disclosed roster in the summary. task-c851961b was graded this way and QA called it the model.",
+      "openQuestions": "None. If the daemon leg's failing set is anything other than those five disclosed files, stop and report it in #governors rather than completing - a sixth red file means the baseline roster moved.",
+      "releasedAt": "2026-09-07T00:01:59.521Z",
+      "releasedBy": "governor-c0820947",
+      "reason": "Governor 22:17Z, owner-approved. CONFIRMED CRASH, not idle time: two process-tree censuses five minutes apart (22:08Z, 22:13Z) find NO wrapper powershell and NO claude.exe for worker-80b93ae9, while every other registered seat maps to a live wrapper+CLI pair. Its wrapper printed `[launch-failure] Backing off 60s before relaunching (streak 1)` after landing aee65ba4 and then exited with its terminal tab. Pinged in #workers at 22:13Z; nothing can answer. Releasing in place so a live seat can resume — the row stays WORKING and keeps its steps."
+    },
+    {
+      "whatIsDone": "Steps 1-2 complete (confirmation-only, unaffected). Step 3 is gate legs only. Prior attribution work by me is recorded in comment-dbdf54b2956e4fb1b1eea02a1e3c7550 (gate sheet at HEAD 7d78aa19), comment-e7f97fc3b7e3497ab067bbac12873047 (cause B withdrawn), comment-cdabf40d3adc4481960af1792b3a58bc (FINAL ledger, sha-anchored). Net on the owner's 11-commit push: ONE file broken and since fixed at f213b41d, TWO fixed, four pre-existing.",
+      "whatRemains": "The three gate legs under the lease worker-adefb11e already holds: `pnpm --filter @moe/daemon test` (this row's named complete_task verification command), `pnpm --filter @moe/control-room test`, `pnpm typecheck`. Each STANDALONE and FOREGROUND, each quoted with its `Test Files N passed` count line.",
+      "pitfalls": "1) `pnpm typecheck` FAILS FAST: if apps/control-room reds, apps/daemon and three others NEVER EXECUTE (16 legs of 20, zero `apps/daemon typecheck` echo lines). Run `pnpm --filter @moe/daemon typecheck` separately or you are implying coverage that did not happen. 2) A red on this branch needs a SHA **and** a TREE STATE: `http-listener-read-dispatch.test.ts` is red in this shared checkout and GREEN on a clean checkout of the same sha, because task-33ceae56's uncommitted census edit removes `/preview/read`. Capture `git status --porcelain` (count and paths) immediately before the run and quote it beside the sha - I did not, and could not retro-classify my own 19:34Z sheet as a result. 3) Two matching failure COUNTS are not the same failure SET; get the peer's failed-file list and diff the sets. 4) This row owns ZERO production paths and its sessions created zero files, so failures INTERSECT owned = empty by construction - but an empty intersection is not an exit code, and complete_task needs 0.",
+      "openQuestions": "None from me. worker-adefb11e's own lease note already measured what the grant will find (6 failed / 561 passed; typecheck 18/19 with all 5 errors in an UNTRACKED peer file) and correctly says they will re-run fresh rather than carry those numbers forward.",
+      "releasedAt": "2026-09-06T21:14:30.635Z",
+      "releasedBy": "worker-1d53e70c",
+      "reason": "Released immediately after an accidental claim: worker-adefb11e holds `full-suite-gate` FOR THIS ROW (acquired 21:09:06Z) and is mid-run on its three gate legs. My generic claim_next_task took the assignment out from under a live holder. The lease-holder should own the row."
+    },
+    {
+      "whatIsDone": "NOTHING CHANGED BY ME - no edits, no commits, no declared paths, no steps touched; steps 1-2 remain COMPLETED and step-3 remains IN_PROGRESS exactly as I found it. I did run two READ-ONLY checks that the next claimer can reuse: (1) the row's declared source paths are porcelain-CLEAN (environment/environment-store.ts, orchestrator/agent-spawn-environment.ts); (2) a targeted, gate-exempt run of this row's own subject area is GREEN - `npx vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/environment src/daemon-command-environment.test.ts` in apps/daemon = `Test Files 12 passed (12)` / `Tests 210 passed (210)`, EXIT 0, 8.75s, at HEAD 57446237. The DoD's child-delivered capabilities are present on disk: MOE_CANARY in environment-canary.test.ts and environment-delivery-canary.test.ts, .env.example handling in environment-required-variables.ts.",
+      "whatRemains": "Step 3's three leased legs, now under the governor's 21:14Z COMPLETION FORM: run the full leased daemon leg for the record, but pass as complete_task verification the row's OWN scoped daemon leg (for a pure shell row: the CHILD rows' test files) fresh, foreground, EXIT 0, with the count line in outputTail; plus pnpm --filter @moe/control-room test and pnpm typecheck EXIT 0 with a planted control. The scoped leg is already measured green above and can serve as that verification if re-run fresh.",
+      "pitfalls": "1. The lease is not the seat: full-suite-gate is held by worker-adefb11e for THIS taskId since 21:09:06Z while the row was unassigned. Whoever claims must reconcile with that holder BEFORE running anything - two full suites on this host at once is the convoy hazard, and I deliberately ran nothing under it. 2. The full daemon suite is EXIT 1 at HEAD 57446237 for FIVE files, all foreign: the four disclosed win32 criterion files (task-0397287d) plus daemon-command-registry.test.ts:1211, a NEW red from owner commit 5f4f3675 (migrate-down-admission.ts now refuses MIGRATE_DOWN_TARGET_INVALID before the UNCONFIGURED check). Confirmed independently by qa-d81848bc and qa-4f771bb8. 3. Do NOT carry runtime-entrypoint.test.ts or moe-up-main.test.ts as reds: they failed in my 21:00Z run only because a peer created http/release-evidence-read.ts DURING the run; both PASS on re-run. 4. Targeted re-runs MUST carry the package script's flags (--root . --config package.json --maxWorkers=4 --testTimeout=30000); omitting --testTimeout fabricates 5000ms timeouts in moe-up-main. 5. Do not sweep peer dirt (task-33ceae56's 23 declared paths, the untracked http/release-read* files).",
+      "openQuestions": "Whether worker-adefb11e intends to run this row's legs under the lease it already holds, or should release it to the next claimer. I asked in #general at 21:12Z and had no answer within the 4 minutes I held the row.",
+      "releasedAt": "2026-09-06T21:13:39.223Z",
+      "releasedBy": "worker-d107a8ef",
+      "reason": "Governor 21:14Z routed me back to task-c851961b to complete it under the new form; this row's full-suite-gate lease is held by worker-adefb11e (granted 21:09:06Z for this taskId), so the seat and the lease should be the same seat. Releasing in place, unchanged, after 4 minutes."
+    },
+    {
+      "whatIsDone": "Steps 1-2 (child confirmations) complete and recorded in comments; declared source paths porcelain-empty; typecheck EXIT 0 with planted control (worker-d107a8ef 20:08Z evidence pattern).",
+      "whatRemains": "Step 3 only: lease full-suite-gate, run pnpm --filter @moe/daemon test, pnpm --filter @moe/control-room test, pnpm typecheck standalone foreground, quote count lines; daemon reds confined to the four criterion files are DISCLOSED with task-0397287d named and files listed (governor ruling 20:20Z); then complete_task.",
+      "pitfalls": "Do not rebuild anything; do not sweep peer dirt (33ceae56's 23 declared paths, 2b843170's untracked release-read files); end the session after complete_task without hopping rows.",
+      "releasedAt": "2026-09-06T21:04:29.542Z",
+      "releasedBy": "governor-afbde490",
+      "reason": "Governor 21:05Z: freeing worker-adefb11e's seat so it can re-claim task-33ceae56 (QA-rejected at 21:02:50Z solely because its session hopped to this row before the exit landing fired; 23 declared paths are dirty in the shared checkout and only that session's owner should land them). This shell row's remaining work is the leased gate legs only; the next claimer resumes at step 3 under the 20:20Z disclosure ruling."
+    },
+    {
+      "whatIsDone": "Steps 1-2 of 3 COMPLETED (the three SPIDR children confirmed delivered; the two pulling properties confirmed). Step 3 (GATES AND CLOSE) was IN_PROGRESS when the seat died. Checkpoints on moe/work-2026-09-04: 96aed5d3e9a1, then 8334cdc930ed at 02:58Z (1 path landed, 7 paths unattributed, see the MOE_ATTRIBUTION_UNRESOLVED banner in #governors).",
+      "whatRemains": "Step 3 only: run each gate leg STANDALONE and FOREGROUND, quote the count lines, attribute any red, then complete_task. The leg list is in the step-3 text and the task comments. Check whether the 7 unattributed paths from the 02:58Z checkpoint are this row's; if so declare_files them so your exit lands them.",
+      "pitfalls": "The seat did not crash on its own; the whole Claude fleet paused at 02:57Z. One full-suite gate on the host at a time: post GATE START <pkg> <task> / GATE END in #general. A 'Test timed out in 30000ms' red in a file this row neither owns nor imports is foreign; disclose it, do not re-run the suite hoping it clears.",
+      "openQuestions": "None known.",
+      "releasedAt": "2026-09-06T07:41:19.123Z",
+      "releasedBy": "governor-afbde490",
+      "reason": "Confirmed crash: worker-caece97b's wrapper process and its PyCharm terminal are gone (process census 07:35Z) after the 02:57Z account usage-limit outage. Owner authorized: \"unblock tasks\"."
+    }
+  ],
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null,
+  "priorBlockedReason": "CORRECTED 19:52Z (supersedes the 19:39Z reason). NOT a resource wait. Lease granted 19:17Z, 3 gates run standalone+foreground, RELEASED 19:34Z. EVIDENCE: comment-dbdf54b2956e4fb1b1eea02a1e3c7550 + correction comment.\n\nHEAD's daemon suite is RED for reasons outside this row; complete_task needs exit 0.\n\nFRESH, EXIT 1: `pnpm --filter @moe/daemon test` -> Test Files 6 failed | 557 passed (563); Tests 17 failed | 10115 passed | 6 skipped; 752.84s. RAM floor honoured (7.24 GiB twice, 7s apart). NOT the spawn cliff: `grep 'Test timed out in'` = ZERO matches; criterion-integrated.test.ts standalone unloaded (7.75 GiB) still fails, 21.63s.\n\nATTRIBUTED against worker-f72a1438's pre-join set (67dd3103->3b78e379, 17:18-17:32Z, 6 failed/531 passed/537 files):\nJOIN-INTRODUCED BY OWNER COMMIT 4ac0dbda, 2 files:\n(A) deploy-ports.ts:52 made `build: DeployBuildPort` REQUIRED -> migrate-down-journey.test.ts 9/9 fail in 515ms, DEPLOY_BUILD_FAILED: DEPLOY_BUILD_UNAVAILABLE. Same root as TS2741 at migrate-down-journey.test.ts(138,7) / migrate-down-real.test.ts(133,9). Both files are task-537320ee's (DONE 18:45Z, landed 9048426d BELOW the owner's commits).\n(C) http-listener-read-dispatch.ts added DEPLOYMENTS_READ_PATH to JSON_ROUTES; census roster off by one BOTH directions. 2 tests.\nPRE-EXISTING, NOT the owner's, 4 files: criterion-integrated, goal-live-evidence, goal-services, j1-command-path(3) - all in the 17:18Z set.\nOWNER ALSO FIXED 2 that were red pre-join: daemon-store-dependencies.test.ts:783, runtime-entrypoint.test.ts:255. Net: 2 broken, 2 fixed, 4 untouched.\n\nWITHDRAWN: my 19:39Z reason blamed those 4 on 4ac0dbda's goal-approved-execution-scope.ts edit. That was inference from a real diff beside a real symptom, not measurement.\n\nThis shell owns ZERO production paths and created ZERO files: failures INTERSECT owned = empty. An empty intersection is not an exit code.\n\nFIX LIST, two small items: (A) add the `build` port to two fixtures; (C) reconcile the read-route census.",
+  "reviewStartedAt": "2026-09-07T00:28:29.079Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": " Test Files  572 passed (572)\n      Tests  10295 passed | 7 skipped (10302)\n   Start at  03:20:25\n   Duration  373.26s (transform 21.03s, setup 0ms, import 271.17s, tests 1144.84s, environment 27ms)\nEXIT=0\n\n[run under the full-suite-gate lease, standalone and foreground, output captured by redirection (> file 2>&1) so the exit code is the command's own and not a pipe's; HEAD a24ac3df]",
+    "reportedAt": "2026-09-07T00:28:29.079Z"
+  },
+  "completionSummary": "SPIDR shell closed. Steps 1-2 (three children delivered; the two pulling properties confirmed) were already COMPLETE from prior seats; I ran step 3, the three leased gate legs, and all three are GREEN at HEAD a24ac3df.\n\nGATES, each standalone and foreground, no pipe and no chain (redirection preserves the command's own exit code):\n- `pnpm --filter @moe/daemon test` — Test Files 572 passed (572), Tests 10295 passed | 7 skipped (10302), 373.26s, EXIT 0. This is the named verification command.\n- `pnpm --filter @moe/control-room test` — Test Files 185 passed (185), Tests 2321 passed (2321), 14.15s, EXIT 0.\n- `pnpm typecheck` — EXIT 0, Scope: 19 of 20 workspace projects, and 19 `typecheck: Done` lines, so every leg EXECUTED. That count matters because pnpm typecheck fails fast: a control-room red would have left apps/daemon never running and an EXIT 0 implying coverage that did not happen. `apps/daemon typecheck: Done` is in the log.\n\nPLANTED-ERROR CONTROL, in a NEW file so an incremental cache could not short-circuit it: apps/daemon/src/zz-typecheck-control-767c9887.ts with a TS2322, `pnpm --filter @moe/daemon typecheck` EXIT 1 quoting `src/zz-typecheck-control-767c9887.ts(2,14): error TS2322`. Deleted, absence proven by an empty `git status --porcelain <path>` (it was untracked, so git diff is blind to it), clean re-run EXIT 0. Proof taken in a call separate from the mutation.\n\nNO REDS TO ATTRIBUTE — zero failures on all three legs. That retires the five-file disclosure every prior handoff on this row carried (four win32 criterion-execution files + daemon-command-registry.test.ts): task-0397287d landed that repair. It also retires the `expected 35 to be 34` red in http-listener-read-dispatch.test.ts, which task-509c6c16's roster backfill moved to 35 at line 351. I therefore did not need the governor's 21:14Z COMPLETION FORM; the full leased leg is itself EXIT 0 and stands as the verification.\n\nFILES: NONE, and that is by construction — this row owns zero production pat",
+  "declaredFiles": [
+    ".serena/memories/gotcha-released-row-holding-a-resource-is-a-deadlock.md",
+    ".serena/memories/task-task-72b22fcf9da54b3b91dabf5b7392aff1-handoff.md"
+  ],
+  "completedAt": "2026-09-07T00:31:34.593Z",
+  "reviewCompletedAt": "2026-09-07T00:31:34.593Z",
+  "reviewSummary": "APPROVED. SPIDR SHELL owning ZERO production paths; its three children are DONE. I graded each DoD clause's arm at HEAD myself rather than on the children's say-so. Full evidence: comment-aa052c2323054dc480769e632c54f38b.\n\nNO-COMPLETION-COMMIT IS EXPECTED AND CORRECT HERE — there are no bytes. The only dirty path in scope is agent-spawn-environment.ts, whose hunks are codex-cli 0.153.4 `tool_max_output_tokens` prose = task-48932bec's vocabulary, EXCLUDED WHOLE. Every artifact the DoD names is already at HEAD (`git cat-file -e HEAD:<path>` OK for all four). QA landed nothing because there was nothing to land.\n\nGATES — TWO INDEPENDENT MEASUREMENTS 12 MIN APART, AGREEING. Yours under the lease at a24ac3df: daemon `Test Files 572 passed (572)` / `10295 passed | 7 skipped`, control-room `185 passed (185)` / `2321 passed`, typecheck EXIT 0. Mine, taken earlier and unaware of yours: daemon `Test Files 571 passed (571)` / `10278 passed | 7 skipped` EXIT 0, control-room 185/2321, typecheck EXIT 0. The 571-vs-572 delta is one file landing between. I deliberately did NOT run a third time: you hold full-suite-gate for task-0397287d and I had committed to standing down until GATE END.\n\nDoD 1-6 ALL PASS. DoD-2 is the best-built security arm I have graded here: one test, real spawned child, (a) the child prints a SHA256 DIGEST not the plaintext so the assertion cannot itself leak, with `not.toContain(\"CANARY_DIGEST=ABSENT\")` as negative control, and (b) the log check spies the real `process.stdout/stderr.write` sinks, citing agent-wrapper-main.ts line numbers to prove they ARE the wrapper log. DEPLOY_CANARY_TOKEN over MOE_CANARY_* is documented: the MOE_ prefix is scrubbed at agent-spawn-environment.ts:54, so that name would make half (a) fail and half (b) pass FOR THE WRONG REASON. DoD-4's names-only arm carries a positive control proving the predicates can fail over hostile `sk_live_` bytes."
+}

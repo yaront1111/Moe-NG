@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 
+import { frameOfSurface } from "../../live/live-board-feed.js";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import type { LiveGoalCatalogEntry } from "../../live/live-goal-catalog.js";
 import type { RunGoalView, RunNodeView } from "../../live/live-runs.js";
 import { deriveGoalGlance } from "./goal-glance.js";
+import { AFTER_COMPILE_FRAME, AFTER_REJECT_FRAME, RECORDED } from "./plan-reject-frames.fixture.js";
 
 const NOW = Date.parse("2026-09-04T09:00:00.000Z");
 const ENTRY: LiveGoalCatalogEntry = {
@@ -14,7 +16,7 @@ const ENTRY: LiveGoalCatalogEntry = {
 
 function node(nodeKey: string, status: RunNodeView["status"], extra: Partial<RunNodeView> = {}): RunNodeView {
   return {
-    accepted: null, claim: null, criterionIds: [], dependsOn: [], landing: null, lastActivityAt: null, nodeKey,
+    accepted: null, claim: null, criterionIds: [], declaredMigrations: null, dependsOn: [], landing: null, lastActivityAt: null, nodeKey, nodeRef: `node-${nodeKey}`,
     objective: `Objective of ${nodeKey}`, receipt: null,
     review: { escalated: false, findings: [], latestRoute: null, rounds: 0, unreadable: false, unsuccessfulRounds: 0, version: 0 },
     sharedKey: false, status, ...extra,
@@ -27,9 +29,9 @@ function coverage(verified: number, criteria: number, lifecycle: string, gate1: 
       contractId: "c-1", gate1, plane: "V1",
       requirements: [{
         criteria: [
-          { criterionId: "crit-1", nodeKey: "n-1", statement: "s", status: "VERIFIED" },
-          { criterionId: "crit-2", nodeKey: "n-2", statement: "s", status: "PLANNED" },
-          { criterionId: "crit-3", nodeKey: "n-3", statement: "s", status: "PLANNED" },
+          { criterionId: "crit-1", nodeKey: "n-1", nodeTestStatus: null, statement: "s", status: "VERIFIED" },
+          { criterionId: "crit-2", nodeKey: "n-2", nodeTestStatus: null, statement: "s", status: "PLANNED" },
+          { criterionId: "crit-3", nodeKey: "n-3", nodeTestStatus: null, statement: "s", status: "PLANNED" },
         ],
         requirementId: "r-1", statement: "r",
       }],
@@ -68,6 +70,24 @@ describe("deriveGoalGlance", () => {
     expect(glance.nodesLine).toBeNull();
   });
 
+  it.each([
+    { frame: AFTER_COMPILE_FRAME, needsYou: true, stage: "PLAN" },
+    { frame: AFTER_REJECT_FRAME, needsYou: false, stage: "PLAN_REJECTED" },
+  ])("reports $stage from the successor without losing the original run identity", ({ frame, needsYou, stage }) => {
+    const currentSurface = frameOfSurface(frame);
+    expect(currentSurface.outcome).toBe("SURFACE");
+    expect(RECORDED.successorRunId).not.toBe(RECORDED.rejectedRunId);
+    expect(currentSurface.planningGoalRefs).toEqual({ [RECORDED.successorRunId]: RECORDED.goalId });
+    const glance = deriveGoalGlance({
+      coverage: undefined, entry: { ...ENTRY, goalId: RECORDED.goalId, planningRunRef: RECORDED.rejectedRunId },
+      nowMs: NOW, run: undefined, surface: currentSurface,
+    });
+    expect(glance.stage).toBe(stage);
+    expect(glance.needsYou).toBe(needsYou);
+    expect(glance.needsYouLabels).toEqual(needsYou ? ["Plan to approve"] : []);
+    expect(glance.rank).toBe(needsYou ? 0 : 3);
+  });
+
   it("counts the nodes in the board's words while agents work, and flags the stuck one on the headline", () => {
     const nodes = [
       node("n-1", "ACCEPTED", { accepted: { verifierReceiptId: "r" } }),
@@ -79,7 +99,7 @@ describe("deriveGoalGlance", () => {
       surface: surface([], [STEP("n-1", "COMMITTED"), STEP("n-2", "READY", { claimedBy: "sess-wrap-1", expiresAt: "x" }), STEP("n-3", "READY")]),
     });
     expect(glance.headline).toBe("Agents are working: 1 of 3 nodes accepted. · 1 stuck");
-    expect(glance.nodesLine).toBe("3 nodes · 1 done · 1 working · 1 stuck");
+    expect(glance.nodesLine).toBe("3 nodes · 1 verified · 1 working · 1 stuck");
     expect(glance.state).toBe("ACTIVE");
     expect(glance.needsYou).toBe(false);
     expect(glance.stuck).toBe(1);
@@ -97,6 +117,35 @@ describe("deriveGoalGlance", () => {
     expect(glance.needsYouLabels).toEqual(["Review exhausted"]);
     expect(glance.rank).toBe(0);
     expect(glance.nodesLine).toBe("1 node · 1 stuck");
+  });
+
+  it.each(["BLOCKED", "REPLANNED", "UNATTRIBUTABLE"] as const)(
+    "keeps a %s node visibly blocked after the board adopts pipeline columns", (nodeStatus) => {
+      const glance = deriveGoalGlance({
+        coverage: coverage(0, 1, "EXECUTION_ENABLED"), entry: ENTRY, nowMs: NOW,
+        run: run([node("n-1", nodeStatus)]), surface: surface([], [STEP("n-1", "READY")]),
+      });
+      expect(glance.state).toBe("BLOCKED");
+      expect(glance.stuck).toBe(1);
+      expect(glance.rank).toBe(1);
+      expect(glance.nodesLine).toBe("1 node · 1 stuck");
+    },
+  );
+
+  it("uses the actual published commit when folding the list card's pipeline", () => {
+    const sha = "a".repeat(40);
+    const published: RunGoalView = {
+      ...run([node("n-1", "ACCEPTED", { landing: {
+        branch: "main", code: null, files: ["src/index.ts"], outcome: "COMMITTED", sha,
+      } })]),
+      publish: { branch: "main", code: null, decisionId: "publish-1", outcome: "PUSHED",
+        remoteUrl: "https://github.com/o/r.git", requestedAt: "2026-09-04T08:00:00.000Z", sha, url: null },
+    };
+    const glance = deriveGoalGlance({
+      coverage: coverage(1, 1, "EXECUTION_ENABLED"), entry: ENTRY, nowMs: NOW,
+      run: published, surface: surface([], [STEP("n-1", "COMMITTED")]),
+    });
+    expect(glance.nodesLine).toBe("1 node · 1 published");
   });
 
   it("is DONE, ranks last and carries no chip once the goal is closed", () => {

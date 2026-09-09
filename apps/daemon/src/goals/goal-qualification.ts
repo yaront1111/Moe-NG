@@ -29,9 +29,6 @@
  *    rather than asserting it away.
  */
 
-import { createHash } from "node:crypto";
-
-import type { JsonObject } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 
 import { readReviewLedger } from "../review/review-ledger.js";
@@ -44,52 +41,27 @@ import {
   GOAL_CLOSE_REVIEW_PACKAGE_STALE,
   GOAL_CLOSE_VERIFICATION_NOT_PASSED,
   GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT,
-  GOAL_PREREQUISITE_LAYER,
-  readApprovedNodeScope,
 } from "./goal-close-prerequisite.js";
-import type { GoalPrerequisiteRefusalCode } from "./goal-close-prerequisite.js";
+import { readApprovedExecutionScope } from "./goal-approved-execution-scope.js";
+import {
+  composeClosure, readLiveNodeEvidence, refuseClosure as refuse,
+} from "./goal-live-evidence.js";
+import type {
+  ClosureLeg, GoalClosureQualification, GoalClosureRefused,
+} from "./goal-live-evidence.js";
 import {
   accountDurableActivations, indexDurableReceipts, verifiedResultHolds,
 } from "./goal-qualification-reads.js";
-import type { DurableReceipt } from "./goal-qualification-reads.js";
 
-export const GOAL_CLOSURE_WITNESS_VERSION = "moe-goal-closure-witness/1" as const;
-
-export interface GoalClosureQualified {
-  readonly closureWitness: JsonObject;
-  readonly ok: true;
-  readonly zeroAuthorityWitness: JsonObject;
-}
-
-export interface GoalClosureRefused {
-  readonly code: GoalPrerequisiteRefusalCode;
-  readonly layer: typeof GOAL_PREREQUISITE_LAYER;
-  /** Two codes are raised by more than one guard; the message is what tells them apart. */
-  readonly message: string;
-  readonly ok: false;
-}
-
-export type GoalClosureQualification = GoalClosureQualified | GoalClosureRefused;
-
-const refuse = (
-  code: GoalPrerequisiteRefusalCode, message: string,
-): GoalClosureRefused =>
-  Object.freeze({ code, layer: GOAL_PREREQUISITE_LAYER, message, ok: false as const });
-
-interface NodeClosure {
-  readonly accepted: AcceptanceRecord;
-  readonly nodeRef: string;
-  readonly receipt: DurableReceipt;
-}
-
-/** Length-framed and version-tagged, so the preimage is injective: no two different ordered
- *  tuples can frame to the same bytes, and a ref never silently means something else. */
-function derivedRef(tag: string, parts: readonly string[]): string {
-  const hash = createHash("sha256");
-  hash.update(`${GOAL_CLOSURE_WITNESS_VERSION}|${tag}`);
-  for (const part of parts) hash.update(`|${String(part.length)}:${part}`);
-  return hash.digest("hex");
-}
+/**
+ * The closure vocabulary and the composer live in `./goal-live-evidence.ts`, which owns the
+ * second leg. They are re-exported here so this module stays the single import site the rest of
+ * the daemon knows: `foundation/foundation-surface.ts` takes all four names from here.
+ */
+export { GOAL_CLOSURE_WITNESS_VERSION } from "./goal-live-evidence.js";
+export type {
+  GoalClosureQualification, GoalClosureQualified, GoalClosureRefused,
+} from "./goal-live-evidence.js";
 
 /** The review half: the acceptance, the receipt it names, and the round that receipt attests. */
 function reviewClosure(
@@ -137,17 +109,37 @@ function reviewClosure(
  * Anything unaccounted, unattributable or unreadable refuses.
  */
 function zeroAuthority(
-  store: SqliteEventStore, projectId: string, bound: readonly NodeClosure[],
+  store: SqliteEventStore, projectId: string, bound: readonly ClosureLeg[],
+  legacyLocalKeys: readonly string[],
 ): number | GoalClosureRefused {
   const accounts = accountDurableActivations(store, projectId);
   if (accounts === null) {
     return refuse(GOAL_CLOSE_AUTHORITY_REMAINS, "the durable activation stream is unreadable");
   }
-  const byNode = new Map(bound.map((entry) => [entry.nodeRef, entry.receipt]));
+  // ONLY a Foundation leg ever took a lease and an effect, so only a Foundation leg can account
+  // for one. The filter is what makes `entry.receipt` well typed; the LIVE set below is what
+  // makes the rule bite.
+  const byNode = new Map(bound
+    .filter((entry) => entry.leg === "FOUNDATION")
+    .map((entry) => [entry.nodeRef, entry.receipt]));
+  const liveNodes = new Set(bound
+    .filter((entry) => entry.leg === "LIVE").map((entry) => entry.nodeRef));
   for (const account of accounts) {
     if (account.nodeKey === null) {
       return refuse(GOAL_CLOSE_AUTHORITY_REMAINS,
         "a durable activation has no readable attempt record");
+    }
+    if (legacyLocalKeys.includes(account.nodeKey)) {
+      return refuse(GOAL_CLOSE_AUTHORITY_REMAINS,
+        "a legacy activation ambiguously names a compiled node");
+    }
+    // A live node holds NO receipt to name a lease and an effect, so a durable activation that
+    // names one is authority this closure cannot account for. Skipping it — which is what a
+    // plain `byNode` miss does — would let the live leg close over exactly the authority design
+    // 278 asks it to prove gone, so the live leg refuses instead of continuing.
+    if (liveNodes.has(account.nodeKey)) {
+      return refuse(GOAL_CLOSE_AUTHORITY_REMAINS,
+        "a durable activation names a node proved on the live leg");
     }
     const receipt = byNode.get(account.nodeKey);
     if (receipt === undefined) continue;
@@ -165,41 +157,10 @@ function zeroAuthority(
   return accounts.length;
 }
 
-function compose(
-  approvalRef: string, nodes: readonly string[], bound: readonly NodeClosure[],
-  activations: number,
-): GoalClosureQualified {
-  return Object.freeze({
-    closureWitness: {
-      acceptanceClosureRef: derivedRef("acceptance", [
-        approvalRef,
-        ...bound.flatMap((entry) => [
-          entry.nodeRef, entry.receipt.receiptSha256, entry.accepted.verifierReceiptSha256,
-          entry.accepted.reviewInputDigest,
-        ]),
-      ]),
-      completionNodeAcceptedRef: derivedRef("completion-nodes", nodes),
-      noCurrentPreparationGeneration: true,
-      noPendingDraftOrSupersession: true,
-      obligationsHoldRef: derivedRef("obligations", bound.flatMap(
-        (entry) => [entry.nodeRef, entry.receipt.obligations])),
-      truthClass: "DAEMON_VERIFIED",
-    },
-    ok: true as const,
-    zeroAuthorityWitness: {
-      truthClass: "DAEMON_VERIFIED",
-      zeroAuthorityProofRef: derivedRef("zero-authority", [
-        String(activations),
-        ...bound.flatMap((entry) => [entry.receipt.leaseIdentity, entry.receipt.effectIdentity]),
-      ]),
-    },
-  });
-}
-
 function qualify(
   store: SqliteEventStore, projectId: string, goalId: string,
 ): GoalClosureQualification {
-  const approved = readApprovedNodeScope(store, goalId);
+  const approved = readApprovedExecutionScope(store, projectId, goalId);
   if (approved === null) {
     return refuse(GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED,
       "no current approval names an approved node scope");
@@ -207,28 +168,40 @@ function qualify(
   const nodes = [...new Set(approved.scope)].sort();
   const indexed = indexDurableReceipts(store, new Set(nodes));
   if (!indexed.ok) return refuse(indexed.code, indexed.message);
-  const bound: NodeClosure[] = [];
+  const bound: ClosureLeg[] = [];
   for (const nodeRef of nodes) {
     const receipt = indexed.index.get(nodeRef);
-    if (receipt === undefined) {
+    if (receipt === undefined && approved.requiresFoundation) {
       return refuse(GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT,
-        "no durable verification receipt names this approved node");
+        "no Foundation receipt proves the legacy approved node");
     }
-    if (receipt.verdict !== "PASSED") {
-      return refuse(GOAL_CLOSE_VERIFICATION_NOT_PASSED,
-        "the durable verification receipt did not pass");
+    if (receipt !== undefined) {
+      if (receipt.verdict !== "PASSED") {
+        return refuse(GOAL_CLOSE_VERIFICATION_NOT_PASSED,
+          "the durable verification receipt did not pass");
+      }
+      if (!verifiedResultHolds(store, receipt)) {
+        return refuse(GOAL_CLOSE_RESULT_DIGEST_MISMATCH,
+          "the verified result no longer reads back as the record its receipt names");
+      }
     }
-    if (!verifiedResultHolds(store, receipt)) {
-      return refuse(GOAL_CLOSE_RESULT_DIGEST_MISMATCH,
-        "the verified result no longer reads back as the record its receipt names");
-    }
+    // The review half is what BOTH legs share, so it is asked once for either: an acceptance is
+    // present, no re-plan supersedes it, and its verifier receipt still attests the latest round.
     const accepted = reviewClosure(store, projectId, nodeRef);
     if ("ok" in accepted) return accepted;
-    bound.push({ accepted, nodeRef, receipt });
+    if (receipt !== undefined) {
+      bound.push(Object.freeze({ accepted, leg: "FOUNDATION" as const, nodeRef, receipt }));
+      continue;
+    }
+    // Only approved scopes that do not require Foundation receipts may use their own durable
+    // LIVE evidence. Legacy subjects without a Foundation receipt have already refused above.
+    const live = readLiveNodeEvidence(store, projectId, nodeRef, accepted);
+    if ("ok" in live) return live;
+    bound.push(live);
   }
-  const activations = zeroAuthority(store, projectId, bound);
+  const activations = zeroAuthority(store, projectId, bound, approved.legacyLocalKeys);
   if (typeof activations !== "number") return activations;
-  return compose(approved.approvalRef, nodes, bound, activations);
+  return composeClosure(approved.approvalRef, nodes, bound, activations);
 }
 
 /**

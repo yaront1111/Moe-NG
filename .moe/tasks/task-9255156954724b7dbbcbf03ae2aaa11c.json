@@ -1,0 +1,104 @@
+{
+  "id": "task-9255156954724b7dbbcbf03ae2aaa11c",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "bug: the compose-managed incumbent still carries every variable value in its docker inspect output",
+  "description": "Filed from task-0ca117e389df43ee9b458255f0752842, whose architect invited the filing rather than the widening.\n\nTHE ASYMMETRY. That row made the deployed CANDIDATE receive its environment through a bind-mounted file specifically so no value lands in `docker inspect .Config.Env` — measured: `--env` gives 1 grep hit for a planted value, a mounted file gives 0. The INCUMBENT is unchanged and is not held to that standard: `docker-compose.override.yml` delivers `DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}` and `POSTGRES_PASSWORD` to the compose `app` and `db` services, so the same values sit in THEIR `Config.Env` and are printed by `docker inspect` to anyone who can reach the docker socket.\n\nWHY IT IS INVISIBLE TODAY. `tests/e2e/foundation/platform-secret-canary.e2e.test.ts` sweeps `docker inspect <candidate>` (:218) and never sweeps the incumbent or the db container. So its `hits=0` result — and any epic claim resting on it that \"no secret surfaces anywhere along the pipeline\" — is true of the CANDIDATE only. The sweep is not wrong; its scope is just narrower than the sentence it is quoted for.\n\nSUGGESTED SHAPE, not prescribed: either extend the canary's sweep to the compose-managed containers and make the generated compose topology deliver by mounted file too, or narrow the epic's DoD-5 wording to say explicitly which containers were swept. Do NOT weaken the existing candidate sweep either way.\n\nNot urgent: `.env` is already gitignored and excluded from every build context, so this is a local-socket exposure rather than a committed or published one. LOW.",
+  "definitionOfDone": [
+    "Either the compose-managed app and db containers stop carrying variable values in docker inspect, or the epic's secrecy claim states in writing which containers the canary sweeps and which it does not.",
+    "The candidate-inspect sweep at platform-secret-canary.e2e.test.ts:218 is unchanged or strengthened, never narrowed.",
+    "If the sweep is extended, its swept=N count line rises and the new artifacts are named in the assertion message, as every other sweep in that file already is."
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PRE-FLIGHT. (1) Confirm the leaf task-7693a195c01e45088b8545478aebd51f is DONE and read its completionSummary from get_context.epicSiblings rather than re-measuring. It owns the profile bump to controlled-3 and the db service's compose secret; this row owns the APP service in the override and the canary sweep. If the db still carries POSTGRES_PASSWORD under `environment:`, report_blocked with blockedOnTaskIds rather than fixing it here — the base docker-compose.yml is profile-goldened and touching it from this row would need a second version bump. (2) Bring Docker up and record `docker version --format '{{.Server.Version}}'` and `docker compose version` — the daemon was DOWN on this host at plan time, so nothing docker-backed is measured until you see those. (3) Re-measure the anchors this plan names, because line numbers drift: `dockerComposeOverride` in deployment-infrastructure-templates.ts (the app service's `environment:` block carrying `DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}`), `EXPECTED_OVERRIDE` in deployment-infrastructure-generator.test.ts around :107-120 asserted with `toEqual` at :224, the `composeServices` merge arms at :306-322, and the canary's `sweeps` array at :210-230 plus its db-container lookup at :155. (4) `git status --porcelain -- apps/daemon/src/repository tests/e2e` — note any foreign dirt in the step note and leave it alone.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/deployment/deployment-infrastructure-templates.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Stop the app service delivering DATABASE_URL through compose `environment:`, in deployment-infrastructure-templates.ts. Replace that one line with a compose SECRET whose value still comes from `.env`, plus an entrypoint that loads it — the same shape the deployed candidate already uses, so the two paths stop disagreeing about what a secret is. Target shape: the app service keeps `PORT` in `environment:` (a port is not a secret), gains `secrets: [database_url]`, and a top-level `secrets: { database_url: { environment: DATABASE_URL } }` block. THE ENTRYPOINT TRAP, and it is the same one the candidate hit: setting `entrypoint:` in compose CLEARS the image's command, exactly as `--entrypoint` clears `.Config.Cmd`, so the service MUST also name `command:` explicitly or it starts with nothing to exec. Derive that `command:` from the `DEPLOYMENT_ENTRY_PATH` constant already in this file rather than retyping the path, so the Dockerfile's `CMD` and the override cannot drift apart. MEASURE, do not assume, whether the node base image's own `docker-entrypoint.sh` must be restored ahead of it — read the built image's `Entrypoint ++ Cmd` with `docker image inspect` the way `imageCommandArgv` does, and make the answer an assertion rather than a comment. The loader itself must put NO value in any argv: `export DATABASE_URL=\"$(cat /run/secrets/database_url)\"; exec \"$0\" \"$@\"` names a path only. PRESERVE THE FAIL-FAST: `${DATABASE_URL:?set DATABASE_URL in .env}` makes compose refuse with a readable message today, and `secrets.environment` takes no `:?` form, so an unset variable would silently start the app with an empty connection string. Keep an equivalent and prove it with an arm.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/deployment/deployment-infrastructure-templates.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Update the override's byte-exact golden and the merge arms in deployment-infrastructure-generator.test.ts. `EXPECTED_OVERRIDE` is compared with `toEqual` at :224, so it moves line for line — update it as a CONSEQUENCE of step 2, never re-baked to silence a red, and keep it an exact `toEqual`: do not loosen it into a `toContain`. The structural arms at :306-322 merge the base compose with the override and assert `composeServices(override)` is exactly `{app, proxy}`, that the override contains no `postgres`, and that it contains no `\\nvolumes:` block. A top-level `secrets:` block is a NEW top-level key in that file, so check whether `composeServices` parses it as a service and fix the parser or the assertion accordingly rather than letting a `secrets` key silently read as a fourth service. Add arms that pin the new behaviour rather than only the new bytes: the emitted override carries NO `DATABASE_URL:` assignment under any service's `environment:`, the secret is sourced from the compose environment, and the app's `command:` matches the Dockerfile's entry path so the two generators cannot drift. Also re-check the cross-directory `CHANGE_ME` read-back arm that proves no emitted file carries a credential literal — it must still pass unchanged.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Extend the canary's sweep to the compose-managed containers — DoD 1's measurement half and DoD 3. Today `sweeps` at :210-230 covers the CANDIDATE's inspect and logs, the proxy's Caddyfile, the receipts, the ledger and every generated and committed file, but never the compose `app` or `db` containers, which is why the leak was invisible. Add, each as its own labelled Sweep so the failure message names it: the app container's inspected configuration, the app container's logs, the db container's inspected configuration, the db container's logs, and the proxy container's inspected configuration. Resolve those container names the way the file already does — `docker ps --filter label=com.docker.compose.service=<name> --filter network=<project>_default --format {{.Names}}`, the pattern at :155 for db and :220 for proxy. THE EXISTING CANDIDATE SWEEP IS UNCHANGED AND UNNARROWED (DoD 2): add to the array, never edit or remove an entry. THIS ARM IS THE PROOF THE FIX WORKS AND IT MUST BE SHOWN TO FAIL FIRST: the canary is planted AS the postgres password (`PGPASSWORD=${CANARY}` at :158), so a db-inspect sweep goes RED against today's code. Run it once against the pre-fix templates, quote the failing labels, then confirm it goes green with the fix — a sweep added after the fix that was never seen red proves nothing. Update the `swept=N artifacts` line so N rises, and rewrite the file header's claim that no secret surfaces \"ANYWHERE ALONG THE PIPELINE\" to say what is now actually swept; that sentence was true of the candidate only and is the wording DoD 1 offers as the alternative branch.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/platform-secret-canary.e2e.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "LIVE RUN AND VERIFICATION. Acquire `full-suite-gate` and announce GATE START — these files stand up the generated topology verbatim and publish the product's real host ports (3000 and 5432), so two at once lose the bind. Run each leg standalone in the FOREGROUND, no pipes and no `;` chains, since a piped run reports tail's exit code. Legs: `pnpm --filter @moe/daemon typecheck`, `pnpm --filter @moe/daemon test`, then the three `MOE_PLATFORM_PIPELINE=1` e2e files ONE AT A TIME with `--no-file-parallelism` — platform-secret-canary, platform-pipeline, platform-teardown-failure-paths. Quote each command, exit code and `Test Files N passed` count line; an exit-0 leg with no count line is UNVERIFIED. Quote the canary's own `SECRET CANARY shape=... swept=N artifacts, hits=0` line with the RAISED N, and the pre-fix red from step 4 alongside it so the arm's non-vacuity is on the record. Also run `pnpm --filter @moe/control-room test` if the leaf's version bump is in the same working tree, since the two profile-version mirrors live under apps/control-room and are invisible to the daemon leg (epic rail 1). Apply the path-attributed baseline for any repo-wide red: failing paths at the merge-base versus HEAD, delta intersected with this row's three owned paths must be EMPTY, foreign red quoted verbatim. TEARDOWN IS PART OF THE RUN: `composeDown` and the container removals must leave nothing behind on every exit path including the failure ones, and end with a `docker ps -a` census — epic rail 4 makes a leaked container or a held port inadmissible for every later gate on this board. Release the gate and announce GATE END.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "tests/e2e/foundation/platform-secret-canary.e2e.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "ADVERSARIAL SELF-REVIEW, then complete. Read the diff as an attacker. Specific questions this change earns: does the value reach `docker inspect` through any field other than `.Config.Env` — `.Config.Cmd`, `.Config.Entrypoint`, `.Config.Labels`, or the compose config hash label docker writes on every compose container? Does `docker compose config` print the resolved secret? Does the app's stdout log the connection string on a failed connect, and is that path actually exercised by the sweep or only the happy one? What happens on `docker compose up` with DATABASE_URL unset — a readable refusal, or an app that starts with an empty string and fails obscurely later? Is the new sweep falsifiable: mutate the app template back to `environment: DATABASE_URL` and confirm the canary goes RED naming the app container, then restore. RESTORE PROOF: back the mutated template out of tree to `%TEMP%/moe-task-9255156954-<basename>-<workerId>` — the task id in the path is mandatory, seat ids are reused across relaunches and a seat-keyed backup has held a stale vintage on this host — hash the LIVE file at window-open, and prove the restore by SHA256 equality in a call SEPARATE from the restore. Do the drill with NO full-suite lease held. Then confirm each of the three DoD items maps to a landed assertion, report all three touched paths in complete_step.modifiedFiles, and complete. Put the gate table in a task COMMENT first — completionSummary truncates silently at 2000 chars mid-word.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/deployment/deployment-infrastructure-templates.ts",
+        "tests/e2e/foundation/platform-secret-canary.e2e.test.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "LOW",
+  "order": 145,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-08T18:44:33.771Z",
+  "updatedAt": "2026-09-09T10:20:55.361Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-09T09:42:38.653Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 3
+  },
+  "dependsOn": [
+    "task-7693a195c01e45088b8545478aebd51f"
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-09T09:52:06.919Z",
+  "planningNotes": {
+    "approachesConsidered": "THE DoD IS DISJUNCTIVE and the filer wrote \"SUGGESTED SHAPE, not prescribed\", so the branch was put to the owner in the REPL. They chose the REAL FIX (make compose stop carrying values in Config.Env and sweep uniformly) over the documented carve-out (extend the sweep, narrow the epic's wording) and over closing it as won't-fix. THEN THE ROW WAS SPLIT, because measuring the chosen branch turned up a cost the DoD does not mention: the db service lives in the base docker-compose.yml, which is profile-GOLDENED, and `controlled-profile-generator.test.ts:22-24` states the rule outright — \"A tree change is a profile VERSION BUMP plus a lockfile re-mint, not a re-bake of the numbers below\". So fixing db means bumping controlled-2 to controlled-3 in four places, two of them hand-transcribed mirrors under apps/control-room, plus a new lockfile asset. That is a different job from the app-side override, so it went to leaf task-7693a195c01e45088b8545478aebd51f and this row depends on it. MECHANISM: a compose secret sourced from the compose ENVIRONMENT (`secrets: { database_url: { environment: DATABASE_URL } }`), not from a `file:`. The file-sourced form was rejected as the primary because it forces the operator to create secret files by hand, changing the scaffold's setup flow for every user, when the value already lives in `.env` and compose can read it from there. It stays the disclosed fallback if the running Compose is too old — unmeasurable at plan time, Docker was down. `DATABASE_URL_FILE` plus a change to the generated app's config reader was rejected for this row: `controlled-profile-package-templates.ts:179` is profile source, so editing it is another golden move and belongs with the leaf, not here. An entrypoint loader gets the same result with no profile change. EXTENDING THE SWEEP WITHOUT FIXING ANYTHING was considered as a standalone delivery and rejected on the owner's answer, but the sweep extension is kept as this row's PROOF rather than dropped — it is what turns \"we believe it is fixed\" into a measurement.",
+    "codebaseInsights": "MEASURED AT HEAD 2026-09-09 by architect-ed42e60a. THE LEAK, both halves: `deployment-infrastructure-templates.ts` `dockerComposeOverride` emits the app service with `DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}` under `environment:`, and `controlled-profile-root-templates.ts:239-243` emits the base db service with `POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}`. Both land in their container's `.Config.Env`. The second half is the LEAF's, not this row's. WHY IT WAS INVISIBLE: the canary's `sweeps` array at platform-secret-canary.e2e.test.ts:210-230 covers the candidate's inspect and logs, the proxy's Caddyfile, receipts, the ledger, and every generated and committed file — and no compose container's inspect. THE CANARY IS PLANTED AS THE POSTGRES PASSWORD (`dockerQuietly([\"exec\", \"--env\", `PGPASSWORD=${CANARY}`, database, ...])` at :158), so a db-inspect sweep is RED today; that is the row's non-vacuity proof and it must be run once before the fix. The file already knows how to resolve compose containers by service label — `docker ps --filter label=com.docker.compose.service=db` at :155 and the same for proxy at :220 — so the extension needs no new machinery. GOLDENS THIS ROW MOVES: `EXPECTED_OVERRIDE` in deployment-infrastructure-generator.test.ts (byte-exact array, `toEqual` at :224, app environment block around :118-120) and the structural merge arms at :306-322 which assert `composeServices(override)` is exactly {app, proxy}, no `postgres`, no `\\nvolumes:` — a new top-level `secrets:` key is the thing most likely to confuse that parser. GOLDENS THIS ROW MUST NOT MOVE: `GOLDEN_MANIFEST` and `EXPECTED_DOCKER_COMPOSE` in controlled-profile-generator.test.ts belong to the leaf. THE ENTRYPOINT TRAP is already documented in this codebase at deploy-candidate-environment.ts:33-39: the node base image contributes `ENTRYPOINT [\"docker-entrypoint.sh\"]` even though the generated Dockerfile sets none, and `--entrypoint` CLEARS `.Config.Cmd`. Compose has the same semantics, so an `entrypoint:` override without an explicit `command:` starts a container with nothing to exec. `DEPLOYMENT_ENTRY_PATH` and `DEPLOYMENT_HEALTHCHECK_PATH` are constants in the same templates file, so the compose `command:` can be derived rather than retyped. NOT AFFECTED, verified: `controlled-profile-migrate.test.ts` starts postgres with a direct `docker run --env`, never through compose, so it does not consume either service.",
+    "risks": "THE SWEEP EXTENSION MUST BE SEEN RED FIRST. A sweep added after the fix, that never failed, is indistinguishable from a sweep that reads the wrong container or resolves an empty name — and `docker ps --filter` returning nothing yields an empty string that contains no canary and passes. Run it against the pre-fix templates, quote the failing labels, and treat a green first run as a defect in the arm rather than good news. Same class as the swept=N denominator: a sweep that swept zero artifacts passes while proving nothing. THE ENTRYPOINT OVERRIDE IS THE RISKIEST BYTE IN THIS ROW. Setting `entrypoint:` clears the image command, so a missing `command:` produces a container that starts and immediately exits, which under compose `depends_on: service_healthy` shows up as a health timeout far from the cause — exactly the failure mode the candidate's module comment warns about. Assert the app actually answers, not merely that compose accepted the file. FAIL-FAST LOSS IS SILENT: `${DATABASE_URL:?...}` refuses today with a readable message; `secrets.environment` has no `:?` form, so an unset variable starts the app with an empty connection string. That regression passes every byte-golden arm. COMPOSE VERSION: environment-sourced secrets need a recent Compose (v2.23+ in the spec) and the daemon was DOWN at plan time, so this is unmeasured. If the running version is older, take the file-sourced fallback and DISCLOSE that it changes the operator's setup flow rather than shipping it quietly. INSPECT IS WIDER THAN Config.Env: compose writes a config-hash label on every container it manages, and `docker compose config` resolves and prints interpolated values. Check both before claiming the value is gone. TEARDOWN: these e2e files publish the product's real host ports 3000 and 5432, cannot run in parallel with each other, and epic rail 4 makes a leaked container or held port inadmissible for every later gate on this board. SCOPE FENCE: do not touch the base docker-compose.yml, `GOLDEN_MANIFEST`, `EXPECTED_DOCKER_COMPOSE` or CONTROLLED_PROFILE_VERSION from this row — all four belong to the leaf, and moving them here would force a second profile version bump.",
+    "keyFiles": [
+      "apps/daemon/src/repository/deployment/deployment-infrastructure-templates.ts",
+      "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts",
+      "tests/e2e/foundation/platform-secret-canary.e2e.test.ts",
+      "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+      "apps/daemon/src/deployment/deploy-candidate-environment.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-09T09:52:09.069Z",
+  "contextFetchedBy": [
+    "worker-409b958a"
+  ]
+}

@@ -11,6 +11,7 @@ import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-
 import {
   CLASSIFYING_POLICY_SLICE, POLICY_SLICE, PROVIDER_OBSERVATION,
 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { FIXTURE_ACTIVATION_RECEIPTS } from "../bootstrap/bootstrap-test-fixtures.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
@@ -67,7 +68,9 @@ function commitBootstrap(
     principalId: "operator-local",
     projectId: PROJECT,
     schemaVersion: "moe-bootstrap-command/1",
-  })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS });
+  })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS }, undefined,
+  // `project.activate` MINTS its witness from measured receipts and refuses without them.
+  FIXTURE_ACTIVATION_RECEIPTS);
   if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
 }
 
@@ -252,14 +255,8 @@ beforeAll(async () => {
   // The finalize terminal refuses a run no installed policy can tier (task-a888038d), so this
   // world installs the risk-classifying table too or its proposal never reaches PLAN_REVIEW.
   commitBootstrap("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
-  commitBootstrap("project.activate", {
-    witness: {
-      artifactPathRef: "artifact-1", backupPathRef: "backup-1", credentialRef: "credential-1",
-      distributionManifestHash: "cafe".padEnd(64, "0"), policyRevisionHash: "face".padEnd(64, "0"),
-      providerMinimumProfileRef: "provider-profile-1", signingKeyRef: "signing-1",
-      storeDriverRef: "store-driver-1", truthClass: "DAEMON_VERIFIED",
-    },
-  }, 2);
+  commitBootstrap("project.activate", // NO WITNESS: the daemon mints it from its own measured receipts.
+      {}, 2);
   // The default board subjects are a DERIVED PAIR now: command `live-1` mints `goal-live-1`
   // and its own `run-live-1`, which is the run this listener addresses.
   commitBootstrap(

@@ -42,6 +42,16 @@ export function prepareProductContractV2GoalBindingLegs(
   const goalAbsent = !byGoal.ok && byGoal.code === "PRODUCT_CONTRACT_V2_GOAL_BINDING_ABSENT";
   const contractAbsent = !byContract.ok
     && byContract.code === "PRODUCT_CONTRACT_V2_GOAL_BINDING_ABSENT";
+  // A reader refusal that is not ABSENT — INVALID bytes, a store failure — keeps its own code
+  // and layer. It used to fall into the absent-vs-present comparison below and come out as
+  // MISMATCH whenever the other side was absent, hiding a corrupt or unreadable binding behind
+  // "the two sides disagree".
+  if (!byGoal.ok && !goalAbsent) {
+    return Object.freeze({ code: byGoal.code, layer: byGoal.layer, ok: false as const });
+  }
+  if (!byContract.ok && !contractAbsent) {
+    return Object.freeze({ code: byContract.code, layer: byContract.layer, ok: false as const });
+  }
   if (goalAbsent !== contractAbsent) return mismatch();
   if (!goalAbsent) {
     if (!byGoal.ok) return Object.freeze({ code: byGoal.code, layer: byGoal.layer,

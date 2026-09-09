@@ -48,19 +48,19 @@ describe("deriveGoalCatalog", () => {
     }))).toStrictEqual([
       {
         goalId: "goal-alpha",
-        headline: "Durable GoalCreated record \u00b7 planning run run-alpha",
+        headline: "Recorded in this project",
         title: "goal-alpha",
       },
       {
         goalId: "goal-beta",
-        headline: "Durable GoalCreated record \u00b7 planning run run-beta",
+        headline: "Recorded in this project",
         title: "goal-beta",
       },
     ]);
     expect(data.goals[0]).toMatchObject({
       budgetComingOnline: "No budget read is joined to the goal catalog yet.",
       needsYou: false,
-      state: "DRAFT",
+      state: "UNKNOWN",
       titleIsIdentifier: true,
     });
     expect(data.goals[0]?.progress).toBeUndefined();
@@ -324,7 +324,8 @@ describe("deriveGoalCatalog maps the coverage read's goal lifecycle onto the sta
   });
   it.each([
     ["COMPLETED", "DONE"], ["EXECUTION_ENABLED", "ACTIVE"], ["CLOSING", "ACTIVE"],
-    ["PLAN_REVIEW", "DRAFT"], ["DRAFT", "DRAFT"], [null, "DRAFT"],
+    ["PLAN_REVIEW", "DRAFT"], ["DRAFT", "DRAFT"], [null, "UNKNOWN"],
+    ["UNRECOGNIZED", "UNKNOWN"],
   ])("lifecycle %s renders as %s", (lifecycle, state) => {
     const card = deriveGoalCatalog(catalog([entry]), new Map([["goal-cov", withLifecycle(lifecycle)]])).goals[0];
     expect(card?.state).toBe(state);

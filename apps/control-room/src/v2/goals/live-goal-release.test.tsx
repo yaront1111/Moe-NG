@@ -1,0 +1,408 @@
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+
+import type { SurfaceFrame } from "../../live/live-board-feed.js";
+import type { LiveSetup } from "../../live/live-config.js";
+import { LiveGoalRelease } from "./live-goal-release.js";
+
+/**
+ * A CLIENT-SIDE TIMEOUT IS NOT EVIDENCE THE COMMAND DID NOT HAPPEN.
+ *
+ * MEASURED, not imagined: pull request https://github.com/yaront1111/Moe-NG/pull/32 was opened
+ * by the daemon on 2026-09-08 and the browser session that ordered it never rendered the link.
+ * `release.decide` runs `publishOnce`, then `gh pr create`, then a `gh pr view` re-read, and
+ * against a real remote that takes tens of seconds. The command transport gives up at 15s
+ * (`client-transport.ts` DEFAULT_REQUEST_TIMEOUT_MS) and every `/release/read` poll fired into
+ * the still-busy daemon aborts at its own 15s (`live-effect-read.ts`), so the card collapsed
+ * into "The release evidence could not be read right now." about a command that was SUCCEEDING.
+ *
+ * THE FIX DOES NOT MAKE AN ABORT MEAN "SUCCESS". It makes it mean "unknown, still waiting",
+ * which is what an undelivered round trip has always meant -- `client-transport.ts` says so
+ * itself: `delivered` separates "a daemon that refused" from "a daemon that never answered".
+ * The refusal vocabulary is untouched, and the two arms in the last describe block are the
+ * proof: a DELIVERED refusal still renders its own code with its own layer, verbatim, and the
+ * two paths still reach DIFFERENT codes at DIFFERENT layers.
+ *
+ * EVERYTHING RUNS AT THE COMPONENT LEVEL WITH FAKE TIMERS. The live browser lane opens a real
+ * pull request on every run, which is not a thing a test suite may do.
+ */
+
+/**
+ * A REAL timer and a REAL clock, captured at module load -- BEFORE the `beforeEach` below installs
+ * vitest's fake timers. Whatever `vi.useFakeTimers()` replaces on the global object, these two
+ * references still reach the real event loop and the real wall clock.
+ */
+const realSetTimeout = globalThis.setTimeout.bind(globalThis);
+const realNow = Date.now.bind(Date);
+
+/**
+ * REAL wall clock one arm may spend waiting for detached work, summed across every drained read
+ * that arm makes (`drainUntil`, below).
+ *
+ * A MILLISECOND BUDGET AND NOT A HOP COUNT, WHICH IS THE ENTIRE REPAIR. `spendOffer` hashes the
+ * payload with `crypto.subtle.digest` before it reaches the transport, and that promise resolves
+ * off Node's THREADPOOL: it needs real elapsed time, and no number of microtask hops supplies
+ * any. Draining N times at a 0ms fake advance costs well under a millisecond, so a hop-bounded
+ * drain gives up before the work it waits for can land -- which is how
+ * `expect(await sendCount(wire)).toBe(1)` red a loaded lane with `expected +0 to be 1` while
+ * passing every run on a quiet host.
+ *
+ * SIZED FROM MEASUREMENT, NOT TASTE. Instrumented copies of these arms, run inside a real
+ * 206-file control-room lane (5 runs, 2 of them under 16 spinning CPU hogs, 50 drained reads)
+ * never needed more than ONE real event-loop turn, and the most expensive single turn cost 24ms
+ * of wall clock. 2500ms is roughly a hundred of those worst-case turns.
+ *
+ * STILL BOUNDED, AND STILL INSIDE VITEST'S 5s PER-TEST DEFAULT: state that never arrives fails
+ * FAST at `getByTestId`'s own "unable to find an element" error instead of hanging to the runner
+ * timeout -- the trap `await screen.findByTestId(...)` would set here, since this file arms fake
+ * timers for every arm and RTL's `waitFor` polls a `setInterval` nothing would advance. The
+ * budget is per ARM rather than per read, so an arm whose state never arrives cannot multiply the
+ * wait by the number of reads it makes.
+ */
+const DRAIN_BUDGET_MS = 2_500;
+let drainBudgetLeftMs = DRAIN_BUDGET_MS;
+
+beforeAll(() => {
+  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+});
+beforeEach(() => { vi.useFakeTimers(); drainBudgetLeftMs = DRAIN_BUDGET_MS; });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
+
+const GOAL_ID = "goal-1";
+const SHA = "a".repeat(40);
+const DOSSIER = "b".repeat(64);
+const PR_URL = "https://github.com/yaront1111/Moe-NG/pull/32";
+
+/** The bound the browser's command transport gives up at, and the bound each read gives up at. */
+const TRANSPORT_BOUND_MS = 15_000;
+/** How long the real `gh pr create` + `gh pr view` kept the daemon busy: longer than the bound. */
+const DAEMON_BUSY_MS = 40_000;
+
+/** The daemon's own offer row, exactly as `affordance-planning-offers.ts` mints it. */
+const OFFER = Object.freeze({
+  commandEnvelopeVersion: "moe-runtime-command/1",
+  commandId: "cmd-release-1",
+  commandKind: "release.decide",
+  expectedVersion: 3,
+  inputSchemaVersion: "moe-bootstrap-command/1",
+  targetAggregateId: `release:${GOAL_ID}`,
+});
+const OFFERED = {
+  connection: "CONNECTED", detail: "", offers: [OFFER], outcome: "SURFACE", steps: [],
+} as unknown as SurfaceFrame;
+
+type ReceiptSeed = {
+  readonly outcome: "RELEASED" | "REFUSED";
+  readonly prUrl: string | null;
+  readonly refusalCode: string | null;
+};
+
+/** The `/release/read` PRESENT body the daemon sends, decoded by the real exact-key decoder. */
+function presentBody(receipt: ReceiptSeed | null): Readonly<Record<string, unknown>> {
+  return {
+    evidence: {
+      ancestryMeasured: true,
+      criteria: [{
+        command: "pnpm test", criterionId: "crit-a", exitCode: "0", gaps: [], landing: SHA,
+        nodeKey: "node-a", receiptSha: "c".repeat(40), title: "Criterion A",
+      }],
+      goalId: GOAL_ID, goalTitle: "Ship the orders screen",
+      preview: { decidedAt: "2026-09-06T11:02:44.190Z", decisionId: "decision-preview-1", outcome: "APPROVED", url: null },
+      receipt: receipt === null ? null : {
+        dossierSha256: DOSSIER, outcome: receipt.outcome, prUrl: receipt.prUrl,
+        receiptId: "release-receipt-0123456789", refusalCode: receipt.refusalCode, sha: SHA,
+      },
+      reviewRounds: [], sha: SHA,
+    },
+    kind: "PRESENT",
+  };
+}
+
+const NO_RECEIPT = presentBody(null);
+const RELEASED = presentBody({ outcome: "RELEASED", prUrl: PR_URL, refusalCode: null });
+
+/** What `/release/read` answers next. Flipped by the arms to model the daemon's own timeline. */
+type ReadMode = { readonly kind: "ABORT" } | { readonly kind: "BODY"; readonly body: unknown };
+interface Wire {
+  readonly reads: () => number;
+  readonly sends: () => number;
+  setRead(mode: ReadMode): void;
+}
+
+/**
+ * ONE FAKE DAEMON for both transports, because the two are genuinely separate in production and
+ * a fake that conflated them could not tell the story: `release.decide` goes out over
+ * `setup.transport.sendCommand`, while `/release/read` is a bare `fetch` the transport never sees.
+ */
+function attach(send: () => Promise<unknown>): { readonly setup: LiveSetup; readonly wire: Wire } {
+  let mode: ReadMode = { kind: "BODY", body: NO_RECEIPT };
+  let reads = 0;
+  let sends = 0;
+  vi.stubGlobal("fetch", vi.fn(async (path: string): Promise<Response> => {
+    if (path !== "/release/read") throw new Error(`unexpected fetch path ${path}`);
+    reads += 1;
+    // An aborted read REJECTS, exactly as `AbortSignal.timeout` makes it reject in the browser.
+    if (mode.kind === "ABORT") throw new Error("simulated read abort at 15s");
+    // Read out of the narrowed value here: `mode` is reassigned by the arms, so the narrowing
+    // does not survive into the `json` closure below.
+    const { body } = mode;
+    return { json: async (): Promise<unknown> => body, status: 200 } as unknown as Response;
+  }));
+  const setup = {
+    client: { commands: { "release.decide": (_affordance: unknown, input: Record<string, unknown>) => ({
+      envelope: { commandId: OFFER.commandId, kind: "release.decide", payload: input["payload"] }, ok: true,
+    }) } },
+    headers: { authorization: "Bearer live" }, ok: true, projectId: "project-1",
+    projection: "moe.board", sessionCredential: "cred-1", subscriberId: "control-room-1",
+    transport: { sendCommand: vi.fn(async (): Promise<unknown> => { sends += 1; return send(); }) },
+  } as unknown as LiveSetup;
+  return {
+    setup,
+    wire: { reads: (): number => reads, sends: (): number => sends, setRead: (next: ReadMode): void => { mode = next; } },
+  };
+}
+
+const settle = async (ms = 0): Promise<void> => {
+  await act(async () => { await vi.advanceTimersByTimeAsync(ms); });
+};
+
+/** Arms the two-click control and confirms it, which is the only way a decide is dispatched. */
+async function confirmRelease(): Promise<void> {
+  await act(async () => { fireEvent.click(screen.getByTestId("cr.release.button")); });
+  expect(screen.getByTestId("cr.release.button").textContent).toContain("Confirm:");
+  await act(async () => { fireEvent.click(screen.getByTestId("cr.release.button")); });
+}
+
+describe("a decide that outruns the transport bound still shows the operator the PR link", () => {
+  /**
+   * DoD 1, literally: the decide takes LONGER than the transport bound, and the link appears in
+   * the SAME MOUNT with no reload. The no-reload part is asserted three ways that a remount
+   * would each break -- the `cr.release.root` DOM NODE is the same object, the operator's typed
+   * base branch survives, and the answer note the submit produced is still on screen.
+   */
+  it("keeps the card, and delivers the link, when the daemon outlasts the 15s abort", async () => {
+    // The daemon accepted the command and is opening the pull request; the browser gives up at
+    // 15s and reports an UNDELIVERED round trip. Nothing here says the command failed.
+    const { setup, wire } = attach(async () => new Promise((resolve) => {
+      setTimeout(() => resolve({ code: "TRANSPORT_REQUEST_FAILED", delivered: false, layer: "CONTROL_ROOM_TRANSPORT" }), TRANSPORT_BOUND_MS);
+    }));
+    render(<LiveGoalRelease frame={OFFERED} goalId={GOAL_ID} setup={setup} />);
+    await settle();
+    const root = screen.getByTestId("cr.release.root");
+    expect(screen.queryByTestId("cr.release.link")).toBeNull();
+
+    // The operator types a base branch, so a remount is visible as its loss.
+    fireEvent.change(screen.getByTestId("cr.release.base"), { target: { value: "release-train" } });
+    await confirmRelease();
+    // From here the daemon is busy with `gh` and every read into it aborts.
+    wire.setRead({ kind: "ABORT" });
+
+    // THE DEFECT, ASSERTED AS THE INTERMEDIATE STATE. Two poll cycles pass with the command in
+    // flight and succeeding. A card that says the evidence "could not be read right now" here is
+    // telling the operator something false, and that sentence is what sent this row to the board.
+    await settle(5_000);
+    expect(screen.queryByTestId("cr.release.read-refusal")).toBeNull();
+    await settle(5_000);
+    expect(screen.queryByTestId("cr.release.read-refusal")).toBeNull();
+    expect(screen.getByTestId("cr.release.root")).toBe(root);
+
+    // The transport gives up at 15s. The daemon has NOT.
+    await settle(TRANSPORT_BOUND_MS);
+    expect(screen.queryByTestId("cr.release.read-refusal")).toBeNull();
+    await settle(DAEMON_BUSY_MS - TRANSPORT_BOUND_MS);
+    expect(screen.queryByTestId("cr.release.read-refusal")).toBeNull();
+
+    // The daemon finishes: the receipt is RELEASED and carries the pull request.
+    wire.setRead({ kind: "BODY", body: RELEASED });
+    await settle(5_000);
+    const link = screen.getByTestId("cr.release.link");
+    expect(link.getAttribute("href")).toBe(PR_URL);
+    expect(link.textContent).toBe(PR_URL);
+
+    // SAME MOUNT: the identical DOM node, and the operator's own typed value still in it.
+    expect(screen.getByTestId("cr.release.root")).toBe(root);
+    expect((screen.getByTestId("cr.release.base") as HTMLInputElement).value).toBe("release-train");
+    // Exactly one decide left the browser across the whole flow.
+    expect(await sendCount(wire)).toBe(1);
+  });
+});
+
+/** The daemon's own refusal of `release.decide`, at the layer `RELEASE_DECIDE_CODE_LAYER_MAP` maps
+ *  that code to. DELIVERED: the round trip completed and this IS the daemon's answer. */
+const EVIDENCE_DETAIL = "unverified evidence for: crit-unknown, crit-other";
+const DAEMON_REFUSAL = Object.freeze({
+  delivered: true,
+  response: { ok: false, refusal: { code: "RELEASE_EVIDENCE_INCOMPLETE", detail: EVIDENCE_DETAIL, layer: "DAEMON_PREREQUISITE" } },
+  status: 200,
+});
+/** What `client-transport.ts` returns when the round trip never delivered: its OWN code, its OWN
+ *  layer. The daemon may have done the work, may not have; this shape says only "we do not know". */
+const TRANSPORT_ABORT = Object.freeze({
+  code: "TRANSPORT_REQUEST_FAILED", delivered: false, layer: "CONTROL_ROOM_TRANSPORT",
+});
+
+/**
+ * ONE REAL EVENT-LOOP TURN, then React's queue: a real `setTimeout` so libuv can deliver a
+ * threadpool completion in the poll phase, then `advanceTimersByTimeAsync(0)` so React's own work
+ * flushes inside `act`. Returns the real wall clock consumed, which `drainUntil` charges against
+ * the arm's budget. It advances the FAKE clock 0ms, so no arm's 5s read poll fires as a side
+ * effect of looking.
+ */
+const drainTick = async (): Promise<number> => {
+  const startedAt = realNow();
+  await act(async () => {
+    await new Promise<void>((resolve) => { realSetTimeout(resolve, 1); });
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  // Never zero: a tick the clock reports as instant must still cost budget, or this loops forever.
+  return Math.max(realNow() - startedAt, 1);
+};
+
+/**
+ * Spends real event-loop turns until `ready()`, or until this arm's `DRAIN_BUDGET_MS` is gone --
+ * at which point it returns and lets the caller's own read produce the failure.
+ */
+const drainUntil = async (ready: () => boolean): Promise<void> => {
+  while (!ready() && drainBudgetLeftMs > 0) {
+    drainBudgetLeftMs -= await drainTick();
+  }
+};
+
+/**
+ * The `CODE @ LAYER` string `OutcomeNote` prints inside its Details block, read from the DOM.
+ *
+ * IT DRAINS FIRST, AND THAT IS LOAD-BEARING, NOT BELT-AND-BRACES. `decide()` (goal-release.tsx)
+ * dispatches the submit FIRE-AND-FORGET -- `void port.submit(...).then((outcome) => setAnswer(...))`
+ * -- so the click handler returns immediately and the `await act(async () => fireEvent.click(...))`
+ * that ends `confirmRelease()` has NO contract to await that detached chain. Reading the answer
+ * synchronously after a confirm is therefore unguarded BY CONSTRUCTION, not merely unlucky. The
+ * gap is not a microtask hop either -- see `DRAIN_BUDGET_MS` for what it actually is.
+ */
+const noteCode = async (testId: string): Promise<string> => {
+  await drainUntil(() => screen.queryByTestId(testId) !== null);
+  return screen.getByTestId(testId).querySelector("code")?.textContent ?? "";
+};
+
+/** The submit's own answer: the code and layer the authority that refused it reported. */
+const answerCode = (): Promise<string> => noteCode("cr.release.answer");
+
+/**
+ * The READ's refusal, which is a different sentence at a different layer -- and it is reached
+ * through the same detached submit, because the port wrapper only calls `refresh()` once the
+ * submit has settled. So it needs the same drain for the same reason.
+ */
+const readRefusalCode = (): Promise<string> => noteCode("cr.release.read-refusal");
+
+/**
+ * How many decides actually reached the transport. IT DRAINS, and the reason is sharper than
+ * for the DOM reads: the digest precedes `sendCommand`, so this counter does not move until that
+ * threadpool round trip lands, which makes a bare `wire.sends()` the EARLIEST read in the chain
+ * to lose the race -- measured on a loaded lane as `AssertionError: expected +0 to be 1`.
+ *
+ * It waits for the FIRST send and then reports the TRUE count, so an arm asserting `toBe(1)`
+ * still fails on 0 (never sent, which is this assertion's whole job as a positive control) and
+ * still fails on 2 (sent twice).
+ */
+const sendCount = async (wire: Wire): Promise<number> => {
+  await drainUntil(() => wire.sends() > 0);
+  return wire.sends();
+};
+
+describe("the refusal path is unchanged by the fix", () => {
+  /**
+   * DoD 2(a). THE ONE WAY THIS FIX COULD DO HARM is by swallowing a real refusal into its
+   * "still waiting" state, so this arm is written as though that is what it is hunting: the
+   * daemon answers, DELIVERED, with the release vocabulary's own `RELEASE_EVIDENCE_INCOMPLETE`,
+   * and the operator must read that code with that layer, verbatim and by exact equality --
+   * not "a note rendered", not "it refused".
+   *
+   * `sends() === 1` is the positive control. With an empty command roster `spendOffer` refuses
+   * OFFER_KIND_UNBUILDABLE at a NEARER layer and never reaches the transport, and this arm would
+   * then be asserting about a refusal the daemon never sent.
+   */
+  it("renders a DELIVERED RELEASE_EVIDENCE_INCOMPLETE verbatim, with its layer, and keeps it", async () => {
+    const { setup, wire } = attach(async () => DAEMON_REFUSAL);
+    render(<LiveGoalRelease frame={OFFERED} goalId={GOAL_ID} setup={setup} />);
+    await settle();
+    await confirmRelease();
+
+    expect(await sendCount(wire)).toBe(1);
+    expect(await answerCode()).toBe("RELEASE_EVIDENCE_INCOMPLETE @ DAEMON_PREREQUISITE");
+    // And WHAT to go and fix, which is the whole reason the daemon sends a detail.
+    expect(screen.getByTestId("cr.release.answer-detail").textContent).toBe(EVIDENCE_DETAIL);
+
+    // STILL THERE after several poll cycles: the fix must not let a later re-render quietly
+    // replace a refusal the operator has not read yet.
+    await settle(20_000);
+    expect(await answerCode()).toBe("RELEASE_EVIDENCE_INCOMPLETE @ DAEMON_PREREQUISITE");
+  });
+
+  /**
+   * DoD 2(a), THE SCOPE HALF. A DELIVERED refusal ends the wait -- the daemon spoke, so the
+   * command's fate is KNOWN -- and a read that fails afterwards is once again reported as a
+   * failed read. Without this the guard would latch on any submit and blindfold the read path
+   * for the rest of the card's life.
+   *
+   * The read is flipped to aborting from the instant the daemon answers, because that is the
+   * only window in which the guard's scope is observable: a successful read would clear the
+   * wait by itself and this arm would pass whatever the guard did.
+   */
+  it("stops waiting once the daemon has ANSWERED, so a later failed read is reported again", async () => {
+    let flip = (): void => undefined;
+    const { setup, wire } = attach(async () => { flip(); return DAEMON_REFUSAL; });
+    flip = (): void => { wire.setRead({ kind: "ABORT" }); };
+    render(<LiveGoalRelease frame={OFFERED} goalId={GOAL_ID} setup={setup} />);
+    await settle();
+    await confirmRelease();
+    expect(await sendCount(wire)).toBe(1);
+
+    await settle(5_000);
+    // The honest sentence, at the read's own layer, about a read that really did fail.
+    expect(await readRefusalCode()).toBe("TRANSPORT_REQUEST_FAILED @ CONTROL_ROOM_RELEASE_READ");
+  });
+
+  /**
+   * DoD 2(b). The two paths reach DIFFERENT codes at DIFFERENT layers, asserted by their literal
+   * values in both directions -- neither may contain the other's code or the other's layer. The
+   * discriminator is not invented here: `client-transport.ts` returns `delivered: false` with its
+   * own `TRANSPORT_REQUEST_FAILED`, and `spendOffer` reports THAT case, and only that case, at
+   * `CONTROL_ROOM_TRANSPORT`; a daemon that answered carries the engine's own code and layer.
+   *
+   * WHICH LAYER ANSWERED is the point. `CONTROL_ROOM_TRANSPORT` is the BROWSER saying it never
+   * got an answer. `DAEMON_PREREQUISITE` is the DAEMON saying it looked at the evidence and said
+   * no. An operator who could not tell those apart cannot know whether to go and fix a criterion
+   * or simply wait.
+   */
+  it("keeps a transport abort and a daemon refusal at different codes AND different layers", async () => {
+    const refusing = attach(async () => DAEMON_REFUSAL);
+    render(<LiveGoalRelease frame={OFFERED} goalId={GOAL_ID} setup={refusing.setup} />);
+    await settle();
+    await confirmRelease();
+    const refused = await answerCode();
+    expect(await sendCount(refusing.wire)).toBe(1);
+    cleanup();
+
+    const aborting = attach(async () => new Promise((resolve) => {
+      setTimeout(() => resolve(TRANSPORT_ABORT), TRANSPORT_BOUND_MS);
+    }));
+    render(<LiveGoalRelease frame={OFFERED} goalId={GOAL_ID} setup={aborting.setup} />);
+    await settle();
+    await confirmRelease();
+    // THE DECIDE MUST BE ON THE WIRE BEFORE THE CLOCK MOVES. This arm's abort is a
+    // `setTimeout(TRANSPORT_BOUND_MS)` armed INSIDE `sendCommand`, so advancing the clock first
+    // advances past a timer that does not exist yet -- and then no later 0ms drain can ever fire
+    // it. Asserting the send here is both the positive control and the ordering guard.
+    expect(await sendCount(aborting.wire)).toBe(1);
+    await settle(TRANSPORT_BOUND_MS);
+    const aborted = await answerCode();
+
+    expect(refused).toBe("RELEASE_EVIDENCE_INCOMPLETE @ DAEMON_PREREQUISITE");
+    expect(aborted).toBe("TRANSPORT_REQUEST_FAILED @ CONTROL_ROOM_TRANSPORT");
+    expect(aborted).not.toBe(refused);
+    // Neither may borrow the other's vocabulary, in either direction.
+    expect(aborted).not.toContain("RELEASE_EVIDENCE_INCOMPLETE");
+    expect(aborted).not.toContain("DAEMON_PREREQUISITE");
+    expect(refused).not.toContain("TRANSPORT_REQUEST_FAILED");
+    expect(refused).not.toContain("CONTROL_ROOM_TRANSPORT");
+  });
+});

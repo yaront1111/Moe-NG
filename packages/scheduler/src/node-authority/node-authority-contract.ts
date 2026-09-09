@@ -34,9 +34,41 @@ import type {
 import type { AdmissionAmount, AdmissionGate } from "../budget/budget-reservation.js";
 
 /** The wire tag; separate from the digest domain so the two rotate apart. */
-export const NODE_AUTHORITY_SCHEMA_TAG = "MOE-NODE-AUTHORITY/2";
-export const NODE_AUTHORITY_DIGEST_DOMAIN = "MOE-NODE-AUTHORITY-BODY-HASH/2";
-export const NODE_AUTHORITY_SCHEMA_VERSION = 2 as const;
+export const NODE_AUTHORITY_SCHEMA_TAG = "MOE-NODE-AUTHORITY/3";
+export const NODE_AUTHORITY_DIGEST_DOMAIN = "MOE-NODE-AUTHORITY-BODY-HASH/3";
+export const NODE_AUTHORITY_SCHEMA_VERSION = 3 as const;
+/**
+ * A SET, not a point. Version 2 predates `declaredMigrations` and is still read —
+ * and still framed and digested under its OWN literals, byte for byte, so every
+ * stored body keeps the identity it was persisted with. Rewriting the v2 pair
+ * here would silently move every historical claim, receipt and approval.
+ */
+export const NODE_AUTHORITY_SUPPORTED_SCHEMA_VERSIONS = Object.freeze([2, 3] as const);
+export type NodeAuthoritySchemaVersion =
+  (typeof NODE_AUTHORITY_SUPPORTED_SCHEMA_VERSIONS)[number];
+/**
+ * The version a FRESH body is minted at when its draft declares NOTHING.
+ *
+ * A body carries no schema-3 content unless it states `declaredMigrations`, so
+ * minting it at the current version would move its identity for a member it does
+ * not have — the same objection as defaulting the member to `[]`, one layer up,
+ * and the reason four pinned daemon digests moved, two of them historical
+ * APPROVAL DECISIONS. The version is therefore chosen by CONTENT at the mint site
+ * (`node-authority-codec.ts`), never by reading this module's current version.
+ */
+export const NODE_AUTHORITY_UNDECLARED_SCHEMA_VERSION = 2 as const;
+const SCHEMA_TAGS: Readonly<Record<NodeAuthoritySchemaVersion, string>> = Object.freeze({
+  2: "MOE-NODE-AUTHORITY/2", 3: NODE_AUTHORITY_SCHEMA_TAG,
+});
+const DIGEST_DOMAINS: Readonly<Record<NodeAuthoritySchemaVersion, string>> = Object.freeze({
+  2: "MOE-NODE-AUTHORITY-BODY-HASH/2", 3: NODE_AUTHORITY_DIGEST_DOMAIN,
+});
+export const isNodeAuthoritySchemaVersion = (
+  value: unknown,
+): value is NodeAuthoritySchemaVersion =>
+  (NODE_AUTHORITY_SUPPORTED_SCHEMA_VERSIONS as readonly unknown[]).includes(value);
+export const nodeAuthoritySchemaTag = (version: NodeAuthoritySchemaVersion): string =>
+  SCHEMA_TAGS[version];
 export const NODE_JOIN_ROLES = Object.freeze(["COMPLETION", "JOIN", "NONE"] as const);
 export type NodeJoinRole = (typeof NODE_JOIN_ROLES)[number];
 /** Closed only at the NodeDefinition authority boundary. The budget ledger keeps
@@ -65,6 +97,7 @@ export const NODE_ADMISSION_GATE_POLICY_WITNESS: Readonly<
 /** The closed field roster, alphabetical — the one canonical serialization order. */
 export const NODE_DEFINITION_KEYS = Object.freeze([
   "admissionAmounts", "admissionGatePolicy", "capability", "completionLinkage", "constraints", "criterionBindings",
+  "declaredMigrations",
   "directHardDependencies", "joinRole", "monotonicPredicateProofs", "nodeKey", "objective",
   "planExecutionContentDigest", "policySliceHash", "readScopes", "repositoryBaseTree",
   "resources", "schemaVersion", "verificationRecipeRevisions", "writeScopes",
@@ -92,11 +125,13 @@ export const NODE_AUTHORITY_CODES = Object.freeze([
   "NODE_AUTHORITY_BUDGET_GATE_POLICY_INVALID", "NODE_AUTHORITY_BUDGET_GATE_WITNESS_FORBIDDEN",
   "NODE_AUTHORITY_BUDGET_LEGACY_SCALAR", "NODE_AUTHORITY_BUDGET_METER_UNKNOWN",
   "NODE_AUTHORITY_CALLER_DIGEST_FORBIDDEN",
-  "NODE_AUTHORITY_DIGEST_MISMATCH", "NODE_AUTHORITY_DUPLICATE_EDGE", "NODE_AUTHORITY_EDGE_ORDER",
+  "NODE_AUTHORITY_DIGEST_MISMATCH", "NODE_AUTHORITY_DUPLICATE_EDGE",
+  "NODE_AUTHORITY_DUPLICATE_MIGRATION", "NODE_AUTHORITY_EDGE_ORDER",
   "NODE_AUTHORITY_EXCLUDED_FIELD", "NODE_AUTHORITY_FIELD_INVALID",
   "NODE_AUTHORITY_JOIN_LINKAGE_INVALID", "NODE_AUTHORITY_LIMIT_EXCEEDED",
   "NODE_AUTHORITY_MALFORMED", "NODE_AUTHORITY_MONOTONIC_PROOF_MISSING",
-  "NODE_AUTHORITY_NONCANONICAL", "NODE_AUTHORITY_NOT_BYTES", "NODE_AUTHORITY_SCOPE_INVALID",
+  "NODE_AUTHORITY_NONCANONICAL", "NODE_AUTHORITY_NOT_BYTES",
+  "NODE_AUTHORITY_SCHEMA_MISMATCH", "NODE_AUTHORITY_SCOPE_INVALID",
   "NODE_AUTHORITY_TOO_LARGE", "NODE_AUTHORITY_UNREADABLE", "NODE_AUTHORITY_UNSUPPORTED_SCHEMA",
 ] as const);
 export type NodeAuthorityCode = (typeof NODE_AUTHORITY_CODES)[number];
@@ -116,7 +151,8 @@ export type NodeAuthorityLayer = (typeof LAYER_NAMES)[number];
 export const NODE_AUTHORITY_LIMITS = Object.freeze({
   maxAdmissionAmounts: 35, maxBytes: 1_048_576, maxCriterionBindings: 512,
   maxDependencyEntries: 128, maxIdBytes: 512,
-  maxListEntries: 64, maxObjectiveBytes: 4096, maxProofEntries: 128, maxRationaleBytes: 1024,
+  maxListEntries: 64, maxMigrationEntries: 64, maxObjectiveBytes: 4096, maxProofEntries: 128,
+  maxRationaleBytes: 1024,
   maxScopeBytes: 1024, maxScopeEntries: 128,
 });
 
@@ -147,6 +183,14 @@ export interface NodeAuthorityDraft {
   readonly capability: string;
   readonly completionLinkage: string | null;
   readonly constraints: readonly string[];
+  /**
+   * The migration identifiers the node's author DECLARED, in the order they
+   * authored them. OPTIONAL, and the two absences are different facts:
+   * ABSENT means UNKNOWN — a schema-2 body, or one whose author never stated it;
+   * PRESENT AND EMPTY means the author declared this node migrates nothing.
+   * Never defaulted to `[]` anywhere: that would mint a declaration nobody wrote.
+   */
+  readonly declaredMigrations?: readonly string[];
   readonly directHardDependencies: readonly NodeAuthorityEdgeInput[];
   readonly joinRole: NodeJoinRole;
   readonly nodeKey: string;
@@ -164,7 +208,7 @@ export interface NodeDefinition extends Omit<NodeAuthorityDraft, "directHardDepe
   readonly directHardDependencies: readonly NodeDependencyEntry[];
   readonly monotonicPredicateProofs: readonly MonotonicPredicateRegistryEntry[];
   readonly planExecutionContentDigest: string;
-  readonly schemaVersion: typeof NODE_AUTHORITY_SCHEMA_VERSION;
+  readonly schemaVersion: NodeAuthoritySchemaVersion;
 }
 export type NodeAuthorityDraftResult =
   | { readonly draft: NodeAuthorityDraft; readonly ok: true } | NodeAuthorityRefusal;
@@ -220,14 +264,18 @@ export function canonicalText(value: unknown): string {
 }
 
 /** Domain-separated and length-framed, so no payload can shift across the domain
- * boundary to forge a different body under the same digest. */
-export function nodeBodyDigest(bodyJson: string): string {
+ * boundary to forge a different body under the same digest. The version is the
+ * BODY'S OWN, never the module's current one: framing a stored schema-2 body
+ * under the /3 domain would move an identity that is already history. */
+export function nodeBodyDigest(bodyJson: string, version: NodeAuthoritySchemaVersion): string {
   return createHash("sha256")
-    .update(`${NODE_AUTHORITY_DIGEST_DOMAIN}\n${bodyJson.length}:`, "utf8")
+    .update(`${DIGEST_DOMAINS[version]}\n${bodyJson.length}:`, "utf8")
     .update(bodyJson, "utf8").digest("hex");
 }
 
-export function canonicalEnvelopeJson(digest: string, bodyJson: string): string {
+export function canonicalEnvelopeJson(
+  digest: string, bodyJson: string, version: NodeAuthoritySchemaVersion,
+): string {
   return `{"body":${bodyJson},"digest":${JSON.stringify(digest)},`
-    + `"schema":${JSON.stringify(NODE_AUTHORITY_SCHEMA_TAG)}}`;
+    + `"schema":${JSON.stringify(SCHEMA_TAGS[version])}}`;
 }

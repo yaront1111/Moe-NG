@@ -3,7 +3,9 @@ import type { JSX } from "react";
 
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
+import type { PreviewReadOutcome } from "../../live/live-preview.js";
 import { ARROW_RIGHT, MIDDOT } from "../glyphs.js";
+import { useProviderPause } from "../shell/pause-context.js";
 import { deriveGoalStatus } from "./goal-status.js";
 import type { GoalStatus } from "./goal-status.js";
 
@@ -20,6 +22,8 @@ export const STAGE_WORDS: Readonly<Record<GoalStatus["stage"], string>> = Object
   ESCALATION: "Review exhausted",
   NO_PRD: "No PRD",
   PLAN: "Plan review",
+  PLAN_REJECTED: "Plan sent back",
+  PREVIEW: "Gate 2: your product is running",
   READY_TO_CLOSE: "Ready to close",
   REPLANNED: "Replanned",
   UNKNOWN: "Reading",
@@ -28,8 +32,12 @@ export const STAGE_WORDS: Readonly<Record<GoalStatus["stage"], string>> = Object
 
 /** The page anchors the opened goal's sections carry; the strip links, the page owns the ids. */
 export const GOAL_SECTION_IDS = Object.freeze({
-  activity: "cr-goal-activity", board: "cr-goal-board", contract: "cr-goal-contract", plan: "cr-goal-plan",
-  publish: "cr-goal-publish",
+  activity: "cr-goal-activity", board: "cr-goal-board", contract: "cr-goal-contract",
+  // The anchor the unset-variables card links to. It is an ANCHOR, not a strip stage: the strip
+  // states where the GOAL stands, and unset variables are a fact about an environment rather
+  // than a lifecycle position - see the note on STAGE_WORDS above.
+  environments: "cr-goal-environments",
+  plan: "cr-goal-plan", publish: "cr-goal-publish",
 });
 
 export interface GoalStatusStripProps {
@@ -77,6 +85,8 @@ export interface LiveGoalStatusProps {
   readonly pollMs?: number | undefined;
   /** The coverage reader the page already holds; the strip reads the opened goal with it. */
   readonly read: (goalId: string) => Promise<DocumentCoverageOutcome>;
+  /** The preview receipt read; absent means no PREVIEW stage is ever derived. */
+  readonly readPreview?: ((goalId: string) => Promise<PreviewReadOutcome>) | undefined;
   readonly runId: string;
   /** The board's own affordance frame, shared so the strip and the board agree on offers. */
   readonly surface: SurfaceFrame | null;
@@ -84,8 +94,11 @@ export interface LiveGoalStatusProps {
 
 const POLL_MS = 5_000;
 
-export function LiveGoalStatus({ goalId, onNeedsYou, pollMs, read, runId, surface }: LiveGoalStatusProps): JSX.Element {
+export function LiveGoalStatus({
+  goalId, onNeedsYou, pollMs, read, readPreview, runId, surface,
+}: LiveGoalStatusProps): JSX.Element {
   const [coverage, setCoverage] = useState<DocumentCoverageOutcome | null>(null);
+  const [preview, setPreview] = useState<PreviewReadOutcome | null>(null);
   const generation = useRef(0);
   useEffect(() => {
     const run = generation.current + 1;
@@ -104,5 +117,17 @@ export function LiveGoalStatus({ goalId, onNeedsYou, pollMs, read, runId, surfac
     const timer = setInterval(tick, pollMs ?? POLL_MS);
     return (): void => { generation.current += 1; clearInterval(timer); };
   }, [goalId, pollMs, read]);
-  return <GoalStatusStrip onNeedsYou={onNeedsYou} status={deriveGoalStatus({ coverage, goalId, runId, surface })} />;
+  useEffect(() => {
+    if (readPreview === undefined) return undefined;
+    let live = true;
+    const tick = (): void => {
+      void readPreview(goalId).then((next) => { if (live) setPreview(next); }, () => undefined);
+    };
+    tick();
+    const timer = setInterval(tick, pollMs ?? POLL_MS);
+    return (): void => { live = false; clearInterval(timer); };
+  }, [goalId, pollMs, readPreview]);
+  // The shell's one health poll, never a second one of the strip's own.
+  const paused = useProviderPause();
+  return <GoalStatusStrip onNeedsYou={onNeedsYou} status={deriveGoalStatus({ coverage, goalId, paused, preview, runId, surface })} />;
 }

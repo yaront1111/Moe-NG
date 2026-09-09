@@ -1,7 +1,8 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { HealthOutcome, PolicyOutcome } from "../../live/live-ops.js";
+import type { RepositoryRemoteOutcome } from "../../live/live-repository-remote.js";
 import { LiveHealth, LivePolicy } from "./live-ops.js";
 import { HealthScreen, PolicyScreen, verifierWords } from "./ops-screens.js";
 
@@ -27,11 +28,31 @@ const POLICY: PolicyOutcome = {
   verifier: { calibration: false, policy: true },
   waivers: { reason: "No command on this daemon records a policy waiver.", supported: false },
 };
+/** The daemon's five-key pause, as /health/read serves it; the line is carried, never parsed. */
+const PAUSED = {
+  lastLine: "You've hit your weekly limit - resets Sep 8, 10:46am (Asia/Jerusalem)",
+  provider: "claude", resetAt: "2026-09-02T20:30:00.000Z", since: "2026-09-02T20:00:00.000Z",
+  workItemId: "node.deliver@node-1",
+};
 const HEALTH: HealthOutcome = {
+  agents: { paused: null, repository: { code: "REPOSITORY_EXECUTION_UNCONFIGURED", owner: null, phase: null, status: "UNKNOWN" } },
   daemon: { commandAuthorityPlane: "V1", nodeSpecsDir: null, pid: 4242, projectId: "unai", protocolVersion: "moe-runtime-command/1", startedAt: "2026-09-02T19:00:00.000Z", storePath: "D:/store.sqlite" },
   ledger: { aggregates: 12, commandKinds: 9, decisionCount: 40, goals: 2, lastDecidedAt: "2026-09-02T19:35:00.000Z" },
   readAt: "2026-09-02T20:00:00.000Z", status: "HEALTH", verifier: { calibration: true, policy: true },
 };
+
+/**
+ * The two REMOTE frames the daemon really answers, recorded off its own production port
+ * (`createRepositoryRemoteReadPort(...).readRemote()`, apps/daemon/src/http/repository-remote-read.ts)
+ * and decoded through live-repository-remote.ts. Same bytes as live-repository-remote.test.ts.
+ */
+const BOUND_REMOTE: RepositoryRemoteOutcome = Object.freeze({
+  boundAt: "2026-09-05T04:33:07.118Z", boundBy: "operator-local", readAt: "2026-09-05T04:41:12.503Z",
+  remoteUrl: "https://github.com/owner/unai.git", status: "REMOTE" as const,
+});
+const UNBOUND_REMOTE: RepositoryRemoteOutcome = Object.freeze({
+  boundAt: null, boundBy: null, readAt: "2026-09-05T04:41:12.907Z", remoteUrl: null, status: "REMOTE" as const,
+});
 
 describe("verifierWords", () => {
   it("names exactly what is missing before delivered work can be accepted", () => {
@@ -56,7 +77,7 @@ describe("PolicyScreen", () => {
 
   it("names the missing standard slices and offers one install when a wire is attached", () => {
     render(<PolicyScreen nowMs={NOW} outcome={POLICY} />);
-    expect(screen.getByTestId("cr.policy.standard").textContent).toContain("1 OF 3 SLICES MISSING");
+    expect(screen.getByTestId("cr.policy.standard").textContent).toContain("1 of 3 slices missing");
     expect(screen.getByTestId("cr.policy.standard.REVIEWER_CALIBRATION").getAttribute("data-installed")).toBe("false");
     expect(screen.getByTestId("cr.policy.install.nowire")).toBeTruthy();
     expect(screen.queryByTestId("cr.policy.install")).toBeNull();
@@ -97,6 +118,43 @@ describe("PolicyScreen", () => {
 });
 
 describe("HealthScreen", () => {
+  it("shows the repository holder through verification without claiming a live child", () => {
+    render(<HealthScreen nowMs={NOW} outcome={{ ...HEALTH, agents: {
+      paused: null, repository: {
+        code: null, owner: { nodeRef: "node-2", projectId: "other-project" }, phase: "VERIFYING", status: "HELD",
+      },
+    } }} />);
+    const card = screen.getByTestId("cr.health.reservation");
+    expect(card.textContent).toContain("Repository held by node-2");
+    expect(card.textContent).toContain("other-project");
+    expect(card.textContent).toContain("Verifying the work");
+    expect(card.textContent).toContain("Other nodes wait until this work is landed");
+    expect(card.textContent).not.toContain("agent is running");
+    expect(card.querySelector("button")).toBeNull();
+  });
+
+  it("distinguishes unknown repository ownership from an inspected idle repository", () => {
+    render(<HealthScreen nowMs={NOW} outcome={{ ...HEALTH, agents: {
+      paused: null, repository: { code: "REPOSITORY_EXECUTION_UNREADABLE", owner: null, phase: null, status: "UNKNOWN" },
+    } }} />);
+    expect(screen.getByTestId("cr.health.reservation").textContent).toContain("Repository ownership is unknown");
+    expect(screen.getByTestId("cr.health.reservation").textContent).toContain("REPOSITORY_EXECUTION_UNREADABLE");
+    cleanup();
+    render(<HealthScreen nowMs={NOW} outcome={{ ...HEALTH, agents: {
+      paused: null, repository: { code: null, owner: null, phase: null, status: "IDLE" },
+    } }} />);
+    expect(screen.getByTestId("cr.health.reservation").textContent).toContain("No repository reservation is held");
+  });
+
+  it("renders an unrecognized daemon phase verbatim", () => {
+    render(<HealthScreen nowMs={NOW} outcome={{ ...HEALTH, agents: {
+      paused: null, repository: {
+        code: null, owner: { nodeRef: "node-2", projectId: "other-project" }, phase: "constructor", status: "HELD",
+      },
+    } }} />);
+    expect(screen.getByTestId("cr.health.reservation").textContent).toContain("constructor");
+  });
+
   it("states the process and ledger facts in a person's words", () => {
     render(<HealthScreen nowMs={NOW} outcome={HEALTH} />);
     expect(screen.getByTestId("cr.health.banner").textContent).toBe("The daemon answered just now · up for 1 h · last decision 25 min ago");
@@ -106,6 +164,57 @@ describe("HealthScreen", () => {
     expect(screen.getByTestId("cr.health.store").textContent).toBe("D:/store.sqlite");
     expect(screen.getByTestId("cr.health.decisions").textContent).toBe("40");
     expect(screen.getByTestId("cr.health.verifier").textContent).toBe("The verifier can accept delivered work.");
+    expect(screen.getByTestId("cr.health.agents").textContent).toBe("not paused");
+  });
+
+  it("names the paused provider and when it resumes, in the reader's own locale", () => {
+    render(<HealthScreen nowMs={NOW} outcome={{ ...HEALTH, agents: { ...HEALTH.agents, paused: PAUSED } }} />);
+    expect(screen.getByTestId("cr.health.agents").textContent)
+      .toBe(`paused: claude limit, resumes ${new Date("2026-09-02T20:30:00.000Z").toLocaleString()}`);
+  });
+
+  it("still names the pause when the reset instant is one this browser cannot read", () => {
+    render(<HealthScreen nowMs={NOW} outcome={{ ...HEALTH, agents: { ...HEALTH.agents, paused: { ...PAUSED, resetAt: "whenever" } } }} />);
+    expect(screen.getByTestId("cr.health.agents").textContent).toBe("paused: claude limit, resumes whenever");
+  });
+});
+
+describe("the Repository card on Health", () => {
+  it("names the bound remote with who bound it and when, from the recorded daemon frame", () => {
+    render(<HealthScreen nowMs={NOW} outcome={HEALTH} remote={BOUND_REMOTE} />);
+    expect(screen.getByTestId("cr.health.repository.remote").textContent).toBe("https://github.com/owner/unai.git");
+    expect(screen.getByTestId("cr.health.repository.boundat").textContent).toBe("2026-09-05T04:33:07.118Z");
+    expect(screen.getByTestId("cr.health.repository.boundby").textContent).toBe("operator-local");
+  });
+
+  it("says the remote is unbound rather than treating an all-null frame as a fault", () => {
+    render(<HealthScreen nowMs={NOW} outcome={HEALTH} remote={UNBOUND_REMOTE} />);
+    expect(screen.getByTestId("cr.health.repository.remote").textContent)
+      .toBe("No remote bound - bind it from the Publish card on any goal.");
+    expect(screen.queryByTestId("cr.health.repository.facts")).toBeNull();
+    expect(screen.queryByTestId("cr.health.repository.refusal")).toBeNull();
+  });
+
+  it("reveals where the rebind happens when Change is pressed, and hides it again", () => {
+    render(<HealthScreen nowMs={NOW} outcome={HEALTH} remote={BOUND_REMOTE} />);
+    expect(screen.queryByTestId("cr.health.repository.changehow")).toBeNull();
+    fireEvent.click(screen.getByTestId("cr.health.repository.change"));
+    expect(screen.getByTestId("cr.health.repository.changehow").textContent).toContain("Publish card on any goal");
+    fireEvent.click(screen.getByTestId("cr.health.repository.change"));
+    expect(screen.queryByTestId("cr.health.repository.changehow")).toBeNull();
+  });
+
+  it("carries the daemon own refusal code and layer, and says so while the read has not answered", () => {
+    render(<HealthScreen nowMs={NOW} outcome={HEALTH} remote={null} />);
+    expect(screen.getByTestId("cr.health.repository.loading")).toBeTruthy();
+    cleanup();
+    render(<HealthScreen nowMs={NOW} outcome={HEALTH} remote={{
+      code: "REPOSITORY_REMOTE_READ_CAPABILITY_DENIED", layer: "REPOSITORY_REMOTE_READ", status: "REFUSED",
+    }} />);
+    const refusal = screen.getByTestId("cr.health.repository.refusal").textContent ?? "";
+    expect(refusal).toContain("REPOSITORY_REMOTE_READ_CAPABILITY_DENIED");
+    expect(refusal).toContain("REPOSITORY_REMOTE_READ");
+    expect(screen.queryByTestId("cr.health.repository.remote")).toBeNull();
   });
 });
 
@@ -125,5 +234,27 @@ describe("LivePolicy / LiveHealth", () => {
     cleanup();
     render(<LivePolicy headers={{}} pollMs={60_000} read={() => Promise.reject(new Error("x"))} />);
     expect((await screen.findByTestId("cr.policy.refusal")).textContent).toContain("POLICY_READ_FAILED");
+  });
+
+  it("puts the repository remote ON THE POLLER, not on the mount alone", async () => {
+    const readRemote = vi.fn(async () => BOUND_REMOTE);
+    render(<LiveHealth headers={{}} pollMs={20} read={async () => HEALTH} readRemote={readRemote} />);
+    expect((await screen.findByTestId("cr.health.repository.remote")).textContent)
+      .toBe("https://github.com/owner/unai.git");
+    // A read wired to the screen but not the poll would stay at ONE call forever, so a remote
+    // bound from a goal Publish card would never appear here without a reload.
+    await waitFor(() => { expect(readRemote.mock.calls.length).toBeGreaterThan(1); });
+  });
+
+  it("keeps the daemon own refusal for the repository read when it is the one that fails", async () => {
+    render(<LiveHealth
+      headers={{}}
+      pollMs={60_000}
+      read={async () => HEALTH}
+      readRemote={() => Promise.reject(new Error("x"))}
+    />);
+    expect((await screen.findByTestId("cr.health.repository.refusal")).textContent)
+      .toContain("REPOSITORY_REMOTE_READ_FAILED");
+    expect(screen.getByTestId("cr.health.banner")).toBeTruthy();
   });
 });

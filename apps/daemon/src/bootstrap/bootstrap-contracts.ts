@@ -40,9 +40,42 @@ export const BOOTSTRAP_COMMAND_KINDS = Object.freeze([
   "provider.probe",
   "goal.close",
   "repository.publish",
+  // APPENDED for the same reason `goal.close` is: existing suites assert against this array in
+  // order. Bootstrap membership is what gives the kind the durable replay fence and the
+  // prerequisite table below; its EFFECTS are asynchronous, so the registry serves it from an
+  // async entry that admits through this surface first (daemon-command-registry.js).
+  "repository.bootstrap",
+  // APPENDED, same rule. `deployment.set_target` is an ordinary synchronous write; the DEPLOY
+  // that follows it runs `docker` and `ssh`, so it admits through this surface and is then
+  // served asynchronously, exactly as `repository.bootstrap` above.
+  "deployment.set_target",
+  "deployment.deploy",
+  // APPENDED, same rule. Undoing a schema change dumps the database and then runs the generated
+  // product's migration tool, so it admits through this surface and is then served
+  // asynchronously, exactly as `deployment.deploy` above.
+  "deployment.migrate_down",
 ] as const satisfies readonly RuntimeCommandKind[]);
 
 export type BootstrapCommandKind = (typeof BOOTSTRAP_COMMAND_KINDS)[number];
+
+/**
+ * The bootstrap-family kinds that are NOT rows in `BOOTSTRAP_HANDLERS`.
+ *
+ * They admit through this surface (decode, replay fence, prerequisites) and are then served by
+ * an ASYNC registry entry, because their effects are asynchronous and `CommandHandler` is not.
+ * Named here so a consumer enumerating the served bootstrap family from the handler table alone
+ * does not silently under-count: that table is no longer the whole seam.
+ */
+export const ASYNC_SERVED_BOOTSTRAP_KINDS: readonly BootstrapCommandKind[] = Object.freeze([
+  "repository.bootstrap",
+  // `docker build`, an optional `docker save | ssh docker load`, and a health poll that waits
+  // out docker's own start-period. `deployment.set_target`, its sibling, writes one durable
+  // binding and is a `BOOTSTRAP_HANDLERS` row like every other synchronous kind.
+  "deployment.deploy",
+  // Same shape: a dump, then a child process running `node-pg-migrate down`. A synchronous
+  // handler would answer before the schema moved back.
+  "deployment.migrate_down",
+]);
 
 export const BOOTSTRAP_REQUEST_KEYS = Object.freeze([
   "commandId",

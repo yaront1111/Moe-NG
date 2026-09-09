@@ -4,6 +4,7 @@
  * clock) are injected so each status arm flips exactly one of them; the default readers are
  * exercised by the empty-world arm, which walks the real ledgers.
  */
+import { randomUUID } from "node:crypto";
 import { decodeGraphContent } from "@moe/scheduler";
 import { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
@@ -12,15 +13,24 @@ import {
   GOAL_CREATE_COMMAND_ID, GOAL_ID, PROJECT_ID, closeStores, driveThrough, envelope, openStore, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
+import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import { compiledPlanAuthority } from "../planning/compiled-authority-bodies.js";
+import { baseSnapshot, revisionContentFor } from "../planning/graph-query-test-fixtures.js";
+import type { MigrationDeclarations } from "../planning/graph-query-test-fixtures.js";
 import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
 import type { WorkClaimRecord } from "../work/work-claim-read-model.js";
+import { recordDeployReceipt } from "../deployment/deploy-ledger.js";
+import type { RecordDeployReceiptInput } from "../deployment/deploy-ledger.js";
+import { DEPLOY_ENGINE_PRINCIPAL_ID, DEPLOY_RECEIPT_COMMAND_KIND, deployAggregateId, deployReceiptId }
+  from "../deployment/deploy-receipt-contracts.js";
+import { DEPLOY_TARGET_BOUND_EVENT, deployTargetAggregateId } from "../deployment/deploy-target-contracts.js";
 import type { RunsView } from "./runs-read-contract.js";
 import { createRunsReadPort } from "./runs-read.js";
 import type { NodeReviewFacts, NodeReviews, RunsReadOptions } from "./runs-read.js";
 
 const PRD = "# Run me\n\n## 11. Evidence\nRows are immutable.\n";
 const NOW = "2026-09-02T20:00:00.000Z";
+const ref = (key: string): string => compiledExecutionRef(PROJECT_ID, activeGraphFor(GOAL_ID), key);
 
 afterEach(closeStores);
 
@@ -61,21 +71,163 @@ function activeGraphFor(goalRef: string, keys: readonly [string, string] = ["nod
   return Object.freeze({ content: decoded.value.content, goalRef });
 }
 
+/**
+ * A graph whose node authority GENUINELY CARRIES a migration declaration. The identifiers ride
+ * the DRAFT into `createNodeDefinition` (@moe/scheduler), which is the same seam production's
+ * `scheduler-node-planning-authority.ts:141` spreads them into; the member on the resulting
+ * definition is that codec's own `project()` output, never assigned by a fixture. A nodeKey
+ * absent from `declared` declares NOTHING (schema-2 body, member absent); a present `[]` is a
+ * stated declared-none (schema 3). `compiledPlanAuthority` cannot be used here: its draft
+ * deliberately declares none (`compiled-policy-authority-body.ts:98-113`).
+ */
+function declaringGraphFor(goalRef: string, declared?: MigrationDeclarations): ActiveCompiledGraph {
+  return Object.freeze({ content: revisionContentFor(`human:${goalRef}`, baseSnapshot(), declared), goalRef });
+}
+
+/** Rows keyed by the local nodeKey, so an arm reads the member of the node it names. */
+function migrationsByKey(view: RunsView, goalId: string): Map<string, readonly string[] | null> {
+  const goal = view.goals.find((candidate) => candidate.goalId === goalId);
+  if (goal === undefined) throw new Error(`goal ${goalId} is absent from the view`);
+  return new Map(goal.nodes.map((node) => [node.nodeKey, node.declaredMigrations]));
+}
+
+/** A SECOND bound goal, so two goals' rows are both visible in one read. Goal identity is
+ *  `goal-${commandId}` (`goal-identity.ts:27`), so a distinct command id is a distinct goal. */
+const OTHER_GOAL_ID = "goal-2";
+function bindSecondGoal(store: SqliteEventStore): void {
+  const outcome = send(store, envelope("goal.create_with_source", 0, {
+    instructions: "Build the other PRD.",
+    source: { displayPath: "docs/other.md", mediaType: "text/markdown", text: `${PRD}\nOther.\n` },
+    title: "Other goal",
+  }, "2"));
+  if (!outcome.ok) throw new Error(`second goal bind refused: ${outcome.code}`);
+}
+
 const quiet: NodeReviewFacts = Object.freeze({
   accepted: undefined, escalated: false, lineage: { unsuccessfulRounds: 0 }, replanned: false, rounds: [],
   unreadable: false, version: 0,
 });
+
+const deploymentBytes = (value: unknown) => new TextEncoder().encode(JSON.stringify(value));
+const DEPLOY_SHA = "a".repeat(40);
+function bindTarget(store: SqliteEventStore, environment: string, id: string, target: Record<string, unknown>): void {
+  const aggregateId = deployTargetAggregateId(PROJECT_ID, environment), bytes = deploymentBytes(target);
+  const committed = store.commitExpectedVersionDecision({
+    commandKind: "deployment.set_target", committedResultBytes: bytes, correlationId: id, decidedAt: NOW,
+    expectedVersion: store.getAggregateVersion(aggregateId), targetAggregateId: aggregateId,
+    key: { commandId: id, principalId: "principal-1", projectId: PROJECT_ID },
+    requestBytes: deploymentBytes({ kind: "deployment.set_target", payload: { environment, ...target } }),
+    events: [{ eventId: `${id}-${DEPLOY_TARGET_BOUND_EVENT}`, eventType: DEPLOY_TARGET_BOUND_EVENT, payload: bytes }],
+  });
+  expect(committed.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+}
+function deployment(store: SqliteEventStore, environment: string, id: string, overrides: Partial<RecordDeployReceiptInput> = {}): void {
+  expect(recordDeployReceipt(store, { projectId: PROJECT_ID, environment, decisionId: id, decidedAt: NOW,
+    sha: DEPLOY_SHA, imageDigest: `sha256:${"b".repeat(64)}`, refusal: null, releaseDecision: null, url: null,
+    ...overrides }).ok).toBe(true);
+}
+function deploymentRows(store: SqliteEventStore) {
+  const view = runs(portFor(store).readRuns({ goalRef: GOAL_ID }));
+  expect(view.goals.length).toBe(1);
+  const rows = view.goals[0]?.deployments;
+  expect(Array.isArray(rows)).toBe(true);
+  if (rows === undefined) throw new Error("deployment array missing");
+  return rows;
+}
+function malformedDeploymentTip(store: SqliteEventStore, environment: string): void {
+  const receiptId = deployReceiptId(PROJECT_ID, environment, "malformed-newer"), aggregateId = deployAggregateId(PROJECT_ID, environment);
+  const committed = store.commitExpectedVersionDecision({
+    commandKind: DEPLOY_RECEIPT_COMMAND_KIND, committedResultBytes: deploymentBytes({}),
+    correlationId: "malformed-newer", decidedAt: NOW, expectedVersion: store.getAggregateVersion(aggregateId),
+    targetAggregateId: aggregateId, key: { commandId: receiptId, principalId: DEPLOY_ENGINE_PRINCIPAL_ID, projectId: PROJECT_ID },
+    requestBytes: deploymentBytes({ receiptId }), events: [{ eventId: `${receiptId}-DeployRecorded`,
+      eventType: "EnvironmentDeployed", payload: deploymentBytes({ environment, outcome: "DEPLOYED", receiptId, sha: DEPLOY_SHA }) }],
+  });
+  expect(committed.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+}
+
+it("unions three durable environments with omitted missing facts and detached target copies", () => {
+  const store = boundWorld();
+  bindTarget(store, "alpha", "alpha-bind", { network: "alpha-net", sshTarget: null, url: "https://binding-only.example" });
+  deployment(store, "bravo", "bravo-deploy", { url: "https://bravo.example" });
+  bindTarget(store, "charlie", "charlie-bind", { network: "charlie-net", sshTarget: "operator@charlie.example", url: null });
+  deployment(store, "charlie", "charlie-deploy");
+  const rows = deploymentRows(store);
+  expect([...rows].sort((a, b) => a.environment.localeCompare(b.environment))).toStrictEqual([
+    { environment: "alpha", target: { network: "alpha-net" } },
+    { environment: "bravo", sha: DEPLOY_SHA, time: NOW, url: "https://bravo.example", status: "DEPLOYED" },
+    { environment: "charlie", target: { network: "charlie-net", host: "charlie.example" },
+      sha: DEPLOY_SHA, time: NOW, status: "DEPLOYED" },
+  ]);
+  expect(Object.isFrozen(rows) && rows.every((row) => Object.isFrozen(row)
+    && (row.target === undefined || Object.isFrozen(row.target)))).toBe(true);
+  const again = deploymentRows(store);
+  expect(again.find((row) => row.environment === "alpha")?.target)
+    .not.toBe(rows.find((row) => row.environment === "alpha")?.target);
+});
+
+it.each(["DEPLOY_BUILD_FAILED", "DEPLOY_DOCKER_UNAVAILABLE", "DEPLOY_HEALTH_TIMEOUT", "DEPLOY_TARGET_MISSING"] as const)(
+  "carries the durable refusal code verbatim: %s", (code) => {
+    const store = boundWorld();
+    deployment(store, "refused", "refused-deploy", { imageDigest: null,
+      refusal: { code, detail: "not projected", layer: "DAEMON_DEPLOY_ENGINE" } });
+    expect(deploymentRows(store)).toStrictEqual([{ environment: "refused", sha: DEPLOY_SHA, time: NOW, status: "REFUSED", code }]);
+  },
+);
+
+it("takes the last durable receipt rather than the greatest timestamp", () => {
+  const store = boundWorld(), earlier = "2026-09-01T00:00:00.000Z", replacement = "c".repeat(40);
+  deployment(store, "updated", "old", { url: "https://old.example" });
+  deployment(store, "updated", "new", { decidedAt: earlier, sha: replacement, url: "https://new.example" });
+  expect(deploymentRows(store)).toStrictEqual([
+    { environment: "updated", sha: replacement, time: earlier, url: "https://new.example", status: "DEPLOYED" },
+  ]);
+});
+
+it("withholds target usernames, private fields, diagnostics and authenticated receipt URLs", () => {
+  const store = boundWorld(), privateUser = randomUUID(), privateMarker = randomUUID();
+  const authenticatedUrl = `https://${privateUser}:${privateMarker}@private.example`;
+  const target = { network: "safe-net", sshTarget: `${privateUser}@safe.example`,
+    url: "https://binding-only.example", privateField: privateMarker };
+  const userinfo = /:\/\/[^/@\s"]+@/u;
+  expect([userinfo.test(authenticatedUrl), JSON.stringify(target).includes(privateUser),
+    JSON.stringify(target).includes(privateMarker)]).toEqual([true, true, true]);
+  bindTarget(store, "guarded", "guarded-bind", target);
+  deployment(store, "guarded", "guarded-refusal", { imageDigest: null, url: authenticatedUrl,
+    refusal: { code: "DEPLOY_BUILD_FAILED", detail: privateMarker, layer: "DAEMON_DEPLOY_ENGINE" } });
+  const rows = deploymentRows(store), wire = JSON.stringify(rows);
+  // Boolean-only guard runs before structural assertions, so a regression cannot dump private values.
+  expect(wire.includes(privateUser) || wire.includes(privateMarker) || userinfo.test(wire)).toBe(false);
+  expect(rows).toStrictEqual([{ environment: "guarded", target: { network: "safe-net", host: "safe.example" },
+    sha: DEPLOY_SHA, time: NOW, status: "REFUSED", code: "DEPLOY_BUILD_FAILED" }]);
+});
+
+it.each(["target", "newer receipt"] as const)("drops only the environment with a malformed %s", (mode) => {
+  const store = boundWorld();
+  deployment(store, "healthy", "healthy-receipt");
+  deployment(store, "broken", "initial-valid-receipt");
+  if (mode === "target") {
+    bindTarget(store, "broken", "old-target", { network: "valid-net", sshTarget: null, url: null });
+    bindTarget(store, "broken", "bad-target", { network: "invalid network", sshTarget: null, url: null });
+  } else malformedDeploymentTip(store, "broken");
+  expect(deploymentRows(store)).toStrictEqual([
+    { environment: "healthy", sha: DEPLOY_SHA, time: NOW, status: "DEPLOYED" },
+  ]);
+});
 const round = (route: string, number = 1): NodeReviewFacts["rounds"][number] =>
   ({ round: number, routing: { route } } as unknown as NodeReviewFacts["rounds"][number]);
 const claim = (nodeKey: string, expiresAt: string, status: "OPEN" | "RELEASED" = "OPEN"): [string, WorkClaimRecord] =>
-  [`node.deliver@${nodeKey}`, { claimedBy: "sess-wrap-1", expiresAt, status, version: 1, workItemId: `node.deliver@${nodeKey}` }];
+  [`node.deliver@${ref(nodeKey)}`, { claimedBy: "sess-wrap-1", expiresAt, status, version: 1, workItemId: `node.deliver@${ref(nodeKey)}` }];
 const reviewsOf = (
   facts: Record<string, NodeReviewFacts>, receipts: NodeReviews["receipts"] = new Map(),
   landings: NodeReviews["landings"] = new Map(),
 ) =>
-  (_s: unknown, _p: unknown, keys: ReadonlySet<string>): NodeReviews => ({
-    landings, ledgers: new Map([...keys].map((key) => [key, facts[key] ?? quiet])), receipts,
-  });
+  (_s: unknown, _p: unknown, keys: ReadonlySet<string>): NodeReviews => {
+    const scoped = new Map(Object.entries(facts).map(([key, value]) => [ref(key), value]));
+    return { landings: new Map([...landings].map(([key, value]) => [ref(key), value])),
+      ledgers: new Map([...keys].map((key) => [key, scoped.get(key) ?? quiet])),
+      receipts: new Map([...receipts].map(([key, value]) => [ref(key), value])) };
+  };
 
 function portFor(store: SqliteEventStore, overrides: Partial<RunsReadOptions> = {}) {
   return createRunsReadPort({
@@ -99,6 +251,22 @@ function runs(result: ReturnType<ReturnType<typeof portFor>["readRuns"]>): RunsV
 }
 
 describe("createRunsReadPort", () => {
+  it("always serves the deployment roster even when nothing is configured", () => {
+    const view = runs(createRunsReadPort({ projectId: PROJECT_ID, store: boundWorld() }).readRuns({}));
+    expect(view.goals).toHaveLength(1);
+    expect(view.goals[0]).toHaveProperty("deployments", []);
+  });
+
+  it("carries the receipt's tested tree identity without exposing its internal binding", () => {
+    const store = boundWorld();
+    const receipt = { byteCount: 2, evidenceSha256: "e".repeat(64), exitCode: 0 as const,
+      outputSha256: "a".repeat(64), test: "node check.mjs", workspace: "/project",
+      workspaceBinding: { version: "moe-verified-workspace/1" as const, root: "/project", branchRef: "refs/heads/main",
+        headSha: "a".repeat(40), treeSha: "b".repeat(40), dirtySha256: "c".repeat(64) } };
+    const view = runs(portFor(store, { readReviews: reviewsOf({}, new Map([["node-a", receipt]])) }).readRuns({}));
+    expect(view.goals[0]?.nodes[0]?.receipt).toEqual({ byteCount: 2, exitCode: 0, outputSha256: "a".repeat(64),
+      test: "node check.mjs", testedTreeSha: "b".repeat(40), workspace: "/project" });
+  });
   it("walks the real ledgers for a plain bound goal: no plan, no nodes, honest run", () => {
     const store = boundWorld();
     const view = runs(createRunsReadPort({ projectId: PROJECT_ID, store }).readRuns({}));
@@ -143,7 +311,7 @@ describe("createRunsReadPort", () => {
       ["node-a", "ACCEPTED", { verifierReceiptId: "receipt-a" }, "ACCEPT"],
       ["node-b", "DELIVERED", null, "ACCEPT"],
     ]);
-    expect(view.goals[0]?.nodes[0]?.receipt).toEqual({ byteCount: 120, exitCode: 0, outputSha256: "o".repeat(64), test: "pnpm test", workspace: "D:/unai" });
+    expect(view.goals[0]?.nodes[0]?.receipt).toEqual({ byteCount: 120, exitCode: 0, outputSha256: "o".repeat(64), test: "pnpm test", testedTreeSha: null, workspace: "D:/unai" });
     const rejected: NodeReviewFacts = {
       ...quiet, lineage: {
         records: [
@@ -184,7 +352,7 @@ describe("createRunsReadPort", () => {
     expect(view.totals).toMatchObject({ BLOCKED: 2, READY: 0 });
   });
 
-  it("refuses to attribute a node key that another activated plan also carries", () => {
+  it("attributes scoped facts when another activated plan carries the same local key", () => {
     const store = boundWorld();
     const accepted: NodeReviewFacts = {
       ...quiet, accepted: { policyDecision: "ALLOW", reviewInputDigest: "r", reviewerCalibrationDigest: "c", verifierReceiptId: "receipt-a", verifierReceiptSha256: "s" },
@@ -197,10 +365,10 @@ describe("createRunsReadPort", () => {
       readReviews: reviewsOf({ "node-a": accepted }),
     }).readRuns({ goalRef: GOAL_ID }));
     expect(view.goals[0]?.nodes.map((node) => [node.nodeKey, node.status, node.sharedKey, node.accepted !== null])).toEqual([
-      ["node-a", "UNATTRIBUTABLE", true, true],
+      ["node-a", "ACCEPTED", false, true],
       ["node-b", "READY", false, false],
     ]);
-    expect(view.totals).toMatchObject({ ACCEPTED: 0, UNATTRIBUTABLE: 1, nodes: 2 });
+    expect(view.totals).toMatchObject({ ACCEPTED: 1, UNATTRIBUTABLE: 0, nodes: 2 });
     // Control: the same acceptance with a unique key IS this goal's.
     const unique = runs(portFor(store, { readReviews: reviewsOf({ "node-a": accepted }) }).readRuns({ goalRef: GOAL_ID }));
     expect(unique.goals[0]?.nodes[0]?.status).toBe("ACCEPTED");
@@ -209,7 +377,7 @@ describe("createRunsReadPort", () => {
   it("carries the verifier's real receipt and a clean round through the default review reader", () => {
     const store = boundWorld();
     // The daemon's own receipt production: a clean round, then the receipt decision on the node.
-    seedVerifierReceipt(store, "node-a", PROJECT_ID);
+    seedVerifierReceipt(store, ref("node-a"), PROJECT_ID);
     const view = runs(createRunsReadPort({
       clock: () => NOW, projectId: PROJECT_ID, readActive: () => [activeGraphFor(GOAL_ID)], readClaims: () => new Map(),
       readRun: (_s, _p, runId) => ({ acceptance: null, approval: "BOUND", authority: null, lifecycle: "ACTIVATED", outcome: "RUN", plan: null, reviewable: false, runId, submissionHash: "h" }),
@@ -218,7 +386,7 @@ describe("createRunsReadPort", () => {
     const node = view.goals[0]?.nodes[0];
     expect(node?.status).toBe("DELIVERED");
     expect(node?.review).toMatchObject({ findings: [], latestRoute: "ACCEPT", rounds: 1 });
-    expect(node?.receipt).toEqual({ byteCount: 2, exitCode: 0, outputSha256: expect.stringMatching(/^[0-9a-f]{64}$/u), test: "pnpm test", workspace: "/fixture-workspace" });
+    expect(node?.receipt).toEqual({ byteCount: 2, exitCode: 0, outputSha256: expect.stringMatching(/^[0-9a-f]{64}$/u), test: "pnpm test", testedTreeSha: null, workspace: "/fixture-workspace" });
     expect(node?.landing).toBeNull();
   });
 
@@ -253,6 +421,88 @@ describe("createRunsReadPort", () => {
       readClaims: () => new Map([claim("node-a", "2026-09-02T21:00:00.000Z", "RELEASED")]),
     }).readRuns({}));
     expect(released.goals[0]?.nodes[0]).toMatchObject({ claim: { active: false, status: "RELEASED" }, status: "READY" });
+  });
+
+  it("serves a node's declared identifiers by value, in authored order, on its own execution identity", () => {
+    const store = boundWorld();
+    const graph = declaringGraphFor(GOAL_ID, new Map([["dev-a", ["migration-b", "migration-a"]]]));
+    const view = runs(portFor(store, { readActive: () => [graph] }).readRuns({ goalRef: GOAL_ID }));
+    // BY VALUE AND IN ORDER, never a count: a reversing or deduping read passes `toHaveLength`.
+    expect(migrationsByKey(view, GOAL_ID).get("dev-a")).toEqual(["migration-b", "migration-a"]);
+    // The declaration is served on the row whose nodeRef IS this graph's node — the execution
+    // identity, not the local key. Nothing here is matched by filename or by sha.
+    const declaring = view.goals[0]?.nodes.find((node) => node.declaredMigrations !== null);
+    expect(declaring?.nodeRef).toBe(compiledExecutionRef(PROJECT_ID, graph, "dev-a"));
+    expect(declaring?.nodeKey).toBe("dev-a");
+    // The read hands out a copy, not the durable authority array.
+    expect(declaring?.declaredMigrations).not.toBe(graph.content.nodeAuthority.definitions
+      .find((definition) => definition.nodeKey === "dev-a")?.declaredMigrations);
+  });
+
+  it("keeps one goal's declaration off another goal's run that shares the same node key", () => {
+    const store = boundWorld();
+    bindSecondGoal(store);
+    // Both graphs carry dev-a/dev-b/dev-c. Only the FIRST goal's author declared anything, so a
+    // read keyed on nodeKey alone would serve goal-1's identifiers on goal-2's dev-a row.
+    const view = runs(portFor(store, {
+      readActive: () => [
+        declaringGraphFor(GOAL_ID, new Map([["dev-a", ["migration-b", "migration-a"]]])),
+        declaringGraphFor(OTHER_GOAL_ID),
+      ],
+    }).readRuns({}));
+    expect(view.goals.map((goal) => goal.goalId)).toEqual([GOAL_ID, OTHER_GOAL_ID]);
+    expect(migrationsByKey(view, GOAL_ID).get("dev-a")).toEqual(["migration-b", "migration-a"]);
+    expect(migrationsByKey(view, OTHER_GOAL_ID).get("dev-a")).toBeNull();
+    // Both goals really did surface the shared key, so the assertion above is not vacuous.
+    expect([...migrationsByKey(view, OTHER_GOAL_ID).keys()]).toEqual(["dev-a", "dev-b", "dev-c"]);
+  });
+
+  it("gives each goal its OWN declaration when both goals declare on the same node key", () => {
+    const store = boundWorld();
+    bindSecondGoal(store);
+    // The null-vs-value arm above could pass an implementation that served the FIRST graph's
+    // value everywhere and happened to read null for the second. Here both declare, and the
+    // two values are different, so serving either goal the other's declaration reds.
+    const view = runs(portFor(store, {
+      readActive: () => [
+        declaringGraphFor(GOAL_ID, new Map([["dev-a", ["migration-one"]]])),
+        declaringGraphFor(OTHER_GOAL_ID, new Map([["dev-a", ["migration-two", "migration-three"]]])),
+      ],
+    }).readRuns({}));
+    expect(migrationsByKey(view, GOAL_ID).get("dev-a")).toEqual(["migration-one"]);
+    expect(migrationsByKey(view, OTHER_GOAL_ID).get("dev-a"))
+      .toEqual(["migration-two", "migration-three"]);
+  });
+
+  it("distinguishes a node that declared NOTHING from one that declared NONE", () => {
+    const store = boundWorld();
+    // dev-a: absent from the map, so its authority body states no member at all -> UNKNOWN.
+    // dev-b: an explicit empty declaration, a stated fact -> [].
+    // dev-c: one identifier, so the arm cannot pass by collapsing everything to null.
+    const graph = declaringGraphFor(GOAL_ID, new Map([["dev-b", []], ["dev-c", ["migration-c"]]]));
+    const byKey = migrationsByKey(
+      runs(portFor(store, { readActive: () => [graph] }).readRuns({ goalRef: GOAL_ID })), GOAL_ID,
+    );
+    expect([byKey.get("dev-a"), byKey.get("dev-b"), byKey.get("dev-c")])
+      .toEqual([null, [], ["migration-c"]]);
+    // The two are different VALUES, not merely different-looking: `?? []` collapses them.
+    expect(byKey.get("dev-a")).not.toEqual(byKey.get("dev-b"));
+    // And the distinction is real one layer down: the codec mints a different schema version.
+    const versionOf = (nodeKey: string) => graph.content.nodeAuthority.definitions
+      .find((definition) => definition.nodeKey === nodeKey)?.schemaVersion;
+    expect([versionOf("dev-a"), versionOf("dev-b")]).toEqual([2, 3]);
+  });
+
+  it("serves nothing for a graph whose definitions do not include the node", () => {
+    const store = boundWorld();
+    // A declaration for a key this graph's authority does not define is not served ANYWHERE:
+    // ownership comes from the per-graph definition list, never from a name that merely matches.
+    const graph = declaringGraphFor(GOAL_ID, new Map([["dev-absent", ["migration-x"]]]));
+    const byKey = migrationsByKey(
+      runs(portFor(store, { readActive: () => [graph] }).readRuns({ goalRef: GOAL_ID })), GOAL_ID,
+    );
+    expect([...byKey.keys()]).toEqual(["dev-a", "dev-b", "dev-c"]);
+    expect([...byKey.values()]).toEqual([null, null, null]);
   });
 
   it("carries a refused planning-run read as a null run and a thrown walk as UNREADABLE", () => {

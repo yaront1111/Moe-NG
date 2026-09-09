@@ -14,6 +14,7 @@ import {
   LANDING_RECEIPT_COMMAND_KIND, decodeLandingReceiptBytes, landingAggregateId,
 } from "../repository/landing-receipt-contracts.js";
 import type { LandingReceiptV1 } from "../repository/landing-receipt-contracts.js";
+import { decisionsOf } from "../decision-ledger-memo.js";
 
 /**
  * The read half of the review composition: every committed decision for one reviewed subject,
@@ -299,23 +300,17 @@ export function readReviewLedgers(
   }
   const landings = new Map<string, LandingReceiptV1>();
   let decisionCount = 0;
-  let cursor = 0n;
-  for (;;) {
-    const page = store.readCommandDecisionsAfter(cursor, LEDGER_PAGE_SIZE);
-    for (const decision of page.items) {
-      if (decision.key.projectId !== projectId) continue;
-      decisionCount += 1;
-      if (decision.effectDisposition !== "EFFECTS_COMMITTED") continue;
-      const acc = accumulators.get(decision.targetAggregateId);
-      if (acc !== undefined) fold(acc, decision);
-      const landed = landingSubjects.get(decision.targetAggregateId);
-      if (landed !== undefined && decision.commandKind === LANDING_RECEIPT_COMMAND_KIND) {
-        const decoded = decodeLandingReceiptBytes(decision.resultBytes);
-        if (decoded.ok && decoded.receipt.subjectRef === landed) landings.set(landed, decoded.receipt);
-      }
+  for (const decision of decisionsOf(store, LEDGER_PAGE_SIZE)) {
+    if (decision.key.projectId !== projectId) continue;
+    decisionCount += 1;
+    if (decision.effectDisposition !== "EFFECTS_COMMITTED") continue;
+    const acc = accumulators.get(decision.targetAggregateId);
+    if (acc !== undefined) fold(acc, decision);
+    const landed = landingSubjects.get(decision.targetAggregateId);
+    if (landed !== undefined && decision.commandKind === LANDING_RECEIPT_COMMAND_KIND) {
+      const decoded = decodeLandingReceiptBytes(decision.resultBytes);
+      if (decoded.ok && decoded.receipt.subjectRef === landed) landings.set(landed, decoded.receipt);
     }
-    if (!page.hasMore || page.nextCursor === null) break;
-    cursor = page.nextCursor;
   }
   const ledgers = new Map<string, ReviewLedger>();
   const receipts = new Map<string, VerifierExecutionEvidence>();

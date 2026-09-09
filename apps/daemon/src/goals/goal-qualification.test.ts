@@ -75,6 +75,7 @@ import {
   seedVerifiedNode,
 } from "./goal-closure-test-fixtures.js";
 import { qualifyGoalClosure } from "./goal-qualification.js";
+import { createScopedGoalWorld } from "./goal-scoped-test-fixtures.js";
 
 /**
  * The daemon prerequisite composer for `goal.close`, read straight out of durable bytes on a
@@ -349,9 +350,13 @@ describe("goal closure qualification — the reachable receipt reader", () => {
 
     expect(qualified.ok).toBe(true);
     if (!qualified.ok) return;
+    // The roster is EXACT and includes `legs`, the sibling field naming which leg proved each
+    // node. It is a sibling and never a witness key: core validates both witnesses against its
+    // own exact rosters, so a `leg` inside one would refuse instead of closing.
     expect(Object.keys(qualified).sort()).toStrictEqual([
-      "closureWitness", "ok", "zeroAuthorityWitness",
+      "closureWitness", "legs", "ok", "zeroAuthorityWitness",
     ]);
+    expect(qualified.legs).toEqual({ [ACTIVATION_WORLD_NODE_KEY]: "FOUNDATION" });
     expect(qualified.closureWitness["truthClass"]).toBe("DAEMON_VERIFIED");
     expect(qualified.zeroAuthorityWitness["truthClass"]).toBe("DAEMON_VERIFIED");
     expectUnmoved(store, before);
@@ -375,16 +380,23 @@ describe("goal closure qualification — the reachable receipt reader", () => {
       "the verified result no longer reads back as the record its receipt names");
   });
 
-  it("refuses RECEIPT_ABSENT for an approved node no verification receipt names", () => {
-    const store = openStore();
+  /**
+   * The LIVE leg reads review evidence under immutable compiled execution refs. No Foundation
+   * receipt names those subjects. Raw legacy keys still need actual Foundation receipts; the
+   * live leg's other refusal arms live in `goal-live-evidence.test.ts`.
+   */
+  it("closes through the LIVE leg for approved, accepted nodes no Foundation receipt names", () => {
+    const world = createScopedGoalWorld(["node-1", "node-2"]);
+    const { store } = world;
     // Both nodes are fully reviewed and accepted, so the review guard cannot answer for either.
-    approvedWorld(store, ["node-1", "node-2"]);
+    for (const nodeRef of world.nodeRefs) seedReviewAcceptance(store, nodeRef);
     const before = snapshot(store);
 
     const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
 
-    expectRefusedExactly(outcome, "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
-      "no durable verification receipt names this approved node");
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.legs).toEqual(Object.fromEntries(world.nodeRefs.map((nodeRef) => [nodeRef, "LIVE"])));
     expectUnmoved(store, before);
   });
 
@@ -413,14 +425,20 @@ describe("goal closure qualification — the reachable receipt reader", () => {
    * A decoy row is committed to its OWN aggregate while naming another verification's id, so the
    * scanned bytes claim `node-1` and the row those bytes point at is the out-of-scope `node-src`
    * one. Reading the SCANNED value would admit a receipt for a node nothing verified; reading the
-   * STORED row skips it and leaves `node-1` with no evidence at all.
+   * STORED row skips it and leaves `node-1` with no Foundation evidence at all.
+   *
+   * The approved compiled execution has real review evidence for its LIVE leg. The question
+   * "was the decoy admitted?" is asked of the leg: trusting scanned bytes would incorrectly
+   * select FOUNDATION from a receipt whose stored row names the unrelated `node-src`.
    */
   it("indexes the stored row a receipt points at, never the bytes that pointed at it", () => {
-    const store = openStore();
-    approvedWorld(store, ["node-1"]);
+    const world = createScopedGoalWorld();
+    const { store } = world;
+    const nodeRef = world.nodeRef("node-1");
+    seedReviewAcceptance(store, nodeRef);
     plant(store, { graphIdentity: "node-src", verdict: "PASSED", verificationId: "verify-src" });
     const decoy = encodeFoundationPayload(
-      receiptRow({ graphIdentity: "node-1", verdict: "PASSED", verificationId: "verify-src" }));
+      receiptRow({ graphIdentity: nodeRef, verdict: "PASSED", verificationId: "verify-src" }));
     expect(decoy.ok).toBe(true);
     if (!decoy.ok) return;
     commitRawReceipt(store, "verify-src", decoy.bytes,
@@ -436,8 +454,10 @@ describe("goal closure qualification — the reachable receipt reader", () => {
 
     const outcome = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
 
-    expectRefusedExactly(outcome, "GOAL_CLOSE_VERIFICATION_RECEIPT_ABSENT",
-      "no durable verification receipt names this approved node");
+    expect(outcome.ok).toBe(true);
+    if (!outcome.ok) return;
+    expect(outcome.legs).toEqual({ [nodeRef]: "LIVE" });
+    expect(outcome.legs[nodeRef]).not.toBe("FOUNDATION");
     expectUnmoved(store, before);
   });
 

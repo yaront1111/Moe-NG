@@ -5,13 +5,15 @@ import {
 } from "@moe/core";
 import type { SqliteEventStore } from "@moe/store";
 
-import { payloadRef, readDurableLedger, refuse } from "../bootstrap/bootstrap-ledger.js";
+import { payloadRef, readDurableLedger, refuse, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import type { HumanReviewWitness, ServiceOutcome } from "../bootstrap/bootstrap-ledger.js";
 import { approvalDelayDisposition, readApprovalGate } from "./approval-gate.js";
 import { readApprovalPolicySettings } from "./approval-policy-settings.js";
 import { assembleActivationInput, commitIntentActivation, replayIntentDecision }
   from "./approval-intent-activation.js";
 import { APPROVAL_INTENT_PAYLOAD_KEYS } from "./approval-intent-contracts.js";
+import { APPROVAL_REJECT_REASON_REQUIRED, commitIntentRejection, rejectionReasonOf }
+  from "./approval-intent-rejection.js";
 import { observeApprovalIntentSourceFences }
   from "./approval-intent-source-fences.js";
 import { readApprovalIntentSources } from "./approval-intent-sources.js";
@@ -193,8 +195,8 @@ export function runApprovalIntentCommand(input: ApprovalIntentInput): ServiceOut
   });
   const replayed = replayIntentDecision(input.store, command);
   if (replayed !== null) return replayed;
-  if (intent.decision !== "APPROVE") {
-    return refuse(null, "BOOTSTRAP_PAYLOAD_INVALID", "DAEMON_PREREQUISITE");
+  if (intent.decision === "REJECT" && rejectionReasonOf(intent.decisionReason) === null) {
+    return refuse(null, APPROVAL_REJECT_REASON_REQUIRED, LAYER);
   }
 
   // Capture every mutable source BEFORE the first authority read. The envelope version is the
@@ -234,6 +236,23 @@ export function runApprovalIntentCommand(input: ApprovalIntentInput): ServiceOut
     return refuse(null, "APPROVAL_HUMAN_REVIEW_REQUIRED", "APPROVAL_POLICY");
   }
 
+  if (intent.decision === "REJECT") {
+    // An APPROVE through this seam writes only the GOAL (GoalExecutionEnabled) and never moves
+    // the run, so the run stays PLAN_REVIEW after approval and the binding check alone admitted a
+    // later REJECT: the run flipped to REJECTED with a REVISION successor while the goal stayed
+    // EXECUTION_ENABLED on the rejected run's graph — a durable split with no repair path. The
+    // goal's own durable fact, the one readApprovedPlan trusts, decides reviewability here.
+    const state = stateOf(ledger, sources.goalRef);
+    const goal: JsonObject | null = typeof state === "object" && state !== null && !Array.isArray(state)
+      ? (state as JsonObject) : null;
+    const lifecycle = goal === null ? null : payloadRef(goal, "lifecycle");
+    const active = goal === null ? null : payloadRef(goal, "activeGraphRevisionRef");
+    const enabled = lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING" || lifecycle === "COMPLETED";
+    if (enabled && active === sources.graphRevisionRef) {
+      return refuse(null, "APPROVAL_RUN_NOT_REVIEWABLE", "APPROVAL_RUN_BINDING");
+    }
+    return commitIntentRejection(input.store, command, { intent, sourceFences, sources });
+  }
   const assembled = assembleActivationInput(input.store, ledger, {
     humanReview: witness, intent, projectId: input.projectId, sourceFences,
   });

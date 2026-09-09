@@ -1,8 +1,11 @@
 import type { JSX } from "react";
 
-import type { HealthOutcome, PolicyOutcome, PolicySliceKind } from "../../live/live-ops.js";
+import type { HealthOutcome, PolicyOutcome, PolicySliceKind, ProviderPauseView } from "../../live/live-ops.js";
+import type { RepositoryRemoteOutcome } from "../../live/live-repository-remote.js";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
+import { RepositoryCard } from "./repository-card.js";
+import { RepositoryReservationCard } from "./repository-reservation-card.js";
 import { RefusalNote } from "../components/outcome-note.js";
 
 /**
@@ -43,8 +46,25 @@ function upFor(startedAt: string, nowMs: number): string {
   return `${String(Math.floor(hours / 24))} d ${String(hours % 24)} h`;
 }
 
+/**
+ * What the fleet is waiting for, in the reader's own words and time zone.
+ *
+ * The reset instant is the daemon's fact; the LOCALE is the reader's, so the resume time is
+ * formatted here rather than served pre-rendered. Date and time both, because a weekly limit
+ * resumes on another day.
+ */
+function agentsWords(paused: ProviderPauseView | null): string {
+  if (paused === null) return "not paused";
+  const at = Date.parse(paused.resetAt);
+  // An instant this browser cannot read is shown RAW, never as "Invalid Date", and never as calm:
+  // hiding a live pause behind a formatting miss is the one thing this line must not do.
+  const when = Number.isNaN(at) ? paused.resetAt : new Date(at).toLocaleString();
+  return `paused: ${paused.provider} limit, resumes ${when}`;
+}
+
 function Refusal({ outcome, testId }: {
-  readonly outcome: Extract<PolicyOutcome | HealthOutcome, { status: "ERROR" | "REFUSED" }>; readonly testId: string;
+  readonly outcome: Extract<PolicyOutcome | HealthOutcome, { status: "ERROR" | "REFUSED" }>;
+  readonly testId: string;
 }): JSX.Element {
   return <RefusalNote refusal={outcome} testId={testId} />;
 }
@@ -98,7 +118,7 @@ export function PolicyScreen({ install, nowMs, outcome }: {
         const missing = outcome.standard.filter((row) => !row.installed);
         return (
           <div className="cr2-ops-card cr2-policy-standard" data-testid="cr.policy.standard">
-            <p className="cr2-slot-kicker">{`STANDARD POLICY ${MIDDOT} ${String(missing.length)} OF ${String(outcome.standard.length)} SLICES MISSING`}</p>
+            <p className="cr2-slot-kicker">{`Standard policy ${MIDDOT} ${String(missing.length)} of ${String(outcome.standard.length)} slices missing`}</p>
             <ul className="cr2-approve-obligations" data-testid="cr.policy.standard.list">
               {outcome.standard.map((row) => (
                 <li className="cr2-coverage-section" data-installed={row.installed ? "true" : "false"} data-testid={`cr.policy.standard.${row.kind}`} key={row.sliceRef}>
@@ -174,7 +194,12 @@ export function PolicyScreen({ install, nowMs, outcome }: {
   );
 }
 
-export function HealthScreen({ nowMs, outcome }: { readonly nowMs: number; readonly outcome: HealthOutcome | null }): JSX.Element {
+export function HealthScreen({ nowMs, outcome, remote }: {
+  readonly nowMs: number;
+  readonly outcome: HealthOutcome | null;
+  /** The project's bound git remote; null while the read has not answered. */
+  readonly remote?: RepositoryRemoteOutcome | null | undefined;
+}): JSX.Element {
   if (outcome === null) {
     return <section className="cr2-ops" data-testid="cr.health.root"><p className="cr2-slot-kicker" data-testid="cr.health.loading">Reading the daemon...</p></section>;
   }
@@ -199,7 +224,10 @@ export function HealthScreen({ nowMs, outcome }: { readonly nowMs: number; reado
         <Fact label="Aggregates" value={String(ledger.aggregates)} />
         <Fact label="Command kinds used" value={String(ledger.commandKinds)} />
         <Fact label="Goals bound to a PRD" value={ledger.goals === null ? "unreadable" : String(ledger.goals)} />
+        <Fact label="Agents" testId="cr.health.agents" value={agentsWords(outcome.agents.paused)} />
       </dl>
+      <RepositoryCard outcome={remote ?? null} />
+      <RepositoryReservationCard reservation={outcome.agents.repository} />
       <p className="cr2-approve-banner" data-testid="cr.health.verifier">{verifierWords(outcome.verifier)}</p>
     </section>
   );

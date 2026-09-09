@@ -1045,7 +1045,8 @@ describe.skipIf(!gitAvailable)("the postlaunch delta capture", { timeout: 30_000
       layer: "RUNNER_WORKSPACE_CAPTURE",
       path: "work/logs",
     });
-  });
+  // The real Git fixture plus both observations exceeded 30s on the shared Windows host.
+  }, 90_000);
 
   // The attribution index folds a declared directory to the STRONGEST class in
   // its subtree, and DIRTY (rank 4) and UNTRACKED (rank 2) both outrank IGNORED

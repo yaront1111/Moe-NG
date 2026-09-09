@@ -36,6 +36,7 @@ use moe_windows_job_core::{
 };
 
 use crate::completion::{Completion, Outcome};
+use crate::approved_image::ApprovedImageGuard;
 use crate::control::AcceptState;
 use crate::diagnostics::{Diagnostic, DiagnosticNote};
 use crate::frames::ByteChannel;
@@ -142,6 +143,17 @@ impl<'c, C: Win32Calls + ProcessCalls> Session<'c, C> {
             None => None,
         };
         let deadline_ms = request.store_path().is_none().then_some(self.timeout_ms);
+        // Hold the image and all directory names through contained completion.
+        // A refused hash/lock never reaches Job creation or CreateProcess.
+        let _image_guard = match request.approved_image_sha256() {
+            Some(digest) => match ApprovedImageGuard::acquire(request.executable(), digest) {
+                Ok(guard) => Some(guard),
+                Err(error) => return StoreLockedOutcome::new(
+                    Outcome::NotLaunched(publish(wiring, Refused::approved_image(error))), guard,
+                ),
+            },
+            None => None,
+        };
         let plan = match LaunchPlan::from_request(&request, self.inherited) {
             Ok(plan) => plan,
             Err(error) => return StoreLockedOutcome::new(

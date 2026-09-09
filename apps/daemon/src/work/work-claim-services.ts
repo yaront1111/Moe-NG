@@ -1,7 +1,11 @@
+import { createHash } from "node:crypto";
+
 import type { JsonValue, RuntimeError } from "@moe/contracts";
 import { identifyReplayRequest } from "@moe/store";
 import type { CommandDecisionKey, CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
+import { conflictError } from "../bootstrap/bootstrap-conflict-error.js";
+import { holderHasLiveSession } from "./work-claim-holder-liveness.js";
 import {
   decodeWorkClaimRequestBytes,
   isIsoInstant,
@@ -58,10 +62,11 @@ function refuse(
   kind: WorkClaimCommandKind | null,
   code: DaemonCode | string,
   refusedBy: WorkClaimRefusedBy,
+  error: RuntimeError | null = null,
 ): WorkClaimRefused {
   return Object.freeze({
     advisoryOnly: true as const, authority: "NONE" as const, code,
-    error: null, kind, ok: false as const, refusedBy,
+    error, kind, ok: false as const, refusedBy,
   });
 }
 
@@ -74,6 +79,19 @@ function decisionKey(request: WorkClaimRequest): CommandDecisionKey {
 }
 
 const encoder = new TextEncoder();
+
+/**
+ * The event id carries the PRINCIPAL as well as the command id. Seats choose their own
+ * work.* command ids (the brief hands them no minted one), and two seats on one goal chose
+ * the same readable id across sessions: distinct decisions (the key includes the principal),
+ * but `${commandId}-${eventType}` collided in the store's global event namespace and the
+ * second release died DURABLE_ID_CONFLICT (measured 2026-09-05). The principal's digest keeps
+ * the id short and free of a session id's characters.
+ */
+function eventIdFor(request: WorkClaimRequest, eventType: string): string {
+  const principal = createHash("sha256").update(request.principalId, "utf8").digest("hex").slice(0, 16);
+  return `${request.commandId}-${eventType}-${principal}`;
+}
 
 /**
  * The canonical request bytes of a command: the exact preimage `commitAccepted`
@@ -99,7 +117,7 @@ function commitAccepted(
     correlationId: request.correlationId,
     decidedAt: request.decidedAt,
     events: [{
-      eventId: `${request.commandId}-${eventType}`,
+      eventId: eventIdFor(request, eventType),
       eventType,
       payload: encoder.encode(JSON.stringify(result)),
     }],
@@ -109,7 +127,10 @@ function commitAccepted(
     targetAggregateId: aggregateId,
   });
   if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
-    return refuse(request.kind, response.decision.resultCode, "DURABLE_STORE");
+    return refuse(
+      request.kind, response.decision.resultCode, "DURABLE_STORE",
+      conflictError(response.decision),
+    );
   }
   return Object.freeze({
     advisoryOnly: false as const, authority: "DURABLE_DECISION" as const,
@@ -198,7 +219,23 @@ function decide(
     return refuse(request.kind, "WORK_CLAIM_NOT_FOUND", "DAEMON_PREREQUISITE");
   }
   if (held.claimedBy !== request.principalId) {
-    return refuse(request.kind, "WORK_CLAIM_NOT_CLAIMANT", "DAEMON_PREREQUISITE");
+    // RELEASE, and only release, widens for a holder that is no longer live.
+    // A seat claims under its own bearer, and that secret dies with the wrapper
+    // process, so before this the claim's 30-minute expiry was the ONLY exit
+    // from a dead seat's hold — nobody on the board, operator included, could
+    // hand the item back. Renewal stays claimant-only: it is the holder's
+    // keepalive, and letting a stranger extend a fence it does not own would be
+    // a new authority rather than a recovery.
+    //
+    // A LIVE holder is NEVER overridden, and neither is one this daemon cannot
+    // read: `null` (unreadable or throwing session ledger) fails closed with the
+    // same code, because corrupt bytes are not evidence that a seat is gone.
+    const live = request.kind === "work.release"
+      ? holderHasLiveSession(store, request.projectId, held.claimedBy, request.decidedAt)
+      : true;
+    if (live !== false) {
+      return refuse(request.kind, "WORK_CLAIM_NOT_CLAIMANT", "DAEMON_PREREQUISITE");
+    }
   }
   const result: JsonValue = request.kind === "work.release"
     ? { claimedBy: held.claimedBy, expiresAt: held.expiresAt, status: "RELEASED", workItemId }

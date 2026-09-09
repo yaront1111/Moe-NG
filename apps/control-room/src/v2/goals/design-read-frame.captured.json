@@ -1,0 +1,136 @@
+{
+  "latest": {
+    "ok": true,
+    "record": {
+      "contractRef": {
+        "contractId": "contract-design-lane",
+        "revisionDigest": "0572b121116da7ff4fa91efe1a130878a5c88da7e22433e9465c7da2680e0f4d",
+        "revisionId": "rev-1"
+      },
+      "goalRef": "goal-012d8848-17e3-4dc2-adb2-3761ec21aff5",
+      "profile": "typescript-web-app/react-node-postgresql",
+      "projectId": "e2e-proj-sdprxq",
+      "revision": {
+        "apiSurface": [
+          {
+            "payload": "{ email, password }",
+            "route": "POST /api/sessions"
+          }
+        ],
+        "componentList": [
+          "AppShell",
+          "ConfirmDialog"
+        ],
+        "dataModel": [
+          {
+            "entity": "ShelfItemV2Marker",
+            "fields": [
+              "id",
+              "ownerId",
+              "title"
+            ],
+            "relations": [
+              "User.id"
+            ]
+          }
+        ],
+        "nonFunctional": {
+          "accessibility": "WCAG 2.2 AA, keyboard-reachable on every screen",
+          "auth": "session cookie, argon2id password hash",
+          "performance": "p95 API 200ms"
+        },
+        "openDecisions": [
+          "Does the operator want SSO in v1?"
+        ],
+        "screens": [
+          {
+            "journey": "Sign in and reach the shelf",
+            "screens": [
+              {
+                "screen": "SignIn",
+                "states": [
+                  "EMPTY",
+                  "SUBMITTING"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "schemaVersion": "moe-design-revision/1",
+      "submittedAt": "2026-09-06T19:00:47.417Z",
+      "version": 2
+    },
+    "versions": [
+      1,
+      2
+    ]
+  },
+  "older": {
+    "ok": true,
+    "record": {
+      "contractRef": {
+        "contractId": "contract-design-lane",
+        "revisionDigest": "0572b121116da7ff4fa91efe1a130878a5c88da7e22433e9465c7da2680e0f4d",
+        "revisionId": "rev-1"
+      },
+      "goalRef": "goal-012d8848-17e3-4dc2-adb2-3761ec21aff5",
+      "profile": "typescript-web-app/react-node-postgresql",
+      "projectId": "e2e-proj-sdprxq",
+      "revision": {
+        "apiSurface": [
+          {
+            "payload": "{ email, password }",
+            "route": "POST /api/sessions"
+          }
+        ],
+        "componentList": [
+          "AppShell",
+          "ShelfTable"
+        ],
+        "dataModel": [
+          {
+            "entity": "ShelfItemV1Marker",
+            "fields": [
+              "id",
+              "ownerId",
+              "title"
+            ],
+            "relations": [
+              "User.id"
+            ]
+          }
+        ],
+        "nonFunctional": {
+          "accessibility": "WCAG 2.2 AA, keyboard-reachable on every screen",
+          "auth": "session cookie, argon2id password hash",
+          "performance": "p95 API 200ms"
+        },
+        "openDecisions": [
+          "Does the operator want SSO in v1?"
+        ],
+        "screens": [
+          {
+            "journey": "Sign in and reach the shelf",
+            "screens": [
+              {
+                "screen": "SignIn",
+                "states": [
+                  "EMPTY",
+                  "SUBMITTING"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "schemaVersion": "moe-design-revision/1",
+      "submittedAt": "2026-09-06T19:00:46.384Z",
+      "version": 1
+    },
+    "versions": [
+      1,
+      2
+    ]
+  }
+}

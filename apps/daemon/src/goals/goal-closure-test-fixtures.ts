@@ -30,8 +30,9 @@ import {
   ACTIVATION_WORLD_NODE_KEY, seedActivationWorldWithGatePolicy,
 } from "../activation/activation-world-fixtures.js";
 import {
-  CLAUDE_PROFILE, OBSERVATION, PROJECT_ID, PROVIDER_OBSERVATION, SEALED_SUBMISSION_HASH,
-  approvalPayload, approvalRecord, bootstrapSequence, closeStores, driveThrough, envelope, send,
+  CLAUDE_PROFILE, GOAL_ID, OBSERVATION, PROJECT_ID, PROVIDER_OBSERVATION, SEALED_SUBMISSION_HASH,
+  acceptancePayload, approvalPayload, approvalRecord, bootstrapSequence, closeStores, driveThrough,
+  envelope, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { readLatestProjectConfiguration } from "../configuration/project-configuration-selection.js";
 import { selectProjectConfiguration } from "../configuration/project-configuration-selection.js";
@@ -51,6 +52,8 @@ import { resolveCurrentProviderProfile } from "../provider-profile/provider-prof
 import {
   RESTORE_CONTROLLER_SCHEMA_VERSION, preparedRestoreIdentity,
 } from "../recovery/restore-controller-contract.js";
+import { recordLandingReceipt } from "../repository/landing-ledger.js";
+import { readReviewLedger } from "../review/review-ledger.js";
 import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
 import { createFoundationAttemptServiceWithProviderRun } from "../work/foundation-attempt-service.js";
 import { readFoundationAttemptRecord } from "../work/foundation-attempt-store.js";
@@ -200,7 +203,10 @@ function createAttemptWorld(nodeRef: string, baseWorld?: AttemptWorld): AttemptW
   });
 }
 
-function bootstrapGoalWorld(store: SqliteEventStore, nodeRef: string, world: AttemptWorld): void {
+function bootstrapGoalWorld(
+  store: SqliteEventStore, nodeRef: string, world: AttemptWorld,
+  approvedScope: readonly string[] = [nodeRef],
+): void {
   for (const request of bootstrapSequence()) {
     if (request.kind === "approval.decide") break;
     const adjusted = request.kind === "project.bind_repository"
@@ -221,7 +227,7 @@ function bootstrapGoalWorld(store: SqliteEventStore, nodeRef: string, world: Att
   }
   seedActivationWorldWithGatePolicy(store, "HUMAN_APPROVAL");
   const approved = send(store, envelope("approval.decide", 0, approvalPayload({
-    record: { ...approvalRecord(SEALED_SUBMISSION_HASH), approvedNodeScope: [nodeRef] },
+    record: { ...approvalRecord(SEALED_SUBMISSION_HASH), approvedNodeScope: [...approvedScope] },
   })));
   if (!approved.ok) throw new Error(`goal fixture approval refused: ${approved.code}`);
   seedConfiguration(store, world.label);
@@ -527,11 +533,12 @@ export type SeededAttempt = Omit<SeededAttemptInternal, "runtime" | "tree">;
  */
 export async function seedProvenAttempt(
   store: SqliteEventStore, nodeRef = ACTIVATION_WORLD_NODE_KEY,
+  approvedScope: readonly string[] = [nodeRef],
 ): Promise<SeededAttemptInternal> {
   const baseWorld = storeWorlds.get(store);
   const world = createAttemptWorld(nodeRef, baseWorld);
   if (baseWorld === undefined) {
-    bootstrapGoalWorld(store, nodeRef, world);
+    bootstrapGoalWorld(store, nodeRef, world, approvedScope);
     storeWorlds.set(store, world);
   }
   openAttemptSession(store, world.sessionId, world.label, baseWorld === undefined);
@@ -592,8 +599,9 @@ export interface SeededVerification extends SeededAttempt {
 /** One canonical PASSED receipt over the exact candidate bytes the attempt sealed. */
 export async function seedVerifiedNode(
   store: SqliteEventStore, nodeRef = ACTIVATION_WORLD_NODE_KEY,
+  approvedScope: readonly string[] = [nodeRef],
 ): Promise<SeededVerification> {
-  const internal = await seedProvenAttempt(store, nodeRef);
+  const internal = await seedProvenAttempt(store, nodeRef, approvedScope);
   const recipeAggregateId = `recipe-${internal.attemptRef}`;
   const verificationId = `verify-${internal.attemptRef}`;
   const service = createFoundationVerificationService({
@@ -696,14 +704,44 @@ export function approveNodes(store: SqliteEventStore, nodeRefs: readonly string[
  */
 export function seedReviewAcceptance(store: SqliteEventStore, nodeRef = "node-1"): void {
   const receipt = seedVerifierReceipt(store, nodeRef, PROJECT_ID);
+  // This fixture emulates the node verifier's in-process integration-acceptance dispatch.
+  const outcome = dispatchAsOperator(store, {
+    commandId: `cmd-j1-review-accept-${nodeRef}`,
+    commandKind: "integration.accept_output",
+    correlationId: "corr-j1-review",
+    expectedVersion: receipt.currentVersion,
+    payload: { receiptId: receipt.receiptId, subjectRef: nodeRef },
+    targetAggregateId: nodeRef,
+  }, "NODE_VERIFIER");
+  if (!outcome.ok) throw new Error(`authenticated review setup failed for ${nodeRef}`);
+}
+
+interface OperatorDispatch {
+  readonly commandId: string;
+  readonly commandKind: string;
+  readonly correlationId: string;
+  readonly expectedVersion: number;
+  readonly payload: Record<string, unknown>;
+  readonly targetAggregateId: string;
+}
+
+/**
+ * The PUBLISHED, authenticated package-root command path under the configured operator
+ * principal — the seat `goal.close` and `integration.accept_output` both require
+ * (`OPERATOR_PRINCIPAL_KINDS`). Extracted so a fixture that closes a goal and one that accepts
+ * a node's output reach the daemon through the SAME shipped entry point rather than through two
+ * hand-copied envelopes that could drift apart.
+ */
+function dispatchAsOperator(
+  store: SqliteEventStore, request: OperatorDispatch, transport: "HTTP_LISTENER" | "NODE_VERIFIER",
+): ReturnType<typeof daemon.handleCommandRequest> {
   const ports = daemon.createDaemonCommandPorts({
     clock: () => "2026-08-16T00:00:00.000Z",
     operatorPrincipalId: OPERATOR_PRINCIPAL_ID,
     projectId: PROJECT_ID,
     store,
   });
-  // This fixture emulates the node verifier's in-process integration-acceptance dispatch.
-  const outcome = daemon.handleCommandRequest({
+  return daemon.handleCommandRequest({
     authenticator: {
       authenticate: (credential) => credential === OPERATOR_CREDENTIAL
         ? {
@@ -719,18 +757,71 @@ export function seedReviewAcceptance(store: SqliteEventStore, nodeRef = "node-1"
     ...ports,
   }, {
     body: encoder.encode(JSON.stringify({
-      commandId: `cmd-j1-review-accept-${nodeRef}`,
-      commandKind: "integration.accept_output",
-      correlationId: "corr-j1-review",
-      expectedVersion: receipt.currentVersion,
-      payload: { receiptId: receipt.receiptId, subjectRef: nodeRef },
+      ...request,
       requestDigest: "a".repeat(64),
       schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
       sessionCredential: OPERATOR_CREDENTIAL,
-      targetAggregateId: nodeRef,
     })),
     credential: OPERATOR_CREDENTIAL,
     protocolVersion: daemon.WIRE_PROTOCOL_VERSION,
-  }, "NODE_VERIFIER");
-  if (!outcome.ok) throw new Error(`authenticated review setup failed for ${nodeRef}`);
+  }, transport);
+}
+
+/**
+ * `goal.close` through the shipped, authenticated operator wire — the same entry the control
+ * room's third human action reaches. Nothing about the closure is presented: the payload's two
+ * witnesses are the inert fixture literals `qualifyGoalClosure` replaces with derived ones.
+ */
+export function closeGoalThroughCommandPath(
+  store: SqliteEventStore, expectedVersion: number, commandId = "cmd-j1-goal-close",
+): ReturnType<typeof daemon.handleCommandRequest> {
+  return dispatchAsOperator(store, {
+    commandId,
+    commandKind: "goal.close",
+    correlationId: "corr-j1-close",
+    expectedVersion,
+    payload: acceptancePayload(),
+    targetAggregateId: GOAL_ID,
+  }, "HTTP_LISTENER");
+}
+
+/** The landing outcome a fixture asks the lander's ledger to record for a node. */
+export type SeededLanding = "COMMITTED" | Readonly<{ readonly refusalCode: string }>;
+
+const LANDING_SHA = "0123456789abcdef0123456789abcdef01234567";
+
+/**
+ * One durable landing receipt for a node, written through the lander's OWN ledger writer
+ * (`recordLandingReceipt`) rather than planted: the bytes a closure reads back are the exact
+ * bytes production commits.
+ *
+ * `verifierReceiptId` defaults to the one this node's review acceptance names, because that is
+ * the only pairing production can produce; an override exists solely for the STALE-landing arm,
+ * where a landing attests a verifier receipt the acceptance does not.
+ */
+export function seedLandingReceipt(
+  store: SqliteEventStore, nodeRef: string, outcome: SeededLanding, verifierReceiptId?: string,
+): string {
+  const accepted = readReviewLedger(store, PROJECT_ID, nodeRef).accepted;
+  const receiptId = verifierReceiptId ?? accepted?.verifierReceiptId;
+  if (receiptId === undefined) {
+    throw new Error(`no review acceptance names ${nodeRef}, so no landing can attest one`);
+  }
+  const committed = outcome === "COMMITTED";
+  const recorded = recordLandingReceipt(store, {
+    commit: committed
+      ? {
+        branch: "main", files: ["src/landed.ts"], message: `Land ${nodeRef}\n`,
+        parentSha: null, sha: LANDING_SHA,
+      }
+      : null,
+    decidedAt: "2026-08-16T01:00:00.000Z",
+    projectId: PROJECT_ID,
+    refusal: committed ? null : { code: outcome.refusalCode, detail: "fixture landing refusal" },
+    subjectRef: nodeRef,
+    verifierReceiptId: receiptId,
+    workspace: "D:/fixture-workspace",
+  });
+  if (!recorded.ok) throw new Error(`landing receipt fixture refused: ${recorded.code}`);
+  return recorded.receipt.receiptId;
 }

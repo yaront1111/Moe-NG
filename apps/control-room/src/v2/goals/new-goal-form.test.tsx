@@ -147,8 +147,8 @@ describe("the PRD drop reads in the browser and writes nothing", () => {
     await user.type(screen.getByTestId("cr.goals.newgoal.outcome"), "Proceed without the PRD");
     await user.type(screen.getByTestId("cr.goals.newgoal.title"), "Proceed without the PRD");
     await user.click(screen.getByTestId("cr.goals.newgoal.create"));
-    expect(onCreate).toHaveBeenCalledTimes(1);
-    expect(onCreate.mock.calls[0]?.[0]).not.toHaveProperty("prd");
+    expect((screen.getByTestId("cr.goals.newgoal.create") as HTMLButtonElement).disabled).toBe(true);
+    expect(onCreate).not.toHaveBeenCalled();
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -280,7 +280,7 @@ describe("the PRD drop reads in the browser and writes nothing", () => {
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
-  it("attaches no PRD and names the local code when the file cannot be read", async () => {
+  it("blocks creation and names the local code when the file cannot be read", async () => {
     const user = userEvent.setup();
     stubFetchThatMustNotBeCalled();
     const onCreate = vi.fn();
@@ -297,8 +297,8 @@ describe("the PRD drop reads in the browser and writes nothing", () => {
     await user.type(screen.getByTestId("cr.goals.newgoal.outcome"), "Proceed without the PRD");
     await user.type(screen.getByTestId("cr.goals.newgoal.title"), "Proceed without the PRD");
     await user.click(screen.getByTestId("cr.goals.newgoal.create"));
-    // An unread file is not project material; it must not ride the draft at all.
-    expect(onCreate.mock.calls[0]?.[0]).not.toHaveProperty("prd");
+    expect((screen.getByTestId("cr.goals.newgoal.create") as HTMLButtonElement).disabled).toBe(true);
+    expect(onCreate).not.toHaveBeenCalled();
   });
 
   it("never seeds the outcome with prose the operator did not type", async () => {
@@ -335,7 +335,7 @@ describe("goal intake validation", () => {
     await user.type(screen.getByTestId("cr.goals.newgoal.title"), "Start a Windows project");
     expect(create.disabled).toBe(false);
     expect(screen.getByTestId("cr.goals.newgoal.authority-note").textContent)
-      .toContain("advisory requests");
+      .toContain("Budget and risk are optional");
     await user.click(create);
     const draft = onCreate.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(draft["budgetEnvelope"]).toBe("");

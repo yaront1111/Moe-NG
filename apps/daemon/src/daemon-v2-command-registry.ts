@@ -12,7 +12,7 @@ import {
 } from "./daemon-command-registry.js";
 import { commandFamilyFacts } from "./daemon-command-families.js";
 import type { WiredCommandKind } from "./daemon-command-vocabulary.js";
-import { DomainRefusal, decisionOf } from "./daemon-command-dispatch.js";
+import { DomainRefusal, decisionOf, domainRefusalOf } from "./daemon-command-dispatch.js";
 import { isDurableHumanPrincipal } from "./identity/human-approver.js";
 import { createSessionAuthority } from "./identity/session-authority.js";
 import { readCommandTransportOrigin } from "./http/http-adapter.js";
@@ -59,6 +59,7 @@ export function createDaemonV2CommandPorts(
   // Read every injected dependency once. The command plane must not be
   // retargetable after construction through getters or a mutable options bag.
   const clock = options.clock;
+  const deploymentDeploy = options.deploymentDeploy;
   const cutoverActivation = options.cutoverActivation;
   const eventSubscriberId = options.eventSubscriberId;
   const foundationCatalogSource = options.foundationCatalogSource;
@@ -67,9 +68,12 @@ export function createDaemonV2CommandPorts(
   const operatorPrincipalId = options.operatorPrincipalId;
   const projectId = options.projectId;
   const store = options.store;
+  const releaseDecide = options.releaseDecide;
   const verificationCatalogSource = options.verificationCatalogSource;
   const shared = createDaemonCommandPorts({
     authorityPlane: "V2", clock, operatorPrincipalId, projectId, store,
+    ...(releaseDecide === undefined ? {} : { releaseDecide }),
+    ...(deploymentDeploy === undefined ? {} : { deploymentDeploy }),
     ...(cutoverActivation === undefined ? {} : { cutoverActivation }),
     ...(eventSubscriberId === undefined ? {} : { eventSubscriberId }),
     ...(foundationCatalogSource === undefined ? {} : { foundationCatalogSource }),
@@ -114,7 +118,7 @@ export function createDaemonV2CommandPorts(
       projectId,
     });
     if (!authority.ok) {
-      throw new DomainRefusal(authority.code, authority.layer, authority.code);
+      throw domainRefusalOf(authority);
     }
 
     const decidedAt = clock();
@@ -125,7 +129,7 @@ export function createDaemonV2CommandPorts(
         principalId: principal.principalId, projectId,
         targetAggregateId: envelope.targetAggregateId,
       });
-      if (!outcome.ok) throw new DomainRefusal(outcome.code, outcome.layer, outcome.code);
+      if (!outcome.ok) throw domainRefusalOf(outcome);
       return Object.freeze({
         commandId: envelope.commandId, disposition: outcome.disposition,
         effectId: outcome.revision.revisionDigest, resultCode: "PRODUCT_CONTRACT_REVISION_V2",
@@ -154,7 +158,7 @@ export function createDaemonV2CommandPorts(
           principalId: principal.principalId, projectId,
           targetAggregateId: envelope.targetAggregateId,
         });
-      if (!outcome.ok) throw new DomainRefusal(outcome.code, outcome.layer, outcome.code);
+      if (!outcome.ok) throw domainRefusalOf(outcome);
       return Object.freeze({
         commandId: envelope.commandId, disposition: outcome.disposition,
         effectId: outcome.clarificationId,

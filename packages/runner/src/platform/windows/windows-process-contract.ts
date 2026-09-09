@@ -42,6 +42,8 @@ export const WINDOWS_PROCESS_LAYERS = Object.freeze([
   "BROKER_NATIVE",
   /** Broker `RefusalLayer::StoreLock` — exclusive per-store ownership. */
   "BROKER_STORE_LOCK",
+  /** Broker `RefusalLayer::ApprovedImage` — exact locked executable image authority. */
+  "BROKER_APPROVED_IMAGE",
 ] as const);
 export type WindowsProcessLayer = (typeof WINDOWS_PROCESS_LAYERS)[number];
 

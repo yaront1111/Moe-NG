@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 /**
  * `planning.submit_decomposition` — the MIDDLE of the PRD product: an agent
  * submits plan STRUCTURE; the daemon verifies the human's Gate 1 approval,
@@ -25,15 +24,14 @@ import { createHash } from "node:crypto";
  */
 import type { SqliteEventStore } from "@moe/store";
 
-import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
-import { BOOTSTRAP_SCHEMA_VERSION } from "../bootstrap/bootstrap-contracts.js";
-import type { HandlerTable } from "../bootstrap/bootstrap-ledger.js";
-import { GOAL_HANDLERS } from "../goals/goal-services.js";
-import { PLANNING_HANDLERS } from "./planning-services.js";
+import { dispatchCompiledPlanning as dispatch } from "./compiled-planning-dispatch.js";
+import { COMPILED_CONTRACT_BINDING_VERSION, readCompiledContractBinding } from "./compiled-contract-binding.js";
+import { readDesignRevision } from "../design/design-store.js";
 import { resolveProductContractGate1 } from "../product-contract/product-contract-gate-1-resolver.js";
 import { readProductContractRevision } from "../product-contract/product-contract-revision-reader.js";
 import { validateRevisionProvenance } from "../product-contract/product-contract-provenance.js";
 import { compiledPlanAuthority } from "./compiled-authority-bodies.js";
+import { idsOf, resolveCompileRun, sealedSubmissionHash } from "./compile-run-resolution.js";
 import { COMPILED_NODE_RISK_PROFILE } from "./compiled-authority-contracts.js";
 import type { CompiledNodeInput } from "./compiled-authority-contracts.js";
 
@@ -48,7 +46,8 @@ export const SUBMIT_DECOMPOSITION_CODES = Object.freeze([
   "SUBMIT_DECOMPOSITION_MALFORMED",
   "SUBMIT_DECOMPOSITION_GATE_DIGEST_MISMATCH",
   "SUBMIT_DECOMPOSITION_ALREADY_FINALIZED",
-  "SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL",
+  "SUBMIT_DECOMPOSITION_RUN_UNREADABLE",
+  "SUBMIT_DECOMPOSITION_SUBMISSION_CONFLICT",
 ] as const);
 
 export interface SubmitDecompositionInput {
@@ -70,6 +69,8 @@ export interface SubmitDecompositionAccepted {
 }
 export interface SubmitDecompositionRefused {
   readonly code: string;
+  /** The refusing authority's own words when it has any; absent, the code is the whole story. */
+  readonly detail?: string;
   readonly layer: string;
   readonly ok: false;
   /** True when the plan sealed up to the policy gate: install tiers, re-dispatch. */
@@ -79,14 +80,18 @@ export type SubmitDecompositionResult =
   | SubmitDecompositionAccepted
   | SubmitDecompositionRefused;
 
-const COMPILE_HANDLERS: HandlerTable = Object.freeze({
-  ...BOOTSTRAP_HANDLERS,
-  ...GOAL_HANDLERS,
-  ...PLANNING_HANDLERS,
-});
+function refused(
+  code: string, layer: string = LAYER, detail?: string,
+): SubmitDecompositionRefused {
+  return Object.freeze(
+    detail === undefined ? { code, layer, ok: false } : { code, detail, layer, ok: false },
+  );
+}
 
-function refused(code: string, layer: string = LAYER): SubmitDecompositionRefused {
-  return Object.freeze({ code, layer, ok: false });
+/** An upstream refusal's `detail`, forwarded verbatim when it carries one. */
+function detailOf(value: object): string | undefined {
+  const detail = (value as { readonly detail?: unknown }).detail;
+  return typeof detail === "string" && detail.length > 0 ? detail : undefined;
 }
 
 function record(value: unknown): Readonly<Record<string, unknown>> | null {
@@ -109,39 +114,6 @@ function stringField(value: unknown): value is string {
   return typeof value === "string" && value.length > 0;
 }
 
-/** One derived identity family per approved revision: restartable by construction. */
-// Keyed on the revision AND the run: an approved revision is keyed by the PRD's content sha,
-// so two goals over the same PRD compile the same revision, and event ids keyed on the digest
-// alone collided (DURABLE_ID_CONFLICT on the second goal's first submit, measured 2026-09-03
-// on UnAI with a real planning seat). The run is the goal's own.
-function idsOf(revisionDigest: string, runId: string): Record<string, string> {
-  const stem = `compile-${revisionDigest.slice(0, 12)}-${createHash("sha256").update(runId, "utf8").digest("hex").slice(0, 8)}`;
-  return {
-    claim: `${stem}-claim`, create: `${stem}-create`, finalize: `${stem}-finalize`,
-    propose: `${stem}-propose`, ready: `${stem}-ready`, stem,
-  };
-}
-
-function dispatch(
-  store: SqliteEventStore,
-  input: SubmitDecompositionInput,
-  commandId: string,
-  runId: string,
-  commands: readonly Record<string, unknown>[],
-): ReturnType<typeof runBootstrapCommand> {
-  return runBootstrapCommand(store, new TextEncoder().encode(JSON.stringify({
-    commandId,
-    correlationId: input.correlationId,
-    decidedAt: input.decidedAt,
-    expectedVersion: 0,
-    kind: "plan.propose",
-    payload: { commands, runId },
-    principalId: input.principalId,
-    projectId: input.projectId,
-    schemaVersion: BOOTSTRAP_SCHEMA_VERSION,
-  })), COMPILE_HANDLERS);
-}
-
 export function runSubmitDecomposition(
   store: SqliteEventStore,
   input: SubmitDecompositionInput,
@@ -149,7 +121,10 @@ export function runSubmitDecomposition(
   const payload = record(input.payload);
   if (payload === null
     || Object.keys(payload).length !== SUBMIT_DECOMPOSITION_PAYLOAD_KEYS.length) {
-    return refused("SUBMIT_DECOMPOSITION_MALFORMED");
+    return refused(
+      "SUBMIT_DECOMPOSITION_MALFORMED", LAYER,
+      "payload must be exactly {gateRef, goalRef, structure}",
+    );
   }
   const gateRef = record(payload["gateRef"]);
   const structure = record(payload["structure"]);
@@ -157,7 +132,10 @@ export function runSubmitDecomposition(
   if (gateRef === null || structure === null || !stringField(goalRef)
     || !stringField(gateRef["contractId"]) || !stringField(gateRef["revisionId"])
     || !stringField(gateRef["revisionDigest"])) {
-    return refused("SUBMIT_DECOMPOSITION_MALFORMED");
+    return refused(
+      "SUBMIT_DECOMPOSITION_MALFORMED", LAYER,
+      "goalRef must be a string and gateRef exactly {contractId, revisionDigest, revisionId}",
+    );
   }
   const ref = {
     contractId: gateRef["contractId"] as string,
@@ -167,35 +145,46 @@ export function runSubmitDecomposition(
 
   // THE HUMAN GATE, resolved durably; then the exact approved revision.
   const gate = resolveProductContractGate1(store, { projectId: input.projectId, ref });
-  if (!gate.ok) return refused(gate.code, "layer" in gate ? String(gate.layer) : LAYER);
+  if (!gate.ok) {
+    return refused(gate.code, "layer" in gate ? String(gate.layer) : LAYER, detailOf(gate));
+  }
   if (gate.revisionDigest !== ref.revisionDigest) {
     return refused("SUBMIT_DECOMPOSITION_GATE_DIGEST_MISMATCH");
   }
   const revisionRead = readProductContractRevision(store, { projectId: input.projectId, ref });
   if (!revisionRead.ok) {
-    return refused(revisionRead.code, "layer" in revisionRead ? String(revisionRead.layer) : LAYER);
+    return refused(
+      revisionRead.code, "layer" in revisionRead ? String(revisionRead.layer) : LAYER,
+      detailOf(revisionRead),
+    );
   }
   const revision = revisionRead.revision;
 
   const provenance = validateRevisionProvenance(
     store, input.projectId, goalRef, revision.sourceDocumentDigests,
   );
-  if (!provenance.ok) return refused(provenance.code, provenance.layer);
-  const runId = provenance.planningRunRef;
+  if (!provenance.ok) return refused(provenance.code, provenance.layer, provenance.detail);
+  // THE GOAL'S CURRENT RUN, not the one it was created with. `planningRunRef` is immutable on the
+  // goal record, so after a REJECT it still names the run that was rejected; the run that can
+  // accept a plan is its successor. A stale walk refuses rather than compiling onto a last-good id.
+  const target = resolveCompileRun(store, provenance.planningRunRef);
+  if (target === null) return refused("SUBMIT_DECOMPOSITION_RUN_UNREADABLE");
+  const runId = target.runId;
 
   const completionNodeKey = structure["completionNodeKey"];
   const nodes = structure["structureNodes"] ?? structure["nodes"];
   if (!stringField(completionNodeKey) || !Array.isArray(nodes)) {
-    return refused("SUBMIT_DECOMPOSITION_MALFORMED");
+    return refused(
+      "SUBMIT_DECOMPOSITION_MALFORMED", LAYER,
+      "structure must be {completionNodeKey, nodes: [{nodeKey, objective, criterionIds, "
+      + "dependsOn}]}",
+    );
   }
-  // CORE DESIGN, discovered at the finalize reducer (planning-run-submission.ts):
-  // an INITIAL run seals exactly ONE execution-bearing node — "plan the smallest
-  // complete slice" is a fence, not advice. Growth is the EXPANSION machinery's
-  // (graph.request_expansion), whose runs are inherently multi-node. Refusing
-  // here, with the path named, beats sealing a plan finalize must reject.
-  if (nodes.length > 1) {
-    return refused("SUBMIT_DECOMPOSITION_MULTI_NODE_INITIAL");
-  }
+  // NODE COUNT IS UNCONSTRAINED HERE: an INITIAL run seals the WHOLE graph. What a plan must
+  // satisfy is DAG COHERENCE, enforced by `compiledPlanAuthority` below — an unknown or
+  // self-referential `dependsOn` target and a dependency on the completion node refuse
+  // COMPILED_PLAN_MALFORMED, a criterion bound by no node refuses
+  // COMPILED_PLAN_CRITERION_UNBOUND, and COMPILED_PLAN_NODE_BUDGET caps the roster.
   // THE RISK FACTS ARE THE DAEMON'S, never the agent's. The agent's structure
   // carries the PLAN — nodeKey, objective, criterion bindings, build order —
   // and the dispatcher states capability/scopes/resources/recipes from the
@@ -210,14 +199,20 @@ export function runSubmitDecomposition(
     if (node === null || !canonicalText(node["nodeKey"]) || !canonicalText(node["objective"])
       || !Array.isArray(criterionIds) || !criterionIds.every(canonicalText)
       || !Array.isArray(dependsOn) || !dependsOn.every(canonicalText)) {
-      return refused("SUBMIT_DECOMPOSITION_MALFORMED");
+      return refused(
+        "SUBMIT_DECOMPOSITION_MALFORMED", LAYER,
+        `node ${String(sealedNodes.length + 1)}: nodeKey and objective must be non-empty NFC `
+        + "strings, criterionIds and dependsOn arrays of such strings",
+      );
     }
     sealedNodes.push(Object.freeze({
       capability: COMPILED_NODE_RISK_PROFILE.capability,
       // A SET, never the agent's listing: order and repeats are not plan facts, and the
       // plan codec admits only an ascending, duplicate-free set.
       criterionIds: Object.freeze([...new Set(criterionIds)].sort()),
-      dependsOn: dependsOn as readonly string[],
+      // The build order is a set too: a producer named twice is ONE edge, and the graph
+      // codec refused the repeat one layer down, where the reason named no node.
+      dependsOn: Object.freeze([...new Set(dependsOn as readonly string[])].sort()),
       nodeKey: node["nodeKey"] as string,
       objective: node["objective"] as string,
       readScopes: [...COMPILED_NODE_RISK_PROFILE.readScopes],
@@ -226,6 +221,14 @@ export function runSubmitDecomposition(
       writeScopes: [...COMPILED_NODE_RISK_PROFILE.writeScopes],
     }));
   }
+  // THE ROSTER IS A SET AS WELL. The graph codec admits node authorities only in strictly
+  // ascending nodeKey order (code-unit order, its own comparison), and a planner naturally
+  // lists the completion node LAST: every real seat submission on 2026-09-05 refused
+  // GRAPH_CONTENT_FIELD_INVALID on that alone, across seven graph shapes. Sorting here makes
+  // "listing order is not a plan fact" true for nodes, as it already was for criteria.
+  sealedNodes.sort((left, right) => (
+    left.nodeKey < right.nodeKey ? -1 : left.nodeKey > right.nodeKey ? 1 : 0
+  ));
   const compiled = compiledPlanAuthority({
     authorRef: input.principalId,
     completionNodeKey,
@@ -237,13 +240,34 @@ export function runSubmitDecomposition(
     knownCapabilities: input.knownCapabilities ?? null,
     nodes: sealedNodes,
   });
-  if (!compiled.ok) return refused(compiled.code, compiled.layer);
+  if (!compiled.ok) return refused(compiled.code, compiled.layer, compiled.detail);
 
   const ids = idsOf(ref.revisionDigest, runId);
-  // MEASURED, not inferred: the whole propose fold commits ONE run event (v1)
-  // and the finalize a second (v2) - the chain items' 0..4 are fold-internal.
+  // MEASURED, not inferred: the whole propose fold commits ONE run event and
+  // the finalize a second - the chain items' 0..4 are fold-internal.
+  // The thresholds are OFFSETS from the run's own base head, not literals: an INITIAL run starts
+  // at 0, a REVISION successor at 1 because the rejection already minted its `PlanningRunCreated`
+  // (see `resolveCompileRun`). With baseVersion 0 every comparison below is byte-identical in
+  // behaviour to the literals it replaced, which is why the INITIAL path is unchanged.
   const runVersion = store.getAggregateVersion(runId);
-  if (runVersion >= 2) {
+  if (runVersion >= target.baseVersion + 2) {
+    const existing = readCompiledContractBinding(store, input.projectId, runId);
+    if (!existing.ok) return refused(existing.code);
+    if (existing.binding.contractRef.contractId !== ref.contractId
+      || existing.binding.contractRef.revisionId !== ref.revisionId
+      || existing.binding.contractRef.revisionDigest !== ref.revisionDigest
+      || existing.binding.goalRef !== goalRef || existing.binding.graphContentHash !== compiled.graphContentHash) {
+      return refused("SUBMIT_DECOMPOSITION_SUBMISSION_CONFLICT");
+    }
+    // FAIL CLOSED ON A CHANGED SUBMISSION. This branch dispatches no leg, so the store's own
+    // command-bytes conflict never sees a resubmission that arrives here: without this check a
+    // DIFFERENT structure under the same derived command ids answers `ok` carrying the hashes of
+    // a plan that was never sealed on the run. Measured 2026-09-05 on a compiled REVISION run:
+    // the caller got REPLAYED with submissionHash a28e4ab2... while the run held f6c57f28...
+    // A genuine crash-restart re-dispatch submits the same bytes and still replays.
+    if (sealedSubmissionHash(store, input.projectId, runId) !== compiled.submissionHash) {
+      return refused("SUBMIT_DECOMPOSITION_SUBMISSION_CONFLICT");
+    }
     return Object.freeze({
       disposition: "REPLAYED" as const,
       graphContentHash: compiled.graphContentHash,
@@ -256,11 +280,21 @@ export function runSubmitDecomposition(
   const witness = (fields: Record<string, string>): Record<string, unknown> =>
     Object.freeze({ ...fields, truthClass: "DAEMON_VERIFIED" });
 
-  if (runVersion === 0) {
+  if (runVersion === target.baseVersion) {
+    // Capture the design once, with the proposal. A finalize/replay preserves that choice.
+    const design = readDesignRevision(store, { projectId: input.projectId, goalRef });
+    if (!design.ok && design.code !== "DESIGN_REVISION_ABSENT") return refused(design.code, design.layer);
+    if (design.ok && (design.record.contractRef.contractId !== ref.contractId
+      || design.record.contractRef.revisionId !== ref.revisionId
+      || design.record.contractRef.revisionDigest !== ref.revisionDigest)) return refused("DESIGN_CONTRACT_NOT_APPROVED");
+    const contractBinding = Object.freeze({ version: COMPILED_CONTRACT_BINDING_VERSION,
+      projectId: input.projectId, goalRef, planningRunRef: runId, contractRef: ref,
+      designVersion: design.ok ? design.record.version : null,
+      graphContentHash: compiled.graphContentHash, submissionHash: compiled.submissionHash });
     const proposed = dispatch(store, input, ids["propose"] as string, runId, [
       {
         commandId: ids["create"], expectedVersion: 0, goalRef, kind: "planning.create_draft",
-        runId, runKind: "INITIAL",
+        runId, runKind: target.runKind,
       },
       {
         commandId: ids["ready"], expectedVersion: 1, kind: "planning.ready",
@@ -287,15 +321,18 @@ export function runSubmitDecomposition(
         expectedVersion: 3,
         graphContentBytesBase64: compiled.graphContentBytesBase64,
         kind: "plan.propose",
-        proposalKind: "INITIAL",
+        // MUST track the run's own kind: the core refuses a proposal whose kind differs from the
+        // run's with ILLEGAL_TRANSITION (planning-run-submission.ts:118), which is exactly what
+        // keeps an INITIAL authority path from being replayed onto a REVISION run and back.
+        proposalKind: target.runKind,
         submissionHash: compiled.submissionHash,
         witness: witness({
           attemptRef: `${ids["stem"]}-attempt`, submissionRef: `${ids["stem"]}-submission`,
         }),
       },
-    ]);
-    if (!proposed.ok) return refused(proposed.code, "DAEMON_PLANNING");
-  } else if (runVersion !== 1) {
+    ], contractBinding);
+    if (!proposed.ok) return refused(proposed.code, "DAEMON_PLANNING", detailOf(proposed));
+  } else if (runVersion !== target.baseVersion + 1) {
     // A run someone else advanced to an unexpected shape is not this seam's to force.
     return refused("SUBMIT_DECOMPOSITION_ALREADY_FINALIZED");
   }

@@ -17,6 +17,22 @@ export const PUBLISH_RECEIPT_VERSION = "moe-publish-receipt/1" as const;
 export const PUBLISH_RECEIPT_COMMAND_KIND = "internal.repository.publish_receipt" as const;
 export const REPOSITORY_PUBLISH_COMMAND_KIND = "repository.publish" as const;
 
+/**
+ * The PROJECT's remote, bound by the first publish that names one and reused by every publish
+ * that sends `remoteUrl: null`. It is a second LEG of the publish decision rather than a command
+ * of its own: `repository.publish`'s payload roster is frozen at `["goalId", "remoteUrl"]`, and a
+ * binding that could outlive its publish (or a publish that could outlive its binding) is exactly
+ * the split-brain one fenced decision prevents.
+ */
+export const REMOTE_BOUND_EVENT_TYPE = "RepositoryRemoteBound" as const;
+
+/** `remoteUrl: null` and no binding to resolve: the operator must name a remote once. */
+export const PUBLISH_REMOTE_UNBOUND = "PUBLISH_REMOTE_UNBOUND" as const;
+
+/** A named remote `admitRemoteUrl` refuses. Distinct from the generic payload code so the
+ *  browser can say WHICH field is wrong without the daemon echoing the url back. */
+export const PUBLISH_REMOTE_URL_INVALID = "PUBLISH_REMOTE_URL_INVALID" as const;
+
 export interface PublishRefusal {
   readonly code: string;
   readonly detail: string;
@@ -56,15 +72,18 @@ const REFUSAL_KEYS = ["code", "detail"] as const;
  * misread or that would carry a secret into a durable decision.
  */
 const REMOTE_HTTPS = /^https:\/\/[A-Za-z0-9.-]+(?::\d+)?\/[^\s@]+$/u;
-const REMOTE_SSH = /^(?:ssh:\/\/)?(?:[A-Za-z0-9_.-]+@)?[A-Za-z0-9.-]+(?::\d+)?[:/][^\s@]+$/u;
+const REMOTE_SSH = /^ssh:\/\/(?:[A-Za-z0-9_.-]+@)?[A-Za-z0-9.-]+(?::\d+)?\/[^\s@]+$/u;
+// A second colon invokes a Git remote helper, not SSH; later path colons remain valid.
+const REMOTE_SCP = /^(?:[A-Za-z0-9_.-]+@)?[A-Za-z0-9.-]+:(?!:)[^\s@]+$/u;
 
 export function admitRemoteUrl(value: unknown): string | null {
   if (typeof value !== "string" || value.length === 0 || value.length > 2048) return null;
-  if (/\s/u.test(value)) return null;
+  if (/\s/u.test(value) || value.includes("\\") || /^[A-Za-z]:/u.test(value)) return null;
   // Only https and ssh travel: a file:, git: or http: remote is refused by the name of its scheme.
   if (value.includes("://") && !value.startsWith("https://") && !value.startsWith("ssh://")) return null;
   if (REMOTE_HTTPS.test(value)) return value;
-  if (!value.startsWith("https://") && !value.startsWith("http://") && REMOTE_SSH.test(value)) return value;
+  if (REMOTE_SSH.test(value)) return value;
+  if (!value.includes("://") && REMOTE_SCP.test(value)) return value;
   return null;
 }
 
@@ -108,6 +127,11 @@ function freezeDeep<T>(value: T): T {
 /** Every publish fact for a goal lands beside the goal, never on it. */
 export function publishAggregateId(goalId: string): string {
   return `publish:${goalId}`;
+}
+
+/** One remote per PROJECT, on a stream of its own so a binding never bumps a goal's version. */
+export function remoteAggregateId(projectId: string): string {
+  return `remote:${projectId}`;
 }
 
 /** One receipt per publish decision: the id is a pure function of that decision. */

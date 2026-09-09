@@ -16,6 +16,16 @@ const SOURCE_KEYS = Object.freeze([
   "acceptanceCriterionContent", "directHardDependencies", "planExecutionContent",
   "predicateRegistry",
 ]);
+const DECLARED_MIGRATIONS_KEY = "declaredMigrations";
+/**
+ * A SECOND admissible roster, never a fifth name on the first one. `exact` is
+ * own-key COUNT equality plus every-key-present (snapshot.ts:70-74), so appending
+ * the name would make the declaration MANDATORY and refuse every authored source
+ * already in the store. Widening `exact` itself is worse: it guards boundaries all
+ * over this package and loosening it would relax checks that have nothing to do
+ * with migrations.
+ */
+const DECLARING_SOURCE_KEYS = Object.freeze([...SOURCE_KEYS, DECLARED_MIGRATIONS_KEY]);
 const compare = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0;
 const same = (left: readonly string[], right: readonly string[]): boolean =>
   left.length === right.length && left.every((value, index) => value === right[index]);
@@ -82,7 +92,18 @@ export function readNodePlanningDefinition(reader: V2CompilerNodePlanningAuthori
   let value: unknown;
   try { value = reader(request); } catch { return undefined; }
   const snapshot = snapshotCompilerInput(value);
-  if (!snapshot.ok || !exact(snapshot.value, SOURCE_KEYS)) return undefined;
+  if (!snapshot.ok) return undefined;
+  // A SOURCE THAT NAMES THE MEMBER MUST STATE ONE, and the guard for that is already
+  // upstream: `snapshotCompilerInput` visits every own value and FAILS on one that is
+  // `undefined` (snapshot.ts:21 — `undefined` is neither a primitive it accepts nor
+  // `typeof "object"`). So a five-key source carrying an assigned `undefined` never
+  // reaches this roster check at all. A local re-check here would be dead code; the
+  // arm that pins the behaviour names the snapshot as the refuser rather than a
+  // second guard, so a later change to snapshot.ts reds the arm instead of hiding
+  // behind a redundant one.
+  if (!exact(snapshot.value, SOURCE_KEYS) && !exact(snapshot.value, DECLARING_SOURCE_KEYS)) {
+    return undefined;
+  }
   const planBytes = encodePlanExecutionContent(snapshot.value["planExecutionContent"]);
   const acceptanceBytes = encodeAcceptanceCriteriaContent(
     snapshot.value["acceptanceCriterionContent"],
@@ -103,6 +124,21 @@ export function readNodePlanningDefinition(reader: V2CompilerNodePlanningAuthori
       capability: request.capability,
       completionLinkage: request.completionLinkage,
       constraints: request.constraints,
+      // THE MEMBER RIDES THE SOURCE, NOT THE REQUEST, and that is measured rather
+      // than a preference: `authority-contracts.ts:73` already calls
+      // `V2CompilerNodePlanningAuthority` "source-owned planning/dependency
+      // material", `directHardDependencies` rides the source for exactly this
+      // reason, and a declaration is stated by the node's AUTHOR — there is no
+      // compiler-side fact that could supply one. Moving it onto
+      // `V2CompilerNodeAuthorityRequest` would drag the product contract, `NodeFact`
+      // and `V2CompiledNode` in behind it for a value none of them own.
+      //
+      // Spread, never an assigned `undefined`: the draft is written field by field,
+      // so an unassigned member is dropped silently, and an assigned `undefined` is
+      // still an own key that `readDraftFields` and the codec's byte comparison read
+      // differently from an absent one.
+      ...(snapshot.value[DECLARED_MIGRATIONS_KEY] === undefined
+        ? {} : { declaredMigrations: snapshot.value[DECLARED_MIGRATIONS_KEY] }),
       directHardDependencies: snapshot.value["directHardDependencies"],
       joinRole: request.joinRole,
       nodeKey: request.nodeKey,

@@ -21,6 +21,9 @@ import type { LandingBaselineEntry } from "./landing-receipt-contracts.js";
 export interface GitObservation {
   readonly entries: readonly LandingBaselineEntry[];
   readonly root: string;
+  /** The subset of `entries` git does not track (`??`), so a landing can carry an import
+   *  HEAD would otherwise lack. Optional: a fake that omits it reads as "none untracked". */
+  readonly untracked?: readonly string[];
 }
 
 export type GitObserveResult =
@@ -71,9 +74,9 @@ const MAX_OUTPUT_BYTES = 8 * 1024 * 1024;
 const DETAIL_TAIL = 600;
 const MOE_DIRECTORIES: ReadonlySet<string> = new Set([".moe", ".moe-next"]);
 /** The identity every landing carries: Moe's, never the operator's. */
-const LANDER_IDENTITY = ["-c", "user.name=Moe", "-c", "user.email=moe@moe.local", "-c", "commit.gpgsign=false"];
+export const LANDER_IDENTITY = ["-c", "user.name=Moe", "-c", "user.email=moe@moe.local", "-c", "commit.gpgsign=false"];
 
-function landingEnvironment(): NodeJS.ProcessEnv {
+export function landingEnvironment(): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(process.env)) {
     // GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE from a parent shell would redirect the landing.
@@ -107,14 +110,16 @@ function isMoeMetadata(path: string): boolean {
 }
 
 /** `git status --porcelain=v1 -z --no-renames`: `XY path\0` records, root-relative. */
-function parseStatus(output: string): readonly { readonly deleted: boolean; readonly path: string }[] {
-  const entries: { deleted: boolean; path: string }[] = [];
+function parseStatus(
+  output: string,
+): readonly { readonly deleted: boolean; readonly path: string; readonly untracked: boolean }[] {
+  const entries: { deleted: boolean; path: string; untracked: boolean }[] = [];
   for (const record of output.split("\0")) {
     if (record.length < 4) continue;
     const status = record.slice(0, 2);
     const path = record.slice(3);
     if (path === "" || isMoeMetadata(path)) continue;
-    entries.push({ deleted: status.includes("D"), path });
+    entries.push({ deleted: status.includes("D"), path, untracked: status === "??" });
   }
   return entries;
 }
@@ -167,7 +172,14 @@ export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLanding
         blobId: entry.deleted ? DELETED_BLOB : (blobs.get(entry.path) as string), path: entry.path,
       }))
       .toSorted((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
-    return { observation: Object.freeze({ entries: Object.freeze(entries), root: top }), ok: true };
+    const untracked = dirty.filter((entry) => entry.untracked).map((entry) => entry.path)
+      .toSorted((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    return {
+      observation: Object.freeze({
+        entries: Object.freeze(entries), root: top, untracked: Object.freeze(untracked),
+      }),
+      ok: true,
+    };
   };
 
   const commit = async (
@@ -220,11 +232,18 @@ export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLanding
     if (name === "HEAD") return { code: "DETACHED_HEAD", detail: "the workspace has no branch checked out", ok: false };
     // The remote is the URL the human named, never a configured remote name: the decision
     // says where the bytes go, and a renamed origin cannot redirect it.
-    const pushed = await run(top, ["push", "--", remoteUrl, `HEAD:refs/heads/${name}`]);
+    const sha = head.stdout.trim();
+    const ref = `refs/heads/${name}`;
+    const pushed = await run(top, ["push", "--", remoteUrl, `${sha}:${ref}`]);
     if (pushed.code !== 0) {
       return { code: "GIT_PUSH_FAILED", detail: tail(`${pushed.stdout}${pushed.stderr}`), ok: false };
     }
-    return { ok: true, receipt: Object.freeze({ branch: name, sha: head.stdout.trim() }) };
+    const confirmed = await run(top, ["ls-remote", "--refs", "--", remoteUrl, ref]);
+    const remoteRefs = confirmed.stdout.trim().split(/\r?\n/u);
+    if (confirmed.code !== 0 || remoteRefs.length !== 1 || remoteRefs[0] !== `${sha}\t${ref}`) {
+      return { code: "GIT_PUSH_FAILED", detail: "remote branch did not confirm the pushed commit", ok: false };
+    }
+    return { ok: true, receipt: Object.freeze({ branch: name, sha }) };
   };
 
   return Object.freeze({ commit, observe, push });

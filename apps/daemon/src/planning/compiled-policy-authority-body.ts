@@ -101,6 +101,19 @@ function nodeDefinitionOf(
   const criterionRef = node.criterionIds[0] ?? "criterion-unbound";
   const built = createNodeDefinition({
     ...createCompiledNodePlanning(input, node),
+    // VERDICT ON `declaredMigrations`: THIS BODY LEGITIMATELY DECLARES NONE, and the
+    // member is therefore ABSENT rather than `[]`.
+    //
+    // A migration declaration is stated by a node's AUTHOR in an authored planning
+    // source. This draft is synthesized by the daemon from `CompiledNodeInput`
+    // (compiled-authority-contracts.ts:68-80), which carries capability, criteria,
+    // dependsOn, nodeKey, objective, scopes, resources and recipe refs — and no
+    // planning source and no declaration. There is no author here to state one, so
+    // ABSENT is the true answer: it means UNKNOWN, which is exactly the case.
+    //
+    // `[]` would be a FALSE DECLARATION and not merely a cosmetic difference: an
+    // explicit empty list mints a schema-3 body (node-authority-codec.ts:127), which
+    // moves the digest of every body this module seals.
     draft: {
       admissionAmounts: [...ADMISSION_PURPOSES].sort().map((purpose, index) => ({
         meter: NODE_METER, purpose, quantity: index + 1,

@@ -91,7 +91,7 @@ describe("v2 readiness manifest bytes", () => {
     const decoded = decodeV2ReadinessManifest(encoded);
 
     expect(new TextDecoder().decode(encoded)).toBe(JSON.stringify(expected));
-    expect(decoded).toEqual({ manifest: expected, ok: true });
+    expect(decoded).toEqual({ manifest: expected, ok: true, pinsMatch: true });
     if (!decoded.ok) return;
     expect(Object.isFrozen(decoded)).toBe(true);
     expect(Object.isFrozen(decoded.manifest)).toBe(true);
@@ -123,9 +123,7 @@ describe("v2 readiness manifest bytes", () => {
 
   it("requires the running schema and exact static v2 surface", () => {
     for (const candidate of [
-      manifest({
-        storeSchemaVersion: "moe-sqlite-schema/6" as typeof SQLITE_SCHEMA_MANIFEST_VERSION,
-      }),
+      manifest({ storeSchemaVersion: "moe-sqlite-schema/6" }),
       manifest({ surfaceManifestSha256: HEX("ff") }),
     ]) {
       expect(decodeV2ReadinessManifest(encodeV2ReadinessManifest(candidate))).toEqual({
@@ -133,7 +131,24 @@ describe("v2 readiness manifest bytes", () => {
         layer: "DAEMON_V2_READINESS_MANIFEST",
         ok: false,
       });
+      expect(decodeV2ReadinessManifest(encodeV2ReadinessManifest(candidate), "CURRENT").ok).toBe(false);
     }
+  });
+
+  it("reads a manifest written under another build's pins as recorded, and says they differ", () => {
+    // The post-activation marker binding reads this way: after a build pin bump the manifest
+    // still decodes to exactly the bytes that were written (digest unchanged), and the caller is
+    // told the pins are not the running build's instead of being locked out of both planes.
+    const foreign = manifest({ storeSchemaVersion: "moe-sqlite-schema/6", surfaceManifestSha256: HEX("ff") });
+    const bytes = encodeV2ReadinessManifest(foreign);
+    const decoded = decodeV2ReadinessManifest(bytes, "RECORDED");
+    expect(decoded).toEqual({ manifest: foreign, ok: true, pinsMatch: false });
+    if (!decoded.ok) return;
+    expect(encodeV2ReadinessManifest(decoded.manifest)).toEqual(bytes);
+    expect(decodeV2ReadinessManifest(encodeV2ReadinessManifest(manifest()), "RECORDED"))
+      .toEqual({ manifest: manifest(), ok: true, pinsMatch: true });
+    // Shape and canonical-bytes refusals are unchanged by the policy.
+    expect(decodeV2ReadinessManifest(encodeV2ReadinessManifest(manifest({ storeSchemaVersion: "" })), "RECORDED").ok).toBe(false);
   });
 
   it("binds every canonical release, migration, backup, qualification and gate pin", () => {
@@ -187,10 +202,23 @@ describe("v2 readiness manifest durable reader", () => {
       digest: digestV2ReadinessManifest(expected),
       manifest: expected,
       ok: true,
+      pinsMatch: true,
       version: 1,
     });
     if (!read.ok) return;
     expect(Object.isFrozen(read)).toBe(true);
+  });
+
+  it("reads a foreign-pinned durable manifest under RECORDED pins and refuses it under CURRENT", () => {
+    const foreign = manifest({ storeSchemaVersion: "moe-sqlite-schema/6" });
+    const store = { readEvents: () => [asEvent(encodeV2ReadinessManifest(foreign))] };
+    expect(readV2ReadinessManifest(store, { projectId: "project-1" })).toEqual({
+      code: "V2_READINESS_MANIFEST_STATIC_PIN_MISMATCH", layer: "DAEMON_V2_READINESS_MANIFEST", ok: false,
+    });
+    // The marker-binding read: the same digest the marker bound, the pins reported not the build's.
+    expect(readV2ReadinessManifest(store, { pins: "RECORDED", projectId: "project-1" })).toEqual({
+      digest: digestV2ReadinessManifest(foreign), manifest: foreign, ok: true, pinsMatch: false, version: 1,
+    });
   });
 
   it("distinguishes absent, unreadable, malformed and noncanonical durable evidence", () => {

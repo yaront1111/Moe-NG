@@ -46,6 +46,10 @@ const GOAL_TITLE_COMING_ONLINE: ComingOnlineFact = Object.freeze({
 
 const COMING_ONLINE: readonly ComingOnlineFact[] = Object.freeze([
   Object.freeze({
+    label: "Current state",
+    reason: "The creation catalog does not carry the goal's current lifecycle.",
+  }),
+  Object.freeze({
     label: "Acceptance progress",
     reason: "Node acceptance is not joined to the goal catalog yet.",
   }),
@@ -150,13 +154,13 @@ function goalCard(entry: LiveGoalCatalogEntry): GoalCardModel {
     comingOnlineFacts: entry.brief === null ? LEGACY_COMING_ONLINE : COMING_ONLINE,
     facts,
     goalId: entry.goalId,
-    headline: `Durable GoalCreated record \u00b7 planning run ${entry.planningRunRef}`,
+    headline: "Recorded in this project",
     headlineFacts: Object.freeze([identityFact, runFact]),
     headlineTone: "verified",
     needsYou: false,
     progressComingOnline: "Node acceptance is not joined to the goal catalog yet.",
     planningRunRef: entry.planningRunRef,
-    state: "DRAFT",
+    state: "UNKNOWN",
     title: entry.brief?.title ?? entry.goalId,
     titleIsIdentifier: entry.brief === null,
   });
@@ -211,7 +215,8 @@ function withCoverage(
   // The lifecycle is the daemon fold of the goal aggregate; DONE is exactly COMPLETED.
   const lifecycle = outcome.goals.find((goal) => goal.goalId === card.goalId)?.lifecycle ?? null;
   const state: GoalCardModel["state"] = lifecycle === "COMPLETED" ? "DONE"
-    : lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING" ? "ACTIVE" : card.state;
+    : lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING" ? "ACTIVE"
+      : lifecycle === "DRAFT" || lifecycle === "PLANNING" || lifecycle === "PLAN_REVIEW" ? "DRAFT" : card.state;
   return Object.freeze({
     ...card,
     headline: complete

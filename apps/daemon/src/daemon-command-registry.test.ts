@@ -1,10 +1,11 @@
-import { createHash } from "node:crypto";
+import { readAgentProvider } from "./orchestrator/agent-provider-store.js";
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
+import { RUNTIME_COMMAND_ENVELOPE_VERSION, createRuntimeError } from "@moe/contracts";
 import type { RuntimeCommandEnvelope, RuntimeCommandKind } from "@moe/contracts";
 import { admitProductContractRevisionRef, productContractGate1Authority } from "@moe/core";
 import type { HttpDispatchPort } from "@moe/mcp";
@@ -13,10 +14,16 @@ import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { OPERATOR_CAPABILITIES, createDaemonCommandPorts } from "./daemon-command-registry.js";
 import type { DaemonCommandPortOptions } from "./daemon-command-registry.js";
+import { decisionOf } from "./daemon-command-dispatch.js";
 import { createMcpDispatchPort } from "./mcp-dispatch-port.js";
+import { MCP_EXCLUDED_COMMAND_KINDS, MCP_SERVED_QUERY_KINDS, wiredMcpToolKinds }
+  from "./mcp-tool-allowlist.js";
 import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
+import { RELEASE_DECIDE_COMMAND_KIND } from "./release/release-decide-contracts.js";
 import { commandFamilyFacts } from "./daemon-command-families.js";
-import { PAYLOAD_KEYS, type WiredCommandKind } from "./daemon-command-vocabulary.js";
+import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, type WiredCommandKind }
+  from "./daemon-command-vocabulary.js";
+import { HUMAN_ONLY_STEPS } from "./orchestrator/agent-spawn-contract.js";
 import { humanReviewWitness } from "./bootstrap/bootstrap-ledger.js";
 import { COMMAND_PREREQUISITES } from "./bootstrap/bootstrap-sequence.js";
 import {
@@ -30,6 +37,7 @@ import {
   MAX_DOCUMENT_INGEST_TEXT_UTF8_BYTES,
 } from "./documents/document-source-contract.js";
 import { readDocumentSourceView } from "./documents/document-source-read.js";
+import { aggregateIdFor as workAggregateIdFor } from "./work/work-claim-services.js";
 import { createFoundationCaptureLifecycle } from "./work/foundation-capture-lifecycle.js";
 import { FOUNDATION_DISPATCH_COMMAND_KIND as FOUNDATION_DISPATCH_KIND } from "./work/foundation-attempt-contracts.js";
 import { agentCapabilitiesFor, createStoreDependencies } from "./daemon-store-dependencies.js";
@@ -65,6 +73,9 @@ import type { ProductContractGate1Authority }
  * the kind, also transcribed rather than recomputed from `capability`.
  */
 interface Row {
+  readonly payload?: Readonly<Record<string, unknown>>;
+  readonly httpStatus?: number;
+  readonly nonOperatorRefusal?: { readonly code: string; readonly layer: string };
   readonly agent: readonly string[] | null;
   /** Served only on the asynchronous entry: its service returns a promise. */
   readonly asyncOnly?: true;
@@ -97,6 +108,10 @@ const ROWS: readonly Row[] = [
   { agent: [PLANNING, WORK], capability: PLANNING, code: "APPROVAL_INTENT_SHAPE_INVALID",
     kind: "approval.decide_intent", layer: "DAEMON_APPROVAL_INTENT",
     payloadKeys: ["decision", "decisionReason", "dependencyChanges", "runId"] },
+  { agent: null, capability: ADMIN, code: "CRITERION_CHECK_MALFORMED", kind: "criterion_check.approve",
+    layer: "CRITERION_EVIDENCE", payloadKeys: ["goalRef", "planningRunRef", "contractRef", "criterionId", "check"] },
+  { agent: null, capability: ADMIN, code: "CRITERION_CHECK_MALFORMED", kind: "criterion_check.verify",
+    layer: "CRITERION_EVIDENCE", payloadKeys: ["goalRef", "planningRunRef", "contractRef", "integratedSha", "approvals"] },
   // task-b8272ee0. The SHIPPED daemon supplies no cutover evidence root, so the composition
   // root's own fail-closed branch answers here — registered and refusing, never removed from
   // the roster. The arm that proves the kind REACHES `activateCutover` builds ports WITH the
@@ -104,11 +119,35 @@ const ROWS: readonly Row[] = [
   // because this row alone cannot tell "served" from "advertised".
   { agent: null, capability: ADMIN, code: "CUTOVER_ACTIVATE_UNCONFIGURED",
     kind: "cutover.activate", layer: "DAEMON_COMPOSITION", payloadKeys: ["record"] },
+  // Existing deployment vocabulary backfilled into the independent served-kind census.
+  { agent: [GOAL, WORK], asyncOnly: true, capability: GOAL, code: "DEPLOY_BUILD_CONTEXT_UNCONFIGURED",
+    kind: "deployment.deploy", layer: "DAEMON_COMMAND_SEAM", payloadKeys: ["environment", "sha"] },
+  { agent: null, asyncOnly: true, capability: GOAL, code: "DEPLOY_ROLLBACK_RECEIPT_INVALID",
+    kind: "deployment.rollback", layer: "DAEMON_COMMAND_SEAM",
+    payload: { environment: "staging", toReceiptRef: "a".repeat(64), restoreDatabase: false },
+    payloadKeys: ["environment", "toReceiptRef", "restoreDatabase"] },
+  // Async-served like the deploy above, and refusing at the SEAM for the same reason: the
+  // shipped daemon names no database, workspace or project root to revert, so the composition
+  // root's own fail-closed branch answers. Registered and refusing, never absent.
+  { agent: null, asyncOnly: true, capability: GOAL, code: "MIGRATE_DOWN_UNCONFIGURED",
+    kind: "deployment.migrate_down", layer: "DAEMON_COMMAND_SEAM",
+    payloadKeys: ["environment", "toMigrationRequestId"] },
+  { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE,
+    kind: "deployment.set_target", layer: PREREQ_LAYER,
+    payloadKeys: ["environment", "network", "sshTarget", "url"] },
   // An empty payload carries none of the six sections, so the envelope decode —
   // the only stage above the recovery embargo — is what answers.
   { agent: [WORK], capability: WORK, code: "ACTIVATION_INGRESS_REQUEST_MALFORMED",
     kind: "effect.activate", layer: INGRESS,
     payloadKeys: ["activation", "effect", "lease", "liveClaims", "slot"] },
+  // THE ONE SEAT KIND IN THIS BATCH. `agent` is NON-NULL and there is no OPERATOR_ONLY entry
+  // below, because a planning seat authors the design -- the opposite of every neighbouring
+  // kind this epic adds. An empty payload carries no `goalRef`, so the design edge's own
+  // REQUEST-layer shape refusal answers, minted through `designRefusal` from the slice's closed
+  // DESIGN_CODE_LAYERS map rather than a literal at the throw site.
+  { agent: [PLANNING, WORK], capability: PLANNING, code: "DESIGN_SHAPE_INVALID",
+    kind: "design.submit", layer: "REQUEST",
+    payloadKeys: ["contractRef", "goalRef", "revision"] },
   { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
     kind: "escalation.decide", layer: INGRESS, payloadKeys: ["decision", "escalationRef", "subjectRef"] },
   { agent: null, capability: WORK, code: "EVENT_STREAM_RESUME_INPUT_INVALID",
@@ -183,6 +222,25 @@ const ROWS: readonly Row[] = [
   { agent: [WORK], capability: WORK, code: "JOURNAL_REQUEST_MALFORMED", kind: "journal.append",
     layer: "DAEMON_JOURNAL_APPEND",
     payloadKeys: ["attemptAggregateId", "effectId", "entries"] },
+  // task-eb37494e. `agent` is null and the capability is ADMIN, which fences REACH only -- the
+  // OPERATOR_ONLY entry below is the human fence. An empty payload carries no `environment`, so
+  // the INTERVAL RECORD answers, and it answers with ENVIRONMENT rather than RANGE because the
+  // record checks the environment FIRST: a caller naming an environment that cannot exist is
+  // told that, not that its interval is out of range for a nonexistent target. Both the code and
+  // the layer are the RECORD's (`probe-interval-record.ts`), forwarded unrestamped by the edge --
+  // which is the point of transcribing them here rather than a code the edge could mint.
+  { agent: null, capability: ADMIN, code: "PROBE_INTERVAL_ENVIRONMENT_INVALID",
+    kind: "monitoring.set_probe_interval", layer: INGRESS,
+    payloadKeys: ["environment", "intervalMs"] },
+  // task-509f0437, and the code transcribed here is the RECORD's first refusal for the same
+  // reason the interval row's is: the retirement edge substitutes `""` for a missing or
+  // wrong-typed `environment` -- a value `admitEnvironmentName` is documented to reject -- rather
+  // than minting a refusal of its own, so the answer is the record's code at the record's layer,
+  // forwarded unrestamped. A code the edge could mint would let the two authors of this
+  // vocabulary drift.
+  { agent: null, capability: ADMIN, code: "ENVIRONMENT_RETIREMENT_ENVIRONMENT_INVALID",
+    kind: "monitoring.retire_environment", layer: INGRESS,
+    payloadKeys: ["environment"] },
   { agent: [PLANNING, WORK], capability: PLANNING, code: PREREQUISITE, kind: "plan.propose",
     layer: PREREQ_LAYER, payloadKeys: ["commands", "runId"] },
   // The compile DISPATCHER's own request codec answers an empty payload -- the Gate 1
@@ -194,16 +252,65 @@ const ROWS: readonly Row[] = [
     kind: "policy.install", layer: INGRESS, payloadKeys: ["slice"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "policy.validate",
     layer: PREREQ_LAYER, payloadKeys: ["input"] },
-  { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "project.activate",
-    layer: PREREQ_LAYER, payloadKeys: ["witness"] },
+  // The operator's product-preview verdict, answered BEFORE the request assembler because the
+  // kind has no codec. An empty payload never reaches the runner stub: the decoder refuses the
+  // missing decision first, so the code transcribed here is REQUEST's, not GOAL_AUTHORITY's.
+  // Both literals are hand-copied from PREVIEW_CODE_LAYERS -- reading them back out of the map
+  // would let the map and the wire drift together silently.
+  { agent: null, capability: REVIEW, code: "PREVIEW_DECISION_INVALID", kind: "preview.decide",
+    layer: "REQUEST", payloadKeys: ["decision", "findings", "previewRef"] },
+  // ASKING for the preview, the other half of the same operator act. ASYNC-ONLY: the service
+  // spawns a dev server, waits for it to answer and drives a browser, none of which a
+  // synchronous handler can express. The empty payload this sweep sends is dispatched as the
+  // CONFIGURED OPERATOR, so the entry's own operator fence passes and the DECODER answers --
+  // which is why the code transcribed here is the start decoder's REQUEST-layer one, not the
+  // RUNNER codes an unwired supervisor would raise below it. `payloadKeys` is exactly two:
+  // `workspace` is deliberately absent, because the runner spawns a script out of it.
+  { agent: null, asyncOnly: true, capability: REVIEW, code: "PREVIEW_START_PAYLOAD_INVALID",
+    kind: "preview.start", layer: "REQUEST", payloadKeys: ["goalId", "sha"] },
+  // ASYNC-ONLY since task-4b9c394d: the daemon MEASURES its own activation receipts (a git HEAD
+  // read and a store backup) before it may mint the witness, and a synchronous handler cannot
+  // await that. `payloadKeys` still lists "witness" DELIBERATELY -- the roster is the ingress
+  // allow-list, and an unlisted key would be refused generically at PAYLOAD_SHAPE instead of
+  // reaching the specific ACTIVATION_WITNESS_CALLER_SUPPLIED refusal. The empty payload this
+  // sweep sends is the CORRECT one, so the row still reaches the prerequisite gate.
+  { agent: [ADMIN, WORK], asyncOnly: true, capability: ADMIN, code: PREREQUISITE,
+    kind: "project.activate", layer: PREREQ_LAYER, payloadKeys: ["witness"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "project.bind_repository",
     layer: PREREQ_LAYER, payloadKeys: ["observation"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: "BOOTSTRAP_PAYLOAD_INVALID",
     kind: "project.register", layer: INGRESS, payloadKeys: ["owner"] },
+  { agent: null, capability: ADMIN, code: "AGENT_PROVIDER_PAYLOAD_INVALID",
+    kind: "project.set_agent_provider", layer: "DAEMON_COMPOSITION",
+    payloadKeys: ["base", "goalId", "provider"] },
   { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "provider.probe",
     layer: PREREQ_LAYER, payloadKeys: ["observation"] },
+  { agent: [GOAL, WORK], asyncOnly: true, capability: GOAL, code: "RELEASE_PR_FAILED",
+    kind: "release.decide", layer: "RUNNER_WORKSPACE", payloadKeys: ["base", "decision", "goalId", "sha"] },
+  // Writing the approved contract's required variable NAMES into the bound repository's
+  // committed `.env.example`. Async-only: a file write plus `git` spawns, which a synchronous
+  // handler cannot express. `agent` is null and OPERATOR_ONLY carries it: committing in the
+  // operator's own repository is their act. An empty payload names no contract, so the
+  // operator path answers the approval gate's refusal from the daemon prerequisite layer.
+  { agent: null, asyncOnly: true, capability: GOAL, code: "ENV_EXAMPLE_CONTRACT_UNAPPROVED",
+    kind: "product_contract.sync_env_example", layer: PREREQ_LAYER, payloadKeys: ["contractId"] },
   { agent: [GOAL, WORK], capability: GOAL, code: PREREQUISITE, kind: "repository.publish",
-    layer: PREREQ_LAYER, payloadKeys: ["goalId", "remoteUrl"] },
+    layer: PREREQ_LAYER, payloadKeys: ["approval", "goalId", "remoteUrl"] },
+  // Creating a product repository at an operator-supplied path. Async-only: the service runs
+  // `git`, optionally the `gh` CLI and a tree write, none of which a synchronous handler can
+  // express. ADMIN fences reach; OPERATOR_ONLY fences the act.
+  { agent: [ADMIN, WORK], capability: ADMIN, code: PREREQUISITE, kind: "repository.bootstrap",
+    asyncOnly: true, layer: PREREQ_LAYER,
+    payloadKeys: ["dir", "github", "productName", "profileVersion"] },
+  // Landed by task-a2409cba (environment.set_variable / unset_variable). Transcribed here
+  // because ROWS is an exact set-equality with the served registry and its own row had not
+  // backfilled the census; the values are MEASURED, not chosen.
+  { agent: [ADMIN, WORK], capability: ADMIN, code: "ENV_ENVIRONMENT_UNKNOWN",
+    kind: "environment.set_variable", layer: "SCOPE",
+    payloadKeys: ["environment", "name", "value"] },
+  { agent: [ADMIN, WORK], capability: ADMIN, code: "ENV_ENVIRONMENT_UNKNOWN",
+    kind: "environment.unset_variable", layer: "SCOPE",
+    payloadKeys: ["environment", "name"] },
   // ADMIN is the reach fence only: an empty payload never reaches the R3
   // approval gate, which is what actually makes this command human-only.
   { agent: [ADMIN, WORK], capability: ADMIN, code: "RECOVERY_COMPLETION_REQUEST_MALFORMED",
@@ -256,6 +363,9 @@ const ROWS: readonly Row[] = [
     layer: STEP_LAYER, payloadKeys: ["attemptAggregateId", "effectId", "stepRef"] },
   { agent: [WORK], capability: WORK, code: "STEP_REQUEST_MALFORMED", kind: "step.start",
     layer: STEP_LAYER, payloadKeys: ["attemptAggregateId", "effectId", "label"] },
+  { agent: null, capability: ADMIN, code: "REPOSITORY_RECOVERY_INPUT_INVALID", kind: "repository.recover", asyncOnly: true,
+    nonOperatorRefusal: { code: "REPOSITORY_RECOVERY_HUMAN_REQUIRED", layer: "REPOSITORY_RECOVERY" },
+    layer: "REPOSITORY_RECOVERY", payloadKeys: ["action", "decision", "expectedReservationRevision", "nodeRef", "reason"] },
   { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.claim",
     layer: INGRESS, payloadKeys: ["expiresAt", "workItemId"] },
   { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.release",
@@ -276,6 +386,7 @@ const ROWS: readonly Row[] = [
  * the table would agree with it. This one does not.
  */
 const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
+  "criterion_check.approve", "criterion_check.verify", "repository.recover",
   "approval.decide", "approval.decide_intent",
   "planning.submit_decomposition", "product_contract.answer_clarification",
   "product_contract.ask_clarification", "product_contract.propose_revision",
@@ -284,15 +395,29 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
   "foundation.dispatch", "foundation.verification", "resource.reconcile",
   "resource.confirm_released",
   "step.start", "step.finish", "step.checkpoint", "cutover.activate",
+  "environment.set_variable", "environment.unset_variable",
+  "design.submit",
   "escalation.decide", "goal.close", "goal.create", "goal.create_with_source",
   "graph.approve", "graph.prepare_supersession", "graph.release_preparation",
   "graph.request_expansion", "graph.supersede",
   "integration.accept_output",
-  "plan.propose", "policy.install", "policy.validate", "project.activate",
-  "project.bind_repository", "project.register", "provider.probe", "repository.publish",
+  "plan.propose", "policy.install", "policy.validate", "preview.decide", "preview.start",
+  "project.activate",
+  "project.bind_repository", "project.register", "project.set_agent_provider",
+  "provider.probe", "repository.publish",
+  "release.decide", "product_contract.sync_env_example",
+  "deployment.set_target", "deployment.deploy", "deployment.rollback", "deployment.migrate_down",
+  "repository.bootstrap",
   "qualification.replan",
   "review.submit", "session.close", "session.open", "session.renew",
   "work.claim", "work.release", "work.renew",
+  // APPENDED, and appended for a reason this list already documents: the order here is
+  // `PAYLOAD_KEYS`' key order, and the probe-interval entry was appended THERE rather than filed
+  // beside the deployment kinds it reads like, so that neither this transcription nor the
+  // vocabulary's ROWS had to be rewritten mid-table.
+  "monitoring.set_probe_interval",
+  // task-509f0437, appended after it for exactly the same reason.
+  "monitoring.retire_environment",
 ];
 
 /**
@@ -302,12 +427,19 @@ const REGISTRATION_ORDER: readonly RuntimeCommandKind[] = [
  * dropped reddens on the four that must not.
  */
 const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
+  "project.set_agent_provider",
+  "criterion_check.approve", "criterion_check.verify", "repository.recover",
   // BOTH approval wires. The intent seam derives the activation witness and the record the
   // caller-shaped wire used to accept, so gating one and not the other would leave the derived
   // wire reachable by a non-operator principal -- handing back exactly the authority it removes.
   "approval.decide", "approval.decide_intent", "goal.close",
   // Publishing pushes the operator's repository to the remote the operator named.
   "repository.publish",
+  "release.decide", "deployment.set_target", "deployment.deploy", "deployment.rollback",
+  // Reverting a production schema destroys the data the forward migration created.
+  "deployment.migrate_down",
+  // Writing into and committing in the operator's own product repository is their act.
+  "product_contract.sync_env_example",
   // The operator ANSWERS a material product question; an agent transport presenting
   // that answer would be quiet invention with a human label (see the vocabulary set).
   "product_contract.answer_clarification",
@@ -318,6 +450,30 @@ const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
   "resource.confirm_released", "session.open",
   // The one-way GA activation: ADMIN fences reach, this set fences the human act itself.
   "cutover.activate",
+  // Deciding a rendered product preview is the operator's own verdict, and its REVIEW
+  // capability is a reach fence an agent can hold -- this set is what makes it human-only.
+  // ASKING for one is the same act on the same terms: it runs the product on the daemon's
+  // host. `preview.start` is served from an ASYNC entry, so this membership keeps it off the
+  // MCP roster while the handler's own entry check is what refuses the dispatch.
+  "preview.decide", "preview.start",
+  // Writing an environment variable hands a production secret to the deploy; ADMIN fences
+  // reach, this set fences the act. Landed by task-a2409cba; transcribed here because the
+  // roster is an exact set and its own row had not backfilled the census yet.
+  "environment.set_variable", "environment.unset_variable",
+  // Creating a product repository at an operator-supplied path, and optionally pushing it to
+  // a GitHub account the operator's own `gh` login owns. ADMIN fences reach; this set is what
+  // makes it the operator's act.
+  "repository.bootstrap",
+  // task-eb37494e. Re-timing the production health probe is the operator's act: too fast and the
+  // probe is the load it was meant to watch for, too slow and an outage ends before the signal
+  // arrives. ADMIN fences reach; this set fences the act, and the MCP exclusion derived from it
+  // is what keeps the kind off a surface the operator bootstrap credential authenticates.
+  "monitoring.set_probe_interval",
+  // task-509f0437. Retiring an environment is the operator's act in a stronger sense still: it
+  // does not re-time the probe, it ENDS it, so the signal an outage would have produced stops
+  // existing. ADMIN fences reach; this set fences the act, and the derived MCP exclusion keeps
+  // the kind off a surface the operator bootstrap credential authenticates.
+  "monitoring.retire_environment",
 ];
 
 const CREDENTIAL = "registry-operator-credential";
@@ -383,16 +539,17 @@ async function sendAsync(
   commandKind: RuntimeCommandKind,
   payload: Readonly<Record<string, unknown>>,
   credential: string = CREDENTIAL,
+  origin: "MCP_STDIO" | "HTTP_LISTENER" = "MCP_STDIO",
 ): Promise<Awaited<ReturnType<typeof handleAsyncCommandRequest>>> {
   return await handleAsyncCommandRequest(deps, {
     body: new TextEncoder().encode(JSON.stringify({
       commandId, commandKind, correlationId: "corr-registry", expectedVersion: 0, payload,
       requestDigest: "a".repeat(64), schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
-      sessionCredential: credential, targetAggregateId: "agg-registry",
+      sessionCredential: credential, targetAggregateId: commandKind === "deployment.rollback" ? PROJECT : "agg-registry",
     })),
     credential,
     protocolVersion: WIRE_PROTOCOL_VERSION,
-  }, "MCP_STDIO");
+  }, origin);
 }
 
 function openSession(
@@ -407,6 +564,132 @@ function openSession(
   expect(opened).toMatchObject({ decision: { disposition: "DECIDED" }, outcome: "ACCEPTED" });
   return secret;
 }
+
+describe("project.set_agent_provider persists on its fenced synchronous edge", () => {
+  const payload = { base: "main", goalId: "", provider: "codex" };
+  const snapshot = () => {
+    const reader = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      return { decisions: decisionCount(reader), eventHorizon: reader.readEventHorizon() };
+    } finally { reader.close(); }
+  };
+
+  it("persists exactly one setting event and reads it through a reopened store", () => {
+    const before = snapshot();
+    expect(send("cmd-provider-configured", "project.set_agent_provider", payload)).toMatchObject({
+      outcome: "ACCEPTED", decision: { resultCode: "AGENT_PROVIDER_SET", disposition: "DECIDED" },
+    });
+    // Direct setting commits have an event/receipt, not a manufactured domain decision row.
+    expect(snapshot()).toEqual({ decisions: before.decisions, eventHorizon: before.eventHorizon + 1n });
+    const reader = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      expect(readAgentProvider({ store: reader, projectId: PROJECT, now: () => "unused" }, "goal-new"))
+        .toEqual({ ok: true, provider: "codex" });
+    } finally { reader.close(); }
+  });
+
+  it.each([{}, { ...payload, base: 3 }, { ...payload, goalId: null }])(
+    "refuses malformed provider payload %j without a setting event", badPayload => {
+      const before = snapshot();
+      expect(send("cmd-provider-malformed", "project.set_agent_provider", badPayload)).toMatchObject({
+        outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 422,
+        refusal: { code: "AGENT_PROVIDER_PAYLOAD_INVALID", layer: "DAEMON_COMPOSITION" },
+      });
+      expect(snapshot()).toEqual(before);
+    },
+  );
+
+  it("preserves the store's unknown-provider code and layer without writing", () => {
+    const before = snapshot();
+    expect(send("cmd-provider-unknown", "project.set_agent_provider", { ...payload, provider: "third-provider" }))
+      .toMatchObject({ outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 422,
+        refusal: { code: "AGENT_PROVIDER_UNKNOWN", layer: "DURABLE_STORE" } });
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("refuses a repeated command identity at the store without a second setting write", () => {
+    expect(send("cmd-provider-retry", "project.set_agent_provider", payload).outcome).toBe("ACCEPTED");
+    const after = snapshot();
+    for (const retried of [payload, { ...payload, provider: "claude" }]) {
+      expect(send("cmd-provider-retry", "project.set_agent_provider", retried)).toMatchObject({
+        outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 503,
+        refusal: { code: "COMMAND_ID_CONFLICT", layer: "DURABLE_STORE" },
+      });
+      expect(snapshot()).toEqual(after);
+    }
+  });
+
+  it("refuses the non-operator at authorization before composition", () => {
+    const credential = openSession("cmd-provider-session", "provider-agent", randomUUID(), [ADMIN, WORK]);
+    const before = snapshot();
+    expect(send("cmd-provider-agent", "project.set_agent_provider", payload, credential)).toMatchObject({
+      outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 403,
+      refusal: { code: "OPERATOR_PRINCIPAL_REQUIRED", layer: "DAEMON_AUTHORIZATION" },
+    });
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("serves one ADMIN entry synchronously with no staffing capability", () => {
+    const entry = deps.registry.get("project.set_agent_provider");
+    expect(entry).toMatchObject({ kind: "project.set_agent_provider", requiredCapability: ADMIN,
+      payloadKeys: ["base", "goalId", "provider"] });
+    expect(entry?.asyncHandler).toBeUndefined();
+    expect(agentCapabilitiesFor("project.set_agent_provider")).toBeNull();
+  });
+});
+
+describe("release.decide operator-only async wiring", () => {
+  const payload = { base: "main", decision: "APPROVE", goalId: "release-goal", sha: "b".repeat(40) };
+  const snapshot = () => {
+    const reader = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      return { decisions: decisionCount(reader), eventHorizon: reader.readEventHorizon() };
+    } finally {
+      reader.close();
+    }
+  };
+
+  it("serves an asynchronous GOAL entry with only caller-intent keys", () => {
+    const entry = deps.registry.get(RELEASE_DECIDE_COMMAND_KIND);
+    expect(entry).toMatchObject({ kind: "release.decide", requiredCapability: GOAL,
+      payloadKeys: ["base", "decision", "goalId", "sha"] });
+    expect(entry?.asyncHandler).toBeTypeOf("function");
+    expect(commandFamilyFacts(RELEASE_DECIDE_COMMAND_KIND))
+      .toMatchObject({ release: true, requiredCapability: GOAL });
+  });
+
+  it("refuses an authenticated capable non-operator at the async operator fence", async () => {
+    const credential = openSession("cmd-release-open-agent", "sess-release-agent",
+      "release-agent-secret", [GOAL, WORK]);
+    const before = snapshot();
+    expect(await sendAsync("cmd-release-agent", RELEASE_DECIDE_COMMAND_KIND, payload,
+      credential, "HTTP_LISTENER")).toMatchObject({
+      outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 403,
+      refusal: { code: "OPERATOR_PRINCIPAL_REQUIRED", layer: "DAEMON_AUTHORIZATION" },
+    });
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("refuses the operator with the unconfigured release port code and no durable writes", async () => {
+    const before = snapshot();
+    expect(await sendAsync("cmd-release-unconfigured", RELEASE_DECIDE_COMMAND_KIND, payload,
+      CREDENTIAL, "HTTP_LISTENER")).toMatchObject({
+      outcome: "PORT_REFUSED", stage: "DISPATCH", httpStatus: 422,
+      refusal: { code: "RELEASE_PR_FAILED", layer: "RUNNER_WORKSPACE",
+        detail: "no release port is composed for this daemon" },
+    });
+    expect(snapshot()).toEqual(before);
+  });
+
+  it("refuses caller-supplied project authority at PAYLOAD_SHAPE without writes", async () => {
+    const before = snapshot();
+    expect(await sendAsync("cmd-release-smuggled", RELEASE_DECIDE_COMMAND_KIND,
+      { ...payload, projectId: PROJECT }, CREDENTIAL, "HTTP_LISTENER")).toMatchObject({
+      error: { code: "INPUT_INVALID" }, httpStatus: 400, ok: false, stage: "PAYLOAD_SHAPE",
+    });
+    expect(snapshot()).toEqual(before);
+  });
+});
 
 function transportRequest(
   commandId: string,
@@ -568,6 +851,40 @@ describe("server-authored command transport origin carrier", () => {
       });
       expect(Object.isFrozen(input)).toBe(true);
     }
+  });
+
+  it("stamps the origin on an entry that declares its own asyncHandler", async () => {
+    // The async door used to hand the handler a bare { envelope, principal }: every entry with
+    // an asyncHandler (project.activate, the foundation attempts) saw no origin even when the
+    // listener passed one, so a gate on it would refuse everything or read "unstamped" and open.
+    const captured: CommandHandlerInput[] = [];
+    const wired: CommandAdapterDeps = {
+      authenticator: deps.authenticator,
+      decisions: deps.decisions,
+      registry: buildCommandRegistry([{
+        asyncHandler: async (input) => {
+          captured.push(input);
+          return {
+            commandId: input.envelope.commandId,
+            disposition: "DECIDED",
+            effectId: `effect-${input.envelope.commandId}`,
+            resultCode: "EFFECTS_COMMITTED",
+          };
+        },
+        handler: () => { throw new Error("the sync handler must not run for an async entry"); },
+        kind: "goal.create",
+        payloadKeys: ["title"],
+        requiredCapability: GOAL,
+      }]),
+    };
+    const result = await handleAsyncCommandRequest(
+      wired, transportRequest("cmd-transport-async-entry"), "MCP_STDIO",
+    );
+
+    expect(result).toMatchObject({ outcome: "ACCEPTED" });
+    expect(captured).toHaveLength(1);
+    expect(captured.map(readCommandTransportOrigin)).toEqual(["MCP_STDIO"]);
+    expect(Object.isFrozen(captured[0])).toBe(true);
   });
 
   it("keeps unstamped non-gate commands byte-identical on both legacy entries", async () => {
@@ -804,18 +1121,100 @@ describe("production command transport stamps", () => {
 });
 
 describe("registered command table", () => {
-  it("serves exactly the forty-six characterized kinds and nothing else", () => {
+  it("serves exactly the characterized kinds and nothing else", () => {
     // Pins the swept case count: an it.each over an empty or shortened table
     // would otherwise pass while asserting nothing.
-    expect(ROWS).toHaveLength(46);
-    expect(deps.registry.size).toBe(46);
+    expect(ROWS).toHaveLength(64);
+    expect(deps.registry.size).toBe(64);
     expect([...deps.registry.keys()].sort()).toEqual(ROWS.map((row) => row.kind).sort());
+  });
+
+  /**
+   * BIDIRECTIONAL, and the direction that is easy to lose is the second one.
+   *
+   * The SERVED set is enumerated from the IMPLEMENTATION SEAM -- the composed registry every
+   * transport dispatches through -- never from a roster constant. A test that iterates the
+   * roster can only see one direction: deleting an entry shrinks its own iteration and stays
+   * green while a served capability silently vanishes from the advertised surface. The MCP
+   * surface has TWO halves and a served command kind is on exactly one of them, so the
+   * partition is asserted too: a kind on both would be advertised and fenced at once.
+   */
+  it("partitions every served kind across the MCP surface, both directions", () => {
+    const served = new Set<string>([...deps.registry.keys()]);
+    const queryKinds = new Set<string>(MCP_SERVED_QUERY_KINDS);
+    const advertised = new Set<string>(
+      wiredMcpToolKinds().filter((kind) => !queryKinds.has(kind)),
+    );
+    const excluded = new Set<string>(MCP_EXCLUDED_COMMAND_KINDS);
+    // Direction 1: nothing is advertised or fenced that the seam does not actually serve.
+    expect([...advertised, ...excluded].filter((kind) => !served.has(kind)).sort()).toEqual([]);
+    // Direction 2: nothing the seam serves is missing from BOTH halves -- the direction a
+    // roster-iterating test cannot see.
+    expect([...served]
+      .filter((kind) => !advertised.has(kind) && !excluded.has(kind)).sort()).toEqual([]);
+    // The partition is exact: advertised and fenced are disjoint.
+    expect([...advertised].filter((kind) => excluded.has(kind)).sort()).toEqual([]);
+    expect(advertised.size + excluded.size).toBe(served.size);
+    // The subject, named. The set assertions above shrink with a wholesale removal; these do
+    // not, so deleting the kind from either side reddens here.
+    expect(served.has("repository.bootstrap")).toBe(true);
+    expect(excluded.has("repository.bootstrap")).toBe(true);
+    expect(wiredMcpToolKinds()).not.toContain("repository.bootstrap");
+    expect(served.has("release.decide")).toBe(true);
+    expect(excluded.has("release.decide")).toBe(true);
+    expect(wiredMcpToolKinds()).not.toContain("release.decide");
+    // SERVED BY THE ASYNC ENTRY, and this assertion is here because a mutation drill proved
+    // membership alone cannot see it: `entryOf` falls back to the generic SYNCHRONOUS wiring
+    // for any vocabulary kind, so deleting the async entry left the key in place and the set
+    // assertions above stayed green while the command was no longer served by its own service.
+    expect(deps.registry.get("repository.bootstrap")?.asyncHandler).toBeDefined();
+    expect(deps.registry.get("deployment.rollback")?.asyncHandler).toBeDefined();
+  });
+
+  /**
+   * THE THREE-AXIS FENCE ON `deployment.migrate_down`, ASSERTED TOGETHER (DoD 3 of
+   * task-537320ee). Reverting a production schema destroys the data the forward migration
+   * created, so it is never an agent's decision — and the three rosters that say so are
+   * independent, which is exactly why they are asserted in ONE arm that names WHICH one failed.
+   * A kind fenced in two of the three is reachable through the third.
+   *
+   * AXIS 2 IS ASSERTED AGAINST `wiredMcpToolKinds()`, THE COMPUTED SERVED-OVER-MCP SURFACE, and
+   * deliberately NOT against `MCP_EXCLUDED_COMMAND_KINDS`. That roster is DERIVED from
+   * `OPERATOR_PRINCIPAL_KINDS` (mcp-tool-allowlist.ts), so asserting it beside axis 1 would
+   * assert ONE fact twice and stay green with the fence broken. This is the single most likely
+   * way this kind ships looking tested and is not.
+   *
+   * NO COUNT LITERAL AND NO TRANSCRIBED LIST: every value below is read from a production
+   * surface, so a sibling row moving a roster cannot red this arm spuriously.
+   */
+  it("fences deployment.migrate_down at dispatch, on MCP and in the wrapper, all three", () => {
+    const kind = "deployment.migrate_down";
+    // AXIS 1 -- the dispatch fence. Without it any GOAL-capable session could revert a schema.
+    expect(OPERATOR_PRINCIPAL_KINDS.has(kind), `${kind} missing from OPERATOR_PRINCIPAL_KINDS`)
+      .toBe(true);
+    // AXIS 2 -- the TRANSPORT. The MCP port authenticates with the operator bootstrap
+    // credential, so an advertised operator kind is an agent arriving AS the operator.
+    expect(wiredMcpToolKinds(), `${kind} is ADVERTISED over MCP`).not.toContain(kind);
+    // AXIS 3 -- the wrapper. `agentCapabilitiesFor` already answers null for this kind, so this
+    // is belt-and-braces; it is asserted anyway because the null capability is one edit away.
+    expect(HUMAN_ONLY_STEPS.has(kind), `${kind} missing from HUMAN_ONLY_STEPS`).toBe(true);
+    expect(agentCapabilitiesFor(kind), `${kind} is staffable`).toBeNull();
+    // THE SUBJECT IS ACTUALLY SERVED. Every arm above would pass vacuously for a kind the
+    // registry does not carry, which would make this a test of three rosters and nothing else.
+    expect(deps.registry.has(kind), `${kind} is not served at all`).toBe(true);
+    // SERVED BY ITS OWN ASYNC ENTRY, not by the generic synchronous fallback: `entryOf` answers
+    // any vocabulary kind, so membership alone cannot tell "registered" from "served".
+    expect(deps.registry.get(kind)?.asyncHandler, `${kind} lost its async entry`).toBeDefined();
+    // AND IT IS ADVERTISED. The bidirectional partition arm above relates the SERVED set to the
+    // two MCP halves; this pins the third roster the kind must appear in, so a PAYLOAD_KEYS
+    // deletion reds here rather than merely shrinking that arm's own iteration.
+    expect(Object.keys(PAYLOAD_KEYS), `${kind} missing from PAYLOAD_KEYS`).toContain(kind);
   });
 
   it("keeps the registration order the payload table declares", () => {
     // The sorted-set assertion above cannot see a reordered table, and a move that
     // reshuffles the literal is exactly the silent edit a mechanical split makes.
-    expect(REGISTRATION_ORDER).toHaveLength(46);
+    expect(REGISTRATION_ORDER).toHaveLength(64);
     expect([...deps.registry.keys()]).toEqual(REGISTRATION_ORDER);
   });
 
@@ -842,10 +1241,11 @@ describe("registered command table", () => {
 
   it.each(ROWS)("$kind reaches its own family handler and refuses with its code", async (row) => {
     const answered = row.asyncOnly === true
-      ? await sendAsync(`cmd-empty-${row.kind}`, row.kind, {})
+      ? await sendAsync(`cmd-empty-${row.kind}`, row.kind, row.payload ?? {}, CREDENTIAL,
+        row.kind === "repository.recover" ? "HTTP_LISTENER" : "MCP_STDIO")
       : send(`cmd-empty-${row.kind}`, row.kind, {});
     expect(answered).toMatchObject({
-      httpStatus: 422,
+      httpStatus: row.httpStatus ?? 422,
       ok: false,
       outcome: "PORT_REFUSED",
       refusal: { code: row.code, layer: row.layer },
@@ -984,9 +1384,9 @@ describe("authorization ordering under a real session", () => {
       );
     });
 
-    it("gates exactly the ten transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(11);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(11);
+    it("gates exactly the transcribed kinds and no others", () => {
+      expect(OPERATOR_ONLY).toHaveLength(28);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(28);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {
@@ -997,9 +1397,9 @@ describe("authorization ordering under a real session", () => {
       expect(answered).toMatchObject({
         httpStatus: gated ? 403 : 422,
         outcome: "PORT_REFUSED",
-        refusal: gated
+        refusal: row.nonOperatorRefusal ?? (gated
           ? { code: "OPERATOR_PRINCIPAL_REQUIRED", layer: "DAEMON_AUTHORIZATION" }
-          : { code: row.code, layer: row.layer },
+          : { code: row.code, layer: row.layer }),
         stage: "DISPATCH",
       });
     });
@@ -1050,6 +1450,83 @@ describe("server-injected request fields", () => {
       refusal: { code: "EXPECTED_VERSION_CONFLICT", layer: "CORE_REDUCER" },
       stage: "DISPATCH",
     });
+  });
+
+  /**
+   * The renderer is generic, so the CORE reducer's conflict gained the same affordance: a
+   * caller fenced before the store now also learns which version to resend at. Pinned rather
+   * than left implicit, because it is a wire-visible change to an existing refusal.
+   */
+  it("names the versions on a CORE_REDUCER conflict too, since the renderer is generic", () => {
+    const answered = send("cmd-register-stale-core", "project.register",
+      { owner: "operator-local" }, CREDENTIAL, 5);
+    if (answered.outcome !== "PORT_REFUSED") throw new Error("expected a port refusal");
+    expect(answered.refusal.layer).toBe("CORE_REDUCER");
+    expect(answered.refusal.detail).toBe("EXPECTED_VERSION_CONFLICT actualVersion=1 expectedVersion=5");
+  });
+
+  /**
+   * The generic renderer must NOT append anything when a refusal carries an error with no
+   * registered detail keys — most codes have none, and every one of their wire details would
+   * change shape if the join were unconditional. Driven straight at the exported production
+   * seam because no registered command refuses that way today; a frozen null-prototype details
+   * object (what the registry hands out) must not make `Object.keys` throw either.
+   */
+  it("renders just the code when a refusal's error carries no detail keys", () => {
+    const error = createRuntimeError({ code: "CAPABILITY_DENIED" });
+    expect(Object.keys(error.details)).toHaveLength(0);
+    expect(() => decisionOf(Object.freeze({
+      advisoryOnly: true as const, authority: "NONE" as const, code: "CAPABILITY_DENIED",
+      error, kind: "work.claim" as const, ok: false as const,
+      refusedBy: "DAEMON_INGRESS" as const,
+    }))).toThrow(expect.objectContaining({
+      code: "CAPABILITY_DENIED", detail: "CAPABILITY_DENIED", layer: "DAEMON_INGRESS",
+    }));
+  });
+
+  /**
+   * A caller told only "EXPECTED_VERSION_CONFLICT" has nothing to retry AT, so the wire detail
+   * must name the version the store observed. `work.release` is the kind driven here because
+   * every BOOTSTRAP reducer fences `expectedVersion` itself and answers under `CORE_REDUCER`
+   * before the store is reached (bootstrap-ledger.ts:258-260) — a bootstrap kind cannot produce
+   * a DURABLE_STORE conflict through this adapter without a store double, and this arm is about
+   * the real adapter over the real store.
+   */
+  it("names the observed version on a durable-store conflict over the real /command adapter", () => {
+    const item = "node.deliver@registry-http-conflict";
+    expect(send("cmd-http-conflict-claim", "work.claim", {
+      expiresAt: "2026-08-09T13:00:00.000Z", workItemId: item,
+    })).toMatchObject({ ok: true, outcome: "ACCEPTED" });
+
+    // The claim moved the head to 1; releasing at the version the caller still believed (0) is
+    // accepted by every daemon gate — the claimant matches — and fenced by the STORE.
+    const answered = send("cmd-http-conflict-release", "work.release", { workItemId: item });
+    if (answered.outcome !== "PORT_REFUSED") throw new Error("expected a port refusal");
+    const refusal = answered.refusal;
+
+    // The observed version is read back off the store, never echoed from the request: a daemon
+    // that reported its own `expectedVersion` as the actual would fail here.
+    const reader = SqliteEventStore.openForProject(storePath, PROJECT);
+    const head = reader.getAggregateVersion(workAggregateIdFor(item));
+    reader.close();
+    expect(head).toBe(1);
+
+    expect(refusal.code).toBe("EXPECTED_VERSION_CONFLICT");
+    expect(refusal.layer).toBe("DURABLE_STORE");
+    expect(refusal.detail).toMatch(/^EXPECTED_VERSION_CONFLICT actualVersion=\d+ expectedVersion=\d+$/);
+    expect(refusal.detail).toBe(`EXPECTED_VERSION_CONFLICT actualVersion=${String(head)} expectedVersion=0`);
+    // The REFUSED frame's key roster is UNCHANGED: the versions ride in the existing `detail`
+    // string, because eleven control-room decoders and the generated client pin these four keys.
+    expect(Object.keys(refusal).sort()).toEqual(["code", "detail", "httpStatus", "layer"]);
+  });
+
+  /** A refusal with no error still renders the bare code — the renderer is generic, not a
+   *  conflict special case, and must not start appending anything to every other refusal. */
+  it("leaves a refusal that carries no runtime error at its bare code", () => {
+    const answered = send("cmd-http-bare-detail", "work.claim", { workItemId: "no-expiry" });
+    if (answered.outcome !== "PORT_REFUSED") throw new Error("expected a port refusal");
+    expect(answered.refusal.code).toBe("WORK_CLAIM_PAYLOAD_INVALID");
+    expect(answered.refusal.detail).toBe("WORK_CLAIM_PAYLOAD_INVALID");
   });
 
   it("replays the identical command and replays again on a fresh store handle", () => {
@@ -1590,7 +2067,7 @@ describe("createDaemonCommandPorts", () => {
 
   it("returns a frozen pair carrying the whole registry", () => {
     expect(Object.isFrozen(ports)).toBe(true);
-    expect(ports.registry.size).toBe(46);
+    expect(ports.registry.size).toBe(64);
     expect(ports.registry.get("project.register")).toMatchObject({
       kind: "project.register", payloadKeys: ["owner"], requiredCapability: ADMIN,
     });
@@ -1612,7 +2089,7 @@ describe("createDaemonCommandPorts", () => {
     });
 
     expect([...supplied.registry.keys()]).toEqual([...ports.registry.keys()]);
-    expect(supplied.registry.size).toBe(46);
+    expect(supplied.registry.size).toBe(64);
     for (const roster of [ports.registry, supplied.registry]) {
       const entry = roster.get(FOUNDATION_DISPATCH_KIND);
       expect(entry?.asyncHandler).toBeDefined();
@@ -1644,7 +2121,7 @@ describe("createDaemonCommandPorts", () => {
 
     const snapshotPorts = createDaemonCommandPorts(options);
     expect(reads).toBe(1);
-    expect(snapshotPorts.registry.size).toBe(46);
+    expect(snapshotPorts.registry.size).toBe(64);
     expect(reads).toBe(1);
 
     expect(() => createDaemonCommandPorts({

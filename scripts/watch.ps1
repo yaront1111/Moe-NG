@@ -25,7 +25,8 @@ $rules = @(
   @{ Match = "REFUSED|BLOCKED|_EXIT|error|Error"; Colour = "Red" }
 )
 
-Get-Content -LiteralPath $LogFile -Wait -Tail 20 | ForEach-Object {
+# The log is UTF-8 (up.ps1 writes it that way); say so rather than trust the shell's default.
+Get-Content -LiteralPath $LogFile -Wait -Tail 20 -Encoding utf8 | ForEach-Object {
   $line = $_
   $colour = $null
   foreach ($rule in $rules) {

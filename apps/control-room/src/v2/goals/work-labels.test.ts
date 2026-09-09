@@ -1,9 +1,13 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+
 import { RUNTIME_COMMAND_KINDS } from "@moe/contracts";
 import { describe, expect, it } from "vitest";
 
 import {
   CHAIN_ORDER,
   COLUMN_MEANINGS,
+  DEPENDS_TOKEN_PREFIX,
   MISSING_TOKENS,
   WORK_KIND_LABELS,
   cardIdentity,
@@ -97,8 +101,13 @@ describe("work-labels mirrors the daemon's emitted command kinds", () => {
   });
 
   it("lists exactly the prerequisite tokens the daemon emits", () => {
-    expect(new Set(Object.keys(MISSING_TOKENS)))
-      .toEqual(new Set(["escalation", "verification", "verifier-calibration", "verifier-policy"]));
+    // A hand-spelled second witness. The seam-derived, bidirectional check lives
+    // below; this one stays because two independently written rosters disagreeing
+    // is a louder signal than either alone.
+    expect(new Set(Object.keys(MISSING_TOKENS))).toEqual(new Set([
+      "escalation", "replan", "verification", "verifier-calibration", "verifier-policy",
+      "deployment.set_target",
+    ]));
   });
 });
 
@@ -119,6 +128,11 @@ describe("work-labels orders a column by the daemon's real prerequisite chain", 
     expect(chainRank("plan.propose")).toBeLessThan(chainRank("approval.decide"));
     expect(chainRank("approval.decide")).toBeLessThan(chainRank("goal.close"));
     expect(chainRank("policy.install")).toBeLessThan(chainRank("policy.validate"));
+    // The activation witness is minted from MEASURED receipts and the `policy` receipt is the
+    // digest of the INSTALLED SLICE SET, so an activate with no policy installed refuses
+    // ACTIVATION_POLICY_UNMEASURED. This edge is absent from COMMAND_PREREQUISITES, which is
+    // exactly why CHAIN_ORDER had it backwards while this suite stayed green (task-d342a2b1).
+    expect(chainRank("policy.install")).toBeLessThan(chainRank("project.activate"));
   });
 
   it("sorts an unknown kind last rather than guessing where it belongs", () => {
@@ -176,5 +190,151 @@ describe("work-labels names what each column means, in the owner's words", () =>
     expect(columnFor("READY").meaning).toBe("The daemon says this can happen now: nothing it needs is missing.");
     expect(columnFor("BLOCKED").meaning).toBe("Not offered yet: something this command needs has not happened.");
     expect(columnFor("COMMITTED").meaning).toBe("Already written into the daemon's own record.");
+  });
+});
+
+/**
+ * ROSTER, BOTH DIRECTIONS (global rail 9). The daemon side is enumerated from the
+ * EMITTING SEAM — the source text of affordance-read.ts — never from MISSING_TOKENS
+ * itself. A test that iterates the label map can only ever see one direction:
+ * deleting an entry shrinks its own iteration and stays green while a token the
+ * daemon really emits silently loses its reading. That is exactly the hole that let
+ * `replan` ship unlabelled, which this suite now catches.
+ *
+ * Source text rather than an import because the control room must never reach into
+ * apps/daemon at runtime — the same reason work-labels.ts is a mirror. The scan is
+ * anchored on the three shapes the surface actually writes tokens in, and every arm
+ * asserts the scan FOUND cases, so a regex that silently matched nothing cannot pass.
+ */
+const AFFORDANCE_READ = readFileSync(
+  resolve(process.cwd(), "..", "daemon", "src", "http", "affordance-read.ts"), "utf8",
+);
+
+/**
+ * The VALUE EXPRESSION of every `missing:` step field, then every array body inside it.
+ *
+ * NOT `/missing: \[...\]/`, which is what this scanner used to be. That regex requires the
+ * `[` to sit IMMEDIATELY after `missing: `, so it read
+ * `missing: deployBound ? [] : ["deployment.set_target"]` (affordance-read.ts:418) as
+ * containing no tokens at all -- and that blindness is exactly how `deployment.set_target`
+ * reached an operator as a raw command kind, the same class of hole this suite's header
+ * describes for `replan`. A scanner that cannot see an emission site cannot guard it.
+ *
+ * The value expression is cut at the next SIBLING KEY rather than at end of line, because
+ * :418 continues `, status: deployBound ? "READY" : "BLOCKED"` on the same line and a
+ * line-greedy capture would harvest "READY" and "BLOCKED" as prerequisite tokens.
+ */
+const MISSING_FIELD_VALUE = /missing: ([^\n]*?)(?=, (?:status|version|kind|aggregateId)\b|\n)/gu;
+
+function missingFieldArrays(source: string): readonly string[] {
+  return [...source.matchAll(MISSING_FIELD_VALUE)]
+    .flatMap((match) => [...(match[1] ?? "").matchAll(/\[([^\]]*)\]/gu)].map((body) => body[1] ?? ""));
+}
+
+/** Quoted literals inside a `missing: [ ... ]` step field. */
+function missingFieldTokens(source: string): readonly string[] {
+  return missingFieldArrays(source)
+    .flatMap((body) => [...body.matchAll(/"([^"]+)"/gu)].map((hit) => hit[1] ?? ""));
+}
+
+/** Quoted literals inside the verification-prerequisite array the surface freezes. */
+function verificationTokens(source: string): readonly string[] {
+  const block = /verificationMissing = Object\.freeze\(\[([\s\S]*?)\]\);/u.exec(source);
+  if (block === null) throw new Error("verification token block not found in affordance-read.ts");
+  return [...(block[1] ?? "").matchAll(/"([^"]+)"/gu)].map((hit) => hit[1] ?? "");
+}
+
+/**
+ * Template-literal token prefixes, e.g. `depends:${nodeRef}`, reached the way the
+ * surface actually reaches them: only through a list SPREAD INTO a `missing` field.
+ * Scanning every template literal in the file is too broad — affordance-read.ts:143
+ * mints the aggregate id `publish:${goalId}`, which is not a prerequisite token and
+ * must not be mistaken for one.
+ */
+function tokenPrefixes(source: string): readonly string[] {
+  const spreads = new Set([...missingFieldArrays(source)]
+    .flatMap((body) => [...body.matchAll(/\.\.\.([A-Za-z_$][\w$]*)/gu)].map((hit) => hit[1] ?? "")));
+  if (spreads.size === 0) throw new Error("no list is spread into a missing field");
+  const prefixes: string[] = [];
+  for (const name of spreads) {
+    const statement = new RegExp(`const ${name} = [^;]*;`, "u").exec(source);
+    if (statement === null) throw new Error(`no declaration found for missing source ${name}`);
+    prefixes.push(...[...statement[0].matchAll(/`([a-z][a-z-]*:)\$\{/gu)].map((hit) => hit[1] ?? ""));
+  }
+  return prefixes;
+}
+
+describe("every prerequisite token the daemon emits has a reading, and every reading a token", () => {
+  it("scans real tokens out of the emitting seam rather than trusting the label map", () => {
+    // THE ANTI-VACUITY GUARD: a sweep that silently found nothing would make every
+    // set comparison below trivially true.
+    expect(AFFORDANCE_READ.length).toBeGreaterThan(1000);
+    expect(missingFieldTokens(AFFORDANCE_READ).length).toBeGreaterThan(0);
+    // THE CONDITIONAL SHAPE IS REACHED, not just the literal one. Named by value, because
+    // the broadened scanner is only worth anything if it sees the site the old one missed:
+    // strip this token from the scan and the set-equality arm below goes red rather than
+    // quietly agreeing with a map that lost an entry.
+    expect(missingFieldTokens(AFFORDANCE_READ)).toContain("deployment.set_target");
+    expect(verificationTokens(AFFORDANCE_READ).length).toBeGreaterThan(0);
+    expect(tokenPrefixes(AFFORDANCE_READ).length).toBeGreaterThan(0);
+  });
+
+  it("maps exactly the EXACT tokens the surface emits — set equality, both directions", () => {
+    const emitted = new Set([
+      ...missingFieldTokens(AFFORDANCE_READ), ...verificationTokens(AFFORDANCE_READ),
+    ]);
+    // Independently spelled, so a scanner that drifted cannot quietly agree with itself.
+    expect(emitted).toEqual(new Set([
+      "escalation", "replan", "verification", "verifier-calibration", "verifier-policy",
+      "deployment.set_target",
+    ]));
+    // DIRECTION 1 — every emitted token has a reading that is not the raw token.
+    for (const token of emitted) {
+      expect(MISSING_TOKENS[token]).toBeDefined();
+      expect(labelForMissing(token)).not.toBe(token);
+    }
+    // DIRECTION 2 — every reading corresponds to a token the surface can emit.
+    expect(new Set(Object.keys(MISSING_TOKENS))).toEqual(emitted);
+  });
+
+  it("reads the one PREFIXED token, which no exact-match map could hold", () => {
+    const prefixes = new Set(tokenPrefixes(AFFORDANCE_READ));
+    expect(prefixes).toEqual(new Set([DEPENDS_TOKEN_PREFIX]));
+    // The prefix is not, and must not become, an exact key.
+    expect(MISSING_TOKENS[DEPENDS_TOKEN_PREFIX]).toBeUndefined();
+    expect(labelForMissing(`${DEPENDS_TOKEN_PREFIX}node-a`))
+      .toBe("the node node-a to be accepted first");
+  });
+});
+
+describe("work-labels reads a dependency block in the operator's words", () => {
+  it("names the blocking node inside the sentence the board actually renders", () => {
+    // The rendered sentence, not just the fragment: work-board.tsx:69 prefixes
+    // "needs " and joins with ", ", so this is what an operator reads on the card.
+    const missing = ["depends:node-kernel", "verification"];
+    expect(`needs ${missing.map(labelForMissing).join(", ")}`)
+      .toBe("needs the node node-kernel to be accepted first, the daemon's verification");
+  });
+
+  it("echoes the node key exactly as the daemon spelled it", () => {
+    expect(labelForMissing("depends:node-a")).toContain("node-a");
+    expect(labelForMissing("depends:Node_B-2")).toBe("the node Node_B-2 to be accepted first");
+    // Two different nodes must not read as the same blocker.
+    expect(labelForMissing("depends:node-a")).not.toBe(labelForMissing("depends:node-b"));
+  });
+
+  it("keeps the raw fall-through, which is load-bearing honesty", () => {
+    // An unknown token is never dressed up as a sentence.
+    expect(labelForMissing("totally.made.up")).toBe("totally.made.up");
+    expect(labelForMissing("dependsOn:node-a")).toBe("dependsOn:node-a");
+    // A prefix naming NO node identifies nothing, so it stays raw too.
+    expect(labelForMissing("depends:")).toBe("depends:");
+  });
+
+  it("gives the replan token words instead of leaking the raw token", () => {
+    // goal-status.ts:77 already branches on this token, so the board knew about it
+    // while the label map did not — it rendered as the bare word "replan".
+    expect(labelForMissing("replan"))
+      .toBe("a human's REPLAN decision, which retires this node into the successor plan");
   });
 });

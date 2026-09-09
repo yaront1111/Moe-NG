@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, it } from "vitest";
 
 import { PROJECT_ID, closeStores, openStore } from "../review/review-test-fixtures.js";
-import { readPublishLedger, readPublishReceipt, recordPublishReceipt } from "./publish-ledger.js";
 import {
-  NODE_PUBLISHER_PRINCIPAL_ID, REPOSITORY_PUBLISH_COMMAND_KIND, admitRemoteUrl, publishAggregateId,
-  publishLinkFor, publishReceiptId,
+  readProjectRemote, readPublishLedger, readPublishReceipt, recordPublishReceipt,
+} from "./publish-ledger.js";
+import {
+  NODE_PUBLISHER_PRINCIPAL_ID, REMOTE_BOUND_EVENT_TYPE, REPOSITORY_PUBLISH_COMMAND_KIND,
+  admitRemoteUrl, publishAggregateId, publishLinkFor, publishReceiptId, remoteAggregateId,
 } from "./publish-receipt-contracts.js";
 
 afterEach(closeStores);
@@ -98,5 +100,124 @@ describe("the publish ledger", () => {
     expect(again.ok && again.receipt.outcome).toBe("REFUSED");
     const read = readPublishReceipt(store, PROJECT_ID, publishReceiptId(PROJECT_ID, GOAL, decisionId));
     expect(read.ok && read.decision.key.principalId).toBe(NODE_PUBLISHER_PRINCIPAL_ID);
+  });
+});
+
+/**
+ * A binding, committed onto the project's remote aggregate the way the goal service's second
+ * decision leg commits it. Written through the store's own API rather than through a helper the
+ * production read shares, so the read below folds bytes it did not author.
+ */
+function bindRemote(
+  store: ReturnType<typeof openStore>,
+  commandId: string,
+  payload: Record<string, unknown>,
+  boundAt = "2026-09-04T09:00:00.000Z",
+): void {
+  const aggregateId = remoteAggregateId(PROJECT_ID);
+  const response = store.commitExpectedVersionDecision({
+    commandKind: REPOSITORY_PUBLISH_COMMAND_KIND,
+    committedResultBytes: encoder.encode(JSON.stringify({ bound: true })),
+    correlationId: "test-bind",
+    decidedAt: boundAt,
+    events: [{
+      eventId: `${commandId}-${REMOTE_BOUND_EVENT_TYPE}`, eventType: REMOTE_BOUND_EVENT_TYPE,
+      payload: encoder.encode(JSON.stringify(payload)),
+    }],
+    expectedVersion: store.getAggregateVersion(aggregateId),
+    key: { commandId, principalId: "operator-local", projectId: PROJECT_ID },
+    requestBytes: encoder.encode(JSON.stringify(payload)),
+    targetAggregateId: aggregateId,
+  });
+  if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") throw new Error("binding not committed");
+}
+
+describe("readProjectRemote", () => {
+  it("answers null while nothing is bound", () => {
+    const store = openStore();
+    expect(readProjectRemote(store, PROJECT_ID)).toBeNull();
+    expect(store.getAggregateVersion(remoteAggregateId(PROJECT_ID))).toBe(0);
+  });
+
+  it("folds to the LATEST binding, not the first", () => {
+    const store = openStore();
+    bindRemote(store, "cmd-bind-1", {
+      boundAt: "2026-09-04T09:00:00.000Z", boundBy: "operator-local",
+      remoteUrl: "https://github.com/o/first.git",
+    });
+    bindRemote(store, "cmd-bind-2", {
+      boundAt: "2026-09-04T10:00:00.000Z", boundBy: "operator-two",
+      remoteUrl: "git@github.com:o/second.git",
+    }, "2026-09-04T10:00:00.000Z");
+
+    expect(readProjectRemote(store, PROJECT_ID)).toEqual({
+      boundAt: "2026-09-04T10:00:00.000Z", boundBy: "operator-two",
+      remoteUrl: "git@github.com:o/second.git",
+    });
+    expect(Object.isFrozen(readProjectRemote(store, PROJECT_ID))).toBe(true);
+  });
+
+  it("reads a binding for the NAMED project only", () => {
+    const store = openStore();
+    bindRemote(store, "cmd-bind-3", {
+      boundAt: "2026-09-04T09:00:00.000Z", boundBy: "operator-local",
+      remoteUrl: "https://github.com/o/r.git",
+    });
+    expect(readProjectRemote(store, "project-other")).toBeNull();
+  });
+
+  it("answers null on an undecodable payload instead of throwing", () => {
+    const store = openStore();
+    const aggregateId = remoteAggregateId(PROJECT_ID);
+    const response = store.commitExpectedVersionDecision({
+      commandKind: REPOSITORY_PUBLISH_COMMAND_KIND,
+      committedResultBytes: encoder.encode(JSON.stringify({ bound: true })),
+      correlationId: "test-bind-junk",
+      decidedAt: "2026-09-04T09:00:00.000Z",
+      events: [{
+        eventId: `cmd-bind-junk-${REMOTE_BOUND_EVENT_TYPE}`, eventType: REMOTE_BOUND_EVENT_TYPE,
+        payload: encoder.encode("{not json"),
+      }],
+      expectedVersion: store.getAggregateVersion(aggregateId),
+      key: { commandId: "cmd-bind-junk", principalId: "operator-local", projectId: PROJECT_ID },
+      requestBytes: encoder.encode("{}"),
+      targetAggregateId: aggregateId,
+    });
+    expect(response.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+    expect(readProjectRemote(store, PROJECT_ID)).toBeNull();
+  });
+
+  it("ignores an extra key, a wrong event type and a URL that no longer admits", () => {
+    const store = openStore();
+    bindRemote(store, "cmd-bind-extra", {
+      boundAt: "2026-09-04T09:00:00.000Z", boundBy: "operator-local", extra: "x",
+      remoteUrl: "https://github.com/o/r.git",
+    });
+    expect(readProjectRemote(store, PROJECT_ID)).toBeNull();
+
+    const store2 = openStore();
+    bindRemote(store2, "cmd-bind-bad-url", {
+      boundAt: "2026-09-04T09:00:00.000Z", boundBy: "operator-local",
+      remoteUrl: "https://user:secret@github.com/o/r.git",
+    });
+    expect(readProjectRemote(store2, PROJECT_ID)).toBeNull();
+  });
+
+  /**
+   * FAIL CLOSED, and the arm that says so. The LAST binding is the operator's current answer, so
+   * an unreadable last binding must NOT fall back to the remote it replaced: pushing a goal to a
+   * superseded remote is the defect this read exists to prevent. Null here, and the null-publish
+   * path then refuses UNBOUND rather than resolving a stale URL.
+   */
+  it("refuses to fall back to an older binding when the LATEST one is unreadable", () => {
+    const store = openStore();
+    bindRemote(store, "cmd-bind-good", {
+      boundAt: "2026-09-04T09:00:00.000Z", boundBy: "operator-local",
+      remoteUrl: "https://github.com/o/good.git",
+    });
+    expect(readProjectRemote(store, PROJECT_ID)?.remoteUrl).toBe("https://github.com/o/good.git");
+
+    bindRemote(store, "cmd-bind-broken", { remoteUrl: "https://github.com/o/broken.git" });
+    expect(readProjectRemote(store, PROJECT_ID)).toBeNull();
   });
 });

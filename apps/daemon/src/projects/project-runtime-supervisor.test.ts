@@ -3,6 +3,7 @@ import { PassThrough, Writable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ProjectCatalogEntry } from "./project-catalog.js";
+import { runSingleProjectMain } from "./project-single-main.js";
 import {
   MAX_PROJECT_STACK_FRAME_BYTES,
   PROJECT_STACK_PROTOCOL_VERSION,
@@ -585,7 +586,7 @@ describe("project runtime completion wait", () => {
     expect(harness.closeCount).toBe(0);
   });
 
-  it("waits for natural proven completion and returns only the exact exit code", async () => {
+  it.each([0, 23])("waits for natural proven completion and returns the exact exit code %s", async (exitCode) => {
     const harness = new BoundaryHarness();
     const runtime = await running(harness);
     let settled = false;
@@ -593,11 +594,11 @@ describe("project runtime completion wait", () => {
     await Promise.resolve();
     expect(settled).toBe(false);
     expect(runtime.list([ENTRY])[0]?.lifecycle).toBe("RUNNING");
-    harness.finish(proven(23), 23);
+    harness.finish(proven(exitCode), exitCode);
     const result = await completion;
     expect(result).toEqual({
       code: "PROJECT_RUNTIME_COMPLETED",
-      exitCode: 23,
+      exitCode,
       layer: PROJECT_RUNTIME_SUPERVISOR_LAYER,
       ok: true,
     });
@@ -616,5 +617,63 @@ describe("project runtime completion wait", () => {
       layer: "WINDOWS_PROCESS_TRANSPORT",
       ok: false,
     });
+  });
+
+  it.each([[0, 1], [7, 0]])("refuses native exit %s when the host reports %s", async (nativeExit, hostExit) => {
+    const harness = new BoundaryHarness();
+    const runtime = await running(harness);
+    const completion = runtime.wait(INSTANCE_ID);
+    harness.finish(proven(nativeExit), hostExit);
+    expect(await completion).toEqual({ code: "PROJECT_RUNTIME_PROTOCOL_VIOLATION",
+      layer: PROJECT_RUNTIME_SUPERVISOR_LAYER, ok: false });
+    expect(runtime.list([ENTRY])[0]?.lifecycle).toBe("UNKNOWN");
+  });
+
+  it("waits for late host evidence before accepting a native completion", async () => {
+    const harness = new BoundaryHarness();
+    const runtime = await running(harness, 500);
+    let settled = false;
+    const completion = runtime.wait(INSTANCE_ID).finally(() => { settled = true; });
+    harness.completed.resolve(proven());
+    try {
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(settled).toBe(false);
+    } finally { harness.finish(proven(), 1); }
+    expect(await completion).toMatchObject({ code: "PROJECT_RUNTIME_PROTOCOL_VIOLATION", ok: false });
+    expect(runtime.list([ENTRY])[0]?.lifecycle).toBe("UNKNOWN");
+  });
+
+  it("refuses a native completion when the host channel never closes", async () => {
+    const harness = new BoundaryHarness();
+    const runtime = await running(harness, 5);
+    const completion = runtime.wait(INSTANCE_ID);
+    harness.completed.resolve(proven());
+    try {
+      expect(await completion).toMatchObject({ code: "PROJECT_RUNTIME_PROTOCOL_VIOLATION", ok: false });
+      expect(runtime.list([ENTRY])[0]?.lifecycle).toBe("UNKNOWN");
+    } finally { harness.stdout.end(); harness.stderr.end(); }
+  });
+
+  it("propagates contradictory completion to a failing single-project CLI exit", async () => {
+    const harness = new BoundaryHarness();
+    const runtime = supervisor(harness);
+    const logs: string[] = [];
+    const completed = runSingleProjectMain({
+      dependencies: {
+        createFiles: () => ({ create: async () => ({ code: "UNUSED", layer: "PROJECT_MANAGER_FILES", ok: false }),
+          discard: async () => undefined, register: async () => ({ ok: true, project: ENTRY,
+            written: { root: ENTRY.root, createdRoot: false, paths: [] } }) }),
+        createRuntime: () => runtime, mintUuid: () => INSTANCE_ID,
+        resolveAssetRoot: () => "D:\\artifact\\control-room",
+      },
+      env: {}, log: (line) => { logs.push(line); }, onSignal: () => undefined,
+      platform: "win32", projectRoot: ENTRY.root, root: "D:\\artifact",
+    });
+    await vi.waitFor(() => expect(runtime.list([ENTRY])[0]?.lifecycle).toBe("STARTING"));
+    harness.ready();
+    await vi.waitFor(() => expect(logs).toContain("moe start: Ctrl-C stops this project runtime"));
+    harness.finish(proven(), 1);
+    expect(await completed).toBe(1);
+    expect(logs).toContain("PROJECT_RUNTIME_PROTOCOL_VIOLATION PROJECT_RUNTIME_SUPERVISOR");
   });
 });

@@ -13,7 +13,7 @@ const RUNS: RunsOutcome = {
   goals: [{
     goalId: "goal-1", lifecycle: "EXECUTION_ENABLED",
     nodes: [{
-      accepted: null, claim: null, criterionIds: [], dependsOn: [], lastActivityAt: null, nodeKey: "node-a",
+      accepted: null, claim: null, criterionIds: [], declaredMigrations: null, dependsOn: [], lastActivityAt: null, nodeKey: "node-a", nodeRef: "node-a",
       objective: "Keep fields.", landing: null, receipt: null, review: { escalated: false, findings: [], latestRoute: null, rounds: 0, unreadable: false, unsuccessfulRounds: 0, version: 0 }, sharedKey: false,
       status: "READY",
     }],
@@ -46,6 +46,8 @@ describe("LiveRuns", () => {
 
   it("renders a rejected read as an ERROR at the screen's own layer", async () => {
     render(<LiveRuns headers={{}} onOpenBoard={vi.fn()} pollMs={60_000} read={() => Promise.reject(new Error("x"))} />);
-    expect((await screen.findByTestId("cr.runs.refusal")).textContent).toContain("RUNS_READ_FAILED");
+    const refusal = (await screen.findByTestId("cr.runs.refusal")).textContent;
+    expect(refusal).toContain("The runs could not be read right now.");
+    expect(refusal).toContain("RUNS_READ_FAILED @ CONTROL_ROOM_RUNS");
   });
 });

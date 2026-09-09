@@ -226,9 +226,12 @@ describe("the work board says what the daemon said, in the owner's words", () =>
     render(<WorkBoard frame={surface(committed)} />);
     const labels = within(screen.getByTestId("cr.board.column.committed"))
       .getAllByTestId("cr.board.label").map((node) => node.textContent);
+    // "Install the policy" precedes "Activate the project": the activate is refused
+    // ACTIVATION_POLICY_UNMEASURED until a policy slice is installed to measure, so this IS
+    // the real chain even though COMMAND_PREREQUISITES does not carry the edge (task-d342a2b1).
     expect(labels).toEqual([
       "Register the project", "Bind the repository", "Probe the model provider",
-      "Activate the project", "Install the policy", "Propose the plan",
+      "Install the policy", "Activate the project", "Propose the plan",
       "Decide the plan approval",
     ]);
   });

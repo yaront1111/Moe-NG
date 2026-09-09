@@ -27,10 +27,27 @@ import { handleDocumentCoverageReadRequest } from "./document-coverage-route.js"
 import { RUNS_READ_PATH } from "./runs-read-contract.js";
 import { handleRunsReadRequest } from "./runs-read-route.js";
 import { POLICY_READ_PATH, handlePolicyReadRequest } from "./policy-read.js";
+import { ACTIVATION_READ_PATH, handleActivationReadRequest } from "./activation-read.js";
 import { HEALTH_READ_PATH, handleHealthReadRequest } from "./health-read.js";
 import { ACTIVITY_READ_PATH, handleActivityReadRequest } from "./activity-read.js";
 import { SESSIONS_READ_PATH, handleSessionsReadRequest } from "./sessions-read.js";
+import { REPOSITORY_REMOTE_READ_PATH, handleRepositoryRemoteReadRequest } from "./repository-remote-read.js";
+import { CRITERIA_READ_PATH, REPOSITORY_RECOVERY_READ_PATH, REPOSITORY_BOOTSTRAP_READ_PATH, DEPLOYMENTS_READ_PATH, handleRepositoryWorkflowReadRequest } from "./repository-workflow-read.js";
 import { GOAL_SOURCE_READ_PATH, handleGoalSourceReadRequest } from "./goal-source-read.js";
+import { DESIGN_READ_PATH, handleDesignReadRequest } from "./design-read.js";
+import {
+  BACKUPS_READ_PATH, handleBackupsReadRequest,
+} from "./backups-read.js";
+import {
+  DEPLOYMENTS_HEALTH_READ_PATH, handleDeploymentsHealthReadRequest,
+} from "./deployments-health-read.js";
+import { PREVIEW_READ_PATH, handlePreviewReadRequest } from "./preview-read.js";
+import { RELEASE_READ_PATH, handleReleaseReadRequest } from "./release-read.js";
+import {
+  handlePreviewCaptureRequest, isPreviewCapturePath, locatePreviewCapture,
+  previewCaptureRequestPathOf,
+} from "./preview-capture-route.js";
+import { ENVIRONMENTS_READ_PATH, handleEnvironmentsReadRequest } from "./environments-read.js";
 import {
   checkHeaders, credentialOf, protocolVersionOf, readBoundedBody,
 } from "./http-listener-guards.js";
@@ -62,6 +79,7 @@ import type { StartListenerOptions } from "./http-listener.js";
 /** The JSON surface. Anything else is either a hosted asset or an unknown route. */
 export const JSON_ROUTES: readonly string[] = Object.freeze([
   AFFORDANCE_PATH,
+  BACKUPS_READ_PATH,
   BUDGET_COMMITMENT_READ_PATH,
   COMMAND_PATH,
   DOCUMENT_COVERAGE_READ_PATH,
@@ -81,10 +99,21 @@ export const JSON_ROUTES: readonly string[] = Object.freeze([
   V2_COMMAND_PATH,
   RUNS_READ_PATH,
   POLICY_READ_PATH,
+  ACTIVATION_READ_PATH,
   HEALTH_READ_PATH,
   ACTIVITY_READ_PATH,
   SESSIONS_READ_PATH,
+  REPOSITORY_REMOTE_READ_PATH,
+  CRITERIA_READ_PATH,
+  REPOSITORY_RECOVERY_READ_PATH,
+  REPOSITORY_BOOTSTRAP_READ_PATH,
+  DEPLOYMENTS_READ_PATH,
   GOAL_SOURCE_READ_PATH,
+  DESIGN_READ_PATH,
+  DEPLOYMENTS_HEALTH_READ_PATH,
+  ENVIRONMENTS_READ_PATH,
+  PREVIEW_READ_PATH,
+  RELEASE_READ_PATH,
 ]);
 
 function serveDocumentDossier(
@@ -105,6 +134,15 @@ function serveDocumentDossier(
     refuseRequest(response, result.code);
     return;
   }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveRepositoryWorkflow(response: ServerResponse, request: IncomingMessage, options: StartListenerOptions,
+  body: Uint8Array, workflow: "BOOTSTRAP" | "CRITERIA" | "RECOVERY" | "DEPLOYMENTS"): void {
+  const result = handleRepositoryWorkflowReadRequest(workflow, {
+    authenticator: options.deps.authenticator, repositoryWorkflows: options.repositoryWorkflows,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
   reply(response, result.httpStatus, result.body);
 }
 
@@ -294,6 +332,17 @@ function servePolicy(
   reply(response, result.httpStatus, result.body);
 }
 
+/** ASYNC alone among the reads: the activation receipts are measured, not projected. */
+async function serveActivation(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): Promise<void> {
+  const result = await handleActivationReadRequest({
+    activation: options.activation, authenticator: options.deps.authenticator,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
 function serveHealth(
   response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
 ): void {
@@ -324,11 +373,76 @@ function serveSessions(
   reply(response, result.httpStatus, result.body);
 }
 
+function serveRepositoryRemote(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleRepositoryRemoteReadRequest({
+    authenticator: options.deps.authenticator, repositoryRemote: options.repositoryRemote,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
 function serveGoalSource(
   response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
 ): void {
   const result = handleGoalSourceReadRequest({
     authenticator: options.deps.authenticator, goalSource: options.goalSource,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveDesign(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleDesignReadRequest({
+    authenticator: options.deps.authenticator, designReads: options.designReads,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
+/**
+ * Deployment-environment health. The listener refusal carries the DECODER'S OWN code, not one
+ * flattened here: `/deployments/health/read` tells a missing key apart from an unknown one, and
+ * collapsing them at the dispatch would undo that distinction on the wire.
+ */
+function serveDeploymentsHealth(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleDeploymentsHealthReadRequest({
+    authenticator: options.deps.authenticator, deploymentsHealth: options.deploymentsHealth,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
+/**
+ * The durable per-backup restore-proof records. The listener refusal carries the DECODER'S OWN
+ * code: `/backups/read` tells a body it could not decode apart from one that named a key this
+ * route does not serve, and collapsing them here would undo that distinction on the wire.
+ */
+function serveBackupsRead(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleBackupsReadRequest({
+    authenticator: options.deps.authenticator, backupReads: options.backupReads,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
+/**
+ * The per-environment variable table. The port answer travels VERBATIM at 200 for the same
+ * reason the design read's does: reshaping here is where a field nobody named would come from,
+ * and on this route that field could carry a secret.
+ */
+function serveEnvironments(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handleEnvironmentsReadRequest({
+    authenticator: options.deps.authenticator, environmentReads: options.environmentReads,
   }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
   if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
   reply(response, result.httpStatus, result.body);
@@ -355,6 +469,74 @@ function serveDocumentIngest(
   reply(response, result.httpStatus, result.body);
 }
 
+function servePreviewRead(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handlePreviewReadRequest({
+    authenticator: options.deps.authenticator,
+    previewReads: options.previewReads,
+  }, {
+    body,
+    credential: credentialOf(request),
+    protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
+function serveReleaseRead(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  body: Uint8Array,
+): void {
+  const result = handleReleaseReadRequest({
+    authenticator: options.deps.authenticator,
+    releaseReads: options.releaseReads,
+  }, {
+    body,
+    credential: credentialOf(request),
+    protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  reply(response, result.httpStatus, result.body);
+}
+
+/**
+ * The capture-bytes route. It is NOT a JSON route and deliberately not in `JSON_ROUTES`: it
+ * answers image bytes, is matched by PREFIX rather than by equality, and is served by the
+ * static host's own machinery. It is intercepted BEFORE the roster check so an unhosted daemon
+ * (`assets === null`) still serves captures — the two roots are independent.
+ *
+ * `checkHeaders` runs on it exactly as it does on the JSON surface, so the route sits behind
+ * the same Host/Origin/CSRF fence, and `serveAsset` is handed the NARROWED locator so the
+ * bytes it will publish are images under the previews root and nothing else.
+ */
+function servePreviewCapture(
+  response: ServerResponse,
+  request: IncomingMessage,
+  options: StartListenerOptions,
+  authority: string,
+  path: string,
+): void {
+  const result = handlePreviewCaptureRequest({
+    authenticator: options.deps.authenticator,
+    previewCaptures: options.previewCaptures,
+  }, {
+    credential: credentialOf(request),
+    protocolVersion: protocolVersionOf(request),
+  });
+  if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
+  if (result.kind === "REPLY") { reply(response, result.httpStatus, result.body); return; }
+  serveAsset(
+    response, request, result.root, authority,
+    previewCaptureRequestPathOf(path), locatePreviewCapture,
+  );
+}
+
 /**
  * The facade calls this AFTER the handshake surface and the retired-approve tombstone have
  * had their turn, so this module never sees a path either of those owns.
@@ -368,6 +550,14 @@ export async function serveReadDispatch(
   assets: ControlRoomAssetRoot | null,
   path: string,
 ): Promise<void> {
+  // Before the roster check, because the capture route is matched by PREFIX and lives outside
+  // `JSON_ROUTES`; it carries the same Host/Origin/CSRF fence as the JSON surface.
+  if (isPreviewCapturePath(path)) {
+    const captureFault = checkHeaders(request, authority, origin, options.csrfToken);
+    if (captureFault !== null) { refuseRequest(response, captureFault); return; }
+    servePreviewCapture(response, request, options, authority, path);
+    return;
+  }
   if (!JSON_ROUTES.includes(path)) {
     // No hosted bundle means the answer is the one it always was. The static
     // host is reached only when a root was resolved at startup, so a daemon
@@ -432,12 +622,58 @@ export async function serveReadDispatch(
     refuseRequest(response, "LISTENER_SESSIONS_REQUEST_INVALID");
     return;
   }
+  if (path === REPOSITORY_REMOTE_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_REPOSITORY_REMOTE_REQUEST_INVALID");
+    return;
+  }
+  if (path === CRITERIA_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_CRITERIA_REQUEST_INVALID"); return;
+  }
+  if (path === REPOSITORY_RECOVERY_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_REPOSITORY_RECOVERY_REQUEST_INVALID"); return;
+  }
+  if (path === REPOSITORY_BOOTSTRAP_READ_PATH && request.method !== "POST") {
+    reply(response, 200, { outcome: "REFUSED", code: "REPOSITORY_BOOTSTRAP_READ_REQUEST_INVALID",
+      layer: "REPOSITORY_WORKFLOW_READ" }); return;
+  }
+  if (path === DEPLOYMENTS_READ_PATH && request.method !== "POST") {
+    reply(response, 200, { outcome: "REFUSED", code: "DEPLOYMENTS_READ_REQUEST_INVALID",
+      layer: "REPOSITORY_WORKFLOW_READ" }); return;
+  }
   if (path === GOAL_SOURCE_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_GOAL_SOURCE_REQUEST_INVALID");
     return;
   }
+  if (path === DESIGN_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_DESIGN_REQUEST_INVALID");
+    return;
+  }
+  if (path === ENVIRONMENTS_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_ENVIRONMENTS_REQUEST_INVALID");
+    return;
+  }
+  if (path === DEPLOYMENTS_HEALTH_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_DEPLOYMENTS_HEALTH_REQUEST_INVALID");
+    return;
+  }
+  if (path === BACKUPS_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_BACKUPS_REQUEST_INVALID");
+    return;
+  }
+  if (path === PREVIEW_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_PREVIEW_REQUEST_INVALID");
+    return;
+  }
+  if (path === RELEASE_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_RELEASE_REQUEST_INVALID");
+    return;
+  }
   if (path === POLICY_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_POLICY_REQUEST_INVALID");
+    return;
+  }
+  if (path === ACTIVATION_READ_PATH && request.method !== "POST") {
+    refuseRequest(response, "LISTENER_ACTIVATION_REQUEST_INVALID");
     return;
   }
   if (path === HEALTH_READ_PATH && request.method !== "POST") {
@@ -480,10 +716,22 @@ export async function serveReadDispatch(
     serveActivity(response, request, options, body);
   } else if (path === SESSIONS_READ_PATH) {
     serveSessions(response, request, options, body);
+  } else if (path === REPOSITORY_REMOTE_READ_PATH) {
+    serveRepositoryRemote(response, request, options, body);
+  } else if (path === CRITERIA_READ_PATH) {
+    serveRepositoryWorkflow(response, request, options, body, "CRITERIA");
+  } else if (path === REPOSITORY_RECOVERY_READ_PATH) {
+    serveRepositoryWorkflow(response, request, options, body, "RECOVERY");
+  } else if (path === REPOSITORY_BOOTSTRAP_READ_PATH) {
+    serveRepositoryWorkflow(response, request, options, body, "BOOTSTRAP");
+  } else if (path === DEPLOYMENTS_READ_PATH) {
+    serveRepositoryWorkflow(response, request, options, body, "DEPLOYMENTS");
   } else if (path === GOAL_SOURCE_READ_PATH) {
     serveGoalSource(response, request, options, body);
   } else if (path === POLICY_READ_PATH) {
     servePolicy(response, request, options, body);
+  } else if (path === ACTIVATION_READ_PATH) {
+    await serveActivation(response, request, options, body);
   } else if (path === HEALTH_READ_PATH) {
     serveHealth(response, request, options, body);
   } else if (path === RUNS_READ_PATH) {
@@ -498,5 +746,17 @@ export async function serveReadDispatch(
     serveProductContractV2Pending(response, request, options, body);
   } else if (path === SESSION_CHALLENGE_OPERANDS_READ_PATH) {
     serveSessionChallengeOperands(response, request, options, body);
+  } else if (path === DESIGN_READ_PATH) {
+    serveDesign(response, request, options, body);
+  } else if (path === DEPLOYMENTS_HEALTH_READ_PATH) {
+    serveDeploymentsHealth(response, request, options, body);
+  } else if (path === BACKUPS_READ_PATH) {
+    serveBackupsRead(response, request, options, body);
+  } else if (path === ENVIRONMENTS_READ_PATH) {
+    serveEnvironments(response, request, options, body);
+  } else if (path === PREVIEW_READ_PATH) {
+    servePreviewRead(response, request, options, body);
+  } else if (path === RELEASE_READ_PATH) {
+    serveReleaseRead(response, request, options, body);
   } else serveDocumentDossier(response, request, options, body);
 }

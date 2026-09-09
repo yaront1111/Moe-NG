@@ -32,11 +32,14 @@ const TEST_VOCABULARY = /(^|[/._-])(tests?|specs?|mocks?|fixtures?|harness)([/._
 const BUILD_OUTPUT = "target";
 
 /**
- * The ONE production file the sweep catches: `native/src/spec.rs` is `mod spec;`
- * in `native/src/lib.rs`. Each entry must still be FOUND by the sweep, so an
+ * Exact production files whose domain vocabulary overlaps the sweep: Rust's
+ * `mod spec` and the wrapper's node-spec reader plus its required runtime bridge.
+ * Each entry must still be FOUND by the sweep and admitted by the packer, so an
  * exemption cannot quietly outlive the file it excuses.
  */
 const PRODUCTION_EXCEPTIONS = Object.freeze([
+  "apps/daemon/src/orchestrator/node-spec-listing.js",
+  "apps/daemon/src/orchestrator/node-spec-listing.ts",
   "packages/runner/src/platform/windows/native/src/spec.rs",
 ]);
 

@@ -120,6 +120,40 @@ describe("agent wrapper process lifecycle", () => {
       expect(source.listenerCount("SIGTERM")).toBe(0);
     },
   );
+
+  it("a `stop` line on a piped stdin requests the same shutdown, once, and nothing else does", async () => {
+    // `moe up` cannot deliver Ctrl-C to a windowless child and its kill() is TerminateProcess,
+    // which skips the exit path that retires the seats; the supervisor asks over the pipe.
+    const stdin = new EventEmitter() as EventEmitter & { isTTY?: boolean; unref: () => void };
+    const unref = vi.fn();
+    stdin.unref = unref;
+    const source = Object.assign(new EventEmitter(), { stdin });
+    const onRequest = vi.fn();
+    const stop = createWrapperStopSignal(source, onRequest);
+    expect(unref).toHaveBeenCalledTimes(1);
+
+    stdin.emit("data", Buffer.from("status\n"));
+    stdin.emit("data", "sto");
+    expect(stop.requested()).toBe(false);
+    stdin.emit("data", "p\r\n");
+    await expect(stop.wait()).resolves.toBeUndefined();
+    expect(onRequest).toHaveBeenCalledTimes(1);
+    stdin.emit("data", "stop\n");
+    expect(onRequest).toHaveBeenCalledTimes(1);
+
+    stop.close();
+    expect(stdin.listenerCount("data")).toBe(0);
+  });
+
+  it("leaves a TTY stdin and a missing stdin alone", () => {
+    const tty = Object.assign(new EventEmitter(), { isTTY: true, unref: vi.fn() });
+    const withTty = Object.assign(new EventEmitter(), { stdin: tty });
+    createWrapperStopSignal(withTty, vi.fn());
+    expect(tty.listenerCount("data")).toBe(0);
+    expect(tty.unref).not.toHaveBeenCalled();
+    const bare = Object.assign(new EventEmitter(), { stdin: null });
+    expect(createWrapperStopSignal(bare, vi.fn()).requested()).toBe(false);
+  });
 });
 
 /**
@@ -143,27 +177,141 @@ describe("wrapper binary staffing wiring", () => {
     expect(end).toBeGreaterThan(start);
     return source.slice(start, end);
   };
+  const fenceConstruction = (source: string): string => {
+    const marker = "const staffingFence = createAgentSessionFence({";
+    expect(source.split(marker)).toHaveLength(2);
+    const start = source.indexOf(marker);
+    const end = source.indexOf("    });", start);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    expect(start).toBeLessThan(source.indexOf("createRepositoryDeliveryRuntime({"));
+    expect(start).toBeLessThan(source.indexOf("createAgentWrapper({"));
+    return source.slice(start, end);
+  };
+  const assertStaffingWiring = (source: string): void => {
+    expect(wrapperCall(source)).toMatch(/^\s+staffingFence,\r?$/mu);
+    const construction = fenceConstruction(source);
+    expect(construction).toContain("isProcessAlive: probeProcessAlive");
+    expect(construction).toContain("projectId: config.projectId");
+    expect(construction).toContain("store: verifierStore");
+    const start = source.indexOf("createRepositoryDeliveryRuntime({");
+    const end = source.indexOf("    });", start);
+    expect(source.slice(start, end)).toContain("fence: staffingFence");
+  };
 
   it("passes a staffingFence in the production createAgentWrapper call", () => {
-    expect(wrapperCall(SOURCE)).toContain("staffingFence:");
+    expect(wrapperCall(SOURCE)).toMatch(/^\s+staffingFence,\r?$/mu);
   });
 
   it("builds that fence from the real store and the real liveness probe", () => {
-    // Pins WHAT is injected, not merely that the key is present: a
-    // `staffingFence: undefined` would satisfy the assertion above while leaving
-    // the binary exactly as unfenced as the rejected version.
-    const call = wrapperCall(SOURCE);
-    expect(call).toContain("staffingFence: createAgentSessionFence({");
-    expect(call).toContain("isProcessAlive: probeProcessAlive");
-    expect(call).toContain("store: verifierStore");
-    expect(call).not.toContain("staffingFence: undefined");
+    // The same constructed fence now serves staffing and repository delivery.
+    assertStaffingWiring(SOURCE);
   });
 
-  it("scans a slice that can actually fail (positive control)", () => {
-    // Without this, a scan that silently matched nothing would report success.
-    const unwired = SOURCE.replace(/staffingFence: createAgentSessionFence\(\{/, "");
-    expect(() => expect(wrapperCall(unwired)).toContain("staffingFence: createAgentSessionFence({"))
+  it.each([
+    ["wrapper injection", "      staffingFence,", "      staffingFence: undefined,"],
+    ["constructor", "const staffingFence = createAgentSessionFence({", "const unusedFence = createAgentSessionFence({"],
+    ["liveness witness", "isProcessAlive: probeProcessAlive", "isProcessAlive: () => false"],
+    ["store witness", "isProcessAlive: probeProcessAlive, projectId: config.projectId, store: verifierStore,",
+      "isProcessAlive: probeProcessAlive, projectId: config.projectId, store: undefined,"],
+    ["repository injection", "fence: staffingFence", "fence: undefined"],
+  ])("rejects removal of the %s (positive control)", (_name, from, to) => {
+    const unwired = SOURCE.replace(from, to);
+    expect(unwired).not.toBe(SOURCE);
+    expect(() => assertStaffingWiring(unwired)).toThrow();
+  });
+
+  it("passes a providerPause built from the real store in the production call", () => {
+    // Pins WHAT is injected, not merely that the key is present: a `providerPause: undefined`
+    // leaves the binary exactly as unable to survive a provider limit as before this row.
+    const call = wrapperCall(SOURCE);
+    expect(call).toContain("providerPause: createProviderPauseGate({");
+    const start = call.indexOf("providerPause: createProviderPauseGate({");
+    const block = call.slice(start, call.indexOf("      }),", start));
+    expect(block).toContain("store: verifierStore");
+    expect(block).toContain("providerFor(process.env[\"MOE_AGENT_COMMAND\"]");
+    expect(call).not.toContain("providerPause: undefined");
+  });
+
+  it("scans a providerPause slice that can actually fail (positive control)", () => {
+    const unwired = SOURCE.replace(/providerPause: createProviderPauseGate\(\{/, "");
+    expect(() =>
+      expect(wrapperCall(unwired)).toContain("providerPause: createProviderPauseGate({"))
       .toThrow();
+  });
+
+  // The two compiler-lane closures MOVED to ./wrapper-mission-inputs.ts when the design edge was
+  // threaded: this file stood at exactly the 400-line split threshold and could not take the
+  // wiring line. The claims below did not change, only where each half is measured — the binary
+  // is still asserted to WIRE them, and the composition is still asserted to be the right one.
+  const INPUTS = readFileSync(
+    new URL("./wrapper-mission-inputs.ts", import.meta.url), "utf8",
+  );
+
+  it("wires both compiler-lane mission inputs from the real store in the production call", () => {
+    const call = wrapperCall(SOURCE);
+    expect(call).toContain("compilerGateRef: missionInputs.compilerGateRef,");
+    expect(call).toContain("compilerInstructions: missionInputs.compilerInstructions,");
+    expect(call).not.toContain("compilerInstructions: undefined");
+    // The factory is built from the REAL store, not from a placeholder.
+    const built = SOURCE.slice(SOURCE.indexOf("const missionInputs = createCompilerMissionInputs({"));
+    expect(built.slice(0, built.indexOf("});"))).toContain("store: verifierStore");
+  });
+
+  it("composes the operator's rejection reason into compilerInstructions", () => {
+    // The composer is unit-tested to death next door, but "the composer works" and "the binary
+    // calls it" are separate claims. Before this pin, `compilerInstructions` answered the goal's
+    // catalog brief and nothing else, so a re-staffed compiler seat received a mission byte-
+    // identical to the one whose plan had just been rejected.
+    expect(INPUTS).toContain("compilerInstructions: (goalId) =>");
+    // EXACTLY ONCE: two call sites would mean one of them is dead, and a `toContain` cannot tell.
+    expect(INPUTS.split("composeCompilerInstructions(brief, latestRejectionReason(").length - 1)
+      .toBe(1);
+    // Pins the ARGUMENTS, not merely the call: `latestRejectionReason(store, projectId, <the
+    // GOAL id>)` would walk an aggregate that has no run history and answer null forever, while
+    // every assertion that only looked for the call name stayed green.
+    expect(INPUTS).toContain("laneStore, config.projectId, refsOfGoal(goalId).planningRunRef,");
+  });
+
+  it("scans a compilerInstructions slice that can actually fail (positive control)", () => {
+    const unwired = INPUTS.replace("composeCompilerInstructions(brief, latestRejectionReason(", "");
+    expect(unwired).not.toBe(INPUTS);
+    expect(() => expect(unwired)
+      .toContain("composeCompilerInstructions(brief, latestRejectionReason(")).toThrow();
+  });
+
+  it("supplies designBrief from the real store, so a seat reads its goal's actual design", () => {
+    // THE DEFECT THIS ROW CLOSED. `designBrief` was declared on AgentWrapperConfig and consumed
+    // at two call sites, and no caller ever supplied it — so every live compiler seat evaluated
+    // `undefined ?? null` and was told "NO DESIGN ACCOMPANIES THIS BRIEF" over a goal whose
+    // design was durably present. `wrapper-mission-inputs.test.ts` proves the resolver's
+    // BEHAVIOUR against a real store; this arm proves the binary actually passes it.
+    const call = wrapperCall(SOURCE);
+    expect(call).toContain("designBrief: createDesignBriefResolver({");
+    expect(call).not.toContain("designBrief: undefined");
+    const start = call.indexOf("designBrief: createDesignBriefResolver({");
+    const block = call.slice(start, call.indexOf("      }),", start));
+    expect(block).toContain("store: verifierStore");
+    expect(block).toContain("projectId: config.projectId");
+  });
+
+  it("scans a designBrief slice that can actually fail (positive control)", () => {
+    const unwired = SOURCE.replace("designBrief: createDesignBriefResolver({", "");
+    expect(unwired).not.toBe(SOURCE);
+    expect(() => expect(wrapperCall(unwired))
+      .toContain("designBrief: createDesignBriefResolver({")).toThrow();
+  });
+
+  it("still passes the offer surface the wrapper watches", () => {
+    // `affordances,` sat BETWEEN the two moved closures; the extraction that made room for
+    // designBrief deleted it once. An unwired offer surface staffs nothing at all.
+    expect(wrapperCall(SOURCE)).toMatch(/^\s+affordances,\r?$/mu);
+  });
+
+  it("tells the operator which provider is paused and until when", () => {
+    // The wrapper log is the operator's only view of a paused fleet; a paused pass that
+    // printed the ordinary idle line would read as "nothing to do", not "parked".
+    expect(SOURCE).toContain("[wrapper] provider paused:");
   });
 
   it("announces incomplete standing verifier authority at startup, from the real store", () => {
@@ -292,5 +440,58 @@ describe("wrapper staffing handle is project-asserted", () => {
       "SqliteEventStore.openForProject(config.storePath, config.projectId)",
     );
     expect(source).not.toContain("SqliteEventStore.open(config.storePath)");
+  });
+});
+
+/**
+ * The boot-time reclaim has to run in the SHIPPED binary, exactly once, before
+ * the first staffing pass. Both halves are load-bearing and neither is visible
+ * to a behavioural test of the pass itself: a reclaim that never runs leaves the
+ * 30-minute wait exactly as it was, and one that runs inside the interval loop
+ * would fight the wrapper's own live children every tick.
+ */
+describe("wrapper binary reclaim wiring", () => {
+  const SOURCE = readFileSync(
+    new URL("./agent-wrapper-main.ts", import.meta.url), "utf8",
+  );
+  const reclaimCall = (source: string): string => {
+    const start = source.indexOf("runReclaimPass({");
+    expect(start).toBeGreaterThan(-1);
+    const end = source.indexOf("});", start);
+    expect(end).toBeGreaterThan(start);
+    return source.slice(start, end);
+  };
+
+  it("runs the reclaim after the spawner is armed and before the interval loop", () => {
+    const armed = SOURCE.indexOf("secureSpawn = agentSpawner;");
+    const reclaim = SOURCE.indexOf("runReclaimPass({");
+    const loop = SOURCE.indexOf("for (;;) {");
+    expect(armed).toBeGreaterThan(-1);
+    expect(loop).toBeGreaterThan(-1);
+    expect(reclaim).toBeGreaterThan(armed);
+    expect(reclaim).toBeLessThan(loop);
+  });
+
+  it("calls it exactly once, so it can never be inside the loop", () => {
+    expect(SOURCE.split("runReclaimPass(").length).toBe(2);
+  });
+
+  it("hands it the real store, the real probe and the operator credential", () => {
+    // WHAT is injected, not merely that the call exists: a pass built over a
+    // stub probe or a second store would report a clean board it never read.
+    const call = reclaimCall(SOURCE);
+    expect(call).toContain("isProcessAlive: probeProcessAlive");
+    expect(call).toContain("store: verifierStore");
+    expect(call).toContain("operatorCredential: config.credential");
+    expect(call).toContain("projectId: config.projectId");
+  });
+
+  it("prints the pass summary even when it reclaimed nothing", () => {
+    expect(SOURCE).toContain("[wrapper] reclaim pass:");
+  });
+
+  it("scans a slice that can actually fail (positive control)", () => {
+    const stripped = SOURCE.replace("runReclaimPass({", "");
+    expect(() => expect(stripped.split("runReclaimPass(").length).toBe(2)).toThrow();
   });
 });

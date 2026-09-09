@@ -166,7 +166,16 @@ describe("pinned corpus authority (task-e1b479134f6c4c2282bd7b13af693460)", () =
       return {
         ...real,
         readFileSync: (...args: Parameters<typeof real.readFileSync>) => {
-          real.writeFileSync(join(root, "landed-mid-read.md"), "the tree moved\n");
+          // Gated to the corpus read alone, which is the only moment the comment
+          // above claims the tree moves. Measured 2026-09-08 with a counter in the
+          // mock: the ungated form already fired exactly ONCE, because vitest loads
+          // modules through its own fs rather than through this factory. So the gate
+          // buys no time; it buys the guarantee that a dependency which later reads a
+          // file at load cannot move the tree BEFORE the first observation and quietly
+          // retire this arm's coverage.
+          if (String(args[0]).endsWith(PINNED_BENCHMARK_SPEC_RELATIVE_PATH)) {
+            real.writeFileSync(join(root, "landed-mid-read.md"), "the tree moved\n");
+          }
           return real.readFileSync(...args);
         },
       };
@@ -177,7 +186,12 @@ describe("pinned corpus authority (task-e1b479134f6c4c2282bd7b13af693460)", () =
     expect(fresh.isPinnedDocument(document)).toBe(false);
     expect(refusalOf(document).code).toBe("CORPUS_ROOT_MOVED");
     expect(refusalOf(document).layer).toBe(PRE_FREEZE_AUDIT_LAYER);
-  });
+    // 30s, not the 5s default. Measured on this host: 693ms idle, of which 98.7% is the
+    // arm's NINE git spawns; 2317ms under fleet load; and >5000ms in the filing that
+    // opened this row — a ~15x spread over identical bytes, so what varies is host
+    // contention, not work. Sized for the loaded tail at ~13x the worst completed
+    // observation rather than for the idle host a re-measurement is likely to see.
+  }, 30_000);
 
   /**
    * DoD 3's second clause. The strong form is a CORRECT digest: if even the genuine pinned
@@ -194,7 +208,15 @@ describe("pinned corpus authority (task-e1b479134f6c4c2282bd7b13af693460)", () =
     process.env[PINNED_DOCUMENT_ROOT_ENV] = newCorpusRepo("forged", true);
     expect(refusalOf(forge(PINNED_BENCHMARK_SPEC_SHA256)).code).toBe("CORPUS_ROOT_DIRTY");
     expect(refusalOf(forge(PINNED_BENCHMARK_SPEC_SHA256)).layer).toBe(PRE_FREEZE_AUDIT_LAYER);
-  });
+    // 30s, not the 5s default, and the same number as the sibling above rather than a
+    // second one a reader would have to reconcile. Measured 2026-09-09 on this host, ten
+    // consecutive standalone runs: 242ms min, 257ms median, 277ms max quiet; 405ms worst
+    // with six copies of the run contending; 1721ms under real fleet load, which is only
+    // a 2.9x margin on the 5s default. The sibling, whose bytes never changed, spanned
+    // 693ms idle to >5000ms loaded — a ~15x spread, so what varies is host contention on
+    // this arm's SEVEN git subprocess spawns, not work, and a 2.9x margin is the bet that
+    // arm lost. 30s is 108x the worst quiet run and 17x the loaded one.
+  }, 30_000);
 
   /**
    * The portability assertion this row is named for. It is stated over the module's own

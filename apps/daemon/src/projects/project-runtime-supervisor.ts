@@ -251,8 +251,11 @@ export function createProjectRuntimeSupervisor(options: ProjectRuntimeSupervisor
     try { outcome = await record.boundary.completed; }
     catch { return refused("PROJECT_RUNTIME_BOUNDARY_REFUSED"); }
     if (isUnknown(outcome)) return boundaryRefusal(outcome);
-    return isProven(outcome) ? Object.freeze({ code: "PROJECT_RUNTIME_COMPLETED", exitCode: outcome.exitCode,
-      layer: PROJECT_RUNTIME_SUPERVISOR_LAYER, ok: true as const }) : refused("PROJECT_RUNTIME_BOUNDARY_REFUSED");
+    if (!isProven(outcome)) return refused("PROJECT_RUNTIME_BOUNDARY_REFUSED");
+    // Drain and classify host evidence before exposing the native exit to foreground callers.
+    if (!await settleCompletion(record, outcome)) return refused(PROJECT_RUNTIME_PROTOCOL_VIOLATION);
+    return Object.freeze({ code: "PROJECT_RUNTIME_COMPLETED", exitCode: outcome.exitCode,
+      layer: PROJECT_RUNTIME_SUPERVISOR_LAYER, ok: true as const });
   }
   function listedLifecycle(entry: ProjectCatalogEntry): ProjectRuntimeLifecycle {
     const record = records.get(entry.instanceId);

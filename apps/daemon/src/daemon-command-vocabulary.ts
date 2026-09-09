@@ -1,50 +1,50 @@
 import type { RuntimeCommandKind } from "@moe/contracts";
-
-import { EFFECT_ACTIVATE_COMMAND_KIND, EFFECT_ACTIVATE_PAYLOAD_KEYS }
-  from "./activation/activation-ingress-contracts.js";
+import { AGENT_PROVIDER_COMMAND_KIND } from "./orchestrator/agent-provider-command.js";
+import { CRITERION_APPROVE, CRITERION_VERIFY } from "./criterion-evidence/criterion-contracts.js";
+import { EFFECT_ACTIVATE_COMMAND_KIND } from "./activation/activation-ingress-contracts.js";
 import type { BootstrapCommandKind } from "./bootstrap/bootstrap-contracts.js";
 import { CUTOVER_ACTIVATE_COMMAND_KIND } from "./cutover/cutover-activate-contracts.js";
 import {
+  ENVIRONMENT_COMMAND_KIND_SET, ENVIRONMENT_COMMAND_KIND_UNSET,
+} from "./environment/environment-store.js";
+import {
   PLANNING_SUBMIT_DECOMPOSITION_COMMAND_KIND,
   PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND,
-  PRODUCT_CONTRACT_ANSWER_CLARIFICATION_PAYLOAD_KEYS,
   PRODUCT_CONTRACT_ASK_CLARIFICATION_COMMAND_KIND,
-  PRODUCT_CONTRACT_ASK_CLARIFICATION_PAYLOAD_KEYS,
   PRODUCT_CONTRACT_PROPOSE_REVISION_COMMAND_KIND,
 } from "./product-contract/product-contract-command-contracts.js";
-import { PRODUCT_CONTRACT_PROPOSE_PAYLOAD_KEYS }
-  from "./product-contract/product-contract-propose-service.js";
-import { SUBMIT_DECOMPOSITION_PAYLOAD_KEYS } from "./planning/compile-dispatcher.js";
-import { APPROVAL_DECIDE_INTENT_COMMAND_KIND, APPROVAL_INTENT_PAYLOAD_KEYS }
-  from "./planning/approval-intent-contracts.js";
-import { EXPANSION_REQUEST_KIND, EXPANSION_REQUEST_PAYLOAD_KEYS }
-  from "./planning/expansion-request-contracts.js";
-import { FOUNDATION_VERIFICATION_COMMAND_KIND, FOUNDATION_VERIFICATION_REQUEST_KEYS }
-  from "./evidence/foundation-verification-contracts.js";
+
+import { APPROVAL_DECIDE_INTENT_COMMAND_KIND } from "./planning/approval-intent-contracts.js";
+import { EXPANSION_REQUEST_KIND } from "./planning/expansion-request-contracts.js";
+import {
+  FOUNDATION_VERIFICATION_COMMAND_KIND,
+} from "./evidence/foundation-verification-contracts.js";
 import type { SessionCommandKind } from "./identity/session-contracts.js";
+import { EVENT_STREAM_RESUME_COMMAND_KIND } from "./http/event-resume-command.js";
+import { JOURNAL_APPEND_COMMAND_KIND } from "./journal/journal-contracts.js";
+import { PROBE_INTERVAL_COMMAND_KIND } from "./monitoring/probe-interval-command-contracts.js";
+import { ENVIRONMENT_RETIREMENT_COMMAND_KIND }
+  from "./monitoring/environment-retirement-command-contracts.js";
+
+import { PREVIEW_DECIDE_COMMAND_KIND, PREVIEW_START_COMMAND_KIND }
+  from "./preview/preview-contracts.js";
+import { RELEASE_DECIDE_COMMAND_KIND } from "./release/release-decide-contracts.js";
+import { ENV_EXAMPLE_SYNC_COMMAND_KIND } from "./repository/env-example-sync-contracts.js";
 import {
-  EVENT_STREAM_RESUME_COMMAND_KIND, EVENT_STREAM_RESUME_PAYLOAD_KEYS,
-} from "./http/event-resume-command.js";
-import { JOURNAL_APPEND_COMMAND_KIND, JOURNAL_APPEND_PAYLOAD_KEYS }
-  from "./journal/journal-contracts.js";
-import { FOUNDATION_DISPATCH_PAYLOAD_KEYS } from "./daemon-foundation-command.js";
-import {
-  PRODUCT_CONTRACT_GATE_1_COMMAND_KIND, PRODUCT_CONTRACT_GATE_1_PAYLOAD_KEYS,
+  PRODUCT_CONTRACT_GATE_1_COMMAND_KIND,
 } from "./product-contract/product-contract-gate-1-contract.js";
-import { CONTINUATION_COMMAND_KIND, CONTINUATION_PAYLOAD_KEYS }
-  from "./recovery/continuation-command.js";
-import { RECOVERY_COMPLETE_PAYLOAD_KEYS, RECOVERY_COMPLETION_COMMAND_KIND }
-  from "./recovery/recovery-completion-digest.js";
+import { CONTINUATION_COMMAND_KIND } from "./recovery/continuation-command.js";
+import { RECOVERY_COMPLETION_COMMAND_KIND } from "./recovery/recovery-completion-digest.js";
 import type { ReviewCommandKind } from "./review/review-contracts.js";
 import { FOUNDATION_DISPATCH_COMMAND_KIND } from "./work/foundation-attempt-contracts.js";
 import {
-  RESOURCE_CONFIRM_RELEASED_COMMAND_KIND, RESOURCE_CONFIRM_RELEASED_PAYLOAD_KEYS,
+  RESOURCE_CONFIRM_RELEASED_COMMAND_KIND,
 } from "./work/resource-confirm-released-command.js";
-import { RESOURCE_RECONCILE_COMMAND_KIND, RESOURCE_RECONCILE_PAYLOAD_KEYS }
-  from "./work/resource-reconcile-command.js";
+import { RESOURCE_RECONCILE_COMMAND_KIND } from "./work/resource-reconcile-command.js";
 import {
-  STEP_CHECKPOINT_COMMAND_KIND, STEP_CHECKPOINT_PAYLOAD_KEYS, STEP_FINISH_COMMAND_KIND,
-  STEP_FINISH_PAYLOAD_KEYS, STEP_START_COMMAND_KIND, STEP_START_PAYLOAD_KEYS,
+  STEP_CHECKPOINT_COMMAND_KIND,
+  STEP_FINISH_COMMAND_KIND,
+  STEP_START_COMMAND_KIND,
 } from "./work/step-lifecycle-contracts.js";
 import type { StepLifecycleCommandKind } from "./work/step-lifecycle-contracts.js";
 import type { WorkClaimCommandKind } from "./work/work-claim-contracts.js";
@@ -67,9 +67,14 @@ export const CAPABILITIES = {
   REVIEW: "review.write", WORK: "work.write",
 } as const;
 
-export const BOOTSTRAP_FAMILY: Readonly<Record<BootstrapCommandKind, string>> = Object.freeze({
+export const BOOTSTRAP_FAMILY: Readonly<Record<BootstrapCommandKind | "deployment.rollback", string>> = Object.freeze({
   "approval.decide": CAPABILITIES.PLANNING, "goal.close": CAPABILITIES.GOAL,
-  "repository.publish": CAPABILITIES.GOAL,
+  "repository.publish": CAPABILITIES.GOAL, "repository.bootstrap": CAPABILITIES.ADMIN,
+  // Deploying a goal's landed code, and naming where it deploys to. GOAL-scoped like
+  // `repository.publish` for the same reason: both act on the product a goal produced. The
+  // capability fences REACH only -- the operator fence below is what makes them human acts.
+  "deployment.set_target": CAPABILITIES.GOAL, "deployment.deploy": CAPABILITIES.GOAL,
+  "deployment.rollback": CAPABILITIES.GOAL, "deployment.migrate_down": CAPABILITIES.GOAL,
   "goal.create": CAPABILITIES.GOAL, "goal.create_with_source": CAPABILITIES.GOAL,
   "plan.propose": CAPABILITIES.PLANNING,
   "policy.install": CAPABILITIES.ADMIN, "policy.validate": CAPABILITIES.ADMIN,
@@ -157,14 +162,100 @@ export const COMPILER_FAMILY: Readonly<Record<string, string>> = Object.freeze({
   [PRODUCT_CONTRACT_PROPOSE_REVISION_COMMAND_KIND]: CAPABILITIES.PLANNING,
 });
 
+/** REVIEW capability, on its own table: REVIEW_FAMILY membership would set review:true
+ *  and dispatch this kind to runReviewCommand. Family membership is not the human gate. */
+export const PREVIEW_FAMILY: Readonly<Record<
+  typeof PREVIEW_DECIDE_COMMAND_KIND | typeof PREVIEW_START_COMMAND_KIND, string
+>> = Object.freeze({
+  [PREVIEW_DECIDE_COMMAND_KIND]: CAPABILITIES.REVIEW,
+  // START AND DECIDE ARE TWO HALVES OF ONE OPERATOR ACT, so they share a capability: whoever
+  // may pass verdict on a rendered preview is whoever may ask for one to be rendered. REVIEW
+  // fences REACH only; OPERATOR_PRINCIPAL_KINDS below is what makes both human-only.
+  [PREVIEW_START_COMMAND_KIND]: CAPABILITIES.REVIEW,
+});
+/** GOAL like repository.publish, but not a bootstrap-sequence or review reducer command. */
+export const RELEASE_FAMILY: Readonly<Record<typeof RELEASE_DECIDE_COMMAND_KIND, string>> =
+  Object.freeze({ [RELEASE_DECIDE_COMMAND_KIND]: CAPABILITIES.GOAL });
+export const CRITERION_FAMILY = Object.freeze({ [CRITERION_APPROVE]: CAPABILITIES.ADMIN, [CRITERION_VERIFY]: CAPABILITIES.ADMIN });
+export const REPOSITORY_RECOVERY_FAMILY = Object.freeze({ "repository.recover": CAPABILITIES.ADMIN });
+/** GOAL like `release.decide`: acts on the product a goal produced. REACH only -- OPERATOR_PRINCIPAL_KINDS below is the human gate. NOT a bootstrap kind. */
+export const ENV_EXAMPLE_SYNC_FAMILY = Object.freeze({ [ENV_EXAMPLE_SYNC_COMMAND_KIND]: CAPABILITIES.GOAL });
+
+/** ADMIN fences REACH, exactly as it does for `ENVIRONMENT_FAMILY` above and for the same
+ *  reason it is NOT the human gate: what makes this kind human-only is OPERATOR_PRINCIPAL_KINDS
+ *  below plus the MCP exclusion `mcp-tool-allowlist.js` DERIVES from that set. Setting how often
+ *  the daemon probes a production environment is an administrative act on the project: too fast
+ *  is a load generator aimed at production, too slow is not monitoring. The BOUNDS that decide
+ *  which is which are `probe-interval-record.js`'s and are never restated here. */
+export const MONITORING_FAMILY = Object.freeze({
+  [PROBE_INTERVAL_COMMAND_KIND]: CAPABILITIES.ADMIN,
+  // ADMIN fences REACH on the same terms as the interval kind above, and the human gate is
+  // likewise OPERATOR_PRINCIPAL_KINDS plus the MCP exclusion derived from it -- never this
+  // capability. Retiring an environment is administrative in the strongest sense available
+  // in this family: the interval kind can only re-time a probe, this one STOPS it, so an
+  // outage in the retired environment stops producing samples at all. Which environments
+  // may be retired, and through which deployment generation, are the RECORD's
+  // (`environment-retirement-record.js`) and are never restated here.
+  [ENVIRONMENT_RETIREMENT_COMMAND_KIND]: CAPABILITIES.ADMIN,
+});
+export const SETTINGS_FAMILY = Object.freeze({ [AGENT_PROVIDER_COMMAND_KIND]: CAPABILITIES.ADMIN });
+
+/** ADMIN fences REACH -- it keeps scoped agent sessions out. It is NOT the human gate: what
+ *  makes these two human-only is OPERATOR_PRINCIPAL_KINDS below, plus the MCP exclusion
+ *  `mcp-tool-allowlist.js` DERIVES from that same set. Same reach/human split as
+ *  `resource.confirm_released`. A reader who mistakes this line for the human fence will
+ *  later hand an ADMIN agent a variable the deploy delivers to a production process. */
+export const ENVIRONMENT_FAMILY: Readonly<Record<string, string>> = Object.freeze({
+  [ENVIRONMENT_COMMAND_KIND_SET]: CAPABILITIES.ADMIN,
+  [ENVIRONMENT_COMMAND_KIND_UNSET]: CAPABILITIES.ADMIN,
+});
+
+/**
+ * THE DESIGN AUTHORING WIRE -- AND THE ONE KIND IN THIS BATCH THAT A SEAT MAY ACTUALLY TAKE.
+ *
+ * PLANNING, for exactly the reason `COMPILER_FAMILY` gives above: drawing the design a goal is
+ * built from is a planning act on its own wire, authored between the Gate 1 product-contract
+ * approval and the decomposition run, by the same planning seat that proposes the revision and
+ * submits the decomposition.
+ *
+ * IT IS DELIBERATELY NOT IN `OPERATOR_PRINCIPAL_KINDS`, and that absence is the whole point
+ * rather than an omission. Every OTHER kind landing beside it in this epic -- the deployment
+ * pair, the environment pair, `preview.decide`, `release.decide` -- is a HUMAN act, so the
+ * surrounding code is dense with the human-only shape: a null `agentCapabilitiesFor`, an
+ * OPERATOR_PRINCIPAL_KINDS entry, the MCP exclusion derived from it, a HUMAN_ONLY_STEPS entry.
+ * Copying that shape here would leave every roster test green while making the design step
+ * PERMANENTLY UNSTAFFABLE -- no seat could ever submit a design, and the failure would surface
+ * as a chain that silently never advances. `familyCapabilityOf` therefore answers PLANNING and
+ * `agentCapabilitiesFor` hands a seat [PLANNING, WORK]; `daemon-command-design.test.ts` proves
+ * that BEHAVIOURALLY, by dispatching as an agent principal, not by roster membership.
+ *
+ * `design.read` is ABSENT from this table on purpose: it is a QUERY, served by the MCP dispatch
+ * port (`mcp-dispatch-port.js`) and the HTTP read seam (`http/design-read.js`), so it has no
+ * command family, no PAYLOAD_KEYS row and no registry entry -- exactly like `graph.get` and
+ * `product_contract.read`. Adding it here would mint a command the registry cannot serve.
+ */
+export const DESIGN_FAMILY: Readonly<Record<string, string>> = Object.freeze({
+  "design.submit": CAPABILITIES.PLANNING,
+});
+
 export type WiredCommandKind =
+  | typeof AGENT_PROVIDER_COMMAND_KIND
+  | "deployment.rollback"
+  | typeof RELEASE_DECIDE_COMMAND_KIND | typeof ENV_EXAMPLE_SYNC_COMMAND_KIND
+  | "design.submit"
+  | "repository.recover"
+  | typeof CRITERION_APPROVE | typeof CRITERION_VERIFY
   | BootstrapCommandKind | GraphMutationCommandKind
   | typeof APPROVAL_DECIDE_INTENT_COMMAND_KIND
   | typeof PLANNING_SUBMIT_DECOMPOSITION_COMMAND_KIND
   | typeof PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND
   | typeof PRODUCT_CONTRACT_ASK_CLARIFICATION_COMMAND_KIND
   | typeof PRODUCT_CONTRACT_PROPOSE_REVISION_COMMAND_KIND
+  | typeof PREVIEW_DECIDE_COMMAND_KIND
+  | typeof PREVIEW_START_COMMAND_KIND
   | typeof CUTOVER_ACTIVATE_COMMAND_KIND
+  | typeof ENVIRONMENT_COMMAND_KIND_SET | typeof ENVIRONMENT_COMMAND_KIND_UNSET
+  | typeof PROBE_INTERVAL_COMMAND_KIND | typeof ENVIRONMENT_RETIREMENT_COMMAND_KIND
   | ReviewCommandKind | SessionCommandKind | WorkClaimCommandKind
   | typeof CONTINUATION_COMMAND_KIND | typeof EFFECT_ACTIVATE_COMMAND_KIND
   | typeof EVENT_STREAM_RESUME_COMMAND_KIND
@@ -174,12 +265,16 @@ export type WiredCommandKind =
   | typeof RESOURCE_CONFIRM_RELEASED_COMMAND_KIND | typeof RESOURCE_RECONCILE_COMMAND_KIND
   | StepLifecycleCommandKind;
 
-/** The five capability tables, searched in order and named ONCE. `daemon-command-families.js`
- *  reads the same list, so an entry's demanded capability and an agent's granted set can never
- *  come from different tables. */
+/** The capability tables, searched in order and named ONCE -- no count in this sentence, because
+ *  the number rotted twice. `daemon-command-families.js` reads the same list, so an entry's
+ *  demanded capability and an agent's granted set can never come from different tables. A table
+ *  that is NOT listed here is dead: `familyCapabilityOf` walks only this array and its kinds
+ *  would resolve to a null capability. */
 const FAMILY_TABLES: readonly Readonly<Record<string, string | undefined>>[] = Object.freeze([
-  APPROVAL_INTENT_FAMILY, BOOTSTRAP_FAMILY, COMPILER_FAMILY, GRAPH_FAMILY, REVIEW_FAMILY,
-  SESSION_FAMILY, WORK_FAMILY,
+  APPROVAL_INTENT_FAMILY, BOOTSTRAP_FAMILY, COMPILER_FAMILY, DESIGN_FAMILY, ENVIRONMENT_FAMILY,
+  GRAPH_FAMILY,
+  PREVIEW_FAMILY, RELEASE_FAMILY, REVIEW_FAMILY, SESSION_FAMILY, WORK_FAMILY, CRITERION_FAMILY,
+  REPOSITORY_RECOVERY_FAMILY, SETTINGS_FAMILY, ENV_EXAMPLE_SYNC_FAMILY, MONITORING_FAMILY,
 ]);
 
 /** The capability the kind's family demands, or null when no family claims the kind. */
@@ -192,8 +287,21 @@ export function familyCapabilityOf(kind: string): string | null {
 }
 
 export function agentCapabilitiesFor(kind: string): readonly string[] | null {
+  if (kind === AGENT_PROVIDER_COMMAND_KIND) return null;
+  if (kind === "deployment.rollback" || kind === "deployment.migrate_down" || kind === ENV_EXAMPLE_SYNC_COMMAND_KIND) return null;
+  if (kind === CRITERION_APPROVE || kind === CRITERION_VERIFY || kind === "repository.recover") return null;
   // Human wire: never staffable, whatever its family capability says.
   if (kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND) return null;
+  if (kind === PREVIEW_DECIDE_COMMAND_KIND || kind === PREVIEW_START_COMMAND_KIND) return null;
+  // Human wire, on the same terms as the environment pair: an agent that could re-time the
+  // production health probe could slow it until an outage stopped being visible, or speed it
+  // until the probe itself was the outage. Never staffable, whatever ADMIN reach says.
+  if (kind === PROBE_INTERVAL_COMMAND_KIND) return null;
+  // And a STRONGER case of the same act: re-timing a probe can slow monitoring until an
+  // outage stops being visible; retiring an environment ends its monitoring outright. An
+  // agent holding this kind could hide an outage by declaring the environment gone. Never
+  // staffable, whatever ADMIN reach says.
+  if (kind === ENVIRONMENT_RETIREMENT_COMMAND_KIND) return null;
   if (kind === "node.deliver") {
     return Object.freeze([CAPABILITIES.REVIEW, CAPABILITIES.WORK]);
   }
@@ -253,77 +361,10 @@ export function agentCapabilitiesFor(kind: string): readonly string[] | null {
     : Object.freeze([family, CAPABILITIES.WORK]);
 }
 
-export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>> =
-  Object.freeze({
-    "approval.decide": ["activation", "command", "graphRevisionRef", "record", "runId"],
-    // SPREAD from the seam's own constant, never retyped: the module compares the payload against
-    // that list, so a second hand-written copy here would let the advertised roster and the
-    // enforced one drift apart while both looked right.
-    [APPROVAL_DECIDE_INTENT_COMMAND_KIND]: APPROVAL_INTENT_PAYLOAD_KEYS,
-    [PLANNING_SUBMIT_DECOMPOSITION_COMMAND_KIND]: SUBMIT_DECOMPOSITION_PAYLOAD_KEYS,
-    [PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND]:
-      PRODUCT_CONTRACT_ANSWER_CLARIFICATION_PAYLOAD_KEYS,
-    [PRODUCT_CONTRACT_ASK_CLARIFICATION_COMMAND_KIND]:
-      PRODUCT_CONTRACT_ASK_CLARIFICATION_PAYLOAD_KEYS,
-    [PRODUCT_CONTRACT_PROPOSE_REVISION_COMMAND_KIND]: PRODUCT_CONTRACT_PROPOSE_PAYLOAD_KEYS,
-    [EVENT_STREAM_RESUME_COMMAND_KIND]: EVENT_STREAM_RESUME_PAYLOAD_KEYS,
-    [CONTINUATION_COMMAND_KIND]: CONTINUATION_PAYLOAD_KEYS,
-    [EFFECT_ACTIVATE_COMMAND_KIND]: EFFECT_ACTIVATE_PAYLOAD_KEYS,
-    [RECOVERY_COMPLETION_COMMAND_KIND]: RECOVERY_COMPLETE_PAYLOAD_KEYS,
-    [PRODUCT_CONTRACT_GATE_1_COMMAND_KIND]: PRODUCT_CONTRACT_GATE_1_PAYLOAD_KEYS,
-    [JOURNAL_APPEND_COMMAND_KIND]: JOURNAL_APPEND_PAYLOAD_KEYS,
-    [FOUNDATION_DISPATCH_COMMAND_KIND]: FOUNDATION_DISPATCH_PAYLOAD_KEYS,
-    [FOUNDATION_VERIFICATION_COMMAND_KIND]: FOUNDATION_VERIFICATION_REQUEST_KEYS,
-    [RESOURCE_RECONCILE_COMMAND_KIND]: RESOURCE_RECONCILE_PAYLOAD_KEYS,
-    [RESOURCE_CONFIRM_RELEASED_COMMAND_KIND]: RESOURCE_CONFIRM_RELEASED_PAYLOAD_KEYS,
-    [STEP_START_COMMAND_KIND]: STEP_START_PAYLOAD_KEYS,
-    [STEP_FINISH_COMMAND_KIND]: STEP_FINISH_PAYLOAD_KEYS,
-    [STEP_CHECKPOINT_COMMAND_KIND]: STEP_CHECKPOINT_PAYLOAD_KEYS,
-    // CALLER INTENT ONLY, and one key wide by construction. `ActivateCutoverInput` names five
-    // fields and four of them are SERVER facts the registry assembles -- projectId and
-    // correlationId from authentication and the envelope, decidedAt and activatedAtEpochMs from
-    // the daemon clock. `record` is the GO_ACTIVATE binding and the only thing a caller may
-    // present, so an activation cannot name its own decision time or project.
-    [CUTOVER_ACTIVATE_COMMAND_KIND]: ["record"],
-    "escalation.decide": ["decision", "escalationRef", "subjectRef"],
-    "goal.close": ["closureWitness", "goalId", "zeroAuthorityWitness"],
-    // PROSE ONLY. The goal, its planning run and its budget account are all derived from the
-    // authenticated command identity, the project and principal come from authentication, and
-    // project readiness is read from the durable activation — so `goalId`, `planningRunRef`,
-    // `budgetAccountRef` and `witness` are absent here BY CONSTRUCTION: a caller naming one is
-    // refused INPUT_INVALID at PAYLOAD_SHAPE before any handler runs.
-    "goal.create": ["instructions", "title"],
-    "goal.create_with_source": ["instructions", "source", "title"],
-    // THE FIVE GRAPH MUTATION ALLOW-LISTS: caller INTENT ONLY. Each service decodes an EXACT
-    // request that ALSO carries commandId, correlationId, decidedAt, principalId and projectId,
-    // every one a SERVER fact re-attached by `daemon-command-graph-contracts.js`. Their absence
-    // here is the guarantee: the seam refuses an unlisted key STRUCTURALLY at PAYLOAD_SHAPE, so
-    // "a caller cannot name the principal, the project or the decision time" holds by
-    // construction rather than by five separate downstream comparisons.
-    "graph.approve": ["activation", "command", "graphRevisionRef", "record", "runId"],
-    "graph.prepare_supersession": ["approvedTargetRevisionRef", "goalRef"],
-    "graph.release_preparation": ["expectedPreparationVersion", "generation", "goalRef"],
-    [EXPANSION_REQUEST_KIND]: EXPANSION_REQUEST_PAYLOAD_KEYS,
-    "graph.supersede": [
-      "command", "expectedPredecessorRevisionRef", "expectedPreparationVersion", "generation",
-      "goalRef", "record", "successorGraphContentHash", "successorRevisionRef",
-    ],
-    "integration.accept_output": ["receiptId", "subjectRef"],
-    "plan.propose": ["commands", "runId"],
-    "policy.install": ["slice"], "policy.validate": ["input"],
-    "project.activate": ["witness"], "project.bind_repository": ["observation"],
-    "project.register": ["owner"], "provider.probe": ["observation"],
-    "repository.publish": ["goalId", "remoteUrl"],
-    "qualification.replan": [
-      "nodes", "subjectRef", "successorPlanRef", "supportedCanonicalizerVersions",
-    ],
-    "review.submit": ["findings", "packageItems", "round", "subjectRef"],
-    "session.close": ["sessionId"],
-    "session.open": ["capabilities", "credentialSha256", "expiresAt", "sessionId"],
-    "session.renew": ["expiresAt", "sessionId"],
-    "work.claim": ["expiresAt", "workItemId"], "work.release": ["workItemId"],
-    "work.renew": ["expiresAt", "workItemId"],
-  });
+/** The exact per-kind ingress allow-lists, SPLIT OUT to `./daemon-command-payload-keys.js` when
+ *  this module crossed the 400-line hard cap, and re-exported here so no consumer import path
+ *  changes and this stays the one module a reader opens for a mapping (task-a2409cba). */
+export { PAYLOAD_KEYS } from "./daemon-command-payload-keys.js";
 
 export const OPERATOR_CAPABILITIES: readonly string[] = Object.freeze([
   CAPABILITIES.ADMIN, CAPABILITIES.GOAL, CAPABILITIES.PLANNING,
@@ -335,6 +376,9 @@ export const OPERATOR_CAPABILITIES: readonly string[] = Object.freeze([
  *  capabilities say. `resource.confirm_released` belongs here because a proven release
  *  is a human's evidence about the physical world; ADMIN above only fences reach. */
 export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
+  AGENT_PROVIDER_COMMAND_KIND,
+  CRITERION_APPROVE, CRITERION_VERIFY,
+  "repository.recover",
   "approval.decide",
   // The one-way GA activation. ADMIN would fence reach only, and this is the act that makes v2
   // authoritative for good -- exactly the human-only class this set exists for. It is also why
@@ -349,10 +393,53 @@ export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   // an agent presenting an answer would be the quiet invention the clarification
   // fence exists to refuse. MCP-excluded on the same standing contract.
   PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND,
+  // Deciding a product preview is the operator's own act; an agent presenting
+  // APPROVE/REJECT would staff the human gate. MCP-excluded on the same standing.
+  PREVIEW_DECIDE_COMMAND_KIND,
+  // ASKING for a preview is the same human act as judging one: it spawns a dev server and drives
+  // a browser on the daemon host. Membership HERE is what removes the kind from the advertised
+  // MCP surface (`mcp-tool-allowlist.js` DERIVES its exclusion from this set), but NOT what
+  // fences its dispatch: like `deployment.deploy`, it is served from an ASYNC entry that never
+  // reaches the synchronous operator check, so its handler fences itself at entry.
+  PREVIEW_START_COMMAND_KIND,
+  RELEASE_DECIDE_COMMAND_KIND,
   "goal.close",
-  // Publishing pushes the operator's repository to a remote the operator named: the human's
-  // own act on their own code, and MCP-unreachable for the same reason as the approvals.
-  "repository.publish",
+  // AN AGENT MUST NEVER SET AN ENVIRONMENT VARIABLE: one it could write is one the deploy then
+  // delivers to a production process. The MCP roster EXCLUDES both kinds by deriving itself from
+  // this very set (`mcp-tool-allowlist.js`), and that exclusion -- not the ADMIN capability
+  // above -- is the fence; `agent-spawn-contract.js` HUMAN_ONLY_STEPS refuses the spawn side.
+  ENVIRONMENT_COMMAND_KIND_SET,
+  ENVIRONMENT_COMMAND_KIND_UNSET,
+  // AND AN AGENT MUST NEVER RE-TIME THE PRODUCTION HEALTH PROBE. This membership is what keeps
+  // the kind off the MCP roster (`mcp-tool-allowlist.js` DERIVES the exclusion from this set),
+  // which matters more here than the ADMIN capability above: the MCP port authenticates with the
+  // operator bootstrap credential, so an ADVERTISED operator kind is an agent arriving AS the
+  // operator and the capability gate would pass. `agent-spawn-contract.js` HUMAN_ONLY_STEPS
+  // refuses the spawn side and was landed with the advertisement by task-749e585afc; this entry
+  // is the half that could not exist until the kind was wired, and its absence is exactly what
+  // `mcp-tool-allowlist.test.ts`'s lockstep arm reds on.
+  PROBE_INTERVAL_COMMAND_KIND,
+  // AND AN AGENT MUST NEVER RETIRE ONE. Same three-way fence and same derivation as the kind
+  // above, for a sharper reason: retirement SILENCES the sweep for that environment
+  // (`daemon-store-foundation-composition.js` skips arming retired entries and excludes them
+  // from the dedicated predicate), so an agent holding it could stop the very probe that would
+  // have paged a human about an outage -- and the monitoring that just went quiet is not what
+  // would catch that. Judging an environment finished is the operator's call about their own
+  // product.
+  ENVIRONMENT_RETIREMENT_COMMAND_KIND,
+  // Publishing pushes the operator's repository to a remote they named; bootstrap CREATES one at
+  // a path they supplied. Their own code, and MCP-unreachable like the approvals.
+  "repository.publish", "repository.bootstrap",
+  // DEPLOYING A PRODUCT IS NEVER AN AGENT'S DECISION, and neither is naming the host it deploys
+  // to. Both are MCP-excluded by derivation from this set (`mcp-tool-allowlist.js`), which
+  // matters more here than elsewhere: the MCP port authenticates with the operator bootstrap
+  // credential, so an advertised operator kind is an agent arriving AS the operator.
+  // `deployment.deploy` is served from an ASYNC entry and therefore never reaches the registry's
+  // synchronous operator check -- it fences itself at handler entry, and this membership is what
+  // keeps it off the MCP roster rather than what fences the dispatch. `deployment.migrate_down` joins them for a sharper reason still: REVERTING A PRODUCTION SCHEMA IS NEVER AN AGENT'S DECISION, because it destroys the data the forward migration created and only the operator can weigh that loss.
+  "deployment.set_target", "deployment.deploy", "deployment.rollback", "deployment.migrate_down",
+  // Writing in the operator's own repository is their act. ASYNC-served like `deployment.deploy` above, so this membership keeps it off MCP; the handler fences itself at entry.
+  ENV_EXAMPLE_SYNC_COMMAND_KIND,
   // The two graph kinds that MOVE authority: one makes a graph the running one, the other
   // replaces the running one. Both are the human's approve action on their own edge -- the seat
   // `approval.decide` is reserved for. The other three propose, release or request and activate

@@ -3,13 +3,24 @@ import { describe, expect, it } from "vitest";
 
 import {
   NODE_PLANNING_SOURCE_SCHEMA_VERSION,
+  NODE_PLANNING_SOURCE_UNDECLARED_SCHEMA_VERSION,
   createNodePlanningSourceContent,
   decodeNodePlanningSourceContentBytes,
   encodeNodePlanningSourceContent,
 } from "./node-planning-source-codec.js";
 import { NODE_AUTHORITY_LIMITS } from "./node-authority-contract.js";
+import { sameNodePlanningSourceBytes } from "./node-planning-source-format.js";
 
 const hex = (digit: string): string => digit.repeat(64);
+
+/**
+ * Captured from this fixture BEFORE the declaration member existed, so it is a
+ * pre-change golden rather than a re-grading of whatever the code now produces.
+ * A source that declares nothing must keep exactly this identity forever: every
+ * stored planning-source revision digest is derived from it.
+ */
+const LEGACY_SOURCE_DIGEST =
+  "e02e1dde54e8ea5f5cdf02d084b0095885f8d48f709879e6c41a6e6da82b4c51";
 
 const planContent = () => {
   const created = createPlanExecutionContent({
@@ -132,7 +143,10 @@ describe("NodePlanningSourceContent codec", () => {
       "predicateRegistry",
       "version",
     ]);
-    expect(result.content.version).toBe(NODE_PLANNING_SOURCE_SCHEMA_VERSION);
+    // The UNDECLARED version, not the module's current one: this fixture states no
+    // declaration, and version is chosen by content. Reading the current constant
+    // here would promote every legacy source the moment the module version moves.
+    expect(result.content.version).toBe(NODE_PLANNING_SOURCE_UNDECLARED_SCHEMA_VERSION);
     expect(result.sourceDigest).toMatch(/^[0-9a-f]{64}$/u);
     expect(result.content.planExecutionContent.affectedNodeIds).toEqual(["node-consumer"]);
     expect(Object.isFrozen(result.content)).toBe(true);
@@ -161,7 +175,10 @@ describe("NodePlanningSourceContent codec", () => {
 
   it("distinguishes unsupported object and wire schemas from malformed content", () => {
     const content = accepted().content;
-    expect(createNodePlanningSourceContent({ ...content, version: 2 })).toMatchObject({
+    // 3, not 2: version 2 is now the DECLARING schema and a stated 2 over a
+    // declaration-free content is a MISMATCH, asserted by its own arm below. This
+    // arm keeps testing the genuinely unsupported case, which 3 still is.
+    expect(createNodePlanningSourceContent({ ...content, version: 3 })).toMatchObject({
       issues: [{
         code: "NODE_PLANNING_SOURCE_UNSUPPORTED_SCHEMA",
         layer: "NODE_PLANNING_SOURCE_SCHEMA",
@@ -172,7 +189,7 @@ describe("NodePlanningSourceContent codec", () => {
     if (!encoded.ok) throw new Error("planning source did not encode");
     const envelope = JSON.parse(new TextDecoder().decode(encoded.bytes));
     const foreignWire = new TextEncoder().encode(JSON.stringify({
-      ...envelope, schema: "MOE-NODE-PLANNING-SOURCE/2",
+      ...envelope, schema: "MOE-NODE-PLANNING-SOURCE/3",
     }));
     expect(decodeNodePlanningSourceContentBytes(foreignWire)).toMatchObject({
       issues: [{
@@ -378,5 +395,202 @@ describe("NodePlanningSourceContent codec", () => {
 
     const coreRefusal = refusal({ ...source(), planExecutionContent: {} });
     expect(Object.keys(coreRefusal.issues[0]!).sort()).toEqual(["code", "layer", "message"]);
+  });
+});
+
+/**
+ * The migration declaration one layer up from the node authority. Every arm here
+ * exists because the authored source is the ONLY place a declaration can be stated:
+ * `readDeclaredMigrations` (node-authority-fields.ts:98-118) can refuse a bad one,
+ * but nothing below this layer can notice a good one that was never carried.
+ */
+describe("NodePlanningSourceContent declared migrations", () => {
+  const declaring = (identifiers: readonly string[]) => ({
+    ...source(), declaredMigrations: [...identifiers],
+  });
+
+  it("leaves a source that declares nothing byte-identical and version-1", () => {
+    const created = accepted();
+
+    // ABSENT, not `[]`. A defaulted empty list would mint a declaration nobody
+    // authored AND move the digest of every source already in the store.
+    expect("declaredMigrations" in created.content).toBe(false);
+    expect(Object.keys(created.content)).toEqual([
+      "acceptanceCriterionContent",
+      "directHardDependencies",
+      "planExecutionContent",
+      "predicateRegistry",
+      "version",
+    ]);
+    expect(created.content.version).toBe(NODE_PLANNING_SOURCE_UNDECLARED_SCHEMA_VERSION);
+    // The historical value, pinned as a literal: a later bump of the module's
+    // current version must not promote a source that declares nothing.
+    expect(created.content.version).toBe(1);
+    // The v1 wire, byte for byte: the same four envelope keys and the same tag it
+    // has always carried, with the digest fixed against a pre-change capture.
+    const encoded = encodeNodePlanningSourceContent(created.content);
+    if (!encoded.ok) throw new Error("planning source did not encode");
+    const envelope = JSON.parse(new TextDecoder().decode(encoded.bytes));
+    expect(Object.keys(envelope).sort()).toEqual([
+      "acceptanceCriterionContentBytesBase64",
+      "dependencyContentBytesBase64",
+      "planExecutionContentBytesBase64",
+      "schema",
+    ]);
+    expect(envelope.schema).toBe("MOE-NODE-PLANNING-SOURCE/1");
+    expect(created.sourceDigest).toBe(LEGACY_SOURCE_DIGEST);
+
+    // AND THE DECODE SIDE, which the encode assertions above cannot see. A
+    // reconstruction that defaults the member to `[]` re-admits at version 2 with a
+    // v2 digest, so without this the whole arm is blind to the single most likely
+    // well-meaning refactor — measured, not assumed: the mutation drill for it first
+    // red-lined a DIFFERENT arm, which is what proved the gap.
+    const decoded = decodeNodePlanningSourceContentBytes(encoded.bytes);
+    expect(decoded.ok).toBe(true);
+    if (!decoded.ok) return;
+    expect("declaredMigrations" in decoded.content).toBe(false);
+    expect(decoded.content.version).toBe(NODE_PLANNING_SOURCE_UNDECLARED_SCHEMA_VERSION);
+    expect(decoded.sourceDigest).toBe(LEGACY_SOURCE_DIGEST);
+  });
+
+  it("round-trips two identifiers by value, by count and in authored order", () => {
+    const created = accepted(declaring(["migration-b", "migration-a"]));
+
+    // AUTHORED ORDER, not sorted and not set-compared: the landed authority
+    // preserves order as content (node-authority-fields.ts:93-96), so `b` before
+    // `a` is a different declaration from `a` before `b`, and a path that keeps
+    // only the first entry passes every single-identifier fixture.
+    expect(created.content.declaredMigrations).toEqual(["migration-b", "migration-a"]);
+    expect(created.content.declaredMigrations?.length).toBe(2);
+    expect(created.content.version).toBe(NODE_PLANNING_SOURCE_SCHEMA_VERSION);
+    expect(created.content.version).toBe(2);
+
+    const encoded = encodeNodePlanningSourceContent(created.content);
+    if (!encoded.ok) throw new Error("declaring planning source did not encode");
+    const decoded = decodeNodePlanningSourceContentBytes(encoded.bytes);
+    expect(decoded).toStrictEqual(created);
+    if (!decoded.ok) return;
+    expect(decoded.content.declaredMigrations).toEqual(["migration-b", "migration-a"]);
+    expect(accepted(declaring(["migration-a", "migration-b"])).sourceDigest)
+      .not.toBe(created.sourceDigest);
+  });
+
+  it("keeps an explicit empty declaration distinct from an absent one", () => {
+    const empty = accepted(declaring([]));
+
+    expect("declaredMigrations" in empty.content).toBe(true);
+    expect(empty.content.declaredMigrations).toEqual([]);
+    expect(empty.content.version).toBe(2);
+    expect(empty.sourceDigest).not.toBe(accepted().sourceDigest);
+    const encoded = encodeNodePlanningSourceContent(empty.content);
+    if (!encoded.ok) throw new Error("empty declaration did not encode");
+    const envelope = JSON.parse(new TextDecoder().decode(encoded.bytes));
+    expect(envelope.schema).toBe("MOE-NODE-PLANNING-SOURCE/2");
+    expect(Object.hasOwn(envelope, "declaredMigrationsBytesBase64")).toBe(true);
+  });
+
+  it.each([
+    ["a non-list declaration", () => ({ ...source(), declaredMigrations: "migration-a" }),
+      "NODE_PLANNING_SOURCE_MALFORMED", "NODE_PLANNING_SOURCE_ADMISSION",
+      "declaredMigrations is not a list"],
+    ["a noncanonical entry", () => ({ ...source(), declaredMigrations: [" migration-a "] }),
+      "NODE_PLANNING_SOURCE_MALFORMED", "NODE_PLANNING_SOURCE_ADMISSION",
+      "declaredMigrations holds an inadmissible entry"],
+    ["a non-string entry", () => ({ ...source(), declaredMigrations: [1] }),
+      "NODE_PLANNING_SOURCE_MALFORMED", "NODE_PLANNING_SOURCE_ADMISSION",
+      "declaredMigrations holds an inadmissible entry"],
+    ["a duplicated identifier", () => declaring(["migration-a", "migration-a"]),
+      "NODE_PLANNING_SOURCE_DUPLICATE_MIGRATION", "NODE_PLANNING_SOURCE_ADMISSION",
+      "declaredMigrations states one identifier twice"],
+    ["an over-bound declaration", () => declaring(Array.from(
+      { length: NODE_AUTHORITY_LIMITS.maxMigrationEntries + 1 },
+      (_unused, index) => `migration-${index}`,
+    )), "NODE_PLANNING_SOURCE_LIMIT_EXCEEDED", "NODE_PLANNING_SOURCE_LIMITS",
+      "declaredMigrations exceeds its bound"],
+    ["an unknown key beside the declaration", () => ({
+      ...declaring(["migration-a"]), graphId: "graph-forged",
+    }), "NODE_PLANNING_SOURCE_MALFORMED", "NODE_PLANNING_SOURCE_ADMISSION",
+      "planning source is not an exact source record"],
+  ])("refuses %s at the source layer, not the authority layer",
+    (_name, make, code, layer, message) => {
+      // THE LAYER IS THE POINT. Both layers can call a declaration bad; an arm that
+      // pins only the code cannot tell which one answered, and the source layer is
+      // the one that has to, because the authority never sees an unadmitted source.
+      //
+      // THE MESSAGE IS PINNED FOR THE SAME REASON ONE LEVEL DOWN. Before this row
+      // the exact-key roster refused `declaredMigrations` as an UNRECOGNISED KEY
+      // with the very code and layer four of these cases expect, so a code-and-layer
+      // arm alone stays green whether the member is admitted-then-refused or never
+      // admitted at all — the roster-widening half of the change would be untested.
+      expect(refusal(make()).issues).toEqual([{ code, layer, message }]);
+    });
+
+  it("refuses a stated version the content does not imply, either way", () => {
+    // The version is chosen by CONTENT, never stated by a caller — the pattern the
+    // landed authority codec uses at node-authority-codec.ts:127-128. A caller that
+    // could state it could frame a declaring source with the old tag.
+    expect(createNodePlanningSourceContent({
+      ...accepted().content, version: 2,
+    })).toMatchObject({
+      issues: [{
+        code: "NODE_PLANNING_SOURCE_SCHEMA_MISMATCH",
+        layer: "NODE_PLANNING_SOURCE_SCHEMA",
+      }],
+      ok: false,
+    });
+    expect(createNodePlanningSourceContent({
+      ...accepted(declaring(["migration-a"])).content, version: 1,
+    })).toMatchObject({
+      issues: [{
+        code: "NODE_PLANNING_SOURCE_SCHEMA_MISMATCH",
+        layer: "NODE_PLANNING_SOURCE_SCHEMA",
+      }],
+      ok: false,
+    });
+  });
+
+  it("refuses a wire whose schema tag disagrees with its envelope roster", () => {
+    const legacy = encodeNodePlanningSourceContent(accepted().content);
+    if (!legacy.ok) throw new Error("planning source did not encode");
+    const envelope = JSON.parse(new TextDecoder().decode(legacy.bytes));
+    // A v2 tag over a v1 envelope: the declaration key is the whole reason the
+    // version moved, so a tag that claims v2 without one is not merely
+    // noncanonical, it is a schema the reader must name.
+    expect(decodeNodePlanningSourceContentBytes(new TextEncoder().encode(JSON.stringify({
+      ...envelope, schema: "MOE-NODE-PLANNING-SOURCE/2",
+    })))).toMatchObject({
+      issues: [{
+        code: "NODE_PLANNING_SOURCE_SCHEMA_MISMATCH",
+        layer: "NODE_PLANNING_SOURCE_SCHEMA",
+      }],
+      ok: false,
+    });
+    expect(decodeNodePlanningSourceContentBytes(new TextEncoder().encode(JSON.stringify({
+      ...envelope, schema: "MOE-NODE-PLANNING-SOURCE/3",
+    })))).toMatchObject({
+      issues: [{
+        code: "NODE_PLANNING_SOURCE_UNSUPPORTED_SCHEMA",
+        layer: "NODE_PLANNING_SOURCE_SCHEMA",
+      }],
+      ok: false,
+    });
+  });
+
+  it("keeps sameNodePlanningSourceBytes answering across the declaration", () => {
+    const bytesOf = (value: unknown) => {
+      const encoded = encodeNodePlanningSourceContent(accepted(value).content);
+      if (!encoded.ok) throw new Error("planning source did not encode");
+      return encoded.bytes;
+    };
+    const declared = bytesOf(declaring(["migration-a", "migration-b"]));
+
+    expect(sameNodePlanningSourceBytes(
+      declared, bytesOf(declaring(["migration-a", "migration-b"])),
+    )).toBe(true);
+    expect(sameNodePlanningSourceBytes(
+      declared, bytesOf(declaring(["migration-b", "migration-a"])),
+    )).toBe(false);
+    // Declared-none is not absent, and the comparator must not blur them.
+    expect(sameNodePlanningSourceBytes(bytesOf(declaring([])), bytesOf(source()))).toBe(false);
   });
 });

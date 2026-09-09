@@ -4,9 +4,12 @@ import type { AffordancePort } from "./http/affordance-contract.js";
 import type { DocumentCoverageReadPort } from "./http/document-coverage-contract.js";
 import type { RunsReadPort } from "./http/runs-read-contract.js";
 import type { PolicyReadPort } from "./http/policy-read.js";
+import type { ActivationReadPort } from "./http/activation-read.js";
 import type { HealthReadPort } from "./http/health-read.js";
 import type { ActivityReadPort } from "./http/activity-read.js";
 import type { SessionsReadPort } from "./http/sessions-read.js";
+import type { RepositoryRemoteReadPort } from "./http/repository-remote-read.js";
+import type { RepositoryWorkflowReadPort } from "./http/repository-workflow-read.js";
 import type { DocumentDossierReadPort } from "./http/document-dossier-read.js";
 import type { DocumentIngestPort } from "./http/document-ingest-route.js";
 import type { SubscriptionPort } from "./http/event-stream-contract.js";
@@ -26,6 +29,13 @@ import type {
 import type { PairingOpenSessionPort } from "./http/pairing-open-completion.js";
 import type { SessionHandshakePort } from "./identity/session-handshake.js";
 import type { GoalSourceReadPort } from "./documents/document-source-full-read.js";
+import type { BackupsReadPort } from "./http/backups-read.js";
+import type { DeploymentsHealthReadPort } from "./http/deployments-health-read.js";
+import type { DesignReadPort } from "./http/design-read.js";
+import type { EnvironmentsReadPort } from "./http/environments-read.js";
+import type { PreviewReadPort } from "./http/preview-read.js";
+import type { ReleaseReadPort } from "./http/release-evidence-read.js";
+import type { PreviewCapturePort } from "./http/preview-capture-route.js";
 import type { GraphQueryPort } from "./planning/graph-query.js";
 
 export interface OptionalDaemonPortProvider {
@@ -36,6 +46,34 @@ export interface OptionalDaemonPortProvider {
   documentIngest?(): DocumentIngestPort;
   /** The goal-scoped full-PRD reader, bound to this daemon's own project. */
   goalSource?(): GoalSourceReadPort;
+  /**
+   * The versioned design-aggregate reader. Bound to this daemon's store but NOT to a project:
+   * the read takes its projectId from the authenticated principal, so a port that pre-bound one
+   * would answer its own binding rather than fence the caller's.
+   */
+  designReads?(): DesignReadPort;
+  /**
+   * The per-environment variable-table reader. Bound to this daemon's own store AND project:
+   * unlike the design read, the environment aggregate id is keyed by projectId inside the store
+   * config, so the binding is the composition root's fact and never request input.
+   */
+  environmentReads?(): EnvironmentsReadPort;
+  /**
+   * The deployment-environment health read. Bound to this daemon's own store, project AND probe
+   * ring sidecar: all three are composition-root facts, never request input.
+   */
+  deploymentsHealth?(): DeploymentsHealthReadPort;
+  /**
+   * The durable backup restore-proof read. Bound to this daemon's own store path AND project by
+   * the composition root: both are composition-root facts, never request input, and a
+   * route-supplied project would let a caller read another project's backups.
+   */
+  backupReads?(): BackupsReadPort;
+  /** Durable preview receipts and captures from the runner's bound product workspace. */
+  previewReads?(): PreviewReadPort;
+  /** The goal's release evidence and the receipt of a decision taken on it. */
+  releaseReads?(): ReleaseReadPort;
+  previewCaptures?(): PreviewCapturePort;
   /** The current-active-graph reader, bound to this daemon's own project. */
   graph?(): GraphQueryPort;
   /** The strict durable GoalCreated catalog, bound to this daemon's own project. */
@@ -46,12 +84,17 @@ export interface OptionalDaemonPortProvider {
   runs?(): RunsReadPort;
   /** Installed policy and evaluations, bound to this daemon own project. */
   policy?(): PolicyReadPort;
+  /** The six activation receipts, MEASURED per request, bound to this daemon own project. */
+  activation?(): ActivationReadPort;
   /** The daemon process and ledger facts, bound to this daemon own project. */
   health?(): HealthReadPort;
   /** What the daemon decided, bound to this daemon own project. */
   activity?(): ActivityReadPort;
   /** Who holds a seat, bound to this daemon own project. */
   sessions?(): SessionsReadPort;
+  /** The git remote the first publish bound, for this daemon own project. */
+  repositoryRemote?(): RepositoryRemoteReadPort;
+  repositoryWorkflows?(): RepositoryWorkflowReadPort;
   /** The pending-plan read port, bound to this daemon's own project. */
   planningRuns?(): PlanningRunReadPort;
   /** The budget commitment read port, bound to this daemon's own project. */
@@ -98,10 +141,20 @@ export interface ResolvedOptionalDaemonPorts {
   readonly documentCoverage?: DocumentCoverageReadPort;
   readonly runs?: RunsReadPort;
   readonly policy?: PolicyReadPort;
+  readonly activation?: ActivationReadPort;
   readonly health?: HealthReadPort;
   readonly activity?: ActivityReadPort;
   readonly sessions?: SessionsReadPort;
+  readonly repositoryRemote?: RepositoryRemoteReadPort;
+  readonly repositoryWorkflows?: RepositoryWorkflowReadPort;
   readonly goalSource?: GoalSourceReadPort;
+  readonly designReads?: DesignReadPort;
+  readonly environmentReads?: EnvironmentsReadPort;
+  readonly deploymentsHealth?: DeploymentsHealthReadPort;
+  readonly backupReads?: BackupsReadPort;
+  readonly previewReads?: PreviewReadPort;
+  readonly releaseReads?: ReleaseReadPort;
+  readonly previewCaptures?: PreviewCapturePort;
   readonly documentDossiers?: DocumentDossierReadPort;
   readonly documentIngest?: DocumentIngestPort;
   readonly graph?: GraphQueryPort;
@@ -131,7 +184,12 @@ const FACTORIES = Object.freeze([
   "planningRuns", "productContractGate1", "productContractPending",
   "productContractV2Current", "productContractV2Pending", "commandAuthorityPlane",
   "sessionChallengeOperands", "pairingOpenSessions",
-  "reconciliation", "runs", "policy", "health", "activity", "sessions", "goalSource",
+  "reconciliation", "runs", "policy", "activation", "health", "activity", "sessions", "repositoryRemote", "repositoryWorkflows", "goalSource",
+  "designReads",
+  "environmentReads",
+  "deploymentsHealth",
+  "backupReads",
+  "previewReads", "previewCaptures", "releaseReads",
   "sessionHandshake",
 ] as const);
 
@@ -260,6 +318,18 @@ export function resolveOptionalDaemonPorts(
       && (!hasMethods(policy, ["readPolicy"]) || typeof Reflect.get(policy, "boundProjectId") !== "string")) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const activationFactory = provider.activation;
+    if (activationFactory !== undefined && typeof activationFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    // `boundProjectId` is load-bearing, not decoration: the handler refuses
+    // ACTIVATION_READ_PROJECT_MISMATCH by comparing it to the authenticated principal.
+    const activation = activationFactory?.call(provider);
+    if (activation !== undefined
+      && (!hasMethods(activation, ["readActivation"])
+        || typeof Reflect.get(activation, "boundProjectId") !== "string")) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const healthFactory = provider.health;
     if (healthFactory !== undefined && typeof healthFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
@@ -287,12 +357,82 @@ export function resolveOptionalDaemonPorts(
       && (!hasMethods(sessions, ["readSessions"]) || typeof Reflect.get(sessions, "boundProjectId") !== "string")) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
+    const remoteFactory = provider.repositoryRemote;
+    const workflowFactory = provider.repositoryWorkflows;
+    if (workflowFactory !== undefined && typeof workflowFactory !== "function") return Object.freeze({ failure: "INVALID", ok: false } as const);
+    const repositoryWorkflows = workflowFactory?.call(provider);
+    if (repositoryWorkflows !== undefined && (!hasMethods(repositoryWorkflows, ["readCriteria", "readRecovery"])
+      || typeof Reflect.get(repositoryWorkflows, "boundProjectId") !== "string")) return Object.freeze({ failure: "INVALID", ok: false } as const);
+    if (remoteFactory !== undefined && typeof remoteFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const repositoryRemote = remoteFactory?.call(provider);
+    if (repositoryRemote !== undefined
+      && (!hasMethods(repositoryRemote, ["readRemote"]) || typeof Reflect.get(repositoryRemote, "boundProjectId") !== "string")) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
     const goalSourceFactory = provider.goalSource;
     if (goalSourceFactory !== undefined && typeof goalSourceFactory !== "function") {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
     const goalSource = goalSourceFactory?.call(provider);
     if (goalSource !== undefined && !hasMethods(goalSource, ["read"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const designReadsFactory = provider.designReads;
+    if (designReadsFactory !== undefined && typeof designReadsFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const designReads = designReadsFactory?.call(provider);
+    if (designReads !== undefined && !hasMethods(designReads, ["read"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const environmentReadsFactory = provider.environmentReads;
+    if (environmentReadsFactory !== undefined && typeof environmentReadsFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const environmentReads = environmentReadsFactory?.call(provider);
+    if (environmentReads !== undefined && !hasMethods(environmentReads, ["read"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const deploymentsHealthFactory = provider.deploymentsHealth;
+    if (deploymentsHealthFactory !== undefined && typeof deploymentsHealthFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const deploymentsHealth = deploymentsHealthFactory?.call(provider);
+    if (deploymentsHealth !== undefined && !hasMethods(deploymentsHealth, ["read"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const backupReadsFactory = provider.backupReads;
+    if (backupReadsFactory !== undefined && typeof backupReadsFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const backupReads = backupReadsFactory?.call(provider);
+    if (backupReads !== undefined && !hasMethods(backupReads, ["read"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const previewReadsFactory = provider.previewReads;
+    if (previewReadsFactory !== undefined && typeof previewReadsFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const previewReads = previewReadsFactory?.call(provider);
+    if (previewReads !== undefined && !hasMethods(previewReads, ["read"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const releaseReadsFactory = provider.releaseReads;
+    if (releaseReadsFactory !== undefined && typeof releaseReadsFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const releaseReads = releaseReadsFactory?.call(provider);
+    if (releaseReads !== undefined && !hasMethods(releaseReads, ["read"])) {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const previewCapturesFactory = provider.previewCaptures;
+    if (previewCapturesFactory !== undefined && typeof previewCapturesFactory !== "function") {
+      return Object.freeze({ failure: "INVALID", ok: false } as const);
+    }
+    const previewCaptures = previewCapturesFactory?.call(provider);
+    if (previewCaptures !== undefined && !hasMethods(previewCaptures, ["projectDirectory"])) {
       return Object.freeze({ failure: "INVALID", ok: false } as const);
     }
     const pendingFactory = provider.productContractPending;
@@ -382,10 +522,20 @@ export function resolveOptionalDaemonPorts(
       ...(documentCoverage === undefined ? {} : { documentCoverage }),
       ...(runs === undefined ? {} : { runs }),
       ...(policy === undefined ? {} : { policy }),
+      ...(activation === undefined ? {} : { activation }),
       ...(health === undefined ? {} : { health }),
       ...(activity === undefined ? {} : { activity }),
       ...(sessions === undefined ? {} : { sessions }),
+      ...(repositoryRemote === undefined ? {} : { repositoryRemote }),
+      ...(repositoryWorkflows === undefined ? {} : { repositoryWorkflows }),
       ...(goalSource === undefined ? {} : { goalSource }),
+      ...(designReads === undefined ? {} : { designReads }),
+      ...(environmentReads === undefined ? {} : { environmentReads }),
+      ...(deploymentsHealth === undefined ? {} : { deploymentsHealth }),
+      ...(backupReads === undefined ? {} : { backupReads }),
+      ...(previewReads === undefined ? {} : { previewReads }),
+      ...(releaseReads === undefined ? {} : { releaseReads }),
+      ...(previewCaptures === undefined ? {} : { previewCaptures }),
       ...(documentDossiers === undefined ? {} : { documentDossiers }),
       ...(documentIngest === undefined ? {} : { documentIngest }),
       ...(graph === undefined ? {} : { graph }),

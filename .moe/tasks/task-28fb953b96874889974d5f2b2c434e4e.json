@@ -1,0 +1,510 @@
+{
+  "id": "task-28fb953b96874889974d5f2b2c434e4e",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "The bootstrap engine: directory guard, git init, scaffold write, first commit, the gh port and the receipt",
+  "description": "SPIDR child of task-facff1d1e7ce44a6b1101490524890a9 (architect-fa3a3e17, 2026-09-05), which measured over the file cap. dependsOn task-4a0f706437a042059789be2ebdb98bc0 for the scaffold tree it writes.\n\nWHY THIS ROW EXISTS. The parent owns `repository.bootstrap` end to end. Publishing ONE command kind on this board costs 13 forced edits on its own (measured below), so the parent cannot also carry the engine, the ports and the receipt inside a 10-file plan. This row is the dependency LEAF: the whole bootstrap sequence as a pure, injectable, offline-testable service, plus the handler entry point the parent will register. NO command kind, NO vocabulary edit, NO registry edit, NO MCP roster edit - all of that is the parent.\n\nMEASURED AT HEAD (branch moe/work-2026-09-04) by architect-fa3a3e17:\n- `git grep -rc 'repo create' apps/ tools/` = 0. No GitHub repository creation path exists.\n- `apps/daemon/src/repository/git-landing-port.ts:68` already exports an injectable `GitRunner` type and `nodeGitRunner` (spawn-based, 243 lines). It handles add/commit/push but NOT `init`. REUSE the `GitRunner` seam; do not write a second process launcher.\n- `apps/daemon/src/repository/landing-receipt-contracts.ts` (236 lines) is the receipt shape to mirror.\n- `project.bind_repository` is real and is handled at `apps/daemon/src/bootstrap/bootstrap-services.ts:227` (`bindRepository`), with `apps/daemon/src/bootstrap/bootstrap-sequence.ts:36` requiring `project.register` FIRST. That ordering is a real constraint on this row's sequence.\n- The \"manager catalog\" the parent's DoD names is `apps/daemon/src/projects/project-catalog.ts` - it exists.\n- Every new `.ts` under apps/daemon needs a tracked one-line `.js` bridge (`export * from \"./x.ts\";`). Budget two files per module.\n\nGITHUB IS OPTIONAL AND THAT IS LOAD-BEARING. A local-only bootstrap SUCCEEDS and says so: `gh` absent refuses BOOTSTRAP_GH_UNAVAILABLE for the GitHub half ONLY, while the local repository still exists, is committed and is bound, and the receipt records remoteUrl: null. Failing the whole bootstrap because `gh` is missing would make the feature unusable on most machines.\n\nTHE DIRECTORY GUARD IS THE SAFETY PROPERTY. This command writes a whole tree at an operator-supplied path. BOOTSTRAP_DIR_NOT_EMPTY must refuse BEFORE anything is written.",
+  "definitionOfDone": [
+    "The four refusal codes are defined here with their layer and are each asserted with CODE AND LAYER, never merely `ok:false`: BOOTSTRAP_DIR_NOT_EMPTY, BOOTSTRAP_GIT_UNAVAILABLE, BOOTSTRAP_GH_UNAVAILABLE, BOOTSTRAP_PROFILE_VERSION_UNKNOWN (the last one re-exported from child 1's generator, not redefined). Reuse an already-rostered layer literal; introduce no new `*_LAYER` constant.",
+    "BOOTSTRAP_DIR_NOT_EMPTY is asserted against a real temp directory containing exactly ONE file, and the test asserts NOTHING WAS WRITTEN - read the directory back and assert its entries are unchanged. Also assert a non-existent directory IS created and an EMPTY existing one IS accepted. This is the safety property of the row, so mutate the guard and confirm the arm goes red.",
+    "A local-only bootstrap through the service SUCCEEDS with the gh port reporting absent: the temp directory is a git repository, `git log --oneline` is exactly ONE line reading `chore: scaffold by Moe`, and the result carries BOOTSTRAPPED with remoteUrl: null plus the code BOOTSTRAP_GH_UNAVAILABLE for the GitHub half. Assert all of it.",
+    "GitHub creation is tested OFFLINE through an injectable port that captures argv, asserting the `gh` argv BYTE-FOR-BYTE as `[\"repo\",\"create\",\"<owner>/<name>\",\"--<visibility>\",\"--source\",\".\",\"--push\"]`. No network call in any test, no stored token, no REST fallback.",
+    "`moe-bootstrap-receipt/1` is defined mirroring apps/daemon/src/repository/landing-receipt-contracts.ts and records {dir, sha, remoteUrl|null, BOOTSTRAPPED|REFUSED(code)}; a REFUSED receipt carries its code and NO sha, and that is asserted as its own arm.",
+    "The service reuses the EXISTING `GitRunner` seam from apps/daemon/src/repository/git-landing-port.ts and the EXISTING bind path (`bindRepository` in apps/daemon/src/bootstrap/bootstrap-services.ts, after `project.register` per bootstrap-sequence.ts:36). A second process launcher or a second binding path is a rejection. Name the reuse with a grep -n in the completion record.",
+    "EVERY temp directory and child process the tests create is removed on EVERY exit path including the throwing one (epic rail 4) - teardown in a `finally`, not after the assertions. Invoke `git`/`gh` as bare executables under shell:false with argv arrays; never a hard-coded `.cmd`, never a shell string, never a chain.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`. Root `pnpm test` does NOT cover apps/**, so the daemon leg is the only apps/** evidence - say so rather than quoting a bare root count line."
+  ],
+  "taskRails": [
+    "NO COMMAND KIND. No edit to daemon-command-vocabulary.ts, daemon-command-registry.ts, mcp-tool-allowlist.ts, agent-spawn-contract.ts, or packages/contracts - every one of those belongs to the parent task-facff1d1e7ce44a6b1101490524890a9 and touching them here collides in the shared worktree.",
+    "NEVER WRITE INTO A NON-EMPTY DIRECTORY. The guard refuses before the first byte is written, not after.",
+    "A LOCAL-ONLY BOOTSTRAP IS A SUCCESS. `gh` absent refuses only the GitHub half.",
+    "REUSE the GitRunner seam and the existing bind path. A second launcher or a second binding path defeats the row.",
+    "`gh` CLI ONLY, matching the Gate 3 decision (task-f961dc89): no stored token, no REST fallback.",
+    "OFFLINE TESTS ONLY. Every port is injectable; no test may reach the network."
+  ],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PREREQUISITE HARD STOP, then the two premise re-measurements this plan rests on.\n\nPREREQUISITE — this row's scaffold producer is task-4a0f706437a042059789be2ebdb98bc0. Run `git grep -rn \"CONTROLLED_PROFILE_VERSION\\|generateControlledProfile\" -- apps/daemon/src`. If absent, STOP and `moe.report_blocked` with `blockedOnTaskIds: [\"task-4a0f706437a042059789be2ebdb98bc0\"]`. Do NOT inline a scaffold here and do NOT narrow the DoD — an inline tree defeats both rows and collides with its owner in the shared worktree. Record the generator's ACTUAL exported names and result shape; this plan names them from the sibling plan, and the landed code is the authority.\n\nPREMISE 1 — `grep -n \"internal\\.\" apps/daemon/src/daemon-command-vocabulary.ts` must return ZERO, and `git grep -n \"internal.repository.landing_receipt\" -- apps/daemon packages` must show it only in landing-receipt-contracts.ts (plus two control-room display files). That is what proves an `internal.*` receipt kind needs no roster backfill and keeps this row inside its budget. If it has changed, STOP and report — do not absorb a roster backfill into this row.\n\nPREMISE 2 — `grep -n \"repo create\" -r apps/ tools/` must still return nothing, confirming no GitHub creation path exists to reuse.\n\nRecord all three commands and their output in the step note.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/repository/git-landing-port.ts"
+      ],
+      "note": "Prerequisite landed (git log --grep='Moe-Task: task-4a0f706437a042059789be2ebdb98bc0': 829c3bc0 DONE QA checkpoint). git grep -rn 'CONTROLLED_PROFILE_VERSION\\|generateControlledProfile' -- apps/daemon/src finds controlled-profile-generator.ts:26,114. Actual generateControlledProfile({productName,profileVersion}) returns {ok:true,files:ReadonlyMap<string,string>} or {ok:false,code,refusedBy:'DAEMON_INGRESS'}; version controlled-1. git grep -n 'internal\\.' -- apps/daemon/src/daemon-command-vocabulary.ts: zero. git grep -n 'internal.repository.landing_receipt' -- apps/daemon packages: landing-receipt-contracts.ts:22 only; apps/control-room: board-feed.tsx:26/activity-words.ts:19 only. git grep -n 'repo create' -- apps/ tools/: zero. GitRunner/nodeGitRunner exist; LANDER_IDENTITY and landingEnvironment exist but require exports (already allowed step 3). bindRepository remains bootstrap-services.ts:96, with project.register prerequisite in bootstrap-sequence.ts:36. No new binding implementation planned; parent supplies ports. Foreign dirty paths including repository/deployment untouched. TDD requires writing planned tests ahead of production within subsequent steps; same owned roster, no widening.",
+      "startedAt": "2026-09-05T19:06:26.464Z",
+      "completedAt": "2026-09-05T19:07:27.925Z"
+    },
+    {
+      "stepId": "step-2",
+      "description": "CONTRACTS: refusal codes, the receipt, the request/result types, and the port interfaces. Create `repository-bootstrap-contracts.ts` (+ one-line `.js` bridge).\n\nREFUSAL CODES — all four as `as const` string literals, each paired with an ALREADY-ROSTERED layer literal. Use `\"DAEMON_INGRESS\"`, which bootstrap-services.ts:100 already uses in `refuse(request.kind, \"BOOTSTRAP_PAYLOAD_INVALID\", \"DAEMON_INGRESS\")`. Introduce NO new `*_LAYER` constant — the security lane carries a boundary roster over those and a new one demands a backfill this row does not own.\n- `BOOTSTRAP_DIR_NOT_EMPTY`, `BOOTSTRAP_GIT_UNAVAILABLE`, `BOOTSTRAP_GH_UNAVAILABLE` defined here.\n- `BOOTSTRAP_PROFILE_VERSION_UNKNOWN` RE-EXPORTED from child 1's generator module, never redefined. Two definitions of one code is exactly the drift the code exists to prevent.\n\nRECEIPT — mirror apps/daemon/src/repository/landing-receipt-contracts.ts: `BOOTSTRAP_RECEIPT_VERSION = \"moe-bootstrap-receipt/1\" as const` and `BootstrapReceiptV1 { dir; sha: string | null; remoteUrl: string | null; outcome: \"BOOTSTRAPPED\" | \"REFUSED\"; refusal: { code; detail } | null; decidedAt; version }`. Follow the landing receipt's null-pairing discipline: the success member and the refusal member are both nullable and EXACTLY ONE is populated — a REFUSED receipt carries its code and NO sha, and that invariant is asserted in step 7.\n\nPORTS — declare, do not implement: a `GhRunner` reusing the EXISTING `GitRunner` type shape from git-landing-port.ts:68 (`(cwd, args, stdin?) => Promise<{code, stderr, stdout}>`) but distinguishing EXECUTABLE-ABSENT from nonzero-exit; a `TreeWriterPort`; a `RepositoryBoundPort` and a `CatalogRegistrationPort` that the PARENT row supplies from the existing `bindRepository` (bootstrap-services.ts:96) and `project-catalog.ts`. This row calls those two, never implements them.\n\nA SECRET NEVER SURFACES (epic rail 3): the receipt's `remoteUrl` and every refusal `detail` are shaped so a token embedded in a remote URL cannot be stored or printed. Say in a comment how that is enforced.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-contracts.ts",
+        "apps/daemon/src/repository/repository-bootstrap-contracts.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-contracts.ts",
+        "apps/daemon/src/repository/repository-bootstrap-contracts.js"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-contracts.ts",
+        "apps/daemon/src/repository/repository-bootstrap-contracts.js",
+        "apps/daemon/src/repository/repository-bootstrap-service.test.ts"
+      ],
+      "note": "Contracts + bridge delivered with discriminated receipt null-pair and DAEMON_INGRESS provenance. githubRefusal is separate from local refusal so optional GH failure cannot violate success sha/refusal invariant. Diagnostics are closed literals; service will admit only canonical GitHub URLs. Parent-supplied bind port explicitly requires prior durable project.register and must throw on refusal. Planned test file created early for TDD: missing constants RED (1 failed), then GREEN Test Files 1 passed (1), Tests 1 passed (1). No package edge: imports are intra-daemon. Actual producer dependency landed 2feed27b, verified via task.epicSiblings landing.merged=true. No amendments in active plan.",
+      "startedAt": "2026-09-05T19:07:28.122Z",
+      "completedAt": "2026-09-05T19:09:46.952Z"
+    },
+    {
+      "stepId": "step-3",
+      "description": "HOST PORTS. Create `repository-bootstrap-ports.ts` (+ bridge) with the production implementations only — no sequencing logic.\n\nGIT: reuse `nodeGitRunner` and `landingEnvironment()` from git-landing-port.ts rather than writing a second launcher. `landingEnvironment()` strips every `GIT_*` variable from the parent environment — a parent shell's `GIT_DIR` / `GIT_WORK_TREE` / `GIT_INDEX_FILE` would silently redirect `git init` into the WRONG repository, which in this row means writing a product tree into someone else's checkout. That hygiene is not optional here. If the function is not exported, export it in this step rather than copying it.\n- `git init` in the target directory; `git add -A` scoped to that directory; `git -c user.name=Moe -c user.email=moe@moe.local -c commit.gpgsign=false commit -m \"chore: scaffold by Moe\"` reusing the existing `LANDER_IDENTITY` array. The identity is Moe's, never the operator's, so the first commit does not depend on the operator having git configured at all.\n- Spawn failure (ENOENT) => `BOOTSTRAP_GIT_UNAVAILABLE`.\n\nGH: same discipline — bare executable `gh`, argv array, `shell: false`, `windowsHide: true`, an explicit timeout, no shell string, no `&&` chain, no pipe, and NEVER a hard-coded `gh.cmd` (the measured host returns EINVAL for a `.cmd` under `shell:false`). Argv is exactly `[\"repo\",\"create\",\"<owner>/<name>\",\"--<visibility>\",\"--source\",\".\",\"--push\"]`.\n- DISTINGUISH TWO OUTCOMES, because collapsing them costs the diagnosis: spawn ENOENT means `gh` is ABSENT; a nonzero exit means GitHub refused. Both refuse only the GitHub half with `BOOTSTRAP_GH_UNAVAILABLE`, and the detail says which. No stored token, no REST fallback, no `GH_TOKEN` read.\n\nTREE WRITER: write child 1's `ReadonlyMap<path, bytes>` under the target directory, creating parent directories. Reject any path that is absolute, contains a `..` segment, or resolves outside the target after normalization — the generator is trusted, but this writer is the last place a bad path can be stopped before bytes land at an operator-supplied root.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-ports.ts",
+        "apps/daemon/src/repository/repository-bootstrap-ports.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-ports.ts",
+        "apps/daemon/src/repository/repository-bootstrap-ports.js"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/git-landing-port.ts",
+        "apps/daemon/src/repository/repository-bootstrap-ports.ts",
+        "apps/daemon/src/repository/repository-bootstrap-ports.js",
+        "apps/daemon/src/repository/repository-bootstrap-ports.test.ts"
+      ],
+      "note": "Host ports reuse nodeGitRunner, newly exported existing LANDER_IDENTITY/landingEnvironment (only two export edits). Git first commit has verified SHA. GH injectable exec boundary bare gh, argv, shell:false/windowsHide/60s timeout; ENOENT distinct from exit 1; output discarded and remote derived. Tree checks all paths before any writes, guards files/junctions/dotfiles/UNC/empty input; rechecks prepare/write gap and uses wx. Tests written first from step-5 roster: initial export assertion RED then Test Files 1 passed (1), Tests 24 passed (24). Initial real-git tests exceeded default 5s (14s suite); explicitly bounded at 300s to permit process completion/finally cleanup. Confirmed zero remaining test temp directories and git processes after run. pnpm --filter @moe/daemon typecheck exit 0.",
+      "startedAt": "2026-09-05T19:09:47.159Z",
+      "completedAt": "2026-09-05T19:15:57.250Z"
+    },
+    {
+      "stepId": "step-4",
+      "description": "THE SEQUENCE. Create `repository-bootstrap-service.ts` (+ bridge): a pure function over injected ports, returning a `BootstrapReceiptV1`. Order is load-bearing and each guard runs BEFORE anything is written:\n\n1. PROFILE VERSION first — an unknown version refuses `BOOTSTRAP_PROFILE_VERSION_UNKNOWN` before any filesystem contact, so a typo cannot create a directory.\n2. DIRECTORY GUARD second, and this is the safety property of the row: probe the target. Non-existent => create it and proceed. Exists and EMPTY => proceed. Exists with ANY entry => refuse `BOOTSTRAP_DIR_NOT_EMPTY` having written NOTHING. This command writes a whole tree at a path the operator typed; a wrong path that buries an existing directory is the worst outcome available here, so the refusal precedes the first byte, never follows it. Decide and document how a dotfile-only directory and a directory that is actually a FILE are answered.\n3. Generate the tree via child 1's generator; write it.\n4. `git init`, `git add`, first commit. Spawn failure => `BOOTSTRAP_GIT_UNAVAILABLE`. Capture the resulting sha.\n5. GitHub half, ONLY if the caller asked for it. `gh` absent or failing => `BOOTSTRAP_GH_UNAVAILABLE` for THIS HALF ONLY — the receipt still records `BOOTSTRAPPED` with `remoteUrl: null` and carries the code in its detail. A LOCAL-ONLY BOOTSTRAP IS A SUCCESS: failing the whole operation because `gh` is missing would make the feature unusable on the majority of machines, and that inversion is the single most likely way this row regresses.\n6. Hand off to `RepositoryBoundPort` then `CatalogRegistrationPort` — call them, never reimplement them.\n\nThe service performs no process spawning and no direct `fs` calls of its own; everything goes through the step-3 ports so every arm in step 6 runs offline.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-service.ts",
+        "apps/daemon/src/repository/repository-bootstrap-service.js"
+      ],
+      "newFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-service.ts",
+        "apps/daemon/src/repository/repository-bootstrap-service.js"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-service.ts",
+        "apps/daemon/src/repository/repository-bootstrap-service.js",
+        "apps/daemon/src/repository/repository-bootstrap-service.test.ts",
+        "apps/daemon/src/repository/repository-bootstrap-contracts.ts",
+        "apps/daemon/src/repository/repository-bootstrap-ports.ts"
+      ],
+      "note": "Sequence + bridge: version/name/GitHub validation before fs; tree prepare/write then reused Git port then optional GH then bind/catalog. Pure service has no fs/process calls. Returns honest failure receipt on effect throws; parent owns durable persistence and project.register-before-bind. Added service tests from planned steps 6/7 before implementation (missing export RED), then 2 files/39 tests GREEN; daemon typecheck exit 0 after fixing test literal widening. Validator moved within owned contracts/ports to keep service independent of host implementations. Added partial-commit and thrown-I/O arms; will rerun in next step.",
+      "startedAt": "2026-09-05T19:15:57.447Z",
+      "completedAt": "2026-09-05T19:18:29.486Z"
+    },
+    {
+      "stepId": "step-5",
+      "description": "HOST PORT TESTS — `repository-bootstrap-ports.test.ts`. These are the only arms that touch a real process, and they never touch the network.\n\n- REAL GIT in a temp directory: init, add, commit with the Moe identity; then assert `git log --oneline` is EXACTLY ONE line reading `chore: scaffold by Moe`. Assert the LINE COUNT as well as the text — a substring match would pass on a two-commit history.\n- Assert the commit's author is Moe, not the host's git config, by reading it back. This proves `LANDER_IDENTITY` was actually applied rather than inherited.\n- Assert `landingEnvironment()` hygiene bites: set `GIT_DIR` in the child environment and confirm the init still lands in the target directory. This is the arm that catches a product tree being written into a foreign checkout.\n- GH PORT, offline: assert spawn ENOENT maps to executable-absent and a nonzero exit maps to GitHub-refused, and that the two are DISTINGUISHABLE. Assert the argv is built byte-for-byte as `[\"repo\",\"create\",\"<owner>/<name>\",\"--<visibility>\",\"--source\",\".\",\"--push\"]`. No network call.\n- TREE WRITER: an absolute path, a `..` segment, and a path that normalizes outside the target are each REFUSED and write nothing.\n\nEVERY temp directory is removed in a `finally`, not after the assertions — a throwing arm must not leak (epic rail 4: a test that leaks makes every later gate on this board inadmissible). Every child process must exit or be killed before the arm returns; a held handle also reds unrelated suites on Windows.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-ports.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-ports.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-contracts.ts",
+        "apps/daemon/src/repository/repository-bootstrap-ports.ts",
+        "apps/daemon/src/repository/repository-bootstrap-ports.test.ts"
+      ],
+      "note": "Fresh post-cleanup host tests: pnpm --config.verify-deps-before-run=false --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=300000 src/repository/repository-bootstrap-ports.test.ts => exit0, Test Files 1 passed (1), Tests 29 passed (29), 22.85s. Real Git identity, single log line, inherited GIT_DIR hygiene, deterministic main, forced-throw cleanup; offline GH ENOENT/nonzero/timeout, exact argv; all unsafe tree paths and invalid targets; late entry preservation. Two review fixes from previous resume included: main matches generator CI; GitHub runtime field validation prevents coercion/null. All original three failed-cleanup folders now independently ABSENT. Current separate xKcg7W folder pre-existed this targeted run, arose while peers ran full suites; not swept or claimed as mine. Actual pnpm mitigation uses --config.verify-deps-before-run=false; shorter --no-verify-deps-before-run was rejected before tests. No dependency install/purge performed. Governor halted new full gates for host RAM exhaustion; proceeding sequential one-file drills only.",
+      "startedAt": "2026-09-05T19:18:29.717Z",
+      "completedAt": "2026-09-05T19:53:45.155Z"
+    },
+    {
+      "stepId": "step-6",
+      "description": "SERVICE TESTS, PART 1 — the refusals, in `repository-bootstrap-service.test.ts`. Every arm asserts the CODE AND THE LAYER, never merely that it failed: a test asserting only \"refused\" is one added layer away from vacuous, because a second refusal layer can answer first and the arm stays green while no longer testing its subject.\n\n(a) `BOOTSTRAP_DIR_NOT_EMPTY` — the safety arm. A real temp directory containing exactly ONE file. Assert code + layer, AND read the directory back and assert its entries are byte-identical to before: hash the existing file first and re-hash after. Proving NOTHING WAS WRITTEN is the point; an arm that only checks the return value would pass while the tree had already been laid down.\n(b) A NON-EXISTENT directory IS created and accepted.\n(c) An EMPTY existing directory IS accepted.\n(d) `BOOTSTRAP_GIT_UNAVAILABLE` — git port reports absent; code + layer.\n(e) `BOOTSTRAP_PROFILE_VERSION_UNKNOWN` — an unknown profile version; code + layer; and assert NO directory was created, which pins the step-4 ordering that puts the version check before any filesystem contact.\n(f) PRECEDENCE: with BOTH an unknown version and a non-empty directory, assert WHICH code wins. An unpinned precedence is how these two arms silently start testing each other.\n\nMUTATION CHECK for (a): invert the guard, confirm the arm goes RED, restore. Record the result — a failure-path test that has never been seen red is not evidence.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-service.test.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-service.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-ports.ts",
+        "apps/daemon/src/repository/repository-bootstrap-service.test.ts"
+      ],
+      "note": "All six refusal/safety arms are in the production service suite (real one-file directory hash+entries unchanged, absent/empty directory accepted, Git unavailable CODE+DAEMON_INGRESS, profile version zero prepare calls, version precedence over nonempty). Whole service suite freshly passed 1 file/21 tests. Mandatory guard inversion was RED: one-file test received BOOTSTRAPPED instead of BOOTSTRAP_DIR_NOT_EMPTY@DAEMON_INGRESS, 1 failed/20 skipped exit1. Restored in finally and independently proved SHA256 E69F2F493A6427F175578E9B14555F6654CB9D4066C15B1BACEFFC80A1DE0F8A equal external worker-suffixed backup. Separate post-restore targeted safety/version/Git/acceptance command passed 1 file/6 tests (15 skipped), exit0. Both temp cleanup and source restoration proven; no untracked git-diff claim. Temporary mutated production path reported even though bytes restored.",
+      "startedAt": "2026-09-05T19:53:45.447Z",
+      "completedAt": "2026-09-05T19:56:56.931Z"
+    },
+    {
+      "stepId": "step-7",
+      "description": "SERVICE TESTS, PART 2 — the success paths and the receipt, same file.\n\n(g) LOCAL-ONLY SUCCESS with the gh port reporting ABSENT. Assert ALL of it: the outcome is `BOOTSTRAPPED`; `remoteUrl` is null; the receipt carries `BOOTSTRAP_GH_UNAVAILABLE` for the GitHub half; the directory is a git repository; the tree matches child 1's generated map; `git log --oneline` is exactly ONE line reading `chore: scaffold by Moe`; and the `RepositoryBoundPort` and `CatalogRegistrationPort` doubles each received exactly one call with the expected arguments. A bootstrap that fails wholesale without `gh` is unusable on most machines — this arm is the regression fence for that inversion, so make it explicit rather than folding it into a generic happy path.\n(h) GITHUB HALF REQUESTED AND AVAILABLE, offline through the argv-capturing double: the captured argv is asserted byte-for-byte, and the receipt records the remote URL. No network.\n(i) GITHUB HALF FAILS (nonzero exit, not absent): the LOCAL repository still exists, is committed and is handed to the bind port; the receipt is still `BOOTSTRAPPED` with `remoteUrl: null`, and the detail distinguishes refused-by-GitHub from gh-absent.\n(j) RECEIPT INVARIANT, its own arm: a REFUSED receipt carries its code and `sha: null`; a BOOTSTRAPPED receipt carries a sha and `refusal: null`. Assert both directions — exactly one member populated — mirroring the null-pairing in landing-receipt-contracts.ts.\n(k) NO SECRET SURFACES (epic rail 3): drive the gh port with a remote URL carrying an embedded credential and assert it appears in NEITHER the receipt NOR any refusal detail.\n\nTeardown for every temp directory in a `finally`.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-service.test.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-service.test.ts",
+        "apps/daemon/src/repository/repository-bootstrap-ports.test.ts",
+        "apps/daemon/src/repository/repository-bootstrap-contracts.ts",
+        "apps/daemon/src/repository/repository-bootstrap-ports.ts"
+      ],
+      "note": "Fresh restored-code service file: pnpm --config.verify-deps-before-run=false --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=1 --testTimeout=300000 src/repository/repository-bootstrap-service.test.ts => exit0, Test Files 1 passed (1), Tests 22 passed (22), 46.65s. All success/optional-GH/refusal null-pair/userinfo/real committed bind+catalog failure/second-call arms pass. All temp directories finally-cleaned. Static imports replace initial red-first import fallbacks in both planned test files. Production files listed here were temporarily mutated and restored (comment-13cda1ed05914657a745fab3dfd4457d records 41 refusal arms RED and independent SHA256 equality); no mutant remains. No additional paths or composition authority taken.",
+      "startedAt": "2026-09-05T19:56:57.239Z",
+      "completedAt": "2026-09-05T20:10:53.551Z"
+    },
+    {
+      "stepId": "step-8",
+      "description": "GATES. Run each leg standalone and quote its OUTPUT — the `Test Files N passed` count line — never its exit code. `pnpm --filter <pkg> <script>` prints \"No projects matched the filters\" and exits 0; \"No test files found\" is also exit 0.\n\n- `pnpm --filter @moe/daemon test` (@moe/daemon is apps/daemon — resolve by PACKAGE NAME, not directory).\n- `pnpm typecheck`.\n- State explicitly that the root vitest include has NO `apps/**`, so a bare `pnpm test` count line is NOT evidence for anything this row owns; the daemon leg is.\n\nREUSE EVIDENCE (DoD 6) — a claim about not having written a second implementation is a claim about the whole tree, so make it a command, not a sentence. Quote the output of:\n- `git grep -n \"execFile(\\\"git\\\"\\|spawnSync(\\\"git\\\"\\|spawn(\\\"git\\\"\" -- apps/daemon/src` — the only hit must remain git-landing-port.ts's `nodeGitRunner`.\n- `git grep -n \"project.bind_repository\" -- apps/daemon/src/repository` — must show this row calling the port, not reducing a command itself.\n\nREPO-WIDE BASELINE, path-attributed: repo-wide failures at the merge-base, at HEAD, subtract, intersect with this row's owned paths under apps/daemon/src/repository/. Completion needs that intersection EMPTY and the owned legs exit 0. Disclose any foreign red verbatim with its failing file paths — never hide it, never fabricate a green.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-service.ts",
+        "apps/daemon/src/repository/repository-bootstrap-ports.ts"
+      ],
+      "note": "Executed effective amend-1, not superseded full-suite instructions. From apps/daemon: npx --no-install vitest run --root . --config package.json src/repository/repository-bootstrap-ports.test.ts src/repository/repository-bootstrap-service.test.ts --maxWorkers=1 --testTimeout=300000 => EXIT0; Test Files 2 passed (2), Tests 52 passed (52), 63.21s. Separate fresh per-file counts ports1/30, service1/22. Recursive repository test-import census names only those2 files. Six-root strict tsc with all imported dependencies EXIT0 (full command comment-9a4bb36e244d45b3bf1c73bd2ed68d5d). Root and daemon full typecheck EXIT1, only exact foreign diagnostics recorded in comments, owned intersection empty. Required governor-halt full-test nonexecution wording and honest baseline limits in comment-da71061ccbb0463ea28c73f6b71eb5ec. Root test excludes apps/**. Reuse greps and parent composition contract in comment-c1e527764a264b47b26d6ab37b169eca; one executable Git launcher and one comment mentioning it. No full test gate launched during halt. No source edits in step.",
+      "startedAt": "2026-09-05T20:10:54.007Z",
+      "completedAt": "2026-09-05T20:18:54.656Z",
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "GATES — AMENDED UNDER THE GOVERNOR GATE HALT OF 2026-09-05 20:01Z (host at the commit ceiling; a full `pnpm --filter @moe/daemon test` on this host is OOM-killed and produces no count line, which is not evidence of anything). Run each leg standalone and quote its OUTPUT — the `Test Files N passed` count line — never its exit code. `pnpm --filter <pkg> <script>` prints \"No projects matched the filters\" and exits 0; \"No test files found\" is also exit 0.\n\n- TARGETED OWNED LEGS in place of the full daemon suite: from apps/daemon, `npx vitest run --root . --config package.json src/repository/repository-bootstrap-ports.test.ts src/repository/repository-bootstrap-service.test.ts` plus any other test file under apps/daemon/src/repository/ that imports this row's modules — quote the count line for each file (the already-measured set is 1 file / 30 tests and 1 file / 22 tests). These must be exit 0.\n- `pnpm typecheck` — owned paths must report nothing; foreign diagnostics are disclosed by path and are not yours.\n- Do NOT start `pnpm --filter @moe/daemon test` or root `pnpm test` while the halt stands. State VERBATIM in the completion record: \"Full `pnpm --filter @moe/daemon test` and root `pnpm test` NOT RUN under governor gate halt 20:01Z (host at commit ceiling, seven orphaned index processes resident); targeted owned legs above are the completion evidence per global rail 3. Known foreign baseline reds on record: src/work/foundation-capture-producer.test.ts timeouts and the 11-file root baseline.\" If the halt is lifted (governor posts `HOST CLEAR — FULL` in #general) BEFORE you call complete_task, run the daemon suite once with `VITEST_MAX_WORKERS=2` under a posted `GATE START` and quote it instead.\n- State explicitly that the root vitest include has NO `apps/**`, so a bare `pnpm test` count line is NOT evidence for anything this row owns; the daemon legs are.\n\nREUSE EVIDENCE (DoD 6) — a claim about not having written a second implementation is a claim about the whole tree, so make it a command, not a sentence. Quote the output of:\n- `git grep -n \"execFile(\\\"git\\\"\\|spawnSync(\\\"git\\\"\\|spawn(\\\"git\\\"\" -- apps/daemon/src` — the only hit must remain git-landing-port.ts's `nodeGitRunner`.\n- `git grep -n \"project.bind_repository\" -- apps/daemon/src/repository` — must show this row calling the port, not reducing a command itself.\n\nREPO-WIDE BASELINE, path-attributed: with no repo-wide run taken under the halt, the delta ∩ owned paths under apps/daemon/src/repository/ is trivially EMPTY; say so, and name the known foreign baseline reds above. Completion needs the owned legs exit 0. Disclose any foreign red verbatim with its failing file paths — never hide it, never fabricate a green.",
+          "reason": "Governor gate-halt overlay (20:01Z, still in force). Host is at the commit ceiling (124.8/126.3 GB, RAM 2.6 GB, seven orphaned index processes resident); the named `pnpm --filter @moe/daemon test` (~9,000 tests, 4-worker pool) is OOM-killed on this host and yields no count line. The worker contract requires the plan-NAMED verification to run fresh, so the named command must change to one that can produce a result. Only the daemon-suite leg changes; typecheck, reuse-evidence greps and the path-attributed baseline clause are verbatim. Consistent with global rail 3: owned-package legs exit 0 decide completion; the repo-wide leg is disclosed, not fabricated.",
+          "amendedBy": "governor-afbde490",
+          "amendedAt": "2026-09-05T20:15:20.570Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
+    },
+    {
+      "stepId": "step-9",
+      "description": "ADVERSARIAL SELF-REVIEW before `moe.complete_task`.\n\nTHE DIRECTORY GUARD IS THE ATTACK SURFACE — answer each with a command:\n- What does the guard do when the target is a FILE, a symlink to a non-empty directory, a path with a trailing separator, an empty string, a UNC path, or a directory containing only dotfiles? Each needs a defined answer, and \"it threw\" is not one.\n- Does the probe-then-write sequence have a window? If the directory becomes non-empty between the probe and the write, what happens? Say which, and whether it matters at this trust level.\n- Run the whole thing TWICE against the same directory: the second run must refuse `BOOTSTRAP_DIR_NOT_EMPTY`, not append a second commit. Assert it.\n- Does the tree writer stop a path that escapes the target? You wrote the check in step 3 — confirm the arm actually reds when you remove it.\n\nPARTIAL-FAILURE HONESTY:\n- If `git init` succeeds and the commit fails, what is on disk and what does the receipt say? A REFUSED receipt with no sha over a directory that now holds a tree is a real state — document it rather than pretending it cannot happen, and say whether a retry can describe it.\n- If the bind port throws after a successful commit, is the receipt still written?\n\nEPIC RAILS:\n- Rail 3: grep your own test fixtures and refusal details for anything token-shaped. No credential in a committed fixture, no remote URL with embedded userinfo in any receipt or log line.\n- Rail 4: every temp directory and every child process this row's tests create is released on EVERY exit path including the throwing one. Force an arm to throw and confirm the directory is gone and no `git`/`gh` process survives.\n\nMUTATION DRILL: `git status --porcelain` the exact paths FIRST. Every file in this row is NEW (untracked), so `git diff -- <path>` is empty before, during and after and certifies NOTHING. Back each mutated path up out of tree under %TEMP% suffixed by your worker id, and prove the restore by SHA256 equality in a call SEPARATE from the restore — a PowerShell copy can silently no-op, and \"the command returned\" is not evidence the bytes moved.",
+      "status": "COMPLETED",
+      "affectedFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-service.ts",
+        "apps/daemon/src/repository/repository-bootstrap-service.test.ts",
+        "apps/daemon/src/repository/repository-bootstrap-ports.ts"
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/repository-bootstrap-contracts.ts",
+        "apps/daemon/src/repository/repository-bootstrap-contracts.js",
+        "apps/daemon/src/repository/repository-bootstrap-ports.ts",
+        "apps/daemon/src/repository/repository-bootstrap-ports.js",
+        "apps/daemon/src/repository/repository-bootstrap-service.ts",
+        "apps/daemon/src/repository/repository-bootstrap-service.js",
+        "apps/daemon/src/repository/repository-bootstrap-ports.test.ts",
+        "apps/daemon/src/repository/repository-bootstrap-service.test.ts",
+        "apps/daemon/src/repository/git-landing-port.ts"
+      ],
+      "note": "Adversarial checklist complete, full analysis/evidence in comment-16d12db5812f4b8e85f70dec07b37121 and mutation comments. Guard inversion RED, safely contained escape guard removal RED, 41 refusal arms RED against mutated production layer; separate external-backup SHA256 equality confirms restored untracked files. No mutation changed since final named npx gate: Test Files2 passed(2), Tests52 passed(52), exit0. File/symlink/blank/UNC/dotfile/trailing-slash/late-arrival/two-bootstrap arms assert exact provenance and preserved contents. Partial failures return honest SHA-null receipts; local artifacts retained; parent persists receipts, not this service. All temp tests finally-cleaned; forced-throw cleanup passes and external real-Git probe confirms no additional ProcessWrap after bounded close-drain (not a descendant census). GH entirely offline. No token fixture, second git launcher, binding reducer, command kind or roster change. Parent owns validated ingress and caller-owned-directory trust; hostile ancestor-swap atomicity not claimed. Independent read-only reviewer found no blocking risk. All nine paths restated for exact wrapper attribution; shared git-landing-port.ts diff only two exports, all peer work preserved.",
+      "startedAt": "2026-09-05T20:18:55.042Z",
+      "completedAt": "2026-09-05T20:19:32.583Z"
+    }
+  ],
+  "status": "DONE",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Human requested continuation; live Test-Path checks now show all three exact cleanup-blocking temp directories ABSENT. Cleanup prerequisite is resolved externally; resume step 5 and remaining verification.",
+  "createdBy": "WORKER",
+  "parentTaskId": "task-facff1d1e7ce44a6b1101490524890a9",
+  "dependsOn": [
+    "task-4a0f706437a042059789be2ebdb98bc0"
+  ],
+  "priority": "HIGH",
+  "order": 81.4,
+  "comments": [
+    {
+      "id": "comment-57a1f9469679471cb5208483d22eb9a4",
+      "author": "worker-7bdbffac",
+      "content": "Implementation checkpoint: steps 1–4 complete, step 5 IN_PROGRESS. Nine owned paths = repository-bootstrap-{contracts,ports,service}.{ts,js}, repository-bootstrap-{ports,service}.test.ts, git-landing-port.ts (two export additions only). No command/registry changes. Parent task-facff1d1e7ce44a6b1101490524890a9 dependsOn this row (measured through Moe get_context). Interfaces: bootstrapRepository(request,ports), createBootstrapGitPort, createBootstrapGhPort, createNodeGhRunner, nodeTreeWriter. Parent must durably project.register before existing bindRepository, throw if composed bind/catalog refuses, persist returned receipt. GH warning occupies githubRefusal independently of the success SHA/refusal null pair.\n\nFresh focused run: pnpm --filter @moe/daemon exec vitest run --root . --config package.json --testTimeout=300000 src/repository/repository-bootstrap-ports.test.ts src/repository/repository-bootstrap-service.test.ts src/repository/git-landing-port.test.ts -> exit 0, Test Files 3 passed (3), Tests 49 passed (49), 38.19s. This is NOT final-gate certification while cleanup below remains unresolved. pnpm --filter @moe/daemon typecheck -> exit 0.\n\nBLOCKING CLEANUP: earlier invocation of those three files WITHOUT --testTimeout=300000 timed out the existing git-landing-port.test.ts at lines 38,64,85 (default 5s). Its afterEach at line 13 failed EPERM and left exactly these test-created directories:\nC:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-landing-port-9LanNB\nC:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-landing-port-Qgw7W6\nC:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-landing-port-KrNcmh\nNative PowerShell recursive removal with containment verification, then an explicit-path Remove-Item -LiteralPath retry, were both rejected by exec tool policy ('blocked by policy'). No workaround attempted. Get-CimInstance Win32_Process -Filter \"Name='git.exe'\" showed none at cleanup inspection. These paths were inspected and are ordinary directories, not links. New bootstrap tests use finally and 300s bounds for real-process arms; own bootstrap temp directories did not remain. Must clean these three with an authorized mechanism before further admissible gates under epic rail 4.\n\nRemaining: complete step 5 after cleanup; steps 6/9 mutation drills with separate SHA256 restore proof; step 7 receipt/success completion; full daemon/root/typecheck/foundation/store gates and path baseline; adversarial review. Pre-production snapshot HEAD b3ff0b9002924422c48b6963134c32aad540dc51. Initial pnpm typecheck exit 1 was foreign apps/control-room/src/v2/cordum-app.test.tsx(1555,41) TS2493 and src/v2/shell/advanced-frames.test.ts(58,10) TS2352 (response status missing). No repo-wide-green claim.",
+      "timestamp": "2026-09-05T19:22:28.278Z"
+    },
+    {
+      "id": "comment-df09989677bb40ba9425c660380af696",
+      "author": "worker-7bdbffac",
+      "content": "RESUME (human 'continue', 2026-09-05 ~19:38 UTC): moved task back to WORKING with explicit reason that cleanup is NOT resolved; reclaimed as worker-7bdbffac. Step5 already IN_PROGRESS (start_step correctly refuses duplicate start). Read-only parallel review found two actual defects, now repaired inside existing owned paths: (1) plain git init inherited default branch despite scaffold CI controlled-profile-root-templates.ts:156 branches:[main]; initialize --initial-branch=main, assert exact init argv and real branch. (2) isBootstrapGithubRequest regex-coerced missing/numeric owner/name and dereferenced null; it now checks unknown input/object/string fields before grammar. RED targeted run: 4 failed/1 passed/24 skipped, code/layer tests showed BOOTSTRAP_GH_UNAVAILABLE/GH_EXECUTION_FAILED instead of BOOTSTRAP_PAYLOAD_INVALID/GITHUB_REQUEST_INVALID, plus null TypeError and missing init arg. GREEN same focused command: pnpm --filter @moe/daemon exec vitest run --root . --config package.json src/repository/repository-bootstrap-ports.test.ts -t 'initializes main|malformed GitHub shape' => Test Files 1 passed (1), Tests 5 passed | 24 skipped (29), exit0. Only injected pure tests ran; these are repair evidence, NOT final teardown certification. Fresh pnpm --filter @moe/daemon typecheck exit0.\n\nAll three original denied-cleanup directories still exist. Requested exact deletion from user asynchronously and governor. No further cleanup attempt or bypass. Host mtkbtsvc pid24208 measured 1,148,856 handles on resume; governor msg-ea51784482bf4a01b7a880a80ca25e8f requires GATE START/END serialization for full suites. No full suite launched on resume. A current moe-bootstrap-ports-xKcg7W folder was seen although my only resumed tests were pure; likely another full-suite consumer currently executing these new shared tests, so do NOT sweep temp prefixes.\n\nOWNERSHIP: git-landing-port.ts now has foreign push/ls-remote hunks at ~232+ in addition to my two exports. None of those foreign hunks were authored or changed by me. Posted coordination to governors/workers; preserve them, resolve attribution before landing. New bootstrap paths remain untracked; no task commit recorded yet. Remaining step6/9 drills and full gates are uncompleted.",
+      "timestamp": "2026-09-05T19:40:14.469Z"
+    },
+    {
+      "id": "comment-99e0c3e19a524fd39138435dddf52ed1",
+      "author": "worker-7bdbffac",
+      "content": "Cleanup resolution: at this continuation, separate Test-Path checks show all EXACT prior folders ABSENT. No retry/delete was required; restored WORKING and reclaimed. New gate-launch issue measured before any tests: plain pnpm exec now attempts an automatic install and aborts ERR_PNPM_ABORTED_REMOVE_MODULES_DIR_NO_TTY. Do NOT consent to purging shared node_modules. Installed pnpm.mjs:113028 defaults verify-deps-before-run to install; option definition :112729 is Boolean; dispatch :211411 only runs it when truthy. Using per-invocation --no-verify-deps-before-run to run existing installed dependencies without modifying manifests/lock/node_modules. This does not suppress test/typecheck failures; executable package/test counts still required. Plain named gates will be reported honestly if they abort before execution; adjusted equivalent legs are separately recorded.",
+      "timestamp": "2026-09-05T19:51:29.879Z"
+    },
+    {
+      "id": "comment-fb8393464df8445fb2a4d7eddc1ebdaa",
+      "author": "worker-7bdbffac",
+      "content": "Mandatory guard mutation completed after cleanup. Initial exact-path git status => ?? for ports/contracts/service. Created OUT-OF-TREE backups named %TEMP%/moe-bootstrap-{ports,contracts,service}-worker-7bdbffac.backup. Independent initial hashes matched. Ports SHA256 E69F2F493A6427F175578E9B14555F6654CB9D4066C15B1BACEFFC80A1DE0F8A. Mutated the ONE readdirSync(dir).length !== 0 guard to === 0. Focused production-service arm 'refuses ONE existing file without writing anything' went RED: expected BOOTSTRAP_DIR_NOT_EMPTY@DAEMON_INGRESS/REFUSED/sha:null, received BOOTSTRAPPED/sha. Test used only its real disposable temp directory; finally cleanup ran. Command exit1, Test Files 1 failed (1), Tests 1 failed | 20 skipped (21). Restore ran in finally; SEPARATE command compared SHA256 with external backup, exact equality. No git-diff-as-proof claim for untracked files. Fresh whole service file before drilling: 1 file/21 tests passed, exit0; whole host-ports file 1/29 passed. No full-suite launch during governor HOST halt.",
+      "timestamp": "2026-09-05T19:55:40.774Z"
+    },
+    {
+      "id": "comment-13cda1ed05914657a745fab3dfd4457d",
+      "author": "worker-7bdbffac",
+      "content": "Adversarial drills run ahead of final gates to keep final verification on restored bytes. Path guard removal: added a dedicated case with target nested INSIDE a disposable parent, so the mutation can only write within test-owned temporary storage (never used unsafe absolute fixtures with the guard disabled). Temporarily early-returned resolve(root,path) in treePath. That arm went RED: BOOTSTRAP_TREE_PATH_INVALID/TREE_PATH_INVALID@DAEMON_INGRESS expected, actual ok:true. 1 failed/29 skipped, exit1. Restored in finally; SEPARATE SHA256 proof matched E69F2F493A6427F175578E9B14555F6654CB9D4066C15B1BACEFFC80A1DE0F8A; restored arm passed 1/29 skipped exit0.\n\nEvery refusal arm was then observed RED, not just the safety guard. Temporarily changed ONLY bootstrapRefusal's production refusedBy literal from DAEMON_INGRESS to MUTATED. Host ports: 24 failed | 6 skipped (30), each failing on expected code/detail with wrong layer. Service: 17 failed | 5 skipped (22), covering all defined refusal codes, profile precedence, optional GH warnings, returned receipt invariant, userinfo rejection, bind/catalog throws, partial Git commit, tree refusal, thrown prepare/write and invalid inputs. Both mutation runs exit1. Each restored in finally; SEPARATE hash calls proved contracts SHA256 A1405EE725F50F817EA5F3CDED0123E3546B2F18D7B9075117DFE5923169540A equals external backup. No production mutant remains. Old service SHA AC37118BC82AA1EEAD544BCF66299FEE2C96C62D1FD8CE20322546A83978BE44 unchanged. New bind/catalog error arms now use REAL git and assert exactly one retained commit + REFUSED receipt sha:null. Thrown GH diagnostic arm uses runtime random value and boolean non-disclosure assertion so failures never print it. All temporary directories in these arms cleaned via finally.",
+      "timestamp": "2026-09-05T20:04:19.947Z"
+    },
+    {
+      "id": "comment-ebb9cd37643d4707a247a937c3237dab",
+      "author": "worker-7bdbffac",
+      "content": "Fresh root pnpm typecheck (process-local pnpm_config_verify_deps_before_run=warn so shared node_modules is not auto-purged) EXIT1. Exact foreign diagnostics: apps/daemon/src/orchestrator/agent-wrapper.test.ts(298,11) TS2322: array status:string not assignable to readonly ChainStep[] / status 'BLOCKED'|'COMMITTED'|'READY'; apps/daemon/src/preview/preview-ledger.ts(62,4) and (63,17) TS2304 Cannot find name 'CommandDecisionRecord'. No bootstrap/git-landing owned diagnostic. Before-diff measurement at b3ff0b9002924422c48b6963134c32aad540dc51 had foreign apps/control-room/src/cordum-app.test.tsx(1555,41) TS2493 and apps/control-room/src/shell/advanced-frames.test.ts(58,10) TS2352 (missing DaemonAnswer.status); those are now clear. Failing-path delta intersect owned9 EMPTY. Shared-tree current measurement, not a claim of clean committed HEAD verification. Full-suite test lanes DEFERRED under governor msg-45c1f127b54a4eef9304fde5f277f4b2 HALT NEW FULL-SUITE GATES; explicit amendment request msg-f941683ec07643faa56d9fd1e21d1b74 pending. Not calling an unexecuted gate green. Root vitest does not cover apps/**. Correction to prior pnpm comment: --no-verify-deps-before-run is rejected; working per-invocation switch is --config.verify-deps-before-run=false (no config/dependency files edited).",
+      "timestamp": "2026-09-05T20:12:11.270Z"
+    },
+    {
+      "id": "comment-c1e527764a264b47b26d6ab37b169eca",
+      "author": "worker-7bdbffac",
+      "content": "Delivered-tree reuse anchors (commands survive commit): git grep -n -E 'execFile\\(\"git\"|spawnSync\\(\"git\"|spawn\\(\"git\"' -- apps/daemon/src => sole executable call git-landing-port.ts:92; also daemon-main-activation-boot.test.ts:57 COMMENT mentioning that call, not a launcher. Select-String -Path apps/daemon/src/repository/repository-bootstrap-ports.ts -Pattern 'nodeGitRunner|landingEnvironment|LANDER_IDENTITY' => import:5, default runner:15, identity:18, GH environment:40. Select-String -Path apps/daemon/src/repository/repository-bootstrap-service.ts -Pattern 'project.bind_repository|ports.bindRepository|ports.registerCatalog' => parent composition contract:36, bind call:65, catalog call:67. New untracked files are invisible to git grep until wrapper commit; Select-String measured actual bytes. Parent task-facff1d1e7ce44a6b1101490524890a9 has dependsOn this engine; it must project.register first and supply existing bootstrap-services.bindRepository plus catalog. This row RETURNS receipts; it does NOT durably persist them or claim end-to-end command composition. Parent owns that. Only shared tracked diff is two exports in git-landing-port.ts; peer changes preserved. New production counts113/127/71; largest function30 lines. Own token-shaped grep has only comment 'query tokens'; dynamic random values in negative tests are not committed credentials and assertions cannot print them.",
+      "timestamp": "2026-09-05T20:15:00.916Z"
+    },
+    {
+      "id": "comment-9a4bb36e244d45b3bf1c73bd2ed68d5d",
+      "author": "worker-7bdbffac",
+      "content": "Fresh strict OWNED-CLOSURE compiler EXIT0: pnpm --config.verify-deps-before-run=false --filter @moe/daemon exec tsc --ignoreConfig --noEmit --strict --module nodenext --moduleResolution nodenext --target es2024 --lib es2024 --types node --exactOptionalPropertyTypes --noUncheckedIndexedAccess --verbatimModuleSyntax --forceConsistentCasingInFileNames --skipLibCheck --noUnusedLocals --noUnusedParameters --noFallthroughCasesInSwitch --noImplicitOverride --isolatedModules src/repository/repository-bootstrap-contracts.ts src/repository/repository-bootstrap-ports.ts src/repository/repository-bootstrap-service.ts src/repository/repository-bootstrap-ports.test.ts src/repository/repository-bootstrap-service.test.ts src/repository/git-landing-port.ts . This compiles all six roots and imports, not diagnostic filtering. Failed initial attempts disclosed: TS7 require('typescript') exposes version not legacy compiler API; explicit-file CLI needs --ignoreConfig (TS5112 otherwise). No source/settings change.\nLatest full daemon typecheck EXIT1 foreign paths: src/http/health-read.test.ts(70,7) TS2353 readRepository absent from HealthReadOptions; same file(78,24),(81,51),(84,40),(85,40),(89,65),(92,26),(99,24),(102,39),(106,73) TS2339 repository absent from {readonly paused:ProviderPauseView|null}; src/orchestrator/agent-wrapper.test.ts(298,11) TS2322 status:string vs BLOCKED|COMMITTED|READY; src/preview/preview-process.ts(241,20) TS2304 Cannot find name connect; src/repository/repository-execution-port.test.ts(7,99) TS2307 Cannot find module ./repository-execution-contracts.js. All under apps/daemon; none of these five paths is owned by this row, including the adjacent repository test. Owned-path delta empty. Broad package typecheck is NOT green.",
+      "timestamp": "2026-09-05T20:15:58.035Z"
+    },
+    {
+      "id": "comment-da71061ccbb0463ea28c73f6b71eb5ec",
+      "author": "worker-7bdbffac",
+      "content": "Step8 active amendment amend-1 by governor-afbde490 20:15:20Z is authority, not superseded base text. Required disclosure: Full `pnpm --filter @moe/daemon test` and root `pnpm test` NOT RUN under governor gate halt 20:01Z (host at commit ceiling, seven orphaned index processes resident); targeted owned legs above are the completion evidence per global rail 3. Known foreign baseline reds on record: src/work/foundation-capture-producer.test.ts timeouts and the 11-file root baseline.\nThese full-suite baseline references come from the governor's amendment, not a new worker run. No full post-halt test delta measured; amended scope treats owned intersection as empty based on fresh owned legs, not a fabricated broad run. Root Vitest has NO apps/**; only explicit daemon Vitest runs evidence this task. Root verify:foundation/verify:store also NOT RUN during halt (both start pnpm typecheck then root test lanes); root typecheck itself was run and its foreign reds are in comments. User-visible/command composition and durable receipts remain parent-owned, not certified here.",
+      "timestamp": "2026-09-05T20:17:54.599Z"
+    },
+    {
+      "id": "comment-16d12db5812f4b8e85f70dec07b37121",
+      "author": "worker-7bdbffac",
+      "content": "Adversarial/cleanup evidence on current bytes: file/junction/blank/UNC => BOOTSTRAP_DIR_INVALID; trailing slash accepted on empty target; dotfile => BOOTSTRAP_DIR_NOT_EMPTY. Dedicated port arms assert CODE+DAEMON_INGRESS and no writes. Late entry between prepare/write => DIR_NOT_EMPTY; wx prevents overwrites. This is not an OS transaction against a hostile local process swapping ancestor symlinks; documented caller-owned-directory trust. Ordinary second bootstrap is refused without a second commit. Git commit failure retains tree/.git but REFUSED sha:null; retry refuses nonempty. Bind/catalog failure retains real single-commit repo and RETURNS REFUSED receipt; parent owns durable write. Extra input validation (product/GH) runs after profile and before filesystem, safe before-first-write precedence.\nCleanup: all temp allocations in two tests use awaited scratch helpers with finally/rmSync; forced throw arm pins FORCED_TEST_THROW and existsSync false. All real Git calls awaited, all GH tests injectable/offline. Additional fresh inline Node real-Git+forced-throw probe: temp absent and ProcessWrap resources returned to pre-run baseline after bounded 20x100ms close-drain, EXIT0. Initial one-tick-only probe EXIT1 because a closing ProcessWrap still existed (directory already removed); bounded drain succeeded, no production change. This is current-process child-handle evidence, NOT a system-wide PID or descendant census. Real GH timeout process-tree teardown is not independently tested in this offline row; broader platform process-tree hardening remains an epic-final consideration, not a fabricated claim.\nMandatory mutation results and untracked-path separate SHA256 restore proofs are in comment-fb8393464df8445fb2a4d7eddc1ebdaa and comment-13cda1ed05914657a745fab3dfd4457d. Fresh hashes still match all three external backups. Independent read-only subagent audit found no new blocking risk and confirmed <=50-line functions.",
+      "timestamp": "2026-09-05T20:18:32.891Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-05T17:22:49.335Z",
+  "updatedAt": "2026-09-05T21:27:22.993Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-05T18:10:10.343Z",
+    "plannedStepCount": 9,
+    "plannedDistinctFileCount": 9,
+    "executedStepCount": 9,
+    "doneAt": "2026-09-05T21:26:07.592Z",
+    "wallClockMs": 11757249
+  },
+  "planSizeWarnings": [
+    "Plan has 9 steps (target <=8); plans over 12 are rejected. Consider splitting the task before it grows.",
+    "Plan touches 9 distinct files (target <=5); plans over 10 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5",
+    "step-6",
+    "step-7",
+    "step-8",
+    "step-9"
+  ],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-05T18:13:01.704Z",
+  "planningNotes": {
+    "approachesConsidered": "WHERE THE BINDING AND THE CATALOG LIVE. Considered doing bind + catalog registration inside this service. REJECTED: `bindRepository` is a `CommandHandler` that needs a command `context` and `reduceAndCommit`, which only exists at the dispatch edge — pulling it in here would drag the command context into a pure service and put this row back over its file budget. This row declares narrow port interfaces (`RepositoryBoundPort`, `CatalogRegistrationPort`) and the PARENT supplies implementations backed by the existing `bindRepository` and `project-catalog.ts`. That satisfies \"reuse, do not reinvent\" — the test for it is that no second binding implementation exists anywhere, which is a grep, not a call.\n\nWHETHER TO WRITE A SECOND PROCESS LAUNCHER FOR `gh`. Rejected. `GitRunner`'s shape `(cwd, args, stdin?) => Promise<{code, stderr, stdout}>` is executable-agnostic; the gh port reuses the same TYPE with a different executable, so one discipline covers both and the argv-capture double in the tests is one implementation.\n\nHOW `gh` ABSENCE IS DETECTED. Considered probing with `gh --version` first. REJECTED as a second failure mode: a probe that succeeds and a create that then fails leaves two paths to BOOTSTRAP_GH_UNAVAILABLE. Instead the port reports absence as a distinct outcome from a nonzero exit — ENOENT from the spawn is `gh` absent (BOOTSTRAP_GH_UNAVAILABLE), a nonzero exit is a GitHub-side failure. Both refuse only the GitHub half; the local repository stands either way. State which is which in the receipt detail.\n\nSPLITTING THIS ROW FURTHER. Not needed: 8 files, 9 steps, both inside the thresholds.",
+    "codebaseInsights": "MEASURED AT HEAD (moe/work-2026-09-04) by architect-fa3a3e17, 2026-09-05.\n\nTHE MEASUREMENT THAT VALIDATES THE SPLIT: `grep -n \"internal\\.\" apps/daemon/src/daemon-command-vocabulary.ts` returns ZERO. `internal.repository.landing_receipt` (landing-receipt-contracts.ts:22) is NOT in PAYLOAD_KEYS, not in the registry, not in the MCP roster. So an `internal.*` receipt kind bypasses the command roster entirely and this row can define `moe-bootstrap-receipt/1` with NO roster backfill — which is exactly what keeps it inside its file budget. Confirm this yourself before writing the receipt; if it has changed, stop and report rather than absorbing a roster backfill.\n\nTHE GIT SEAM TO REUSE — apps/daemon/src/repository/git-landing-port.ts:\n- :68 `export type GitRunner = (cwd: string, args: readonly string[], stdin?: string) => Promise<GitRunResult>` where `GitRunResult = { code: number | null; stderr: string; stdout: string }`.\n- :91 `nodeGitRunner` uses `execFile(\"git\", [...args], { cwd, env: landingEnvironment(), timeout: 60_000, windowsHide: true })` — the BARE executable, argv array, no shell. Copy that discipline for `gh`.\n- :78 `landingEnvironment()` strips every `GIT_*` variable from the parent environment (a parent shell's GIT_DIR / GIT_WORK_TREE / GIT_INDEX_FILE would redirect the operation) and sets GIT_OPTIONAL_LOCKS=0, GIT_TERMINAL_PROMPT=0, LC_ALL=C. `git init` in an operator-supplied directory needs exactly that hygiene — reuse the function, do not write a second one.\n- :79 `LANDER_IDENTITY = [\"-c\",\"user.name=Moe\",\"-c\",\"user.email=moe@moe.local\",\"-c\",\"commit.gpgsign=false\"]` — the identity every Moe commit carries, and the reason the first commit does not depend on the operator's git config. Reuse it for `chore: scaffold by Moe`.\n- `createGitLandingPort` handles add/commit/push but NOT `init`. This row adds init/first-commit on the SAME runner seam.\n\nTHE RECEIPT SHAPE TO MIRROR — apps/daemon/src/repository/landing-receipt-contracts.ts (236 lines):\n`LANDING_RECEIPT_VERSION = \"moe-landing-receipt/1\"`; `LandingReceiptV1 { commit: LandingCommit | null; decidedAt; outcome: \"COMMITTED\" | \"REFUSED\"; projectId; receiptId; refusal: LandingRefusal | null; subjectRef; version; workspace }`; `LandingRefusal { code: string; detail: string }`. The null-pairing is the pattern: the success member and the refusal member are BOTH nullable and exactly one is populated.\n\nTHE COMPOSITION SEAMS THIS ROW CALLS BUT DOES NOT OWN:\n- `bindRepository` is `CommandHandler` at bootstrap-services.ts:96, reading `request.payload.observation` and calling `reduceAndCommit` with kind `project.bind_repository`. It refuses with `refuse(request.kind, \"BOOTSTRAP_PAYLOAD_INVALID\", \"DAEMON_INGRESS\")` at :100 — which is the rostered layer literal this row reuses for its own refusals.\n- `apps/daemon/src/projects/project-catalog.ts` exposes `RegisterCatalogProjectInput`, `ProjectCatalogPorts`, `ProjectCatalogFsPort` and a family of `PROJECT_CATALOG_*` codes under `PROJECT_CATALOG_LAYER`. Registration is already ported and injectable.\nBoth are composed by the PARENT row task-facff1d1e7ce44a6b1101490524890a9. This row declares the port interfaces and never reimplements either.\n\nCHILD 1's SURFACE (task-4a0f706437a042059789be2ebdb98bc0, not yet landed): `generateControlledProfile({ productName, profileVersion })` returning `{ ok: true; files: ReadonlyMap<string,string> } | { ok: false; code; refusedBy }`, plus `CONTROLLED_PROFILE_VERSION` and `BOOTSTRAP_PROFILE_VERSION_UNKNOWN`, under apps/daemon/src/repository/controlled-profile/. Step 1 hard-stops if it is absent.\n\nEvery new `.ts` under apps/daemon needs a tracked one-line `.js` bridge (`export * from \"./x.ts\";` — measured convention, git-landing-port.js et al). Budget two files per module."
+  },
+  "planApprovedAt": "2026-09-05T18:13:03.825Z",
+  "contextFetchedBy": [
+    "worker-7bdbffac",
+    "qa-f2906c26"
+  ],
+  "workStartedAt": "2026-09-05T19:06:26.464Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "Human-requested resume made useful code progress: fixed deterministic main branch (scaffold CI targets main) and malformed GitHub runtime shape validation; 5 pure regression tests green and fresh daemon typecheck0. Final verification remains blocked by the unchanged teardown prerequisite: C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-landing-port-9LanNB, C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-landing-port-Qgw7W6, C:\\Users\\Yaron\\AppData\\Local\\Temp\\moe-landing-port-KrNcmh all still exist. These are this task's old git-landing test leftovers; native cleanup was denied by execution policy in original session. User has been asked to delete EXACT these three folders in File Explorer and reply cleaned; renewed governor request posted. No denied-operation workaround, no blanket temp sweep, and no final-gate claim. Need authorized cleanup, then resume step5 and remaining drills/gates. Do not treat unrelated peer dirt or host timeout baselines as block premises. Preserve foreign push/ls-remote hunk now coexisting with this task's two exports in git-landing-port.ts; ownership coordination posted. Updated task comment and Serena handoff carry current evidence and uncompleted steps.",
+  "blockedOnTaskIds": null,
+  "reviewStartedAt": "2026-09-05T20:21:23.541Z",
+  "verification": {
+    "command": "npx --no-install vitest run --root . --config package.json src/repository/repository-bootstrap-ports.test.ts src/repository/repository-bootstrap-service.test.ts --maxWorkers=1 --testTimeout=300000",
+    "exitCode": 0,
+    "outputTail": "cwd: D:/projexts/moe-next/apps/daemon\nRUN v4.1.10\nTest Files  2 passed (2)\nTests  52 passed (52)\nStart at 23:17:00\nDuration 63.21s (transform 257ms, setup 0ms, import 368ms, tests 61.24s, environment 0ms)\nEffective gate: step8 amend-1. Full suites deferred under governor halt; root/daemon typecheck foreign-red disclosed in task comments; owned-source strict compiler exit0.",
+    "reportedAt": "2026-09-05T20:21:23.541Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/repository/git-landing-port.ts",
+    "apps/daemon/src/repository/repository-bootstrap-contracts.ts",
+    "apps/daemon/src/repository/repository-bootstrap-contracts.js",
+    "apps/daemon/src/repository/repository-bootstrap-service.test.ts",
+    "apps/daemon/src/repository/repository-bootstrap-ports.ts",
+    "apps/daemon/src/repository/repository-bootstrap-ports.js",
+    "apps/daemon/src/repository/repository-bootstrap-ports.test.ts",
+    "apps/daemon/src/repository/repository-bootstrap-service.ts",
+    "apps/daemon/src/repository/repository-bootstrap-service.js",
+    ".moe/tasks/task-28fb953b96874889974d5f2b2c434e4e.json",
+    ".moe/tasks/task-e9cb2442a9a44408bea35cfce6a1897b.json",
+    ".moe/tasks/task-9ade7f88832d4ee6bc0d72e8d9c33598.json"
+  ],
+  "completionSummary": "Bootstrap engine/contracts/host ports delivered in 9 owned paths; no command/registry changes. Refusals pin CODE+DAEMON_INGRESS; guarded writes, deterministic main/Moe first commit, optional GH failure preserves local BOOTSTRAPPED, canonical remote URLs, honest SHA-null refusal receipts. Parent task-facff1d1e7ce44a6b1101490524890a9 dependsOn this row and supplies existing bind+catalog after project.register; this service RETURNS receipts, parent persists them.\nFresh amended gate (cwd apps/daemon): Test Files 2 passed (2), Tests 52 passed (52), exit0; individual ports30/service22. Strict six-root tsc closure exit0. Guard/path mutations RED; all41 refusal arms RED; separate untracked-source SHA256 restore proof recorded. Cleanup finally/forced-throw and ProcessWrap close-drain proven; no GH network.\nReuse: git grep -n -E 'execFile\\(\"git\"|spawnSync\\(\"git\"|spawn\\(\"git\"' -- apps/daemon/src => git-landing-port.ts:92 sole executable call (+test comment). Select-String -Path apps/daemon/src/repository/repository-bootstrap-service.ts -Pattern 'ports.bindRepository|ports.registerCatalog' =>65,67. Details/comment-c1e527764a264b47b26d6ab37b169eca.\nFull `pnpm --filter @moe/daemon test` and root `pnpm test` NOT RUN under governor gate halt 20:01Z (host at commit ceiling, seven orphaned index processes resident); targeted owned legs above are the completion evidence per global rail 3. Known foreign baseline reds on record: src/work/foundation-capture-producer.test.ts timeouts and the 11-file root baseline.\nRoot/daemon typecheck foreign-red only (exact lines comments ebb9cd/9a4bb); owned delta empty, broad green NOT claimed. Root excludes apps/**. Step8 amend-1 governs; baseline/verification limits comment-da71061ccbb0463ea28c73f6b71eb5ec.",
+  "commits": [
+    {
+      "sha": "31997b7ddca15ef78d580b0496233c4cd6412aac",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-05T21:11:00Z",
+      "paths": [
+        ".moe/tasks/task-28fb953b96874889974d5f2b2c434e4e.json",
+        ".moe/tasks/task-e9cb2442a9a44408bea35cfce6a1897b.json",
+        "apps/daemon/src/repository/git-landing-port.ts",
+        "apps/daemon/src/repository/repository-bootstrap-contracts.js",
+        "apps/daemon/src/repository/repository-bootstrap-contracts.ts",
+        "apps/daemon/src/repository/repository-bootstrap-ports.js",
+        "apps/daemon/src/repository/repository-bootstrap-ports.test.ts",
+        "apps/daemon/src/repository/repository-bootstrap-ports.ts",
+        "apps/daemon/src/repository/repository-bootstrap-service.js",
+        "apps/daemon/src/repository/repository-bootstrap-service.test.ts",
+        "apps/daemon/src/repository/repository-bootstrap-service.ts"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-05T21:12:33.922Z",
+      "treeId": "058f22d3391e8deaa9a96ad0b667cf3882aa85d2",
+      "status": "REVIEW",
+      "pushed": true
+    },
+    {
+      "sha": "a5db2c2bab15b391262632984cb180913d5ec533",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-f2906c26@2026-09-05T21:11:00Z",
+      "paths": [
+        ".moe/tasks/task-28fb953b96874889974d5f2b2c434e4e.json",
+        ".moe/tasks/task-9ade7f88832d4ee6bc0d72e8d9c33598.json"
+      ],
+      "recordedBy": "qa-f2906c26",
+      "recordedAt": "2026-09-05T21:27:22.993Z",
+      "treeId": "b2d1cb8282e846cb1003b107efb479f832a98a34",
+      "status": "DONE",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [
+    "apps/control-room/src/live/live-document-coverage.test.ts",
+    "apps/control-room/src/live/live-document-coverage.ts",
+    "apps/control-room/src/live/live-ops.test.ts",
+    "apps/control-room/src/live/live-ops.ts",
+    "apps/control-room/src/live/live-repository-reservation.ts",
+    "apps/control-room/src/live/live-runs.test.ts",
+    "apps/control-room/src/live/live-runs.ts",
+    "apps/control-room/src/v2/approvals/escalation-port.test.ts",
+    "apps/control-room/src/v2/approvals/escalation-port.ts",
+    "apps/control-room/src/v2/approvals/live-needs-you.test.tsx",
+    "apps/control-room/src/v2/approvals/needs-you.test.tsx",
+    "apps/control-room/src/v2/approvals/replan-successor-port.test.ts",
+    "apps/control-room/src/v2/approvals/replan-successor-port.ts",
+    "apps/control-room/src/v2/board/board-columns.test.ts",
+    "apps/control-room/src/v2/board/board-columns.ts",
+    "apps/control-room/src/v2/board/board-lanes.tsx",
+    "apps/control-room/src/v2/board/board-screen.test.tsx",
+    "apps/control-room/src/v2/board/board-screen.tsx",
+    "apps/control-room/src/v2/goals/contract-dossier.test.tsx",
+    "apps/control-room/src/v2/goals/contract-dossier.tsx",
+    "apps/control-room/src/v2/goals/goal-close-transition.test.tsx",
+    "apps/control-room/src/v2/goals/goal-publish.test.tsx",
+    "apps/control-room/src/v2/goals/goal-status.test.tsx",
+    "apps/control-room/src/v2/goals/prd-coverage.test.tsx",
+    "apps/control-room/src/v2/goals/prd-coverage.tsx",
+    "apps/control-room/src/v2/ops/ops-screens.test.tsx",
+    "apps/control-room/src/v2/ops/repository-reservation-card.tsx",
+    "apps/control-room/src/v2/resources/resources-frames.fixture.ts",
+    "apps/control-room/src/v2/runs/live-runs.test.tsx",
+    "apps/control-room/src/v2/runs/runs-screen.test.tsx",
+    "apps/control-room/src/v2/runs/runs-screen.tsx",
+    "apps/control-room/src/v2/runs/run-words.ts",
+    "apps/control-room/src/v2/styles/cordum-shell-layout.test.tsx",
+    "apps/daemon/src/goals/goal-close-readiness.test.ts",
+    "apps/daemon/src/goals/goal-close-readiness.ts",
+    "apps/daemon/src/http/activity-read.test.ts",
+    "apps/daemon/src/http/activity-read.ts",
+    "apps/daemon/src/http/document-coverage-contract.ts",
+    "apps/daemon/src/http/document-coverage-read.test.ts",
+    "apps/daemon/src/http/document-coverage-read.ts",
+    "apps/daemon/src/http/health-read.test.ts",
+    "apps/daemon/src/http/runs-read.test.ts",
+    "apps/daemon/src/http/runs-read.ts",
+    "apps/daemon/src/http/runs-read-contract.ts",
+    "apps/daemon/src/orchestrator/agent-wrapper-repository-refusal.test.ts",
+    "apps/daemon/src/orchestrator/compiled-execution-ref.js",
+    "apps/daemon/src/orchestrator/compiled-execution-ref.ts",
+    "apps/daemon/src/orchestrator/compiled-node-identity.test.ts",
+    "apps/daemon/src/orchestrator/compiled-node-identity.ts",
+    "apps/daemon/src/orchestrator/compiled-node-identity-test-fixtures.ts",
+    "apps/daemon/src/orchestrator/compiled-node-source.test.ts",
+    "apps/daemon/src/orchestrator/compiled-node-source.ts",
+    "apps/daemon/src/orchestrator/node-lander.test.ts",
+    "apps/daemon/src/orchestrator/node-lander.ts",
+    "apps/daemon/src/orchestrator/node-lander-verification.js",
+    "apps/daemon/src/orchestrator/node-lander-verification.ts",
+    "apps/daemon/src/orchestrator/node-spec-listing.test.ts",
+    "apps/daemon/src/orchestrator/node-spec-listing.ts",
+    "apps/daemon/src/orchestrator/node-verifier.test.ts",
+    "apps/daemon/src/orchestrator/node-verifier-workspace.js",
+    "apps/daemon/src/orchestrator/node-verifier-workspace.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-contracts.js",
+    "apps/daemon/src/orchestrator/repository-delivery-contracts.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-coordinator.js",
+    "apps/daemon/src/orchestrator/repository-delivery-coordinator.test.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-coordinator.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-recovery.test.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.js",
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.ts",
+    "apps/daemon/src/orchestrator/wrapper-node-missions.js",
+    "apps/daemon/src/orchestrator/wrapper-node-missions.test.ts",
+    "apps/daemon/src/orchestrator/wrapper-node-missions.ts",
+    "apps/daemon/src/preview/preview-goal-landing.test.ts",
+    "apps/daemon/src/preview/preview-ledger.test.ts",
+    "apps/daemon/src/repository/git-verified-workspace-capture.js",
+    "apps/daemon/src/repository/git-verified-workspace-capture.ts",
+    "apps/daemon/src/repository/git-verified-workspace-commit.js",
+    "apps/daemon/src/repository/git-verified-workspace-commit.ts",
+    "apps/daemon/src/repository/git-verified-workspace-faults.test.ts",
+    "apps/daemon/src/repository/git-verified-workspace-port.js",
+    "apps/daemon/src/repository/git-verified-workspace-port.test.ts",
+    "apps/daemon/src/repository/git-verified-workspace-port.ts",
+    "apps/daemon/src/repository/git-verified-workspace-runtime.js",
+    "apps/daemon/src/repository/git-verified-workspace-runtime.test.ts",
+    "apps/daemon/src/repository/git-verified-workspace-runtime.ts",
+    "apps/daemon/src/repository/goal-landing-facts.test.ts",
+    "apps/daemon/src/repository/goal-landing-facts.ts",
+    "apps/daemon/src/repository/landing-ledger.test.ts",
+    "apps/daemon/src/repository/landing-ledger.ts",
+    "apps/daemon/src/repository/repository-execution-concurrency.test.ts",
+    "apps/daemon/src/repository/repository-execution-contracts.js",
+    "apps/daemon/src/repository/repository-execution-contracts.ts",
+    "apps/daemon/src/repository/repository-execution-identity.js",
+    "apps/daemon/src/repository/repository-execution-identity.ts",
+    "apps/daemon/src/repository/repository-execution-persistence.js",
+    "apps/daemon/src/repository/repository-execution-persistence.ts",
+    "apps/daemon/src/repository/repository-execution-port.js",
+    "apps/daemon/src/repository/repository-execution-port.test.ts",
+    "apps/daemon/src/repository/repository-execution-port.ts",
+    "apps/daemon/src/repository/repository-execution-record.js",
+    "apps/daemon/src/repository/repository-execution-record.test.ts",
+    "apps/daemon/src/repository/repository-execution-record.ts",
+    "apps/daemon/src/repository/verified-workspace-contracts.js",
+    "apps/daemon/src/repository/verified-workspace-contracts.test.ts",
+    "apps/daemon/src/repository/verified-workspace-contracts.ts",
+    "apps/daemon/src/review/verifier-receipt-contracts.ts",
+    "apps/daemon/src/review/verifier-receipt-ledger.test.ts",
+    "apps/daemon/src/review/verifier-receipt-ledger.ts",
+    "docs/plans/2026-09-05-deep-review-remediation.md",
+    "docs/plans/2026-09-06-repository-delivery-remediation.md",
+    "Moe-NG_Deep_Review_2026-09-05.md"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-f2906c26@2026-09-05T21:11:00Z",
+    "at": "2026-09-05T21:27:22.993Z"
+  },
+  "completedAt": "2026-09-05T21:26:07.592Z",
+  "reviewCompletedAt": "2026-09-05T21:26:07.592Z",
+  "reviewSummary": "VERIFIED AT DELIVERED TREE: commit 31997b7ddca15ef78d580b0496233c4cd6412aac (moe/work-2026-09-04, kind=checkpoint, 11 paths = 9 owned + 2 wrapper task JSONs). git status/diff HEAD on all 9 owned paths EMPTY -> worktree bytes == committed bytes.\n\nGATES RE-RUN BY ME (effective step-8 amend-1; halt 20:01Z still in force, no \"HOST CLEAR - FULL\" in #general):\n1. apps/daemon: npx --no-install vitest run --root . --config package.json src/repository/repository-bootstrap-ports.test.ts src/repository/repository-bootstrap-service.test.ts --maxWorkers=1 --testTimeout=300000 -> PIPESTATUS[0]=0, \"Test Files 2 passed (2)\", \"Tests 52 passed (52)\", 70.45s.\n2. ports file alone -> \"Test Files 1 passed (1)\", \"Tests 30 passed (30)\".\n3. pnpm typecheck -> exit 1, 3 daemon diagnostics ALL FOREIGN: orchestrator/agent-wrapper.test.ts:298 TS2322, preview/preview-runner.test.ts:282 TS2379, release/release-decide-contracts.test.ts:16 TS5097. ZERO on owned paths (foreign set differs from worker disclosure; tree moved). Root pnpm test has no apps/**; full daemon suite NOT run under halt.\n\nMY OWN MUTATION CONTROL: inverted guard at repository-bootstrap-ports.ts:81 (!== 0 -> === -1); DIR_NOT_EMPTY arm went RED (1 failed | 21 skipped, got BOOTSTRAPPED). Restored; sha256 e69f2f49..0f8a equals out-of-tree backup, checked in a SEPARATE call, status clean.\n\nLEAKS: %TEMP%\\moe-bootstrap-* census before/after a fresh run IDENTICAL. One stale dir moe-bootstrap-ports-xKcg7W (19:12Z) pre-dates all my runs; left in place, not chargeable.\n\nDoD: 4 codes + DAEMON_INGRESS layer asserted; VERSION_UNKNOWN re-exported not redefined; guard arm hashes file + re-reads entries; absent/empty dir accepted; local-only success asserts one-line \"chore: scaffold by Moe\", remoteUrl null, GH_UNAVAILABLE half; gh argv byte-for-byte offline; receipt null-pair both directions; greps: only nodeGitRunner launches git, no second bind path; finally teardown. No command-kind/roster edits. Max file 245 lines."
+}

@@ -557,6 +557,7 @@ describe("Product Contract /2 durable clarification", () => {
     }
     expect(ask(sourceStore, input(forgedSource))).toEqual({
       code: "PRODUCT_CONTRACT_PROVENANCE_DIGEST_MISSING",
+      detail: expect.stringContaining("must include the goal's own PRD sha") as string,
       layer: "PRODUCT_CONTRACT_PROVENANCE", ok: false,
     });
     expect(rows(sourceStore, PROJECT_ID, CONTRACT_ID)).toEqual([]);

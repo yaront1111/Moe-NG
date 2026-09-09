@@ -1,10 +1,13 @@
 import type { JSX } from "react";
 
 import type { RunNodeView } from "../../live/live-runs.js";
+import { declaredMigrationsWords } from "../goals/migration-presentation.js";
 import { MIDDOT } from "../glyphs.js";
-import { agoWords } from "../ops/activity-words.js";
-import { ROUTE_WORDS, STATUS_WORDS } from "../runs/runs-screen.js";
-import { BOARD_COLUMNS, COLUMN_WORDS, untilWords } from "./board-columns.js";
+import { agoWords, seatWords } from "../ops/activity-words.js";
+import { STATUS_WORDS } from "../runs/run-words.js";
+import {
+  BOARD_COLUMNS, COLUMN_WORDS, ROUTE_WORDS, isStuck, untilWords,
+} from "./board-columns.js";
 import type { BoardCard, BoardFold } from "./board-columns.js";
 
 /**
@@ -21,10 +24,12 @@ export interface BoardLanesProps {
   readonly nowMs: number;
 }
 
-function Field({ label, value }: { readonly label: string; readonly value: string | null }): JSX.Element | null {
+function Field({ label, testId, value }: {
+  readonly label: string; readonly testId?: string; readonly value: string | null;
+}): JSX.Element | null {
   if (value === null || value === "") return null;
   return (
-    <div className="cr2-kanban-field">
+    <div className="cr2-kanban-field" data-testid={testId}>
       <dt className="cr2-kanban-field-label">{label}</dt>
       <dd className="cr2-kanban-field-value">{value}</dd>
     </div>
@@ -33,25 +38,28 @@ function Field({ label, value }: { readonly label: string; readonly value: strin
 
 function receiptWords(node: RunNodeView): string | null {
   if (node.receipt === null) return null;
-  return `${node.receipt.test} in ${node.receipt.workspace} ${MIDDOT} exit ${String(node.receipt.exitCode)}`
-    + ` ${MIDDOT} output ${node.receipt.outputSha256.slice(0, 12)} (${String(node.receipt.byteCount)} bytes)`;
+  return `${node.receipt.test} ${MIDDOT} exit ${String(node.receipt.exitCode)}`;
 }
 
 function landingWords(node: RunNodeView): string | null {
   if (node.landing === null) return null;
   if (node.landing.outcome === "COMMITTED") {
-    return `commit ${(node.landing.sha ?? "").slice(0, 10)} on ${node.landing.branch ?? "?"}`
-      + ` ${MIDDOT} ${String(node.landing.files.length)} file${node.landing.files.length === 1 ? "" : "s"}, local only`;
+    const branch = node.landing.branch === null || node.landing.branch === "" ? "the workspace branch" : node.landing.branch;
+    return `landed on ${branch} ${MIDDOT} ${String(node.landing.files.length)} file${node.landing.files.length === 1 ? "" : "s"}, local only`;
   }
-  return `not landed: ${node.landing.code ?? "REFUSED"}`;
+  return "not landed yet";
 }
 
 function claimWords(node: RunNodeView, nowMs: number): string | null {
   if (node.claim === null) return null;
-  return node.claim.active
-    ? `${node.claim.claimedBy} ${MIDDOT} lease ends ${untilWords(node.claim.expiresAt, nowMs) ?? "now"}`
-    : `${node.claim.claimedBy} ${MIDDOT} ${node.claim.status === "RELEASED" ? "released" : "expired"}`
-      + (node.lastActivityAt === null ? "" : ` ${MIDDOT} last activity ${agoWords(node.lastActivityAt, nowMs)}`);
+  const who = seatWords(node.claim.claimedBy);
+  if (node.claim.active) {
+    const left = untilWords(node.claim.expiresAt, nowMs);
+    return left === null ? `${who} ${MIDDOT} lease expired` : `${who} ${MIDDOT} lease ends ${left}`;
+  }
+  const ended = node.claim.status === "RELEASED" ? "released" : "expired";
+  const when = node.lastActivityAt === null ? "" : ` ${MIDDOT} last activity ${agoWords(node.lastActivityAt, nowMs)}`;
+  return `${who} ${MIDDOT} ${ended}${when}`;
 }
 
 function reviewWords(node: RunNodeView): string | null {
@@ -72,15 +80,24 @@ function CardDetails({ card, criterionStatement, nowMs }: {
   return (
     <div className="cr2-kanban-card-body" data-testid={`cr.kanban.detail.${node.nodeKey}`}>
       <dl className="cr2-kanban-fields">
-        <Field label="Node" value={node.nodeKey} />
-        <Field label="Daemon status" value={STATUS_WORDS[node.status]} />
-        <Field label="Depends on" value={node.dependsOn.length === 0 ? null : node.dependsOn.join(", ")} />
+        <Field label="Status" value={STATUS_WORDS[node.status]} />
+        <Field label="Waiting on" value={node.dependsOn.length === 0 ? null : "other work in this plan"} />
         <Field label="Seat" value={claimWords(node, nowMs)} />
         <Field label="Review" value={reviewWords(node)} />
         <Field label="Verifier" value={receiptWords(node)} />
-        <Field label="Accepted" value={node.accepted === null ? null : `receipt ${node.accepted.verifierReceiptId.slice(0, 12)}`} />
+        <Field label="Accepted" value={node.accepted === null ? null : "the daemon accepted this work"} />
         <Field label="Landing" value={landingWords(node)} />
-        <Field label="Shared key" value={node.sharedKey ? "another activated plan carries this node key" : null} />
+        {/* WHAT THIS NODE ADDS TO THE SCHEMA, from the node's OWN declaration and nowhere else.
+            Never derived from a diff, a landed file list, a filename or a receipt's applied list:
+            a receipt is a PROJECT_ENVIRONMENT observation, and hanging one on a node is a false
+            attribution. Absent when the node declares none, so an empty label never reads as a
+            measured "this node changes no schema". */}
+        <Field
+          label="Migrations"
+          testId={`cr.kanban.migrations.${node.nodeKey}`}
+          value={declaredMigrationsWords(node.declaredMigrations)}
+        />
+        <Field label="Legacy execution" value={node.sharedKey ? "earlier execution has no scoped identity" : null} />
       </dl>
       {criteria.length === 0 ? null : (
         <div className="cr2-kanban-criteria">
@@ -113,7 +130,13 @@ function Card({ card, criterionStatement, nowMs }: {
   const { node } = card;
   return (
     <li className="cr2-kanban-card-slot">
-      <details className="cr2-kanban-card" data-column={card.column} data-status={node.status} data-testid={`cr.kanban.card.${node.nodeKey}`}>
+      <details
+        className="cr2-kanban-card"
+        data-column={card.column}
+        data-status={node.status}
+        data-stuck={isStuck(node) ? "true" : undefined}
+        data-testid={`cr.kanban.card.${node.nodeKey}`}
+      >
         <summary className="cr2-kanban-card-face">
           <span className="cr2-kanban-card-title" title={node.objective}>{node.objective === "" ? node.nodeKey : node.objective}</span>
           <span className="cr2-kanban-card-line" data-testid={`cr.kanban.line.${node.nodeKey}`}>{card.line}</span>

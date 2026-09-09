@@ -64,6 +64,12 @@ function fromEnv(): StoreDependencyProvider {
 const provider: DaemonDependencyProvider & Pick<
   StoreDependencyProvider, "restore" | "sourceSnapshotPublisher"
 > = Object.freeze({
+  schedules: () => fromEnv().schedules(),
+  activation: () => {
+    const port = fromEnv().activation;
+    if (port === undefined) throw new Error("unreachable: the activation reader is always wired");
+    return port();
+  },
   affordances: () => {
     const port = fromEnv().affordances;
     if (port === undefined) throw new Error("unreachable: affordances is always wired");
@@ -99,9 +105,56 @@ const provider: DaemonDependencyProvider & Pick<
     if (port === undefined) throw new Error("unreachable: the sessions reader is always wired");
     return port();
   },
+  repositoryRemote: () => {
+    const port = fromEnv().repositoryRemote;
+    if (port === undefined) {
+      throw new Error("unreachable: the repository-remote reader is always wired");
+    }
+    return port();
+  },
+  repositoryWorkflows: () => {
+    const port = fromEnv().repositoryWorkflows;
+    if (port === undefined) throw new Error("repository workflow read port unavailable");
+    return port();
+  },
   goalSource: () => {
     const port = fromEnv().goalSource;
     if (port === undefined) throw new Error("unreachable: the goal-source reader is always wired");
+    return port();
+  },
+  designReads: () => {
+    const port = fromEnv().designReads;
+    if (port === undefined) throw new Error("unreachable: the design reader is always wired");
+    return port();
+  },
+  environmentReads: () => {
+    const port = fromEnv().environmentReads;
+    if (port === undefined) throw new Error("unreachable: the environment reader is always wired");
+    return port();
+  },
+  deploymentsHealth: () => {
+    const port = fromEnv().deploymentsHealth;
+    if (port === undefined) throw new Error("unreachable: the deployment health reader is always wired");
+    return port();
+  },
+  backupReads: () => {
+    const port = fromEnv().backupReads;
+    if (port === undefined) throw new Error("unreachable: the backup restore-proof reader is always wired");
+    return port();
+  },
+  previewReads: () => {
+    const port = fromEnv().previewReads;
+    if (port === undefined) throw new Error("unreachable: the preview reader is always wired");
+    return port();
+  },
+  releaseReads: () => {
+    const port = fromEnv().releaseReads;
+    if (port === undefined) throw new Error("unreachable: the release reader is always wired");
+    return port();
+  },
+  previewCaptures: () => {
+    const port = fromEnv().previewCaptures;
+    if (port === undefined) throw new Error("unreachable: the preview capture reader is always wired");
     return port();
   },
   documentDossiers: () => {
@@ -129,6 +182,18 @@ const provider: DaemonDependencyProvider & Pick<
   goalCatalog: () => {
     const port = fromEnv().goalCatalog;
     if (port === undefined) throw new Error("unreachable: the goal catalog is always wired");
+    return port();
+  },
+  /**
+   * FORWARDED for the reason stated on `graph` above, and the consequence here is a LEAKED
+   * PROCESS rather than a refusal: `daemon-main` loads THIS frozen object, so a preview port
+   * missing here leaves the shipped daemon's shutdown with nothing to sweep, and every preview
+   * server it started keeps its port after the daemon is gone — while every direct-injection
+   * test stays green.
+   */
+  previews: () => {
+    const port = fromEnv().previews;
+    if (port === undefined) throw new Error("unreachable: the preview port is always wired");
     return port();
   },
   planningRuns: () => {

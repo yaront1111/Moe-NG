@@ -310,3 +310,37 @@ describe("toWireEnvelope", () => {
       .not.toBe(toWireEnvelope(first, "credential-a").requestDigest);
   });
 });
+
+/**
+ * THE SEED SENDS NO ACTIVATION WITNESS (task-4b9c394d, parent DoD 4 "`pnpm seed` keeps working").
+ *
+ * The seed used to build a nine-key witness from its own input and hand it over. The daemon now
+ * MINTS the witness from receipts it measures, and refuses a caller-supplied one outright, so a
+ * seed that still sent one would refuse ACTIVATION_WITNESS_CALLER_SUPPLIED @ DAEMON_INGRESS and
+ * `pnpm seed` would stop working. This arm is what would catch that regression.
+ */
+describe("the demo seed's activation payload", () => {
+  it("carries NOTHING, so the daemon mints the witness it commits", () => {
+    const activate = buildDemoSeedPlan(INPUT)
+      .find((command) => command.commandKind === "project.activate");
+
+    // A `find` that matched nothing would make every assertion below vacuous.
+    expect(activate).toBeDefined();
+    if (activate === undefined) throw new Error("the seed plan has no project.activate command");
+    expect(activate.payload).toEqual({});
+    expect(Object.keys(activate.payload)).toHaveLength(0);
+  });
+
+  it("keeps the chain ORDER the bootstrap prerequisites require", () => {
+    const kinds = buildDemoSeedPlan(INPUT).map((command) => command.commandKind);
+
+    // POLICY NOW PRECEDES ACTIVATION, and that is the point rather than an accident: the
+    // `policy` receipt the daemon measures is the digest of the INSTALLED SLICE SET, so an
+    // activation attempted before any install refuses ACTIVATION_POLICY_UNMEASURED. Putting
+    // the installs back after the activate reds this arm AND `pnpm seed` against a live daemon.
+    expect(kinds.slice(0, 7)).toEqual([
+      "project.register", "project.bind_repository", "provider.probe",
+      "policy.install", "policy.install", "policy.install", "project.activate",
+    ]);
+  });
+});

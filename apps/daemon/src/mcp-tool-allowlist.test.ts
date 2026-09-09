@@ -1,16 +1,25 @@
+import { createHash, randomUUID } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { allowlistedToolEntries } from "@moe/mcp";
+import { RUNTIME_COMMAND_ENVELOPE_VERSION, RUNTIME_COMMAND_KINDS } from "@moe/contracts";
+import { STDIO_TOOL_INDEX, allowlistedToolEntries, createHttpMcpAdapter, toolLabelForKind } from "@moe/mcp";
+import type { HttpDispatchPort } from "@moe/mcp";
 import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
-import { PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
+import { CAPABILITIES, OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
+import { handleAsyncCommandRequest, handleCommandRequest } from "./http/http-adapter.js";
+import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
+import { readDeployReceipt } from "./deployment/deploy-ledger.js";
+import { deployReceiptId } from "./deployment/deploy-receipt-contracts.js";
+import { HUMAN_ONLY_STEPS } from "./orchestrator/agent-spawn-contract.js";
 import { createStoreDependencies } from "./daemon-store-dependencies.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
 import { createMcpDispatchPort, servedMcpQueryKinds } from "./mcp-dispatch-port.js";
 import { createProductContractReadPort } from "./product-contract/product-contract-read-port.js";
+import { createMcpHttpSessionPort } from "./mcp-http/mcp-http-session-port.js";
 import {
   MCP_EXCLUDED_COMMAND_KINDS, MCP_SERVED_QUERY_KINDS, wiredMcpToolKinds,
 } from "./mcp-tool-allowlist.js";
@@ -48,6 +57,9 @@ const port = createMcpDispatchPort({
   affordances: provider.affordances?.(),
   contract: createProductContractReadPort({ projectId: PROJECT, store: contractStore }),
   deps: provider.provide(),
+  // Composed, not omitted: an ADVERTISED query whose port is absent falls through to the
+  // port's generic INPUT_INVALID, which is exactly the "phantom tool" the arm below forbids.
+  design: provider.designReads?.(),
   documents: provider.goalSource?.(),
   fallbackCredential: CREDENTIAL,
   graph: provider.graph?.(),
@@ -67,7 +79,54 @@ afterAll(() => {
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
+function releaseMcpRequest(body: unknown, sessionId?: string): Request {
+  return new Request("http://127.0.0.1/mcp", {
+    method: "POST", body: JSON.stringify(body),
+    headers: { accept: "application/json, text/event-stream", authorization: `Bearer ${CREDENTIAL}`,
+      "content-type": "application/json", host: "127.0.0.1",
+      ...(sessionId === undefined ? {} : { "mcp-session-id": sessionId }) },
+  });
+}
+
+it("release.decide is refused by the MCP allowlist before authentication or dispatch", async () => {
+  const calls: string[] = [];
+  const observedPort: HttpDispatchPort = {
+    authenticate: (credential, kind) => { calls.push("authenticate"); return port.authenticate(credential, kind); },
+    dispatchCommandBytes: (bytes) => { calls.push("command"); return port.dispatchCommandBytes(bytes); },
+    dispatchQueryBytes: (bytes) => { calls.push("query"); return port.dispatchQueryBytes(bytes); },
+  };
+  const adapter = createHttpMcpAdapter({ dispatchPort: observedPort, enableJsonResponse: true,
+    sessionPort: createMcpHttpSessionPort(provider.provide().authenticator),
+    toolAllowlist: wiredMcpToolKinds() });
+  try {
+    const initialized = await adapter.handleRequest(releaseMcpRequest({ id: 1, jsonrpc: "2.0",
+      method: "initialize", params: { capabilities: {}, protocolVersion: "2025-06-18",
+        clientInfo: { name: "release-fence-test", version: "1" } } }));
+    await initialized.text();
+    expect(initialized.status).toBe(200);
+    const sessionId = initialized.headers.get("mcp-session-id");
+    if (sessionId === null) throw new Error("release fixture opened no MCP session");
+    const label = toolLabelForKind("release.decide");
+    expect(STDIO_TOOL_INDEX.get(label)?.kind).toBe("release.decide");
+    expect(wiredMcpToolKinds()).toContain("goal.create");
+    const before = decisionsIn();
+    const response = await adapter.handleRequest(releaseMcpRequest({ id: 2, jsonrpc: "2.0",
+      method: "tools/call", params: { name: label, arguments: {} } }, sessionId));
+    expect(await response.json()).toMatchObject({ id: 2, error: { code: -32002,
+      data: { code: "CAPABILITY_DENIED", truthClass: "DAEMON_VERIFIED",
+        transport: { category: "FORBIDDEN", httpStatus: 403 } } } });
+    // RuntimeError has no layer member: zero tool-port calls pins WHICH layer refused.
+    expect(calls).toEqual([]);
+    expect(decisionsIn()).toEqual(before);
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toContain("release.decide");
+    expect(wiredMcpToolKinds()).not.toContain("release.decide");
+  } finally {
+    await adapter.close();
+  }
+});
+
 const PAYLOAD_FOR: Readonly<Record<string, Record<string, unknown>>> = Object.freeze({
+  "design.read": { goalRef: "goal-allowlist-probe" },
   "documents.source_read": { goalRef: "goal-allowlist-probe" },
   "product_contract.read": { goalRef: "goal-allowlist-probe" },
   "events.read": { limit: 5, projection: "moe.board", subscriberId: "control-room-1" },
@@ -86,6 +145,34 @@ function refusalCodeOf(queryKind: string): string | null {
 }
 
 describe("wiredMcpToolKinds command half", () => {
+  it("provider selection is human-only even if future agent capabilities permit it", () => {
+    expect(provider.provide().registry.has("project.set_agent_provider")).toBe(true);
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toContain("project.set_agent_provider");
+    expect(HUMAN_ONLY_STEPS.has("project.set_agent_provider")).toBe(true);
+  });
+
+  it("keeps paired-human bootstrap excluded through the unchanged operator partition", () => {
+    expect(provider.provide().registry.has("repository.bootstrap")).toBe(true);
+    expect(OPERATOR_PRINCIPAL_KINDS.has("repository.bootstrap")).toBe(true);
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toEqual(
+      [...OPERATOR_PRINCIPAL_KINDS].filter((kind) => kind !== "session.open").sort(),
+    );
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toContain("repository.bootstrap");
+    expect(wiredMcpToolKinds()).not.toContain("repository.bootstrap");
+    expect(allowlistedToolEntries(wiredMcpToolKinds()).map((entry) => entry.kind))
+      .not.toContain("repository.bootstrap");
+  });
+
+  it("release.decide belongs to the exact served operator exclusion partition", () => {
+    const operatorKinds: ReadonlySet<string> = OPERATOR_PRINCIPAL_KINDS;
+    const served = [...provider.provide().registry.keys()]
+      .filter((kind) => operatorKinds.has(kind) && kind !== "session.open").sort();
+    const excluded = [...MCP_EXCLUDED_COMMAND_KINDS].sort();
+    expect(excluded).toEqual(served);
+    expect(served).toEqual(excluded);
+    expect(served).toContain("release.decide");
+  });
+
   it("equals the daemon's wired command vocabulary MINUS the excluded kinds", () => {
     const commands = wiredMcpToolKinds().filter((kind) => !MCP_SERVED_QUERY_KINDS.includes(kind));
     const expected = [...Object.keys(PAYLOAD_KEYS)]
@@ -136,11 +223,39 @@ describe("wiredMcpToolKinds command half", () => {
    * so a silent shrink is visible even when every membership arm above still passes.
    */
   it("pins an EXACT, frozen exclusion denominator and the derived roster size", () => {
+    // Independent transcription of every currently served operator-only command except
+    // session.open. Keeping the names catches swaps that preserve the denominator.
+    const expectedExcluded = Object.freeze([
+      "approval.decide", "approval.decide_intent",
+      "criterion_check.approve", "criterion_check.verify", "cutover.activate",
+      "deployment.deploy", "deployment.migrate_down", "deployment.rollback", "deployment.set_target",
+      "environment.set_variable", "environment.unset_variable", "goal.close",
+      "graph.approve", "graph.supersede", "integration.accept_output",
+      // task-eb37494e wired the kind for dispatch, and the exclusion followed BY DERIVATION from
+      // OPERATOR_PRINCIPAL_KINDS -- precisely the movement the lockstep arm at the foot of this
+      // file exists to force. In SORTED position, because the derivation sorts.
+      // task-509f0437 wired the kind for dispatch and the exclusion followed BY DERIVATION in the
+      // same way -- no member was hand-added to this production array; only this INDEPENDENT
+      // transcription of it moved. Sorted BEFORE the interval kind, because the derivation sorts.
+      "monitoring.retire_environment",
+      "monitoring.set_probe_interval",
+      "preview.decide", "preview.start", "product_contract.answer_clarification",
+      "product_contract.sync_env_example", "project.set_agent_provider", "release.decide",
+      "repository.bootstrap", "repository.publish", "repository.recover", "resource.confirm_released",
+    ]);
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toEqual(expectedExcluded);
     // EXACT, not `> 0`: a ONE-member roster satisfies `length > 0` while silently
     // re-admitting one approval kind to MCP, which is the precise regression this row exists
     // to prevent. Drilled by deletion in step 7 D3.
-    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(6);
+    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(27);
     expect(Object.isFrozen(MCP_EXCLUDED_COMMAND_KINDS)).toBe(true);
+    // Every operator-only kind but the operator's own scoped-session mint is off the MCP roster:
+    // the exclusion is the vocabulary's human-only class, so a kind that joins it leaves the
+    // roster with no edit here. `session.open` is the documented exception.
+    const operatorOnly = [...OPERATOR_PRINCIPAL_KINDS].filter((kind) => kind !== "session.open").sort();
+    expect([...MCP_EXCLUDED_COMMAND_KINDS].sort()).toEqual(operatorOnly);
+    for (const kind of operatorOnly) expect(wiredMcpToolKinds()).not.toContain(kind);
+    expect(wiredMcpToolKinds()).toContain("session.open");
 
     // The DERIVED denominator, from live imports on both sides, so it stays true as the
     // vocabulary grows and reds the moment the subtraction stops happening.
@@ -149,19 +264,15 @@ describe("wiredMcpToolKinds command half", () => {
       - MCP_EXCLUDED_COMMAND_KINDS.length
       + MCP_SERVED_QUERY_KINDS.length,
     );
-    // The measured values behind that identity at delivery: 45 - 5 + 5 = 45. Pinned as a
-    // second, INDEPENDENT witness: the identity above would still hold if both sides moved
-    // together, and these literals would not. task-b8272ee0 moved vocabulary and excluded
-    // together by one — `cutover.activate` is registered AND withheld from MCP — and the
-    // human-approver fence widening moved excluded alone by one more
-    // (`approval.decide_intent` left the MCP roster the moment paired HUMAN principals
-    // could take the witness); `wired` moves only when the subtraction itself changes.
+    // Independent count witness: the current surface has 62 commands, subtracts the exact
+    // 25-member exclusion above, and adds seven queries. Schema rollback joins both the
+    // vocabulary and the exclusion, so it adds no agent-facing command.
     expect({
       excluded: MCP_EXCLUDED_COMMAND_KINDS.length,
       queries: MCP_SERVED_QUERY_KINDS.length,
       vocabulary: Object.keys(PAYLOAD_KEYS).length,
       wired: wiredMcpToolKinds().length,
-    }).toEqual({ excluded: 6, queries: 6, vocabulary: 46, wired: 46 });
+    }).toEqual({ excluded: 27, queries: 7, vocabulary: 64, wired: 44 });
   });
 
   it("is deterministic and frozen", () => {
@@ -209,6 +320,26 @@ describe("wiredMcpToolKinds query half, bound to the production port", () => {
  * cannot see.
  */
 
+/**
+ * The row's kind on the PRODUCTION async dispatch path — the same entry point the HTTP
+ * listener uses, not a hand-built handler call. `deployment.rollback` is served from an ASYNC
+ * entry (`daemon-command-async-entries.ts`), so the synchronous request never reaches its
+ * fence; calling `handleCommandRequest` here would test nothing.
+ */
+async function sendRollback(
+  commandId: string, payload: Readonly<Record<string, unknown>>, credential: string,
+): Promise<Awaited<ReturnType<typeof handleAsyncCommandRequest>>> {
+  return await handleAsyncCommandRequest(provider.provide(), {
+    body: encoder.encode(JSON.stringify({
+      commandId, commandKind: "deployment.rollback", correlationId: "corr-rollback",
+      expectedVersion: 0, payload, requestDigest: "a".repeat(64),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION, sessionCredential: credential,
+      targetAggregateId: PROJECT,
+    })),
+    credential, protocolVersion: WIRE_PROTOCOL_VERSION,
+  }, "HTTP_LISTENER");
+}
+
 const decisionsIn = (): readonly { readonly commandKind: string }[] => {
   const store = SqliteEventStore.openForProject(storePath, PROJECT);
   try {
@@ -242,6 +373,11 @@ describe("task-4dd05f0c served/advertised parity", () => {
   });
 
   it("C2 keeps every excluded kind SERVED by the registry — this closes ONE transport", () => {
+    expect({
+      operator: OPERATOR_PRINCIPAL_KINDS.has("deployment.rollback"),
+      mcp: wiredMcpToolKinds().includes("deployment.rollback"),
+      human: HUMAN_ONLY_STEPS.has("deployment.rollback"),
+    }).toEqual({ operator: true, mcp: false, human: true });
     // Widened to string[] deliberately: `registry.keys()` is typed as the closed command-kind
     // union, and MCP_EXCLUDED_COMMAND_KINDS is `readonly string[]` so the roster can name a
     // kind the union does not yet carry. Comparing as strings is what makes the misspelling
@@ -254,6 +390,73 @@ describe("task-4dd05f0c served/advertised parity", () => {
     for (const kind of MCP_EXCLUDED_COMMAND_KINDS) {
       expect({ kind, served: served.includes(kind) }).toEqual({ kind, served: true });
     }
+  });
+
+  /**
+   * C2b — THE SECOND FENCE, DISPATCHED RATHER THAN ASSERTED BY MEMBERSHIP.
+   *
+   * C2 above proves the kind is off the MCP roster and still served. It cannot prove the
+   * daemon REFUSES an agent who reaches the kind by some other route, because a set-membership
+   * triple dispatches nothing: it would read identically if the principal fence were deleted.
+   * This arm sends the real command through the production dispatch path twice, under two
+   * credentials, and asserts the exact code AND the layer that refused each.
+   *
+   * THE DISCRIMINATOR IS THAT THE TWO CODES DIFFER. The agent is stopped at
+   * OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION, before the handler body runs. The
+   * operator gets PAST that line and is refused by the HANDLER itself, at
+   * DEPLOY_ROLLBACK_RECEIPT_INVALID @ DAEMON_COMMAND_SEAM because the selected deployment
+   * receipt is durably absent. Same command, same payload: only the principal
+   * differs, and the two answers prove the fence sits BEFORE the handler rather than being
+   * the handler's own failure. A single shared refusal code could not tell those apart.
+   */
+  it("C2b refuses an agent-authenticated rollback at authorization, and lets the operator reach the handler", async () => {
+    const toReceiptRef = deployReceiptId(PROJECT, "production", "rollback-receipt-not-recorded");
+    const payload = { environment: "production", restoreDatabase: false, toReceiptRef };
+    // A valid receipt identifier and project target let the operator reach the real receipt
+    // reader. Missing evidence must refuse before an intent or any deployment effect is written.
+    expect(readDeployReceipt(contractStore, PROJECT, toReceiptRef))
+      .toEqual({ code: "DEPLOY_RECEIPT_NOT_FOUND", ok: false });
+    const before = decisionsIn().length;
+
+    const agentSecret = randomUUID();
+    const opened = handleCommandRequest(provider.provide(), {
+      body: encoder.encode(JSON.stringify({
+        commandId: "cmd-rollback-session", commandKind: "session.open",
+        correlationId: "corr-rollback", expectedVersion: 0, requestDigest: "a".repeat(64),
+        payload: {
+          capabilities: [CAPABILITIES.GOAL, CAPABILITIES.WORK],
+          credentialSha256: createHash("sha256").update(agentSecret, "utf8").digest("hex"),
+          expiresAt: "2027-01-01T00:00:00.000Z", sessionId: randomUUID(),
+        },
+        schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION, sessionCredential: CREDENTIAL,
+        targetAggregateId: "agg-rollback",
+      })),
+      credential: CREDENTIAL, protocolVersion: WIRE_PROTOCOL_VERSION,
+    }, "HTTP_LISTENER");
+    expect(opened).toMatchObject({ outcome: "ACCEPTED" });
+
+    // THE AGENT ARM. GOAL is the kind's own `requiredCapability`, so this session is NOT
+    // refused for lacking capability — it is refused for not being the operator. Handing it
+    // the exact capability the entry demands is what makes the arm about the principal fence.
+    expect(await sendRollback("cmd-rollback-agent", payload, agentSecret)).toMatchObject({
+      outcome: "PORT_REFUSED", httpStatus: 403,
+      refusal: { code: "OPERATOR_PRINCIPAL_REQUIRED", layer: "DAEMON_AUTHORIZATION" },
+    });
+
+    // THE OPERATOR ARM. Past the fence and into the handler, which refuses for an unrelated
+    // reason with an unrelated layer. That it is a DIFFERENT code is the whole point.
+    expect(await sendRollback("cmd-rollback-operator", payload, CREDENTIAL)).toMatchObject({
+      outcome: "PORT_REFUSED", httpStatus: 422,
+      refusal: { code: "DEPLOY_ROLLBACK_RECEIPT_INVALID", layer: "DAEMON_COMMAND_SEAM" },
+    });
+
+    // Neither arm wrote anything durable: a refusal that committed first is not a fence.
+    // `session.open` above is the one decision either arm is allowed to have added, and NO
+    // decision names the kind — counting alone would miss a rollback decision that replaced
+    // one the count already expected.
+    const after = decisionsIn();
+    expect(after.length).toBe(before + 1);
+    expect(after.filter((entry) => entry.commandKind === "deployment.rollback")).toEqual([]);
   });
 
   it("C3 names the ONE advertised kind the /2 plane withholds, so the gap stays visible", () => {
@@ -343,5 +546,222 @@ describe("task-4dd05f0c served/advertised parity", () => {
     const after = decisionsIn();
     expect(after.filter((item) => item.commandKind === "events.resume")).toEqual([]);
     expect(after.length).toBe(before.length);
+  });
+});
+
+/**
+ * task-5f883e4e: `preview.decide` NAMED, not merely counted.
+ *
+ * The arms above are set arithmetic over whole rosters, so `preview.decide` is only ever
+ * visible in them through a moving count literal a sibling kind-publishing row bumps. These
+ * three name it, and each closes a different way the fence could be hollow:
+ *
+ *  - membership in BOTH directions (excluded AND unadvertised), so deleting it from
+ *    `OPERATOR_PRINCIPAL_KINDS` reddens here by name rather than as `expected 10 to be 11`;
+ *  - the tool label is GENERATED, which is the discriminator between the two refusal
+ *    branches: `http-tool-bridge.ts:195` answers a KNOWN-but-omitted label with
+ *    CAPABILITY_DENIED, `:193` answers an UNKNOWN one with INPUT_INVALID. A kind that
+ *    vanished from the generated surface would also be "not advertised" — and would refuse
+ *    for the wrong reason, which is not the fence this row is claiming;
+ *  - the daemon's OWN seam still SERVES it under the operator credential, reaching the
+ *    handler's refusal rather than an authorization one. That is what makes the exclusion
+ *    load-bearing: the MCP port dispatches as the operator bootstrap credential
+ *    (`mcp-dispatch-port.ts:343`, `mcp-main.ts:112-127`), so a capability gate would fence
+ *    nothing and only omission from the advertisement refuses the caller.
+ */
+describe("task-5f883e4e preview.decide is fenced to the operator", () => {
+  const PREVIEW_DECIDE = "preview.decide";
+
+  it("is excluded from the MCP advertisement, in both directions, BY NAME", () => {
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toContain(PREVIEW_DECIDE);
+    expect(wiredMcpToolKinds()).not.toContain(PREVIEW_DECIDE);
+    // The roster is DERIVED from the vocabulary's operator-only class, so this is the
+    // upstream fact the exclusion is computed from — not a second hand-kept list. Widened to
+    // a string Set rather than cast at the call: `OPERATOR_PRINCIPAL_KINDS` is typed by the
+    // closed command-kind union, and a cast would make a kind that LEFT the union a silent
+    // pass instead of the compile error it should be.
+    const operatorOnly: ReadonlySet<string> = OPERATOR_PRINCIPAL_KINDS;
+    expect(operatorOnly.has(PREVIEW_DECIDE)).toBe(true);
+    // A surviving control: a staffable kind of the same shape stays advertised, so
+    // "advertises nothing" cannot pass this arm.
+    expect(wiredMcpToolKinds()).toContain("goal.create");
+  });
+
+  it("is GENERATED but omitted, so the transport refuses CAPABILITY_DENIED, not INPUT_INVALID", () => {
+    const label = toolLabelForKind(PREVIEW_DECIDE);
+    // Derived through the production helper: a hand-spelled name would be UNKNOWN and would
+    // green this arm on the INPUT_INVALID branch instead.
+    expect(STDIO_TOOL_INDEX.get(label)).toBeDefined();
+    const advertised = new Set(allowlistedToolEntries(wiredMcpToolKinds())
+      .map((entry) => entry.tool.name));
+    expect({ advertised: advertised.has(label), label })
+      .toEqual({ advertised: false, label });
+    expect(advertised.has(toolLabelForKind("goal.create"))).toBe(true);
+  });
+
+  it("still reaches the HANDLER on the daemon's own seam under the operator credential", async () => {
+    const before = decisionsIn();
+    const bytes = await port.dispatchCommandBytes(encoder.encode(JSON.stringify({
+      commandId: "cmd-preview-decide-allowlist",
+      commandKind: PREVIEW_DECIDE,
+      correlationId: "corr-preview-decide-allowlist",
+      expectedVersion: 0,
+      // EMPTY on purpose: the preview decoder refuses the missing decision at REQUEST, which
+      // is a HANDLER refusal. An authorization refusal (OPERATOR_PRINCIPAL_REQUIRED at
+      // DAEMON_AUTHORIZATION) would mean the seam never reached the handler at all, and the
+      // exclusion in the roster above would not be what is fencing the MCP caller.
+      payload: {},
+      requestDigest: "a".repeat(64),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: CREDENTIAL,
+      targetAggregateId: "agg-preview-decide-allowlist",
+    })));
+    const frame = JSON.parse(decoder.decode(bytes)) as Record<string, unknown>;
+    const refusal = frame["refusal"] as { code?: string; layer?: string } | undefined;
+
+    // Code AND layer together: the code alone cannot say WHICH layer refused.
+    expect({ code: refusal?.code, layer: refusal?.layer })
+      .toEqual({ code: "PREVIEW_DECISION_INVALID", layer: "REQUEST" });
+    // The STAGE is the discriminator this arm turns on. `DISPATCH` means the seam ran the
+    // command; an operator-principal refusal would answer earlier and never reach it, which
+    // is exactly the outcome an MCP caller gets — and why the roster, not a capability, is
+    // what fences that caller.
+    expect(frame["stage"]).toBe("DISPATCH");
+    expect(frame["outcome"]).toBe("PORT_REFUSED");
+    expect(frame["ok"]).toBe(false);
+    // A refused decision commits nothing, so the exclusion cannot be read as "harmless
+    // because the command is inert" — it is a real seam that would have run.
+    expect(decisionsIn().length).toBe(before.length);
+  });
+});
+
+/**
+ * task-749e585a: `monitoring.set_probe_interval` is ADVERTISED on the shared runtime contract by
+ * this row and DISPATCHED by task-eb37494e. Between the two commits the kind exists in
+ * `RUNTIME_COMMAND_KINDS` and in the generated client while the daemon serves nothing for it,
+ * and these arms are what make that interval safe rather than merely brief.
+ *
+ * WHY THE KIND IS NOT IN `MCP_EXCLUDED_COMMAND_KINDS` HERE, which is the first thing a reader
+ * will suspect is an omission. That roster is DERIVED from `OPERATOR_PRINCIPAL_KINDS`
+ * (`mcp-tool-allowlist.ts:94`), which is typed `ReadonlySet<WiredCommandKind>` — a union built
+ * from `PAYLOAD_KEYS`. A kind absent from `PAYLOAD_KEYS` cannot be named there without a type
+ * error, and `wiredMcpToolKinds()` is itself computed by FILTERING `PAYLOAD_KEYS`, so the
+ * arithmetic arm above (`|wired| === |PAYLOAD_KEYS| - |excluded| + |queries|`) reds for such a
+ * kind too. The kind is therefore MCP-unreachable at this commit for a STRONGER reason than
+ * exclusion: nothing advertises it at all.
+ *
+ * THE RISK THAT CREATES, and the one these arms actually guard: when task-eb37494e adds the
+ * `PAYLOAD_KEYS` entry, the kind becomes advertised BY DERIVATION unless the same commit also
+ * adds it to `OPERATOR_PRINCIPAL_KINDS`. The MCP port dispatches under the operator bootstrap
+ * credential, so an advertised operator kind is an agent arriving AS the operator and a
+ * capability gate would pass. The implication arm below is written to red in exactly that
+ * commit, and it is NOT vacuous today because it pins the current state on both sides.
+ */
+describe("task-749e585a the probe-interval kind is unreachable over MCP", () => {
+  const PROBE_INTERVAL = "monitoring.set_probe_interval";
+
+  it("is on the shared runtime roster and in the generated client, but off the MCP surface", () => {
+    // THE SUBJECT EXISTS. Without this the two negatives below would pass for a misspelling.
+    expect(RUNTIME_COMMAND_KINDS).toContain(PROBE_INTERVAL);
+    expect(wiredMcpToolKinds()).not.toContain(PROBE_INTERVAL);
+    expect(allowlistedToolEntries(wiredMcpToolKinds()).map((entry) => entry.kind))
+      .not.toContain(PROBE_INTERVAL);
+    // The surviving control: a staffable kind of the same shape IS advertised, so "advertises
+    // nothing" cannot green this arm.
+    expect(wiredMcpToolKinds()).toContain("goal.create");
+  });
+
+  it("keeps the dispatch entry and the operator fence in lockstep, in both directions", () => {
+    // NOT AN `if`. Both sides are read from production and compared, so the arm states a real
+    // equality today (false === false) and reds the moment ONE side moves. An `if (wired)`
+    // guard would silently test nothing until task-eb37494e lands.
+    const wiredForDispatch = Object.hasOwn(PAYLOAD_KEYS, PROBE_INTERVAL);
+    const operatorOnly: ReadonlySet<string> = OPERATOR_PRINCIPAL_KINDS;
+    expect({
+      excluded: MCP_EXCLUDED_COMMAND_KINDS.includes(PROBE_INTERVAL),
+      operator: operatorOnly.has(PROBE_INTERVAL),
+    }).toEqual({ excluded: wiredForDispatch, operator: wiredForDispatch });
+    // AND THE INVARIANT THAT MUST HOLD IN BOTH WORLDS: advertised-and-fenced, or not
+    // advertised. Never advertised-and-unfenced.
+    expect(wiredMcpToolKinds()).not.toContain(PROBE_INTERVAL);
+    // The DISCRIMINATOR that keeps the equality above honest: a kind that IS wired for
+    // dispatch reads `true` on all three, so the shape is not trivially satisfiable by
+    // `false === false` alone.
+    const rollbackWired = Object.hasOwn(PAYLOAD_KEYS, "deployment.rollback");
+    expect({
+      excluded: MCP_EXCLUDED_COMMAND_KINDS.includes("deployment.rollback"),
+      operator: operatorOnly.has("deployment.rollback"),
+      wired: rollbackWired,
+    }).toEqual({ excluded: true, operator: true, wired: true });
+  });
+
+  /**
+   * REWRITTEN BY task-eb37494e, WHICH IS THE COMMIT THIS ARM WAS WRITTEN TO OUTLIVE. Before the
+   * dispatch registration landed, the kind was refused at stage REGISTRY with INPUT_INVALID
+   * because the daemon served nothing for it. It is served now, so the OLD assertion could only
+   * be kept by leaving the kind unwired -- and the arm's subject was never "unserved", it was
+   * "MCP-UNREACHABLE". That property survives the wiring and is what is asserted here, on the
+   * stronger footing the wiring makes available: reached, fenced, and refused by the RECORD.
+   */
+  it("is served on the command seam and answers with the record's own code AND layer", async () => {
+    const before = decisionsIn();
+    // A payload whose ENVIRONMENT cannot admit, so the call reaches the handler and is refused
+    // there -- proving reach WITHOUT writing a probe interval into this suite's store. The
+    // OPERATOR credential is used deliberately: it is the strongest principal the MCP port can
+    // present, so a refusal here is about the REQUEST, never about the caller being unworthy.
+    const bytes = await port.dispatchCommandBytes(encoder.encode(JSON.stringify({
+      commandId: "cmd-probe-interval-allowlist",
+      commandKind: PROBE_INTERVAL,
+      correlationId: "corr-probe-interval-allowlist",
+      expectedVersion: 0,
+      payload: { environment: "NOT A VALID ENVIRONMENT", intervalMs: 30_000 },
+      requestDigest: "a".repeat(64),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: CREDENTIAL,
+      targetAggregateId: "agg-probe-interval-allowlist",
+    })));
+    const frame = JSON.parse(decoder.decode(bytes)) as Record<string, unknown>;
+    const refusal = frame["refusal"] as { code?: string; layer?: string } | undefined;
+
+    // CODE AND LAYER TOGETHER, and both are the INTERVAL RECORD's, forwarded unrestamped by the
+    // command edge. Three surfaces can refuse this call -- the seam's payload allow-list, the
+    // edge, and the record -- so an arm naming only the code would stay green the day the edge
+    // started answering first under a layer of its own.
+    expect({ code: refusal?.code, layer: refusal?.layer, outcome: frame["outcome"] }).toEqual({
+      code: "PROBE_INTERVAL_ENVIRONMENT_INVALID", layer: "DAEMON_INGRESS",
+      outcome: "PORT_REFUSED",
+    });
+    expect(frame["ok"]).toBe(false);
+    // STAGE DISPATCH, NOT REGISTRY, and that is the whole delta this row landed: before the
+    // dispatch registration the seam answered REGISTRY/INPUT_INVALID for this kind. DISPATCH
+    // means the seam actually RAN the command.
+    expect(frame["stage"]).toBe("DISPATCH");
+    // THE DISCRIMINATOR THAT KEEPS `toBe("DISPATCH")` HONEST: the seam still answers REGISTRY
+    // for a kind it genuinely does not serve as a COMMAND, so the assertion above is a statement
+    // about THIS kind rather than about a stage the seam stopped using. `design.read` is the
+    // control because it is a REAL member of RUNTIME_COMMAND_KINDS -- an invented spelling would
+    // be refused earlier still, at DECODE, and prove nothing about the registry.
+    const unservedBytes = await port.dispatchCommandBytes(encoder.encode(JSON.stringify({
+      commandId: "cmd-probe-interval-control",
+      commandKind: "design.read",
+      correlationId: "corr-probe-interval-control",
+      expectedVersion: 0,
+      payload: {},
+      requestDigest: "a".repeat(64),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+      sessionCredential: CREDENTIAL,
+      targetAggregateId: "agg-probe-interval-control",
+    })));
+    const unservedFrame = JSON.parse(decoder.decode(unservedBytes)) as Record<string, unknown>;
+    expect({
+      code: (unservedFrame["error"] as { code?: string } | undefined)?.code,
+      stage: unservedFrame["stage"],
+    }).toEqual({ code: "INPUT_INVALID", stage: "REGISTRY" });
+    // AND THE MCP PROPERTY THE DESCRIBE BLOCK IS NAMED FOR, restated at the seam: reaching the
+    // kind here took a DIRECT dispatch of hand-built bytes. It is still off the advertised tool
+    // roster, so no MCP client can discover or call it.
+    expect(wiredMcpToolKinds()).not.toContain(PROBE_INTERVAL);
+    // Nothing durable was written by either call.
+    expect(decisionsIn().length).toBe(before.length);
   });
 });

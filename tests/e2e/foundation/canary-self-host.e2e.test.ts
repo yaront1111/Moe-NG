@@ -111,7 +111,10 @@ describe("Foundation self-host canary: the wrapper's seat flags against the REAL
         agentCommand: CANARY_AGENT_COMMAND,
         credential,
         timeoutMs: CANARY_AGENT_TIMEOUT_MS,
-      }), authority.watch);
+      }), authority.watch, {}, {
+        [credential.deliveredAs]: credential.value,
+        MOE_AGENT_COMMAND: CANARY_AGENT_COMMAND,
+      });
       const view = readLedgerView(run.scratch);
       printRunReceipt("canary-real-claude", run, view);
 

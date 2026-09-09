@@ -10,7 +10,9 @@ import {
   CompiledPolicyAdmissionError,
   createCompiledPolicyAuthorityBody,
 } from "./compiled-policy-authority-body.js";
-import { COMPILED_PLAN_NODE_BUDGET } from "./compiled-authority-contracts.js";
+import {
+  COMPILED_NODE_KEY_MAX_CHARS, COMPILED_PLAN_NODE_BUDGET,
+} from "./compiled-authority-contracts.js";
 import type {
   CompiledPlanCode,
   CompiledPlanInput,
@@ -18,7 +20,7 @@ import type {
 } from "./compiled-authority-contracts.js";
 
 const LAYER = "COMPILED_PLAN_PRODUCER";
-const KEY = /^[a-z0-9][a-z0-9-]{0,120}$/u;
+const KEY = new RegExp(`^[a-z0-9][a-z0-9-]{0,${String(COMPILED_NODE_KEY_MAX_CHARS - 1)}}$`, "u");
 
 function refused(code: CompiledPlanCode, detail: string): CompiledPlanResult {
   return Object.freeze({ code, detail, layer: LAYER, ok: false });
@@ -87,6 +89,14 @@ function shapeRefusal(input: CompiledPlanInput): CompiledPlanResult | null {
         "COMPILED_PLAN_CRITERION_UNBOUND",
         `criterion ${criterion.criterionId} is satisfied by no node`,
       );
+    }
+  }
+  // Judged AFTER coverage so an unbound criterion keeps its own, more useful refusal. A node
+  // with nothing to satisfy has no acceptance contract to carry; the approval codec refused it
+  // as a producer throw, which the port reported as a bare UNKNOWN_ERROR (measured 2026-09-05).
+  for (const node of input.nodes) {
+    if (node.criterionIds.length === 0) {
+      return refused("COMPILED_PLAN_MALFORMED", `node ${node.nodeKey} binds no criterion`);
     }
   }
   if (input.knownCapabilities !== null) {

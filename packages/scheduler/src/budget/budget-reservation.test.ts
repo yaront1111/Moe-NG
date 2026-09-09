@@ -105,6 +105,10 @@ describe("reserveForAdmission", () => {
     ["malformed admission shape", view(), { admissionRef: REF, amounts: AMOUNTS } as unknown as AdmissionRequest,
       "BUDGET_RESERVATION_MALFORMED"],
     ["non-numeric quantity", view(), admission({ amounts: with_("4") }), "BUDGET_RESERVATION_MALFORMED"],
+    // A view carrying one meter twice passed the sufficiency check on the first row and then
+    // reserved (and refunded) on BOTH rows: units minted and destroyed from a caller-shaped view.
+    ["duplicate meter rows in the view", view({ meters: [bucket(MS, 100), bucket(MS, 100), bucket(AT, 10)] }),
+      admission(), "BUDGET_RESERVATION_MALFORMED"],
     ["unknown purpose", view(), admission({ amounts: [...AMOUNTS,
       { purpose: "SIDE_QUEST", meter: MS, quantity: 1 } as unknown as AdmissionAmount] }),
       "BUDGET_RESERVATION_MALFORMED"],

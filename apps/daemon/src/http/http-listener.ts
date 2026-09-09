@@ -11,10 +11,20 @@ import type { ProductContractGate1ReadPort } from "./product-contract-gate-1-rea
 import type { DocumentCoverageReadPort } from "./document-coverage-contract.js";
 import type { RunsReadPort } from "./runs-read-contract.js";
 import type { PolicyReadPort } from "./policy-read.js";
+import type { ActivationReadPort } from "./activation-read.js";
 import type { HealthReadPort } from "./health-read.js";
 import type { ActivityReadPort } from "./activity-read.js";
 import type { SessionsReadPort } from "./sessions-read.js";
+import type { RepositoryRemoteReadPort } from "./repository-remote-read.js";
+import type { RepositoryWorkflowReadPort } from "./repository-workflow-read.js";
 import type { GoalSourceReadPort } from "../documents/document-source-full-read.js";
+import type { DeploymentsHealthReadPort } from "./deployments-health-read.js";
+import type { BackupsReadPort } from "./backups-read.js";
+import type { DesignReadPort } from "./design-read.js";
+import type { EnvironmentsReadPort } from "./environments-read.js";
+import type { PreviewCapturePort } from "./preview-capture-route.js";
+import type { PreviewReadPort } from "./preview-read.js";
+import type { ReleaseReadPort } from "./release-evidence-read.js";
 import type {
   ProductContractV2CurrentReadPort,
 } from "./product-contract-v2-current-read.js";
@@ -139,14 +149,49 @@ export interface StartListenerOptions {
   readonly runs?: RunsReadPort;
   /** Absent means the policy read refuses as unavailable. */
   readonly policy?: PolicyReadPort;
+  /** Absent means the activation receipts read refuses as unavailable. */
+  readonly activation?: ActivationReadPort;
   /** Absent means the health read refuses as unavailable. */
   readonly health?: HealthReadPort;
   /** Absent means the activity read refuses as unavailable. */
   readonly activity?: ActivityReadPort;
   /** Absent means the sessions read refuses as unavailable. */
   readonly sessions?: SessionsReadPort;
+  /** Absent means the repository-remote read refuses as unavailable. */
+  readonly repositoryRemote?: RepositoryRemoteReadPort;
+  readonly repositoryWorkflows?: RepositoryWorkflowReadPort;
   /** Absent means the goal-source (PRD text) read refuses as unavailable. */
   readonly goalSource?: GoalSourceReadPort;
+  /** Absent means the design-revision read refuses as unavailable. */
+  readonly designReads?: DesignReadPort;
+  /** Absent means the per-environment variable-table read refuses as unavailable. */
+  readonly environmentReads?: EnvironmentsReadPort;
+  /**
+   * Absent means the deployment-environment health read refuses as UNAVAILABLE. Never a healthy
+   * default: a daemon composed without this port cannot see any environment, and answering UP
+   * for all of them is the most dangerous output a health route has.
+   */
+  readonly deploymentsHealth?: DeploymentsHealthReadPort;
+  /**
+   * Absent means the durable backup restore-proof read refuses as UNAVAILABLE. Never an empty
+   * list and never a state: a daemon composed without this port has seen no backup at all, so
+   * an empty answer would read as "no backups exist", and anything a caller could mistake for
+   * PROVEN is the most dangerous output a restore-proof route has - a backup nobody checked,
+   * believed at the one moment the difference matters.
+   */
+  readonly backupReads?: BackupsReadPort;
+  /**
+   * Absent means the preview receipt read refuses as unavailable rather than answering ABSENT:
+   * an unwired daemon must not tell a card "this goal has no preview".
+   */
+  readonly previewReads?: PreviewReadPort;
+  readonly releaseReads?: ReleaseReadPort;
+  /**
+   * Absent means the capture-bytes route refuses as unavailable. Present, it names the
+   * ABSOLUTE project directory `.moe-next/previews` sits under; the route proves that root by
+   * realpath on every request and confines every read to it.
+   */
+  readonly previewCaptures?: PreviewCapturePort;
   /** Absent means the pending-contract read refuses rather than inventing one. */
   readonly productContractPending?: ProductContractPendingReadPort;
   /** Absent means the activated `/2` current-contract read refuses as unavailable. */

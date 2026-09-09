@@ -124,6 +124,10 @@ async function main(): Promise<void> {
       // dispatch runs on is the reader's answer at that dispatch, not at start.
       commandAuthorityPlane: provider.commandAuthorityPlane?.(),
       deps: provider.provide(),
+      // The seat's design read. Composed here rather than left undefined because ADVERTISING
+      // `design.read` while the port is absent refuses every real caller -- the tool shows up on
+      // the roster and can only ever answer INPUT_INVALID.
+      design: provider.designReads?.(),
       documents: provider.goalSource?.(),
       fallbackCredential: credential,
       graph: provider.graph?.(),

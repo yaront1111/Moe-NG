@@ -1,8 +1,8 @@
 import type { JSX } from "react";
 
 import "../styles/cordum-board.css";
-import type { RunGoalView, RunNodeStatus, RunNodeView, RunsOutcome } from "../../live/live-runs.js";
-import { BOARD_COLUMNS, COLUMN_WORDS, foldBoard, nodesLine, untilWords } from "../board/board-columns.js";
+import type { RunGoalView, RunNodeView, RunsOutcome } from "../../live/live-runs.js";
+import { BOARD_COLUMNS, COLUMN_WORDS, ROUTE_WORDS, foldBoard, nodesLine, untilWords } from "../board/board-columns.js";
 import type { BoardColumn, BoardFold } from "../board/board-columns.js";
 import { BoardLanes } from "../board/board-lanes.js";
 import { Freshness } from "../components/freshness.js";
@@ -10,6 +10,11 @@ import type { FreshnessProps } from "../components/freshness.js";
 import { RefusalNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
 import { publishLine } from "../goals/goal-publish.js";
+import { seatWords } from "../ops/activity-words.js";
+import { GOAL_WORDS } from "./run-words.js";
+
+export { STATUS_WORDS } from "./run-words.js";
+export { ROUTE_WORDS } from "../board/board-columns.js";
 
 /** When the daemon last answered, on the live screen's own clock; absent on a pure render. */
 export interface ScreenFreshness {
@@ -32,32 +37,6 @@ export interface RunsScreenProps {
   readonly outcome: RunsOutcome | null;
 }
 
-export const STATUS_WORDS: Readonly<Record<RunNodeStatus, string>> = Object.freeze({
-  ACCEPTED: "Accepted",
-  BLOCKED: "Ledger unreadable",
-  DELIVERED: "Delivered, awaiting the verifier",
-  ESCALATED: "Escalated",
-  ESCALATION_REQUIRED: "Needs escalation",
-  IN_PROGRESS: "In progress",
-  READY: "Ready for an agent",
-  REPLANNED: "Replanned into a successor goal",
-  UNATTRIBUTABLE: "Shared key, not attributable",
-});
-
-/** Lifecycle tokens the daemon folds, in a person's words; an unknown token stays as it is. */
-export const GOAL_WORDS: Readonly<Record<string, string>> = Object.freeze({
-  CANCELLED: "Cancelled", CLOSING: "Closing", COMPLETED: "Done", DRAFT: "Planning",
-  EXECUTION_ENABLED: "Active", PLANNING: "Planning", PLAN_REVIEW: "Plan in review",
-});
-
-export const ROUTE_WORDS: Readonly<Record<string, string>> = Object.freeze({
-  ACCEPT: "review passed",
-  ESCALATE: "review escalated",
-  REJECT_IMPLEMENTATION: "rejected: implementation",
-  REJECT_PLAN: "rejected: same finding again",
-  UNKNOWN_EVIDENCE: "rejected: evidence unknown",
-});
-
 function ago(iso: string | null, nowMs: number): string | null {
   if (iso === null) return null;
   const at = Date.parse(iso);
@@ -73,18 +52,18 @@ function ago(iso: string | null, nowMs: number): string | null {
 export function nodeEvidence(node: RunNodeView, nowMs: number): readonly string[] {
   const lines: string[] = [];
   if (node.sharedKey) {
-    lines.push("another activated plan carries this node key, so its review ledger cannot be attributed to this goal");
+    lines.push("earlier execution has no scoped identity, so its evidence cannot be attributed to this goal");
   }
-  if (node.accepted !== null) lines.push(`accepted by the daemon ${MIDDOT} receipt ${node.accepted.verifierReceiptId}`);
+  if (node.accepted !== null) lines.push("accepted by the daemon");
   if (node.receipt !== null) {
-    lines.push(`verifier ran ${node.receipt.test} in ${node.receipt.workspace}, exit ${String(node.receipt.exitCode)},`
-      + ` output ${node.receipt.outputSha256.slice(0, 12)} (${String(node.receipt.byteCount)} bytes)`);
+    lines.push(`verifier ran ${node.receipt.test}, exit ${String(node.receipt.exitCode)}`);
+    lines.push(node.receipt.testedTreeSha === null ? "tested Git tree not recorded"
+      : `tested Git tree ${node.receipt.testedTreeSha.slice(0, 12)}`);
   }
   if (node.landing !== null) {
     lines.push(node.landing.outcome === "COMMITTED"
-      ? `landed as commit ${(node.landing.sha ?? "").slice(0, 10)} on ${node.landing.branch ?? "?"}`
-        + ` ${MIDDOT} ${String(node.landing.files.length)} file${node.landing.files.length === 1 ? "" : "s"}, local only`
-      : `not landed in git: ${node.landing.code ?? "REFUSED"}`);
+      ? `landed on ${node.landing.branch ?? "the workspace branch"} ${MIDDOT} ${String(node.landing.files.length)} file${node.landing.files.length === 1 ? "" : "s"}, local only`
+      : "not landed yet");
   }
   if (node.review.rounds > 0) {
     const route = node.review.latestRoute === null ? "" : ` ${MIDDOT} last ${ROUTE_WORDS[node.review.latestRoute] ?? node.review.latestRoute}`;
@@ -92,14 +71,18 @@ export function nodeEvidence(node: RunNodeView, nowMs: number): readonly string[
   }
   if (node.review.unsuccessfulRounds > 0) {
     lines.push(`${String(node.review.unsuccessfulRounds)} unsuccessful`
-      + (node.status === "ESCALATION_REQUIRED" ? `: the daemon refuses more rounds until a human escalates` : ""));
+      + (node.status === "ESCALATION_REQUIRED" ? ": needs your decision before more rounds" : ""));
   }
   if (node.claim !== null) {
-    lines.push(node.claim.active
-      ? `held by ${node.claim.claimedBy} ${MIDDOT} lease ends ${untilWords(node.claim.expiresAt, nowMs) ?? "now"}`
-      : `last held by ${node.claim.claimedBy} (${node.claim.status === "RELEASED" ? "released" : "expired"})`);
+    const who = seatWords(node.claim.claimedBy);
+    if (node.claim.active) {
+      const left = untilWords(node.claim.expiresAt, nowMs);
+      lines.push(left === null ? `${who} ${MIDDOT} lease expired` : `${who} ${MIDDOT} lease ends ${left}`);
+    } else {
+      lines.push(`${who} (${node.claim.status === "RELEASED" ? "released" : "expired"})`);
+    }
   }
-  if (node.dependsOn.length > 0) lines.push(`after ${node.dependsOn.join(", ")}`);
+  if (node.dependsOn.length > 0) lines.push("waiting on other work");
   const when = ago(node.lastActivityAt, nowMs);
   if (when !== null) lines.push(`last activity ${when}`);
   return lines;
@@ -119,8 +102,8 @@ function rankOf(goal: RunGoalView, fold: BoardFold | null): number {
   if (fold === null) return goal.lifecycle === "COMPLETED" ? 4 : 3;
   if (fold.stuck > 0) return 0;
   if (fold.counts.WORKING + fold.counts.REVIEW > 0) return 1;
-  if (fold.counts.QUEUED > 0) return 2;
-  return goal.lifecycle === "COMPLETED" || fold.counts.DONE === fold.total ? 4 : 3;
+  if (fold.counts.PLANNED > 0) return 2;
+  return goal.lifecycle === "COMPLETED" || fold.counts.VERIFIED + fold.counts.LANDED + fold.counts.PUBLISHED === fold.total ? 4 : 3;
 }
 
 const NO_STATEMENT = (): null => null;
@@ -131,7 +114,8 @@ export function GoalSection({ embedded = false, goal, nowMs, onOpenBoard }: {
 }): JSX.Element {
   const title = goal.title ?? goal.goalId;
   const runRef = goal.run?.runId ?? "";
-  const fold = goal.nodes.length === 0 ? null : foldBoard(goal.nodes, nowMs);
+  const fold = goal.nodes.length === 0
+    ? null : foldBoard(goal.nodes, nowMs, goal.publish?.outcome === "PUSHED" ? goal.publish.sha : null);
   const state = goal.lifecycle === null ? "" : GOAL_WORDS[goal.lifecycle] ?? goal.lifecycle;
   return (
     <section
@@ -164,7 +148,7 @@ export function GoalSection({ embedded = false, goal, nowMs, onOpenBoard }: {
       </div>
       {fold === null ? (
         <p className="cr2-needs-note" data-testid={`cr.runs.goal.${goal.goalId}.empty`}>
-          No nodes yet: they appear once an approved plan is activated.
+          No work yet: it appears once an approved plan is activated.
         </p>
       ) : (
         <BoardLanes criterionStatement={NO_STATEMENT} fold={fold} nowMs={nowMs} />
@@ -177,10 +161,10 @@ export function GoalSection({ embedded = false, goal, nowMs, onOpenBoard }: {
 function Totals({ freshness, outcome, nowMs }: {
   readonly freshness: ScreenFreshness | undefined; readonly outcome: Extract<RunsOutcome, { status: "RUNS" }>; readonly nowMs: number;
 }): JSX.Element {
-  const counts: Record<BoardColumn, number> = { BLOCKED: 0, DONE: 0, QUEUED: 0, REVIEW: 0, REWORK: 0, WORKING: 0 };
+  const counts: Record<BoardColumn, number> = { PLANNED: 0, WORKING: 0, REVIEW: 0, VERIFIED: 0, LANDED: 0, PUBLISHED: 0 };
   for (const goal of outcome.goals) {
     if (goal.nodes.length === 0) continue;
-    const fold = foldBoard(goal.nodes, nowMs);
+    const fold = foldBoard(goal.nodes, nowMs, goal.publish?.outcome === "PUSHED" ? goal.publish.sha : null);
     for (const column of BOARD_COLUMNS) counts[column] += fold.counts[column];
   }
   const { goals, nodes } = outcome.totals;
@@ -221,7 +205,7 @@ export function RunsScreen({ freshness, nowMs, onOpenBoard, outcome }: RunsScree
               <p className="cr2-goals-empty-body">Create a goal from a PRD and approve its plan; its nodes appear here as agents take them.</p>
             </div>
           ) : [...outcome.goals]
-            .map((goal, index) => ({ goal, index, rank: rankOf(goal, goal.nodes.length === 0 ? null : foldBoard(goal.nodes, nowMs)) }))
+            .map((goal, index) => ({ goal, index, rank: rankOf(goal, goal.nodes.length === 0 ? null : foldBoard(goal.nodes, nowMs, goal.publish?.outcome === "PUSHED" ? goal.publish.sha : null)) }))
             .sort((left, right) => left.rank - right.rank || left.index - right.index)
             .map(({ goal }) => (
               <GoalSection goal={goal} key={goal.goalId} nowMs={nowMs} onOpenBoard={onOpenBoard} />

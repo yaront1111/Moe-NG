@@ -26,6 +26,7 @@ import {
 } from "../review/verifier-receipt-ledger.js";
 import { createNodeVerifier } from "./node-verifier.js";
 import type { VerifierRunCapture } from "./node-verifier.js";
+import type { VerifiedWorkspaceCapture } from "../repository/verified-workspace-contracts.js";
 
 /**
  * Over the REAL provider and store: the verifier's consequences are read back
@@ -117,11 +118,17 @@ const AUTHORITY = {
   },
 };
 
+const WORKSPACE_BINDING = Object.freeze({
+  branchRef: "refs/heads/main", dirtySha256: "d".repeat(64), headSha: "1".repeat(40), root: directory,
+  treeSha: "2".repeat(40), version: "moe-verified-workspace/1" as const,
+});
+
 function verifier(
   capture: VerifierRunCapture,
   authority: typeof AUTHORITY | null = AUTHORITY,
   onRun: () => void = () => undefined,
   nodeRef: string = NODE,
+  captureWorkspace: () => Promise<VerifiedWorkspaceCapture> = async () => ({ binding: WORKSPACE_BINDING, ok: true }),
 ) {
   return createNodeVerifier({
     deps: provider.provide(),
@@ -138,10 +145,40 @@ function verifier(
     },
     store,
     verificationAuthority: () => authority,
+    verifiedWorkspace: { capture: captureWorkspace },
   });
 }
 
 describe("createNodeVerifier", () => {
+  it("withholds the verifier receipt when workspace contents change during the test", async () => {
+    const nodeRef = "node-workspace-drift";
+    seedCleanRound(nodeRef, "seed-workspace-drift");
+    let treeSha = WORKSPACE_BINDING.treeSha;
+    const reports = await verifier(
+      { byteCount: 1, exitCode: 0, output: "ok", sha256: fill("aa") }, AUTHORITY,
+      () => { treeSha = "3".repeat(40); }, nodeRef,
+      async () => ({ binding: { ...WORKSPACE_BINDING, treeSha }, ok: true }),
+    ).verifyOnce();
+    expect(reports).toEqual([{ detail: "workspace changed during verification", nodeRef, outcome: "VERIFIER_WORKSPACE_CHANGED" }]);
+    const ledger = readReviewLedger(store, PROJECT, nodeRef);
+    expect(ledger.accepted).toBeUndefined();
+    expect(ledger.version).toBe(1);
+  });
+
+  it("does not execute tests when the workspace binding cannot be captured", async () => {
+    const nodeRef = "node-workspace-unreadable";
+    seedCleanRound(nodeRef, "seed-workspace-unreadable");
+    let runs = 0;
+    const reports = await verifier(
+      { byteCount: 1, exitCode: 0, output: "ok", sha256: fill("aa") }, AUTHORITY,
+      () => { runs += 1; }, nodeRef,
+      async () => ({ code: "VERIFIED_WORKSPACE_UNREADABLE", detail: "capture refused", ok: false }),
+    ).verifyOnce();
+    expect(reports).toEqual([{ detail: "capture refused", nodeRef, outcome: "VERIFIED_WORKSPACE_UNREADABLE" }]);
+    expect(runs).toBe(0);
+    expect(readReviewLedger(store, PROJECT, nodeRef).version).toBe(1);
+  });
+
   it("skips a node with nothing submitted", async () => {
     const reports = await verifier({ byteCount: 0, exitCode: 0, output: "", sha256: fill("aa") }).verifyOnce();
     expect(reports).toHaveLength(0);
@@ -230,6 +267,7 @@ describe("createNodeVerifier", () => {
     if (!receipt.ok) throw new Error(receipt.code);
     expect(receipt.receipt.execution.outputSha256).toBe(greenSha);
     expect(receipt.receipt.execution.byteCount).toBe(greenOutput.length);
+    expect(receipt.receipt.execution.workspaceBinding).toEqual(WORKSPACE_BINDING);
     expect(receipt.receipt.packageItems).toContainEqual(expect.objectContaining({
       digest: receipt.receipt.execution.evidenceSha256,
       kind: "DAEMON_RECEIPT",
@@ -450,6 +488,7 @@ function realVerifier(
     verificationAuthority: createVerifierAuthorityProvider({
       projectId: project.projectId, store: project.store,
     }),
+    verifiedWorkspace: { capture: async () => ({ binding: WORKSPACE_BINDING, ok: true }) },
   });
 }
 

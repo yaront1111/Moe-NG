@@ -438,8 +438,12 @@ export interface Driver {
   readonly stop: () => Promise<void>;
 }
 
-export async function stdioDriver(workspace: PortabilityWorkspace, credential: string): Promise<Driver> {
-  const env = environmentFor(workspace, { MOE_SESSION_CREDENTIAL: credential });
+export async function stdioDriver(
+  workspace: PortabilityWorkspace,
+  credential: string,
+  extraEnvironment: Readonly<Record<string, string>> = {},
+): Promise<Driver> {
+  const env = environmentFor(workspace, { ...extraEnvironment, MOE_SESSION_CREDENTIAL: credential });
   const client = stdioClient("moe-mcp-stdio", env);
   await client.initialize();
   const raw = async (method: string, params: unknown): Promise<Reply> =>

@@ -71,9 +71,11 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   // The runs read: same transport pair.
   "LISTENER_RUNS_REQUEST_INVALID",
   "LISTENER_RUNS_UNAVAILABLE",
-  // The policy and health reads: same transport pairs.
+  // Policy, activation receipts and health: same transport pairs, none taking an operand.
   "LISTENER_POLICY_REQUEST_INVALID",
   "LISTENER_POLICY_UNAVAILABLE",
+  "LISTENER_ACTIVATION_REQUEST_INVALID",
+  "LISTENER_ACTIVATION_UNAVAILABLE",
   "LISTENER_HEALTH_REQUEST_INVALID",
   "LISTENER_HEALTH_UNAVAILABLE",
   // The activity and sessions reads: same transport pairs.
@@ -81,9 +83,59 @@ export const LISTENER_REFUSAL_CODES = Object.freeze([
   "LISTENER_ACTIVITY_UNAVAILABLE",
   "LISTENER_SESSIONS_REQUEST_INVALID",
   "LISTENER_SESSIONS_UNAVAILABLE",
+  // The project's bound git remote: same transport pair, one line to hold the file at its cap.
+  "LISTENER_REPOSITORY_REMOTE_REQUEST_INVALID", "LISTENER_REPOSITORY_REMOTE_UNAVAILABLE",
+  "LISTENER_CRITERIA_REQUEST_INVALID", "LISTENER_CRITERIA_UNAVAILABLE",
+  "LISTENER_REPOSITORY_RECOVERY_REQUEST_INVALID", "LISTENER_REPOSITORY_RECOVERY_UNAVAILABLE",
   // The goal-source (PRD text) read: same transport pair.
   "LISTENER_GOAL_SOURCE_REQUEST_INVALID",
   "LISTENER_GOAL_SOURCE_UNAVAILABLE",
+  // The design-revision read: same transport pair.
+  "LISTENER_DESIGN_REQUEST_INVALID",
+  "LISTENER_DESIGN_UNAVAILABLE",
+  // The deployment-environment health read (`/deployments/health/read`). FOUR codes rather than
+  // the usual pair, because its body contract is exact-key and the two ways to break it are
+  // fixed differently: MISSING_KEY names no environment at all, UNKNOWN_KEY names a key this
+  // route does not serve (including a `projectId` the principal already decides). A single
+  // code for both would leave a client unable to tell which mistake it made. REQUEST_INVALID
+  // keeps its usual meaning — a non-POST, an undecodable body, a non-object, or an environment
+  // that is not a usable string. UNAVAILABLE covers a daemon composed without the health port,
+  // which must refuse rather than answer a healthy default for environments it cannot see.
+  // The durable backup restore-proof read (`/backups/read`). THREE codes rather than the
+  // health read's four: this body is exact-key with NO keys at all, so there is no missing-key
+  // mistake to distinguish - UNKNOWN_KEY names any key the route does not serve (including an
+  // `environment` filter it does not honour, which silently ignored would let a caller believe
+  // it was looking at one environment's backups). REQUEST_INVALID keeps its usual meaning: a
+  // non-POST, an undecodable body, or a non-object. UNAVAILABLE covers a daemon composed
+  // without the port, which must refuse rather than answer an empty list that would read as
+  // "no backups exist" - or, worse, anything a caller could mistake for a proven one.
+  "LISTENER_BACKUPS_REQUEST_INVALID",
+  "LISTENER_BACKUPS_UNAVAILABLE",
+  "LISTENER_BACKUPS_UNKNOWN_KEY",
+  "LISTENER_DEPLOYMENTS_HEALTH_MISSING_KEY",
+  "LISTENER_DEPLOYMENTS_HEALTH_REQUEST_INVALID",
+  "LISTENER_DEPLOYMENTS_HEALTH_UNAVAILABLE",
+  "LISTENER_DEPLOYMENTS_HEALTH_UNKNOWN_KEY",
+  // The preview surface's transport pair, shared by BOTH its routes: the JSON receipt read
+  // (`/preview/read`) and the capture-bytes route (`/preview/capture/...`). REQUEST_INVALID
+  // covers a non-POST receipt read and any body that is not exactly `{goalId}`; UNAVAILABLE
+  // covers a daemon composed without the preview ports. A capture request that IS reachable
+  // but not servable answers one of the eleven asset codes above instead — those describe a
+  // PATH, these describe the surface.
+  "LISTENER_PREVIEW_REQUEST_INVALID",
+  "LISTENER_PREVIEW_UNAVAILABLE",
+  // The release evidence read (`/release/read`): same transport pair. REQUEST_INVALID covers a
+  // non-POST and any body that is not exactly `{goalId}`; UNAVAILABLE covers a daemon composed
+  // without the release reader. A goal with no evidence to show is NOT here — that is an
+  // ordinary ABSENT answer from the route, not a transport fault.
+  "LISTENER_RELEASE_REQUEST_INVALID",
+  "LISTENER_RELEASE_UNAVAILABLE",
+  // The per-environment variable table: same transport pair. REQUEST_INVALID covers a non-POST
+  // and any body that is not exactly `{environment}`; an environment NAME this project does not
+  // have is NOT here, because that caller is refused by the store's own ENV_ENVIRONMENT_UNKNOWN
+  // at its own layer instead.
+  "LISTENER_ENVIRONMENTS_REQUEST_INVALID",
+  "LISTENER_ENVIRONMENTS_UNAVAILABLE",
   // The pending-contract read (the Gate 1 card's read): same transport pair.
   "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID",
   "LISTENER_PRODUCT_CONTRACT_PENDING_UNAVAILABLE",
@@ -201,18 +253,43 @@ export function statusFor(code: ListenerRefusalCode): number {
   if (code === "LISTENER_RUNS_UNAVAILABLE") return 503;
   if (code === "LISTENER_POLICY_REQUEST_INVALID") return 400;
   if (code === "LISTENER_POLICY_UNAVAILABLE") return 503;
+  if (code === "LISTENER_ACTIVATION_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_ACTIVATION_UNAVAILABLE") return 503;
   if (code === "LISTENER_HEALTH_REQUEST_INVALID") return 400;
   if (code === "LISTENER_HEALTH_UNAVAILABLE") return 503;
   if (code === "LISTENER_ACTIVITY_REQUEST_INVALID") return 400;
   if (code === "LISTENER_ACTIVITY_UNAVAILABLE") return 503;
   if (code === "LISTENER_SESSIONS_REQUEST_INVALID") return 400;
   if (code === "LISTENER_SESSIONS_UNAVAILABLE") return 503;
+  if (code === "LISTENER_REPOSITORY_REMOTE_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_REPOSITORY_REMOTE_UNAVAILABLE") return 503;
+  if (code === "LISTENER_CRITERIA_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_CRITERIA_UNAVAILABLE") return 503;
+  if (code === "LISTENER_REPOSITORY_RECOVERY_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_REPOSITORY_RECOVERY_UNAVAILABLE") return 503;
   if (code === "LISTENER_GOAL_SOURCE_REQUEST_INVALID") return 400;
   if (code === "LISTENER_GOAL_SOURCE_UNAVAILABLE") return 503;
+  if (code === "LISTENER_DESIGN_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_DESIGN_UNAVAILABLE") return 503;
+  if (code === "LISTENER_BACKUPS_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_BACKUPS_UNKNOWN_KEY") return 400;
+  if (code === "LISTENER_BACKUPS_UNAVAILABLE") return 503;
+  if (code === "LISTENER_DEPLOYMENTS_HEALTH_MISSING_KEY") return 400;
+  if (code === "LISTENER_DEPLOYMENTS_HEALTH_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_DEPLOYMENTS_HEALTH_UNKNOWN_KEY") return 400;
+  if (code === "LISTENER_DEPLOYMENTS_HEALTH_UNAVAILABLE") return 503;
+  if (code === "LISTENER_PREVIEW_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_PREVIEW_UNAVAILABLE") return 503;
+  if (code === "LISTENER_RELEASE_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_RELEASE_UNAVAILABLE") return 503;
+  if (code === "LISTENER_ENVIRONMENTS_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_ENVIRONMENTS_UNAVAILABLE") return 503;
   if (code === "LISTENER_PRODUCT_CONTRACT_PENDING_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PRODUCT_CONTRACT_PENDING_UNAVAILABLE") return 503;
   if (code === "LISTENER_PRODUCT_CONTRACT_V2_PENDING_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PRODUCT_CONTRACT_V2_PENDING_UNAVAILABLE") return 503;
+  if (code === "LISTENER_PRODUCT_CONTRACT_V2_CURRENT_REQUEST_INVALID") return 400;
+  if (code === "LISTENER_PRODUCT_CONTRACT_V2_CURRENT_UNAVAILABLE") return 503;
   if (code === "LISTENER_PLANNING_RUN_REQUEST_INVALID") return 400;
   if (code === "LISTENER_PLANNING_RUN_UNAVAILABLE") return 503;
   if (code === "LISTENER_SESSION_CHALLENGE_OPERANDS_REQUEST_INVALID") return 400;

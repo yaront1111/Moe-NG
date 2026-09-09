@@ -222,6 +222,7 @@ const NO_METER = "BUDGET_ACCOUNT_UNKNOWN_METER";
 const DUPLICATE = "BUDGET_ACCOUNT_DUPLICATE_IDENTITY";
 const MALFORMED = "BUDGET_ACCOUNT_COMMAND_MALFORMED";
 const ILLEGAL = "BUDGET_ACCOUNT_ILLEGAL_CLOSE";
+const NOT_OPEN = "BUDGET_ACCOUNT_NOT_OPEN";
 
 interface ReplayForgery {
   readonly name: string;
@@ -483,6 +484,11 @@ const REJECTIONS: readonly RejectionCase[] = [
   { name: "closing an account holding quarantined units", code: ILLEGAL, setup: () => handmade({ quarantined: 5 }), close: { accountId: CHILD, expectedVersion: 0 } },
   { name: "closing an already-closed account", code: ILLEGAL, setup: () => handmade({}, "CLOSED"), close: { accountId: CHILD, expectedVersion: 0 } },
   { name: "closing a parent whose child is still open", code: ILLEGAL, setup: () => handmade({}, "OPEN", 0), close: { accountId: ROOT, expectedVersion: 0 } },
+  // Design 664: an account that left OPEN moves no units again, in either direction. The
+  // re-funded CLOSED child was a state the close transition can never produce.
+  { name: "re-funding a closed child", code: NOT_OPEN, setup: () => handmade({}, "CLOSED"), alloc: { expectedParentVersion: 0, expectedChildVersion: 0 } },
+  { name: "returning from a settling child", code: NOT_OPEN, setup: () => handmade({ available: 3 }, "SETTLING"), back: { expectedParentVersion: 0, expectedChildVersion: 0, amounts: [{ meter: ATTEMPTS, amount: 3 }] } },
+  { name: "allocating from a closed parent", code: NOT_OPEN, setup: () => ({ ...handmade({}, "CLOSED"), accounts: handmade({}, "CLOSED").accounts.map((r) => (r.accountId === ROOT ? { ...r, state: "CLOSED" as const } : r)) }), alloc: { expectedParentVersion: 0, childAccountId: GRANDCHILD, childOwnerRef: "node:9", amounts: [{ meter: ATTEMPTS, amount: 1 }] } },
   { name: "several failing checks at once, reporting only the first in the published order", code: STALE, alloc: { expectedChildVersion: 0, amounts: [{ meter: "no.such", amount: 99 }] } },
 ];
 

@@ -154,3 +154,88 @@ describe("truth-04: the strip credits whatever actually set its state", () => {
     expect(linkTitle()).toBe(`${OFFLINE_SOURCE} ${NO_STREAM}`);
   });
 });
+
+/**
+ * The shell-wide provider pause. The strip stays PURE - it renders the `paused`
+ * prop it is handed and reads no context of its own; the shell host supplies it.
+ *
+ * A pause is a fleet-wide fact, so it belongs on the one surface every screen
+ * carries. It is NOT a connection state: the link is healthy while the seats
+ * wait, so the pause may not touch the chip, the banner or the sparkline.
+ */
+
+/** 3a's own five-key fixture, verbatim from live/live-ops.test.ts. */
+const PAUSE = Object.freeze({
+  lastLine: "You've hit your weekly limit - resets Sep 8, 10:46am (Asia/Jerusalem)",
+  provider: "claude",
+  resetAt: "2026-09-02T20:30:00.000Z",
+  since: "2026-09-02T20:00:00.000Z",
+  workItemId: "node.deliver@node-1",
+});
+
+const DISCONNECTED = describeConnection("DISCONNECTED");
+
+describe("the status strip says the fleet is waiting out a provider limit", () => {
+  it("names the provider and the instant it resumes, in the viewer's own locale", () => {
+    render(<StatusStrip clockPresent descriptor={CONNECTED} paused={PAUSE} />);
+    // Computed with the SAME call the strip makes, so the box's locale and time
+    // zone never decide whether this arm passes.
+    const resumes = new Date(PAUSE.resetAt).toLocaleString();
+    expect(screen.getByTestId("cr.shell.paused").textContent)
+      .toBe(`Agents paused: claude limit, resumes ${resumes}`);
+    // A locale that rendered nothing would make the sentence above vacuous.
+    expect(resumes.length).toBeGreaterThan(0);
+  });
+
+  it("carries the seat's last line as a title, so the raw cause stays one hover away", () => {
+    render(<StatusStrip clockPresent descriptor={CONNECTED} paused={PAUSE} />);
+    expect(screen.getByTestId("cr.shell.paused").getAttribute("title"))
+      .toBe(`Last line from the claude seat: ${PAUSE.lastLine}`);
+  });
+
+  it("shows an unreadable instant raw rather than as Invalid Date, and never hides the pause", () => {
+    // resetAt passes the decoder on non-emptiness alone, so an instant this box
+    // cannot parse still reaches the strip. Hiding a live pause behind a
+    // formatting miss is the one thing this line must not do.
+    const unreadable = { ...PAUSE, resetAt: "whenever the limit lifts" };
+    render(<StatusStrip clockPresent descriptor={CONNECTED} paused={unreadable} />);
+    const words = screen.getByTestId("cr.shell.paused").textContent ?? "";
+    expect(words).toBe("Agents paused: claude limit, resumes whenever the limit lifts");
+    expect(words).not.toContain("Invalid Date");
+  });
+
+  it("says nothing at all when no pause is known", () => {
+    // Both absences: no prop (an unwired caller) and an explicit null (a poll
+    // that answered calm, or refused). Neither may state a pause.
+    const { rerender } = render(<StatusStrip clockPresent descriptor={CONNECTED} />);
+    expect(screen.queryByTestId("cr.shell.paused")).toBeNull();
+
+    rerender(<StatusStrip clockPresent descriptor={CONNECTED} paused={null} />);
+    expect(screen.queryByTestId("cr.shell.paused")).toBeNull();
+    expect(screen.getByTestId("cr.shell.statusstrip").textContent).not.toContain("Agents paused");
+  });
+
+  it("leaves the link's own claims untouched: no motion, no stream, no relay word", () => {
+    render(<StatusStrip clockPresent descriptor={CONNECTED} paused={PAUSE} />);
+    const spine = screen.getByTestId("cr.shell.eventspine");
+    // The pause is a seat fact, not a transport fact. It may not light the
+    // sparkline, invent a stream, or change what the link says it measures.
+    expect(spine.getAttribute("data-live")).toBe("true");
+    expect(spine.getAttribute("data-stream")).toBeNull();
+    expect(linkTitle()).toBe(`${DAEMON_SOURCE} ${NO_STREAM}`);
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("Connected");
+  });
+
+  it("sits between the connection chip and the stale marker", () => {
+    // DISCONNECTED is the descriptor that actually renders a stale marker;
+    // CONNECTED carries an empty staleLabel and renders none.
+    render(<StatusStrip clockPresent descriptor={DISCONNECTED} paused={PAUSE} />);
+    const strip = screen.getByTestId("cr.shell.statusstrip");
+    const order = [...strip.children].map((child) => child.getAttribute("data-testid"));
+    expect(order).toContain("cr.shell.stale");
+    expect(order.indexOf("cr.shell.paused"))
+      .toBe(order.indexOf("cr.shell.connection") + 1);
+    expect(order.indexOf("cr.shell.stale"))
+      .toBe(order.indexOf("cr.shell.paused") + 1);
+  });
+});

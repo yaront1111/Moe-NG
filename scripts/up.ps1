@@ -84,6 +84,7 @@ if (-not $env:CLAUDE_CODE_OAUTH_TOKEN -and -not $env:ANTHROPIC_AUTH_TOKEN -and
 }
 
 $watcher = $null
+$consoleEncoding = $null
 try {
   Push-Location $repoRoot
 
@@ -94,7 +95,12 @@ try {
   }
 
   # Second window: the seat watcher, reading the log this window is about to write.
-  Set-Content -LiteralPath $logFile -Value "" -Encoding utf8
+  # Truncate through a share-tolerant handle: a watcher window (or any `tail -f`) still
+  # reading the previous run's log must not stop this run from starting. Set-Content
+  # asks for exclusive access and failed on exactly that (2026-09-05).
+  $logStream = [System.IO.File]::Open($logFile, [System.IO.FileMode]::Create,
+    [System.IO.FileAccess]::Write, [System.IO.FileShare]::ReadWrite)
+  $logStream.Close()
   $shell = if (Get-Command pwsh -ErrorAction SilentlyContinue) { "pwsh" } else { "powershell" }
   $watcher = Start-Process $shell -PassThru -ArgumentList @(
     "-NoExit", "-NoProfile",
@@ -108,10 +114,17 @@ try {
   Write-Host "OPEN THE #pair= URL BELOW WITHIN 60 SECONDS. It is a one-use bearer." -ForegroundColor Yellow
   Write-Host ""
 
+  # Seat prose is UTF-8 (em-dashes, section signs, arrows). PowerShell decodes a native
+  # command's output with the console's OEM code page (ibm850 on this host) unless told
+  # otherwise, and Tee-Object would then write that mojibake into the log for good.
+  $consoleEncoding = [Console]::OutputEncoding
+  [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+
   pnpm start 2>&1 | Tee-Object -FilePath $logFile -Append
 }
 finally {
   Pop-Location -ErrorAction SilentlyContinue
+  if ($consoleEncoding) { [Console]::OutputEncoding = $consoleEncoding }
   if ($tokenWasSet) {
     [Environment]::SetEnvironmentVariable("CLAUDE_CODE_OAUTH_TOKEN", $null)
     Write-Host "moe-next: CLAUDE_CODE_OAUTH_TOKEN scrubbed from this window." -ForegroundColor Green

@@ -175,9 +175,27 @@ export function settleReservation(view: BudgetAvailableView, reservation: Reserv
     if (one.overrun > 0) overrun.push({ meter, amount: one.overrun }); }
   const settlement: SettlementRecord = { settlementId: deriveSettlementId(record.reservationId), reservationId: record.reservationId,
     accountId: record.accountId, attemptRef: record.attemptRef as string, version: 0, state: stateOf(lines), lines, unknownExternalLiability: false, overrun };
-  if (cmd.prior !== null) return JSON.stringify(cmd.prior) === JSON.stringify(settlement)
-    ? accept(cmd.prior as unknown as SettlementRecord, view) : fail(view, null, "BUDGET_SETTLEMENT_ALREADY_SETTLED");
+  // The replay check compares STRUCTURE, not serialisation: a prior that round-tripped through
+  // a store or a JSON layer with its keys in another order is the same settlement, and the old
+  // JSON.stringify equality refused it ALREADY_SETTLED. A prior that does not read as a
+  // settlement at all is malformed, never "different".
+  if (cmd.prior !== null) {
+    const prior = readSettlement(cmd.prior);
+    if (prior === null) return fail(view, null, "BUDGET_SETTLEMENT_MALFORMED");
+    // The caller's own prior comes back by reference, as before; `prior` above only proved shape.
+    return canonical(prior) === canonical(settlement)
+      ? accept(cmd.prior as unknown as SettlementRecord, view) : fail(view, null, "BUDGET_SETTLEMENT_ALREADY_SETTLED");
+  }
   return accept(settlement, shift(view, moves, overrun.length > 0 ? "OVERDRAWN" : view.state));
+}
+/** Key-order-insensitive serialisation of a plain data tree; arrays keep their order. */
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (value !== null && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${canonical(record[key])}`).join(",")}}`;
+  }
+  return JSON.stringify(value);
 }
 type Opened = { readonly code: BudgetSettlementIssueCode } | { readonly record: SettlementRecord };
 /** Shared preamble for the quarantine exits: only a QUARANTINED record with backing units transitions, and only one

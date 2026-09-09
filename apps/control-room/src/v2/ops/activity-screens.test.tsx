@@ -3,6 +3,8 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { ActivityOutcome } from "../../live/live-activity.js";
 import type { SessionsOutcome } from "../../live/live-sessions.js";
+import { ProviderPauseProvider } from "../shell/pause-context.js";
+import type { ProviderPause } from "../shell/pause-context.js";
 import { ActivityPanel, SessionsPanel } from "./activity-screens.js";
 import { agoWords, isSeatRecord, kindWords, principalWords, seatWords } from "./activity-words.js";
 import { LiveActivity, LiveSessions } from "./live-ops.js";
@@ -22,13 +24,41 @@ const ACTIVITY: ActivityOutcome = {
   refusalsRecorded: false, scope: { goalId: "goal-1", targets: 3 }, status: "ACTIVITY", totalDecisions: 12,
 };
 const SESSIONS: SessionsOutcome = {
+  agentProvider: { configured: "claude", envOverride: false },
+  concurrency: { activeSeats: 2, configuredAgentLimit: 2 },
   readAt: "2026-09-03T10:00:00.000Z",
   sessions: [
-    { capabilities: ["review.write", "work.write"], expiresAt: "2026-09-03T11:00:00.000Z", holding: ["node.deliver@node-a"], liveness: "LIVE", principalId: "sess-wrap-abc", sessionId: "sess-wrap-abc", status: "OPEN" },
-    { capabilities: ["project.admin"], expiresAt: "2026-09-03T09:00:00.000Z", holding: [], liveness: "EXPIRED", principalId: "principal-1", sessionId: "sess-op-1", status: "OPEN" },
-    { capabilities: ["project.admin"], expiresAt: "2026-09-03T11:00:00.000Z", holding: [], liveness: "LIVE", principalId: "operator-local", sessionId: "4be93d1a-902e-41f4-ad1a-89fc588d2ff4", status: "OPEN" },
+    { agentVersionAtStart: "2.1.263 (Claude Code)", capabilities: ["review.write", "work.write"], expiresAt: "2026-09-03T11:00:00.000Z", holding: ["node.deliver@node-a"], liveness: "LIVE", principalId: "sess-wrap-abc", providerAtStart: "claude", sessionId: "sess-wrap-abc", status: "OPEN" },
+    // Neither of these is an AGENT seat, so nothing ever measured a provider or a CLI version
+    // for them: they carry the daemon's one stated unknown, exactly as a live read would.
+    { agentVersionAtStart: "UNKNOWN", capabilities: ["project.admin"], expiresAt: "2026-09-03T09:00:00.000Z", holding: [], liveness: "EXPIRED", principalId: "principal-1", providerAtStart: "UNKNOWN", sessionId: "sess-op-1", status: "OPEN" },
+    { agentVersionAtStart: "UNKNOWN", capabilities: ["project.admin"], expiresAt: "2026-09-03T11:00:00.000Z", holding: [], liveness: "LIVE", principalId: "operator-local", providerAtStart: "UNKNOWN", sessionId: "4be93d1a-902e-41f4-ad1a-89fc588d2ff4", status: "OPEN" },
   ],
   status: "SESSIONS", totals: { closed: 0, expired: 1, live: 1 }, unreadable: false,
+};
+
+const PAUSE: ProviderPause = {
+  lastLine: "Claude usage limit reached. Your limit will reset at 11:30 (UTC).",
+  provider: "claude", resetAt: "2026-09-03T11:30:00.000Z", since: "2026-09-03T10:00:00.000Z",
+  workItemId: "node.deliver@n2",
+};
+// Spelled out, never built by calling `pauseSeatWords`: an expectation that called the
+// production formatter would pass for whatever it happens to return.
+const PAUSED_LINE = `Agents paused: claude limit, resumes ${new Date("2026-09-03T11:30:00.000Z").toLocaleString()}`
+  + " - last line from the seat: Claude usage limit reached. Your limit will reset at 11:30 (UTC).";
+const BROWSER_ID = "4be93d1a-902e-41f4-ad1a-89fc588d2ff4";
+/**
+ * The Seats read as it actually looks while the wrapper is paused: no agent seat, and
+ * nothing live at all - the operator's own browser pairing has lapsed too. Both facts
+ * matter: a banner gated on "an agent is live" OR on "anything is live" would vanish
+ * exactly here, and here is the moment a person most needs to be told the wrapper is
+ * waiting rather than broken.
+ */
+const BROWSER_ONLY: SessionsOutcome = {
+  ...SESSIONS,
+  sessions: SESSIONS.sessions.filter((session) => session.sessionId === BROWSER_ID)
+    .map((session) => ({ ...session, liveness: "EXPIRED" as const })),
+  totals: { closed: 0, expired: 1, live: 0 },
 };
 
 describe("activity words", () => {
@@ -50,6 +80,38 @@ describe("activity words", () => {
 });
 
 describe("ActivityPanel", () => {
+  it.each([
+    ["APPLIED", "applied the migrations to this environment"],
+    ["REFUSED", "could not migrate: read the receipt for what the schema did"],
+    ["REVERTED", "reverted the last migration batch"],
+    ["PARTIAL", "recorded the migration: PARTIAL"],
+    [null, "recorded the migration"],
+  ])("renders migration verdict %s in the project-wide activity DOM", (verdict, words) => {
+    render(<ActivityPanel nowMs={NOW} scopeLabel="Project" outcome={{
+      ...ACTIVITY, scope: { goalId: null, targets: 1 }, entries: [{
+        commandKind: "internal.repository.migration_receipt", verdict,
+        decidedAt: "2026-09-03T09:35:00.000Z", disposition: "COMMITTED",
+        principalId: "daemon:migrations", targetAggregateId: "migration:receipt-1", version: 1,
+      }],
+    }} />);
+    const entry = screen.getByTestId("cr.activity.entry.0");
+    expect(entry.querySelector(".cr2-activity-what")?.textContent).toBe(`the daemon ${words}`);
+    expect(entry.textContent).toContain("migration:receipt-1");
+    expect(entry.getAttribute("data-disposition")).toBe("COMMITTED");
+  });
+
+  it("preserves verdicts on folded seat records too", () => {
+    render(<ActivityPanel nowMs={NOW} scopeLabel="Project" outcome={{
+      ...ACTIVITY, scope: { goalId: null, targets: 1 }, entries: [{
+        commandKind: "session.renew", verdict: "UNRECOGNIZED",
+        decidedAt: "2026-09-03T09:35:00.000Z", disposition: "COMMITTED",
+        principalId: "operator-local", targetAggregateId: "session/seat-1", version: 2,
+      }],
+    }} />);
+    expect(screen.getByTestId("cr.activity.seats").querySelector(".cr2-activity-what")?.textContent)
+      .toBe("the operator renewed a seat (UNRECOGNIZED)");
+  });
+
   it("renders each decision as who did what, latest first, and says refusals are not recorded", () => {
     render(<ActivityPanel nowMs={NOW} outcome={ACTIVITY} scopeLabel="Alpha" />);
     expect(screen.getByTestId("cr.activity.count").textContent).toContain("2 work decisions of 12 recorded");
@@ -94,6 +156,74 @@ describe("SessionsPanel", () => {
     expect(screen.getByTestId("cr.sessions.row.sess-op-1").textContent).toContain("expired 1 h ago");
     expect(screen.getByTestId("cr.sessions.list").textContent).not.toContain("sess-op-1");
   });
+
+  it("says the agents are paused, with the reset and the seat's own last line", () => {
+    render(<SessionsPanel nowMs={NOW} outcome={SESSIONS} paused={PAUSE} />);
+    expect(screen.getByTestId("cr.sessions.paused").textContent).toBe(PAUSED_LINE);
+    // The seats themselves are still listed; the banner is a note above them, not a takeover.
+    expect(screen.getByTestId("cr.sessions.row.sess-wrap-abc")).toBeTruthy();
+  });
+
+  it("says it even when no agent seat is left to look at - that is when a person most needs it", () => {
+    // Guard the fixture: a filter that silently yielded zero sessions would make this vacuous.
+    expect(BROWSER_ONLY.sessions).toHaveLength(1);
+    render(<SessionsPanel nowMs={NOW} outcome={BROWSER_ONLY} paused={PAUSE} />);
+    expect(screen.getByTestId("cr.sessions.paused").textContent).toBe(PAUSED_LINE);
+    expect(screen.getByTestId("cr.sessions.noagents").textContent).toContain("No agent seat is open right now.");
+  });
+
+  it("says nothing at all when no pause is known, whether the prop is null or absent", () => {
+    render(<SessionsPanel nowMs={NOW} outcome={SESSIONS} paused={null} />);
+    expect(screen.queryByTestId("cr.sessions.paused")).toBeNull();
+    cleanup();
+    render(<SessionsPanel nowMs={NOW} outcome={SESSIONS} />);
+    expect(screen.queryByTestId("cr.sessions.paused")).toBeNull();
+  });
+
+  /**
+   * The two readings an operator actually sees. Spelled out here, never built by calling
+   * `seatLimitWords`: an expectation that called the production formatter would pass for
+   * whatever it happens to return.
+   */
+  it("says why only two nodes are moving when every seat is busy", () => {
+    expect(SESSIONS.status === "SESSIONS" && SESSIONS.concurrency).toEqual({ activeSeats: 2, configuredAgentLimit: 2 });
+    render(<SessionsPanel nowMs={NOW} outcome={SESSIONS} />);
+    expect(screen.getByTestId("cr.sessions.limit").textContent)
+      .toBe("This daemon is set to run 2 agents at once. Every seat is busy, so the next ready node waits for one to finish.");
+  });
+
+  it("still states the limit when nothing is working, so the number is not a busy-only banner", () => {
+    render(<SessionsPanel nowMs={NOW} outcome={{ ...SESSIONS, concurrency: { activeSeats: 0, configuredAgentLimit: 2 } }} />);
+    expect(screen.getByTestId("cr.sessions.limit").textContent)
+      .toBe("This daemon is set to run 2 agents at once. No agent is working right now.");
+  });
+
+  it("renders the daemon's number, not a 2 baked into the screen", () => {
+    render(<SessionsPanel nowMs={NOW} outcome={{ ...SESSIONS, concurrency: { activeSeats: 1, configuredAgentLimit: 5 } }} />);
+    expect(screen.getByTestId("cr.sessions.limit").textContent)
+      .toBe("This daemon is set to run 5 agents at once. 1 of them is working.");
+    cleanup();
+    // One seat: the sentence must not read "1 agents".
+    render(<SessionsPanel nowMs={NOW} outcome={{ ...SESSIONS, concurrency: { activeSeats: 0, configuredAgentLimit: 1 } }} />);
+    expect(screen.getByTestId("cr.sessions.limit").textContent)
+      .toBe("This daemon is set to run 1 agent at once. No agent is working right now.");
+  });
+
+  it("says nothing about seats when the read REFUSES, and never NaN or undefined", () => {
+    render(<SessionsPanel nowMs={NOW} outcome={{ code: "SESSIONS_READ_UNREADABLE", layer: "SESSIONS_READ", status: "REFUSED" }} />);
+    // The panel is still on screen with its refusal note - it does not vanish.
+    const root = screen.getByTestId("cr.sessions.root");
+    expect(screen.getByTestId("cr.sessions.refusal").textContent).toContain("SESSIONS_READ_UNREADABLE");
+    expect(screen.queryByTestId("cr.sessions.limit")).toBeNull();
+    expect(root.textContent).not.toContain("NaN");
+    expect(root.textContent).not.toContain("undefined");
+  });
+
+  it("says (no output) rather than trailing off when the seat died without printing a line", () => {
+    render(<SessionsPanel nowMs={NOW} outcome={SESSIONS} paused={{ ...PAUSE, lastLine: "   " }} />);
+    expect(screen.getByTestId("cr.sessions.paused").textContent)
+      .toBe(`Agents paused: claude limit, resumes ${new Date("2026-09-03T11:30:00.000Z").toLocaleString()} - last line from the seat: (no output)`);
+  });
 });
 
 describe("LiveActivity / LiveSessions", () => {
@@ -105,5 +235,19 @@ describe("LiveActivity / LiveSessions", () => {
     cleanup();
     render(<LiveSessions headers={{}} pollMs={60_000} read={() => Promise.reject(new Error("x"))} />);
     expect((await screen.findByTestId("cr.sessions.refusal")).textContent).toContain("SESSIONS_READ_FAILED");
+  });
+
+  it("takes the pause from the shell's context, not from a second health poll of its own", async () => {
+    render(
+      <ProviderPauseProvider value={PAUSE}>
+        <LiveSessions headers={{}} pollMs={60_000} read={async () => SESSIONS} />
+      </ProviderPauseProvider>,
+    );
+    expect((await screen.findByTestId("cr.sessions.paused")).textContent).toBe(PAUSED_LINE);
+    cleanup();
+    // No provider above it (a stray mount, a unit test) reads null and says nothing.
+    render(<LiveSessions headers={{}} pollMs={60_000} read={async () => SESSIONS} />);
+    expect(await screen.findByTestId("cr.sessions.count")).toBeTruthy();
+    expect(screen.queryByTestId("cr.sessions.paused")).toBeNull();
   });
 });

@@ -7,12 +7,15 @@ import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { PROJECT_CONFIGURATION_LIMIT_KEYS } from "@moe/contracts";
+import { PROJECT_CONFIGURATION_LIMIT_KEYS, RUNTIME_COMMAND_KINDS } from "@moe/contracts";
 import {
   createProjectConfigurationManifest, encodeProjectConfigurationManifest,
 } from "@moe/core";
 import { DurableStoreError, SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
+import { HEALTH_PROBE_JOB_ID } from "./monitoring/health-probe-contracts.js";
+import { createHealthProbeRing } from "./monitoring/health-probe-ring.js";
+import { recordDeployReceipt } from "./deployment/deploy-ledger.js";
 
 import { selectProjectConfiguration }
   from "./configuration/project-configuration-selection.js";
@@ -21,6 +24,8 @@ import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "./bootstrap/bootstrap-s
 import {
   CLASSIFYING_POLICY_SLICE, POLICY_SLICE, PROVIDER_OBSERVATION,
 } from "./bootstrap/bootstrap-test-fixtures.js";
+import { FIXTURE_ACTIVATION_RECEIPTS } from "./bootstrap/bootstrap-test-fixtures.js";
+import { designAggregateId } from "./design/design-contracts.js";
 import { GOAL_HANDLERS } from "./goals/goal-services.js";
 import { PLANNING_HANDLERS } from "./planning/planning-services.js";
 import { PAYLOAD_KEYS } from "./daemon-command-vocabulary.js";
@@ -34,6 +39,10 @@ import {
 import {
   FOUNDATION_WORKSPACE_CATALOG_ENV_KEY,
 } from "./work/foundation-capture-lifecycle.js";
+import { MCP_EXCLUDED_COMMAND_KINDS, wiredMcpToolKinds } from "./mcp-tool-allowlist.js";
+import { OPERATOR_PRINCIPAL_KINDS } from "./daemon-command-vocabulary.js";
+import { HUMAN_ONLY_STEPS } from "./orchestrator/agent-spawn-contract.js";
+import { ASYNC_SERVED_BOOTSTRAP_KINDS } from "./bootstrap/bootstrap-contracts.js";
 import { handleCommandRequest } from "./http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
 import { bytes, envelopeObject } from "./http/http-test-fixtures.js";
@@ -283,6 +292,65 @@ describe("createStoreDependencies", () => {
         layer: "DAEMON_READ_MODEL",
         ok: false,
         outcome: "REFUSED",
+      });
+      expect(inspection.getAggregateVersion(aggregateId)).toBe(before);
+    } finally {
+      inspection.close();
+    }
+  });
+
+  /**
+   * The environments read, resolved through the REAL composition root
+   * (task-ef76a7f4523d46f48a2f9eb19595e801). A fresh project has set no variable, so the honest
+   * answer is the EMPTY TABLE at ok:true -- NOT a refusal, because "no variables yet" must stay
+   * distinguishable from "wrong credential". Unlike the design read, `projectId` IS bound at
+   * composition time: the aggregate id is `environment/<projectId>/<name>`, a composition-root
+   * fact with no request field that could name another project.
+   *
+   * NO VALUE arm at this layer too: the port is the one production ships, so serializing its
+   * answer and searching for the seeded plaintext is a check on the shipped read path, not on a
+   * handler wrapper.
+   */
+  it("provides an environments read port that answers the empty table with no value", () => {
+    const port = provider.environmentReads?.();
+    expect(port).toBeDefined();
+    if (port === undefined) return;
+
+    expect(port.read({ environment: "preview" }))
+      .toStrictEqual({ environment: "preview", ok: true, variables: [] });
+    // The store's scope authority answers, at its own layer.
+    expect(port.read({ environment: "staging" })).toStrictEqual({
+      code: "ENV_ENVIRONMENT_UNKNOWN",
+      detail: "the environment named is not one this project has",
+      layer: "SCOPE",
+      ok: false,
+    });
+    expect(JSON.stringify(port.read({ environment: "preview" }))).not.toContain(CREDENTIAL);
+  });
+
+  /**
+   * The design read, resolved through the REAL composition root. A fresh project has appended
+   * no revision, so the honest answer is `DESIGN_REVISION_ABSENT` at the LEDGER layer -- the
+   * LAYER is asserted with the code because the same code minted at another layer would mean a
+   * different surface answered. `projectId` travels in the INPUT rather than being bound at
+   * composition time: the HTTP handler passes the authenticated principal's project, so binding
+   * it here as well would hide a principal/project mismatch.
+   */
+  it("provides a design read port that answers ABSENT from the bound store without writing", () => {
+    const port = provider.designReads?.();
+    expect(port).toBeDefined();
+    if (port === undefined) return;
+
+    const inspection = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      const aggregateId = designAggregateId("goal-missing");
+      const before = inspection.getAggregateVersion(aggregateId);
+      expect(port.read({ goalRef: "goal-missing", projectId: PROJECT })).toStrictEqual({
+        code: "DESIGN_REVISION_ABSENT",
+        layer: "LEDGER",
+        ok: false,
+        sourceCode: null,
+        sourceLayer: null,
       });
       expect(inspection.getAggregateVersion(aggregateId)).toBe(before);
     } finally {
@@ -646,6 +714,21 @@ try {
   const first = dispatch();
   const second = dispatch();
   const sourceSnapshotPublisher = provider.sourceSnapshotPublisher();
+  // CALLED, not merely counted: \`providerKeys\` reads the default provider object, so a port
+  // whose key is present there but absent from the COMPOSITION's return would pass that arm
+  // and throw "unreachable" the first time production asked for it. Invoking it is what binds
+  // the composition factory to the shipped provider.
+  const remote = provider.repositoryRemote();
+  const remoteView = remote.readRemote();
+  const previewRead = provider.previewReads().read({
+    goalId: "goal-child-preview", projectId: process.env.MOE_PROJECT_ID,
+  });
+  const previewCaptureMatchesWorkspace = provider.previewCaptures().projectDirectory()
+    === process.env.MOE_NODE_WORKSPACE;
+  const schedules = provider.schedules();
+  let scheduleRegistration;
+  try { scheduleRegistration = schedules.register("child-schedule", () => {}, 60000); }
+  finally { schedules.release(); }
   const shapeOf = (result) => ({
     commandId: result.decision?.commandId ?? null,
     disposition: result.decision?.disposition ?? null,
@@ -658,11 +741,20 @@ try {
     depsKeys: Object.keys(deps).sort(),
     first: shapeOf(first),
     providerKeys: Object.keys(provider).sort(),
+    previewRead,
+    previewCaptureMatchesWorkspace,
     registerCapability: entry.requiredCapability,
     registerHandler: typeof entry.handler,
     registerPayloadKeys: entry.payloadKeys,
     registryKinds: [...deps.registry.keys()].sort(),
+    remoteBoundProjectId: remote.boundProjectId,
+    remoteKeys: Object.keys(remoteView).sort(),
+    remoteOutcome: remoteView.outcome,
+    remoteUrl: remoteView.remoteUrl,
     sameEffect: first.decision?.effectId === second.decision?.effectId,
+    sameSchedules: schedules === provider.schedules(),
+    scheduleRegistration,
+    scheduleAfterRelease: schedules.register("child-schedule", () => {}, 60000),
     sameSourceSnapshotPublisher:
       sourceSnapshotPublisher === provider.sourceSnapshotPublisher(),
     second: shapeOf(second),
@@ -685,6 +777,7 @@ it("serves the default provider and its registry bridge under plain Node", { tim
           MOE_DAEMON_CREDENTIAL: "child-operator-credential",
           MOE_PROJECT_ID: "proj-child-smoke",
           MOE_STORE_PATH: join(childDirectory, "store.db"),
+          MOE_NODE_WORKSPACE: childDirectory,
         },
         maxBuffer: 1_000_000,
         shell: false,
@@ -708,17 +801,37 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       // unreachable from the real daemon while every direct-injection test stays
       // green; a subset assertion would have blessed exactly that omission.
       providerKeys: [
-        "activity", "affordances", "budgetCommitment", "commandAuthorityPlane", "documentCoverage",
+        "activation", "activity", "affordances", "backupReads", "budgetCommitment",
+        "commandAuthorityPlane",
+        "deploymentsHealth",
+        "designReads", "documentCoverage",
         "documentDossiers",
-        "documentIngest", "goalCatalog", "goalSource",
+        "documentIngest", "environmentReads", "goalCatalog", "goalSource",
         "graph", "health",
         "pairingOpenSessions",
-        "planningRuns", "policy", "productContractGate1", "productContractPending",
+        // `previews` is the daemon's ONE preview supervisor, forwarded for exactly the reason
+        // stated above: absent here, the shipped daemon's shutdown sweeps nothing and every
+        // preview server it started keeps its port after the daemon is gone.
+        "planningRuns", "policy", "previewCaptures", "previewReads", "previews",
+        "productContractGate1", "productContractPending",
         "productContractV2Current", "productContractV2Pending",
-        "provide", "provideV2", "reconciliation", "restore", "runs",
+        "provide", "provideV2", "reconciliation", "releaseReads", "repositoryRemote", "repositoryWorkflows", "restore", "runs",
+        "schedules",
         "sessionChallengeOperands", "sessionHandshake", "sessions", "sourceSnapshotPublisher",
         "subscriptions",
       ],
+      // The repository-remote read, resolved through the REAL composition in this child: the
+      // provider key alone cannot prove the composition supplies it. Nothing has published in
+      // this fresh store, so the honest answer is the unbound view -- all nulls under an
+      // `outcome: "REMOTE"`, never a refusal -- bound to this child's own project.
+      remoteBoundProjectId: "proj-child-smoke",
+      remoteKeys: ["boundAt", "boundBy", "outcome", "readAt", "remoteUrl"],
+      remoteOutcome: "REMOTE",
+      remoteUrl: null,
+      // Both forwarded preview ports are invoked in the child. An empty isolated store
+      // reports no preview; capture resolution stays bound to its explicit temp workspace.
+      previewRead: { goalId: "goal-child-preview", kind: "ABSENT" },
+      previewCaptureMatchesWorkspace: true,
       registerCapability: "project.admin",
       registerHandler: "function",
       registerPayloadKeys: ["owner"],
@@ -726,8 +839,15 @@ it("serves the default provider and its registry bridge under plain Node", { tim
       // off-by-one naming nothing. A new command writes its own kind here.
       registryKinds: [
         "approval.decide", "approval.decide_intent",
+        "criterion_check.approve", "criterion_check.verify",
         "cutover.activate",
-        "effect.activate", "escalation.decide", "events.resume", "foundation.dispatch",
+        "deployment.deploy", "deployment.migrate_down", "deployment.rollback", "deployment.set_target",
+        // The design authoring wire (task-06ac0da1): a SEAT kind, unlike its neighbours here.
+        "design.submit",
+        "effect.activate",
+        // The two OPERATOR-ONLY environment writes (task-a2409cba), served by their own edge.
+        "environment.set_variable", "environment.unset_variable",
+        "escalation.decide", "events.resume", "foundation.dispatch",
         "foundation.verification",
         "goal.close",
         "goal.create",
@@ -735,13 +855,23 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "graph.approve", "graph.prepare_supersession", "graph.release_preparation",
         "graph.request_expansion", "graph.supersede",
         "integration.accept_output", "journal.append",
+        // The OPERATOR-ONLY probe-interval write (task-eb37494e), served by its own edge through
+        // the interval record. This roster is SORTED, so it files between `journal.append` and
+        // `plan.propose` rather than at the end of the PAYLOAD_KEYS table it is appended to.
+        // And the OPERATOR-ONLY retirement write (task-509f0437), served by its own edge through
+        // the retirement record. Sorted BEFORE the interval kind despite being APPENDED to the
+        // PAYLOAD_KEYS table after it, which is the difference this roster's sort exists to absorb.
+        "monitoring.retire_environment",
+        "monitoring.set_probe_interval",
         "plan.propose", "planning.submit_decomposition", "policy.install",
-        "policy.validate",
+        "policy.validate", "preview.decide", "preview.start",
         "product_contract.answer_clarification", "product_contract.approve_gate_1",
         "product_contract.ask_clarification", "product_contract.propose_revision",
+        "product_contract.sync_env_example",
         "project.activate", "project.bind_repository", "project.register",
+        "project.set_agent_provider",
         "provider.probe", "qualification.replan", "recovery.complete",
-        "repository.publish",
+        "release.decide", "repository.bootstrap", "repository.publish", "repository.recover",
         "resource.confirm_released", "resource.reconcile",
         "review.submit",
         "session.close", "session.open", "session.renew",
@@ -750,6 +880,9 @@ it("serves the default provider and its registry bridge under plain Node", { tim
         "work.renew", "work.resume",
       ],
       sameEffect: true,
+      sameSchedules: true,
+      scheduleRegistration: { ok: true },
+      scheduleAfterRelease: { ok: false, id: "child-schedule", code: "SCHEDULE_RELEASED", layer: "DAEMON_INGRESS" },
       sameSourceSnapshotPublisher: true,
       second: {
         commandId: "cmd-child-register", disposition: "REPLAYED",
@@ -908,6 +1041,12 @@ describe("the composed affordance port carries planning authority (task-ed89967f
       JSON.stringify({ nodeRef: NODE_REF, title: "The composed node" }),
       "utf8",
     );
+    writeFileSync(join(nodeSpecsDir, "forged-compiled.json"), JSON.stringify({
+      nodeRef: `node:v1:${"a".repeat(64)}`, title: "An operator spec cannot override compiled work",
+    }), "utf8");
+    for (const [name, nodeRef] of [["publish", "publish:decision"], ["criterion", "criterion:v1:run"]]) {
+      writeFileSync(join(nodeSpecsDir, `${name}.json`), JSON.stringify({ nodeRef, title: "Reserved workflow" }), "utf8");
+    }
     const store = SqliteEventStore.openForProject(authorityStorePath, AUTHORITY_PROJECT);
     installTestRecoveryBinding(store);
     let minted = 0;
@@ -924,7 +1063,9 @@ describe("the composed affordance port carries planning authority (task-ed89967f
         principalId: AUTHORITY_OWNER,
         projectId: AUTHORITY_PROJECT,
         schemaVersion: "moe-bootstrap-command/1",
-      })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS });
+      })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS }, undefined,
+      // `project.activate` MINTS its witness from measured receipts, never the payload.
+      FIXTURE_ACTIVATION_RECEIPTS);
       if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
     };
     commit("project.register", { owner: AUTHORITY_OWNER });
@@ -937,16 +1078,8 @@ describe("the composed affordance port carries planning authority (task-ed89967f
     commit("provider.probe", { observation: PROVIDER_OBSERVATION });
     commit("policy.install", { slice: POLICY_SLICE });
     commit("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
-    commit("project.activate", {
-      witness: {
-        artifactPathRef: "artifact-composed", backupPathRef: "backup-composed",
-        credentialRef: "credential-composed", distributionManifestHash: "cafe".padEnd(64, "0"),
-        policyRevisionHash: "face".padEnd(64, "0"),
-        providerMinimumProfileRef: "provider-profile-composed",
-        signingKeyRef: "signing-composed", storeDriverRef: "store-driver-composed",
-        truthClass: "DAEMON_VERIFIED",
-      },
-    }, 2);
+    commit("project.activate", // NO WITNESS: the daemon mints it from its own measured receipts.
+      {}, 2);
     commit("goal.create", {
       instructions: "Carry the composed planning run.", title: "Composed goal",
     }, 0, GOAL_COMMAND);
@@ -993,5 +1126,266 @@ describe("the composed affordance port carries planning authority (task-ed89967f
     // And the merged-node roster really came from the composed spec directory.
     expect((entry.authority["planRevision"] as Record<string, unknown>)["affectedNodeIds"])
       .toEqual([NODE_REF]);
+  });
+});
+
+/**
+ * THE DEPLOYMENT KINDS' FENCE ROSTERS, BOTH DIRECTIONS (DoD 1 of task-04b3ce7e).
+ *
+ * Deploying a product, and naming the host it deploys to, are operator acts. Three independent
+ * rosters carry that fact — the dispatch fence (`OPERATOR_PRINCIPAL_KINDS`), the transport
+ * exclusion derived from it (`mcp-tool-allowlist.ts`) and the staffing fence the WRAPPER reads
+ * (`HUMAN_ONLY_STEPS`) — and a kind fenced in two of the three is reachable through the third.
+ *
+ * SET EQUALITY, NOT MEMBERSHIP, and computed per roster from the ADVERTISED deployment kinds
+ * rather than from a hand-written pair: a third deployment kind added to `PAYLOAD_KEYS` without
+ * its fences reds here instead of shipping reachable. Deleting an entry from ANY side reds,
+ * which is the property DoD 1 names.
+ * Schema rollback is now served. It must join every human-only fence, and malformed input
+ * must still refuse before a decision or event is written.
+ *
+ * NO COUNT LITERAL ANYWHERE IN THE ARM. Eight rows are moving these rosters concurrently; every
+ * assertion below relates production surfaces to each other, so a sibling landing a kind cannot
+ * red it spuriously.
+ */
+describe("the deployment kinds are published human-only and MCP-excluded", () => {
+  const advertised = Object.keys(PAYLOAD_KEYS)
+    .filter((kind) => kind.startsWith("deployment.")).sort();
+  const deploymentMembers = (roster: Iterable<string>): readonly string[] =>
+    [...roster].filter((kind) => kind.startsWith("deployment.")).sort();
+
+  it("advertises the deployment kinds, so the equalities below have a non-empty subject", () => {
+    // A roster arm whose subject is empty passes VACUOUSLY. This is the control that keeps the
+    // three equalities meaningful, and it names the kinds once so a rename is caught here.
+    expect(advertised).toEqual(["deployment.deploy", "deployment.migrate_down",
+      "deployment.rollback", "deployment.set_target"]);
+  });
+
+  it("fences every advertised deployment kind at dispatch, on MCP and in the wrapper", () => {
+    // (1) THE DISPATCH FENCE. Set-equal, so an operator-roster entry deleted for one kind reds.
+    expect(deploymentMembers(OPERATOR_PRINCIPAL_KINDS)).toEqual(advertised);
+    // (2) THE TRANSPORT EXCLUSION, asserted on BOTH sides of the derivation: present in the
+    // excluded roster AND absent from the allowlist the two MCP entries actually pass to
+    // `@moe/mcp`. Asserting only the first would stay green if the allowlist stopped
+    // subtracting the exclusion.
+    expect(deploymentMembers(MCP_EXCLUDED_COMMAND_KINDS)).toEqual(advertised);
+    expect(deploymentMembers(wiredMcpToolKinds())).toEqual([]);
+    // (3) THE STAFFING FENCE. Both kinds carry a non-null agent capability (GOAL, like
+    // `repository.publish`), so absence here is a staffed-deployer leak the capability gate
+    // would not refuse.
+    expect(deploymentMembers(HUMAN_ONLY_STEPS)).toEqual(advertised);
+  });
+
+  it("keeps schema rollback fenced and refuses malformed input without writing", () => {
+    const kind = "deployment.migrate_down";
+    expect(HUMAN_ONLY_STEPS.has(kind)).toBe(true);
+    expect(Object.hasOwn(PAYLOAD_KEYS, kind)).toBe(true);
+    expect(deps.registry.has(kind)).toBe(true);
+    expect(wiredMcpToolKinds()).not.toContain(kind);
+    const observed = SqliteEventStore.openForProject(storePath, PROJECT);
+    try {
+      const before = observed.readCommandDecisionsAfter(0n, 1000);
+      expect(before.hasMore).toBe(false);
+      const eventHorizon = observed.readEventHorizon();
+      const result = dispatch(envelopeObject({
+        commandId: "cmd-malformed-migrate-down", commandKind: kind, payload: { unrecognized: true },
+      }));
+      expect(result).toMatchObject({ ok: false, outcome: "REFUSED", stage: "PAYLOAD_SHAPE",
+        error: { code: "INPUT_INVALID" } });
+      const after = observed.readCommandDecisionsAfter(0n, 1000);
+      expect(after.hasMore).toBe(false);
+      expect(after.items.length).toBe(before.items.length);
+      expect(observed.readEventHorizon()).toEqual(eventHorizon);
+    } finally { observed.close(); }
+  });
+
+  it("serves deployment.deploy from the ASYNC half of the surface, never the sync tables", () => {
+    // The served surface has two halves, and the sync tables are no longer the whole seam. A
+    // roster arm that enumerated only the synchronous handlers would report this kind as
+    // advertised-but-unserved; one that trusted the advertised roster alone would stay green
+    // while the async entry vanished.
+    const synchronous = Object.keys({
+      ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS,
+    });
+    // `deployment.deploy` NAMED, rather than "no deployment kind is synchronous": its sibling
+    // `deployment.set_target` is an ordinary synchronous write and BELONGS in a handler table,
+    // so the broader claim would red the day that row lands while proving nothing extra.
+    expect(synchronous).not.toContain("deployment.deploy");
+    // `deployment.deploy` and ONLY it: `deployment.set_target` is an ordinary synchronous write
+    // whose handler is a sibling row's, so naming it here would claim an async seam it does not
+    // have. The membership is proved rather than declared in
+    // daemon-command-async-entries.test.ts, which dispatches the kind through the entry.
+    expect(deploymentMembers(ASYNC_SERVED_BOOTSTRAP_KINDS))
+      .toEqual(["deployment.deploy", "deployment.migrate_down"]);
+  });
+});
+
+/**
+ * task-eb37494e: BIDIRECTIONAL ROSTER COVERAGE FOR THE MONITORING FAMILY.
+ *
+ * WHY THIS BLOCK EXISTS AT ALL, since the neighbour above looks like it would already cover it.
+ * It does not. `affordance-read.test.ts` holds the repository's other set-equality arm of this
+ * shape and it compares `SERVED_BOOTSTRAP_KINDS` against `BOOTSTRAP_COMMAND_KINDS`, so it covers
+ * BOOTSTRAP kinds only; `monitoring.set_probe_interval` is deliberately NOT one (its effects are
+ * synchronous, and a wrong entry there would mint an unplanned card on the operator's affordance
+ * surface). The block above covers `deployment.`-prefixed kinds only. So before this block, NO
+ * arm anywhere related the shared runtime roster to the daemon's dispatch for this family.
+ *
+ * THE SERVED SIDE IS ENUMERATED FROM THE DISPATCH SEAM -- `deps.registry`, the composed table
+ * every transport dispatches through -- and NEVER from a roster constant. That is the whole
+ * discipline: an arm that iterated the roster could only ever prove "advertised implies served",
+ * because deleting a member shrinks its own iteration and the arm stays green while a served
+ * capability vanishes from the advertised surface. Adding a kind to two lists and observing that
+ * they match is a tautology; this compares an ADVERTISEMENT (the shared contract, which the
+ * browser and the generated client dispatch against) to an IMPLEMENTATION (the registry's keys).
+ */
+describe("the monitoring kinds are served, advertised and fenced in lockstep", () => {
+  const monitoringMembers = (roster: Iterable<string>): readonly string[] =>
+    [...roster].filter((kind) => kind.startsWith("monitoring.")).sort();
+  const advertised = monitoringMembers(RUNTIME_COMMAND_KINDS);
+  const served = monitoringMembers(deps.registry.keys());
+
+  it("advertises the monitoring family, so the equalities below have a non-empty subject", () => {
+    // A set arm whose subject is empty passes VACUOUSLY -- two empty arrays are equal. This is
+    // the control that keeps every equality below meaningful, and it names the kind once so a
+    // rename is caught here rather than as a silent shrink to zero.
+    // task-509f0437 added the second member. This literal is the ONE place the family's
+    // membership is named rather than derived, so it is deliberately exact: a kind that appears
+    // on the shared contract without reaching the fences below reds HERE first.
+    expect(advertised).toEqual([
+      "monitoring.retire_environment", "monitoring.set_probe_interval",
+    ]);
+    // AND THE FILTER STILL DISCRIMINATES: without this, `monitoringMembers` returning everything
+    // (or the prefix being wrong) could not be told apart from the roster being right.
+    expect(monitoringMembers(["not.a.served.kind", "monitoring.set_probe_interval"]))
+      .toEqual(["monitoring.set_probe_interval"]);
+    expect(["not.a.served.kind"].filter((kind) => !served.includes(kind)))
+      .toEqual(["not.a.served.kind"]);
+  });
+
+  it("serves exactly what it advertises, as SET-EQUALITY in both directions", () => {
+    // DIRECTION 1 -- advertised implies served: a kind on the shared contract the daemon does
+    // not dispatch is a wire the browser and the generated client can call and nothing answers.
+    // DIRECTION 2 -- served implies advertised: a kind the daemon dispatches that the contract
+    // does not carry is a capability no client can reach. ONE equality states both, which is
+    // why it is written as an equality rather than as two subset filters.
+    expect(served).toEqual(advertised);
+    // Named as well as compared, so a WHOLESALE deletion -- both sides emptied at once, under
+    // which the equality above is still true -- cannot pass. This is the line the mutation drill
+    // reds ON THE SERVED SIDE when the dispatch registration is removed while the shared roster
+    // keeps advertising the kind.
+    expect(served).toContain("monitoring.set_probe_interval");
+    expect(deps.registry.has("monitoring.set_probe_interval")).toBe(true);
+    expect(served).toContain("monitoring.retire_environment");
+    expect(deps.registry.has("monitoring.retire_environment")).toBe(true);
+  });
+
+  it("fences every advertised monitoring kind at dispatch, on MCP and in the wrapper", () => {
+    // Each of the three is SET-EQUAL to the advertised set, so a fence dropped for one kind reds
+    // -- a subset check would stay green while exactly that happened.
+    expect(monitoringMembers(OPERATOR_PRINCIPAL_KINDS)).toEqual(advertised);
+    // BOTH sides of the MCP derivation: named in the exclusion AND absent from the allowlist the
+    // entries actually hand to `@moe/mcp`. The first alone would stay green if the allowlist
+    // stopped subtracting the exclusion.
+    expect(monitoringMembers(MCP_EXCLUDED_COMMAND_KINDS)).toEqual(advertised);
+    expect(monitoringMembers(wiredMcpToolKinds())).toEqual([]);
+    // The staffing fence. `agentCapabilitiesFor` answers null for this kind, so an omission here
+    // is not caught by the capability gate: it would be a staffable seat for an operator act.
+    expect(monitoringMembers(HUMAN_ONLY_STEPS)).toEqual(advertised);
+  });
+
+  it("serves the kind SYNCHRONOUSLY, never from the async bootstrap half", () => {
+    // The served surface has two halves and a membership check cannot tell them apart. This kind
+    // is an ordinary durable write, so it must NOT have admitted through the bootstrap surface:
+    // an entry there would put an unplanned offer on the operator's affordance surface.
+    expect(monitoringMembers(ASYNC_SERVED_BOOTSTRAP_KINDS)).toEqual([]);
+    expect(deps.registry.get("monitoring.set_probe_interval")?.asyncHandler).toBeUndefined();
+    // Retirement is an ordinary durable write too: it appends one event and decides. Async-serving
+    // it would put an unplanned rollback/retry offer on the operator's affordance surface.
+    expect(deps.registry.get("monitoring.retire_environment")?.asyncHandler).toBeUndefined();
+    // The CONTROL that keeps the `toBeUndefined` above from passing for "no entry at all": a
+    // kind that IS async-served reads the other way through the same accessor.
+    expect(deps.registry.get("deployment.deploy")?.asyncHandler).toBeDefined();
+  });
+});
+
+describe("production health probe registration", () => {
+  it("fails closed if the production probe timer cannot be armed", () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-monitor-failed-timer-"));
+    const path = join(root, "store.db");
+    const config = { credential: CREDENTIAL, principalId: "operator-local", projectId: "project-monitor-timer", storePath: path,
+      schedule: { timer: { set: () => { throw new Error("not disclosed"); }, clear: () => {} } } };
+    let provider: ReturnType<typeof createStoreDependencies> | undefined;
+    try {
+      expect(() => { provider = createStoreDependencies(config); }).toThrow(/^SCHEDULE_TIMER_FAILED@DAEMON_INGRESS$/u);
+      const reopened = SqliteEventStore.openForProject(path, config.projectId);
+      try { expect(reopened.getHealth().quickCheck).toBe("ok"); } finally { reopened.close(); }
+    } finally { provider?.close(); rmSync(root, { recursive: true, force: true }); }
+  });
+
+  it("rebinds one durable monitor on restart and retains the same probe rate", async () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-monitor-compose-"));
+    const path = join(root, "store.db");
+    const timers = new Map<() => void, number>();
+    let calls = 0;
+    let externalCalls = 0;
+    const config = { credential: CREDENTIAL, principalId: "operator-local", projectId: "project-monitor", storePath: path,
+      schedule: { timer: { set: (tick: () => void, interval: number) => { timers.set(tick, interval); return tick; },
+        clear: (handle: unknown) => { timers.delete(handle as () => void); } }, resolve: () => () => { externalCalls++; } },
+      healthProbeHttp: async () => { calls++; return 200; } };
+    let provider = createStoreDependencies(config);
+    const store = SqliteEventStore.openForProject(path, config.projectId);
+    try {
+      expect([...timers.values()]).toEqual([60000]);
+      expect(provider.schedules()).toBe(provider.schedules());
+      expect(recordDeployReceipt(store, { projectId: config.projectId, environment: "preview", decisionId: "monitor-deploy",
+        decidedAt: CLOCK(), sha: "a".repeat(40), imageDigest: `sha256:${"b".repeat(64)}`,
+        refusal: null, releaseDecision: null, url: "http://127.0.0.1:49999" }).ok).toBe(true);
+      const tick = async (): Promise<void> => {
+        [...timers].find((entry) => entry[1] === 60000)?.[0]();
+        await new Promise<void>((done) => setImmediate(done));
+      };
+      await tick(); await tick(); expect(calls).toBe(2);
+      expect(provider.schedules().register("unrelated", () => { externalCalls++; }, 250)).toEqual({ ok: true });
+      provider.close(); expect(timers.size).toBe(0);
+      provider = createStoreDependencies(config);
+      expect([...timers.values()].sort((a, b) => a - b)).toEqual([250, 60000]);
+      await tick(); await tick(); expect(calls).toBe(4);
+      [...timers].find((entry) => entry[1] === 250)?.[0]();
+      expect(externalCalls).toBe(1);
+      const registrations = store.readEvents(`durable-schedule/${config.projectId}`)
+        .map((event) => JSON.parse(new TextDecoder().decode(event.payload)) as { id: string; intervalMs: number });
+      expect(registrations.filter((entry) => entry.id === HEALTH_PROBE_JOB_ID)).toEqual([{ id: HEALTH_PROBE_JOB_ID, intervalMs: 60000 }]);
+      const read = createHealthProbeRing(`${path}.health.sqlite`, config.projectId).read("preview");
+      if (!read.ok) throw new Error(read.code);
+      expect(read.value).toHaveLength(4);
+    } finally { provider.close(); store.close(); rmSync(root, { recursive: true, force: true }); }
+    expect(timers.size).toBe(0);
+  });
+
+  it("aborts the real registered callback on close without persisting a late observation", async () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-monitor-abort-"));
+    const path = join(root, "store.db");
+    let tick: (() => void) | undefined;
+    let seen: AbortSignal | undefined;
+    const config = { credential: CREDENTIAL, principalId: "operator-local", projectId: "project-monitor-abort", storePath: path,
+      schedule: { timer: { set: (callback: () => void) => { tick = callback; return callback; }, clear: () => { tick = undefined; } } },
+      healthProbeHttp: async (_url: string, signal: AbortSignal): Promise<number> => {
+        seen = signal; return new Promise<number>(() => { /* Deliberately ignores cancellation. */ });
+      } };
+    const provider = createStoreDependencies(config);
+    const store = SqliteEventStore.openForProject(path, config.projectId);
+    try {
+      expect(recordDeployReceipt(store, { projectId: config.projectId, environment: "preview", decisionId: "abort-deploy",
+        decidedAt: CLOCK(), sha: "a".repeat(40), imageDigest: `sha256:${"b".repeat(64)}`,
+        refusal: null, releaseDecision: null, url: "http://127.0.0.1:49999" }).ok).toBe(true);
+      expect(tick).toBeTypeOf("function"); tick?.();
+      expect(seen?.aborted).toBe(false);
+      provider.close();
+      expect(seen?.aborted).toBe(true);
+      await new Promise<void>((done) => setImmediate(done));
+      expect(createHealthProbeRing(`${path}.health.sqlite`, config.projectId).read("preview")).toEqual({ ok: true, value: [] });
+      expect(tick).toBeUndefined();
+    } finally { provider.close(); store.close(); rmSync(root, { recursive: true, force: true }); }
   });
 });

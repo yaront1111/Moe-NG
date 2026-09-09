@@ -1,5 +1,5 @@
 import { EventEmitter } from "node:events";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
@@ -7,7 +7,8 @@ import { PassThrough } from "node:stream";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
-import type { AffordancePort } from "../http/affordance-contract.js";
+import { DESIGN_SECTION_KEYS } from "../design/design-contracts.js";
+import type { AffordancePort, ChainStep } from "../http/affordance-contract.js";
 import { workItemIdFor } from "../http/affordance-read.js";
 import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { readSessionLedger } from "../identity/session-read-model.js";
@@ -22,7 +23,8 @@ import type { SpawnInvocationRefusalCode } from "./agent-spawn-invocation.js";
 import { createAgentSessionFence } from "./agent-session-fence.js";
 import type { AgentSessionFence } from "./agent-session-fence.js";
 import { claudeSpawnStarter } from "./agent-spawner.js";
-import { codeMission, createAgentWrapper } from "./agent-wrapper.js";
+import { DESIGN_STEP_KIND } from "./agent-staffing-order.js";
+import { HUMAN_ONLY_STEPS, codeMission, createAgentWrapper } from "./agent-wrapper.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 
 /**
@@ -237,7 +239,70 @@ describe("createAgentWrapper", () => {
     expect(report.active).toBe(2);
   });
 
-  it("never staffs the human approval or goal-closure actions", async () => {
+  it("never staffs the human approval, goal-closure or environment-variable actions", async () => {
+    // Hoisted out of the stub so the vacuity controls below read the SAME steps the wrapper
+    // was handed. Inlined, "the surface offered it" could only be re-asserted by restating
+    // the literal, which proves nothing about what `readSurface()` actually returned.
+    const humanOnlySteps: readonly ChainStep[] = [
+      {
+        aggregateId: "plan-human-1", claim: null, claimAggregateVersion: 0,
+        kind: "approval.decide",
+        missing: [], status: "READY", version: 1,
+      },
+      {
+        aggregateId: "goal-human-1", claim: null, claimAggregateVersion: 0,
+        kind: "goal.close",
+        missing: [], status: "READY", version: 2,
+      },
+      // task-d0d1cb5c: the environment kinds are fenced in HUMAN_ONLY_STEPS BEFORE they
+      // exist as vocabulary, so until task-a2409cba lands them no other arm can see the
+      // membership — the offer surface's test only holds `approval.*` against the set.
+      // Asserted HERE, through runOnce()'s own loop, because that is the production
+      // consumer: a test that read HUMAN_ONLY_STEPS.has() directly would restate the
+      // constant instead of proving the wrapper obeys it.
+      {
+        aggregateId: "env-human-1", claim: null, claimAggregateVersion: 0,
+        kind: "environment.set_variable",
+        missing: [], status: "READY", version: 3,
+      },
+      {
+        aggregateId: "env-human-2", claim: null, claimAggregateVersion: 0,
+        kind: "environment.unset_variable",
+        missing: [], status: "READY", version: 4,
+      },
+      // task-5f883e4e: deciding a product preview is the operator's own act, and the MCP
+      // exclusion cannot help here because the wrapper never crosses a transport.
+      // MEASURED, not assumed: with the kind removed from HUMAN_ONLY_STEPS this pass
+      // reports `{kind: "preview.decide", outcome: "UNWIRED_KIND", refusal: null,
+      // sessionId: null, workItemId: "preview.decide@preview-human-1"}` — it does NOT
+      // reach `spawnAgent`, because `agentCapabilitiesFor` returns null for this kind
+      // (daemon-command-vocabulary.ts:206) and refuses one gate later. So the entry in
+      // HUMAN_ONLY_STEPS is defence in depth, not the only thing standing between the
+      // surface and a seat. It is still load-bearing: the capability gate is a fact about
+      // what an agent MAY do, and it would stop applying the moment this kind gained any
+      // agent capability, whereas the roster states that it must never be STAFFED.
+      {
+        aggregateId: "preview-human-1", claim: null, claimAggregateVersion: 0,
+        kind: "preview.decide",
+        missing: [], status: "READY", version: 5,
+      },
+      // task-749e585a: `monitoring.set_probe_interval` is fenced here BEFORE it exists as
+      // daemon vocabulary, exactly as the environment kinds were above. That ordering is the
+      // point of the row: the kind reaches the SHARED runtime roster in the same commit, so a
+      // window in which it is advertised but unfenced would otherwise open for as long as
+      // task-eb37494e takes to land. It is asserted through `runOnce()` rather than by reading
+      // the set, because the wrapper's loop is the production consumer and a
+      // `HUMAN_ONLY_STEPS.has()` call would only restate the constant.
+      //
+      // NOTE FOR WHOEVER WIRES THE DISPATCH: unlike `preview.decide`, this kind has NO
+      // `agentCapabilitiesFor` entry to fall back on yet, so at this commit the roster below is
+      // not defence in depth -- it is the only thing between this surface and a seat.
+      {
+        aggregateId: "probe-human-1", claim: null, claimAggregateVersion: 0,
+        kind: "monitoring.set_probe_interval",
+        missing: [], status: "READY", version: 6,
+      },
+    ];
     const forbidden = createAgentWrapper({
       affordances: {
         boundProjectId: "proj-human-actions",
@@ -248,18 +313,7 @@ describe("createAgentWrapper", () => {
           planningAuthorityByRun: {},
           planningGoalRefs: {},
           planningGoalRef: null,
-          steps: [
-            {
-              aggregateId: "plan-human-1", claim: null, claimAggregateVersion: 0,
-              kind: "approval.decide",
-              missing: [], status: "READY", version: 1,
-            },
-            {
-              aggregateId: "goal-human-1", claim: null, claimAggregateVersion: 0,
-              kind: "goal.close",
-              missing: [], status: "READY", version: 2,
-            },
-          ],
+          steps: humanOnlySteps,
         }),
       },
       claimTtlMs: 60_000,
@@ -273,11 +327,39 @@ describe("createAgentWrapper", () => {
       spawnAgent: () => { throw new Error("human-only steps must never spawn"); },
     });
 
-    expect(await forbidden.runOnce()).toEqual({
-      active: 0,
-      spawned: [],
-      surfaceOutcome: "SURFACE",
-    });
+    const report = await forbidden.runOnce();
+
+    expect(report).toEqual({ active: 0, spawned: [], surfaceOutcome: "SURFACE" });
+    // task-5f883e4e, BY WORK-ITEM ID rather than by count. `spawned: []` above is the strong
+    // claim, but it is a whole-pass claim: it would be satisfied identically by a surface that
+    // never offered `preview.decide` at all, and a later edit that drops the step from the stub
+    // would keep it green while deleting the coverage. Naming the id ties the empty result to
+    // THIS work item. `workItemIdFor()` is `${kind}@${aggregateId ?? "-"}` (agent-wrapper.ts),
+    // and it is computed INSIDE the loop AFTER the HUMAN_ONLY_STEPS check — so if the fence
+    // ever stopped skipping this kind, the id would appear here rather than nowhere.
+    expect(report.spawned.map((entry) => entry.workItemId))
+      .not.toContain("preview.decide@preview-human-1");
+    // THE VACUITY CONTROL. The surface really did present `preview.decide` as READY and
+    // UNCLAIMED, so "no seat was spawned for it" is a fence result and not the trivial
+    // consequence of an absent offer.
+    expect(humanOnlySteps.filter((step) =>
+      step.kind === "preview.decide" && step.status === "READY" && step.claim === null))
+      .toHaveLength(1);
+    // task-749e585a, same two-part shape and for the same reason: the id, then the control that
+    // proves the id was offered. `workItemIdFor()` is computed INSIDE the loop AFTER the
+    // HUMAN_ONLY_STEPS check, so the id appears here only if the fence stopped skipping.
+    expect(report.spawned.map((entry) => entry.workItemId))
+      .not.toContain("monitoring.set_probe_interval@probe-human-1");
+    expect(humanOnlySteps.filter((step) =>
+      step.kind === "monitoring.set_probe_interval" && step.status === "READY"
+      && step.claim === null)).toHaveLength(1);
+    // AND THE LAYER, which is what makes this arm say WHICH fence answered rather than only
+    // that nothing spawned. The wrapper's `deps`, `mintSecret` and `spawnAgent` above all
+    // THROW; a kind that got past HUMAN_ONLY_STEPS and was then refused one gate later by
+    // `agentCapabilitiesFor` would still be reported, as `preview.decide` measurably is when
+    // its roster entry is removed (see the comment on that step). An empty `spawned` array is
+    // therefore only reachable by the STAFFING fence, never by the capability gate.
+    expect(report.spawned).toEqual([]);
   });
 
   it("revokes the scoped session as soon as its agent exits", async () => {
@@ -945,7 +1027,7 @@ describe("agent spawn admission truth", () => {
       platform: "win32",
       spawn: admittingSpawn(),
     });
-    let held: Promise<void> | null = null;
+    let held: Promise<unknown> | null = null;
     try {
       let suffix = 0;
       const admitted = createAgentWrapper({
@@ -2007,6 +2089,366 @@ describe("createAgentWrapper - bearer and claim horizons", () => {
         .toMatchObject({ expiresAt: new Date(NOW + 60_000).toISOString(), status: "OPEN" });
     } finally {
       reader.close();
+      harness.dispose();
+    }
+  });
+});
+
+/**
+ * PARALLEL SEATS. The staffing loop already collects every READY unclaimed step in one
+ * pass and breaks only at `activeCount() >= maxAgents` (agent-wrapper.ts:356) — but
+ * nothing pinned it, so a refactor could serialise staffing silently and every existing
+ * arm would stay green. These cases pin the fact by WORK-ITEM ID in a SINGLE pass: an
+ * arm asserting only `spawned.length > 0`, or only a length, passes on a serial loop or
+ * on the wrong pair. Every spawn here is held open (the child's `exit` never settles),
+ * so each assertion reads a pass that ran with its children still alive.
+ */
+
+/**
+ * A surface offering exactly `nodes()` as `node.deliver` steps, layered on the live one so
+ * every other member of the frame keeps its production shape. Claim state is read back from
+ * the REAL claim ledger, not remembered in the test, so a second pass sees what the first
+ * pass durably claimed — the same thing production's surface does.
+ */
+function nodeStepsPort(
+  live: AffordancePort, reader: SqliteEventStore, projectId: string,
+  nodes: () => readonly { readonly missing: readonly string[]; readonly nodeRef: string; readonly status: "BLOCKED" | "READY" }[],
+): AffordancePort {
+  return {
+    boundProjectId: projectId,
+    readSurface: () => {
+      const surface = live.readSurface();
+      if (surface.outcome !== "SURFACE") return surface;
+      const ledger = readWorkClaimLedger(reader, projectId).claims;
+      return {
+        ...surface,
+        steps: nodes().map((node) => {
+          const record = ledger.get(workItemIdFor("node.deliver", node.nodeRef));
+          return {
+            aggregateId: node.nodeRef,
+            claim: record?.status === "OPEN"
+              ? { claimedBy: record.claimedBy, expiresAt: record.expiresAt, version: record.version }
+              : null,
+            claimAggregateVersion: record?.version ?? 0,
+            kind: "node.deliver" as const,
+            missing: node.missing,
+            status: node.status,
+            version: 1,
+          };
+        }),
+      };
+    },
+  };
+}
+
+function nodeWrapper(
+  harness: ReturnType<typeof isolatedHarness>, port: AffordancePort, maxAgents: number, prefix: string,
+): ReturnType<typeof createAgentWrapper> {
+  let suffix = 0;
+  return createAgentWrapper({
+    affordances: port,
+    claimTtlMs: 60_000,
+    clock: () => NOW,
+    deps: harness.isolated.provide(),
+    maxAgents,
+    mintSecret: () => `${prefix}-${String(suffix += 1).padStart(4, "0")}${"0".repeat(32)}`,
+    nodeMission: (nodeRef) => ({
+      instructions: `implement ${nodeRef}`, test: "pnpm test", title: nodeRef, workspace: directory,
+    }),
+    operatorCredential: OPERATOR,
+    // Held open for the whole case: nothing below reads a pass that waited for a child.
+    spawnAgent: async () => ({ exit: new Promise<void>(() => undefined), ok: true, pid: CHILD_PID }),
+  });
+}
+
+const ready = (nodeRef: string) => ({ missing: [] as readonly string[], nodeRef, status: "READY" as const });
+const deliver = (nodeRef: string): string => workItemIdFor("node.deliver", nodeRef);
+
+describe("the wrapper staffs seats in parallel", () => {
+  it("spawns TWO independent READY nodes in ONE pass, naming both work items", async () => {
+    const projectId = "proj-wrapper-parallel-two";
+    const harness = isolatedHarness(projectId);
+    const reader = SqliteEventStore.openForProject(harness.storePath, projectId);
+    try {
+      const port = nodeStepsPort(harness.port, reader, projectId, () => [ready("par-a"), ready("par-b")]);
+      const report = await nodeWrapper(harness, port, 2, "par2").runOnce();
+
+      expect(report.spawned).toHaveLength(2);
+      expect(report.spawned.map((entry) => entry.workItemId)).toEqual([deliver("par-a"), deliver("par-b")]);
+      expect(report.spawned.map((entry) => entry.outcome)).toEqual(["SPAWNED", "SPAWNED"]);
+      // Both seats are live AT THE SAME MOMENT — the fact a serial loop cannot produce.
+      expect(report.active).toBe(2);
+      expect(report.surfaceOutcome).toBe("SURFACE");
+      // Both claims are durable and held by DIFFERENT agent sessions, not one seat twice.
+      const claims = readWorkClaimLedger(reader, projectId).claims;
+      const holders = [deliver("par-a"), deliver("par-b")].map((item) => claims.get(item)?.claimedBy);
+      expect(holders.every((holder) => holder !== undefined)).toBe(true);
+      expect(new Set(holders).size).toBe(2);
+    } finally {
+      reader.close();
+      harness.dispose();
+    }
+  });
+
+  it("honours maxAgents 2 against THREE READY nodes: the third is not spawned", async () => {
+    const projectId = "proj-wrapper-parallel-limit";
+    const harness = isolatedHarness(projectId);
+    const reader = SqliteEventStore.openForProject(harness.storePath, projectId);
+    try {
+      const port = nodeStepsPort(harness.port, reader, projectId,
+        () => [ready("lim-a"), ready("lim-b"), ready("lim-c")]);
+      const report = await nodeWrapper(harness, port, 2, "lim2").runOnce();
+
+      // The exact pair, in order: a bare length of 2 would also pass if the loop
+      // spawned b and c, or spawned c twice.
+      expect(report.spawned.map((entry) => entry.workItemId)).toEqual([deliver("lim-a"), deliver("lim-b")]);
+      expect(report.spawned.map((entry) => entry.workItemId)).not.toContain(deliver("lim-c"));
+      expect(report.active).toBe(2);
+      // ABSENCE by id at the DURABLE layer too: the third item was never claimed, so the
+      // break happened before the claim, not after a claim the report happens to omit.
+      expect(readWorkClaimLedger(reader, projectId).claims.get(deliver("lim-c"))).toBeUndefined();
+    } finally {
+      reader.close();
+      harness.dispose();
+    }
+  });
+
+  it("honours maxAgents 1 against THREE READY nodes: exactly one, and it is the first", async () => {
+    const projectId = "proj-wrapper-parallel-one";
+    const harness = isolatedHarness(projectId);
+    const reader = SqliteEventStore.openForProject(harness.storePath, projectId);
+    try {
+      const port = nodeStepsPort(harness.port, reader, projectId,
+        () => [ready("one-a"), ready("one-b"), ready("one-c")]);
+      const report = await nodeWrapper(harness, port, 1, "one1").runOnce();
+
+      // The limit is what stops the loop, not the ordering: the same three steps that
+      // yielded two above yield exactly one here, and the two left behind are named.
+      expect(report.spawned.map((entry) => entry.workItemId)).toEqual([deliver("one-a")]);
+      expect(report.active).toBe(1);
+      const claims = readWorkClaimLedger(reader, projectId).claims;
+      expect(claims.get(deliver("one-b"))).toBeUndefined();
+      expect(claims.get(deliver("one-c"))).toBeUndefined();
+    } finally {
+      reader.close();
+      harness.dispose();
+    }
+  });
+});
+
+/**
+ * THE DEPENDENCY GATE'S EFFECT ON STAFFING — the wrapper half of the loop task-1d7b9df2
+ * opened. That row proved the SURFACE blocks a node whose HARD dependency is not ACCEPTED
+ * (affordance-read.ts:442-452, arms in affordance-read.test.ts). What is proven HERE is the
+ * consequence the operator actually feels: the wrapper leaves a free seat idle rather than
+ * staffing a node whose parent has not landed, and takes it the moment the surface says READY.
+ */
+describe("the wrapper respects the surface's dependency gate", () => {
+  it("leaves a dependency-blocked node alone with a seat FREE, then staffs it once READY", async () => {
+    const projectId = "proj-wrapper-depends";
+    const harness = isolatedHarness(projectId);
+    const reader = SqliteEventStore.openForProject(harness.storePath, projectId);
+    try {
+      // Stands in for the review ledger the production gate folds: while `dep-a` is not
+      // ACCEPTED the surface reports `dep-b` BLOCKED on `depends:dep-a`. The BLOCKED node is
+      // listed FIRST on purpose — the loop's node.deliver-first sort and its HUMAN_ONLY /
+      // `session.*` skips can then not be what produces either count below.
+      const accepted = new Set<string>();
+      const port = nodeStepsPort(harness.port, reader, projectId, () => [
+        accepted.has("dep-a")
+          ? ready("dep-b")
+          : { missing: ["depends:dep-a"], nodeRef: "dep-b", status: "BLOCKED" as const },
+        ready("dep-a"),
+      ]);
+      const staffing = nodeWrapper(harness, port, 2, "dep2");
+
+      const first = await staffing.runOnce();
+      expect(first.spawned).toHaveLength(1);
+      expect(first.spawned.map((entry) => entry.workItemId)).toEqual([deliver("dep-a")]);
+      // THE LOAD-BEARING ASSERTION: maxAgents is 2 and only ONE seat is taken, so what
+      // withheld `dep-b` was the dependency and not the limit. Without this an arm that
+      // silently spawned nothing, or that was really measuring maxAgents, would pass.
+      expect(first.active).toBe(1);
+      expect(readWorkClaimLedger(reader, projectId).claims.get(deliver("dep-b"))).toBeUndefined();
+
+      accepted.add("dep-a");
+      const second = await staffing.runOnce();
+      expect(second.spawned).toHaveLength(1);
+      expect(second.spawned.map((entry) => entry.workItemId)).toEqual([deliver("dep-b")]);
+      expect(second.active).toBe(2);
+      // `dep-a` is not restaffed: its claim from the first pass is still open and its seat
+      // still live, so the second pass is the dependency moving, not the first pass repeating.
+      expect(second.spawned.map((entry) => entry.workItemId)).not.toContain(deliver("dep-a"));
+      expect(readWorkClaimLedger(reader, projectId).claims.get(deliver("dep-a")))
+        .toMatchObject({ status: "OPEN", version: 1 });
+    } finally {
+      reader.close();
+      harness.dispose();
+    }
+  });
+
+  it("spells the blocking token exactly as the production surface emits it", () => {
+    // The stub above hand-writes `depends:dep-a`. Read the PRODUCER's own source so a rename
+    // of the token reds here and says the stub went stale, instead of leaving these arms
+    // quietly rehearsing a shape the daemon no longer produces.
+    const source = readFileSync(new URL("../http/affordance-read.ts", import.meta.url), "utf8");
+    expect(source).toContain(".map((nodeRef) => `depends:${nodeRef}`)");
+  });
+});
+
+/**
+ * THE DESIGN STEP, STAFFED — the wrapper half of the rung task-217f40b7 added to the surface.
+ *
+ * The surface offers `design.submit` on the goal's OWN design aggregate between Gate 1 and the
+ * decomposition. These arms prove the wrapper TAKES it, ORDERS it deliberately, and hands the
+ * seat the DESIGN brief rather than the generic one.
+ *
+ * Every spawn is asserted BY WORK-ITEM ID, never by a count: a count arm stays green when the
+ * wrapper staffs the wrong step, which is exactly the defect the id fences.
+ */
+describe("the wrapper staffs the design step the surface offers", () => {
+  const DESIGN_ITEM = workItemIdFor("design.submit", "design:goal-1");
+  const NODE_ITEM = workItemIdFor("node.deliver", "node-1");
+  const readyStep = (kind: string, aggregateId: string): ChainStep => ({
+    aggregateId, claim: null, claimAggregateVersion: 0, kind,
+    missing: [], status: "READY", version: 0,
+  }) as ChainStep;
+
+  /** A wrapper over a STUB surface offering exactly `steps`, recording every spawn request. */
+  const wrapperOver = (
+    harness: ReturnType<typeof isolatedHarness>, projectId: string, prefix: string,
+    steps: readonly ChainStep[], maxAgents: number, started: SpawnRequest[],
+  ): ReturnType<typeof createAgentWrapper> => {
+    let suffix = 0;
+    return createAgentWrapper({
+      affordances: {
+        boundProjectId: projectId,
+        readSurface: () => ({ nextAllowedCommands: [], outcome: "SURFACE", steps: [...steps] }),
+      } as never,
+      claimTtlMs: 60_000,
+      clock: () => NOW,
+      deps: harness.isolated.provide(),
+      maxAgents,
+      mintSecret: () => `${prefix}-${String(suffix += 1).padStart(4, "0")}${"0".repeat(32)}`,
+      nodeMission: (nodeRef) => ({
+        instructions: `implement ${nodeRef}`, test: "pnpm test", title: nodeRef,
+        workspace: directory,
+      }),
+      operatorCredential: OPERATOR,
+      projectId,
+      // Held open for the whole case, so every assertion reads a pass whose children live.
+      spawnAgent: async (request) => {
+        started.push(request);
+        return { exit: new Promise<void>(() => undefined), ok: true, pid: CHILD_PID };
+      },
+    });
+  };
+
+  it("staffs a READY unclaimed design step, named by its work-item id", async () => {
+    const projectId = "proj-wrapper-design-staffs";
+    const harness = isolatedHarness(projectId);
+    const started: SpawnRequest[] = [];
+    try {
+      const report = await wrapperOver(harness, projectId, "dsg1", [
+        readyStep("design.submit", "design:goal-1"),
+      ], 2, started).runOnce();
+
+      expect(report.spawned.map((entry) => entry.workItemId)).toEqual([DESIGN_ITEM]);
+      expect(report.spawned.map((entry) => entry.outcome)).toEqual(["SPAWNED"]);
+      expect(started.map((request) => request.workItemId)).toEqual([DESIGN_ITEM]);
+      expect(started[0]?.kind).toBe("design.submit");
+      // maxAgents is 2 and exactly ONE seat was taken: the limit is not what shaped this.
+      expect(report.active).toBe(1);
+      expect(report.surfaceOutcome).toBe("SURFACE");
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it("hands the design seat its OWN brief, not the generic mission", async () => {
+    const projectId = "proj-wrapper-design-brief";
+    const harness = isolatedHarness(projectId);
+    const started: SpawnRequest[] = [];
+    try {
+      await wrapperOver(harness, projectId, "dsg2", [
+        readyStep("design.submit", "design:goal-1"),
+      ], 1, started).runOnce();
+
+      const brief = started[0]?.mission ?? "";
+      expect(brief).toContain("You are a moe-next DESIGN agent");
+      expect(brief).toContain('targetAggregateId "design:goal-1"');
+      for (const section of DESIGN_SECTION_KEYS) expect(brief).toContain(section);
+      expect(DESIGN_SECTION_KEYS.length).toBe(5);
+      // The generic builder's tell. Its presence would mean the dispatch fell through.
+      expect(brief).not.toContain("Suggested development payload");
+      expect(brief).not.toContain("You are a moe-next agent.");
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  /**
+   * THE ORDERING DECISION, PINNED. A design gates the WHOLE decomposition behind it, so it
+   * outranks generic work; an in-flight `node.deliver` is already-planned work whose seat is
+   * the reason the loop exists, so it still outranks the design. maxAgents is 1 in both
+   * halves, which makes the RANK the only thing that can decide the pick, and the winner is
+   * listed LAST both times so surface order cannot be the explanation either.
+   */
+  it("ranks the design step AHEAD of generic work and BEHIND node.deliver", async () => {
+    const projectId = "proj-wrapper-design-rank";
+    const harness = isolatedHarness(projectId);
+    const started: SpawnRequest[] = [];
+    try {
+      const overGeneric = await wrapperOver(harness, projectId, "dsg3", [
+        readyStep("policy.install", "some-policy"),
+        readyStep("design.submit", "design:goal-1"),
+      ], 1, started).runOnce();
+      expect(overGeneric.spawned.map((entry) => entry.workItemId)).toEqual([DESIGN_ITEM]);
+
+      const underNode = await wrapperOver(harness, "proj-wrapper-design-rank-2", "dsg4", [
+        readyStep("design.submit", "design:goal-2"),
+        readyStep("node.deliver", "node-1"),
+      ], 1, started).runOnce();
+      expect(underNode.spawned.map((entry) => entry.workItemId)).toEqual([NODE_ITEM]);
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it("spells the design step kind exactly as the production surface emits it", () => {
+    // The offer surface NAMES this kind; the wrapper CONSUMES the name. Two sites minting the
+    // literal independently is how an offer and a staffer disagree while each passes its own
+    // tests, so read the PRODUCER's own source: a rename there reds here instead of leaving a
+    // design step nothing ever staffs.
+    const source = readFileSync(
+      new URL("../http/affordance-planning-offers.ts", import.meta.url), "utf8",
+    );
+    expect(source).toContain(`offer(input, "${DESIGN_STEP_KIND}", designAggregateId(goal.goalId))`);
+    // And it must never become a human act: HUMAN_ONLY_STEPS is consulted BEFORE the READY
+    // filter, so an entry added there would make the design step permanently unstaffable and
+    // the failure would surface only as a chain that silently never advances.
+    expect(HUMAN_ONLY_STEPS.has(DESIGN_STEP_KIND)).toBe(false);
+    // The positive control: this set is not simply empty of everything asked of it.
+    expect(HUMAN_ONLY_STEPS.has("goal.create")).toBe(true);
+  });
+
+  it("dedupes a design step across two passes rather than staffing it twice", async () => {
+    // `staffing.has(workItemId)` is the in-process guard; the design step must go THROUGH it
+    // and not around it, or a slow seat is restaffed under a second identity every poll.
+    const projectId = "proj-wrapper-design-dedupe";
+    const harness = isolatedHarness(projectId);
+    const started: SpawnRequest[] = [];
+    try {
+      const wrapper = wrapperOver(harness, projectId, "dsg5", [
+        readyStep("design.submit", "design:goal-1"),
+      ], 2, started);
+      await wrapper.runOnce();
+      const second = await wrapper.runOnce();
+
+      expect(second.spawned.map((entry) => entry.workItemId)).toEqual([]);
+      expect(started.map((request) => request.workItemId)).toEqual([DESIGN_ITEM]);
+      expect(second.active).toBe(1);
+    } finally {
       harness.dispose();
     }
   });

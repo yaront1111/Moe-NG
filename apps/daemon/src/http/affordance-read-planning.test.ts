@@ -3,7 +3,27 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { SqliteEventStore } from "@moe/store";
+import type { NextAllowedCommand } from "@moe/contracts";
 import { afterAll, describe, expect, it } from "vitest";
+
+import {
+  GOAL_ID as REJECT_GOAL,
+  PROJECT_ID as REJECT_PROJECT,
+  RUN_ID as REJECT_RUN,
+  OPERATOR as REJECT_OPERATOR,
+  approveGate1,
+  approvePlan,
+  boundWorld,
+  closeStores,
+  committedRevision,
+  rejectPlan,
+  rejectedWorld as rejectedWorldWithoutDesign,
+  submit,
+} from "../planning/plan-reject-test-fixtures.js";
+import { currentPlanningRun } from "../planning/current-planning-run.js";
+import { designAggregateId, isDesignSkip } from "../design/design-contracts.js";
+import { readDesignRevision, submitDesignRevision } from "../design/design-store.js";
+import { designRevisionFixture, designSkipFixture } from "../design/design-test-fixtures.js";
 
 import { BOOTSTRAP_HANDLERS, runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
 import {
@@ -12,6 +32,20 @@ import {
   PROVIDER_OBSERVATION,
   fixtureBudgetCommitmentFor,
 } from "../bootstrap/bootstrap-test-fixtures.js";
+import { FIXTURE_ACTIVATION_RECEIPTS } from "../bootstrap/bootstrap-test-fixtures.js";
+import {
+  GOAL_ID as SEED_GOAL,
+  PROJECT_ID as SEED_PROJECT,
+  closeStores as closeSeedStores,
+  driveThrough,
+  openStore as openSeedStore,
+} from "../bootstrap/bootstrap-test-fixtures.js";
+import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
+import { seedLandingReceipt, seedReviewAcceptance } from "../goals/goal-closure-test-fixtures.js";
+import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
+import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
+import { releaseDossierAggregateId } from "../release/release-dossier-contracts.js";
+import { recordReleaseDossier } from "../release/release-dossier-ledger.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { finalizeChain, planningChain } from "../orchestrator/demo-seed-payloads.js";
@@ -20,7 +54,7 @@ import { PLANNING_HANDLERS } from "../planning/planning-services.js";
 import { resolvePlanningAuthorities } from "./affordance-planning-authorities.js";
 import type { PlanningAuthorityEntry } from "./affordance-planning-authorities.js";
 import {
-  DEFAULT_GOAL_SUBJECT, DEFAULT_RUN_SUBJECT, createAffordancePort,
+  DEFAULT_GOAL_SUBJECT, DEFAULT_RUN_SUBJECT, createAffordancePort, workItemIdFor,
 } from "./affordance-read.js";
 
 /**
@@ -69,7 +103,9 @@ function commitBootstrap(
     principalId: "operator-local",
     projectId: PROJECT,
     schemaVersion: "moe-bootstrap-command/1",
-  })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS });
+  })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS }, undefined,
+  // `project.activate` MINTS its witness from measured receipts and refuses without them.
+  FIXTURE_ACTIVATION_RECEIPTS);
   if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
 }
 
@@ -110,15 +146,8 @@ describe("plan.propose on the surface", () => {
     // The finalize terminal refuses a run no installed policy can tier (task-a888038d), so this
     // world installs the risk-classifying table too or its proposal never reaches PLAN_REVIEW.
     commitBootstrap("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
-    commitBootstrap("project.activate", {
-      witness: {
-        artifactPathRef: "artifact-1", backupPathRef: "backup-1",
-        credentialRef: "credential-1", distributionManifestHash: "cafe".padEnd(64, "0"),
-        policyRevisionHash: "face".padEnd(64, "0"),
-        providerMinimumProfileRef: "provider-profile-1", signingKeyRef: "signing-1",
-        storeDriverRef: "store-driver-1", truthClass: "DAEMON_VERIFIED",
-      },
-    }, 2);
+    commitBootstrap("project.activate", // NO WITNESS: the daemon mints it from its own measured receipts.
+      {}, 2);
     // TWO goals, so the binding cannot be read as scan order or as a default name. Each goal
     // now OWNS its planning run - the writer derives `run-${subject}` from the goal it mints -
     // so only the goal minted by command `live-1` pairs with the run this board addresses.
@@ -275,7 +304,9 @@ describe("planningGoalRef when no goal owns the board's run", () => {
       principalId: "operator-local",
       projectId: ABSENT_PROJECT,
       schemaVersion: "moe-bootstrap-command/1",
-    })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS });
+    })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS }, undefined,
+  // `project.activate` MINTS its witness from measured receipts and refuses without them.
+  FIXTURE_ACTIVATION_RECEIPTS);
     if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
   }
 
@@ -301,15 +332,8 @@ describe("planningGoalRef when no goal owns the board's run", () => {
     commitAbsent("provider.probe", { observation: PROVIDER_OBSERVATION });
     commitAbsent("policy.install", { slice: POLICY_SLICE });
     commitAbsent("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
-    commitAbsent("project.activate", {
-      witness: {
-        artifactPathRef: "artifact-1", backupPathRef: "backup-1",
-        credentialRef: "credential-1", distributionManifestHash: "cafe".padEnd(64, "0"),
-        policyRevisionHash: "face".padEnd(64, "0"),
-        providerMinimumProfileRef: "provider-profile-1", signingKeyRef: "signing-1",
-        storeDriverRef: "store-driver-1", truthClass: "DAEMON_VERIFIED",
-      },
-    }, 2);
+    commitAbsent("project.activate", // NO WITNESS: the daemon mints it from its own measured receipts.
+      {}, 2);
     // ONLY the decoy. `goal.create` derives the run from the goal it mints, so this world holds
     // `goal-affordance-fresh` bound to `run-affordance-fresh` and NOTHING bound to
     // DEFAULT_RUN_SUBJECT. A deriving producer answers null; a hardcoding one answers
@@ -375,7 +399,9 @@ describe("planning offers are bound per durable goal (task-4451675e / R3-10)", (
       principalId: "operator-local",
       projectId,
       schemaVersion: "moe-bootstrap-command/1",
-    })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS });
+    })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS }, undefined,
+  // `project.activate` MINTS its witness from measured receipts and refuses without them.
+  FIXTURE_ACTIVATION_RECEIPTS);
     if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
   }
 
@@ -403,15 +429,8 @@ describe("planning offers are bound per durable goal (task-4451675e / R3-10)", (
     commitR3("provider.probe", { observation: PROVIDER_OBSERVATION });
     commitR3("policy.install", { slice: POLICY_SLICE });
     commitR3("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
-    commitR3("project.activate", {
-      witness: {
-        artifactPathRef: "artifact-r3-10", backupPathRef: "backup-r3-10",
-        credentialRef: "credential-r3-10", distributionManifestHash: "cafe".padEnd(64, "0"),
-        policyRevisionHash: "face".padEnd(64, "0"),
-        providerMinimumProfileRef: "provider-profile-r3-10", signingKeyRef: "signing-r3-10",
-        storeDriverRef: "store-driver-r3-10", truthClass: "DAEMON_VERIFIED",
-      },
-    }, 2);
+    commitR3("project.activate", // NO WITNESS: the daemon mints it from its own measured receipts.
+      {}, 2);
     commitR3("goal.create", {
       instructions: "Carry the live board's planning run.", title: "Live board goal",
     }, 0, BOARD_GOAL_COMMAND);
@@ -597,8 +616,8 @@ describe("planningAuthorityByRun (task-ed89967f / R3-016)", () => {
   const OWNER_DECOY = "project-owner-decoy";
   /** A THIRD identity: whoever issued the durable commands. Not an author either. */
   const COMMAND_ISSUER = "operator-local";
-  const NODE = { nodeRef: "node-authority-1", title: "The single merged node" };
-  const SECOND_NODE = { nodeRef: "node-authority-2", title: "A second merged node" };
+  const NODE = { dependsOn: [], nodeRef: "node-authority-1", title: "The single merged node" };
+  const SECOND_NODE = { dependsOn: [], nodeRef: "node-authority-2", title: "A second merged node" };
   const ALPHA_COMMAND = "authority-alpha";
   const BETA_COMMAND = "authority-beta";
   const ALPHA_GOAL = `goal-${ALPHA_COMMAND}`;
@@ -654,7 +673,9 @@ describe("planningAuthorityByRun (task-ed89967f / R3-016)", () => {
       principalId: COMMAND_ISSUER,
       projectId,
       schemaVersion: "moe-bootstrap-command/1",
-    })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS });
+    })), { ...BOOTSTRAP_HANDLERS, ...GOAL_HANDLERS, ...PLANNING_HANDLERS }, undefined,
+  // `project.activate` MINTS its witness from measured receipts and refuses without them.
+  FIXTURE_ACTIVATION_RECEIPTS);
     if (!outcome.ok) throw new Error(`${kind}: ${outcome.code} (${outcome.refusedBy})`);
   }
 
@@ -697,15 +718,8 @@ describe("planningAuthorityByRun (task-ed89967f / R3-016)", () => {
     commitAuthority("provider.probe", { observation: PROVIDER_OBSERVATION });
     commitAuthority("policy.install", { slice: POLICY_SLICE });
     commitAuthority("policy.install", { slice: CLASSIFYING_POLICY_SLICE }, 1);
-    commitAuthority("project.activate", {
-      witness: {
-        artifactPathRef: "artifact-r3-016", backupPathRef: "backup-r3-016",
-        credentialRef: "credential-r3-016", distributionManifestHash: "cafe".padEnd(64, "0"),
-        policyRevisionHash: "face".padEnd(64, "0"),
-        providerMinimumProfileRef: "provider-profile-r3-016", signingKeyRef: "signing-r3-016",
-        storeDriverRef: "store-driver-r3-016", truthClass: "DAEMON_VERIFIED",
-      },
-    }, 2);
+    commitAuthority("project.activate", // NO WITNESS: the daemon mints it from its own measured receipts.
+      {}, 2);
     // TWO goals on the legacy lane, so both runs carry an eligible plan.propose offer and the
     // sibling-isolation arm has two entries that must differ in every bound field.
     commitAuthority("goal.create", {
@@ -921,5 +935,571 @@ describe("planningAuthorityByRun (task-ed89967f / R3-016)", () => {
       nodes: [NODE], offers: [offer], principalId: PRINCIPAL,
       planningGoalRefs: { [offer.targetAggregateId]: ALPHA_GOAL },
     }))).toEqual([offer.targetAggregateId]);
+  });
+});
+
+/**
+ * THE REJECT JOURNEY OVER A REAL STORE, driven end to end by production commands: a PRD-bound
+ * goal, a committed revision, Gate 1 approved by a real paired session, the compiler's own
+ * INITIAL chain to PLAN_REVIEW, then `approval.decide_intent` REJECT.
+ *
+ * Every assertion is SET-EQUALITY on the offer targets for a kind, never `toContain`: the defect
+ * this closes is an offer that should have DISAPPEARED, and a subset assertion is blind to it.
+ */
+describe("after a REJECT the surface follows the goal's successor run", () => {
+  // Each world is an ephemeral store registered by the fixture's own `openStore`; this releases
+  // every one of them, and runs alongside this file's other afterAll rather than replacing it.
+  afterAll(closeStores);
+
+  function portOver(world: SqliteEventStore) {
+    let issued = 0;
+    const bound = createAffordancePort({
+      mintId: () => `reject-${String(issued += 1)}`,
+      projectId: REJECT_PROJECT,
+      store: world,
+    });
+    return (kind: string): string[] => {
+      const result = bound.readSurface();
+      if (result.outcome !== "SURFACE") throw new Error(`refused: ${result.code}`);
+      return result.nextAllowedCommands
+        .filter((entry) => entry.commandKind === kind)
+        .map((entry) => entry.targetAggregateId)
+        .sort();
+    };
+  }
+
+  /** Every offer on the surface as `commandKind@targetAggregateId`, sorted. */
+  function offerPairsOver(world: SqliteEventStore): string[] {
+    let issued = 0;
+    const result = createAffordancePort({
+      mintId: () => `reject-pairs-${String(issued += 1)}`,
+      projectId: REJECT_PROJECT,
+      store: world,
+    }).readSurface();
+    if (result.outcome !== "SURFACE") throw new Error(`refused: ${result.code}`);
+    return result.nextAllowedCommands
+      .map((entry) => `${entry.commandKind}@${entry.targetAggregateId}`)
+      .sort();
+  }
+
+  function refsOver(world: SqliteEventStore): Readonly<Record<string, string>> {
+    let issued = 0;
+    const result = createAffordancePort({
+      mintId: () => `reject-refs-${String(issued += 1)}`,
+      projectId: REJECT_PROJECT,
+      store: world,
+    }).readSurface();
+    if (result.outcome !== "SURFACE") throw new Error(`refused: ${result.code}`);
+    return result.planningGoalRefs;
+  }
+
+  it("offers the approval kinds on the compiled run BEFORE the reject", () => {
+    // The CONTROL for every arm below: without it, "no decide_intent after the reject" could be
+    // green because this world never offered one at all.
+    const world = boundWorld();
+    const ref = committedRevision(world);
+    approveGate1(world, ref);
+    const sealed = submit(world, ref);
+    if (!sealed.ok) throw new Error(`submit refused: ${sealed.code} @ ${sealed.layer}`);
+    const targets = portOver(world);
+    expect(targets("approval.decide_intent")).toEqual([sealed.runId]);
+    expect(targets("approval.decide")).toEqual([sealed.runId]);
+    expect(refsOver(world)).toEqual({ [sealed.runId]: REJECT_GOAL });
+  });
+
+  it("WITHHOLDS both approval kinds for the rejected run and offers the compiler instead", () => {
+    const world = rejectedWorld("needs two nodes, not one");
+    const targets = portOver(world.store);
+    // The card the operator just acted on is GONE — not merely re-pointed, and not still there
+    // beside a new one: a stale decide_intent is a dispatch the daemon would refuse.
+    expect(targets("approval.decide_intent")).toEqual([]);
+    expect(targets("approval.decide")).toEqual([]);
+    expect(targets("planning.submit_decomposition")).toEqual([world.goalId]);
+  });
+
+  it("binds the SUCCESSOR run to the goal, and the rejected run to nothing", () => {
+    const world = rejectedWorld("the second slice is missing");
+    expect(world.successorRunId).not.toBe(world.originalRunId);
+    // EXACT map. The rejected run's key must be absent, or the surface's authority map still
+    // binds a run nobody may act on to this goal.
+    expect(refsOver(world.store)).toEqual({ [world.successorRunId]: world.goalId });
+  });
+
+  it("moves both approval kinds onto the SUCCESSOR once the compiler runs, and re-offers the "
+    + "rejected run under NO kind", () => {
+    const world = rejectedWorld("the second slice is missing");
+    const targets = portOver(world.store);
+    // CONTROL, before the compile: the surface is offering the compiler, not an approval. Without
+    // this line the assertions below could hold on a surface that had never moved at all.
+    expect(targets("planning.submit_decomposition")).toEqual([world.goalId]);
+
+    const compiled = submit(world.store, world.ref);
+    if (!compiled.ok) throw new Error(`submit refused: ${compiled.code} @ ${compiled.layer}`);
+    // FIRST. `compiled.runId` is what the dispatcher actually wrote to; if the compile had landed
+    // back on the rejected run every assertion below would still be readable as "the surface
+    // followed the successor" while the plan was sealed onto a run the operator already refused.
+    expect(compiled.runId).toBe(world.successorRunId);
+
+    expect(targets("approval.decide_intent")).toEqual([world.successorRunId]);
+    expect(targets("approval.decide")).toEqual([world.successorRunId]);
+    // The compiler card is spent: the successor is reviewable, so the ladder has moved past it.
+    expect(targets("planning.submit_decomposition")).toEqual([]);
+    expect(refsOver(world.store)).toEqual({ [world.successorRunId]: world.goalId });
+
+    // SET-EQUALITY OVER THE WHOLE SURFACE, not one kind at a time: "the rejected run is never
+    // re-offered" is a claim about EVERY offer, and a per-kind check only sees the kinds it
+    // names. Asserting the empty list (rather than `not.toContain`) prints the offending
+    // `commandKind@target` pairs verbatim when it fails.
+    expect(offerPairsOver(world.store)
+      .filter((pair) => pair.endsWith(`@${world.originalRunId}`))).toEqual([]);
+  });
+
+  it("follows a SECOND rejection onto run 3, and re-offers neither earlier run", () => {
+    // The whole point of a BOUNDED chain fold rather than a single hop: an operator may reject
+    // as many times as they like, and the surface must track the head of the chain, not run 2.
+    const world = rejectedWorld("the second slice is missing");
+    const compiled = submit(world.store, world.ref);
+    if (!compiled.ok) throw new Error(`submit refused: ${compiled.code} @ ${compiled.layer}`);
+    const targets = portOver(world.store);
+    // CONTROL: the successor really is the card on offer before the second rejection.
+    expect(targets("approval.decide_intent")).toEqual([world.successorRunId]);
+
+    const thirdRunId = rejectPlan(world.store, world.successorRunId, "still one node short");
+    expect(thirdRunId).not.toBe(world.successorRunId);
+    expect(thirdRunId).not.toBe(world.originalRunId);
+
+    expect(targets("approval.decide_intent")).toEqual([]);
+    expect(targets("planning.submit_decomposition")).toEqual([world.goalId]);
+    expect(refsOver(world.store)).toEqual({ [thirdRunId]: world.goalId });
+    // Neither earlier run is reachable under ANY kind - checked over the whole surface, because
+    // "run 1 is gone" said per-kind only covers the kinds the assertion happens to name.
+    const pairs = offerPairsOver(world.store);
+    expect(pairs.filter((pair) => pair.endsWith(`@${world.originalRunId}`))).toEqual([]);
+    expect(pairs.filter((pair) => pair.endsWith(`@${world.successorRunId}`))).toEqual([]);
+    // The walk MADE two hops and is not degraded: without this the arm above could pass on a
+    // fold that gave up early and answered the head by accident.
+    expect(currentPlanningRun(world.store, REJECT_RUN))
+      .toMatchObject({ hops: 2, runId: thirdRunId, unreadable: false });
+  });
+
+  it("refuses a stale approval aimed at the rejected run, by CODE and by refusing layer", () => {
+    // The client that cached the pre-reject offer. Not a version race: the fixture reads the
+    // run's CURRENT version, so the refusal below is the lifecycle fence and not optimistic
+    // concurrency answering first for it.
+    const world = rejectedWorld("the second slice is missing");
+    expect(world.store.getAggregateVersion(world.originalRunId)).toBeGreaterThan(0);
+
+    expect(() => rejectPlan(world.store, world.originalRunId, "stale card", "cmd-stale-reject"))
+      .toThrowError(/REJECT refused: APPROVAL_RUN_NOT_REVIEWABLE @ APPROVAL_RUN_BINDING/);
+    expect(() => approvePlan(world.store, world.originalRunId, "cmd-stale-approve"))
+      .toThrowError(/APPROVE refused: APPROVAL_RUN_NOT_REVIEWABLE @ APPROVAL_RUN_BINDING/);
+  });
+
+  it("lets the operator approve the SUCCESSOR, and the goal moves on carrying its binding", () => {
+    const world = rejectedWorld("the second slice is missing");
+    const compiled = submit(world.store, world.ref);
+    if (!compiled.ok) throw new Error(`submit refused: ${compiled.code} @ ${compiled.layer}`);
+    const targets = portOver(world.store);
+    expect(targets("approval.decide_intent")).toEqual([world.successorRunId]);
+
+    approvePlan(world.store, world.successorRunId);
+
+    // The approval landed on the successor: the goal has left DRAFT, so the ladder no longer
+    // offers either approval kind, and the map still names the SUCCESSOR as this goal's run.
+    expect(targets("approval.decide_intent")).toEqual([]);
+    expect(targets("approval.decide")).toEqual([]);
+    expect(refsOver(world.store)).toEqual({ [world.successorRunId]: world.goalId });
+    expect(offerPairsOver(world.store)
+      .filter((pair) => pair.endsWith(`@${world.originalRunId}`))).toEqual([]);
+  });
+
+  it("falls back to the goal's immutable ref when the run chain cannot be walked", () => {
+    // FAIL-OPEN ON THE READ, deliberately, and the opposite of the dispatcher's fail-closed
+    // refusal on the same condition: a WRITE onto a stale id seals a plan the operator never
+    // saw, while a read that gave up would cost every healthy goal on the board its offers.
+    const world = rejectedWorld("the second slice is missing");
+    const blind = blindChainStore(world.store, world.originalRunId);
+    expect(currentPlanningRun(blind, world.originalRunId))
+      .toMatchObject({ hops: 0, runId: world.originalRunId, unreadable: true });
+
+    // The surface still ANSWERS - no throw, no refusal - and answers about the immutable ref.
+    const targets = portOver(blind);
+    expect(targets("planning.submit_decomposition")).toEqual([world.goalId]);
+    expect(refsOver(blind)).toEqual({ [world.originalRunId]: world.goalId });
+    // THE CONTROL: the identical read through the UNWRAPPED store names the successor, so the
+    // fallback above is attributable to the injected read failure and not to the Proxy.
+    expect(refsOver(world.store)).toEqual({ [world.successorRunId]: world.goalId });
+  });
+});
+
+/**
+ * A store whose per-aggregate event read THROWS for one run id. `SqliteEventStore` freezes
+ * itself, so a method cannot be shadowed by assignment; same Proxy technique as
+ * `unreadableRunStore` in compile-dispatcher-revision.test.ts.
+ */
+function blindChainStore(store: SqliteEventStore, runId: string): SqliteEventStore {
+  return new Proxy(store, {
+    get(target, property, receiver): unknown {
+      if (property === "readEvents") {
+        return (aggregateId: string): unknown => {
+          if (aggregateId === runId) throw new Error("injected read failure");
+          return target.readEvents(aggregateId);
+        };
+      }
+      const value: unknown = Reflect.get(target, property, receiver);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+}
+
+function designPort(store: SqliteEventStore) {
+  let issued = 0;
+  return createAffordancePort({
+    clock: () => "2026-09-06T00:00:00.000Z", mintId: () => `design-offer-${issued += 1}`,
+    projectId: REJECT_PROJECT, store,
+  });
+}
+
+function designFrame(port: ReturnType<typeof designPort>) {
+  const result = port.readSurface();
+  if (result.outcome !== "SURFACE") throw new Error(`${result.code}@${result.layer}`);
+  return result;
+}
+
+function designKinds(port: ReturnType<typeof designPort>) {
+  return new Set(designFrame(port).nextAllowedCommands
+    .filter((entry) => entry.commandKind === "design.submit"
+      || entry.commandKind === "planning.submit_decomposition")
+    .map((entry) => entry.commandKind));
+}
+
+function writeDesign(
+  store: SqliteEventStore, contractRef: unknown, revision: unknown, expectedVersion = 0,
+) {
+  const result = submitDesignRevision(store, {
+    commandId: `design-${expectedVersion}`, contractRef, correlationId: "design-surface",
+    decidedAt: "2026-09-06T00:00:00.000Z", expectedVersion, goalRef: REJECT_GOAL,
+    principalId: REJECT_OPERATOR, projectId: REJECT_PROJECT, revision,
+  });
+  if (!result.ok) throw new Error(`${result.code}@${result.layer}`);
+  return result;
+}
+
+/** Rejection arms keep their original subject: the optional design step was already skipped. */
+function rejectedWorld(reason: string) {
+  const world = rejectedWorldWithoutDesign(reason);
+  writeDesign(world.store, world.ref, designSkipFixture());
+  return world;
+}
+
+describe("the real design surface journey", () => {
+  afterAll(closeStores);
+
+  it("offers the exact design work-item from Gate 1 on, staffable only before the first design", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    const port = designPort(store);
+    expect(designKinds(port)).toEqual(new Set());
+    approveGate1(store, ref);
+    expect(designKinds(port)).toEqual(new Set(["design.submit"]));
+    const frame = designFrame(port);
+    const step = frame.steps.find((entry) => entry.kind === "design.submit");
+    if (step === undefined) throw new Error("design step missing");
+    expect(workItemIdFor(step.kind, step.aggregateId)).toBe("design.submit@design:goal-1");
+    expect(step).toMatchObject({
+      aggregateId: designAggregateId(REJECT_GOAL), status: "READY", version: 0,
+    });
+    const offered = frame.nextAllowedCommands.find((entry) => entry.commandKind === step.kind);
+    expect(offered).toMatchObject({ expectedVersion: 0, targetAggregateId: step.aggregateId });
+    if (offered === undefined) throw new Error("design offer missing");
+    // Use the actual offer's fence; the goal is already version 1, but the design is version 0.
+    expect(writeDesign(store, ref, designRevisionFixture(), offered.expectedVersion).record.version)
+      .toBe(1);
+    // The design is now PRESENT: the operator keeps a route to revise it, and the goal is also
+    // ready to compile. Both are offered; only the decomposition is STAFFED on the line below.
+    expect(designKinds(port)).toEqual(
+      new Set(["design.submit", "planning.submit_decomposition"]));
+    expect(designFrame(port).steps.filter((entry) => entry.kind === "design.submit")).toEqual([]);
+  });
+
+  /**
+   * THE CAPABILITY THIS ROW EXISTS TO MAKE REACHABLE, against the REAL `designState` over a real
+   * store — no stub. `design.submit` is a versioned revision command and the approve fold renders
+   * "Version 2", but before this row nothing in production offered it once a design existed, so
+   * version 2 was unreachable by any operator. The `expectedVersion` assertions are the whole
+   * arm: an offer minted at the wrong fence is dispatch-refused on every attempt and the ABSENT
+   * case cannot detect it, because 0 is the correct answer there.
+   */
+  it("offers a resubmit fenced on the design head, and the fence tracks TWO resubmits", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+    writeDesign(store, ref, designRevisionFixture());
+    const port = designPort(store);
+    for (const expected of [1, 2]) {
+      const frame = designFrame(port);
+      const resubmit = frame.nextAllowedCommands
+        .find((entry) => entry.commandKind === "design.submit");
+      if (resubmit === undefined) throw new Error(`no design.submit offer at version ${expected}`);
+      // The DESIGN aggregate's head, not the goal's: same reason the first design is fenced at 0
+      // while the goal is already at 1.
+      expect(resubmit).toMatchObject({
+        expectedVersion: expected, targetAggregateId: designAggregateId(REJECT_GOAL),
+      });
+      // OFFERED, never STAFFED: a resubmit in `steps` is a design agent restaffed every poll.
+      expect(frame.steps.filter((entry) => entry.kind === "design.submit")).toEqual([]);
+      // The offer the surface minted is the one the store accepts — dispatched at its own fence.
+      expect(writeDesign(store, ref, designRevisionFixture(), resubmit.expectedVersion)
+        .record.version).toBe(expected + 1);
+    }
+  });
+
+  it("skips the design while the real chain still compiles and reaches approval", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+    writeDesign(store, ref, designSkipFixture());
+    const port = designPort(store);
+    expect(designKinds(port)).toEqual(new Set(["planning.submit_decomposition"]));
+    expect(designFrame(port).steps.filter((entry) => entry.kind === "design.submit")).toEqual([]);
+    const compiled = submit(store, ref);
+    if (!compiled.ok) throw new Error(`${compiled.code}@${compiled.layer}`);
+    expect(compiled.runId).toBe(REJECT_RUN);
+    expect(designKinds(port)).toEqual(new Set());
+    expect(designFrame(port).nextAllowedCommands.filter((entry) =>
+      entry.commandKind === "approval.decide_intent").map((entry) => entry.targetAggregateId))
+      .toEqual([compiled.runId]);
+    approvePlan(store, compiled.runId);
+    expect(designKinds(port)).toEqual(new Set());
+  });
+
+  it("refuses the surface with the design reader's code and layer when its ledger throws", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+    const blind = blindChainStore(store, designAggregateId(REJECT_GOAL));
+    const refused = designPort(blind).readSurface();
+    expect(refused).toMatchObject({
+      code: "DESIGN_STORE_UNAVAILABLE", layer: "LEDGER", outcome: "REFUSED",
+    });
+    // UNREADABLE IS NOT ABSENCE, and now that PRESENT offers a resubmit it is not PRESENT
+    // either: the refusal carries no roster at all, so neither a first design nor a revision
+    // can be offered over a ledger nobody could read.
+    expect("nextAllowedCommands" in refused).toBe(false);
+    expect("steps" in refused).toBe(false);
+  });
+
+  it.each([true, false])("reads the latest revision when skipped=%s changes between polls", (skipFirst) => {
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+    const port = designPort(store);
+    expect(designKinds(port)).toEqual(new Set(["design.submit"]));
+    for (const [index, skipped] of [skipFirst, !skipFirst].entries()) {
+      writeDesign(store, ref, skipped ? designSkipFixture() : designRevisionFixture(), index);
+      const read = readDesignRevision(store, { goalRef: REJECT_GOAL, projectId: REJECT_PROJECT });
+      if (!read.ok) throw new Error(`${read.code}@${read.layer}`);
+      expect(read.record.version).toBe(index + 1);
+      expect(isDesignSkip(read.record.revision)).toBe(skipped);
+      // The two states DIVERGE here, on the real store, inside one journey: a skip withholds
+      // the design for good, a real revision keeps the resubmit offered. Asserting the same
+      // set for both — as this arm did before the resubmit existed — cannot see the difference.
+      expect(designKinds(port)).toEqual(new Set(skipped
+        ? ["planning.submit_decomposition"]
+        : ["design.submit", "planning.submit_decomposition"]));
+      // Neither state staffs a design: SKIPPED has no offer, PRESENT has one that is not a step.
+      expect(designFrame(port).steps.filter((entry) => entry.kind === "design.submit"))
+        .toEqual([]);
+    }
+  });
+
+  it("refuses malformed design bytes rather than offering a replacement over unreadable history", () => {
+    const store = boundWorld();
+    const ref = committedRevision(store);
+    approveGate1(store, ref);
+    writeDesign(store, ref, designRevisionFixture());
+    const corrupt = new Proxy(store, {
+      get(target, property, receiver): unknown {
+        if (property === "readEvents") return (aggregateId: string) => target.readEvents(aggregateId)
+          .map((event) => aggregateId === designAggregateId(REJECT_GOAL)
+            ? { ...event, payload: encoder.encode("{}") } : event);
+        const value: unknown = Reflect.get(target, property, receiver);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const refused = designPort(corrupt).readSurface();
+    expect(refused).toMatchObject({
+      code: "DESIGN_RECORD_MALFORMED", layer: "LEDGER", outcome: "REFUSED",
+    });
+    // A design that EXISTS but cannot be decoded must not be treated as PRESENT and handed a
+    // resubmit offer over bytes nobody could read; the whole surface refuses instead.
+    expect("nextAllowedCommands" in refused).toBe(false);
+    expect("steps" in refused).toBe(false);
+  });
+});
+
+/**
+ * THE RELEASE DECISION CARD, THROUGH THE SHIPPED COMPOSITION ROOT (task-21209552, DoD 1-2).
+ *
+ * Every arm here runs `createAffordancePort(...).readSurface()` over a REAL store driven through
+ * the production bootstrap sequence, with the landing receipt written by the lander's own writer
+ * (`recordLandingReceipt`, via `seedLandingReceipt`) — no stubbed fact, no hand-built frame. The
+ * ladder arms in `affordance-planning-offers.test.ts` prove the RULE; these prove the surface
+ * really composes it, which is the half a stubbed `landedCommit` can never reach.
+ *
+ * THE POINT OF THE SUITE IS THE SURVIVAL ARM. `readDurableLedger` keeps the last committed
+ * result per `targetAggregateId`, so a decide committed against the BARE GOAL ID would overwrite
+ * the goal's own durable record, drop it out of `durableGoals`, and silently take every offer
+ * for that goal with it — with nothing thrown and every by-name assertion still passing. That is
+ * a measured defect on this ladder, not a hypothetical (`preview.decide`, 2026-09-06).
+ *
+ * Each arm opens its OWN ephemeral store: the module-level store above is driven sequentially by
+ * the plan.propose suite, and a landed commit in it would move every roster that follows.
+ */
+describe("the release decision card over a real store", () => {
+  const RELEASE_TARGET = releaseDossierAggregateId(SEED_GOAL);
+  const LANDED_SHA = "c".repeat(40);
+
+  /** The graph-scoped ref for a node key, so the landing sits on a node THIS goal's graph names. */
+  function scopedRef(store: ReturnType<typeof openSeedStore>, nodeKey: string): string {
+    const graph = activeCompiledGraphs(store, SEED_PROJECT).find((plan) =>
+      plan.goalRef === SEED_GOAL
+      && plan.content.snapshot.nodes.some((node) => node.nodeKey === nodeKey));
+    return graph === undefined ? nodeKey : compiledExecutionRef(SEED_PROJECT, graph, nodeKey);
+  }
+
+  /** An EXECUTION_ENABLED goal; `landed` writes a real COMMITTED landing receipt for its node. */
+  function releaseWorld(landed: boolean): ReturnType<typeof openSeedStore> {
+    const store = openSeedStore();
+    driveThrough(store, "goal.close");
+    if (landed) {
+      const nodeRef = scopedRef(store, "node-a");
+      seedReviewAcceptance(store, nodeRef);
+      seedLandingReceipt(store, nodeRef, "COMMITTED");
+    }
+    return store;
+  }
+
+  /** The whole offer slice as the surface states it, UNFILTERED by target. */
+  function surface(store: ReturnType<typeof openSeedStore>): {
+    readonly offers: readonly NextAllowedCommand[]; readonly roster: readonly string[];
+  } {
+    let seq = 0;
+    const result = createAffordancePort({
+      mintId: () => `afford-release-${String(seq += 1)}`, projectId: SEED_PROJECT, store,
+    }).readSurface();
+    if (!("nextAllowedCommands" in result)) throw new Error("expected a surface, got a refusal");
+    const offers = result.nextAllowedCommands;
+    return {
+      offers,
+      roster: offers.map((entry) => `${entry.commandKind}@${entry.targetAggregateId}`).sort(),
+    };
+  }
+
+  const releaseCard = (store: ReturnType<typeof openSeedStore>): NextAllowedCommand | undefined =>
+    surface(store).offers.find((entry) => entry.commandKind === "release.decide");
+
+  afterAll(() => { closeSeedStores(); });
+
+  it("offers release.decide at the RELEASE aggregate, spendable against the store's version", () => {
+    const store = releaseWorld(true);
+    const card = releaseCard(store);
+    // BY VALUE, and against the CONTRACT function rather than a literal: `release-decide-command`
+    // :47 refuses RELEASE_TARGET_INVALID unless the target is exactly this.
+    expect(card?.targetAggregateId).toBe(RELEASE_TARGET);
+    expect(card?.targetAggregateId).not.toBe(SEED_GOAL);
+    // SPENDABLE, read from the STORE and never copied out of the response: the offer carries
+    // `versionOf(durableLedger, target)` while `release-decide-command.ts:133` fences on
+    // `store.getAggregateVersion(target)`. A stale 0 would refuse EXPECTED_VERSION_CONFLICT on
+    // every release the surface ever offered, while the card looked perfectly correct.
+    expect(card?.expectedVersion).toBe(store.getAggregateVersion(RELEASE_TARGET));
+  });
+
+  it("keeps expectedVersion tracking the store after a dossier moves the release aggregate", () => {
+    // The release aggregate is NOT the card's alone — `release-dossier-ledger.ts:118` commits
+    // the dossier onto the same target. So the two version sources can only be proved equal on
+    // an aggregate that has actually MOVED; at 0-vs-0 the assertion above is satisfied by a
+    // reader that answers zero to everything.
+    const store = releaseWorld(true);
+    expect(releaseCard(store)?.expectedVersion).toBe(0);
+    const recorded = recordReleaseDossier(store, {
+      decidedAt: "2026-09-06T12:00:00.000Z", goalId: SEED_GOAL,
+      markdown: "# fixture release dossier\n", projectId: SEED_PROJECT, sha: LANDED_SHA,
+    });
+    expect(recorded.ok).toBe(true);
+    const moved = store.getAggregateVersion(RELEASE_TARGET);
+    expect(moved).toBeGreaterThan(0);
+    expect(releaseCard(store)?.expectedVersion).toBe(moved);
+
+    // AND AGAIN after a SECOND dossier at a DIFFERENT sha. One write proves the two sources
+    // agree once; a fence that tracked only the FIRST move would still satisfy the assertion
+    // above and refuse every release after the second, which is the shape a cached or
+    // once-folded reader fails in. A second sha is required — `recordReleaseDossier` REPLAYS
+    // the same (project, goal, sha) triple instead of appending, so re-recording would move
+    // nothing and the arm would pass without testing anything.
+    const again = recordReleaseDossier(store, {
+      decidedAt: "2026-09-06T13:00:00.000Z", goalId: SEED_GOAL,
+      markdown: "# second fixture release dossier\n", projectId: SEED_PROJECT,
+      sha: "d".repeat(40),
+    });
+    expect(again.ok).toBe(true);
+    const movedAgain = store.getAggregateVersion(RELEASE_TARGET);
+    expect(movedAgain).toBeGreaterThan(moved);
+    expect(releaseCard(store)?.expectedVersion).toBe(movedAgain);
+  });
+
+  it("THE GOAL SURVIVES a decision committed against the offered release target", () => {
+    const store = releaseWorld(true);
+    const before = surface(store);
+    const card = before.offers.find((entry) => entry.commandKind === "release.decide");
+    if (card === undefined) throw new Error("no release offer to spend");
+    const goalBefore = stateOf(readDurableLedger(store, SEED_PROJECT), SEED_GOAL);
+    expect(goalBefore).toBeDefined();
+
+    // Committed AT THE TARGET THE OFFER CARRIES, never at a target this test chose: that is what
+    // makes the arm see a retargeted mint. The envelope shape is the dispatcher's own — the
+    // decide commits `envelope.targetAggregateId` at `envelope.expectedVersion`.
+    const response = store.commitExpectedVersionDecision({
+      commandKind: "release.decide",
+      committedResultBytes: encoder.encode(JSON.stringify({ decision: "RELEASED" })),
+      correlationId: "release-decide-survival",
+      decidedAt: "2026-09-06T12:30:00.000Z",
+      events: [{
+        eventId: `${SEED_GOAL}-ReleaseDecided`, eventType: "ReleaseDecided",
+        payload: encoder.encode(JSON.stringify({ goalId: SEED_GOAL, sha: LANDED_SHA })),
+      }],
+      expectedVersion: card.expectedVersion,
+      key: {
+        commandId: "cmd-release-decide-survival", principalId: "operator-local",
+        projectId: SEED_PROJECT,
+      },
+      requestBytes: encoder.encode(JSON.stringify({ goalId: SEED_GOAL, sha: LANDED_SHA })),
+      targetAggregateId: card.targetAggregateId,
+    });
+    // The offer is SPENDABLE: the version it carried is the one the store accepted.
+    expect(response.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+
+    // SURVIVAL, asserted three ways — the goal's own durable record is intact, the surface still
+    // answers for it, and the whole roster is unchanged. A key-spelling assertion sees none of
+    // this: it passes just as happily while the goal is being erased.
+    const goalAfter = stateOf(readDurableLedger(store, SEED_PROJECT), SEED_GOAL);
+    expect(goalAfter).toEqual(goalBefore);
+    const after = surface(store);
+    expect(after.roster).toEqual(before.roster);
+    expect(after.roster).toContain(`release.decide@${RELEASE_TARGET}`);
+  });
+
+  it("WITHHOLDS it, with publish, for a goal that has landed nothing", () => {
+    // Set-equality over the release/publish slice, never `not.toContain` alone: an offer that
+    // should have DISAPPEARED still satisfies a per-kind absence check, and a differently-named
+    // release offer would satisfy it too.
+    const roster = surface(releaseWorld(false)).roster;
+    // Non-empty first: a surface that answered nothing at all would satisfy the absence below
+    // for the wrong reason, and `repository.bootstrap` is in this roster throughout — the
+    // filter names the two LANDING-gated kinds exactly, never a `repository.` prefix.
+    expect(roster.length).toBeGreaterThan(0);
+    expect(roster.filter((entry) =>
+      entry.startsWith("release.decide@") || entry.startsWith("repository.publish@")))
+      .toEqual([]);
   });
 });

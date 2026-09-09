@@ -6,6 +6,8 @@ import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
 import type { RunNodeView, RunsOutcome } from "../../live/live-runs.js";
+import { ProviderPauseProvider } from "../shell/pause-context.js";
+import type { ProviderPause } from "../shell/pause-context.js";
 import { BOARD_COLUMNS } from "./board-columns.js";
 import { briefOf, toneOf } from "./board-feed.js";
 import { BoardScreen, LiveBoard } from "./board-screen.js";
@@ -21,7 +23,7 @@ const RUN = "run-1";
 
 function node(nodeKey: string, status: RunNodeView["status"], extra: Partial<RunNodeView> = {}): RunNodeView {
   return {
-    accepted: null, claim: null, criterionIds: [], dependsOn: [], landing: null, lastActivityAt: null, nodeKey,
+    accepted: null, claim: null, criterionIds: [], declaredMigrations: null, dependsOn: [], landing: null, lastActivityAt: null, nodeKey, nodeRef: `execution-${nodeKey}`,
     objective: `Objective of ${nodeKey}`, receipt: null,
     review: { escalated: false, findings: [], latestRoute: null, rounds: 0, unreadable: false, unsuccessfulRounds: 0, version: 0 },
     sharedKey: false, status, ...extra,
@@ -48,8 +50,8 @@ const COVERAGE: DocumentCoverageOutcome = {
   contracts: [{
     contractId: "contract-1", gate1: "APPROVED", plane: "V1", requirements: [{
       criteria: [
-        { criterionId: "crit-1", nodeKey: "n-done", statement: "Ingest persists before extraction", status: "VERIFIED" },
-        { criterionId: "crit-2", nodeKey: "n-work", statement: "Evidence survives a throwing extractor", status: "PLANNED" },
+        { criterionId: "crit-1", nodeKey: "n-done", nodeTestStatus: null, statement: "Ingest persists before extraction", status: "VERIFIED" },
+        { criterionId: "crit-2", nodeKey: "n-work", nodeTestStatus: null, statement: "Evidence survives a throwing extractor", status: "PLANNED" },
       ],
       requirementId: "req-1", statement: "The ledger is durable",
     }], revisionDigest: "d".repeat(64), revisionId: "rev-1",
@@ -71,7 +73,7 @@ const SURFACE: SurfaceFrame = {
 
 const ACTIVITY: ActivityOutcome = {
   entries: [
-    { commandKind: "review.submit", decidedAt: "2026-09-04T08:25:00.000Z", disposition: "COMMITTED", principalId: "daemon:node-verifier", targetAggregateId: "n-rework", verdict: "REJECT_IMPLEMENTATION", version: 5 },
+    { commandKind: "review.submit", decidedAt: "2026-09-04T08:25:00.000Z", disposition: "COMMITTED", principalId: "daemon:node-verifier", targetAggregateId: "execution-n-rework", verdict: "REJECT_IMPLEMENTATION", version: 5 },
     { commandKind: "approval.decide_intent", decidedAt: "2026-09-04T08:18:00.000Z", disposition: "COMMITTED", principalId: "operator-local", targetAggregateId: RUN, verdict: null, version: 2 },
     { commandKind: "planning.submit_decomposition", decidedAt: "2026-09-04T08:08:00.000Z", disposition: "COMMITTED", principalId: "sess-wrap-0", targetAggregateId: GOAL, verdict: null, version: 1 },
     { commandKind: "OPEN_SESSION", decidedAt: "2026-09-04T08:00:00.000Z", disposition: "COMMITTED", principalId: "operator-local", targetAggregateId: "moe.session-authority.v1/session/s-1", verdict: null, version: 1 },
@@ -79,15 +81,42 @@ const ACTIVITY: ActivityOutcome = {
   refusalsRecorded: false, scope: { goalId: GOAL, targets: 8 }, status: "ACTIVITY", totalDecisions: 4,
 };
 
+const PAUSE: ProviderPause = {
+  lastLine: "Claude usage limit reached. Your limit will reset at 11:30 (UTC).",
+  provider: "claude", resetAt: "2026-09-03T11:30:00.000Z", since: "2026-09-03T10:00:00.000Z",
+  workItemId: "node.deliver@n-work",
+};
+// Spelled out, not built by calling the production formatter.
+const WAITING = `Waiting for the provider limit to reset at ${new Date("2026-09-03T11:30:00.000Z").toLocaleString()}`;
+
 describe("BoardScreen", () => {
+  it.each(["PUSHED", "PENDING", "REFUSED"] as const)("attributes a %s receipt only to its exact landed commit", (outcome) => {
+    const nodes = ["a", "b"].map((key) => node(key, "ACCEPTED", {
+      landing: { branch: "main", code: null, files: [`${key}.ts`], outcome: "COMMITTED", sha: key.repeat(40) },
+    }));
+    const runs: RunsOutcome = { ...RUNS, goals: [{ ...RUNS.goals[0]!, nodes,
+      publish: { branch: "main", code: null, decisionId: "publish-1", outcome, remoteUrl: "https://example.com/repo.git", requestedAt: "2026-09-04T08:00:00.000Z", sha: "a".repeat(40), url: null },
+    }] };
+    render(<BoardScreen activity={null} brief={null} coverage={null} goalId={GOAL} nowMs={NOW} runId={RUN} runs={runs} surface={null} title="t" />);
+    expect(screen.getByTestId("cr.kanban.count.PUBLISHED").textContent).toBe(outcome === "PUSHED" ? "1" : "0");
+    expect(screen.getByTestId("cr.kanban.count.LANDED").textContent).toBe(outcome === "PUSHED" ? "1" : "2");
+    expect(screen.getByTestId("cr.kanban.line.b").textContent).toBe("landed on the workspace branch");
+  });
+
   it("folds the goal's nodes into six columns with counts, one line per card, and a finding only where it is the next question", () => {
     render(<BoardScreen activity={ACTIVITY} brief="Make evidence survive." coverage={COVERAGE} goalId={GOAL} nowMs={NOW} runId={RUN} runs={RUNS} surface={SURFACE} title="Evidence ledger" />);
-    for (const column of BOARD_COLUMNS) expect(screen.getByTestId(`cr.kanban.count.${column}`).textContent).toBe("1");
+    expect(screen.getByTestId("cr.kanban.count.PLANNED").textContent).toBe("2");
+    expect(screen.getByTestId("cr.kanban.count.WORKING").textContent).toBe("1");
+    expect(screen.getByTestId("cr.kanban.count.REVIEW").textContent).toBe("2");
+    expect(screen.getByTestId("cr.kanban.count.LANDED").textContent).toBe("1");
+    expect(screen.getByTestId("cr.kanban.count.VERIFIED").textContent).toBe("0");
+    expect(screen.getByTestId("cr.kanban.count.PUBLISHED").textContent).toBe("0");
+    expect(BOARD_COLUMNS).toHaveLength(6);
     expect(screen.getByTestId("cr.kanban.line.n-queue").textContent).toBe("waiting on other work");
     expect(screen.getByTestId("cr.kanban.line.n-work").textContent).toBe("an agent seat · lease ends in 12 min");
     expect(screen.getByTestId("cr.kanban.line.n-review").textContent).toBe("delivered 2 min ago · waiting on the verifier");
     expect(screen.getByTestId("cr.kanban.line.n-rework").textContent).toBe("sent back ×2 · rejected: implementation");
-    expect(screen.getByTestId("cr.kanban.line.n-done").textContent).toBe("verified · landed");
+    expect(screen.getByTestId("cr.kanban.line.n-done").textContent).toBe("landed on the workspace branch");
     expect(screen.getByTestId("cr.kanban.line.n-stuck").textContent).toBe("every review attempt used; needs your decision");
     expect(screen.getByTestId("cr.kanban.finding.n-rework").textContent).toBe(FINDING.detail);
     expect(screen.getByTestId("cr.kanban.finding.n-stuck").textContent).toBe(FINDING.detail);
@@ -104,10 +133,22 @@ describe("BoardScreen", () => {
     expect(screen.getByTestId("cr.kanban.brief").textContent).toBe("Make evidence survive.");
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("1");
     expect(screen.getByTestId("cr.kanban.progress").textContent).toContain("1 of 2 acceptance criteria verified");
-    expect(screen.getByTestId("cr.kanban.nodes").textContent).toBe("6 nodes · 1 done · 2 working · 2 stuck");
+    expect(screen.getByTestId("cr.kanban.nodes").textContent).toBe("6 nodes · 1 landed · 1 working · 2 stuck");
     expect(screen.getByTestId("cr.kanban.stage").textContent).toBe("Agents working");
     expect(screen.getByTestId("cr.kanban.next").getAttribute("href")).toBe("#cr-goal-board");
     expect(screen.queryByTestId("cr.kanban.publish")).toBeNull();
+  });
+
+  it("makes the header's one next step the provider limit while the wrapper is paused", () => {
+    render(<BoardScreen activity={ACTIVITY} brief={null} coverage={COVERAGE} goalId={GOAL} nowMs={NOW} paused={PAUSE} runId={RUN} runs={RUNS} surface={SURFACE} title="t" />);
+    expect(screen.getByTestId("cr.kanban.next").textContent).toBe(WAITING);
+    // The rest of the header is untouched: the pause is the next step, not the stage.
+    expect(screen.getByTestId("cr.kanban.stage").textContent).toBe("Agents working");
+    expect(screen.getByTestId("cr.kanban.progress").textContent).toContain("1 of 2 acceptance criteria verified");
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("1");
+    cleanup();
+    render(<BoardScreen activity={ACTIVITY} brief={null} coverage={COVERAGE} goalId={GOAL} nowMs={NOW} runId={RUN} runs={RUNS} surface={SURFACE} title="t" />);
+    expect(screen.getByTestId("cr.kanban.next").textContent).toBe("Watch the board");
   });
 
   it("lists the decisions latest first in a person's words, resolving targets to names and skipping seat records", () => {
@@ -169,11 +210,110 @@ describe("LiveBoard", () => {
     const readCatalog = vi.fn(async () => catalog);
     render(<LiveBoard goalId={GOAL} headers={{}} pollMs={60_000} readActivity={readActivity} readCatalog={readCatalog} readCoverage={readCoverage} readRuns={readRuns} runId={RUN} surface={SURFACE} title="t" />);
     expect((await screen.findByTestId("cr.kanban.brief")).textContent).toBe("Keep every anchor.");
-    expect((await screen.findByTestId("cr.kanban.count.DONE")).textContent).toBe("1");
+    expect((await screen.findByTestId("cr.kanban.count.LANDED")).textContent).toBe("1");
     expect(await screen.findByTestId("cr.kanban.feed.list")).toBeTruthy();
     expect(readRuns).toHaveBeenCalledWith(GOAL);
     expect(readCoverage).toHaveBeenCalledWith(GOAL);
     expect(readActivity).toHaveBeenCalledWith(GOAL);
     expect(readCatalog).toHaveBeenCalledTimes(1);
+  });
+
+  it("takes the pause from the shell's context and hands it to the board it renders", async () => {
+    const readers = {
+      readActivity: async (): Promise<ActivityOutcome> => ACTIVITY,
+      readCatalog: async (): Promise<GoalCatalogFrame> => ({ connection: "CONNECTED", detail: "", goals: [], outcome: "GOALS" }),
+      readCoverage: async (): Promise<DocumentCoverageOutcome> => COVERAGE,
+      readRuns: async (): Promise<RunsOutcome> => RUNS,
+    };
+    render(
+      <ProviderPauseProvider value={PAUSE}>
+        <LiveBoard goalId={GOAL} headers={{}} pollMs={60_000} {...readers} runId={RUN} surface={SURFACE} title="t" />
+      </ProviderPauseProvider>,
+    );
+    // findByTEXT, not findByTestId: the element exists from the first paint holding the
+    // UNKNOWN stage's "Wait", so a testid lookup would settle before the reads land.
+    await screen.findByText(WAITING);
+    expect(screen.getByTestId("cr.kanban.next").textContent).toBe(WAITING);
+    cleanup();
+    // No provider above it: the board says what it says today.
+    render(<LiveBoard goalId={GOAL} headers={{}} pollMs={60_000} {...readers} runId={RUN} surface={SURFACE} title="t" />);
+    await screen.findByText("Watch the board");
+    expect(screen.getByTestId("cr.kanban.next").textContent).toBe("Watch the board");
+  });
+});
+
+/**
+ * WHAT A NODE ADDS TO THE SCHEMA (DoD 6, second surface). The identifiers come from the node's
+ * OWN declaration - `RunNodeView.declaredMigrations`, served by `/runs/read` - and from nowhere
+ * else. Not from a diff, not from `landing.files`, not from a filename, not from a receipt's
+ * applied list: a receipt is a PROJECT_ENVIRONMENT observation and hanging it on a node is a
+ * false attribution the producer rows deliberately refused to build.
+ */
+describe("a node card names the migrations the node declares", () => {
+  const ONE = "20260907120000-add-receipts.sql";
+  const TWO = "20260907120500-add-index.sql";
+
+  // Spelled out rather than spread from RUNS: a spread of the RunsOutcome union inside a nested
+  // scope loses the discriminant narrowing and would only typecheck by widening the fixture.
+  function boardWith(nodes: readonly RunNodeView[]): RunsOutcome {
+    return {
+      goals: [{
+        goalId: GOAL, lifecycle: "EXECUTION_ENABLED", nodes, publish: null,
+        run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: RUN },
+        title: "Evidence ledger",
+      }],
+      status: "RUNS",
+      totals: {
+        ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 0,
+        IN_PROGRESS: 0, READY: nodes.length, REPLANNED: 0, UNATTRIBUTABLE: 0,
+        goals: 1, nodes: nodes.length,
+      },
+    };
+  }
+
+  it("renders the line for a node declaring ONE migration", () => {
+    render(<BoardScreen activity={null} brief={null} coverage={null} goalId={GOAL} nowMs={NOW} runId={RUN}
+      runs={boardWith([node("n-one", "READY", { declaredMigrations: [ONE] })])} surface={null} title="t" />);
+
+    expect(screen.getByTestId("cr.kanban.migrations.n-one").textContent).toContain(ONE);
+  });
+
+  it("renders BOTH identifiers for a node declaring two, never one and a truncation", () => {
+    render(<BoardScreen activity={null} brief={null} coverage={null} goalId={GOAL} nowMs={NOW} runId={RUN}
+      runs={boardWith([node("n-two", "READY", { declaredMigrations: [ONE, TWO] })])} surface={null} title="t" />);
+
+    const said = screen.getByTestId("cr.kanban.migrations.n-two").textContent ?? "";
+    // A card that showed the first and hid the second is a schema change an operator cannot see.
+    expect(said).toContain(ONE);
+    expect(said).toContain(TWO);
+  });
+
+  it("renders NO line at all for a node that declares none and for one that declares nothing", () => {
+    render(<BoardScreen activity={null} brief={null} coverage={null} goalId={GOAL} nowMs={NOW} runId={RUN}
+      runs={boardWith([
+        node("n-empty", "READY", { declaredMigrations: [] }),
+        node("n-unknown", "READY", { declaredMigrations: null }),
+      ])} surface={null} title="t" />);
+
+    // ABSENCE, not an empty label. A rendered "Migrations:" with nothing after it reads as a
+    // measured none; only the row being gone says the card has nothing to state.
+    expect(screen.queryByTestId("cr.kanban.migrations.n-empty")).toBeNull();
+    expect(screen.queryByTestId("cr.kanban.migrations.n-unknown")).toBeNull();
+    // The cards themselves still render, so this arm cannot pass by the board being empty.
+    expect(screen.getByTestId("cr.kanban.detail.n-empty")).toBeTruthy();
+    expect(screen.getByTestId("cr.kanban.detail.n-unknown")).toBeTruthy();
+  });
+
+  it("keeps each node's declaration on its own card", () => {
+    render(<BoardScreen activity={null} brief={null} coverage={null} goalId={GOAL} nowMs={NOW} runId={RUN}
+      runs={boardWith([
+        node("n-a", "READY", { declaredMigrations: [ONE] }),
+        node("n-b", "READY", { declaredMigrations: [TWO] }),
+      ])} surface={null} title="t" />);
+
+    expect(screen.getByTestId("cr.kanban.migrations.n-a").textContent).toContain(ONE);
+    expect(screen.getByTestId("cr.kanban.migrations.n-a").textContent).not.toContain(TWO);
+    expect(screen.getByTestId("cr.kanban.migrations.n-b").textContent).toContain(TWO);
+    expect(screen.getByTestId("cr.kanban.migrations.n-b").textContent).not.toContain(ONE);
   });
 });

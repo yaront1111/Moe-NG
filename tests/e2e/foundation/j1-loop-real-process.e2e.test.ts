@@ -14,6 +14,7 @@
  * refusal body the forged-credential arm must echo verbatim.
  */
 import { existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -52,7 +53,7 @@ afterAll(() => {
  * exit is the honest boundary of the pass.
  */
 async function runArm(arm: AgentArm, watch?: PassWatcher): Promise<ArmRun> {
-  return await runPass(scratches, (scratch) => runWrapper(scratch, arm), watch);
+  return await runPass(scratches, (scratch) => runWrapper(scratch, arm), watch, { compiledExecution: true });
 }
 
 /**
@@ -122,7 +123,14 @@ describe("J1 loop over real daemon, wrapper and agent processes", () => {
 
     // DoD 1 — COMMITTED, asserted from the durable ledger and not from any process output.
     expect(view.rounds).toBeGreaterThan(0);
+    expect(view.nodeRef).toMatch(/^node:v1:[a-f0-9]{64}$/u);
+    expect(view.nodeRef).not.toBe(NODE_REF);
     expect(view.acceptedReceiptId).toBeDefined();
+    expect(view.landingReceipt?.outcome).toBe("COMMITTED");
+    const landedHead = execFileSync("git", ["rev-parse", "HEAD"], { cwd: run.scratch.workspace,
+      encoding: "utf8", windowsHide: true, shell: false }).trim();
+    expect(view.landingReceipt?.commit?.sha).toBe(landedHead);
+    expect(view.landingReceipt?.commit?.files).toEqual(["math.mjs"]);
 
     // The DAEMON-SIDE verifier acceptance, explicitly instead of an agent self-report: the
     // receipt row is the one `recordVerifierReceipt` wrote, keyed on the acceptance the review
@@ -177,6 +185,7 @@ describe("J1 loop over real daemon, wrapper and agent processes", () => {
     expect(view.acceptedReceiptId).toBeUndefined();
     expect(view.receiptRow).toBeUndefined();
     expect(view.receiptEventCount).toBe(0);
+    expect(view.landingReceipt).toBeNull();
   }, ARM_TIMEOUT_MS);
 
   it("stays un-COMMITTED when the agent exits 0 without submitting", async () => {
@@ -195,5 +204,6 @@ describe("J1 loop over real daemon, wrapper and agent processes", () => {
     expect(view.rounds).toBe(0);
     expect(view.acceptedReceiptId).toBeUndefined();
     expect(view.receiptEventCount).toBe(0);
+    expect(view.landingReceipt).toBeNull();
   }, ARM_TIMEOUT_MS);
 });

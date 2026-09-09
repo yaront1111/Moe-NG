@@ -19,18 +19,23 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
-import type { RuntimeCommandKind } from "@moe/contracts";
+import type { RuntimeCommandEnvelope, RuntimeCommandKind } from "@moe/contracts";
 import { SqliteEventStore } from "@moe/store";
 import { afterAll, describe, expect, it } from "vitest";
 
 import { createStoreDependencies } from "./daemon-store-dependencies.js";
 import { handleCommandRequest } from "./http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
+import type { AuthenticatedPrincipal, DurableDecision } from "./http/http-contract.js";
+import { AGENT_PROVIDER_COMMAND_KIND } from "./orchestrator/agent-provider-command.js";
+import { agentProviderAggregateId } from "./orchestrator/agent-provider-store.js";
 import { CAPABILITIES, OPERATOR_CAPABILITIES } from "./daemon-command-vocabulary.js";
 import { MCP_EXCLUDED_COMMAND_KINDS, wiredMcpToolKinds } from "./mcp-tool-allowlist.js";
 import { createOperatorSessionHandshakePort } from "./identity/session-handshake.js";
 import { isDurableHumanPrincipal } from "./identity/human-approver.js";
 import { installTestRecoveryBinding } from "./identity/session-test-fixtures.js";
+import { createAgentWrapper } from "./orchestrator/agent-wrapper.js";
+import type { ChainStep } from "./http/affordance-contract.js";
 
 const CREDENTIAL = "human-approver-operator-credential";
 const PROJECT = "proj-human-approver";
@@ -82,6 +87,27 @@ const provider = createStoreDependencies({
   storePath,
 });
 const deps = provider.provide();
+
+it("release.decide never staffs the READY unclaimed human work item", async () => {
+  const steps: readonly ChainStep[] = [{ aggregateId: "release-human-1", claim: null,
+    claimAggregateVersion: 0, kind: "release.decide", missing: [], status: "READY", version: 1 }];
+  const wrapper = createAgentWrapper({
+    affordances: { boundProjectId: PROJECT, readSurface: () => ({
+      nextAllowedCommands: [], outcome: "SURFACE", planningAuthorityByRun: {},
+      planningGoalRefs: {}, planningGoalRef: null, steps,
+    }) },
+    claimTtlMs: 60_000, clock: () => Date.parse(DECIDED_AT), deps, maxAgents: 1,
+    mintSecret: () => { throw new Error("release human gate must not mint a session"); },
+    operatorCredential: CREDENTIAL,
+    spawnAgent: () => { throw new Error("release human gate must not spawn"); },
+  });
+  expect(steps.filter((step) => step.kind === "release.decide"
+    && step.status === "READY" && step.claim === null)).toHaveLength(1);
+  const report = await wrapper.runOnce();
+  expect(report.spawned.map((entry) => entry.workItemId))
+    .not.toContain("release.decide@release-human-1");
+  expect(report).toEqual({ active: 0, spawned: [], surfaceOutcome: "SURFACE" });
+});
 
 afterAll(() => {
   provider.close();
@@ -315,17 +341,199 @@ describe("SOFT_POLICY_WAIVER over the real HTTP ingress", () => {
   });
 
   it("serves approval.decide from the registry while MCP neither advertises nor serves it", () => {
+    // The operator-only class less `session.open` (the operator's own scoped-session mint over
+    // the bearer-authorized MCP HTTP path); production derives this from the vocabulary.
     const expectedExclusions: readonly string[] = Object.freeze([
-      "approval.decide", "approval.decide_intent", "cutover.activate", "graph.approve",
-      "product_contract.answer_clarification", "repository.publish",
+      "project.set_agent_provider",
+      "criterion_check.approve", "criterion_check.verify", "repository.recover",
+      "approval.decide", "approval.decide_intent", "cutover.activate", "goal.close",
+      "graph.approve", "graph.supersede", "integration.accept_output", "preview.decide",
+      "product_contract.answer_clarification", "repository.publish", "resource.confirm_released",
+      // Landed by task-a2409cba: writing a production secret is never reachable over MCP.
+      "environment.set_variable", "environment.unset_variable",
+      // Creating a repository at an operator-supplied path. The MCP port authenticates with the
+      // operator bootstrap credential, so an advertised operator kind would let an agent arrive
+      // AS THE OPERATOR — the exclusion is derived from OPERATOR_PRINCIPAL_KINDS, not typed here.
+      "repository.bootstrap",
+      "release.decide", "deployment.deploy", "deployment.migrate_down", "deployment.rollback", "deployment.set_target",
+      // Committing in the operator's own product repository; derived from
+      // OPERATOR_PRINCIPAL_KINDS like the rest, never typed into the allowlist.
+      "product_contract.sync_env_example",
+      // Asking for a product preview runs the product on the daemon's host, so it is the
+      // operator's act and never an agent's. Derived from OPERATOR_PRINCIPAL_KINDS like the rest.
+      "preview.start",
+      // task-eb37494e. Re-timing the production health probe is the operator's act. Derived from
+      // OPERATOR_PRINCIPAL_KINDS like every entry above, never typed into the allowlist -- which
+      // is exactly why this transcription grew by ADDING the kind rather than by relaxing the
+      // length pin: the pin is what proves the derivation moved when the vocabulary did.
+      "monitoring.set_probe_interval",
+      // task-509f0437, and it grew this transcription the same way and for the same reason:
+      // retiring an environment ends its monitoring, so it joined OPERATOR_PRINCIPAL_KINDS and
+      // the exclusion followed by derivation with no edit to the production array.
+      "monitoring.retire_environment",
     ]);
-    expect(expectedExclusions).toHaveLength(6);
-    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(6);
+    expect(expectedExclusions).toHaveLength(27);
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(27);
     expect([...MCP_EXCLUDED_COMMAND_KINDS].sort()).toEqual([...expectedExclusions].sort());
     // Direction 1: the production registry SERVES the kind this branch composes into.
     expect(deps.registry.has("approval.decide")).toBe(true);
     // Direction 2: the advertised MCP roster does not carry it, so the witness minted on
     // principal identity alone stays trustworthy.
     expect(wiredMcpToolKinds()).not.toContain("approval.decide");
+  });
+});
+
+/**
+ * `project.set_agent_provider` — the third widening, and the narrowest of them.
+ *
+ * WHY THESE ARMS RUN AT THE REGISTRY HANDLER SEAM AND NOT OVER HTTP. This kind's
+ * `requiredCapability` is `CAPABILITIES.ADMIN` (`SETTINGS_FAMILY`), and the HTTP ingress
+ * checks `requiredCapability` BEFORE it reaches any handler (`http-command-ingress.ts:158`).
+ * So a no-ADMIN principal sent over HTTP is refused `CAPABILITY_DENIED @ AUTHORIZE` and
+ * NEVER REACHES THE FENCE: an ingress-level negative arm would stay green even with the
+ * fence's ADMIN check deleted outright, which is exactly the "one added layer away from
+ * vacuous" failure global rail 1 names. The seam arms below drive `entry.handler` directly,
+ * where the fence is the only thing that can answer, and the HTTP arm at the end pins the
+ * OTHER layer by name so neither refusal can silently stand in for the other.
+ */
+const PROVIDER_AGGREGATE = agentProviderAggregateId(PROJECT);
+/** The project-default scope: empty `goalId` is the command contract's own sentinel. */
+const PROVIDER_PAYLOAD = Object.freeze({ base: "", goalId: "", provider: "codex" });
+const NEVER_PAIRED_PRINCIPAL = "principal-agent-never-paired";
+
+function providerEnvelope(commandId: string): RuntimeCommandEnvelope {
+  return {
+    commandId, commandKind: AGENT_PROVIDER_COMMAND_KIND,
+    correlationId: "corr-human-approver", expectedVersion: 0, payload: { ...PROVIDER_PAYLOAD },
+    requestDigest: "a".repeat(64), schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
+    // Never read at this seam: authentication already happened upstream, and supplying a
+    // real credential here would hide that the fence reads `principal`, not the envelope.
+    sessionCredential: "not-read-at-the-handler-seam",
+    targetAggregateId: "agg-human-approver",
+  };
+}
+
+function principalOf(
+  principalId: string, capabilities: readonly string[],
+): AuthenticatedPrincipal {
+  return { capabilities, principalId, projectId: PROJECT };
+}
+
+/** Dispatches straight into the registered handler — past authentication and past the
+ *  ingress capability gate, so the operator fence is the only authority left to answer. */
+function dispatchAtSeam(commandId: string, principal: AuthenticatedPrincipal): DurableDecision {
+  const entry = deps.registry.get(AGENT_PROVIDER_COMMAND_KIND);
+  if (entry === undefined) throw new Error("the registry must serve project.set_agent_provider");
+  return entry.handler({ envelope: providerEnvelope(commandId), principal });
+}
+
+/** The seam throws `DomainRefusal` rather than returning a port refusal, so the code and
+ *  layer are read off the thrown value. A RETURNED decision is a drill failure, not a pass. */
+function seamRefusalOf(
+  commandId: string, principal: AuthenticatedPrincipal,
+): { code: string; httpStatus: number; layer: string } {
+  let decision: DurableDecision | null = null;
+  try {
+    decision = dispatchAtSeam(commandId, principal);
+  } catch (thrown) {
+    const refusal = thrown as { code?: unknown; httpStatus?: unknown; layer?: unknown };
+    if (typeof refusal.code !== "string" || typeof refusal.layer !== "string") throw thrown;
+    return { code: refusal.code, httpStatus: Number(refusal.httpStatus), layer: refusal.layer };
+  }
+  throw new Error("expected a refusal at the operator fence; the handler ACCEPTED: "
+    + JSON.stringify(decision));
+}
+
+function isDurableHuman(principalId: string): boolean {
+  const reader = SqliteEventStore.openForProject(storePath, PROJECT);
+  try {
+    return isDurableHumanPrincipal(reader, principalId);
+  } finally {
+    reader.close();
+  }
+}
+
+describe("project.set_agent_provider for a paired browser HUMAN holding ADMIN", () => {
+  it("admits the paired HUMAN holding ADMIN at the fence and writes the provider durably", () => {
+    expect(isDurableHuman(HUMAN_ADMIN.principalId)).toBe(true);
+    const before = ledger(PROVIDER_AGGREGATE).length;
+    expect(dispatchAtSeam("cmd-provider-human-admin",
+      principalOf(HUMAN_ADMIN.principalId, OPERATOR_CAPABILITIES))).toMatchObject({
+      commandId: "cmd-provider-human-admin", disposition: "DECIDED",
+      resultCode: "AGENT_PROVIDER_SET",
+    });
+    // Reaching `runAgentProviderCommand` is the claim, so the durable event is the evidence:
+    // a fence that admitted but wrote nothing would satisfy the result code alone.
+    const written = ledger(PROVIDER_AGGREGATE);
+    expect(written).toHaveLength(before + 1);
+    expect(JSON.parse(written[written.length - 1] ?? "null")).toMatchObject({
+      goalId: "", provider: "codex",
+    });
+  });
+
+  it("refuses a durable HUMAN WITHOUT ADMIN: OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION", () => {
+    // THE ARM DoD 2's DRILL REDDENS. Every other condition is satisfied — durable HUMAN,
+    // canonical payload, the kind's own handler — so ADMIN is the ONLY thing missing, and
+    // deleting the fence's ADMIN check turns this refusal into an acceptance.
+    expect(isDurableHuman(HUMAN_NO_ADMIN.principalId)).toBe(true);
+    const before = ledger(PROVIDER_AGGREGATE).length;
+    expect(seamRefusalOf("cmd-provider-human-noadmin",
+      principalOf(HUMAN_NO_ADMIN.principalId, [CAPABILITIES.PLANNING]))).toEqual({
+      code: "OPERATOR_PRINCIPAL_REQUIRED", httpStatus: 403, layer: "DAEMON_AUTHORIZATION",
+    });
+    expect(ledger(PROVIDER_AGGREGATE)).toHaveLength(before);
+  });
+
+  it("refuses a NON-human principal holding ADMIN the same way (pairing, not capabilities)", () => {
+    // The widening turns on the pairing ledger. A principal that was never paired cannot buy
+    // its way past the fence with capabilities, however complete they are.
+    expect(isDurableHuman(NEVER_PAIRED_PRINCIPAL)).toBe(false);
+    const before = ledger(PROVIDER_AGGREGATE).length;
+    expect(seamRefusalOf("cmd-provider-agent-admin",
+      principalOf(NEVER_PAIRED_PRINCIPAL, OPERATOR_CAPABILITIES))).toEqual({
+      code: "OPERATOR_PRINCIPAL_REQUIRED", httpStatus: 403, layer: "DAEMON_AUTHORIZATION",
+    });
+    expect(ledger(PROVIDER_AGGREGATE)).toHaveLength(before);
+  });
+
+  it("refuses a no-ADMIN principal at the INGRESS instead: CAPABILITY_DENIED @ AUTHORIZE", () => {
+    // THE OTHER LAYER, PINNED BY NAME. Same principal as the seam negative above, sent over
+    // the real HTTP path: the ingress answers first and the fence is never consulted. This is
+    // why the arm above cannot live here — this one is green with or without the widening.
+    // The ingress reports its layer as `stage` on the refusal envelope, not `refusal.layer`.
+    expect(send("cmd-provider-http-noadmin", AGENT_PROVIDER_COMMAND_KIND,
+      { ...PROVIDER_PAYLOAD }, HUMAN_NO_ADMIN.credential)).toMatchObject({
+      error: { code: "CAPABILITY_DENIED" }, httpStatus: 403, ok: false,
+      outcome: "REFUSED", stage: "AUTHORIZE",
+    });
+  });
+
+  it("carries the paired HUMAN holding ADMIN through the REAL ingress end to end", () => {
+    // The browser's actual path, not a seam shortcut: authentication, the ingress capability
+    // gate, the payload allow-list and the fence, all in production order. This is the arm
+    // the control-room journey mirrors.
+    expect(send("cmd-provider-http-human-admin", AGENT_PROVIDER_COMMAND_KIND,
+      { ...PROVIDER_PAYLOAD, provider: "claude" }, HUMAN_ADMIN.credential)).toMatchObject({
+      decision: { disposition: "DECIDED", resultCode: "AGENT_PROVIDER_SET" },
+      httpStatus: 200, ok: true, outcome: "ACCEPTED",
+    });
+  });
+
+  it("keeps the kind MCP-unreachable in BOTH directions (the widening's standing condition)", () => {
+    // Global rail 9: enumerate the SERVED set from the dispatch seam, not only the roster
+    // constant, and assert set-equality rather than a subset. Admitting a paired HUMAN on
+    // principal identity alone is only sound while no agent can reach the kind over MCP —
+    // `MCP_EXCLUDED_COMMAND_KINDS` is DERIVED from `OPERATOR_PRINCIPAL_KINDS`, so this arm is
+    // what would catch a roster edit that opened both fences at once.
+    const served = new Set<string>(wiredMcpToolKinds());
+    const excluded = new Set<string>(MCP_EXCLUDED_COMMAND_KINDS);
+    expect(excluded.has(AGENT_PROVIDER_COMMAND_KIND)).toBe(true);
+    expect(served.has(AGENT_PROVIDER_COMMAND_KIND)).toBe(false);
+    // Direction 1: nothing served is excluded. Direction 2: nothing excluded is served.
+    // Iterating one roster alone would shrink with it and stay green.
+    expect([...served].filter((kind) => excluded.has(kind))).toEqual([]);
+    expect([...excluded].filter((kind) => served.has(kind))).toEqual([]);
+    // The registry DOES serve it — the exclusion is MCP-only, not a de-registration.
+    expect(deps.registry.has(AGENT_PROVIDER_COMMAND_KIND)).toBe(true);
   });
 });

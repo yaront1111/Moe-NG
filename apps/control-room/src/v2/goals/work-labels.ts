@@ -55,7 +55,12 @@ export const WORK_KIND_LABELS: Readonly<Record<string, WorkKindLabel>> = Object.
 /**
  * The daemon's own prerequisite chain (COMMAND_PREREQUISITES,
  * apps/daemon/src/bootstrap/bootstrap-sequence.ts:18-34) flattened topologically,
- * with the session and node kinds after it. The surface iterates
+ * with the session and node kinds after it. ONE EDGE IS NOT IN THAT TABLE:
+ * policy.install precedes project.activate because the activation witness is minted
+ * from MEASURED receipts and the `policy` receipt is the digest of the installed
+ * slice set, so an activate with no policy installed refuses
+ * ACTIVATION_POLICY_UNMEASURED (activation-receipts.ts). The table carries the
+ * admission authority only; this order carries both (task-d342a2b1). The surface iterates
  * BOOTSTRAP_COMMAND_KINDS in its own array order, which is alphabetical - so the
  * Committed column opens on "approval.decide" and ends on "provider.probe", the
  * reverse of the order the work actually happened in. Presentation only: no field
@@ -65,8 +70,8 @@ export const CHAIN_ORDER: readonly string[] = Object.freeze([
   "project.register",
   "project.bind_repository",
   "provider.probe",
-  "project.activate",
   "policy.install",
+  "project.activate",
   "policy.validate",
   "goal.create",
   "plan.propose",
@@ -86,6 +91,9 @@ export const MISSING_TOKENS: Readonly<Record<string, string>> = Object.freeze({
   // affordance-read.ts - three review rounds failed; the kernel refuses more until a human
   // records escalation.decide, which the Needs-you screen offers as "Allow more attempts".
   escalation: "a human's decision to allow more review attempts (Needs you)",
+  // affordance-read.ts - a human answered the exhausted review with REPLAN, so the
+  // node takes no further round and its work continues under the successor plan.
+  replan: "a human's REPLAN decision, which retires this node into the successor plan",
   // affordance-read.ts - a delivered node awaiting the daemon's verifier.
   verification: "the daemon's verification",
   // affordance-read.ts - the verifier's standing slices this project never installed; the
@@ -94,6 +102,14 @@ export const MISSING_TOKENS: Readonly<Record<string, string>> = Object.freeze({
     "the reviewer calibration slice (moe-reviewer-calibration/1) an operator installs with policy.install",
   "verifier-policy":
     "the host verifier policy slice (moe-verifier-policy/1) an operator installs with policy.install",
+  // affordance-read.ts:418 and its surfaceMissing arm - nothing is bound for the environment,
+  // so a deploy has no host to reach. Phrased as the ABSENCE rather than as the command kind:
+  // the daemon reports the token "deployment.set_target", and an operator told "STILL NEEDS
+  // deployment.set_target" has been handed an internal name to decode. Kept deliberately in
+  // step with the Deployments card's own DEPLOY_TARGET_MISSING words ("No target is bound for
+  // this environment, so there is nowhere to deploy") - the same absence is described in two
+  // places and they must not read as two different problems.
+  "deployment.set_target": "a deploy target bound for an environment, so a deploy has somewhere to go",
 });
 
 export interface KindReading {
@@ -115,8 +131,22 @@ export function labelForKind(kind: string): KindReading {
   });
 }
 
+/**
+ * The one PREFIXED token the daemon emits. Every other token is an exact key, but
+ * `depends:<nodeKey>` carries the blocking node's own key, so it cannot live in
+ * MISSING_TOKENS and is read here instead. The node key is echoed exactly as the
+ * daemon spelled it - the board never renames a node.
+ */
+export const DEPENDS_TOKEN_PREFIX = "depends:";
+
 /** One missing[] token in words; anything unmirrored stays exactly as it arrived. */
 export function labelForMissing(token: string): string {
+  if (token.startsWith(DEPENDS_TOKEN_PREFIX)) {
+    const nodeKey = token.slice(DEPENDS_TOKEN_PREFIX.length);
+    // A prefix with nothing after it names no node, so it is reported raw rather
+    // than dressed up as a sentence about a node that was never identified.
+    if (nodeKey.length > 0) return `the node ${nodeKey} to be accepted first`;
+  }
   const phrase = MISSING_TOKENS[token];
   if (phrase !== undefined) return phrase;
   const entry = WORK_KIND_LABELS[token];

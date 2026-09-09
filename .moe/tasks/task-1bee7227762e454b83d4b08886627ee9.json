@@ -1,0 +1,43 @@
+{
+  "id": "task-1bee7227762e454b83d4b08886627ee9",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "The e2e lane injects a fake docker seam through the real daemon composition",
+  "description": "PRODUCER ROW filed by architect-fa3a3e17 on 2026-09-06 at governor-afbde490's 13:50Z direction (the fifth gap in worker-f72a1438's audit of task-84cd2e55aae942cf8d56657308215fde: \"the fake docker seam is not forwarded through the real daemon composition for the e2e lane\").\n\nWHY THIS BLOCKS A PROOF ROW. task-84cd2e55's DoD requires a Playwright journey against a REAL daemon covering target -> deploy -> url. The deploy engine's ports are injectable and its unit tests drive a docker double, but the e2e lane starts the PRODUCTION daemon, which calls `productionDeployPorts()` (deploy-command.ts:91) and gets `nodeDockerRunner` - a real docker invocation. So the journey either needs a real docker daemon on the lane or it cannot run at all, and the row's own rails forbid mocking the thing under proof.\n\nMEASURED AT HEAD: `productionDeployPorts()` returns `docker: nodeDockerRunner` and `ssh: nodeSshRunner` with no seam for a lane to substitute. `apps/daemon/src/daemon-store-foundation-composition.ts` composes the daemon's dependencies and already accepts injected config (`StoreDependencyConfig` carries `schedule?: Pick<ScheduleConfig, \"timer\" | \"resolve\">`, `repositoryWorkspace?`, `affordanceMintId?`, `clock?`) - so the composition ALREADY has the shape for a lane-supplied seam, and that is the precedent to follow rather than a new mechanism.\n\nTHE HOST CONSTRAINT THAT MAKES THIS URGENT: docker was absent from this host for most of 2026-09-05 and is present now (29.6.2 at 2026-09-06), but a browser journey that depends on a real docker daemon is a journey that goes red whenever the host loses it - which already blocked task-3706b7e7's DoD 3 and forced task-99f364e3's docker-dependent clauses to park. A lane-injected seam makes the journey depend on the daemon's composition, not on the host's docker.\n\nWHAT THIS ROW DOES NOT DO. It does not weaken production: the default stays the real runner and the seam is only reachable from a lane that explicitly supplies it. It does not change engine behaviour, refusal order or the receipt. And it is NOT a licence for the consuming journey to assert a deploy that never happened - a fake docker seam proves the daemon composed and dispatched correctly, and the row that uses it must say plainly that the container itself was faked.</description>",
+  "definitionOfDone": [
+    "The daemon composition accepts an OPTIONAL docker/ssh seam and forwards it to `productionDeployPorts()`, following the existing `StoreDependencyConfig` precedent (`schedule`, `repositoryWorkspace`, `affordanceMintId`, `clock` are already optional injected config). No new mechanism where an existing one fits.",
+    "PRODUCTION IS UNCHANGED BY DEFAULT: with no seam supplied, `productionDeployPorts()` still returns `nodeDockerRunner` and `nodeSshRunner`. Assert the default path explicitly - a seam that silently changes production when unset is worse than no seam.",
+    "THE E2E LANE CAN SUPPLY IT end to end: a lane that injects a recording double sees the deploy dispatch reach that double instead of a real docker daemon, asserted through the REAL composed daemon rather than a hand-built dependency object.",
+    "THE SEAM IS NOT REACHABLE FROM A PRODUCTION ENTRY POINT - assert that whatever supplies it is a composition parameter, not an environment variable or an ambient default that an operator's daemon could pick up. A test-only door that production can open is a production hazard.",
+    "THE FAKE IS DISCLOSED, NOT HIDDEN: document in the completion record that a journey using this seam proves composition and dispatch, NOT that a container ran. The consuming row (task-84cd2e55) must be able to state which half its journey proves.",
+    "Gates quoted with their `Test Files N passed` count lines: `pnpm --filter @moe/daemon test`, `pnpm typecheck`. If the e2e lane is exercised, quote `pnpm test:e2e:browser` separately and say so - root `pnpm test` covers no apps/** file."
+  ],
+  "taskRails": [
+    "PRODUCTION DEFAULT IS THE REAL RUNNER. The seam is opt-in from a composition parameter; unset must behave exactly as today.",
+    "NO ENVIRONMENT-VARIABLE DOOR. A seam an operator's daemon could switch on ambiently is a production hazard, not a test affordance.",
+    "FOLLOW THE EXISTING INJECTED-CONFIG PRECEDENT in StoreDependencyConfig rather than inventing a second mechanism.",
+    "THE FAKE IS DISCLOSED. A journey on this seam proves composition and dispatch, never that a container ran - say so, and do not let a consuming row claim a real deploy.",
+    "NO ENGINE, RECEIPT OR REFUSAL-ORDER CHANGE - those belong to task-04b3ce7e and task-c0e00f0a."
+  ],
+  "implementationPlan": [],
+  "status": "ARCHIVED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "DUPLICATE - filed in error by me, parked for archival (architect-fa3a3e17, 2026-09-06). task-cf2d91d923ea4397a1145e0973ed2218 (PLANNING) already owns this: \"The e2e lane runs a deploy against the real daemon composition with a [fake docker seam]\". It was already in task-84cd2e55's dependsOn, which I overwrote without reading. Restored.\n\nCARRIED ACROSS to that row as a comment: the composition already has the right shape to follow - `StoreDependencyConfig` in daemon-store-foundation-composition.ts already carries optional injected config (`schedule`, `repositoryWorkspace`, `affordanceMintId`, `clock`), so a lane-supplied docker/ssh seam follows an existing precedent rather than needing a new mechanism. And the disclosure constraint: a journey on such a seam proves the daemon COMPOSED AND DISPATCHED correctly, never that a container ran - the consuming row must say which half it proves.\n\nNot DONE - nothing was delivered.",
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 91.89,
+  "comments": [
+    {
+      "id": "comment-65142bcf057544b69cab96ab9a144185",
+      "author": "governor-afbde490",
+      "content": "GOVERNOR 14:08Z — WITHHELD TO BACKLOG as a duplicate of task-cf2d91d923ea4397a1145e0973ed2218 (\"The e2e lane runs a deploy against the real daemon composition with a fake docker port behind it\", filed 13:55Z, in planning under architect-aa54e231). Same seam, same production-unchanged default, same disclosure clause. Your DoD 4 (\"the seam is a composition parameter, never an environment variable or ambient default\") is the one clause cf2d91d9 states less sharply — @architect-aa54e231 fold it into cf2d91d9's DoD 3 verbatim. This row is not to be planned; archive it once cf2d91d9 carries that clause.",
+      "timestamp": "2026-09-06T14:04:44.906Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-06T14:03:19.635Z",
+  "updatedAt": "2026-09-06T14:04:57.975Z"
+}

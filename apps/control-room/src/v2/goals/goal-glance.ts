@@ -2,7 +2,7 @@ import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import type { LiveGoalCatalogEntry } from "../../live/live-goal-catalog.js";
 import type { RunGoalView } from "../../live/live-runs.js";
-import { foldBoard, nodesLine } from "../board/board-columns.js";
+import { foldBoard, isStuck, nodesLine } from "../board/board-columns.js";
 import type { BoardFold } from "../board/board-columns.js";
 import { MIDDOT } from "../glyphs.js";
 import { deriveGoalStatus } from "./goal-status.js";
@@ -21,7 +21,7 @@ export interface GoalGlance {
   readonly needsYou: boolean;
   /** The decisions waiting on a human, in a person's words, for the card's chip. */
   readonly needsYouLabels: readonly string[];
-  /** "5 nodes, 3 done, 1 working, 1 stuck" (middot-joined); null before any node exists. */
+  /** "5 nodes, 3 landed, 1 working, 1 stuck" (middot-joined); null before any node exists. */
   readonly nodesLine: string | null;
   /** Lower sorts first: needs a human, then stuck, then working, then waiting, then done. */
   readonly rank: number;
@@ -42,7 +42,10 @@ const STAGE_LABEL: Readonly<Partial<Record<GoalStatus["stage"], string>>> = Obje
 
 function stateOf(status: GoalStatus, fold: BoardFold | null, lifecycle: string | null): GoalStateLabel {
   if (status.stage === "CLOSED" || lifecycle === "COMPLETED") return "DONE";
-  if (status.stage === "ESCALATION" || status.stage === "REPLANNED" || (fold !== null && fold.counts.BLOCKED > 0)) return "BLOCKED";
+  // Rework remains active work, but a stopped or refused-landing node blocks its goal.
+  const blocked = fold !== null && Object.values(fold.cards)
+    .some((cards) => cards.some(({ node }) => node.status !== "READY" && isStuck(node)));
+  if (status.stage === "ESCALATION" || status.stage === "REPLANNED" || blocked) return "BLOCKED";
   if (lifecycle === "EXECUTION_ENABLED" || lifecycle === "CLOSING" || status.stage === "WORKING") return "ACTIVE";
   return "DRAFT";
 }
@@ -72,7 +75,8 @@ export function deriveGoalGlance(input: {
   const status = deriveGoalStatus({
     coverage: coverage ?? null, goalId: entry.goalId, runId: entry.planningRunRef, surface,
   });
-  const fold = run === undefined || run.nodes.length === 0 ? null : foldBoard(run.nodes, nowMs);
+  const publishedSha = run?.publish?.outcome === "PUSHED" ? run.publish.sha : null;
+  const fold = run === undefined || run.nodes.length === 0 ? null : foldBoard(run.nodes, nowMs, publishedSha);
   const lifecycle = run?.lifecycle
     ?? (coverage?.status === "COVERAGE" ? coverage.goals.find((row) => row.goalId === entry.goalId)?.lifecycle ?? null : null);
   const stuck = fold?.stuck ?? 0;

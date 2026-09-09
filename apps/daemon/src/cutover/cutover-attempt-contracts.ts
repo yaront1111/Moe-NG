@@ -147,6 +147,7 @@ const WITNESS_KEYS: Readonly<Record<CutoverCommandKind, readonly string[]>> = Ob
 });
 
 function validWitness(kind: CutoverCommandKind, value: unknown): boolean {
+  if (!Object.hasOwn(WITNESS_KEYS, kind)) return false;
   const keys = WITNESS_KEYS[kind];
   if (keys.length === 0) return value === undefined;
   if (!exact(value, keys)) return false;
@@ -157,9 +158,13 @@ function validWitness(kind: CutoverCommandKind, value: unknown): boolean {
 
 function validCommand(value: unknown): value is CutoverCommand {
   if (!isRecord(value) || typeof value["kind"] !== "string") return false;
+  // Own keys only: a stored kind of `constructor` or `hasOwnProperty` resolved to an inherited
+  // function through the bare lookup, and the decoder THREW from `keys.every` instead of
+  // refusing — a tampered store row answered 500 on cutover.activate instead of UNREADABLE.
   const kind = value["kind"] as CutoverCommandKind;
+  if (!Object.hasOwn(COMMAND_KEYS, kind)) return false;
   const keys = COMMAND_KEYS[kind];
-  if (keys === undefined || !exact(value, keys)) return false;
+  if (!exact(value, keys)) return false;
   if (typeof value["commandId"] !== "string" || !REF.test(value["commandId"])) return false;
   const version = value["expectedVersion"];
   if (typeof version !== "number" || !Number.isSafeInteger(version) || version < 0) return false;

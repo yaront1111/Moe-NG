@@ -1,0 +1,222 @@
+/**
+ * THE CAPTURED SCREENSHOT BYTES, over HTTP: GET `/preview/capture/<goalId>/<sha>/<file>.png`
+ * hands a browser one PNG the preview runner wrote. This is the security boundary of its row.
+ *
+ * IT IS NOT A SECOND FILE SERVER. Every path judgement — method, decode, traversal, segment,
+ * type, realpath, containment, size — is `locateControlRoomAsset` in `static-asset-host.ts`,
+ * unchanged and uncopied, so there is exactly ONE statement in this daemon of what makes a
+ * path servable and exactly one set of codes describing how it can fail. A hand-rolled
+ * confinement implements about four of those eleven and calls itself confined; this module
+ * adds a NARROWING and nothing else.
+ *
+ * THE NARROWING, and why root-confinement alone is not enough. `.moe-next/previews` sits
+ * inside `.moe-next`, beside stores, receipts and dotfiles, and the shared content-type map
+ * publishes `.css .html .js .png .svg .woff2`. A server confined to a directory that will hand
+ * back ANY servable file under it is still an exfiltration surface, so this route publishes
+ * `image/png` ALONE (DoD 3). Type is decided by an ALLOWLIST THIS MODULE OWNS, applied to the
+ * extension the shared closed map resolves — never by anything the request asserts about
+ * itself, and never by a Content-Type or Accept header. `.svg` is excluded on purpose even
+ * though it is an image: an SVG is a script carrier, and `preview-capture.ts` writes PNG only
+ * (`page.screenshot({type:"png"})`), so no real capture is one.
+ *
+ * THE TYPE CHECK RUNS BEFORE ANY SYSCALL, and the order is the behaviour. A `.sqlite` under
+ * the root is refused without resolving anything, so a type refusal can never tell a caller
+ * that a path resolved. Containment, by contrast, MUST run after resolution: it compares the
+ * REALPATH against the realpath'd root, which is the only order that catches a symlink inside
+ * the root pointing outside it (DoD 2's own refusal class).
+ *
+ * THE SHAPE IS EXACTLY THREE SEGMENTS, `<goalId>/<sha>/<file>`, derived from
+ * `previewCaptureDirectory` so the server and the writer cannot disagree about the layout. A
+ * shorter or longer path is not a capture and is refused before the filesystem is touched.
+ *
+ * REFUSALS NAME A CODE AND NEVER A PATH. `refuseRequest` puts `{code, layer}` on the wire and
+ * drops any `detail`, so no refusal here echoes the path it refused — an error that did would
+ * be a filesystem probe with a 403 attached.
+ *
+ * READ-ONLY, and GET/HEAD only. Nothing here creates, writes or deletes; no preview is started
+ * or stopped.
+ */
+import { realpathSync, statSync } from "node:fs";
+import { isAbsolute, join } from "node:path";
+
+import { CAPABILITIES } from "../daemon-command-vocabulary.js";
+import { previewCaptureDirectory } from "../preview/preview-receipt-contracts.js";
+import { authenticateHttpRequest } from "./http-command-ingress.js";
+import type { Authenticator, HttpPortRefused, HttpRefused } from "./http-contract.js";
+import { locateControlRoomAsset } from "./static-asset-host.js";
+import {
+  contentTypeFor, decodeRequestPath, judgeAssetMethod, judgeRequestPath, refuseAsset,
+  refuseAssetRoot,
+} from "./static-asset-path-policy.js";
+import type {
+  ControlRoomAssetDispatch, ControlRoomAssetRoot, ControlRoomAssetRootResult,
+} from "./static-asset-path-policy.js";
+
+export const PREVIEW_CAPTURE_PATH = "/preview/capture" as const;
+
+/** The ONLY media type this route publishes. A directory-confined server is not confined. */
+export const PREVIEW_CAPTURE_CONTENT_TYPES: readonly string[] = Object.freeze(["image/png"]);
+
+/** `<goalId>/<sha>/<file>` — the layout `preview-capture.ts` writes, and nothing longer. */
+const CAPTURE_SEGMENT_COUNT = 3;
+
+/**
+ * Sentinels fed to `previewCaptureDirectory` so the layout is stated ONCE. Plain ASCII on
+ * purpose: a NUL byte here would make this whole module read as BINARY to grep, git grep and
+ * `file`, so it would silently drop out of every text census run over this tree. Nothing is
+ * lost by using ASCII - the suffix is matched with `endsWith` and stripped BY LENGTH, so a
+ * sentinel that also occurred in the prefix would still strip correctly.
+ */
+const GOAL_MARK = "__GOAL_MARK__";
+const SHA_MARK = "__SHA_MARK__";
+
+/**
+ * The previews root, RELATIVE, derived from the one statement of the layout rather than
+ * spelled a second time. If `previewCaptureDirectory` ever stops ending in `<goalId>/<sha>`
+ * this throws at first use instead of quietly serving from the wrong directory.
+ */
+export function previewsRootRelativePath(): string {
+  const marked = previewCaptureDirectory(GOAL_MARK, SHA_MARK);
+  const suffix = `/${GOAL_MARK}/${SHA_MARK}`;
+  if (!marked.endsWith(suffix)) {
+    throw new Error(`previewCaptureDirectory no longer ends in <goalId>/<sha>: ${marked}`);
+  }
+  return marked.slice(0, -suffix.length);
+}
+
+/** Absent means the preview surface is unwired; it never means "no captures". */
+export interface PreviewCapturePort {
+  /** ABSOLUTE path of the project directory the previews root sits under. */
+  projectDirectory(): string;
+}
+
+/** True for the capture route and its whole subtree, and for nothing that merely shares a stem. */
+export function isPreviewCapturePath(path: string): boolean {
+  return path === PREVIEW_CAPTURE_PATH || path.startsWith(`${PREVIEW_CAPTURE_PATH}/`);
+}
+
+/** The asset-shaped remainder the shared locator judges. `/preview/capture` alone yields `/`. */
+export function previewCaptureRequestPathOf(path: string): string {
+  const rest = path.slice(PREVIEW_CAPTURE_PATH.length);
+  return rest === "" ? "/" : rest;
+}
+
+/**
+ * Prove the previews root the way the static host proves a bundle root, minus the two checks
+ * that are specific to a control-room bundle (an `index.html` at the root, and the baked-secret
+ * scan): a captures directory has neither, and demanding them would refuse every real one.
+ * Containment is still measured against the REALPATH, which is what makes a symlinked previews
+ * directory safe to serve from.
+ */
+export function resolvePreviewCaptureRoot(projectDirectory: string): ControlRoomAssetRootResult {
+  if (projectDirectory === "" || !isAbsolute(projectDirectory)) {
+    return refuseAssetRoot("LISTENER_ASSET_ROOT_INVALID", "project directory is not absolute");
+  }
+  try {
+    const directory = realpathSync.native(
+      join(projectDirectory, ...previewsRootRelativePath().split("/")),
+    );
+    if (!statSync(directory).isDirectory()) {
+      return refuseAssetRoot("LISTENER_ASSET_ROOT_INVALID", "previews root is not a directory");
+    }
+    return Object.freeze({ directory, kind: "ROOT" as const });
+  } catch {
+    return refuseAssetRoot("LISTENER_ASSET_ROOT_INVALID", "previews root cannot be resolved");
+  }
+}
+
+/**
+ * The shared locator, NARROWED. Method, encoding and traversal are judged by the shared policy
+ * so the codes are the rostered ones; then the shape and the type are checked WITHOUT touching
+ * the filesystem; then `locateControlRoomAsset` performs the realpath, the containment
+ * comparison and the size ceiling. The containment check is deliberately NOT repeated here —
+ * one statement of it is the property this row is defending.
+ */
+export function locatePreviewCapture(
+  root: ControlRoomAssetRoot, method: string, requestPath: string,
+): ControlRoomAssetDispatch {
+  const methodRefusal = judgeAssetMethod(method);
+  if (methodRefusal !== null) return methodRefusal;
+  const decoded = decodeRequestPath(requestPath);
+  if (decoded === null) return refuseAsset("LISTENER_ASSET_ENCODING_INVALID");
+  const judged = judgeRequestPath(decoded);
+  if ("code" in judged) return refuseAsset(judged.code);
+  if (judged.segments.length !== CAPTURE_SEGMENT_COUNT) {
+    return refuseAsset("LISTENER_ASSET_SEGMENT_INVALID");
+  }
+  const contentType = contentTypeFor(judged.segments[CAPTURE_SEGMENT_COUNT - 1] ?? "");
+  if (contentType === null || !PREVIEW_CAPTURE_CONTENT_TYPES.includes(contentType)) {
+    return refuseAsset("LISTENER_ASSET_TYPE_UNKNOWN");
+  }
+  return locateControlRoomAsset(root, method, requestPath);
+}
+
+export type PreviewCaptureDispatch =
+  | Readonly<{ readonly kind: "ASSET"; readonly root: ControlRoomAssetRoot }>
+  | Readonly<{
+    readonly body: HttpPortRefused | HttpRefused | PreviewCaptureRefused;
+    readonly httpStatus: number;
+    readonly kind: "REPLY";
+  }>
+  | Readonly<{
+    readonly code: "LISTENER_ASSET_ROOT_INVALID" | "LISTENER_PREVIEW_UNAVAILABLE";
+    readonly kind: "LISTENER_REFUSAL";
+  }>;
+
+export interface PreviewCaptureRefused {
+  readonly code: "PREVIEW_CAPTURE_CAPABILITY_DENIED";
+  readonly layer: "PREVIEW_READ";
+  readonly outcome: "REFUSED";
+}
+
+/**
+ * AUTHENTICATE BEFORE RESOLVING ANYTHING. An unauthenticated caller must not be able to learn
+ * whether this project has previews at all, so the credential is judged before the root is
+ * proven and long before any request path is decoded.
+ */
+export function handlePreviewCaptureRequest(
+  dependencies: {
+    readonly authenticator: Authenticator;
+    readonly previewCaptures?: PreviewCapturePort | undefined;
+  },
+  request: {
+    readonly credential: string | null;
+    readonly protocolVersion: unknown;
+  },
+): PreviewCaptureDispatch {
+  const access = authenticateHttpRequest(
+    dependencies.authenticator, request.credential, request.protocolVersion,
+  );
+  if (!access.ok) {
+    return Object.freeze({ body: access, httpStatus: access.httpStatus, kind: "REPLY" });
+  }
+  if (!access.principal.capabilities.includes(CAPABILITIES.GOAL)) {
+    return Object.freeze({
+      body: Object.freeze({
+        code: "PREVIEW_CAPTURE_CAPABILITY_DENIED" as const,
+        layer: "PREVIEW_READ" as const,
+        outcome: "REFUSED" as const,
+      }),
+      httpStatus: 200,
+      kind: "REPLY",
+    });
+  }
+  const port = dependencies.previewCaptures;
+  if (port === undefined) {
+    return Object.freeze({ code: "LISTENER_PREVIEW_UNAVAILABLE", kind: "LISTENER_REFUSAL" });
+  }
+  // The port is composition-supplied and its call is the ONE thing here that can throw. A
+  // throwing port must fail CLOSED with a code, not escape as an unhandled request fault.
+  let directory: string;
+  try {
+    directory = port.projectDirectory();
+  } catch {
+    return Object.freeze({ code: "LISTENER_PREVIEW_UNAVAILABLE", kind: "LISTENER_REFUSAL" });
+  }
+  const root = resolvePreviewCaptureRoot(directory);
+  if (root.kind === "LISTENER_REFUSAL") {
+    // The root's `detail` stops here: `refuseRequest` never writes one to the wire.
+    return Object.freeze({ code: "LISTENER_ASSET_ROOT_INVALID", kind: "LISTENER_REFUSAL" });
+  }
+  return Object.freeze({ kind: "ASSET", root });
+}

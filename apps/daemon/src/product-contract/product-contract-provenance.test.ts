@@ -53,7 +53,9 @@ describe("validateRevisionProvenance", () => {
     const store = boundWorld();
     const other = "ab".repeat(32);
     expect(validateRevisionProvenance(store, PROJECT_ID, GOAL_ID, [other])).toMatchObject({
-      code: "PRODUCT_CONTRACT_PROVENANCE_DIGEST_MISSING", ok: false,
+      code: "PRODUCT_CONTRACT_PROVENANCE_DIGEST_MISSING",
+      detail: `sourceDocumentDigests must include the goal's own PRD sha ${PRD_SHA}`,
+      ok: false,
     });
   });
 
@@ -82,9 +84,14 @@ describe("validateRevisionProvenance", () => {
 
   it("refuses malformed inputs before touching the store", () => {
     const store = boundWorld();
-    for (const digests of [[], ["not-hex"], ["AB".repeat(32)], "x", null, [PRD_SHA, 42]]) {
+    // The object shape a real seat guessed thirteen variants of (2026-09-05) is refused with
+    // the one shape that is admitted, so the next attempt can be the right one.
+    const asObjects = [{ contentSha256: PRD_SHA, sourceRef: "source:abc" }];
+    for (const digests of [[], ["not-hex"], ["AB".repeat(32)], "x", null, [PRD_SHA, 42], asObjects]) {
       expect(validateRevisionProvenance(store, PROJECT_ID, GOAL_ID, digests)).toMatchObject({
-        code: "PRODUCT_CONTRACT_PROVENANCE_MALFORMED", ok: false,
+        code: "PRODUCT_CONTRACT_PROVENANCE_MALFORMED",
+        detail: expect.stringContaining("bare lowercase sha256 hex strings") as string,
+        ok: false,
       });
     }
     expect(validateRevisionProvenance(store, PROJECT_ID, "", [PRD_SHA])).toMatchObject({

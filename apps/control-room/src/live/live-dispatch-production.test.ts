@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { dispatchAffordancePayload } from "./live-command-dispatch.js";
+import { DEV_PAYLOADS } from "./live-dispatch-payloads.js";
 
 describe("dispatchAffordancePayload", () => {
   it("hands an explicit operator payload through the daemon offer without consulting dev defaults", async () => {
@@ -168,5 +169,46 @@ describe("dispatchAffordancePayload", () => {
       ok: false,
       stage: "ANSWER_REFUSED",
     });
+  });
+});
+
+/**
+ * THE BROWSER MAY NOT ASSERT A READING IT DID NOT TAKE.
+ *
+ * Every payload this bundle sends is committed to the real ledger as operator authority, so a
+ * `claude --version` sentence sitting in a frozen literal is an invented measurement wearing a
+ * DAEMON_VERIFIED coat -- the exact defect the activation feature exists to remove. The provider
+ * CLI version is measured by the DAEMON now (`activation-receipts-measure.ts` runs
+ * `<agent command> --version` through its ports and publishes the reading at
+ * `/activation/read`.provider), so the browser has nothing left to say about it.
+ *
+ * Asserted over the WHOLE payload roster rather than the one key that regressed: the next
+ * fabricated reading will be pasted into a different command, and a test that only reads
+ * `provider.probe` cannot see it. Every kind is enumerated from DEV_PAYLOADS itself, and the
+ * count is pinned so a roster that shrinks to nothing still fails.
+ */
+describe("DEV_PAYLOADS asserts no provider reading", () => {
+  const KINDS = Object.keys(DEV_PAYLOADS);
+
+  it("enumerates a NON-EMPTY roster, so the sweep below cannot pass vacuously", () => {
+    expect(KINDS.length).toBeGreaterThanOrEqual(8);
+    expect(KINDS).toContain("provider.probe");
+  });
+
+  it.each(KINDS)("carries no version reading anywhere in %s", (kind) => {
+    const json = JSON.stringify(DEV_PAYLOADS[kind]);
+    // A known snapshot kind IS an assertion that somebody ran the CLI and read a build out of it.
+    expect(json).not.toContain("DATED_SNAPSHOT");
+    expect(json).not.toContain("BUILD_STAMP");
+    // ...and so is any prose naming the invocation, whichever CLI it names.
+    expect(json).not.toMatch(/--version/u);
+  });
+
+  it("sends provider.probe with modelSnapshotKind UNKNOWN, exactly as the demo seed does", () => {
+    const probe = DEV_PAYLOADS["provider.probe"] as
+      { readonly observation: { readonly profile: Record<string, unknown> } };
+    expect(probe.observation.profile["modelSnapshotKind"]).toBe("UNKNOWN");
+    expect(probe.observation.profile["modelSnapshotEvidence"])
+      .toBe("the browser ran no provider CLI probe");
   });
 });

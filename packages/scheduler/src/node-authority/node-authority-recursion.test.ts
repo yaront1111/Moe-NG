@@ -682,3 +682,71 @@ describe("node authority recursion — every hashed field is load-bearing", () =
     );
   });
 });
+
+/**
+ * `declaredMigrations` under the RECURSIVE authority.
+ *
+ * The hashes below were MEASURED AT THE PRE-CHANGE TREE and are literals on purpose.
+ * `nodeAuthorityHash` is what execution refs, claims, receipts and approvals bind, so
+ * a recomputation-based assertion would move with a preimage regression instead of
+ * catching it.
+ */
+const PRE_CHANGE_AUTHORITY_HASHES: Readonly<Record<string, string>> = Object.freeze({
+  "node-a": "742aefe853488111fb6e185a96f10d6b1c68ff4fbbb28472be4a80888ff7a99f",
+  "node-b": "3b75540032b02e02a7a2ab44c0faae7ca70293e8c3833deb464f4db50e72d027",
+  "node-c": "255d4ce3081f55b20abce8927b7ac90a5a81093e2df5e92aaef0ff629444f99e",
+});
+
+/** The same three bodies restated as STORED schema-2 records, declaring nothing. */
+function legacyV2Bodies(): Json[] {
+  return (JSON.parse(JSON.stringify(bodies())) as Json[]).map((body) => {
+    delete body["declaredMigrations"];
+    body["schemaVersion"] = 2;
+    return body;
+  });
+}
+
+/** Every node declares, so the whole graph — not only the leaf — is exercised. */
+function declaringBodies(declared: readonly string[]): unknown[] {
+  return bodies({
+    "node-a": { patch: { declaredMigrations: [...declared] } },
+    "node-b": {
+      edges: [{ edgeKey: "edge-ab", requirement: requirementFor() }],
+      patch: { declaredMigrations: [...declared] },
+    },
+    "node-c": {
+      edges: [{
+        edgeKey: "edge-bc",
+        requirement: requirementFor({ consumer: "node-c", producer: "node-b" }),
+      }],
+      patch: { declaredMigrations: [...declared] },
+    },
+  });
+}
+
+describe("declaredMigrations — the recursive authority binding", () => {
+  it("(g) binds the declaration: two graphs differing ONLY in it hash differently", () => {
+    const left = acceptedOrThrow(snapshotDraft(), declaringBodies(["1730000000001_add-users"]));
+    const right = acceptedOrThrow(snapshotDraft(), declaringBodies(["1730000000002_add-orders"]));
+    for (const nodeKey of ["node-a", "node-b", "node-c"]) {
+      expect(hashOf(left, nodeKey)).not.toBe(hashOf(right, nodeKey));
+      expect(hashOf(left, nodeKey)).toMatch(HEX_64);
+    }
+    // A DECLARING node must also differ from the same node declaring NOTHING: without
+    // this half the arm would pass on a preimage that hashed neither spelling.
+    const silent = acceptedOrThrow();
+    expect(hashOf(left, "node-a")).not.toBe(hashOf(silent, "node-a"));
+  });
+
+  it("(h) rewrites no history: a stored v2 graph keeps the hashes it has today", () => {
+    const legacy = acceptedOrThrow(snapshotDraft(), legacyV2Bodies());
+    const current = acceptedOrThrow();
+    for (const [nodeKey, hash] of Object.entries(PRE_CHANGE_AUTHORITY_HASHES)) {
+      expect(hashOf(legacy, nodeKey)).toBe(hash);
+      // A body that DECLARES NOTHING hashes identically at either schema version:
+      // the declaration enters the preimage only when it was actually authored.
+      expect(hashOf(current, nodeKey)).toBe(hash);
+    }
+    expect(legacy.definitions.every((entry) => entry.schemaVersion === 2)).toBe(true);
+  });
+});

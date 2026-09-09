@@ -162,6 +162,10 @@ export function recordVerifierReceipt(
     if (historical.decision.currentVersion !== ledger.version) {
       return { code: "VERIFIER_RECEIPT_STALE", ok: false };
     }
+    if ((historical.receipt.execution.workspaceBinding !== undefined || input.execution.workspaceBinding !== undefined)
+      && historical.receipt.execution.evidenceSha256 !== verifierExecutionDigest(
+        input.projectId, input.subjectRef, input.source, input.execution,
+      )) return { code: "VERIFIER_RECEIPT_STALE", ok: false };
     return {
       decision: historical.decision,
       disposition: "REPLAYED",

@@ -22,7 +22,7 @@ import {
   locateControlRoomAsset,
   readControlRoomAssetBytes,
 } from "./static-asset-host.js";
-import type { ControlRoomAssetRoot } from "./static-asset-host.js";
+import type { ControlRoomAssetDispatch, ControlRoomAssetRoot } from "./static-asset-host.js";
 import {
   CONTROL_ROOM_LISTENER_LAYER,
   credentialOf,
@@ -343,13 +343,22 @@ export function serveAsset(
   assets: ControlRoomAssetRoot,
   authority: string,
   path: string,
+  /**
+   * THE LOCATOR, injectable so a second root can be served WITHOUT a second file server. The
+   * preview-capture route passes a NARROWER locator (same guards, image types only); everything
+   * below — host check, refusal shape, HEAD, ETag/304, the byte read and the length actually
+   * sent — is identical for both roots because there is one statement of it.
+   */
+  locate: (
+    root: ControlRoomAssetRoot, method: string, requestPath: string,
+  ) => ControlRoomAssetDispatch = locateControlRoomAsset,
 ): void {
   const policy = CONTROL_ROOM_ASSET_RESPONSE_HEADERS;
   if (request.headers.host !== authority) {
     refuseRequest(response, "LISTENER_HOST_INVALID", policy);
     return;
   }
-  const located = locateControlRoomAsset(assets, request.method ?? "", path);
+  const located = locate(assets, request.method ?? "", path);
   if (located.kind === "LISTENER_REFUSAL") {
     refuseRequest(response, located.code, policy);
     return;

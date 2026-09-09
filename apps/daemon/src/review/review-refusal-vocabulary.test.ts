@@ -56,6 +56,7 @@ const encoder = new TextEncoder();
 
 const EXPECTED_DAEMON_CODES = [
   "REVIEW_ALREADY_ACCEPTED",
+  "REVIEW_COMMAND_BYTES_CONFLICT",
   "REVIEW_COMMAND_ID_REUSED",
   "REVIEW_COMMAND_UNKNOWN",
   "REVIEW_DELTA_EVIDENCE_UNSUPPLIABLE",
@@ -94,6 +95,8 @@ function driveDaemonRefusals(): readonly string[] {
   expect(submit(staleStore, 1).ok).toBe(true);
   const reuseStore = openStore();
   expect(submit(reuseStore, 1).ok).toBe(true);
+  const bytesStore = openStore();
+  expect(submit(bytesStore, 1).ok).toBe(true);
   const cappedStore = openStore();
   driveRounds(cappedStore, 3);
   // Three failed rounds, then the human answers REPLAN: the node takes no further round.
@@ -204,6 +207,9 @@ function driveDaemonRefusals(): readonly string[] {
     ))),
     daemonCode("commandId reused under another kind", send(reuseStore, envelope(
       "escalation.decide", 1, escalationPayload(), "cmd-round-1",
+    ))),
+    daemonCode("commandId reused under the same kind with other bytes", send(bytesStore, envelope(
+      "review.submit", 0, submitPayload(7, [], { subjectRef: "node-run-OTHER" }), "cmd-round-1",
     ))),
     daemonCode("fourth round with no recorded escalation", send(cappedStore, envelope(
       "review.submit", 3, submitPayload(4), "cmd-fourth-round",

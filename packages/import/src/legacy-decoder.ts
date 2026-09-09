@@ -79,11 +79,16 @@ function decodeRefusal(
   return refusal(sourcePath, refuseImport(code, "DECODE", detail));
 }
 
-/** The family is the first path segment; a nested file belongs to its top-level family. */
+/**
+ * The family is the first path segment; a nested file belongs to its top-level family. Own
+ * keys only: `in` also answers true for `constructor`, `toString` or `__proto__`, and a legacy
+ * tree with such a top-level directory then decoded with `Object.prototype.toString` (or
+ * `Object.prototype` itself) as its `kind` instead of refusing.
+ */
 function familyOf(path: string): SupportedSourceFamily | null {
   const [head] = path.split("/");
   if (head === undefined) return null;
-  return head in SUPPORTED_SOURCE_FAMILIES ? (head as SupportedSourceFamily) : null;
+  return Object.hasOwn(SUPPORTED_SOURCE_FAMILIES, head) ? (head as SupportedSourceFamily) : null;
 }
 
 /**
@@ -138,12 +143,32 @@ function readIdentity(path: string, document: Record<string, unknown>): DecodeRe
   return declared;
 }
 
-/** The source's own time, or null when it declared none. Never a clock read. */
+/** Canonical UTC, millisecond precision, `Z` suffix: the only spelling the import's clock reads. */
+const CANONICAL_UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
+
+function isCanonicalUtc(value: string): boolean {
+  if (!CANONICAL_UTC.test(value)) return false;
+  const parsed = new Date(value);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString() === value;
+}
+
+/**
+ * The source's own time, or null when it declared none. Never a clock read.
+ *
+ * Canonical UTC only. `provenance.sourceTime` is compared lexically to pick the import's
+ * `committedAt`, and the store's own clock reader refuses anything else: a `time` such as
+ * `2026-01-01T00:00:00Z` used to decode fine and then abort the WHOLE import at APPLY
+ * (IMPORT_COMMIT_FAILED), taking every well-formed sibling record with it. Refusing it here
+ * keeps the refusal typed, per file, at DECODE.
+ */
 function readDeclaredTime(path: string, document: Record<string, unknown>): DecodeRefusal | string | null {
   const declared = document["time"];
   if (declared === undefined || declared === null) return null;
   if (typeof declared !== "string") {
     return decodeRefusal(path, "IMPORT_SOURCE_MALFORMED", "time is neither a string nor null");
+  }
+  if (!isCanonicalUtc(declared)) {
+    return decodeRefusal(path, "IMPORT_SOURCE_MALFORMED", "time is not canonical UTC (YYYY-MM-DDTHH:mm:ss.sssZ)");
   }
   return declared;
 }

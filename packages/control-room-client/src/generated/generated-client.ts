@@ -184,16 +184,26 @@ export interface GeneratedCommandBuilders {
   readonly ["budget.propose_raise"]: CommandBuilder<"budget.propose_raise">;
   readonly ["budget.reconcile"]: CommandBuilder<"budget.reconcile">;
   readonly ["context.repackage"]: CommandBuilder<"context.repackage">;
+  readonly ["criterion_check.approve"]: CommandBuilder<"criterion_check.approve">;
+  readonly ["criterion_check.verify"]: CommandBuilder<"criterion_check.verify">;
   readonly ["cutover.abort"]: CommandBuilder<"cutover.abort">;
   readonly ["cutover.activate"]: CommandBuilder<"cutover.activate">;
   readonly ["cutover.preview"]: CommandBuilder<"cutover.preview">;
   readonly ["cutover.quiesce"]: CommandBuilder<"cutover.quiesce">;
   readonly ["dependency.challenge"]: CommandBuilder<"dependency.challenge">;
+  readonly ["deployment.deploy"]: CommandBuilder<"deployment.deploy">;
+  readonly ["deployment.migrate_down"]: CommandBuilder<"deployment.migrate_down">;
+  readonly ["deployment.rollback"]: CommandBuilder<"deployment.rollback">;
+  readonly ["deployment.set_target"]: CommandBuilder<"deployment.set_target">;
+  readonly ["design.read"]: CommandBuilder<"design.read">;
+  readonly ["design.submit"]: CommandBuilder<"design.submit">;
   readonly ["effect.activate"]: CommandBuilder<"effect.activate">;
   readonly ["effect.adopt_result"]: CommandBuilder<"effect.adopt_result">;
   readonly ["effect.confirm_absent"]: CommandBuilder<"effect.confirm_absent">;
   readonly ["effect.observe"]: CommandBuilder<"effect.observe">;
   readonly ["effect.reconcile"]: CommandBuilder<"effect.reconcile">;
+  readonly ["environment.set_variable"]: CommandBuilder<"environment.set_variable">;
+  readonly ["environment.unset_variable"]: CommandBuilder<"environment.unset_variable">;
   readonly ["escalation.decide"]: CommandBuilder<"escalation.decide">;
   readonly ["events.resume"]: CommandBuilder<"events.resume">;
   readonly ["evidence.rerun"]: CommandBuilder<"evidence.rerun">;
@@ -224,6 +234,8 @@ export interface GeneratedCommandBuilders {
   readonly ["lease.confirm_revoke"]: CommandBuilder<"lease.confirm_revoke">;
   readonly ["lease.extend"]: CommandBuilder<"lease.extend">;
   readonly ["lease.mark_suspect"]: CommandBuilder<"lease.mark_suspect">;
+  readonly ["monitoring.retire_environment"]: CommandBuilder<"monitoring.retire_environment">;
+  readonly ["monitoring.set_probe_interval"]: CommandBuilder<"monitoring.set_probe_interval">;
   readonly ["plan.propose"]: CommandBuilder<"plan.propose">;
   readonly ["planning.cancel"]: CommandBuilder<"planning.cancel">;
   readonly ["planning.claim"]: CommandBuilder<"planning.claim">;
@@ -232,14 +244,18 @@ export interface GeneratedCommandBuilders {
   readonly ["planning.submit_decomposition"]: CommandBuilder<"planning.submit_decomposition">;
   readonly ["policy.install"]: CommandBuilder<"policy.install">;
   readonly ["policy.validate"]: CommandBuilder<"policy.validate">;
+  readonly ["preview.decide"]: CommandBuilder<"preview.decide">;
+  readonly ["preview.start"]: CommandBuilder<"preview.start">;
   readonly ["product_contract.answer_clarification"]: CommandBuilder<"product_contract.answer_clarification">;
   readonly ["product_contract.approve_gate_1"]: CommandBuilder<"product_contract.approve_gate_1">;
   readonly ["product_contract.ask_clarification"]: CommandBuilder<"product_contract.ask_clarification">;
   readonly ["product_contract.propose_revision"]: CommandBuilder<"product_contract.propose_revision">;
+  readonly ["product_contract.sync_env_example"]: CommandBuilder<"product_contract.sync_env_example">;
   readonly ["profile.register"]: CommandBuilder<"profile.register">;
   readonly ["project.activate"]: CommandBuilder<"project.activate">;
   readonly ["project.bind_repository"]: CommandBuilder<"project.bind_repository">;
   readonly ["project.register"]: CommandBuilder<"project.register">;
+  readonly ["project.set_agent_provider"]: CommandBuilder<"project.set_agent_provider">;
   readonly ["provider.probe"]: CommandBuilder<"provider.probe">;
   readonly ["qualification.cancel"]: CommandBuilder<"qualification.cancel">;
   readonly ["qualification.recover"]: CommandBuilder<"qualification.recover">;
@@ -251,8 +267,11 @@ export interface GeneratedCommandBuilders {
   readonly ["recovery.complete"]: CommandBuilder<"recovery.complete">;
   readonly ["recovery.inspect_external"]: CommandBuilder<"recovery.inspect_external">;
   readonly ["recovery.reconcile_external"]: CommandBuilder<"recovery.reconcile_external">;
+  readonly ["release.decide"]: CommandBuilder<"release.decide">;
   readonly ["replan.propose_unblock"]: CommandBuilder<"replan.propose_unblock">;
+  readonly ["repository.bootstrap"]: CommandBuilder<"repository.bootstrap">;
   readonly ["repository.publish"]: CommandBuilder<"repository.publish">;
+  readonly ["repository.recover"]: CommandBuilder<"repository.recover">;
   readonly ["resource.confirm_released"]: CommandBuilder<"resource.confirm_released">;
   readonly ["resource.reconcile"]: CommandBuilder<"resource.reconcile">;
   readonly ["resource.release"]: CommandBuilder<"resource.release">;
@@ -291,16 +310,26 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["budget.propose_raise"]: commandBuilderFor("budget.propose_raise"),
     ["budget.reconcile"]: commandBuilderFor("budget.reconcile"),
     ["context.repackage"]: commandBuilderFor("context.repackage"),
+    ["criterion_check.approve"]: commandBuilderFor("criterion_check.approve"),
+    ["criterion_check.verify"]: commandBuilderFor("criterion_check.verify"),
     ["cutover.abort"]: commandBuilderFor("cutover.abort"),
     ["cutover.activate"]: commandBuilderFor("cutover.activate"),
     ["cutover.preview"]: commandBuilderFor("cutover.preview"),
     ["cutover.quiesce"]: commandBuilderFor("cutover.quiesce"),
     ["dependency.challenge"]: commandBuilderFor("dependency.challenge"),
+    ["deployment.deploy"]: commandBuilderFor("deployment.deploy"),
+    ["deployment.migrate_down"]: commandBuilderFor("deployment.migrate_down"),
+    ["deployment.rollback"]: commandBuilderFor("deployment.rollback"),
+    ["deployment.set_target"]: commandBuilderFor("deployment.set_target"),
+    ["design.read"]: commandBuilderFor("design.read"),
+    ["design.submit"]: commandBuilderFor("design.submit"),
     ["effect.activate"]: commandBuilderFor("effect.activate"),
     ["effect.adopt_result"]: commandBuilderFor("effect.adopt_result"),
     ["effect.confirm_absent"]: commandBuilderFor("effect.confirm_absent"),
     ["effect.observe"]: commandBuilderFor("effect.observe"),
     ["effect.reconcile"]: commandBuilderFor("effect.reconcile"),
+    ["environment.set_variable"]: commandBuilderFor("environment.set_variable"),
+    ["environment.unset_variable"]: commandBuilderFor("environment.unset_variable"),
     ["escalation.decide"]: commandBuilderFor("escalation.decide"),
     ["events.resume"]: commandBuilderFor("events.resume"),
     ["evidence.rerun"]: commandBuilderFor("evidence.rerun"),
@@ -331,6 +360,8 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["lease.confirm_revoke"]: commandBuilderFor("lease.confirm_revoke"),
     ["lease.extend"]: commandBuilderFor("lease.extend"),
     ["lease.mark_suspect"]: commandBuilderFor("lease.mark_suspect"),
+    ["monitoring.retire_environment"]: commandBuilderFor("monitoring.retire_environment"),
+    ["monitoring.set_probe_interval"]: commandBuilderFor("monitoring.set_probe_interval"),
     ["plan.propose"]: commandBuilderFor("plan.propose"),
     ["planning.cancel"]: commandBuilderFor("planning.cancel"),
     ["planning.claim"]: commandBuilderFor("planning.claim"),
@@ -339,14 +370,18 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["planning.submit_decomposition"]: commandBuilderFor("planning.submit_decomposition"),
     ["policy.install"]: commandBuilderFor("policy.install"),
     ["policy.validate"]: commandBuilderFor("policy.validate"),
+    ["preview.decide"]: commandBuilderFor("preview.decide"),
+    ["preview.start"]: commandBuilderFor("preview.start"),
     ["product_contract.answer_clarification"]: commandBuilderFor("product_contract.answer_clarification"),
     ["product_contract.approve_gate_1"]: commandBuilderFor("product_contract.approve_gate_1"),
     ["product_contract.ask_clarification"]: commandBuilderFor("product_contract.ask_clarification"),
     ["product_contract.propose_revision"]: commandBuilderFor("product_contract.propose_revision"),
+    ["product_contract.sync_env_example"]: commandBuilderFor("product_contract.sync_env_example"),
     ["profile.register"]: commandBuilderFor("profile.register"),
     ["project.activate"]: commandBuilderFor("project.activate"),
     ["project.bind_repository"]: commandBuilderFor("project.bind_repository"),
     ["project.register"]: commandBuilderFor("project.register"),
+    ["project.set_agent_provider"]: commandBuilderFor("project.set_agent_provider"),
     ["provider.probe"]: commandBuilderFor("provider.probe"),
     ["qualification.cancel"]: commandBuilderFor("qualification.cancel"),
     ["qualification.recover"]: commandBuilderFor("qualification.recover"),
@@ -358,8 +393,11 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["recovery.complete"]: commandBuilderFor("recovery.complete"),
     ["recovery.inspect_external"]: commandBuilderFor("recovery.inspect_external"),
     ["recovery.reconcile_external"]: commandBuilderFor("recovery.reconcile_external"),
+    ["release.decide"]: commandBuilderFor("release.decide"),
     ["replan.propose_unblock"]: commandBuilderFor("replan.propose_unblock"),
+    ["repository.bootstrap"]: commandBuilderFor("repository.bootstrap"),
     ["repository.publish"]: commandBuilderFor("repository.publish"),
+    ["repository.recover"]: commandBuilderFor("repository.recover"),
     ["resource.confirm_released"]: commandBuilderFor("resource.confirm_released"),
     ["resource.reconcile"]: commandBuilderFor("resource.reconcile"),
     ["resource.release"]: commandBuilderFor("resource.release"),
@@ -902,7 +940,7 @@ export interface GeneratedContractPins {
   readonly queryEnvelopeVersion: typeof RUNTIME_QUERY_ENVELOPE_VERSION;
 }
 
-export const GENERATED_CONTRACT_DIGEST = "ed325554bc61d7d55c24b2c712258f8dda8c05dce23bde99888fbb2b31d68c28";
+export const GENERATED_CONTRACT_DIGEST = "f1878eeaa08a050c12000a0e9885a4fef11c12c824602c1b50696d970f2dd295";
 
 export const GENERATED_CONTRACT_PINS: GeneratedContractPins = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,

@@ -3,6 +3,7 @@ import type { ChildProcess, SpawnOptions } from "node:child_process";
 import { createHash } from "node:crypto";
 import { win32 as windowsPath } from "node:path";
 
+import { deliverEnvironment, type EnvironmentDeliveredVariables } from "../environment/environment-delivery.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import type { VerifierRunCapture } from "./node-verifier.js";
 import {
@@ -38,6 +39,7 @@ type SpawnProcess = (
 ) => ChildProcess;
 
 export interface VerifierProcessRunnerOptions {
+  readonly delivered?: EnvironmentDeliveredVariables | undefined; // Onto the allowlisted RESULT.
   /**
    * How long stdio may stay open after the recipe's exit is observed before
    * the capture settles on that exit anyway. A recipe that backgrounds a
@@ -65,7 +67,9 @@ export function createVerifierProcessRunner(
   options: VerifierProcessRunnerOptions = {},
 ): VerifierProcessRunner {
   const sourceEnvironment = options.environment ?? process.env;
-  const environment = runtimeEnvironment(sourceEnvironment);
+  // UNDER the allowlist: the overlay lands on what the filter RETURNED, so an arbitrary operator
+  // name arrives without either roster being widened to admit it.
+  const { environment } = deliverEnvironment(runtimeEnvironment(sourceEnvironment), options.delivered);
   const drainGraceMs = options.drainGraceMs ?? DEFAULT_DRAIN_GRACE_MS;
   const killGraceMs = options.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
   const killProcessGroup = options.killProcessGroup ?? process.kill.bind(process);

@@ -16,7 +16,8 @@
  * below proves the same comparison FAILS on a one-byte change.
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import type { Dirent } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,7 +39,12 @@ import {
   restoreAccessPaths,
   snapshotAccessStates,
 } from "./cutover-inventory.js";
-import { MAX_WALK_DEPTH, MAX_WALK_ENTRIES, captureCutoverManifest } from "./cutover-manifest.js";
+import {
+  DEFAULT_EXCLUDED_DIRECTORY_NAMES,
+  MAX_WALK_DEPTH,
+  MAX_WALK_ENTRIES,
+  captureCutoverManifest,
+} from "./cutover-manifest.js";
 import type { CutoverDirent, CutoverManifest, CutoverWalkPorts } from "./cutover-manifest.js";
 
 /** Every path kind DoD 1 enumerates. An inventory missing one is not an inventory. */
@@ -487,6 +493,54 @@ describe("TASK-MF: links are manifested and node_modules is excluded on the reco
     ]);
   });
 
+  /**
+   * ARM C3 - THE HOST-LOCAL AGENT STORE. `.serena` is an agent memory store
+   * ignored by a gitignore that lives OUTSIDE this repository, so its size is a
+   * property of the developer's machine rather than of the tree being cut over:
+   * on the checkout that filed this row it was 4303 of 10574 walked entries, and
+   * it is what re-armed MAX_WALK_ENTRIES at the real root. Same category as
+   * `node_modules` - a tree no cutover is about - arrived at from the other
+   * direction.
+   *
+   * This arm walks a CONSTRUCTED fixture, never the host's real `.serena`. That
+   * directory is absent or tiny on a fresh clone, so an arm anchored on it would
+   * be red here and green on CI, which is worse than no arm at all.
+   */
+  it("TASK-MF ARM C3: the host-local agent memory store is excluded by DEFAULT and DECLARED", () => {
+    const { root } = fixture();
+    const store = join(root, ".serena", "memories");
+    mkdirSync(store, { recursive: true });
+    const memoryCount = 12;
+    for (let index = 0; index < memoryCount; index += 1) {
+      writeFileSync(join(store, `memory-${index}.md`), `agent memory ${index}`);
+    }
+
+    const excluded = captureCutoverManifest(root);
+    assertOk(excluded);
+    // BOTH halves of the exclusion contract in ONE assertion, so a red reports
+    // them together instead of stopping at whichever is checked first:
+    //   descended - the walk must not have gone into it; and
+    //   declared  - it must be NAMED in the record, because a walk that skipped
+    //               more than it admits cannot masquerade as a match. Absence
+    //               ALONE is also what a walk that returned nothing produces;
+    //               only the declaration tells the two apart.
+    expect({
+      descended: excluded.manifest.entries.some((entry) => entry.path.startsWith(".serena/")),
+      declared: excluded.manifest.excludedDirectories.includes(".serena"),
+    }).toEqual({ descended: false, declared: true });
+
+    // THE NEGATIVE that keeps the default meaningful. Exclude nothing and the
+    // same tree DOES yield every one of those files, so this arm cannot stay
+    // green by the walk breaking entirely.
+    const admitted = captureCutoverManifest(root, { excludedDirectoryNames: [] });
+    assertOk(admitted);
+    expect(admitted.manifest.entries.filter((entry) => entry.path.startsWith(".serena/"))).toHaveLength(
+      memoryCount,
+    );
+    expect(admitted.manifest.excludedDirectories).toEqual([]);
+    expect(admitted.manifest.entryCount).toBe(excluded.manifest.entryCount + memoryCount);
+  });
+
   const manifestOf = (
     entries: CutoverManifest["entries"],
     excludedDirectories: readonly string[] = ["node_modules"],
@@ -525,20 +579,107 @@ describe("TASK-MF: links are manifested and node_modules is excluded on the reco
   });
 
   /**
+   * The population census the refusal message needs, and NOTHING it does not.
+   * It counts dirents; it never opens or hashes a file, so it costs what `find`
+   * costs rather than what the manifest walk costs. It runs ONLY on the failure
+   * path, in a case that has by then already failed - ARM E hashes thousands of
+   * files under a 300s budget and a second HASHING walk would be indefensible.
+   * It mirrors the walk's own exclusions so the counts describe the ADMITTED
+   * population, which is the number that has to come down.
+   */
+  const countByTopSegment = (root: string): readonly (readonly [string, number])[] => {
+    const totals = new Map<string, number>();
+    const queue: { readonly absolute: string; readonly top: string }[] = [
+      { absolute: root, top: "" },
+    ];
+    while (queue.length > 0) {
+      const current = queue.pop();
+      if (current === undefined) {
+        break;
+      }
+      let dirents: readonly Dirent[];
+      try {
+        dirents = readdirSync(current.absolute, { withFileTypes: true });
+      } catch {
+        continue; // an unreadable directory must not take down the diagnostic itself
+      }
+      for (const entry of dirents) {
+        if (DEFAULT_EXCLUDED_DIRECTORY_NAMES.includes(entry.name)) {
+          continue;
+        }
+        const top = current.top === "" ? entry.name : current.top;
+        totals.set(top, (totals.get(top) ?? 0) + 1);
+        if (entry.isDirectory() && !entry.isSymbolicLink()) {
+          queue.push({ absolute: join(current.absolute, entry.name), top });
+        }
+      }
+    }
+    return [...totals].sort((left, right) => right[1] - left[1]).slice(0, 12);
+  };
+
+  /**
    * ARM E - THE ACCEPTANCE. Fixtures stayed green through the entire defect
    * because none of them contained a pnpm junction tree. Only the real root
    * proves this row unblocked task-e60b874b.
+   *
+   * It has since refused a SECOND time, on entry count rather than on a junction,
+   * and the bare `entry count exceeds 10000` named the limit but not the
+   * population - so the next agent to meet it re-derived from scratch that 41% of
+   * the walk was one host-local directory. The refusal branch below exists so
+   * that cost is paid once.
    */
   it(
     "TASK-MF ARM E: captureCutoverManifest succeeds against the REAL repo root",
     () => {
       const result = captureCutoverManifest(REPO_ROOT);
-      assertOk(result);
+      if (!result.ok) {
+        // Supersedes assertOk's generic dump with a strictly more informative
+        // one. Same assertion - ok:true or fail - told in terms of what the
+        // reader has to change.
+        const census = countByTopSegment(REPO_ROOT)
+          .map(([segment, count]) => `${segment}=${count}`)
+          .join(" ");
+        throw new Error(
+          `${result.code} @ ${result.layer}: ${result.detail} (stopped at ${result.path}). ` +
+            `ADMITTED POPULATION by top-level segment, largest first: ${census}. ` +
+            `EXCLUSIONS IN FORCE: ${DEFAULT_EXCLUDED_DIRECTORY_NAMES.join(", ")}. ` +
+            `Read the census before touching MAX_WALK_ENTRIES (${MAX_WALK_ENTRIES}): a segment that ` +
+            `is host-local tool state rather than repository content belongs in ` +
+            `DEFAULT_EXCLUDED_DIRECTORY_NAMES, and raising the bound against a population that ` +
+            `grows on its own only defers this failure.`,
+        );
+      }
       // Non-zero FIRST: a walk that silently returned nothing must not read as success.
       expect(result.manifest.entryCount).toBeGreaterThan(0);
       expect(result.manifest.entries).toHaveLength(result.manifest.entryCount);
       expect(result.manifest.excludedDirectories.length).toBeGreaterThan(0);
       expect(result.manifest.excludedDirectories).toContain("node_modules");
+
+      // The margin, REPORTED rather than frozen. `expect(entryCount).toBe(6271)`
+      // is a number the next peer commit moves; the RELATION to the bound is the
+      // property, and the message is what tells a reader the headroom got thin
+      // before the walk starts refusing outright.
+      const margin = MAX_WALK_ENTRIES - result.manifest.entryCount;
+      expect(
+        result.manifest.entryCount,
+        `walked ${result.manifest.entryCount} entries under MAX_WALK_ENTRIES=${MAX_WALK_ENTRIES}, margin ${margin}`,
+      ).toBeLessThan(MAX_WALK_ENTRIES);
+
+      // Every default exclusion that ACTUALLY EXISTS at the top of this tree is
+      // DECLARED on the record. Derived from the real tree rather than from a
+      // fixed list, so it still holds on a clean host where `.serena` is absent,
+      // and it catches the failure mode a subset check cannot: a name sitting in
+      // the defaults that the walk never applies.
+      const presentDefaults = readdirSync(REPO_ROOT, { withFileTypes: true })
+        .filter(
+          (entry) => entry.isDirectory() && DEFAULT_EXCLUDED_DIRECTORY_NAMES.includes(entry.name),
+        )
+        .map((entry) => entry.name);
+      // A sweep that silently yields zero cases passes; this refuses to.
+      expect(presentDefaults.length).toBeGreaterThan(0);
+      for (const name of presentDefaults) {
+        expect(result.manifest.excludedDirectories).toContain(name);
+      }
     },
     300_000,
   );

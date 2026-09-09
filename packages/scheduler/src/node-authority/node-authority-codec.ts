@@ -16,8 +16,10 @@ import { types } from "node:util";
 
 import { hasOnlyOwnStringKeys, isPlainRecord, readOwnDataProperty } from "../runtime-shape.js";
 import {
-  NODE_AUTHORITY_LIMITS, NODE_AUTHORITY_SCHEMA_TAG, NODE_AUTHORITY_SCHEMA_VERSION,
-  NODE_DEFINITION_KEYS, canonicalEnvelopeJson, canonicalText, nodeBodyDigest, ok, refuse,
+  NODE_AUTHORITY_LIMITS, NODE_AUTHORITY_SCHEMA_VERSION,
+  NODE_AUTHORITY_UNDECLARED_SCHEMA_VERSION,
+  NODE_AUTHORITY_SUPPORTED_SCHEMA_VERSIONS, NODE_DEFINITION_KEYS, canonicalEnvelopeJson,
+  canonicalText, isNodeAuthoritySchemaVersion, nodeAuthoritySchemaTag, nodeBodyDigest, ok, refuse,
 } from "./node-authority-contract.js";
 import {
   admitPlanning, applicable, composeEdges, pick, project, readDerived, requirementsOf,
@@ -25,7 +27,7 @@ import {
 import { admitPlanningContent } from "./node-authority-planning-content.js";
 import { forbiddenKeyRefusal, readDraftFields } from "./node-authority-fields.js";
 import type {
-  NodeAuthorityDraftResult, NodeAuthorityRefusal, NodeDefinition, Read,
+  NodeAuthorityDraftResult, NodeAuthorityRefusal, NodeAuthoritySchemaVersion, NodeDefinition, Read,
 } from "./node-authority-contract.js";
 import type { AdmittedPlanning } from "./node-authority-compose.js";
 
@@ -34,6 +36,8 @@ const CREATE_KEYS: readonly string[] =
 const CONTENT_CREATE_KEYS: readonly string[] =
   ["acceptanceCriterionContent", "draft", "planExecutionContent", "predicateRegistry"];
 const ENVELOPE_KEYS: readonly string[] = ["body", "digest", "schema"];
+const SUPPORTED_SCHEMA_TAGS: readonly string[] =
+  NODE_AUTHORITY_SUPPORTED_SCHEMA_VERSIONS.map(nodeAuthoritySchemaTag);
 const HEX_64 = /^[0-9a-f]{64}$/u;
 const encoder = new TextEncoder();
 
@@ -47,7 +51,7 @@ export interface NodeAuthorityBody {
   readonly bodyContentDigest: string;
   readonly bytes: Uint8Array;
   readonly definition: NodeDefinition;
-  readonly schemaVersion: typeof NODE_AUTHORITY_SCHEMA_VERSION;
+  readonly schemaVersion: NodeAuthoritySchemaVersion;
 }
 export type NodeAuthorityResult =
   | { readonly ok: true; readonly value: NodeAuthorityBody } | NodeAuthorityRefusal;
@@ -65,10 +69,13 @@ export type NodeAuthorityBytesResult =
 function accept(definition: NodeDefinition): NodeAuthorityResult {
   let bytes: Uint8Array;
   let digest: string;
+  // The body's OWN version, never the module's current one: framing a stored
+  // schema-2 body under the /3 domain would move an identity that is history.
+  const version = definition.schemaVersion;
   try {
     const bodyJson = canonicalText(definition);
-    digest = nodeBodyDigest(bodyJson);
-    bytes = encoder.encode(canonicalEnvelopeJson(digest, bodyJson));
+    digest = nodeBodyDigest(bodyJson, version);
+    bytes = encoder.encode(canonicalEnvelopeJson(digest, bodyJson, version));
   } catch {
     return refuse("NODE_AUTHORITY_MALFORMED", "NODE_AUTHORITY_CODEC",
       "canonical encoding failed for an admitted body");
@@ -79,10 +86,7 @@ function accept(definition: NodeDefinition): NodeAuthorityResult {
   }
   return Object.freeze({
     ok: true as const,
-    value: Object.freeze({
-      bodyContentDigest: digest, bytes, definition,
-      schemaVersion: NODE_AUTHORITY_SCHEMA_VERSION,
-    }),
+    value: Object.freeze({ bodyContentDigest: digest, bytes, definition, schemaVersion: version }),
   });
 }
 
@@ -114,7 +118,17 @@ function createWithPlanning(
   const mismatch = applicable(drafted.draft, planning.value);
   if (mismatch !== null) return mismatch;
   const edges = composeEdges(drafted.draft, pick(input, "predicateRegistry"));
-  return edges.ok ? accept(project(drafted.draft, planning.value, edges.value)) : edges;
+  // A FRESH body is minted at the LOWEST version that can CARRY it, chosen by the
+  // draft's own CONTENT and stated explicitly rather than defaulted: a silent
+  // default is how a v3 body would get framed with a v2 tag. Reading the module's
+  // current version here instead would promote every body that declares NOTHING,
+  // moving its identity for a member it does not have -- the same objection as
+  // defaulting `declaredMigrations` to `[]`, one layer up.
+  const minted = drafted.draft.declaredMigrations === undefined
+    ? NODE_AUTHORITY_UNDECLARED_SCHEMA_VERSION : NODE_AUTHORITY_SCHEMA_VERSION;
+  return edges.ok
+    ? accept(project(drafted.draft, planning.value, edges.value, minted))
+    : edges;
 }
 
 export function createNodeDefinition(input: unknown): NodeAuthorityResult {
@@ -147,19 +161,23 @@ export function admitNodeDefinition(value: unknown): NodeAuthorityResult {
     return refuse("NODE_AUTHORITY_MALFORMED", "NODE_AUTHORITY_ADMISSION",
       "body carries an unrecognised field");
   }
-  if (pick(value, "schemaVersion") !== NODE_AUTHORITY_SCHEMA_VERSION) {
+  // A SET, not a point: schema 2 predates `declaredMigrations` and is still read.
+  const version = pick(value, "schemaVersion");
+  if (!isNodeAuthoritySchemaVersion(version)) {
     return refuse("NODE_AUTHORITY_UNSUPPORTED_SCHEMA", "NODE_AUTHORITY_SCHEMA",
       "body schema version is not supported");
   }
   const stated: Record<string, unknown> = {};
   for (const key of NODE_DEFINITION_KEYS) stated[key] = pick(value, key);
   stated["directHardDependencies"] = requirementsOf(stated["directHardDependencies"]);
-  const drafted = readDraftFields(stated, NODE_DEFINITION_KEYS);
+  const drafted = readDraftFields(stated, NODE_DEFINITION_KEYS, version);
   if (!drafted.ok) return drafted;
   const derived = readDerived(value);
   if (!derived.ok) return derived;
   const edges = composeEdges(drafted.draft, pick(value, "monotonicPredicateProofs"));
-  return edges.ok ? accept(project(drafted.draft, derived.value, edges.value)) : edges;
+  // A RE-READ body keeps its OWN version, which is what makes the round trip at
+  // :236-240 byte-identical for every body stored before this member existed.
+  return edges.ok ? accept(project(drafted.draft, derived.value, edges.value, version)) : edges;
 }
 
 export function encodeNodeDefinition(definition: unknown): NodeAuthorityBytesResult {
@@ -223,12 +241,19 @@ export function decodeNodeDefinitionBytes(input: unknown): NodeAuthorityResult {
   }
   const envelope = readEnvelope(parsed);
   if (!envelope.ok) return envelope;
-  if (envelope.value.schema !== NODE_AUTHORITY_SCHEMA_TAG) {
+  if (!SUPPORTED_SCHEMA_TAGS.includes(envelope.value.schema)) {
     return refuse("NODE_AUTHORITY_UNSUPPORTED_SCHEMA", "NODE_AUTHORITY_CODEC",
       "envelope schema tag is not supported");
   }
   const admitted = admitNodeDefinition(envelope.value.body);
   if (!admitted.ok) return admitted;
+  // THE TWO GATES MUST AGREE, not merely both pass: a supported tag around a
+  // supported body of a DIFFERENT version is a forged pairing. The byte re-encode
+  // below would also catch it, but as NONCANONICAL — which names the wrong fault.
+  if (nodeAuthoritySchemaTag(admitted.value.schemaVersion) !== envelope.value.schema) {
+    return refuse("NODE_AUTHORITY_SCHEMA_MISMATCH", "NODE_AUTHORITY_CODEC",
+      "envelope schema tag and body schema version disagree");
+  }
   if (admitted.value.bodyContentDigest !== envelope.value.digest) {
     return refuse("NODE_AUTHORITY_DIGEST_MISMATCH", "NODE_AUTHORITY_IDENTITY",
       "declared digest does not match the body it claims");
