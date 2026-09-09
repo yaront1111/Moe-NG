@@ -28,5 +28,19 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:24:18.695Z",
-  "updatedAt": "2026-09-09T16:24:18.695Z"
+  "updatedAt": "2026-09-09T17:08:16.868Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-09T17:07:10.791Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Measured at claim (2026-09-09 ~16:50Z): parent task-d85fd8fd74354e94886d619c67f24c75 is BLOCKED at 6/8 steps, unassigned; apps/daemon/src/repository/git-source-extract.ts exists only as an UNTRACKED file (git ls-files empty) and all six migration modules under apps/daemon/src/repository/migrations are modified WIP. No landing commit. This row's description already carries the full measured roster (3 refs for the dead guard, the 4 image-build anchors, the gated migrate-down-real lines) from its filing.",
+      "whatRemains": "Wait for the parent to reach DONE with a completion commit carrying git-source-extract.ts and the widened MigrationPorts.apply(workspace, connection, sha) / MigrationDownPorts.revert(..., sha) signatures. Then re-measure the helper's ACTUAL exported name and result type (the worker may have deviated from the planned extractCommittedPath shape), re-grep DEPLOY_MIGRATION_WORKSPACE_MISMATCH (expected 3 refs in deploy-migration-context.ts + 3 in its test, no mirror), and plan the three items. Item 4 (a MIGRATION_SOURCE_UNAVAILABLE code) is optional and touches three rosters; decide at plan time, default is leave it.",
+      "pitfalls": "Do not plan items 2 or 3 against the parent's PLAN text — plan against the landed bytes. Do not revive the dead guard as a git-diff interim check (the parent's amendment comment explains why it refuses legitimate rollbacks). deploy-image-build.test.ts's four arms must stay green UNEDITED when the build folds onto the helper. The gated migrate-down-real arm needs docker AND MOE_MIGRATION_RESTORE=1 to prove; an unrun gated arm is not a pass.",
+      "openQuestions": "Whether the parent's worker kept the helper in repository/ (cycle-free) or moved it; and whether extraction failure stayed byte-parity with MIGRATION_FAILED/MIGRATION_FILE_UNKNOWN or grew its own code, which decides item 4.",
+      "releasedAt": "2026-09-09T17:08:16.866Z",
+      "releasedBy": "architect-ed42e60a",
+      "reason": "Build-order handoff: parent task-d85fd8fd is BLOCKED at 6/8 steps with git-source-extract.ts UNTRACKED and six migration files dirty WIP. Items 2 and 3 of this row name the helper's signature and the widened apply/revert signatures, neither landed. Plan after the parent reaches DONE; dependsOn already gates WORKING."
+    }
+  ]
 }

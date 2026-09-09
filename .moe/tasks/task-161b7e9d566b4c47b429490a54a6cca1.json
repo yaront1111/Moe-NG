@@ -127,7 +127,7 @@
       "completedAt": "2026-09-09T16:48:18.774Z"
     }
   ],
-  "status": "BLOCKED",
+  "status": "WORKING",
   "assignedWorkerId": "worker-b42eccd4",
   "branch": null,
   "prLink": null,
@@ -355,11 +355,17 @@
       "author": "worker-b42eccd4",
       "content": "STEP 8 / DoD 6, PART B — THE FOLLOW-UP LEDGER. Every item the feature rows recorded, CLOSED with evidence or LISTED with the reason. No silent drops. worker-b42eccd4, 2026-09-09. Sources indexed by step 1 and re-read on disk this session.\n\nFROM task-e7a20a49 comment-9881c6f2 (\"FOLLOW-UPS FOR THE EPIC-FINAL HARDENING ROW\"):\n1. **EVENT_STREAM_SUBSCRIBER_MISMATCH is live for every operator** — the browser hardcodes `LIVE_SUBSCRIBER = \"control-room-1\"` (live-config.ts:18) while the daemon mints `reader:${sessionId}` for every non-legacy session (event-stream-access.ts:76-104) and refuses at http-listener-command-stream-routes.ts:165. **OPEN, and it needs an ARCHITECT, not a worker.** The reporter is right that it is a product defect rather than test hygiene, and right that the fix is a decision between two designs (the handshake states the subscriber id, or the browser is handed its sessionId). I did not take it: this row's rail 1 fences boundary/authority work out, and picking one of two designs for a session-identity seam from a worker seat is exactly the fabricated-authority move the epic's rails exist to stop. NOTE it did NOT block this row's live proof — the drive reads the daemon directly, never the event feed.\n2. **journeys.spec.ts:79-81 is stale because this epic shipped** — asserts `toBeDisabled()` on `cr.nav.resources` whose premise (\"the one NAV_ID not in BUILT_NAV_ROUTES\") is false since 039911cd. **OPEN, LISTED.** The reporter states the fix is not deleting two lines but injecting an all-unbuilt roster, and it lives in the browser e2e lane whose full run is step 6 — which is parked behind a peer's `full-suite-gate` lease. Recorded as EPIC-CAUSED, per their correction.\n3. **Frozen roster count `expect(roster.size).toBe(30)`** at http-listener-read-dispatch.test.ts:313 — redundant with the set-equality half of its own arm and reds every future read-route row. **OPEN, LISTED, one-line fix**, deliberately not taken: the file is not in this row's owned paths and its owning row is DONE, so editing it here would contest a landed row's bytes.\n4. **`isDaemonShaped` misses an UPPERCASE daemon-shaped path** (same file, :290). **OPEN, LISTED**, latent by the reporter's own measurement (every route in the tree is lowercase).\n5. **Five e2e reds belonging to other closed rows** — subsumed by step 6, which runs `pnpm test:e2e:browser` in full and attributes by merge-base/HEAD delta.\n\nFROM task-8f86e105 comment-95965c48 (three residual gaps):\nF1. **A nonempty but TRUNCATED pg_dump is not structurally checked** — the zero-byte case is closed (backup-ports.ts:41-47), but nothing reads the artifact's CONTENT, so a half-written dump with a clean close and a zero exit is hashed and recorded as a backup. **OPEN, LISTED.** Cheap hardening exists (assert the tail carries pg_dump's terminator); not taken because it edits a DONE row's owned production file and the realistic truncation causes all surface as a nonzero exit.\nF2. **No orphan reaper for `moe-verifier-*` containers** — cleanup is in-process only; a SIGKILL of the daemon between `docker run` and cleanup leaks a running container that nothing sweeps. **OPEN, LISTED.** Same reason.\nF3 and the third gap are in the same comment and carry the same disposition.\n\nFROM task-96957529 comment-b91e9c8b (two NOT COVERED answers):\n6. **Result-size bounding for MCP reads has no owner** — the measurement landed (`MAX_MCP_OUTPUT_TOKENS` is claude's lever and INERT on a codex seat; every size key is rejected under `--strict-config`), the code names the remedy in its own words (\"a change to the SERVED MCP READ SURFACE ... a separate row\"), and that row was never filed. **OPEN, LISTED, UNOWNED.** I am not filing it: global rail 21 folds hardening into this row, and this row is not the MCP read surface. It wants an architect at the next epic.\n\nNEW, FROM THIS SESSION, all three already recorded above with evidence:\n7. **The browser cannot install the standing verifier authority** (`moe-verifier-policy/1`, `moe-reviewer-calibration/1`). OPEN; documented in README and the runbook; the drive does it on the operator wire and says so.\n8. **Criterion approval refuses the operator wire** `CRITERION_CHECK_HUMAN_REQUIRED @ CRITERION_EVIDENCE`, and no criterion-approval surface ships in the control room. OPEN; documented.\n9. **A crash during a PREVIEW is NOT COVERED.** Measured: `grep -rln journal apps/daemon/src/preview/` = 0 hits and no preview arm exists in `tests/fault/` or the j3 crash harness, so there is no landing-style intent/attempt/completion ledger for a preview and no arm that kills a daemon mid-preview. A preview leaves a real dev-server process, so the interesting failure is an ORPHAN rather than a duplicated record — a different shape from DoD 2's one-outcome property, which is why the knob this row added does not reach it. LISTED here rather than opened as a row, exactly as the step directs.\n\nCLOSED THIS EPIC BY THIS ROW: the browser plan-gate dead end (`APPROVAL_INTENT_POLICY_REF_UNAVAILABLE`), fixed in `ACTIVATION_CHAIN_KINDS`; and the epic's own FALSE record that `release.decide` is operator-only, corrected in the drive's boundary roster and now in the runbook.",
       "timestamp": "2026-09-09T16:47:50.272Z"
+    },
+    {
+      "id": "comment-89d6710c3ae74b919762823d9dfe4995",
+      "author": "worker-b42eccd4",
+      "content": "SESSION 4 — NO WORK DELIVERED, NO BYTES WRITTEN. Row state unchanged: 7 of 8 steps COMPLETED, step 6 IN_PROGRESS, BLOCKED on `full-suite-gate`. This comment records only what I measured, so the next session does not re-derive it.\n\nWHAT THIS SESSION DID: answered two routed governor @all messages, verified ownership of this row by taskId rather than inferring it from a stale offer, read the handoff memory, and waited 10 minutes on the lease. No source, test, or doc path was created or modified. No branch switch, no pull, no commit, no push. I hold no lease.\n\nMEASURED ON `full-suite-gate` (moe.list_resources, 16:53Z, and again on disk at 17:05Z):\n\n    holder   worker-409b958a / task-b2b4550835   acquiredAt 2026-09-09T16:19:42.836Z\n    queue 1  worker-b42eccd4 / task-161b7e9d     requestedAt 16:42:26.629Z   (this row)\n    queue 2  worker-0e797912 / task-d85fd8fd     requestedAt 16:43:51.980Z\n\n`moe.wait_for_resource` for the full 600000 ms returned `granted:false, timedOut:true, position:1`.\n\nCORRECTION TO MY OWN BLOCK NOTE, so it is not quoted forward: that note says \"my queue entry stands behind qa-01b7fe3f\". That was true when written and is now stale — qa-01b7fe3f has left the queue and this row is position 1. The rest of the note stands.\n\nTHE HOLDER IS ALIVE, NOT STALE — I checked twice before saying anything, because a wrong staleness call is how a live lease gets torn off someone. task-b2b4550835 is WORKING (auto-unblocked at grant, not parked), and its `updatedAt` moved from 16:19:42Z to 17:01:14Z during my wait. So this is an ordinary queue wait, NOT a dead lease, and I am requesting no force-release.\n\nONE SCHEDULING OBSERVATION, routed to the governor and NOT acted on by me: the holder's own lease note says the gate was taken \"before the pre-edit daemon baseline\", and its row is `stepsCompleted: ['step-1']` with step 2 of 5 IN_PROGRESS and its production edit not yet written. So the exclusive lease is being held across an implementation phase, not only across a suite run, while two fully-implemented rows queue behind it for their final gate legs. Whether that is the intended discipline is a governor call, not mine.\n\nON RESUME, nothing to re-derive — see `mem:task-task-161b7e9d566b4c47b429490a54a6cca1-handoff`. Step 6 is DoD 4's ten legs, each standalone and foreground, each `Test Files N passed` count line quoted verbatim: `pnpm test` (covers NO apps/**, global rail 18), `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test:e2e`, `pnpm test:e2e:browser`, `pnpm test:integration` from PowerShell, `pnpm test:security`, `pnpm test:property`, plus `pnpm test:fault` which this row adds. Known foreign red to ATTRIBUTE and disclose, not fix: `apps/daemon/src/deployment/rollback-command.ts` is a peer's dirty in-flight file (task-b7cdf265) and reds a repo-wide `tsc` with 10 TS6133/TS7053 errors; it is not in this row's diff.",
+      "timestamp": "2026-09-09T17:04:37.474Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:14:49.532Z",
-  "updatedAt": "2026-09-09T16:50:30.823Z",
+  "updatedAt": "2026-09-09T17:14:29.347Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:28:10.582Z",
     "plannedStepCount": 8,
@@ -399,10 +405,10 @@
     "architect-978f68c6"
   ],
   "workStartedAt": "2026-09-08T20:46:11.016Z",
-  "blockedReason": "STEP 6 ONLY — WAITING ON full-suite-gate. Seven of eight steps are COMPLETED and the live proof is delivered and green; the one remaining clause is DoD 4's ten-leg regression, which needs the shared lease.\n\nDELIVERED THIS SESSION: the fresh-product loop runs end to end. One drive takes a recorded PRD from the browser's New product form to https://github.com/yaront1111/moe-live-proof-161b7e9d/pull/2 at sha 65192c19a8cf5197462647926c130a0c12c2c1ad, whose body is the dossier with a row for every one of the eight approved criteria. Three nodes landed at three distinct shas; 8/8 criteria VERIFIED, cross-checked against the approved contract's roster AND /documents/coverage/read; Gate 3 taken by click. Comments 1c5bf6a0, 20a016d8, 5721966a, 2285a126, 2d429567 carry the evidence. Steps 5, 7 and 8 are COMPLETED with notes.\n\nONE PRODUCT DEFECT FIXED: a browser-bootstrapped product could never approve its own plan, because ACTIVATION_CHAIN_KINDS never drove policy.validate while approval.decide_intent derives its policy ref from the newest PolicyEvaluated. Refusal was APPROVAL_INTENT_POLICY_REF_UNAVAILABLE @ DAEMON_APPROVAL_INTENT. One roster member; pnpm --filter @moe/control-room test -> Test Files 205 passed (205), Tests 2677 passed (2677).\n\nWHY A RESOURCE WAIT, NOT A CAPABILITY BLOCK: full-suite-gate is held by worker-409b958a (task-b2b4550835) since 2026-09-09T16:19Z; my queue entry stands behind qa-01b7fe3f. DoD 4 names ten legs, each must print its own count line, so a scoped substitute cannot discharge it and inventing one is what epic rail 4 forbids. Rather than pin a seat on the lease I did the two non-resource steps first, as the acquire response advised. On grant the row resumes at step 6 with nothing to re-derive: the handoff memory names the legs, the foreign red to attribute (rollback-command.ts, a peer's dirty file on task-b7cdf265), and the requirement to add pnpm test:fault.",
-  "blockedResourceId": "full-suite-gate",
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-09T16:50:30.823Z",
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
   "commits": [
     {
       "sha": "b8f499daa13aad3c5b44be104ee74d6e93f8772f",
@@ -584,6 +590,48 @@
       "treeId": "abb1b4f33b293f2ae4c63bbe599a71212db13755",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "2e4ff607d764ddb444949018d2cd2b1de9fa371a",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b42eccd4@2026-09-09T14:52:09Z",
+      "paths": [
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        ".moe/tasks/task-24b68b05c865436ead05cd5ea375ff6f.json",
+        ".moe/tasks/task-2536051174234be5aa7c5eadea6d3413.json",
+        ".moe/tasks/task-4b7f4a857b504ccb9c64ff4e75280ec1.json",
+        ".moe/tasks/task-77207fb327a9462b869ff647650e57cf.json",
+        ".moe/tasks/task-9dbe28fdccc546dfbbbf9b32f68e7c61.json",
+        ".moe/tasks/task-a47301ee3aa64866ba109d4c0283526f.json",
+        ".moe/tasks/task-b58778da10e7492fa6fee89269f56ef0.json",
+        ".moe/tasks/task-b8571cfe50614c1d89fee3a0a448de10.json",
+        ".moe/tasks/task-b8ec9a638f6540c28798c29f23fd5ada.json",
+        ".moe/tasks/task-ba83b202265d40d1885d3091f009b0a2.json",
+        ".moe/tasks/task-d56a0cc5f6ae4dc88da5233a9702d9e6.json",
+        ".moe/tasks/task-dd86f35e117e4de1b5b885332d8af1f8.json",
+        ".moe/tasks/task-f4f45c281ab64f6dbf2c4ff163140010.json",
+        ".moe/tasks/task-f7d38f752b074dc89da30631783aae04.json",
+        "apps/control-room/src/v2/ops/activation-port.test.ts",
+        "apps/control-room/src/v2/ops/activation-port.ts",
+        "docs/agent-stack-runbook.md",
+        "docs/VISION.md",
+        "README.md",
+        "tests/e2e/control-room/daemon-ports.ts",
+        "tests/e2e/control-room/live-proof-criteria.ts",
+        "tests/e2e/control-room/live-proof-gate1.ts",
+        "tests/e2e/control-room/live-proof-landing.test.ts",
+        "tests/e2e/control-room/live-proof-landing.ts",
+        "tests/e2e/control-room/live-proof-prd.spec.ts",
+        "tests/e2e/control-room/live-proof-release.ts",
+        "tests/e2e/control-room/live-proof-workspace.ts"
+      ],
+      "recordedBy": "worker-b42eccd4",
+      "recordedAt": "2026-09-09T16:50:50.566Z",
+      "treeId": "fbe13f74f9378331666f63b3e6a017fc6761e89c",
+      "status": "BLOCKED",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -603,7 +651,32 @@
     "tests/fault/landing-crash/landing-crash-child.ts",
     "tests/fault/landing-crash/landing-crash-world.ts",
     ".moe/tasks/task-c090faae9fbe438b959e76a08b7dcfdb.json",
-    ".moe/tasks/task-de80c663569a4ab2b30a9db6ac526e4b.json"
+    ".moe/tasks/task-de80c663569a4ab2b30a9db6ac526e4b.json",
+    ".moe/tasks/task-24b68b05c865436ead05cd5ea375ff6f.json",
+    ".moe/tasks/task-2536051174234be5aa7c5eadea6d3413.json",
+    ".moe/tasks/task-4b7f4a857b504ccb9c64ff4e75280ec1.json",
+    ".moe/tasks/task-77207fb327a9462b869ff647650e57cf.json",
+    ".moe/tasks/task-9dbe28fdccc546dfbbbf9b32f68e7c61.json",
+    ".moe/tasks/task-a47301ee3aa64866ba109d4c0283526f.json",
+    ".moe/tasks/task-b58778da10e7492fa6fee89269f56ef0.json",
+    ".moe/tasks/task-b8571cfe50614c1d89fee3a0a448de10.json",
+    ".moe/tasks/task-b8ec9a638f6540c28798c29f23fd5ada.json",
+    ".moe/tasks/task-ba83b202265d40d1885d3091f009b0a2.json",
+    ".moe/tasks/task-d56a0cc5f6ae4dc88da5233a9702d9e6.json",
+    ".moe/tasks/task-dd86f35e117e4de1b5b885332d8af1f8.json",
+    ".moe/tasks/task-f4f45c281ab64f6dbf2c4ff163140010.json",
+    ".moe/tasks/task-f7d38f752b074dc89da30631783aae04.json",
+    "apps/control-room/src/v2/ops/activation-port.test.ts",
+    "apps/control-room/src/v2/ops/activation-port.ts",
+    "docs/agent-stack-runbook.md",
+    "docs/VISION.md",
+    "README.md",
+    "tests/e2e/control-room/daemon-ports.ts",
+    "tests/e2e/control-room/live-proof-criteria.ts",
+    "tests/e2e/control-room/live-proof-landing.test.ts",
+    "tests/e2e/control-room/live-proof-landing.ts",
+    "tests/e2e/control-room/live-proof-release.ts",
+    "tests/e2e/control-room/live-proof-workspace.ts"
   ],
   "touchedFiles": [
     "apps/daemon/src/orchestrator/node-lander-journal.ts",
@@ -619,16 +692,23 @@
     "tests/fault/landing-crash/landing-crash-world.ts",
     "tests/fault/landing-crash/landing-crash.fault.ts",
     "tests/fault/landing-crash/landing-crash-child.ts",
-    "drill-161b7e9d-hooks.mjs"
+    "drill-161b7e9d-hooks.mjs",
+    "tests/e2e/control-room/live-proof-landing.ts",
+    "apps/control-room/src/v2/ops/activation-port.ts",
+    "docs/VISION.md",
+    "tests/e2e/control-room/live-proof-workspace.ts",
+    "docs/agent-stack-runbook.md",
+    "tests/e2e/control-room/live-proof-release.ts",
+    "README.md",
+    "tests/e2e/control-room/live-proof-criteria.ts",
+    "tests/e2e/control-room/live-proof-landing.test.ts"
   ],
-  "unattributedPaths": [
-    "NUL"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-a11dcf70@2026-09-09T14:13:39Z",
-    "at": "2026-09-09T14:20:28.930Z"
+    "sessionId": "worker-b42eccd4@2026-09-09T14:52:09Z",
+    "at": "2026-09-09T16:50:50.566Z"
   },
   "priorBlockedReason": "HELD FOR THE SHARED-TREE CUTOVER, at the governor's own instruction. NOT a capability block and NOT a re-opening of comment-f3a33015 — that resume ruling stands and the acceptance bar is untouched.\n\ngovernor-608c8a78 asked every seat (msg-a1ea4386) under the user's explicit checkout-main + preserve/commit/push request to reach a safe point, preserve through normal wrapper landing, and NOT start a new mutable run during the cutover. Every remaining piece of this row IS a new mutable run: step 5 is a fresh-product live run with real provider seats ending in a real GitHub PR; step 6 is nine-plus whole-suite legs. A branch switch mid-run destroys it. Independently, step 6 cannot run anyway: full-suite-gate is held by qa-01b7fe3f from 2026-09-09T12:21:00Z.\n\nSTATE, measured not inferred (msg-422fafb8, comment-37410b0e): all 12 delivered paths TRACKED and clean vs HEAD; `git log origin/moe/work-2026-09-04..HEAD` = 0, so the work is committed AND pushed and a checkout of main loses nothing of mine. Steps 1-4 stay COMPLETED. I own no launcher and started no run.\n\nDELIVERED ANYWAY, a real defect in this row's own bytes: live-proof-prd.spec.ts:257 recorded a FALSE \"operator-only-boundary\" roster — it listed release.decide as operator-only (served as an ASYNC entry, so the registry's synchronous fence never runs; assertReleasePrincipal admits a paired ADMIN via releaseByPairedAdmin) and its registry line ref was stale (fence at :393, not :379). Corrected to operatorOnly + pairedAdminReachable; one grep hit repo-wide so no consumer moved; tsc exit 0, zero diagnostics.\n\nTO CLEAR: a governor confirms the cutover is finished and the branch is settled. The next seat then resumes step 5 directly — remote, setup contract and outstanding list are all in comment-37410b0e, nothing to re-derive.",
   "blockedOnTaskIds": null,
