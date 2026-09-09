@@ -10,9 +10,18 @@
  * command's return value: a `DurableDecision` carries no verdict, so an arm asserting on it would
  * prove only that the function returned.
  *
- * ORDERING IS PROVEN BY REFUSAL. A sequence that happens to pass in order proves less than one
- * that refuses out of order, so the out-of-order attempts assert the specific code AND the layer
- * that answered -- never merely that the call failed.
+ * WHICH ORDERINGS ARE PROVEN BY REFUSAL, AND WHICH EDGE IS DELIBERATELY NOT ONE. Every
+ * out-of-order attempt below asserts the specific code AND the layer that answered, never merely
+ * that the call failed. The Gate 2 -> Gate 3 edge is NOT among them, and it must not become one:
+ * the owner's direction of 2026-09-09 is "we can approve the plan at the start but that's it", so
+ * release is decided on MACHINE EVIDENCE alone and a REJECTED or absent preview verdict is
+ * RENDERED into the pull request rather than enforced. An external reviewer prescribed a
+ * preview-required refusal here and the owner overruled it; release-decide-service.ts's closed
+ * code map is still exactly three codes, and release-decide-service.test.ts pins both directions.
+ * This header used to claim that edge was proven by refusal while no arm asserted it.
+ *
+ * What Gate 3 DOES refuse is a sha nothing was proven at, and a SECOND approval of a sha this goal
+ * already released.
  */
 import { describe, expect, it } from "vitest";
 
@@ -141,8 +150,11 @@ describe("a gate taken out of order refuses with its own code and layer", () => 
     const world = journeyWorld("SUBMITTED");
     expect((await decideRelease(world, releasePayload(world.sha))).answer)
       .toMatchObject({ outcome: "ACCEPTED" });
-    // The replay fence is answered from the ADMISSION journal, not from the receipt: a fresh
-    // command id at an already-released sha is a second release, not a retry of the first.
+    // KEPT, AND THIS IS THE ARM THAT MATTERS FOR THE UNATTENDED PATH. The replay fence is answered
+    // from the ADMISSION journal, not from the receipt: a fresh command id at an already-released
+    // sha is a second release, not a retry of the first. With a human at the keyboard a duplicate
+    // approval is a mis-click; once a policy engine can approve a release with no human in the
+    // loop, this fence is the only thing between a retried command and a second pull request.
     expect((await decideRelease(world, releasePayload(world.sha))).answer).toMatchObject({
       ok: false,
       refusal: { code: "RELEASE_COMMAND_ID_REQUIRED", layer: "DAEMON_COMMAND_SEAM" },
