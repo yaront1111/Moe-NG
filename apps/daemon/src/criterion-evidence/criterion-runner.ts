@@ -8,7 +8,7 @@ import { createVerifiedWorkspacePort } from "../repository/git-verified-workspac
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import { readCriterionGoal } from "./criterion-goal.js";
 import type { CriterionGoal } from "./criterion-goal.js";
-import { readCriterionRuns } from "./criterion-run.js";
+import { queueAutomaticCriterionVerification, readCriterionRuns } from "./criterion-run.js";
 import { recordCriterionReceipt, readCriterionReceipt } from "./criterion-receipt.js";
 import { measureCriterionProgram } from "./criterion-approval.js";
 import { criterionHash, sameCriterionBinding } from "./criterion-codec.js";
@@ -125,8 +125,10 @@ export function createCriterionRunner(options: CriterionRunnerOptions) {
     const graphs = activeCompiledGraphs(store, projectId, new Set(["EXECUTION_ENABLED", "CLOSING", "COMPLETED"]));
     for (const graph of graphs) {
       const goal = readCriterionGoal(store, projectId, graph.goalRef); if (!goal.ok) continue;
-      const runs = readCriterionRuns(store, goal); const run = runs?.at(-1); if (run === undefined) continue;
       const owned = repository.readOwned(options.workspace, options.storeId, projectId); if (!owned.ok) continue;
+      // Preserve release/recovery of an existing batch before queuing a different artifact.
+      if (owned.handle === null) queueAutomaticCriterionVerification(store, projectId, graph.goalRef, options.clock(), options.artifactFor);
+      const runs = readCriterionRuns(store, goal); const run = runs?.at(-1); if (run === undefined) continue;
       let handle = owned.handle;
       if (handle !== null) {
         if (handle.owner.nodeRef !== criterionExecutionRef(run) || handle.reservation.phase === "BLOCKED") continue;

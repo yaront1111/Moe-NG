@@ -107,7 +107,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T17:18:29.893Z",
-  "updatedAt": "2026-09-09T20:56:44.697Z",
+  "updatedAt": "2026-09-09T20:57:37.118Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T18:13:13.603Z",
     "plannedStepCount": 4,
@@ -329,11 +329,34 @@
       "treeId": "cfddf8b4c34dd94d96dc7ce16b028d5b7a5a3ebb",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "97268c4e2369fbb26a0385d7cdc398ecd5199a4f",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T20:50:51Z",
+      "paths": [
+        ".moe/tasks/task-503e927b2b134f12af238bdfc474c0a1.json",
+        ".moe/tasks/task-77207fb327a9462b869ff647650e57cf.json",
+        ".moe/tasks/task-a47301ee3aa64866ba109d4c0283526f.json",
+        ".moe/tasks/task-b8571cfe50614c1d89fee3a0a448de10.json",
+        ".moe/tasks/task-de80c663569a4ab2b30a9db6ac526e4b.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T20:57:37.118Z",
+      "treeId": "eb9aafccb5d4bbc6943f3f35bac74a4d38323279",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
     "apps/daemon/src/monitoring/environment-retirement-restart.test.ts",
-    ".moe/tasks/task-de80c663569a4ab2b30a9db6ac526e4b.json"
+    ".moe/tasks/task-de80c663569a4ab2b30a9db6ac526e4b.json",
+    ".moe/tasks/task-503e927b2b134f12af238bdfc474c0a1.json",
+    ".moe/tasks/task-77207fb327a9462b869ff647650e57cf.json",
+    ".moe/tasks/task-a47301ee3aa64866ba109d4c0283526f.json",
+    ".moe/tasks/task-b8571cfe50614c1d89fee3a0a448de10.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/monitoring/environment-retirement-restart.test.ts"
@@ -341,9 +364,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-b42eccd4@2026-09-09T14:02:17Z",
-    "at": "2026-09-09T14:13:57.338Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-01b7fe3f@2026-09-09T20:50:51Z",
+    "at": "2026-09-09T20:57:37.118Z"
   },
   "reviewStartedAt": "2026-09-09T14:13:08.422Z",
   "verification": {
