@@ -42,6 +42,19 @@ describe("migration receipt", () => {
     expect(migrationRefusal("MIGRATION_BACKUP_FAILED", "backup failed")).toEqual(failure);
   });
 
+  it("decodes the tool-missing code only under its own rostered layer", () => {
+    // The roster is what makes the code durable: a receipt carrying it must survive a round trip,
+    // and the SAME code stamped with a layer it does not own must not be launderable into one.
+    const refused = { ...receipt(), outcome: "REFUSED" as const, applied: [],
+      refusal: { code: "MIGRATION_TOOL_MISSING", layer: "DAEMON_INGRESS", detail: "MIGRATION_TOOL_MISSING" } };
+    expect(decodeMigrationReceiptBytes(bytes(refused))).toEqual({ ok: true, receipt: refused });
+    for (const layer of ["DAEMON_DEPLOY_ENGINE", "LEDGER", "KEY"]) {
+      expect(decodeMigrationReceiptBytes(bytes({ ...refused, refusal: { ...refused.refusal, layer } })))
+        .toEqual({ ok: false, code: "MIGRATION_RECEIPT_INVALID", layer: "DAEMON_INGRESS" });
+    }
+    expect(migrationRefusal("MIGRATION_TOOL_MISSING", "MIGRATION_TOOL_MISSING")).toEqual(refused.refusal);
+  });
+
   it("accepts the migration CLI's underscore timestamp separator", () => {
     const value = { ...receipt(), applied: ["20260906100100000_added_by_cli.js"] };
     expect(decodeMigrationReceiptBytes(bytes(value))).toEqual({ ok: true, receipt: value });
@@ -126,6 +139,44 @@ describe("backup before migration", () => {
       expect(result).toMatchObject({ outcome: "REFUSED", applied: [], refusal: {
         code: "MIGRATION_FAILED", layer: "DAEMON_INGRESS", detail: "1700000000001-broken.js",
       } });
+      expect(existsSync(result.backupRef!.split("@sha256:")[0]!)).toBe(true);
+      expect(readMigrationReceipt(w.store, "project", "request")).toEqual(result);
+    } finally { w.close(); }
+  });
+
+  it("keeps every non-tool failure on MIGRATION_FAILED with its filename", async () => {
+    // The regression a rushed version of the tool-missing fix would ship: a PARTIALLY installed
+    // workspace, or any other apply failure, reported as "your workspace is not installed". Only
+    // an error whose `toolMissing` is set may narrow, so each of these must keep the old answer.
+    const failures: readonly (readonly [string, unknown, string])[] = [
+      ["a named migration", new MigrationExecutionError("1700000000005-partial.js"), "1700000000005-partial.js"],
+      ["an explicitly non-tool error", new MigrationExecutionError("1700000000006-other.js", false), "1700000000006-other.js"],
+      ["an unnamed engine error", new MigrationExecutionError(null), "MIGRATION_FILE_UNKNOWN"],
+      ["a foreign throw", new Error("ERR_MODULE_NOT_FOUND"), "MIGRATION_FILE_UNKNOWN"],
+    ];
+    expect(failures).toHaveLength(4);
+    for (const [index, [label, thrown, detail]] of failures.entries()) {
+      const w = world();
+      try {
+        const result = await migrateWithBackup(w.store, { ...w.input, requestId: `non-tool-${String(index)}` },
+          { ...w.ports, apply: async () => { throw thrown; } });
+        expect(result.refusal, label).toEqual({ code: "MIGRATION_FAILED", layer: "DAEMON_INGRESS", detail });
+        expect(result.backupRef, label).not.toBeNull();
+      } finally { w.close(); }
+    }
+  });
+
+  it("narrows to MIGRATION_TOOL_MISSING only when the tool itself was unresolvable", async () => {
+    const w = world();
+    try {
+      const result = await migrateWithBackup(w.store, w.input, { ...w.ports, apply: async () => {
+        throw new MigrationExecutionError(null, true);
+      } });
+      expect(result).toMatchObject({ outcome: "REFUSED", applied: [], refusal: {
+        code: "MIGRATION_TOOL_MISSING", layer: "DAEMON_INGRESS", detail: "MIGRATION_TOOL_MISSING",
+      } });
+      // No filename rides along, even the sentinel one the error still carries internally.
+      expect(JSON.stringify(result)).not.toContain("MIGRATION_FILE_UNKNOWN");
       expect(existsSync(result.backupRef!.split("@sha256:")[0]!)).toBe(true);
       expect(readMigrationReceipt(w.store, "project", "request")).toEqual(result);
     } finally { w.close(); }

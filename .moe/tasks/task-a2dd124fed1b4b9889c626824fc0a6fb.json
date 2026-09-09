@@ -159,11 +159,17 @@
       "author": "governor-608c8a78",
       "content": "Governance recovery/provenance checkpoint, 2026-09-09T09:25Z. Human instructed 'unblock tasks' here after I proposed confirmed-exit task-only recovery. Released failed worker-3df6caa8 at09:04:49Z; worker-409b958a claimed09:04:52Z and normal acquire refreshed this task's full-suite lease at09:05:32Z. Live resource snapshots09:05:37Z and09:06:54Z named worker-409b958a (NOT historical d0fc1403). Recovery completed all steps and QA owns review. At09:24:59Z get_context still records ONLY checkpoint2217bd85138d7c3f83b7729747bf56b4b4cd67cc/landing.lastCheckpoint, no completion; QA has verified committed bytes and fresh gates (comment-5d9726a4), which is valuable evidence but does not itself record current-round completion provenance. No source bytes are claimed lost. Request normal wrapper completion recording or explicit surfaced provenance resolution; do not manufacture semantic changes, hand-land sources, or treat this as an implementation re-plan. Worker and QA already notified in #workers/#qa at09:21:50Z. I have made no second release and no QA decision.",
       "timestamp": "2026-09-09T09:25:36.547Z"
+    },
+    {
+      "id": "comment-78eb3d92920848988408dc7a9dabec87",
+      "author": "governor-608c8a78",
+      "content": "LEASE INTEGRITY FOLLOW-UP 2026-09-09T09:26Z. Exact Moe activity: worker409 normal RESOURCE_RELEASED09:15:20.690Z evt-e3182c70; QA RESOURCE_ACQUIRED09:17:46.354Z evt-62c02ef1; RESOURCE_RELEASED09:23:12.281Z evt-bb0c3532 records workerId=qa-01b7fe3f and forced:true, immediately followed by grant to task61f826e5/worker0e797912. Thus a governor's later 'dead12h lease' explanation does not match the removed lease. QA and new holder have been asked for actual command/mutant/restore timings to establish any overlap. Evidence after forced handover is not assumed isolated; evidence completed and restored before it is not automatically invalidated. No current lease reversal or process termination requested. Preserve all originals and report accurately.",
+      "timestamp": "2026-09-09T09:26:15.560Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T18:15:37.002Z",
-  "updatedAt": "2026-09-09T09:25:36.547Z",
+  "updatedAt": "2026-09-09T09:29:58.422Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T18:17:31.355Z",
     "plannedStepCount": 4,
@@ -178,7 +184,8 @@
     "worker-3df6caa8",
     "governor-608c8a78",
     "worker-409b958a",
-    "qa-01b7fe3f"
+    "qa-01b7fe3f",
+    "governor-74f24573"
   ],
   "stepsCompleted": [
     "step-1",
@@ -228,19 +235,39 @@
       "treeId": "00837b8d0321c678c6483f722a215a9a71d161fc",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "9de664fd6253d245ab999287339442b6c7e8b309",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T09:16:45Z",
+      "paths": [
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        ".moe/tasks/task-8b178e52483e4ff28e269b5ed4e492b6.json",
+        ".moe/tasks/task-a2dd124fed1b4b9889c626824fc0a6fb.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T09:26:09.818Z",
+      "treeId": "79d1a8fa0fe0dff5f4e5f02971edc404e05f35a1",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
     "apps/daemon/src/monitoring/environment-retirement-record.test.ts",
     "apps/daemon/src/monitoring/environment-retirement-record.ts",
-    "apps/daemon/src/monitoring/environment-retirement-record.js"
+    "apps/daemon/src/monitoring/environment-retirement-record.js",
+    ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+    ".moe/tasks/task-8b178e52483e4ff28e269b5ed4e492b6.json",
+    ".moe/tasks/task-a2dd124fed1b4b9889c626824fc0a6fb.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-3df6caa8@2026-09-09T08:57:05Z",
-    "at": "2026-09-09T08:57:14.758Z"
+    "sessionId": "qa-01b7fe3f@2026-09-09T09:16:45Z",
+    "at": "2026-09-09T09:26:09.818Z"
   },
   "priorHandoffs": [
     {

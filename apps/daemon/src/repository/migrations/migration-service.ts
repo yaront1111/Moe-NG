@@ -3,6 +3,7 @@ import { dirname, join } from "node:path";
 import type { SqliteEventStore } from "@moe/store";
 import { BACKUP_DIRECTORY, BACKUP_LEAF, PRE_MIGRATION_BACKUP_LEAF } from "../../bootstrap/activation-receipts-measure.js";
 import { backupFileHash } from "../../backups/backup-ports.js";
+import { MIGRATION_TOOL_MISSING } from "../controlled-profile/controlled-profile-generator.js";
 import { MigrationExecutionError, nodeMigrationPorts, type MigrationPorts } from "./migration-ports.js";
 import { MIGRATION_RECEIPT_VERSION, migrationError, migrationReceiptId, migrationRefusal,
   decodeMigrationReceiptBytes, readMigrationReceipt, recordMigrationReceipt, type MigrationReceipt } from "./migration-receipt.js";
@@ -65,6 +66,13 @@ async function execute(
     const applied = await ports.apply(input.workspace, input.databaseUrl);
     return { ...base, applied, backupRef, outcome: "APPLIED", refusal: null };
   } catch (error) {
+    // A workspace that was never installed cannot even RESOLVE its migration tool, so it never
+    // reached a file. Answering with a filename there — real or the UNKNOWN sentinel — sends the
+    // operator hunting a migration that is fine. The code IS the detail (the migrationError idiom),
+    // because `text` refuses an empty string and a caller-influenced word may never ride here.
+    if (backupRef !== null && error instanceof MigrationExecutionError && error.toolMissing) {
+      return { ...base, backupRef, refusal: migrationRefusal(MIGRATION_TOOL_MISSING, MIGRATION_TOOL_MISSING) };
+    }
     if (backupRef !== null) return { ...base, backupRef,
       refusal: migrationRefusal("MIGRATION_FAILED", error instanceof MigrationExecutionError ? error.file : "MIGRATION_FILE_UNKNOWN") };
     if (ownsFile && path !== null) {

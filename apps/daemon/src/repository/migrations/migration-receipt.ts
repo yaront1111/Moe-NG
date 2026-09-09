@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
+import { MIGRATION_TOOL_MISSING } from "../controlled-profile/controlled-profile-generator.js";
 
 export const MIGRATION_RECEIPT_VERSION = "moe-migration-receipt/1";
 const principal = "daemon:migration-engine";
@@ -16,7 +17,13 @@ const codeLayers = Object.freeze({ MIGRATION_BACKUP_FAILED: "DAEMON_INGRESS",
   // receipt weeks later needs to know whether the schema was left alone (the named batch was not
   // the tail, so nothing ran) or whether a `down()` actually failed part way.
   MIGRATION_DOWN_BATCH_UNKNOWN: "DAEMON_INGRESS", MIGRATION_DOWN_NOT_LAST_BATCH: "DAEMON_INGRESS",
-  MIGRATION_DOWN_FAILED: "DAEMON_INGRESS" } as const);
+  MIGRATION_DOWN_FAILED: "DAEMON_INGRESS",
+  // THE TOOL, NOT THE FILE. Kept out of MIGRATION_FAILED because an operator reading a redacted
+  // deploy receipt has only the CODE to go on: "the product workspace was never installed" and
+  // "a migration file is broken" are different actions, and collapsing them cost a real diagnosis.
+  // Spelled by IMPORT from its owner, never retyped -- the same reason MIGRATION_RECEIPT_COMMAND_KIND
+  // is exported above. The layer is the EXISTING DAEMON_INGRESS the constant's own comment names.
+  [MIGRATION_TOOL_MISSING]: "DAEMON_INGRESS" } as const);
 export type MigrationCode = keyof typeof codeLayers;
 export const migrationRefusal = (code: MigrationCode, detail: string) =>
   Object.freeze({ code, layer: codeLayers[code], detail });

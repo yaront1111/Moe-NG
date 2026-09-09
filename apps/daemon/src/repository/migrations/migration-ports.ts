@@ -9,25 +9,39 @@ export interface MigrationPorts {
 }
 export class MigrationExecutionError extends Error {
   readonly file: string;
-  constructor(file: string | null) {
+  /** TRUE only when the product workspace could not RESOLVE its migration tool — a tree that was
+   *  never installed. Kept as its own field rather than a second sentinel in `file`, because a
+   *  missing TOOL and an unknown FILE are different answers for the operator. Optional and last,
+   *  so every existing positional construction site keeps its meaning untouched. */
+  readonly toolMissing: boolean;
+  constructor(file: string | null, toolMissing = false) {
     super("MIGRATION_FAILED@DAEMON_INGRESS");
     this.file = migrationFilename(file) ? file : "MIGRATION_FILE_UNKNOWN";
+    this.toolMissing = toolMissing;
   }
 }
 
 // Execute the generated product's installed migration tool, not another daemon dependency.
 // Child output is captured, never logged: imported migration code may itself print values.
 const MIGRATE = String.raw`
-import { runner } from 'node-pg-migrate';
 import { basename, join } from 'node:path';
 import { readdirSync } from 'node:fs';
+const emit = value => process.stdout.write('\nMOE_MIGRATION_RESULT=' + JSON.stringify(value) + '\n');
+// The tool belongs to the PRODUCT's workspace, so an uninstalled tree fails HERE, at module
+// resolution, before a single migration file is read. RESOLVE the root specifier before importing
+// it: a dynamic import raises the same ERR_MODULE_NOT_FOUND when an INSTALLED tool's own
+// transitive dependency is missing, and a broken install is not an absent tool. The import itself
+// stays outside this branch, so every other import failure keeps the existing catch below.
+let missing = false;
+try { import.meta.resolve('node-pg-migrate'); } catch { missing = true; }
+if (missing) { emit({ applied: [], file: null, toolMissing: true }); process.exitCode = 1; } else {
+const { runner } = await import('node-pg-migrate');
 let last = null;
 const files = readdirSync('migrations');
 const secret = new URL(process.env.DATABASE_URL);
 const denied = [process.env.DATABASE_URL, decodeURIComponent(secret.password)].filter(Boolean);
 const safe = value => typeof value === 'string' && /^\d{13,17}[-_][A-Za-z0-9_-]+\.(?:js|cjs|mjs|sql)$/.test(value)
   && files.includes(value) && !denied.some(part => value.includes(part));
-const emit = value => process.stdout.write('\nMOE_MIGRATION_RESULT=' + JSON.stringify(value) + '\n');
 const logger = { debug() {}, error() {}, info(message) {
   const match = /^### MIGRATION (.+) \(UP\) ###$/.exec(String(message));
   if (match) last = files.find(file => file.slice(0, file.lastIndexOf('.')) === match[1]) ?? null;
@@ -49,6 +63,7 @@ try {
   }
   emit({ applied: [], file: safe(last) ? last : null }); process.exitCode = 1;
 }
+}
 `;
 
 async function apply(workspace: string, connection: string): Promise<readonly string[]> {
@@ -63,7 +78,8 @@ async function apply(workspace: string, connection: string): Promise<readonly st
     const decoded: unknown = JSON.parse(line?.slice("MOE_MIGRATION_RESULT=".length) ?? "null");
     if (typeof decoded !== "object" || decoded === null) throw new MigrationExecutionError(null);
     const value = decoded as Record<string, unknown>;
-    if (result.exitCode !== 0) throw new MigrationExecutionError(typeof value.file === "string" ? value.file : null);
+    if (result.exitCode !== 0) throw new MigrationExecutionError(
+      typeof value.file === "string" ? value.file : null, value.toolMissing === true);
     if (!Array.isArray(value.applied) || !value.applied.every(migrationFilename)) throw new MigrationExecutionError(null);
     return Object.freeze([...value.applied]);
   } catch (error) { throw error instanceof MigrationExecutionError ? error : new MigrationExecutionError(null); }

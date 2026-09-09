@@ -8,7 +8,7 @@ import { installTestRecoveryBinding } from "../../identity/session-test-fixtures
 import { createVerifierDatabaseRunner } from "../../orchestrator/verifier-database.js";
 import { CONTROLLED_PROFILE_VERSION, generateControlledProfile } from "../controlled-profile/controlled-profile-generator.js";
 import { migrateWithBackup } from "./migration-service.js";
-import { nodeMigrationPorts } from "./migration-ports.js";
+import { MigrationExecutionError, nodeMigrationPorts } from "./migration-ports.js";
 import { readMigrationReceipt } from "./migration-receipt.js";
 
 const RUN = process.env.MOE_MIGRATION_RESTORE === "1";
@@ -43,6 +43,42 @@ it("pins the live restore gate and actual lifecycle/engine imports", () => {
   expect(typeof migrateWithBackup).toBe("function");
   expect(typeof nodeMigrationPorts().dump).toBe("function");
 });
+
+// UNGATED ON PURPOSE: no docker, no database. The tool check resolves the root specifier BEFORE
+// the child reads `migrations` or parses DATABASE_URL, so an empty tree answers on its own. A
+// mocked port would prove nothing — the defect lives in a child process's module resolution, and
+// only a real tree with no node_modules exercises it.
+it("names the missing TOOL, not an unknown FILE, when the workspace was never installed", async () => {
+  const root = mkdtempSync(join(tmpdir(), "moe-migration-uninstalled-"));
+  let store: SqliteEventStore | undefined;
+  try {
+    // Syntactically valid, so the arm cannot pass because the URL was rejected instead.
+    const url = "postgres://u:p@127.0.0.1:5432/db";
+    const rejection = await nodeMigrationPorts().apply(root, url).then(
+      () => null, (error: unknown) => error);
+    expect(rejection).toBeInstanceOf(MigrationExecutionError);
+    expect(rejection).toMatchObject({ toolMissing: true });
+    // The old answer, and the whole reason this arm exists: `file` still defaults to the sentinel,
+    // so the sentinel alone can never be the discriminator.
+    expect((rejection as MigrationExecutionError).file).toBe("MIGRATION_FILE_UNKNOWN");
+
+    store = SqliteEventStore.openForProject(join(root, "events.sqlite"), "project");
+    installTestRecoveryBinding(store);
+    const refused = await migrateWithBackup(store, {
+      projectRoot: root, workspace: root, projectId: "project", requestId: "uninstalled",
+      environment: "production", sha: "a".repeat(40), databaseUrl: url,
+      now: new Date("2026-09-06T10:00:00.000Z"),
+    }, { ...nodeMigrationPorts(), dump: async (_url, path) => { writeFileSync(path, "-- backup\n"); } });
+    expect(refused).toMatchObject({ outcome: "REFUSED", applied: [], refusal: {
+      code: "MIGRATION_TOOL_MISSING", layer: "DAEMON_INGRESS", detail: "MIGRATION_TOOL_MISSING",
+    } });
+    expect(refused.backupRef).not.toBeNull();
+    expect(readMigrationReceipt(store, "project", "uninstalled")).toEqual(refused);
+  } finally {
+    store?.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+}, 180_000);
 
 // Opt-in performs real work; Docker unavailable with flag=1 FAILS, never silently skips.
 it.runIf(RUN)("restores the changed schema and keeps it untouched after a failed backup", async () => {

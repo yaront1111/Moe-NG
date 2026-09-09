@@ -43,6 +43,12 @@ const PUBLIC_PHASE_DETAILS: ReadonlySet<string> = new Set([
   "DEPLOY_ROLLBACK_IMAGE_UNAVAILABLE", "DEPLOY_EFFECT_UNAVAILABLE", "DEPLOY_COMMIT_UNAVAILABLE",
   "DEPLOY_ARCHIVE_UNAVAILABLE", "DEPLOY_ARCHIVE_FAILED", "DEPLOY_DOCKER_UNAVAILABLE",
   "DEPLOY_BUILD_STDIN_FAILED", "DEPLOY_BUILD_TIMED_OUT",
+  // The ONE migration composite that qualifies. Both halves are closed-roster constants minted by
+  // migration-service.ts — the code and layer from migration-receipt.ts's frozen `codeLayers`, the
+  // detail the code itself — so no filename, stderr or connection string can ride here. Every
+  // OTHER migration refusal carries a filename tail, which is caller-influenced text, so the
+  // generic `MIGRATION_FAILED@DAEMON_INGRESS` is deliberately NOT a member and stays redacted.
+  "MIGRATION_TOOL_MISSING@DAEMON_INGRESS: MIGRATION_TOOL_MISSING",
 ]);
 
 /** The refusal as it may be STORED: code and layer unchanged — this engine's own stable

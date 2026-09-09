@@ -62,8 +62,9 @@ const LOCAL: DeployTarget = { network: "moe-net", sshTarget: null, url: "https:/
 const REMOTE: DeployTarget = { ...LOCAL, sshTarget: "deployer@host.example.test" };
 
 /** THE AUDITED PUBLIC PHASE LITERALS. Every one is minted by production code with no caller text
- *  in it (deploy-service.ts and deploy-image-build.ts), which is the whole reason they may
- *  survive: they are outputs of a finite set, not inputs that happened to look safe. */
+ *  in it (deploy-service.ts, deploy-image-build.ts and — for the migration composite — the
+ *  closed-roster code, layer and detail migration-service.ts mints), which is the whole reason
+ *  they may survive: they are outputs of a finite set, not inputs that happened to look safe. */
 const SAFE_PHASES = [
   "DEPLOY_PROXY_MISSING_OR_AMBIGUOUS", "DEPLOY_PROXY_BUSY", "DEPLOY_PROXY_CONFIG_UNSUPPORTED",
   "DEPLOY_PROXY_INCUMBENT_MISSING", "DEPLOY_PROXY_RECOVERY_REQUIRED", "DEPLOY_PROXY_WRITE_FAILED",
@@ -71,6 +72,7 @@ const SAFE_PHASES = [
   "DEPLOY_ROLLBACK_IMAGE_UNAVAILABLE", "DEPLOY_EFFECT_UNAVAILABLE", "DEPLOY_COMMIT_UNAVAILABLE",
   "DEPLOY_ARCHIVE_UNAVAILABLE", "DEPLOY_ARCHIVE_FAILED", "DEPLOY_DOCKER_UNAVAILABLE",
   "DEPLOY_BUILD_STDIN_FAILED", "DEPLOY_BUILD_TIMED_OUT",
+  "MIGRATION_TOOL_MISSING@DAEMON_INGRESS: MIGRATION_TOOL_MISSING",
 ] as const;
 
 /** A fresh opaque value per call. Returned, never logged, never written to a file in the tree. */
@@ -239,6 +241,9 @@ describe("the surviving details are a FINITE PUBLIC SET, not a credential detect
     const impostors = [
       "DEPLOY_PROXY_BUSYY", "DEPLOY_PROXY_MISSING", "DEPLOY_CREDENTIAL_LEAKED",
       "MIGRATION_FAILED@DAEMON_INGRESS", "ENV_STORE_KEY_UNAVAILABLE@KEY", "DEPLOY_BUILD_FAILED",
+      // The admitted migration composite with a FILENAME tail. Proves the one member that WAS
+      // admitted did not turn its code and layer into a blanket prefix a caller could ride.
+      "MIGRATION_TOOL_MISSING@DAEMON_INGRESS: 1700000000009-broken.js",
     ];
     expect(impostors.length).toBeGreaterThan(0);
     const store = openStore();
