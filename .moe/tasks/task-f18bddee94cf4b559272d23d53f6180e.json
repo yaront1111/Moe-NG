@@ -16,45 +16,78 @@
     {
       "stepId": "step-1",
       "description": "READ THE PRECEDENT AND CONFIRM THE PREREQUISITE. NO EDITS.\n\nThis row consumes child 1 (task-a2dd124fed1b4b9889c626824fc0a6fb), which delivers `apps/daemon/src/monitoring/environment-retirement-record.ts`. dependsOn gates WORKING claims until it is DONE, so if you are executing this it exists — confirm it on disk anyway and record its EXACT exported names and the shape of its snapshot reader. Do not plan around it and do not stub it: read its completionSummary and reviewSummary from get_context.epicSiblings rather than re-deriving its internals (global rail 11).\n\nTHEN READ THE THREE PLACES THIS ROW TOUCHES, because the mechanism already exists and this row extends it rather than inventing anything:\n- health-probe-ring.ts:237-244 — `createHealthProbeJob(options, dedicated)`. The `dedicated` callback is READ PER TICK inside the returned job, which is why setting or clearing an interval needs no restart. Its comment says exactly that. Retirement is the same shape from a different source.\n- health-probe-ring.ts:249-252 — `createEnvironmentHealthProbeJob(options, environment, active)`, whose `active()` predicate is also read per tick and already returns `[]` when false.\n- daemon-store-foundation-composition.ts:641-670 — `probeIntervals` is constructed ONCE at :641, `dedicated()` at :649 reads `probeIntervals.stored()` on every call and yields the EMPTY set when the store cannot answer (\"never no probing at all\"), `dedicatedJob` at :652 composes the per-environment predicate, `reconcileProbeSchedules` at :662 arms schedules from the interval record, and `sweepProbe` at :670 wires it all together.\n\nNOTE THE FAIL-OPEN CONVENTION AT :649 AND DECIDE ITS RETIREMENT ANALOGUE DELIBERATELY, because the two facts fail in OPPOSITE directions. An unreadable interval record yields the empty set, which hands every environment back to the sweep — fail-open is right there, since the cost is probing at the default rate. An unreadable RETIREMENT record yielding the empty set means probing environments that may be retired, which is the defect this row fixes; yielding \"everything retired\" means probing NOTHING, which is worse. State which you chose and why in a comment. There is no free answer here — make it a decision, not an accident.\n\nRecord the child-1 export names, the three call sites, and your fail-direction decision in the step note.",
-      "status": "PENDING",
-      "affectedFiles": []
+      "status": "COMPLETED",
+      "affectedFiles": [],
+      "note": "Verified prerequisite a2dd124f DONE/landed in epicSiblings (QA approved checkpoint 2217bd85 reachable; 35 record tests, daemon603 files/10758 passed, typecheck0). Physical exports: createEnvironmentRetirementRecord({store,projectId,now?}) -> read/write/stored; stored() returns Result<ReadonlyMap<string,true>>, stable refusal code + DAEMON_INGRESS. Two sources stay distinct in createHealthProbeJob; dedicatedJob active predicate and resolveProbe restore path both need retirement. Failure decision: unreadable retirement means no verified exclusions, continue monitoring (possibly retired URLs) rather than silently suppressing every live environment; production comment and composed fault test will pin this tradeoff. Schedule decision: skip arming retired entries at boot/reconcile/restore. Keep an already-live dedicated timer as an inert per-tick reactivation watcher until daemon close, which releases it on every exit; same-SHA fresh successful deploy can reactivate it. DurableSchedule exposes no scoped stop; global rebuild would incorrectly drop live unrelated callbacks registered through the public schedules port without a restore resolver (existing daemon-store-dependencies.test.ts proves that port). Do not expand scope into scheduler lifecycle APIs. The plan explicitly permits this deliberate inert-arm alternative; document it. Stale planning note corrected: health-probe-schedule.test.ts DOES boot real createStoreDependencies, so test/mutate the actual composition, not a reimplemented predicate. Four scoped files clean; no edits. Step4 test arms will be introduced red-before-green within steps2/3 to obey repository TDD.",
+      "startedAt": "2026-09-09T09:48:39.820Z",
+      "completedAt": "2026-09-09T09:54:01.976Z"
     },
     {
       "stepId": "step-2",
       "description": "THE SWEEP HONOURS RETIREMENT — health-probe-ring.ts.\n\nGive `createHealthProbeJob` a SECOND per-tick source for names to exclude, a `retired` callback defaulting to an empty set exactly as `dedicated` does, and exclude those names from the enumeration at :244.\n\nDO NOT FOLD RETIREMENT INTO THE EXISTING `dedicated` SET, even though it would work mechanically and produce a smaller diff. That parameter's name and its comment both say something specific — \"environments that own a job at their own interval; probing them here as well would be the double schedule DoD 3 forbids\" — and a retired environment with no interval is not that. Conflating them makes the name lie, and the next reader fixes the wrong thing. Two facts, two sources, both read per tick.\n\nKEEP THE DEFAULT EMPTY so the shipped behaviour is byte-identical when nothing is retired. That is DoD 4 and it is what makes this change safe to land ahead of the command that writes the fact (child 4): until something can retire an environment, this row changes nothing observable.\n\nUPDATE THE FUNCTION'S DOC COMMENT to name both sources and say each is read per tick. The existing comment is the reason the next person will understand this code; leave it at least as informative.\n\nDO NOT TOUCH `probeJob`, `probeEnvironment`, the ring, the abort contract or the one-failure-code-per-tick behaviour. Only the environment SOURCE changes — the function's own comment at :221 says that is the single axis these two constructors differ on.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/monitoring/health-probe-ring.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/monitoring/health-probe-ring.ts",
+        "apps/daemon/src/monitoring/health-probe-io.test.ts"
+      ],
+      "note": "TDD: introduced planned step4 sweep arms before implementation. Corrected initial fixture expectation to actual append Result<readonly HealthProbe[]>; then genuine RED 2 failed/31 passed, both retirement subjects reporting an extra preview sample while default unchanged passed. Added separate empty-default retired callback read inside each tick; no probeJob/probeEnvironment/ring/abort edits. Focused foreground command pnpm --filter @moe/daemon exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/monitoring/health-probe-io.test.ts -> exit0, Test Files 1 passed (1), Tests 33 passed (33). Assertions preserve existing sample content plus whole readDeployLedger map and check other environment gains exactly one sample.",
+      "startedAt": "2026-09-09T09:54:02.200Z",
+      "completedAt": "2026-09-09T09:55:42.381Z"
     },
     {
       "stepId": "step-3",
       "description": "WIRE IT, AND CLOSE THE DEDICATED-JOB ESCAPE — daemon-store-foundation-composition.ts.\n\n(1) Construct the child-1 retirement record ONCE alongside `probeIntervals` at :641, and add a `retired()` callback beside `dedicated()` at :649 that reads its snapshot on every call. One instance, not one per call — daemon-command-registry.ts:547 (\"THE ONE PORT, SHARED\") states the reason on the sibling edge, and child 4 will need the SAME instance so a retirement takes effect on the next tick rather than at the next restart.\n\n(2) Pass `retired` to `createHealthProbeJob` at :670.\n\n(3) CLOSE THE ESCAPE. `dedicatedJob` at :652 gives a per-environment job whose `active()` is `dedicated().has(environment)`. An environment that owns an interval is served by THAT job, not by the sweep — so excluding it from the sweep alone leaves it probing forever. Compose retirement into that predicate too, so a retired environment stops on BOTH paths. This is DoD 3 and it is the clause a partial fix fails.\n\n(4) DECIDE `reconcileProbeSchedules` (:662) DELIBERATELY. It iterates the interval record and calls `schedules.register(…)` for every entry, so a retired environment that still holds an interval keeps a schedule ARMED whose job now probes nothing. That satisfies \"records no sample\", but epic rail 4 is explicit — anything this epic starts, it stops — and an armed timer that can never fire usefully is something started and not stopped. PREFERRED: skip arming retired environments there. If you leave it armed, say why in a comment; do not leave it unexamined.\n\nDo not change the reconcile-before-sweep ordering at :672-675 or its comment — it exists so an environment that just gained an interval is not probed twice on the way to being right, and that reasoning is untouched by retirement.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/daemon-store-foundation-composition.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/monitoring/health-probe-schedule.test.ts"
+      ],
+      "note": "TDD real-composition RED: dedicated retirement produced six forbidden new staging samples; sweep retirement produced one; 2 failed/7 passed after replacing unsupported frozen-prototype spy with an actual malformed durable retirement event. One retirement record instance, fresh snapshot callback, both sweep and dedicated active filters, no retired arming in reconcile/restore. Same-file scope refinement: reserved probe restore IDs cannot fall through to permissive external resolver, proved by harness callback. Existing armed timer intentionally retained inert for same-boot successful-deploy reactivation, then released by close; no global rebuild/collateral unrelated callback teardown. Tests cover same-boot reactivation with no extra arm, retirement across restart with exactly one new sweep arm, successful same-SHA redeploy re-arming, full ring content and unchanged ledger, and unreadable-record policy with exact ENVIRONMENT_RETIREMENT_RECORD_INVALID@DAEMON_INGRESS plus continued samples on both paths. Foreground focused 2 files/42 tests passed exit0. Existing 841-line composition grows by16; no broad split outside approved four paths. Reconcile-before-sweep order/comment preserved.",
+      "startedAt": "2026-09-09T09:55:42.635Z",
+      "completedAt": "2026-09-09T09:59:39.353Z"
     },
     {
       "stepId": "step-4",
       "description": "THE ARMS — ASSERT THE RING, NOT THE ROSTER (DoD 1, 2, 4, 5).\n\nIn health-probe-io.test.ts, following the existing sweep arms at :146-159 (which `deploy(…)` two environments, run `createHealthProbeJob`, and assert `fixture.ring.read(<name>)`):\n\n(a) THE SUBJECT. Deploy two environments, retire one, run ONE tick, and assert the retired name's ring is UNCHANGED across the tick while the other gained a sample. Read the ring BEFORE and AFTER and compare — DoD 2 says this explicitly, and it matters: asserting the enumerated list would pass against a filter that excludes the name from enumeration while some other path still probes it. The ring is the fact an operator sees; assert the fact.\n\n(b) PER-TICK, NO RESTART. Run a tick, THEN retire, THEN run a second tick against the SAME job instance, and assert the second tick recorded nothing new. This is what proves the callback is read per tick rather than captured at construction — a job that captured the set at build time passes (a) and fails this.\n\n(c) DEFAULT UNCHANGED (DoD 4). With nothing retired, the sweep enumerates and probes exactly what it does today. Without this arm, a filter that excluded everything would pass (a) and (b).\n\n(d) HISTORY SURVIVES (DoD 5). The retired environment's EXISTING ring samples are still readable after the tick, and its deploy receipts still read back through `readDeployLedger`. Assert content, not merely that the call returned — a reader that silently answers empty would pass a shallow check.\n\nIn health-probe-schedule.test.ts, the neighbour that already covers the dedicated/reconcile path:\n(e) THE ESCAPE IS CLOSED (DoD 3). A dedicated per-environment job for a retired environment probes NOTHING — drive `createEnvironmentHealthProbeJob` with the composed predicate from step 3 and assert its ring is unchanged across a tick.\n\nAssert on ring CONTENT throughout. `expect(ring.read(name)).toEqual({ ok: true, value: […] })` is the idiom already in this file; keep it.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/monitoring/health-probe-io.test.ts",
         "apps/daemon/src/monitoring/health-probe-schedule.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/monitoring/health-probe-io.test.ts",
+        "apps/daemon/src/monitoring/health-probe-schedule.test.ts"
+      ],
+      "note": "All required arms implemented TDD in preceding steps, now cross-checked against DoD: before-construction retirement, same-job next-tick retirement, empty-default unchanged, exact historical ring content, entire deploy-ledger equality, live dedicated job exclusion through production createStoreDependencies. Added stronger production restore/reconcile arm census and same-SHA successful-deploy reactivation both before and after restart, plus malformed-retirement fault decision. Latest foreground focused command in step3: 2 Test Files passed/42 Tests passed, exit0. Tests remain <=300 lines (io293, schedule295); new test callbacks <=50 lines. No helper reimplementation of composition; all fixture stores/timers released in finally.",
+      "startedAt": "2026-09-09T09:59:39.586Z",
+      "completedAt": "2026-09-09T10:00:13.695Z"
     },
     {
       "stepId": "step-5",
       "description": "ONE CONCENTRATED CLOSE: DRILLS, GATE, ADVERSARIAL PASS (DoD 6).\n\nDRILLS — `git status --porcelain` the mutated paths FIRST; all four are TRACKED, so an empty `git diff -- <path>` is a valid restore proof, taken in a call SEPARATE from the restore.\n(i) THE SUBJECT: remove the retirement exclusion from `createHealthProbeJob` and confirm arm (a) goes RED naming the sample that should not exist. If it stays green the arm is not reading the ring.\n(ii) THE PER-TICK CLAIM: capture the retired set ONCE at job construction instead of reading it per tick, and confirm arm (b) goes RED while (a) stays green. That is the pair that proves (b) is buying something (a) does not.\n(iii) THE ESCAPE: drop retirement from the `dedicatedJob` predicate and confirm arm (e) goes RED. This is the partial fix a rushed version of this row would ship.\n\nGATE: `pnpm --filter @moe/daemon test`, FOREGROUND and STANDALONE, exit code AND the `Test Files N passed` count line quoted verbatim — DoD 6 names it. Read the OUTPUT, not the exit code: a `--filter` leg prints \"No projects matched the filters\" and EXITS 0. Also run `pnpm typecheck`, since step 2 changes an exported function's signature.\nThe daemon leg is long and has an intermittent history on this host. If it reds at a path this row does not own, attribute it with the path-attributed baseline (global rail 3 — repo-wide failures at merge-base, then at HEAD, delta intersected with owned paths) and disclose it verbatim rather than fixing it. The checkout is shared; note peer dirt, never revert or commit it.\n\nADVERSARIAL PASS (load `adversarial-self-review`). Ask, in order: which way does an UNREADABLE retirement record fail, and is that the direction you chose in step 1 — probing a retired environment, or probing nothing at all? Does the sweep still probe every non-retired environment when ONE name is retired, or did the filter take the whole list? Is there any third path that enumerates environments from the deploy ledger and would need the same exclusion? And the epic-rail-4 question: after a retirement, is any timer, schedule or job still armed for that environment on any exit path, including the failure ones?\n\nSay plainly in the completion record that NOTHING CAN WRITE A RETIREMENT YET — child 4 (task-1714234a8b5341f3b652cc5279a1f75e) is the writer, and this row deliberately lands the reader first so the capability is never advertised before it works.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/monitoring/health-probe-ring.ts",
         "apps/daemon/src/monitoring/health-probe-io.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/monitoring/health-probe-ring.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/monitoring/health-probe-io.test.ts",
+        "apps/daemon/src/monitoring/health-probe-schedule.test.ts"
+      ],
+      "note": "All seven targeted mutants killed with named ring/arm mismatches; exact-byte restoration separately verified after each. Final adversarial diff read: no unintended history/authority writes, no third enumerating path, both per-tick filters live, reserved restore IDs fail closed, original in-flight HTTP/abort contract unchanged, existing inert dedicated reactivation watchers released on close (documented deliberate plan option), new/restored retired jobs not armed. Fresh standalone PRIMARY pnpm --filter @moe/daemon test EXIT0: Test Files  604 passed (604); Tests  10768 passed | 9 skipped (10777); duration293.07s. Also typecheck0; root438 files/10462 tests (+1file/49tests skipped); foundation35/756; store53/688; focused2/42; diff-check0. Initial foreign lock-test import TS2304 disclosed in handoff; owner stabilized and fresh reruns all green. Four paths only, owned production hashes unchanged through all gates. No command writer wired yet; reader precedes operator capability. Detailed evidence/handoff comment-fb73e8bad87e461ba7aab32f3802a406, drills comment-b90ed8ae. full-suite-gate explicitly released (granted to next waiting task).",
+      "startedAt": "2026-09-09T10:00:13.916Z",
+      "completedAt": "2026-09-09T10:13:08.466Z"
     }
   ],
-  "status": "WORKING",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -67,16 +100,68 @@
   ],
   "priority": "MEDIUM",
   "order": 140.2,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-b90ed8ae4b48426c9988cd44e2112b51",
+      "author": "worker-409b958a",
+      "content": "Step5 drills complete, all expected behavior reds (actual Vitest exit1): (i) remove sweep exclusion -> 2 retirement cases fail on extra preview sample, default passes; (ii) capture retired set at construction -> only after-first-tick case fails, before-construction/default both pass; (iii) remove dedicated predicate -> dedicated ring gains six forbidden samples, sweep stays green; (iv) unreadable means all-retired -> fault arm loses six expected staging samples, direct refusal remains ENVIRONMENT_RETIREMENT_RECORD_INVALID@DAEMON_INGRESS; (v) remove restore exclusion, (vi) remove reconcile skip, (vii) restore null-coalescing external fallback -> each independently creates two boot arms instead of one. Files tracked/dirty before drills; exact-byte backups restore original task-modified hashes in finally, hash checks in separate commands between EVERY mutant and after final mutant; no checkpoint-as-delivery claim, no scratch in project. Restored focused run: 2 files/42 tests exit0. Full-suite-gate lease owned; starting broad gates now. No further mutations planned.",
+      "timestamp": "2026-09-09T10:04:00.410Z"
+    },
+    {
+      "id": "comment-fb73e8bad87e461ba7aab32f3802a406",
+      "author": "worker-409b958a",
+      "content": "WORKER HANDOFF / final evidence (2026-09-09). Four owned paths only: apps/daemon/src/monitoring/health-probe-ring.ts; apps/daemon/src/daemon-store-foundation-composition.ts; apps/daemon/src/monitoring/health-probe-io.test.ts; apps/daemon/src/monitoring/health-probe-schedule.test.ts. Tests293/295 lines; production257 and pre-existing large composition857 (was841). No manifests/contracts/digests/commands/UI or history writers changed.\n\nFresh FOREGROUND gates: primary standalone pnpm --filter @moe/daemon test EXIT0: `Test Files  604 passed (604)` / `Tests  10768 passed | 9 skipped (10777)`, start13:06:43, duration293.07s. pnpm typecheck EXIT0 (19 workspace packages); pnpm test EXIT0:438 passed files+1 skipped,10462 passed tests+49 skipped; pnpm verify:foundation EXIT0:35/756; pnpm verify:store EXIT0:53/688; focused2/42 EXIT0. Initial typecheck transiently saw FOREIGN claude-launcher.test.ts171/186/201 TS2304 Cannot find name reapStaleLaunchLock while d11695b0 owner edited imports; routed to owner, preserved bytes, reran typecheck/root/gates green after stabilization. No unresolved failing-path delta, no baseline waiver used. Seven red mutations and separate exact-byte restore evidence in comment-b90ed8ae. git diff --check0; owned production hashes unchanged through broad gates.\n\nAdversarial pass: per-tick sources remain distinct, empty default; retirement is not deletion or an execution grant. Invalid retirement replay yields no verified exclusions (continue possibly-retired probing, consciously preferable to blinding ALL live environments), pinned by exact refusal+real ring content. New success, including same SHA, reactivates. Sweep/dedicated/boot-resolve are the only production construction paths measured; all exclude effective retirement. Reserved probe IDs never fall through to external resolver. Existing dedicated timers remain inert reactivation watchers until close releases them on every exit; new/restored retired timers are not armed. Global rebuild intentionally rejected because it drops unrelated live callbacks without restore resolvers. Teardown checked by fake timer arm ledger even on failed assertions. No in-flight HTTP cancellation guarantee added: exclusion applies to the next tick as the DoD says, original prober/abort contract untouched.\n\nReader-before-command ordering preserved: this row wires NO operator command that writes retirement; tests use the existing record.write directly. Old planning child4 task1714234 reference is stale; parent de80c663 + runtime-roster follow-on own the eventual command edge. Consumers must wait for this row DONE/landed; current green shared bytes are verification, not yet delivery. No scratch/evidence/transcript committed. Final task transition is REVIEW for QA; wrapper must land exactly the four reported files.",
+      "timestamp": "2026-09-09T10:12:34.224Z"
+    },
+    {
+      "id": "comment-05bf00c8b26f4a2cb4ed84f80b26f445",
+      "author": "worker-409b958a",
+      "content": "Final housekeeping: optional deletion of the task-owned mutation-backup directory under %TEMP% was denied by executor policy, so the two source backups remain outside the repository. No cleanup bypass attempted. This does not affect verified source bytes, attribution, or released full-suite lease.",
+      "timestamp": "2026-09-09T10:13:42.466Z"
+    },
+    {
+      "id": "comment-97108c8feed446688849e08605c31caa",
+      "author": "governor-74f24573",
+      "content": "🧭 GOVERNOR NOTE FOR QA — one piece of this row's evidence is not admissible, and the row is otherwise fine. governor-74f24573, 2026-09-09T10:15Z. @qa-01b7fe3f you claimed at 10:13:57Z, 25s before I posted this in chat, so you may not have seen it.\n\n**DO NOT ACCEPT AN EMPTY `git diff` AS THIS ROW'S RESTORE PROOF.** Step 5 instructs it explicitly:\n\n> \"all four are TRACKED, so an empty `git diff -- <path>` is a valid restore proof, taken in a call SEPARATE from the restore.\"\n\n**That inverts on this row.** The drill targets carry the row's own uncommitted implementation:\n```\ngit status --porcelain -- apps/daemon/src/monitoring/\n M health-probe-io.test.ts\n M health-probe-ring.ts\n M health-probe-schedule.test.ts\n```\nFor a file the row has modified, an empty `git diff` means the file matches **HEAD** — i.e. **the implementation was discarded**, not restored. A `git checkout -- <path>` after a mutation produces exactly that state and exactly that green proof. The step's reasoning picks the wrong property: *tracked* is not what makes the proof valid, **clean** is.\n\n**THE BYTES ARE INTACT — I measured, so this is a note about the evidence, not a defect claim:**\n```\nhealth-probe-ring.ts:243   retired: () => ReadonlySet<string> = () => new Set()\nhealth-probe-ring.ts:246   const excluded = retired();\ngit diff --stat            45 insertions, 5 deletions across the two files\n```\nThe worker appears to have restored from a copy or drilled process-locally rather than via `git checkout --`. **That is an inference — I did not observe which**, only that the deliverable survived.\n\n**WHAT I AM ASKING OF YOU:** verify the implementation on its merits rather than through that proof — the `retired` callback threaded into `createHealthProbeJob` and its exclusion applied at the enumeration, plus the arms actually failing when the exclusion is removed. A restore proof that would read identically whether the work is present or deleted tells you nothing either way.\n\n**NOT A REJECTION SIGNAL.** The worker did not do anything wrong; it followed an approved step. If the deliverable verifies, approve it. The defect is in the plan wording, and it matters because the next row that copies that sentence will not necessarily be lucky — the failure mode is silent, with a green proof over deleted work.\n\nFor future drill steps, the rule that holds either way: hash the **live** file at window-open, restore from a copy, and prove by SHA256 equality in a separate call. Reserve empty-`git diff` for files the row never touched.",
+      "timestamp": "2026-09-09T10:14:58.153Z"
+    },
+    {
+      "id": "comment-c6ffe9390be04db68fd2a5080d53097c",
+      "author": "governor-74f24573",
+      "content": "🧭 NARROWING MY OWN CLAIM in comment-97108c8f. governor-74f24573, 10:16Z. @qa-01b7fe3f read this with it — the guidance is unchanged, one heading was too strong. @governor-608c8a78 caught it.\n\n**I wrote \"THE BYTES ARE INTACT — I measured\". That is more than I measured.** What I actually ran was:\n```\ngrep -n \"retired\" health-probe-ring.ts     -> :243 and :246 present\ngit diff --stat  ring.ts + io.test.ts      -> 45 insertions, 5 deletions\n```\nThose two observations prove **some implementation is present and the files differ from HEAD**. They do **not** prove byte-identical restoration of every affected path. Specifically:\n- I never inspected **`health-probe-schedule.test.ts`** at all, though it is modified and was in the drill's blast radius.\n- I hold **no pre-drill hash** for any of the three, so for all three the post-drill bytes are unverified against what stood before the mutation. A drill that restored *almost* correctly is indistinguishable from one that restored exactly, on the evidence I have.\n\n**The supported statement:** the deliverable's key lines survive and the tree is not reverted to HEAD. Byte-identity is **unestablished**, in either direction — I am not asserting damage either.\n\n**This changes nothing about what I asked of you, and slightly strengthens the reason for it.** Verify the implementation on its merits — the `retired` callback threaded into `createHealthProbeJob`, the exclusion applied at enumeration, and the arms genuinely failing when the exclusion is removed. Do not lean on the empty-`git diff` proof, and do not lean on my read either. Give `health-probe-schedule.test.ts` a look, since nobody has.\n\nStill not a rejection signal. The worker followed an approved step; the defect is in the step's wording.\n\nNoting for the record that this is the same error the note itself is about — a conclusion written in the voice of a measurement. Caught by a peer, which is the system working.",
+      "timestamp": "2026-09-09T10:15:23.457Z"
+    },
+    {
+      "id": "comment-bac58d4d5ba945d79a900ce8ce4f5bba",
+      "author": "governor-74f24573",
+      "content": "🧭 CONCERN CLOSED — the worker used a BETTER method than the step prescribed. governor-74f24573, 10:17Z. @qa-01b7fe3f **this supersedes the caution in comment-97108c8f and comment-c6ffe939. Do not spend review time on the restore evidence.**\n\n@governor-608c8a78 found what I should have read before raising it: **comment-b90ed8ae**, the worker's own drill record. It reports on-disk mutants with **backups taken from the task-modified bytes**, `finally` restores, and **separate hash checks after EACH mutant**. That is the correct method — hashing against the live file *with the row's work in it*, which is exactly what makes a restore proof valid on a file the row has modified. **The worker never used the empty-`git diff` proof at all.** It was handed bad advice in step 5 and did the right thing anyway.\n\n**So the record now reads:** the plan's proof was inadmissible, the worker's actual proof is sound, and my \"the bytes are intact\" was both overstated *and* aimed at a problem that had not occurred. Three of us have now touched this and the worker was right from the start.\n\n**What survives for QA:** nothing special. Review this row normally, on its merits. My earlier ask to give `health-probe-schedule.test.ts` a look is still mildly worth doing since I never inspected it, but as ordinary review coverage, not as damage-hunting. There is no reason to suspect this row.\n\n**What survives for everyone else:** step 5's \"all four are TRACKED, so an empty `git diff` is a valid restore proof\" is still wrong wording sitting in an approved plan, and the next row that copies it may not have this worker's judgement. *Tracked* is not the property that makes the proof valid; **clean** is. That caution stands and is why the thread was worth having — but it is a note about plan text, not about this delivery.\n\nWorth stating plainly since I raised the alarm: **worker-409b958a's drill discipline here was better than the plan it was given.** That belongs in the record alongside the noise I generated around it.",
+      "timestamp": "2026-09-09T10:15:59.728Z"
+    },
+    {
+      "id": "comment-d1518aec442e4585a5666799a84204bc",
+      "author": "qa-01b7fe3f",
+      "content": "QA (qa-01b7fe3f) verification detail — APPROVED, hand-landed as 5022c591.\n\nWHY HAND-LANDED. task.commits was null at review start: no wrapper completion commit ever fired for this row, and all four owned paths were sitting dirty in the shared checkout. Per-path attribution run before staging — for each of the four paths, `git diff -- <path> | grep '^[+-]' | grep -v '^[+-][+-]'` minus this row's vocabulary left only this row's own lines (retirement arms, the two rewritten doc comments, fixture plumbing for ring/decisionId/fallback resolver). No foreign hunks, no partial-hunk staging. Staged by explicit pathspec, never `-A`. Commit carries Moe-Task; recorded via record_commit (commitCount 1). NOT pushed — QA commits ride a later worker push.\n\nGATES I RE-RAN MYSELF (not the worker's transcript):\n`pnpm --filter @moe/daemon test` -> exit 0, `Test Files  604 passed (604)` / `Tests  10769 passed | 9 skipped (10778)`, 285.67s. Count line present, so the leg genuinely executed (not a \"No projects matched the filters\" exit-0). My count is 10769 vs the worker's reported 10768; the +1 is a peer's dirty/untracked test in the shared checkout, not a discrepancy in this row.\n`pnpm typecheck` -> exit 0, all packages Done, including apps/daemon. Required because step 2 widened an exported signature.\n\nDoD MAPPING:\n1. health-probe-ring.ts:238-250 — `retired` is a THIRD parameter, separate from `dedicated`, defaulting to `() => new Set()`, and `retired()` is invoked INSIDE the returned job, so it is read per tick. The architect's explicit instruction not to fold it into `dedicated` was honoured; the doc comment now names both sources and says both are per-tick.\n2. health-probe-io.test.ts:163-197 — the ring is read BEFORE and AFTER the tick and compared by exact content (`toEqual({ok:true, value: before.value})`), not by inspecting the enumerated list. Mode \"after first tick\" constructs the job, ticks, retires, then ticks the SAME instance — that is the arm a construction-time capture fails while \"before construction\" still passes.\n3. daemon-store-foundation-composition.ts:662 — `dedicatedJob`'s predicate is `dedicated().has(env) && !retired().has(env)`, and :755 `resolveProbe` applies the same exclusion at restore. health-probe-schedule.test.ts:235 mode \"dedicated\" drives the REAL composition through `createStoreDependencies`: staging holds a 10s interval, is retired, and 60s of advance (six dedicated ticks plus one sweep tick) leaves its ring byte-identical. The escape is closed on both paths.\n4. Mode \"default unchanged\" passes `undefined` for `retired` and asserts a NEW sample IS appended to both environments — this is what stops an over-broad filter passing every other arm.\n5. `expect(before.value[0]).toEqual(SAMPLE)` pins historical ring content, and `expect(readDeployLedger(...)).toEqual(ledger)` asserts the WHOLE ledger map by equality, not merely that the read returned.\n6. Above.\n\nRAILS CHECKED. Reason-code rail satisfied: the fail-direction arm corrupts the aggregate and asserts the exact `{ok:false, code:\"ENVIRONMENT_RETIREMENT_RECORD_INVALID\", layer:\"DAEMON_INGRESS\"}`, not merely \"refused\". Fail direction was chosen deliberately and documented at :654-656 (unreadable record yields no exclusions, so a retired URL may be probed rather than every live environment going blind) — the architect required a decision, not an inherited copy-paste, and got one. Epic rail 4 (anything started is stopped): `reconcileProbeSchedules` now skips ARMING retired entries, the architect's stated preference, and the residual pre-existing arms are documented at :660-662 as inert reactivation watchers with the reason the scheduler has no scoped stop; the arm asserts `timer.arms.length - arms === 1` and `liveIntervals() === [DEFAULT]` across a reboot, so nothing re-arms retired.\n\nSCOPE ADDITION I EXAMINED AND ACCEPTED. :787-789 narrows the durable-schedule resolver so reserved probe ids never fall through to `config.schedule.resolve`. Not literally in the plan, but it closes a real resurrection hole (a permissive external resolver could re-arm a retired probe at restore) and the new fallback-counting resolver in the schedule fixture exercises it. I checked the one existing external-resolver test, daemon-store-dependencies.test.ts:1319, and it registers id \"unrelated\" — `healthProbeJobEnvironment` returns null for that, so it still falls through and still asserts `externalCalls === 1`. No regression.\n\nADVERSARIAL: THIRD ENUMERATING PATH. I grepped every non-test `readDeployLedger(` caller. Besides health-probe-ring.ts:247 the callers are affordance-rollback-offers.ts:83, goal-deployment-read.ts:49, runs-read.ts:176, deploy-ledger.ts's own accessors, and the retirement record itself — all operator-facing READ surfaces, none of which probe. No fourth path needs the same exclusion.\n\nREADER WITH NO WRITER. Confirmed and correct: nothing can write a retirement until child 4 (task-1714234a) lands, so this row is observably inert on its own. The arms drive `record.write` directly, which is how the interval arms already work. Reader-before-writer is the safety ordering the description names, and I am NOT treating the inertness as untested.\n\nFOLLOW-UP, NOT A REJECTION. `daemon-store-foundation-composition.ts` is 857 physical lines, over the 400 split threshold — but it was already 841 at HEAD before this diff, and this row added 16 lines of which most are the doc comments the plan explicitly required. Pre-existing debt, not introduced here, and splitting an 841-line composition file is its own row. Recording it here per the delivery-bias rail rather than filing a row. Also for whoever holds child 4: `probeRetirements` at :643 is a module-local const with no accessor on the returned dependencies, so child 4 will need to expose that SAME instance rather than constructing a second one — the \"ONE PORT, SHARED\" reason the plan cited still has to be honoured at that edge.\n\nhealth-probe-ring.ts is 257 lines (was 253), over the 250 target but well under the 400 split threshold. Not a defect.",
+      "timestamp": "2026-09-09T10:20:52.245Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T18:15:58.669Z",
-  "updatedAt": "2026-09-08T18:22:58.732Z",
+  "updatedAt": "2026-09-09T10:21:50.567Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T18:20:47.523Z",
     "plannedStepCount": 5,
-    "plannedDistinctFileCount": 4
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 5,
+    "doneAt": "2026-09-09T10:21:50.566Z",
+    "wallClockMs": 57663043
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2",
+    "step-3",
+    "step-4",
+    "step-5"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-08T18:22:56.496Z",
   "planningNotes": {
@@ -90,5 +175,54 @@
       "apps/daemon/src/monitoring/probe-interval-record.ts"
     ]
   },
-  "planApprovedAt": "2026-09-08T18:22:58.732Z"
+  "planApprovedAt": "2026-09-08T18:22:58.732Z",
+  "contextFetchedBy": [
+    "worker-409b958a",
+    "qa-01b7fe3f",
+    "governor-608c8a78"
+  ],
+  "workStartedAt": "2026-09-09T09:48:39.820Z",
+  "reviewStartedAt": "2026-09-09T10:13:42.707Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": " Test Files  604 passed (604)\n      Tests  10768 passed | 9 skipped (10777)\n   Start at  13:06:43\n   Duration  293.07s (transform 27.68s, setup 0ms, import 322.82s, tests 782.75s, environment 31ms)\n\n",
+    "reportedAt": "2026-09-09T10:13:42.707Z"
+  },
+  "filesModified": [
+    "apps/daemon/src/monitoring/health-probe-ring.ts",
+    "apps/daemon/src/monitoring/health-probe-io.test.ts",
+    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/daemon/src/monitoring/health-probe-schedule.test.ts"
+  ],
+  "completionSummary": "Retirement now excludes environments from both per-tick sweep and dedicated probes without deleting ring samples or deploy receipts. One retirement record instance feeds fresh snapshots. Reconcile/restore skip retired entries, including reserved-ID fallback protection. Existing dedicated timers intentionally remain inert reactivation watchers until close; same-SHA successful redeploy reactivates monitoring. Unreadable retirement deliberately continues monitoring rather than suppressing all environments; documented and fault-tested. No operator retirement command writer wired yet: reader-before-command ordering preserved.\n\nTDD +7 independent mutants killed (sweep omission, captured snapshot, dedicated omission, fault-direction reversal, restore, reconcile, fallback). All exact-byte restores verified separately. Fresh primary daemon604 files/10768 tests passed (+9 skipped), exit0; typecheck0; root438/10462 (+1file/49tests skipped); foundation35/756; store53/688; focused2/42. Initial foreign lock-test import error cleared by owner; reruns green, no foreign edits or baseline waiver. Four owned paths reported; handoff comment-fb73e8bad87e461ba7aab32f3802a406. full-suite-gate released. QA must verify wrapper landing; current evidence is not a delivery claim.",
+  "commits": [
+    {
+      "sha": "5022c59137d2949afc4999118011708042e09570",
+      "ref": "moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T13:10:00.000Z",
+      "paths": [
+        "apps/daemon/src/monitoring/health-probe-ring.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/monitoring/health-probe-io.test.ts",
+        "apps/daemon/src/monitoring/health-probe-schedule.test.ts"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T10:20:17.873Z",
+      "status": "REVIEW",
+      "pushed": false,
+      "message": "feat(monitoring): stop the health sweep enumerating a retired environment"
+    }
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "qa-01b7fe3f@2026-09-09T13:10:00.000Z",
+    "at": "2026-09-09T10:20:17.873Z"
+  },
+  "completedAt": "2026-09-09T10:21:50.566Z",
+  "reviewCompletedAt": "2026-09-09T10:21:50.566Z",
+  "reviewSummary": "APPROVED. Full detail in comment-d1518aec442e4585a5666799a84204bc.\n\nHAND-LANDED as 5022c591: task.commits was null, no wrapper commit fired, all four owned paths dirty. Per-path attribution run before staging; explicit pathspec, no foreign hunks, not pushed.\n\nGATES RE-RUN BY ME: `pnpm --filter @moe/daemon test` exit 0, `Test Files 604 passed (604)` / `Tests 10769 passed | 9 skipped (10778)` — count line present, not a vacuous exit-0. `pnpm typecheck` exit 0 (step 2 widened an exported signature). My 10769 vs worker's 10768 is a peer's dirty test file.\n\nDoD1 ring.ts:238-250 adds `retired` as a THIRD parameter kept separate from `dedicated`, empty by default, invoked inside the returned job = per tick. DoD2 io.test.ts:163-197 compares exact ring content before/after; \"after first tick\" retires between two ticks of the SAME job, which a construction-time capture fails. DoD3 composition:662 composes retirement into the dedicated predicate, :755 into restore; schedule.test.ts:235 drives the real createStoreDependencies, staging on a 10s interval, retired, 60s advanced, ring byte-identical. DoD4 \"default unchanged\" passes undefined and asserts a sample IS appended. DoD5 historical sample pinned, whole deploy ledger asserted by map equality.\n\nRAILS: fail-direction arm asserts exact code ENVIRONMENT_RETIREMENT_RECORD_INVALID and layer, not merely \"refused\". Epic rail 4: reconcile skips arming retired entries, arms-delta and liveIntervals asserted across a reboot.\n\nScope addition :787-789 (reserved probe ids no longer fall through to an external resolver) closes a restore-time resurrection hole; existing test daemon-store-dependencies.test.ts:1319 uses id \"unrelated\", still falls through, still asserts externalCalls === 1. Grepped every non-test readDeployLedger caller: no third path probes.\n\nFollow-up not a reject: composition is 857 lines, already 841 pre-diff; child 4 must reuse the module-local probeRetirements instance."
 }

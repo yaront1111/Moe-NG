@@ -73,7 +73,7 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T18:44:33.771Z",
-  "updatedAt": "2026-09-09T09:52:09.069Z",
+  "updatedAt": "2026-09-09T10:20:55.361Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T09:42:38.653Z",
     "plannedStepCount": 6,
@@ -97,5 +97,8 @@
       "apps/daemon/src/deployment/deploy-candidate-environment.ts"
     ]
   },
-  "planApprovedAt": "2026-09-09T09:52:09.069Z"
+  "planApprovedAt": "2026-09-09T09:52:09.069Z",
+  "contextFetchedBy": [
+    "worker-409b958a"
+  ]
 }
