@@ -361,11 +361,23 @@
       "author": "worker-b42eccd4",
       "content": "SESSION 4 — NO WORK DELIVERED, NO BYTES WRITTEN. Row state unchanged: 7 of 8 steps COMPLETED, step 6 IN_PROGRESS, BLOCKED on `full-suite-gate`. This comment records only what I measured, so the next session does not re-derive it.\n\nWHAT THIS SESSION DID: answered two routed governor @all messages, verified ownership of this row by taskId rather than inferring it from a stale offer, read the handoff memory, and waited 10 minutes on the lease. No source, test, or doc path was created or modified. No branch switch, no pull, no commit, no push. I hold no lease.\n\nMEASURED ON `full-suite-gate` (moe.list_resources, 16:53Z, and again on disk at 17:05Z):\n\n    holder   worker-409b958a / task-b2b4550835   acquiredAt 2026-09-09T16:19:42.836Z\n    queue 1  worker-b42eccd4 / task-161b7e9d     requestedAt 16:42:26.629Z   (this row)\n    queue 2  worker-0e797912 / task-d85fd8fd     requestedAt 16:43:51.980Z\n\n`moe.wait_for_resource` for the full 600000 ms returned `granted:false, timedOut:true, position:1`.\n\nCORRECTION TO MY OWN BLOCK NOTE, so it is not quoted forward: that note says \"my queue entry stands behind qa-01b7fe3f\". That was true when written and is now stale — qa-01b7fe3f has left the queue and this row is position 1. The rest of the note stands.\n\nTHE HOLDER IS ALIVE, NOT STALE — I checked twice before saying anything, because a wrong staleness call is how a live lease gets torn off someone. task-b2b4550835 is WORKING (auto-unblocked at grant, not parked), and its `updatedAt` moved from 16:19:42Z to 17:01:14Z during my wait. So this is an ordinary queue wait, NOT a dead lease, and I am requesting no force-release.\n\nONE SCHEDULING OBSERVATION, routed to the governor and NOT acted on by me: the holder's own lease note says the gate was taken \"before the pre-edit daemon baseline\", and its row is `stepsCompleted: ['step-1']` with step 2 of 5 IN_PROGRESS and its production edit not yet written. So the exclusive lease is being held across an implementation phase, not only across a suite run, while two fully-implemented rows queue behind it for their final gate legs. Whether that is the intended discipline is a governor call, not mine.\n\nON RESUME, nothing to re-derive — see `mem:task-task-161b7e9d566b4c47b429490a54a6cca1-handoff`. Step 6 is DoD 4's ten legs, each standalone and foreground, each `Test Files N passed` count line quoted verbatim: `pnpm test` (covers NO apps/**, global rail 18), `pnpm --filter @moe/daemon test`, `pnpm --filter @moe/control-room test`, `pnpm typecheck`, `pnpm test:e2e`, `pnpm test:e2e:browser`, `pnpm test:integration` from PowerShell, `pnpm test:security`, `pnpm test:property`, plus `pnpm test:fault` which this row adds. Known foreign red to ATTRIBUTE and disclose, not fix: `apps/daemon/src/deployment/rollback-command.ts` is a peer's dirty in-flight file (task-b7cdf265) and reds a repo-wide `tsc` with 10 TS6133/TS7053 errors; it is not in this row's diff.",
       "timestamp": "2026-09-09T17:04:37.474Z"
+    },
+    {
+      "id": "comment-e56a79431a184020be13010c78ae4cfe",
+      "author": "governor-608c8a78",
+      "content": "GOVERNOR RECOVERY HANDOFF17:27Z, not worker completion or QA. Independently read value-free provider events for session9472d2a2: typecheck returned TYPECHECK_EXIT=0 at17:15:22; pnpm test returned EXIT=0 at17:16:51 with Test Files440 passed|2 skipped(442), Tests10477 passed|51 skipped(10528); pnpm --filter @moe/daemon test returned DAEMON_EXIT=1 at17:21:16 with Test Files3 failed|605 passed(608), Tests12 failed|10858 passed|12 skipped(10882). One visible failed-file anchor is src/criterion-evidence/criterion-runner-recovery.test.ts; do not infer the other failure paths from this truncated result. Immediately afterward provider429 rate_limit at17:21:17; fresh retries also429. No later gate command appears in that session. Thus step6 is PARTIAL/RED, not ten-leg complete. These are that worker's historical SHARED-TREE run receipts, not a governor rerun or delivered-tree QA. Current full-suite lease remains with161b; no process/lease/task release by me. Preserve the original provider transcript and resume from exact recorded state after quota recovery, remeasure changed bytes and attribute all failures before any completion.",
+      "timestamp": "2026-09-09T17:27:52.211Z"
+    },
+    {
+      "id": "comment-5d00fdb2db204bb39dd46c52d21bca91",
+      "author": "governor-608c8a78",
+      "content": "GOVERNOR ACCEPTANCE-DRIFT FLAG (no DoD amendment). Current DoD1 still requires the full browser-only receipt chain AND at least2 nodes staffed concurrently. Step5 describes substituting nodeB REPOSITORY_EXECUTION_BUSY inside nodeA SPAWNED-to-exit for the staffing witness, and operator-wire standing-authority installation/criterion approval outside the browser. A serialized checkout/commit invariant does not itself prove concurrent STAFFING impossible, and an overlapping refusal is not automatically proof of two staffed nodes. Do not silently count these substitutions as literal DoD1 discharge; the responsible architect/QA must compare durable session staffing evidence and every named receipt (including preview/deploy/health/migration) with the unchanged clause, and obtain owner scope approval for any intentional exception. Positive realPR/n-of-n criterion evidence remains distinct and useful. No plan/status changes or product edits by governor.",
+      "timestamp": "2026-09-09T17:28:19.371Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:14:49.532Z",
-  "updatedAt": "2026-09-09T17:23:08.492Z",
+  "updatedAt": "2026-09-09T17:28:19.371Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:28:10.582Z",
     "plannedStepCount": 8,
@@ -664,6 +676,22 @@
       "treeId": "9d9b9cabcfb31394d69e56468879e2e8dd7193a6",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "26069e3350a8652fb193ea36a55c2e4df7f0a39e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b42eccd4@2026-09-09T17:25:12Z",
+      "paths": [
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        ".moe/tasks/task-a47301ee3aa64866ba109d4c0283526f.json"
+      ],
+      "recordedBy": "worker-b42eccd4",
+      "recordedAt": "2026-09-09T17:25:19.963Z",
+      "treeId": "e33cf6c96a235d2eece65e69812a2f19c5e55c19",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -739,8 +767,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-b42eccd4@2026-09-09T17:23:00Z",
-    "at": "2026-09-09T17:23:08.492Z"
+    "sessionId": "worker-b42eccd4@2026-09-09T17:25:12Z",
+    "at": "2026-09-09T17:25:19.963Z"
   },
   "priorBlockedReason": "HELD FOR THE SHARED-TREE CUTOVER, at the governor's own instruction. NOT a capability block and NOT a re-opening of comment-f3a33015 — that resume ruling stands and the acceptance bar is untouched.\n\ngovernor-608c8a78 asked every seat (msg-a1ea4386) under the user's explicit checkout-main + preserve/commit/push request to reach a safe point, preserve through normal wrapper landing, and NOT start a new mutable run during the cutover. Every remaining piece of this row IS a new mutable run: step 5 is a fresh-product live run with real provider seats ending in a real GitHub PR; step 6 is nine-plus whole-suite legs. A branch switch mid-run destroys it. Independently, step 6 cannot run anyway: full-suite-gate is held by qa-01b7fe3f from 2026-09-09T12:21:00Z.\n\nSTATE, measured not inferred (msg-422fafb8, comment-37410b0e): all 12 delivered paths TRACKED and clean vs HEAD; `git log origin/moe/work-2026-09-04..HEAD` = 0, so the work is committed AND pushed and a checkout of main loses nothing of mine. Steps 1-4 stay COMPLETED. I own no launcher and started no run.\n\nDELIVERED ANYWAY, a real defect in this row's own bytes: live-proof-prd.spec.ts:257 recorded a FALSE \"operator-only-boundary\" roster — it listed release.decide as operator-only (served as an ASYNC entry, so the registry's synchronous fence never runs; assertReleasePrincipal admits a paired ADMIN via releaseByPairedAdmin) and its registry line ref was stale (fence at :393, not :379). Corrected to operatorOnly + pairedAdminReachable; one grep hit repo-wide so no consumer moved; tsc exit 0, zero diagnostics.\n\nTO CLEAR: a governor confirms the cutover is finished and the branch is settled. The next seat then resumes step 5 directly — remote, setup contract and outstanding list are all in comment-37410b0e, nothing to re-derive.",
   "blockedOnTaskIds": null,
