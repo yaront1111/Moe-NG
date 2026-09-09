@@ -58,7 +58,7 @@
     }
   ],
   "status": "REVIEW",
-  "assignedWorkerId": "qa-3ae63006",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -91,11 +91,17 @@
       "author": "worker-b42eccd4",
       "content": "RE-VERIFICATION IN A FRESH SESSION (the prior session died after step 4; its gate output died with it, so every leg below was RUN AGAIN in this session at 2026-09-09 ~14:03-14:15Z / 17:03-17:15 local). Nothing was edited: my one owned path is committed at 8cca472b and `git status --porcelain -- apps/daemon/src/monitoring/` is EMPTY, so this is the same tree the first gate table graded.\n\nFRESH GATE TABLE, each leg foreground and standalone, exit captured with ${PIPESTATUS[0]}, count line verbatim:\n\npnpm --filter @moe/daemon test        EXIT 0   Test Files 607 passed (607) | Tests 10834 passed | 12 skipped (10846) | 237.06s\npnpm --filter @moe/daemon test  (2nd) EXIT 0   Test Files 607 passed (607) | Tests 10834 passed | 12 skipped (10846) | 237.01s\npnpm --filter @moe/control-room test  EXIT 0   Test Files 205 passed (205) | Tests 2677 passed (2677) | 14.12s\npnpm typecheck                        EXIT 0   apps/daemon typecheck: Done (all packages Done)\n\nThe daemon leg ran TWICE (the second was an attempt to pass a vitest filter through `pnpm ... test -- <name>`, which does NOT reach vitest as a filter and re-ran the whole suite). Unintended, but it is a free reproducibility control: two independent full runs, same 607/607, same 10834 passed.\n\nDELTA vs THE PRIOR SESSION'S TABLE: 10834 passed | 12 skipped, against 10833 passed | 13 skipped at 12:24Z. One test moved from skipped to passed. It is not mine — my file's 3 arms are unconditional and none is skipped — it is a peer's conditional arm whose precondition is now met. Denominator is unchanged at 10846.\n\nPOSITIVE CONTROL that my arms actually EXECUTE (an exit-0 leg with no count line proves nothing; so does a full-suite count line that never names the file):\n  cd apps/daemon && npx vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 src/monitoring/environment-retirement-restart.test.ts\n  EXIT 0   Test Files 1 passed (1) | Tests 3 passed (3)\nThree arms, matching the three this row delivered (end-to-end retire + restart; history-survives + ledger-unmutated; dedicated-interval + deploy-after-retirement).\n\nFULL-SUITE-GATE LEASE, disclosed rather than taken. `.moe/resources/full-suite-gate.json` shows holder qa-01b7fe3f for task-7693a195c0, acquiredAt 2026-09-09T12:21:00Z with etaMs 900000 — i.e. 87 minutes past its own stated ETA when I measured at 14:03Z. I did NOT force-release it (not my call) and did NOT queue on it (acquire + report_blocked on a resource parks a one-shot seat). I measured instead: `Get-CimInstance Win32_Process | Where-Object CommandLine -match 'vitest|pnpm|tsc '` returned NO vitest and NO pnpm process — only my own shell. No suite was running, so my runs contended with nothing. Recording it as a live lease past its ETA for whoever triages stale leases.\n\nPEER DIRT AT THIS TREE: 34 dirty paths, 4 of them untracked, none under apps/daemon/src/monitoring. Reverted, stashed, added and committed NONE of them.",
       "timestamp": "2026-09-09T14:12:52.156Z"
+    },
+    {
+      "id": "comment-565b31d9d2584620ac8332d475c0f2f3",
+      "author": "qa-3ae63006",
+      "content": "QA in progress: inspected checkpoint 8cca472b plus completion dcb7dc2f; owned test blob is unchanged and both SHAs are branch-contained. Source diff is one +349-line test. No mutable gates started while clarifying governor SAVE/STOP; full-suite-gate also remains peer-held, holder pinged. One concrete teardown concern under review: withRestartableDaemon allocates root at line 130, but initial boot(), shutdown(), and SqliteEventStore.openForProject (149-151) all precede the try at 152. A setup throw skips cleanup entirely; inside finally, shutdown()/store.close() throwing skips rmSync and the timer assertion. Will fault-inject once permitted; please clarify any existing setup-failure guarantee before I decide.",
+      "timestamp": "2026-09-09T14:14:54.428Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T17:18:29.893Z",
-  "updatedAt": "2026-09-09T14:13:15.634Z",
+  "updatedAt": "2026-09-09T20:50:37.401Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T18:13:13.603Z",
     "plannedStepCount": 4,
@@ -299,10 +305,26 @@
       "treeId": "b33787ea081a367ac2f5a4ff267f4d906049c41f",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "dcb7dc2f6d11971a3411379ba3b33ef5e19059ff",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-b42eccd4@2026-09-09T14:02:17Z",
+      "paths": [
+        ".moe/tasks/task-de80c663569a4ab2b30a9db6ac526e4b.json"
+      ],
+      "recordedBy": "worker-b42eccd4",
+      "recordedAt": "2026-09-09T14:13:57.338Z",
+      "treeId": "cfddf8b4c34dd94d96dc7ce16b028d5b7a5a3ebb",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
-    "apps/daemon/src/monitoring/environment-retirement-restart.test.ts"
+    "apps/daemon/src/monitoring/environment-retirement-restart.test.ts",
+    ".moe/tasks/task-de80c663569a4ab2b30a9db6ac526e4b.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/monitoring/environment-retirement-restart.test.ts"
@@ -310,9 +332,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-b42eccd4@2026-09-09T13:47:09Z",
-    "at": "2026-09-09T13:47:16.171Z"
+    "kind": "completion",
+    "sessionId": "worker-b42eccd4@2026-09-09T14:02:17Z",
+    "at": "2026-09-09T14:13:57.338Z"
   },
   "reviewStartedAt": "2026-09-09T14:13:08.422Z",
   "verification": {

@@ -15,6 +15,11 @@ import { approvePlanInBrowser, askClarification, driveGate1InBrowser, proposeCon
   from "./live-proof-gate1.js";
 import { installStandingAuthority, landLiveProofNodes } from "./live-proof-landing.js";
 import { prepareLiveProductWorkspace } from "./live-proof-workspace.js";
+import { LIVE_ENVIRONMENT, cleanupDeployment } from "./live-proof-deploy.js";
+import { DEPLOY_BUILD_CONTEXT_ENV_KEY } from "../../../apps/daemon/src/deployment/deploy-command.js";
+import { deployLiveProof, previewLiveProof } from "./live-proof-operate.js";
+import { removeMigrationDatabase } from "./live-proof-migration.js";
+import { readRecoveryEvidence } from "./live-proof-recovery.js";
 import { verifyLiveProofCriteria } from "./live-proof-criteria.js";
 import { LIVE_RELEASE, releaseLiveProof } from "./live-proof-release.js";
 import { CRITERIA, PRD_TEXT, PRODUCT_NAME } from "./live-proof-prd.js";
@@ -32,10 +37,16 @@ import { CRITERIA, PRD_TEXT, PRODUCT_NAME } from "./live-proof-prd.js";
  * plan's two nodes CONCURRENTLY through the real wrapper and lands both in the product's own
  * repository, so the node landing shas DoD 1 asks for are read off git here.
  *
- * WHAT IT STILL DOES NOT COVER, said here so a green run is never read as more than it is:
- * Gate 2, Gate 3 and the deploy are on the far side of the operator fence this spec's boundary
- * arm MEASURES, and the owner's ruling (comment-267eccae) routes preview and deploy over the
- * operator wire rather than the browser. Steps 5-8 of the plan own those.
+ * WHAT THE SEATS ARE. REAL PROVIDER SEATS. The wrapper spawns a real coding CLI through its own
+ * `MOE_AGENT_COMMAND` seam and that CLI writes each node's module; nothing in this lane contains
+ * a line of the product's source. Round 1 used a scripted seat and QA rejected it.
+ *
+ * WHO DOES WHAT, said plainly so a green run is never read as more than it is. The browser
+ * drives bootstrap, activation, Gate 1 with its clarification, the design, the plan and the plan
+ * gate, and it takes the release decision by click. PREVIEW and DEPLOY ride the CONFIGURED
+ * OPERATOR wire, because both refuse every other principal in their own source and the owner
+ * ruled (comment-267eccae item 3) that they may be driven that way with the actor named
+ * truthfully. No fence is edited anywhere in this row.
  *
  * NOTHING IS SEEDED. `seed: "NONE"` plus the `seedPid === null` assertion is the lane's own
  * witness, and the catalog is asserted ABSENT before the page is touched. No scratchpad script
@@ -43,8 +54,15 @@ import { CRITERIA, PRD_TEXT, PRODUCT_NAME } from "./live-proof-prd.js";
  * the browser's own form, and every fact below is read back from the daemon or from git.
  */
 
-/** Raised for the landing leg: three real deliveries, each with a verifier run and a commit. */
-const JOURNEY_MS = 1_800_000;
+/**
+ * Raised for the REAL seats and the REAL deploy.
+ *
+ * Three provider turns (minutes each, serialized by the repository coordinator), a forced crash
+ * and a wrapper restart, a `docker build` of a cold `node:24.16.0-alpine`, docker's own health
+ * retries, and a PostgreSQL container. This is a wall-clock bound on a long live drive, not a
+ * performance target: a run that needs more than this has stalled, not slowed.
+ */
+const JOURNEY_MS = 5_400_000;
 const CARD_MS = 120_000;
 const RUN_MS = 240_000;
 const CONTRACT_ID = "contract-standup-live-proof";
@@ -135,6 +153,18 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
   created.push(parentDir);
   const productDir = join(parentDir, PRODUCT_NAME);
   expect(existsSync(productDir), "the browser must create the submitted directory").toBe(false);
+
+  // THE DEPLOY BUILD CONTEXT IS HOST-SCOPED DAEMON CONFIGURATION, NEVER A PAYLOAD KEY -- a
+  // caller-supplied path would let any operator-authenticated request build an arbitrary
+  // directory on this host (daemon-command-async-entries.ts:245-251). `daemonEnv` spreads
+  // `process.env`, so naming it here is how an operator configures THIS daemon, and an
+  // unconfigured one refuses DEPLOY_BUILD_CONTEXT_UNCONFIGURED rather than guessing.
+  const priorBuildContext = process.env[DEPLOY_BUILD_CONTEXT_ENV_KEY];
+  process.env[DEPLOY_BUILD_CONTEXT_ENV_KEY] = productDir;
+  // Per run, so two drives on one host never contend for a container name.
+  const containerPrefix = `moe-liveproof-${String(Date.now())}`;
+  let deployedContainer = "";
+  let deployedImageSha = "";
 
   const outcome = await withDaemonBackedControlRoom({
     approval: "HUMAN", liveCredentials: "ATTACHED", nodeWorkspace: productDir,
@@ -262,9 +292,19 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
           // standing slices, and without them the verifier never accepts a delivered node.
           record("standing-authority-operator-wire", await installStandingAuthority(lane, scratch));
           const landed = await landLiveProofNodes(
-            lane, productDir, PLAN_NODES.map((node) => node.nodeKey), CONCURRENT_NODES);
+            lane, productDir, PLAN_NODES.map((node) => node.nodeKey), CONCURRENT_NODES,
+            Object.fromEntries(PLAN_NODES.map((node) => [node.nodeKey, node.objective])),
+            // ---- DoD 2: THE FORCED CRASH, ARMED INSIDE THIS REAL DRIVE. ----
+            // `before-intent` is the point at which RESUMPTION is the product's designed
+            // answer, and choosing it is a measurement rather than a preference:
+            // `repositoryLandingMayRetry` admits a retry only when the attempt journal reads
+            // NO_EFFECT, so `after-intent` (STARTED) and `after-commit` both resolve to
+            // REPOSITORY_RECOVERY_REQUIRED by design -- one outcome, never duplicated, but
+            // deliberately NOT auto-resumed. Those two points are proved in the fault lane.
+            { point: "before-intent" });
           record("node-landings", landed.ok
-            ? { landings: landed.landings, seats: landed.seats, staffing: landed.staffing }
+            ? { crash: landed.crash, landings: landed.landings, seats: landed.seats,
+              staffing: landed.staffing }
             : { detail: landed.detail.slice(0, 1500), ok: false });
           expect(landed.ok, landed.ok ? "landed" : landed.detail).toBe(true);
           if (landed.ok) {
@@ -280,6 +320,33 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
             expect(landed.staffing.evidence ?? "", "the witness must carry the product's own code")
               .toContain("REPOSITORY_EXECUTION_BUSY");
             expect(CONCURRENT_NODES).toHaveLength(2);
+
+            // ---- DoD 2: RECOVERY, PROVED FROM THE STORE ALONE. ----
+            // The knob's note is the dying process's OWN last words on fd 2; nothing here is
+            // read from agent memory and nothing is read from a line saying "recovered".
+            expect(landed.crash, "the armed knob must have fired").not.toBeNull();
+            const crash = landed.crash;
+            if (crash !== null) {
+              const others = landed.landings
+                .filter((row) => row.nodeKey !== crash.nodeKey).map((row) => row.nodeRef);
+              const recovery = readRecoveryEvidence({
+                crashAt: crash.at, crashedNodeRef: crash.nodeRef,
+                landingKindSuffix: "landing", otherNodeRefs: others,
+                storePath: scratch.storePath,
+              });
+              record("crash-and-recovery", { crash, recovery });
+              // ONE OUTCOME. Counted from rows, because a DUPLICATE landing looks fine too.
+              expect(recovery.crashedNodeLandings,
+                `landing outcomes for ${crash.nodeRef}: ${JSON.stringify(recovery.crashedNode)}`)
+                .toBe(1);
+              // AND THE GOAL RESUMES: the OTHER nodes' refs carry decisions committed strictly
+              // after the instant the dying process stamped, so resumption is anchored to the
+              // crash rather than to when this assertion happened to run.
+              expect(recovery.resumedNodes.length,
+                `no decision on ${others.join(",")} after ${crash.at}`).toBeGreaterThan(0);
+              expect(others.length, "the goal must carry more than the interrupted node")
+                .toBeGreaterThan(0);
+            }
 
             // ---- DoD 3, FIRST HALF: every approved criterion VERIFIED, WITH ITS DENOMINATOR.
             const evidence = await verifyLiveProofCriteria(
@@ -297,6 +364,20 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
             expect(evidence.totals?.["criteria"]).toBe(CRITERIA.length);
             expect(evidence.totals?.["verified"]).toBe(CRITERIA.length);
             expect(evidence.integratedSha ?? "").toMatch(/^[0-9a-f]{40}$/u);
+
+            // ---- DoD 1 / GATE 2: THE PREVIEW RECEIPT AND ITS DECISION. ----
+            // ON THE CONFIGURED-OPERATOR WIRE, by the owner's ruling (comment-267eccae item 3),
+            // and the record says so: `preview-start-command.ts:82-84` states in its own source
+            // that preview "is never widened to a paired browser human". Nothing is fenced open.
+            const releasedSha = evidence.integratedSha ?? "";
+            const preview = await previewLiveProof(lane, goalId, releasedSha);
+            record("preview", preview);
+            expect(preview.refusal, `preview refused: ${preview.refusal ?? ""}`).toBeNull();
+            expect(preview.receiptId ?? "", "a 64-hex preview receipt id").toMatch(/^[0-9a-f]{64}$/u);
+            expect(preview.url ?? "", "the receipt names where the preview served")
+              .toMatch(/^https?:\/\/127\.0\.0\.1:\d+/u);
+            expect(preview.decision?.["outcome"], JSON.stringify(preview.decision))
+              .toBe("ACCEPTED");
 
             // ---- DoD 3, SECOND HALF: the dossier at the released sha, on a real PR. ----
             // OPT-IN. Without MOE_LIVE_RELEASE_PR=1 nothing is pushed and the absence is
@@ -322,6 +403,55 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
                 .filter((line) => line.trimStart().startsWith("| crit-"));
               expect(rows, `dossier criterion rows:\n${rows.join("\n")}`)
                 .toHaveLength(CRITERIA.length);
+
+              // ---- DoD 1 / GATE 3 -> PREVIEW ENVIRONMENT: fingerprints, deploy, health,
+              // migration. AFTER the release because `deployment.deploy`'s prerequisite table
+              // reads a COMMITTED `repository.publish` DECISION, which Gate 3 is what commits.
+              const deployedSha = String(released.receipt?.["sha"] ?? releasedSha);
+              const operated = await deployLiveProof({
+                containerPrefix: containerPrefix, goalId, lane, sha: deployedSha,
+                storePath: scratch.storePath, workspace: productDir,
+              });
+              deployedContainer = operated.deploy.receipt?.containerName ?? "";
+              deployedImageSha = deployedSha;
+              record("deploy-and-migration", operated);
+
+              // THE ENVIRONMENT FINGERPRINTS. Four keys and no `value`: the operator's only
+              // confirmation a write took is the fingerprint, and it is a full sha256.
+              expect(operated.environment.fingerprints.map((row) => row.name))
+                .toEqual(["DATABASE_URL", "SESSION_SECRET"]);
+              for (const row of operated.environment.fingerprints) {
+                expect(row.isSet).toBe(true);
+                expect(row.fingerprintSha256, row.name).toMatch(/^[0-9a-f]{64}$/u);
+              }
+
+              // THE DEPLOY RECEIPT AND ITS HEALTH URL, from a REAL docker build of the
+              // released sha -- no `fakeDocker` anywhere in this lane.
+              expect(operated.deploy.receipt, JSON.stringify(operated.deploy)).not.toBeNull();
+              expect(operated.deploy.receipt?.outcome,
+                `deploy detail: ${operated.deploy.receipt?.detail ?? ""}`).toBe("DEPLOYED");
+              expect(operated.deploy.receipt?.sha).toBe(deployedSha);
+              expect(operated.deploy.receipt?.url ?? "",
+                "a DEPLOYED receipt names where the environment answers").not.toBe("");
+              // HEALTH TWO WAYS: docker's own verdict, and the image's healthcheck run again
+              // inside the container. A container that became healthy and then died answers
+              // the first and fails the second.
+              expect(operated.deploy.health?.dockerHealth,
+                JSON.stringify(operated.deploy.health)).toBe("healthy");
+              expect(operated.deploy.health?.probeStatus,
+                operated.deploy.health?.probeOutput ?? "").toBe(0);
+
+              // THE MIGRATION RECEIPT, written by the SHIPPED writer against a real database.
+              expect(operated.migration?.ok, JSON.stringify(operated.migration?.log ?? []))
+                .toBe(true);
+              expect(operated.migration?.receipt?.outcome).toBe("APPLIED");
+              expect(operated.migration?.receipt?.environment).toBe(LIVE_ENVIRONMENT);
+              expect(operated.migration?.receipt?.backupRef ?? "")
+                .toMatch(/^.+\.sql@sha256:[a-f0-9]{64}$/u);
+              // ASKED OF THE DATABASE, not of the DDL this drive sent: the only authority on
+              // what a database calls its constraint is the database.
+              expect(operated.migration?.constraintFromDatabase)
+                .toBe("standup_entry_author_email_entry_date_key");
             }
           }
         }
@@ -384,6 +514,13 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
 
     return { commits: commits.length, goalId, productHead, projectId: lane.projectId };
   });
+
+  // EVERYTHING THIS DRIVE CREATED ON THE DOCKER HOST, REMOVED BY NAME AND TAG. Never by
+  // wildcard: this host runs other lanes, and a pattern sweep would take their containers too.
+  removeMigrationDatabase(`${containerPrefix}-db`);
+  cleanupDeployment(deployedContainer, deployedImageSha);
+  if (priorBuildContext === undefined) delete process.env[DEPLOY_BUILD_CONTEXT_ENV_KEY];
+  else process.env[DEPLOY_BUILD_CONTEXT_ENV_KEY] = priorBuildContext;
 
   record("lane-outcome", outcome.ok ? outcome.value : { code: outcome.code, detail: outcome.detail });
   expect(outcome.ok, `lane opened${outcome.ok ? "" : `: ${outcome.code} ${outcome.detail}`}`).toBe(true);

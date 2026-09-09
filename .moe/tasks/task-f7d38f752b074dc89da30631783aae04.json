@@ -109,7 +109,7 @@
     }
   ],
   "status": "BLOCKED",
-  "assignedWorkerId": "worker-0e797912",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -167,7 +167,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T15:00:40.393Z",
-  "updatedAt": "2026-09-09T20:03:20.618Z",
+  "updatedAt": "2026-09-09T20:50:37.403Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T17:08:24.544Z",
     "plannedStepCount": 7,
@@ -209,5 +209,74 @@
   "blockedReason": "PARKED ON `full-suite-gate` FOR DoD 5 ONLY. Steps 1-5 COMPLETE and green; step 7's work is finished and already written to the row; step 6 stays IN_PROGRESS because its only remaining leg is the exact command DoD 5 names.\n\nWHY A WAIT, NOT A SUBSTITUTION. DoD 5 is `pnpm --filter @moe/daemon test` EXIT 0 with its count line quoted. A scoped superset cannot satisfy a clause naming the command, and running a daemon-wide suite beside a peer's is what this gate prevents. worker-409b958a has held it since 19:43:27Z for task-b2b4550835; I am #1 and re-polled acquire_resource five times over ~20 min rather than assuming.\n\nEVERYTHING GATE-FREE IS MEASURED AND ON THE ROW. comment-1277acba: all six pre-fix REDs verbatim; the scoped 7-file command at `Test Files 7 passed (7) / Tests 81 passed (81)` run TWICE (post-fix and post-drill); typecheck EXIT 0; per-file deltas (goal-landing-facts 16->18, publication-goal-integration 1->3, publication-approval 8->10, criterion-integrated 1->5, goal-live-evidence unchanged at 14); the 11-arm mutation matrix; restore proof; post-drill SHA256s. comment-7ae4089c: the adversarial self-review. comment-5c197f55 and comment-598c3e3c: preview and control-room follow-ups. comment-5660024e on task-b8ec9a63: the release-durable-facts follow-up.\n\nTHE TREE IS SAFE FOR THE CURRENT HOLDER. No mutant on disk: both drills ran PROCESS-LOCALLY via a temp vitest config outside `src` whose setupFiles vi.mock the shared predicate. The three temp files are deleted and `git status --porcelain` on those paths is EMPTY. No test process of mine runs, I hold no other lease, nothing is half-written.\n\nON GRANT: re-measure disk/git, GATE START, run the suite standalone in the foreground, quote its count line, path-attribute any foreign red, GATE END, release. Then step 6, then step 7, then complete_task on that fresh exit-0 run. The nine paths are in the step-5 note and the handoff memory.\n\nNO COMPLETION CLAIM IS MADE HERE.",
   "blockedResourceId": "full-suite-gate",
   "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-09T20:03:20.618Z"
+  "blockedAt": "2026-09-09T20:03:20.618Z",
+  "commits": [
+    {
+      "sha": "f976d2c76d17f2db9918c0c888f4b55010ebcf4b",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-0e797912@2026-09-09T19:36:26Z",
+      "paths": [
+        ".moe/tasks/task-b8ec9a638f6540c28798c29f23fd5ada.json",
+        ".moe/tasks/task-f7d38f752b074dc89da30631783aae04.json",
+        "apps/daemon/src/criterion-evidence/criterion-artifact.ts",
+        "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
+        "apps/daemon/src/preview/preview-goal-landing.ts",
+        "apps/daemon/src/repository/goal-landing-facts.test.ts",
+        "apps/daemon/src/repository/goal-landing-facts.ts",
+        "apps/daemon/src/repository/landing-receipt-contracts.ts",
+        "apps/daemon/src/repository/publication-approval.test.ts",
+        "apps/daemon/src/repository/publication-goal-integration.test.ts",
+        "apps/daemon/src/repository/publication-goal-integration.ts"
+      ],
+      "recordedBy": "worker-0e797912",
+      "recordedAt": "2026-09-09T20:03:37.934Z",
+      "treeId": "095ee89bb5fe075053b6ae5fb35cbd21ea3bc9f6",
+      "status": "BLOCKED",
+      "contested": [
+        {
+          "path": "apps/daemon/src/criterion-evidence/criterion-artifact.ts",
+          "taskId": "task-b8ec9a638f6540c28798c29f23fd5ada"
+        }
+      ],
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-b8ec9a638f6540c28798c29f23fd5ada.json",
+    ".moe/tasks/task-f7d38f752b074dc89da30631783aae04.json",
+    "apps/daemon/src/criterion-evidence/criterion-artifact.ts",
+    "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
+    "apps/daemon/src/preview/preview-goal-landing.ts",
+    "apps/daemon/src/repository/goal-landing-facts.test.ts",
+    "apps/daemon/src/repository/goal-landing-facts.ts",
+    "apps/daemon/src/repository/landing-receipt-contracts.ts",
+    "apps/daemon/src/repository/publication-approval.test.ts",
+    "apps/daemon/src/repository/publication-goal-integration.test.ts",
+    "apps/daemon/src/repository/publication-goal-integration.ts"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/repository/publication-goal-integration.ts",
+    "apps/daemon/drill-f7d38f75-b.setup.ts",
+    "apps/daemon/src/repository/landing-receipt-contracts.ts",
+    "apps/daemon/src/criterion-evidence/criterion-artifact.ts",
+    "apps/daemon/src/preview/preview-goal-landing.ts",
+    "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
+    "apps/daemon/drill-f7d38f75-a.setup.ts",
+    "apps/daemon/src/repository/publication-goal-integration.test.ts",
+    "apps/daemon/src/repository/publication-approval.test.ts",
+    "apps/daemon/src/repository/goal-landing-facts.test.ts",
+    "apps/daemon/src/repository/goal-landing-facts.ts",
+    "apps/daemon/drill-f7d38f75.config.ts"
+  ],
+  "unattributedPaths": [
+    "tests/e2e/control-room/live-proof-seat.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-0e797912@2026-09-09T19:36:26Z",
+    "at": "2026-09-09T20:03:37.934Z"
+  }
 }

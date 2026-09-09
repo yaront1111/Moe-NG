@@ -33,20 +33,33 @@ import { compiledExecutionRef }
   from "../../../apps/daemon/src/orchestrator/compiled-execution-ref.js";
 import { activeCompiledGraphs }
   from "../../../apps/daemon/src/orchestrator/compiled-node-source.js";
+import { LANDING_FAULT_DEVELOPMENT_ENV, LANDING_FAULT_POINT_ENV }
+  from "../../../apps/daemon/src/orchestrator/landing-fault-injection.js";
+import type { LandingFaultPoint }
+  from "../../../apps/daemon/src/orchestrator/landing-fault-injection.js";
 import { killTree } from "./daemon-children.js";
 import { readWireProtocolVersion } from "./daemon-ports.js";
 import type { DaemonLane, LaneScratch } from "./daemon-ports.js";
-import { liveSeatDouble, modulePath } from "./live-proof-workspace.js";
+import { liveProviderSeat, providerExecutable } from "./live-proof-seat.js";
+import { checksFor, modulePath } from "./live-proof-workspace.js";
 import { resolveLaneScratch, startWrapper, WRAPPER_INTERVAL_MS, wrapperEnv } from "./wrapper-lane.js";
 
-/** Baseline, two seats, two verifier runs and two commits, at a 500 ms wrapper interval. */
-export const LIVE_LANDING_BUDGET_MS = 420_000;
-const SEAT_WRITE_BUDGET_MS = 180_000;
+/**
+ * Baseline, three REAL provider seats, three verifier runs and three commits.
+ *
+ * RAISED FOR THE REAL SEATS. A scripted seat wrote its file in milliseconds; a provider reads
+ * the acceptance checks, writes a module and runs the checks itself, which cost 1-4 minutes per
+ * node when measured. Delivery is serialized by the repository coordinator, so the budget is
+ * the SUM of three provider turns plus the wrapper's own passes, not the maximum of them.
+ */
+export const LIVE_LANDING_BUDGET_MS = 1_200_000;
+/** One provider seat's turn, from staffing to the module existing on disk. */
+const SEAT_WRITE_BUDGET_MS = 900_000;
 /**
  * THREE, so the two NODE seats can be alive together.
  *
  * The board carries a third READY item beside the two nodes -- `plan.propose@run-live-1`, which
- * this seat double does not answer and which the wrapper retries until its attempts exhaust.
+ * the seat launcher does not claim and which the wrapper retries until its attempts exhaust.
  * MEASURED 2026-09-09 at `MOE_WRAPPER_MAX_AGENTS=2`: that item held one of the two seats, only
  * `node-auth-api` was ever staffed, and `node-entries` was reported SEAT_NEVER_WROTE. Three is
  * the smallest bound at which both nodes can be staffed in one pass; the CONCURRENCY CLAIM is
@@ -55,6 +68,29 @@ const SEAT_WRITE_BUDGET_MS = 180_000;
 const MAX_AGENTS = 3;
 /** Raised for the reason `lane-landing.ts` raises it: the out-of-process round costs passes. */
 const STAFFING_ATTEMPTS = 30;
+/**
+ * How long an ARMED pass is given to reach the named point and write its note.
+ *
+ * The note cannot appear until the provider seat has finished, the wrapper's verifier has run
+ * and the landing write has started, so this bounds a REAL SEAT'S WHOLE TURN plus a verify.
+ */
+const CRASH_NOTE_BUDGET_MS = 900_000;
+
+/** Arms the DEVELOPMENT-ONLY crash knob for the FIRST node's landing write, and only that one. */
+export interface LiveLandingFault { readonly point: LandingFaultPoint }
+
+/** What the knob left behind, read from the dead pass's own fd 2 rather than from memory. */
+export interface LiveLandingCrash {
+  /** The knob's timestamp, as the dying process wrote it. */
+  readonly at: string;
+  readonly knob: string;
+  readonly nodeKey: string;
+  readonly nodeRef: string;
+  /** The note verbatim. */
+  readonly note: string;
+  readonly pid: number;
+  readonly point: string;
+}
 
 /** When a seat ran, from its own markers. Windows do not overlap: delivery is serialized. */
 export interface LiveSeatWindow {
@@ -80,6 +116,8 @@ export interface LiveStaffingWitness {
 }
 
 export interface LiveProofLanded {
+  /** Present only when the caller armed the knob: what crashed, where, and when. */
+  readonly crash: LiveLandingCrash | null;
   readonly landings: readonly LiveNodeLanding[];
   readonly ok: true;
   readonly seats: readonly LiveSeatWindow[];
@@ -273,7 +311,8 @@ export async function installStandingAuthority(
 /** Runs the real wrapper until EVERY named node has landed, then stops it. */
 export async function landLiveProofNodes(
   lane: DaemonLane, workspace: string, keys: readonly string[],
-  rendezvous: readonly string[],
+  rendezvous: readonly string[], objectives: Readonly<Record<string, string>> = {},
+  fault: LiveLandingFault | null = null,
 ): Promise<LiveProofLanded | LiveProofLandingRefused> {
   const scratch = resolveLaneScratch(lane);
   if (scratch === null) {
@@ -285,9 +324,21 @@ export async function landLiveProofNodes(
     return { detail: `NO_COMPILED_EXECUTION_NODE ${missing.join(",")}`, ok: false, wrapperPid: null };
   }
   retireSpecNode(scratch);
-  const seat = liveSeatDouble(scratch.root, workspace, refs, rendezvous);
+  const seat = liveProviderSeat({
+    briefs: keys.map((key) => ({
+      checks: checksFor(key), modulePath: modulePath(key), nodeKey: key,
+      objective: objectives[key] ?? "",
+    })),
+    dir: scratch.root,
+    executable: providerExecutable(),
+    refs,
+    rendezvous,
+    workspace,
+  });
   const tracked: ChildProcess[] = [];
-  const watched = startWrapper(lane.repoRoot, {
+  const priorTranscripts: string[] = [];
+  const startPass = (arming: LiveLandingFault | null): ReturnType<typeof startWrapper> =>
+    startWrapper(lane.repoRoot, {
     ...wrapperEnv(scratch, seat.command, WRAPPER_INTERVAL_MS, true),
     // `node`, NOT `process.execPath`: this host's executable is "C:\Program Files\nodejs\node.exe"
     // and the verifier parses the command into argv, so the space split it and the run exited 1
@@ -296,8 +347,17 @@ export async function landLiveProofNodes(
     MOE_NODE_WORKSPACE: workspace,
     MOE_WRAPPER_MAX_AGENTS: String(MAX_AGENTS),
     MOE_WRAPPER_MAX_ITEM_ATTEMPTS: String(STAFFING_ATTEMPTS),
+    // THE CRASH KNOB, and it is the SHIPPED one: `landing-fault-injection.ts` refuses to arm
+    // unless BOTH variables are set, so an unarmed pass passes neither and the injector reads
+    // FAULT_INJECTION_DISARMED. Nothing here can crash an unarmed run.
+    ...(arming === null ? {} : {
+      [LANDING_FAULT_DEVELOPMENT_ENV]: "1", [LANDING_FAULT_POINT_ENV]: arming.point,
+    }),
   }, tracked);
+  let watched = startPass(fault);
   const wrapperPid = watched.child.pid ?? null;
+  let armed = fault;
+  let crash: LiveLandingCrash | null = null;
   let stopped = false;
   const stopTracked = async (): Promise<void> => {
     if (stopped) return;
@@ -310,7 +370,7 @@ export async function landLiveProofNodes(
     // DEDUPLICATED, because a poll that repeats one refusal 300 times is one fact, and the tail
     // is the only place a reader looks. Order is preserved and nothing is rewritten.
     const seen = new Set<string>();
-    const lines = watched.transcript().split(/\r?\n/u)
+    const lines = [...priorTranscripts, watched.transcript()].join("\n").split(/\r?\n/u)
       .filter((line) => !line.includes("plan.propose@") && line.trim() !== "")
       .filter((line) => { const had = seen.has(line); seen.add(line); return !had; });
     return { detail: `${detail}\n${lines.slice(-40).join("\n")}`, ok: false, wrapperPid };
@@ -337,6 +397,35 @@ export async function landLiveProofNodes(
       const nodeRef = refs[key]!;
       const round = await submitProductRound(lane, scratch, workspace, key, nodeRef);
       if (round !== null) return refuse(round);
+      if (armed !== null) {
+        // THE FORCED CRASH, MID-WRITE. The knob SIGKILLs the process performing the landing
+        // write at the named point; the pass never returns and its terminal line never reaches
+        // stdout. The note it writes to fd 2 before the signal is the only thing it leaves
+        // behind, and it reads identically on Windows, which has no signals.
+        //
+        // `\d` AND `\S`, DOUBLED, BECAUSE THIS IS A TEMPLATE LITERAL. A single `\d` inside
+        // backticks is a NonEscapeCharacter and collapses to a bare `d`, so the pattern silently
+        // becomes `pid=(d+)` and never matches. MEASURED 2026-09-09: the knob fired, the note was
+        // in the transcript verbatim, and the wait still reported FAULT_NOTE_NEVER_WRITTEN.
+        //
+        // THE WHOLE NOTE IS GROUP 1 because `watched.waitFor` resolves with `exec(...)[1]` and
+        // nothing else -- a pattern whose first group is the pid would throw the timestamp away.
+        const note = await watched.waitFor(
+          new RegExp(`^(${LANDING_FAULT_POINT_ENV} point=${armed.point} pid=\\d+ at=\\S+)`, "mu"),
+          CRASH_NOTE_BUDGET_MS);
+        if (note === null) return refuse(`FAULT_NOTE_NEVER_WRITTEN ${armed.point} ${key}`);
+        const stamped = /pid=(\d+) at=(\S+)/u.exec(note);
+        crash = { at: stamped?.[2] ?? "", knob: LANDING_FAULT_POINT_ENV, nodeKey: key, nodeRef,
+          note, pid: Number(stamped?.[1] ?? 0), point: armed.point };
+        // THE RESTART. A NEW process, same store, same repository, same handle, NO arming. It is
+        // told nothing about what happened and works it out from the store, which is the whole
+        // claim. The dead pass's transcript is kept, so a refusal after this point still carries
+        // the crash in its tail.
+        priorTranscripts.push(watched.transcript());
+        await killTree(watched.child);
+        armed = null;
+        watched = startPass(null);
+      }
       const committed = await watched.waitFor(
         new RegExp(`^\\[lander\\] (${nodeRef.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&")}): COMMITTED `, "mu"),
         LIVE_LANDING_BUDGET_MS);
@@ -358,7 +447,7 @@ export async function landLiveProofNodes(
       };
     });
     return {
-      landings: resolved, ok: true, seats,
+      crash, landings: resolved, ok: true, seats,
       staffing: concurrentStaffing(watched.transcript(), rendezvous.map((key) => refs[key]!)),
       wrapperPid,
     };

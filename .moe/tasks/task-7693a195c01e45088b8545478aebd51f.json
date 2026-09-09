@@ -108,7 +108,7 @@
     }
   ],
   "status": "BLOCKED",
-  "assignedWorkerId": "worker-a11dcf70",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 2,
@@ -243,11 +243,17 @@
       "author": "worker-a11dcf70",
       "content": "ADVERSARIAL REVIEW of the delivered diff — worker-a11dcf70. Read as a hostile reviewer, marking each item MEASURED or REASONED so nothing inferred is dressed as a measurement.\n\n1. CAN THE PASSWORD REACH A LOG LINE? MEASURED for the compose layer: `docker compose config --format json` on the real project with a planted 24-byte hex value gives valueMatches 0 in stdout AND stderr, for all three input classes (supplied / unset / empty). The refusal message names the SECRET, never the value. REASONED for the postgres layer: `POSTGRES_PASSWORD_FILE` is consumed by the image entrypoint, which logs the PATH on a read failure, not the content — not re-measured this session, and the original accepted proof (comment-b4512d36) covered the running-container half.\n\n2. THE COMPOSE CONFIG-HASH LABEL. MEASURED indirectly and soundly: the label is a digest OVER the resolved config, and the resolved config provably contains no occurrence of the value. A hash of value-free input cannot disclose a value. This was the plan's specific worry that a `.Config.Env`-only sweep would miss.\n\n3. EXOTIC VALUES — newline, `$`, trailing space. Byte round-trip through the mounted secret file holds for all classes. AUTHENTICATION with a TRAILING NEWLINE FAILS, and it failed at the pre-change baseline too: a Postgres init limitation, not a regression from this row, and explicitly NOT claimed supported. Do not let any compressed summary of this row read as \"all classes authenticate\" — the earlier completionSummary did, and comment-309a0e62 is the correction of record. The `$` case is safe precisely because the value travels as file CONTENT, never through compose interpolation.\n\n4. IS THE FAIL-FAST FALSIFIABLE? MEASURED — see comment-7c502167. Removing the `:+` guard makes an unset variable resolve to EXIT 0 instead of EXIT 1. The guard is load-bearing and the arm that pins it is not vacuous.\n\n5. WHY NOT THE PLAN'S OWN SUGGESTION? The step offered a top-level `x-` extension carrying `${POSTGRES_PASSWORD:?...}`. Rejected on measurement: compose interpolates extension fields and `docker compose config` PRINTS the resolved value, which would have swapped a `docker inspect` leak for a `docker compose config` leak. Epic rail 3 forbids plaintext on any surface, not just the one the title names.\n\n6. CONCURRENCY / IDEMPOTENCY. `generateControlledProfile` reads no clock, no random source, no cwd, no host tool version and no `os.EOL`; its only file read is the pinned lockfile asset. Two concurrent generations are byte-identical, and an arm asserts exactly that. No shared mutable state, no check-then-act, nothing to lock.\n\n7. SIDE EFFECTS ON FAILURE PATHS. The one place this row spawns a subprocess is the opt-in `composePasswordConfig` helper. Its `mkdtemp` cleanup sits in a `finally`, so it runs on the throw path; before deleting it asserts the resolved parent is `tmpdir()` and throws \"unsafe compose fixture cleanup\" otherwise, so a bad root cannot become a recursive delete somewhere real. It never echoes subprocess output into an assertion message, which is why a failing case cannot print the planted value into CI logs. It returns a COUNT of matches, not the matched text.\n\n8. THE ARMS ARE COMMITTED, NOT A DELETED PROBE'S TRANSCRIPT. The three docker-backed cases live in the delivered test file behind `MOE_SCAFFOLD_COMPOSE=1`, so any later seat re-runs them. The always-on shape arm above them prevents a zero-case default from passing silently when the flag is absent.\n\n9. WHAT I WOULD BE DINGED FOR, said plainly rather than buried: the daemon suite leg is not run, and the running-container half of DoD 2 is inherited rather than re-executed. The inheritance is defensible because the emitted `docker-compose.yml` is pinned byte-for-byte at sha256 ca06da38... by a green `toEqual(GOLDEN_MANIFEST)` arm this session, so the artifact the accepted proof exercised is provably the same artifact — byte identity, not the diffstat identity that was rightly refused before. The daemon leg is simply owed.\n\n10. SCOPE, restated so it is not read as a fix that did not ship: `deployment-infrastructure-templates.ts:143` still emits `DATABASE_URL` under `environment:` and `.env.example` embeds the password in that URL, so the APP container still leaks. That is consumer task-9255156954's declared scope and it dependsOn this row. Not a gap in this row, and no new bug row is filed for it.",
       "timestamp": "2026-09-09T20:16:35.500Z"
+    },
+    {
+      "id": "comment-802eff26569c4ecb89fe6712ee782a13",
+      "author": "governor-608c8a78",
+      "content": "Governor attribution correction and upstream repair (2026-09-09 20:35Z): checkpoint ac50be661370f664f65ac41c6779f5646b643bca contains FOUR of the five canonical product sources plus board metadata, not all five. controlled-profile-generator.test.ts is still unlanded despite explicit ASSERTED ownership and no peer intersections. Read-only same-byte replay: SHA256 14b3f311094d4edba2baa63aec1cccdde309253718b563cbc7bcdf08827c6799, 462 lines, stable before/after; installed PowerShell lexer fails with exact 'unparseable-source', offset8813/line192. The valid arrow-body regex exposed a missing '>' regex-start context that Bash already recognizes. Fixed source parses exactly two ./controlled-profile-generator.js imports. Original per-path postflight skip code was not persisted/retrieved; this is a reproduced lexer defect, not a claim that original stdout was recovered.\n\nSeparate Moe-s-Tavern source fix 951137ff071b2b4a7d2f8195d26ae705d3b2021a is pushed to main and remote SHA verified. Both launcher sources and paired guard harnesses accounted for. RED: PS5.1 two named assertions fail before patch; GREEN: PS5.1 48/48, PS7 48/48, Bash40/40; daemon100 files/1151 tests EXIT0; syntax both launchers and diff check pass. Real missing-import refusal remains pinned to MOE_ATTR_IMPORTEE_MISSING(./missing.mjs).\n\nThis is NOT installed-bundle deployment, product source landing, or task completion. No product byte or installed artifact was edited. A normal session using the updated packaged launcher must land the remaining source; do not fake-edit it, bypass attribution, or hand-land it. Full-daemon DoD gate remains owed under full-suite-gate; steps/ownership/resource wait unchanged. Downstream 4b7 scope-restoration hold stays until actual controlled-3 completion.",
+      "timestamp": "2026-09-09T20:36:27.686Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T09:49:59.862Z",
-  "updatedAt": "2026-09-09T20:18:42.972Z",
+  "updatedAt": "2026-09-09T20:50:37.395Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T10:02:51.986Z",
     "plannedStepCount": 7,
@@ -301,7 +307,9 @@
     "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
     "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
     "apps/control-room/src/v2/products/live-new-product.tsx",
-    "apps/control-room/src/v2/products/live-new-product.test.tsx"
+    "apps/control-room/src/v2/products/live-new-product.test.tsx",
+    ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json",
+    ".moe/tasks/task-958158c90dd74060a81cc156a68c86ab.json"
   ],
   "completionSummary": "DELIVERY-ONLY RESTORE. No source byte changed this session and none should have: the work was complete and qa-01b7fe3f verified all six DoD items PASS at 14:21Z. The only thing missing was a commit carrying the five sources. Full gate table and adversarial review in comment-045748aa.\n\nTHE STUCK MECHANISM, now cleared. Downstream task-4b7f4a85 — which dependsOn THIS row — held all five implementation paths in its plan affectedFiles. With policy contested=skip-untouched, every non-writing exit skipped them and produced MOE_COMMIT_NOTHING_TO_COMMIT, so a consumer was reserving its own prerequisite's paths. After architect-ed42e60a's reservation recovery, get_commit_scope postflight re-read immediately before this call shows all five asserted=true, peerContested=0.\n\nWHAT I MEASURED FRESH: Docker Server 29.6.2 / Compose v5.3.1, matching the record; the named verification command EXIT 0 (4 files, 38 passed | 5 skipped); both typechecks EXIT 0; full control-room suite EXIT 0 (205 files, 2678 passed); one manifest hash moved and only one (docker-compose.yml to ca06da38), pnpm-lock 0963d16c byte-unchanged, GOLDEN_FILE_COUNT 23, no v3 asset, zero CHANGE_ME lines in the diff; docker ps -a empty and port 5432 free.\n\nTWO LIMITS, stated not buried. (1) pnpm --filter @moe/daemon test was NOT run by me — full-suite-gate is peer-held with two rows queued on clauses no substitute can discharge, and this restore has no defect to re-check. It rests on QA's 14:21Z run (607 files, 10834 passed). (2) The recovery rewrote the five files at 16:13:55, AFTER that run. The diffstat is identical (81/23) and I published each file's sha256 in the step-1 note, but a matching diffstat is not byte identity and no hash of the pre-restore vintage exists. QA should re-run the daemon leg rather than inherit mine.\n\nSCOPE BOUNDARY: this closes the DB service's leak, not the product's. deployment-infrastructure-templates.ts:143 still emits DATABASE_URL under environment: and .env.example embeds the passwor",
   "commits": [
@@ -679,17 +687,36 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "ac50be661370f664f65ac41c6779f5646b643bca",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-a11dcf70@2026-09-09T20:04:59Z",
+      "paths": [
+        ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json",
+        ".moe/tasks/task-958158c90dd74060a81cc156a68c86ab.json",
+        "apps/control-room/src/v2/products/live-new-product.test.tsx",
+        "apps/control-room/src/v2/products/live-new-product.tsx",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts"
+      ],
+      "recordedBy": "worker-a11dcf70",
+      "recordedAt": "2026-09-09T20:18:59.194Z",
+      "treeId": "f7ba10634cbda1f66077b2d7359bdd74510053c1",
+      "status": "BLOCKED",
+      "pushed": true
     }
   ],
   "unattributedPaths": [
-    "apps/daemon/NUL",
-    "NUL"
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-01b7fe3f@2026-09-09T14:13:37Z",
-    "at": "2026-09-09T14:24:16.635Z"
+    "sessionId": "worker-a11dcf70@2026-09-09T20:04:59Z",
+    "at": "2026-09-09T20:18:59.194Z"
   },
   "priorBlockedReason": "DELIVERY STILL MISSING AFTER THE CONTEST WAS CLEARED. Not a code rejection: all six DoD items still pass on my earlier verification (comment-bf785735, comment-309a0e62, comment-9ef545e4). qa-01b7fe3f.\n\nWHAT CHANGED, AND IT IS REAL PROGRESS: the reservation contest is GONE. get_commit_scope postflight now reports ZERO peer intersections on all five implementation paths — only `.moe/tasks/*.json` rows are contested, which is normal and harmless. Unblock condition (b) from my previous reason, narrowing the contesting row's scope, has been met by architect-ed42e60a.\n\nWHAT DID NOT CHANGE: no commit carries this row's SOURCE delivery.\n- `git show HEAD:<each of the three controlled-profile files> | grep -c 'POSTGRES_PASSWORD_FILE|controlled-3'` -> 0, 0, 0.\n- `git log --all --grep=<taskId>` returns TEN commits; `git show <each> -- apps/daemon/src/repository/controlled-profile/ apps/control-room/src/v2/products/ --stat` is EMPTY for every one. All ten carry `.moe/tasks/*.json` only.\n- `git status --porcelain` still shows all five paths ` M `.\nNine of those ten are wip checkpoints stamped `role=qa cli-exit=1` — QA sessions exiting on the row, not worker deliveries.\n\nSo the row returned to REVIEW WITHOUT the five-source completion commit its own reopen reason requires. That reason forbids precisely what would otherwise close it here: no hand-landing, no dirty-byte QA approval, no source reimplementation. I am doing none of them.\n\nUNBLOCK, now a SINGLE condition: a preflight-tracked WORKER session claims this row and EXITS ON IT, producing a completion commit carrying the five paths. Delivery only — the code is verified and must not be rewritten.\n\nMINOR, stale rather than live: task.unattributedPaths lists `NUL` and `apps/daemon/NUL`. Neither exists on disk and git status is clean of both — a Windows redirect artifact from an earlier session. Harmless, but it should not be carried into a landing.\n\nDO NOT DISCARD THE WORKING TREE: those five dirty paths are still the only copy.",
   "declaredFiles": [

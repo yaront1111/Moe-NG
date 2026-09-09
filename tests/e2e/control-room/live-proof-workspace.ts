@@ -3,24 +3,26 @@
  *
  * WHAT LIVES HERE AND WHY IT IS SPLIT OUT. `live-proof-landing.ts` owns the wrapper chain; this
  * module owns the bytes that chain operates on: the workspace baseline the daemon's verifier
- * runs, the per-criterion checks the criterion service later runs, and the seat double the
- * wrapper spawns. Two files rather than one because the project rail caps a source at 250
- * physical lines and the chain plus its fixtures is comfortably over that.
+ * runs and the per-criterion checks the criterion service later runs. The seats that write the
+ * product's own modules live in `live-proof-seat.ts` and are REAL PROVIDER SEATS.
+ *
+ * THERE IS NO SEAT DOUBLE ANY MORE. Round 1 of this row kept each node's source in a literal
+ * table here and had a scripted seat write it out, disclosed as "the ONE double". QA rejected
+ * that (comment-b8cb1fc1 item 2) because governor-608c8a78 had refused the waiver twice, and a
+ * truthful disclosure is not an authorization. Nothing in this file now contains, or can
+ * produce, a line of the product's code.
  *
  * NOTHING HERE IS AUTHORITY. The baseline is committed into the product repository the BROWSER
  * bootstrapped (task rail 3 forbids a scratchpad script standing in for a step the product
  * claims to do itself) and every assertion below is derived from the PRD's own criteria in
  * `live-proof-prd.ts`, so a check that passes is a check against the recorded contract rather
- * than against something written to be easy. The seat is the ONE double, for the reason
- * `lane-landing.ts` gives: a real provider seat cannot be asked to produce a specific edit on
- * cue, and this row certifies the LOOP, not provider behaviour. Everything downstream of the
- * seat's exit -- verifier, lander, git -- is the shipped daemon.
+ * than against something written to be easy.
  */
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { landingSeatClaim } from "./lane-landing.js";
+import { writeDeployableSurface } from "./live-proof-image.js";
 
 /** Stated, not inherited, exactly as `daemon-ports.ts` states it: no host identity needed. */
 const IDENTITY = ["-c", "user.name=Moe", "-c", "user.email=moe@moe.local",
@@ -68,56 +70,28 @@ export const CRITERION_CHECKS: readonly {
     criterionId: "crit-a8", moduleKey: "node-integration" },
 ]);
 
-/** The module each node's seat delivers. Small, but it is what every check above measures. */
-export const NODE_MODULES: Readonly<Record<string, string>> = Object.freeze({
-  "node-auth-api": [
-    'const ACCOUNTS = { "dana@team.test": "correct-horse" };',
-    '// A2: ONE string for both misses, so an attacker cannot enumerate emails.',
-    'const SIGN_IN_ERROR = "Email or password is incorrect.";',
-    'export function signIn(email, password) {',
-    '  return ACCOUNTS[email] === password',
-    '    ? { screen: "TODAY", session: { email } } : { error: SIGN_IN_ERROR, screen: "SIGN IN" };',
-    '}',
-    'export function getEntries(session, date) {',
-    '  if (session === null || session === undefined) return { body: { code: "SESSION_REQUIRED" }, status: 401 };',
-    '  if (!/^\\d{4}-\\d{2}-\\d{2}$/u.test(date)) return { body: { code: "ENTRY_DATE_INVALID" }, status: 400 };',
-    '  return { body: { entries: [] }, status: 200 };',
-    '}',
-    '',
-  ].join("\n"),
-  "node-entries": [
-    '// A5: the name the DATABASE constraint carries, not an application check.',
-    'const UNIQUE = "standup_entry_author_email_entry_date_key";',
-    'const keyOf = (row) => `${row.author_email}\\u0000${row.entry_date}`;',
-    'export function upsert(rows, entry) {',
-    '  const kept = rows.filter((row) => keyOf(row) !== keyOf(entry));',
-    '  return { rows: [...kept, { blockers: "", ...entry }] };',
-    '}',
-    'export function insertDirect(rows, entry) {',
-    '  return rows.some((row) => keyOf(row) === keyOf(entry))',
-    '    ? { constraint: UNIQUE, ok: false } : { ok: true, rows: [...rows, entry] };',
-    '}',
-    'export function history(rows, date) {',
-    '  const day = rows.filter((row) => row.entry_date === date);',
-    '  return day.length === 0 ? { entries: [], state: "EMPTY" } : { entries: day, state: "LOADED" };',
-    '}',
-    'export function render(row) {',
-    '  return row.blockers === "" ? `${row.today}` : `${row.today}\\nBlockers\\n${row.blockers}`;',
-    '}',
-    '',
-  ].join("\n"),
-  // THE COMPLETION NODE'S OWN SURFACE. It depends on both work nodes, so the graph withholds it
-  // until they are ACCEPTED -- and A6/A8 are checked THROUGH it, so what this node delivers is
-  // measured rather than assumed present.
-  "node-integration": [
-    'export * from "../node-auth-api/module.mjs";',
-    'export * from "../node-entries/module.mjs";',
-    '',
-  ].join("\n"),
-});
+
+/**
+ * The nodes the compiled plan carries, in the order the plan declares them.
+ *
+ * A ROSTER, NOT A TABLE OF BODIES. Round 1 of this row held each node's SOURCE here and had a
+ * seat double write it out; QA rejected that as an unauthorized substitution and it was right
+ * to. The bytes are now a real provider's, so what remains here is the list of nodes and the
+ * derivation of what each one is judged by -- which is read off `CRITERION_CHECKS` above,
+ * itself derived from the browser-approved contract.
+ */
+export const NODE_KEYS: readonly string[] = Object.freeze([
+  "node-auth-api", "node-entries", "node-integration",
+]);
 
 /** Where a node's delivered module lives, relative to the product repository root. */
 export const modulePath = (nodeKey: string): string => `${nodeKey}/module.mjs`;
+
+/** The check files whose assertions one node's module must satisfy, in criterion order. */
+export const checksFor = (nodeKey: string): readonly string[] =>
+  Object.freeze(CRITERION_CHECKS
+    .filter((row) => row.moduleKey === nodeKey)
+    .map((row) => `checks/${row.criterionId}.mjs`));
 
 /**
  * Commits the baseline the daemon's verifier and the criterion service both run.
@@ -130,7 +104,7 @@ export const modulePath = (nodeKey: string): string => `${nodeKey}/module.mjs`;
  */
 export function prepareLiveProductWorkspace(workspace: string): readonly string[] {
   const paths: string[] = ["verify.mjs"];
-  const keys = Object.keys(NODE_MODULES);
+  const keys = NODE_KEYS;
   writeFileSync(join(workspace, "verify.mjs"), [
     'import { existsSync } from "node:fs";',
     `const keys = ${JSON.stringify(keys)};`,
@@ -157,81 +131,12 @@ export function prepareLiveProductWorkspace(workspace: string): readonly string[
     ].join("\n"), "utf8");
     paths.push(file);
   }
+  // THE DEPLOYABLE SURFACE RIDES THE SAME COMMIT. `docker build` is fed by `git archive <sha>`
+  // (deploy-image-build.ts:63), so a Dockerfile added later than the landed sha is invisible to
+  // the deploy; it has to be an ancestor of every sha this product will ever deploy.
+  paths.push(...writeDeployableSurface(workspace));
   productGit(workspace, ["add", "--", ...paths]);
   productGit(workspace, [...IDENTITY, "commit", "--quiet", "--message",
-    "Acceptance checks for the recorded PRD criteria"]);
+    "Acceptance checks for the recorded PRD criteria, and the deployable surface"]);
   return Object.freeze(paths);
-}
-
-
-/**
- * The seat double: it reads its mission, delivers ONE node's module, and marks its window.
- *
- * IT READS ITS MISSION for the reason `landingSeatDouble` does: the wrapper staffs every ready
- * item through the same command, so a seat that ignored stdin would deliver a node on behalf of
- * a mission that never claimed it. The claim clause comes from PRODUCTION
- * (`agent-mission-text.ts`'s `codeMission`, re-exported by `lane-landing.ts`), so a mission that
- * merely quotes a ref does not match.
- */
-export function liveSeatDouble(
-  dir: string, workspace: string, refs: Readonly<Record<string, string>>,
-  rendezvous: readonly string[],
-): { command: string } {
-  // THE PEER SET IS THE CONCURRENT PAIR, not "every other node". A completion node depends on
-  // its parents and is deliberately withheld until they are ACCEPTED, so asking it to see a
-  // live peer would time out on correct behaviour; and it would see its parents' persisted
-  // start markers anyway, which proves nothing. Only the nodes named here wait for each other.
-  const claims = Object.entries(refs).map(([key, ref]) => ({
-    claim: landingSeatClaim(ref), key,
-    peers: rendezvous.includes(key) ? rendezvous.filter((row) => row !== key) : [],
-    target: join(workspace, modulePath(key)).replaceAll("\\", "/"),
-  }));
-  const jsPath = join(dir, "live-proof-seat.js");
-  writeFileSync(jsPath, [
-    'const fs = require("node:fs");',
-    'const path = require("node:path");',
-    `const CLAIMS = ${JSON.stringify(claims)};`,
-    `const BODIES = ${JSON.stringify(NODE_MODULES)};`,
-    `const MARKS = ${JSON.stringify(dir.replaceAll("\\", "/"))};`,
-
-    "const chunks = [];",
-    'process.stdin.on("error", function () { process.exit(0); });',
-    'process.stdin.on("data", function (chunk) { chunks.push(chunk); });',
-    'process.stdin.on("end", function () {',
-    '  const mission = Buffer.concat(chunks).toString("utf8");',
-    "  const mine = CLAIMS.find(function (row) { return mission.indexOf(row.claim) !== -1; });",
-    "  if (mine === undefined) process.exit(0);",
-    "  const startedAt = Date.now();",
-    '  const mark = function (suffix, body) {',
-    '    fs.writeFileSync(path.join(MARKS, "seat-" + mine.key + suffix), JSON.stringify(body));',
-    "  };",
-    '  mark(".start", { startedAt: startedAt });',
-    "  // PEERS ARE OBSERVED, NEVER WAITED FOR. A rendezvous here DEADLOCKS against a",
-    "  // designed product invariant: the repository delivery coordinator admits ONE checkout",
-    "  // owner per repository root, so a seat that blocked until its peer was also delivering",
-    "  // would hold the reservation the peer is refused on -- measured 2026-09-09 as",
-    "  // REPOSITORY_EXECUTION_BUSY (REPOSITORY_DELIVERY) on every pass until the budget spent.",
-    "  const peerSeen = mine.peers.every(function (key) {",
-    '    return fs.existsSync(path.join(MARKS, "seat-" + key + ".start"));',
-    "  });",
-    "  try {",
-    "    fs.mkdirSync(path.dirname(mine.target), { recursive: true });",
-    "    fs.writeFileSync(mine.target, BODIES[mine.key]);",
-    "  } catch (error) {",
-    '    process.stderr.write("SEAT_WRITE_FAILED " + String(error) + "\\n");',
-    "    process.exit(1);",
-    "  }",
-    '  mark(".end", { endedAt: Date.now(), peerSeen: peerSeen, startedAt: startedAt });',
-    "  process.exit(0);",
-    "});",
-    "",
-  ].join("\n"), "utf8");
-  const cmdPath = join(dir, "live-proof-seat.cmd");
-  const shPath = join(dir, "live-proof-seat.sh");
-  writeFileSync(cmdPath,
-    `@echo off\r\n"${process.execPath}" "%~dp0live-proof-seat.js"\r\nexit /b %ERRORLEVEL%\r\n`, "utf8");
-  writeFileSync(shPath,
-    `#!/bin/sh\nexec "${process.execPath}" "$(dirname "$0")/live-proof-seat.js"\n`, "utf8");
-  chmodSync(shPath, 0o755);
-  return { command: process.platform === "win32" ? cmdPath : shPath };
 }
