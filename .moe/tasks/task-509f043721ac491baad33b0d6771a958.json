@@ -202,11 +202,17 @@
       "author": "qa-01b7fe3f",
       "content": "QA qa-01b7fe3f 2026-09-09 — APPROVED. Independent re-verification at commit 76324877 (on moe/work-2026-09-04, 27 paths, working tree clean for every row path — no post-commit drift).\n\nGATES I RE-RAN MYSELF, foreground, exit captured, count lines verbatim:\n    pnpm --filter @moe/daemon test              EXIT 0  Test Files 606 passed (606) / Tests 10815 passed | 12 skipped (10827)  [296.01s]\n    pnpm --filter @moe/control-room-client test EXIT 0  Test Files 10 passed (10) / Tests 96 passed (96)\n    apps/control-room, the 4 files this row touched  EXIT 0  Test Files 4 passed (4) / Tests 47 passed (47)\nBoth daemon and control-room-client counts reproduce the worker's claim EXACTLY.\n\nDISCLOSURE ON DoD ITEM 5. I did NOT run the whole `pnpm --filter @moe/control-room test` lane. `full-suite-gate` is held by worker-b42eccd4 on task-5380dbf067 (acquired 11:22Z, ETA 90 min) for a measurement whose whole subject is \"does this lane red UNDER SUITE LOAD\" — 48 node processes were live at my census. An uncontrolled concurrent full-lane run would inject load into their uncontended control runs and, on a lane with a known load-flake population, would also risk a false red here. I ran the scoped superset instead: all four files in apps/control-room that this row edits are digest-hex transcriptions, so they are the entire reason the DoD names that lane, and all four pass. The worker's own full-lane run was Test Files 205 passed (205) / Tests 2677 passed (2677) EXIT 0.\n\nDRILL (iii) WAS ABSENT FROM THE RECORD; I DISCHARGED IT. The worker's evidence comment reports drills (i) and (ii) but not the digest drill the plan asked for. Measured: old pin `daafa7872670d05bd428a3037b1afea1ce357d83bea8f434623080356d26a025` -> new pin `f1878eeaa08a050c12000a0e9885a4fef11c12c824602c1b50696d970f2dd295`, so the derivation genuinely moved; `contract-digest.test.ts` is green at HEAD, i.e. `deriveContractDigest()` equals the new pin. A forgotten regeneration would have left the old pin against the new derivation and reded. The arm is load-bearing. Independently, I recomputed sha256 of the generated file = `85ff8615edb24613bbc911d837e7095551006744c1f81b303e335039f2eaf881`, which is exactly `generated-coverage.test.ts:35 GENERATED_FILE_SHA256` — the sixth mirror the worker found and no census regex catches.\n\nMIRROR CENSUS BY HEX, not by symbol, run by me: the new digest appears in generated-client.ts, generated-coverage.test.ts, data-adapter.test.ts and the three v2/goals .tsx files. Six code mirrors, all consistent. The old hex survives only in .moe/tasks/*.json records. Six, not the four the row description claims.\n\nMCP EXCLUSION IS GENUINELY DERIVED, verified independently of the worker's drill: `git grep \"monitoring.retire_environment\" -- apps packages` on non-test files returns ONLY the contracts module, the wrapper HUMAN_ONLY_STEPS entry, the shared roster and the generated client. No member was hand-added to `MCP_EXCLUDED_COMMAND_KINDS`; `mcp-tool-allowlist.ts:94` spreads and filters `OPERATOR_PRINCIPAL_KINDS`. Counts moved 26->27 with zero edits there, and `wired: 44` correctly did NOT move (excluded kinds never enter WIRED_KINDS).\n\nBIDIRECTIONAL ARM IS REAL. `daemon-store-dependencies.test.ts:1238` enumerates served from `deps.registry.keys()` — the dispatch seam — and asserts `expect(served).toEqual(advertised)`, plus four NAMED membership lines so a wholesale both-sides deletion still reds. The worker's refusal to fabricate a whole-roster `advertised === served` is CORRECT and carries its measurement: that direction is false by production design and documented at gates-roster-coherence.test.ts:20-26.\n\nTHE REAL DEFECT THIS ROW CAUGHT. `daemon-command-families.ts:123` computes `monitoring: kind in MONITORING_FAMILY`. The moment the family held a second kind, `if (monitoring) return runProbeIntervalCommand(...)` stopped being a handler selector and retirement would have been served by the interval edge, which decodes a field retirement does not carry. Fixed by per-kind dispatch inside the family guard. ANY family gaining a second kind has this bug — worth a sweep by whoever holds the next kind-wiring row.\n\nFOLLOW-UP, recorded here per the delivery-bias rail rather than filed as rows or held against this one:\n1. PER-FILE CAP. `daemon-command-vocabulary.ts` 452 lines (was 427 at merge-base) and `daemon-command-registry.ts` 656 (was 620). Both were ALREADY over the 400 split threshold before this row; this row grew them 25 and 36. Not introduced here, and splitting either mid-delivery collides with every concurrent kind-wiring row. This belongs in the epic-final hardening row's DoD. The row's OWN new files are 95 and 36 lines, well inside.\n2. The row description still names `pnpm --filter @moe/control-room test` as the digest gate. It is the wrong package; `@moe/control-room` carries no mirror named by that symbol. Both the architect (comment-6a821120) and the worker corrected it in-record; the description text itself is unchanged and will mislead the next reader.\n3. The worker discloses one unreproduced daemon run showing 5 failures in an uncaptured third file, and denominator drift 10825->10827 from peer untracked .test.ts files. My own run was 10827 with zero failures. Recorded as observed, not diagnosed.",
       "timestamp": "2026-09-09T11:50:08.739Z"
+    },
+    {
+      "id": "comment-4a23414435834e73a891ffd259168e68",
+      "author": "governor-608c8a78",
+      "content": "Governance delivery triage, fresh after CHECKPOINT-UNPUSHED: task is DONE; source completion 763248778b6f80df977ca9613644873817633d33 remains recorded pushed. New QA checkpoint fee4e168b8711c049ddaf10a2ab5a8317cf69d25 is recorded pushed:false. I independently ran git-show EXIT0: this checkpoint changes only three BOARD task JSON paths (509f0437,5380dbf0,7693a195), no product sources, and has explicit Moe-Kind:checkpoint/Moe-Session trailers. Live git ls-remote EXIT0 returned d9cc66c7ed5061280998d3aab4047f66b5d0bb0a on the work branch, matching the PR maintainer's separately announced non-force integration push. Do not infer network failure, source loss, or delivery rollback from the generic unpushed banner; no exact push-error tail was attached in current task comments. Maintainer notified to preserve fresh fleet commits. I did not push/rebase/reset/stash or hand-land anything; next safe landing/integration owns retry, with checkpoint retained.",
+      "timestamp": "2026-09-09T11:56:56.239Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T18:16:25.350Z",
-  "updatedAt": "2026-09-09T11:52:11.732Z",
+  "updatedAt": "2026-09-09T11:56:56.239Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T18:33:15.983Z",
     "plannedStepCount": 7,
@@ -249,7 +255,8 @@
   "contextFetchedBy": [
     "worker-0e797912",
     "worker-409b958a",
-    "qa-01b7fe3f"
+    "qa-01b7fe3f",
+    "governor-608c8a78"
   ],
   "workStartedAt": "2026-09-09T10:30:32.436Z",
   "declaredFiles": [
@@ -293,7 +300,9 @@
     "apps/daemon/src/daemon-command-registry.ts",
     "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
     "apps/daemon/src/preview/preview-start-command.test.ts",
-    ".moe/tasks/task-509f043721ac491baad33b0d6771a958.json"
+    ".moe/tasks/task-509f043721ac491baad33b0d6771a958.json",
+    ".moe/tasks/task-5380dbf067eb4eeba1cec7117ffa39b5.json",
+    ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json"
   ],
   "completionSummary": "THIS ROW ABSORBED THE DELETED CHILD 4 (task-1714234a8b5341f3b652cc5279a1f75e). Its title says \"publish\"; it also SERVES the kind — a grader reading only the title will wrongly think the command edge is missing. The two cannot separate: daemon-command-vocabulary.test.ts:349 holds Object.keys(PAYLOAD_KEYS) equal to ROWS' kinds, so a kind on the roster with no dispatch entry reds at once.\n\nDELIVERED, 26 paths. Shared roster + generated client + all six digest mirrors + daemon payload keys, vocabulary, family, operator set and wrapper fence + a new command edge with its contracts module, both with .js bridges + 13 test files whose frozen literals moved.\n\nGATES, all EXIT 0, each foreground and standalone with a nonzero count line (none is a \"no projects matched\" exit-0): daemon 606/606 files, 10815 tests; control-room 205/205, 2677; control-room-client 10/10, 96; root lane 439+2/441, 10471+51; typecheck all Done.\n\nFOUR MEASURED CORRECTIONS, all detailed in comment-2b1977d1 and comment-09765e03:\n1. THE DESCRIPTION NAMES THE WRONG DIGEST GATE. @moe/control-room is apps/control-room and has NO mirror; the catching arm is contract-digest.test.ts under @moe/control-room-client, also covered by the root lane AND by the daemon leg's committed mirror census. Following the description alone ships a stale digest through green.\n2. SIX MIRRORS, NOT FOUR — five hand-transcribed, plus generated-coverage.test.ts:35 GENERATED_FILE_SHA256, a whole-file sha no census regex in this repo matches. All rotated; residual grep for the old hexes returns nothing.\n3. A DEFECT THAT WOULD HAVE SHIPPED SILENTLY: daemon-command-families.ts computes `monitoring: kind in MONITORING_FAMILY`, so once the family held two kinds the `if (monitoring)` branch stopped selecting a handler and retirement would have been served by the interval edge. Fixed by dispatching per kind.\n4. THE PLAN'S \"SHARED-INSTANCE TRAP\" IS FALSE AS FRAMED and its drill cannot red — the record is a stateless facade replaying per call, ",
   "commits": [
@@ -337,6 +346,23 @@
       "treeId": "0c0c90b01c650913f099b2b38a36ce11df7e45b2",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "fee4e168b8711c049ddaf10a2ab5a8317cf69d25",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T11:42:58Z",
+      "paths": [
+        ".moe/tasks/task-509f043721ac491baad33b0d6771a958.json",
+        ".moe/tasks/task-5380dbf067eb4eeba1cec7117ffa39b5.json",
+        ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T11:52:22.551Z",
+      "treeId": "9283bae3578c32969ee0084e89192f3af3067632",
+      "status": "DONE",
+      "pushed": false
     }
   ],
   "touchedFiles": [
@@ -348,21 +374,12 @@
     "apps/daemon/src/daemon-command-vocabulary.ts",
     "apps/daemon/src/monitoring/environment-retirement-command-contracts.ts"
   ],
-  "unattributedPaths": [
-    "apps/control-room/.drill/counterfactual.config.mts",
-    "apps/control-room/.drill/drill.config.mts",
-    "apps/control-room/.drill/gen.cjs",
-    "apps/control-room/.drill/lane.config.mts",
-    "apps/control-room/.drill/measure.test.tsx",
-    "tests/fault/landing-crash/landing-crash.fault.ts",
-    "tests/fault/landing-crash/landing-crash-child.ts",
-    "tests/fault/landing-crash/landing-crash-world.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-0e797912@2026-09-09T10:30:02Z",
-    "at": "2026-09-09T11:34:20.210Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-01b7fe3f@2026-09-09T11:42:58Z",
+    "at": "2026-09-09T11:52:22.551Z"
   },
   "completedAt": "2026-09-09T11:52:11.732Z",
   "reviewCompletedAt": "2026-09-09T11:52:11.732Z",
