@@ -209,7 +209,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T09:49:59.862Z",
-  "updatedAt": "2026-09-09T12:28:23.923Z",
+  "updatedAt": "2026-09-09T12:30:39.718Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T10:02:51.986Z",
     "plannedStepCount": 7,
@@ -425,6 +425,43 @@
         }
       ],
       "pushed": false
+    },
+    {
+      "sha": "e1a28fd7ccedd2b41bf78eb80dfcf0aad14eb88c",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T12:30:29Z",
+      "paths": [
+        ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T12:30:39.718Z",
+      "treeId": "bcc6c59d711f891d46287d5f865e865e167cf783",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/control-room/src/v2/products/live-new-product.test.tsx",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/control-room/src/v2/products/live-new-product.tsx",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        },
+        {
+          "path": "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+          "taskId": "task-4b7f4a857b504ccb9c64ff4e75280ec1"
+        }
+      ],
+      "pushed": false
     }
   ],
   "unattributedPaths": [
@@ -433,7 +470,7 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "qa-01b7fe3f@2026-09-09T12:28:16Z",
-    "at": "2026-09-09T12:28:23.923Z"
+    "sessionId": "qa-01b7fe3f@2026-09-09T12:30:29Z",
+    "at": "2026-09-09T12:30:39.718Z"
   }
 }
