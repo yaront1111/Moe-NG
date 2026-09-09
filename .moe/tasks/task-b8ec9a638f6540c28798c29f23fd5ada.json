@@ -76,10 +76,17 @@
   "parentTaskId": null,
   "priority": "HIGH",
   "order": 78,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-5660024eeb9f49de8bed9fe0ec30ce89",
+      "author": "worker-0e797912",
+      "content": "FOLLOW-UP FROM task-f7d38f752b074dc89da30631783aae04 (no-effect landings and goal progress). Not a request to change scope — a decision you may want to read before your release-evidence arms harden.\n\nTHE DECISION, recorded on that row by architect-ed42e60a and implemented this session: a node whose landing refused NOTHING_TO_COMMIT ran, was accepted by review, and provably had no bytes to commit. It COUNTS as a landing at every goal-progress gate, contributing NO SHA. Gates that COUNT landings count it; gates that BIND a sha SKIP it, exactly as they already skip a node with no landing at all. Every OTHER refusal (GIT_COMMIT_FAILED, GIT_INDEX_LOCKED, anything decided after the lander journaled its intent to commit) still counts for nothing. The discriminator is the refusal CODE, sound because node-lander.ts:208-210 mints NOTHING_TO_COMMIT before commitJournaledLanding at :223.\n\nWHAT THIS MEANS FOR THE PATH YOU OWN. `apps/daemon/src/release/release-durable-facts.ts:46` reads\n  && landed.receipt.verifierReceiptId === receipt.receiptId && landed.receipt.outcome === \"COMMITTED\"\nper node. Under the decision above, a NOTHING_TO_COMMIT node should CONTRIBUTE NO LANDING SHA to the dossier rather than be treated as a GAP that withholds it. Measured at HEAD 380cd3ad this session: that file is tracked and CLEAN, and I did not touch it — the seam is yours, not mine, and I am not editing it from another row.\n\nWHAT LANDED THIS SESSION, so you can reuse it rather than re-derive it: `apps/daemon/src/repository/landing-receipt-contracts.ts` now exports the shared constant `LANDING_NOTHING_TO_COMMIT` and the one-line predicate `landedWithNoEffect(receipt: LandingReceiptV1): boolean`. The three gates I fixed all call that single predicate so the rule cannot drift between them; if you take this up, please call it too rather than spelling a fourth string comparison. The three fixed seams are criterion-evidence/criterion-artifact.ts (integrated artifact), repository/goal-landing-facts.ts (publish/release offer) and repository/publication-goal-integration.ts (publish prerequisite).\n\nTWO SEAMS DELIBERATELY LEFT UNFIXED, both filed as comments on task-f7d38f75 rather than as rows: preview/preview-goal-landing.ts:84 still demands ALL nodes COMMITTED (its test file is an untracked peer WIP, so editing it would collide), and control-room goal-publish.tsx:65,:70 still says \"No node of this goal is landed as a commit yet\" for a no-effect goal (cosmetic, control-room lane).",
+      "timestamp": "2026-09-09T19:56:44.758Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T14:58:04.260Z",
-  "updatedAt": "2026-09-09T15:32:18.084Z",
+  "updatedAt": "2026-09-09T19:56:44.758Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T15:27:48.449Z",
     "plannedStepCount": 5,

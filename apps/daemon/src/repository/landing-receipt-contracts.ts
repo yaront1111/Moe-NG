@@ -25,6 +25,20 @@ export const LANDING_BASELINE_COMMAND_KIND = "internal.repository.landing_baseli
 /** The blob id `git hash-object` gives a working-tree file, or this for a path that is gone. */
 export const DELETED_BLOB = "DELETED" as const;
 
+/**
+ * THE ONE REFUSAL CODE THAT MEANS "LANDED, WITH NO SHA TO BIND": the node ran, review accepted
+ * it, no workspace path differed from the staffing baseline. Goal-progress gates CREDIT it as a
+ * landing and gates binding a sha skip it — the rule, and why the code is the discriminator the
+ * gates can actually read, is argued at `criterion-evidence/criterion-artifact.ts`. It lives here
+ * so it cannot drift between gates; `goals/goal-live-evidence.ts` keeps its own copy on purpose.
+ */
+export const LANDING_NOTHING_TO_COMMIT = "NOTHING_TO_COMMIT" as const;
+
+/** True when this receipt attests a node that ran, was accepted, and had nothing to commit. */
+export function landedWithNoEffect(receipt: LandingReceiptV1): boolean {
+  return receipt.outcome === "REFUSED" && receipt.refusal?.code === LANDING_NOTHING_TO_COMMIT;
+}
+
 export interface LandingBaselineEntry {
   readonly blobId: string;
   readonly path: string;

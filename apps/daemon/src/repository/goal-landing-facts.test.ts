@@ -86,18 +86,32 @@ describe("a goal has a landed commit", () => {
     expect(goalHasLandedCommit(store, PROJECT_ID, GOAL_ID)).toBe(true);
   });
 
-  it("is FALSE when the goal's only landing was REFUSED", () => {
-    // A refusal is a landing ATTEMPT, not a landed commit. NOTHING_TO_COMMIT is the exact
-    // shape the lander writes for a node whose work produced no diff.
-    //
-    // THIS IS THE DOCUMENTED BASELINE for task-f7d38f752b074dc89da30631783aae04 ("a node that
-    // legitimately lands nothing never counts toward its goal"). Releasing the checkout for such a
-    // node (task-9dbe28fdccc546dfbbbf9b32f68e7c61) deliberately did NOT change this: goal closure
-    // still asks for a COMMITTED receipt, so the successor row starts from a measurement, not a guess.
+  it("is TRUE when the goal's only landing PROVABLY had nothing to commit", () => {
+    // READING A, decided on task-f7d38f752b074dc89da30631783aae04: a node that ran, was accepted
+    // and found no path differing from its staffing baseline LANDED — with no sha. The lander
+    // mints NOTHING_TO_COMMIT at node-lander.ts:207-210 BEFORE it journals any landing intent
+    // (:223), so the code is pre-intent by construction, and the closure node leg already admits
+    // it (goal-live-evidence.ts:79,:133-146). This arm makes the publish offer agree.
     const store = enabledWorld();
 
     land(store, "node-a", { refusalCode: "NOTHING_TO_COMMIT" });
 
+    // The durable outcome really is REFUSED — the fact is crediting the CODE, not a committed
+    // receipt in disguise.
+    expect(nodeLanded(store, "node-a")).toBe("REFUSED");
+    expect(goalHasLandedCommit(store, PROJECT_ID, GOAL_ID)).toBe(true);
+  });
+
+  it("is FALSE when the goal's only landing refused for a POST-INTENT reason", () => {
+    // The discriminator is the refusal CODE, not "not COMMITTED". GIT_COMMIT_FAILED is decided
+    // AFTER the lander journaled its intent to commit: bytes were owed and never arrived, so the
+    // goal has no landing. A blanket `outcome !== COMMITTED` removal passes the arm above while
+    // being wrong here, which is what makes this pair falsifiable.
+    const store = enabledWorld();
+
+    land(store, "node-a", { refusalCode: "GIT_COMMIT_FAILED" });
+
+    expect(nodeLanded(store, "node-a")).toBe("REFUSED");
     expect(goalHasLandedCommit(store, PROJECT_ID, GOAL_ID)).toBe(false);
   });
 
@@ -192,10 +206,24 @@ describe("the publish offer on /affordances/read", () => {
     expect(goalOffers(enabledWorld())).toEqual([`goal.close@${GOAL_ID}`]);
   });
 
-  it("stays ABSENT when the goal's only landing was REFUSED", () => {
+  it("APPEARS when the goal's only landing provably had nothing to commit", () => {
+    // The surface twin of the fact arm: the PUBLISH card is offered for a goal whose work was
+    // verified to need no bytes. Without it, publish, deploy and closure stall forever on a node
+    // that did exactly what it was asked to do.
     const store = enabledWorld();
 
     land(store, "node-a", { refusalCode: "NOTHING_TO_COMMIT" });
+
+    expect(nodeLanded(store, "node-a")).toBe("REFUSED");
+    expect(goalOffers(store)).toEqual([
+      `goal.close@${GOAL_ID}`, `repository.publish@publish:${GOAL_ID}`,
+    ]);
+  });
+
+  it("stays ABSENT when the goal's only landing refused for a POST-INTENT reason", () => {
+    const store = enabledWorld();
+
+    land(store, "node-a", { refusalCode: "GIT_COMMIT_FAILED" });
 
     expect(nodeLanded(store, "node-a")).toBe("REFUSED");
     expect(goalOffers(store)).toEqual([`goal.close@${GOAL_ID}`]);

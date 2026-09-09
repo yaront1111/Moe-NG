@@ -3,6 +3,7 @@ import type { SqliteEventStore } from "@moe/store";
 import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import { resolveRepositoryExecutionIdentity } from "../repository/repository-execution-identity.js";
 import { readLandingReceipt } from "../repository/landing-ledger.js";
+import { landedWithNoEffect } from "../repository/landing-receipt-contracts.js";
 import { readVerifierReceipt } from "../review/verifier-receipt-ledger.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
 import type { CriterionGoal } from "./criterion-goal.js";
@@ -31,7 +32,24 @@ export function readCriterionArtifact(workspace: string): IntegratedCriterionArt
 export const sameCriterionArtifact = (a: IntegratedCriterionArtifact, b: IntegratedCriterionArtifact | null): boolean =>
   b !== null && a.root === b.root && a.sha === b.sha && a.treeSha === b.treeSha;
 
-/** An integrated candidate contains every execution-bearing node's exact, verified landing. */
+/**
+ * An integrated candidate contains every execution-bearing node's exact, verified landing.
+ *
+ * A NODE THAT LANDED NOTHING IS ACCEPTED WITH NO SHA TO BIND, not an unlanded node. Its receipt
+ * is a REFUSED one carrying `LANDING_NOTHING_TO_COMMIT`, which the lander mints at
+ * node-lander.ts:208-210 BEFORE `commitJournaledLanding` at :223 writes any landing intent — so
+ * the code is pre-intent by construction and is the discriminator this layer can actually read
+ * (the journal's reservation handle is gone once the no-effect node releases its checkout,
+ * repository-execution-port.ts:103). Such a node contributes no sha, so the ancestry check below
+ * is SKIPPED for it, exactly as it is for a node with no landing at all. EVERY OTHER refusal —
+ * GIT_COMMIT_FAILED, GIT_INDEX_LOCKED, anything decided after bytes were owed — still refuses,
+ * and so does a node with no acceptance.
+ *
+ * Inherited hazard, named rather than fixed here: node-lander.ts:78-79 records NOTHING_TO_COMMIT
+ * firing FALSELY on 2026-09-05 when delivered files were misread as operator dirt
+ * (`earlierAttemptPaths` is the mitigation). Goal closure already accepted that risk at
+ * goal-live-evidence.ts:133-146; crediting the code here extends it to criterion evidence.
+ */
 export function readIntegratedCriterionArtifact(
   store: SqliteEventStore, goal: CriterionGoal, workspace: string | null,
 ): IntegratedCriterionArtifact | null {
@@ -45,7 +63,9 @@ export function readIntegratedCriterionArtifact(
     for (const nodeRef of nodes) {
       const accepted = reviews.ledgers.get(nodeRef)?.accepted;
       const candidate = reviews.landings.get(nodeRef);
-      if (accepted === undefined || candidate === undefined || candidate.outcome !== "COMMITTED" || candidate.commit === null) return null;
+      if (accepted === undefined || candidate === undefined) return null;
+      if (landedWithNoEffect(candidate)) continue;
+      if (candidate.outcome !== "COMMITTED" || candidate.commit === null) return null;
       const landing = readLandingReceipt(store, goal.binding.projectId, candidate.receiptId);
       const verifier = readVerifierReceipt(store, goal.binding.projectId, candidate.verifierReceiptId);
       if (!landing.ok || landing.receipt.subjectRef !== nodeRef || landing.receipt.commit === null
