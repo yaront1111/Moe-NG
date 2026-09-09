@@ -19,9 +19,9 @@
  *
  * WHAT THE BROWSER BUTTON CANNOT DO, MEASURED RATHER THAN ASSUMED, AND PINNED BY LAYER. The
  * Gate-2 card renders against a really-running product — asserted below — but its Approve control
- * cannot commit, for two INDEPENDENT reasons, and the arms pin each at its own layer because the
- * first one masks the second:
- *   WALL A, AUTHORIZATION. `preview.decide` is in `OPERATOR_PRINCIPAL_KINDS`
+ * cannot commit, and ONE of the two reasons it once had is now FIXED. The arms pin each at its own
+ * layer, because the first masks the second:
+ *   WALL A, AUTHORIZATION, STILL LIVE. `preview.decide` is in `OPERATOR_PRINCIPAL_KINDS`
  *     (daemon-command-vocabulary.ts:365) and is deliberately NOT in the registry's paired-human
  *     widening (daemon-command-registry.ts:344-355), which admits only the intent wire, the
  *     criterion kinds, `repository.publish` and the clarification answer. The shipped browser
@@ -29,13 +29,17 @@
  *     paired human is refused OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION. That is the
  *     epic's own rail — human gates are operator-only — so this row asserts it rather than
  *     widening it.
- *   WALL B, THE REQUEST. `preview-port.ts:51-63` sends `previewRef = affordance.targetAggregateId`
- *     = `preview:<goalId>`, but the decide edge spends that value as a RECEIPT ID
- *     (preview-daemon-edge.ts:225 -> preview-ledger.ts:89), which is a sha256 hex. `PreviewFacts`
- *     already carries the right value (`receiptId`, needs-you-preview.ts:109) and the port never
- *     reads it. Dispatched AS THE OPERATOR so wall A cannot answer first, that payload refuses
- *     PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY. `preview-port.test.ts:60` cannot see this: its
- *     fixture affordance uses one arbitrary string for both ids.
+ *   WALL B, THE REQUEST, FIXED — READ THIS IN THE PAST TENSE. `preview-port.ts` USED TO send
+ *     `previewRef = affordance.targetAggregateId` = `preview:<goalId>`, while the decide edge
+ *     spends that value as a RECEIPT ID (preview-daemon-edge.ts:225 -> preview-ledger.ts:89),
+ *     a sha256 hex — so every Approve refused PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY.
+ *     `PreviewFacts` already carried the right value (`receiptId`, needs-you-preview.ts:109) and
+ *     the composition dropped it. `submit` now TAKES the receipt id from its caller and
+ *     `live-needs-you.tsx` passes `facts.receiptId`, so the browser no longer composes the wrong
+ *     id at all. The aggregate-id dispatch below survives only as a NEGATIVE CONTROL on the
+ *     daemon's refusal, dispatched AS THE OPERATOR so wall A cannot answer for it.
+ *     `preview-port.test.ts` could not once see any of this: its fixture used one arbitrary
+ *     string for both ids, and those two strings are now deliberately different.
  * The verdict this spec asserts is therefore committed by the CONFIGURED OPERATOR — which
  * `lane.credential` provably is (session-authenticator.ts:98-105) — and read back from the
  * daemon's own answer, never from component state.
@@ -133,15 +137,27 @@ test("gate 2 live: a real landing starts a real preview and APPROVE commits a ve
           expect(pairedSaid, "refused by CODE").toContain("OPERATOR_PRINCIPAL_REQUIRED");
           expect(pairedSaid, "and by LAYER").toContain("DAEMON_AUTHORIZATION");
 
-          // WALL B, dispatched AS THE OPERATOR so wall A cannot answer for it: the aggregate id
-          // the browser sends as `previewRef` is not a receipt id and never resolves one.
+          // WALL B IS NOW A NEGATIVE CONTROL, NOT A STATEMENT ABOUT THE BROWSER. It pins the
+          // DAEMON's refusal of a wrong id: dispatched AS THE OPERATOR so wall A cannot answer
+          // for it, an aggregate id is not a receipt id and never resolves one. That refusal is
+          // CORRECT and must survive — the browser no longer composes this value. preview-port.ts
+          // used to derive `previewRef` from the offer's `targetAggregateId`, which is exactly
+          // this string, so every Approve died here; it now takes the receipt id from its caller.
+          // The control is only meaningful while the two ids DIFFER, so that is asserted rather
+          // than assumed: if they ever coincided this arm would pass while measuring nothing.
+          expect(previewAggregateId(goalId), "the negative control must not be the receipt id")
+            .not.toBe(preview.receiptId);
           const asAggregate = await decideLanePreview(lane, previewAggregateId(goalId), "APPROVE",
             undefined, goalId);
           const aggregateSaid = JSON.stringify(asAggregate.body);
           expect(aggregateSaid, "refused by CODE").toContain("PREVIEW_GOAL_NOT_LANDED");
           expect(aggregateSaid, "and by LAYER").toContain("GOAL_AUTHORITY");
 
-          // THE OPERATOR'S OWN VERDICT, committed for real.
+          // THE BROWSER'S PATH, COMMITTED FOR REAL (DoD 3). This is the value the Approve button
+          // now sends: `live-needs-you.tsx` passes `facts.receiptId` — what `/preview/read`
+          // answered, which is `preview.receiptId` here — and `preview-port.ts` puts it in
+          // `previewRef` verbatim. So the operator's Approve reaches PREVIEW_DECISION_RECORDED
+          // rather than the refusal above.
           const answer = await decideLanePreview(lane, preview.receiptId, "APPROVE", undefined, goalId);
           decided = true;
           expect(JSON.stringify(answer.body), "APPROVE is accepted").toContain("PREVIEW_DECISION_RECORDED");
