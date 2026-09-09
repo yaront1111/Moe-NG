@@ -208,7 +208,15 @@ describe("pinned corpus authority (task-e1b479134f6c4c2282bd7b13af693460)", () =
     process.env[PINNED_DOCUMENT_ROOT_ENV] = newCorpusRepo("forged", true);
     expect(refusalOf(forge(PINNED_BENCHMARK_SPEC_SHA256)).code).toBe("CORPUS_ROOT_DIRTY");
     expect(refusalOf(forge(PINNED_BENCHMARK_SPEC_SHA256)).layer).toBe(PRE_FREEZE_AUDIT_LAYER);
-  });
+    // 30s, not the 5s default, and the same number as the sibling above rather than a
+    // second one a reader would have to reconcile. Measured 2026-09-09 on this host, ten
+    // consecutive standalone runs: 242ms min, 257ms median, 277ms max quiet; 405ms worst
+    // with six copies of the run contending; 1721ms under real fleet load, which is only
+    // a 2.9x margin on the 5s default. The sibling, whose bytes never changed, spanned
+    // 693ms idle to >5000ms loaded — a ~15x spread, so what varies is host contention on
+    // this arm's SEVEN git subprocess spawns, not work, and a 2.9x margin is the bet that
+    // arm lost. 30s is 108x the worst quiet run and 17x the loaded one.
+  }, 30_000);
 
   /**
    * The portability assertion this row is named for. It is stated over the module's own
