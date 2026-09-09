@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
 import type { DeployCandidateEnvironmentPort } from "./deploy-candidate-environment.js";
+import { createDockerDoubleWithArgv } from "./deploy-docker-double.js";
+import type { DockerDouble, DockerDoubleOptions } from "./deploy-docker-double.js";
 import type { DeployBuildPort } from "./deploy-image-build.js";
 
 /**
@@ -231,169 +233,18 @@ export const nodeImageTransfer: ImageTransferPort = (tag, sshTarget) => new Prom
   load.on("close", (code) => { loadCode = code; settle(); });
 });
 
-export type ContainerState = "ABSENT" | "STARTING" | "HEALTHY" | "STOPPED" | "REMOVED";
-
-export interface DockerDoubleOptions {
-  readonly proxyConfig?: string;
-  readonly proxyNames?: readonly string[];
-  readonly appContainer?: string;
-  readonly lockHeld?: boolean;
-  readonly reloadCodes?: readonly (number | null)[];
-  readonly rewriteCodes?: readonly (number | null)[];
-  readonly reloadAppliesOnFailure?: boolean;
-  /** docker's own last stderr line when `build` must refuse. */
-  readonly buildStderr?: string;
-  /** Every docker call refuses to spawn, as it would with no docker on PATH. */
-  readonly dockerUnavailable?: boolean;
-  /** Health answers per container, in order; the LAST entry repeats forever. */
-  readonly health?: Readonly<Record<string, readonly ContainerState[]>>;
-  readonly imageDigest?: string;
-  /** Containers already running before this deploy, with their health. */
-  readonly running?: Readonly<Record<string, ContainerState>>;
-  readonly saveStderr?: string;
-  readonly sshStderr?: string;
-}
-
-/** The double's answer to `imageCommandArgv`: `Entrypoint ++ Cmd`, as real docker prints them. */
-export const DOUBLE_IMAGE_COMMAND = '["docker-entrypoint.sh"]\n["node","/app/dist/server.js"]\n';
-const ok = (stdout = ""): DeployRunResult => ({ code: 0, stderr: "", stdout });
-const failed = (stderr: string, code: number | null = 1): DeployRunResult =>
-  ({ code, stderr, stdout: "" });
-
-export interface DockerDouble {
-  readonly build: DeployBuildPort;
-  readonly transitions: readonly { readonly argv: readonly string[]; readonly serving: readonly string[] }[];
-  readonly writes: readonly string[];
-  upstream(): string;
-  config(): string;
-  locked(): boolean;
-  /** Every docker argv, in call order. */
-  readonly calls: readonly (readonly string[])[];
-  readonly docker: DockerRunner;
-  readonly ssh: SshRunner;
-  readonly sshCalls: readonly (readonly string[])[];
-  readonly transfer: ImageTransferPort;
-  /** What the container IS, not what was invoked on it. */
-  state(name: string): ContainerState;
-  /** Every container currently answering, in insertion order. */
-  serving(): readonly string[];
-}
+/**
+ * THE DOUBLE LIVES IN `deploy-docker-double.ts` and is re-exported here UNCHANGED, so the twenty
+ * files importing `createDockerDouble`, `DockerDouble`, `DockerDoubleOptions`, `ContainerState` or
+ * `DOUBLE_IMAGE_COMMAND` from `./deploy-ports.js` keep working with no edit. The seam is exact:
+ * above is the PRODUCTION effect boundary, below is what the double models.
+ */
+export * from "./deploy-docker-double.js";
 
 /**
- * A STATE MACHINE, not an argv recorder. A recorder answers "what was invoked,
- * in what order"; only a state machine answers "what was RUNNING at that point",
- * which is the property a health refusal must leave defined. Production-tier on
- * purpose: the flip and rollback rows drive this same model, and two models of
- * what docker did is two things to reason about during an incident.
+ * The double with the two PRODUCTION argv builders above bound in. Bound HERE rather than imported
+ * THERE because the reverse edge would be a runtime cycle: this file `export *`s from that one, so
+ * a VALUE import back would make module evaluation order load-bearing, which typecheck misses.
  */
-export function createDockerDouble(options: DockerDoubleOptions = {}): DockerDouble {
-  const calls: (readonly string[])[] = [];
-  const sshCalls: (readonly string[])[] = [];
-  const states = new Map<string, ContainerState>(Object.entries(options.running ?? {}));
-  const probes = new Map<string, number>();
-  const digest = options.imageDigest ?? `sha256:${"a".repeat(64)}`;
-  let config = options.proxyConfig ?? "";
-  const readUpstream = () => /^\s*reverse_proxy ([\w.-]+):3000\s*$/mu.exec(config)?.[1] ?? "";
-  let upstream = readUpstream(); let locked = options.lockHeld ?? false;
-  let reloads = 0; let rewrites = 0;
-  const writes: string[] = [];
-  const serving = (): string[] => {
-    const name = upstream === "app" ? options.appContainer ?? "app" : upstream;
-    return states.get(name) === "HEALTHY" ? [name] : [];
-  };
-  const transitions = [{ argv: ["initial"], serving: serving() }];
-  const proxyCall = (args: readonly string[], stdin?: string): DeployRunResult => {
-    if (args[0] === "ps") return ok((args.includes("label=com.docker.compose.service=proxy")
-      ? options.proxyNames ?? (config === "" ? [] : ["proxy"]) : [options.appContainer ?? "app"]).join("\n"));
-    if (args.includes("mkdir")) {
-      if (locked) return failed("lock exists");
-      locked = true; return ok();
-    }
-    if (args.includes("rmdir")) { locked = false; return ok(); }
-    if (args.includes("cat")) return ok(config);
-    if (args.includes("tee")) {
-      writes.push(stdin ?? "");
-      const code = options.rewriteCodes?.[rewrites++];
-      if (code !== undefined && code !== 0) return failed("write refused", code);
-      config = stdin ?? ""; return ok();
-    }
-    if (args.includes("reload")) {
-      const code = options.reloadCodes?.[reloads++];
-      if (code === undefined || code === 0 || options.reloadAppliesOnFailure === true) upstream = readUpstream();
-      return code === undefined || code === 0 ? ok() : failed("reload refused", code);
-    }
-    return failed("unsupported proxy argv");
-  };
-  // A container that was never created cannot report health, whatever the script
-  // says: real `docker inspect` exits nonzero for a name that does not exist.
-  const healthOf = (name: string): ContainerState => {
-    const current = states.get(name);
-    if (current === undefined || current === "REMOVED") return "ABSENT";
-    const scripted = options.health?.[name];
-    if (scripted === undefined || scripted.length === 0) return current;
-    const seen = probes.get(name) ?? 0;
-    probes.set(name, seen + 1);
-    return scripted[Math.min(seen, scripted.length - 1)] as ContainerState;
-  };
-  const dispatch = (args: readonly string[], stdin?: string): DeployRunResult => {
-    if (options.dockerUnavailable === true) return failed("docker: not found", null);
-    const [verb, ...rest] = args;
-    if (verb === "exec" || verb === "ps") return proxyCall(args, stdin);
-    const named = rest[rest.length - 1] ?? "";
-    if (verb === "build") {
-      return options.buildStderr === undefined ? ok() : failed(options.buildStderr);
-    }
-    if (verb === "run") {
-      // The container name is the `--name` VALUE, never the trailing argv —
-      // that last token is the image tag, and keying on it would track a
-      // container that does not exist under a name nothing ever probes.
-      const flag = args.indexOf("--name");
-      const name = flag === -1 ? named : args[flag + 1] ?? named;
-      states.set(name, "STARTING");
-      return ok(name);
-    }
-    if (verb === "inspect") {
-      const state = healthOf(named);
-      // An absent container is NOT inserted: recording the probe would create
-      // the very key that makes the next probe answer from the script.
-      if (state !== "ABSENT") states.set(named, state);
-      return state === "ABSENT" ? failed("No such object") : ok(`${state.toLowerCase()}\n`);
-    }
-    // TWO image reads, not one: `--entrypoint` clears the image CMD, so a delivering deploy reads
-    // the argv back first. Answering only the digest models a docker no candidate could start on.
-    if (verb === "image") return ok(args.includes("{{.Id}}") ? `${digest}\n` : DOUBLE_IMAGE_COMMAND);
-    if (verb === "stop") { states.set(named, "STOPPED"); return ok(); }
-    if (verb === "rm") { states.set(named, "REMOVED"); return ok(); }
-    if (verb === "save") {
-      return options.saveStderr === undefined ? ok() : failed(options.saveStderr);
-    }
-    return ok();
-  };
-  const docker: DockerRunner = (args, stdin) => {
-    calls.push([...args]);
-    const result = dispatch(args, stdin);
-    transitions.push({ argv: [...args], serving: serving() });
-    return Promise.resolve(result);
-  };
-  const transfer: ImageTransferPort = (tag, sshTarget) => {
-    calls.push([...dockerSaveArgv(tag)]);
-    sshCalls.push([...sshDockerLoadArgv(sshTarget)]);
-    if (options.saveStderr !== undefined) return Promise.resolve(failed(`docker save: ${options.saveStderr}`));
-    if (options.sshStderr !== undefined) return Promise.resolve(failed(`ssh docker load: ${options.sshStderr}`));
-    return Promise.resolve(ok());
-  };
-  // A remote call is the SAME docker argv wrapped in `ssh <target> docker ...`.
-  // Unwrapping it here rather than giving the double a second model keeps "what
-  // docker did" a single answer whether the target was local or remote.
-  const ssh: SshRunner = (args, stdin) => {
-    sshCalls.push([...args]);
-    const docked = args.indexOf("docker");
-    return docked === -1 ? Promise.resolve(ok()) : docker(args.slice(docked + 1), stdin);
-  };
-  return {
-    build: request => docker(["build", "--tag", request.tag, "-"]),
-    calls, docker, serving, transitions, writes,
-    upstream: () => upstream, config: () => config, locked: () => locked,
-    ssh, sshCalls, state: (name) => states.get(name) ?? "ABSENT", transfer,
-  };
-}
+export const createDockerDouble = (options: DockerDoubleOptions = {}): DockerDouble =>
+  createDockerDoubleWithArgv({ dockerSaveArgv, sshDockerLoadArgv }, options);

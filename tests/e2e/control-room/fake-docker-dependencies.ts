@@ -36,12 +36,43 @@ const model = createDockerDouble({
 const record = (port: string, argv: readonly string[]): void => {
   appendFileSync(callsPath, `${JSON.stringify({ port, argv })}\n`, "utf8");
 };
+/**
+ * The container a call BRINGS UP, or undefined for every call that brings none up.
+ *
+ * `run` does it in one call and names the container with `--name`. `create` + `docker cp -` +
+ * `start` does the same thing in three, and `start` names the container POSITIONALLY — so reading
+ * `--name` there would find no flag and, with the old `indexOf(...) + 1`, silently return `args[0]`
+ * and seed a health script under the container name "start". A candidate brought up that way would
+ * carry no script of its own and read as permanently unhealthy, which surfaces as a health
+ * timeout rather than as the missing seed it actually is.
+ */
+export const seededCandidate = (args: readonly string[]): string | undefined => {
+  const flag = args.indexOf("--name");
+  if (args[0] === "run" || args[0] === "create") return flag === -1 ? undefined : args[flag + 1];
+  return args[0] === "start" ? args[1] : undefined;
+};
+
+/**
+ * Seeds a candidate's health script ONCE PER CONTAINER, not once per matching call: `create` and
+ * `start` are two calls that bring the SAME candidate up, and re-seeding on the second would hand
+ * a fresh script to a deploy already midway through consuming the first. Returns whether it
+ * seeded, so the decision is OBSERVABLE rather than inferable only from its effect.
+ */
+export const seedCandidateHealth = (
+  seeded: Record<string, readonly ContainerState[]>,
+  args: readonly string[],
+  script: readonly ContainerState[],
+): boolean => {
+  const name = seededCandidate(args);
+  if (name === undefined || seeded[name] !== undefined) return false;
+  seeded[name] = script;
+  return true;
+};
+
 const docker: DockerRunner = (args, stdin) => {
   record("docker", args);
-  const name = args[args.indexOf("--name") + 1];
-  if (args[0] === "run" && name !== undefined) {
-    health[name] = mode === "DEPLOY_HEALTH_TIMEOUT" ? ["STARTING"] : ["STARTING", "HEALTHY"];
-  }
+  seedCandidateHealth(health, args,
+    mode === "DEPLOY_HEALTH_TIMEOUT" ? ["STARTING"] : ["STARTING", "HEALTHY"]);
   return model.docker(args, stdin);
 };
 
