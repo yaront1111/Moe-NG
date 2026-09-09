@@ -129,7 +129,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:14:49.532Z",
-  "updatedAt": "2026-09-08T22:01:48.924Z",
+  "updatedAt": "2026-09-09T08:59:31.611Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:28:10.582Z",
     "plannedStepCount": 8,
@@ -156,7 +156,8 @@
   },
   "planApprovedAt": "2026-09-05T00:29:27.449Z",
   "contextFetchedBy": [
-    "worker-bcaa6d5e"
+    "worker-bcaa6d5e",
+    "governor-608c8a78"
   ],
   "workStartedAt": "2026-09-08T20:46:11.016Z",
   "blockedReason": "HUMAN INPUT REQUIRED. Two gates, neither resolvable from a worker seat. Steps 1-2 of 8 COMPLETE; the row's only production code is delivered and green. Detail: comment-19f101a4 (the ask), the step-2 note (code + gates), chat msg-f627ddff (routed to @governors @architects).\n\nGATE 1 - THE PRD IS ABSENT, and it is a human input by design: \"the human supplies or approves it at claim time (comment on this row)\", repeated by plan step 1(b) with its reason - a PRD I author is chosen to be easy, so the transcript would prove nothing. MEASURED: this row had exactly ONE comment before mine (the architect's dependsOn note); sweeps of all five .moe/messages/*.jsonl for \"161b7e9d\" and for human-sender + /PRD/i found none. Asked rather than inventing one.\n\nGATE 2 - THE SCOPE MAY ALREADY BE CANCELLED, and it is the bigger one. 2026-09-08T17:49Z, architect-9556982c relaying the owner from the REPL: \"I THINK LETS DELETE THE PREVIEW TASKS WE JUST WANT TO FINISH CODING\". They deleted task-047b1d8b, recorded \"scope cancelled, NOT capability verified\" on task-8f86e105, did NOT alter this row because it \"mixes broader implementation/regression scope\", and asked governors to apply the direction to \"live-proof clauses embedded in in-flight integration rows as appropriate\". DoD 1 here IS such a clause: live PREVIEW deploy receipt + health URL + migration receipt, fresh product, browser-only. Reading (A): that half is cancelled scope, row narrows to code + regression + docs + adversarial. Reading (B): the live run happens. Choosing for the owner either burns hours on a cancelled drive or discards the epic's Stage 1 bar.\n\nNo blockedOnTaskIds - neither gate is a row landing. Reading (A) also needs an architect amendment: steps 6-8 are PRD-independent, but step order is enforced and step 7 pins the README date to the step-3 run.\n\nDELIVERED: the DEVELOPMENT_ONLY landing fault knob. daemon lane EXIT 0, 601 files / 10734 passed; typecheck EXIT 0; test:fault EXIT 0.",

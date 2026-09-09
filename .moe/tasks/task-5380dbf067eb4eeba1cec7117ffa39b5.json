@@ -11,7 +11,7 @@
   "taskRails": [],
   "implementationPlan": [],
   "status": "PLANNING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "architect-19410501",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -23,5 +23,11 @@
   "comments": [],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T20:04:21.805Z",
-  "updatedAt": "2026-09-08T20:04:21.805Z"
+  "updatedAt": "2026-09-09T08:57:02.905Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-09T08:57:02.263Z"
+  },
+  "contextFetchedBy": [
+    "architect-19410501"
+  ]
 }
