@@ -117,8 +117,8 @@
       "completedAt": "2026-09-09T12:17:38.854Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-01b7fe3f",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -205,11 +205,23 @@
       "author": "governor-608c8a78",
       "content": "GOVERNANCE DELIVERY BLOCK — completion50a8a323 is metadata-only, not controlled-3 source delivery. Independent git-show EXIT0 shows exactly three BOARD JSON paths and Moe-Contested trailers for ALL five implementation paths, each naming downstream task-4b7f4a85. Live get_context confirms that downstream row is WORKING/unassigned, dependsOn7693 remains unmet, declaredPaths empty: its plan reservation is the conflict, not an observed executing peer. The five sources are already asserted/declared on7693; declaring again is not a fix. Read-only Moe source trace finds getCommitScope includes every nonterminal peer's planned paths; launchers' skip-untouched then omit an asserted source when the current verification-only session did not write it. I asked the human for a narrow ownership-check correction preserving actual peer edits. Until a valid source landing exists, do not approve from dirty bytes, do not hand-land sources, do not discard checkpoints or pretend pushing50a fixes this. Separate evidence checks routed to QA: latest gate table has mandatory legs EXIT1 and latest newline-auth shorthand conflicts with prior measured limitation. No task status/release or source edits by me.",
       "timestamp": "2026-09-09T12:21:33.385Z"
+    },
+    {
+      "id": "comment-bf78573506e44a91966c0d3176f7c259",
+      "author": "qa-01b7fe3f",
+      "content": "QA VERDICT — WORK PASSES, DELIVERY DOES NOT. qa-01b7fe3f, RESUME seat. All legs re-run fresh by me this session, foreground, standalone, no pipe into pnpm and no `;`-chains; ${PIPESTATUS[0]} captured on each. full-suite-gate held throughout (lease acquired 12:21:00Z by this seat).\n\nGATE TABLE — ALL FOUR MANDATORY LEGS NOW EXIT 0. This SUPERSEDES comment-8479c7c0 and answers the governor's routed evidence check #1.\n- `pnpm --filter @moe/daemon test` EXIT 0 — `Test Files 607 passed (607)` / `Tests 10834 passed | 12 skipped (10846)`, 232.89s.\n- `pnpm --filter @moe/control-room test` EXIT 0 — `Test Files 205 passed (205)` / `Tests 2677 passed (2677)`, 13.94s.\n- `pnpm --filter @moe/daemon typecheck` EXIT 0.\n- `pnpm --filter @moe/control-room typecheck` EXIT 0.\nThe foreign red the worker disclosed is GONE: the peer landed the committed `.js` bridge (`git ls-files` now shows `apps/daemon/src/deployment/deploy-candidate-start.js`), and `git status --porcelain -- apps/daemon/src/deployment/` is EMPTY. No path-attributed baseline is needed any more — DoD 6 is met LITERALLY, not by rail-3 attribution.\n\nDoD, item by item, verified against the working tree:\n1. PASS. Emitted db service carries `POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password` (a path) plus a service-level secret; no `POSTGRES_PASSWORD:` assignment under any `environment:`. CHANGE_ME read-back arms at :334/:340/:349/:387/:389 are byte-unchanged — `git diff -U0 HEAD -- controlled-profile-generator.test.ts | grep -i CHANGE_ME` returns ZERO lines — and pass in the green run.\n2. PASS on the record's terms. Live proof is comment-b4512d36 with full re-runnable source in comment-ed461460 + comment-3a32dc34: baseline at named SHA b0dc1c5765 inspect match 1 / compose config match 1; current 0 across `.Config.Env`, `.Config.Cmd`, `.Config.Entrypoint`, `.Config.Labels` AND `docker compose config`. Non-vacuity established by the 1 before the 0. Authentication proven by connecting from the container network address with a wrong-password negative control, not from the invalid loopback probe the worker withdrew.\n3. PASS. Fail-fast survives via `environment: ${POSTGRES_PASSWORD:+POSTGRES_PASSWORD}`, which emits only the NAME. Unset AND empty both exit 1 with `secret \"POSTGRES_PASSWORD\" must declare either \\`file\\` or \\`environment\\`: invalid compose project`, naming the variable. Falsifiable: comment-3ccf0db6 drilled it process-locally and the two missing-input arms went RED. The plan's suggested `x-` `:?` extension was measured to LEAK the value through `docker compose config` (match 1) and correctly rejected.\n4. PASS as amended by comment-8751c582. All four literals are controlled-3 (generator.ts:26, generator.test.ts:212, live-new-product.tsx:49, live-new-product.test.tsx:52). The only surviving `\"controlled-2\"` is generator.test.ts:427, where the refusal sweep asserts the predecessor is REJECTED with BOOTSTRAP_PROFILE_VERSION_UNKNOWN at DAEMON_INGRESS — a reason-code assertion, not a stale literal. No v3 lock asset minted; `assets/` still holds v1 and v2 only. `pnpm-lock.yaml 0963d16c…` byte-unchanged; only `docker-compose.yml` moved, to ca06da38.\n5. PASS. `GOLDEN_FILE_COUNT = 23` unchanged, asserted at :233, :358 and :450. No file added or removed.\n6. PASS — see the gate table above.\nThe architect's parser check also holds: `deployment-infrastructure-generator.test.ts` is byte-unchanged (absent from `git status --porcelain`) and green inside the 607, so the column-0 `secrets:` block did not register as a fourth service.",
+      "timestamp": "2026-09-09T14:21:22.069Z"
+    },
+    {
+      "id": "comment-309a0e626c884941b2bb4829e748095f",
+      "author": "qa-01b7fe3f",
+      "content": "QA PART 2 — WHY I AM NOT APPROVING, AND THE GOVERNOR'S SECOND EVIDENCE CHECK. qa-01b7fe3f.\n\nNO COMMIT ANYWHERE CARRIES THIS ROW. Measured, not inferred:\n- `git log --oneline -S 'POSTGRES_PASSWORD_FILE' --all -- apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts` → ZERO commits.\n- `git log --oneline -S '\"controlled-3\"' --all` → ZERO commits.\n- `git diff --stat HEAD` on the five implementation paths → 81 insertions / 23 deletions still DIRTY at HEAD dcb7dc2f.\n- `git show --stat c4c0ac98` (the wip checkpoint named for this row) carries ONE path, and it is a peer's board JSON: `.moe/tasks/task-de80c663….json`. It carries no source.\nSo the governor's condition in comment-ea55add8 — \"until a valid source landing exists\" — is NOT met. The entire controlled-3 delivery lives only in this shared checkout's working tree.\n\nTHE MECHANISM IS UNCHANGED SINCE 12:21Z. `moe.get_commit_scope` postflight, run by me now, still returns `policy.contested: \"skip-untouched\"` and still lists ALL FIVE implementation paths in `peerDeclared`, each naming `task-4b7f4a857b504ccb9c64ff4e75280ec1`. That row is WORKING, unassigned, `touchedFiles: []`, and its dependsOn names THIS row — so a downstream row that has not started is reserving its own prerequisite's paths, and every non-writing session (mine included) has them skipped. My own exit at 13:58Z already produced `MOE_COMMIT_NOTHING_TO_COMMIT`. The narrow ownership-check correction the governor routed to the human has not landed.\n\nI am therefore honouring the standing block: no approval from dirty bytes, no QA hand-landing of sources. Approving would put a DONE row and an unblocked consumer (task-9255156954724b7dbbcbf03ae2aaa11c) on top of bytes that exist in no commit — the clean-checkout hole epic rail 4 makes inadmissible.\n\nGOVERNOR'S EVIDENCE CHECK #2 — THE NEWLINE-AUTH SHORTHAND. The governor is right that there is a conflict, and it is a RECORD-PRECISION defect, not a work defect:\n- comment-b4512d36 (the primary measurement) is PRECISE and correct: \"Correct-password SELECT1 succeeds for normal and space/$/trailing-space both before and after\" — trailing-newline deliberately excluded — and then \"Trailing-newline authentication fails BEFORE and AFTER, a preexisting Postgres initialization limitation; not claimed supported.\"\n- comment-9de21d73 compresses that to \"`$`, embedded space, trailing space and trailing newline were measured byte-identical in the mounted secret file, and correct-password `SELECT 1` succeeded\", which reads as if all four classes authenticated. The completionSummary's \"Mounted secret bytes exact for all three. Correct password authenticates\" carries the same elision.\n- ADJUDICATION: the byte-equality half is accurate for all three classes; only the AUTHENTICATION half excludes trailing-newline, and that failure is measured at the pre-change baseline SHA b0dc1c5765 too, so this row introduces no regression. It is precisely the subject of peer row task-4b7f4a85. DoD 2 requires the planted value to authenticate and it does. Not a reject; the two compressed sentences should not have dropped the exclusion, and this comment is the correction of record.\n\nWHAT UNBLOCKS THIS ROW — one of, and none of them is mine to do:\n(a) the human's ownership-check correction lands so a wrapper session commits the five paths normally; or\n(b) a governor/architect narrows task-4b7f4a85's plan affectedFiles so the contest clears; or\n(c) a governor explicitly lifts the hand-landing clause of comment-ea55add8 for this row, at which point a QA seat can commit the five measured-own paths with the task trailer and record_commit.\nNothing else is outstanding: the code, the tests and all four mandatory gates are green and re-verified this session.",
+      "timestamp": "2026-09-09T14:21:50.762Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T09:49:59.862Z",
-  "updatedAt": "2026-09-09T13:43:27.934Z",
+  "updatedAt": "2026-09-09T14:22:40.852Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T10:02:51.986Z",
     "plannedStepCount": 7,
@@ -251,11 +263,11 @@
     "architect-978f68c6"
   ],
   "workStartedAt": "2026-09-09T10:20:55.085Z",
-  "blockedReason": null,
+  "blockedReason": "QA REVIEW COMPLETE AND PASSING; DELIVERY BLOCKED ON A LANDING DEFECT, NOT THE WORK. Verdict in comment-bf785735 (DoD item by item) and comment-309a0e62 (why no approval). qa-01b7fe3f.\n\nALL SIX DoD ITEMS PASS. Four mandatory gates re-run fresh this session, foreground, standalone, PIPESTATUS captured: daemon test EXIT 0 `Test Files 607 passed (607)` / `Tests 10834 passed | 12 skipped (10846)`; control-room test EXIT 0 `Test Files 205 passed (205)` / `Tests 2677 passed (2677)`; both typecheck legs EXIT 0. The foreign red the worker disclosed is GONE (the peer's deploy-candidate-start.js bridge is now committed), so DoD 6 is met literally.\n\nWHY NO APPROVAL. Zero commits anywhere carry this row: `git log -S 'POSTGRES_PASSWORD_FILE' --all` and `git log -S '\"controlled-3\"' --all` both return nothing; all five implementation paths are still dirty at HEAD dcb7dc2f. get_commit_scope run now still reports policy.contested \"skip-untouched\" with all five paths in peerDeclared naming a WORKING, unassigned, touchedFiles-empty DOWNSTREAM row whose own dependsOn names THIS row. My exit at 13:58Z already produced MOE_COMMIT_NOTHING_TO_COMMIT. governor-608c8a78's standing block (comment-ea55add8) forbids approving from dirty bytes and forbids QA hand-landing until a valid source landing exists; that is unmet.\n\nUNBLOCK, any one of: (a) the human's ownership-check correction lands and a wrapper session commits the five paths; (b) a governor or architect narrows the contesting row's plan affectedFiles; (c) a governor lifts the hand-landing clause here, after which a QA seat commits the five measured-own paths with the task trailer plus record_commit. Then the row needs only a landing check, not a re-review.\n\nDO NOT DISCARD THE WORKING TREE — the only copy of controlled-3 is the dirty state of the five paths listed in comment-309a0e62.\n\nNOT REJECTED: no defect for a worker to fix.",
   "blockedOnTaskIds": null,
   "blockedResourceId": null,
-  "blockedFromStatus": null,
-  "blockedAt": null,
+  "blockedFromStatus": "REVIEW",
+  "blockedAt": "2026-09-09T14:22:40.852Z",
   "reviewStartedAt": "2026-09-09T12:18:55.867Z",
   "verification": {
     "command": "cd apps/daemon && pnpm exec vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 --testNamePattern='^(?!.*LIVE_PROVIDER:)' src/repository/controlled-profile src/repository/deployment/deployment-infrastructure-generator.test.ts",
@@ -617,9 +629,10 @@
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
-    "outcome": "committed",
+    "outcome": "nothing",
     "kind": "checkpoint",
-    "sessionId": "qa-01b7fe3f@2026-09-09T13:43:20Z",
-    "at": "2026-09-09T13:43:27.934Z"
+    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
+    "sessionId": "qa-01b7fe3f@2026-09-09T13:58:29Z",
+    "at": "2026-09-09T13:58:33.564Z"
   }
 }
