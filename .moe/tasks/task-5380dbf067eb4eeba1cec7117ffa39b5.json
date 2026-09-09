@@ -125,7 +125,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T20:04:21.805Z",
-  "updatedAt": "2026-09-09T11:13:22.575Z",
+  "updatedAt": "2026-09-09T11:13:27.943Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T08:57:02.263Z",
     "plannedStepCount": 5,
@@ -186,26 +186,45 @@
       "treeId": "cfe5f772b0cee2c11ae548f0cf03ef0d550a893f",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "9046ce29aab7ab5648473227e5ef8bdec80e785d",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-09T11:13:22Z",
+      "paths": [
+        ".moe/tasks/task-4b7f4a857b504ccb9c64ff4e75280ec1.json",
+        ".moe/tasks/task-5380dbf067eb4eeba1cec7117ffa39b5.json",
+        ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json",
+        ".moe/tasks/task-d11695b0b6714183a16146eb4dd444f3.json",
+        "apps/control-room/src/v2/goals/live-goal-release.test.tsx"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-09T11:13:27.943Z",
+      "treeId": "7102ea4a8dc17da50b147307b4db2df4a38b6ca6",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
     "apps/control-room/src/v2/goals/live-goal-release.test.tsx",
     "apps/control-room/src/v2/goals/live-goal-release.tsx",
-    "apps/control-room/src/v2/goals/goal-release.tsx"
+    "apps/control-room/src/v2/goals/goal-release.tsx",
+    ".moe/tasks/task-4b7f4a857b504ccb9c64ff4e75280ec1.json",
+    ".moe/tasks/task-5380dbf067eb4eeba1cec7117ffa39b5.json",
+    ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json",
+    ".moe/tasks/task-d11695b0b6714183a16146eb4dd444f3.json"
   ],
   "unattributedPaths": [
-    "apps/daemon/src/daemon-command-registry-human-approver.test.ts",
-    "apps/daemon/src/daemon-store-dependencies.test.ts",
-    "apps/daemon/src/daemon-v2-command-registry.test.ts",
-    "apps/daemon/src/mcp-main.test.ts",
-    "apps/daemon/src/monitoring/environment-retirement-command-contracts.js",
-    "apps/daemon/src/orchestrator/agent-spawn-contract.ts"
+    "apps/daemon/src/mcp-http/mcp-http-host.test.ts",
+    "apps/daemon/src/preview/preview-start-command.test.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-b42eccd4@2026-09-09T10:39:29Z",
-    "at": "2026-09-09T10:39:33.365Z"
+    "sessionId": "qa-01b7fe3f@2026-09-09T11:13:22Z",
+    "at": "2026-09-09T11:13:27.943Z"
   },
   "workStartedAt": "2026-09-09T10:39:49.015Z",
   "reviewStartedAt": "2026-09-09T11:13:10.412Z",
