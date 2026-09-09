@@ -11,8 +11,81 @@
     "pnpm --filter @moe/daemon test EXIT 0 with its count line quoted, and the two MOE_PLATFORM_PIPELINE=1 e2e files stay green, run one at a time with --no-file-parallelism."
   ],
   "taskRails": [],
-  "implementationPlan": [],
-  "status": "PLANNING",
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PRE-FLIGHT, and it gates everything after it. (1) Confirm the leaf task-60f851fa3e1046fe98090d9dc6f30e0a is DONE and read its completionSummary and reviewSummary from get_context.epicSiblings rather than re-measuring HEAD; this row consumes `createCandidateArgv`, `startCandidateArgv`, `copyEnvironmentArgv` and the USTAR encoder in `deploy-candidate-archive.ts` that it lands, and the docker double's `create`/`cp`/`start` support. If any of those symbols is absent, report_blocked with blockedOnTaskIds rather than re-implementing them here. (2) RE-CENSUS the verb before editing anything: `git grep -n '\"run\"' -- apps/daemon/src/deployment tests/e2e`. The census I took at plan time found the candidate's verb pinned in eight files this row owns; it also found `migrate-down-real.test.ts:100`, `rollback-restore-real.test.ts:123` and `tests/e2e/foundation/*` which watch the VERIFIER's Postgres containers or the e2e harness, NOT the candidate, and must not be touched. If the census returns a candidate-verb site outside this row's eight owned paths, STOP and report rather than taking the extra path. (3) Bring the acceptance environment up, which the owner agreed to: start Docker Desktop and the Windows OpenSSH server, then prove BOTH with quoted output — `docker version --format '{{.Server.Version}}'` and `ssh localhost docker version --format '{{.Server.Version}}'`. At plan time the docker daemon was DOWN and port 22 was CLOSED on this host, so treat both as unproven until you see the versions. (4) `git status --porcelain -- apps/daemon/src/deployment` — at plan time `deploy-ledger.ts` and `deploy-refusal-redaction.test.ts` were modified and `deploy-migration-disclosure.test.ts` was untracked, all belonging to other sessions. `deploy-refusal-redaction.test.ts` IS one of this row's owned paths AND is peer-dirty: edit it additively around the peer's changes, and never revert, stash or `git add -A` any of the three.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/deploy-service.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "Wire the candidate to create + copy + start, in deploy-service.ts. `startCandidate` at :226-232 is the ONLY caller of `runCandidateArgv` and the only seam that needs to change; `run(target, args, stdin?)` at :190-192 already threads stdin through both the local and the `ssh <target> docker ...` path, so no port and no capability is added. New sequence, replacing the single `run` call: `create` the candidate on the argv the leaf landed, then — only when the delivery holds variables — `docker cp -` the USTAR archive on STDIN into the container, then `start` it. THE VERB CHANGES UNCONDITIONALLY: do NOT keep a `run` path for the zero-variable case. Two start paths in a deploy engine is a maintenance hazard — a fix landed in one silently misses the other, and every future arm has to ask which it exercised — and DoD 4 enumerates the consumer sites on the assumption of one path. Preserve the existing replay semantics exactly: the `healthArgv(name)` probe still runs FIRST and an existing container is still reused rather than recreated, so a replay stays a replay and not a race. FAIL CLOSED ON EVERY LEG: a nonzero `create`, a nonzero `cp` or a nonzero `start` must refuse with the same code and layer discipline the current single-call failure uses, and a `cp` that fails must NOT leave a created-but-never-started container behind — epic rail 4 makes anything this row starts its job to stop, on the failure paths too. The plaintext goes host memory to docker CLI stdin to container filesystem and MUST NOT appear in any argv, so the value never becomes a token in the `cp` call.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/deploy-service.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "Remove the remote refusal — DoD 3, and only now that step 2 has made remote delivery reachable. In deploy-candidate-environment.ts: delete `DEPLOY_ENVIRONMENT_REMOTE_UNSUPPORTED` (:143) and the `if (sshTarget !== null) return ...` gate at the head of `resolveCandidateMount` (:128). The `sshTarget` parameter itself may become unused — remove it from the signature and from `candidateMount` at deploy-service.ts:235-237 rather than leaving a dead argument that reads as a live condition. REWRITE the doc comment at :135-142: it explains why a bind mount cannot reach a remote docker host and states \"there is no `tee` to write with\", which this row makes false; leaving it is a false record, and it is the sentence a future reader would trust. Replace it with what is now true — the archive travels on stdin, so nothing names a path on the docker host and local and remote are the same code path. DoD 3 requires the removal be asserted BY CODE, not merely by outcome: add an arm that reads the module source and asserts the constant name is absent, alongside a behavioural arm that a remote target with variables now resolves a delivery instead of a refusal string. Also update the module header (:10-46), which describes the mount-and-source-a-host-file design that this row replaces. Keep the file under 250 physical lines; the archive encoder lives in the leaf's `deploy-candidate-archive.ts`, not here.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/deploy-candidate-environment.ts",
+        "apps/daemon/src/deployment/deploy-service.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "Migrate the four test files that pin the verb POSITIVELY — these go RED on their own if missed, so they are the safe half, but each must stay as strong as it is now. deploy-service.test.ts:159-162 (`argvFor(context.docker, \"run\")` compared with an exact `toEqual(runCandidateArgv(...))`) and :779 (`findIndex(call => call[0] === \"run\")`, an ORDERING arm). deploy-rollback.test.ts:111 and :125 (exact `toEqual(runCandidateArgv(...))` against the digest READ BACK from the kept receipt — that read-back is the point of the arm and must survive) and :142, the positional arm inside \"retires the incumbent only after the candidate answered healthy\": `indexesOf(runCandidateArgv(...))` now has to locate a create-then-start PAIR, and DoD 4 requires this arm STAYS POSITIONAL — keep asserting index order against the health probes, the `stop` and the proxy `reload`, and keep `expect(started).toHaveLength(1)` meaningful by pinning the create and the start separately rather than collapsing to a substring search. deploy-journey.test.ts:660 (`some(call => call[0] === \"run\")).toBe(true)`). NO EXACT `toEqual` MAY BE LOOSENED INTO A `toContain` and no `toHaveLength` may be dropped — that is DoD 4's explicit bar and it is the way this migration would silently go vacuous. Import the production builders the leaf landed rather than retyping argv literals in the tests, exactly as deploy-rollback.test.ts already does at :9.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/deploy-service.test.ts",
+        "apps/daemon/src/deployment/deploy-rollback.test.ts",
+        "apps/daemon/src/deployment/deploy-journey.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "Migrate the five test sites that pin the verb NEGATIVELY — THE DANGEROUS HALF. Every one of these asserts that NO candidate was started, and after a verb rename each stays green while asserting nothing at all: deploy-build-authority.test.ts:31 (`some(args => args[0] === \"run\")).toBe(false)`), deploy-rollback.test.ts:183 (same shape), deploy-service.test.ts:552 (same shape), :812 and :850 (`filter(call => call[0] === \"run\")).toEqual([])`). Repoint each at the NEW verbs so it still fails when a candidate is started — assert no `create` AND no `start` for the candidate name, not merely no `run`. Then PROVE each one is non-vacuous individually: with the arm repointed, make the production path start a candidate on that scenario and confirm the arm goes RED. An arm asserting an absence that can no longer occur is worse than no arm, and these five are the exact sites where this migration would quietly hollow out the suite. Also deploy-refusal-redaction.test.ts:330, `start: { wrap: failVerb(\"run\", detail) }` inside the `it.each` whose row at :313 is `[\"the candidate start\", \"start\"]`: `failVerb` currently makes the candidate start fail by matching the `run` verb, and after this row it matches nothing, so the redaction arm would pass while exercising no failure. Repoint it and confirm the planted secret still reaches the refusal path it is meant to redact. THIS FILE IS PEER-DIRTY — edit around the other session's changes and never revert them.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/deploy-build-authority.test.ts",
+        "apps/daemon/src/deployment/deploy-service.test.ts",
+        "apps/daemon/src/deployment/deploy-rollback.test.ts",
+        "apps/daemon/src/deployment/deploy-refusal-redaction.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "Double-level arms for the remote delivery path itself, in deploy-candidate-environment.test.ts and deploy-service.test.ts. Assert against the docker double, with the specific reason code every time and never merely that the operation did not succeed: (1) a target with `sshTarget !== null` and a non-empty environment now RESOLVES a delivery — the old `DEPLOY_ENVIRONMENT_REMOTE_UNSUPPORTED` string must no longer be returned by any path, asserted by the code-absence arm from step 3 and by behaviour here. (2) The remote call shape is `ssh <target> docker create ...` / `... docker cp - <name>:<dest>` / `... docker start <name>`, and the `cp` call carries the archive on STDIN — assert the recorded stdin holds the encoded assignment and that NO argv token in any of the three calls contains the value. (3) The zero-variable remote case still deploys and issues NO `cp` at all. (4) Failure legs, one arm each: `create` nonzero, `cp` nonzero, `start` nonzero — each refuses with its own code and layer, and after a failed `cp` no created container is left behind. (5) `DEPLOY_ENVIRONMENT_IMAGE_COMMAND_UNKNOWN` and the forwarded `readEnvironmentDelivery` refusals still fire unchanged on the remote path; partial delivery must stay unrepresentable. Verify each failure arm by mutating the production surface and confirming it goes red — a refusal arm that is one added layer away from vacuous is the defect this board keeps finding.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/deploy-candidate-environment.test.ts",
+        "apps/daemon/src/deployment/deploy-service.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "LIVE ACCEPTANCE — DoD 1 and DoD 2, and neither may be discharged by argv inspection or a fake runner. The owner agreed to bring Docker and the Windows OpenSSH server up for exactly this, and the target is `sshTarget = localhost`: that is a genuine `ssh <target> docker ...` path with real stdin carriage and a real container, so it satisfies DoD 1 literally without provisioning a remote host. DoD 1: deploy to a target with `sshTarget !== null`, holding at least one variable, and prove the variable arrived BY RESPONSE from the deployed build — the candidate answers an HTTP request echoing the value it read from its environment. Include the NEGATIVE CONTROL the parent row used: the incumbent answers with the marker absent BEFORE the flip, the candidate answers with it after, so the arm cannot pass against a build that never received anything. DoD 2: run the secret canary's candidate-inspect sweep on this remote path and record `swept=N artifacts, hits=0` with N quoted — a sweep that silently swept zero artifacts passes while proving nothing, so the denominator is load-bearing. Also sweep the `cp` call's own recorded argv and the deploy receipt. TEARDOWN IS PART OF THE ARM, not cleanup around it: every container, image, network and volume this acceptance creates is removed on EVERY exit path including the failure ones, and the run ends with a `docker ps -a` census proving nothing of yours survived. Epic rail 4 makes a leaked container or port inadmissible for every later gate on this board.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/deploy-service.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "VERIFICATION and adversarial review — DoD 5. Acquire `full-suite-gate` and announce GATE START before the e2e legs; they drive real docker and a peer's suite would contend. Run each leg standalone in the FOREGROUND, no pipes and no `;` chains — a piped run reports tail's exit code. Legs: `pnpm --filter @moe/daemon typecheck`, then `pnpm --filter @moe/daemon test` (EXIT 0, quote the `Test Files N passed` count line — an exit-0 leg with no count line is UNVERIFIED, and the producer's baseline for comparison was 598 files / 10702 tests), then the three `MOE_PLATFORM_PIPELINE=1` e2e files ONE AT A TIME with `--no-file-parallelism`: platform-pipeline, platform-secret-canary, platform-teardown-failure-paths. Quote each one's command, exit code and count line. Apply the path-attributed baseline for any repo-wide red: record the failing-path set at the merge-base and at HEAD and show the delta intersected with this row's eight owned paths is EMPTY, quoting foreign red verbatim rather than hiding it. THEN READ YOUR OWN DIFF AS AN ATTACKER. Specific questions this change earns: what happens if `create` succeeds and the process dies before `start` — does the next deploy's replay probe adopt a created-but-never-started container as healthy? Can a value reach a log line, a receipt, an error path or `docker inspect` through the new `cp` leg? Does the archive encoder handle a value containing a newline, a quote, a very long value, and a name at the USTAR 100-byte path limit? Is any of the five negative arms from step 5 now unfalsifiable? Put the gate table in a task COMMENT first — completionSummary truncates silently at 2000 chars mid-word — then report all eight touched paths in complete_step.modifiedFiles and note the three peer-dirty paths you did not touch.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/deploy-service.ts",
+        "apps/daemon/src/deployment/deploy-candidate-environment.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -21,7 +94,8 @@
   "createdBy": "WORKER",
   "parentTaskId": null,
   "dependsOn": [
-    "task-0ca117e389df43ee9b458255f0752842"
+    "task-0ca117e389df43ee9b458255f0752842",
+    "task-60f851fa3e1046fe98090d9dc6f30e0a"
   ],
   "priority": "MEDIUM",
   "order": 144,
@@ -35,9 +109,11 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T18:38:35.074Z",
-  "updatedAt": "2026-09-09T08:42:38.805Z",
+  "updatedAt": "2026-09-09T09:32:27.329Z",
   "metrics": {
-    "firstClaimAt": "2026-09-08T18:40:39.705Z"
+    "firstClaimAt": "2026-09-08T18:40:39.705Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 8
   },
   "contextFetchedBy": [
     "architect-9556982c"
@@ -51,5 +127,26 @@
       "releasedBy": "architect-9556982c",
       "reason": "Build-order handoff: required producer API is untracked active worker WIP; dependency already declared. Plan an independent leaf first, then return after producer lands."
     }
-  ]
+  ],
+  "planSizeWarnings": [
+    "Plan touches 8 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-09T09:32:25.151Z",
+  "planningNotes": {
+    "approachesConsidered": "THE ROW WAS SPLIT, and that is the main planning decision. The description names nine verb-pinning sites; the census I ran at HEAD found TWELVE, and after excluding three that watch the verifier's Postgres containers rather than the candidate (migrate-down-real.test.ts:100, rollback-restore-real.test.ts:123, tests/e2e/foundation/e2e-harness) the honest count for a single row was TEN distinct files, at the hard-reject boundary, one of them peer-dirty. Rail 20 calls that a split signal at plan time rather than a discovery for the worker at step 5. So the argv builders, the USTAR encoder, the docker double's create/cp/start support and the control-room fake now live in leaf task-60f851fa3e1046fe98090d9dc6f30e0a (6 files, wires nothing, every existing `run` arm stays green WITHOUT edits), and this row owns the wiring, the refusal removal and the consumer migration (8 files). dependsOn is set to both the leaf and the already-DONE local-delivery producer. A VOLUME-BASED ALTERNATIVE was evaluated and rejected: `docker volume create` plus a populating `docker run --rm -i` writing the file into the volume from stdin would keep the candidate's verb as `run` and collapse the blast radius to about five files. It fails on its own terms — the populating call is itself a `run`, so the `filter(call => call[0] === \"run\")).toEqual([...])` arms move anyway whenever variables are present; it adds a volume to the teardown surface on a remote host, which epic rail 4 makes expensive; it needs `cat` in the candidate image, which is unmeasured; and it puts the plaintext through two containers instead of one. The create/cp/start shape was already built and measured on this host by the parent row's author before being set aside, and it is the one the row was filed to carry. KEEPING `run` FOR THE ZERO-VARIABLE CASE was also considered and rejected: it would preserve four negative arms untouched, but two start paths in a deploy engine means a fix landed in one silently misses the other and every future arm has to ask which it exercised. DoD 4 enumerates the consumer sites on the assumption of one path.",
+    "codebaseInsights": "MEASURED AT HEAD 2026-09-09 by architect-ed42e60a. THE DEPENDENCY LANDED: task-0ca117e389df43ee9b458255f0752842 is DONE, commit cff9a8a76d9c4f2644f579c0e334c3004f287945 on moe/work-2026-09-04, verification `pnpm --filter @moe/daemon test` exit 0, `Test Files 598 passed (598) / Tests 10702 passed | 8 skipped`. The prior architect released this row because that producer's files were untracked WIP; they are now landed and this plan is written against the landed API, not against the description's prose. STDIN NEEDS NO NEW PORT: `DockerRunner` is `(args, stdin?) => Promise<DeployRunResult>` at deploy-ports.ts:24; `runProcess` at :153-177 writes stdin into the spawned child and ends it, with a `DEPLOY_STDIN_UNAVAILABLE` abort already wired; `nodeSshRunner` at :184-185 passes it through; and deploy-service.ts:190-192 threads it through the single `run(target, args, stdin?)` seam that chooses between `ports.docker(args, stdin)` and `ports.ssh([sshTarget, \"docker\", ...args], stdin)`. So `docker cp -` reaches a remote target through machinery that already exists. THE SINGLE SEAM: `startCandidate` at deploy-service.ts:226-232 is the only caller of `runCandidateArgv`, and it probes `healthArgv(name)` first so a replay reuses an existing container instead of recreating it — preserve that ordering. LINE DRIFT from the description, re-measure rather than trusting it: the double's dispatch is `if (verb === \"run\")` at deploy-ports.ts:346, not :341; `failVerb(\"run\", detail)` is at deploy-refusal-redaction.test.ts:330, not :325, and its `it.each` row `[\"the candidate start\", \"start\"]` is at :313. THE EIGHT OWNED PATHS and what each pins: deploy-service.ts (the seam); deploy-candidate-environment.ts (:128 the sshTarget gate, :143 the constant, :93-100 runCandidateArgv, :10-46 and :135-142 the load-bearing prose); deploy-candidate-environment.test.ts (:89-102, :148-170, :260-301); deploy-service.test.ts (:159-162 exact, :552 negative, :779 ordering, :812 and :850 negative); deploy-rollback.test.ts (:111, :125 exact against the receipt read-back, :142 positional, :183 negative); deploy-journey.test.ts (:660 positive); deploy-build-authority.test.ts (:31 negative); deploy-refusal-redaction.test.ts (:313, :330). NOT OURS, verified and must not be touched: migrate-down-real.test.ts:100 and rollback-restore-real.test.ts:123 watch `createVerifierDatabaseRunner` spawning Postgres containers, and tests/e2e/foundation/e2e-harness.ts:143 uses \"run\" as an id prefix. tests/e2e/control-room/fake-docker-dependencies.ts:42 DOES key candidate health on the verb and belongs to the LEAF row, not this one. No reusable tar writer exists in the repo; `tools/packaging/pack-source.test.ts` is the only USTAR mention and it is reader-side. HOST STATE AT PLAN TIME: the Docker daemon was DOWN (`failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`) and port 22 was CLOSED, so nothing docker-backed could be measured directly; the owner agreed in the REPL to bring both up so the remote leg proves against `sshTarget = localhost`.",
+    "risks": "THE FIVE NEGATIVE ARMS ARE THE REAL HAZARD OF THIS ROW. deploy-build-authority.test.ts:31, deploy-rollback.test.ts:183, deploy-service.test.ts:552, :812 and :850 each assert that NO candidate was started by testing for the `run` verb. Rename the verb and every one of them stays GREEN while asserting nothing that can occur. Same class at deploy-refusal-redaction.test.ts:330, where `failVerb(\"run\")` would stop failing anything and the redaction arm would pass having exercised no failure path at all. Repointing them is not enough — each must be individually proven to go RED against a production path that starts a candidate. ACCEPTANCE ENVIRONMENT: DoD 1 forbids proving remote delivery by argv inspection or a fake runner, and the prior architect's handoff repeats that. `sshTarget = localhost` over a real OpenSSH server against a real Docker daemon is the agreed answer and is a genuine remote code path; do not silently downgrade it to the double if the environment is awkward — report instead. SECRET EXPOSURE MOVES: the value now travels as docker CLI stdin rather than as a file the daemon wrote, so the sweep set changes. Sweep the recorded `cp` argv, the receipt, the refusal details and the candidate's `docker inspect`, and quote the DENOMINATOR — a sweep that swept zero artifacts passes while proving nothing. TEARDOWN: epic rail 4 makes a leaked container, image, network or port inadmissible for every later gate on this board, and this row's failure legs deliberately abort between `create` and `start`, which is exactly where an orphan container is born. Every failure arm must assert the orphan was removed. REPLAY: `startCandidate` reuses an existing container by name; with create and start split, a crash between them leaves a container that exists but never ran, and the replay probe must not adopt it as healthy. PEER DIRT: at plan time deploy-ledger.ts and deploy-refusal-redaction.test.ts were modified and deploy-migration-disclosure.test.ts was untracked, all foreign. deploy-refusal-redaction.test.ts is simultaneously an owned path and peer-dirty — edit additively, never revert or stash, and never treat the dirt as a stop condition. EPIC SIZE: this epic now carries 92 non-archived rows against an advisory ceiling of 40; that is a re-slice signal for whoever owns the board, not a reason to hold this row.",
+    "keyFiles": [
+      "apps/daemon/src/deployment/deploy-service.ts",
+      "apps/daemon/src/deployment/deploy-candidate-environment.ts",
+      "apps/daemon/src/deployment/deploy-ports.ts",
+      "apps/daemon/src/deployment/deploy-service.test.ts",
+      "apps/daemon/src/deployment/deploy-rollback.test.ts",
+      "apps/daemon/src/deployment/deploy-refusal-redaction.test.ts",
+      "tests/e2e/foundation/platform-secret-canary.e2e.test.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-09T09:32:27.329Z"
 }
