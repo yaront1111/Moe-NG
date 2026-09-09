@@ -365,7 +365,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-04T09:14:49.532Z",
-  "updatedAt": "2026-09-09T17:14:29.347Z",
+  "updatedAt": "2026-09-09T17:21:56.687Z",
   "metrics": {
     "firstClaimAt": "2026-09-05T00:28:10.582Z",
     "plannedStepCount": 8,
@@ -632,6 +632,23 @@
       "treeId": "fbe13f74f9378331666f63b3e6a017fc6761e89c",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "c685729d34eeda78fd9d47fb62cc1f10edd0cdbb",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-b42eccd4@2026-09-09T17:21:49Z",
+      "paths": [
+        ".moe/tasks/task-161b7e9d566b4c47b429490a54a6cca1.json",
+        ".moe/tasks/task-2536051174234be5aa7c5eadea6d3413.json",
+        ".moe/tasks/task-77207fb327a9462b869ff647650e57cf.json"
+      ],
+      "recordedBy": "worker-b42eccd4",
+      "recordedAt": "2026-09-09T17:21:56.686Z",
+      "treeId": "62209d0da3b64671edb23e9f0a8b4d6bfb19813c",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -707,8 +724,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-b42eccd4@2026-09-09T14:52:09Z",
-    "at": "2026-09-09T16:50:50.566Z"
+    "sessionId": "worker-b42eccd4@2026-09-09T17:21:49Z",
+    "at": "2026-09-09T17:21:56.686Z"
   },
   "priorBlockedReason": "HELD FOR THE SHARED-TREE CUTOVER, at the governor's own instruction. NOT a capability block and NOT a re-opening of comment-f3a33015 — that resume ruling stands and the acceptance bar is untouched.\n\ngovernor-608c8a78 asked every seat (msg-a1ea4386) under the user's explicit checkout-main + preserve/commit/push request to reach a safe point, preserve through normal wrapper landing, and NOT start a new mutable run during the cutover. Every remaining piece of this row IS a new mutable run: step 5 is a fresh-product live run with real provider seats ending in a real GitHub PR; step 6 is nine-plus whole-suite legs. A branch switch mid-run destroys it. Independently, step 6 cannot run anyway: full-suite-gate is held by qa-01b7fe3f from 2026-09-09T12:21:00Z.\n\nSTATE, measured not inferred (msg-422fafb8, comment-37410b0e): all 12 delivered paths TRACKED and clean vs HEAD; `git log origin/moe/work-2026-09-04..HEAD` = 0, so the work is committed AND pushed and a checkout of main loses nothing of mine. Steps 1-4 stay COMPLETED. I own no launcher and started no run.\n\nDELIVERED ANYWAY, a real defect in this row's own bytes: live-proof-prd.spec.ts:257 recorded a FALSE \"operator-only-boundary\" roster — it listed release.decide as operator-only (served as an ASYNC entry, so the registry's synchronous fence never runs; assertReleasePrincipal admits a paired ADMIN via releaseByPairedAdmin) and its registry line ref was stale (fence at :393, not :379). Corrected to operatorOnly + pairedAdminReachable; one grep hit repo-wide so no consumer moved; tsc exit 0, zero diagnostics.\n\nTO CLEAR: a governor confirms the cutover is finished and the branch is settled. The next seat then resumes step 5 directly — remote, setup contract and outstanding list are all in comment-37410b0e, nothing to re-derive.",
   "blockedOnTaskIds": null,
