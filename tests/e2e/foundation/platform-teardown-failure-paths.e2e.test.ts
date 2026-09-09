@@ -173,14 +173,25 @@ function deployService(current: World, healthBudgetMs: number, databaseUrl: stri
 }
 
 describe("the platform's failure paths", () => {
-  it("counts what is alive by asking docker, not by trusting a cleanup that returned", async () => {
+  it("computes the names added since a prior census without Docker", () => {
+    expect(added(["a", "b"], ["b", "c"])).toEqual(["c"]);
+    expect(added(["a"], [])).toEqual([]);
+  });
+
+  it.runIf(RUN_PIPELINE)("counts what is alive by asking docker, not by trusting a cleanup that returned", async () => {
+    const availability = probeDocker();
+    if (!availability.available) throw Object.assign(
+      new Error("DEPLOY_DOCKER_UNAVAILABLE @ PLATFORM_PIPELINE_HARNESS"),
+      { code: availability.code, layer: "PLATFORM_PIPELINE_HARNESS", truthClass: "UNKNOWN" },
+    );
     const seen = await census();
     // The census is a real query in both directions: `docker ps` answers with names, and the port
     // probe answers by binding. Neither reads a return value from the code under test.
     expect(Array.isArray(seen.containers)).toBe(true);
+    expect(Array.isArray(seen.networks)).toBe(true);
     expect(typeof seen.publicPortFree).toBe("boolean");
-    expect(added(["a", "b"], ["b", "c"])).toEqual(["c"]);
-  });
+    // 20s availability probe + two bounded 60s queries, with 20s for host scheduling.
+  }, 160_000);
 
   it.runIf(RUN_PIPELINE)("removes the candidate when the DEPLOY fails", async () => {
     const current = await ensureWorld();

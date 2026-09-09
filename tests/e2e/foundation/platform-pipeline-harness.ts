@@ -305,16 +305,31 @@ export function composeDown(project: string, directory: string): Leg {
 
 export const HEALTH_PATH = DEPLOYMENT_HEALTH_PATH;
 
+/** An unavailable observation is UNKNOWN, never evidence that no resources remain. */
+function censusNames(args: readonly string[]): readonly string[] {
+  try {
+    const outcome = spawnSync("docker", [...args], {
+      encoding: "utf8", shell: false, timeout: 60_000,
+    });
+    if (outcome.error !== undefined || outcome.status !== 0 || typeof outcome.stdout !== "string") {
+      throw new Error();
+    }
+    return outcome.stdout.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line !== "");
+  } catch {
+    throw Object.assign(new Error("PLATFORM_CENSUS_UNAVAILABLE"), {
+      code: "PLATFORM_CENSUS_UNAVAILABLE", layer: "PLATFORM_PIPELINE_HARNESS", truthClass: "UNKNOWN",
+    });
+  }
+}
+
 /** Container names currently alive on this host, as docker itself reports them. */
 export function liveContainers(): readonly string[] {
-  const leg = dockerQuietly(["ps", "--format", "{{.Names}}"], 60_000);
-  return leg.stdout.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line !== "");
+  return censusNames(["ps", "--format", "{{.Names}}"]);
 }
 
 /** Network names currently present on this host. */
 export function liveNetworks(): readonly string[] {
-  const leg = dockerQuietly(["network", "ls", "--format", "{{.Name}}"], 60_000);
-  return leg.stdout.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line !== "");
+  return censusNames(["network", "ls", "--format", "{{.Name}}"]);
 }
 
 /** True when the OS reports the port free, i.e. nothing is listening on it any more. */
