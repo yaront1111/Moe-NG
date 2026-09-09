@@ -170,7 +170,7 @@
       "completedAt": "2026-09-09T10:27:15.651Z"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -270,23 +270,32 @@
       "author": "worker-0e797912",
       "content": "MUTATION DRILL MATRIX + ADVERSARIAL MEASUREMENTS - step 8. worker-0e797912, 2026-09-09.\n\nNO ON-DISK MUTATION HAPPENED. The drill was PROCESS-LOCAL: an out-of-tree vitest config at %TEMP%/moe-task-d11695b0-drill.config.mjs with a `enforce:\"pre\"` Vite transform that rewrites claude-launch-lock.ts IN MEMORY (guarded to skip .test.ts). The file on disk was never modified, so there is no backup, no restore, and no restore proof that could be wrong. Every mutation asserts its own anchor and throws DRILL_ANCHOR_MISSING / DRILL_ANCHOR_AMBIGUOUS rather than silently mutating the wrong place. It was run with NO full-suite lease held (I was queued, not holding). Config deleted afterwards; its full mutation list is reproduced below so a grader can recreate it.\n\n| mutation | anchor -> replacement | result | arms that went RED |\n|---|---|---|---|\n| none (positive control) | - | 8 passed (8) | - |\n| eaddrinuse-admits | `if (failure !== null) {` -> `if (failure !== null && failure.code !== \"EADDRINUSE\") {` (a busy name falls through to the success path, so a SECOND lease is handed out) | 2 failed \\| 6 passed | stalled-holder arm (e); crash-reclaim arm (f). Both: `expected { ok: true, lease: {...} } to match object { ok: false, ...}` |\n| namespace-accepts-anything | `if (!NAMESPACE_PATTERN.test(namespace)) return null;` -> `if (false) return null;` | 1 failed \\| 7 passed | namespace-escape arm: `expected { namespace: 'bad\\ns', ...} to be null` |\n| release-returns-a-thenable | the `return Object.freeze({ ok: true, lease });` line wrapped so release() returns `{then(onOk){...}}` | 1 failed \\| 7 passed | native-promise arm: `expected false to be true` from isSafeNativePromise |\n| exclusion-consults-the-sidecar | reads `<sha256>.holder`, `process.kill(recorded.pid, 0)`, refuses LAUNCH_LOCK_IDENTITY_CONFLICT when it answers - i.e. THE ORIGINAL DEFECT reintroduced | 2 failed \\| 6 passed | sidecar-variants arm (a): `expected [...] to deeply equal ['ok','ok','ok','ok']`; fixed-identity arm (b): `expected 'LAUNCH_LOCK_IDENTITY_CONFLICT@LAUNCH_...' to be 'ok'` |\n| release-does-not-await-close | the awaited `new Promise((resolve,reject)=>server.close(cb))` -> `new Promise((resolve)=>{server.close();resolve();})` | 8 passed - NO ARM WENT RED | NONE - disclosed below |\n\nTHE ONE MUTATION THAT SURVIVES, stated plainly rather than papered over. \"Release resolves without awaiting the close callback\" is not observable through the lease contract on this host: `server.close()` is initiated synchronously and Windows frees the pipe name fast enough that an immediately following acquire still succeeds, so acquire-release-acquire cannot separate the two. I could not construct a deterministic arm for it and did not fake one. What IS pinned instead, by two arms added because of this drill: (1) release() returns a value the PRODUCTION `isSafeNativePromise` accepts - imported from claude-launcher-port-results.js, not restated - on the first call and the idempotent second, which is the documented silent-failure mode the ruling names (a thenable reports CLAUDE_LAUNCH_LOCK_UNKNOWN on a release that succeeded); (2) a release whose advisory sidecar has been deleted out from under it still resolves and the identity re-acquires. A close that reports an error still rejects and still surfaces as CLAUDE_LAUNCH_LOCK_UNKNOWN through settleClaudeLaunch; that path has no reachable trigger from outside the module.\n\nALSO NOT DETECTABLE BY ANY ARM, and deliberately so: dropping the `.holder` suffix check in removeSidecar. The path is built once inside resolveLaunchLockScope and always ends in `.holder`, so no caller can reach the guard. It is defence in depth against a future caller, not a live branch, and I am not claiming coverage for it.\n\nADVERSARIAL MEASUREMENTS (probe at %TEMP%, EXIT 0, deleted; questions taken from the step).\n- TWO ACQUIRES RACING FOR ONE IDENTITY INSIDE ONE PROCESS - the `released` flag is per-lease but the pipe name is not. Four simultaneous `acquireWindowsLaunchLock(\"race\")` under Promise.all, 5 rounds: EVERY round returned exactly 1 winner and 3 LAUNCH_LOCK_IDENTITY_CONFLICT. Intra-process exclusion is the same kernel binding as cross-process.\n- AN ERROR EMITTED ON THE SERVER AFTER A SUCCESSFUL LISTEN - the class the ruling flagged as never measured. A synthetic `error` event emitted directly on the live Server handle did NOT reach uncaughtException and did NOT end the process; the lease then released and re-acquired ok:true. The guard registered inside listenExclusively survives past listen, which is why.\n- SIDECAR WRITE THROWS AFTER A SUCCESSFUL LISTEN: acquire still returns ok:true and the release still proves itself (measured at step 3 with the sidecar root planted as a FILE so mkdir and write both fail).\n- close() TWICE / ON A FAILED LISTEN: measured ERR_SERVER_NOT_RUNNING in the callback. Unreachable in production - a lease exists only after a successful listen, and the `released` flag short-circuits before the second close. The idempotent-release arm covers it.\n- LEAKS ON THE FAILURE PATH (epic rail 4): ran the eaddrinuse-admits drill, which FAILS 2 arms including both child-spawning ones. node.exe process count 85 before, 85 after. No scratch namespace directory survived, and the default root still held exactly the four protected .lock files.\n\nONE DISCLOSED EXPOSURE CHANGE, since a reviewer should not have to find it. The old lock file contained only a PID; the identity appeared only as the sha256 in its FILENAME. The new advisory sidecar records `{pid, identity, acquiredAt}`, so the lockIdentity is now in plaintext inside a 0o600 file under the user's %TEMP%. That is what step 3 specifies and the diagnostic is the point (the filename hash cannot tell an operator WHICH identity wedged). lockIdentity is a claim/registration identifier - \"lock-1\" in the daemon fixtures - and it is already persisted in the durable registration and observation records, so this is not a credential and epic rail 3 is not engaged. Hashing it would leave the sidecar saying nothing the filename does not already say.",
       "timestamp": "2026-09-09T10:26:47.431Z"
+    },
+    {
+      "id": "comment-2812b92b3cba4169b8f879a1896aacc3",
+      "author": "qa-01b7fe3f",
+      "content": "QA EVIDENCE — qa-01b7fe3f, 2026-09-09, review of completion commit b0dc1c57 (on moe/work-2026-09-04, six owned source paths + 3 board JSONs). Everything below is MY OWN re-run, not the worker's transcript.\n\nGATE LEGS RE-RUN BY ME, each standalone and foreground:\n| leg | exit | count line |\n|---|---|---|\n| pnpm --filter @moe/runner typecheck | 0 | `tsc --project tsconfig.json`, no diagnostics |\n| pnpm --filter @moe/daemon typecheck | 0 | `tsc --project tsconfig.json`, no diagnostics |\n| pnpm --filter @moe/runner test | 0 | `Test Files 80 passed (80)` / `Tests 2799 passed | 1 skipped (2800)` |\n| pnpm --filter @moe/daemon test | 1 | `Test Files 9 failed | 595 passed (604)` / `Tests 12 failed | 10769 passed | 14 skipped (10795)` |\nRunner leg reproduces task.verification exactly. New file proven executed by a standalone run: `Test Files 1 passed (1)` / `Tests 8 passed (8)`.\n\nDAEMON RED IS FOREIGN — path-attributed, not asserted. Failing files: cutover/v2-readiness-evidence-{collector,producers}, daemon-command-vocabulary, daemon-entry, daemon-main-activation-boot, daemon-startup, gates-roster-coherence, graph-preview-request, mcp-tool-allowlist. Verbatim discriminator: `expected [ 'monitoring.set_probe_interval' ] to deeply equal [ …(2) ]` with `- \"monitoring.retire_environment\"`, and `expected 'node:internal/modules/esm/resolve:271…' to contain 'DAEMON_ENTRY_NO_DEPENDENCY_PROVIDER'` / `throw new ERR_MODULE_NOT_FOUND(`. That is a peer mid-flight adding a monitoring command kind — untracked `apps/daemon/src/monitoring/environment-retirement-command-contracts.{ts,js}` in the shared tree. Intersection with this row's owned paths is EMPTY, proven two ways: (1) the row's ONLY daemon path runs green standalone under the package's own config — `Test Files 1 passed (1)` / `Tests 18 passed | 1 skipped (19)`; (2) the causal channel is closed — `git grep -n reapStaleLaunchLock -- packages apps adapters tools scripts docs` returns NOTHING, and the only apps/daemon file referencing the lock at all is this row's own foundation-attempt-windows.test.ts. Worker's leg was 604/604 at 13:29 local; the 9 files reddened in the ~11 minutes before my 13:40 run.\n\nMY OWN MUTATION DRILL, process-local, no on-disk mutation (peer worker-409b958a holds full-suite-gate). Out-of-tree vitest config with an `enforce:\"pre\"` transform rewriting claude-launch-lock.ts in memory, each mutation anchor-asserted; config deleted after.\n| mutant | result | arms RED |\n|---|---|---|\n| none (positive control) | 8 passed (8) | — |\n| eaddrinuse-admits (`if (failure !== null)` -> `&& failure.code !== \"EADDRINUSE\"`) | 2 failed \\| 6 passed | stalled-holder (e); crash-reclaim (f) |\n| namespace-accepts-anything (validator line deleted) | 1 failed \\| 7 passed | namespace-escape (d) |\n| sidecar-is-load-bearing (existsSync(sidecarPath) -> refuse; THE ORIGINAL DEFECT) | 2 failed \\| 6 passed | sidecar-variants (a); fixed-identity lock-1 (b) |\nReproduces the worker's matrix on the arms that matter, from an independent config. No arm is vacuous.\n\nRESIDUE: read-only census AFTER all my legs and all my drills. Directory holds exactly four `.lock` entries and nothing else — no `.holder` and no scratch root leaked by any lane, mine included. 212fff9b… sha256 74a88fcd7a421601c061e20a6b3ac3b739f1ab81665ecda051e0e3220b0390c4 body \"44088\"; 72c879fa… 2ddb67b8a8c259ffaff61a5abdd38f5b5d6f1c6e2af4344c85b17b77af2451cc \"40000000\"; 8f4b6914… ac90706d73a07dc775fa455d0e8aa368bfb5fc717ea541b7ec891c96cc7e5147 \"66492\"; c4f11049… 2ddb67b8… \"40000000\". Every SHA256 and body matches comment-1cd5a048 / comment-42b65bfc. UNTOUCHED.\n\nPER-FILE CAP: claude-launch-lock.ts is 173 physical lines (cap 250). Task-level net LOC is not a bar.\n\nRAIL 1 (reason codes, not outcomes): every refusal arm asserts `code` AND `layer`, and the stalled-holder arm additionally asserts `\"lease\" in rival === false`. Rail 4 teardown: children SIGKILLed in an afterEach and in a `finally` on the daemon arm; scratch roots removed with a guard that skips the default root.\n\nONE THING I CHECKED AND ACCEPT, so nobody re-opens it: the `release-does-not-await-close` mutant survives, and the worker disclosed that rather than faking an arm. Windows frees the pipe name too fast for acquire-release-acquire to separate the two. What is pinned instead is the observable half — the PRODUCTION `isSafeNativePromise`, imported not restated, accepts what `release()` returns on both the first and the idempotent second call. That is the documented silent-failure mode. Correct call.",
+      "timestamp": "2026-09-09T10:40:28.046Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T22:52:12.246Z",
-  "updatedAt": "2026-09-09T10:29:20.436Z",
+  "updatedAt": "2026-09-09T10:41:17.185Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T09:04:28.095Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 6,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-09-09T10:41:17.185Z",
+    "wallClockMs": 5809090
   },
   "contextFetchedBy": [
     "architect-ed42e60a",
     "worker-409b958a",
     "governor-608c8a78",
     "architect-f04f69cf",
-    "worker-0e797912"
+    "worker-0e797912",
+    "qa-01b7fe3f"
   ],
   "planSizeWarnings": [
     "Plan touches 6 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -351,6 +360,29 @@
       "treeId": "5f36f414bb22420e00a12bafe177d952e064eea6",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "b0dc1c57652d0f1ceea5f75861adcd44d6cd64dc",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-0e797912@2026-09-09T09:58:08Z",
+      "paths": [
+        ".moe/tasks/task-39e1628f68f54b8694bfd4a9a8a1b0ad.json",
+        ".moe/tasks/task-8b178e52483e4ff28e269b5ed4e492b6.json",
+        ".moe/tasks/task-d11695b0b6714183a16146eb4dd444f3.json",
+        "apps/daemon/src/work/foundation-attempt-windows.test.ts",
+        "packages/runner/src/providers/claude/claude-launcher.test.ts",
+        "packages/runner/src/providers/claude/claude-launcher.ts",
+        "packages/runner/src/providers/claude/claude-launcher.windows.test.ts",
+        "packages/runner/src/providers/claude/claude-launch-lock.test.ts",
+        "packages/runner/src/providers/claude/claude-launch-lock.ts"
+      ],
+      "recordedBy": "worker-0e797912",
+      "recordedAt": "2026-09-09T10:29:29.083Z",
+      "treeId": "4ad66195562ce25f81dd1d212539defa967ade38",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -359,14 +391,17 @@
     "packages/runner/src/providers/claude/claude-launcher.test.ts",
     "packages/runner/src/providers/claude/claude-launcher.windows.test.ts",
     "packages/runner/src/providers/claude/claude-launch-lock.test.ts",
-    "apps/daemon/src/work/foundation-attempt-windows.test.ts"
+    "apps/daemon/src/work/foundation-attempt-windows.test.ts",
+    ".moe/tasks/task-39e1628f68f54b8694bfd4a9a8a1b0ad.json",
+    ".moe/tasks/task-8b178e52483e4ff28e269b5ed4e492b6.json",
+    ".moe/tasks/task-d11695b0b6714183a16146eb4dd444f3.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
+    "kind": "completion",
     "sessionId": "worker-0e797912@2026-09-09T09:58:08Z",
-    "at": "2026-09-09T09:58:11.253Z"
+    "at": "2026-09-09T10:29:29.083Z"
   },
   "reviewStartedAt": "2026-09-09T10:29:20.436Z",
   "verification": {
@@ -375,5 +410,15 @@
     "outputTail": "RUN  v4.1.10 D:/projexts/moe-next\n\n Test Files  80 passed (80)\n      Tests  2799 passed | 1 skipped (2800)\n   Start at  13:27:26\n   Duration  22.85s (transform 4.03s, setup 0ms, import 11.73s, tests 97.43s, environment 5ms)",
     "reportedAt": "2026-09-09T10:29:20.436Z"
   },
-  "completionSummary": "The Claude launch lock is now a WIN32 NAMED PIPE. listen() is the exclusion; the name frees the instant the holder dies, however it dies (SIGKILL included). recordedHolderPid, pidIsDead, reapStaleLaunchLock, the retry loop and the ino/dev check are DELETED, so a recycled PID has nothing left to impersonate. acquireWindowsLaunchLock keeps its name and contract; index-surface.test.ts:887 needed no edit.\n\nNew MOE_CLAUDE_LAUNCH_LOCK_NAMESPACE scopes the pipe prefix and the advisory sidecar together, fail-closed on anything outside [A-Za-z0-9_-]{1,64}; DEFAULT UNCHANGED when absent. Test lanes take per-run namespaces; test:live:foundation-attempt deliberately keeps the default so it still serializes against a real fleet launch. Advisory <sha256>.holder sidecar {pid,identity,acquiredAt} buys back the diagnosis a wedged pipe cannot give, and exclusion NEVER reads it; the unlink is suffix-guarded so pre-existing .lock residue is structurally unreachable.\n\n8 landed arms in the new claude-launch-lock.test.ts plus 1 in the daemon fixture, every one asserting a specific code@layer. Holders and rivals are separate PROCESSES running the production module.\n\nGATE, all four legs EXIT 0 with nonzero count lines: runner typecheck, daemon typecheck, `pnpm --filter @moe/runner test` 80 files / 2799 passed, `pnpm --filter @moe/daemon test` 604 files / 10769 passed. New file's presence in the runner roster proven by `vitest list`, not inferred. No leg is red, so the path-attributed baseline delta is empty.\n\nDISCLOSED, not left to be found: (1) one mutation survives the drill - release resolving without awaiting the close callback leaves all 8 arms green because Windows frees the name too fast to separate them; I pinned the observable half (production isSafeNativePromise accepts what release() returns) rather than fake a red. (2) The .holder suffix guard has no reachable trigger, so nothing covers it. (3) The sidecar records lockIdentity in plaintext in a 0o600 file where the old lock file"
+  "completionSummary": "The Claude launch lock is now a WIN32 NAMED PIPE. listen() is the exclusion; the name frees the instant the holder dies, however it dies (SIGKILL included). recordedHolderPid, pidIsDead, reapStaleLaunchLock, the retry loop and the ino/dev check are DELETED, so a recycled PID has nothing left to impersonate. acquireWindowsLaunchLock keeps its name and contract; index-surface.test.ts:887 needed no edit.\n\nNew MOE_CLAUDE_LAUNCH_LOCK_NAMESPACE scopes the pipe prefix and the advisory sidecar together, fail-closed on anything outside [A-Za-z0-9_-]{1,64}; DEFAULT UNCHANGED when absent. Test lanes take per-run namespaces; test:live:foundation-attempt deliberately keeps the default so it still serializes against a real fleet launch. Advisory <sha256>.holder sidecar {pid,identity,acquiredAt} buys back the diagnosis a wedged pipe cannot give, and exclusion NEVER reads it; the unlink is suffix-guarded so pre-existing .lock residue is structurally unreachable.\n\n8 landed arms in the new claude-launch-lock.test.ts plus 1 in the daemon fixture, every one asserting a specific code@layer. Holders and rivals are separate PROCESSES running the production module.\n\nGATE, all four legs EXIT 0 with nonzero count lines: runner typecheck, daemon typecheck, `pnpm --filter @moe/runner test` 80 files / 2799 passed, `pnpm --filter @moe/daemon test` 604 files / 10769 passed. New file's presence in the runner roster proven by `vitest list`, not inferred. No leg is red, so the path-attributed baseline delta is empty.\n\nDISCLOSED, not left to be found: (1) one mutation survives the drill - release resolving without awaiting the close callback leaves all 8 arms green because Windows frees the name too fast to separate them; I pinned the observable half (production isSafeNativePromise accepts what release() returns) rather than fake a red. (2) The .holder suffix guard has no reachable trigger, so nothing covers it. (3) The sidecar records lockIdentity in plaintext in a 0o600 file where the old lock file",
+  "touchedFiles": [
+    "packages/runner/src/providers/claude/claude-launcher.test.ts",
+    "apps/daemon/src/work/foundation-attempt-windows.test.ts",
+    "packages/runner/src/providers/claude/claude-launch-lock.ts",
+    "packages/runner/src/providers/claude/claude-launch-lock.test.ts",
+    "packages/runner/src/providers/claude/claude-launcher.ts"
+  ],
+  "completedAt": "2026-09-09T10:41:17.185Z",
+  "reviewCompletedAt": "2026-09-09T10:41:17.185Z",
+  "reviewSummary": "APPROVED. Commit b0dc1c57 on moe/work-2026-09-04. Full QA evidence: comment-2812b92b. Graded against comment-1cd5a048 (amends arms a/c/d/f) and comment-42b65bfc, not the stale DoD field.\n\nLEGS I RE-RAN: runner typecheck 0; daemon typecheck 0; runner test 0 at `Test Files 80 passed (80)` / `Tests 2799 passed | 1 skipped (2800)`, reproducing task.verification exactly. New lock test file standalone: `Tests 8 passed (8)`.\n\nDAEMON LEG RED AT 9 FILES, FOREIGN, disclosed: `Tests 12 failed | 10769 passed`. Discriminator `expected [ 'monitoring.set_probe_interval' ] to deeply equal [ …(2) ]` minus `\"monitoring.retire_environment\"`, plus ERR_MODULE_NOT_FOUND in daemon-entry: a peer mid-flight on a monitoring command kind. Owned-path intersection EMPTY, proven twice: the row's only daemon path is green standalone (`Tests 18 passed | 1 skipped (19)`), and `git grep reapStaleLaunchLock` over all source returns nothing, so no channel reaches those files.\n\nMY OWN PROCESS-LOCAL DRILL (no disk mutation; peer holds the gate): control 8/8; eaddrinuse-admits reds (e)+(f); namespace-accepts-anything reds (d); sidecar-is-load-bearing, the original defect reintroduced, reds (a)+(b). No vacuous arm.\n\nARMS: (a) 4 sidecar variants all ok; (b) fixed lock-1 acquire/release/acquire; (c) afterEach narrowed to the .holder sidecar with a live-child proof a rival still refuses; (d) one env var scopes pipe prefix and sidecar root, default asserted, invalid refused CLAUDE_LAUNCH_LOCK_UNKNOWN; (e) stalled holder in a separate child, rival refused, EPIPE probe, holder exits 0, fails against the withdrawn wall-clock bound; (f) exclusion plus SIGKILL reclaim in one arm. Every refusal asserts code AND layer.\n\nRESIDUE UNTOUCHED: exactly four .lock files, SHA256 and bodies match the census. Module is 173 lines (cap 250)."
 }
