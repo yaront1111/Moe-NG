@@ -11,14 +11,15 @@ export interface RepositoryExecutionRecoveryInput {
   readonly commandId: string;
   readonly principalId: string;
   readonly requestSha256: string;
-  readonly proof: { readonly kind: "ABORT_UNEXECUTED" } | { readonly kind: "LANDING_RECEIPT" | "LANDING_COMPLETION"; readonly id: string };
+  readonly proof: { readonly kind: "ABORT_UNEXECUTED" }
+    | { readonly kind: "LANDING_RECEIPT" | "LANDING_COMPLETION" | "LANDING_REFUSED_NO_EFFECT"; readonly id: string };
 }
 /** Internal operator effect. Authentication and durable approval precede this atomic CAS+receipt. */
 export function recoverRepositoryExecution(input: RepositoryExecutionRecoveryInput): RepositoryExecutionResult<{ released: true; replayed: boolean }> {
   const { handle, proof } = input;
   if (!validExecutionOwner(handle.owner) || !Number.isSafeInteger(input.expectedRevision) || input.expectedRevision < 1
     || !/^[a-f0-9]{64}$/u.test(input.requestSha256) || input.commandId.length === 0 || input.principalId.length === 0
-    || !["ABORT_UNEXECUTED", "LANDING_RECEIPT", "LANDING_COMPLETION"].includes(proof.kind)) {
+    || !["ABORT_UNEXECUTED", "LANDING_RECEIPT", "LANDING_COMPLETION", "LANDING_REFUSED_NO_EFFECT"].includes(proof.kind)) {
     return repositoryExecutionFailure("REPOSITORY_EXECUTION_OWNER_MISMATCH");
   }
   const resolved = resolveRepositoryExecutionIdentity(handle.reservation.identity.root); if (!resolved.ok) return resolved;
@@ -31,9 +32,13 @@ export function recoverRepositoryExecution(input: RepositoryExecutionRecoveryInp
       && record.state.sessionId === null && record.state.pid === null;
     const canLand = record.everExecuted && record.state.baselineId !== null && record.state.sessionId !== null
       && (record.state.phase === "LANDING" || (record.state.phase === "BLOCKED" && proof.kind === "LANDING_COMPLETION"));
-    if (proof.kind === "ABORT_UNEXECUTED" ? !canAbort : !canLand || !/^[a-f0-9]{64}$/u.test(proof.id)) {
-      return repositoryExecutionFailure("REPOSITORY_EXECUTION_TRANSITION_INVALID");
-    }
+    // A refusal that journaled no intent never reached Git, so a BLOCKED reservation carrying one
+    // is released without a completion to reconcile. The evidence join proves the absence.
+    const canReleaseNoEffect = record.everExecuted && record.state.baselineId !== null && record.state.sessionId !== null
+      && ["LANDING", "BLOCKED"].includes(record.state.phase);
+    const permitted = proof.kind === "ABORT_UNEXECUTED" ? canAbort
+      : (proof.kind === "LANDING_REFUSED_NO_EFFECT" ? canReleaseNoEffect : canLand) && /^[a-f0-9]{64}$/u.test(proof.id);
+    if (!permitted) return repositoryExecutionFailure("REPOSITORY_EXECUTION_TRANSITION_INVALID");
     return { ok: true, record: null, value: { released: true as const } };
   }, {
     key: recoveryDigest([handle.owner.projectId, input.principalId, input.commandId]),

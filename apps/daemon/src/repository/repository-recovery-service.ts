@@ -7,7 +7,7 @@ import type { RepositoryRecoveryResult, RepositoryRecoveryView } from "./reposit
 import { decodeRepositoryRecoveryPayload } from "./repository-recovery-codec.js";
 import { readRepositoryRecoveryReservation, recoverRepositoryExecution } from "./repository-execution-recovery.js";
 import { repositoryRecoveryOwnerDigest } from "./repository-landing-intent.js";
-import { readRecoveryLandingEvidence } from "./repository-recovery-evidence.js";
+import { readRecoveryLandingEvidence, readRecoveryNoEffectEvidence } from "./repository-recovery-evidence.js";
 import { recoveryDigest } from "./repository-recovery-facts.js";
 import { readRecoveryApproval, recordRecoveryApproval } from "./repository-recovery-approval.js";
 import { readRepositoryRecoveryReplay } from "./repository-recovery-replay.js";
@@ -56,9 +56,12 @@ export function createRepositoryRecoveryService(options: RepositoryRecoveryServi
       return { version: REPOSITORY_RECOVERY_VERSION, projectId: options.projectId, code, reservations: held.map((item) => {
         const { handle } = item; const targetAggregateId = targetFor(handle);
         const landing = readRecoveryLandingEvidence(options.store, handle);
+        // A landing that journaled no intent is reconcilable too, with nothing to reconcile.
+        const noEffect = landing.ok ? null : readRecoveryNoEffectEvidence(options.store, handle);
         return { nodeRef: handle.owner.nodeRef, phase: handle.reservation.phase, expectedReservationRevision: handle.reservation.revision,
           actions: REPOSITORY_RECOVERY_ACTIONS.map((action) => {
-            const refusal = action === "ABORT_UNEXECUTED" ? abortCode(item) : landing.ok ? null : landing.code;
+            const refusal = action === "ABORT_UNEXECUTED" ? abortCode(item)
+              : landing.ok || noEffect?.ok === true ? null : landing.code;
             return { action, available: refusal === null, code: refusal, offer: refusal !== null ? null : {
               commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION, commandId: options.mintId(), commandKind: REPOSITORY_RECOVERY_COMMAND_KIND,
               expectedVersion: options.store.getAggregateVersion(targetAggregateId), inputSchemaVersion: REPOSITORY_RECOVERY_VERSION, targetAggregateId } };
@@ -85,8 +88,9 @@ export function createRepositoryRecoveryService(options: RepositoryRecoveryServi
         if (handle.reservation.revision !== payload.expectedReservationRevision) return recoveryRefusal("REPOSITORY_RECOVERY_REVISION_CONFLICT");
         const abort = abortCode(held);
         const landing = payload.action === "RECONCILE_LANDED" ? readRecoveryLandingEvidence(options.store, handle) : null;
+        const noEffect = landing !== null && !landing.ok ? readRecoveryNoEffectEvidence(options.store, handle) : null;
         if (payload.action === "ABORT_UNEXECUTED" && abort !== null) return recoveryRefusal(abort);
-        if (landing !== null && !landing.ok) return landing;
+        if (landing !== null && !landing.ok && noEffect?.ok !== true) return landing;
         const approval = { requestSha256, ownerDigest: repositoryRecoveryOwnerDigest(handle.owner), identity: handle.reservation.identity };
         if (prior.approval !== null && JSON.stringify(prior.approval) !== JSON.stringify(approval)) return recoveryRefusal("REPOSITORY_RECOVERY_APPROVAL_CONFLICT");
         if (prior.approval === null) {
@@ -99,7 +103,13 @@ export function createRepositoryRecoveryService(options: RepositoryRecoveryServi
           return result.ok ? success(input.commandId, result.replayed) : recoveryRefusal(result.code);
         };
         if (landing === null) return release({ kind: "ABORT_UNEXECUTED" });
-        if (!landing.ok) return landing;
+        if (!landing.ok) {
+          if (noEffect?.ok !== true) return landing;
+          // No Git effect exists to guard against; the durable evidence is re-joined instead.
+          const checked = readRecoveryNoEffectEvidence(options.store, handle); if (!checked.ok) return checked;
+          if (JSON.stringify(checked.evidence) !== JSON.stringify(noEffect.evidence)) return recoveryRefusal("REPOSITORY_RECOVERY_EVIDENCE_CONFLICT");
+          return release(checked.evidence.proof);
+        }
         return await git.guard(landing.evidence, () => {
           // Rejoin durable evidence while the Git identity and owned index entries are held.
           const checked = readRecoveryLandingEvidence(options.store, handle); if (!checked.ok) return checked;

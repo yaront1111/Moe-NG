@@ -89,6 +89,11 @@ describe("a goal has a landed commit", () => {
   it("is FALSE when the goal's only landing was REFUSED", () => {
     // A refusal is a landing ATTEMPT, not a landed commit. NOTHING_TO_COMMIT is the exact
     // shape the lander writes for a node whose work produced no diff.
+    //
+    // THIS IS THE DOCUMENTED BASELINE for task-f7d38f752b074dc89da30631783aae04 ("a node that
+    // legitimately lands nothing never counts toward its goal"). Releasing the checkout for such a
+    // node (task-9dbe28fdccc546dfbbbf9b32f68e7c61) deliberately did NOT change this: goal closure
+    // still asks for a COMMITTED receipt, so the successor row starts from a measurement, not a guess.
     const store = enabledWorld();
 
     land(store, "node-a", { refusalCode: "NOTHING_TO_COMMIT" });

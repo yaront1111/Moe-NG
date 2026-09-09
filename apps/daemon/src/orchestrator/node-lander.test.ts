@@ -7,6 +7,9 @@ import type { LandingBaselineEntry } from "../repository/landing-receipt-contrac
 import { PROJECT_ID, closeStores, hex64, openStore, seedVerifierReceipt } from "../review/review-test-fixtures.js";
 import { readVerifierReceipt } from "../review/verifier-receipt-ledger.js";
 import { createNodeLander, deliveredPaths, landingMessage } from "./node-lander.js";
+import { executionHandle } from "../repository/repository-execution-record.js";
+import type { RepositoryExecutionHandle } from "../repository/repository-execution-contracts.js";
+import { readRepositoryLandingEvidence } from "../repository/repository-landing-intent.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import type { VerifiedWorkspaceBinding, VerifiedWorkspacePort } from "../repository/verified-workspace-contracts.js";
 
@@ -65,11 +68,22 @@ function bindingOptions(git: GitLandingPort): {
   };
 }
 
+/** A LANDING-phase reservation, built by the production constructor rather than a hand-made shape. */
+function reservation(): RepositoryExecutionHandle {
+  return executionHandle({
+    owner: { projectId: PROJECT_ID, nodeRef: NODE, ownershipToken: hex64("cd"), storeId: "store-node-lander" },
+    state: { phase: "LANDING", baselineId: "baseline-1", sessionId: "session-1", pid: 4242,
+      controllerId: "controller-1", controllerPid: 4241 },
+    revision: 5, everExecuted: true,
+  }, { root: WORKSPACE, gitDirectory: `${WORKSPACE}/.git` });
+}
+
 function lander(git: GitLandingPort, accepted: { verifierReceiptId: string } | null, mission = brief,
-  bindings = bindingOptions(git)) {
+  bindings = bindingOptions(git), reservationHandle?: RepositoryExecutionHandle) {
   const store = openStore();
   const made = createNodeLander({
     ...bindings,
+    ...(reservationHandle === undefined ? {} : { reservationHandle }),
     clock: () => "2026-09-03T12:00:00.000Z",
     git,
     nodeMission: () => mission,
@@ -287,6 +301,40 @@ describe("createNodeLander", () => {
     expect(reports[0]?.detail).toContain("NOTHING_TO_COMMIT");
     const receipt = readLandingReceipt(store, PROJECT_ID, landingReceiptId(PROJECT_ID, NODE, VERIFIER_RECEIPT));
     expect(receipt.ok && receipt.receipt.outcome).toBe("REFUSED");
+  });
+
+  // The property the checkout release depends on: this refusal is decided BEFORE the journal, so it
+  // is effect-free by construction. If a future edit ever journals an intent first, this arm reds and
+  // the release becomes unsafe — that is what it is here to say.
+  it("records the NOTHING_TO_COMMIT refusal with no journaled landing intent", async () => {
+    const held = reservation();
+    const git = fakeGit(observation([{ blobId: BLOB_A, path: "operator-dirty.ts" }]));
+    const { made, store } = lander(git, { verifierReceiptId: VERIFIER_RECEIPT }, brief, bindingOptions(git), held);
+    await made.baseline(NODE);
+    const reports = await made.landOnce();
+    expect(reports[0]?.detail).toContain("NOTHING_TO_COMMIT");
+    const receipt = readLandingReceipt(store, PROJECT_ID, landingReceiptId(PROJECT_ID, NODE, VERIFIER_RECEIPT));
+    expect(receipt.ok && receipt.receipt.refusal?.code).toBe("NOTHING_TO_COMMIT");
+    expect(receipt.ok && receipt.receipt.commit).toBeNull();
+    expect(readRepositoryLandingEvidence(store, held))
+      .toMatchObject({ ok: false, code: "REPOSITORY_RECOVERY_EVIDENCE_MISSING" });
+    expect(git.commits).toHaveLength(0);
+  });
+
+  // Non-vacuity control for the arm above: with the SAME handle wiring, a landing that does commit
+  // journals both an intent and a completion. So the missing intent above is the lander's decision,
+  // not a harness that never journals at all.
+  it("journals an intent and a completion when the same reservation does land", async () => {
+    const held = reservation();
+    const git = fakeGit(observation([]));
+    const { made, store } = lander(git, { verifierReceiptId: VERIFIER_RECEIPT }, brief, bindingOptions(git), held);
+    await made.baseline(NODE);
+    git.observations = [observation([{ blobId: BLOB_B, path: "src/new.ts" }])];
+    const reports = await made.landOnce();
+    expect(reports[0]?.outcome).toBe("COMMITTED");
+    const journal = readRepositoryLandingEvidence(store, held);
+    expect(journal.ok && journal.intent.paths).toEqual(["src/new.ts"]);
+    expect(journal.ok && journal.completion?.commit.sha).toBe(SHA);
   });
 
   it("records a commit failure with git's own words and does not retry it", async () => {

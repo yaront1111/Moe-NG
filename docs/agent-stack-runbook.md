@@ -945,6 +945,57 @@ it), `NOTHING_TO_COMMIT`, `NOT_A_REPOSITORY`, `GIT_COMMIT_FAILED` (git's own
 words, e.g. a hook). A transient git failure (`GIT_FAILED`, e.g. a lock) is
 only reported and retried next pass. `MOE_NODE_LANDING=0` turns landing off.
 
+### A landing that commits nothing, and releasing a checkout it wedged
+
+A node can be accepted and still change no file — the work was already on HEAD,
+or a dead earlier seat's files were committed by the attempt before it. The
+lander refuses `NOTHING_TO_COMMIT` and records that refusal beside the node.
+
+**What that does to checkout ownership now.** The refusal is decided BEFORE the
+lander journals any landing intent, so nothing was written and nothing is owed:
+the reservation on that checkout is RELEASED (`LANDED_NOTHING`), and the next
+`node.deliver` on the same root claims it normally. You do nothing. A refusal
+decided AFTER the intent is journaled — `GIT_COMMIT_FAILED` from a hook, for
+instance — is the opposite case: git may already carry part of the landing, so
+the reservation is BLOCKED and held on purpose.
+
+**What a BLOCKED reservation means.** The record lives in
+`<gitdir>/moe-repository-execution.sqlite` and SURVIVES A DAEMON RESTART —
+restarting changes nothing. While it exists the execution port refuses every
+effect family on that checkout, not just landing: publishing and criterion
+verification are shut out too, and any other node asking for the root is refused
+`REPOSITORY_EXECUTION_BUSY`. `BLOCKED` is terminal by design (its transition
+list is empty), so nothing moves the reservation out of it — a release is the
+only exit, and it is offered on evidence rather than taken by a phase change.
+
+**Releasing a checkout wedged by an older daemon** (before the release above
+existed, a `NOTHING_TO_COMMIT` refusal left the reservation BLOCKED forever):
+
+1. Open the control room's **Health** screen and find the **Repository recovery**
+   card. Each held reservation shows its node ref, its reservation revision and
+   its phase.
+2. Read the two actions. `Release unused reservation` (`ABORT_UNEXECUTED`) will
+   be refused `REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN` here — the node did
+   execute. The second action is the one that applies.
+3. If the second action is refused rather than offered, the code under it says
+   why, and `REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN` there means the daemon
+   found a journaled landing intent: git may have run, so STOP. That checkout
+   needs the landing reconciled, not released; do not work around it.
+4. Type a reason (required, it is recorded with the decision) and press the
+   second button. It is labelled `Reconcile completed landing` even when the
+   landing committed nothing — the underlying action is `RECONCILE_LANDED`.
+5. The daemon re-reads the durable evidence with the reservation still held and
+   releases only if it still finds a refusal receipt with no journaled intent;
+   the card then answers `Recovery decision recorded`. Refresh it: the
+   reservation is gone.
+6. Confirm from the repository side that the next node can own the root. The
+   card lists no reservation for it, and the next `node.deliver` no longer
+   answers `REPOSITORY_EXECUTION_BUSY`.
+
+Recovery is human-only: the decision is taken either by the configured operator
+principal itself or by a durably paired human principal, and an agent principal
+is refused `REPOSITORY_RECOVERY_HUMAN_REQUIRED`.
+
 ### Closing a goal (your decision, the daemon's evidence)
 
 Closing is human-only and operator-only, like approval and publishing: the

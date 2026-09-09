@@ -19,6 +19,12 @@ export interface RecoveryLandedEvidence {
   readonly needsLandingReceipt: boolean;
   readonly proof: { readonly kind: "LANDING_RECEIPT" | "LANDING_COMPLETION"; readonly id: string };
 }
+export interface RecoveryNoEffectEvidence {
+  readonly receiptId: string;
+  readonly verifierReceiptId: string;
+  readonly refusalCode: string;
+  readonly proof: { readonly kind: "LANDING_REFUSED_NO_EFFECT"; readonly id: string };
+}
 function sameWorkspace(workspace: string, handle: RepositoryExecutionHandle): boolean {
   if (workspace === handle.reservation.identity.root) return true;
   const resolved = resolveRepositoryExecutionIdentity(workspace);
@@ -71,5 +77,42 @@ export function readRecoveryLandingEvidence(store: SqliteEventStore, handle: Rep
       || (completion !== null && !sameCommit(commit, completion.commit))) return recoveryRefusal("REPOSITORY_RECOVERY_EVIDENCE_CONFLICT");
     return { ok: true, evidence: { binding, commit, verifierReceiptId: verified.receipt.receiptId, receiptId, needsLandingReceipt: !landed.ok,
       proof: completion === null ? { kind: "LANDING_RECEIPT", id: receiptId } : { kind: "LANDING_COMPLETION", id: completion.intentId } } };
+  } catch { return recoveryRefusal("REPOSITORY_RECOVERY_EVIDENCE_INVALID"); }
+}
+
+/**
+ * The reservation a landing wedged BEFORE it journaled anything. Both conditions are required and
+ * neither is sufficient: a durable refusal receipt for the accepted verifier receipt, AND no landing
+ * intent at all. A BLOCKED reservation WITH an intent and no completion stays a mid-write unknown,
+ * because Git may have run; this one provably never reached Git, so the checkout is owed nothing.
+ */
+export function readRecoveryNoEffectEvidence(store: SqliteEventStore, handle: RepositoryExecutionHandle): RepositoryRecoveryResult<{ evidence: RecoveryNoEffectEvidence }> {
+  try {
+    const { owner, reservation } = handle;
+    if (/^(?:publish|criterion):/u.test(owner.nodeRef)) return recoveryRefusal("REPOSITORY_RECOVERY_WORKFLOW_UNSUPPORTED");
+    if (!["LANDING", "BLOCKED"].includes(reservation.phase)) return recoveryRefusal("REPOSITORY_RECOVERY_PHASE_UNSUPPORTED");
+    // Checked BEFORE the journal: without both, the intent key cannot be computed at all, and an
+    // unanswerable question must not read as "no intent was ever journaled".
+    if (reservation.baselineId === null || reservation.sessionId === null) return recoveryRefusal("REPOSITORY_RECOVERY_EVIDENCE_MISSING");
+    const journal = readRepositoryLandingEvidence(store, handle);
+    if (journal.ok) return recoveryRefusal("REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN");
+    if (journal.code !== "REPOSITORY_RECOVERY_EVIDENCE_MISSING") return journal;
+    const review = readReviewLedger(store, owner.projectId, owner.nodeRef);
+    if (review.unreadable || review.escalated || review.replanned) return recoveryRefusal("REPOSITORY_RECOVERY_EVIDENCE_INVALID");
+    if (review.accepted === undefined) return recoveryRefusal("REPOSITORY_RECOVERY_EVIDENCE_MISSING");
+    const receiptId = landingReceiptId(owner.projectId, owner.nodeRef, review.accepted.verifierReceiptId);
+    const landed = readLandingReceipt(store, owner.projectId, receiptId);
+    if (!landed.ok) {
+      return recoveryRefusal(landed.code === "LANDING_RECEIPT_NOT_FOUND"
+        ? "REPOSITORY_RECOVERY_EVIDENCE_MISSING" : "REPOSITORY_RECOVERY_EVIDENCE_INVALID");
+    }
+    const { receipt } = landed;
+    if (receipt.subjectRef !== owner.nodeRef || receipt.verifierReceiptId !== review.accepted.verifierReceiptId
+      || !sameWorkspace(receipt.workspace, handle)) return recoveryRefusal("REPOSITORY_RECOVERY_EVIDENCE_INVALID");
+    if (receipt.outcome !== "REFUSED" || receipt.commit !== null || receipt.refusal === null) {
+      return recoveryRefusal("REPOSITORY_RECOVERY_EVIDENCE_CONFLICT");
+    }
+    return { ok: true, evidence: { receiptId, verifierReceiptId: receipt.verifierReceiptId,
+      refusalCode: receipt.refusal.code, proof: { kind: "LANDING_REFUSED_NO_EFFECT", id: receiptId } } };
   } catch { return recoveryRefusal("REPOSITORY_RECOVERY_EVIDENCE_INVALID"); }
 }
