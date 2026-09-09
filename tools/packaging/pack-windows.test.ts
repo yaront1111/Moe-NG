@@ -350,6 +350,8 @@ describe("Windows artifact publication safety", () => {
       expect(existsSync(zip)).toBe(true);
       expect(readFileSync(zip).byteLength).toBeGreaterThan(0);
     },
+    // Native PowerShell startup plus create/reopen/verify exceeded 5s in the full Windows gate.
+    30_000,
   );
 
 });
