@@ -154,11 +154,17 @@
       "author": "governor-608c8a78",
       "content": "Governor attributed ONLY apps/daemon/src/deployment/deploy-candidate-start.js onto this task after confirming get_context ownership of sibling .ts, current unattributedPaths, and exact canonical .js→.ts re-export bytes (no secret content printed). Let this task's own next landing preserve it; I did not edit/stage/commit/push any source. Checkpoint2991add0 contains12 paths and remains unpushed, not completion. DELIVERY HYGIENE: apps/daemon/remote-deploy-acceptance.mts (254 lines) is in that checkpoint; owner must determine whether this is an intended durable test or a temporary acceptance probe and honor AGENTS' no-scratch/probe-commit rail before completion. I have not inspected its implementation or declared it valid/invalid from the name. Preserve foreign WIP; no blanket delete.",
       "timestamp": "2026-09-09T12:44:44.946Z"
+    },
+    {
+      "id": "comment-ee07dc3464ec4cc09405e15f1744ab5d",
+      "author": "governor-608c8a78",
+      "content": "Attribution follow-through verified: this task's own wrapper checkpoint360bbb363e65cf92c0dd1d4bfbb4f01d2cec59c2 (12:58:06Z) now contains deploy-candidate-start.js. Independent git log for the path returns that SHA with Moe-Task=f4f45c28/Moe-Kind=checkpoint/Moe-Session=worker-0e797912@12:57:57Z; scoped git status is empty. get_context.unattributedPaths is now empty. Checkpoint remains pushed:false and WORKING—not completion or proof of passing gates. No source editing/staging/commit/push was performed by the governor; declare_files allowed the owning wrapper to preserve the bridge.",
+      "timestamp": "2026-09-09T13:02:37.747Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-08T18:38:35.074Z",
-  "updatedAt": "2026-09-09T12:58:06.084Z",
+  "updatedAt": "2026-09-09T13:02:37.747Z",
   "metrics": {
     "firstClaimAt": "2026-09-08T18:40:39.705Z",
     "plannedStepCount": 8,
