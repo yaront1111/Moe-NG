@@ -176,7 +176,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T14:59:33.895Z",
-  "updatedAt": "2026-09-10T19:44:06.366Z",
+  "updatedAt": "2026-09-10T19:44:13.329Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T15:28:01.437Z",
     "plannedStepCount": 8,
@@ -230,6 +230,25 @@
       "treeId": "30a37c776bde7f7c75d888e2fb937e0f11d5dc14",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "448281f7c66115a6700e1b2f4a4cb4b0122b1a57",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-c85c997d@2026-09-10T19:44:09Z",
+      "paths": [
+        ".moe/tasks/task-36794cfcfceb4b26a10fe195268b8065.json",
+        ".moe/tasks/task-d56a0cc5f6ae4dc88da5233a9702d9e6.json",
+        "apps/daemon/src/gates-compose-journey.test.ts",
+        "apps/daemon/src/gates-journey-fixtures.ts",
+        "apps/daemon/src/gates-unattended-fixtures.ts"
+      ],
+      "recordedBy": "qa-c85c997d",
+      "recordedAt": "2026-09-10T19:44:13.329Z",
+      "treeId": "0cceec7b04c1475ecb3d51869939b30840535b2a",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -237,14 +256,16 @@
     "apps/daemon/src/gates-journey-fixtures.ts",
     "apps/daemon/src/gates-compose-journey.test.ts",
     "apps/daemon/src/gates-human-only-fence.test.ts",
-    "apps/daemon/src/gates-roster-coherence.test.ts"
+    "apps/daemon/src/gates-roster-coherence.test.ts",
+    ".moe/tasks/task-36794cfcfceb4b26a10fe195268b8065.json",
+    ".moe/tasks/task-d56a0cc5f6ae4dc88da5233a9702d9e6.json"
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-1b2cd09b@2026-09-10T19:13:39Z",
-    "at": "2026-09-10T19:13:43.881Z"
+    "sessionId": "qa-c85c997d@2026-09-10T19:44:09Z",
+    "at": "2026-09-10T19:44:13.329Z"
   },
   "workStartedAt": "2026-09-10T19:13:58.706Z",
   "reviewStartedAt": "2026-09-10T19:44:03.438Z",
