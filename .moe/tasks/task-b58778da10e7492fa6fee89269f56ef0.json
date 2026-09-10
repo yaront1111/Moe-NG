@@ -11,7 +11,7 @@
   ],
   "taskRails": [],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -53,7 +53,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:42:16.269Z",
-  "updatedAt": "2026-09-10T10:44:51.923Z",
+  "updatedAt": "2026-09-10T17:39:42.720Z",
   "contextFetchedBy": [
     "governor-608c8a78"
   ],
