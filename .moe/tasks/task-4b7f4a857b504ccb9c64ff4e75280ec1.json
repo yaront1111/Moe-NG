@@ -84,7 +84,7 @@
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": null,
+  "assignedWorkerId": "worker-ed22fae0",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -157,7 +157,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T10:42:43.737Z",
-  "updatedAt": "2026-09-10T18:16:18.653Z",
+  "updatedAt": "2026-09-10T18:17:45.588Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T10:42:46.813Z",
     "plannedStepCount": 5,
@@ -192,7 +192,8 @@
   "contextFetchedBy": [
     "governor-608c8a78",
     "architect-978f68c6",
-    "worker-a11dcf70"
+    "worker-a11dcf70",
+    "worker-ed22fae0"
   ],
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
