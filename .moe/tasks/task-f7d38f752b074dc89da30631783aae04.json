@@ -167,7 +167,7 @@
       "activeAmendmentId": "amend-2"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -295,23 +295,32 @@
       "author": "worker-a11dcf70",
       "content": "ADDENDUM TO THE PREVIEW FOLLOW-UP (comment-5c197f55), the one line step 7 asks for: when `preview-goal-landing.ts` is fixed it must use the CORRECTED TWO-PART predicate — `landedWithNoEffect(receipt, landingIntents)` — never the NOTHING_TO_COMMIT code alone, or it re-opens exactly the lost-work hole the governor's reproducer (comment-573c4f2c) demonstrated.\n\nStill measured at the delivered tree: `readGoalLandingStatus` at preview-goal-landing.ts:81-85 already calls `readReviewLedgers` and destructures `{ landings }` only, so `landingIntents` is available at that call site for free, the same shape as the three seams this row corrected. Its rule is stricter than the others — `.outcome !== \"COMMITTED\"` puts a node in `missing`, so preview refuses PREVIEW_GOAL_NOT_LANDED for ANY no-effect node, not just a laundered one.\n\nSTILL BLOCKED FROM THIS ROW BY THE SAME COLLISION, re-checked this session, not carried over on faith: `git status --porcelain -- apps/daemon/src/preview/preview-goal-landing.test.ts` answers `?? apps/daemon/src/preview/preview-goal-landing.test.ts` — an untracked peer WIP, exactly as it was at plan time. Writing preview logic here would put my bytes under a test file I cannot see the intent of, and an untracked peer file has no undo. `git log --oneline -- apps/daemon/src/preview/preview-goal-landing.test.ts` returns nothing, so the file has never landed and no commit names an owner; the board shows no row holding the preview seam. Whoever picks this up should re-check that `??` first — if the peer has landed by then, the two-part fix is one destructure and one predicate call.\n\nThe other two follow-ups stand unchanged and are NOT re-posted: the control-room card (comment-598c3e3c) and the release-durable-facts note on task-b8ec9a638f6540c28798c29f23fd5ada. Both now also inherit the two-part rule rather than the code alone.",
       "timestamp": "2026-09-10T10:52:13.999Z"
+    },
+    {
+      "id": "comment-c86e30c160dc44c3a273a2d1c718b423",
+      "author": "qa-01b7fe3f",
+      "content": "QA VERIFICATION RECORD — qa-01b7fe3f, re-measured at the delivered tree, nothing taken from the worker's transcript. Delivered bytes reviewed at f976d2c7 (checkpoint, 9 paths) + 3c54e4fd (completion, 8 daemon paths); f976d2c7 confirmed an ancestor of HEAD, so all 10 declared paths are in the delivered tree. `git diff HEAD -- apps/daemon/src` EMPTY, so what I ran is what landed.\n\nLEG A — the recorded verification command, re-run verbatim by me:\n`cd apps/daemon && npx vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 --testNamePattern=\"^(?!.*LIVE_PROVIDER:)\" src/review src/repository src/criterion-evidence src/goals src/http src/preview src/orchestrator`\n  Test Files  202 passed (202)\n       Tests  2676 passed | 9 skipped (2685)      EXIT 0\nMatches task.verification exactly.\n\nLEG B — DoD 5's literal leg. `pnpm --filter @moe/daemon test` is EXIT 1 at this HEAD. I ran the two failing files directly and reproduced all 8 failures verbatim, including `expected 2 to be 1` twice.\n\nATTRIBUTION, MEASURED BY ME, NOT ACCEPTED FROM THE ROW. I served the PRE-ROW source of all four production files this row changed (dumped from ab12d9d9 = f976d2c7~1) through an in-memory Vite `transform` with `enforce: \"pre\"`, with two throwing anchors: LIVE_FILE_IS_NOT_POST_ROW (live text must contain `landedWithNoEffect`) and BASE_ALREADY_CARRIES_ROW (no dump may contain it). Neither fired; all four printed QA_BASESTATE_SERVED. With this row's diff ABSENT: `Tests 8 failed | 40 passed (48)` — the same 8 arms, arm for arm. (2)-minus-(1) intersected with owned paths = EMPTY. Owner is task-24b68b05's second DurableSchedule job, already in the merge-base; the failure shape is documented independently of this row. Approving on the path-attributed baseline rail, with the red disclosed, not hidden.\n\nNON-VACUITY — TWO DRILLS, ZERO ON-DISK MUTATION (same in-memory transform; harness deleted, `git diff HEAD -- apps/daemon/src` EMPTY afterwards, `ls qa-drill-f7d38f75.config.ts qa-base-f7d38f75` -> No such file or directory). Both halves of the two-part rule are load-bearing:\n- M1, drop `!journaledIntents.has(landingIntentKey(...))` -> 5 arms RED across all four seams: criterion-integrated \"REFUSES the mixed goal when node-b's own acceptance already JOURNALED a landing intent\"; repository-delivery-runtime \"keeps a refusal that already journaled an intent in the REFUSED bucket and still blocks\"; goal-landing-facts fact AND its /affordances/read offer twin; publication-goal-integration \"refuses a goal whose no-effect node already JOURNALED a landing intent\".\n- M2, make the predicate ignore the refusal code -> 4 arms RED (criterion, goal-landing-facts fact + offer twin, publication-goal-integration), and separately the DoD 4 handler arm: `publication-approval.test.ts > refuses PUBLISH_GOAL_NOT_INTEGRATED at DAEMON_PREREQUISITE for GIT_COMMIT_FAILED` -> `expected { advisoryOnly: false, ...(5) } to match object { ok: false, ...(2) }`.\n\nDoD 4 IS PROVEN AT THE HANDLER, NOT AT A FIXTURE: `liveWorld()` deliberately does not stub `validateGoal`, so `publicationGoalIntegrated` itself decides, and the negative asserts CODE and LAYER together, which is what stops another gate answering first.\n\nSCOPE. 10 declared paths, no eleventh. `git log ab12d9d9..HEAD -- review-read-model.ts repository-landing-intent.ts` returns ONLY the leaf commit e5e6475f (task-5e96bf69), so this row did not contest its prerequisite's files. Per-file cap: landing-receipt-contracts.ts 257, goal-landing-facts.ts 138, criterion-artifact.ts 79, publication-goal-integration.ts 49 — all under 400. The 257 exceeds step-6 amend-2's \"exactly 250\" sub-clause by 7 lines; the worker disclosed it with its rationale rather than hiding it, and the binding rail is the 400 split threshold, so it is not a defect.\n\nTHE FOURTH GATE (comment-d0dc35b3) IS NOT A REJECTION REASON, and I checked rather than assumed. `goals/goal-live-evidence.ts:79,:139` still credits `NOTHING_TO_COMMIT` by code alone. That is PRE-EXISTING behaviour this row neither introduced nor widened — the closure node leg admitted the code before this row and admits exactly the same set after it. It sits outside the ten declared paths, step 6 requires its test to pass UNEDITED (it did), and a governor already rejected this row once for scope creep. The worker measured the residual exposure and bounded it correctly: a contract-bearing goal is independently caught by criterion-artifact returning null, leaving only a goal that `goal-close-readiness.ts:64` answers NO_CONTRACT for. Filed as a comment per the delivery-bias rail, with the fix named symbol by symbol. Whoever takes it should grep the LITERAL `NOTHING_TO_COMMIT`, not the helper name — a `grep landedWithNoEffect` audit returns three clean call sites and is blind to the divergent fourth.",
+      "timestamp": "2026-09-10T11:01:19.385Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T15:00:40.393Z",
-  "updatedAt": "2026-09-10T10:53:47.656Z",
+  "updatedAt": "2026-09-10T11:01:58.084Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T17:08:24.544Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-10T11:01:58.083Z",
+    "wallClockMs": 64413539
   },
   "contextFetchedBy": [
     "architect-978f68c6",
     "worker-0e797912",
     "worker-409b958a",
     "governor-608c8a78",
-    "worker-a11dcf70"
+    "worker-a11dcf70",
+    "qa-01b7fe3f"
   ],
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -378,6 +387,32 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "3c54e4fd40cefb0634cbe2842f6b61354810489f",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-a11dcf70@2026-09-10T10:28:03Z",
+      "paths": [
+        ".moe/tasks/task-4b7f4a857b504ccb9c64ff4e75280ec1.json",
+        ".moe/tasks/task-9255156954724b7dbbcbf03ae2aaa11c.json",
+        ".moe/tasks/task-b58778da10e7492fa6fee89269f56ef0.json",
+        ".moe/tasks/task-f7d38f752b074dc89da30631783aae04.json",
+        "apps/daemon/src/criterion-evidence/criterion-artifact.ts",
+        "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
+        "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts",
+        "apps/daemon/src/repository/goal-landing-facts.test.ts",
+        "apps/daemon/src/repository/goal-landing-facts.ts",
+        "apps/daemon/src/repository/landing-receipt-contracts.ts",
+        "apps/daemon/src/repository/publication-goal-integration.test.ts",
+        "apps/daemon/src/repository/publication-goal-integration.ts"
+      ],
+      "recordedBy": "worker-a11dcf70",
+      "recordedAt": "2026-09-10T10:53:59.520Z",
+      "treeId": "49673a6e8a9c17eeb58f140bbe4fc05f940f0d3b",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -390,7 +425,11 @@
     "apps/daemon/src/repository/goal-landing-facts.ts",
     "apps/daemon/src/preview/preview-goal-landing.ts",
     "apps/daemon/src/repository/publication-goal-integration.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts"
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts",
+    ".moe/tasks/task-4b7f4a857b504ccb9c64ff4e75280ec1.json",
+    ".moe/tasks/task-9255156954724b7dbbcbf03ae2aaa11c.json",
+    ".moe/tasks/task-b58778da10e7492fa6fee89269f56ef0.json",
+    ".moe/tasks/task-f7d38f752b074dc89da30631783aae04.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/repository/publication-goal-integration.ts",
@@ -404,16 +443,17 @@
     "apps/daemon/src/repository/publication-approval.test.ts",
     "apps/daemon/src/repository/goal-landing-facts.test.ts",
     "apps/daemon/src/repository/goal-landing-facts.ts",
-    "apps/daemon/drill-f7d38f75.config.ts"
+    "apps/daemon/drill-f7d38f75.config.ts",
+    "apps/daemon/basestate-f7d38f75.config.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts",
+    "apps/daemon/drill-task-f7d38f75.config.ts"
   ],
-  "unattributedPaths": [
-    "tests/e2e/control-room/live-proof-seat.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-0e797912@2026-09-09T19:36:26Z",
-    "at": "2026-09-09T20:03:37.934Z"
+    "kind": "completion",
+    "sessionId": "worker-a11dcf70@2026-09-10T10:28:03Z",
+    "at": "2026-09-10T10:53:59.520Z"
   },
   "blockedOnTaskIds": null,
   "priorBlockedReason": "Correctness + session-provenance block, not a resource wait. The approved pre-intent-by-code premise is disproved by the actual runtime retry in comment573c4f2c623e4bfc99a40048f782e740; full executable reproducer is commentd573098614d1411f9baad5c37e98a1bb. Actual durable receipt REFUSED/NOTHING_TO_COMMIT is credited=true while existing landing intent keeps deliveryFacts=REFUSED. Existing81-test scoped green does not cover or repair that misclassification. Need corrected in-scope evidence discriminator/producer plan and regression before completion. Separately, new conversation turn/claim did not establish a fresh wrapper preflight: canonical task baseline still carries20:03:35Z landed=1, not this claim. No product edits, full-suite execution, physical mutants or manual landing. Only read-only scoped7files81tests EXIT0 and subsequent standalone daemon typecheck EXIT0; no processes in flight. Released only this task's unused full-suite queue entry. Preserve nine checkpointed source paths and current steps; do not reset/reimplement blindly or complete from historical claims. Latest worker409 comment records corrected handoff. Await architect scope plus tracked wrapper launch.",
@@ -455,5 +495,8 @@
     "outputTail": " Test Files  202 passed (202)\n      Tests  2676 passed | 9 skipped (2685)\n   Start at  13:48:12\n   Duration  85.18s (transform 15.43s, setup 0ms, import 111.16s, tests 208.44s, environment 10ms)\n\nEXIT=0",
     "reportedAt": "2026-09-10T10:53:47.656Z"
   },
-  "completionSummary": "A no-effect landing now counts toward goal progress, but ONLY when it provably owed no bytes. `landedWithNoEffect(receipt, journaledIntents)` is a TWO-PART rule: the NOTHING_TO_COMMIT code AND no landing intent journaled for that acceptance. Null intent history (any intent decision that fails to decode) credits NOTHING. Three seams pass the set from their EXISTING readReviewLedgers call, so no second store walk was added: goal-landing-facts.ts:83, publication-goal-integration.ts:34, criterion-artifact.ts:65.\n\n\"Pre-intent by construction\" is WITHDRAWN and deleted from the tree. The governor's reproducer (comment-573c4f2c) is real: a retry after a journaled intent whose bytes were reverted mints the SAME code with the node's work lost. It is landed as a committed arm in repository-delivery-runtime.test.ts under POST_INTENT_REFUSAL_MUST_NOT_BE_CREDITED, with the pre-intent arm as positive control, over the real lander, real journal and real store.\n\n10 new arms, each asserting the seam's SPECIFIC outcome (artifact null / non-null at a named sha, goalHasLandedCommit, the exact goalOffers roster, publicationGoalIntegrated plus its ancestry-check count) — never merely \"became publishable\". Every seam carries all three variants: key present -> NOT credited; DIFFERENT verifierReceiptId -> credited; null -> NOT credited. Intents written by the production writer; only the undecodable body is planted, via the production writeRecoveryFact.\n\nTHREE DRILLS, THREE KILLS, zero on-disk mutation (in-memory Vite transform, throwing anchors, no lease held): drop the journal clause -> the runtime arm RED; make the collector skip the intent kind -> same arm RED at size 0 vs 1, proving the set comes from the store; ignore the code -> all four GIT_COMMIT_FAILED negatives RED.\n\nVERIFICATION: scoped 8-file leg 8 passed / 97 tests EXIT 0 (baseline 7/81). typecheck EXIT 0. DoD 5's literal `pnpm --filter @moe/daemon test` is EXIT 1 and I am NOT claiming otherwise: 8 failures, all in monitoring/he"
+  "completionSummary": "A no-effect landing now counts toward goal progress, but ONLY when it provably owed no bytes. `landedWithNoEffect(receipt, journaledIntents)` is a TWO-PART rule: the NOTHING_TO_COMMIT code AND no landing intent journaled for that acceptance. Null intent history (any intent decision that fails to decode) credits NOTHING. Three seams pass the set from their EXISTING readReviewLedgers call, so no second store walk was added: goal-landing-facts.ts:83, publication-goal-integration.ts:34, criterion-artifact.ts:65.\n\n\"Pre-intent by construction\" is WITHDRAWN and deleted from the tree. The governor's reproducer (comment-573c4f2c) is real: a retry after a journaled intent whose bytes were reverted mints the SAME code with the node's work lost. It is landed as a committed arm in repository-delivery-runtime.test.ts under POST_INTENT_REFUSAL_MUST_NOT_BE_CREDITED, with the pre-intent arm as positive control, over the real lander, real journal and real store.\n\n10 new arms, each asserting the seam's SPECIFIC outcome (artifact null / non-null at a named sha, goalHasLandedCommit, the exact goalOffers roster, publicationGoalIntegrated plus its ancestry-check count) — never merely \"became publishable\". Every seam carries all three variants: key present -> NOT credited; DIFFERENT verifierReceiptId -> credited; null -> NOT credited. Intents written by the production writer; only the undecodable body is planted, via the production writeRecoveryFact.\n\nTHREE DRILLS, THREE KILLS, zero on-disk mutation (in-memory Vite transform, throwing anchors, no lease held): drop the journal clause -> the runtime arm RED; make the collector skip the intent kind -> same arm RED at size 0 vs 1, proving the set comes from the store; ignore the code -> all four GIT_COMMIT_FAILED negatives RED.\n\nVERIFICATION: scoped 8-file leg 8 passed / 97 tests EXIT 0 (baseline 7/81). typecheck EXIT 0. DoD 5's literal `pnpm --filter @moe/daemon test` is EXIT 1 and I am NOT claiming otherwise: 8 failures, all in monitoring/he",
+  "completedAt": "2026-09-10T11:01:58.083Z",
+  "reviewCompletedAt": "2026-09-10T11:01:58.083Z",
+  "reviewSummary": "APPROVED. Full evidence: comment-c86e30c1. Graded landed bytes f976d2c7 (checkpoint, ancestor of HEAD) + 3c54e4fd; `git diff HEAD -- apps/daemon/src` EMPTY.\n\n5/5 DoD verified independently. (1) comment-a94b3eaa predates all code, corrected twice after the governor's reproducer withdrew \"pre-intent by construction\". (2/3) Rule is TWO-PART: NOTHING_TO_COMMIT code AND no journaled intent for that acceptance; null history credits nothing. Arms at four seams assert OUTCOME and CODE, not mere publishability. (4) Publish proven at the HANDLER through the real gate (liveWorld does not stub validateGoal): NOTHING_TO_COMMIT yields a committed decision + RepositoryPublishRequested; GIT_COMMIT_FAILED refuses PUBLISH_GOAL_NOT_INTEGRATED at DAEMON_PREREQUISITE, code AND layer. (5) Re-ran task.verification: `Test Files 202 passed (202) / Tests 2676 passed | 9 skipped (2685)` EXIT 0, matching the record.\n\nDoD 5's literal `pnpm --filter @moe/daemon test` is EXIT 1: 8 reds in health-probe-schedule.test.ts + daemon-store-dependencies.test.ts. I ATTRIBUTED IT MYSELF, not from the row's account: served pre-row source of all four changed production files from ab12d9d9 via in-memory transform with throwing anchors both ends; same 8 failures arm for arm with this row's diff ABSENT. Delta intersected with owned paths EMPTY; owner task-24b68b05's second DurableSchedule job, already in merge-base. Approved on the path-attributed baseline rail, red disclosed.\n\nNON-VACUITY BY MY OWN DRILLS, zero on-disk mutation, harness deleted: dropping the journal half reds 5 arms across all four seams; ignoring the refusal code reds 4 arms plus the DoD 4 handler negative.\n\nScope clean: 10 paths; prerequisite files touched only by leaf e5e6475f. Per-file max 257 lines.\n\nNot a reject, checked not assumed: goal-live-evidence.ts:79,:139 still credits code alone — pre-existing, unchanged here, outside declared paths, exposure bounded to a NO_CONTRACT goal, filed as comment-d0dc35b3."
 }
