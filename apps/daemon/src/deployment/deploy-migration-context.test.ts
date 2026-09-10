@@ -12,7 +12,7 @@ import { setEnvironmentVariable } from "../environment/environment-store.js";
 import type { EnvironmentStoreConfig } from "../environment/environment-store.js";
 import { migrateWithBackup } from "../repository/migrations/migration-service.js";
 import {
-  DEPLOY_MIGRATION_DATABASE_VARIABLE, resolveDeployMigrationContext,
+  DEPLOY_MIGRATION_CONTEXT_DETAILS, DEPLOY_MIGRATION_DATABASE_VARIABLE, resolveDeployMigrationContext,
 } from "./deploy-migration-context.js";
 import type {
   DeployMigrationContextConfig, DeployMigrationContextResult,
@@ -82,14 +82,11 @@ function resolvedInput(result: DeployMigrationContextResult) {
  * hope — a resolver that refused but still let the caller reach `dump` would show `dumps: 1`.
  */
 async function migrateAfterResolving(
-  config: DeployMigrationContextConfig, environment: string, named?: string,
+  config: DeployMigrationContextConfig, environment: string,
 ): Promise<{ readonly applies: number; readonly dumps: number; readonly result: DeployMigrationContextResult }> {
   let dumps = 0;
   let applies = 0;
-  const result = resolveDeployMigrationContext(config, {
-    environment, requestId: REQUEST, sha: SHA,
-    ...(named === undefined ? {} : { workspace: named }),
-  });
+  const result = resolveDeployMigrationContext(config, { environment, requestId: REQUEST, sha: SHA });
   if (result.ok) {
     await migrateWithBackup(config.store, result.input, {
       dump: async (): Promise<void> => { dumps += 1; },
@@ -159,22 +156,20 @@ describe("resolveDeployMigrationContext", () => {
     expect({ applies: unreadable.applies, dumps: unreadable.dumps }).toEqual({ applies: 0, dumps: 0 });
   });
 
-  it("(d) refuses a mismatched or unconfigured workspace, and an absent or empty database value", async () => {
+  it("(d) refuses an unconfigured workspace and an absent or empty database value — its WHOLE roster", async () => {
     const store = openMemoryStore();
     const environment = environmentConfig(store);
-    const root = workspace();
     seed(environment, "production", DEPLOY_MIGRATION_DATABASE_VARIABLE, PRODUCTION_URL);
-
-    const mismatched = await migrateAfterResolving(
-      contextConfig(environment, root), "production", join(root, "somewhere-else"));
-    expect(mismatched.result).toMatchObject({
-      code: "DEPLOY_MIGRATION_WORKSPACE_MISMATCH", layer: "DAEMON_DEPLOY_ENGINE", ok: false });
-    expect({ applies: mismatched.applies, dumps: mismatched.dumps }).toEqual({ applies: 0, dumps: 0 });
+    const minted = new Set<string>();
+    const record = (result: DeployMigrationContextResult): void => {
+      if (!result.ok && result.layer === "DAEMON_DEPLOY_ENGINE") minted.add(result.code);
+    };
 
     const unconfigured = await migrateAfterResolving(contextConfig(environment, undefined), "production");
     expect(unconfigured.result).toMatchObject({
       code: "DEPLOY_MIGRATION_WORKSPACE_UNCONFIGURED", layer: "DAEMON_DEPLOY_ENGINE", ok: false });
     expect({ applies: unconfigured.applies, dumps: unconfigured.dumps }).toEqual({ applies: 0, dumps: 0 });
+    record(unconfigured.result);
 
     // A DIFFERENT store with the environment present but carrying no database variable at all.
     const bare = environmentConfig(openMemoryStore());
@@ -183,6 +178,7 @@ describe("resolveDeployMigrationContext", () => {
     expect(absent.result).toMatchObject({
       code: "DEPLOY_MIGRATION_DATABASE_UNSET", layer: "DAEMON_DEPLOY_ENGINE", ok: false });
     expect({ applies: absent.applies, dumps: absent.dumps }).toEqual({ applies: 0, dumps: 0 });
+    record(absent.result);
 
     // EMPTY is as absent as missing: `migrateWithBackup` would hand "" straight to `dump`.
     const empty = environmentConfig(openMemoryStore());
@@ -190,6 +186,20 @@ describe("resolveDeployMigrationContext", () => {
     const blank = await migrateAfterResolving(contextConfig(empty, workspace()), "production");
     expect(blank.result).toMatchObject({ code: "DEPLOY_MIGRATION_DATABASE_UNSET", ok: false });
     expect({ applies: blank.applies, dumps: blank.dumps }).toEqual({ applies: 0, dumps: 0 });
+    record(blank.result);
+
+    // THE ROSTER, BOTH DIRECTIONS, and the reason this arm no longer needs a workspace-mismatch
+    // case: every code the resolver can actually MINT was driven above, and the advertised roster
+    // is asserted equal to that served set. Iterating the roster alone would only prove one
+    // direction — a fourth entry nothing can reach, or a code minted off-roster, both survive it.
+    // A resurrected path-compare guard fails here whichever side it is added to.
+    expect([...minted].sort()).toEqual(Object.keys(DEPLOY_MIGRATION_CONTEXT_DETAILS).sort());
+    expect([...minted].sort())
+      .toEqual(["DEPLOY_MIGRATION_DATABASE_UNSET", "DEPLOY_MIGRATION_WORKSPACE_UNCONFIGURED"]);
+    // Every advertised detail is real prose, so the roster cannot shrink to two by emptying one.
+    for (const detail of Object.values(DEPLOY_MIGRATION_CONTEXT_DETAILS)) {
+      expect(detail.length).toBeGreaterThan(20);
+    }
   });
 
   it("(e) puts the connection value in no refusal and no serialised form — with a positive control", () => {
@@ -199,18 +209,30 @@ describe("resolveDeployMigrationContext", () => {
     seed(environment, "production", DEPLOY_MIGRATION_DATABASE_VARIABLE, PRODUCTION_URL);
     const config = contextConfig(environment, root);
 
-    // Every refusal this module can reach WHILE a credential-shaped value is really in the store,
-    // so the arm is not passing because nothing sensitive was ever present.
+    // A SECOND environment that exists but carries no database variable, so the DATABASE_UNSET
+    // refusal below is reached WHILE `production`'s credential-shaped value sits in the same store.
+    seed(environment, "preview", "STRIPE_KEY", "sk_live_example");
+
+    // EVERY refusal this module can reach — the two it mints itself and the two the environment
+    // slice forwards — WHILE a credential-shaped value is really in the store, so the arm is not
+    // passing because nothing sensitive was ever present. The workspace-mismatch entry that used
+    // to sit here is gone with its guard; DATABASE_UNSET replaces it, which is a code this arm
+    // never covered before, so the deletion makes the "every refusal" claim MORE true, not less.
     const refusals: DeployMigrationContextResult[] = [
       resolveDeployMigrationContext(config, { environment: "staging", requestId: REQUEST, sha: SHA }),
-      resolveDeployMigrationContext(config, {
-        environment: "production", requestId: REQUEST, sha: SHA, workspace: join(root, "elsewhere") }),
+      resolveDeployMigrationContext(config, { environment: "preview", requestId: REQUEST, sha: SHA }),
       resolveDeployMigrationContext(
         { ...config, workspace: undefined }, { environment: "production", requestId: REQUEST, sha: SHA }),
       resolveDeployMigrationContext(
         { ...config, credential: unreadableCredentialSource() },
         { environment: "production", requestId: REQUEST, sha: SHA }),
     ];
+    // Named, not merely counted: an arm that only checked `refusals.length` would stay green if
+    // two entries collapsed onto the same code.
+    expect(refusals.map(refusal => (refusal.ok ? "OK" : refusal.code))).toEqual([
+      "ENV_ENVIRONMENT_UNKNOWN", "DEPLOY_MIGRATION_DATABASE_UNSET",
+      "DEPLOY_MIGRATION_WORKSPACE_UNCONFIGURED", "ENV_STORE_KEY_UNAVAILABLE",
+    ]);
     const contains = (haystack: string): boolean =>
       haystack.includes(PRODUCTION_URL) || haystack.includes("prod-s3cr3t");
     for (const refusal of refusals) {
