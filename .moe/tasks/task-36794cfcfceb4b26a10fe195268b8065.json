@@ -64,21 +64,32 @@
     {
       "stepId": "step-5",
       "description": "THE FULL DAEMON LEG, UNDER THE SHARED GATE. This is DoD clause 3 and the task's named verification command.\n\n(a) `moe.acquire_resource full-suite-gate`. At plan time it is HELD by qa-c85c997d for task-24b68b05, acquired 2026-09-10T18:52:09Z with a 24h expiry, so expect a wait. If refused: say so in chat, then `moe.report_blocked` with `resourceId: \"full-suite-gate\"` - that keeps your seat and auto-unblocks on grant. Do NOT run the full leg beside a peer's held gate.\n\n(b) With the lease held: post GATE START, run `pnpm --filter @moe/daemon test`, post GATE END, release the resource. Quote the `Test Files N passed (N)` line verbatim and the exit code. No count line means nothing ran, whatever the exit code says.\n\n(c) THE FILE COUNT. Expected N = 611 and UNCHANGED, and the record must say WHY: this row stages a file that was already on disk and already collected, so zero bytes moved and vitest collects exactly the same set before and after. Take the PRINTED number as authoritative rather than the DoD's literal 611 - the epic rail forbids trusting a frozen roster count. If N differs, reconcile it in the same window with `git ls-files -- apps/daemon | grep -c '.test.ts$'` (610 at plan time, so 610 + this file = 611) and `git log --since=2026-09-05 --diff-filter=AD --name-only -- 'apps/daemon/**/*.test.ts'` to name the peer rows that added or removed test files. Explain any move; never restate 611 as a fact you did not measure.\n\n(d) IF EXIT 1: apply the epic's path-attributed-baseline rail rather than fabricating green. This row's owned-path set is one file whose bytes are unchanged, so the HEAD-failures-minus-merge-base-failures set intersected with owned paths is empty by construction - state that argument explicitly. Disclose the foreign red verbatim with its exact failing lines and file paths. Note: the 8 reds recorded earlier today in monitoring/health-probe-schedule.test.ts and daemon-store-dependencies.test.ts are GONE at this HEAD (re-measured at plan time: 2 files, 48 tests, exit 0), so do not pre-attribute a red to them.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [],
-      "startedAt": "2026-09-10T18:59:33.568Z"
+      "modifiedFiles": [
+        "apps/daemon/src/preview/preview-goal-landing.test.ts"
+      ],
+      "note": "FULL DAEMON LEG RUN UNDER MY OWN HELD GATE. EXIT 0. DoD clause 3 satisfied.\n\n(a) LEASE: I already HELD full-suite-gate. The prior session queued at position #1 behind qa-c85c997d (task-24b68b05) and reported blocked with resourceId; the daemon auto-granted on release at 2026-09-10T19:11:51.946Z. No force-release was used, no leg was run beside a peer's lease. Released at 19:18 immediately after the run; list_resources now shows holders [] and queue [].\n\n(b) GATE WINDOW 2026-09-10T19:13:11Z -> 19:17:42Z (269.45s). Announced in #general (chan-ced9...) as GATE END msg-64e2e384032f4412a7c5a15907294182.\n  COMMAND: pnpm --filter @moe/daemon test\n  EXIT:    0   (captured as $? of the standalone foreground leg, redirected to a log — NOT piped, so no PIPESTATUS hazard)\n  Test Files  611 passed (611)\n  Tests  11001 passed | 21 skipped (11022)\nBoth count lines present, so the leg demonstrably EXECUTED — exit 0 alone would not have been evidence.\n\n(c) FILE COUNT 611, UNCHANGED, and it reconciles exactly. Measured in the same window:\n  `git ls-files -- apps/daemon | grep -c '.test.ts$'` -> 611 (was 610 at plan time)\n  `git ls-files --others --exclude-standard -- apps/daemon | grep '.test.ts$'` -> EMPTY (grep exit 1) (was 1 path at plan time)\n  610 tracked + 1 untracked = 611 collected BEFORE; 611 tracked + 0 untracked = 611 collected AFTER. The row made an already-present, already-collected file tracked and moved ZERO bytes, so vitest collects a byte-identical set either side. I took the PRINTED 611 as authoritative rather than the DoD's literal, per the epic's no-frozen-roster-count rail; it simply agrees.\n\n(d) NO EXIT 1, so the path-attributed-baseline argument was not needed. Recording it anyway because it is the strongest form available: this row's owned-path set is one file whose bytes are unchanged at SHA256 f25eb695b5c3cfb6ceed7221a02f73bd7ff88b04545eaab30cd2675f04ccc6df, so HEAD-failures-minus-merge-base-failures intersected with owned paths is empty BY CONSTRUCTION. No foreign red to disclose: zero failures in the whole leg. The 8 reds recorded earlier today in monitoring/health-probe-schedule.test.ts and daemon-store-dependencies.test.ts are confirmed gone at this HEAD, as the plan predicted.\n\nSTATE FOUND AT RESUME (the prior session died between steps 4 and 5): the wrapper's BLOCKED-exit checkpoint d1f88ee0 already COMMITTED the staged file. `git log --diff-filter=A` names d1f88ee0 as its adding commit; HEAD blob 8d786497 == `git hash-object` of the live file; live SHA256 == the %TEMP% backup's SHA256 == step 1's recorded hash. So the peer's bytes landed verbatim without this session touching them. `git status --porcelain -- apps/daemon/src` is EMPTY (0 lines) both before and after the gate window, which also proves no peer was mid-write under apps/daemon during the run.\n\nPEER DIRT (untouched, as at step 1): .codex/agent-instructions.md, .codex/config.toml, .grok/config.toml modified; .moe/resources/*.json and Moe-NG_Deep_Review_2026-09-05.md untracked; several .moe/tasks and .moe/messages paths modified by the live fleet. No `git add -A`, `git stash`, `git checkout --`, `git restore` or hand `git commit` was run at any point in this row.",
+      "startedAt": "2026-09-10T18:59:33.568Z",
+      "completedAt": "2026-09-10T19:18:30.967Z"
     },
     {
       "stepId": "step-6",
       "description": "ADVERSARIAL SELF-REVIEW, THEN THE COMPLETION RECORD.\n\nRun the checklist and record each answer:\n  - DoD 4: `git status --porcelain -- apps/daemon/src` shows no modification anywhere under src/preview except the staged add. Zero production source touched.\n  - The delivered bytes are the peer's bytes: SHA256 still equals step 1's.\n  - Re-run the DoD 2 census. A peer may have dropped a NEW untracked test in the meantime - if so, report it and do NOT adopt it; it is not yours, and the clause is scoped to the file this row was commissioned for.\n  - Peer dirty paths from step 1(d) are all still untouched.\n  - The %TEMP% backup is stale now and lives out of tree; leave it.\n\nAsk the hostile questions: what if two sessions raced this one file - would my census still be honest? What if the gate ran while a peer was mid-write under apps/daemon? What would I have concluded if the leg printed exit 0 with no count line?\n\nThen write the row comment carrying (1) the per-arm duplication table from step 2, (2) both gate rows as command / exit code / count line, (3) the file-count reasoning. Comments truncate SILENTLY at 5000 chars - keep it under ~4500 and put one idea per comment if it runs long. Only then call moe.complete_task, with `pnpm --filter @moe/daemon test` as verification.command and its FRESH output tail, and a completionSummary that states plainly which of the two arms was unique and that no bytes on disk changed.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/preview/preview-goal-landing.test.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/preview/preview-goal-landing.test.ts"
+      ],
+      "note": "ADVERSARIAL SELF-REVIEW DONE. Full record in comment-fa9eb8f393144b058313f53bb2058eb4; per-arm duplication table in comment-e604bd20b4544a059a0f600bc6eb5006.\n\nCHECKLIST, each measured:\n- DoD 4: `git status --porcelain -- apps/daemon/src` EMPTY (0 lines) before and after the gate. Row diff 69603caa..HEAD under apps/daemon/src/preview is exactly one insert-only file, 30 lines. Zero production source touched.\n- Bytes are the peer's: live SHA256 f25eb695b5c3cfb6ceed7221a02f73bd7ff88b04545eaab30cd2675f04ccc6df == step 1's hash == the %TEMP% task-keyed backup's hash; HEAD blob 8d786497 == `git hash-object` of the live file. Verbatim, no reformat, no docblock, Arm A not removed.\n- DoD 2 re-run post-gate: `git ls-files --others --exclude-standard -- apps/daemon | grep '.test.ts$'` still EMPTY (grep exit 1). No new untracked peer test appeared. Not silenced: gitignore diff 0 lines, `git check-ignore` exits 1 on the path.\n- Peer dirt from step 1(d) all untouched. No add -A / stash / checkout -- / restore / hand commit anywhere in this row.\n- %TEMP% backup left in place, out of tree, as instructed.\n\nHOSTILE QUESTIONS:\n- Raced by another session? Census still honest — `git log --diff-filter=A` names d1f88ee0 (this row's own BLOCKED-exit checkpoint) as the adding commit and its blob matches my pre-flight backup, so the landed bytes are provably the censused ones.\n- Peer mid-write under apps/daemon during the gate? No — src status was 0 lines on both sides of the window.\n- Exit 0 with no count line? That is nothing-ran, not a pass; I would have reported unverified rather than completed. Both count lines were present.\n\nVERIFICATION FOR complete_task: `pnpm --filter @moe/daemon test`, exit 0, `Test Files 611 passed (611)` / `Tests 11001 passed | 21 skipped (11022)`, run fresh this session at 19:13:11Z-19:17:42Z under my own held full-suite-gate lease (released 19:18).",
+      "startedAt": "2026-09-10T19:18:36.018Z",
+      "completedAt": "2026-09-10T19:19:30.387Z"
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": "worker-ed22fae0",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-77a9823a",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -93,26 +104,35 @@
       "author": "worker-ed22fae0",
       "content": "DoD CLAUSE 1 EVIDENCE — per-arm duplication, decided on read, 2026-09-10.\n\nGREPS RUN (both scoped to apps/**, as the plan directs):\n  git grep -n readGoalLandingStatus -- 'apps/**'\n    -> 16 hits: 7 in 3 TEST files (preview-auto-decision.test.ts:69,181,522;\n       preview-daemon-edge.test.ts:38,76,227,292; preview-runner.test.ts:28,124,139,147),\n       2 production call sites (preview-daemon-edge.ts:214, preview-runner.ts:156),\n       1 definition (preview-goal-landing.ts:73). (Plan said 5 test call sites; the true count is\n       7 — :227 and :522 are extra, both read `.nodes` only, neither seeds a bare key.)\n  git grep -n 'seedLandingReceipt(' -- 'apps/**'   [the decisive one for ARM B]\n    -> 40 tracked call sites. Only FOUR pass a BARE node key:\n       goal-live-evidence.test.ts:277 (\"node-2\"), :337 (ACTIVATION_WORLD_NODE_KEY),\n       publication-goal-integration.test.ts:15 (\"unrelated\"),\n       compiled-node-identity.test.ts:119 (\"node-a\").\n       NONE of those four files calls readGoalLandingStatus.\n\n| arm | covering tracked file + arm | verdict |\n|---|---|---|\n| ARM A — `toEqual({allLanded:true, missing:[], nodes:[\"node-a\"]})` after a SCOPED landing | preview-runner.test.ts:142-152, arm \"PASSES the gate once every node of the goal carries a COMMITTED landing\". Lands via `land()`/`scopedRef()` (:57-70) = the same `compiledExecutionRef` keying, then asserts `status.nodes` toStrictEqual [\"node-a\"], `status.missing` toStrictEqual [], `status.allLanded` true — the same three fields as three expectations. | DUPLICATED |\n| ARM B — `toEqual({allLanded:false, missing:[\"node-a\"], nodes:[\"node-a\"]})` after a landing seeded on the BARE node key | NONE. | UNIQUE |\n\nARM A delta, stated so it is not hidden: the untracked whole-object `toEqual` additionally pins\nthat GoalLandingStatus carries NO extra keys, which the three field assertions do not. Marginal,\nand not why the file is being kept.\n\nARM B, why every near neighbour misses (each read in context, not just the matched line):\n- preview-runner.test.ts:124 — landing seeded on the SCOPED ref with outcome REFUSED\n  (NOTHING_TO_COMMIT). Asserts `.missing` under a different CAUSE (outcome, not key vintage).\n- preview-runner.test.ts:139 — lands SIBLING `node-1` scoped. That is the goal-scope concern.\n- preview-daemon-edge.test.ts:76 and preview-auto-decision.test.ts:181 — positive fixture guards\n  inside `landedWorld()`, both seeded through `scopedRef(store, NODE_KEY)`.\n- preview-daemon-edge.test.ts:292 — `enabledWorld()`, NO landing seeded at all.\n- preview-daemon-edge.test.ts:227 / preview-auto-decision.test.ts:522 — read `.nodes` only.\n\nNEAREST NEIGHBOUR, disclosed because it is genuinely close but is NOT this surface:\ncompiled-node-identity.test.ts:115-123, arm \"withholds landing credit for a key also owned by a\nterminal goal\", seeds the IDENTICAL world (`driveThrough(store,\"goal.close\")` +\n`seedReviewAcceptance(store,\"node-a\")` + `seedLandingReceipt(store,\"node-a\",\"COMMITTED\")`) — but\nasserts `goalHasLandedCommit(...)` toBe(false). That is a DIFFERENT production function in a\nDIFFERENT module (repository/goal-landing-facts.ts:134) with ANY-of-N semantics over a\nmodule-private nodeOwners/landedGoals walk, which preview-goal-landing.ts:14-19 documents as\nexplicitly not the question this gate asks (ALL, not ANY, off two public seams). So no tracked arm\npins `goalNodes`'s legacy branch at preview-goal-landing.ts:61-62 — where a `legacyCompiledNodeKeys`\nhit maps the node to null and is then filtered out of the ledger lookup set at :82, making a\nbare-keyed receipt unreachable — FOR readGoalLandingStatus.\n\nDECISION: ARM B is unique -> the delivery is COMMIT the file verbatim, not delete.",
       "timestamp": "2026-09-10T18:58:32.972Z"
+    },
+    {
+      "id": "comment-fa9eb8f393144b058313f53bb2058eb4",
+      "author": "worker-ed22fae0",
+      "content": "COMPLETION RECORD — DELIVERY WAS **COMMIT**. Adversarial self-review below.\n\n(1) PER-ARM DUPLICATION — the full table with its greps is comment-e604bd20b4544a059a0f600bc6eb5006 (step 2). Summary: ARM A (`toEqual({allLanded:true, missing:[], nodes:[\"node-a\"]})` after a SCOPED landing) is DUPLICATED by preview-runner.test.ts:142-152 \"PASSES the gate once every node of the goal carries a COMMITTED landing\", which asserts the same three fields as three separate expectations. ARM B (`toEqual({allLanded:false, missing:[\"node-a\"], nodes:[\"node-a\"]})` after a landing seeded on the BARE node key) is covered by NOTHING tracked — decisive grep was `git grep -n 'seedLandingReceipt(' -- 'apps/**'`, 40 call sites, only four pass a bare key and none of those four files calls readGoalLandingStatus. ARM B guards the `legacyCompiledNodeKeys`/`compiledExecutionRef` scoping in `goalNodes`. That is why the file was kept, not deleted.\n\n(2) THE GATE — window 2026-09-10T19:13:11Z -> 19:17:42Z under full-suite-gate held by me (auto-granted 19:11:51.946Z after the prior session queued at #1 behind qa-c85c997d; no force-release). Released 19:18. GATE END posted as msg-64e2e384032f4412a7c5a15907294182.\n\n  command   pnpm --filter @moe/daemon test\n  exit      0        (standalone foreground leg, redirected not piped — no PIPESTATUS hazard)\n  count     Test Files  611 passed (611)\n            Tests  11001 passed | 21 skipped (11022)\n\nScoped pre-check from step 3, same file: `Test Files 1 passed (1)` / `Tests 2 passed (2)`, exit 0.\n\n(3) FILE COUNT 611, UNCHANGED, RECONCILED IN-WINDOW. `git ls-files -- apps/daemon | grep -c '.test.ts$'` -> 611 (610 at plan time). `git ls-files --others --exclude-standard -- apps/daemon | grep '.test.ts$'` -> EMPTY, grep exit 1 (one path at plan time). So 610+1=611 collected BEFORE, 611+0=611 collected AFTER. Zero bytes moved; vitest collects a byte-identical set either side. I took the PRINTED number as authoritative per the epic's no-frozen-roster-count rail — it happens to agree with the DoD's literal.\n\nSIDE EFFECT WORTH BROADCASTING: this host no longer reports one file more than the tracked tree. A daemon leg quoting 611 from here on is the tracked tree.\n\n(4) ADVERSARIAL CHECKLIST\n- DoD 4 — `git status --porcelain -- apps/daemon/src` is EMPTY (0 lines), before AND after the gate. Row diff 69603caa..HEAD under apps/daemon/src/preview is exactly `preview-goal-landing.test.ts | 30 ++++`, one file, insert-only. ZERO production source touched.\n- Bytes are the peer's bytes — live SHA256 f25eb695b5c3cfb6ceed7221a02f73bd7ff88b04545eaab30cd2675f04ccc6df equals step 1's recorded hash and equals the out-of-tree backup at %TEMP%\\moe-task-36794cfc-…; HEAD blob 8d786497 equals `git hash-object` of the live file. Committed verbatim: no reformat, no docblock, no removal of the duplicated Arm A.\n- DoD 2 re-run post-gate: still EMPTY. No peer dropped a new untracked test. Not reached by silencing: `git diff 69603caa HEAD -- '*.gitignore'` is 0 lines and `git check-ignore` exits 1 on the path.\n- Peer dirt from step 1(d) untouched: .codex/*, .grok/config.toml modified; .moe/resources/*.json and Moe-NG_Deep_Review_2026-09-05.md untracked. No `git add -A`, `git stash`, `git checkout --`, `git restore`, no hand `git commit` at any point.\n\nHOSTILE QUESTIONS, ANSWERED\n- Two sessions racing this file? The census would still be honest. `git log --diff-filter=A` names d1f88ee0 — this row's own BLOCKED-exit checkpoint — as the adding commit, and the blob matches my pre-flight backup, so the landed bytes are provably the ones I censused, not a rival's.\n- Peer mid-write under apps/daemon during the gate? `git status --porcelain -- apps/daemon/src` was 0 lines on both sides of the window, so no.\n- Exit 0 with no count line? That is NOTHING RAN, not a pass, and I would have reported it as unverified rather than completing.\n\nRESUME NOTE, disclosed: the prior session died between steps 4 and 5. Its wrapper checkpoint had already committed the staged file, so this session re-verified from git rather than re-staging. Row commits also carry three .moe/tasks/*.json board writes — daemon bookkeeping, not edits of mine.",
+      "timestamp": "2026-09-10T19:19:18.258Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-10T18:50:58.926Z",
-  "updatedAt": "2026-09-10T19:01:09.171Z",
+  "updatedAt": "2026-09-10T19:20:21.896Z",
   "metrics": {
     "firstClaimAt": "2026-09-10T18:51:05.330Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 4
+    "executedStepCount": 6
   },
   "contextFetchedBy": [
     "architect-bb193f43",
-    "worker-ed22fae0"
+    "worker-ed22fae0",
+    "qa-77a9823a"
   ],
   "stepsCompleted": [
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5",
+    "step-6"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-10T18:56:27.685Z",
@@ -144,24 +164,54 @@
       "treeId": "814814ac28f00f2eba1ac0a6b3fada3c241941ed",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "d1f88ee015c6744547f481a1c1df9421155442bf",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-ed22fae0@2026-09-10T18:56:34Z",
+      "paths": [
+        ".moe/tasks/task-36794cfcfceb4b26a10fe195268b8065.json",
+        "apps/daemon/src/preview/preview-goal-landing.test.ts"
+      ],
+      "recordedBy": "worker-ed22fae0",
+      "recordedAt": "2026-09-10T19:01:26.322Z",
+      "treeId": "e7d7730e5cec953d476e14828fb9d9bc0e2336bb",
+      "status": "BLOCKED",
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-36794cfcfceb4b26a10fe195268b8065.json"
+    "apps/daemon/src/preview/preview-goal-landing.test.ts",
+    "apps/daemon/src/preview/preview-runner.test.ts",
+    "apps/daemon/src/preview/preview-daemon-edge.test.ts",
+    "apps/daemon/src/preview/preview-auto-decision.test.ts"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/daemon/qa-drill-task-24b68b05.config.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
     "sessionId": "worker-ed22fae0@2026-09-10T18:56:34Z",
-    "at": "2026-09-10T18:56:38.269Z"
+    "at": "2026-09-10T19:01:26.322Z"
   },
   "workStartedAt": "2026-09-10T18:56:50.457Z",
   "declaredFiles": [
     "apps/daemon/src/preview/preview-goal-landing.test.ts"
   ],
-  "blockedReason": "WAITING ON full-suite-gate FOR DoD CLAUSE 3 ONLY. Steps 1-4 are delivered; the file is STAGED and DECLARED and the untracked census is already EMPTY. The only thing left that needs the gate is the one leg `pnpm --filter @moe/daemon test`.\n\nWHY I DID NOT RUN BESIDE IT: full-suite-gate is held by qa-c85c997d for task-24b68b05, acquiredAt 2026-09-10T18:52:09Z. Measured 18:59:43Z, so the lease is SEVEN MINUTES old against a 30-minute ETA, and its own note says a mutation drill is part of that run. That is live work, not a stale lease — no force-release is warranted and I am not asking for one. moe.acquire_resource answered granted:false, position #1, queueLength 1.\n\nSTATE PRESERVED FOR THE RESUMING SESSION (all re-measurable from disk):\n- apps/daemon/src/preview/preview-goal-landing.test.ts is STAGED (`A` in git status), bytes VERBATIM at SHA256 f25eb695b5c3cfb6ceed7221a02f73bd7ff88b04545eaab30cd2675f04ccc6df, unchanged from pre-flight. Backed up out of tree at %TEMP%\\moe-task-36794cfc-preview-goal-landing.test.ts.\n- moe.declare_files已 called on that one path, so it rides the commit pathspec despite this seat not authoring it.\n- DoD 1 decided: ARM A duplicated by preview-runner.test.ts:142-152; ARM B (bare legacy landing must not approve a scoped preview) UNIQUE. Evidence in comment-e604bd20b4544a059a0f600bc6eb5006. Delivery is COMMIT.\n- DoD 2 satisfied: `git ls-files --others --exclude-standard -- apps/daemon | grep '\\.test\\.ts$'` returns empty (grep exit 1), reached by staging, not by any ignore entry.\n- Scoped green re-measured today: Test Files 1 passed (1) / Tests 2 passed (2), exit 0.\n\nON GRANT: post GATE START, run `pnpm --filter @moe/daemon test`, expect `Test Files 611 passed (611)` UNCHANGED because this row moved zero bytes on disk and vitest already collected this file untracked, post GATE END, release, then step 6. Full handoff in Serena memory task-task-36794cfcfceb4b26a10fe195268b8065-handoff. Announced in #general as msg-841f68b20cbb46c9867023d7cb84d30a.",
-  "blockedResourceId": "full-suite-gate",
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-10T19:01:09.171Z"
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "blockedOnTaskIds": null,
+  "reviewStartedAt": "2026-09-10T19:20:20.888Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": " Test Files  611 passed (611)\n      Tests  11001 passed | 21 skipped (11022)\n   Start at  22:13:12\n   Duration  269.45s (transform 37.27s, setup 0ms, import 298.66s, tests 718.46s, environment 29ms)\n\nEXIT=0 — standalone foreground leg, output redirected not piped, run 2026-09-10T19:13:11Z -> 19:17:42Z under full-suite-gate held by worker-ed22fae0 for this task (auto-granted 19:11:51.946Z, released 19:18).",
+    "reportedAt": "2026-09-10T19:20:20.888Z"
+  },
+  "completionSummary": "DELIVERY WAS **COMMIT**, not delete. The five-day-untracked apps/daemon/src/preview/preview-goal-landing.test.ts is now tracked at d1f88ee0, VERBATIM — no reformat, no docblock, duplicated arm not removed. NO BYTES ON DISK CHANGED: the row only moved an already-present, already-executing file from untracked into the index.\n\nWHICH ARM WAS UNIQUE. Arm A (`toEqual({allLanded:true, missing:[], nodes:[\"node-a\"]})` after a SCOPED landing) is DUPLICATED by preview-runner.test.ts:142-152 \"PASSES the gate once every node of the goal carries a COMMITTED landing\", which asserts the same three fields as three separate expectations. Arm B (`toEqual({allLanded:false, missing:[\"node-a\"], nodes:[\"node-a\"]})` after a landing seeded on the BARE node key) is UNIQUE — nothing tracked covers it. Decisive grep `git grep -n 'seedLandingReceipt(' -- 'apps/**'`: 40 call sites, only four pass a bare key and none of those four files calls readGoalLandingStatus. Arm B is the only guard on the legacyCompiledNodeKeys/compiledExecutionRef scoping in goalNodes. Full per-arm table with every near-neighbour read in context: comment-e604bd20b4544a059a0f600bc6eb5006. Completion record and adversarial checklist: comment-fa9eb8f393144b058313f53bb2058eb4.\n\nDoD 2: `git ls-files --others --exclude-standard -- apps/daemon | grep '.test.ts$'` returns EMPTY (grep exit 1), reached by tracking the file, NOT by an ignore entry — gitignore diff is 0 lines and `git check-ignore` exits 1 on the path.\n\nDoD 3: 611 passed (611), UNCHANGED, and reconciled in-window rather than restated: 610 tracked + 1 untracked = 611 collected BEFORE; 611 tracked + 0 untracked = 611 AFTER. Side effect worth knowing fleet-wide — this host no longer reports one file more than the tracked tree, so a daemon leg quoting 611 from here on IS the tracked tree.\n\nDoD 4: zero production source touched. `git status --porcelain -- apps/daemon/src` is empty before and after the gate; row diff 69603caa..HEAD under src/preview is one insert-only file"
 }
