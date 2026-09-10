@@ -61,24 +61,30 @@
     {
       "stepId": "step-4",
       "description": "PROVE IT AGAINST THE ACTUAL GENERATED SCAFFOLD, LIVE (DoD 1 and DoD 2).\n\nADAPT THE SIBLING'S PROBE; DO NOT WRITE A SECOND HARNESS. Its full source is in task-7693a195's comment-ed461460 (part 1) and comment-3a32dc34 (part 2): it materialises all generated files into a scratch project under `tmpdir()`, runs `docker compose up`, authenticates from the CONTAINER NETWORK ADDRESS with a wrong-password negative control, sweeps `docker inspect` and `compose config` for the planted value by count, and tears down with label-filtered zero-count assertions. Note its recorded correction: a loopback probe was INVALID because the wrong password also succeeded there; the container network address with the negative control is the valid form. Do not regress to loopback.\n\nFOUR CLASSES, and each one is load-bearing:\n(a) TRAILING NEWLINE — `docker compose up` now REFUSES at the guard, before the db initialises. Assert the guard's nonzero exit and that its message names POSTGRES_PASSWORD; assert the db container never reached a running state; assert no volume was created that would carry a half-initialised cluster.\n(b) NORMAL random value — still authenticates. This is the positive control that stops (a) from being achieved by refusing everything.\n(c) SPACE + `$` + TRAILING SPACE — still authenticates. Special characters are supported and must stay supported; only newlines are refused.\n(d) WRONG PASSWORD — still refused by postgres with `password authentication failed` (exit 2), proving the auth probe can fail at all.\n\nPIN A STABLE REFUSAL MARKER, ADDED 2026-09-10 (part 2 of the restore). Class (a)'s \"nonzero exit and a message naming POSTGRES_PASSWORD\" is WEAK ON ITS OWN: an unrelated guard failure — a missing or unreadable secret, a mount that did not appear, an image that cannot start — satisfies both while proving nothing about newlines. Emit a STABLE unsupported-newline marker from the guard and assert THAT, together with the guard stage, so the arm cannot be satisfied by a different failure. And assert the other direction separately: a missing or unreadable secret, or a guard that cannot start, must NOT authorise db startup either. Those are two distinct properties and a single \"the guard failed\" assertion covers neither.\n\nAND THE UNSET/EMPTY ARM, which step 2 must not have weakened: `docker compose up --detach db` with unset AND with empty exits 1 with the sibling's exact stderr. Quote it verbatim.\n\nNO VALUE-BEARING EVIDENCE MAY BE PERSISTED (the row says so, and epic rail 3). Compare counts and booleans, never values. Do not log the planted value, a prefix of it, a hash of it, or captured output that contains it. Do not commit a fixture carrying one.\n\nTEARDOWN ON EVERY EXIT PATH INCLUDING THE THROWING ONE (epic rail 4): `down --volumes --remove-orphans` exit 0, then label-filtered `docker ps --all --quiet`, `volume ls --quiet` and `network ls --quiet` all counting ZERO, then the scratch directory removed with its parent asserted to be `tmpdir()`. A probe that leaks a container makes every later gate on this board inadmissible.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts"
       ],
-      "startedAt": "2026-09-10T17:50:20.074Z"
+      "modifiedFiles": [
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-password-guard.test.ts"
+      ],
+      "note": "PROVEN LIVE AGAINST THE ACTUAL GENERATED SCAFFOLD. 8/8 arms green with docker; 1 passed + 7 skipped without the flag, which is the discriminator that the live arms really executed.\n\nWHERE IT LANDED, AND WHY NOT WHERE THE STEP SAID. Step 4's affectedFiles named controlled-profile-generator.test.ts, which is already 515 lines. Adding a full live compose harness there would push it toward 650. I put it in a NEW sibling instead - apps/daemon/src/repository/controlled-profile/controlled-profile-password-guard.test.ts, 301 lines - which is exactly the house pattern for opt-in live arms (controlled-profile-migrate.test.ts, controlled-profile-build.test.ts). That is one path beyond the step's declared roster; it is reported in modifiedFiles and flagged here rather than taken silently. I did NOT write a second harness: the file adapts the sibling's probe from task-7693a195 comment-ed461460 / comment-3a32dc34 - same scratch-project materialisation under tmpdir(), same container-network-address auth with the stdin `.` sentinel, same label-filtered teardown census. The recorded loopback correction is honoured: `-h` is the container's own NetworkSettings address, never 127.0.0.1, and the wrong-password control runs on the same path.\n\nGATE: MOE_SCAFFOLD_PASSWORD_GUARD=1, matching MOE_SCAFFOLD_BUILD/MIGRATE. `it.runIf`, never an early return, so a vacuous run reports SKIPPED rather than PASSED. With the flag and no docker daemon the arm calls expect.fail(DEPLOY_DOCKER_UNAVAILABLE) - opt-in, never a silent skip.\n\nTHE FOUR CLASSES, all green (full table with commands goes in a row comment at step 5):\n(a) TRAILING NEWLINE - `compose up --detach --wait db` exits nonzero at the guard. Guard logs carry POSTGRES_PASSWORD_NEWLINE_UNSUPPORTED, guard State.ExitCode != 0, database container State.Status == \"created\" with StartedAt still 0001-01-01T00:00:00Z.\n(b) NORMAL random 24-byte hex - database starts, exact-byte auth returns 1.\n(c) SPACE + `$` + TRAILING SPACE - identical, so special characters stay supported; only newlines are refused.\n(d) WRONG PASSWORD - psql exit 2 with `password authentication failed`, run inside (b) and (c) so neither can be achieved by a probe that authenticates everything.\n\nTHE STABLE MARKER, and it is not decoration. I assert the marker AND the stage, so an unrelated guard failure cannot satisfy (a). The other direction is asserted SEPARATELY, as two more arms, because \"the guard failed\" covers neither:\n- SECRET UNREADABLE: string surgery removes the guard's own secret mount from the emitted compose (the mutation is asserted to have applied, and the db's mount is asserted still present), so /run/secrets/postgres_password is absent. The guard answers POSTGRES_PASSWORD_SECRET_UNREADABLE and the database still never starts.\n- GUARD CANNOT START: a second `-f` layer replaces the guard's image with an unresolvable tag. `up` fails, and no db container, no volume and no network exist at all - compose refuses before it creates anything.\n\nTHREE THINGS I MEASURED THAT CONTRADICT THE STEP'S WORDING, corrected in the arms rather than asserted around:\n1. `docker logs` relays the container's stderr on the CLI's STDERR. Reading stdout alone returns \"\" and my first run went red against an empty string while the guard had in fact printed its refusal. The helper now concatenates both streams.\n2. Compose CREATES the db container before running the dependency, so \"the db container never reached a running state\" is true but \"no db container exists\" is FALSE. The provable bar is State.Status == \"created\" with a zero StartedAt.\n3. Compose also CREATES the named volume during `up`, before the guard runs, so \"no volume was created\" is FALSE on the newline path. I assert the honest and stronger property instead: the volume exists and is EMPTY - `docker run --rm -v <vol>:/probe:ro postgres:17-alpine ls -A /probe` prints nothing, so nothing carries a half-initialised cluster into the operator's retry.\n\nUNSET/EMPTY ARM, unweakened by step 2's new service: `docker compose up --detach db` exits 1 with stderr byte-equal to\n  secret \"POSTGRES_PASSWORD\" must declare either `file` or `environment`: invalid compose project\n(trailing newline included; asserted with toBe, not toContain). Neither the guard nor the db container is created.\n\nNO VALUE-BEARING EVIDENCE PERSISTED. Every planted value is randomBytes(24) minted in-process, written only to the scratch .env, and compared by count or boolean. One arm asserts the guard's own logs contain ZERO occurrences of the planted value, which is a positive proof of the no-leak property rather than an absence of effort. No assertion message interpolates a value; no fixture carries one.\n\nTEARDOWN ON EVERY EXIT PATH INCLUDING THE THROWING ONE. Every arm wraps in try/finally; the finally rewrites .env with a FRESH random value before `down` (measured necessity: `down` re-resolves the secret declaration, so the unset/empty arm would otherwise refuse its own teardown and leak its containers), then ass",
+      "startedAt": "2026-09-10T17:50:20.074Z",
+      "completedAt": "2026-09-10T17:56:54.447Z"
     },
     {
       "stepId": "step-5",
       "description": "THE GATES, BOTH LEGS, THEN THE ADVERSARIAL PASS.\n\nRUN BOTH AND QUOTE BOTH COUNT LINES: `pnpm --filter @moe/daemon test` and `pnpm --filter @moe/control-room test`, each EXIT 0. The control-room leg is MANDATORY, not optional (epic rail 2): two of the four version-literal sites live under apps/control-room, which is in NONE of `pnpm test` (the root vitest include has no `apps/**`), `pnpm typecheck`, or the daemon leg. Read the OUTPUT, not the exit code — a `--filter` leg prints \"No projects matched the filters\" and exits 0, and \"0 passed\" is exit 0 too, so the `Test Files N passed` count line is the only discriminator.\n\nAlso run `pnpm typecheck`. If a repo-wide leg reds at a path this row does not own, attribute it with the path-attributed baseline (repo-wide failures at the merge-base, then at HEAD, the delta intersected with this row's owned paths) and disclose it verbatim rather than fixing it.\n\nCOMPLETION RECORD. State plainly which branch of DoD 2 you took and why the other is closed: exact-byte authentication is not achievable from outside the image, because the entrypoint's `file_env` uses `$(< \"$file\")` and command substitution strips trailing newlines. Put the four probe classes and their outcomes in a row COMMENT — the completion summary truncates silently at 2000 characters and a severed evidence table reads as a skipped gate.\n\nADVERSARIAL PASS (load `adversarial-self-review`). Ask, in order: does the guard refuse a LEADING or EMBEDDED newline as well as a trailing one, and is that the behaviour you want — `wc -l` counts them all, so say whether that is deliberate? What happens on a host where the guard image cannot start — does the db start anyway, and is that fail-open? Does `service_completed_successfully` behave the way you assume when the guard exits nonzero, or does compose report something an operator will misread? Can the value reach a log through the guard's own stderr on any path? Does `DATABASE_URL` in `.env.example` carry the same hazard, since an operator pastes the same password into it — and if so, is that a comment on this row rather than a new one, per the delivery-bias rail? And the question the filing poses: after this change, can an operator with a trailing-newline password still reach a running database that holds a credential they cannot reproduce?",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
         "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts"
-      ]
+      ],
+      "startedAt": "2026-09-10T17:57:16.319Z"
     }
   ],
   "status": "WORKING",
-  "assignedWorkerId": "worker-a11dcf70",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -151,12 +157,12 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T10:42:43.737Z",
-  "updatedAt": "2026-09-10T17:55:29.674Z",
+  "updatedAt": "2026-09-10T18:16:18.653Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T10:42:46.813Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 3
+    "executedStepCount": 4
   },
   "dependsOn": [
     "task-7693a195c01e45088b8545478aebd51f",
@@ -165,7 +171,8 @@
   "stepsCompleted": [
     "step-1",
     "step-2",
-    "step-3"
+    "step-3",
+    "step-4"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-10T17:39:26.037Z",
@@ -227,6 +234,23 @@
       "treeId": "f65b1f876d2abf6dcd6fe68a02d86f0de8a03c5c",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "6043181323667cb592945898ecc2e3cf1daeed1b",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-a11dcf70@2026-09-10T17:39:41Z",
+      "paths": [
+        ".moe/tasks/task-4b7f4a857b504ccb9c64ff4e75280ec1.json",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+        "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts"
+      ],
+      "recordedBy": "worker-a11dcf70",
+      "recordedAt": "2026-09-10T17:56:38.608Z",
+      "treeId": "808bb9f91298f3a527f980ff2c178f027140a052",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -237,18 +261,25 @@
     "apps/control-room/src/v2/products/live-new-product.tsx",
     "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
     "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
-    "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts"
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+    "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts"
   ],
   "unattributedPaths": [
-    ".moe-scratch/expected-compose.txt",
-    ".moe-scratch/gen-expected.mjs",
-    ".moe-scratch/probe-tokens.mjs"
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-password-guard.test.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-a11dcf70@2026-09-10T17:39:44Z",
-    "at": "2026-09-10T17:47:41.588Z"
+    "sessionId": "worker-a11dcf70@2026-09-10T17:39:41Z",
+    "at": "2026-09-10T17:56:38.608Z"
   },
-  "workStartedAt": "2026-09-10T17:40:16.597Z"
+  "workStartedAt": "2026-09-10T17:40:16.597Z",
+  "touchedFiles": [
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+    "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts"
+  ],
+  "declaredFiles": [
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-password-guard.test.ts"
+  ]
 }
