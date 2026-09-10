@@ -408,7 +408,8 @@ export function journeyWorld(design: DesignStep): JourneyWorld {
 }
 
 export {
-  BASE, CREDENTIAL, DECIDED_AT, GOAL_ID, PROJECT_ID, PR_URL, REMOTE_URL, closeStores, nextId,
+  BASE, CREDENTIAL, DECIDED_AT, GOAL_ID, PROJECT_ID, PR_URL, REMOTE_URL, closeStores,
+  dossierFacts, nextId,
   readDesignRevision, readPreviewDecision, readReleaseReceipt, releaseReceiptId, seatSession,
 };
 export type { CommandAdapterDeps, Journey };
