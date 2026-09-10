@@ -1,4 +1,8 @@
-import { createHash } from "node:crypto";
+import { spawnSync } from "node:child_process";
+import { createHash, randomBytes } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 
 import { describe, expect, expectTypeOf, it } from "vitest";
 
@@ -12,16 +16,16 @@ import {
 import type { ControlledProfileRefusal, ControlledProfileRefusalCode, ControlledProfileTree } from "./controlled-profile-generator.js";
 
 /**
- * The golden for profile version `controlled-2`.
+ * The golden for profile version `controlled-3`.
  *
  * THE EXPECTATIONS ARE LINE ARRAYS FOR THE SAME REASON THE TEMPLATES ARE: a multi-line template
  * literal in this file would capture THIS file's checkout line endings, so the golden would pass on
  * an LF checkout and fail on a CRLF one while the generator was innocent. The newline lives in the
  * code on both sides of the comparison.
  *
- * A tree change is a profile VERSION BUMP plus a lockfile re-mint, not a re-bake of the numbers
- * below (task rail 4). If you are here to make a failing arm green, that is the question to answer
- * first.
+ * A tree change is a profile VERSION BUMP, not a re-bake of the numbers below (task rail 4).
+ * Re-mint the lockfile when dependencies move; controlled-3 deliberately reuses v2's lock bytes.
+ * If you are here to make a failing arm green, that is the question to answer first.
  */
 
 const lines = (parts: readonly string[]): string => `${parts.join("\n")}\n`;
@@ -34,7 +38,7 @@ const GOLDEN_MANIFEST: readonly string[] = [
   ".github/workflows/ci.yml  5ec9a41f863ff4a9083f17f2702202f1fc3bba15c872d7f326a4e82cff06a602",
   ".gitignore  f9dc6d94a2d0deef95cde70cd545145f8d5e2f3d3251dc2d4581e596bfccb2ee",
   "README.md  a3dcfc8a3e2983866c7837be7939f6b604f06d4804a30261c4a3437512f82844",
-  "docker-compose.yml  288945fa1cb9987f9bd53988e947bbdb4b46007a59a86237f6efdb229f718a1b",
+  "docker-compose.yml  ca06da38bcf619df20e91998b9982adac55108843c2340ea541a1178eafdd7d8",
   "e2e/smoke.spec.ts  a95824a6d628fd30f3f36ce95c23cbd7a33001632871c437f71908a955fde76b",
   "migrations/1700000000000-initial.js  e3e86d8ce26dba4f1f3f8bb69572d7a37a99fc8c39eb7e8b4d7fb814c9317a5e",
   "package.json  636ff642a319817c158ed9a9094d479bf231546cec745ffc710b2004a77803b3",
@@ -91,16 +95,19 @@ const EXPECTED_ROOT_PACKAGE_JSON = lines([
 const EXPECTED_DOCKER_COMPOSE = lines([
   "# PostgreSQL for local development.",
   "#",
-  "# Every credential is read from the environment — no password literal lives in this file. Copy",
-  "# .env.example to .env and fill it in; `docker compose` loads .env from this directory.",
+  "# Credentials come from .env; the password is mounted as a secret, not container metadata.",
+  "# Copy .env.example to .env and fill it in; `docker compose` loads .env from this directory.",
   "services:",
   "  db:",
   "    image: postgres:17-alpine",
   "    restart: unless-stopped",
   "    environment:",
   "      POSTGRES_USER: ${POSTGRES_USER:-app}",
-  "      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}",
+  "      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password",
   "      POSTGRES_DB: ${POSTGRES_DB:-app}",
+  "    secrets:",
+  "      - source: POSTGRES_PASSWORD",
+  "        target: postgres_password",
   "    ports:",
   "      - \"5432:5432\"",
   "    volumes:",
@@ -113,6 +120,11 @@ const EXPECTED_DOCKER_COMPOSE = lines([
   "",
   "volumes:",
   "  db-data:",
+  "",
+  "secrets:",
+  "  POSTGRES_PASSWORD:",
+  "    environment: ${POSTGRES_PASSWORD:+POSTGRES_PASSWORD}",
+  "    # Only the NAME is emitted. Empty/unset refuses with POSTGRES_PASSWORD in the error.",
 ]);
 
 const EXPECTED_CI_WORKFLOW = lines([
@@ -152,15 +164,52 @@ function tree(productName: string, profileVersion: string = CONTROLLED_PROFILE_V
   return result;
 }
 
+function composePasswordConfig(mode: "supplied" | "unset" | "empty") {
+  const root = mkdtempSync(join(tmpdir(), "moe-compose-password-"));
+  const value = randomBytes(24).toString("hex");
+  const env: NodeJS.ProcessEnv = { ...process.env, POSTGRES_USER: "app", POSTGRES_DB: "app" };
+  delete env.POSTGRES_PASSWORD;
+  try {
+    writeFileSync(join(root, "compose.yaml"), tree("password-probe").files.get("docker-compose.yml") ?? "");
+    writeFileSync(join(root, ".env"), mode === "unset" ? "" : `POSTGRES_PASSWORD='${mode === "empty" ? "" : value}'\n`);
+    const result = spawnSync("docker", ["compose", "--project-name", "moe-password-probe", "--env-file", ".env",
+      "-f", "compose.yaml", "config", "--format", "json"], { cwd: root, env, encoding: "utf8", timeout: 20_000 });
+    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
+    // Never expose subprocess output or credential-shaped values in a failed assertion.
+    return { exitCode: result.status, spawnFailed: result.error !== undefined,
+      valueMatches: output.split(value).length - 1,
+      missingPasswordRefusal: output.includes('secret "POSTGRES_PASSWORD" must declare either `file` or `environment`: invalid compose project') };
+  } finally {
+    if (dirname(resolve(root)) !== resolve(tmpdir())) throw new Error("unsafe compose fixture cleanup");
+    rmSync(root, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  }
+}
+
 describe("the controlled profile generator", () => {
+  it("delivers the database password only through a guarded secret source", () => {
+    const body = tree("password-probe").files.get("docker-compose.yml") ?? "";
+    expect(body.split("\n").filter((line) => /^ {6}POSTGRES_PASSWORD(?:_FILE)?:/.test(line)))
+      .toEqual(["      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password"]);
+    expect(body).toContain("      - source: POSTGRES_PASSWORD\n        target: postgres_password\n");
+    expect(body).toContain("secrets:\n  POSTGRES_PASSWORD:\n    environment: ${POSTGRES_PASSWORD:+POSTGRES_PASSWORD}\n");
+  });
+
+  // Real Compose parsing is opt-in; the always-on shape arm above prevents a zero-case default.
+  it.runIf(process.env.MOE_SCAFFOLD_COMPOSE === "1").each(["supplied", "unset", "empty"] as const)(
+    "keeps compose password metadata value-free and refuses missing input: %s", (mode) => {
+      expect(composePasswordConfig(mode)).toEqual({ exitCode: mode === "supplied" ? 0 : 1,
+        spawnFailed: false, valueMatches: 0, missingPasswordRefusal: mode !== "supplied" });
+    },
+  );
+
   it("defines the missing-tool vocabulary without inventing a workspace detector", () => {
     expect(MIGRATION_TOOL_MISSING).toBe("MIGRATION_TOOL_MISSING");
     expectTypeOf<typeof MIGRATION_TOOL_MISSING>().toMatchTypeOf<ControlledProfileRefusalCode>();
     expectTypeOf<ControlledProfileRefusal["refusedBy"]>().toEqualTypeOf<"DAEMON_INGRESS">();
   });
 
-  it("identifies the migration-capable profile with a new version", () => {
-    expect(CONTROLLED_PROFILE_VERSION).toBe("controlled-2");
+  it("identifies the secret-capable profile with a new version", () => {
+    expect(CONTROLLED_PROFILE_VERSION).toBe("controlled-3");
   });
 
   it("ships a migration tool with both directions and a nonempty migration", () => {
@@ -375,9 +424,9 @@ describe("the controlled profile generator's refusals", () => {
     "a".repeat(65),
   ];
 
-  it("refuses an unknown profile version at the daemon ingress layer", () => {
-    const result = generateControlledProfile({ productName: "alpha-product", profileVersion: "controlled-999" });
-
+  it.each(["controlled-2", "controlled-999"])("refuses an unknown profile version at the daemon ingress layer: %s", (profileVersion) => {
+    const result = generateControlledProfile({ productName: "alpha-product", profileVersion });
+    expect(result.ok).toBe(false); // Keep a wrong-version red from printing the entire generated tree.
     expect(result).toEqual({
       ok: false,
       code: BOOTSTRAP_PROFILE_VERSION_UNKNOWN,
