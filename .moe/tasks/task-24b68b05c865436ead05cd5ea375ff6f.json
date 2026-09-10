@@ -142,8 +142,8 @@
       ]
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-a11dcf70",
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -180,11 +180,17 @@
       "author": "worker-a11dcf70",
       "content": "STEP 3 DEVIATION, WITH THE MEASUREMENT: THE RECEIPT VERSION WAS **NOT** BUMPED. The step says bump `RELEASE_RECEIPT_VERSION` to `moe-release-receipt/2`. Step 7 of the same plan says `src/release/release-receipt-ledger.test.ts` must still be 8 and lists it as a gate leg; the plan's own planningNotes say the vintage arms were folded into the new test file \"to keep the roster at nine\", i.e. that file is NOT an owned path. Those two instructions are mutually unsatisfiable, and here is why:\n\n  apps/daemon/src/release/release-receipt-ledger.test.ts:56\n    expect(read.receipt.version).toBe(\"moe-release-receipt/1\");\n\nThat line reads back a receipt the ledger wrote IN THAT TEST and pins its version to /1. Bumping the constant reddens it. Global rail: a worker who finds an unnamed asserting consumer mid-step must stop rather than take the extra path. `git grep -n \"moe-release-receipt/1\\|moe-release-receipt/2\"` over every consumer returns exactly three lines, all in that one file: :56 (a freshly written receipt is /1), :148 (the decoder fixture body spells /1 as a literal, so it is vintage-stable either way) and :189 (an arm asserting a body claiming **/2** is REFUSED).\n\nWHAT I SHIPPED INSTEAD: `provenance` is an OPTIONAL key at the UNCHANGED version /1. The roster stays closed -- exactly the nine required keys, optionally plus `provenance`, and any other extra key is refused as before. Concretely:\n- a receipt written before this key existed decodes with `provenance: null`;\n- a receipt carrying it decodes with the action and tier VALUES;\n- a human release writes the key OMITTED, so its stored bytes are byte-identical to what the ledger has always written and a replay of an already-stored receipt stays a replay;\n- :189 still passes, because a body claiming /2 is still refused;\n- :56 still passes, because the writer still writes /1.\n\nIT ALSO RETIRES THE HAZARD THE ARCHITECT CALLED \"THE SILENT ONE\". `releaseReceiptId` hashes `RELEASE_RECEIPT_VERSION`, so the bump needed a separate pinned `RECEIPT_ID_DOMAIN` literal or every stored id rotated and `deploy-command.ts:298` / `goal-deployment-read.ts:47` would stop finding RELEASED receipts, with `release-evidence-read.ts` escalating the whole release read to UNREADABLE. With no bump there is nothing to pin -- but the arm the plan wanted is still there and is STRONGER: it asserts `releaseReceiptId(...)` equals sha256 over a tuple whose first member is the string literal `\"moe-release-receipt/1\"`, so ANY future bump reddens that arm instead of silently rotating ids. A second assertion pins that a receipt with provenance and one without share an id.\n\nONE ENCODING OF \"A HUMAN DECIDED THIS\": the key ABSENT. An explicit `\"provenance\": null` in the bytes is REFUSED, not treated as a synonym, because the id does not hash provenance and two byte-forms of one receipt sharing an id would make a replay indistinguishable from a rewrite. Armed.\n\nDoD 2 is unaffected: it requires the persisted decision record to NAME the opt-in (action and tier). It does. Nothing in the DoD names a receipt version.\n\nSECOND, SMALLER DEVIATION: `RecordReleaseReceiptInput.provenance` is OPTIONAL rather than required. Four foreign test files construct that input (deploy-release-binding.test.ts:51, goal-deployment-read.test.ts:29, release-read.test.ts:302 and :327, release-receipt-ledger.test.ts) and none is an owned path; a required key would have forced edits to all of them for no behavioural gain.\n\nVERIFIED: `pnpm --filter @moe/daemon exec vitest run --config package.json --maxWorkers=1 --testTimeout=60000 src/release/release-auto-decide.test.ts src/release/release-receipt-ledger.test.ts src/release/release-decide-service.test.ts src/release/release-decide-wiring.test.ts src/http/release-read.test.ts` -> `Test Files 5 passed (5)` / `Tests 58 passed (58)`. `pnpm --filter @moe/daemon typecheck` EXIT 0.",
       "timestamp": "2026-09-09T23:33:08.988Z"
+    },
+    {
+      "id": "comment-fa7f0940757a46debb21397e9c578cd4",
+      "author": "worker-a11dcf70",
+      "content": "STEP 7 GATE MEASUREMENT — 8 REDS, MINE, AND TWO UNNAMED SHAPE CONSUMERS\n\nGATE START held full-suite-gate (renewed; prior session died holding it). All legs run foreground, standalone, no pipes into the exit code. Count lines read, not exit codes.\n\nGREEN LEGS\n- `pnpm --filter @moe/daemon exec vitest run --config package.json --maxWorkers=1 --testTimeout=30000 src/release/release-auto-decide.test.ts` -> `Test Files 1 passed (1)` / `Tests 42 passed (42)`, EXIT 0. Step 7 requires N>=15.\n- same runner, `src/release/release-receipt-ledger.test.ts` -> `Test Files 1 passed (1)` / `Tests 8 passed (8)`, EXIT 0. Baseline 8 held (no receipt-version bump; see comment-0f38dfa3).\n- `pnpm --filter @moe/daemon typecheck` EXIT 0. `pnpm typecheck` EXIT 0 (all packages \"Done\").\n- `pnpm --filter @moe/control-room test` -> `Test Files 207 passed (207)` / `Tests 2693 passed (2693)`, EXIT 0.\n\nRED LEG — `pnpm --filter @moe/daemon test`\n`Test Files 2 failed | 608 passed (610)` / `Tests 8 failed | 10971 passed | 12 skipped (10991)`, EXIT 1.\n\nCAUSE, ATTRIBUTED TO MY OWN DIFF, NOT FOREIGN RED. Step 5 registers `release/auto-decide` on the daemon's existing DurableSchedule, which arms a SECOND timer at DEFAULT_SCHEDULE_INTERVAL_MS 60_000. Two test files pin the WHOLE composed schedule as if the health probe were the only job on it. Reproduced scoped at --maxWorkers=1:\n\n1. `src/monitoring/health-probe-schedule.test.ts` (9 tests | 6 failed). Four arms pin the exact interval roster: `expected [ 10000, 20000, 60000, 60000 ] to deeply equal [ 10000, 20000, 60000 ]` (:132, and the same shape at :153, :191, :229). Two arms pin the arm-count delta across a reboot: `expected 2 to be 1` (:264).\n2. `src/daemon-store-dependencies.test.ts` (39 tests | 2 failed). `expected [ 60000, 60000 ] to deeply equal [ 60000 ]` (:1339/:1352). AND, materially different: `expected undefined to be false` (:1383) — its fake timer at :1372 is SINGLE-SLOT, `set: (callback) => { tick = callback; return callback; }`, so my registration overwrites `tick` with the reconciler callback and the health probe's AbortSignal is never observed. That one is NOT a roster bump; it needs the fake restructured to a keyed map like the sibling test at :1333.\n\nNEITHER FILE IS IN ANY STEP'S affectedFiles (nine planned paths, steps 1-8; task JSON `affectedFiles: null`). Global rail \"grep the SHAPE, not the symbol\" binds me here: a worker who finds an unnamed consumer mid-step stops and reports rather than taking the extra path, and must never reshape the producer to evade the consumer's check. So I am neither editing those two files nor making the registration conditional to dodge them.\n\nTWO REMEDIES, ARCHITECT'S CALL\n(a) AMEND step 7 to own `apps/daemon/src/monitoring/health-probe-schedule.test.ts` and `apps/daemon/src/daemon-store-dependencies.test.ts` (roster 9 -> 11). I then narrow both to the health-probe arms instead of the whole composition (strengthens them: the next scheduled job will not red them either) and rebuild the single-slot fake at :1372 into a keyed map.\n(b) A prerequisite row that de-brittles the two consumers first, with this row's dependsOn on it.\n\nI recommend (a): it is ~10 lines, no other row is waiting on those files, and (b) serialises a 42-test-green feature behind a test-hygiene row.\n\nCENSUS (DoD 7), NOTHING ROTATED\n- HEX, not symbol: `git grep -ln f1878eeaa08a050c12000a0e9885a4fef11c12c824602c1b50696d970f2dd295 -- . ':!.serena' ':!.moe' ':!.codex' ':!.grok'` returns exactly the six plan-time files: data-adapter.test.ts, approve-plan-reject.test.tsx, approve-plan.test.tsx, plan-run-resolution.test.tsx, generated-coverage.test.ts, generated/generated-client.ts. No mirror moved.\n- FENCE ANCHOR DEVIATION, disclosed: step 7 says compare `git grep -n \"release.decide\"` in daemon-command-vocabulary.ts / mcp-tool-allowlist.ts against THE MERGE-BASE. That anchor is wrong for those two files — merge-base 68eb1c5d predates release-decide-contracts.ts entirely, so the grep is EMPTY there and every hit is a peer row's on this branch. The sound measurement is my row's own commit set: `git show --name-only` over all four `Moe-Task: task-24b68b05` commits touches NEITHER file. Fence roster untouched by this row, proven by attribution rather than by a polluted diff.\n- `git diff --name-only 68eb1c5d..HEAD -- packages/core/src/policy/` is EMPTY (DoD 4).\n\nPEER DIRT, noted and untouched: 32 modified + 6 untracked paths from other sessions (.moe/**, .codex/**, repository/migrations/**, repository/controlled-profile/**, preview/preview-goal-landing.test.ts, repository/git-source-extract.*). One wrapper commit of mine swept `.moe/tasks/task-7693a195c01e45088b8545478aebd51f.json` in; that is wrapper attribution, not my write.\n\nReleasing full-suite-gate now (GATE END) so a blocked row does not pin it.",
+      "timestamp": "2026-09-10T00:10:17.440Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:05:30.360Z",
-  "updatedAt": "2026-09-09T23:53:59.189Z",
+  "updatedAt": "2026-09-10T00:11:26.357Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T19:36:44.792Z",
     "plannedStepCount": 8,
@@ -299,6 +305,22 @@
       "treeId": "ebc66e0512ae2fb5a09a36afc01c643e9db0146a",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "f8d461e6a116c9cfc7529b355d0c3d59528b49c2",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-a11dcf70@2026-09-09T23:56:00Z",
+      "paths": [
+        ".moe/tasks/task-24b68b05c865436ead05cd5ea375ff6f.json",
+        ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json"
+      ],
+      "recordedBy": "worker-a11dcf70",
+      "recordedAt": "2026-09-09T23:56:07.918Z",
+      "treeId": "cd48ddbc620cdd99a9737d1f8f40962fd987f0ba",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -313,7 +335,8 @@
     "apps/daemon/src/release/release-auto-decide.ts",
     "apps/daemon/src/release/release-decide-service.ts",
     "apps/daemon/src/release/release-receipt-contracts.ts",
-    "apps/daemon/src/release/release-receipt-ledger.ts"
+    "apps/daemon/src/release/release-receipt-ledger.ts",
+    ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/release/release-decide-service.ts",
@@ -329,7 +352,11 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-a11dcf70@2026-09-09T23:53:52Z",
-    "at": "2026-09-09T23:53:59.189Z"
-  }
+    "sessionId": "worker-a11dcf70@2026-09-09T23:56:00Z",
+    "at": "2026-09-09T23:56:07.918Z"
+  },
+  "blockedReason": "STEP 7 GATE RED FROM MY OWN DIFF; THE FIX IS IN TWO FILES NO STEP OWNS. Needs a step-7 amendment (amend_plan_step OVERLAY, NOT request_replan: six steps are delivered and green). Full measurement in comment-fa7f0940.\n\n`pnpm --filter @moe/daemon test` = `Test Files 2 failed | 608 passed (610)` / `Tests 8 failed | 10971 passed | 12 skipped (10991)`, EXIT 1. Cause: step 5's `registerReleaseAutoDecide` arms a SECOND timer at DEFAULT_SCHEDULE_INTERVAL_MS 60_000 on the shared DurableSchedule. Two files pin the WHOLE composed schedule as if the health probe were its only job:\n- `apps/daemon/src/monitoring/health-probe-schedule.test.ts`, 6 of 9 red: `expected [ 10000, 20000, 60000, 60000 ] to deeply equal [ 10000, 20000, 60000 ]` (:132; same shape :153/:191/:229) and `expected 2 to be 1` (:264).\n- `apps/daemon/src/daemon-store-dependencies.test.ts`, 2 of 39 red: `expected [ 60000, 60000 ] to deeply equal [ 60000 ]` (:1352) and `expected undefined to be false` (:1383), because its fake timer at :1372 is SINGLE-SLOT (`set: (cb) => { tick = cb; return cb; }`) so my job overwrites the probe's callback. Needs a keyed map like the sibling at :1333, not a roster bump.\n\nNeither path is in any step's affectedFiles. The \"grep the SHAPE, not the symbol\" rail binds me: report an unnamed consumer, never take the extra path, never reshape the producer to evade its check. I did NOT edit them and did NOT gate registration on `MOE_RELEASE_BASE` to dodge them.\n\nASK: amend step 7 to own those two paths (9 -> 11). I will narrow both to the health-probe arms so the NEXT job cannot red them either, plus rebuild the fake. ~10 lines.\n\nELSE GREEN: release-auto-decide.test.ts 42 passed (42); release-receipt-ledger 8; daemon typecheck 0; pnpm typecheck 0; control-room 207 files / 2693 tests; digest hex census still six files; vocabulary and allowlist untouched by this row. full-suite-gate RELEASED. Step 8 drill NOT done.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-10T00:11:26.357Z"
 }
