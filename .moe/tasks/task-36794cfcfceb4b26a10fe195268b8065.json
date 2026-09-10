@@ -114,7 +114,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-10T18:50:58.926Z",
-  "updatedAt": "2026-09-10T19:20:21.896Z",
+  "updatedAt": "2026-09-10T19:20:26.381Z",
   "metrics": {
     "firstClaimAt": "2026-09-10T18:51:05.330Z",
     "plannedStepCount": 6,
@@ -180,22 +180,38 @@
       "treeId": "e7d7730e5cec953d476e14828fb9d9bc0e2336bb",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "ae337d50eff4e2e183866d9d148e73d68caa12ad",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-77a9823a@2026-09-10T19:20:22Z",
+      "paths": [
+        ".moe/tasks/task-24b68b05c865436ead05cd5ea375ff6f.json",
+        ".moe/tasks/task-36794cfcfceb4b26a10fe195268b8065.json"
+      ],
+      "recordedBy": "qa-77a9823a",
+      "recordedAt": "2026-09-10T19:20:26.381Z",
+      "treeId": "60f21965fad55342185ec3cc32f6420b0f9b6277",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
     "apps/daemon/src/preview/preview-goal-landing.test.ts",
     "apps/daemon/src/preview/preview-runner.test.ts",
     "apps/daemon/src/preview/preview-daemon-edge.test.ts",
-    "apps/daemon/src/preview/preview-auto-decision.test.ts"
+    "apps/daemon/src/preview/preview-auto-decision.test.ts",
+    ".moe/tasks/task-24b68b05c865436ead05cd5ea375ff6f.json",
+    ".moe/tasks/task-36794cfcfceb4b26a10fe195268b8065.json"
   ],
-  "unattributedPaths": [
-    "apps/daemon/qa-drill-task-24b68b05.config.ts"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-ed22fae0@2026-09-10T18:56:34Z",
-    "at": "2026-09-10T19:01:26.322Z"
+    "sessionId": "qa-77a9823a@2026-09-10T19:20:22Z",
+    "at": "2026-09-10T19:20:26.381Z"
   },
   "workStartedAt": "2026-09-10T18:56:50.457Z",
   "declaredFiles": [
