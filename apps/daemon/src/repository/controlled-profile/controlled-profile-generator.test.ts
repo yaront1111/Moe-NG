@@ -16,7 +16,7 @@ import {
 import type { ControlledProfileRefusal, ControlledProfileRefusalCode, ControlledProfileTree } from "./controlled-profile-generator.js";
 
 /**
- * The golden for profile version `controlled-3`.
+ * The golden for profile version `controlled-4`.
  *
  * THE EXPECTATIONS ARE LINE ARRAYS FOR THE SAME REASON THE TEMPLATES ARE: a multi-line template
  * literal in this file would capture THIS file's checkout line endings, so the golden would pass on
@@ -24,7 +24,7 @@ import type { ControlledProfileRefusal, ControlledProfileRefusalCode, Controlled
  * code on both sides of the comparison.
  *
  * A tree change is a profile VERSION BUMP, not a re-bake of the numbers below (task rail 4).
- * Re-mint the lockfile when dependencies move; controlled-3 deliberately reuses v2's lock bytes.
+ * Re-mint the lockfile when dependencies move; controlled-4 deliberately reuses v2's lock bytes.
  * If you are here to make a failing arm green, that is the question to answer first.
  */
 
@@ -38,7 +38,7 @@ const GOLDEN_MANIFEST: readonly string[] = [
   ".github/workflows/ci.yml  5ec9a41f863ff4a9083f17f2702202f1fc3bba15c872d7f326a4e82cff06a602",
   ".gitignore  f9dc6d94a2d0deef95cde70cd545145f8d5e2f3d3251dc2d4581e596bfccb2ee",
   "README.md  a3dcfc8a3e2983866c7837be7939f6b604f06d4804a30261c4a3437512f82844",
-  "docker-compose.yml  ca06da38bcf619df20e91998b9982adac55108843c2340ea541a1178eafdd7d8",
+  "docker-compose.yml  261dd4ea71c6a45be1e878572b246df4a9bf1376347815feb2d66819eef81e20",
   "e2e/smoke.spec.ts  a95824a6d628fd30f3f36ce95c23cbd7a33001632871c437f71908a955fde76b",
   "migrations/1700000000000-initial.js  e3e86d8ce26dba4f1f3f8bb69572d7a37a99fc8c39eb7e8b4d7fb814c9317a5e",
   "package.json  636ff642a319817c158ed9a9094d479bf231546cec745ffc710b2004a77803b3",
@@ -101,6 +101,9 @@ const EXPECTED_DOCKER_COMPOSE = lines([
   "  db:",
   "    image: postgres:17-alpine",
   "    restart: unless-stopped",
+  "    depends_on:",
+  "      db-password-guard:",
+  "        condition: service_completed_successfully",
   "    environment:",
   "      POSTGRES_USER: ${POSTGRES_USER:-app}",
   "      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password",
@@ -109,14 +112,37 @@ const EXPECTED_DOCKER_COMPOSE = lines([
   "      - source: POSTGRES_PASSWORD",
   "        target: postgres_password",
   "    ports:",
-  "      - \"5432:5432\"",
+  '      - "5432:5432"',
   "    volumes:",
   "      - db-data:/var/lib/postgresql/data",
   "    healthcheck:",
-  "      test: [\"CMD-SHELL\", \"pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app}\"]",
+  '      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-app} -d ${POSTGRES_DB:-app}"]',
   "      interval: 5s",
   "      timeout: 5s",
   "      retries: 20",
+  "",
+  "  # REFUSES BEFORE THE DATABASE INITIALISES. The mounted secret carries your EXACT bytes, but",
+  "  # postgres reads it through a command substitution, which strips trailing newlines - so a",
+  "  # newline-bearing password initialises a credential that is NOT the one you hold, and you",
+  "  # can never log in. `wc -l` reports a COUNT of newline bytes and nothing else: never cat,",
+  "  # echo or interpolate this file, on any path, in any message. A missing or unreadable secret",
+  "  # refuses here too, so `db` is never started by a guard that could not do its job.",
+  "  db-password-guard:",
+  "    image: postgres:17-alpine",
+  '    entrypoint: ["/bin/sh", "-c"]',
+  "    command:",
+  "      - |",
+  "        test -r /run/secrets/postgres_password || {",
+  "          echo 'POSTGRES_PASSWORD_SECRET_UNREADABLE: /run/secrets/postgres_password is missing or unreadable.' >&2",
+  "          exit 1",
+  "        }",
+  "        wc -l < /run/secrets/postgres_password | grep -qx 0 || {",
+  "          echo 'POSTGRES_PASSWORD_NEWLINE_UNSUPPORTED: POSTGRES_PASSWORD contains a newline. The database initialises the value without it, so the credential you hold is not the credential the database has. Remove the newline from .env and re-run.' >&2",
+  "          exit 1",
+  "        }",
+  "    secrets:",
+  "      - source: POSTGRES_PASSWORD",
+  "        target: postgres_password",
   "",
   "volumes:",
   "  db-data:",
@@ -209,7 +235,7 @@ describe("the controlled profile generator", () => {
   });
 
   it("identifies the secret-capable profile with a new version", () => {
-    expect(CONTROLLED_PROFILE_VERSION).toBe("controlled-3");
+    expect(CONTROLLED_PROFILE_VERSION).toBe("controlled-4");
   });
 
   it("ships a migration tool with both directions and a nonempty migration", () => {
@@ -424,7 +450,7 @@ describe("the controlled profile generator's refusals", () => {
     "a".repeat(65),
   ];
 
-  it.each(["controlled-2", "controlled-999"])("refuses an unknown profile version at the daemon ingress layer: %s", (profileVersion) => {
+  it.each(["controlled-2", "controlled-3", "controlled-999"])("refuses an unknown profile version at the daemon ingress layer: %s", (profileVersion) => {
     const result = generateControlledProfile({ productName: "alpha-product", profileVersion });
     expect(result.ok).toBe(false); // Keep a wrong-version red from printing the entire generated tree.
     expect(result).toEqual({

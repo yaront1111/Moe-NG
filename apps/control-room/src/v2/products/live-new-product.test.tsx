@@ -49,7 +49,7 @@ describe("the caller half carries the operator values and omits an unrequested g
     expect(payload["profileVersion"]).toBe(CONTROLLED_PROFILE_VERSION);
     // Pinned as a literal so a silent drift from the daemon generator reds HERE, where the
     // comment naming the producer is, rather than as an opaque refusal in a browser.
-    expect(CONTROLLED_PROFILE_VERSION).toBe("controlled-3");
+    expect(CONTROLLED_PROFILE_VERSION).toBe("controlled-4");
   });
 
   it("carries owner, name and visibility verbatim when the operator asked for them", () => {
