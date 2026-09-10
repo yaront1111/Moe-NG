@@ -35,15 +35,13 @@ export const sameCriterionArtifact = (a: IntegratedCriterionArtifact, b: Integra
 /**
  * An integrated candidate contains every execution-bearing node's exact, verified landing.
  *
- * A NODE THAT LANDED NOTHING IS ACCEPTED WITH NO SHA TO BIND, not an unlanded node. Its receipt
- * is a REFUSED one carrying `LANDING_NOTHING_TO_COMMIT`, which the lander mints at
- * node-lander.ts:208-210 BEFORE `commitJournaledLanding` at :223 writes any landing intent — so
- * the code is pre-intent by construction and is the discriminator this layer can actually read
- * (the journal's reservation handle is gone once the no-effect node releases its checkout,
- * repository-execution-port.ts:103). Such a node contributes no sha, so the ancestry check below
- * is SKIPPED for it, exactly as it is for a node with no landing at all. EVERY OTHER refusal —
- * GIT_COMMIT_FAILED, GIT_INDEX_LOCKED, anything decided after bytes were owed — still refuses,
- * and so does a node with no acceptance.
+ * A NODE THAT LANDED NOTHING IS ACCEPTED WITH NO SHA TO BIND, not an unlanded node. Whether a
+ * receipt is such a node is `landedWithNoEffect`'s two-part question — the NOTHING_TO_COMMIT code
+ * AND no landing intent journaled for that acceptance — which is why the walk's `landingIntents`
+ * set is handed to it rather than the code being read here. Such a node contributes no sha, so
+ * the ancestry check below is SKIPPED for it, exactly as it is for a node with no landing at all.
+ * EVERY OTHER refusal — GIT_COMMIT_FAILED, GIT_INDEX_LOCKED, anything decided after bytes were
+ * owed — still refuses, and so does a node with no acceptance and an unreadable intent history.
  *
  * Inherited hazard, named rather than fixed here: node-lander.ts:78-79 records NOTHING_TO_COMMIT
  * firing FALSELY on 2026-09-05 when delivered files were misread as operator dirt
@@ -64,7 +62,7 @@ export function readIntegratedCriterionArtifact(
       const accepted = reviews.ledgers.get(nodeRef)?.accepted;
       const candidate = reviews.landings.get(nodeRef);
       if (accepted === undefined || candidate === undefined) return null;
-      if (landedWithNoEffect(candidate)) continue;
+      if (landedWithNoEffect(candidate, reviews.landingIntents)) continue;
       if (candidate.outcome !== "COMMITTED" || candidate.commit === null) return null;
       const landing = readLandingReceipt(store, goal.binding.projectId, candidate.receiptId);
       const verifier = readVerifierReceipt(store, goal.binding.projectId, candidate.verifierReceiptId);

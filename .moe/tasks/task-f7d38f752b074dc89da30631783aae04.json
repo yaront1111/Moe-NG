@@ -91,12 +91,24 @@
     {
       "stepId": "step-6",
       "description": "VERIFICATION. Foreground, standalone, no pipes. Scoped: `pnpm --filter @moe/daemon exec vitest run --config package.json --maxWorkers=1 --testTimeout=30000 src/criterion-evidence/criterion-integrated.test.ts src/repository/goal-landing-facts.test.ts src/repository/publication-goal-integration.test.ts src/repository/publication-approval.test.ts src/goals/goal-live-evidence.test.ts src/goals/goal-close-readiness.test.ts src/orchestrator/compiled-node-identity.test.ts` — quote the count line; goal-live-evidence and compiled-node-identity must pass UNEDITED (they pin the closure node leg and the ambiguity withholding this row must not disturb). Then `pnpm --filter @moe/daemon typecheck` EXIT 0. Then DoD 5 under `full-suite-gate` (acquire_resource; GATE START): `pnpm --filter @moe/daemon test` EXIT 0, `Test Files N passed` quoted verbatim (parent's baseline was 607 files / 10847 tests); GATE END. Path-attributed baseline for any foreign red. Put the gate table and the three pre-fix reds from step 2 in a task COMMENT before completionSummary.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/criterion-evidence/criterion-artifact.ts",
         "apps/daemon/src/repository/goal-landing-facts.ts"
       ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/landing-receipt-contracts.ts",
+        "apps/daemon/src/repository/goal-landing-facts.ts",
+        "apps/daemon/src/repository/publication-goal-integration.ts",
+        "apps/daemon/src/criterion-evidence/criterion-artifact.ts",
+        "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts",
+        "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
+        "apps/daemon/src/repository/goal-landing-facts.test.ts",
+        "apps/daemon/src/repository/publication-goal-integration.test.ts"
+      ],
+      "note": "AMEND-2 DELIVERED: `landedWithNoEffect` is now the two-part rule and all three seams pass it the set. Gate table, foreign-red disclosure and the (2)-minus-(1) measurement are in comment-65024738.\n\nPREDICATE (landing-receipt-contracts.ts:43, file 250 -> 257 lines): `landedWithNoEffect(receipt, journaledIntents: ReadonlySet<string> | null)` = `journaledIntents !== null && outcome === \"REFUSED\" && refusal?.code === LANDING_NOTHING_TO_COMMIT && !journaledIntents.has(landingIntentKey(receipt.subjectRef, receipt.verifierReceiptId))`. FAIL CLOSED: null credits NOTHING. Imports the leaf's exported `landingIntentKey` rather than respelling the key (no runtime cycle: repository-landing-intent-contracts.ts imports back only `import type`, which erases). Doc rewritten to \"the code is NECESSARY, NEVER SUFFICIENT\" and \"unverifiable history gains no authority\"; there is NO permissive edge described anywhere. The \"pre-intent by construction\" prose is DELETED from criterion-artifact.ts and goal-landing-facts.ts (x2 sites) and replaced by the two-part rule; the withdrawn argument survives nowhere in the tree.\n\nSCOPE NOTE, disclosed rather than hidden: the amendment said \"exactly 250 lines; keep net-zero\". I could not meet that. The rationale the amendment ORDERS centralised here (code-necessary-not-sufficient, the reproducer citation, the fail-closed-null paragraph) costs more lines than the prose deleted from the two seams gives back, and the deletions land in those files, not this one. I compressed the module header and both doc blocks and put the signature on one line to hold it to 257 — 7 over the 250 target, 143 under the 400 split. No production logic was left undocumented to save lines. If an architect prefers 250 exactly, the lever is splitting the decoder half out, which is an 11th path and outside this row.\n\nTHREE SEAMS (no new store walk added by this row — `grep readReviewLedgers(` over non-test sources shows each seam still makes exactly ONE call and now destructures/captures `landingIntents` from it):\n- goal-landing-facts.ts:81/:83 destructures `{ landingIntents, landings }`.\n- publication-goal-integration.ts:32/:34 captures `reviews` once; the `every()` still runs over the COMMITTED subset alone.\n- criterion-artifact.ts:65 passes `reviews.landingIntents` from the existing call.\n\nPROOF THROUGH THE REAL RUNTIME (repository-delivery-runtime.test.ts, real lander, real journal, real store): the POST-intent arm now reads `readReviewLedgers(f.store, f.projectId, new Set([\"a\"]))`, asserts the code is NOTHING_TO_COMMIT, asserts `landingIntents?.size` is 1, and asserts the predicate is FALSE under message POST_INTENT_REFUSAL_MUST_NOT_BE_CREDITED — the governor's reproducer, landed. The PRE-intent arm mirrors it: `landingIntents` toEqual `new Set()` and the predicate TRUE under PRE_INTENT_REFUSAL_MUST_BE_CREDITED. The two differ only in whether an intent exists.\n\nSET-LEVEL VARIANTS AT ALL THREE SEAMS, 10 new arms, every one asserting the seam's specific outcome (artifact null / non-null at a named sha, goalHasLandedCommit true/false, the exact goalOffers roster, publicationGoalIntegrated plus its ancestry-check count) — never merely \"became publishable\". (a) key present -> NOT credited; (b) DIFFERENT verifierReceiptId -> credited; (c) null -> NOT credited. Intents are written by the PRODUCTION writer `recordRepositoryLandingIntent`, which validates the handle it is given; only the undecodable body is planted, via the production `writeRecoveryFact`, because no writer produces one.\n\ncomment-6f251c2f (REFUSED_NO_EFFECT is wider than a successful no-op) is answered by the code half and said so in the predicate doc: every other pre-intent refusal carries a different code, so nothing was widened.\n\nPEER DIRT, noted and untouched: apps/daemon/src/preview/preview-goal-landing.test.ts is still `??` (a peer's untracked WIP), so preview stays out of this row.",
       "startedAt": "2026-09-09T19:53:43.760Z",
+      "completedAt": "2026-09-10T10:50:34.088Z",
       "amendments": [
         {
           "amendmentId": "amend-1",
@@ -118,11 +130,24 @@
     {
       "stepId": "step-7",
       "description": "ADVERSARIAL SELF-REVIEW and the three follow-ups, then complete. Attack the change: does counting NOTHING_TO_COMMIT let a goal close whose node was accepted by review but never actually executed — no, the receipt binds verifierReceiptId (node-lander.ts:207-210) and goal-live-evidence.ts:129-132 checks that binding; confirm and cite. Can a post-intent GIT_COMMIT_FAILED be laundered into NOTHING_TO_COMMIT by a crash between journal and receipt — trace node-lander.ts:223-234 and state what receipt a crash there leaves (none, then recovery), so no. Does the affordance layer now offer publish for a goal with NOTHING to push, and is PUSHED-on-up-to-date acceptable — yes by design, say so. What does readIntegratedCriterionArtifact answer for an ALL-no-effect goal (baseline HEAD) and can a criterion check run against it — the runner needs only root/sha/treeSha; confirm. MUTATION DRILLS: revert criterion-artifact.ts:48 to the all-COMMITTED test and confirm the mixed arm goes RED; make goal-landing-facts count ALL refusals and confirm the GIT_COMMIT_FAILED arm goes RED; same at publication-goal-integration. Process-local transforms preferred; on-disk only with no full-suite lease held, backup at `%TEMP%/moe-task-f7d38f75-<basename>-<workerId>`, hash the LIVE file at window-open, SHA256 restore proof in a SEPARATE call. THREE FOLLOW-UPS as COMMENTS, not rows (delivery-bias rail): (1) on task-b8ec9a638f6540c28798c29f23fd5ada (release evidence, WORKING): release-durable-facts.ts:44-46 must treat a NOTHING_TO_COMMIT node as contributing no landing sha, not as a gap — quote this row's decision. (2) on this row: preview-goal-landing.ts:80-86 needs the same rule; blocked here by the untracked peer test file; name the owner if `git log`/board shows one. (3) on this row: control-room goal-publish.tsx:63-69 \"No node of this goal is landed as a commit yet\" is now wrong for a no-effect goal; cosmetic, control-room lane, one line. Report all seven touched paths in complete_step.modifiedFiles.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/criterion-evidence/criterion-artifact.ts",
         "apps/daemon/src/repository/publication-goal-integration.ts"
       ],
+      "modifiedFiles": [
+        "apps/daemon/src/repository/landing-receipt-contracts.ts",
+        "apps/daemon/src/repository/goal-landing-facts.ts",
+        "apps/daemon/src/repository/publication-goal-integration.ts",
+        "apps/daemon/src/criterion-evidence/criterion-artifact.ts",
+        "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts",
+        "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
+        "apps/daemon/src/repository/goal-landing-facts.test.ts",
+        "apps/daemon/src/repository/publication-goal-integration.test.ts"
+      ],
+      "note": "ADVERSARIAL REVIEW, DRILLS AND FOLLOW-UPS DONE. Full record in comment-7f419285 (attack answers + three drill kills), comment-d0dc35b3 (the NEW fourth-gate finding) and comment-550e75fe (preview addendum). Gate table in comment-65024738.\n\nATTACK 2 RE-ANSWERED: the original \"no\" was wrong. Traced at node-lander.ts — attempt 1 journals an intent inside commitJournaledLanding (:223) and returns GIT_INDEX_LOCKED at :227-230 WITHOUT recording a receipt; the seat's bytes are reverted between passes; attempt 2 hits delivered.length === 0 at :207 and mints NOTHING_TO_COMMIT at :208-210. Same code, work gone. The two-part rule closes it because the intent is durable and keyed to the acceptance.\n\nTHREE DRILLS, THREE KILLS, ZERO ON-DISK MUTATION — in-memory Vite transform, enforce \"pre\", temp config outside src, each anchor THROWING when absent so a silent no-op cannot pass as green; no full-suite lease held during any of them. (a) drop the journal clause -> POST_INTENT_REFUSAL_MUST_NOT_BE_CREDITED, expected true to be false. (b) collector skips the intent kind -> same arm, expected +0 to be 1, so the set is read from the store and does not default empty. (c) predicate ignores the code -> all four GIT_COMMIT_FAILED negatives RED across all three seams. Harness deleted; the leaf's review-read-model.ts has an EMPTY git diff, never written on disk from this row.\n\nTHE FINDING THIS PASS EXISTS FOR, and it is a gap I am NOT fixing here: goal-live-evidence.ts:139 — the goal-CLOSURE node leg — still credits by CODE ALONE. It keeps its own literal at :79, does not import landedWithNoEffect, and its verifierReceiptId guard at :129-132 catches a STALE landing, not a lost-work retry, so the reproducer's receipt passes it. It is not one of this row's ten declared paths and step 6 requires its test file to pass UNEDITED (it did). Exposure measured and bounded: a contract-bearing goal is now covered independently because criterion-artifact.ts returns null and closure refuses GOAL_CLOSE_CRITERIA_UNVERIFIED; the uncovered case is a goal with no approved contract or zero criteria, where goal-close-readiness.ts:64 answers NO_CONTRACT and the node leg is the only gate. Fix shape and file list are in comment-d0dc35b3.\n\nOTHER ATTACKS, all answered by measurement rather than assertion: no second store walk added (each seam still makes exactly one readReviewLedgers call, now destructured); a fresh acceptance after an old post-intent refusal IS credited and the DIFFERENT-verifier variant proves it at all three seams; fail-closed null is stated in the predicate doc with no permissive edge anywhere in the tree; all three call sites pass the set. Consistency bonus worth recording: set and landings come from ONE walk, so a reader can never see a receipt without the intent that preceded it — two walks would have that race, since the lander always writes the intent first.\n\nPurity and safety re-checked on the diff: all four changed production functions are pure reads over the durable ledger, no mutation, no new IO, no new error path; a COMMITTED receipt short-circuits before the predicate at every seam; refusal null and empty-set inputs both behave; the key is unambiguous because verifierReceiptId is fixed-width 64 hex.\n\nFOLLOW-UPS: four now, all comments, no new rows. (1) release-durable-facts on task-b8ec9a63, (2) preview seam with the two-part addendum, (3) control-room card, (4) the goal-live-evidence closure leg above. No files changed in this step — the eight paths listed are the row's delivered set, unchanged since step 6.",
+      "startedAt": "2026-09-10T10:50:36.445Z",
+      "completedAt": "2026-09-10T10:52:37.635Z",
       "amendments": [
         {
           "amendmentId": "amend-1",
@@ -142,7 +167,7 @@
       "activeAmendmentId": "amend-2"
     }
   ],
-  "status": "WORKING",
+  "status": "REVIEW",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -246,22 +271,47 @@
       "author": "governor-608c8a78",
       "content": "GOVERNANCE FINAL OVERLAY CONSISTENCY09:57: step6 amend-2 is the corrected fail-closed collector-consumer split and dependency5e96 is now liveWORKING/a11. However step7 activeamend-1 STILL asks 'Is the fail-open edge for an undecodable intent body stated in the doc?' and refers to readReviewLedgers as this row's on-disk drill target despite that production scope moving to the leaf. Therefore 'no further architect work' is premature: an architect must align step7 with fail-closed/null-history behavior and split ownership, preserving the intended non-vacuity coverage (process-local read-only transforms do not require product-source ownership, on-disk edits do). Five completed steps must remain intact. After the bounded final overlay fix/voluntary handoff, supported SPEED route PLANNING->AWAITING_APPROVAL->WORKING can return this row withdependsOn intact; it need not sitPLANNING awaiting leaf completion and churn architect claims. No governor approval of remaining contradictory text, no full replan/reset required.",
       "timestamp": "2026-09-10T09:58:02.316Z"
+    },
+    {
+      "id": "comment-65024738c7774d879df68d5ff7c2a507",
+      "author": "worker-a11dcf70",
+      "content": "STEP 6 GATE TABLE (amend-2). Base HEAD 67125ad1. Leaf task-5e96bf69 confirmed DONE and landed at e5e6475f; its `landingIntents`/`landingIntentKey` exports read off disk before editing. review-read-model.ts and repository-landing-intent.ts NOT touched by this row (git diff both = EMPTY).\n\nLEG 1 — scoped, foreground, standalone, no pipes:\n`pnpm --filter @moe/daemon exec vitest run --config package.json --maxWorkers=1 --testTimeout=300000 src/criterion-evidence/criterion-integrated.test.ts src/repository/goal-landing-facts.test.ts src/repository/publication-goal-integration.test.ts src/repository/publication-approval.test.ts src/goals/goal-live-evidence.test.ts src/goals/goal-close-readiness.test.ts src/orchestrator/compiled-node-identity.test.ts src/orchestrator/repository-delivery-runtime.test.ts`\n  Test Files  8 passed (8)\n       Tests  97 passed (97)          EXIT 0\nPrior scoped baseline was 7 files / 81 tests; it rose to 8/97. goal-live-evidence.test.ts and compiled-node-identity.test.ts passed UNEDITED.\n\nLEG 2 — `pnpm --filter @moe/daemon typecheck` -> EXIT 0 (`$ tsc --project tsconfig.json`).\n\nLEG 3 — DoD 5 under full-suite-gate. GATE START 10:40:26Z, GATE END 10:53Z, lease released.\n`pnpm --filter @moe/daemon test`\n  Test Files  2 failed | 608 passed (610)\n       Tests  8 failed | 10990 passed | 13 skipped (11011)      EXIT 1\n\nTHE RED IS FOREIGN AND IS DISCLOSED, NOT HIDDEN. All 8 are in src/monitoring/health-probe-schedule.test.ts (6) and src/daemon-store-dependencies.test.ts (2), verbatim:\n  expected [ 60000, 60000 ] to deeply equal [ 60000 ]\n  expected undefined to be false\n  expected [ 10000, 20000, 60000, 60000 ] to deeply equal [ 10000, 20000, 60000 ]\n  expected [ 20000, 30000, 60000, 60000 ] to deeply equal [ 20000, 30000, 60000 ]\n  expected [ 10000, 60000, 60000 ] to deeply equal [ 10000, 60000 ]\n  expected [ 10000, 10000, 60000, 60000 ] to deeply equal [ 10000, 10000, 60000 ]\n  expected 2 to be 1   (x2, \"stops retired dedicated/sweep probes without erasing history\")\nOwner: task-24b68b05's second DurableSchedule job (registerReleaseAutoDecide), already in the merge-base.\n\n(2)-MINUS-(1) MEASURED, NOT ARGUED. I served the MERGE-BASE (HEAD) source of all four production files this row changed from an in-memory vitest transform (zero on-disk mutation) and re-ran both failing files. Two throws armed at opposite ends and neither fired: BASE_ALREADY_CARRIES_DIFF (proves each dump is pre-row) and LIVE_FILE_IS_NOT_MUTATED (proves each live file is post-row). Positive proof the substitution actually happened, printed per module:\n  BASESTATE_SERVED: /src/repository/landing-receipt-contracts.ts\n  BASESTATE_SERVED: /src/repository/goal-landing-facts.ts\n  BASESTATE_SERVED: /src/repository/publication-goal-integration.ts\n  BASESTATE_SERVED: /src/criterion-evidence/criterion-artifact.ts\nResult with the diff ABSENT: `Tests 8 failed | 40 passed (48)` — the SAME 8 arms, arm for arm. Delta intersected with owned paths = EMPTY. Harness deleted; `ls basestate-f7d38f75*` -> No such file or directory.\n\nLEG 3b — the exit-0 leg I am submitting as task.verification, the same blast-radius superset QA re-ran and approved on the sibling row task-5e96bf69 hours ago (its reviewSummary records the identical 8 foreign failures):\n`cd apps/daemon && npx vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 --testNamePattern=\"^(?!.*LIVE_PROVIDER:)\" src/review src/repository src/criterion-evidence src/goals src/http src/preview src/orchestrator`\n  Test Files  202 passed (202)\n       Tests  2676 passed | 9 skipped (2685)      EXIT 0\nSibling's recorded baseline on the same command was 2666 passed; +10 is exactly this row's 10 new arms (3 criterion, 4 goal-landing-facts, 3 publication-goal-integration).",
+      "timestamp": "2026-09-10T10:50:08.658Z"
+    },
+    {
+      "id": "comment-7f419285dead40f9a845c1189f89114f",
+      "author": "worker-a11dcf70",
+      "content": "STEP 7 — ADVERSARIAL SELF-REVIEW AND THREE MUTATION DRILLS.\n\nATTACK 2, RE-ANSWERED HONESTLY. The original plan answered \"can a post-intent refusal be laundered into NOTHING_TO_COMMIT\" with NO. That was WRONG, and comment-573c4f2c is the reproducer. The mechanism, traced at node-lander.ts: attempt 1 delivers bytes, `commitJournaledLanding` (:223) journals an intent, and the commit fails on a real index lock; :227-230 returns GIT_INDEX_LOCKED WITHOUT recording a receipt (\"A git failure that is not structural is reported, not recorded: the next pass retries\"). Between passes the seat's bytes are reverted. Attempt 2 reaches `delivered.length === 0` at :207 and mints NOTHING_TO_COMMIT at :208-210 — the SAME code as a legitimate no-op, with the node's work gone. \"Pre-intent by construction\" was a ONE-INVOCATION argument; across attempts the same code appears post-intent. The corrected two-part rule closes it: the intent is durable and keyed to the acceptance, so attempt 2's receipt fails `!journaledIntents.has(...)`.\n\nNO SECOND WALK ADDED FROM THIS ROW. `grep readReviewLedgers( ` over non-test sources: goal-landing-facts.ts:81, publication-goal-integration.ts:32, criterion-artifact.ts:59 — one call each, unchanged in count, now destructured/captured for `landingIntents`. The one-pass property itself is the leaf's arm (task-5e96bf69 DoD 1, killed by its drill B). CONSISTENCY BONUS worth naming: because the set and the landings come from the SAME walk, a reader can never see a receipt without the intent that preceded it. Two separate walks would have that race, since the lander always writes the intent before the receipt.\n\nFRESH ACCEPTANCE AFTER AN OLD POST-INTENT REFUSAL: credited, and PROVEN rather than asserted — the \"DIFFERENT verifier receipt\" variant exists at all three seams (criterion artifact resolves at the landed sha; goalHasLandedCommit TRUE; publicationGoalIntegrated TRUE with checks 0). The key carries the verifier receipt id, so a stale acceptance's intent cannot taint the current one.\n\nFAIL-CLOSED NULL IS IN THE PREDICATE DOC, and there is NO fail-open edge anywhere: \"FAIL CLOSED ON NULL: `readReviewLedgers` answers `null` when an intent decision did not decode, and unverifiable history gains no authority — null is not an empty set and credits NOTHING.\" amend-1's fail-open language is gone from the tree.\n\nNO SEAM CREDITS BY CODE ALONE — `grep landedWithNoEffect`: three call sites, all passing the set (criterion-artifact.ts:65, goal-landing-facts.ts:83, publication-goal-integration.ts:34). A FOURTH gate outside this row's scope still does; filed separately in the next comment.\n\nTHREE DRILLS, ZERO ON-DISK MUTATION. All three ran as an in-memory Vite `transform` with `enforce: \"pre\"` from a temp config OUTSIDE src, keyed by env var, each anchor THROWING when absent so a silent no-op cannot masquerade as green. No `full-suite-gate` lease was held during any of them. Harness deleted afterwards; `git diff -- apps/daemon/src/review/review-read-model.ts` is EMPTY (the leaf's file was never written on disk from this row) and `ls drill-task-f7d38f75*` answers No such file or directory.\n(a) drop `!journaledIntents.has(...)` from the predicate -> repository-delivery-runtime.test.ts POST-intent arm RED: `AssertionError: POST_INTENT_REFUSAL_MUST_NOT_BE_CREDITED: expected true to be false`.\n(b) make `readReviewLedgers` skip the intent kind -> the SAME arm RED at `expect(after.landingIntents?.size).toBe(1)`: `AssertionError: expected +0 to be 1`. The set really is populated from the store; it does not default empty. (The size assertion fires before the predicate one, which is why that is the quoted failure.)\n(c) make the predicate ignore the code -> all FOUR GIT_COMMIT_FAILED negatives RED, across all three seams: criterion `expected { …(3) } to be null`; goal-landing-facts fact `expected true to be false` and its offer twin `expected [ 'goal.close@goal-1', …(1) ] to deeply equal [ 'goal.close@goal-1' ]`; publication `expected true to be false`.\n\nDoD 3, for the record: its \"refusal decided BEFORE any journaled landing intent\" wording is satisfied by the corrected TWO-PART rule (the code AND no journaled intent for that acceptance), NOT by the withdrawn \"pre-intent by construction\" argument. Drill (a) is what proves the post-intent half is load-bearing.",
+      "timestamp": "2026-09-10T10:51:42.185Z"
+    },
+    {
+      "id": "comment-d0dc35b3b5514dedb101be022b2259bd",
+      "author": "worker-a11dcf70",
+      "content": "FOLLOW-UP 4, NEW, FOUND BY THE STEP-7 ADVERSARIAL PASS — the goal-CLOSURE node leg is the one gate this row did NOT correct, and it still credits by CODE ALONE. Filed as a comment per the delivery-bias rail, not as a row.\n\nMEASURED, not inferred, at the delivered tree:\n- `apps/daemon/src/goals/goal-live-evidence.ts:79` keeps its OWN copy of the literal (`const LANDING_NOTHING_TO_COMMIT = \"NOTHING_TO_COMMIT\"`) and does NOT import `landedWithNoEffect` — `grep -n \"landedWithNoEffect\\|LANDING_NOTHING_TO_COMMIT\" goal-live-evidence.ts` returns only :79, :139, :144.\n- :139 is the whole test: `if (code !== LANDING_NOTHING_TO_COMMIT) return refuseClosure(GOAL_CLOSE_VERIFICATION_NOT_PASSED, ...)`, then :143-145 returns the node as a LIVE leg with `landing: LANDING_NOTHING_TO_COMMIT`. The reproducer's laundered receipt passes it.\n- Its one extra guard does NOT catch this. :129-132 refuses when `landing.verifierReceiptId !== accepted.verifierReceiptId`; in the reproducer the receipt attests exactly the current acceptance, so that check is satisfied. That guard catches a STALE landing, not a lost-work retry.\n- It reads `readReviewLedgers(store, projectId, new Set([nodeRef]))` at :164 and takes `.landings` only, so the intent set is available at that call site for free — the fix is the same shape as the three seams this row corrected, not a new walk.\n\nWHY THIS ROW DID NOT FIX IT, stated plainly rather than left implicit: `goal-live-evidence.ts` is not among this row's ten declared paths, and step 6 names it in the opposite direction — goal-live-evidence.test.ts must pass UNEDITED because it pins the closure node leg this row must not disturb. Editing it here would be taking an eleventh path after a governor already rejected this row for scope creep once (msg-3623a98c). It passed unedited: 8 files / 97 tests green in leg 1.\n\nEXPOSURE, bounded honestly. For a CONTRACT-BEARING goal the hole is now covered by a different gate: criterion-artifact.ts returns null for the laundered node, so goal.close refuses GOAL_CLOSE_CRITERIA_UNVERIFIED independently. The uncovered case is a goal with no approved contract or zero approved criteria — goal-close-readiness.ts:64 returns NO_CONTRACT for exactly that and the criteria gate does not apply, leaving the node leg as the only gate. So: a criterion-free goal can still CLOSE over a node whose bytes were lost to a reverted retry.\n\nTHE FIX, for whoever takes it: pass the walk's `landingIntents` into the check and replace the bare code comparison with `landedWithNoEffect(landing, landingIntents)` imported from `repository/landing-receipt-contracts.js`, deleting the local literal at :79. That also removes the \"keeps its own copy on purpose\" divergence my own module comment now documents. Its test file will need the post-intent negative and the null negative, mirroring the three seams. One production file, one test file.",
+      "timestamp": "2026-09-10T10:52:01.269Z"
+    },
+    {
+      "id": "comment-550e75fe86364e50aa14fac5042f694b",
+      "author": "worker-a11dcf70",
+      "content": "ADDENDUM TO THE PREVIEW FOLLOW-UP (comment-5c197f55), the one line step 7 asks for: when `preview-goal-landing.ts` is fixed it must use the CORRECTED TWO-PART predicate — `landedWithNoEffect(receipt, landingIntents)` — never the NOTHING_TO_COMMIT code alone, or it re-opens exactly the lost-work hole the governor's reproducer (comment-573c4f2c) demonstrated.\n\nStill measured at the delivered tree: `readGoalLandingStatus` at preview-goal-landing.ts:81-85 already calls `readReviewLedgers` and destructures `{ landings }` only, so `landingIntents` is available at that call site for free, the same shape as the three seams this row corrected. Its rule is stricter than the others — `.outcome !== \"COMMITTED\"` puts a node in `missing`, so preview refuses PREVIEW_GOAL_NOT_LANDED for ANY no-effect node, not just a laundered one.\n\nSTILL BLOCKED FROM THIS ROW BY THE SAME COLLISION, re-checked this session, not carried over on faith: `git status --porcelain -- apps/daemon/src/preview/preview-goal-landing.test.ts` answers `?? apps/daemon/src/preview/preview-goal-landing.test.ts` — an untracked peer WIP, exactly as it was at plan time. Writing preview logic here would put my bytes under a test file I cannot see the intent of, and an untracked peer file has no undo. `git log --oneline -- apps/daemon/src/preview/preview-goal-landing.test.ts` returns nothing, so the file has never landed and no commit names an owner; the board shows no row holding the preview seam. Whoever picks this up should re-check that `??` first — if the peer has landed by then, the two-part fix is one destructure and one predicate call.\n\nThe other two follow-ups stand unchanged and are NOT re-posted: the control-room card (comment-598c3e3c) and the release-durable-facts note on task-b8ec9a638f6540c28798c29f23fd5ada. Both now also inherit the two-part rule rather than the code alone.",
+      "timestamp": "2026-09-10T10:52:13.999Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T15:00:40.393Z",
-  "updatedAt": "2026-09-10T10:21:06.168Z",
+  "updatedAt": "2026-09-10T10:53:47.656Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T17:08:24.544Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 5
+    "executedStepCount": 7
   },
   "contextFetchedBy": [
     "architect-978f68c6",
     "worker-0e797912",
     "worker-409b958a",
-    "governor-608c8a78"
+    "governor-608c8a78",
+    "worker-a11dcf70"
   ],
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -271,7 +321,9 @@
     "step-2",
     "step-3",
     "step-4",
-    "step-5"
+    "step-5",
+    "step-6",
+    "step-7"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-09T19:36:14.229Z",
@@ -329,17 +381,16 @@
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-b8ec9a638f6540c28798c29f23fd5ada.json",
-    ".moe/tasks/task-f7d38f752b074dc89da30631783aae04.json",
     "apps/daemon/src/criterion-evidence/criterion-artifact.ts",
     "apps/daemon/src/criterion-evidence/criterion-integrated.test.ts",
-    "apps/daemon/src/preview/preview-goal-landing.ts",
     "apps/daemon/src/repository/goal-landing-facts.test.ts",
-    "apps/daemon/src/repository/goal-landing-facts.ts",
-    "apps/daemon/src/repository/landing-receipt-contracts.ts",
-    "apps/daemon/src/repository/publication-approval.test.ts",
     "apps/daemon/src/repository/publication-goal-integration.test.ts",
-    "apps/daemon/src/repository/publication-goal-integration.ts"
+    "apps/daemon/src/repository/publication-approval.test.ts",
+    "apps/daemon/src/repository/landing-receipt-contracts.ts",
+    "apps/daemon/src/repository/goal-landing-facts.ts",
+    "apps/daemon/src/preview/preview-goal-landing.ts",
+    "apps/daemon/src/repository/publication-goal-integration.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts"
   ],
   "touchedFiles": [
     "apps/daemon/src/repository/publication-goal-integration.ts",
@@ -393,5 +444,16 @@
       "releasedBy": "architect-ed42e60a",
       "reason": "Re-plan complete by amendment (step-6 amend-1, step-7 amend-1). Row needs a governor status hop PLANNING→WORKING for a fresh wrapper seat; architect claim released so the hop is unobstructed."
     }
-  ]
+  ],
+  "declaredFiles": [
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts"
+  ],
+  "reviewStartedAt": "2026-09-10T10:53:47.656Z",
+  "verification": {
+    "command": "cd apps/daemon && npx vitest run --root . --config package.json --maxWorkers=4 --testTimeout=30000 --testNamePattern=\"^(?!.*LIVE_PROVIDER:)\" src/review src/repository src/criterion-evidence src/goals src/http src/preview src/orchestrator",
+    "exitCode": 0,
+    "outputTail": " Test Files  202 passed (202)\n      Tests  2676 passed | 9 skipped (2685)\n   Start at  13:48:12\n   Duration  85.18s (transform 15.43s, setup 0ms, import 111.16s, tests 208.44s, environment 10ms)\n\nEXIT=0",
+    "reportedAt": "2026-09-10T10:53:47.656Z"
+  },
+  "completionSummary": "A no-effect landing now counts toward goal progress, but ONLY when it provably owed no bytes. `landedWithNoEffect(receipt, journaledIntents)` is a TWO-PART rule: the NOTHING_TO_COMMIT code AND no landing intent journaled for that acceptance. Null intent history (any intent decision that fails to decode) credits NOTHING. Three seams pass the set from their EXISTING readReviewLedgers call, so no second store walk was added: goal-landing-facts.ts:83, publication-goal-integration.ts:34, criterion-artifact.ts:65.\n\n\"Pre-intent by construction\" is WITHDRAWN and deleted from the tree. The governor's reproducer (comment-573c4f2c) is real: a retry after a journaled intent whose bytes were reverted mints the SAME code with the node's work lost. It is landed as a committed arm in repository-delivery-runtime.test.ts under POST_INTENT_REFUSAL_MUST_NOT_BE_CREDITED, with the pre-intent arm as positive control, over the real lander, real journal and real store.\n\n10 new arms, each asserting the seam's SPECIFIC outcome (artifact null / non-null at a named sha, goalHasLandedCommit, the exact goalOffers roster, publicationGoalIntegrated plus its ancestry-check count) — never merely \"became publishable\". Every seam carries all three variants: key present -> NOT credited; DIFFERENT verifierReceiptId -> credited; null -> NOT credited. Intents written by the production writer; only the undecodable body is planted, via the production writeRecoveryFact.\n\nTHREE DRILLS, THREE KILLS, zero on-disk mutation (in-memory Vite transform, throwing anchors, no lease held): drop the journal clause -> the runtime arm RED; make the collector skip the intent kind -> same arm RED at size 0 vs 1, proving the set comes from the store; ignore the code -> all four GIT_COMMIT_FAILED negatives RED.\n\nVERIFICATION: scoped 8-file leg 8 passed / 97 tests EXIT 0 (baseline 7/81). typecheck EXIT 0. DoD 5's literal `pnpm --filter @moe/daemon test` is EXIT 1 and I am NOT claiming otherwise: 8 failures, all in monitoring/he"
 }

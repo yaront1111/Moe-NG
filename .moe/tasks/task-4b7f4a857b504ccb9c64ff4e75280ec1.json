@@ -56,12 +56,12 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Architect scope-restoration handoff after7693 actual DONE and verified split-checkpoint delivery; row unassigned0/5 allPENDING. Preserve all DoD/text. IMPORTANT newer consumer constraint: comment-c8df4535 on4b7 and2bf03192 onb587 identify deployment-infrastructure-generator.test.ts as an omitted asserting consumer, currently dirty-owned by925/b42. Resolve accurate scope and safe925 delivery ordering; retainb587 hold until resolved. Do NOT restore old arrays then automatically drop hold or reserve925's undelivered source. No product implementation/reset of completed work.",
+  "reopenReason": "Execute previously agreed b587 comment6e5748be part2 under operator unblock authorization:925 is QA DONE10:42 with generator consumer delivered5a61d91b and corrected canary completion1005cd9d. Fresh4b7 unassigned0/5. Architect must add accurate seventh consumer/assertions and stable guard refusal evidence before removing hold; existing six restored paths and work preserved.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "priority": "LOW",
@@ -112,7 +112,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T10:42:43.737Z",
-  "updatedAt": "2026-09-10T10:22:38.536Z",
+  "updatedAt": "2026-09-10T10:44:51.266Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T10:42:46.813Z",
     "plannedStepCount": 5,

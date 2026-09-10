@@ -18,6 +18,8 @@ import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js"
 import { createVerifiedWorkspacePort } from "../repository/git-verified-workspace-port.js";
 import { createRepositoryExecutionPort } from "../repository/repository-execution-port.js";
 import { recordLandingReceipt } from "../repository/landing-ledger.js";
+import { REPOSITORY_LANDING_INTENT_KIND, recordRepositoryLandingIntent } from "../repository/repository-landing-intent.js";
+import { writeRecoveryFact } from "../repository/repository-recovery-facts.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { calibration, packageItems, policyInput, submitPayload } from "../review/review-test-fixtures.js";
 import { NODE_VERIFIER_PRINCIPAL_ID, recordVerifierReceipt } from "../review/verifier-receipt-ledger.js";
@@ -131,6 +133,43 @@ it("records the native criterion outcome on the integrated Git SHA and invalidat
  */
 const NO_EFFECT = Object.freeze({ refusalCode: "NOTHING_TO_COMMIT" });
 const POST_INTENT = Object.freeze({ refusalCode: "GIT_COMMIT_FAILED" });
+const INTENT_ROOT = "D:/fixture-workspace";
+
+/**
+ * THE SECOND HALF OF THE DISCRIMINATOR, seeded through the PRODUCTION writer.
+ *
+ * `recordRepositoryLandingIntent` is the only thing that mints an intent, and it validates the
+ * handle it is given, so the bytes these arms read back are the bytes production commits. The
+ * NOTHING_TO_COMMIT code is ambiguous alone: a retry whose already-journaled work was reverted
+ * mints the same code with the node's bytes gone (repository-delivery-runtime.test.ts, the
+ * post-intent arm). Only the UNDECODABLE body is planted, because no writer produces one.
+ */
+function seedLandingIntent(
+  store: ReturnType<typeof boundWorld>, nodeRef: string, verifierReceiptId?: string,
+): void {
+  const accepted = readReviewLedger(store, PROJECT_ID, nodeRef).accepted;
+  const receiptId = verifierReceiptId ?? accepted?.verifierReceiptId;
+  if (receiptId === undefined) throw new Error(`no acceptance names ${nodeRef}`);
+  const written = recordRepositoryLandingIntent(store, {
+    binding: { version: "moe-verified-workspace/1", root: INTENT_ROOT, branchRef: "refs/heads/trunk",
+      headSha: "1".repeat(40), treeSha: "2".repeat(40), dirtySha256: "3".repeat(64) },
+    handle: {
+      owner: { nodeRef, ownershipToken: "b".repeat(64), projectId: PROJECT_ID, storeId: "D:/store.sqlite" },
+      reservation: { baselineId: "baseline", controllerId: "controller", controllerPid: 23,
+        identity: { gitDirectory: `${INTENT_ROOT}/.git`, root: INTENT_ROOT }, nodeRef, phase: "LANDING",
+        pid: 31, projectId: PROJECT_ID, revision: 7, sessionId: "session", storeId: "D:/store.sqlite" },
+    },
+    message: "land\n", paths: ["owned.txt"], verifierReceiptId: receiptId,
+  });
+  if (!written.ok) throw new Error(written.code);
+}
+
+/** An intent decision whose BODY does not decode: the reader answers NULL, never an empty set. */
+function seedUnreadableIntent(store: ReturnType<typeof boundWorld>): void {
+  const written = writeRecoveryFact(store, PROJECT_ID, "planted-intent", REPOSITORY_LANDING_INTENT_KIND,
+    "repository-landing:planted", { version: "not-an-intent" });
+  if (!written.ok) throw new Error(written.code);
+}
 
 function repo(prefix: string): string {
   const root = realpathSync(mkdtempSync(join(tmpdir(), prefix)));
@@ -247,6 +286,51 @@ describe("the integrated criterion artifact over a node that landed nothing", ()
       // only root/sha/treeSha, nothing from a landing.
       expect(artifact).toMatchObject({ root, sha: baseline });
       expect(artifact?.treeSha).toBe(git(root, ["rev-parse", "--verify", "HEAD^{tree}"]));
+    } finally { rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); }
+  }, 180000);
+
+  it("REFUSES the mixed goal when node-b's own acceptance already JOURNALED a landing intent", async () => {
+    // The governor's reproducer at this seam: identical to the MIXED arm except an intent exists
+    // for node-b's acceptance, so its NOTHING_TO_COMMIT is a retry whose bytes were reverted.
+    const root = repo("moe-criteria-journaled-");
+    try {
+      const { goal, refOf, store } = integratedWorld(["node-a", "node-b"]);
+      await landForReal(store, root, refOf("node-a"), "product.txt");
+      seedReviewAcceptance(store, refOf("node-b"));
+      seedLandingIntent(store, refOf("node-b"));
+      seedLandingReceipt(store, refOf("node-b"), NO_EFFECT);
+
+      expect(readIntegratedCriterionArtifact(store, goal, root)).toBeNull();
+    } finally { rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); }
+  }, 180000);
+
+  it("RESOLVES the mixed goal when the journaled intent names a DIFFERENT verifier receipt", async () => {
+    // The key is (verifier receipt, node), so an intent from an EARLIER acceptance of the same
+    // node does not taint the current one. One literal apart from the arm above.
+    const root = repo("moe-criteria-other-verifier-");
+    try {
+      const { goal, refOf, store } = integratedWorld(["node-a", "node-b"]);
+      const sha = await landForReal(store, root, refOf("node-a"), "product.txt");
+      seedReviewAcceptance(store, refOf("node-b"));
+      seedLandingIntent(store, refOf("node-b"), "9".repeat(64));
+      seedLandingReceipt(store, refOf("node-b"), NO_EFFECT);
+
+      expect(readIntegratedCriterionArtifact(store, goal, root)).toMatchObject({ root, sha });
+    } finally { rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); }
+  }, 180000);
+
+  it("REFUSES the mixed goal when the intent history is UNREADABLE — null credits nothing", async () => {
+    // Fail closed. An intent was journaled and its bytes do not decode, so this layer cannot tell
+    // a legitimate no-effect landing from a retry that lost its work, and credits neither.
+    const root = repo("moe-criteria-unreadable-intent-");
+    try {
+      const { goal, refOf, store } = integratedWorld(["node-a", "node-b"]);
+      await landForReal(store, root, refOf("node-a"), "product.txt");
+      seedReviewAcceptance(store, refOf("node-b"));
+      seedUnreadableIntent(store);
+      seedLandingReceipt(store, refOf("node-b"), NO_EFFECT);
+
+      expect(readIntegratedCriterionArtifact(store, goal, root)).toBeNull();
     } finally { rmSync(root, { recursive: true, force: true, maxRetries: 20, retryDelay: 100 }); }
   }, 180000);
 

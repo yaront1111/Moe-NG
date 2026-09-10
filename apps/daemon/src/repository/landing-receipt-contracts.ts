@@ -3,17 +3,16 @@ import { createHash } from "node:crypto";
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonObject, JsonValue } from "@moe/contracts";
 
+import { landingIntentKey } from "./repository-landing-intent.js";
+
 /**
- * The durable shapes of GIT LANDING: what the wrapper's lander records when it
- * commits a verified node's files into the project's repository, and the
- * baseline it observed before the seat started so only the seat's own changes
- * are ever committed.
- *
- * Both records are the daemon's own facts, minted under a reserved principal
- * and an `internal.*` command kind, never dispatched from the wire. They mirror
- * the verifier receipt: exact keys, deterministic ids, a decoder that refuses
- * anything it did not write. A landing that did not happen is recorded as a
- * REFUSED receipt with its code — an absent landing is not a false one.
+ * The durable shapes of GIT LANDING: what the wrapper's lander records when it commits a
+ * verified node's files into the project's repository, and the baseline it observed before the
+ * seat started so only the seat's own changes are ever committed. Both records are the daemon's
+ * own facts, minted under a reserved principal and an `internal.*` command kind, never
+ * dispatched from the wire, and they mirror the verifier receipt: exact keys, deterministic ids,
+ * a decoder that refuses anything it did not write. A landing that did not happen is recorded as
+ * a REFUSED receipt with its code — an absent landing is not a false one.
  */
 
 export const NODE_LANDER_PRINCIPAL_ID = "daemon:node-lander" as const;
@@ -26,17 +25,25 @@ export const LANDING_BASELINE_COMMAND_KIND = "internal.repository.landing_baseli
 export const DELETED_BLOB = "DELETED" as const;
 
 /**
- * THE ONE REFUSAL CODE THAT MEANS "LANDED, WITH NO SHA TO BIND": the node ran, review accepted
- * it, no workspace path differed from the staffing baseline. Goal-progress gates CREDIT it as a
- * landing and gates binding a sha skip it — the rule, and why the code is the discriminator the
- * gates can actually read, is argued at `criterion-evidence/criterion-artifact.ts`. It lives here
- * so it cannot drift between gates; `goals/goal-live-evidence.ts` keeps its own copy on purpose.
+ * THE REFUSAL CODE THAT CAN MEAN "LANDED, WITH NO SHA TO BIND": the node ran, review accepted it,
+ * nothing differed from the staffing baseline. NECESSARY, NEVER SUFFICIENT — the rule is
+ * `landedWithNoEffect`. Kept here so it cannot drift; `goals/goal-live-evidence.ts` keeps a copy.
  */
 export const LANDING_NOTHING_TO_COMMIT = "NOTHING_TO_COMMIT" as const;
 
-/** True when this receipt attests a node that ran, was accepted, and had nothing to commit. */
-export function landedWithNoEffect(receipt: LandingReceiptV1): boolean {
-  return receipt.outcome === "REFUSED" && receipt.refusal?.code === LANDING_NOTHING_TO_COMMIT;
+/**
+ * True when this receipt attests a node that ran, was accepted, and OWED NO BYTES: the code AND
+ * no landing intent journaled for that acceptance. THE CODE ALONE CREDITS LOST WORK — a retry
+ * after a journaled intent whose bytes were reverted mints the SAME code with the node's changes
+ * gone (`orchestrator/repository-delivery-runtime.test.ts`, the post-intent arm). Every OTHER
+ * pre-intent refusal carries a DIFFERENT code, so the code half stays as narrow as it was.
+ * FAIL CLOSED ON NULL: `readReviewLedgers` answers `null` when an intent decision did not decode,
+ * and unverifiable history gains no authority — null is not an empty set and credits NOTHING.
+ */
+export function landedWithNoEffect(receipt: LandingReceiptV1, journaledIntents: ReadonlySet<string> | null): boolean {
+  return journaledIntents !== null && receipt.outcome === "REFUSED"
+    && receipt.refusal?.code === LANDING_NOTHING_TO_COMMIT
+    && !journaledIntents.has(landingIntentKey(receipt.subjectRef, receipt.verifierReceiptId));
 }
 
 export interface LandingBaselineEntry {

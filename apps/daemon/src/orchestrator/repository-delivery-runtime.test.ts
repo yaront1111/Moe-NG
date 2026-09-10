@@ -8,8 +8,8 @@ import { afterEach, describe, expect, it } from "vitest";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { calibration, envelope, packageItems, policyInput, seedVerifierReceipt, send, submitPayload } from "../review/review-test-fixtures.js";
-import { landingAggregateId } from "../repository/landing-receipt-contracts.js";
-import { readReviewLedger } from "../review/review-read-model.js";
+import { landedWithNoEffect, landingAggregateId } from "../repository/landing-receipt-contracts.js";
+import { readReviewLedger, readReviewLedgers } from "../review/review-read-model.js";
 import { NODE_VERIFIER_PRINCIPAL_ID, readVerifierReceipt } from "../review/verifier-receipt-ledger.js";
 import { createRepositoryExecutionPort } from "../repository/repository-execution-port.js";
 import { AgentProcessFailureError } from "./agent-spawn-contract.js";
@@ -170,6 +170,15 @@ describe("production repository delivery composition", () => {
     expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a", held.handle)).toBe("REFUSED_NO_EFFECT");
     // Without a handle the intent key cannot be computed at all, so the answer fails closed to REFUSED.
     expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a")).toBe("REFUSED");
+    // THE POSITIVE CONTROL for the goal-progress predicate, over this same real store: the code
+    // is NOTHING_TO_COMMIT and the walk found NO intent for this acceptance, so the goal-progress
+    // gates credit it. Its twin below is the same code with an intent journaled.
+    const pre = readReviewLedgers(f.store, f.projectId, new Set(["a"]));
+    const noEffect = pre.landings.get("a");
+    if (noEffect === undefined) throw new Error("expected a landing receipt for node a");
+    expect(noEffect.refusal?.code).toBe("NOTHING_TO_COMMIT");
+    expect(pre.landingIntents).toEqual(new Set());
+    expect(landedWithNoEffect(noEffect, pre.landingIntents), "PRE_INTENT_REFUSAL_MUST_BE_CREDITED").toBe(true);
     expect(createRepositoryExecutionPort().inspect(f.workspace)).toEqual({ ok: true, reservation: null });
   }, 120_000);
 
@@ -198,6 +207,16 @@ describe("production repository delivery composition", () => {
     const held = createRepositoryExecutionPort().readOwned(f.workspace, f.storeId, f.projectId);
     if (!held.ok || held.handle === null) throw new Error("expected the wedged reservation to still exist");
     expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a", held.handle)).toBe("REFUSED");
+    // THE GOVERNOR'S REPRODUCER, LANDED (comment-573c4f2c). Identical refusal CODE to the arm
+    // above, but this acceptance journaled an intent and the seat's bytes were reverted, so the
+    // node's work is LOST. Crediting it toward goal closure or a publish offer would credit lost
+    // work as landed — which is exactly what the code-alone rule did before this row.
+    const after = readReviewLedgers(f.store, f.projectId, new Set(["a"]));
+    const reverted = after.landings.get("a");
+    if (reverted === undefined) throw new Error("expected a landing receipt for node a");
+    expect(reverted.refusal?.code).toBe("NOTHING_TO_COMMIT");
+    expect(after.landingIntents?.size).toBe(1);
+    expect(landedWithNoEffect(reverted, after.landingIntents), "POST_INTENT_REFUSAL_MUST_NOT_BE_CREDITED").toBe(false);
     expect(createRepositoryExecutionPort().inspect(f.workspace)).toMatchObject({ ok: true, reservation: { phase: "BLOCKED" } });
     const next = await f.runtime.start(async () => ({ ok: true, pid: process.pid, exit: Promise.resolve() }))(f.request("b"));
     expect({ ok: next.ok, code: next.ok ? null : next.code }).toEqual({ ok: false, code: "REPOSITORY_EXECUTION_BUSY" });

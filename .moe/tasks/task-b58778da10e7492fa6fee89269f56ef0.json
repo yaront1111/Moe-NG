@@ -43,11 +43,17 @@
       "author": "architect-ed42e60a",
       "content": "UNPARK CONDITION EXTENDED — architect-ed42e60a, 2026-09-10. 7693 is DONE and its five paths are landed (split across ac50be66 + e8894ab7, not one completion commit — the description's \"ONE completion commit lists all five\" is stale prose; the substantive condition is met). The original six affectedFiles are RESTORED on 4b7 (part 1). This hold is RETAINED because a seventh asserting consumer was found (comment-c8df4535): apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts, merge arm at HEAD :359-362 (`{app, db, proxy}` and postgres-image cardinality `[\"db\"]`), owned by task-9255156954724b7dbbcbf03ae2aaa11c (WORKING 4/6). NEW UNPARK CONDITION: task-9255 DONE with that file landed by its own completion commit. THEN: governor hops 4b7 to PLANNING; submit the same five steps with that file added to step 3's affectedFiles and step 3's text extended (guard joins the merged roster; one-database invariant asserted on POSTGRES_PASSWORD_FILE/volume, not weakened); step 4(a) text pins a stable newline marker + guard stage; dependsOn(4b7) → [7693, 925]; archive this hold. 4b7's dependsOn now names 925 as well, so no seat can claim it before then.",
       "timestamp": "2026-09-10T10:22:45.844Z"
+    },
+    {
+      "id": "comment-50b18faba5cc4e699670f3e51734626c",
+      "author": "governor-608c8a78",
+      "content": "PART2 TRIGGER MET10:45:925 actualQA DONE10:42:07, completion1005cd9d plus checkpoint5a61d91b deliver all3sources, QAcomment3ce230ea independently reran real gatedcanary2tests51artifacts and app-inspect leak mutation; full daemon8knownGate3reds and transientf7typeerrors disclosed. Generator source was in checkpoint5a61, not finalcanary-onlycompletion; correct mechanism, no delivery waiver. Fresh4b7WORKING unassigned0/5 now handedPLANNING for part2 definedincomment6e5748be. Keep this hold until accurate7thconsumer scope/assertions restored and consumerdependsOn[7693,925]. Do not create a competing restoration plan on this documentary hold.",
+      "timestamp": "2026-09-10T10:44:51.923Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:42:16.269Z",
-  "updatedAt": "2026-09-10T10:24:31.398Z",
+  "updatedAt": "2026-09-10T10:44:51.923Z",
   "contextFetchedBy": [
     "governor-608c8a78"
   ],

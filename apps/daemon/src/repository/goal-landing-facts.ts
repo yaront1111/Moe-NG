@@ -10,18 +10,19 @@
  * content as well as the local node key. Bare legacy facts never unlock a scoped PUBLISH.
  *
  * LANDED MEANS "WITH OR WITHOUT A COMMIT" (task-f7d38f752b074dc89da30631783aae04, reading A).
- * A node whose landing refused `LANDING_NOTHING_TO_COMMIT` ran, was accepted, and provably had
- * no bytes to commit; withholding publish from it stalls publish, deploy and closure for a goal
- * that did exactly what was asked. The names below still say `hasLandedCommit` because
- * `affordance-read.ts:353,:383` and `compiled-node-identity.test.ts` consume them and a rename
- * would touch three files for no behaviour — read "landed", not "carries a sha".
+ * A node whose landing refused `LANDING_NOTHING_TO_COMMIT` AND journaled no intent for that
+ * acceptance ran, was accepted, and provably had no bytes to commit; withholding publish from it
+ * stalls publish, deploy and closure for a goal that did exactly what was asked. The names below
+ * still say `hasLandedCommit` because `affordance-read.ts:353,:383` and
+ * `compiled-node-identity.test.ts` consume them and a rename would touch three files for no
+ * behaviour — read "landed", not "carries a sha".
  *
  * THIS DOES NOT REOPEN THE PHANTOM PUBLISH CARD (UnAI 2026-09-04, task-f6f33a39), which is what
- * the COMMITTED-only rule was written for. That goal had NO landing receipt at all. A
- * NOTHING_TO_COMMIT receipt is a verifier-bound landing — node-lander.ts:208-210 mints it with
- * the node's `verifierReceiptId` — so the evidence the original gate demanded is still there.
- * Every OTHER refusal was decided after the lander journaled its intent to commit and still
- * counts for nothing; see `landing-receipt-contracts.ts` for why the code is the discriminator.
+ * the COMMITTED-only rule was written for. That goal had NO landing receipt at all. A credited
+ * no-effect receipt is a verifier-bound landing — the lander mints it with the node's
+ * `verifierReceiptId` — so the evidence the original gate demanded is still there. Every OTHER
+ * refusal counts for nothing, and so does a no-effect code whose acceptance DID journal an intent
+ * to commit; see `landing-receipt-contracts.ts` for why both halves are needed.
  */
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
@@ -77,9 +78,9 @@ function landedGoals(store: Store, projectId: string, folded?: DurableLedger): R
     const owners = nodeOwners(store, projectId, folded ?? readDurableLedger(store, projectId));
     if (owners.size === 0) return NONE;
     const landed = new Set<string>();
-    const { landings } = readReviewLedgers(store, projectId, new Set(owners.keys()));
+    const { landingIntents, landings } = readReviewLedgers(store, projectId, new Set(owners.keys()));
     for (const [nodeKey, receipt] of landings) {
-      if (receipt.outcome !== "COMMITTED" && !landedWithNoEffect(receipt)) continue;
+      if (receipt.outcome !== "COMMITTED" && !landedWithNoEffect(receipt, landingIntents)) continue;
       for (const goalRef of owners.get(nodeKey) ?? []) landed.add(goalRef);
     }
     return landed;
@@ -93,8 +94,8 @@ function landedGoals(store: Store, projectId: string, folded?: DurableLedger): R
 /** Answers the landing question for many goals at the cost of answering it for one. */
 export interface GoalLandingReader {
   /**
-   * True when at least one node of this goal LANDED: a COMMITTED receipt, or a refusal proving
-   * there was nothing to commit. The name is kept for its consumers; see the module header.
+   * True when at least one node of this goal LANDED: a COMMITTED receipt, or a refusal that
+   * `landedWithNoEffect` credits. The name is kept for its consumers; see the module header.
    */
   readonly hasLandedCommit: (goalId: string) => boolean;
 }
@@ -121,10 +122,11 @@ export function createGoalLandingReader(
 }
 
 /**
- * True when at least one node of this goal LANDED — a COMMITTED receipt, or one refusing
- * `LANDING_NOTHING_TO_COMMIT`, which attests a node that ran and had no bytes to commit. Any
- * OTHER refusal is a landing ATTEMPT that owed bytes and never delivered them, and does not
- * count; an unreadable store answers FALSE.
+ * True when at least one node of this goal LANDED — a COMMITTED receipt, or one `landedWithNoEffect`
+ * credits: `LANDING_NOTHING_TO_COMMIT` with no journaled intent for that acceptance, attesting a
+ * node that ran and had no bytes to commit. Any OTHER refusal is a landing ATTEMPT that owed bytes
+ * and never delivered them, and does not count; an unreadable store or an unreadable intent
+ * history answers FALSE.
  *
  * Single-shot. A caller asking about MORE than one goal should hold a `createGoalLandingReader`
  * instead, which shares the two walks across every question.
