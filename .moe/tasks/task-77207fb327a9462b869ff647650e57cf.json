@@ -145,7 +145,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:24:18.695Z",
-  "updatedAt": "2026-09-10T18:26:19.453Z",
+  "updatedAt": "2026-09-10T18:26:23.805Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T17:07:10.791Z",
     "plannedStepCount": 5,
@@ -214,6 +214,21 @@
       "treeId": "55384b699dbcc58c390ed049a8bc9f1ff2a53bbe",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "fe470b4060a3ffebadd74a42abe568afb3652eba",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-c85c997d@2026-09-10T18:26:20Z",
+      "paths": [
+        ".moe/tasks/task-77207fb327a9462b869ff647650e57cf.json"
+      ],
+      "recordedBy": "qa-c85c997d",
+      "recordedAt": "2026-09-10T18:26:23.805Z",
+      "treeId": "bb0acae611c155d6525571cbb0b639468ea30fba",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -221,23 +236,19 @@
     "apps/daemon/src/deployment/deploy-image-build.ts",
     "apps/daemon/src/repository/git-source-extract.ts",
     "apps/daemon/src/deployment/deploy-migration-context.test.ts",
-    "apps/daemon/src/deployment/migrate-down-real.test.ts"
+    "apps/daemon/src/deployment/migrate-down-real.test.ts",
+    ".moe/tasks/task-77207fb327a9462b869ff647650e57cf.json"
   ],
   "unattributedPaths": [
-    "apps/daemon/basestate-77207fb3.config.ts",
-    "apps/daemon/basestate-77207fb3/deploy-image-build.ts.txt",
-    "apps/daemon/basestate-77207fb3/deploy-migration-context.test.ts.txt",
-    "apps/daemon/basestate-77207fb3/deploy-migration-context.ts.txt",
-    "apps/daemon/basestate-77207fb3/git-source-extract.ts.txt",
-    "apps/daemon/basestate-77207fb3/migrate-down-real.test.ts.txt",
-    "apps/daemon/src/daemon-store-dependencies.test.ts",
-    "apps/daemon/src/monitoring/health-probe-schedule.test.ts"
+    "apps/daemon/basestate-4b7f4a85.config.ts",
+    "apps/daemon/basestate-4b7f4a85/generator.txt",
+    "apps/daemon/basestate-4b7f4a85/root-templates.txt"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-883dc9b4@2026-09-10T18:17:48Z",
-    "at": "2026-09-10T18:17:52.687Z"
+    "sessionId": "qa-c85c997d@2026-09-10T18:26:20Z",
+    "at": "2026-09-10T18:26:23.805Z"
   },
   "reviewStartedAt": "2026-09-10T18:26:11.106Z",
   "verification": {
