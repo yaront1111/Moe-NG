@@ -126,11 +126,19 @@
     {
       "stepId": "step-7",
       "description": "THE FENCE, BOTH DIRECTIONS (DoD 6), THE CENSUS (DoD 7), AND THE GATES. Fence arm in the new test file, enumerated from the SEAM per global rail 9: `S = [...registry.keys()].filter(k => OPERATOR_PRINCIPAL_KINDS.has(k))`; assert `wiredMcpToolKinds()` (mcp-tool-allowlist.ts:99) is DISJOINT from S; assert every registry kind absent from `wiredMcpToolKinds()` is either in S or has `agentCapabilitiesFor(kind) === null` — set-equality of the partition, not subset; assert `\"release.decide\"` is in S. Leave gates-human-only-fence.test.ts:153-178 and mcp-tool-allowlist.test.ts:157-160/:246-256 (:250 pins the excluded length 27) GREEN and UNTOUCHED. CENSUS: this row adds NO runtime command kind, so no GENERATED_CONTRACT_DIGEST mirror rotates — prove it by HEX, not by symbol (a symbol grep misses three mirrors): `git grep -n f1878eeaa08a050c12000a0e9885a4fef11c12c824602c1b50696d970f2dd295 -- . ':!.serena' ':!.moe' ':!.codex' ':!.grok'` must return the same six files as at plan time (data-adapter.test.ts, approve-plan-reject.test.tsx, approve-plan.test.tsx, plan-run-resolution.test.tsx, generated-coverage.test.ts, generated-client.ts); an arm asserts `\"internal.release.auto_approval\"` is NOT in RUNTIME_COMMAND_KINDS; `git grep -n \"release.decide\" -- apps/daemon/src/daemon-command-vocabulary.ts apps/daemon/src/mcp-tool-allowlist.ts` unchanged vs the merge-base. GATES, foreground, standalone, no pipes: `pnpm --filter @moe/daemon exec vitest run --config package.json --maxWorkers=1 --testTimeout=30000 src/release/release-auto-decide.test.ts` -> `Test Files 1 passed (1)` and `Tests N passed (N)` with N >= 15 (the arms named in steps 2-7); then `src/release/release-receipt-ledger.test.ts` still 8; then `pnpm --filter @moe/daemon typecheck` EXIT 0; then under `full-suite-gate` (acquire_resource; GATE START): `pnpm --filter @moe/daemon test` with its count line quoted and NONZERO, `pnpm typecheck` EXIT 0, and `pnpm --filter @moe/control-room test` quoted (cheap, and the census sits beside it); GATE END. Read the COUNT LINES, not exit codes. Path-attributed baseline for any foreign red.",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/release/release-auto-decide.test.ts"
       ],
+      "modifiedFiles": [
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/release/release-auto-decide.test.ts",
+        "apps/daemon/src/monitoring/health-probe-schedule.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "note": "STEP 7 (amend-1) COMPLETE — fence, census, both schedule consumers, the governor's restart defect FIXED, and all gates GREEN. Detail: comment-aa6e971c (this session's defect fix + drill) and comment-e4053e22 (the two consumers' repairs + their non-vacuity mutants).\n\nGATES, held full-suite-gate 18:36:41Z -> 18:46:30Z (GATE START/END posted). Count lines read, not exit codes.\n- pnpm --filter @moe/daemon test: `Test Files 611 passed (611)` / `Tests 11001 passed | 21 skipped (11022)`, EXIT 0. Run TWICE (21:37 and 21:42 local), identical counts. The 8 failures this row's own diff caused yesterday (`Test Files 2 failed | 608 passed (610)`) are GONE, not baselined. The 610 -> 611 FILE is a peer's untracked apps/daemon/src/preview/preview-goal-landing.test.ts executing in the shared checkout, NOT mine — my new arm is inside an existing file. Zero foreign red to attribute.\n- pnpm typecheck EXIT 0 (every package Done); pnpm --filter @moe/daemon typecheck EXIT 0.\n- pnpm --filter @moe/control-room test: `Test Files 207 passed (207)` / `Tests 2693 passed (2693)`, EXIT 0.\n- Scoped: src/release/release-auto-decide.test.ts `Test Files 1 passed (1)` / `Tests 43 passed (43)`; receipt-ledger + health-probe + store-dependencies together `Test Files 3 passed (3)` / `Tests 56 passed (56)` = 8 + 9 + 39.\n\nTHE PRODUCTION FIX (open governor concern 1, comment-176cec27 / 3c28cc45). The composition delegated every unreserved job id to `config.schedule?.resolve?.(id)`, so a host with a total resolver captured `release/auto-decide` at the constructor rebuild, and `arm()` (durable-schedule.ts:76-77) KEEPS the old callback when register arrives at the same interval — correct durable id, empty refusals, reconciler never runs. Fixed by RESERVING the id (`id === RELEASE_AUTO_DECIDE_JOB_ID ? null : ...`), 11 insertions / 5 deletions, durable-schedule.ts untouched so shared scheduler semantics do not move. NO PATH WIDENED: both files were already owned (composition by step 5, the test by steps 2-7); roster stays at 11. Disclosed to @governor-bd76ac8c at 18:33Z (msg-bf0e64f3) with an offer to revert if they read amend-1's fence wider than \"do not edit production to make the two consumer tests pass\".\n\nREGRESSION COMMITTED, not a transcript: `never binds release/auto-decide to a host resolver's callback across a restart` — real createStoreDependencies, real temp SQLite, multi-handle fake timer, total host resolver recording ids; boot/register unrelated durable job/close/reboot/fire all arms; `unrelated-host-job` fires the host fallback exactly once as the POSITIVE CONTROL, and the release id never appears. Asserts the EFFECT, not the resolver, so a fix at another layer would not falsely red it. NON-VACUITY, process-local (temp vitest config OUTSIDE the repo, `%TEMP%/moe-task-24b68b05-drill-26a27e7c.config.mjs`, task id in the path, anchor THROWS when absent): reverting the reservation gives `Tests 1 failed | 42 passed (43)`, the ONE red being that arm with `expected [ 'release/auto-decide' ] to deeply equal []` — the governor's `releaseFallbackCalls: 1` verbatim. Zero on-disk mutation; config deleted and absence proven; reservation anchor `grep -c` == 1.\n\nFENCE (DoD 6), enumerated from the SEAM: S = registry kinds ∩ OPERATOR_PRINCIPAL_KINDS; `wiredMcpToolKinds()` DISJOINT from S; the partition asserted as set equality, not subset; `release.decide` in S; an agent-seat dispatch refused OPERATOR_PRINCIPAL_REQUIRED 403 @ DAEMON_AUTHORIZATION. gates-human-only-fence.test.ts and mcp-tool-allowlist.test.ts left untouched and green inside the 611.\n\nCENSUS (DoD 7): no runtime kind added. HEX `f1878eea…2dd295` still returns EXACTLY the six plan-time files. `internal.release.auto_approval` asserted absent from RUNTIME_COMMAND_KINDS and from PAYLOAD_KEYS. `git diff --name-only 4161ad48..HEAD` and `git status --porcelain` on daemon-command-vocabulary.ts, mcp-tool-allowlist.ts and packages/core/src/policy/ are BOTH empty, so neither fence roster nor the frozen policy package moved, tracked or untracked.\n\nPEER DIRT, noted and untouched per the shared-checkout rail: preview-goal-landing.test.ts (untracked), Moe-NG_Deep_Review_2026-09-05.md, .moe/** and the role/config files. Never reverted, stashed or committed.",
       "startedAt": "2026-09-09T23:44:52.506Z",
+      "completedAt": "2026-09-10T18:47:17.725Z",
       "amendments": [
         {
           "amendmentId": "amend-1",
@@ -145,15 +153,33 @@
     {
       "stepId": "step-8",
       "description": "ADVERSARIAL SELF-REVIEW against the design's attack list, the DoD 5 DRILL, then complete. Attacks to answer in the record: A1 two ticks race (single-flight in-process; across two daemons the deterministic id makes the loser hit RELEASE_COMMAND_IN_PROGRESS or EXPECTED_VERSION_CONFLICT; admission is an atomic two-leg commit); A2 a stale version must be an outcome, never a throw the schedule flattens; A5 gap-free at evaluation but a gap before the PR — the service re-folds at dispatch and refuses; the orphaned auto record is acceptable; the REFUSED auto terminal parks the sha (state the bound in the module header); A6 a human REJECT between evaluation and commit bumps the aggregate by two, so the auto dispatch's pre-REJECT version is refused at :189/:190; A10 journal churn — confirm the three-tick unchanged-version arm; A12 a hostile `MOE_RELEASE_BASE`; A15 the sessionCredential placeholder is never authority (the wrapper recomputes identity from the server-known principal). DoD 5 DRILL on the REJECT branch (2) of release-auto-decide.ts — an UNTRACKED file, so `git diff` is blind: (i) `git status --porcelain apps/daemon/src/release/release-auto-decide.ts` (expect `??`); (ii) copy out of tree to `%TEMP%/moe-task-24b68b05-release-auto-decide-<workerId>.ts` — the task id in the path is mandatory; (iii) in a SEPARATE call, SHA256 of the live file equals the backup's AND the backup contains no mutant token (proves vintage); (iv) mutate: make the REJECT walk return false; (v) run the single file — ONLY the REJECT-wins arm goes RED (expected `RELEASE_COMMAND_ID_REQUIRED @ DAEMON_COMMAND_SEAM`, got a RELEASED receipt with provenance); if it stays GREEN a second layer answered first, typically expectedVersion because the fixture recorded the REJECT after the reconciler read the version — fix the fixture, not the assertion; (vi) restore by copying the backup back; (vii) SEPARATE call: live SHA256 equals the pre-drill hash; (viii) rerun GREEN. Never `git checkout --` or `git restore` on the shared tree; no full-suite lease held during the drill. Quote both hashes, the RED line and the GREEN count line in a row COMMENT before completionSummary (2000-char truncation). Report all nine touched paths in complete_step.modifiedFiles.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/release/release-auto-decide.ts",
         "apps/daemon/src/release/release-auto-approval.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/release/release-auto-approval.ts",
+        "apps/daemon/src/release/release-auto-approval.js",
+        "apps/daemon/src/release/release-auto-approval-record.ts",
+        "apps/daemon/src/release/release-auto-approval-record.js",
+        "apps/daemon/src/release/release-auto-decide.ts",
+        "apps/daemon/src/release/release-auto-decide.js",
+        "apps/daemon/src/release/release-auto-decide.test.ts",
+        "apps/daemon/src/release/release-receipt-contracts.ts",
+        "apps/daemon/src/release/release-receipt-ledger.ts",
+        "apps/daemon/src/release/release-decide-service.ts",
+        "apps/daemon/src/daemon-store-foundation-composition.ts",
+        "apps/daemon/src/monitoring/health-probe-schedule.test.ts",
+        "apps/daemon/src/daemon-store-dependencies.test.ts"
+      ],
+      "note": "STEP 8 COMPLETE — adversarial review answered arm by arm, DoD 5 drill RE-RUN fresh at the delivered tree. Full record: comment-65e537b6.\n\nDoD 5 DRILL, mine, not inherited (I changed production after b42eccd4's 18:04Z drill). Mutant `if (walk.rejectedBy !== null) {` -> `if (false as boolean) {` at release-auto-decide.ts:220, PROCESS-LOCAL via a temp vitest config outside the repo (`%TEMP%/moe-task-24b68b05-dod5-26a27e7c.config.mjs`, task id in the path) whose transform THROWS GATE3_DOD5_ANCHOR_MISSING when the branch is absent. RESULT `Tests 1 failed | 42 passed (43)`; the ONE red is `A RECORDED HUMAN REJECT WINS` at :498 on `expected 'RELEASED' to be 'HUMAN_REJECTED'` — the daemon overturning a human, which is the defect the arm exists to catch. Exactly one arm red, so nothing else answers first. RESTORE: zero on-disk mutation; config deleted and absence proven; anchor `grep -c` == 1; `git status --porcelain -- apps/daemon/src/release/` lists ONLY the test file, so the production module is byte-identical to HEAD. Clean re-run `Test Files 1 passed (1)` / `Tests 43 passed (43)` EXIT 0. No lease held during the drill.\n\nATTACK LIST, each answered by a COMMITTED arm, not prose: A1 concurrency :616; A2 DomainRefusal-as-outcome-never-throw :593 (DurableSchedule flattens throws to SCHEDULE_CALLBACK_FAILED and discards the reason, so an escaped refusal is an invisible refusal); A5 gap re-fold at dispatch :525 asserting the prerequisite row's landed CRITERION_NOT_VERIFIED_AT_SHA; A6 REJECT-between-evaluation-and-commit :488 + :509; A10 journal churn :548 (three ticks, aggregate untouched); A12 absent/hostile MOE_RELEASE_BASE :570 with the ordering pinned by :560; A15 sessionCredential is never authority :791 + :903 + :809. Plus this session's new restart-callback arm :985.\n\nDELIBERATELY NOT DONE, recorded as follow-up rather than filed as rows (delivery-bias rail): (1) a REFUSED automatic terminal parks that (goal, sha) for a human permanently — documented in the module header; a retry policy minting fresh command ids is an unmade product decision. (2) release-evidence-read.ts still withholds provenance from the card projection, so the UI cannot yet distinguish an automatic release from a human one although the receipt bytes carry it.\n\nMODIFIED FILES: the full 13-path roster for the row, not just this step — 11 owned paths plus the two `.js` bridges that pair with them. The four dirty at this exit are daemon-store-foundation-composition.ts, release-auto-decide.test.ts, health-probe-schedule.test.ts and daemon-store-dependencies.test.ts; the rest landed in this row's earlier wip commits. Peer dirt (preview-goal-landing.test.ts untracked, Moe-NG_Deep_Review_2026-09-05.md, .moe/**, role and codex/grok config files) untouched: never reverted, stashed or committed.",
+      "startedAt": "2026-09-10T18:47:29.155Z",
+      "completedAt": "2026-09-10T18:49:13.004Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-26a27e7c",
+  "status": "REVIEW",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -232,16 +258,28 @@
       "author": "worker-b42eccd4",
       "content": "STEP 7 (amend-1) + STEP 8 DRILLS — worker-b42eccd4, 2026-09-10 ~18:0xZ. Four mutants, ALL PROCESS-LOCAL: a temp vitest config OUTSIDE src (`apps/daemon/qa-drill-24b68b05.config.ts`) with an `enforce: \"pre\"` transform keyed on `QA_DRILL`, anchor THROWS when absent so a silent no-op cannot read as green. ZERO on-disk mutation, so there is nothing to restore — required here because a peer (worker-a11dcf70, task-4b7f4a857b) has held `full-suite-gate` since 17:58:43Z and an on-disk drill under a live lease voids their run.\n\n=== THE TWO SCHEDULE CONSUMERS: PRE-FIX RED REPRODUCED, THEN FIXED ===\nPre-fix, at the row's own diff: `src/monitoring/health-probe-schedule.test.ts` = `Tests 6 failed | 3 passed (9)`, e.g. `expected [ 10000, 10000, 60000, 60000 ] to deeply equal [ 10000, 10000, 60000 ]` at :229 and `expected 2 to be 1` at :264. Post-fix: `Test Files 1 passed (1)` / `Tests 9 passed (9)`; `src/daemon-store-dependencies.test.ts` `Tests 39 passed (39)`; the two together `Test Files 2 passed (2)` / `Tests 48 passed (48)`.\n\nFIXED AT THE ROOT, NOT BY BUMPING A LITERAL, and no production file was touched to make them pass.\n- health-probe-schedule.test.ts: new `probeOwned(id)` (= `HEALTH_PROBE_JOB_ID` or `healthProbeJobEnvironment(id) !== null`), `durableRoster(store)`, `foreignRoster(store)` and `probeIntervals(timer, store)`. The last still measures on the TIMER's own set-minus-clear ledger — so a doubled or never-cleared PROBE arm is still visible — then narrows by removing exactly one live arm per FOREIGN registration, keyed by id. It ASSERTS each foreign job is armed rather than assuming it, so the subtraction cannot silently decay. 8 call sites replaced `timer.liveIntervals()`. The :264 total-arm delta became `timer.arms.length - arms - foreignRoster(store).length === 1`.\n- daemon-store-dependencies.test.ts: the SINGLE-SLOT fake at the abort test was rebuilt as the keyed map the sibling in the same file already uses (`timers: Map<() => void, number>`); the armed set is now asserted against the DURABLE ROSTER read from the store, with the probe's own row pinned by `roster().get(HEALTH_PROBE_JOB_ID) === 60000`; ticks drive EVERY armed job (60_000 is no longer unique) and `calls` still counts only what reached `healthProbeHttp`; the `externalCalls` pin became a delta around the 250ms arm's own fire.\n\nNON-VACUITY — mutants against the HEALTH PROBE'S OWN scheduling in `daemon-store-foundation-composition.ts`:\n- A `schedules.register(HEALTH_PROBE_JOB_ID, healthProbe, 30_000)`: `Tests 10 failed | 38 passed (48)`. The narrowed arms are the ones that fired: `expected [ 10000, 20000, 30000 ] to deeply equal [ 10000, 20000, 60000 ]` (probeIntervals, 5 sites) and `expected 30000 to be 60000` (`roster().get(HEALTH_PROBE_JOB_ID)`).\n- B `const sweep = { ok: true } as const;` (probe never scheduled): `11 failed`. Includes `expected [] to deeply equal [...]` on probeIntervals, `expected undefined to be 60000` on the roster pin, AND `expected undefined to be defined` on `seen` in the REBUILT abort fake — proving the rebuilt keyed fake still observes the PROBE's signal, not merely some job's.\n\n=== DoD 5 DRILL, human-REJECT precedence in release-auto-decide.ts ===\n- C: `rejectedBy = event.decisionTrace?.principalId ?? \"an unnamed principal\";` -> `rejectedBy = null;` (the walk never records a REJECT).\n- D: `if (walk.rejectedBy !== null) {` -> `if (false as boolean) {` (the precedence branch never refuses).\nBoth: `Tests 1 failed | 41 passed (42)`, and the ONE red arm is `A RECORDED HUMAN REJECT WINS: the automatic path refuses and writes nothing`, failing `expected 'RELEASED' to be 'HUMAN_REJECTED'` — the automatic path overturned the human. Exactly one arm, no second layer answering first, so the arm is non-vacuous and it is the precedence check it tests.\n\nRESTORE PROOF (process-local, so this is an ABSENCE proof, not a SHA256 one): `rm` the config then `ls` answers `No such file or directory`; both DoD-5 anchors still `grep -c` == 1 in release-auto-decide.ts; `git status --porcelain -- apps/daemon/src/release/` is EMPTY (release-auto-decide.ts is TRACKED as of this row's wip commits, so that is a valid proof for it); `git diff --stat -- apps/daemon/src/daemon-store-foundation-composition.ts` EMPTY with its sweep-register anchor intact. Clean re-run after both drills: `src/release/release-auto-decide.test.ts` `Test Files 1 passed (1)` / `Tests 42 passed (42)`.",
       "timestamp": "2026-09-10T18:04:50.040Z"
+    },
+    {
+      "id": "comment-aa6e971c4eb94cc186bacf990fdc2e35",
+      "author": "worker-26a27e7c",
+      "content": "STEP 7 — THE GOVERNOR'S RESTART CALLBACK DEFECT IS FIXED AND REGRESSION-PINNED (worker-26a27e7c, 2026-09-10 ~21:2xZ). This closes open concern (1) of comment-3c28cc458b6340a58a3fda64a9367986 / comment-176cec277d6544928764b36f9c691bd0. NO PATH WAS WIDENED: both files are already owned by this row (daemon-store-foundation-composition.ts by step 5, release-auto-decide.test.ts by steps 2-7). amend-1's scope fence forbids a production edit *to make the two schedule-consumer TEST files pass*; those two are green without touching production, and this is a different thing — a defect in this row's OWN production diff.\n\nTHE DEFECT, confirmed exactly as the governor measured it. The composition's resolver reserved only the probe ids and DELEGATED everything else to `config.schedule?.resolve?.(id) ?? null`. A host that supplies a total resolver (every embedder may; both existing fixtures do) therefore binds `release/auto-decide` to a FOREIGN callback during the constructor rebuild. `arm()` at durable-schedule.ts:76-77 returns OK without replacing the callback when the interval is unchanged, so `registerReleaseAutoDecide`'s own registration at the same 60_000 SILENTLY LOSES: correct durable id, empty refusals, foreign code firing on the release schedule and the reconciler never running. The old comment claimed \"resolves to null here on purpose\" — that was true only of the no-resolver case, which is why the existing restart arm could not see it.\n\nTHE FIX, one expression in the resolver plus the corrected comment (11 insertions / 5 deletions, `git diff --stat`): `id === RELEASE_AUTO_DECIDE_JOB_ID ? null : config.schedule?.resolve?.(id) ?? null`. Reservation, not delegation — rebuild drops the arm, the transient SCHEDULE_TARGET_UNRESOLVED notice is cleared by `register`, and `register` owns the callback outright. Shared scheduler semantics are UNCHANGED: durable-schedule.ts is not touched, so \"re-registration at the same interval retains the callback and phase\" still holds for every other consumer.\n\nTHE REGRESSION ARM, committed (not a transcript): `never binds release/auto-decide to a host resolver's callback across a restart`, in the already-owned release-auto-decide.test.ts beside the existing restart arm. Real `createStoreDependencies`, real temp SQLite, multi-handle fake timer, a TOTAL host `resolve` that records the id it is asked for. Boot (2 arms, no fallback calls), register a durable `unrelated-host-job` at 250ms, close (0 arms), reboot (3 arms, `refusals()` empty), fire every arm. POSITIVE CONTROL: `unrelated-host-job` fires the host fallback exactly once, so an unreserved id really is captured and a zero below cannot come from a resolver that is never consulted. SUBJECT: the release id never appears in the fallback calls. It asserts the EFFECT, not the resolver, so a future fix at a different layer would not falsely red it.\n\nNON-VACUITY, process-local (full-suite-gate is peer-held by worker-ed22fae0 since 17:58Z with a LIVE vitest run measured at 21:19-21:22Z, so an on-disk drill would void their run). Temp vitest config OUTSIDE the repo at `%TEMP%/moe-task-24b68b05-drill-26a27e7c.config.mjs` (task id in the path), `enforce: \"pre\"` transform on the composition only, and it THROWS `GATE3_DRILL_ANCHOR_MISSING` when the reservation anchor is absent so a silent no-op cannot read as green. Mutant = the pre-fix delegation. Result: `Tests 1 failed | 42 passed (43)`, the ONE red being the new arm with `expected [ 'release/auto-decide' ] to deeply equal []` at :1030 — i.e. it reproduces the governor's `releaseFallbackCalls: 1` verbatim, and nothing else in the file depends on the reservation. RESTORE: zero on-disk mutation to restore; the config was deleted and its absence proven (`No such file or directory`); `grep -c` of the reservation anchor in the composition == 1; `git diff --stat` of the composition shows only the fix.\n\nGREEN AFTER THE FIX: `src/release/release-auto-decide.test.ts` `Test Files 1 passed (1)` / `Tests 43 passed (43)` (42 -> 43, the new arm). `src/release/release-receipt-ledger.test.ts` + `src/monitoring/health-probe-schedule.test.ts` + `src/daemon-store-dependencies.test.ts` together `Test Files 3 passed (3)` / `Tests 56 passed (56)` = 8 + 9 + 39, the same per-file counts worker-b42eccd4 recorded. `pnpm --filter @moe/daemon typecheck` EXIT 0.\n\nCENSUS (DoD 7), re-run at this tree: the digest HEX `f1878eea…2dd295` still returns EXACTLY the six plan-time files (data-adapter.test.ts, approve-plan-reject.test.tsx, approve-plan.test.tsx, plan-run-resolution.test.tsx, generated-coverage.test.ts, generated-client.ts). `git diff --name-only 4161ad48..HEAD -- daemon-command-vocabulary.ts mcp-tool-allowlist.ts packages/core/src/policy/` is EMPTY and `git status --porcelain` on the same paths is EMPTY, so neither fence roster nor the frozen policy package moved, tracked or untracked.",
+      "timestamp": "2026-09-10T18:22:53.003Z"
+    },
+    {
+      "id": "comment-65e537b6556547bf96eb15f7e2477bb1",
+      "author": "worker-26a27e7c",
+      "content": "STEP 8 — ADVERSARIAL SELF-REVIEW AND THE DoD 5 DRILL, RE-MEASURED AT THE DELIVERED TREE (worker-26a27e7c, 18:47-18:48Z). worker-b42eccd4 ran this drill at 18:04Z; I re-ran it myself rather than inherit a transcript, because I changed production since (the resolver reservation).\n\nDoD 5 DRILL, fresh. Mutant: `if (walk.rejectedBy !== null) {` -> `if (false as boolean) {` in release-auto-decide.ts:220, applied PROCESS-LOCALLY by a temp vitest config outside the repo (`%TEMP%/moe-task-24b68b05-dod5-26a27e7c.config.mjs`, task id in the path) whose transform THROWS `GATE3_DOD5_ANCHOR_MISSING` if the branch is absent, so a silent no-op cannot read as green. RESULT: `Test Files 1 failed (1)` / `Tests 1 failed | 42 passed (43)`. The ONE red is the right arm — `A RECORDED HUMAN REJECT WINS: the automatic path refuses and writes nothing` at :498 — failing `expected 'RELEASED' to be 'HUMAN_REJECTED'`. That is the defect itself: with the precedence branch disabled, the daemon overturned a human. Exactly one arm, so no second layer answers first and the arm is non-vacuous. RESTORE: zero on-disk mutation to restore. Config deleted, absence proven (`No such file or directory`); `grep -c` of the anchor == 1; `git status --porcelain -- apps/daemon/src/release/` lists ONLY release-auto-decide.test.ts (my new arm) — the production module is byte-identical to HEAD. Clean re-run: `Test Files 1 passed (1)` / `Tests 43 passed (43)`, EXIT 0. No lease held during either drill.\n\nTHE ATTACK LIST, each answered by a committed arm rather than by prose.\n- A1, two ticks race: `admits exactly ONE release command when two ticks run concurrently` (:616). In-process the schedule is single-flight per job id; across two daemons the deterministic commandId makes the loser hit RELEASE_COMMAND_IN_PROGRESS or EXPECTED_VERSION_CONFLICT, and admission is an atomic two-leg commit.\n- A2, a stale version must be an OUTCOME not a throw: `turns a DomainRefusal from the dispatch into an OUTCOME, never a throw` (:593). This is load-bearing because DurableSchedule flattens any throw to SCHEDULE_CALLBACK_FAILED and DISCARDS the reason — an escaped refusal would be an invisible refusal. Stated in the module header too.\n- A5, gap-free at evaluation but a gap before the PR: the service re-folds the dossier at dispatch and refuses; the orphaned auto-approval record is acceptable and named as such. `refuses a CRITERION GAP with the landed gap code and the prerequisite layer` (:525) asserts CRITERION_NOT_VERIFIED_AT_SHA, the spelling read off the prerequisite row's landed vocabulary, not invented here.\n- A6, a human REJECT between evaluation and commit: bumps the aggregate twice, so the auto dispatch's pre-REJECT expectedVersion is refused. Covered by the precedence arm above plus `refuses a sha a HUMAN already released, with the service's own code and layer` (:509).\n- A10, journal churn: `leaves the release aggregate UNTOUCHED across three ticks on a gap-bearing goal` (:548). This is what stops a stuck goal 409-ing a human's Decide card once a minute.\n- A12, hostile/absent MOE_RELEASE_BASE: `FAILS CLOSED with no configured base branch, even when policy allows the release` (:570), and `refuses when no opt-in is in force, BEFORE any base branch is consulted` (:560) proves the order.\n- A15, the sessionCredential placeholder is never authority: `refuses the dispatch under a daemon:* principal, naming the authorization layer` (:791) and `refuses a fully capable AGENT SEAT at the principal fence, with its layer` (:903). The fence binds the daemon's own call; only the composed operator id passes, asserted by `composes the reconciler under the configured operator id, never a reserved one` (:809).\n- NEW THIS SESSION, the governor's counterexample: `never binds release/auto-decide to a host resolver's callback across a restart` (:985). Detail and its mutant in comment-aa6e971c.\n\nWHAT I WOULD ATTACK NEXT, and deliberately did not do here (delivery-bias rail; these are follow-up material, not this row's): (1) the one-attempt-per-(goal, sha) bound means a REFUSED automatic terminal parks that sha for a human forever — documented in the module header, but a retry policy minting fresh ids is a real product decision nobody has made; (2) release-evidence-read.ts still withholds provenance from the card projection, so an operator reading the UI cannot yet tell an automatic release from a human one even though the receipt bytes carry it.",
+      "timestamp": "2026-09-10T18:48:52.906Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:05:30.360Z",
-  "updatedAt": "2026-09-10T18:17:06.376Z",
+  "updatedAt": "2026-09-10T18:49:53.605Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T19:36:44.792Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 9,
-    "executedStepCount": 6
+    "executedStepCount": 8
   },
   "priorHandoffs": [
     {
@@ -280,7 +318,9 @@
     "step-3",
     "step-4",
     "step-5",
-    "step-6"
+    "step-6",
+    "step-7",
+    "step-8"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-09T21:15:20.337Z",
@@ -395,22 +435,39 @@
       "treeId": "d219f90528278139bddb60716c600a9cb890e5ae",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "9b03d50df5f3daa26874604dd373ebab2e7f660a",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-26a27e7c@2026-09-10T18:17:06Z",
+      "paths": [
+        ".moe/tasks/task-24b68b05c865436ead05cd5ea375ff6f.json",
+        ".moe/tasks/task-4b7f4a857b504ccb9c64ff4e75280ec1.json",
+        ".moe/tasks/task-77207fb327a9462b869ff647650e57cf.json"
+      ],
+      "recordedBy": "worker-26a27e7c",
+      "recordedAt": "2026-09-10T18:17:10.987Z",
+      "treeId": "554beff9f031105c8cabb3f8e52bad3a36baffab",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-24b68b05c865436ead05cd5ea375ff6f.json",
-    "apps/daemon/src/daemon-store-foundation-composition.ts",
-    "apps/daemon/src/release/release-auto-approval.js",
-    "apps/daemon/src/release/release-auto-approval.ts",
-    "apps/daemon/src/release/release-auto-approval-record.js",
-    "apps/daemon/src/release/release-auto-approval-record.ts",
-    "apps/daemon/src/release/release-auto-decide.js",
-    "apps/daemon/src/release/release-auto-decide.test.ts",
-    "apps/daemon/src/release/release-auto-decide.ts",
     "apps/daemon/src/release/release-decide-service.ts",
+    "apps/daemon/src/release/release-auto-approval.ts",
+    "apps/daemon/src/release/release-auto-approval.js",
+    "apps/daemon/src/release/release-auto-approval-record.ts",
+    "apps/daemon/src/release/release-auto-approval-record.js",
+    "apps/daemon/src/release/release-auto-decide.test.ts",
     "apps/daemon/src/release/release-receipt-contracts.ts",
     "apps/daemon/src/release/release-receipt-ledger.ts",
-    ".moe/tasks/task-7693a195c01e45088b8545478aebd51f.json"
+    "apps/daemon/src/release/release-auto-decide.ts",
+    "apps/daemon/src/release/release-auto-decide.js",
+    "apps/daemon/src/daemon-store-foundation-composition.ts",
+    "apps/daemon/src/monitoring/health-probe-schedule.test.ts",
+    "apps/daemon/src/daemon-store-dependencies.test.ts"
   ],
   "touchedFiles": [
     "apps/daemon/src/release/release-decide-service.ts",
@@ -422,17 +479,38 @@
     "apps/daemon/src/release/release-auto-approval-record.ts",
     "apps/daemon/src/daemon-store-foundation-composition.ts"
   ],
-  "unattributedPaths": [],
+  "unattributedPaths": [
+    "apps/daemon/basestate-77207fb3.config.ts",
+    "apps/daemon/basestate-77207fb3/deploy-image-build.ts.txt",
+    "apps/daemon/basestate-77207fb3/deploy-migration-context.test.ts.txt",
+    "apps/daemon/basestate-77207fb3/deploy-migration-context.ts.txt",
+    "apps/daemon/basestate-77207fb3/git-source-extract.ts.txt",
+    "apps/daemon/basestate-77207fb3/migrate-down-real.test.ts.txt",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/monitoring/health-probe-schedule.test.ts"
+  ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-a11dcf70@2026-09-10T00:00:08Z",
-    "at": "2026-09-10T00:12:25.878Z"
+    "sessionId": "worker-26a27e7c@2026-09-10T18:17:06Z",
+    "at": "2026-09-10T18:17:10.987Z"
   },
   "blockedReason": null,
   "blockedResourceId": null,
   "blockedFromStatus": null,
   "blockedAt": null,
   "priorBlockedReason": "STEP 7 GATE RED FROM MY OWN DIFF; THE FIX IS IN TWO FILES NO STEP OWNS. Needs a step-7 amendment (amend_plan_step OVERLAY, NOT request_replan: six steps are delivered and green). Full measurement in comment-fa7f0940.\n\n`pnpm --filter @moe/daemon test` = `Test Files 2 failed | 608 passed (610)` / `Tests 8 failed | 10971 passed | 12 skipped (10991)`, EXIT 1. Cause: step 5's `registerReleaseAutoDecide` arms a SECOND timer at DEFAULT_SCHEDULE_INTERVAL_MS 60_000 on the shared DurableSchedule. Two files pin the WHOLE composed schedule as if the health probe were its only job:\n- `apps/daemon/src/monitoring/health-probe-schedule.test.ts`, 6 of 9 red: `expected [ 10000, 20000, 60000, 60000 ] to deeply equal [ 10000, 20000, 60000 ]` (:132; same shape :153/:191/:229) and `expected 2 to be 1` (:264).\n- `apps/daemon/src/daemon-store-dependencies.test.ts`, 2 of 39 red: `expected [ 60000, 60000 ] to deeply equal [ 60000 ]` (:1352) and `expected undefined to be false` (:1383), because its fake timer at :1372 is SINGLE-SLOT (`set: (cb) => { tick = cb; return cb; }`) so my job overwrites the probe's callback. Needs a keyed map like the sibling at :1333, not a roster bump.\n\nNeither path is in any step's affectedFiles. The \"grep the SHAPE, not the symbol\" rail binds me: report an unnamed consumer, never take the extra path, never reshape the producer to evade its check. I did NOT edit them and did NOT gate registration on `MOE_RELEASE_BASE` to dodge them.\n\nASK: amend step 7 to own those two paths (9 -> 11). I will narrow both to the health-probe arms so the NEXT job cannot red them either, plus rebuild the fake. ~10 lines.\n\nELSE GREEN: release-auto-decide.test.ts 42 passed (42); release-receipt-ledger 8; daemon typecheck 0; pnpm typecheck 0; control-room 207 files / 2693 tests; digest hex census still six files; vocabulary and allowlist untouched by this row. full-suite-gate RELEASED. Step 8 drill NOT done.",
-  "blockedOnTaskIds": null
+  "blockedOnTaskIds": null,
+  "declaredFiles": [
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/monitoring/health-probe-schedule.test.ts"
+  ],
+  "reviewStartedAt": "2026-09-10T18:49:53.605Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": " Test Files  611 passed (611)\n      Tests  11001 passed | 21 skipped (11022)\n   Start at  21:42:05\n   Duration  254.23s (transform 22.47s, setup 0ms, import 269.36s, tests 688.59s, environment 29ms)\n\nDAEMON_TEST_EXIT=0",
+    "reportedAt": "2026-09-10T18:49:53.605Z"
+  },
+  "completionSummary": "GATE 3 CLOSES ON MACHINE EVIDENCE. release.decide is now auto-approved server-side by a `release/auto-decide` job on the daemon's existing DurableSchedule, under a recorded R0/R1 opt-in, with a human still able to intervene and win. 43 arms in release-auto-decide.test.ts. Detail: comment-aa6e971c (the fix + its drill), comment-65e537b6 (attack list + DoD 5 drill), comment-0f38dfa3 (receipt deviation), comment-e4053e22 (the two schedule consumers).\n\nDoD 1: apps/daemon/src/release/release-auto-approval.ts calls evaluatePolicy from the bare `@moe/core`; no tier or opt-in logic reimplemented. DoD 2: an automatic release writes a receipt whose `provenance` NAMES the opt-in's action and tier, asserted by VALUE plus the absence of any second release.decide decision. DoD 3: a criterion gap refuses with CRITERION_NOT_VERIFIED_AT_SHA @ DAEMON_PREREQUISITE, the spelling read off the prerequisite row's landed vocabulary. DoD 4: R2/R3 carry HUMAN_ONLY_TIER with its layer; POLICY_AUTO_APPROVAL_TIERS still deep-equals ['R0','R1'] and packages/core/src/policy/ is untouched (diff AND git status both empty). DoD 5: a recorded human REJECT wins, proven non-vacuous by mutating the precedence branch — exactly one arm red, `expected 'RELEASED' to be 'HUMAN_REJECTED'`. DoD 6: fence enumerated from the dispatch SEAM, partition asserted as set equality; both rosters unchanged. DoD 7: gates below; no runtime kind added, digest HEX census still exactly six files.\n\nGATES, full-suite-gate held 18:36-18:46Z: `pnpm --filter @moe/daemon test` Test Files 611 passed (611) / Tests 11001 passed | 21 skipped (11022) EXIT 0, run TWICE with identical counts; `pnpm typecheck` EXIT 0; `pnpm --filter @moe/control-room test` 207 files / 2693 tests EXIT 0. The 8 failures this row's own diff caused are GONE, not baselined. The 610 -> 611 file is a peer's untracked preview-goal-landing.test.ts, not mine.\n\nFIXED THIS SESSION, the governor-confirmed restart defect (comment-176cec27): the composition delegated unr"
 }

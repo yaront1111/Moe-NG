@@ -6,7 +6,7 @@ import { expect, it } from "vitest";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { readDeployLedger, recordDeployReceipt } from "../deployment/deploy-ledger.js";
 import type { ScheduleTimer } from "../orchestrator/durable-schedule.js";
-import { HEALTH_PROBE_JOB_ID, HEALTH_PROBE_SIDECAR_SUFFIX, HEALTH_PROBE_VERSION, healthProbeJobId } from "./health-probe-contracts.js";
+import { HEALTH_PROBE_JOB_ID, HEALTH_PROBE_SIDECAR_SUFFIX, HEALTH_PROBE_VERSION, healthProbeJobEnvironment, healthProbeJobId } from "./health-probe-contracts.js";
 import { DEFAULT_PROBE_INTERVAL_MS, createProbeIntervalRecord } from "./probe-interval-record.js";
 import { createEnvironmentRetirementRecord } from "./environment-retirement-record.js";
 import { createHealthProbeRing, type HealthProbeRing } from "./health-probe-ring.js";
@@ -73,6 +73,38 @@ const registrations = (store: SqliteEventStore): readonly { id: string; interval
   store.readEvents(`durable-schedule/${PROJECT}`)
     .map((event) => JSON.parse(new TextDecoder().decode(event.payload)) as { id: string; intervalMs: number });
 
+/** The durable roster the schedule replays at boot: last write wins per job id. */
+const durableRoster = (store: SqliteEventStore): ReadonlyMap<string, number> => {
+  const roster = new Map<string, number>();
+  for (const entry of registrations(store)) roster.set(entry.id, entry.intervalMs);
+  return roster;
+};
+
+/** Job ids the HEALTH PROBE itself owns. Every other job on the shared DurableSchedule belongs to
+ * another subsystem — Gate 3's `release/auto-decide` was the first — and is none of this file's
+ * business. Keying on this, rather than on the composed roster, is what keeps these arms from
+ * going red the next time some unrelated subsystem registers a job. */
+const probeOwned = (id: string): boolean =>
+  id === HEALTH_PROBE_JOB_ID || healthProbeJobEnvironment(id) !== null;
+
+const foreignRoster = (store: SqliteEventStore): readonly (readonly [string, number])[] =>
+  [...durableRoster(store)].filter(([id]) => !probeOwned(id));
+
+/** The intervals the PROBE has LIVE, measured on the timer's own set-minus-clear ledger — so a
+ * doubled, stale or never-cleared probe arm is still visible — then narrowed to the probe by
+ * removing exactly one live arm per FOREIGN registration. */
+const probeIntervals = (timer: FakeTimer, store: SqliteEventStore): readonly number[] => {
+  const remaining = [...timer.liveIntervals()];
+  for (const [id, intervalMs] of foreignRoster(store)) {
+    const at = remaining.indexOf(intervalMs);
+    // This fixture's fallback resolver is total, so every foreign job IS armed. If one is not, the
+    // subtraction is unsound; say so rather than let the narrowing decay into a vacuous assertion.
+    expect(at, `foreign schedule job ${id} registered at ${intervalMs}ms is not armed`).not.toBe(-1);
+    remaining.splice(at, 1);
+  }
+  return remaining.sort((a, b) => a - b);
+};
+
 interface DaemonContext {
   boot: () => void;
   shutdown: () => void;
@@ -127,9 +159,9 @@ async function withDaemon(
 
 it("probes two environments at their own stored rates over one window", async () => {
   await withDaemon(["staging", "production"], new Map([["staging", 10_000], ["production", 20_000]]),
-    async ({ boot, counts, timer }) => {
+    async ({ boot, counts, store, timer }) => {
       boot();
-      expect(timer.liveIntervals()).toEqual([10_000, 20_000, DEFAULT_PROBE_INTERVAL_MS]);
+      expect(probeIntervals(timer, store)).toEqual([10_000, 20_000, DEFAULT_PROBE_INTERVAL_MS]);
       await timer.advance(60_000);
       // COUNTS, not the intervals the timer was ASKED for: 60s/10s = 6 and 60s/20s = 3.
       expect(counts.get("staging")).toBe(6);
@@ -150,7 +182,7 @@ it("applies a changed interval on the next sweep, with no daemon restart", async
       // ends this window is what reconciles staging onto its new rate — a bounded latency of one
       // sweep interval, which is the honest cost of not restarting.
       await timer.advance(60_000);
-      expect(timer.liveIntervals()).toEqual([20_000, 30_000, DEFAULT_PROBE_INTERVAL_MS]);
+      expect(probeIntervals(timer, store)).toEqual([20_000, 30_000, DEFAULT_PROBE_INTERVAL_MS]);
 
       const before = { production: counts.get("production") ?? 0, staging: counts.get("staging") ?? 0 };
       await timer.advance(60_000);
@@ -165,7 +197,7 @@ it("re-registers at boot without overwriting the stored intervals or doubling th
     async ({ boot, counts, shutdown, store, timer }) => {
       boot();
       await timer.advance(60_000);
-      const before = { armed: timer.liveIntervals(), registered: registrations(store) };
+      const before = { armed: probeIntervals(timer, store), registered: registrations(store) };
       expect([counts.get("staging"), counts.get("production")]).toEqual([6, 3]);
       shutdown();
       expect(timer.live()).toEqual([]);
@@ -178,7 +210,7 @@ it("re-registers at boot without overwriting the stored intervals or doubling th
       expect(registrations(store).filter((entry) => entry.id === HEALTH_PROBE_JOB_ID))
         .toEqual([{ id: HEALTH_PROBE_JOB_ID, intervalMs: DEFAULT_PROBE_INTERVAL_MS }]);
       // NO DOUBLE SCHEDULE, measured as set-minus-clear on the timer's own ledger.
-      expect(timer.liveIntervals()).toEqual(before.armed);
+      expect(probeIntervals(timer, store)).toEqual(before.armed);
       await timer.advance(60_000);
       // RATE EQUAL BEFORE AND AFTER, per environment: the second window matches the first exactly.
       expect([counts.get("staging"), counts.get("production")]).toEqual([12, 6]);
@@ -188,13 +220,13 @@ it("re-registers at boot without overwriting the stored intervals or doubling th
 it("schedules an environment that first appears between boots at the default rate", async () => {
   await withDaemon(["staging"], new Map([["staging", 10_000]]), async ({ boot, counts, shutdown, store, timer }) => {
     boot();
-    expect(timer.liveIntervals()).toEqual([10_000, DEFAULT_PROBE_INTERVAL_MS]);
+    expect(probeIntervals(timer, store)).toEqual([10_000, DEFAULT_PROBE_INTERVAL_MS]);
     shutdown();
 
     deploy(store, "preview"); // never deployed before, and it has NO stored interval
     boot();
     // No new arm: the sweep it belongs to is already running at the default.
-    expect(timer.liveIntervals()).toEqual([10_000, DEFAULT_PROBE_INTERVAL_MS]);
+    expect(probeIntervals(timer, store)).toEqual([10_000, DEFAULT_PROBE_INTERVAL_MS]);
     await timer.advance(60_000);
     expect(counts.get("preview")).toBe(1);
     expect(counts.get("staging")).toBe(6);
@@ -222,11 +254,11 @@ it("hands an environment back to the sweep when its interval record is cleared",
 
 it("gives two environments that share one interval two independent jobs", async () => {
   await withDaemon(["staging", "production"], new Map([["staging", 10_000], ["production", 10_000]]),
-    async ({ boot, counts, timer }) => {
+    async ({ boot, counts, store, timer }) => {
       boot();
       // `arm()` dedups by JOB ID, not by interval: an equal interval must not collapse two jobs
       // into one, and the only way to see that is two arms AND two probe counts.
-      expect(timer.liveIntervals()).toEqual([10_000, 10_000, DEFAULT_PROBE_INTERVAL_MS]);
+      expect(probeIntervals(timer, store)).toEqual([10_000, 10_000, DEFAULT_PROBE_INTERVAL_MS]);
       await timer.advance(60_000);
       expect([counts.get("staging"), counts.get("production")]).toEqual([6, 6]);
     });
@@ -261,8 +293,10 @@ it.each(["dedicated", "sweep"] as const)("stops retired %s probes without erasin
       }
       const arms = timer.arms.length, registered = registrations(store);
       boot(); // Neither restore nor reconciliation may arm a retired environment.
-      expect(timer.arms.length - arms).toBe(1);
-      expect(timer.liveIntervals()).toEqual([DEFAULT_PROBE_INTERVAL_MS]);
+      // ONE new PROBE arm — the sweep. Every foreign job re-arms at this boot too, so they are
+      // subtracted by id instead of being baked into the expected count.
+      expect(timer.arms.length - arms - foreignRoster(store).length).toBe(1);
+      expect(probeIntervals(timer, store)).toEqual([DEFAULT_PROBE_INTERVAL_MS]);
       expect(registrations(store)).toEqual(registered);
       await timer.advance(DEFAULT_PROBE_INTERVAL_MS);
       expect(ring.read("staging")).toEqual(before);

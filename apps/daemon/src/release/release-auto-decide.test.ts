@@ -972,6 +972,68 @@ describe("the live daemon composition arms the reconciler across a restart", () 
       rmSync(root, { force: true, recursive: true });
     }
   });
+
+  /**
+   * AN EMPTY REFUSAL LIST IS NOT CALLBACK IDENTITY, and the arm above cannot see the difference.
+   * When the host supplies its own `schedule.resolve` -- which `createStoreDependencies` accepts and
+   * every embedder may pass -- a rebuild that DELEGATED this job id would bind it to whatever that
+   * resolver answers, and `arm()` retains the existing callback when `register` arrives at the same
+   * interval, so the reconciler would never run: correct durable id, no refusals, foreign code on
+   * the release schedule. The reservation in the composition is what forbids it, and this arm is
+   * what proves the reservation, by EFFECT rather than by inspecting the resolver.
+   */
+  it("never binds release/auto-decide to a host resolver's callback across a restart", async () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-release-auto-resolver-"));
+    const project = "release-auto-resolver";
+    const timers = new Map<() => void, number>();
+    const fallbackCalls: string[] = [];
+    const boot = () => createStoreDependencies({
+      credential: "release-auto-operator-credential", principalId: "operator-local",
+      projectId: project, storePath: join(root, "store.db"),
+      schedule: {
+        // Total, like a real embedder's registry lookup with a default arm. This is the shape that
+        // turns delegation into a silent capture, so it is the shape the arm must survive.
+        resolve: (id: string) => () => { fallbackCalls.push(id); },
+        timer: {
+          clear: (handle: unknown) => { timers.delete(handle as () => void); },
+          set: (tick: () => void, intervalMs: number) => { timers.set(tick, intervalMs); return tick; },
+        },
+      },
+    });
+    const tickAll = async (): Promise<void> => {
+      for (const tick of [...timers.keys()]) tick();
+      await new Promise<void>((done) => setImmediate(done));
+    };
+    let provider: ReturnType<typeof boot> | null = null;
+    try {
+      provider = boot();
+      // The health sweep and this reconciler, both armed by their own registrations.
+      expect(timers.size).toBe(2);
+      await tickAll();
+      expect(fallbackCalls).toEqual([]);
+      // POSITIVE CONTROL: an id the composition does NOT reserve is delegated, so the host resolver
+      // really does capture durable jobs across a reboot. Without this, a zero below would be
+      // indistinguishable from a resolver that is never consulted for anything.
+      expect(provider.schedules().register("unrelated-host-job", () => { /* durable only */ }, 250))
+        .toEqual({ ok: true });
+      provider.close();
+      provider = null;
+      expect(timers.size).toBe(0);
+
+      provider = boot();
+      expect(timers.size).toBe(3);
+      expect(provider.schedules().refusals()).toEqual([]);
+      await tickAll();
+      expect(fallbackCalls.filter((id) => id === "unrelated-host-job")).toHaveLength(1);
+      // THE SUBJECT. The reconciler's arm fired in the same `tickAll`; it reached the reconciler,
+      // not the host, so the release id never appears here.
+      expect(fallbackCalls.filter((id) => id === RELEASE_AUTO_DECIDE_JOB_ID)).toEqual([]);
+    } finally {
+      provider?.close();
+      expect(timers.size).toBe(0);
+      rmSync(root, { force: true, recursive: true });
+    }
+  });
 });
 
 function bytes(value: unknown): Uint8Array {
