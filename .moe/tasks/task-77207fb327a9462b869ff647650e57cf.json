@@ -151,7 +151,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:24:18.695Z",
-  "updatedAt": "2026-09-10T18:32:12.427Z",
+  "updatedAt": "2026-09-10T18:33:25.926Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T17:07:10.791Z",
     "plannedStepCount": 5,
@@ -252,6 +252,21 @@
       "treeId": "aa8bff896db6b169f2f4f216343e831a5b199d84",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "165f5e3eaa99177091f9e1cdfa8fc811aedf6c1e",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-c85c997d@2026-09-10T18:26:20Z",
+      "paths": [
+        ".moe/tasks/task-77207fb327a9462b869ff647650e57cf.json"
+      ],
+      "recordedBy": "qa-c85c997d",
+      "recordedAt": "2026-09-10T18:33:25.926Z",
+      "treeId": "a6dccf8f01c19b3af405f24460f99f50bb2d6090",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -262,16 +277,12 @@
     "apps/daemon/src/deployment/migrate-down-real.test.ts",
     ".moe/tasks/task-77207fb327a9462b869ff647650e57cf.json"
   ],
-  "unattributedPaths": [
-    "apps/daemon/basestate-4b7f4a85.config.ts",
-    "apps/daemon/basestate-4b7f4a85/generator.txt",
-    "apps/daemon/basestate-4b7f4a85/root-templates.txt"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-883dc9b4@2026-09-10T18:17:48Z",
-    "at": "2026-09-10T18:26:55.550Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-c85c997d@2026-09-10T18:26:20Z",
+    "at": "2026-09-10T18:33:25.926Z"
   },
   "reviewStartedAt": "2026-09-10T18:26:11.106Z",
   "verification": {

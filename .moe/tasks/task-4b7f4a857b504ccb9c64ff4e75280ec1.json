@@ -75,16 +75,27 @@
     {
       "stepId": "step-5",
       "description": "THE GATES, BOTH LEGS, THEN THE ADVERSARIAL PASS.\n\nRUN BOTH AND QUOTE BOTH COUNT LINES: `pnpm --filter @moe/daemon test` and `pnpm --filter @moe/control-room test`, each EXIT 0. The control-room leg is MANDATORY, not optional (epic rail 2): two of the four version-literal sites live under apps/control-room, which is in NONE of `pnpm test` (the root vitest include has no `apps/**`), `pnpm typecheck`, or the daemon leg. Read the OUTPUT, not the exit code — a `--filter` leg prints \"No projects matched the filters\" and exits 0, and \"0 passed\" is exit 0 too, so the `Test Files N passed` count line is the only discriminator.\n\nAlso run `pnpm typecheck`. If a repo-wide leg reds at a path this row does not own, attribute it with the path-attributed baseline (repo-wide failures at the merge-base, then at HEAD, the delta intersected with this row's owned paths) and disclose it verbatim rather than fixing it.\n\nCOMPLETION RECORD. State plainly which branch of DoD 2 you took and why the other is closed: exact-byte authentication is not achievable from outside the image, because the entrypoint's `file_env` uses `$(< \"$file\")` and command substitution strips trailing newlines. Put the four probe classes and their outcomes in a row COMMENT — the completion summary truncates silently at 2000 characters and a severed evidence table reads as a skipped gate.\n\nADVERSARIAL PASS (load `adversarial-self-review`). Ask, in order: does the guard refuse a LEADING or EMBEDDED newline as well as a trailing one, and is that the behaviour you want — `wc -l` counts them all, so say whether that is deliberate? What happens on a host where the guard image cannot start — does the db start anyway, and is that fail-open? Does `service_completed_successfully` behave the way you assume when the guard exits nonzero, or does compose report something an operator will misread? Can the value reach a log through the guard's own stderr on any path? Does `DATABASE_URL` in `.env.example` carry the same hazard, since an operator pastes the same password into it — and if so, is that a comment on this row rather than a new one, per the delivery-bias rail? And the question the filing poses: after this change, can an operator with a trailing-newline password still reach a running database that holds a credential they cannot reproduce?",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
         "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts"
       ],
-      "startedAt": "2026-09-10T17:57:16.319Z"
+      "modifiedFiles": [
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-password-guard.test.ts",
+        "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts",
+        "apps/control-room/src/v2/products/live-new-product.tsx",
+        "apps/control-room/src/v2/products/live-new-product.test.tsx"
+      ],
+      "note": "THREE GATES GREEN, FOREIGN FLAKE ATTRIBUTED BY MEASUREMENT, ADVERSARIAL PASS DONE. Full evidence in comment-6ad0ba67 (gate table + attribution) and comment-173235c9 (six adversarial answers).\n\nGATES, all EXIT 0, count lines read from OUTPUT not exit code:\n- pnpm --filter @moe/daemon test: Test Files 611 passed (611); Tests 11001 passed | 21 skipped (11022)\n- pnpm --filter @moe/control-room test: Test Files 207 passed (207); Tests 2693 passed (2693)  [MANDATORY: two version mirrors live here, invisible to every daemon gate]\n- pnpm typecheck: EXIT 0, 14 packages Done\n- owned-file discriminator, run separately: 3 files, Tests 40 passed | 11 skipped (51), EXIT 0\n\nTHE FIRST DAEMON RUN WAS RED and I am disclosing it verbatim, not hiding it: src/release/release-auto-decide.test.ts, arm \"never binds release/auto-decide to a host resolver's callback across a restart\", `expected [ 'release/auto-decide' ] to deeply equal []`. Foreign file, owned by task-24b68b05 (worker-b42eccd4). Attributed with the (2)-minus-(1) delta, measured not argued: (a) a throwing-transform guard proved the arm DOES load my controlled-profile-generator.ts transitively, so the \"it never loads my code\" shortcut was unavailable; (b) the same arm passes 43/43 in isolation at HEAD with the diff present, so the red is order-dependent; (c) the whole leg re-ran green on the unchanged tree. Delta intersected with owned paths: EMPTY.\n\nDOCKER IS DOWN NOW (`docker version` exit 1, npipe dockerDesktopLinuxEngine not found), so I re-measured NOTHING live and make no fresh live claim. MOE_SCAFFOLD_PASSWORD_GUARD=1 fails all 7 arms with DEPLOY_DOCKER_UNAVAILABLE in ~135ms each — the opt-in contract refusing loudly rather than skipping silently, which is the designed behaviour. The 8/8 live proof stands as step 4's record.\n\nDoD 2 BRANCH TAKEN: explicit fail-closed validation. The other branch is CLOSED, not left open: exact-byte authentication is unreachable from outside the image because postgres's entrypoint `file_env` reads the secret with `$(< \"$file\")` and command substitution strips all trailing newlines. Nothing mounted from outside can survive that.\n\nADVERSARIAL RESIDUAL, LABELLED UNMEASURED: `docker compose up --no-deps db` bypasses depends_on by definition and would still reach the defect. Could not probe it (docker down), so it is a reading of compose semantics, not a measurement. Not closed, because the only compose-level fix is overriding postgres's own entrypoint — riskier than the row's slice. DATABASE_URL in .env.example shares the operator's paste but not the silent-divergence failure mode (the app consumes, it does not initdb); recorded for the epic-final hardening row rather than filed as a new row.\n\nFILES: this step changed no deliverable bytes — all seven owned paths landed at 72561308 and are tracked-clean. The temp attribution scaffolding (apps/daemon/basestate-4b7f4a85.config.ts and basestate-4b7f4a85/) was created and DELETED; git status shows no basestate path of mine. Peer dirt noted and untouched: apps/daemon/basestate-77207fb3*, apps/daemon/src/preview/preview-goal-landing.test.ts, .codex/*, .grok/*, .moe/*, Moe-NG_Deep_Review_2026-09-05.md.",
+      "startedAt": "2026-09-10T17:57:16.319Z",
+      "completedAt": "2026-09-10T18:32:10.315Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-ed22fae0",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-c85c997d",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -153,16 +164,28 @@
       "author": "worker-a11dcf70",
       "content": "SEAT COLLISION, YIELDED WITHOUT TOUCHING ANYTHING (worker-a11dcf70, session ending 2026-09-10 ~17:55Z).\n\nTWO LIVE SESSIONS SHARED THIS workerId ON THIS ROW. I claimed it, ran steps 1-3 and made the source edits; a twin session of the same seat then adopted those bytes, completed step-3 itself, and is now mid-step-4. My `moe.complete_step` for step-3 was refused `[INVALID_STATE] Step is in COMPLETED state` — the documented rival-mutex signal.\n\nLIVENESS MEASURED, NOT ASSUMED, before yielding:\n- `apps/daemon/src/repository/controlled-profile/controlled-profile-password-guard.test.ts` (untracked, 13350 bytes) was last written 17:53:37Z, 61s before my census. I did not create it; it is the twin's step-4 live-probe file.\n- 12 fresh node workers spawned at 20:54:54-55 local — a vitest run starting under the twin.\n- The row's JSON was written 17:50:20Z with step-3 COMPLETED and step-4 IN_PROGRESS.\nI did not overwrite, revert, stash or read-modify-write any of it. An untracked peer file has no undo.\n\nWHAT I CONTRIBUTED IS ON DISK AND MOSTLY COMMITTED. `c5241383` (20:47:38) carried my step-2 and step-3 source edits: the `db-password-guard` service and db `depends_on` in controlled-profile-root-templates.ts, the controlled-4 bump in all four literal sites plus the four prose mentions, the regenerated EXPECTED_DOCKER_COMPOSE, the moved golden row, and the new unit arm. My seventh-consumer edit in deployment-infrastructure-generator.test.ts (17:48:09Z) is on disk and is already listed in the twin's step-3 modifiedFiles, so it is attributed.\n\nMEASUREMENTS WORTH KEEPING, all made live and independently of the twin:\n\n1. GOLDEN DELTA IS EXACTLY ONE ROW. Diffed the full old GOLDEN_MANIFEST against a fresh emission programmatically: `docker-compose.yml ca06da38… -> 261dd4ea71c6a45be1e878572b246df4a9bf1376347815feb2d66819eef81e20`. 23 rows both sides, nothing dropped or added, GOLDEN_FILE_COUNT and pnpm-lock.yaml unmoved.\n\n2. STEP 4(a)'s WORDING NEEDS ONE CORRECTION TO BE TRUE. On a newline refusal compose DOES create the named volume and DOES create the db container, because it materialises the project before running the dependency. Measured: db `State.Status=created`, `StartedAt=0001-01-01T00:00:00Z`, `RestartCount=0`; the volume exists but is EMPTY (0 entries, `PG_VERSION` absent). \"No volume was created\" is not achievable; \"the db never reached a running state and the volume carries no postgres cluster\" is, and is the substance the clause is after.\n\n3. THE UNSET/EMPTY REFUSAL SURVIVES THE NEW DEPENDENCY VERBATIM. With the guard added, `docker compose up --detach db` on unset AND on empty still exits 1 with stderr exactly `secret \"POSTGRES_PASSWORD\" must declare either \\`file\\` or \\`environment\\`: invalid compose project` — compose refuses at project load, before any service is created.\n\n4. LEADING AND EMBEDDED NEWLINES REFUSE TOO, with the same `POSTGRES_PASSWORD_NEWLINE_UNSUPPORTED` marker. `wc -l` counts newline bytes anywhere.\n\n5. `pnpm --filter @moe/daemon test -- --run <paths>` DOES NOT SCOPE. The literal `--` reaches vitest as a match-everything filter and the entire 610-file suite runs. Use `pnpm --filter … exec vitest run <paths>`.\n\n6. FOREIGN RED AT HEAD, disclosed not fixed. Full daemon leg: `Test Files 2 failed | 608 passed (610)`, `Tests 8 failed | 10992 passed | 13 skipped (11013)`. The two files are `src/monitoring/health-probe-schedule.test.ts` and `src/daemon-store-dependencies.test.ts`, neither in this row's owned paths, both already red at HEAD before this row started.\n\n7. PRE-EXISTING DOCKER DEBRIS, not this row's: four containers ~20h old (`moe-liveproof-1788991205733-*`, `moe-liveproof-1788990677096-db`, postgres:16-alpine and caddy). Every scratch project I created was torn down to 0 containers / 0 volumes / 0 networks, label-filtered, and its tmpdir removed.\n\n8. PEER DIRT NOTED, UNTOUCHED: `apps/daemon/src/repository/git-source-extract.ts` (M) and `apps/daemon/src/preview/preview-goal-landing.test.ts` (??), plus `.codex/*`, `.grok/config.toml`, `Moe-NG_Deep_Review_2026-09-05.md`, `.moe/resources/*.json`.\n\nI am making NO terminal call on this row. The twin holds it and should carry it to `complete_task`.",
       "timestamp": "2026-09-10T17:55:29.674Z"
+    },
+    {
+      "id": "comment-6ad0ba67edff493da8fea4d23ca5ed02",
+      "author": "worker-ed22fae0",
+      "content": "STEP 5 GATE TABLE — three legs, all EXIT 0, count lines quoted. Run fresh 2026-09-10 18:19-18:40Z by worker-ed22fae0 under a renewed `full-suite-gate` lease (task-keyed; the prior seat worker-a11dcf70 was dead — zero vitest processes at 18:18Z, only daemon/LSP procs 2 min old).\n\n```\npnpm --filter @moe/daemon test        EXIT 0\n  Test Files  611 passed (611)\n  Tests  11001 passed | 21 skipped (11022)\n\npnpm --filter @moe/control-room test  EXIT 0\n  Test Files  207 passed (207)\n  Tests  2693 passed (2693)\n\npnpm typecheck                        EXIT 0\n  apps/daemon typecheck: Done   (last of 14 packages)\n```\n\nOWNED DAEMON FILES EXECUTE — the discriminator, run separately so the count line is not diluted by 611 files:\n```\nnpx vitest run --root . --config package.json --testNamePattern=\"^(?!.*LIVE_PROVIDER:)\" \\\n  src/repository/controlled-profile/controlled-profile-password-guard.test.ts \\\n  src/repository/controlled-profile/controlled-profile-generator.test.ts \\\n  src/repository/deployment/deployment-infrastructure-generator.test.ts\n  Test Files  3 passed (3)     Tests  40 passed | 11 skipped (51)     EXIT 0\n```\nThe 11 skips include this row's 7 `it.runIf(RUN_GUARD)` live arms. Their green run is step 4's record, NOT re-measured this session — see the DOCKER note below.\n\nA FOREIGN FLAKE, DISCLOSED VERBATIM. The FIRST daemon run (18:19Z) was EXIT 1:\n```\nFAIL  src/release/release-auto-decide.test.ts > the live daemon composition arms the reconciler across a restart\n      > never binds release/auto-decide to a host resolver's callback across a restart\nAssertionError: expected [ 'release/auto-decide' ] to deeply equal []\n Test Files  1 failed | 610 passed (611)\n      Tests  1 failed | 11000 passed | 21 skipped (11022)\n```\nThat file belongs to task-24b68b05 (worker-b42eccd4, WORKING, queued behind me on the gate). It is NOT in this row's owned paths and `git diff <pre-row> HEAD -- apps/daemon/src/release` is EMPTY, so no commit in this row's range touched it.\n\nATTRIBUTED BY MEASUREMENT, NOT BY ARGUMENT (global rail: (2)-minus-(1) ∩ owned). Pre-row anchor `6819424d2a9d17fdec7e131029342c5da7702262` (= `c5241383^`; all seven owned paths were tracked-clean there, recorded in step 1).\n1. REACHABILITY GUARD FIRST, because \"that file never loads my module\" is usually wrong. A temp vitest config whose `transform` THROWS on an owned id: `Error: OWNED PATH LOADED: /src/repository/controlled-profile/controlled-profile-generator.ts`. The failing arm DOES load this row's production module transitively. The cheap argument was unavailable.\n2. HEAD CONTROL, same harness, diff PRESENT (`MODE=off`): `Test Files 1 passed (1)  Tests 43 passed (43)`, EXIT 0. The arm passes in isolation at HEAD, so the red is order/concurrency-dependent, not deterministic.\n3. RE-RAN THE WHOLE LEG unchanged: `Test Files 611 passed (611)`, EXIT 0. Same tree, same command, red then green.\nConclusion: a flake in a peer's file. Delta ∩ owned paths is EMPTY. Nothing was hidden and no green was fabricated — the red is quoted above in full.\n\nThe base-serving config carried the two mandated throws (config-load: the dumped base must not already carry `controlled-4`/`db-password-guard`; transform-time: the live file must). Both scaffolding paths (`apps/daemon/basestate-4b7f4a85.config.ts`, `apps/daemon/basestate-4b7f4a85/`) were DELETED after the run; `git status --porcelain -- apps/daemon | grep basestate` returns nothing. Untouched peer debris left in place: `apps/daemon/basestate-77207fb3.config.ts`, `apps/daemon/basestate-77207fb3/`, `apps/daemon/src/preview/preview-goal-landing.test.ts`, and the modified `.codex/`, `.grok/`, `.moe/` paths.\n\nDOCKER IS DOWN ON THIS HOST RIGHT NOW, so the live arms could not be re-measured: `docker version` exits 1 with `failed to connect to the docker API at npipe:////./pipe/dockerDesktopLinuxEngine`. Running the file with `MOE_SCAFFOLD_PASSWORD_GUARD=1` failed all 7 arms with `AssertionError: DEPLOY_DOCKER_UNAVAILABLE` in ~135 ms each — which is the opt-in contract working as designed (flag set + no daemon = loud failure, never a silent skip), not a product defect. I make NO fresh live claim.",
+      "timestamp": "2026-09-10T18:31:21.044Z"
+    },
+    {
+      "id": "comment-173235c9b9f94c2eb4af1b16122afb45",
+      "author": "worker-ed22fae0",
+      "content": "STEP 5 ADVERSARIAL PASS — the six questions the step names, answered in order. Where an answer is a reading of compose semantics rather than a measurement I say so; docker is down on this host now, so nothing new was measured live this session.\n\n1. LEADING AND EMBEDDED NEWLINES REFUSE TOO, AND THAT IS DELIBERATE. `wc -l` counts newline BYTES anywhere in the file, not just a trailing one, so all three positions hit `POSTGRES_PASSWORD_NEWLINE_UNSUPPORTED` (measured in step 2's live validation). This deliberately OVER-refuses: `$(< \"$file\")` strips only TRAILING newlines, so an embedded newline would in fact survive into `initdb`. Refusing it anyway is the right trade — a `.env` line cannot carry a raw embedded newline without quoting in the first place, and a guard that has to distinguish positions would have to read the value's shape rather than count bytes. Counting is what keeps it from ever seeing the value.\n\n2. GUARD IMAGE CANNOT START -> DB DOES NOT START. This is not an inference; it is a committed arm: `refuses to start the database when the guard itself cannot start` (controlled-profile-password-guard.test.ts:270), which survives the commit and re-runs at the delivered tree. Its sibling `refuses to start the database when the guard cannot read the secret` (:252) covers the missing/unreadable-mount half via `POSTGRES_PASSWORD_SECRET_UNREADABLE`. Two distinct properties, two distinct markers, two separate arms — not one \"the guard failed\" assertion.\n\n3. `service_completed_successfully` ON A NONZERO EXIT reports `service \"db-password-guard\" didn't complete successfully: exit 1`, and compose exits 1. An operator WILL misread the residue, though, which is why the arms pin the substance rather than the docker objects: on refusal compose materialises the project FIRST, so the `db-data` volume IS created and the `db` container IS created — `State.Status=created`, `StartedAt=0001-01-01T00:00:00Z`, `RestartCount=0`, volume EMPTY with no `PG_VERSION`. `initdb` never ran and no credential was chosen. Step 4's plan text asked for \"no volume was created\"; that clause is not literally satisfiable and the arms assert the stronger true thing instead.\n\n4. THE VALUE CANNOT REACH A LOG ON ANY GUARD PATH. `wc -l < /run/secrets/postgres_password` passes the file on stdin, never as argv; `grep -qx 0` reads `wc`'s COUNT, not the file, and `-q` prints nothing. Both `echo`s are literals with no interpolation. There is no `cat` and no `set -x`. The guard block contains no `${...}`, so `docker compose config` cannot expand it — that is the trap the sibling row measured and rejected on the `x-` field (its comment-3e35496a). Fail-closed on the pipeline too: if `wc` errors its output is empty, `grep` finds no match, and the guard refuses.\n\n5. `DATABASE_URL` CARRIES A RELATED BUT LESSER HAZARD, AND IT IS A COMMENT NOT A ROW (delivery-bias rail). `.env.example` emits `DATABASE_URL=postgres://app:CHANGE_ME@localhost:5432/app`, and an operator pastes the same password into both. A trailing newline there does NOT silently initialise a divergent credential — the app is a CONSUMER of that string, not an initialiser, so it fails loudly at connect or URI-parse time and the operator's password still matches the database's. The defect this row exists to close is specifically the SILENT divergence at `initdb`. Filed here as a follow-up item for the epic-final hardening row rather than as a new row.\n\n6. THE FILING'S OWN QUESTION — CAN AN OPERATOR STILL REACH A DIVERGENT RUNNING DATABASE? Through the documented path, NO: `docker compose up`, and `docker compose up db` naming the service explicitly, both run `depends_on` and refuse at the guard. ONE RESIDUAL, AND I AM LABELLING IT UNMEASURED: `docker compose up --no-deps db` bypasses `depends_on` by definition, and would reach the original defect. I could not probe it this session (docker daemon down), so this is a reading of compose's documented flag semantics, NOT a measurement — do not grade it as one. I did not close it because the only compose-level fix is to override postgres's own entrypoint on the `db` service, which is a materially riskier change than the row's minimal slice and would put the check inside the image whose entrypoint is the thing being worked around. `--no-deps` is an explicit operator override of dependency ordering that also skips healthchecks; treating it as an escape hatch is consistent with how compose users read it. Recording it rather than silently shipping past it.\n\nNO NEW DEFECT FOUND IN THE DIFF. Concurrency: the guard is a one-shot with no `restart:` key (default `no`), so a second `up` re-runs it rather than racing a survivor. Inputs: empty and unset are refused a layer earlier, at compose project load, with the sibling's exact stderr — pinned verbatim by the `unset`/`empty` arms. Cleanup: every live arm tears down `--volumes --remove-orphans` in a `finally` with label-filtered zero counts.",
+      "timestamp": "2026-09-10T18:31:47.921Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T10:42:43.737Z",
-  "updatedAt": "2026-09-10T18:17:45.588Z",
+  "updatedAt": "2026-09-10T18:37:30.283Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T10:42:46.813Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "dependsOn": [
     "task-7693a195c01e45088b8545478aebd51f",
@@ -172,7 +195,8 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-10T17:39:26.037Z",
@@ -193,7 +217,8 @@
     "governor-608c8a78",
     "architect-978f68c6",
     "worker-a11dcf70",
-    "worker-ed22fae0"
+    "worker-ed22fae0",
+    "qa-c85c997d"
   ],
   "planSizeWarnings": [
     "Plan touches 7 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
@@ -252,27 +277,49 @@
       "treeId": "808bb9f91298f3a527f980ff2c178f027140a052",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "725613088aae668ca0bbc283f57480ebfa447504",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-ed22fae0@2026-09-10T18:17:46Z",
+      "paths": [
+        ".moe/tasks/task-4b7f4a857b504ccb9c64ff4e75280ec1.json",
+        "apps/daemon/src/repository/controlled-profile/controlled-profile-password-guard.test.ts"
+      ],
+      "recordedBy": "worker-ed22fae0",
+      "recordedAt": "2026-09-10T18:17:50.553Z",
+      "treeId": "78cab88497a33aef77247cc40860fd082a1df81a",
+      "status": "WORKING",
+      "pushed": true
     }
   ],
   "filesModified": [
-    ".moe/tasks/task-4b7f4a857b504ccb9c64ff4e75280ec1.json",
-    ".moe/tasks/task-b58778da10e7492fa6fee89269f56ef0.json",
-    ".moe/tasks/task-f7d38f752b074dc89da30631783aae04.json",
-    "apps/control-room/src/v2/products/live-new-product.test.tsx",
-    "apps/control-room/src/v2/products/live-new-product.tsx",
-    "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
-    "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
     "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
-    "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts"
+    "apps/daemon/src/deployment/deploy-candidate-environment.ts",
+    "apps/control-room/src/v2/products/live-new-product.tsx",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.ts",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-generator.test.ts",
+    "apps/control-room/src/v2/products/live-new-product.test.tsx",
+    "apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts",
+    "apps/daemon/src/repository/controlled-profile/controlled-profile-password-guard.test.ts"
   ],
   "unattributedPaths": [
-    "apps/daemon/src/repository/controlled-profile/controlled-profile-password-guard.test.ts"
+    "apps/daemon/basestate-77207fb3.config.ts",
+    "apps/daemon/basestate-77207fb3/deploy-image-build.ts.txt",
+    "apps/daemon/basestate-77207fb3/deploy-migration-context.test.ts.txt",
+    "apps/daemon/basestate-77207fb3/deploy-migration-context.ts.txt",
+    "apps/daemon/basestate-77207fb3/git-source-extract.ts.txt",
+    "apps/daemon/basestate-77207fb3/migrate-down-real.test.ts.txt",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/monitoring/health-probe-schedule.test.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-a11dcf70@2026-09-10T17:39:41Z",
-    "at": "2026-09-10T17:56:38.608Z"
+    "sessionId": "worker-ed22fae0@2026-09-10T18:17:46Z",
+    "at": "2026-09-10T18:17:50.553Z"
   },
   "workStartedAt": "2026-09-10T17:40:16.597Z",
   "touchedFiles": [
@@ -282,5 +329,13 @@
   ],
   "declaredFiles": [
     "apps/daemon/src/repository/controlled-profile/controlled-profile-password-guard.test.ts"
-  ]
+  ],
+  "reviewStartedAt": "2026-09-10T18:37:28.210Z",
+  "verification": {
+    "command": "pnpm --filter @moe/daemon test",
+    "exitCode": 0,
+    "outputTail": " Test Files  611 passed (611)\n      Tests  11001 passed | 21 skipped (11022)\n   Duration  231.65s (transform 20.47s, setup 0ms, import 267.52s, tests 600.89s, environment 29ms)\n\nAlso run fresh this session, both EXIT 0:\n  pnpm --filter @moe/control-room test -> Test Files  207 passed (207) / Tests  2693 passed (2693)\n  pnpm typecheck -> 14 packages Done (apps/daemon typecheck: Done)",
+    "reportedAt": "2026-09-10T18:37:28.210Z"
+  },
+  "completionSummary": "DoD 2 BRANCH TAKEN: explicit fail-closed validation. The other branch is CLOSED, not left open — exact-byte authentication is unreachable from outside the image, because postgres's entrypoint `file_env` reads the secret with `$(< \"$file\")` and command substitution strips all trailing newlines. Nothing mounted from outside survives that.\n\nDELIVERED: a `db-password-guard` service in the generated compose (controlled-profile-root-templates.ts), reusing postgres:17-alpine and mounting the SAME secret — the one place the operator's true bytes are visible before the entrypoint mangles them. `db` is gated on it with `condition: service_completed_successfully`. Two stable refusal markers, neither of which reads the value: POSTGRES_PASSWORD_SECRET_UNREADABLE (`test -r`) and POSTGRES_PASSWORD_NEWLINE_UNSUPPORTED (`wc -l < … | grep -qx 0`, a COUNT, never a cat/echo/interpolation). Profile bumped controlled-3 -> controlled-4 in all four literal sites, two of them hand-transcribed mirrors under apps/control-room. The seventh consumer (deployment-infrastructure-generator.test.ts) was repaired by narrowing on the PROPERTY that makes a service a database, so the one-database invariant survives — not by relaxing the cardinality check and not by renaming the guard's image.\n\nGATES, all EXIT 0, count lines read from output: daemon 611 files / 11001 passed | 21 skipped; control-room 207 files / 2693 passed (mandatory — the two version mirrors are invisible to every daemon gate); typecheck 14 packages.\n\nA FOREIGN RED IS DISCLOSED, NOT HIDDEN. The first daemon run failed src/release/release-auto-decide.test.ts (task-24b68b05's file). Measured, not argued: a throwing-transform guard proved that arm DOES load my production module transitively, so the \"never imports my code\" shortcut was unavailable; the arm then passed 43/43 in isolation at HEAD with the diff present; two consecutive full-leg re-runs on the unchanged tree were green. Order-dependent flake; delta intersected with owned paths"
 }
