@@ -1,4 +1,3 @@
-import { decodeBoundedJsonBytes } from "@moe/contracts";
 import { DurableStoreError } from "@moe/store";
 import type { EventDraft, SqliteEventStore } from "@moe/store";
 
@@ -6,10 +5,11 @@ import { decisionsOf } from "../decision-ledger-memo.js";
 import { DomainRefusal } from "../daemon-command-dispatch.js";
 import type { DurableDecision } from "../http/http-contract.js";
 import {
-  PREVIEW_DECIDE_COMMAND_KIND, PREVIEW_DECISIONS, PREVIEW_FINDING_KEYS, boundedPreviewText,
-  decodePreviewDecidePayload, exactPreviewRecord, previewRefusal,
+  PREVIEW_DECIDE_COMMAND_KIND, decodePreviewDecidePayload, previewRefusal,
 } from "./preview-contracts.js";
-import type { PreviewDecision, PreviewFinding, PreviewRefusal } from "./preview-contracts.js";
+import type { PreviewDecision, PreviewRefusal } from "./preview-contracts.js";
+import { PREVIEW_DECISION_VERSION } from "./preview-decision-record.js";
+import type { PreviewDecisionProvenance, PreviewDecisionRecord } from "./preview-decision-record.js";
 import { readGoalLandingStatus } from "./preview-goal-landing.js";
 import { readPreviewReceipt } from "./preview-ledger.js";
 import {
@@ -59,23 +59,19 @@ const RECEIPT_LEDGER_PAGE_SIZE = 512;
 
 /** What a decided preview leaves behind: the operator's verdict, and what to rework. */
 export const PREVIEW_DECIDE_RESULT_CODE = "PREVIEW_DECISION_RECORDED" as const;
-export const PREVIEW_DECISION_VERSION = "moe-preview-decision/1" as const;
 
-const PREVIEW_DECISION_KEYS = Object.freeze([
-  "decidedAt", "decision", "findings", "goalId", "previewRef", "projectId", "sha", "version",
-] as const);
-
-export interface PreviewDecisionRecord {
-  readonly decidedAt: string;
-  readonly decision: PreviewDecision;
-  /** Empty for APPROVE. For REJECT, every element names a node of the goal's active graph. */
-  readonly findings: readonly PreviewFinding[];
-  readonly goalId: string;
-  readonly previewRef: string;
-  readonly projectId: string;
-  readonly sha: string;
-  readonly version: typeof PREVIEW_DECISION_VERSION;
-}
+/**
+ * THE PERSISTED RECORD LIVES IN `preview-decision-record.ts`, RE-EXPORTED HERE SO NO IMPORTER
+ * MOVES. It was split out (task-b8571cfe) when carrying decision provenance would have taken this
+ * file past the 400-line bar; that module's header carries the whole reasoning for the /2 bump,
+ * the always-present `provenance` key and the legacy read arm.
+ */
+export {
+  PREVIEW_DECISION_KEYS, PREVIEW_DECISION_LEGACY_KEYS, PREVIEW_DECISION_LEGACY_VERSION,
+  PREVIEW_DECISION_VERSION, PREVIEW_PROVENANCE_KEYS, decodePreviewDecisionRecord,
+  persistedProvenance, readPreviewDecision,
+} from "./preview-decision-record.js";
+export type { PreviewDecisionProvenance, PreviewDecisionRecord } from "./preview-decision-record.js";
 
 /** The receipt state a goal is in, as the offer surface asks about it. */
 export type PreviewReceiptState = PreviewReceiptV1["outcome"];
@@ -94,10 +90,18 @@ export interface PreviewDaemonRuntime extends PreviewDaemonPort {
   readonly supervisor: PreviewSupervisor;
 }
 
-/** ONE supervisor per daemon. Two instances would each hold half the live roster, so shutdown
- *  would sweep one and the other's servers would keep their ports after the daemon was gone. */
-export function createPreviewDaemonPort(config: PreviewRunnerConfig): PreviewDaemonRuntime {
-  const supervisor = createPreviewSupervisor(config);
+/**
+ * The port half of ONE already-built supervisor.
+ *
+ * EXTRACTED SO THERE IS EXACTLY ONE DEFINITION OF `release`, not to allow a second supervisor.
+ * The daemon's automatic decide path (preview-auto-decision.ts, wired in preview-start-command.ts)
+ * holds the supervisor and needs the port to reach `runPreviewDecideEdge`; wrapping it here rather
+ * than spelling a second `{close, release}` at that call site keeps the "not awaited, swallowed"
+ * decision in one place. A port is STATELESS — the live roster lives in the supervisor — so two
+ * wrappers over one supervisor are the same port, which is exactly what the ONE-supervisor rule
+ * below is about.
+ */
+export function previewPortOf(supervisor: PreviewSupervisor): PreviewDaemonPort {
   return Object.freeze({
     close: (): Promise<void> => supervisor.close(),
     // Deliberately not awaited (see the header): a rejection on a path the operator has already
@@ -105,8 +109,14 @@ export function createPreviewDaemonPort(config: PreviewRunnerConfig): PreviewDae
     release: (receiptId: string, decision: PreviewDecision): void => {
       void supervisor.decide(receiptId, decision).catch(() => undefined);
     },
-    supervisor,
   });
+}
+
+/** ONE supervisor per daemon. Two instances would each hold half the live roster, so shutdown
+ *  would sweep one and the other's servers would keep their ports after the daemon was gone. */
+export function createPreviewDaemonPort(config: PreviewRunnerConfig): PreviewDaemonRuntime {
+  const supervisor = createPreviewSupervisor(config);
+  return Object.freeze({ ...previewPortOf(supervisor), supervisor });
 }
 
 /**
@@ -140,51 +150,6 @@ export function createPreviewReceiptReader(
   };
 }
 
-/** One finding as the STORE holds it, refused rather than read around when it does not decode. */
-function persistedFinding(value: unknown): PreviewFinding | null {
-  const item = exactPreviewRecord(value, PREVIEW_FINDING_KEYS);
-  if (item === null || !PREVIEW_FINDING_KEYS.every((key) => boundedPreviewText(item[key]))) {
-    return null;
-  }
-  return Object.freeze({ detail: item["detail"] as string, nodeRef: item["nodeRef"] as string });
-}
-
-/** THE PRODUCTION READ of a committed preview decision: the operator's verdict and the roster
- *  they named, re-validated against the record carrying them. `/activity/read` reports the
- *  VERDICT for this kind (activity-read.ts VERDICT_KINDS); the findings live here, because an
- *  activity entry states a decision's facts and carries no payload. */
-export function readPreviewDecision(
-  store: SqliteEventStore, projectId: string, principalId: string, commandId: string,
-): PreviewDecisionRecord | null {
-  let decision;
-  try {
-    decision = store.getCommandDecision({ commandId, principalId, projectId });
-  } catch { return null; }
-  if (decision === null || decision.effectDisposition !== "EFFECTS_COMMITTED"
-    || decision.commandKind !== PREVIEW_DECIDE_COMMAND_KIND) return null;
-  const decoded = decodeBoundedJsonBytes(decision.resultBytes);
-  if (!decoded.ok) return null;
-  const record = exactPreviewRecord(decoded.value, PREVIEW_DECISION_KEYS);
-  const verdict = PREVIEW_DECISIONS.find((one) => one === record?.["decision"]);
-  if (record === null || verdict === undefined || !Array.isArray(record["findings"])
-    || record["version"] !== PREVIEW_DECISION_VERSION || record["projectId"] !== projectId
-    || !["decidedAt", "goalId", "previewRef", "sha"].every((k) => boundedPreviewText(record[k]))) {
-    return null;
-  }
-  const findings = (record["findings"] as readonly unknown[]).map(persistedFinding);
-  if (findings.some((finding) => finding === null)) return null;
-  return Object.freeze({
-    decidedAt: record["decidedAt"] as string,
-    decision: verdict,
-    findings: Object.freeze(findings as readonly PreviewFinding[]),
-    goalId: record["goalId"] as string,
-    previewRef: record["previewRef"] as string,
-    projectId,
-    sha: record["sha"] as string,
-    version: PREVIEW_DECISION_VERSION,
-  });
-}
-
 /** Exactly the envelope fields this edge reads; a field it cannot see it cannot let a caller forge. */
 export interface PreviewDecideEdgeEnvelope {
   readonly commandId: string;
@@ -202,6 +167,17 @@ export interface PreviewDecideEdgeContext {
   readonly principalId: string;
   /** The AUTHENTICATED principal's project. Never read from the payload. */
   readonly projectId: string;
+  /**
+   * WHICH STANDING OPT-IN THIS DECISION ACTS UNDER, or ABSENT for a human one.
+   *
+   * ABSENT IS THE DEFAULT AND IT MEANS HUMAN. Every wire-borne `preview.decide` reaches this edge
+   * without it, so an operator's own verdict records `provenance: null` with no call site saying
+   * so. Only the daemon's server-side automatic path (preview-auto-decision.ts) supplies a value,
+   * and it can only supply one the policy engine ALREADY answered ALLOW for — this edge neither
+   * derives a tier nor matches an opt-in, so a value here cannot manufacture authority it did not
+   * arrive with.
+   */
+  readonly provenance?: PreviewDecisionProvenance | undefined;
   readonly store: SqliteEventStore;
 }
 
@@ -255,6 +231,7 @@ export function runPreviewDecideEdge(context: PreviewDecideEdgeContext): Durable
     goalId: receipt.goalId,
     previewRef: receipt.receiptId,
     projectId,
+    provenance: context.provenance ?? null,
     sha: receipt.sha,
     version: PREVIEW_DECISION_VERSION,
   });

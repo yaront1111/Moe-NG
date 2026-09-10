@@ -112,7 +112,7 @@ describe("the PRD coverage card", () => {
     expect(screen.getByTestId("cr.coverage.bar").getAttribute("aria-valuemax")).toBe("3");
     expect(screen.getByTestId("cr.coverage.document").textContent).toContain("PRD.md");
     expect(screen.getByTestId("cr.coverage.document").textContent).toContain("1 of 2 PRD sections cited");
-    expect(screen.getByTestId("cr.coverage.contract.contract-1").textContent).toContain("contract approved");
+    expect(screen.getByTestId("cr.coverage.contract.contract-1").textContent).toContain("GATE 1 APPROVED");
     expect(screen.getByTestId("cr.coverage.criterion.crit-1").getAttribute("data-status")).toBe("VERIFIED");
     expect(screen.getByTestId("cr.coverage.criterion.crit-1").textContent).toContain("node-a");
     expect(screen.getByTestId("cr.coverage.criterion.crit-2").getAttribute("data-status")).toBe("PLANNED");
@@ -133,7 +133,7 @@ describe("the PRD coverage card", () => {
       code: "DOCUMENT_COVERAGE_READ_GOAL_UNBOUND", layer: "DOCUMENT_COVERAGE_READ", status: "REFUSED",
     })} />);
     expect((await screen.findByTestId("cr.coverage.refusal")).textContent)
-      .toContain("This goal was created without a PRD");
+      .toContain("The coverage could not be read right now.");
     cleanup();
     render(<PrdCoverage goalId="goal-1" pollMs={60_000} read={() => Promise.reject(new Error("x"))} />);
     expect((await screen.findByTestId("cr.coverage.refusal")).textContent).toContain("COVERAGE_READ_FAILED");

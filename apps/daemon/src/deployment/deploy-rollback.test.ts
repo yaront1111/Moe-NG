@@ -6,7 +6,7 @@ import type { ContainerState } from "./deploy-ports.js";
 import { createDockerDouble } from "./deploy-ports.js";
 import { DEPLOY_ENGINE_STAMP } from "./deploy-receipt-contracts.js";
 import {
-  candidateContainerName, createDeployService, healthArgv, runCandidateArgv,
+  candidateContainerName, createCandidateArgv, createDeployService, healthArgv, startCandidateArgv,
 } from "./deploy-service.js";
 
 afterEach(closeStores);
@@ -63,6 +63,21 @@ function keptDigest(context: ReturnType<typeof harness>, receiptId: string): str
 const argvFor = (context: ReturnType<typeof harness>, verb: string): readonly string[] | undefined =>
   context.docker.calls.find(args => args[0] === verb);
 
+/**
+ * "NO CANDIDATE WAS BROUGHT UP", named against BOTH verbs that can bring one up and scoped to this
+ * rollback's own candidate. The old spelling named only `run`; once the engine creates and starts
+ * instead, that asserts the absence of something impossible and stays green while a container is
+ * started. The verbs come off the PRODUCTION builders so the next rename reds here rather than
+ * emptying the filters, and the double's state machine is asserted too, which a rename cannot reach.
+ */
+function expectNoCandidateBroughtUp(context: ReturnType<typeof harness>): void {
+  expect(context.docker.calls.length).toBeGreaterThan(0);
+  expect(context.docker.calls.filter(args => args[0] === "create" && args.includes(context.name))).toEqual([]);
+  expect(context.docker.calls.filter(args => args[0] === "start" && args.includes(context.name))).toEqual([]);
+  expect([createCandidateArgv("c", "n", "t")[0], startCandidateArgv("c")[0]]).toEqual(["create", "start"]);
+  expect(context.docker.state(context.name)).toBe("ABSENT");
+}
+
 /** Every verb that produces or fetches image bytes — DoD 2's forbidden set. */
 const BUILD_VERBS: readonly string[] = ["build", "buildx", "save", "load", "pull", "commit", "import"];
 
@@ -90,6 +105,16 @@ it("offers an explicit receipt-selected rollback operation", () => {
   expect("rollback" in harness().service).toBe(true);
 });
 
+// THE ABSENCE ASSERTION MUST STILL BE ABLE TO FAIL. `expectNoCandidateBroughtUp` names the verbs
+// that bring a candidate up, and a verb rename turns any such arm into a tautology that stays green
+// while a container starts. Rather than trusting a mutation drill nobody will re-run, the helper is
+// pointed at a rollback that DID start one and required to throw.
+it("that absence assertion still fails when a candidate IS brought up", async () => {
+  const context = harness();
+  expect((await context.service.rollback(context.request)).outcome).toBe("DEPLOYED");
+  expect(() => { expectNoCandidateBroughtUp(context); }).toThrow();
+});
+
 it("switches only to the selected immutable image without rebuilding or transferring", async () => {
   const context = harness();
   const report = await context.service.rollback(context.request);
@@ -108,7 +133,10 @@ it("redeploys the image named by the kept receipt it read back, byte for byte", 
   const context = harness();
   expect((await context.service.rollback(context.request)).outcome).toBe("DEPLOYED");
   const kept = keptDigest(context, context.request.receiptId);
-  expect(argvFor(context, "run")).toEqual(runCandidateArgv(context.name, network, kept));
+  // The candidate now comes up as `create` then `start`; BOTH are pinned, so a migration that
+  // dropped one would red rather than quietly asserting half the bring-up.
+  expect(argvFor(context, "create")).toEqual(createCandidateArgv(context.name, network, kept));
+  expect(argvFor(context, "start")).toEqual(startCandidateArgv(context.name));
   expect(argvFor(context, "image")).toEqual(["image", "inspect", "--format", "{{.Id}}", kept]);
   expectNoRebuild(context, "some docker calls");
 });
@@ -122,7 +150,8 @@ it("follows the receipt the request names when two kept receipts share a sha", a
   const kept = keptDigest(context, context.altRequest.receiptId);
   expect(kept).toBe(altDigest);
   expect(kept).not.toBe(keptDigest(context, context.request.receiptId));
-  expect(argvFor(context, "run")).toEqual(runCandidateArgv(context.altName, network, kept));
+  expect(argvFor(context, "create")).toEqual(createCandidateArgv(context.altName, network, kept));
+  expect(argvFor(context, "start")).toEqual(startCandidateArgv(context.altName));
   expect(argvFor(context, "image")).toEqual(["image", "inspect", "--format", "{{.Id}}", kept]);
   expectNoRebuild(context, "some docker calls");
 });
@@ -139,16 +168,22 @@ it("retires the incumbent only after the candidate answered healthy and the prox
     context.docker.calls.flatMap((argv, index) =>
       argv.length === expected.length && argv.every((token, at) => token === expected[at]) ? [index] : []);
 
-  const started = indexesOf(runCandidateArgv(context.name, network, kept));
-  // `startCandidate` probes for an EXISTING container before it runs one, so the
-  // first health argv precedes the run. The CONFIRMING probe is the last.
+  // The bring-up is a create-then-start PAIR now, and each half is located POSITIONALLY and
+  // separately — not collapsed into a substring search, which would stop being able to see that
+  // the container was created before it was started.
+  const created = indexesOf(createCandidateArgv(context.name, network, kept));
+  const started = indexesOf(startCandidateArgv(context.name));
+  // `bringUpCandidate` probes for an EXISTING container before it creates one, so the
+  // first health argv precedes the create. The CONFIRMING probe is the last.
   const probes = indexesOf(healthArgv(context.name));
   const retired = indexesOf(["stop", "app"]);
   const switched = context.docker.calls.findIndex(argv => argv.includes("reload"));
 
+  expect(created).toHaveLength(1);
   expect(started).toHaveLength(1);
   expect(retired).toHaveLength(1);
   expect(probes.length).toBeGreaterThan(0);
+  expect(started[0] ?? -1).toBeGreaterThan(created[0] ?? -1);
   const confirmed = probes[probes.length - 1] ?? -1;
   expect(confirmed).toBeGreaterThan(started[0] ?? -1);
   expect(switched).toBeGreaterThan(confirmed);
@@ -180,7 +215,7 @@ it("refuses a missing image while retaining the serving incumbent", async () => 
   expect(report.receipt?.refusal).toMatchObject({
     code: "DEPLOY_BUILD_FAILED", detail: "DEPLOY_ROLLBACK_IMAGE_UNAVAILABLE", layer: DEPLOY_ENGINE_STAMP,
   });
-  expect(context.docker.calls.some(args => args[0] === "run")).toBe(false);
+  expectNoCandidateBroughtUp(context);
   expectNoRebuild(context, "some docker calls");
   expect(context.docker.state("app")).toBe("HEALTHY");
   expect(context.docker.locked()).toBe(false);

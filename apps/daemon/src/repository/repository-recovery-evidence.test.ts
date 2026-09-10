@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { closeStores } from "../review/review-test-fixtures.js";
 import { recoveryEvidenceFixture } from "./repository-recovery-test-fixtures.js";
-import { readRecoveryLandingEvidence } from "./repository-recovery-evidence.js";
+import { readRecoveryLandingEvidence, readRecoveryNoEffectEvidence } from "./repository-recovery-evidence.js";
 
 afterEach(closeStores);
 describe("repository recovery evidence joins", () => {
@@ -25,6 +25,31 @@ describe("repository recovery evidence joins", () => {
     expect(readRecoveryLandingEvidence(f.store, blocked)).toMatchObject({ ok: false, code: "REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN" });
     expect(f.landed().ok).toBe(true);
     expect(readRecoveryLandingEvidence(f.store, blocked)).toMatchObject({ ok: false, code: "REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN" });
+  });
+  // DoD 4, first direction: the wedge this row exists for. No commit, no completion, no intent —
+  // and therefore nothing to reconcile, so the reservation is offered a release.
+  it("offers a release for a BLOCKED reservation whose refusal journaled no intent", () => {
+    const f = recoveryEvidenceFixture();
+    expect(f.landed({ commit: null, refusal: { code: "NOTHING_TO_COMMIT",
+      detail: "no path in the workspace differs from the staffing baseline" } }).ok).toBe(true);
+    const blocked = { ...f.handle, reservation: { ...f.handle.reservation, phase: "BLOCKED" as const } };
+    expect(readRecoveryLandingEvidence(f.store, blocked)).toMatchObject({ ok: false, code: "REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN" });
+    expect(readRecoveryNoEffectEvidence(f.store, blocked)).toMatchObject({ ok: true, evidence: {
+      refusalCode: "NOTHING_TO_COMMIT", proof: { kind: "LANDING_REFUSED_NO_EFFECT" } } });
+  });
+  // DoD 4, second direction, without which the first is vacuous: an intent exists, so Git may have
+  // run, and the reservation stays contained however the refusal was worded.
+  it("still answers CONTAINMENT_UNKNOWN when the refusal followed a journaled intent", () => {
+    const f = recoveryEvidenceFixture(); f.completed(false);
+    expect(f.landed({ commit: null, refusal: { code: "GIT_COMMIT_FAILED", detail: "pre-commit hook refused" } }).ok).toBe(true);
+    const blocked = { ...f.handle, reservation: { ...f.handle.reservation, phase: "BLOCKED" as const } };
+    expect(readRecoveryNoEffectEvidence(f.store, blocked)).toMatchObject({ ok: false, code: "REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN" });
+    expect(readRecoveryLandingEvidence(f.store, blocked)).toMatchObject({ ok: false, code: "REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN" });
+  });
+  it("never admits a committed landing through the no-effect release", () => {
+    const f = recoveryEvidenceFixture(); expect(f.landed().ok).toBe(true);
+    const blocked = { ...f.handle, reservation: { ...f.handle.reservation, phase: "BLOCKED" as const } };
+    expect(readRecoveryNoEffectEvidence(f.store, blocked)).toMatchObject({ ok: false, code: "REPOSITORY_RECOVERY_EVIDENCE_CONFLICT" });
   });
   it("refuses legacy verifier history and contradictory landing refusals", () => {
     const old = recoveryEvidenceFixture({ legacy: true }); expect(old.landed().ok).toBe(true);

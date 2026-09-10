@@ -2,11 +2,12 @@ import type { JSX } from "react";
 
 import type { HealthOutcome, PolicyOutcome, PolicySliceKind, ProviderPauseView } from "../../live/live-ops.js";
 import type { RepositoryRemoteOutcome } from "../../live/live-repository-remote.js";
+import { OutcomeNote } from "../components/outcome-note.js";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
+import { readFailedSaid } from "../outcome-words.js";
 import { RepositoryCard } from "./repository-card.js";
 import { RepositoryReservationCard } from "./repository-reservation-card.js";
-import { RefusalNote } from "../components/outcome-note.js";
 
 /**
  * POLICY and HEALTH, the pure screens. Both render only what the daemon stated: a slice's
@@ -62,11 +63,14 @@ function agentsWords(paused: ProviderPauseView | null): string {
   return `paused: ${paused.provider} limit, resumes ${when}`;
 }
 
-function Refusal({ outcome, testId }: {
+function Refusal({ outcome, testId, what }: {
   readonly outcome: Extract<PolicyOutcome | HealthOutcome, { status: "ERROR" | "REFUSED" }>;
   readonly testId: string;
+  readonly what: string;
 }): JSX.Element {
-  return <RefusalNote refusal={outcome} testId={testId} />;
+  return (
+    <OutcomeNote code={outcome.code} layer={outcome.layer} said={readFailedSaid(what)} testId={testId} />
+  );
 }
 
 function Fact({ label, value, testId }: {
@@ -103,7 +107,7 @@ export function PolicyScreen({ install, nowMs, outcome }: {
     return <section className="cr2-ops" data-testid="cr.policy.root"><p className="cr2-slot-kicker" data-testid="cr.policy.loading">Reading the policy...</p></section>;
   }
   if (outcome.status !== "POLICY") {
-    return <section className="cr2-ops" data-testid="cr.policy.root"><Refusal outcome={outcome} testId="cr.policy.refusal" /></section>;
+    return <section className="cr2-ops" data-testid="cr.policy.root"><Refusal outcome={outcome} testId="cr.policy.refusal" what="policy" /></section>;
   }
   return (
     <section className="cr2-ops" data-testid="cr.policy.root">
@@ -166,7 +170,7 @@ export function PolicyScreen({ install, nowMs, outcome }: {
               <p className="cr2-slot-kicker">
                 {`${KIND_WORDS[slice.kind]} ${MIDDOT} installed ${ago(slice.installedAt, nowMs)}`}
                 {slice.contentDigestMatches === null ? "" : slice.contentDigestMatches
-                  ? ` ${MIDDOT} bytes match the ref` : ` ${MIDDOT} bytes do not match the ref`}
+                  ? ` ${MIDDOT} bytes match the ref` : ` ${MIDDOT} BYTES DO NOT MATCH THE REF`}
               </p>
               <p className="cr2-approve-mono cr2-ops-ref">{slice.sliceRef}</p>
               {slice.rules === null ? null : (
@@ -204,7 +208,7 @@ export function HealthScreen({ nowMs, outcome, remote }: {
     return <section className="cr2-ops" data-testid="cr.health.root"><p className="cr2-slot-kicker" data-testid="cr.health.loading">Reading the daemon...</p></section>;
   }
   if (outcome.status !== "HEALTH") {
-    return <section className="cr2-ops" data-testid="cr.health.root"><Refusal outcome={outcome} testId="cr.health.refusal" /></section>;
+    return <section className="cr2-ops" data-testid="cr.health.root"><Refusal outcome={outcome} testId="cr.health.refusal" what="health" /></section>;
   }
   const { daemon, ledger } = outcome;
   return (

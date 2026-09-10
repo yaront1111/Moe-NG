@@ -26,7 +26,7 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
     if (current.ok && current.handle?.reservation.controllerId === config.controller.controllerId
       && current.handle.owner.ownershipToken === handle.owner.ownershipToken) block(current.handle);
   };
-  const release = (handle: RepositoryExecutionHandle, reason: "LANDED" | "ABORTED_BEFORE_EXECUTION") =>
+  const release = (handle: RepositoryExecutionHandle, reason: "LANDED" | "LANDED_NOTHING" | "ABORTED_BEFORE_EXECUTION") =>
     config.port.release(handle.reservation.identity.root, handle.owner, handle.reservation.revision,
       reason, config.controller.controllerId);
 
@@ -45,10 +45,13 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
     } catch { return deliveryRefusal("REPOSITORY_EXECUTION_UNKNOWN"); }
     const claimed = config.port.claimController(workspace, handle.owner, handle.reservation.revision, config.controller);
     if (!claimed.ok) return claimed;
-    // An orphan verifier or interrupted Git effect has no proved close witness.
-    // Only a recorded committed landing can reconcile a crash in that phase.
-    if (claimed.handle.reservation.phase === "LANDING" && config.facts(handle.owner.nodeRef) === "LANDED") {
-      const done = release(claimed.handle, "LANDED");
+    // An orphan verifier or interrupted Git effect has no proved close witness. Only a durable
+    // landing outcome reconciles a crash in that phase: a recorded committed landing, or a refusal
+    // that journaled no intent and therefore wrote nothing at all.
+    const landing = claimed.handle.reservation.phase === "LANDING"
+      ? config.facts(handle.owner.nodeRef, claimed.handle) : null;
+    if (landing === "LANDED" || landing === "REFUSED_NO_EFFECT") {
+      const done = release(claimed.handle, landing === "LANDED" ? "LANDED" : "LANDED_NOTHING");
       return done.ok ? { ok: true as const, handle: null } : done;
     }
     if (["VERIFYING", "LANDING"].includes(claimed.handle.reservation.phase)) {
@@ -138,16 +141,17 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
         block(handle); return;
       }
       if (!config.retired(nodeRef)) return;
-      const facts = config.facts(nodeRef);
-      if (facts === "UNKNOWN" || facts === "REFUSED" || facts === "LANDED") { block(handle); return; }
+      const facts = config.facts(nodeRef, handle);
+      // A landing outcome cannot be reached from EXECUTING; every one of them still contains here.
+      if (facts === "UNKNOWN" || facts === "REFUSED" || facts === "REFUSED_NO_EFFECT" || facts === "LANDED") { block(handle); return; }
       const next = change(handle, facts === "READY"
         ? { phase: "RESERVED", sessionId: null, pid: null } : { phase: "VERIFYING" });
       if (!next.ok || facts === "READY") return;
       handle = next.handle;
     }
     if (handle.reservation.phase === "VERIFYING") {
-      if (config.facts(nodeRef) === "SUBMITTED") await config.verify(nodeRef, handle.reservation.identity.root);
-      const facts = config.facts(nodeRef);
+      if (config.facts(nodeRef, handle) === "SUBMITTED") await config.verify(nodeRef, handle.reservation.identity.root);
+      const facts = config.facts(nodeRef, handle);
       if (facts === "SUBMITTED") return; // missing standing authority can be installed later
       if (facts !== "ACCEPTED" && facts !== "READY") { block(handle); return; }
       const next = change(handle, facts === "READY"
@@ -156,21 +160,27 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
       handle = next.handle;
     }
     if (handle.reservation.phase === "AWAITING_LANDING") {
-      if (handle.reservation.baselineId === null || config.facts(nodeRef) !== "ACCEPTED") { block(handle); return; }
+      if (handle.reservation.baselineId === null || config.facts(nodeRef, handle) !== "ACCEPTED") { block(handle); return; }
       const next = change(handle, { phase: "LANDING" });
       if (!next.ok) return;
       handle = next.handle;
       const result = await config.land(nodeRef, handle.reservation.baselineId!, handle.reservation.identity.root, handle);
-      const facts = config.facts(nodeRef);
+      const facts = config.facts(nodeRef, handle);
       if (facts === "LANDED") { release(handle, "LANDED"); return; }
+      // Refused before any intent: HEAD was never touched, so the checkout is owed nothing and
+      // goes back. Every other refusal still blocks — a post-intent one may have left an effect.
+      else if (facts === "REFUSED_NO_EFFECT") { release(handle, "LANDED_NOTHING"); return; }
       else if (result === "RETRY" && facts === "ACCEPTED") change(handle, { phase: "AWAITING_LANDING" });
       else block(handle);
       return;
     }
     if (handle.reservation.phase === "LANDING") {
-      // Retry only reservation cleanup after the durable receipt proves Git
-      // completed. An unknown effect must never be repeated.
-      if (config.facts(nodeRef) === "LANDED") release(handle, "LANDED");
+      // Reached when the controller died between the landing outcome and its release. Retry only
+      // reservation cleanup after a durable receipt proves what Git did — either that it completed,
+      // or that the refusal journaled no intent and so began nothing. An unknown effect is never repeated.
+      const facts = config.facts(nodeRef, handle);
+      if (facts === "LANDED") release(handle, "LANDED");
+      else if (facts === "REFUSED_NO_EFFECT") release(handle, "LANDED_NOTHING");
       else block(handle);
     }
   };

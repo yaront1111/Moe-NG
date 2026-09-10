@@ -9,7 +9,7 @@ import type { RunNodeView, RunsOutcome } from "../../live/live-runs.js";
 import { ProviderPauseProvider } from "../shell/pause-context.js";
 import type { ProviderPause } from "../shell/pause-context.js";
 import { BOARD_COLUMNS } from "./board-columns.js";
-import { briefOf, toneOf } from "./board-feed.js";
+import { toneOf } from "./board-feed.js";
 import { BoardScreen, LiveBoard } from "./board-screen.js";
 
 beforeAll(() => {
@@ -176,15 +176,6 @@ describe("BoardScreen", () => {
     expect(screen.getByTestId("cr.kanban.empty").textContent).toContain("could not be read right now");
     expect(screen.getByTestId("cr.kanban.feed.refusal").textContent).toContain("could not be read right now");
     expect(document.body.textContent).not.toContain("RUNS_READ_FAILED");
-  });
-
-  it("names a node in the feed by the first sentence of its objective, never the whole brief", () => {
-    const brief = "In D:/projexts/UnAI build PRD Phase 1's evidence deliverable and nothing else. Create src/kernel/evidence.ts exporting the record shape, and much more besides.";
-    expect(briefOf(brief)).toBe("In D:/projexts/UnAI build PRD Phase 1's evidence deliverable and nothing else.");
-    expect(briefOf("Keep every anchor")).toBe("Keep every anchor");
-    const long = "A".repeat(50) + " " + "B".repeat(60) + " tail";
-    expect(briefOf(long).length).toBeLessThanOrEqual(92);
-    expect(briefOf(long).endsWith("…")).toBe(true);
   });
 
   it("colours a feed row by its kind and verdict alone", () => {

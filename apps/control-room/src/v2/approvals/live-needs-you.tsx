@@ -184,7 +184,11 @@ export function LiveNeedsYou({
     if (facts === undefined) return;
     const key = decisionKeyOf(item);
     setResults((previous) => new Map(previous).set(key, { busy: true, outcome: null }));
-    void preview.submit(facts.affordance, decision, findings).then((outcome) => {
+    // THE RECEIPT ID, NOT THE OFFER'S TARGET. `preview.decide` resolves `previewRef` as the
+    // preview receipt id; `facts.receiptId` is what `/preview/read` answered (needs-you-preview.ts).
+    // Deriving it from the affordance sent the goal's aggregate id and answered 422
+    // PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY, so this button never committed a decision.
+    void preview.submit(facts.affordance, facts.receiptId, decision, findings).then((outcome) => {
       setResults((previous) => new Map(previous).set(key, { busy: false, outcome }));
     }, () => {
       setResults((previous) => new Map(previous).set(key, {

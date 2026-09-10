@@ -1,14 +1,10 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
 import { readEnvironmentDelivery } from "../environment/environment-delivery.js";
 import type { EnvironmentDeliveredVariables } from "../environment/environment-delivery.js";
 import type { EnvironmentStoreConfig } from "../environment/environment-projection.js";
-import { DEPLOY_ENGINE_STAMP } from "./deploy-receipt-contracts.js";
 
 /**
- * HOW THE DEPLOYED CANDIDATE RECEIVES ITS ENVIRONMENT — THROUGH A MOUNTED FILE, NEVER THROUGH ARGV.
+ * HOW THE DEPLOYED CANDIDATE RECEIVES ITS ENVIRONMENT — THROUGH A FILE COPIED IN ON THE DOCKER
+ * CLI'S STDIN, NEVER THROUGH ARGV AND NEVER THROUGH A PATH ON THE DOCKER HOST.
  *
  * THE MEASUREMENT THAT DECIDES THE WHOLE SHAPE, run against docker 29.6.2 on a real deployed image
  * before a line of this was written:
@@ -16,11 +12,21 @@ import { DEPLOY_ENGINE_STAMP } from "./deploy-receipt-contracts.js";
  *     The value is printed inside `.Config.Env`. `--env-file` and bare `--env NAME` resolve
  *     client-side into the same field, and image `ENV` is worse still: it lives in the layers and
  *     in `docker history`, outliving the container.
- *   The same value delivered by `--mount type=bind,source=<host file>,target=/run/moe/env,readonly`
- *     => 0. `.Mounts` carries the source PATH and never the contents.
+ *   The same value delivered as a FILE the container holds at /run/moe/env => 0. `docker inspect`
+ *     can name a mount's source PATH; it can never name the CONTENTS of a file inside the rootfs.
  * `tests/e2e/foundation/platform-secret-canary.e2e.test.ts` sweeps the candidate's `docker inspect`
  * stdout for a planted value and asserts ZERO hits, so "deliver the environment" and "the canary
  * still finds nothing" are jointly satisfiable by exactly one family of designs, and this is it.
+ *
+ * WHY THE FILE ARRIVES ON STDIN RATHER THAN THROUGH A BIND MOUNT — THE WHOLE REASON THIS MODULE
+ * CHANGED. A bind mount's `source` is resolved on the DOCKER host, and when the target names an
+ * `sshTarget` that host is not the daemon's machine: the path is simply absent there, and docker
+ * AUTO-CREATES a missing bind source as an empty DIRECTORY rather than failing, so the candidate
+ * would start, its loader would read nothing, and the deploy would present as a 150-second health
+ * timeout naming no cause. `create` + `docker cp -` + `start` names no host path anywhere: the
+ * bytes travel host memory -> the docker CLI's stdin -> the container's filesystem, and `run()`
+ * already carries stdin through `ssh <target> docker ...`. LOCAL AND REMOTE ARE THEREFORE THE SAME
+ * CODE PATH, and nothing is ever written to the daemon's own disk.
  *
  * WHY THE COMMAND IS OVERRIDDEN RATHER THAN THE IMAGE CHANGED. Nothing in the generated image
  * loads a file, so something has to. Overriding the command to a shell that sources the mount and
@@ -41,8 +47,9 @@ import { DEPLOY_ENGINE_STAMP } from "./deploy-receipt-contracts.js";
  * NO VALUE REACHES A LOG, A RECEIPT OR AN ERROR PATH. The refusals here are minted from a fixed
  * detail table keyed by code, exactly as `environment-contracts.ts` and `deploy-migration-context.ts`
  * do; the environment slice's own refusals are FORWARDED UNCHANGED, carrying the code and the layer
- * that actually answered. The plaintext exists in exactly two places: the file this module writes,
- * and the environment of the process the container starts.
+ * that actually answered. The plaintext exists in exactly two places: the string this module hands
+ * back to the deploy engine, and the environment of the process the container starts. It is never
+ * a docker argv token, and since this module stopped writing a host file it is never at rest.
  */
 
 /** Where the delivery is mounted inside the candidate. Read-only, and read once at startup. */
@@ -75,7 +82,12 @@ export function encodeCandidateEnvironment(variables: EnvironmentDeliveredVariab
     .join("");
 }
 
-/** What `startCandidate` needs to mount a delivery: the host file, and the argv it must restore. */
+/**
+ * NO LONGER A PRODUCTION SHAPE. It is the parameter type of `runCandidateArgv`, which nothing in
+ * the deploy engine calls any more; both are kept exported because they are the frozen baseline the
+ * migration to `create`/`cp`/`start` is measured against, and because
+ * `tests/e2e/control-room/fake-docker-health-seed.test.ts` still pins the old verb through them.
+ */
 export interface CandidateEnvironmentMount {
   /** The image's own `Entrypoint ++ Cmd`, which `--entrypoint` would otherwise discard. */
   readonly command: readonly string[];
@@ -84,11 +96,11 @@ export interface CandidateEnvironmentMount {
 }
 
 /**
- * Internal candidate: no public port conflict with the incumbent or proxy.
- *
- * WITH NO MOUNT THIS IS BYTE-IDENTICAL TO WHAT IT ALWAYS WAS, deliberately: a composition that
- * asks for no delivery — every arm that is about docker rather than about variables — starts the
- * candidate exactly as before, so no existing assertion becomes vacuous by drifting past it.
+ * SUPERSEDED BY `createCandidateArgv` + `copyEnvironmentArgv` + `startCandidateArgv`, AND RETAINED
+ * DELIBERATELY. No deploy-engine path builds this argv any more: its mount arm names a path on the
+ * docker host, which is precisely what cannot reach a remote target. It stays exported, and
+ * byte-identical, as the frozen baseline the migration is compared against and because a file
+ * outside this row's scope still pins the old verb through it. Do not call it from production.
  */
 export const runCandidateArgv = (
   name: string, network: string, tag: string, mount: CandidateEnvironmentMount | null = null,
@@ -101,11 +113,11 @@ export const runCandidateArgv = (
 
 /**
  * THE SAME CANDIDATE, BROUGHT UP IN THREE CALLS INSTEAD OF ONE, so the delivery can reach a REMOTE
- * docker host. A bind mount's `source` is resolved on the DOCKER host, and for `sshTarget !== null`
- * that is not the daemon's machine — which is why `resolveCandidateMount` refuses remotely at all.
- * `create` + `cp -` + `start` names no host path anywhere: the bytes ride the docker CLI's STDIN,
- * which `run()` already carries through `ssh <target> docker ...`. NOTHING HERE IS WIRED YET —
- * `runCandidateArgv` is untouched and stays the only builder `startCandidate` calls.
+ * docker host. `create` + `cp -` + `start` names no host path anywhere: the bytes ride the docker
+ * CLI's STDIN, which `run()` already carries through `ssh <target> docker ...`. THIS IS NOW THE
+ * ONLY WAY THE ENGINE STARTS A CANDIDATE, on every target and whether or not there are variables
+ * to deliver — a second start path would be a fix landed in one half and silently missed in the
+ * other.
  *
  * `command` is the image's own `Entrypoint ++ Cmd`, which `--entrypoint` discards. It is a bare
  * string array rather than a `CandidateEnvironmentMount` ON PURPOSE: that type carries a host
@@ -150,44 +162,36 @@ export function parseImageCommand(stdout: string): readonly string[] | null {
 }
 
 /**
- * The mount a candidate starts with, or the DETAIL its refusal carries. `run` is the deploy
+ * The image's OWN `Entrypoint ++ Cmd`, which the candidate must be restarted on because
+ * `--entrypoint` clears `.Config.Cmd` — or the DETAIL its refusal carries. `run` is the deploy
  * engine's own target-aware runner, passed in rather than imported: this module performs no effect
  * it was not handed, exactly as `deploy-ports.ts` requires of everything that touches docker.
+ *
+ * IT TAKES NO `sshTarget`, AND THAT ABSENCE IS THE POINT. It used to refuse outright for a remote
+ * target because the delivery was a bind mount; a delivery that rides stdin resolves identically
+ * whichever docker host answers, so there is nothing here for the target to change.
  */
-export async function resolveCandidateMount(
+export async function resolveCandidateCommand(
   run: (args: readonly string[]) => Promise<{ readonly code: number | null; readonly stdout: string }>,
-  sshTarget: string | null, tag: string, source: string,
-): Promise<CandidateEnvironmentMount | string> {
-  if (sshTarget !== null) return DEPLOY_ENVIRONMENT_REMOTE_UNSUPPORTED;
+  tag: string,
+): Promise<readonly string[] | string> {
   const inspected = await run(imageCommandArgv(tag));
   const command = inspected.code === 0 ? parseImageCommand(inspected.stdout) : null;
-  return command === null ? DEPLOY_ENVIRONMENT_IMAGE_COMMAND_UNKNOWN : { command, source };
+  return command === null ? DEPLOY_ENVIRONMENT_IMAGE_COMMAND_UNKNOWN : command;
 }
 
-export const DEPLOY_ENVIRONMENT_FILE_UNWRITABLE = "DEPLOY_ENVIRONMENT_FILE_UNWRITABLE" as const;
-/**
- * A bind mount names a path on the DOCKER HOST, and a remote target's docker host is not the
- * daemon's. Refusing is the fail-closed answer and the only honest one: docker AUTO-CREATES a
- * missing bind source as an empty DIRECTORY, so mounting anyway would start a candidate whose
- * loader cannot read its delivery, and the deploy would present as a 150s health timeout with no
- * hint of the cause. Delivering to a remote target needs a channel this engine does not have —
- * `run()` wraps every remote call as `ssh <target> docker ...`, so there is no `tee` to write with.
- */
-export const DEPLOY_ENVIRONMENT_REMOTE_UNSUPPORTED = "DEPLOY_ENVIRONMENT_REMOTE_UNSUPPORTED" as const;
 /** An image that names neither an entrypoint nor a command cannot be started by docker either. */
 export const DEPLOY_ENVIRONMENT_IMAGE_COMMAND_UNKNOWN = "DEPLOY_ENVIRONMENT_IMAGE_COMMAND_UNKNOWN" as const;
 
 /**
- * A delivery that is ready to mount. `source` is null when the environment holds NO variables:
- * there is nothing to mount, the candidate starts on the unchanged argv, and a project that never
- * set a variable deploys byte-identically to how it deployed before this existed.
+ * A delivery ready to copy into the candidate. `content` is the ENCODED TEXT, not a path: there is
+ * no host file to name, to secure, or to remove, and therefore no plaintext at rest on the daemon.
+ * It is null when the environment holds NO variables — nothing is copied, no `cp` call is issued,
+ * and a project that never set a variable deploys on the bare `create`/`start` pair.
  */
 export interface DeployCandidateEnvironmentReady {
-  /** MUST NOT THROW: it is called from the deploy's `finally`, where a throw would replace the
-   *  report the deploy had already produced. Idempotent — calling it twice is not an error. */
-  readonly dispose: () => void;
+  readonly content: string | null;
   readonly ok: true;
-  readonly source: string | null;
 }
 
 /** The environment slice's own refusal, forwarded — or this module's file-write refusal. */
@@ -204,27 +208,17 @@ export type DeployCandidateEnvironmentResult =
 export type DeployCandidateEnvironmentPort = (environment: string) => DeployCandidateEnvironmentResult;
 
 /**
- * REMOVAL NEVER THROWS. `dispose` is called from the deploy's `finally`, and a throw there would
- * REPLACE the report the deploy had already produced — turning a DEPLOYED deploy into a crash over
- * a temp file. `force: true` already tolerates an absent path; this additionally tolerates the
- * EPERM/EBUSY a Windows host can answer while something still holds the handle. A file that
- * survives is bounded, visible and mode-0600; a lost deploy report is not.
- */
-function remove(directory: string): void {
-  try { rmSync(directory, { force: true, recursive: true }); } catch { /* see above */ }
-}
-
-/**
- * Resolves an environment to a mountable file, or refuses. PARTIAL DELIVERY IS IMPOSSIBLE BY
- * CONSTRUCTION: `readEnvironmentDelivery` refuses the WHOLE read when one seal will not open, and
- * that refusal is returned here unchanged rather than degraded to an empty map — a candidate that
- * silently receives three of its four variables fails hours later and far from the fault.
+ * Resolves an environment to the text a candidate will be given, or refuses. PARTIAL DELIVERY IS
+ * IMPOSSIBLE BY CONSTRUCTION: `readEnvironmentDelivery` refuses the WHOLE read when one seal will
+ * not open, and that refusal is returned here unchanged rather than degraded to an empty map — a
+ * candidate that silently receives three of its four variables fails hours later and far from the
+ * fault.
  *
- * WHAT REMOVES THE FILE: the caller, unconditionally, in the `finally` of the deploy it belongs to
- * — success, refusal and throw alike. The window is the deploy itself, not the container's
- * lifetime: the loader reads the mount once at startup, and the candidate carries no restart
- * policy, so nothing needs it again. The directory is created by `mkdtempSync`, so two concurrent
- * deploys cannot collide on the path, and the file is written owner-only.
+ * THERE IS NOTHING TO DISPOSE OF, AND THAT IS A DELIBERATE PROPERTY RATHER THAN AN OMISSION. This
+ * used to write the delivery to an owner-only temp file so a bind mount could name it, which put
+ * the plaintext at rest on the daemon's disk and made a `finally` responsible for removing it —
+ * one more exit path that could leak. The bytes now stay in this process's memory until the docker
+ * CLI reads them off stdin, so the window is the call itself and no cleanup can be forgotten.
  */
 export function candidateEnvironmentPort(
   config: EnvironmentStoreConfig,
@@ -233,18 +227,6 @@ export function candidateEnvironmentPort(
     const delivered = readEnvironmentDelivery(config, environment);
     if (!delivered.ok) return { code: delivered.code, layer: delivered.layer, ok: false };
     const encoded = encodeCandidateEnvironment(delivered.variables);
-    if (encoded === "") return { dispose: () => {}, ok: true, source: null };
-    let directory: string | null = null;
-    try {
-      directory = mkdtempSync(join(tmpdir(), "moe-deploy-env-"));
-      const source = join(directory, "env");
-      writeFileSync(source, encoded, { encoding: "utf8", mode: 0o600 });
-      const owned = directory;
-      return { dispose: () => { remove(owned); }, ok: true, source };
-    } catch {
-      // The thrown error names the path and can carry the bytes; neither reaches a refusal.
-      if (directory !== null) remove(directory);
-      return { code: DEPLOY_ENVIRONMENT_FILE_UNWRITABLE, layer: DEPLOY_ENGINE_STAMP, ok: false };
-    }
+    return { content: encoded === "" ? null : encoded, ok: true };
   };
 }

@@ -191,8 +191,7 @@ describe("GoalPublish with no remote bound", () => {
     await userEvent.click(screen.getByTestId("cr.publish.button"));
     await userEvent.click(screen.getByTestId("cr.publish.button"));
     await waitFor(() => {
-      expect(screen.getByTestId("cr.publish.answer").textContent).toContain("The daemon refused this");
-      expect(screen.getByTestId("cr.publish.answer").textContent).toContain("PUBLISH_REMOTE_UNBOUND @ DAEMON_PREREQUISITE");
+      expect(screen.getByTestId("cr.publish.answer").textContent).toContain("That didn't go through.");
     });
     expect(screen.getByTestId("cr.publish.answer").textContent).toContain("PUBLISH_REMOTE_UNBOUND");
   });

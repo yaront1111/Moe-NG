@@ -5,10 +5,11 @@ import type { RepositoryExecutionHandle, RepositoryExecutionPort } from "../repo
 import { criterionWorld } from "./criterion-test-fixtures.js";
 import { createCriterionRunner } from "./criterion-runner.js";
 import { readCriterionGoal } from "./criterion-goal.js";
-import { readCriterionRuns } from "./criterion-run.js";
+import { queueAutomaticCriterionVerification, readCriterionRuns } from "./criterion-run.js";
 import { readCriterionReceipt } from "./criterion-receipt.js";
 import { criterionHash } from "./criterion-codec.js";
 import { criterionRunsId } from "./criterion-storage.js";
+import { CRITERION_PRINCIPAL } from "./criterion-contracts.js";
 
 vi.mock("../repository/git-verified-workspace-port.js", () => ({ createVerifiedWorkspacePort: () => ({ capture: async (root: string) => ({
   ok: true, binding: { root, headSha: "a".repeat(40), treeSha: "b".repeat(40) },
@@ -67,6 +68,82 @@ function setup(executor: CriterionCheckExecutor) {
 const deadController = () => vi.spyOn(process, "kill").mockImplementation(() => { throw Object.assign(new Error("dead"), { code: "ESRCH" }); });
 
 describe("criterion runner recovery authority", () => {
+  it.each(["artifact", "approval"] as const)("does not start a run without the %s precondition", async (missing) => {
+    const reservation = fence();
+    const runCheck = vi.fn<CriterionCheckExecutor["run"]>(async () => passed);
+    const readIntegrated = () => missing === "artifact" ? null : artifact;
+    const world = criterionWorld({ workspace: artifact.root, readIntegrated,
+      executor: { run: runCheck, async close() {} }, repository: reservation.port });
+    if (missing === "artifact") world.approveAll();
+    else expect(world.service.approve(world.approvalInput("crit-api", 0))).toMatchObject({ ok: true });
+    try {
+      await world.service.advance();
+      expect(world.service.read(GOAL_ID)).toMatchObject({ outcome: "CRITERION_EVIDENCE", run: null });
+      expect(runCheck).not.toHaveBeenCalled(); expect(reservation.held()).toBeNull();
+      expect(queueAutomaticCriterionVerification(world.store, PROJECT_ID, GOAL_ID, NOW, readIntegrated))
+        .toEqual({ ok: false, code: missing === "artifact" ? "CRITERION_CHECK_INTEGRATED_ARTIFACT_CHANGED"
+          : "CRITERION_CHECK_APPROVAL_REQUIRED", layer: "CRITERION_EVIDENCE" });
+    } finally { await world.service.close(); }
+  });
+  it.each(["before", "during"] as const)("retains artifact fences when it changes %s automatic execution", async (when) => {
+    const reservation = fence(); let reads = 0; let changed = false;
+    const readIntegrated = () => { reads += 1;
+      return changed || (when === "before" && reads > 1) ? { ...artifact, sha: "d".repeat(40) } : artifact; };
+    const runCheck = vi.fn<CriterionCheckExecutor["run"]>(async (_input, started) => {
+      started(1234); changed = true; return passed;
+    });
+    const world = criterionWorld({ workspace: artifact.root, readIntegrated,
+      executor: { run: runCheck, async close() {} }, repository: reservation.port }); world.approveAll();
+    try {
+      await world.service.advance();
+      expect(world.service.read(GOAL_ID)).toMatchObject({ run: { status: "BLOCKED" } });
+      expect(runCheck).toHaveBeenCalledTimes(when === "before" ? 0 : 1);
+      expect(reservation.held()?.reservation.phase).toBe("BLOCKED");
+      expect(queueAutomaticCriterionVerification(world.store, PROJECT_ID, GOAL_ID, NOW, readIntegrated))
+        .toEqual({ ok: false, code: "CRITERION_CHECK_RUN_PENDING", layer: "CRITERION_EVIDENCE" });
+      await world.service.advance();
+      expect(reservation.released()).toBe(0);
+      expect(runCheck).toHaveBeenCalledTimes(when === "before" ? 0 : 1);
+    } finally { await world.service.close(); }
+  });
+  it("releases a completed reservation before queueing a newly integrated artifact", async () => {
+    const reservation = fence(); let current = artifact;
+    const world = criterionWorld({ workspace: artifact.root, readIntegrated: () => current, repository: reservation.port,
+      executor: { async run(_input, started) { started(1234); return passed; }, async close() {} } }); world.approveAll();
+    try {
+      reservation.permitRelease(false); await world.service.advance();
+      expect(world.service.read(GOAL_ID)).toMatchObject({ run: { status: "COMPLETED" } });
+      expect(reservation.held()?.reservation.phase).toBe("CRITERION_VERIFYING");
+      current = { ...artifact, sha: "d".repeat(40) }; reservation.permitRelease(true);
+      await world.service.advance();
+      expect(reservation.held()).toBeNull(); expect(reservation.released()).toBe(1);
+      expect(world.store.getAggregateVersion(criterionRunsId(PROJECT_ID, GOAL_ID, RUN_ID))).toBe(3);
+    } finally { await world.service.close(); }
+  });
+  it("automatically completes approved checks without a human verification command", async () => {
+    const reservation = fence();
+    const runCheck = vi.fn<CriterionCheckExecutor["run"]>(async (_input, started) => { started(1234); return passed; });
+    const world = criterionWorld({ workspace: artifact.root, readIntegrated: () => artifact,
+      executor: { run: runCheck, async close() {} }, repository: reservation.port });
+    world.approveAll();
+    const humanVerify = vi.spyOn(world.service, "verify");
+    try {
+      await Promise.all([world.service.advance(), world.service.advance()]);
+      expect(world.service.read(GOAL_ID)).toMatchObject({ outcome: "CRITERION_EVIDENCE",
+        run: { status: "COMPLETED", integratedSha: artifact.sha },
+        criteria: [{ evidence: { status: "PASSED" } }, { evidence: { status: "PASSED" } }] });
+      expect(humanVerify).not.toHaveBeenCalled();
+      const events = world.store.readAggregateEvents(criterionRunsId(PROJECT_ID, GOAL_ID, RUN_ID), 0, 20);
+      expect(events.items).toHaveLength(3);
+      expect(events.items[0]?.decisionTrace).toMatchObject({
+        commandKind: "internal.criterion.queued", principalId: CRITERION_PRINCIPAL });
+      expect(events.items.every((row) => row.decisionTrace?.principalId === CRITERION_PRINCIPAL)).toBe(true);
+      await world.service.advance();
+      expect(runCheck).toHaveBeenCalledTimes(2);
+      expect(reservation.released()).toBe(1);
+      expect(world.store.getAggregateVersion(criterionRunsId(PROJECT_ID, GOAL_ID, RUN_ID))).toBe(3);
+    } finally { await world.service.close(); }
+  });
   it("retries release after durable completion without executing checks again, including a replacement controller", async () => {
     let calls = 0; const executor: CriterionCheckExecutor = { async run(_input, started) { calls += 1; started(1234); return passed; }, async close() {} };
     const w = setup(executor); w.reservation.permitRelease(false);

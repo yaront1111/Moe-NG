@@ -1,37 +1,23 @@
 import type { JSX } from "react";
 
-import "../styles/cordum-board.css";
 import type { RunGoalView, RunNodeView, RunsOutcome } from "../../live/live-runs.js";
-import { BOARD_COLUMNS, COLUMN_WORDS, ROUTE_WORDS, foldBoard, nodesLine, untilWords } from "../board/board-columns.js";
-import type { BoardColumn, BoardFold } from "../board/board-columns.js";
 import { BoardLanes } from "../board/board-lanes.js";
-import { Freshness } from "../components/freshness.js";
-import type { FreshnessProps } from "../components/freshness.js";
-import { RefusalNote } from "../components/outcome-note.js";
+import { ROUTE_WORDS, foldBoard, nodesLine, untilWords } from "../board/board-columns.js";
 import { MIDDOT } from "../glyphs.js";
-import { publishLine } from "../goals/goal-publish.js";
 import { seatWords } from "../ops/activity-words.js";
-import { GOAL_WORDS } from "./run-words.js";
+import { GOAL_WORDS, RUN_WORDS } from "./run-words.js";
 
 export { STATUS_WORDS } from "./run-words.js";
 export { ROUTE_WORDS } from "../board/board-columns.js";
 
-/** When the daemon last answered, on the live screen's own clock; absent on a pure render. */
-export interface ScreenFreshness {
-  readonly clockMs: number;
-  readonly lastAnswerMs: FreshnessProps["lastAnswerMs"];
-}
-
 /**
- * RUNS: every goal's work as a board. The project's node counts across the six columns come
- * first; then one section per goal - its title, its state, how its nodes are doing, where
- * it was published - over the same six lanes the opened goal shows. Goals with stuck work
- * sort first, then goals with work in flight, then the rest, done last. Pure: no fetch, no
- * clock beyond the `nowMs` it is handed for relative times.
+ * RUNS & LEASES: every goal's plan as a ladder of nodes, each node with the one word the
+ * daemon's facts add up to and the facts themselves beside it - who holds the claim and
+ * until when, how many review rounds and how the last one routed, the acceptance receipt.
+ * Pure: no fetch, no clock beyond the `nowMs` it is handed for relative times.
  */
 
 export interface RunsScreenProps {
-  readonly freshness?: ScreenFreshness | undefined;
   readonly nowMs: number;
   readonly onOpenBoard: (goalId: string, planningRunRef: string, title: string) => void;
   readonly outcome: RunsOutcome | null;
@@ -88,27 +74,14 @@ export function nodeEvidence(node: RunNodeView, nowMs: number): readonly string[
   return lines;
 }
 
-/** Where the goal stands, in one line: the plan's state before nodes exist, the nodes after. */
-function standingLine(goal: RunGoalView, fold: BoardFold | null): string {
-  if (fold !== null) return nodesLine(fold);
+function runLine(goal: RunGoalView): string {
   if (goal.run === null) return "No plan has been run for this goal yet.";
-  if (goal.run.approval === "BOUND") return "Plan approved; nodes appear once it is activated.";
-  if (goal.run.approval === "ABSENT") return "Plan submitted; waiting for your approval.";
-  return "The plan's approval could not be read.";
+  const approval = goal.run.approval === "BOUND" ? "approved"
+    : goal.run.approval === "ABSENT" ? "awaiting approval" : "approval unreadable";
+  return `${RUN_WORDS[goal.run.lifecycle] ?? goal.run.lifecycle} ${MIDDOT} ${approval}`;
 }
 
-/** Goals with stuck work first, then work in flight, then waiting, then done. */
-function rankOf(goal: RunGoalView, fold: BoardFold | null): number {
-  if (fold === null) return goal.lifecycle === "COMPLETED" ? 4 : 3;
-  if (fold.stuck > 0) return 0;
-  if (fold.counts.WORKING + fold.counts.REVIEW > 0) return 1;
-  if (fold.counts.PLANNED > 0) return 2;
-  return goal.lifecycle === "COMPLETED" || fold.counts.VERIFIED + fold.counts.LANDED + fold.counts.PUBLISHED === fold.total ? 4 : 3;
-}
-
-const NO_STATEMENT = (): null => null;
-
-/** One goal's board. `embedded` (the opened goal's own page) drops the title link. */
+/** One goal as a board. `embedded` (the opened goal's own page) drops the title link and kicker. */
 export function GoalSection({ embedded = false, goal, nowMs, onOpenBoard }: {
   readonly embedded?: boolean; readonly goal: RunGoalView; readonly nowMs: number; readonly onOpenBoard: RunsScreenProps["onOpenBoard"];
 }): JSX.Element {
@@ -116,16 +89,15 @@ export function GoalSection({ embedded = false, goal, nowMs, onOpenBoard }: {
   const runRef = goal.run?.runId ?? "";
   const fold = goal.nodes.length === 0
     ? null : foldBoard(goal.nodes, nowMs, goal.publish?.outcome === "PUSHED" ? goal.publish.sha : null);
-  const state = goal.lifecycle === null ? "" : GOAL_WORDS[goal.lifecycle] ?? goal.lifecycle;
   return (
-    <section
-      className="cr2-run-goal"
-      data-embedded={embedded ? "true" : undefined}
-      data-stuck={fold !== null && fold.stuck > 0 ? "true" : undefined}
-      data-testid={`cr.runs.goal.${goal.goalId}`}
-    >
+    <section className="cr2-run-goal" data-embedded={embedded ? "true" : undefined} data-testid={`cr.runs.goal.${goal.goalId}`}>
       <div className="cr2-run-goal-head">
-        <div className="cr2-run-goal-lead">
+        <div>
+          {embedded ? null : (
+            <p className="cr2-slot-kicker">
+              {goal.lifecycle === null ? "Goal" : GOAL_WORDS[goal.lifecycle] ?? goal.lifecycle}
+            </p>
+          )}
           {embedded ? null : (
             <h2 className="cr2-run-goal-title">
               <button
@@ -137,13 +109,9 @@ export function GoalSection({ embedded = false, goal, nowMs, onOpenBoard }: {
               >
                 {title}
               </button>
-              {state === "" ? null : <span className="cr2-run-goal-state" data-lifecycle={goal.lifecycle ?? undefined}>{state}</span>}
             </h2>
           )}
-          <p className="cr2-run-goal-run" data-testid={`cr.runs.goal.${goal.goalId}.run`}>{standingLine(goal, fold)}</p>
-          {goal.publish === null ? null : (
-            <p className="cr2-run-goal-publish" data-testid={`cr.runs.goal.${goal.goalId}.publish`}>{publishLine(goal.publish)}</p>
-          )}
+          <p className="cr2-run-goal-run" data-testid={`cr.runs.goal.${goal.goalId}.run`}>{runLine(goal)}</p>
         </div>
       </div>
       {fold === null ? (
@@ -151,65 +119,37 @@ export function GoalSection({ embedded = false, goal, nowMs, onOpenBoard }: {
           No work yet: it appears once an approved plan is activated.
         </p>
       ) : (
-        <BoardLanes criterionStatement={NO_STATEMENT} fold={fold} nowMs={nowMs} />
+        <BoardLanes criterionStatement={(): null => null} fold={fold} nowMs={nowMs} />
       )}
     </section>
   );
 }
 
-/** The project's node counts across the six columns, as a strip of heads, plus one sentence. */
-function Totals({ freshness, outcome, nowMs }: {
-  readonly freshness: ScreenFreshness | undefined; readonly outcome: Extract<RunsOutcome, { status: "RUNS" }>; readonly nowMs: number;
-}): JSX.Element {
-  const counts: Record<BoardColumn, number> = { PLANNED: 0, WORKING: 0, REVIEW: 0, VERIFIED: 0, LANDED: 0, PUBLISHED: 0 };
-  for (const goal of outcome.goals) {
-    if (goal.nodes.length === 0) continue;
-    const fold = foldBoard(goal.nodes, nowMs, goal.publish?.outcome === "PUSHED" ? goal.publish.sha : null);
-    for (const column of BOARD_COLUMNS) counts[column] += fold.counts[column];
-  }
-  const { goals, nodes } = outcome.totals;
-  const sentence = `${String(goals)} goal${goals === 1 ? "" : "s"} ${MIDDOT} ${String(nodes)} node${nodes === 1 ? "" : "s"}`;
-  return (
-    <div className="cr2-runs-totals" data-testid="cr.runs.totals" title={sentence}>
-      <span className="cr2-runs-totals-sentence">{sentence}</span>
-      {freshness === undefined ? null : (
-        <Freshness lastAnswerMs={freshness.lastAnswerMs} nowMs={freshness.clockMs} testId="cr.runs.freshness" />
-      )}
-      {BOARD_COLUMNS.map((column) => (
-        <span className="cr2-runs-total" data-column={column} data-count={String(counts[column])} data-testid={`cr.runs.total.${column}`} key={column}>
-          <span className="cr2-runs-total-count">{String(counts[column])}</span>
-          <span className="cr2-runs-total-word">{COLUMN_WORDS[column]}</span>
-        </span>
-      ))}
-    </div>
-  );
+function totalsLine(outcome: Extract<RunsOutcome, { status: "RUNS" }>, nowMs: number): string {
+  const fold = foldBoard(outcome.goals.flatMap((goal) => goal.nodes), nowMs);
+  return `${String(outcome.totals.goals)} goal${outcome.totals.goals === 1 ? "" : "s"} ${MIDDOT} ${nodesLine(fold)}`;
 }
 
-export function RunsScreen({ freshness, nowMs, onOpenBoard, outcome }: RunsScreenProps): JSX.Element {
+export function RunsScreen({ nowMs, onOpenBoard, outcome }: RunsScreenProps): JSX.Element {
   return (
     <section className="cr2-runs" data-testid="cr.runs.root">
       {outcome === null ? (
         <p className="cr2-slot-kicker" data-testid="cr.runs.loading">Reading the runs...</p>
       ) : outcome.status !== "RUNS" ? (
-        <RefusalNote
-          refusal={outcome}
-          said="The runs could not be read right now."
-          testId="cr.runs.refusal"
-        />
+        <p className="cr2-approve-refusal" data-testid="cr.runs.refusal">
+          The runs could not be read right now.
+        </p>
       ) : (
         <>
-          <Totals freshness={freshness} nowMs={nowMs} outcome={outcome} />
+          <span className="cr2-goals-count" data-testid="cr.runs.totals">{totalsLine(outcome, nowMs)}</span>
           {outcome.goals.length === 0 ? (
             <div className="cr2-goals-empty" data-testid="cr.runs.empty">
               <p className="cr2-goals-empty-title">No goals to run yet.</p>
               <p className="cr2-goals-empty-body">Create a goal from a PRD and approve its plan; its nodes appear here as agents take them.</p>
             </div>
-          ) : [...outcome.goals]
-            .map((goal, index) => ({ goal, index, rank: rankOf(goal, goal.nodes.length === 0 ? null : foldBoard(goal.nodes, nowMs, goal.publish?.outcome === "PUSHED" ? goal.publish.sha : null)) }))
-            .sort((left, right) => left.rank - right.rank || left.index - right.index)
-            .map(({ goal }) => (
-              <GoalSection goal={goal} key={goal.goalId} nowMs={nowMs} onOpenBoard={onOpenBoard} />
-            ))}
+          ) : outcome.goals.map((goal) => (
+            <GoalSection goal={goal} key={goal.goalId} nowMs={nowMs} onOpenBoard={onOpenBoard} />
+          ))}
         </>
       )}
     </section>

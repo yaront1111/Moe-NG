@@ -82,7 +82,10 @@ async function execute(
     ownsFile = true;
     await ports.dump(input.databaseUrl, path);
     backupRef = `${path}@sha256:${await backupFileHash(path)}`;
-    const applied = await ports.revert(input.workspace, input.databaseUrl, batch);
+    // `base.sha` is the SOURCE receipt's sha — the commit whose `up()` ran — and it is deliberately
+    // not something the operator supplies: they choose WHICH receipt to undo, and the receipt
+    // decides which tree the `down()` comes from.
+    const applied = await ports.revert(input.workspace, input.databaseUrl, batch, base.sha);
     if (applied.length !== batch.length || applied.some((name, index) => name !== batch[batch.length - 1 - index])) {
       throw new MigrationDownError(null);
     }

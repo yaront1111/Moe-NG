@@ -28,8 +28,8 @@ import { readMigrationReceipt } from "../repository/migrations/migration-receipt
 import { MigrationExecutionError } from "../repository/migrations/migration-ports.js";
 import type { MigrationPorts } from "../repository/migrations/migration-ports.js";
 import {
-  NO_RELEASE_DECISION_NOTE, buildArgv, candidateContainerName, createDeployService, healthArgv,
-  runCandidateArgv,
+  NO_RELEASE_DECISION_NOTE, buildArgv, candidateContainerName, createCandidateArgv,
+  createDeployService, healthArgv, startCandidateArgv,
 } from "./deploy-service.js";
 
 /**
@@ -136,6 +136,46 @@ function harness(options: {
 const argvFor = (docker: DockerDouble, verb: string): readonly string[] | undefined =>
   docker.calls.find((call) => call[0] === verb);
 
+/**
+ * "NOTHING WAS BROUGHT UP" — and it must keep MEANING that after a verb rename.
+ *
+ * These arms used to read `calls.filter(call => call[0] === "run")).toEqual([])`. The candidate is
+ * created and started now, so that spelling asserts the absence of something that can no longer
+ * happen: it would stay green while a candidate was started on every one of these paths. Three
+ * things keep this one honest. (1) It names BOTH verbs that can bring a candidate up, scoped to the
+ * candidate's own name so an unrelated container cannot satisfy or break it. (2) It reads the verbs
+ * off the PRODUCTION builders, so the next rename reds here instead of emptying the filters. (3) It
+ * asserts the double's STATE MACHINE says ABSENT, which no verb rename can hollow out at all.
+ */
+const expectNoCandidateBroughtUp = (docker: DockerDouble, candidate: string): void => {
+  // A sweep over an empty call log passes while proving nothing: these paths all reach docker.
+  expect(docker.calls.length).toBeGreaterThan(0);
+  expect(docker.calls.filter((call) => call[0] === "create" && call.includes(candidate))).toEqual([]);
+  expect(docker.calls.filter((call) => call[0] === "start" && call.includes(candidate))).toEqual([]);
+  expect([createCandidateArgv("c", "n", "t")[0], startCandidateArgv("c")[0]]).toEqual(["create", "start"]);
+  expect(docker.state(candidate)).toBe("ABSENT");
+};
+
+/**
+ * THE NON-VACUITY PROOF FOR EVERY "NOTHING WAS BROUGHT UP" ARM IN THIS FILE, COMMITTED RATHER THAN
+ * DRILLED. Those arms assert an ABSENCE, and an absence assertion decays into a tautology the
+ * moment the thing it names stops being possible — which is exactly what a verb rename does. So
+ * the helper is run here against a deploy that DID bring the candidate up, and is required to
+ * THROW. If a future edit hollows it out, this arm reds first, in the same file, without anyone
+ * having to remember to re-run a mutation drill.
+ */
+describe("the absence assertions can still fail", () => {
+  it("expectNoCandidateBroughtUp THROWS against a deploy that started the candidate", async () => {
+    const context = harness();
+    expect((await context.deploy()).outcome).toBe("DEPLOYED");
+    // The scenario really did bring one up: both verbs are present and the state machine agrees.
+    expect(context.docker.calls.some((call) => call[0] === "create" && call.includes(context.candidate))).toBe(true);
+    expect(context.docker.calls.some((call) => call[0] === "start" && call.includes(context.candidate))).toBe(true);
+    expect(context.docker.state(context.candidate)).not.toBe("ABSENT");
+    expect(() => { expectNoCandidateBroughtUp(context.docker, context.candidate); }).toThrow();
+  });
+});
+
 describe("the deploy engine builds at the landed sha (DoD 1)", () => {
   it("tags the image with the sha VALUE and passes the context, byte for byte", async () => {
     const context = harness();
@@ -156,15 +196,18 @@ describe("the deploy engine builds at the landed sha (DoD 1)", () => {
     const context = harness();
     await context.deploy();
 
-    const run = argvFor(context.docker, "run");
-    expect(run).toEqual(runCandidateArgv(context.candidate, "moe-net", deployImageTag(ENVIRONMENT, SHA)));
-    expect(run).toEqual([
-      "run", "--detach", "--name", context.candidate, "--network", "moe-net",
+    const created = argvFor(context.docker, "create");
+    expect(created).toEqual(createCandidateArgv(context.candidate, "moe-net", deployImageTag(ENVIRONMENT, SHA)));
+    expect(created).toEqual([
+      "create", "--name", context.candidate, "--network", "moe-net",
       `moe-deploy-production:${SHA}`,
     ]);
+    // The start is the second half of the same bring-up, pinned exactly rather than assumed.
+    expect(argvFor(context.docker, "start")).toEqual(startCandidateArgv(context.candidate));
+    expect(argvFor(context.docker, "start")).toEqual(["start", context.candidate]);
     // No `-p` / `--publish` anywhere: a published host port is bound at container
     // create, so a candidate that published one could not start beside the incumbent.
-    expect(run?.some((token) => token === "-p" || token === "--publish")).toBe(false);
+    expect(created?.some((token) => token === "-p" || token === "--publish")).toBe(false);
     // The probe argv NAMES THE CANDIDATE. A probe addressed at the environment's
     // url would be answered by the OLD container and pass instantly.
     expect(context.docker.calls.filter((call) => call[0] === "inspect")
@@ -548,8 +591,7 @@ describe("the proxy flip keeps a healthy public route", () => {
         code: DEPLOY_BUILD_FAILED, layer: DEPLOY_ENGINE_STAMP, detail: "DEPLOY_PROXY_BUSY",
       });
       expect(context.docker.state(INCUMBENT)).toBe("HEALTHY");
-      expect(context.docker.state(context.candidate)).toBe("ABSENT");
-      expect(context.docker.calls.some((call) => call[0] === "run")).toBe(false);
+      expectNoCandidateBroughtUp(context.docker, context.candidate);
       expect(context.docker.upstream()).toBe(INCUMBENT);
     } finally { closeStores(); }
   });
@@ -776,9 +818,13 @@ describe("the deploy composes backup-before-migrate before activating the candid
     // comparing indices is the ordering claim this row is actually about.
     const inspected = context.docker.calls
       .findIndex((call) => call[0] === "image" && call[1] === "inspect");
-    const started = context.docker.calls.findIndex((call) => call[0] === "run");
+    // The candidate is CREATED and then STARTED; the migration must precede the earlier of the
+    // two, so this pins `create` — the first moment a container of the candidate's name exists.
+    const created = context.docker.calls.findIndex((call) => call[0] === "create");
+    const started = context.docker.calls.findIndex((call) => call[0] === "start");
     expect(inspected).toBeGreaterThanOrEqual(0);
-    expect(started).toBeGreaterThan(inspected);
+    expect(created).toBeGreaterThan(inspected);
+    expect(started).toBeGreaterThan(created);
   });
 
   it("(c) MIGRATION_BACKUP_FAILED leaves the schema unchanged and starts NOTHING", async () => {
@@ -807,9 +853,9 @@ describe("the deploy composes backup-before-migrate before activating the candid
     // THE SCHEMA IS UNTOUCHED and neither host effect ran — not "it returned a refusal".
     expect(journal.schema).toEqual(["accounts"]);
     expect(journal.events).toEqual([]);
-    // NO ACTIVATION AND NO FLIP. `run` starts the candidate and `tee` writes the proxy config, so
-    // asserting the ABSENCE of both is what "prevents activation and traffic flip" means here.
-    expect(context.docker.calls.filter((call) => call[0] === "run")).toEqual([]);
+    // NO ACTIVATION AND NO FLIP. `create`/`start` bring the candidate up and `tee` writes the proxy
+    // config, so asserting the ABSENCE of both is what "prevents activation and traffic flip" means.
+    expectNoCandidateBroughtUp(context.docker, context.candidate);
     expect(context.docker.calls.filter((call) => call[0] === "exec" && call.includes("tee"))).toEqual([]);
   });
 
@@ -847,7 +893,7 @@ describe("the deploy composes backup-before-migrate before activating the candid
     expect(persisted?.backupRef).toMatch(/@sha256:[0-9a-f]{64}$/u);
     expect(existsSync((persisted?.backupRef ?? "").split("@sha256:")[0] ?? "")).toBe(true);
     expect(journal.schema).toEqual(["accounts"]);
-    expect(context.docker.calls.filter((call) => call[0] === "run")).toEqual([]);
+    expectNoCandidateBroughtUp(context.docker, context.candidate);
   });
 
   it("(e) a REPLAYED decision applies no second batch, and the EXISTING project lock refuses MIGRATION_IN_PROGRESS", async () => {

@@ -13,7 +13,6 @@ import { readRepositoryRemote } from "../../live/live-repository-remote.js";
 import type { RepositoryRemoteOutcome } from "../../live/live-repository-remote.js";
 import { readRuns } from "../../live/live-runs.js";
 import type { RunGoalView, RunsOutcome } from "../../live/live-runs.js";
-import { Freshness, useClock } from "../components/freshness.js";
 import { MIDDOT } from "../glyphs.js";
 import { GoalDeployments } from "../goals/goal-deployments.js";
 import type { BoardDeploying } from "../goals/goal-deployments.js";
@@ -49,8 +48,6 @@ export interface BoardScreenProps {
   readonly coverage: DocumentCoverageOutcome | null;
   /** The deploy decision's inputs; absent (tests, fixtures) means no Deployments card. */
   readonly deploying?: BoardDeploying | undefined;
-  /** When the daemon last answered the runs read, on a live clock; absent on a pure render. */
-  readonly freshness?: { readonly clockMs: number; readonly lastAnswerMs: number | null } | undefined;
   readonly goalId: string;
   readonly nowMs: number;
   readonly onNeedsYou?: (() => void) | undefined;
@@ -81,16 +78,16 @@ function criterionStatements(coverage: DocumentCoverageOutcome | null): Readonly
 }
 
 export function BoardScreen(props: BoardScreenProps): JSX.Element {
-  const { activity, brief, coverage, deploying, freshness, goalId, nowMs, onNeedsYou, paused, publishing, runId, runs, surface, title } = props;
+  const { activity, brief, coverage, deploying, goalId, nowMs, onNeedsYou, paused, publishing, runId, runs, surface, title } = props;
   const status = deriveGoalStatus({ coverage, goalId, paused, runId, surface });
   const goal = goalOf(runs, goalId);
   const fold = goal === null || goal.nodes.length === 0
     ? null : foldBoard(goal.nodes, nowMs, goal.publish?.outcome === "PUSHED" ? goal.publish.sha : null);
   const statements = criterionStatements(coverage);
   const objectives = new Map<string, string>((goal?.nodes ?? []).map((node) => [node.nodeRef, node.objective]));
-  // The offer alone is not a landing: publish appears only after durable committed work.
-  const landed = (goal?.nodes ?? []).some((node) => node.landing?.outcome === "COMMITTED");
-  const offered = publishOffer(surface, goalId) !== null && landed;
+  const offered = publishOffer(surface, goalId) !== null;
+  // The publish card is the pipeline's LAST step: it appears only once the daemon offers it or
+  // a publish was already decided, never above work that has not landed.
   const showPublish = publishing !== undefined && (offered || (goal?.publish ?? null) !== null);
   return (
     <section className="cr2-kanban" data-testid="cr.kanban.root" id={GOAL_SECTION_IDS.board}>
@@ -102,11 +99,6 @@ export function BoardScreen(props: BoardScreenProps): JSX.Element {
         status={status}
         title={goal?.title ?? title}
       />
-      {freshness === undefined ? null : (
-        <div className="cr2-kanban-freshness">
-          <Freshness lastAnswerMs={freshness.lastAnswerMs} nowMs={freshness.clockMs} testId="cr.kanban.freshness" />
-        </div>
-      )}
       {showPublish ? (
         <div className="cr2-kanban-publish" id={GOAL_SECTION_IDS.publish}>
           <GoalPublish frame={publishing.frame} goal={goal} goalId={goalId} port={publishing.port} remote={publishing.remote} />
@@ -154,16 +146,10 @@ export function BoardScreen(props: BoardScreenProps): JSX.Element {
 
 const POLL_MS = 5_000;
 
-/**
- * One bounded poller: latest answer wins, a rejected read becomes the given failure value.
- * `answeredMs` is the instant the daemon last ANSWERED (a transport failure is not an answer).
- */
-function usePolled<T extends { readonly status: string; readonly code?: string }>(
-  read: () => Promise<T>, failure: T, pollMs: number,
-): { readonly answeredMs: number | null; readonly nowMs: number; readonly value: T | null } {
+/** One bounded poller: latest answer wins, a rejected read becomes the given failure value. */
+function usePolled<T>(read: () => Promise<T>, failure: T, pollMs: number): { readonly nowMs: number; readonly value: T | null } {
   const [value, setValue] = useState<T | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
-  const [answeredMs, setAnsweredMs] = useState<number | null>(null);
   const generation = useRef(0);
   useEffect(() => {
     const run = generation.current + 1;
@@ -178,7 +164,6 @@ function usePolled<T extends { readonly status: string; readonly code?: string }
         if (generation.current !== run) return;
         setValue(next);
         setNowMs(Date.now());
-        if (!(next.status === "ERROR" && next.code === "TRANSPORT_REQUEST_FAILED")) setAnsweredMs(Date.now());
       }, () => {
         inFlight = false;
         if (generation.current === run) setValue(failure);
@@ -188,7 +173,7 @@ function usePolled<T extends { readonly status: string; readonly code?: string }
     const timer = setInterval(tick, pollMs);
     return (): void => { generation.current += 1; clearInterval(timer); };
   }, [failure, pollMs, read]);
-  return { answeredMs, nowMs, value };
+  return { nowMs, value };
 }
 
 const RUNS_FAILURE: RunsOutcome = Object.freeze({ code: "RUNS_READ_FAILED", layer: "CONTROL_ROOM_BOARD", status: "ERROR" as const });
@@ -235,7 +220,6 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
   const coverage = usePolled(coverageReader, COVERAGE_FAILURE, pollMs ?? POLL_MS);
   const activity = usePolled(activityReader, ACTIVITY_FAILURE, pollMs ?? POLL_MS);
   const remote = usePolled(remoteReader, REMOTE_FAILURE, pollMs ?? POLL_MS);
-  const clockMs = useClock();
   // The brief is the human's own words at creation; it never changes, so one read is enough.
   const [catalog, setCatalog] = useState<GoalCatalogFrame | null>(null);
   useEffect(() => {
@@ -252,7 +236,6 @@ export function LiveBoard(props: LiveBoardProps): JSX.Element {
       brief={brief}
       coverage={coverage.value}
       deploying={deploying}
-      freshness={{ clockMs, lastAnswerMs: runs.answeredMs }}
       goalId={goalId}
       nowMs={runs.nowMs}
       onNeedsYou={onNeedsYou}

@@ -11,7 +11,7 @@ beforeAll(() => {
 afterEach(cleanup);
 
 const DATA: NeedsYouData = {
-  countLabel: "2 decisions · needs you",
+  countLabel: "2 DECISIONS · NEEDS YOU",
   items: [
     {
       actionLabel: "Review the plan", detail: "The daemon offers approval for planning run run-1.",
@@ -44,7 +44,7 @@ describe("the Needs-you queue", () => {
   it("renders one card per decision with its goal, headline, detail and one action", async () => {
     const onOpenBoard = vi.fn();
     render(<NeedsYou data={DATA} onOpenBoard={onOpenBoard} />);
-    expect(screen.getByTestId("cr.needsyou.count").textContent).toBe("2 decisions · needs you");
+    expect(screen.getByTestId("cr.needsyou.count").textContent).toBe("2 DECISIONS · NEEDS YOU");
     const plan = screen.getByTestId("cr.needsyou.item.plan-approval.goal-1");
     expect(plan.textContent).toContain("Plan · Alpha");
     expect(plan.textContent).toContain("A plan is waiting for your approval");
@@ -63,7 +63,7 @@ describe("the Needs-you queue", () => {
       escalation: { affordance: { commandKind: "escalation.decide", targetAggregateId: "node-x" }, latestRoute: "REJECT_PLAN", nodeKey: "node-x", unsuccessfulRounds: 3 },
       goalId: "goal-1", headline: "A node's review is exhausted", kind: "ESCALATION" as const, planningRunRef: "run-1", title: "Alpha",
     };
-    const data: NeedsYouData = { countLabel: "1 decision · needs you", items: [item], note: null };
+    const data: NeedsYouData = { countLabel: "1 DECISION · NEEDS YOU", items: [item], note: null };
     const { rerender } = render(<NeedsYou data={data} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
     expect(screen.getByTestId("cr.needsyou.item.escalation.node-x").textContent).toContain("Review exhausted · Alpha");
     await userEvent.click(screen.getByTestId("cr.needsyou.escalate.node-x"));
@@ -78,7 +78,7 @@ describe("the Needs-you queue", () => {
     expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("Allowed.");
     expect((screen.getByTestId("cr.needsyou.escalate.node-x") as HTMLButtonElement).disabled).toBe(true);
     rerender(<NeedsYou data={data} decisionResults={new Map([["node-x", { busy: false, outcome: { code: "REVIEW_ESCALATION_NOT_REACHED", layer: "DAEMON_PREREQUISITE", ok: false } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
-    expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("This node has not used every review attempt yet");
+    expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("That didn't go through.");
     expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("REVIEW_ESCALATION_NOT_REACHED @ DAEMON_PREREQUISITE");
   });
 
@@ -90,7 +90,7 @@ describe("the Needs-you queue", () => {
       goalId: "goal-1", headline: "Everything the contract states is verified", kind: "READY_TO_CLOSE" as const,
       planningRunRef: "run-1", title: "Alpha",
     };
-    const data: NeedsYouData = { countLabel: "1 decision · needs you", items: [item], note: null };
+    const data: NeedsYouData = { countLabel: "1 DECISION · NEEDS YOU", items: [item], note: null };
     const { rerender } = render(<NeedsYou data={data} onDecide={onDecide} onOpenBoard={vi.fn()} />);
     const button = screen.getByTestId("cr.needsyou.close.goal-1");
     expect(button.textContent).toBe("Close the goal");
@@ -149,7 +149,7 @@ describe("the Needs-you queue", () => {
       onOpenBoard={vi.fn()}
     />);
     const note = screen.getByTestId("cr.needsyou.result.goal-1").textContent ?? "";
-    expect(note).toContain(code === "TRANSPORT_REQUEST_FAILED" ? "The daemon did not answer" : "The daemon refused this");
+    expect(note).toContain("That didn't go through.");
     expect(note).toContain(`${code} @ ${layer}`);
     // The refusal is not mistaken for success: the "Closed." line must NOT appear.
     expect(note).not.toContain("Closed. The goal is complete");
@@ -159,7 +159,7 @@ describe("the Needs-you queue", () => {
 
   it("states the empty queue as an invitation and carries the daemon's note", () => {
     render(<NeedsYou
-      data={{ countLabel: "0 decisions · needs you", items: [], note: "The daemon's offers have not arrived yet." }}
+      data={{ countLabel: "0 DECISIONS · NEEDS YOU", items: [], note: "The daemon's offers have not arrived yet." }}
       onOpenBoard={vi.fn()}
     />);
     expect(screen.getByTestId("cr.needsyou.empty").textContent).toContain("Nothing needs you right now.");

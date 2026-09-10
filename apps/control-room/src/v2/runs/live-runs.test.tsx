@@ -46,8 +46,6 @@ describe("LiveRuns", () => {
 
   it("renders a rejected read as an ERROR at the screen's own layer", async () => {
     render(<LiveRuns headers={{}} onOpenBoard={vi.fn()} pollMs={60_000} read={() => Promise.reject(new Error("x"))} />);
-    const refusal = (await screen.findByTestId("cr.runs.refusal")).textContent;
-    expect(refusal).toContain("The runs could not be read right now.");
-    expect(refusal).toContain("RUNS_READ_FAILED @ CONTROL_ROOM_RUNS");
+    expect((await screen.findByTestId("cr.runs.refusal")).textContent).toBe("The runs could not be read right now.");
   });
 });

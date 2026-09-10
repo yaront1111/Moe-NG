@@ -44,8 +44,6 @@ export const DEPLOY_MIGRATION_DATABASE_VARIABLE = "DATABASE_URL" as const;
 export const DEPLOY_MIGRATION_CONTEXT_DETAILS = Object.freeze({
   DEPLOY_MIGRATION_DATABASE_UNSET:
     "the environment carries no database variable for the migration to reach",
-  DEPLOY_MIGRATION_WORKSPACE_MISMATCH:
-    "the workspace named for this deploy is not the workspace the daemon is configured to migrate",
   DEPLOY_MIGRATION_WORKSPACE_UNCONFIGURED:
     "this daemon has no configured migration workspace, so there is nothing to migrate from",
 } as const);
@@ -53,8 +51,8 @@ export const DEPLOY_MIGRATION_CONTEXT_DETAILS = Object.freeze({
 export type DeployMigrationContextCode = keyof typeof DEPLOY_MIGRATION_CONTEXT_DETAILS;
 
 /**
- * These refusals answer from the DEPLOY engine boundary, not the environment slice's: a mismatched
- * or unconfigured workspace is a fact about this deploy, and only the ENV_* codes forwarded
+ * These refusals answer from the DEPLOY engine boundary, not the environment slice's: an
+ * unconfigured workspace is a fact about this deploy, and only the ENV_* codes forwarded
  * unchanged below belong to the environment store. Stamped, not `*_LAYER`-suffixed, because
  * `tests/security/boundary-roster.security.ts` treats a column-zero const whose name ends in
  * LAYER/LAYERS as a public security boundary owing a roster row.
@@ -99,10 +97,11 @@ export interface DeployMigrationContextRequest {
   readonly now?: Date;
   /** The migration's replay identity. `migrateWithBackup` owns the replay; this only carries it. */
   readonly requestId: string;
+  /** WHICH COMMIT'S `migrations/` runs. The engine extracts that path at this sha out of the
+   *  configured workspace's repository, so the tree the deploy archived is what migrates. There
+   *  is deliberately NO caller-supplied workspace beside it: a path string that merely EQUALLED
+   *  the host's proved nothing about the bytes, and pinning the source is the sha's job. */
   readonly sha: string;
-  /** Set only when the caller archived a specific workspace for this sha; a value that disagrees
-   *  with the host's configured one refuses rather than silently migrating the host's. */
-  readonly workspace?: string | null;
 }
 
 function refuse(code: DeployMigrationContextCode): DeployMigrationContextRefusal {
@@ -126,13 +125,6 @@ export function resolveDeployMigrationContext(
 ): DeployMigrationContextResult {
   const workspace = config.workspace;
   if (workspace === undefined || workspace === "") return refuse("DEPLOY_MIGRATION_WORKSPACE_UNCONFIGURED");
-  // A supplied workspace is CHECKED, never adopted: the admitted bytes for this sha are the
-  // host's, and migrating a different tree than the one the deploy archived is exactly the
-  // schema-ahead-of-code split the ordering in deploy-service.ts exists to prevent.
-  const named = request.workspace;
-  if (named !== undefined && named !== null && named !== workspace) {
-    return refuse("DEPLOY_MIGRATION_WORKSPACE_MISMATCH");
-  }
   const projectRoot = config.projectRoot ?? workspace;
   const delivered = readEnvironmentDelivery(
     { credential: config.credential, now: config.now, projectId: config.projectId, store: config.store },

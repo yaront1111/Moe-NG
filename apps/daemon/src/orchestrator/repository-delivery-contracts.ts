@@ -11,11 +11,17 @@ export const REPOSITORY_DELIVERY_REFUSAL_CODES = Object.freeze([
 ] as const);
 export type RepositoryDeliveryRefusal = Readonly<{ ok: false; layer: typeof REPOSITORY_DELIVERY_LAYER;
   code: RepositoryExecutionCode | typeof REPOSITORY_DELIVERY_REFUSAL_CODES[number] }>;
-export type RepositoryDeliveryFacts = "READY" | "SUBMITTED" | "ACCEPTED" | "LANDED" | "REFUSED" | "UNKNOWN";
+/**
+ * REFUSED_NO_EFFECT is a refusal decided BEFORE any landing intent was journaled: HEAD was never
+ * touched and nothing is owed on the checkout, so ownership can be given back. REFUSED keeps its
+ * meaning — a refusal that may have left a partial effect behind — and still contains the root.
+ */
+export type RepositoryDeliveryFacts = "READY" | "SUBMITTED" | "ACCEPTED" | "LANDED" | "REFUSED" | "REFUSED_NO_EFFECT" | "UNKNOWN";
 export interface RepositoryDeliveryConfig {
   readonly baseline: (nodeRef: string, reservedRoot: string) => Promise<string | null>;
   readonly controller: RepositoryExecutionController;
-  readonly facts: (nodeRef: string) => RepositoryDeliveryFacts;
+  /** The handle is what lets a refusal be told apart from a refusal that journaled nothing. */
+  readonly facts: (nodeRef: string, handle?: RepositoryExecutionHandle) => RepositoryDeliveryFacts;
   readonly isProcessAlive: (pid: number) => boolean;
   /** RETRY is permitted only for a known refusal before any commit/ref effect. */
   readonly land: (nodeRef: string, baselineId: string, reservedRoot: string, handle: RepositoryExecutionHandle) => Promise<"RETRY" | void>;

@@ -6,7 +6,7 @@ import {
   RELEASE_RECEIPT_COMMAND_KIND, RELEASE_RECEIPT_PRINCIPAL_ID, RELEASE_RECEIPT_VERSION,
   decodeReleaseReceiptBytes, releaseReceiptId,
 } from "./release-receipt-contracts.js";
-import type { ReleaseReceiptV1 } from "./release-receipt-contracts.js";
+import type { ReleaseReceiptProvenance, ReleaseReceiptV1 } from "./release-receipt-contracts.js";
 
 /**
  * Durable reads and writes for the release receipt, on the SAME aggregate the dossier
@@ -49,6 +49,12 @@ export interface RecordReleaseReceiptInput {
   readonly dossierSha256: string;
   readonly goalId: string;
   readonly outcome: ReleaseReceiptV1["outcome"];
+  /**
+   * The opt-in an AUTOMATIC release acted under. OPTIONAL, and absent means a human decided:
+   * every caller that existed before automatic release passes nothing and its stored bytes stay
+   * byte-identical, which is what keeps a replay of an already-stored receipt a replay.
+   */
+  readonly provenance?: ReleaseReceiptProvenance | null;
   readonly prUrl: string | null;
   readonly projectId: string;
   readonly refusalCode: ReleaseDecideCode | null;
@@ -106,10 +112,12 @@ export function recordReleaseReceipt(
   const historical = readReleaseReceipt(store, input.projectId, receiptId);
   if (historical.ok) return { ok: true, receipt: historical.receipt, replayed: true };
   if (historical.code === "RELEASE_RECEIPT_INVALID") return { code: historical.code, ok: false };
+  const provenance = input.provenance ?? null;
   const receipt: ReleaseReceiptV1 = {
     dossierSha256: input.dossierSha256,
     goalId: input.goalId,
     outcome: input.outcome,
+    provenance,
     prUrl: input.prUrl,
     projectId: input.projectId,
     receiptId,
@@ -117,7 +125,14 @@ export function recordReleaseReceipt(
     sha: input.sha,
     version: RELEASE_RECEIPT_VERSION,
   };
-  const resultBytes = encoder.encode(JSON.stringify(receipt));
+  // THE KEY IS OMITTED, NOT NULLED, FOR A HUMAN DECISION. `receipt` above is the TOTAL in-memory
+  // shape every reader sees; the stored bytes carry `provenance` only when there is one, so a
+  // human release writes exactly the bytes this ledger has always written and a replay of an
+  // already-stored receipt stays a replay rather than a byte conflict.
+  const { provenance: _omitted, ...withoutProvenance } = receipt;
+  const resultBytes = encoder.encode(JSON.stringify(
+    provenance === null ? withoutProvenance : receipt,
+  ));
   if (!decodeReleaseReceiptBytes(resultBytes).ok) {
     return { code: "RELEASE_RECEIPT_INVALID", ok: false };
   }

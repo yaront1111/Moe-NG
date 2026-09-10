@@ -1,14 +1,18 @@
+import { randomUUID } from "node:crypto";
 import type { SqliteEventStore } from "@moe/store";
 import { isDurableHumanPrincipal } from "../identity/human-approver.js";
 import { decodeCompiledContractBinding } from "../planning/compiled-contract-binding.js";
 import { criterionBytes, criterionContractRef, criterionExact, criterionGitSha, criterionObject, criterionText,
   decodeCriterionApproved, sameCriterionBinding, sameCriterionRef } from "./criterion-codec.js";
-import { CRITERION_SCHEMA_VERSION, CRITERION_VERIFY, CRITERION_VERIFY_KEYS, criterionRefused } from "./criterion-contracts.js";
+import { CRITERION_PRINCIPAL, CRITERION_SCHEMA_VERSION, CRITERION_VERIFY, CRITERION_VERIFY_KEYS, criterionRefused } from "./criterion-contracts.js";
 import type { CriterionCommandInput, CriterionCommandResult, CriterionRun, IntegratedCriterionArtifact } from "./criterion-contracts.js";
 import { readCriterionApprovals } from "./criterion-approval.js";
 import { readCriterionGoal } from "./criterion-goal.js";
 import type { CriterionGoal } from "./criterion-goal.js";
 import { commitCriterionRecord, criterionCatalogId, criterionReplay, criterionRunsId, readCriterionRecords } from "./criterion-storage.js";
+import { sameCriterionArtifact } from "./criterion-artifact.js";
+
+const automaticQueueKind = "internal.criterion.queued";
 
 export function decodeCriterionRun(value: unknown): CriterionRun | null {
   if (!criterionObject(value) || !criterionExact(value, ["version", "binding", "runRef", "artifact", "approvals", "status"])
@@ -32,7 +36,8 @@ export function readCriterionRuns(store: SqliteEventStore, goal: CriterionGoal):
     const run = decodeCriterionRun(row.value);
     if (run === null || !sameCriterionBinding(run.binding, binding)) return null;
     const previous = runs.get(run.runRef);
-    if (previous === undefined ? run.status !== "QUEUED" || row.event.decisionTrace?.commandKind !== CRITERION_VERIFY
+    const kind = row.event.decisionTrace?.commandKind;
+    if (previous === undefined ? run.status !== "QUEUED" || (kind !== CRITERION_VERIFY && kind !== automaticQueueKind)
       : JSON.stringify({ ...previous, status: run.status }) !== JSON.stringify(run)) return null;
     if (previous !== undefined && (previous.status === "COMPLETED" || previous.status === "BLOCKED"
       || run.status === "QUEUED")) return null;
@@ -72,5 +77,33 @@ export function queueCriterionVerification(store: SqliteEventStore, projectId: s
     return commitCriterionRecord(store, projectId, CRITERION_VERIFY, input,
       criterionRunsId(projectId, goal.binding.goalRef, goal.binding.planningRunRef), "CriterionVerificationQueued", run, decidedAt,
       [{ aggregateId: catalogId, expectedVersion: catalogVersion, events: [] }]);
+  } catch { return criterionRefused("CRITERION_CHECK_UNREADABLE"); }
+}
+
+/** Internal scheduling, not an external command: human verification keeps its own authority fence. */
+export function queueAutomaticCriterionVerification(store: SqliteEventStore, projectId: string, goalRef: string, decidedAt: string,
+  artifactFor: (goal: CriterionGoal) => IntegratedCriterionArtifact | null,
+): CriterionCommandResult {
+  try {
+    const goal = readCriterionGoal(store, projectId, goalRef); if (!goal.ok) return goal;
+    const catalogId = criterionCatalogId(projectId, goalRef, goal.binding.planningRunRef);
+    const aggregateId = criterionRunsId(projectId, goalRef, goal.binding.planningRunRef);
+    const catalogVersion = store.getAggregateVersion(catalogId);
+    const expectedVersion = store.getAggregateVersion(aggregateId);
+    const approved = readCriterionApprovals(store, goal); const runs = readCriterionRuns(store, goal);
+    if (approved === null || runs === null) return criterionRefused("CRITERION_CHECK_UNREADABLE");
+    if (runs.some((run) => run.status !== "COMPLETED")) return criterionRefused("CRITERION_CHECK_RUN_PENDING");
+    if (approved.length === 0 || approved.length !== goal.criteria.length) return criterionRefused("CRITERION_CHECK_APPROVAL_REQUIRED");
+    const artifact = artifactFor(goal);
+    if (artifact === null) return criterionRefused("CRITERION_CHECK_INTEGRATED_ARTIFACT_CHANGED");
+    // Even a failed completed batch is not an automatic retry loop. Humans can explicitly verify again.
+    if (runs.some((run) => sameCriterionArtifact(run.artifact, artifact))) return criterionRefused("CRITERION_CHECK_ALREADY_COMPLETED");
+    const runRef = `criterion-auto-${randomUUID()}`;
+    const run: CriterionRun = { version: CRITERION_SCHEMA_VERSION, binding: goal.binding, runRef,
+      artifact, approvals: approved, status: "QUEUED" };
+    if (decodeCriterionRun(run) === null) return criterionRefused("CRITERION_CHECK_UNREADABLE");
+    return commitCriterionRecord(store, projectId, automaticQueueKind, { commandId: runRef, correlationId: runRef,
+      principalId: CRITERION_PRINCIPAL, expectedVersion, payload: { goalRef, artifact } }, aggregateId,
+    "CriterionVerificationQueued", run, decidedAt, [{ aggregateId: catalogId, expectedVersion: catalogVersion, events: [] }]);
   } catch { return criterionRefused("CRITERION_CHECK_UNREADABLE"); }
 }

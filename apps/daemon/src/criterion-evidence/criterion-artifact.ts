@@ -3,6 +3,7 @@ import type { SqliteEventStore } from "@moe/store";
 import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import { resolveRepositoryExecutionIdentity } from "../repository/repository-execution-identity.js";
 import { readLandingReceipt } from "../repository/landing-ledger.js";
+import { landedWithNoEffect } from "../repository/landing-receipt-contracts.js";
 import { readVerifierReceipt } from "../review/verifier-receipt-ledger.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
 import type { CriterionGoal } from "./criterion-goal.js";
@@ -31,7 +32,22 @@ export function readCriterionArtifact(workspace: string): IntegratedCriterionArt
 export const sameCriterionArtifact = (a: IntegratedCriterionArtifact, b: IntegratedCriterionArtifact | null): boolean =>
   b !== null && a.root === b.root && a.sha === b.sha && a.treeSha === b.treeSha;
 
-/** An integrated candidate contains every execution-bearing node's exact, verified landing. */
+/**
+ * An integrated candidate contains every execution-bearing node's exact, verified landing.
+ *
+ * A NODE THAT LANDED NOTHING IS ACCEPTED WITH NO SHA TO BIND, not an unlanded node. Whether a
+ * receipt is such a node is `landedWithNoEffect`'s two-part question — the NOTHING_TO_COMMIT code
+ * AND no landing intent journaled for that acceptance — which is why the walk's `landingIntents`
+ * set is handed to it rather than the code being read here. Such a node contributes no sha, so
+ * the ancestry check below is SKIPPED for it, exactly as it is for a node with no landing at all.
+ * EVERY OTHER refusal — GIT_COMMIT_FAILED, GIT_INDEX_LOCKED, anything decided after bytes were
+ * owed — still refuses, and so does a node with no acceptance and an unreadable intent history.
+ *
+ * Inherited hazard, named rather than fixed here: node-lander.ts:78-79 records NOTHING_TO_COMMIT
+ * firing FALSELY on 2026-09-05 when delivered files were misread as operator dirt
+ * (`earlierAttemptPaths` is the mitigation). Goal closure already accepted that risk at
+ * goal-live-evidence.ts:133-146; crediting the code here extends it to criterion evidence.
+ */
 export function readIntegratedCriterionArtifact(
   store: SqliteEventStore, goal: CriterionGoal, workspace: string | null,
 ): IntegratedCriterionArtifact | null {
@@ -45,7 +61,9 @@ export function readIntegratedCriterionArtifact(
     for (const nodeRef of nodes) {
       const accepted = reviews.ledgers.get(nodeRef)?.accepted;
       const candidate = reviews.landings.get(nodeRef);
-      if (accepted === undefined || candidate === undefined || candidate.outcome !== "COMMITTED" || candidate.commit === null) return null;
+      if (accepted === undefined || candidate === undefined) return null;
+      if (landedWithNoEffect(candidate, reviews.landingIntents)) continue;
+      if (candidate.outcome !== "COMMITTED" || candidate.commit === null) return null;
       const landing = readLandingReceipt(store, goal.binding.projectId, candidate.receiptId);
       const verifier = readVerifierReceipt(store, goal.binding.projectId, candidate.verifierReceiptId);
       if (!landing.ok || landing.receipt.subjectRef !== nodeRef || landing.receipt.commit === null

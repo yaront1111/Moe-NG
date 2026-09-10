@@ -945,6 +945,57 @@ it), `NOTHING_TO_COMMIT`, `NOT_A_REPOSITORY`, `GIT_COMMIT_FAILED` (git's own
 words, e.g. a hook). A transient git failure (`GIT_FAILED`, e.g. a lock) is
 only reported and retried next pass. `MOE_NODE_LANDING=0` turns landing off.
 
+### A landing that commits nothing, and releasing a checkout it wedged
+
+A node can be accepted and still change no file — the work was already on HEAD,
+or a dead earlier seat's files were committed by the attempt before it. The
+lander refuses `NOTHING_TO_COMMIT` and records that refusal beside the node.
+
+**What that does to checkout ownership now.** The refusal is decided BEFORE the
+lander journals any landing intent, so nothing was written and nothing is owed:
+the reservation on that checkout is RELEASED (`LANDED_NOTHING`), and the next
+`node.deliver` on the same root claims it normally. You do nothing. A refusal
+decided AFTER the intent is journaled — `GIT_COMMIT_FAILED` from a hook, for
+instance — is the opposite case: git may already carry part of the landing, so
+the reservation is BLOCKED and held on purpose.
+
+**What a BLOCKED reservation means.** The record lives in
+`<gitdir>/moe-repository-execution.sqlite` and SURVIVES A DAEMON RESTART —
+restarting changes nothing. While it exists the execution port refuses every
+effect family on that checkout, not just landing: publishing and criterion
+verification are shut out too, and any other node asking for the root is refused
+`REPOSITORY_EXECUTION_BUSY`. `BLOCKED` is terminal by design (its transition
+list is empty), so nothing moves the reservation out of it — a release is the
+only exit, and it is offered on evidence rather than taken by a phase change.
+
+**Releasing a checkout wedged by an older daemon** (before the release above
+existed, a `NOTHING_TO_COMMIT` refusal left the reservation BLOCKED forever):
+
+1. Open the control room's **Health** screen and find the **Repository recovery**
+   card. Each held reservation shows its node ref, its reservation revision and
+   its phase.
+2. Read the two actions. `Release unused reservation` (`ABORT_UNEXECUTED`) will
+   be refused `REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN` here — the node did
+   execute. The second action is the one that applies.
+3. If the second action is refused rather than offered, the code under it says
+   why, and `REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN` there means the daemon
+   found a journaled landing intent: git may have run, so STOP. That checkout
+   needs the landing reconciled, not released; do not work around it.
+4. Type a reason (required, it is recorded with the decision) and press the
+   second button. It is labelled `Reconcile completed landing` even when the
+   landing committed nothing — the underlying action is `RECONCILE_LANDED`.
+5. The daemon re-reads the durable evidence with the reservation still held and
+   releases only if it still finds a refusal receipt with no journaled intent;
+   the card then answers `Recovery decision recorded`. Refresh it: the
+   reservation is gone.
+6. Confirm from the repository side that the next node can own the root. The
+   card lists no reservation for it, and the next `node.deliver` no longer
+   answers `REPOSITORY_EXECUTION_BUSY`.
+
+Recovery is human-only: the decision is taken either by the configured operator
+principal itself or by a durably paired human principal, and an agent principal
+is refused `REPOSITORY_RECOVERY_HUMAN_REQUIRED`.
+
 ### Closing a goal (your decision, the daemon's evidence)
 
 Closing is human-only and operator-only, like approval and publishing: the
@@ -1135,6 +1186,118 @@ project's policy aggregate at its current versions. The seed's builders
 (`verifierPolicySlice`, `reviewerCalibrationSlice` in
 `src/orchestrator/demo-seed-policy.ts`) are the declared defaults; a real
 deployment installs its own slices at the same refs.
+
+### A fresh product, from the browser, and the three steps that are not
+
+Measured 2026-09-09 by `tests/e2e/control-room/live-proof-prd.spec.ts`, which
+drives a product that did not exist when the run started from the New product
+form to a real pull request. The browser reaches: `repository.bootstrap`, the
+activation chain, Gate 1 (including `product_contract.answer_clarification`),
+`design.submit`, `planning.submit_decomposition`, the plan gate
+(`approval.decide_intent`) and Gate 3 (`release.decide`, which admits a paired
+ADMIN through `releaseByPairedAdmin`). Three steps are NOT the browser's and an
+operator has to take them:
+
+| Step | Why | What refuses without it |
+| --- | --- | --- |
+| Install `moe-verifier-policy/1` and `moe-reviewer-calibration/1` | No screen installs them; see *Verifier authority* above | wrapper prints "standing authority incomplete"; no node is ever accepted |
+| Approve each criterion CHECK | Needs a durable HUMAN principal, and no criterion-approval surface ships | `CRITERION_CHECK_HUMAN_REQUIRED @ CRITERION_EVIDENCE` on the operator wire |
+| Preview and deploy | Both run the product on the daemon's own host and are operator-only by design | `OPERATOR_PRINCIPAL_REQUIRED @ DAEMON_AUTHORIZATION` |
+| Stand the preview environment UP (`docker compose`) | A deploy is an UPDATE: `deploy-service.ts` discovers a container labelled `com.docker.compose.service=proxy` on the target network, reads its Caddyfile and flips the upstream to the candidate. No command kind brings an environment up | `DEPLOY_BUILD_FAILED / DEPLOY_PROXY_MISSING_OR_AMBIGUOUS`, and `DEPLOY_PROXY_INCUMBENT_MISSING` when the config's upstream resolves to no container |
+| Install the product's own dependencies | `deployment.deploy` runs the PRODUCT's migration, and `migration-ports.ts` resolves `node-pg-migrate` from the product workspace | the deploy refuses with the migration's own `MIGRATION_TOOL_MISSING` in its detail |
+
+The proxy's Caddyfile must match the generated one byte for byte after the
+upstream is normalised, or the deploy refuses `DEPLOY_PROXY_CONFIG_UNSUPPORTED`:
+only the generated topology is the engine's to flip. `deployment.deploy` also
+requires a COMMITTED `repository.publish` decision, so a deploy can only follow
+Gate 3.
+
+`policy.validate` IS now driven by the browser's activation chain (added
+2026-09-09). Without it `approval.decide_intent` refuses
+`APPROVAL_INTENT_POLICY_REF_UNAVAILABLE @ DAEMON_APPROVAL_INTENT`, because it
+derives its policy ref from the newest replay-verified `PolicyEvaluated` and
+nothing else writes that row.
+
+`repository.recover` IS A HUMAN'S KIND, NOT AN OPERATOR-ONLY ONE, and the
+distinction matters after a crash. It requires `project.admin` AND a durable
+HUMAN principal, and it REFUSES the MCP, wrapper and verifier transports
+(`repository-recovery-command.ts:20-25`) — so no agent seat can take it and the
+paired browser ADMIN can. It releases a wedged repository reservation with a
+proof: `ABORT_UNEXECUTED` for a reservation that never executed, or
+`RECONCILE_LANDED` for one whose durable evidence proves Git already committed.
+Measured 2026-09-09 on a real crashed landing: the Health screen's **Repository
+recovery** card offered `RECONCILE_LANDED` and refused `ABORT_UNEXECUTED` with
+`REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN`, one click reconciled the landing, and
+the reservation left the view. `qualification.replan` opens a successor run when
+a review has exhausted its attempts (see *Replan*). `session.renew` extends a
+minted session without re-pairing.
+
+### The landing crash knob (DEVELOPMENT ONLY)
+
+`apps/daemon/src/orchestrator/landing-fault-injection.ts` kills the process
+performing a landing write at a NAMED point, which is the only way to reach the
+window between the Git effect and the completion that records it. It is off in
+every normal run and refuses with a stable code:
+
+| Environment | Effect |
+| --- | --- |
+| nothing set | `FAULT_INJECTION_DISARMED` |
+| `MOE_FAULT_INJECT_LANDING=<point>` without `MOE_DEVELOPMENT_ONLY=1` | `FAULT_INJECTION_NOT_DEVELOPMENT` (the development fence answers FIRST, so an unarmed caller learns nothing about which names exist) |
+| both set, unknown point | `FAULT_INJECTION_POINT_UNKNOWN` |
+| both set, known point | SIGKILL at that point, after a synchronous note on fd 2 |
+
+The points are `before-intent`, `after-intent`, `after-commit` and
+`after-completion`. ONLY `after-completion` HAS A RECOVERY: the other three leave
+the journal unable to prove what Git did, so the reservation stays contained —
+`before-intent` reads `REPOSITORY_RECOVERY_EVIDENCE_MISSING` and `after-commit`
+reads `REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN`. That is fail-closed by design;
+an operator whose daemon died at one of those points has a held checkout and no
+button, which is the honest state of the product today. `MOE_DEVELOPMENT_ONLY=1`
+must never be set on a daemon that matters.
+
+### Nodes of one goal deliver ONE AT A TIME
+
+The delivery coordinator admits exactly one checkout owner per repository root.
+While one node holds the reservation — from staffing until its landing commits —
+every other node of that goal is refused
+`REPOSITORY_EXECUTION_BUSY (REPOSITORY_DELIVERY)` on each wrapper pass. So
+"independent nodes are staffed in parallel" means they are CLAIMED and ATTEMPTED
+in the same pass; their commits are serialized. Raising
+`MOE_WRAPPER_MAX_AGENTS` does not change this and never will: the fence is the
+repository, not the seat count. A driver that waits for every seat to report
+before recording any review round therefore DEADLOCKS — the first node holds the
+checkout waiting for a round that is waiting for the second node.
+
+### Human-only kinds (the MCP-excluded roster)
+
+`OPERATOR_PRINCIPAL_KINDS` in `apps/daemon/src/daemon-command-vocabulary.ts` is
+the single source; `mcp-tool-allowlist.js` DERIVES the MCP exclusion from it, so
+a kind added there is removed from the advertised MCP surface by construction.
+As of 2026-09-09 it holds 28 kinds:
+
+```
+approval.decide                  approval.decide_intent
+criterion_check.approve          criterion_check.verify
+cutover.activate                 deployment.deploy
+deployment.migrate_down          deployment.rollback
+deployment.set_target            environment.set_variable
+environment.unset_variable       goal.close
+graph.approve                    graph.supersede
+integration.accept_output        monitoring.retire_environment
+monitoring.set_probe_interval    preview.decide
+preview.start                    product_contract.answer_clarification
+product_contract.sync_env_example project.set_agent_provider
+release.decide                   repository.bootstrap
+repository.publish               repository.recover
+resource.confirm_released        session.open
+```
+
+Membership is what removes a kind from MCP. It is NOT always what fences its
+dispatch: kinds served from ASYNC entries (`deployment.deploy`, `preview.start`,
+`release.decide`) never reach the registry's synchronous operator check, so each
+of those handlers fences itself at entry — and `release.decide`'s own fence
+deliberately admits a paired ADMIN human, which is why Gate 3 is browser-driven
+while preview and deploy are not.
 
 ## Code-node specs
 

@@ -1,12 +1,12 @@
 import { useState } from "react";
 import type { JSX } from "react";
 
+import { OutcomeNote } from "../components/outcome-note.js";
 import { ActionButton } from "../components/primitives.js";
+import { writeFailedSaid } from "../outcome-words.js";
 import type {
   ApprovalAuthorization, ApprovalGrant, PlanApprovalOutcome,
 } from "./plan-approval.js";
-import { RefusalNote } from "../components/outcome-note.js";
-import { refusalWords } from "../components/refusal-words.js";
 
 /**
  * The two decisions on the plan-review screen - approve it, or send it back - and
@@ -65,9 +65,10 @@ function WithheldReason({ authorization }: {
   readonly authorization: Extract<ApprovalAuthorization, { status: "WITHHELD" }>;
 }): JSX.Element {
   return (
-    <RefusalNote
-      refusal={authorization}
-      said={`Approval is not offered for this run. ${refusalWords(authorization)}`}
+    <OutcomeNote
+      code={authorization.code}
+      layer={authorization.layer}
+      said="Approval is not offered for this run yet."
       testId="cr.approve.reason"
     />
   );
@@ -100,7 +101,12 @@ export function ApproveGate(
       <div className="cr2-approve-gate">
         <SentBackNote />
         {refusal === null ? null : (
-          <RefusalNote refusal={refusal} role="alert" testId="cr.approve.dispatch-refusal" />
+          <OutcomeNote
+            code={refusal.code}
+            layer={refusal.layer}
+            said={writeFailedSaid()}
+            testId="cr.approve.dispatch-refusal"
+          />
         )}
       </div>
     );
@@ -139,7 +145,12 @@ export function ApproveGate(
         ? <WithheldReason authorization={authorization} />
         : null}
       {refusal === null ? null : (
-        <RefusalNote refusal={refusal} role="alert" testId="cr.approve.dispatch-refusal" />
+        <OutcomeNote
+          code={refusal.code}
+          layer={refusal.layer}
+          said={writeFailedSaid()}
+          testId="cr.approve.dispatch-refusal"
+        />
       )}
     </div>
   );

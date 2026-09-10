@@ -54,6 +54,23 @@ export interface DossierNodeFacts {
   readonly receipt: DossierReceiptFacts | null;
 }
 
+/**
+ * One approved criterion's CURRENT criterion-check evidence, as the criterion-evidence seam
+ * reads it — the same seam goal closure consults through `currentCriterionReceipts`.
+ *
+ * This is a DIFFERENT fact from `DossierReceiptFacts`. That one is the node's GENERAL verifier
+ * receipt: one command per node, which says the node's own tests passed. This one is the
+ * per-CRITERION check the operator approved for that criterion, and `artifactSha` is the
+ * integrated commit the check actually ran at, read off the receipt itself
+ * (`CriterionReceipt.artifact`) so nothing has to be measured twice and the two reads cannot
+ * come to disagree mid-release.
+ */
+export interface DossierCriterionReceipt {
+  /** The integrated artifact commit the PASSED check ran at. */
+  readonly artifactSha: string;
+  readonly criterionId: string;
+}
+
 /** One approved acceptance criterion and the node that verifies it, if any. */
 export interface DossierCriterionFacts {
   readonly criterionId: string;
@@ -85,6 +102,12 @@ export interface DossierPreviewDecision {
  */
 export interface DossierInput {
   readonly criteria: readonly DossierCriterionFacts[];
+  /**
+   * Every criterion carrying a PASSED criterion-check receipt right now, with the artifact each
+   * ran at. A criterion ABSENT from this list has no current criterion evidence at all, which is
+   * the state `CRITERION_NOT_VERIFIED_AT_SHA` names.
+   */
+  readonly criterionReceipts: readonly DossierCriterionReceipt[];
   readonly goalId: string;
   readonly goalTitle: string;
   readonly nodes: readonly DossierNodeFacts[];

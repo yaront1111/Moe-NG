@@ -13,7 +13,7 @@
  * with its principal fence, remote check, `releaseDossierGaps`, dossier read, replay fence and
  * receipt write all production.
  *
- * WHAT IS DOUBLED, AND WHY NONE OF IT DECIDES -- exactly five seams, all outside the decision
+ * WHAT IS DOUBLED, AND WHY NONE OF IT DECIDES -- exactly six seams, all outside the decision
  * path. (1) The CLOCK. (2) The preview PORT's process stop: there is no child dev server in this
  * lane to kill, and the DECISION is `runPreviewDecideEdge`'s. (3) and (4) Gate 3's two PROCESS
  * LAUNCHERS, the git publisher and the `gh` pull-request port -- the publisher double still writes
@@ -21,8 +21,11 @@
  * real durable receipt and a double that LIED about pushing would be caught by production code.
  * (5) The git ANCESTRY MEASUREMENT, because this lane has no git object database and `ancestryAt`
  * shells out to `git cat-file`; the substitute answers ANCESTOR only for the sha under release,
- * never unconditionally, so the evidence gate is passed THROUGH rather than disarmed. The dossier
- * FACTS themselves come from the production `readReleaseDossierInput` over this same store.
+ * never unconditionally, so the evidence gate is passed THROUGH rather than disarmed. (6) The git
+ * CRITERION-ARTIFACT measurement, for exactly that reason -- `readCriterionArtifact` shells out to
+ * `git rev-parse` and `git status` -- while `currentCriterionReceipts` still applies every one of
+ * its own rules to records the production approval command, queue and receipt writer wrote. The
+ * dossier FACTS themselves come from the production `readReleaseDossierInput` over this store.
  */
 import { createHash } from "node:crypto";
 
@@ -37,6 +40,7 @@ import { createDaemonCommandPorts } from "./daemon-command-registry.js";
 import { designRevisionFixture, designSkipFixture } from "./design/design-test-fixtures.js";
 import { readDesignRevision } from "./design/design-store.js";
 import { designAggregateId } from "./design/design-contracts.js";
+import { seedPassedCriterionReceipts } from "./criterion-evidence/criterion-test-fixtures.js";
 import { createSessionAuthenticator } from "./identity/session-authenticator.js";
 import { handleAsyncCommandRequest, handleCommandRequest } from "./http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "./http/http-contract.js";
@@ -107,11 +111,23 @@ function pushPublisher(store: SqliteEventStore, branch: string, sha: string | nu
   };
 }
 
+/** The integrated criterion artifact a real `readCriterionArtifact` would measure off the
+ *  workspace. SIXTH substituted seam, and the same reason as the fifth: `readCriterionArtifact`
+ *  shells out to `git rev-parse` and `git status`, and this lane has no git object database. It
+ *  decides nothing -- `currentCriterionReceipts` still applies every one of its own rules (latest
+ *  run COMPLETED, receipt PASSED, approved check and criterion digest matching) to the records the
+ *  production writers wrote. An artifact naming a DIFFERENT sha would leave the criteria
+ *  unverified, so this is passed THROUGH the gate rather than disarming it. */
+const criterionArtifactAt = (sha: string) => Object.freeze({
+  root: "D:/fixture-workspace", sha, treeSha: "1".repeat(40),
+});
+
 /** The evidence facts, read by the PRODUCTION reader over this journey's own store. Only the git
- *  ancestry measurement is substituted: this lane holds no git object database. */
+ *  ancestry and criterion-artifact measurements are substituted: this lane holds no git object
+ *  database. */
 function dossierFacts(store: SqliteEventStore) {
   return (goalId: string, sha: string) => {
-    const input = readReleaseDossierInput(store, PROJECT_ID, goalId);
+    const input = readReleaseDossierInput(store, PROJECT_ID, goalId, () => criterionArtifactAt(sha));
     if (input === null || input.criteria.length === 0) return null;
     // The honest stand-in for `git merge-base --is-ancestor` in a lane with no git object
     // database: a cited landing commit is an ancestor of the release sha exactly when it IS that
@@ -370,6 +386,17 @@ export function journeyWorld(design: DesignStep): JourneyWorld {
     throw new Error(`journey landing sha ${sha} no longer matches LANDED_SHA ${LANDED_SHA}: `
       + "rebind the verifier receipt's workspaceBinding.headSha to the landing writer's commit");
   }
+  // THE APPROVED CRITERION CHECKS, PASSED AT THE SHA UNDER RELEASE. Gate 3 now demands the same
+  // criterion evidence `goal.close` demands (GOAL_CLOSE_CRITERIA_UNVERIFIED), so a journey without
+  // it would refuse RELEASE_EVIDENCE_INCOMPLETE on a goal whose product IS built -- and every
+  // release arm would be testing the absence of criterion evidence instead of the sequence.
+  // CRITERION_APPROVE is still a human ADMIN command, so this is the OPERATOR's work, in the same
+  // human's sequence as the three gates.
+  const criteria = seedPassedCriterionReceipts(store, {
+    artifact: criterionArtifactAt(sha), decidedAt: DECIDED_AT, goalRef: GOAL_ID,
+    projectId: PROJECT_ID,
+  });
+  if (criteria.length === 0) throw new Error("the journey goal carries no criteria to verify");
   const receipt = recordPreviewReceipt(store, {
     code: null, decidedAt: DECIDED_AT, goalId: GOAL_ID, pid: 4242, projectId: PROJECT_ID,
     screenshots: [], sha, url: "http://127.0.0.1:5199/",
@@ -381,7 +408,8 @@ export function journeyWorld(design: DesignStep): JourneyWorld {
 }
 
 export {
-  BASE, CREDENTIAL, DECIDED_AT, GOAL_ID, PROJECT_ID, PR_URL, REMOTE_URL, closeStores, nextId,
+  BASE, CREDENTIAL, DECIDED_AT, GOAL_ID, PROJECT_ID, PR_URL, REMOTE_URL, closeStores,
+  dossierFacts, nextId,
   readDesignRevision, readPreviewDecision, readReleaseReceipt, releaseReceiptId, seatSession,
 };
 export type { CommandAdapterDeps, Journey };

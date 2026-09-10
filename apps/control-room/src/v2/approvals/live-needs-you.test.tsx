@@ -3,6 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { LiveSetup } from "../../live/live-config.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
+import type { PreviewReadOutcome } from "../../live/live-preview.js";
 import type { RunsOutcome } from "../../live/live-runs.js";
 import { LiveNeedsYou } from "./live-needs-you.js";
 
@@ -47,6 +48,9 @@ function stubWire(): void {
   }));
 }
 
+/** What `/preview/read` answers in `receiptId`: a 64-hex digest, never `preview:<goalId>`. */
+const RECEIPT_ID = "7c3e91a5d0b84f27ae60d5182b3c94f7a15e8d602c7b93481fa0e65d3c827b19";
+
 const gatePending: DocumentCoverageOutcome = {
   contracts: [{ contractId: "contract-gate", gate1: "PENDING", plane: "V1", requirements: [], revisionDigest: "d".repeat(64), revisionId: "rev-1" }],
   document: { byteLength: 1, contentSha256: "b".repeat(64), displayPath: "PRD.md" },
@@ -67,7 +71,7 @@ describe("LiveNeedsYou", () => {
       expect(screen.getByTestId("cr.needsyou.item.plan-approval.goal-plan")).toBeTruthy();
       expect(screen.getByTestId("cr.needsyou.item.gate-1.goal-gate")).toBeTruthy();
     });
-    expect(screen.getByTestId("cr.needsyou.count").textContent).toBe("2 decisions · needs you");
+    expect(screen.getByTestId("cr.needsyou.count").textContent).toBe("2 decisions need you");
     // The badge count is a passive effect of the 2-item render: it lands after the DOM does.
     await waitFor(() => { expect(onCount).toHaveBeenLastCalledWith(2); });
     expect(readCoverage).toHaveBeenCalledWith("goal-plan");
@@ -158,11 +162,46 @@ describe("LiveNeedsYou", () => {
     expect(submit).toHaveBeenCalledWith(offer, "goal-gate");
   });
 
+  it("sends the RECEIPT id /preview/read answered, never the offer's aggregate id", async () => {
+    // DoD 2. The defect was a composition omission: `facts.receiptId` sat beside the call and
+    // was not passed, so the port derived `previewRef` from the affordance's targetAggregateId
+    // — the preview AGGREGATE — and the daemon answered 422 PREVIEW_GOAL_NOT_LANDED @
+    // GOAL_AUTHORITY. This arm asserts the VALUE that reached the port. A spy that only counted
+    // the call could not tell a receipt id from an aggregate id, which is the same blindness
+    // the port's own fixture had while both its strings were one string.
+    const offer = {
+      commandEnvelopeVersion: "moe-runtime-command/1", commandId: "cmd-preview", commandKind: "preview.decide",
+      expectedVersion: 2, inputSchemaVersion: "moe-preview-command/1", targetAggregateId: "preview:goal-plan",
+    };
+    vi.stubGlobal("fetch", vi.fn(async (path: string): Promise<Response> => {
+      if (path === "/affordances/read") return { json: async () => ({ ...SURFACE, nextAllowedCommands: [offer] }), status: 200 } as unknown as Response;
+      if (path === "/goals/read") return { json: async () => CATALOG, status: 200 } as unknown as Response;
+      throw new Error(`unexpected fetch path ${path}`);
+    }));
+    const readPreview = vi.fn(async (): Promise<PreviewReadOutcome> => ({
+      preview: {
+        code: null, decidedAt: "2026-09-09T12:00:00.000Z", goalId: "goal-plan", outcome: "STARTED",
+        receiptId: RECEIPT_ID, screenshots: [], sha: "c".repeat(64), url: "http://127.0.0.1:4173",
+      },
+      status: "PREVIEW",
+    }));
+    const submit = vi.fn(async () => ({ commandId: "cmd-preview", ok: true as const }));
+
+    render(<LiveNeedsYou onOpenBoard={vi.fn()} previewPort={{ submit }} readPreview={readPreview} setup={SETUP} />);
+    (await screen.findByTestId("cr.needsyou.preview.approve")).click();
+
+    await waitFor(() => { expect(submit).toHaveBeenCalledTimes(1); });
+    // The id is asserted against RECEIPT_ID and the aggregate id is asserted absent, so this
+    // cannot pass again if a later edit reintroduces the derivation.
+    expect(submit).toHaveBeenCalledWith(offer, RECEIPT_ID, "APPROVE", []);
+    expect(submit).not.toHaveBeenCalledWith(offer, "preview:goal-plan", "APPROVE", []);
+  });
+
   it("shows an honest empty queue without a coverage reader", async () => {
     stubWire();
     render(<LiveNeedsYou onOpenBoard={vi.fn()} setup={SETUP} />);
     await screen.findByTestId("cr.needsyou.item.plan-approval.goal-plan");
     expect(screen.queryByTestId("cr.needsyou.item.gate-1.goal-gate")).toBeNull();
-    expect(screen.getByTestId("cr.needsyou.count").textContent).toBe("1 decision · needs you");
+    expect(screen.getByTestId("cr.needsyou.count").textContent).toBe("1 decision needs you");
   });
 });

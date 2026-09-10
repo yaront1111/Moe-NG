@@ -71,7 +71,7 @@ describe("the Needs-you queue after a plan is sent back", () => {
     expect(item.headline).toBe("The plan you sent back is being re-planned");
     expect(item.detail).toContain("compiling a new plan from the reason you gave");
     expect(item.goalId).toBe(RECORDED.goalId);
-    expect(data.countLabel).toBe("1 decision · needs you");
+    expect(data.countLabel).toBe("1 decision needs you");
   });
 
   /**

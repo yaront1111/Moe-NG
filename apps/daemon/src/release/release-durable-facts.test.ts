@@ -8,7 +8,11 @@ import { createProjectConfigurationManifest, encodeProjectConfigurationManifest 
 import { afterEach, expect, it, vi } from "vitest";
 
 import { closeStores, driveThrough, envelope as bootstrapEnvelope, GOAL_CREATE_COMMAND_ID, GOAL_ID, PROJECT_ID, RUN_ID, send } from "../bootstrap/bootstrap-test-fixtures.js";
+import { readCriterionArtifact } from "../criterion-evidence/criterion-artifact.js";
 import { readCriterionGoal } from "../criterion-evidence/criterion-goal.js";
+import { seedPassedCriterionReceipts } from "../criterion-evidence/criterion-test-fixtures.js";
+import { readCoverageCriterionAuthority } from "../http/document-coverage-criteria.js";
+import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import { selectProjectConfiguration } from "../configuration/project-configuration-selection.js";
 import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
@@ -262,6 +266,17 @@ it.each([false, true])("prepares a complete exact-SHA dossier and refuses stale 
         sha, markdown: "# Stale incomplete evidence\n" }).ok).toBe(true);
     }
     land(store, nodeRef, receiptId, sha, sourceSha, workspace);
+    // THE CRITERION EVIDENCE, at a REAL artifact measured by the PRODUCTION reader off this git
+    // repository — no substituted seam in this lane, which is why the set-equality assertion below
+    // means something. The tree is clean at this point (product.ts is committed), so
+    // `readCriterionArtifact` answers the released sha.
+    const artifact = readCriterionArtifact(workspace);
+    if (artifact === null) throw new Error("the fixture workspace is not a measurable artifact");
+    expect(artifact.sha).toBe(sha);
+    const seeded = seedPassedCriterionReceipts(store, {
+      artifact, decidedAt: NOW, goalRef: GOAL_ID, projectId: PROJECT_ID,
+    });
+    expect(seeded).toEqual(["crit-api", "crit-ui"]);
     const facts = seams.dossierFacts(GOAL_ID, sha);
     if (poisoned) {
       expect(facts).toBeNull();
@@ -270,6 +285,30 @@ it.each([false, true])("prepares a complete exact-SHA dossier and refuses stale 
     expect(facts).not.toBeNull();
     if (facts === null) throw new Error("production dossier facts unavailable");
     expect(releaseDossierGaps(facts.input, sha, facts.ancestry)).toEqual([]);
+    // ONE AUTHORITY, PROVEN BY SET EQUALITY. If release and goal closure could read different
+    // criterion receipts, the two gates would disagree about whether the product is built — which
+    // is the whole defect this edge closes. BOTH SIDES ARE PRODUCTION SURFACES: the left is what
+    // `readReleaseDossierInput` folded through `currentCriterionReceipts`; the right is
+    // `readCoverageCriterionAuthority`, the reader `goal.close` refuses
+    // GOAL_CLOSE_CRITERIA_UNVERIFIED from (goal-services.ts:166 -> `goalCloseReadinessFor` ->
+    // document-coverage-read.ts:190). Neither side is a helper that restates the rules.
+    const closure = readCoverageCriterionAuthority(
+      store, PROJECT_ID, activeCompiledGraphs(store, PROJECT_ID),
+    );
+    const closureIds = [...closure.verified]
+      .map((key) => JSON.parse(key) as readonly [string, string])
+      .filter(([goalRef]) => goalRef === GOAL_ID)
+      .map(([, criterionId]) => criterionId)
+      .sort();
+    const releaseIds = facts.input.criterionReceipts.map((receipt) => receipt.criterionId).sort();
+    // NON-VACUOUS FIRST: two equal EMPTY sets satisfy set equality while proving nothing, so the
+    // seeded roster is asserted before the two sides are compared with each other.
+    expect(releaseIds).toEqual([...seeded]);
+    expect(closureIds).toEqual(releaseIds);
+    // And the evidence is bound to the RELEASED tree, not merely present: the artifact each check
+    // passed at is this release's own commit.
+    expect(facts.input.criterionReceipts.map((receipt) => receipt.artifactSha))
+      .toEqual(seeded.map(() => sha));
     const persisted = readReleaseDossier(store, PROJECT_ID, dossierId);
     expect(persisted.ok).toBe(true);
     if (!persisted.ok) throw new Error(persisted.code);

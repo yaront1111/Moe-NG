@@ -93,7 +93,7 @@ const HANDSHAKE_PENDING_DATA: GoalsData = Object.freeze({
   source: "live",
   goals: Object.freeze([]),
   triage: Object.freeze([]),
-  goalCountLabel: "Connecting",
+  goalCountLabel: "CONNECTING",
   comingOnlineNote: "Pairing with the daemon over the runtime handshake. Nothing is shown until it answers.",
 });
 

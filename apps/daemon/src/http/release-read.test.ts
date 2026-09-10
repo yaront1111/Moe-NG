@@ -18,6 +18,7 @@ import { afterEach, expect, it } from "vitest";
 
 import { closeStores, GOAL_ID, PROJECT_ID, RUN_ID } from "../bootstrap/bootstrap-test-fixtures.js";
 import { readCriterionGoal } from "../criterion-evidence/criterion-goal.js";
+import { seedPassedCriterionReceipts } from "../criterion-evidence/criterion-test-fixtures.js";
 import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import {
   approveGate1, approvePlan, boundWorld, committedRevision, nodeOf, structureOf, submit,
@@ -166,8 +167,19 @@ it("keeps covered and UNKNOWN criteria DISTINGUISHABLE, per row, without any mar
   const { apiRef, store } = twoNodeWorld();
   land(store, apiRef, accept(store, apiRef));
   publish(store);
+  // BOTH criteria carry an approved check that PASSED at the released artifact, so the ONLY
+  // difference left between the two rows is their NODE evidence — which is what this arm
+  // measures. Seeding one criterion and not the other would make the split ambiguous: the reader
+  // could not tell which of the two authorities produced it. The artifact MEASUREMENT is the one
+  // substituted seam, for the same reason the ancestry factory above is: no git object database.
+  const artifact = { root: "/fixture-workspace", sha: RELEASE_SHA, treeSha: "d".repeat(40) };
+  expect(seedPassedCriterionReceipts(store, {
+    artifact, decidedAt: NOW, goalRef: GOAL_ID, projectId: PROJECT_ID,
+  })).toEqual(["crit-api", "crit-ui"]);
 
-  const answer = readReleaseForGoal(store, { goalId: GOAL_ID, projectId: PROJECT_ID }, ANCESTOR);
+  const answer = readReleaseForGoal(
+    store, { goalId: GOAL_ID, projectId: PROJECT_ID }, ANCESTOR, () => artifact,
+  );
   if (answer.kind !== "PRESENT") throw new Error(`expected PRESENT, got ${answer.kind}`);
   // NON-VACUITY first: a fixture that silently produced no rows would satisfy every count below.
   expect(answer.evidence.criteria.length).toBe(2);

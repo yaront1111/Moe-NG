@@ -122,7 +122,7 @@ export function StatusStrip({
 
       {simulatable ? (
         <div className="cr2-simulate" data-testid="cr.shell.simulate">
-          <span className="cr2-simulate-label">Simulate</span>
+          <span className="cr2-simulate-label">SIMULATE</span>
           {CONNECTION_STATES.map((state) => {
             const active = state === descriptor.key;
             return (

@@ -4,8 +4,9 @@ import type { JSX } from "react";
 import type {
   CoverageContractView, CoverageCriterionView, DocumentCoverageOutcome,
 } from "../../live/live-document-coverage.js";
+import { OutcomeNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
-import { RefusalNote } from "../components/outcome-note.js";
+import { readFailedSaid } from "../outcome-words.js";
 
 /**
  * PRD COVERAGE: how much of the opened goal's PRD is built, as the daemon can prove it.
@@ -89,7 +90,7 @@ function ContractBlock({ contract }: { readonly contract: CoverageContractView }
     <section className="cr2-approve-block" data-testid={`cr.coverage.contract.${contract.contractId}`}>
       <h3 className="cr2-approve-heading">
         {`CONTRACT ${MIDDOT} ${contract.contractId} ${MIDDOT} ${contract.revisionId}`
-          + ` ${MIDDOT} ${contract.gate1 === "APPROVED" ? "contract approved" : "contract awaiting your approval"}`}
+          + ` ${MIDDOT} GATE 1 ${contract.gate1}`}
       </h3>
       <details className="cr2-approve-inspect" data-testid={`cr.coverage.contract.${contract.contractId}.requirements`}>
         <summary className="cr2-approve-inspect-summary">
@@ -211,16 +212,18 @@ export function PrdCoverage({ goalId, pollMs, read }: PrdCoverageProps): JSX.Ele
 
   return (
     <section className="cr2-approve" data-testid="cr.coverage.card">
-      <p className="cr2-slot-kicker">
-        PRD coverage
-        <span className="cr2-visually-hidden">{` for ${goalId}`}</span>
-      </p>
+      <p className="cr2-slot-kicker">PRD coverage</p>
       {state.phase === "LOADING" ? (
         <p className="cr2-slot-kicker" data-testid="cr.coverage.loading">Reading coverage...</p>
       ) : state.outcome.status === "COVERAGE" ? (
         <CoverageBody coverage={state.outcome} />
       ) : (
-        <RefusalNote refusal={state.outcome} testId="cr.coverage.refusal" />
+        <OutcomeNote
+          code={state.outcome.code}
+          layer={state.outcome.layer}
+          said={readFailedSaid("coverage")}
+          testId="cr.coverage.refusal"
+        />
       )}
     </section>
   );
