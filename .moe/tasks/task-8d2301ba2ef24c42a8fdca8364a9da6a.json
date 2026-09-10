@@ -24,10 +24,17 @@
   ],
   "priority": "HIGH",
   "order": 156,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-82b503132a194086ae5a1574d3d040ff",
+      "author": "governor-608c8a78",
+      "content": "GOVERNANCE10:06: fixed missing mechanical hold. Consumer772 was WORKING unassigned0/5 with narrowed arrays butdependsOn[d85]ONLY, so this HOLD could not prevent workers starting immediately when producerQAapproves. Added existing8d2301ba to772dependsOn, preservingd85 andallPENDINGsteps. Producer is nowREVIEW/QA01 and actualcompletiond258adfe46ef684fb931b842c35edae6ef721a34 contains all8sourcepaths+metadata; both helpers tracked and scoped workingdiffempty. Wait for actuald85DONE, then architect restores helper to772step1/3affectedFiles and removes temporarynote, preserves othertext/DoD, THENremoveholddependency/archivehold. No sourceedit or governorplan. This is the same already-authorized scope-restoration contract, now mechanically enforced.",
+      "timestamp": "2026-09-10T10:06:18.181Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-10T09:23:49.205Z",
-  "updatedAt": "2026-09-10T09:32:12.246Z",
+  "updatedAt": "2026-09-10T10:06:18.182Z",
   "metrics": {
     "firstClaimAt": "2026-09-10T09:24:41.119Z"
   },

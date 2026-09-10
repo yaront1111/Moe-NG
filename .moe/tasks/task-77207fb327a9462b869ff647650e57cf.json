@@ -66,7 +66,8 @@
   "createdBy": "WORKER",
   "parentTaskId": null,
   "dependsOn": [
-    "task-d85fd8fd74354e94886d619c67f24c75"
+    "task-d85fd8fd74354e94886d619c67f24c75",
+    "task-8d2301ba2ef24c42a8fdca8364a9da6a"
   ],
   "priority": "LOW",
   "order": 154,
@@ -80,7 +81,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:24:18.695Z",
-  "updatedAt": "2026-09-10T09:23:17.865Z",
+  "updatedAt": "2026-09-10T10:06:16.855Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T17:07:10.791Z",
     "plannedStepCount": 5,
@@ -114,6 +115,7 @@
   },
   "planApprovedAt": "2026-09-10T09:23:17.865Z",
   "contextFetchedBy": [
-    "architect-978f68c6"
+    "architect-978f68c6",
+    "governor-608c8a78"
   ]
 }
