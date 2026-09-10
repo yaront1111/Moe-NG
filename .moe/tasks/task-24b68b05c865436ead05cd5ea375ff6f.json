@@ -190,7 +190,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:05:30.360Z",
-  "updatedAt": "2026-09-10T00:11:26.357Z",
+  "updatedAt": "2026-09-10T00:12:25.878Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T19:36:44.792Z",
     "plannedStepCount": 8,
@@ -321,6 +321,21 @@
       "treeId": "cd48ddbc620cdd99a9737d1f8f40962fd987f0ba",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "d1a9c29857c8c938c6597a840ea4fde374a81da5",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-a11dcf70@2026-09-10T00:00:08Z",
+      "paths": [
+        ".moe/tasks/task-24b68b05c865436ead05cd5ea375ff6f.json"
+      ],
+      "recordedBy": "worker-a11dcf70",
+      "recordedAt": "2026-09-10T00:12:25.878Z",
+      "treeId": "d219f90528278139bddb60716c600a9cb890e5ae",
+      "status": "BLOCKED",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -352,8 +367,8 @@
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-a11dcf70@2026-09-09T23:56:00Z",
-    "at": "2026-09-09T23:56:07.918Z"
+    "sessionId": "worker-a11dcf70@2026-09-10T00:00:08Z",
+    "at": "2026-09-10T00:12:25.878Z"
   },
   "blockedReason": "STEP 7 GATE RED FROM MY OWN DIFF; THE FIX IS IN TWO FILES NO STEP OWNS. Needs a step-7 amendment (amend_plan_step OVERLAY, NOT request_replan: six steps are delivered and green). Full measurement in comment-fa7f0940.\n\n`pnpm --filter @moe/daemon test` = `Test Files 2 failed | 608 passed (610)` / `Tests 8 failed | 10971 passed | 12 skipped (10991)`, EXIT 1. Cause: step 5's `registerReleaseAutoDecide` arms a SECOND timer at DEFAULT_SCHEDULE_INTERVAL_MS 60_000 on the shared DurableSchedule. Two files pin the WHOLE composed schedule as if the health probe were its only job:\n- `apps/daemon/src/monitoring/health-probe-schedule.test.ts`, 6 of 9 red: `expected [ 10000, 20000, 60000, 60000 ] to deeply equal [ 10000, 20000, 60000 ]` (:132; same shape :153/:191/:229) and `expected 2 to be 1` (:264).\n- `apps/daemon/src/daemon-store-dependencies.test.ts`, 2 of 39 red: `expected [ 60000, 60000 ] to deeply equal [ 60000 ]` (:1352) and `expected undefined to be false` (:1383), because its fake timer at :1372 is SINGLE-SLOT (`set: (cb) => { tick = cb; return cb; }`) so my job overwrites the probe's callback. Needs a keyed map like the sibling at :1333, not a roster bump.\n\nNeither path is in any step's affectedFiles. The \"grep the SHAPE, not the symbol\" rail binds me: report an unnamed consumer, never take the extra path, never reshape the producer to evade its check. I did NOT edit them and did NOT gate registration on `MOE_RELEASE_BASE` to dodge them.\n\nASK: amend step 7 to own those two paths (9 -> 11). I will narrow both to the health-probe arms so the NEXT job cannot red them either, plus rebuild the fake. ~10 lines.\n\nELSE GREEN: release-auto-decide.test.ts 42 passed (42); release-receipt-ledger 8; daemon typecheck 0; pnpm typecheck 0; control-room 207 files / 2693 tests; digest hex census still six files; vocabulary and allowlist untouched by this row. full-suite-gate RELEASED. Step 8 drill NOT done.",
   "blockedResourceId": null,
