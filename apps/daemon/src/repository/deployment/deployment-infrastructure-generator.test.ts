@@ -356,10 +356,20 @@ describe("the generated deployment infrastructure", () => {
     const override = written().get("docker-compose.override.yml") ?? "";
 
     const merged = new Map([...composeServices(base), ...composeServices(override)]);
-    expect(new Set(merged.keys())).toEqual(new Set(["app", "db", "proxy"]));
+    expect(new Set(merged.keys())).toEqual(new Set(["app", "db", "db-password-guard", "proxy"]));
 
+    // ONE DATABASE STILL, narrowed onto what MAKES a service a database rather than onto its image
+    // name. The base now also runs a postgres-imaged PRE-FLIGHT GUARD that refuses a newline-bearing
+    // password before initdb; it reuses the db's image so the scaffold pulls nothing extra, and it
+    // owns no credential and no storage. Do not relax this to "two postgres services are fine" —
+    // that deletes the invariant. Do not rename the guard's image to dodge the filter either — that
+    // hides it from the exact check that should see it, and costs a second image pull.
     const postgres = [...merged].filter(([, body]) => (imageOf(body) ?? "").startsWith("postgres:"));
-    expect(postgres.map(([name]) => name)).toEqual(["db"]);
+    expect(postgres.map(([name]) => name).sort()).toEqual(["db", "db-password-guard"]);
+    const isDatabase = (body: readonly string[]): boolean =>
+      body.some((line) => /^ {6}POSTGRES_PASSWORD_FILE:/u.test(line) || /^ {6}- db-data:/u.test(line));
+    expect(postgres.filter(([, body]) => isDatabase(body)).map(([name]) => name)).toEqual(["db"]);
+    expect(postgres.filter(([, body]) => !isDatabase(body)).map(([name]) => name)).toEqual(["db-password-guard"]);
 
     // The override contributes NO database and NO volumes block: both belong to the base file.
     expect(new Set(composeServices(override).keys())).toEqual(new Set(["app", "proxy"]));

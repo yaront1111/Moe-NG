@@ -220,6 +220,33 @@ describe("the controlled profile generator", () => {
     expect(body).toContain("secrets:\n  POSTGRES_PASSWORD:\n    environment: ${POSTGRES_PASSWORD:+POSTGRES_PASSWORD}\n");
   });
 
+  it("gates the database on a guard that refuses a newline-bearing password without reading it", () => {
+    const body = tree("password-probe").files.get("docker-compose.yml") ?? "";
+    // The db is never CREATED-then-initialised behind a failed check: compose will not start it
+    // until the guard has exited 0, so a refusal lands before initdb chooses a credential.
+    expect(body).toContain("    depends_on:\n      db-password-guard:\n        condition: service_completed_successfully\n");
+    // Same secret, same target: the mounted file is the only place the operator's exact bytes are
+    // still intact, because the postgres entrypoint reads it through a command substitution.
+    expect(body.split("      - source: POSTGRES_PASSWORD\n        target: postgres_password\n")).toHaveLength(3);
+
+    const guard = body.split("\n  db-password-guard:\n")[1]?.split("\n\nvolumes:\n")[0] ?? "";
+    // NON-VACUITY: a slice that missed would make every assertion below pass against "".
+    expect(guard).toContain("    image: postgres:17-alpine\n");
+    expect(guard).toContain("wc -l < /run/secrets/postgres_password | grep -qx 0 ||");
+    expect(guard).toContain("POSTGRES_PASSWORD_NEWLINE_UNSUPPORTED: POSTGRES_PASSWORD contains a newline.");
+    // The other direction: an absent or unreadable secret must not authorise startup either.
+    expect(guard).toContain("test -r /run/secrets/postgres_password ||");
+    expect(guard).toContain("POSTGRES_PASSWORD_SECRET_UNREADABLE:");
+    // NOT A DATABASE: no password file, no data volume, so the one-database invariant is intact.
+    expect(guard).not.toContain("POSTGRES_PASSWORD_FILE");
+    expect(guard).not.toContain("db-data");
+    // THE VALUE NEVER REACHES A LOG. `wc -l` reports a count; nothing here may read bytes out of
+    // the file, and both messages are fixed literals with no expansion of any kind.
+    expect(guard.match(/\b(?:cat|head|tail|od|xxd|base64|printf|awk|sed|cut)\b/gu)).toBeNull();
+    expect(guard.match(/^\s*echo /gmu)).toHaveLength(2);
+    expect(guard.split("\n").filter((line) => line.includes("echo") && line.includes("$"))).toEqual([]);
+  });
+
   // Real Compose parsing is opt-in; the always-on shape arm above prevents a zero-case default.
   it.runIf(process.env.MOE_SCAFFOLD_COMPOSE === "1").each(["supplied", "unset", "empty"] as const)(
     "keeps compose password metadata value-free and refuses missing input: %s", (mode) => {
