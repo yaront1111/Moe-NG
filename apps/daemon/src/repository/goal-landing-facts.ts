@@ -1,5 +1,5 @@
 /**
- * LANDING FACTS FOR A GOAL: has any node of this goal been landed as a commit?
+ * LANDING FACTS FOR A GOAL: has any node of this goal LANDED?
  *
  * The publish affordance is offered off this answer alone. It is deliberately a FACT — a
  * boolean derived from durable state — rather than a store handle passed into the offer ladder,
@@ -8,6 +8,21 @@
  *
  * GOAL SCOPE is the whole point. Landing subjects bind project, goal, run and sealed graph
  * content as well as the local node key. Bare legacy facts never unlock a scoped PUBLISH.
+ *
+ * LANDED MEANS "WITH OR WITHOUT A COMMIT" (task-f7d38f752b074dc89da30631783aae04, reading A).
+ * A node whose landing refused `LANDING_NOTHING_TO_COMMIT` AND journaled no intent for that
+ * acceptance ran, was accepted, and provably had no bytes to commit; withholding publish from it
+ * stalls publish, deploy and closure for a goal that did exactly what was asked. The names below
+ * still say `hasLandedCommit` because `affordance-read.ts:353,:383` and
+ * `compiled-node-identity.test.ts` consume them and a rename would touch three files for no
+ * behaviour — read "landed", not "carries a sha".
+ *
+ * THIS DOES NOT REOPEN THE PHANTOM PUBLISH CARD (UnAI 2026-09-04, task-f6f33a39), which is what
+ * the COMMITTED-only rule was written for. That goal had NO landing receipt at all. A credited
+ * no-effect receipt is a verifier-bound landing — the lander mints it with the node's
+ * `verifierReceiptId` — so the evidence the original gate demanded is still there. Every OTHER
+ * refusal counts for nothing, and so does a no-effect code whose acceptance DID journal an intent
+ * to commit; see `landing-receipt-contracts.ts` for why both halves are needed.
  */
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
@@ -15,6 +30,7 @@ import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import { legacyCompiledNodeKeys } from "../orchestrator/compiled-node-identity.js";
 import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
+import { landedWithNoEffect } from "./landing-receipt-contracts.js";
 
 /**
  * The lifecycles whose goals can hold a landed commit — the SAME set the offer ladder mints
@@ -56,28 +72,31 @@ function nodeOwners(store: Store, projectId: string, ledger: DurableLedger): Rea
   return owners;
 }
 
-/** Every goal with at least one COMMITTED landing, in ONE graph walk and ONE ledger walk. */
+/** Every goal with at least one landing, in ONE graph walk and ONE ledger walk. */
 function landedGoals(store: Store, projectId: string, folded?: DurableLedger): ReadonlySet<string> {
   try {
     const owners = nodeOwners(store, projectId, folded ?? readDurableLedger(store, projectId));
     if (owners.size === 0) return NONE;
     const landed = new Set<string>();
-    const { landings } = readReviewLedgers(store, projectId, new Set(owners.keys()));
+    const { landingIntents, landings } = readReviewLedgers(store, projectId, new Set(owners.keys()));
     for (const [nodeKey, receipt] of landings) {
-      if (receipt.outcome !== "COMMITTED") continue;
+      if (receipt.outcome !== "COMMITTED" && !landedWithNoEffect(receipt, landingIntents)) continue;
       for (const goalRef of owners.get(nodeKey) ?? []) landed.add(goalRef);
     }
     return landed;
   } catch {
-    // Fail closed. An unreadable ledger is not evidence a commit exists, and offering a publish
-    // the workspace has nothing to push is the exact disagreement this gate exists to end.
+    // Fail closed. An unreadable ledger is not evidence anything landed, and offering a publish
+    // to a goal that never ran is the exact disagreement this gate exists to end.
     return NONE;
   }
 }
 
 /** Answers the landing question for many goals at the cost of answering it for one. */
 export interface GoalLandingReader {
-  /** True when at least one node of this goal carries a COMMITTED landing receipt. */
+  /**
+   * True when at least one node of this goal LANDED: a COMMITTED receipt, or a refusal that
+   * `landedWithNoEffect` credits. The name is kept for its consumers; see the module header.
+   */
   readonly hasLandedCommit: (goalId: string) => boolean;
 }
 
@@ -103,8 +122,11 @@ export function createGoalLandingReader(
 }
 
 /**
- * True when at least one node of this goal is landed as a commit. A REFUSED receipt is a landing
- * ATTEMPT, not a landed commit, and does not count; an unreadable store answers FALSE.
+ * True when at least one node of this goal LANDED — a COMMITTED receipt, or one `landedWithNoEffect`
+ * credits: `LANDING_NOTHING_TO_COMMIT` with no journaled intent for that acceptance, attesting a
+ * node that ran and had no bytes to commit. Any OTHER refusal is a landing ATTEMPT that owed bytes
+ * and never delivered them, and does not count; an unreadable store or an unreadable intent
+ * history answers FALSE.
  *
  * Single-shot. A caller asking about MORE than one goal should hold a `createGoalLandingReader`
  * instead, which shares the two walks across every question.

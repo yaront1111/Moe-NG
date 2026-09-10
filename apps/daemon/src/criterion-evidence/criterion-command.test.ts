@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 import { closeStores, PROJECT_ID } from "../bootstrap/bootstrap-test-fixtures.js";
 import { createDaemonCommandPorts } from "../daemon-command-registry.js";
-import { agentCapabilitiesFor, OPERATOR_PRINCIPAL_KINDS } from "../daemon-command-vocabulary.js";
+import { agentCapabilitiesFor, CAPABILITIES, CRITERION_FAMILY, OPERATOR_PRINCIPAL_KINDS } from "../daemon-command-vocabulary.js";
 import { MCP_EXCLUDED_COMMAND_KINDS, wiredMcpToolKinds } from "../mcp-tool-allowlist.js";
 import { criterionWorld } from "./criterion-test-fixtures.js";
 import { CRITERION_APPROVE, CRITERION_VERIFY } from "./criterion-contracts.js";
@@ -11,7 +11,7 @@ import { OPERATOR_CAPABILITIES } from "../daemon-command-vocabulary.js";
 import { handleCommandRequest } from "../http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import type { TransportOrigin } from "../http/http-contract.js";
-import { criterionCatalogId } from "./criterion-storage.js";
+import { criterionCatalogId, criterionRunsId } from "./criterion-storage.js";
 
 afterEach(closeStores);
 describe("criterion commands at the daemon registry", () => {
@@ -24,6 +24,22 @@ describe("criterion commands at the daemon registry", () => {
     expect(MCP_EXCLUDED_COMMAND_KINDS).toContain(kind);
     expect(wiredMcpToolKinds()).not.toContain(kind);
     expect(agentCapabilitiesFor(kind)).toBeNull();
+    expect(CRITERION_FAMILY[kind]).toBe(CAPABILITIES.ADMIN);
+  });
+  it.each([CRITERION_APPROVE, CRITERION_VERIFY])("refuses an external non-ADMIN caller of %s at authorization", (kind) => {
+    const world = criterionWorld();
+    const ports = createDaemonCommandPorts({ store: world.store, projectId: PROJECT_ID, operatorPrincipalId: "operator-local",
+      criterionEvidence: world.service, clock: () => "2026-09-06T00:00:00.000Z" });
+    const input = kind === CRITERION_APPROVE ? world.approvalInput("crit-api", 0) : world.verifyInput("a".repeat(40));
+    const target = (kind === CRITERION_APPROVE ? criterionCatalogId : criterionRunsId)(PROJECT_ID, GOAL_ID, RUN_ID);
+    const result = handleCommandRequest({ ...ports, authenticator: { authenticate: () => ({ verdict: "AUTHENTICATED",
+      principal: { principalId: world.human.principalId, projectId: PROJECT_ID, capabilities: [CAPABILITIES.GOAL] } }) } },
+    { credential: "test-human", protocolVersion: WIRE_PROTOCOL_VERSION, body: new TextEncoder().encode(JSON.stringify({
+      ...input, principalId: undefined, commandKind: kind, targetAggregateId: target, requestDigest: "a".repeat(64),
+      schemaVersion: RUNTIME_COMMAND_ENVELOPE_VERSION, sessionCredential: "test-human" })) }, "HTTP_LISTENER");
+    expect(result).toMatchObject({ ok: false, outcome: "REFUSED", httpStatus: 403,
+      stage: "AUTHORIZE", error: { code: "CAPABILITY_DENIED" } });
+    expect(world.store.getAggregateVersion(target)).toBe(0);
   });
   it("dispatches a paired human approval over HTTP and fences MCP plus caller target substitution before a write", () => {
     const { store, service, human, approvalInput } = criterionWorld();

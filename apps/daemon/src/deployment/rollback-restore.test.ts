@@ -17,7 +17,10 @@ import type { MigrationReceipt } from "../repository/migrations/migration-receip
 import { recordDeployReceipt } from "./deploy-ledger.js";
 import { DEPLOY_MIGRATION_DATABASE_VARIABLE } from "./deploy-migration-context.js";
 import { MIGRATION_RECEIPT_VERSION, migrationReceiptId } from "../repository/migrations/migration-receipt.js";
-import { ROLLBACK_RESTORE_DETAILS, ROLLBACK_RESTORE_STAMP, applyRollbackRestore } from "./rollback-restore.js";
+import {
+  ROLLBACK_RESTORE_DETAILS, ROLLBACK_RESTORE_STAMP, applyResolvedRestore, applyRollbackRestore,
+  resolveRollbackRestore,
+} from "./rollback-restore.js";
 import type { RollbackRestoreConfig, RollbackRestoreResult } from "./rollback-restore.js";
 
 /**
@@ -353,5 +356,76 @@ describe("applyRollbackRestore", () => {
     });
     // NO AUTOMATIC RETRY — invisible to an arm that only checks the outcome.
     expect(f.ports.calls).toHaveLength(1);
+  });
+});
+
+/**
+ * THE TWO HALVES, SEPARATELY — the seam the rollback command puts its admission through.
+ *
+ * The reason these are their own arms rather than a refactor covered by the composition's: the
+ * command now calls the halves at two different points in its lifecycle, with a durable commit in
+ * between. "The read half moves nothing" and "the effect half moves it once" are the two facts
+ * that ordering depends on, and neither is observable through `applyRollbackRestore`, which always
+ * does both.
+ */
+describe("resolveRollbackRestore / applyResolvedRestore", () => {
+  it("(g) resolves destination AND dump with a WIRED port in hand, and calls it ZERO times", async () => {
+    const f = await fixture();
+
+    const resolved = await resolveRollbackRestore(f.config, ENVIRONMENT);
+
+    expect(resolved).toEqual({ databaseUrl: PRODUCTION_URL, dump: pathOf(f.currentRef), ok: true });
+    // THE EMPTY CALL LIST IS THE ASSERTION, and it is falsifiable: arm (a) drives this very port,
+    // on this very fixture, to exactly one call through the composition. So an empty list here
+    // separates "resolved without applying" from "resolved and applied", which the returned shape
+    // on its own cannot do.
+    expect(f.ports.calls).toEqual([]);
+    // ...and the dump is the CURRENT deploy's, never the kept receipt's own — one step too far.
+    expect(pathOf(f.currentRef)).not.toBe(pathOf(f.keptRef));
+
+    // EVERY EVIDENCE REFUSAL KEEPS ITS CODE, DETAIL AND LAYER across the split. Boundness still
+    // answers before deploy history, which is the order the production wiring arms depend on.
+    const unbound = await fixture({ bind: false });
+    expect(refusalOf(await resolveRollbackRestore(unbound.config, ENVIRONMENT))).toEqual({
+      code: "DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE",
+      detail: ROLLBACK_RESTORE_DETAILS.DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE,
+      layer: ROLLBACK_RESTORE_STAMP,
+    });
+    expect(unbound.ports.calls).toEqual([]);
+
+    const unmigrated = await fixture({ currentMigration: false });
+    expect(refusalOf(await resolveRollbackRestore(unmigrated.config, ENVIRONMENT))).toEqual({
+      code: "DEPLOY_ROLLBACK_RESTORE_MIGRATION_UNKNOWN",
+      detail: ROLLBACK_RESTORE_DETAILS.DEPLOY_ROLLBACK_RESTORE_MIGRATION_UNKNOWN,
+      layer: ROLLBACK_RESTORE_STAMP,
+    });
+    expect(unmigrated.ports.calls).toEqual([]);
+  });
+
+  it("(h) applies the resolved pair exactly once, and a throwing port refuses after ONE attempt", async () => {
+    const f = await fixture();
+    const resolved = await resolveRollbackRestore(f.config, ENVIRONMENT);
+    expect(resolved).toMatchObject({ ok: true });
+    if (!resolved.ok) throw new Error("unreachable: asserted a resolved pair above");
+
+    const applied = await applyResolvedRestore(resolved, f.ports);
+
+    // EXACT KEYS, not `toMatchObject`: `databaseUrl` travelled in on `resolved` and must NOT
+    // travel out — this value is what the command may put on a durable surface.
+    expect(applied).toEqual({ dump: pathOf(f.currentRef), ok: true });
+    // The pair really was spent on the port, both halves of it, and exactly once.
+    expect(f.ports.calls).toEqual([{ connection: PRODUCTION_URL, path: pathOf(f.currentRef) }]);
+
+    // A SECOND PORT, throwing, against the SAME already-resolved pair: the refusal belongs to the
+    // apply, and re-resolving is not part of it.
+    const throwing = recordingPorts(true);
+    expect(refusalOf(await applyResolvedRestore(resolved, throwing))).toEqual({
+      code: "DEPLOY_ROLLBACK_RESTORE_FAILED",
+      detail: ROLLBACK_RESTORE_DETAILS.DEPLOY_ROLLBACK_RESTORE_FAILED,
+      layer: ROLLBACK_RESTORE_STAMP,
+    });
+    // NO AUTOMATIC RETRY — a half that tried three times and then refused would pass every other
+    // assertion in this arm.
+    expect(throwing.calls).toHaveLength(1);
   });
 });

@@ -269,7 +269,7 @@ describe("CordumApp live path uses the runtime handshake", () => {
 
     // Before the handshake resolves, the honest in-flight state is shown - never a
     // fabricated goal and never a baked-secret attach.
-    expect(screen.getByText("Connecting")).toBeTruthy();
+    expect(screen.getByText("CONNECTING")).toBeTruthy();
 
     // The refused surface renders once the handshake fails closed: NOT ATTACHED
     // with the bootstrap refusal code, and no crash.
@@ -424,7 +424,7 @@ describe("CordumApp bounded live recovery", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Retry connection" }));
 
     expect(connection()).toBe("OFFLINE");
-    expect(screen.getByText("Connecting")).toBeTruthy();
+    expect(screen.getByText("CONNECTING")).toBeTruthy();
     bootstrap.resolve(jsonResponse(BOOTSTRAP));
     await waitFor(() => { expect(connection()).toBe("CONNECTED"); });
     expect(attempts.retry).toHaveBeenCalledTimes(1);

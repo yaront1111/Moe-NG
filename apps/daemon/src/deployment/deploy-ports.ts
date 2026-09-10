@@ -183,8 +183,35 @@ function runProcess(
 export const nodeDockerRunner: DockerRunner = (args, stdin) => runProcess(
   "docker", args, args[0] === "build" ? DEPLOY_BUILD_TIMEOUT_MS : DEPLOY_COMMAND_TIMEOUT_MS, stdin,
 );
-export const nodeSshRunner: SshRunner = (args, stdin) =>
-  runProcess("ssh", args, DEPLOY_COMMAND_TIMEOUT_MS, stdin);
+/**
+ * SSH'S FAR END IS A SHELL, AND THAT IS NOT A DETAIL THE CALLER SHOULD HAVE TO KNOW.
+ *
+ * `ssh <target> a b c` does NOT deliver three argv elements: it JOINS them with spaces and the
+ * remote login shell RE-SPLITS the result. So any element carrying a space, a newline, a quote or
+ * a `$` arrives as several words — or, past a newline, as a whole second command.
+ *
+ * MEASURED against a real sshd on docker 29.6.2 while wiring the candidate's remote delivery:
+ * `imageCommandArgv` asks for `--format "{{json .Config.Entrypoint}}\n{{json .Config.Cmd}}"`, and
+ * unquoted that came back EXIT 127 with `sh: {{json: not found`. Worse and silent: the delivering
+ * candidate's `create` carries `-c 'set -a; . /run/moe/env; set +a; exec "$0" "$@"'`, which the
+ * remote shell would re-split on its spaces and semicolons and partly EXECUTE.
+ *
+ * Quoting belongs HERE, in the adapter that knows the transport, and not in the engine: the port's
+ * contract is an argv, the local `docker` runner spawns with `shell: false` and needs no quoting,
+ * and the docker double models the transport by stripping it. `args[0]` is the ssh TARGET, which
+ * ssh itself consumes and the remote shell never sees, so it is passed through untouched. Words
+ * made only of characters no POSIX shell treats specially are left alone, which keeps the common
+ * argv readable in a process listing and in an assertion.
+ */
+const REMOTE_SHELL_SAFE = /^[A-Za-z0-9_@%+=:,./-]+$/u;
+export const remoteShellWord = (word: string): string =>
+  REMOTE_SHELL_SAFE.test(word) && word !== "" ? word : `'${word.replaceAll("'", "'\\''")}'`;
+
+export const nodeSshRunner: SshRunner = (args, stdin) => runProcess(
+  "ssh",
+  args.map((word, at) => (at === 0 ? word : remoteShellWord(word))),
+  DEPLOY_COMMAND_TIMEOUT_MS, stdin,
+);
 
 /**
  * `save`'s stdout is piped into `ssh`'s stdin in Node. BOTH children are awaited

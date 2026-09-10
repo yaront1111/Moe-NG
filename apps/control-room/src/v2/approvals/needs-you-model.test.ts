@@ -86,7 +86,7 @@ function coverage(
 describe("deriveNeedsYou", () => {
   it("waits for the catalog and carries a catalog refusal as the note", () => {
     expect(deriveNeedsYou({ catalog: null, coverage: new Map(), surface: null })).toMatchObject({
-      countLabel: "Waiting for the goal catalog", items: [],
+      countLabel: "Waiting for goals", items: [],
     });
     const refused = deriveNeedsYou({
       catalog: { connection: "CONNECTED", detail: "GOAL_CATALOG_READ_CAPABILITY_DENIED", goals: [], outcome: "REFUSED" },
@@ -105,7 +105,7 @@ describe("deriveNeedsYou", () => {
     expect(data.items.map((item) => [item.kind, item.goalId, item.actionLabel])).toEqual([
       ["PLAN_APPROVAL", "goal-b", "Review the plan"],
     ]);
-    expect(data.countLabel).toBe("1 decision · needs you");
+    expect(data.countLabel).toBe("1 decision needs you");
     expect(data.note).toBeNull();
     expect(deriveNeedsYou({
       catalog: catalog([entry("goal-b", "Beta")]), coverage: new Map(),
@@ -131,7 +131,7 @@ describe("deriveNeedsYou", () => {
     expect(data.items[1]?.detail).toContain("All 3 acceptance criteria verified");
     expect(data.items[1]?.detail).toContain("not offering to close it yet");
     expect(data.items[1]?.close).toBeUndefined();
-    expect(data.countLabel).toBe("2 decisions · needs you");
+    expect(data.countLabel).toBe("2 decisions need you");
   });
 
   it("carries the close decision only when the daemon offers goal.close for that goal", () => {
@@ -199,7 +199,7 @@ describe("deriveNeedsYou", () => {
       surface: surface([closeOffer("goal-d")]),
     });
     expect(closed.items).toEqual([]);
-    expect(closed.countLabel).toBe("0 decisions · needs you");
+    expect(closed.countLabel).toBe("0 decisions need you");
   });
 
   it("orders plans before contracts before closes, then by title", () => {
@@ -345,7 +345,7 @@ describe("deriveNeedsYou and Gate 3", () => {
       surface: surface([releaseOffer("goal-r")]),
     });
     expect(released.items).toEqual([]);
-    expect(released.countLabel).toBe("0 decisions · needs you");
+    expect(released.countLabel).toBe("0 decisions need you");
   });
 
   it("keeps listing a REFUSED release and names the code that refused it", () => {

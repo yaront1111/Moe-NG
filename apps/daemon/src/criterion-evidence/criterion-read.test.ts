@@ -7,6 +7,7 @@ import { criterionWorld } from "./criterion-test-fixtures.js";
 import { CRITERION_APPROVE, CRITERION_PRINCIPAL, CRITERION_SCHEMA_VERSION } from "./criterion-contracts.js";
 import { criterionBytes, criterionHash } from "./criterion-codec.js";
 import { CRITERION_EXECUTOR_VERSION } from "./criterion-approval.js";
+import { readCriterionApprovals } from "./criterion-approval.js";
 import { readCriterionGoal } from "./criterion-goal.js";
 import { readCriterionRuns } from "./criterion-run.js";
 import { recordCriterionReceipt, readCriterionReceipt } from "./criterion-receipt.js";
@@ -16,6 +17,32 @@ import { commitCriterionRecord, criterionReceiptId, criterionRunsId } from "./cr
 afterEach(closeStores);
 const artifact = { root: "D:/criterion-reader-fixture", sha: "a".repeat(40), treeSha: "b".repeat(40) };
 const NOW = "2026-09-06T00:00:00.000Z";
+
+it.each([
+  { kind: "internal.criterion.queued", daemon: true, readable: true },
+  { kind: "internal.criterion.run", daemon: true, readable: false },
+  { kind: "internal.criterion.queued", daemon: false, readable: false },
+])("requires the exact internal queue kind and daemon principal: $kind/$daemon", ({ kind, daemon, readable }) => {
+  const world = criterionWorld({ readIntegrated: () => artifact }); world.approveAll();
+  const goal = readCriterionGoal(world.store, PROJECT_ID, GOAL_ID);
+  if (!goal.ok) throw new Error(goal.code);
+  const run = { version: CRITERION_SCHEMA_VERSION, binding: goal.binding, runRef: "internal-reader-run",
+    artifact, approvals: readCriterionApprovals(world.store, goal), status: "QUEUED" };
+  expect(commitCriterionRecord(world.store, PROJECT_ID, kind, { commandId: run.runRef,
+    correlationId: run.runRef, expectedVersion: 0, principalId: daemon ? CRITERION_PRINCIPAL : world.human.principalId,
+    payload: { goalRef: GOAL_ID } }, criterionRunsId(PROJECT_ID, GOAL_ID, RUN_ID),
+  "CriterionVerificationQueued", run, NOW)).toMatchObject({ ok: true });
+  if (readable) {
+    expect(readCriterionRuns(world.store, goal)).toEqual([run]);
+    expect(world.service.read(GOAL_ID)).toMatchObject({ outcome: "CRITERION_EVIDENCE",
+      run: { runRef: run.runRef, status: "QUEUED" },
+      criteria: [{ criterionId: "crit-api", evidence: null }, { criterionId: "crit-ui", evidence: null }] });
+  } else {
+    expect(readCriterionRuns(world.store, goal)).toBeNull();
+    expect(world.service.read(GOAL_ID)).toEqual({ outcome: "REFUSED",
+      code: "CRITERION_CHECK_UNREADABLE", layer: "CRITERION_EVIDENCE" });
+  }
+});
 
 it.each(["new command identity", "same command id from another human"] as const)(
   "does not credit a receipt to a replacement approval with %s", (replacement) => {

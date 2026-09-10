@@ -38,29 +38,36 @@ export interface PreviewFinding {
  *  round trip that dies at REQUEST with a code about a decode. */
 export const PREVIEW_FINDINGS_REQUIRED = "PREVIEW_FINDINGS_REQUIRED" as const;
 
+/**
+ * THE RECEIPT ID IS THE CALLER'S TO SUPPLY, and it is NOT the affordance's target.
+ *
+ * `preview.decide` resolves `previewRef` as the preview RECEIPT id, while the offer's
+ * `targetAggregateId` is the preview AGGREGATE `preview:<goalId>` (previewAggregateId,
+ * preview-receipt-contracts.ts:88). This port used to derive `previewRef` from that target, so
+ * every Approve sent the aggregate id and the daemon answered 422 PREVIEW_GOAL_NOT_LANDED @
+ * GOAL_AUTHORITY. Nothing on the affordance carries the receipt id, so it cannot be derived here
+ * at all — the caller reads it from `/preview/read` and passes it in.
+ *
+ * The id sits SECOND, matching the neighbours: `goal-close-port.submit(affordance, goalId)` and
+ * `escalation-port.submit(affordance, nodeKey, decision)`.
+ */
 export interface PreviewPort {
   submit(
     affordance: Readonly<Record<string, unknown>>,
+    receiptId: string,
     decision: PreviewDecision,
     findings?: readonly PreviewFinding[],
   ): Promise<PreviewOutcome>;
-}
-
-/** The daemon names the preview aggregate as the offer's target, so the decision refers to the
- *  preview it was offered for rather than to a ref the browser composed. */
-function previewRefOf(affordance: Readonly<Record<string, unknown>>): string {
-  const target = affordance["targetAggregateId"];
-  return typeof target === "string" ? target : "";
 }
 
 export function createPreviewPort(wire: PreviewWire): PreviewPort {
   return Object.freeze({
     submit: (
       affordance: Readonly<Record<string, unknown>>,
+      previewRef: string,
       decision: PreviewDecision,
       findings: readonly PreviewFinding[] = [],
     ): Promise<PreviewOutcome> => {
-      const previewRef = previewRefOf(affordance);
       if (decision === "REJECT" && findings.length === 0) {
         return Promise.resolve({
           code: PREVIEW_FINDINGS_REQUIRED, layer: PREVIEW_LAYER, ok: false as const,

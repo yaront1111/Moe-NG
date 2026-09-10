@@ -1,0 +1,71 @@
+{
+  "id": "task-8d2301ba2ef24c42a8fdca8364a9da6a",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "HOLD: restore git-source-extract.ts to task-77207fb3's plan scope once task-d85fd8fd has landed",
+  "description": "BOOKKEEPING ROW, filed 2026-09-09 by architect-f04f69cf under the governor's instruction on task-d85fd8fd (reopenReason, owner \"do whats needed\"): \"file a HOLD row to restore its scope after this row lands, exactly as task-b58778da does for controlled-3.\" It exists so a deliberate temporary narrowing does not become a permanent silent one.\n\nWHAT WAS NARROWED, AND WHY. task-77207fb327a9462b869ff647650e57cf's plan reserved `apps/daemon/src/repository/git-source-extract.ts` in the affectedFiles of its step 1 and step 3. That file is UPSTREAM task-d85fd8fd's OWN untracked deliverable. The result was a reservation cycle: the downstream plan's claim made upstream's completion commit skip the contested path, so upstream could not land; upstream not landing meant the downstream's dependsOn never cleared, so the downstream never started, so the reservation was never released. Neither row could move.\n\nI removed that one path from those two steps and resubmitted the plan. Nothing else changed - the DoD, dependsOn and every step description are verbatim, and step 3 gained a scope note telling its worker to confirm this restoration before executing item 2 (the bare-repo fold, which genuinely edits the helper).\n\nMECHANISM, DECLARED because it differs from the governor's wording. They named `moe.amend_plan_step`; that tool takes only `description` and has no `affectedFiles` parameter, so it cannot narrow a file claim. `moe.submit_plan` can, and requires PLANNING, so task-77207fb3 was hopped WORKING -> PLANNING first. The hop cost nothing: the row was 0/5 with every step PENDING and unassigned, so no completed work, step note or evidence existed to lose. No direct `.moe` write was made.\n\nWHAT THIS ROW DOES. Once task-d85fd8fd is DONE and `git-source-extract.ts` is TRACKED at HEAD, put that path back into task-77207fb3's step 1 and step 3 affectedFiles, and delete step 3's scope note since it will no longer apply. That is the whole job. It is safe by then because a tracked file that upstream has landed is no longer upstream's to lose, and the downstream row legitimately owns it for the fold.\n\nWHY IT IS NOT OPTIONAL. Without it, task-77207fb3's step 3 tells a worker to extract a shared primitive out of a file the plan does not declare. The worker either edits an undeclared path, which starts the next contest, or stops - and a row stopped by a stale scope note is worse than one that never narrowed.\n\nPRESERVATION, and this outlives the row: while `git-source-extract.ts` and its one-line bridge `git-source-extract.js` are UNTRACKED (`??`), the working tree is their ONLY copy. `git diff` is blind to them and the wrapper skips them, so nothing will warn anyone. NEVER checkout, stash, reset or clean this checkout while that is true. A governor holds an out-of-tree rescue copy as a safety net, not a landing.",
+  "definitionOfDone": [
+    "`apps/daemon/src/repository/git-source-extract.ts` is tracked at HEAD (git ls-files returns it) and task-d85fd8fd is DONE - both confirmed and quoted before any edit to task-77207fb3.",
+    "task-77207fb3's step 1 and step 3 affectedFiles each name `apps/daemon/src/repository/git-source-extract.ts` again, and its distinct-file count returns to 5.",
+    "Step 3's temporary scope note is removed, and no other step description, the DoD, or dependsOn is altered - proven by quoting the before and after of the changed fields only.",
+    "task-77207fb3 is left in a state a worker can claim, and this row's completion record names the exact tool used and why, so the next reader can tell a deliberate restoration from an accidental widening."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "BACKLOG",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": "Documentary hold remains enforced while fa owns consumer772 restoration. ed42 voluntarily released this zero-step hold twice after generic reclaims; park the unassigned hold outside the architect claim pool to stop duplicate handoff churn. Do not archive/drop dependency until consumer scope restoration is complete. No implementation task, completed step, or worker claim was cleared.",
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-d85fd8fd74354e94886d619c67f24c75"
+  ],
+  "priority": "HIGH",
+  "order": 156,
+  "comments": [
+    {
+      "id": "comment-82b503132a194086ae5a1574d3d040ff",
+      "author": "governor-608c8a78",
+      "content": "GOVERNANCE10:06: fixed missing mechanical hold. Consumer772 was WORKING unassigned0/5 with narrowed arrays butdependsOn[d85]ONLY, so this HOLD could not prevent workers starting immediately when producerQAapproves. Added existing8d2301ba to772dependsOn, preservingd85 andallPENDINGsteps. Producer is nowREVIEW/QA01 and actualcompletiond258adfe46ef684fb931b842c35edae6ef721a34 contains all8sourcepaths+metadata; both helpers tracked and scoped workingdiffempty. Wait for actuald85DONE, then architect restores helper to772step1/3affectedFiles and removes temporarynote, preserves othertext/DoD, THENremoveholddependency/archivehold. No sourceedit or governorplan. This is the same already-authorized scope-restoration contract, now mechanically enforced.",
+      "timestamp": "2026-09-10T10:06:18.181Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-10T09:23:49.205Z",
+  "updatedAt": "2026-09-10T17:39:22.632Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-10T09:24:41.119Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Trigger measured met (d85fd8fd DONE, d258adfe carries both helpers, tracked+clean). Restore handed to architect-fa84777a, who holds 772.",
+      "whatRemains": "fa84777a: submit_plan on 772 with the helper back in steps 1+3 and step 3's scope note removed; set_task_dependencies(772, [d85fd8fd]); archive this hold.",
+      "pitfalls": "Do not plan this row; do not archive it before 772 carries the helper again. An architect who receives it before then should release it.",
+      "releasedAt": "2026-09-10T17:37:30.658Z",
+      "releasedBy": "architect-ed42e60a",
+      "reason": "Re-offered by the generic claim. task-77207fb3 is held by architect-fa84777a, who owns the restore (handed over in #architects msg-b26024ce with the measured trigger and the exact edit). This hold must stay unheld so they can archive it after the restore."
+    },
+    {
+      "whatIsDone": "Unpark condition measured met 2026-09-10 10:3xZ: d85fd8fd DONE 8/8, completion commit d258adfe lists git-source-extract.ts + .js + six migration files; git ls-files returns both helpers; working tree clean. Restored 772 plan JSON generated (helper back in steps 1 and 3, 527-char scope-note paragraph stripped from step 3, distinct files 5) at %TEMP%/772-restored-steps.json.",
+      "whatRemains": "Claim task-77207fb3 (PLANNING, unassigned), submit_plan with the restored JSON, set_task_dependencies(772, [d85fd8fd]) dropping this hold, then archive this hold. In progress this minute by architect-ed42e60a.",
+      "pitfalls": "Do not archive this hold before 772's plan carries the helper again.",
+      "releasedAt": "2026-09-10T17:36:56.559Z",
+      "releasedBy": "architect-ed42e60a",
+      "reason": "Releasing only to free the one-task-per-worker slot so I can claim task-77207fb3 and apply this hold's restore. Trigger measured met: task-d85fd8fd DONE, completion d258adfe carries git-source-extract.ts and .js, both tracked and clean at HEAD. Archive follows the restore, not before."
+    },
+    {
+      "whatIsDone": "Measured 2026-09-10 ~09:30Z: task-77207fb3's plan no longer names git-source-extract.ts (4 files: deploy-migration-context.ts/.test.ts, deploy-image-build.ts, migrate-down-real.test.ts); moe.get_commit_scope(task-d85fd8fd, postflight) shows git-source-extract.ts AND .js both asserted:true, planned:false, peerDeclared:NONE, unattributedPaths []. The reservation cycle is cleared. Both helper files remain UNTRACKED on disk (the working tree is their only copy); task-d85fd8fd is PLANNING, 6/8 steps, unassigned, no plan defect.",
+      "whatRemains": "Nothing until task-d85fd8fd is DONE and git ls-files returns git-source-extract.ts. Then the restore exactly as this row's description says: put the path back into task-77207fb3's step 1 and step 3 affectedFiles (submit_plan on 77207fb3 after a governor hop to PLANNING, since amend_plan_step cannot change affectedFiles), delete step 3's scope note, distinct-file count back to 5, archive this hold with the tool named.",
+      "pitfalls": "This hold is in PLANNING, so the generic architect claim keeps handing it out; the sibling hold task-b58778da sits in BACKLOG for exactly that reason. An architect who receives it before d85fd8fd is DONE should release, not plan. Do NOT checkout/stash/reset/clean the checkout — the helper files exist only there.",
+      "openQuestions": "Whether a governor parks this to BACKLOG now (recommended).",
+      "releasedAt": "2026-09-10T09:26:02.993Z",
+      "releasedBy": "architect-ed42e60a",
+      "reason": "HOLD row, not plannable: its trigger (task-d85fd8fd DONE with git-source-extract.ts tracked at HEAD) has not fired. Narrowing already applied and measured clear. Recommend a governor park it to BACKLOG like task-b58778da so claim_next_task stops offering it to architects."
+    }
+  ],
+  "contextFetchedBy": [
+    "governor-608c8a78"
+  ]
+}

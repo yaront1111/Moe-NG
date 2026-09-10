@@ -12,8 +12,9 @@
  * `docker-compose.override.yml`, which `docker compose` merges into the base file by default, so a
  * product ends up with ONE project and ONE database — which is what the migrations row assumes.
  *
- * NO CREDENTIAL LITERAL LIVES IN ANY EMITTED BYTE. Every value is `${VAR}` or read from the
- * environment at runtime, mirroring the discipline the scaffold's own compose comment states.
+ * NO CREDENTIAL LITERAL, AND NO CREDENTIAL VALUE, LIVES IN ANY EMITTED BYTE OR IN ANY CONTAINER'S
+ * METADATA. Secrets reach a process through a mounted file the runtime reads; only variable NAMES
+ * and PATHS are emitted. See `dockerComposeOverride` for the measurement that decided the shape.
  */
 
 /** Joined with "\n" and terminated with one — the profile's file shape, byte for byte. */
@@ -116,10 +117,38 @@ export function dockerignore(profileVersion: string, requirementIds: readonly st
   ]);
 }
 
+/** Where the app's connection string is mounted inside its container. A PATH, never a value. */
+export const DEPLOYMENT_DATABASE_URL_SECRET_PATH = "/run/secrets/database_url" as const;
+
 /**
- * ONLY the `app` service. `docker compose` reads `docker-compose.yml` and this file together by
- * default, so `db`, its healthcheck and the `db-data` volume all come from the scaffold's base file
- * and are not restated here — restating them is how a product ends up with two databases.
+ * THE LOADER NAMES A PATH AND NO VALUE, so no variable value is ever a docker argv token — the
+ * property `deploy-candidate-environment.ts` establishes for the deployed candidate.
+ *
+ * `command:` IS OVERRIDDEN, NEVER `entrypoint:`. Measured on a real built product image:
+ * `.Config.Entrypoint` is `["docker-entrypoint.sh"]` (the node base image's, though the generated
+ * Dockerfile sets none) and `.Config.Cmd` is `["node", DEPLOYMENT_ENTRY_PATH]`. `entrypoint:` would
+ * CLEAR Cmd exactly as `--entrypoint` does, leaving nothing to exec — a health timeout naming no
+ * cause; `command:` replaces Cmd and leaves that entrypoint intact, so nothing needs restoring
+ * ahead of it, and the entry path is the constant the Dockerfile's `CMD` uses so the two cannot
+ * drift. `$$` is compose's literal `$`: unescaped, `$(` is rejected as "invalid interpolation
+ * format" before any container exists.
+ */
+const DATABASE_URL_LOADER =
+  `export DATABASE_URL=\\"$$(cat ${DEPLOYMENT_DATABASE_URL_SECRET_PATH})\\"; `
+  + `exec node ${DEPLOYMENT_ENTRY_PATH}`;
+
+/**
+ * ONLY the `app` service: `db`, its healthcheck and the `db-data` volume come from the base file
+ * compose merges with this one — restating them is how a product ends up with two databases.
+ *
+ * THE CONNECTION STRING IS A COMPOSE SECRET, NOT AN `environment:` ENTRY, because `environment:`
+ * lands in `.Config.Env` and `docker inspect` prints that to anyone who can reach the docker socket
+ * — measured: a planted value under `environment:` greps 1, delivered as a secret it greps 0, and
+ * `docker compose config` resolves it to the variable NAME only. `PORT` stays put: a port is not a
+ * secret. `${DATABASE_URL:+DATABASE_URL}` KEEPS THE FAIL-FAST `:?` used to give — unset or empty
+ * emits an empty source and compose refuses the project with `secret "DATABASE_URL" must declare
+ * either file or environment`, naming the variable and never its value, so a silently blank
+ * connection string is unreachable.
  */
 export function dockerComposeOverride(profileVersion: string, requirementIds: readonly string[]): string {
   const port = String(DEPLOYMENT_APP_PORT);
@@ -129,6 +158,9 @@ export function dockerComposeOverride(profileVersion: string, requirementIds: re
     "#",
     "# `docker compose` merges this into docker-compose.yml automatically. The `db` service, its",
     "# healthcheck and the db-data volume live THERE and are deliberately not repeated here.",
+    "#",
+    "# DATABASE_URL arrives as a compose SECRET read from .env, never as an `environment:` entry:",
+    "# `environment:` values are container metadata and `docker inspect` prints them.",
     "services:",
     "  app:",
     "    build:",
@@ -140,7 +172,12 @@ export function dockerComposeOverride(profileVersion: string, requirementIds: re
     "        condition: service_healthy",
     "    environment:",
     `      PORT: ${port}`,
-    "      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}",
+    "    secrets:",
+    "      - source: DATABASE_URL",
+    "        target: database_url",
+    "    # `command:` replaces the image's CMD and leaves its ENTRYPOINT alone. An `entrypoint:` here",
+    "    # would clear CMD and start the app with nothing to exec. `$$` is compose's literal `$`.",
+    `    command: ["/bin/sh", "-c", "${DATABASE_URL_LOADER}"]`,
     "    healthcheck:",
     `      test: ["CMD", "node", "${DEPLOYMENT_HEALTHCHECK_PATH}"]`,
     "      interval: 5s",
@@ -156,6 +193,12 @@ export function dockerComposeOverride(profileVersion: string, requirementIds: re
     `      - "${port}:${port}"`,
     "    volumes:",
     '      - "./docker/Caddyfile:/etc/caddy/Caddyfile:rw"',
+    "",
+    "secrets:",
+    "  DATABASE_URL:",
+    "    environment: ${DATABASE_URL:+DATABASE_URL}",
+    "    # Only the NAME is emitted. Unset or empty refuses the project, naming DATABASE_URL:",
+    "    # set it in .env, which compose loads from this directory.",
   ]);
 }
 

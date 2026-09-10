@@ -11,7 +11,7 @@ import { readReviewLedgers } from "../review/review-read-model.js";
  * short would show a product missing exactly that node's work, and the operator would approve
  * something that was never built.
  *
- * WHY THIS IS NOT `goalHasLandedCommit`. `repository/goal-landing-facts.ts:112` answers
+ * WHY THIS IS NOT `goalHasLandedCommit`. `repository/goal-landing-facts.ts:132` answers
  * "at least ONE node landed" — the right question for offering a PUBLISH, the wrong one for a
  * preview. Its `nodeOwners`/`landedGoals` walk is module-private, so rather than widen a foreign
  * file's exports mid-flight this reads the same two PUBLIC seams it reads: `activeCompiledGraphs`
@@ -30,7 +30,7 @@ import { readReviewLedgers } from "../review/review-read-model.js";
 
 type Store = Parameters<typeof activeCompiledGraphs>[0];
 
-/** The same lifecycles `goal-landing-facts.ts:25-27` calls landable. */
+/** The same lifecycles `goal-landing-facts.ts:39-41` calls landable. */
 const LANDABLE_LIFECYCLES: ReadonlySet<string> = Object.freeze(
   new Set(["CLOSING", "COMPLETED", "EXECUTION_ENABLED"]),
 );

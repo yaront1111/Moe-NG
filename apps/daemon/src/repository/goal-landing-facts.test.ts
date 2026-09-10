@@ -17,7 +17,9 @@ import {
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { seedLandingReceipt, seedReviewAcceptance } from "../goals/goal-closure-test-fixtures.js";
 import { createAffordancePort } from "../http/affordance-read.js";
-import { readReviewLedgers } from "../review/review-read-model.js";
+import { readReviewLedger, readReviewLedgers } from "../review/review-read-model.js";
+import { REPOSITORY_LANDING_INTENT_KIND, recordRepositoryLandingIntent } from "./repository-landing-intent.js";
+import { writeRecoveryFact } from "./repository-recovery-facts.js";
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import { createGoalLandingReader, goalHasLandedCommit } from "./goal-landing-facts.js";
@@ -70,6 +72,44 @@ function land(
   seedLandingReceipt(store, nodeRef, outcome);
 }
 
+const INTENT_ROOT = "D:/fixture-workspace";
+
+/**
+ * THE SECOND HALF OF THE DISCRIMINATOR, written by the PRODUCTION writer.
+ *
+ * `recordRepositoryLandingIntent` is what mints an intent and it validates the handle it is
+ * given, so these arms read back the bytes production commits. The reader collects intents in
+ * one walk of the whole ledger, so it is indifferent to where the intent sits relative to the
+ * receipt; the arms below call this AFTER `land`, which is what opens the acceptance whose
+ * verifier receipt id keys the intent.
+ */
+function journalIntent(
+  store: ReturnType<typeof openStore>, nodeKey: string, verifierReceiptId?: string,
+): void {
+  const nodeRef = scopedRef(store, nodeKey);
+  const receiptId = verifierReceiptId ?? readReviewLedger(store, PROJECT_ID, nodeRef).accepted?.verifierReceiptId;
+  if (receiptId === undefined) throw new Error(`no acceptance names ${nodeRef}`);
+  const written = recordRepositoryLandingIntent(store, {
+    binding: { version: "moe-verified-workspace/1", root: INTENT_ROOT, branchRef: "refs/heads/trunk",
+      headSha: "1".repeat(40), treeSha: "2".repeat(40), dirtySha256: "3".repeat(64) },
+    handle: {
+      owner: { nodeRef, ownershipToken: "b".repeat(64), projectId: PROJECT_ID, storeId: "D:/store.sqlite" },
+      reservation: { baselineId: "baseline", controllerId: "controller", controllerPid: 23,
+        identity: { gitDirectory: `${INTENT_ROOT}/.git`, root: INTENT_ROOT }, nodeRef, phase: "LANDING",
+        pid: 31, projectId: PROJECT_ID, revision: 7, sessionId: "session", storeId: "D:/store.sqlite" },
+    },
+    message: "land\n", paths: ["owned.txt"], verifierReceiptId: receiptId,
+  });
+  if (!written.ok) throw new Error(written.code);
+}
+
+/** An intent decision whose BODY does not decode: the reader answers NULL, never an empty set. */
+function journalUnreadableIntent(store: ReturnType<typeof openStore>): void {
+  const written = writeRecoveryFact(store, PROJECT_ID, "planted-intent", REPOSITORY_LANDING_INTENT_KIND,
+    "repository-landing:planted", { version: "not-an-intent" });
+  if (!written.ok) throw new Error(written.code);
+}
+
 describe("a goal has a landed commit", () => {
   it("is FALSE for an enabled goal that has landed nothing", () => {
     // The live defect: this goal was offered a PUBLISH card over "No node of this goal is
@@ -86,13 +126,67 @@ describe("a goal has a landed commit", () => {
     expect(goalHasLandedCommit(store, PROJECT_ID, GOAL_ID)).toBe(true);
   });
 
-  it("is FALSE when the goal's only landing was REFUSED", () => {
-    // A refusal is a landing ATTEMPT, not a landed commit. NOTHING_TO_COMMIT is the exact
-    // shape the lander writes for a node whose work produced no diff.
+  it("is TRUE when the goal's only landing PROVABLY had nothing to commit", () => {
+    // READING A, decided on task-f7d38f752b074dc89da30631783aae04: a node that ran, was accepted
+    // and found no path differing from its staffing baseline LANDED — with no sha. The closure
+    // node leg already admits it (goal-live-evidence.ts:79,:133-146); this arm makes the publish
+    // offer agree. NO INTENT IS JOURNALED here, which is the other half of the rule.
     const store = enabledWorld();
 
     land(store, "node-a", { refusalCode: "NOTHING_TO_COMMIT" });
 
+    // The durable outcome really is REFUSED — the fact is crediting a refusal, not a committed
+    // receipt in disguise.
+    expect(nodeLanded(store, "node-a")).toBe("REFUSED");
+    expect(goalHasLandedCommit(store, PROJECT_ID, GOAL_ID)).toBe(true);
+  });
+
+  it("is FALSE when that same no-effect refusal already JOURNALED a landing intent", () => {
+    // The governor's reproducer at this seam (comment-573c4f2c): same NOTHING_TO_COMMIT code as
+    // the arm above, but the acceptance journaled an intent, so this is a retry whose bytes were
+    // reverted and the node's work is LOST. Crediting it offers a publish over lost work.
+    const store = enabledWorld();
+
+    land(store, "node-a", { refusalCode: "NOTHING_TO_COMMIT" });
+    journalIntent(store, "node-a");
+
+    expect(nodeLanded(store, "node-a")).toBe("REFUSED");
+    expect(goalHasLandedCommit(store, PROJECT_ID, GOAL_ID)).toBe(false);
+  });
+
+  it("is TRUE when the journaled intent names a DIFFERENT verifier receipt", () => {
+    // The key is (verifier receipt, node): an intent left by an EARLIER acceptance of the same
+    // node does not taint the current one. One literal apart from the arm above.
+    const store = enabledWorld();
+
+    land(store, "node-a", { refusalCode: "NOTHING_TO_COMMIT" });
+    journalIntent(store, "node-a", "9".repeat(64));
+
+    expect(goalHasLandedCommit(store, PROJECT_ID, GOAL_ID)).toBe(true);
+  });
+
+  it("is FALSE when the intent history is UNREADABLE — null credits nothing", () => {
+    // Fail closed. An intent was journaled and its bytes do not decode, so this gate cannot tell
+    // a legitimate no-effect landing from a retry that lost its work, and credits neither.
+    const store = enabledWorld();
+
+    land(store, "node-a", { refusalCode: "NOTHING_TO_COMMIT" });
+    journalUnreadableIntent(store);
+
+    expect(nodeLanded(store, "node-a")).toBe("REFUSED");
+    expect(goalHasLandedCommit(store, PROJECT_ID, GOAL_ID)).toBe(false);
+  });
+
+  it("is FALSE when the goal's only landing refused for a POST-INTENT reason", () => {
+    // The discriminator is the refusal CODE, not "not COMMITTED". GIT_COMMIT_FAILED is decided
+    // AFTER the lander journaled its intent to commit: bytes were owed and never arrived, so the
+    // goal has no landing. A blanket `outcome !== COMMITTED` removal passes the arm above while
+    // being wrong here, which is what makes this pair falsifiable.
+    const store = enabledWorld();
+
+    land(store, "node-a", { refusalCode: "GIT_COMMIT_FAILED" });
+
+    expect(nodeLanded(store, "node-a")).toBe("REFUSED");
     expect(goalHasLandedCommit(store, PROJECT_ID, GOAL_ID)).toBe(false);
   });
 
@@ -187,10 +281,36 @@ describe("the publish offer on /affordances/read", () => {
     expect(goalOffers(enabledWorld())).toEqual([`goal.close@${GOAL_ID}`]);
   });
 
-  it("stays ABSENT when the goal's only landing was REFUSED", () => {
+  it("APPEARS when the goal's only landing provably had nothing to commit", () => {
+    // The surface twin of the fact arm: the PUBLISH card is offered for a goal whose work was
+    // verified to need no bytes. Without it, publish, deploy and closure stall forever on a node
+    // that did exactly what it was asked to do.
     const store = enabledWorld();
 
     land(store, "node-a", { refusalCode: "NOTHING_TO_COMMIT" });
+
+    expect(nodeLanded(store, "node-a")).toBe("REFUSED");
+    expect(goalOffers(store)).toEqual([
+      `goal.close@${GOAL_ID}`, `repository.publish@publish:${GOAL_ID}`,
+    ]);
+  });
+
+  it("stays ABSENT when the goal's only landing refused for a POST-INTENT reason", () => {
+    const store = enabledWorld();
+
+    land(store, "node-a", { refusalCode: "GIT_COMMIT_FAILED" });
+
+    expect(nodeLanded(store, "node-a")).toBe("REFUSED");
+    expect(goalOffers(store)).toEqual([`goal.close@${GOAL_ID}`]);
+  });
+
+  it("stays ABSENT when a no-effect refusal already JOURNALED a landing intent", () => {
+    // The surface twin of the reproducer arm: the PUBLISH card is withheld from a goal whose
+    // only node lost its work to a reverted retry, even though the refusal code says otherwise.
+    const store = enabledWorld();
+
+    land(store, "node-a", { refusalCode: "NOTHING_TO_COMMIT" });
+    journalIntent(store, "node-a");
 
     expect(nodeLanded(store, "node-a")).toBe("REFUSED");
     expect(goalOffers(store)).toEqual([`goal.close@${GOAL_ID}`]);

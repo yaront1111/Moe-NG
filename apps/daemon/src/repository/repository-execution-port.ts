@@ -95,7 +95,7 @@ export function createRepositoryExecutionPort(): RepositoryExecutionPort {
         const checked = checkOwner(record, owner, expectedRevision); if (!checked.ok) return checked;
         const prior = checked.record;
         if (controllerId !== prior.state.controllerId) return repositoryExecutionFailure("REPOSITORY_EXECUTION_CONTROLLER_MISMATCH");
-        const allowed = reason === "LANDED" ? prior.state.phase === "LANDING"
+        const allowed = reason === "LANDED" || reason === "LANDED_NOTHING" ? prior.state.phase === "LANDING"
           : reason === "PUBLISHED" ? prior.state.phase === "PUBLISHING"
           : reason === "CRITERIA_COMPLETED" ? prior.state.phase === "CRITERION_VERIFYING"
           : reason === "ABORTED_BEFORE_EXECUTION" && prior.state.phase === "RESERVED" && !prior.everExecuted;

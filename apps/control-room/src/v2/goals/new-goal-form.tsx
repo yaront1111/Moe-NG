@@ -34,8 +34,6 @@ export interface NewGoalFormProps {
   readonly onCreate: (draft: GoalDraft) => void;
   readonly onCancel: () => void;
   readonly busy?: boolean | undefined;
-  /** A changing offer disables submission without unmounting the operator's draft. */
-  readonly disabledReason?: string | undefined;
   /**
    * Advanced by the parent ONLY when a create actually committed. The form never
    * discards the operator's words on its own, so a refusal - at any layer - leaves
@@ -48,7 +46,6 @@ export function NewGoalForm({
   onCreate,
   onCancel,
   busy = false,
-  disabledReason,
   resetToken = 0,
 }: NewGoalFormProps): JSX.Element {
   const [title, setTitle] = useState("");
@@ -86,7 +83,7 @@ export function NewGoalForm({
   };
 
   const unresolvedPrd = read !== null && (read === "READING" || read.status === "ERROR");
-  const createDisabled = busy || disabledReason !== undefined || unresolvedPrd || outcome.trim() === "" || title.trim() === "";
+  const createDisabled = busy || unresolvedPrd || outcome.trim() === "" || title.trim() === "";
   const submit = (): void => {
     if (createDisabled) return;
     onCreate({
@@ -114,7 +111,7 @@ export function NewGoalForm({
         onDrop={onDrop}
       >
         <div className="cr2-prd-lead">
-          <span className="cr2-field-label">Drop a PRD or paste text</span>
+          <span className="cr2-field-label">Drop a PRD</span>
           <button
             className="cr2-prd-browse"
             onClick={() => inputRef.current?.click()}
@@ -167,10 +164,10 @@ export function NewGoalForm({
           id="cr2-title"
           maxLength={TITLE_INPUT_MAX_LENGTH}
           onChange={(event) => setTitle(event.target.value)}
-          placeholder="Ship the login flow"
+          placeholder="Ship the stdio entry point"
           value={title}
         />
-        <label className="cr2-field-label" htmlFor="cr2-outcome">{`What should be true when this is done ${EMDASH} one sentence is enough`}</label>
+        <label className="cr2-field-label" htmlFor="cr2-outcome">{`Outcome ${EMDASH} one sentence is enough`}</label>
         <input
           className="cr2-field-input"
           data-testid="cr.goals.newgoal.outcome"
@@ -181,7 +178,7 @@ export function NewGoalForm({
           value={outcome}
         />
         <label className="cr2-field-label" htmlFor="cr2-criteria">
-          {`How we will know ${EMDASH} optional, one check per line`}
+          {`Acceptance criteria ${EMDASH} optional, one per line`}
         </label>
         <textarea
           className="cr2-field-area"
@@ -189,7 +186,7 @@ export function NewGoalForm({
           id="cr2-criteria"
           maxLength={8_192}
           onChange={(event) => setCriteria(event.target.value)}
-          placeholder="A signed-out user who submits the form sees the error"
+          placeholder="pnpm test:security exits 0"
           rows={3}
           value={criteria}
         />
@@ -231,9 +228,6 @@ export function NewGoalForm({
             Requested budget is separate from an admitted spending cap and measured consumption.
           </p>
         </details>
-        {disabledReason === undefined ? null : (
-          <p data-testid="cr.goals.newgoal.unavailable" role="status">{disabledReason}</p>
-        )}
         <div className="cr2-newgoal-actions">
           <ActionButton
             disabled={createDisabled}

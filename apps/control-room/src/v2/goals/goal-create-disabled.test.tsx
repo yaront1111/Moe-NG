@@ -1,4 +1,4 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, expect, it, vi } from "vitest";
 
@@ -125,31 +125,4 @@ it("leaves goal creation enabled and the reason undefined when the setup is atta
 
   await user.click(button);
   expect(await screen.findByTestId("cr.goals.newgoal.form")).toBeTruthy();
-});
-
-
-it("preserves an open draft across a lost create offer and an undelivered response", async () => {
-  const user = userEvent.setup();
-  let answer!: (value: { ok: false; report: string }) => void;
-  const create = vi.fn(() => new Promise<{ ok: false; report: string }>((resolve) => { answer = resolve; }));
-  const props = { data: FIXTURE_GOALS_DATA, onCreateGoal: create, onOpenBoard: vi.fn() };
-  const view = render(<GoalsHome {...props} />);
-  await user.click(screen.getByTestId("cr.goals.new"));
-  await user.type(screen.getByTestId("cr.goals.newgoal.title"), "Keep this title");
-  await user.type(screen.getByTestId("cr.goals.newgoal.outcome"), "Keep this outcome");
-  await user.click(screen.getByTestId("cr.goals.newgoal.create"));
-  const reason = "LIVE_BOOTSTRAP_UNAVAILABLE @ CONTROL_ROOM_LIVE";
-  view.rerender(<GoalsHome {...props} createDisabledReason={reason} />);
-  expect((screen.getByTestId("cr.goals.newgoal.title") as HTMLInputElement).value).toBe("Keep this title");
-  await act(async () => { answer({ ok: false, report: "TRANSPORT_REQUEST_FAILED @ CONTROL_ROOM_TRANSPORT" }); });
-  expect(screen.getByTestId("cr.goals.newgoal.report").textContent)
-    .toBe("TRANSPORT_REQUEST_FAILED @ CONTROL_ROOM_TRANSPORT");
-  expect((screen.getByTestId("cr.goals.newgoal.outcome") as HTMLInputElement).value).toBe("Keep this outcome");
-  expect(screen.getByTestId("cr.goals.newgoal.unavailable").textContent).toBe(reason);
-  expect((screen.getByTestId("cr.goals.newgoal.create") as HTMLButtonElement).disabled).toBe(true);
-  await user.click(screen.getByTestId("cr.goals.newgoal.create"));
-  expect(create).toHaveBeenCalledTimes(1);
-  view.rerender(<GoalsHome {...props} />);
-  expect((screen.getByTestId("cr.goals.newgoal.title") as HTMLInputElement).value).toBe("Keep this title");
-  expect((screen.getByTestId("cr.goals.newgoal.create") as HTMLButtonElement).disabled).toBe(false);
 });

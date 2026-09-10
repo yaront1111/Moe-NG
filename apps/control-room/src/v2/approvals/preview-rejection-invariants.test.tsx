@@ -128,7 +128,7 @@ describe("a rejection moves nothing (DoD 3)", () => {
       })) },
     } as unknown as PreviewWire;
 
-    await createPreviewPort(wire).submit(FACTS.affordance, "REJECT", [
+    await createPreviewPort(wire).submit(FACTS.affordance, FACTS.receiptId, "REJECT", [
       { detail: "The total is wrong.", nodeRef: NODE.nodeRef },
     ]);
 
@@ -137,7 +137,8 @@ describe("a rejection moves nothing (DoD 3)", () => {
     expect(built[0]?.input["payload"]).toEqual({
       decision: "REJECT",
       findings: [{ detail: "The total is wrong.", nodeRef: NODE.nodeRef }],
-      previewRef: "preview:goal-1",
+      // The RECEIPT id the caller supplied, never the affordance's targetAggregateId.
+      previewRef: FACTS.receiptId,
     });
     const finding = (built[0]?.input["payload"] as { findings: readonly object[] }).findings[0];
     expect(Object.keys(finding ?? {}).sort()).toEqual(["detail", "nodeRef"]);

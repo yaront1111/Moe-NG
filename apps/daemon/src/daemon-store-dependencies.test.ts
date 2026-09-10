@@ -1335,24 +1335,48 @@ describe("production health probe registration", () => {
       healthProbeHttp: async () => { calls++; return 200; } };
     let provider = createStoreDependencies(config);
     const store = SqliteEventStore.openForProject(path, config.projectId);
+    /** Last write wins per id: the durable roster the schedule replays at boot. */
+    const roster = (): ReadonlyMap<string, number> => {
+      const current = new Map<string, number>();
+      for (const event of store.readEvents(`durable-schedule/${config.projectId}`)) {
+        const entry = JSON.parse(new TextDecoder().decode(event.payload)) as { id: string; intervalMs: number };
+        current.set(entry.id, entry.intervalMs);
+      }
+      return current;
+    };
+    const armedIntervals = (): readonly number[] => [...timers.values()].sort((a, b) => a - b);
+    const rosterIntervals = (): readonly number[] => [...roster().values()].sort((a, b) => a - b);
     try {
-      expect([...timers.values()]).toEqual([60000]);
+      // The shared DurableSchedule carries every subsystem's job, so the armed set is asserted
+      // against the DURABLE ROSTER keyed by id — never against a frozen literal that the next job
+      // to register would red — and the probe's own row is then pinned by its own id.
+      expect(armedIntervals()).toEqual(rosterIntervals());
+      expect(roster().get(HEALTH_PROBE_JOB_ID)).toBe(60000);
       expect(provider.schedules()).toBe(provider.schedules());
       expect(recordDeployReceipt(store, { projectId: config.projectId, environment: "preview", decisionId: "monitor-deploy",
         decidedAt: CLOCK(), sha: "a".repeat(40), imageDigest: `sha256:${"b".repeat(64)}`,
         refusal: null, releaseDecision: null, url: "http://127.0.0.1:49999" }).ok).toBe(true);
+      // Drives EVERY armed job rather than "the 60s one": that interval is no longer unique on the
+      // shared schedule, and picking by interval would silently fire another subsystem's callback.
+      // `calls` counts only what reached `healthProbeHttp`, so it still measures the PROBE.
       const tick = async (): Promise<void> => {
-        [...timers].find((entry) => entry[1] === 60000)?.[0]();
+        for (const armed of [...timers.keys()]) armed();
         await new Promise<void>((done) => setImmediate(done));
       };
       await tick(); await tick(); expect(calls).toBe(2);
       expect(provider.schedules().register("unrelated", () => { externalCalls++; }, 250)).toEqual({ ok: true });
       provider.close(); expect(timers.size).toBe(0);
       provider = createStoreDependencies(config);
-      expect([...timers.values()].sort((a, b) => a - b)).toEqual([250, 60000]);
+      // REBOUND FROM DURABLE STATE: the externally-resolved job survives the restart, and the armed
+      // set still equals the roster — now one entry longer, by id, not by a bumped literal.
+      expect(roster().get("unrelated")).toBe(250);
+      expect(armedIntervals()).toEqual(rosterIntervals());
       await tick(); await tick(); expect(calls).toBe(4);
+      const external = externalCalls;
       [...timers].find((entry) => entry[1] === 250)?.[0]();
-      expect(externalCalls).toBe(1);
+      // A DELTA, because `tick()` above now fires every armed job, including externally-resolved
+      // ones. What this pins is that firing `unrelated`'s own arm runs its callback exactly once.
+      expect(externalCalls - external).toBe(1);
       const registrations = store.readEvents(`durable-schedule/${config.projectId}`)
         .map((event) => JSON.parse(new TextDecoder().decode(event.payload)) as { id: string; intervalMs: number });
       expect(registrations.filter((entry) => entry.id === HEALTH_PROBE_JOB_ID)).toEqual([{ id: HEALTH_PROBE_JOB_ID, intervalMs: 60000 }]);
@@ -1366,10 +1390,14 @@ describe("production health probe registration", () => {
   it("aborts the real registered callback on close without persisting a late observation", async () => {
     const root = mkdtempSync(join(tmpdir(), "moe-monitor-abort-"));
     const path = join(root, "store.db");
-    let tick: (() => void) | undefined;
+    // KEYED, NOT SINGLE-SLOT. A one-callback fake silently drops whichever job arms second on the
+    // shared DurableSchedule, and then observes the wrong subsystem's signal. Same shape as the
+    // sibling fake above.
+    const timers = new Map<() => void, number>();
     let seen: AbortSignal | undefined;
     const config = { credential: CREDENTIAL, principalId: "operator-local", projectId: "project-monitor-abort", storePath: path,
-      schedule: { timer: { set: (callback: () => void) => { tick = callback; return callback; }, clear: () => { tick = undefined; } } },
+      schedule: { timer: { set: (tick: () => void, interval: number) => { timers.set(tick, interval); return tick; },
+        clear: (handle: unknown) => { timers.delete(handle as () => void); } } },
       healthProbeHttp: async (_url: string, signal: AbortSignal): Promise<number> => {
         seen = signal; return new Promise<number>(() => { /* Deliberately ignores cancellation. */ });
       } };
@@ -1379,13 +1407,17 @@ describe("production health probe registration", () => {
       expect(recordDeployReceipt(store, { projectId: config.projectId, environment: "preview", decisionId: "abort-deploy",
         decidedAt: CLOCK(), sha: "a".repeat(40), imageDigest: `sha256:${"b".repeat(64)}`,
         refusal: null, releaseDecision: null, url: "http://127.0.0.1:49999" }).ok).toBe(true);
-      expect(tick).toBeTypeOf("function"); tick?.();
+      // Drive every armed job: the PROBE's own arm is the one that reaches `healthProbeHttp` and
+      // hands us its signal, and `seen` being defined is what proves it actually fired.
+      expect(timers.size).toBeGreaterThan(0);
+      for (const armed of [...timers.keys()]) armed();
+      expect(seen).toBeDefined();
       expect(seen?.aborted).toBe(false);
       provider.close();
       expect(seen?.aborted).toBe(true);
       await new Promise<void>((done) => setImmediate(done));
       expect(createHealthProbeRing(`${path}.health.sqlite`, config.projectId).read("preview")).toEqual({ ok: true, value: [] });
-      expect(tick).toBeUndefined();
+      expect(timers.size).toBe(0);
     } finally { provider.close(); store.close(); rmSync(root, { recursive: true, force: true }); }
   });
 });

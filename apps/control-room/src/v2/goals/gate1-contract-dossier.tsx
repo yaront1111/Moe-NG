@@ -3,23 +3,10 @@ import type { JSX, ReactNode } from "react";
 
 import { MIDDOT } from "../glyphs.js";
 
-/**
- * THE PRODUCT CONTRACT a person approves at Gate 1. Four things lead, because they are the
- * decision: what we will build (objectives), what we will not (negative scope), how we will
- * know it is done (the acceptance criteria), and the product decisions the contract records
- * (material decisions). Everything else the revision carries - user jobs, journeys, the six requirement
- * groups, assumptions, budgets, metrics, provenance, retired ids - is the same dossier one
- * click away, so approval is a reading, not a scroll past an eighteen-section dump.
- */
-
 interface DossierItem {
   readonly details?: readonly string[];
   readonly id: string;
   readonly statement: string;
-}
-
-function plural(count: number, noun: string): string {
-  return `${String(count)} ${noun}${count === 1 ? "" : "s"}`;
 }
 
 function joined(label: string, values: readonly string[]): string {
@@ -40,7 +27,7 @@ function DossierSection({
   return (
     <section className="cr2-approve-block" data-testid={`cr.gate1.contract.${sectionId}`}>
       <h3 className="cr2-approve-heading">
-        {`${title} ${MIDDOT} ${items === undefined ? "revision ledger" : items.length}`}
+        {`${title} ${MIDDOT} ${items === undefined ? "REVISION LEDGER" : items.length}`}
       </h3>
       {items === undefined ? children : items.length === 0 ? (
         <p className="cr2-approve-note">None recorded in this revision.</p>
@@ -87,7 +74,7 @@ function requirements(
 
 function Provenance({ revision }: { readonly revision: ProductContractRevisionV2 }): JSX.Element {
   return (
-    <DossierSection sectionId="provenance" title="Provenance">
+    <DossierSection sectionId="provenance" title="PROVENANCE">
       <dl className="cr2-approve-hashes">
         <dt>author</dt><dd className="cr2-approve-mono">{revision.authorRef}</dd>
         <dt>version</dt><dd className="cr2-approve-mono">{revision.version}</dd>
@@ -110,24 +97,53 @@ function Provenance({ revision }: { readonly revision: ProductContractRevisionV2
   );
 }
 
-/** The sections that are the decision. */
-function Essentials({ revision }: { readonly revision: ProductContractRevisionV2 }): JSX.Element {
+export function Gate1ContractDossier({
+  revision,
+}: { readonly revision: ProductContractRevisionV2 }): JSX.Element {
   return (
-    <>
+    <div className="cr2-approve-body" data-testid="cr.gate1.pending">
       <DossierSection
         items={revision.objectives.map((row) => ({
           id: row.objectiveId, statement: row.statement,
         }))}
         sectionId="objectives"
-        title="What we will build"
+        title="OBJECTIVES"
       />
       <DossierSection
-        items={revision.negativeScope.map((row) => ({
-          id: row.scopeId, statement: row.statement,
+        items={revision.userJobs.map((row) => ({
+          details: [`user ${row.user}`], id: row.userJobId, statement: row.job,
         }))}
-        sectionId="negative-scope"
-        title="What we will not build"
+        sectionId="user-jobs"
+        title="USER JOBS"
       />
+      <DossierSection
+        items={revision.journeys.map((row) => ({
+          details: [`user job ${row.userJobId}`, joined("criteria", row.criterionIds)],
+          id: row.journeyId,
+          statement: row.statement,
+        }))}
+        sectionId="journeys"
+        title="JOURNEYS"
+      />
+      {requirements("requirements.functional", "FUNCTIONAL REQUIREMENTS", revision.functionalRequirements)}
+      {requirements(
+        "requirements.non-functional", "NON-FUNCTIONAL REQUIREMENTS",
+        revision.nonFunctionalRequirements,
+      )}
+      {requirements(
+        "requirements.security-privacy", "SECURITY + PRIVACY REQUIREMENTS",
+        revision.securityPrivacyRequirements,
+      )}
+      {requirements(
+        "requirements.technology", "TECHNOLOGY REQUIREMENTS", revision.technologyRequirements,
+      )}
+      {requirements(
+        "requirements.ux-accessibility", "UX + ACCESSIBILITY REQUIREMENTS",
+        revision.uxAccessibilityRequirements,
+      )}
+      {requirements(
+        "requirements.deployment", "DEPLOYMENT REQUIREMENTS", revision.deploymentRequirements,
+      )}
       <DossierSection
         items={revision.criteria.map((row) => ({
           details: [
@@ -141,7 +157,45 @@ function Essentials({ revision }: { readonly revision: ProductContractRevisionV2
           statement: row.statement,
         }))}
         sectionId="criteria"
-        title="How we will know it is done"
+        title="ACCEPTANCE CRITERIA"
+      />
+      <DossierSection
+        items={revision.negativeScope.map((row) => ({
+          id: row.scopeId, statement: row.statement,
+        }))}
+        sectionId="negative-scope"
+        title="NEGATIVE SCOPE"
+      />
+      <DossierSection
+        items={revision.assumptions.map((row) => ({
+          details: [`validated by ${row.validationCriterionId}`],
+          id: row.assumptionId,
+          statement: row.statement,
+        }))}
+        sectionId="assumptions"
+        title="ASSUMPTIONS"
+      />
+      <DossierSection
+        items={revision.budgets.map((row) => ({
+          details: [`kind ${row.kind}`],
+          id: row.budgetId,
+          statement: `${String(row.limit)} ${row.unit}`,
+        }))}
+        sectionId="budgets"
+        title="BUDGETS"
+      />
+      <DossierSection
+        items={revision.successMetrics.map((row) => ({
+          details: [
+            `target ${row.target}`,
+            `measurement ${row.measurement}`,
+            joined("objectives", row.objectiveIds),
+          ],
+          id: row.metricId,
+          statement: row.statement,
+        }))}
+        sectionId="success-metrics"
+        title="SUCCESS METRICS"
       />
       <DossierSection
         items={revision.materialDecisions.map((row) => ({
@@ -155,81 +209,7 @@ function Essentials({ revision }: { readonly revision: ProductContractRevisionV2
           statement: row.question,
         }))}
         sectionId="material-decisions"
-        title="Product decisions"
-      />
-    </>
-  );
-}
-
-/** The rest of the revision, verbatim, behind one fold. */
-function FullContract({ revision }: { readonly revision: ProductContractRevisionV2 }): JSX.Element {
-  return (
-    <>
-      <DossierSection
-        items={revision.userJobs.map((row) => ({
-          details: [`user ${row.user}`], id: row.userJobId, statement: row.job,
-        }))}
-        sectionId="user-jobs"
-        title="User jobs"
-      />
-      <DossierSection
-        items={revision.journeys.map((row) => ({
-          details: [`user job ${row.userJobId}`, joined("criteria", row.criterionIds)],
-          id: row.journeyId,
-          statement: row.statement,
-        }))}
-        sectionId="journeys"
-        title="Journeys"
-      />
-      {requirements("requirements.functional", "Functional requirements", revision.functionalRequirements)}
-      {requirements(
-        "requirements.non-functional", "Non-functional requirements",
-        revision.nonFunctionalRequirements,
-      )}
-      {requirements(
-        "requirements.security-privacy", "Security and privacy requirements",
-        revision.securityPrivacyRequirements,
-      )}
-      {requirements(
-        "requirements.technology", "Technology requirements", revision.technologyRequirements,
-      )}
-      {requirements(
-        "requirements.ux-accessibility", "UX and accessibility requirements",
-        revision.uxAccessibilityRequirements,
-      )}
-      {requirements(
-        "requirements.deployment", "Deployment requirements", revision.deploymentRequirements,
-      )}
-      <DossierSection
-        items={revision.assumptions.map((row) => ({
-          details: [`validated by ${row.validationCriterionId}`],
-          id: row.assumptionId,
-          statement: row.statement,
-        }))}
-        sectionId="assumptions"
-        title="Assumptions"
-      />
-      <DossierSection
-        items={revision.budgets.map((row) => ({
-          details: [`kind ${row.kind}`],
-          id: row.budgetId,
-          statement: `${String(row.limit)} ${row.unit}`,
-        }))}
-        sectionId="budgets"
-        title="Budgets"
-      />
-      <DossierSection
-        items={revision.successMetrics.map((row) => ({
-          details: [
-            `target ${row.target}`,
-            `measurement ${row.measurement}`,
-            joined("objectives", row.objectiveIds),
-          ],
-          id: row.metricId,
-          statement: row.statement,
-        }))}
-        sectionId="success-metrics"
-        title="Success metrics"
+        title="MATERIAL DECISIONS"
       />
       <DossierSection
         items={[{
@@ -238,7 +218,7 @@ function FullContract({ revision }: { readonly revision: ProductContractRevision
           statement: revision.productCompleteDefinition.statement,
         }]}
         sectionId="product-complete"
-        title="Product complete"
+        title="PRODUCT COMPLETE"
       />
       <Provenance revision={revision} />
       <DossierSection
@@ -253,29 +233,8 @@ function FullContract({ revision }: { readonly revision: ProductContractRevision
           },
         ]}
         sectionId="retired"
-        title="Retired identifiers"
+        title="RETIRED IDENTIFIERS"
       />
-    </>
-  );
-}
-
-export function Gate1ContractDossier({
-  revision,
-}: { readonly revision: ProductContractRevisionV2 }): JSX.Element {
-  const requirementCount = revision.functionalRequirements.length + revision.nonFunctionalRequirements.length
-    + revision.securityPrivacyRequirements.length + revision.technologyRequirements.length
-    + revision.uxAccessibilityRequirements.length + revision.deploymentRequirements.length;
-  return (
-    <div className="cr2-approve-body" data-testid="cr.gate1.pending">
-      <Essentials revision={revision} />
-      <details className="cr2-goal-fold" data-testid="cr.gate1.contract.full">
-        <summary className="cr2-goal-fold-summary">
-          {`The full contract ${MIDDOT} ${plural(requirementCount, "requirement")}, ${plural(revision.userJobs.length, "user job")},`
-            + ` ${plural(revision.journeys.length, "journey")}, assumptions, budgets, metrics, the completion definition,`
-            + " provenance, retired ids"}
-        </summary>
-        <FullContract revision={revision} />
-      </details>
     </div>
   );
 }

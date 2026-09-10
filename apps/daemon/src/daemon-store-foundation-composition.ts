@@ -1,5 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { createAncestryFactory, createProductionReleaseSeams } from "./release/release-production-wiring.js";
+import { RELEASE_AUTO_DECIDE_JOB_ID, RELEASE_BASE_ENV_KEY, registerReleaseAutoDecide }
+  from "./release/release-auto-decide.js";
 import type { ReleasePublisher } from "./release/release-decide-service.js";
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
@@ -785,8 +787,17 @@ export function createStoreDependencies(
   };
   const schedules = createDurableSchedule({ ...config.schedule, store, projectId: config.projectId, now: epochClock,
     // Reserved probe IDs never fall through to an external resolver that could re-arm retirement.
+    // `release/auto-decide` is RESERVED TO NULL here, never delegated: the constructor rebuild runs
+    // BEFORE the registration below re-arms it, and naming it here would need the deps that do not
+    // exist yet. Delegating it would be worse than useless -- a host resolver that answers unknown
+    // ids would bind THIS job to a foreign callback at rebuild, and `arm()` KEEPS the existing
+    // callback when `register` arrives at the same interval (durable-schedule.ts:76-77), so the
+    // reconciler would never run while the release schedule fired someone else's code. Reserving
+    // makes rebuild drop the arm; the transient SCHEDULE_TARGET_UNRESOLVED notice is cleared by
+    // `register`, which then owns the callback outright.
     resolve: (id) => id === HEALTH_PROBE_JOB_ID || healthProbeJobEnvironment(id) !== null
-      ? resolveProbe(id) : config.schedule?.resolve?.(id) ?? null });
+      ? resolveProbe(id)
+      : id === RELEASE_AUTO_DECIDE_JOB_ID ? null : config.schedule?.resolve?.(id) ?? null });
   const close = (): void => { schedules.release(); subscriptionDatabase?.close(); store.close(); };
   /**
    * ORDER IS LOAD-BEARING, and getting it wrong is the defect DoD 3 names. The stored intervals are
@@ -800,6 +811,15 @@ export function createStoreDependencies(
    */
   const sweep = schedules.register(HEALTH_PROBE_JOB_ID, healthProbe, DEFAULT_PROBE_INTERVAL_MS);
   if (!sweep.ok) { close(); throw new Error(`${sweep.code}@${sweep.layer}`); }
+  // GATE 3 UNATTENDED. The SAME registry and the SAME dossier facts the release command holds, and
+  // the SAME operator id boot reconciliation acts under -- a `daemon:*` id is refused 403 by the
+  // release fence, so only this one passes. `MOE_RELEASE_BASE` is host config passed RAW; absent,
+  // the reconciler releases nothing and the gate stays with a human.
+  const autoRelease = registerReleaseAutoDecide(schedules, {
+    base: process.env[RELEASE_BASE_ENV_KEY] ?? null, clock, dossierFacts: releaseDecide.dossierFacts,
+    operatorPrincipalId: config.principalId, projectId: config.projectId, registry, store,
+  });
+  if (!autoRelease.ok) { close(); throw new Error(`${autoRelease.code}@${autoRelease.layer}`); }
   const boot = reconcileProbeSchedules();
   if (boot !== null) { close(); throw new Error(`${boot.code}@${boot.layer}`); }
   return Object.freeze({

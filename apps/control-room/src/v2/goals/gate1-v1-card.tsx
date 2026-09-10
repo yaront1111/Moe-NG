@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
+import { OutcomeNote } from "../components/outcome-note.js";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
+import { readFailedSaid, writeFailedSaid } from "../outcome-words.js";
 import type {
   Gate1ApprovalOutcomeV1, Gate1ApprovalPortV1, Gate1ClarificationViewV1, Gate1PendingViewV1,
   Gate1ReadOutcomeV1,
 } from "./gate1-v1-approval.js";
-import { RefusalNote } from "../components/outcome-note.js";
 
 /**
  * The GATE 1 card on the V1 plane (approve the Product Contract): rendered above the plan
@@ -38,7 +39,7 @@ function PendingBody({ pending }: { readonly pending: Gate1PendingViewV1 }): JSX
     <div className="cr2-approve-body" data-testid="cr.gate1.pending">
       <section className="cr2-approve-block" data-testid="cr.gate1.requirements">
         <h3 className="cr2-approve-heading">
-          {`Requirements ${MIDDOT} ${pending.requirements.length}`}
+          {`REQUIREMENTS ${MIDDOT} ${pending.requirements.length}`}
         </h3>
         <ul className="cr2-approve-obligations">
           {pending.requirements.map((requirement) => (
@@ -55,7 +56,7 @@ function PendingBody({ pending }: { readonly pending: Gate1PendingViewV1 }): JSX
       </section>
       <section className="cr2-approve-block" data-testid="cr.gate1.criteria">
         <h3 className="cr2-approve-heading">
-          {`Acceptance criteria ${MIDDOT} ${pending.criteria.length}`}
+          {`ACCEPTANCE CRITERIA ${MIDDOT} ${pending.criteria.length}`}
         </h3>
         <ul className="cr2-approve-obligations">
           {pending.criteria.map((criterion) => (
@@ -145,10 +146,7 @@ export function Gate1CardV1({ goalId, port, read }: Gate1CardV1Props): JSX.Eleme
 
   return (
     <section className="cr2-approve" data-testid="cr.gate1.card">
-      <p className="cr2-slot-kicker">
-        Product contract
-        <span className="cr2-visually-hidden">{` for ${goalId}`}</span>
-      </p>
+      <p className="cr2-slot-kicker">Product contract</p>
       {state.phase === "LOADING" ? (
         <p className="cr2-slot-kicker" data-testid="cr.gate1.loading">Reading the contract...</p>
       ) : state.outcome.status === "PENDING" ? (
@@ -167,7 +165,7 @@ export function Gate1CardV1({ goalId, port, read }: Gate1CardV1Props): JSX.Eleme
               data-testid={`cr.gate1.question.${row.clarificationId}`}
               key={row.clarificationId}
             >
-              <h3 className="cr2-approve-heading">{`Question ${MIDDOT} ${row.question}`}</h3>
+              <h3 className="cr2-approve-heading">{`QUESTION ${MIDDOT} ${row.question}`}</h3>
               {row.options.map((option) => (
                 <ActionButton
                   disabled={busy}
@@ -202,10 +200,20 @@ export function Gate1CardV1({ goalId, port, read }: Gate1CardV1Props): JSX.Eleme
           {`Contract approved ${MIDDOT} the daemon now compiles the plan from it.`}
         </p>
       ) : (
-        <RefusalNote refusal={state.outcome} role="alert" testId="cr.gate1.refusal" />
+        <OutcomeNote
+          code={state.outcome.code}
+          layer={state.outcome.layer}
+          said={readFailedSaid("contract")}
+          testId="cr.gate1.refusal"
+        />
       )}
       {refusal === null ? null : (
-        <RefusalNote refusal={refusal} role="alert" testId="cr.gate1.dispatchrefusal" />
+        <OutcomeNote
+          code={refusal.code}
+          layer={refusal.layer}
+          said={writeFailedSaid()}
+          testId="cr.gate1.dispatchrefusal"
+        />
       )}
     </section>
   );

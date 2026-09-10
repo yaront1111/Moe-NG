@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  ALPHA_LANDING, BRAVO_LANDING, GOAL_ID, HEAD_SHA, ORPHAN_LANDING, OTHER_SHA, PROJECT_ID,
-  RECEIPT_SHA, ancestryOf, dossierInput,
+  ALPHA_LANDING, BRAVO_LANDING, CRITERION_ARTIFACT, GOAL_ID, HEAD_SHA, ORPHAN_LANDING, OTHER_SHA,
+  PROJECT_ID, RECEIPT_SHA, ancestryOf, dossierInput,
 } from "./release-dossier-fixtures.js";
-import { renderReleaseDossier } from "./release-dossier.js";
+import type { AncestryVerdict, DossierInput } from "./release-dossier-contracts.js";
+import { criterionRows, releaseDossierGaps, renderReleaseDossier } from "./release-dossier.js";
 
 /**
  * The golden. It pins EVERY section byte-for-byte, not the presence of a heading:
@@ -234,8 +235,11 @@ describe("release dossier re-measurement", () => {
     });
     const { calls, predicate } = ancestryOf();
     renderReleaseDossier(input, HEAD_SHA, predicate);
-    // Three criteria, two distinct cited commits: git is asked twice, never three times.
-    expect(calls).toStrictEqual([ALPHA_LANDING, BRAVO_LANDING]);
+    // Three criteria, THREE distinct cited commits — two landings and the one receipt sha both
+    // nodes share. Without memoization crit-two would ask again for a commit already decided, so
+    // the count is what proves the cache, and the list is what proves the receipt sha is cited AT
+    // ALL: before it went through the predicate this array held only the two landings.
+    expect(calls).toStrictEqual([ALPHA_LANDING, RECEIPT_SHA, BRAVO_LANDING]);
   });
 
   it("renders UNKNOWN rather than throwing when the ancestry port itself fails", () => {
@@ -253,7 +257,19 @@ describe("release dossier re-measurement", () => {
     expect(rendered).toContain(`| crit-alpha | LANDING_UNMEASURABLE | git could not decide whether`
       + ` the cited landing commit is an ancestor of this sha (${ALPHA_LANDING}) |`);
     expect(rendered).not.toContain("| crit-alpha | LANDING_NOT_ANCESTOR |");
-    expect(consulted).toBe(1);
+    // The RECEIPT sha is measured by the same predicate and gets the same treatment, with its own
+    // code: one unreachable git leaves BOTH citations unmeasurable rather than only the landing.
+    expect(rendered).toContain(`| crit-alpha | RECEIPT_UNMEASURABLE | git could not decide whether`
+      + ` the verifier receipt's measured source commit is an ancestor of this sha`
+      + ` (${RECEIPT_SHA}) |`);
+    expect(rendered).not.toContain("| crit-alpha | RECEIPT_NOT_ANCESTOR |");
+    // And so does the criterion CHECK's artifact: an unreachable git leaves all THREE citations
+    // unmeasurable, so none of them can quietly read as verified.
+    expect(rendered).toContain(`| crit-alpha | CRITERION_NOT_VERIFIED_AT_SHA | no passed criterion`
+      + ` check binds this criterion to a commit this sha contains (${CRITERION_ARTIFACT}) |`);
+    // Three distinct cited commits, one criterion: the landing, the receipt sha and the artifact
+    // the approved criterion check passed at.
+    expect(consulted).toBe(3);
   });
 
   it("caches an UNMEASURABLE verdict too, so a failing git is not re-run per criterion", () => {
@@ -268,9 +284,107 @@ describe("release dossier re-measurement", () => {
       consulted += 1;
       throw new Error("fatal: not a git repository");
     });
-    expect(consulted).toBe(1);
+    // TWO criteria over ONE node cite two distinct commits — its landing and its receipt sha — so
+    // an uncached predicate would be asked four times. The cache is what makes it two.
+    expect(consulted).toBe(2);
     expect(rendered).toContain("| crit-one | LANDING_UNMEASURABLE |");
     expect(rendered).toContain("| crit-two | LANDING_UNMEASURABLE |");
+    expect(rendered).toContain("| crit-one | RECEIPT_UNMEASURABLE |");
+    expect(rendered).toContain("| crit-two | RECEIPT_UNMEASURABLE |");
+  });
+});
+
+/**
+ * THE TWO CITATIONS THAT USED TO READ AS CLEAN.
+ *
+ * A present verifier receipt sha produced ZERO gaps and was never put through the ancestry
+ * predicate, and no criterion CHECK was consulted at all. So a dossier could print "Every cited
+ * commit was re-measured as an ancestor of this sha" over a verifier run taken on a foreign tree,
+ * for a goal whose approved criteria had never been checked. `goal.close` already refused such a
+ * goal with GOAL_CLOSE_CRITERIA_UNVERIFIED; release, the irreversible gate, did not.
+ *
+ * Every arm asserts the CODE, and each uses a ONE-CRITERION covered fixture so nothing else in
+ * the pipeline can be the source of the gap being measured.
+ */
+describe("release dossier binds evidence to the released tree", () => {
+  const covered = (overrides: Partial<DossierInput> = {}): DossierInput => dossierInput({
+    criteria: [{ criterionId: "crit-alpha", nodeKey: "node-alpha", title: "Alpha" }],
+    ...overrides,
+  });
+  const gapsOf = (
+    input: DossierInput, verdicts: Readonly<Record<string, AncestryVerdict>> = {},
+  ): readonly { readonly code: string; readonly criterionId: string }[] =>
+    releaseDossierGaps(input, HEAD_SHA, ancestryOf(verdicts).predicate)
+      .map((gap) => ({ code: gap.code, criterionId: gap.criterionId }));
+
+  it("gaps a verifier receipt taken on a tree the released sha does not contain", () => {
+    const input = covered();
+    // THE FILING'S PROBE, and it returned gaps=0 before this row: `ancestry` was never reached
+    // for a present receipt sha.
+    expect(gapsOf(input, { [RECEIPT_SHA]: "NOT_ANCESTOR" }))
+      .toEqual([{ code: "RECEIPT_NOT_ANCESTOR", criterionId: "crit-alpha" }]);
+    // The ROW names the NODE whose receipt is unusable, and still shows the sha it cited, which
+    // is what an operator needs in order to go and look at it.
+    const rows = criterionRows(input, ancestryOf({ [RECEIPT_SHA]: "NOT_ANCESTOR" }).predicate);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ nodeKey: "node-alpha", receiptSha: RECEIPT_SHA });
+    expect(rows[0]?.gaps.map((gap) => gap.code)).toEqual(["RECEIPT_NOT_ANCESTOR"]);
+    expect(rows[0]?.gaps[0]?.detail).toContain(RECEIPT_SHA);
+    // THE MIRROR. An ancestor receipt sha lists nothing, so the new check is not a blanket that
+    // gaps every receipt it is shown.
+    expect(gapsOf(input)).toEqual([]);
+  });
+
+  it("keeps a receipt git could not decide apart from one git decided against", () => {
+    expect(gapsOf(covered(), { [RECEIPT_SHA]: "UNMEASURABLE" }))
+      .toEqual([{ code: "RECEIPT_UNMEASURABLE", criterionId: "crit-alpha" }]);
+    expect(gapsOf(covered(), { [RECEIPT_SHA]: "NOT_ANCESTOR" }))
+      .toEqual([{ code: "RECEIPT_NOT_ANCESTOR", criterionId: "crit-alpha" }]);
+  });
+
+  it("gaps an approved criterion with no passed criterion check, and lists none when it has one", () => {
+    // Every OTHER citation in this fixture is clean, so the new code is the only thing that can
+    // gap here — the arm cannot pass on someone else's refusal.
+    expect(gapsOf(covered({ criterionReceipts: [] })))
+      .toEqual([{ code: "CRITERION_NOT_VERIFIED_AT_SHA", criterionId: "crit-alpha" }]);
+    // A check that passed for a DIFFERENT criterion is not evidence for this one.
+    expect(gapsOf(covered({
+      criterionReceipts: [{ artifactSha: CRITERION_ARTIFACT, criterionId: "crit-bravo" }],
+    }))).toEqual([{ code: "CRITERION_NOT_VERIFIED_AT_SHA", criterionId: "crit-alpha" }]);
+    // THE OTHER DIRECTION: a criterion whose check passed at an artifact this sha contains lists
+    // nothing at all.
+    expect(gapsOf(covered())).toEqual([]);
+  });
+
+  it("gaps a criterion check that passed on a tree the released sha does not contain", () => {
+    // PASSED is not enough. The check has to have passed at THIS tree, which is the same standard
+    // the landing commit and the verifier receipt are held to.
+    expect(gapsOf(covered(), { [CRITERION_ARTIFACT]: "NOT_ANCESTOR" }))
+      .toEqual([{ code: "CRITERION_NOT_VERIFIED_AT_SHA", criterionId: "crit-alpha" }]);
+    expect(gapsOf(covered(), { [CRITERION_ARTIFACT]: "UNMEASURABLE" }))
+      .toEqual([{ code: "CRITERION_NOT_VERIFIED_AT_SHA", criterionId: "crit-alpha" }]);
+  });
+
+  it("decides PER CRITERION: one verified criterion does not cover the goal's others", () => {
+    const input = dossierInput({
+      criteria: [
+        { criterionId: "crit-alpha", nodeKey: "node-alpha", title: "Alpha" },
+        { criterionId: "crit-bravo", nodeKey: "node-bravo", title: "Bravo" },
+      ],
+      criterionReceipts: [{ artifactSha: CRITERION_ARTIFACT, criterionId: "crit-alpha" }],
+    });
+    // A per-GOAL check would report either both clean or both gapped; the difference is the point.
+    expect(gapsOf(input))
+      .toEqual([{ code: "CRITERION_NOT_VERIFIED_AT_SHA", criterionId: "crit-bravo" }]);
+  });
+
+  it("says in the document that the criterion was not verified, rather than dropping the row", () => {
+    const rendered = renderReleaseDossier(
+      covered({ criterionReceipts: [] }), HEAD_SHA, ancestryOf().predicate,
+    );
+    expect(rendered).toContain("| crit-alpha | CRITERION_NOT_VERIFIED_AT_SHA | no passed criterion"
+      + " check binds this criterion to a commit this sha contains |");
+    expect(rendered).not.toContain("Every cited commit was re-measured as an ancestor of this sha.");
   });
 });
 

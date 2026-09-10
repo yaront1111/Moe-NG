@@ -148,13 +148,19 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
 }
 
 /**
- * Stated at the WIDE pattern width (`[A-Z0-9_]+`): 77 declarations on 2026-09-08.
+ * Stated at the WIDE pattern width (`[A-Z0-9_]+`): 80 declarations on 2026-09-10.
  * The TWO wide-only names are PRODUCT_CONTRACT_GATE_1_READ_LAYER and
  * LIVE_GATE_1_LAYER, each hidden twice over — module-private AND digit-bearing. Quoting a
  * private count against an exported count of a DIFFERENT width is the recurring error in this
  * area, so every ratio built on this constant must name the width it measures.
+ *
+ * 77 -> 80 on 2026-09-10 for the three preview auto-decision layers (task-89300aa0). They landed
+ * EXPORTED with Gate 2 and reddened the exported roster at 183-vs-180; the fix moved them here
+ * rather than into `LAYER_ROSTER`, because none of their refusals reaches a wire and rostering
+ * one would advertise a channel that does not exist. That is the route this population exists
+ * for. See the matching note above `EXPECTED_ROSTER_SIZE` in boundary-roster.security.ts.
  */
-const EXPECTED_PRIVATE_COUNT = 77;
+const EXPECTED_PRIVATE_COUNT = 80;
 
 /**
  * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
@@ -223,6 +229,13 @@ const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
   { constant: "NODE_CLOSURE_READER_LAYER", file: "apps/daemon/src/planning/node-closure-reader.ts" },
   { constant: "OBSERVATION_CODEC_LAYER", file: "apps/daemon/src/provider-profile/provider-runtime-observation.ts" },
   { constant: "OBSERVATION_READER_LAYER", file: "apps/daemon/src/provider-profile/provider-runtime-observation-reader.ts" },
+  // The preview auto-decision vocabulary (task-89300aa0). Module-private BY DESIGN, not by
+  // oversight: every declination there is a RETURNED value, never a thrown DomainRefusal, so no
+  // refusal reaches a wire and `PREVIEW_LAYERS`/`SERVICE_REFUSED_BY` stay closed. Re-export any
+  // one of them and boundary-roster.security.ts reds with a scan-minus-roster finding.
+  { constant: "PREVIEW_AUTO_CODE_LAYERS", file: "apps/daemon/src/preview/preview-auto-decision.ts" },
+  { constant: "PREVIEW_AUTO_DECISION_LAYER", file: "apps/daemon/src/preview/preview-auto-decision.ts" },
+  { constant: "PREVIEW_AUTO_POLICY_LAYER", file: "apps/daemon/src/preview/preview-auto-decision.ts" },
   { constant: "PLANNING_RUN_READ_LAYER", file: "apps/daemon/src/http/planning-run-read.ts" },
   { constant: "POLICY_INSTALL_LAYER", file: "apps/control-room/src/v2/ops/policy-install-port.ts" },
   { constant: "PUBLISH_LAYER", file: "apps/control-room/src/v2/goals/publish-port.ts" },

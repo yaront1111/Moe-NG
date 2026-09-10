@@ -1,13 +1,13 @@
 import { useState } from "react";
 import type { JSX } from "react";
 
-import { RefusalNote } from "../components/outcome-note.js";
-
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { RepositoryRemoteOutcome } from "../../live/live-repository-remote.js";
 import type { RunGoalPublishView, RunGoalView } from "../../live/live-runs.js";
+import { OutcomeNote } from "../components/outcome-note.js";
 import { ActionButton } from "../components/primitives.js";
 import { MIDDOT } from "../glyphs.js";
+import { writeFailedSaid } from "../outcome-words.js";
 import type { OfferOutcome } from "../approvals/offer-wire.js";
 import type { PublishPort } from "./publish-port.js";
 import type { PublicationApproval } from "../../live/live-publication-candidate.js";
@@ -175,7 +175,12 @@ export function GoalPublish({ frame, goal, goalId, port, remote }: GoalPublishPr
           Recorded. The wrapper pushes on its next pass; this card says when it did.
         </p>
       ) : (
-        <RefusalNote refusal={answer} role="status" testId="cr.publish.answer" />
+        <OutcomeNote
+          code={answer.code}
+          layer={answer.layer}
+          said={writeFailedSaid()}
+          testId="cr.publish.answer"
+        />
       )}
     </section>
   );

@@ -4,7 +4,7 @@ import type { PreviewReadOutcome } from "../../live/live-preview.js";
 import { pauseResetWords } from "../shell/pause-context.js";
 import type { ProviderPause } from "../shell/pause-context.js";
 import { previewStage } from "./goal-status-preview.js";
-import { currentRunOf, planSentBack } from "./plan-run-resolution.js";
+import { planSentBack } from "./plan-run-resolution.js";
 import { DEPENDS_TOKEN_PREFIX } from "./work-labels.js";
 
 /**
@@ -194,14 +194,13 @@ export function deriveGoalStatus(input: {
     }, { agents, progress });
   }
   if (covered !== null && covered.contracts.some((contract) => contract.gate1 === "PENDING")) {
-    return status("CONTRACT", "The Product Contract is waiting for your approval (Gate 1).", {
+    return status("CONTRACT", "The Product Contract is waiting at Gate 1.", {
       anchor: "contract",
       detail: "Answer any open question and approve the contract; the daemon compiles the plan from it.",
       label: "Review the contract",
     }, { agents, progress });
   }
-  // Approval follows the daemon-bound successor; the original ref still identifies a sent-back plan.
-  if (offered(surface, "approval.decide_intent", currentRunOf(surface, goalId, runId))) {
+  if (offered(surface, "approval.decide_intent", runId)) {
     return status("PLAN", "The plan is waiting for your approval.", {
       anchor: "plan", detail: "Read the steps and the acceptance criteria, then approve to start the agents.", label: "Review the plan",
     }, { agents, progress });

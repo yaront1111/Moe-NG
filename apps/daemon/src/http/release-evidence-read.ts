@@ -33,6 +33,7 @@ import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
 import { decisionsOf } from "../decision-ledger-memo.js";
 import { readPublishLedger } from "../repository/publish-ledger.js";
+import type { IntegratedCriterionArtifact } from "../criterion-evidence/criterion-contracts.js";
 import { criterionRows } from "../release/release-dossier.js";
 import type { CriterionRow } from "../release/release-dossier.js";
 import type {
@@ -205,6 +206,8 @@ function receiptForGoal(
  */
 export function readReleaseForGoal(
   store: SqliteEventStore, input: ReleaseReadInput, ancestryFor: AncestryFactory,
+  /** The criterion-artifact measurement, forwarded to the facts reader. Test seam only. */
+  artifactRead?: (root: string) => IntegratedCriterionArtifact | null,
 ): ReleaseReadAnswer {
   const absent = Object.freeze({ goalId: input.goalId, kind: "ABSENT" as const });
   let sha: string | null;
@@ -214,7 +217,9 @@ export function readReleaseForGoal(
       store, input.projectId, readPublishLedger(store, input.projectId).get(input.goalId),
     );
     sha = publication?.outcome === "PUSHED" ? publication.sha : null;
-    facts = readReleaseDossierInput(store, input.projectId, input.goalId);
+    facts = artifactRead === undefined
+      ? readReleaseDossierInput(store, input.projectId, input.goalId)
+      : readReleaseDossierInput(store, input.projectId, input.goalId, artifactRead);
   } catch {
     return absent;
   }

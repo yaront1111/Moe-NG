@@ -466,6 +466,7 @@ async function startDaemon(
   root: string, scratch: LaneScratch, approval: LaneApprovalMode, tracked: ChildProcess[],
   operatorChannel: true | undefined, fixedDemoGoal: true | undefined,
   fakeDocker: FakeDockerMode | undefined, fakeGh: FakeGhMode | undefined,
+  nodeWorkspace: string | undefined,
 ): Promise<LaneRefused | StartedChild> {
   const dependencies = fakeGh !== undefined
     ? `${root}/tests/e2e/control-room/fake-gh-dependencies.ts`
@@ -501,7 +502,13 @@ async function startDaemon(
     // THE RELEASE LANE NEEDS IT FOR A SECOND REASON: `createProductionReleaseSeams` takes the
     // same workspace, and a null one leaves `release.decide` on the fail-closed stub that
     // refuses RELEASE_PR_FAILED before any of this row's chain runs.
-    MOE_NODE_WORKSPACE: fakeDocker === undefined && fakeGh === undefined ? undefined : scratch.workspace,
+    // A CALLER MAY NAME ITS OWN, and one does: the epic-final live proof bootstraps a FRESH
+    // product outside this lane's scratch and the daemon has to measure THAT repository --
+    // `readCriterionArtifact` answers null without a workspace, so every criterion reads
+    // unverifiable, and `createProductionReleaseSeams` falls back to the fail-closed stub. The
+    // path need not exist yet: every reader resolves it per call, and the browser creates it.
+    MOE_NODE_WORKSPACE: nodeWorkspace ?? (
+      fakeDocker === undefined && fakeGh === undefined ? undefined : scratch.workspace),
   });
   // Held on an object because a spawn error arrives on a later turn: a plain
   // `let` assigned only inside the listener reads as never-assigned here.
@@ -599,6 +606,15 @@ export interface DaemonLaneOptions {
   /** ABSENT serves the same bundle with no credentials, for the refusal arm. */
   readonly liveCredentials: LiveCredentialMode;
   /**
+   * The repository the DAEMON measures, as MOE_NODE_WORKSPACE.
+   *
+   * OMITTED IS TODAY'S BEHAVIOUR for every existing caller: the variable is supplied only on
+   * the fake-docker/fake-gh lanes, and naming it here overrides that. Present, the daemon's
+   * publish candidate, release seams and criterion artifact all read the named repository
+   * instead of the lane's scratch one.
+   */
+  readonly nodeWorkspace?: string;
+  /**
    * Give the daemon a private operator channel over its own stdin pipe.
    *
    * OMITTED IS TODAY'S BEHAVIOUR for every existing caller: no `--operator-stdin`, so
@@ -620,7 +636,7 @@ async function openLane<T>(
   scratchRoots.push(scratch.root);
   const daemon = await startDaemon(
     root, scratch, approval, tracked, options.operatorChannel, options.fixedDemoGoal,
-    options.fakeDocker, options.fakeGh,
+    options.fakeDocker, options.fakeGh, options.nodeWorkspace,
   );
   if ("ok" in daemon) return daemon;
   // NULL is "no seed child was ever spawned", which is a different fact from

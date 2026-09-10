@@ -1,10 +1,9 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import type { ChildProcess, SpawnOptions } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { isAbsolute, join, resolve, sep } from "node:path";
+import { isAbsolute } from "node:path";
 import { landingEnvironment, nodeGitRunner } from "../repository/git-landing-port.js";
 import type { GitRunner } from "../repository/git-landing-port.js";
+import { withBareSourceRepository } from "../repository/git-source-extract.js";
 import type { DeployRunResult } from "./deploy-ports.js";
 
 export interface DeployBuildRequest { readonly context: string; readonly sha: string; readonly tag: string }
@@ -16,33 +15,28 @@ const LIMIT = 8 * 1024 * 1024;
 const GIT = ["--no-replace-objects", "-c", `core.attributesFile=${process.platform === "win32" ? "NUL" : "/dev/null"}`];
 
 /** Immutable objects only. An isolated Git directory excludes worktree/info attributes,
- * templates and replacement refs. The archive is streamed as binary bytes into LOCAL Docker. */
+ * templates and replacement refs. The archive is streamed as binary bytes into LOCAL Docker.
+ *
+ * The bare-repository half is `withBareSourceRepository`, shared with the migration source reader
+ * so the two cannot drift. The archive runs INSIDE its `use` callback because the directory is
+ * removed the moment that callback settles, and Docker must have drained the tar by then. The
+ * archive keeps this module's OWN `GIT` array: the shared primitive adds `core.autocrlf=false`,
+ * which is inert for `rev-parse` and `init` and which `init` does not persist into the temporary
+ * repository's config, so the archived bytes are the same bytes as before the recipe was shared. */
 export function createDeploymentImageBuilder(options: { readonly git?: GitRunner; readonly spawn?: Spawn; readonly timeoutMs?: number } = {}): DeployBuildPort {
   const git = options.git ?? nodeGitRunner;
   const spawn = options.spawn ?? nodeSpawn;
   return async request => {
     if (!isAbsolute(request.context) || !/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/u.test(request.sha)
       || !/^moe-deploy-[a-zA-Z0-9_-]+:[a-f0-9]{40}(?:[a-f0-9]{24})?$/u.test(request.tag)) return failed("DEPLOY_COMMIT_UNAVAILABLE");
-    let temporary: string | null = null;
-    const temporaryRoot = resolve(tmpdir());
     try {
-      const commit = await git(request.context, [...GIT, "rev-parse", "--verify", `${request.sha}^{commit}`]);
-      if (commit.code !== 0 || commit.stdout.trim() !== request.sha) return failed("DEPLOY_COMMIT_UNAVAILABLE");
-      const objects = await git(request.context, [...GIT, "rev-parse", "--path-format=absolute", "--git-path", "objects"]);
-      const objectPath = objects.stdout.replace(/\r?\n$/u, "");
-      if (objects.code !== 0 || !isAbsolute(objectPath) || /[\r\n\0]/u.test(objectPath)) return failed("DEPLOY_COMMIT_UNAVAILABLE");
-      temporary = mkdtempSync(join(temporaryRoot, "moe-deploy-source-"));
-      const initialized = await git(temporary, [...GIT, "init", "--bare", "--template=", `--object-format=${request.sha.length === 64 ? "sha256" : "sha1"}`, "."]);
-      if (initialized.code !== 0) return failed("DEPLOY_COMMIT_UNAVAILABLE");
-      mkdirSync(join(temporary, "objects", "info"), { recursive: true });
-      writeFileSync(join(temporary, "objects", "info", "alternates"), `${objectPath.replaceAll("\\", "/")}\n`);
-      return await archiveIntoDocker(spawn, temporary, request, options.timeoutMs ?? 900_000);
+      return await withBareSourceRepository<DeployRunResult>(
+        git, { repository: request.context, sha: request.sha }, {
+          prefix: "moe-deploy-source-",
+          refuse: () => failed("DEPLOY_COMMIT_UNAVAILABLE"),
+          use: temporary => archiveIntoDocker(spawn, temporary, request, options.timeoutMs ?? 900_000),
+        });
     } catch { return failed("DEPLOY_BUILD_UNAVAILABLE"); }
-    finally {
-      if (temporary !== null && resolve(temporary).startsWith(`${temporaryRoot}${sep}`)) {
-        rmSync(temporary, { recursive: true, force: true });
-      }
-    }
   };
 }
 

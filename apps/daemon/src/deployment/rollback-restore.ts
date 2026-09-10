@@ -84,6 +84,19 @@ export interface RollbackRestoreApplied {
 export type RollbackRestoreResult = RollbackRestoreApplied | RollbackRestoreRefusal;
 
 /**
+ * THE ANSWER TO BOTH QUESTIONS, CARRIED BUT NOT YET SPENT, so a caller may put durable fences
+ * between the reading and the applying. `databaseUrl` IS THE CREDENTIAL: it exists here only to be
+ * handed straight to the port, and must never be persisted, logged, or copied into an event, a
+ * decision's result bytes or a refusal detail. `dump` is a path and is the only half of the pair
+ * that may reach a durable surface.
+ */
+export interface RollbackRestoreResolved {
+  readonly databaseUrl: string;
+  readonly dump: string;
+  readonly ok: true;
+}
+
+/**
  * HOST-SCOPED, forwarded from the composition root and never read from the request. `credential`
  * ABSENT means this daemon has no environment store at all, which is the plainest form of "no
  * destination is bound" there is — the same wiring condition `deploy-command.ts:260` uses to
@@ -167,17 +180,17 @@ async function dumpToRestore(
 }
 
 /**
- * Resolves the destination and the dump, then applies ONE to the OTHER — in that order, so every
- * refusal above happens while the database is still untouched.
+ * THE READ HALF, and it moves nothing. Every refusal this module can mint about EVIDENCE — no
+ * destination, no deploy, no migration, no verifiable artifact — is answered here, with the
+ * database still untouched and no port in reach: this function does not take one.
  *
- * ONE ATTEMPT. `restoreDatabaseInto` is called exactly once and a throw is a refusal, never a
- * retry: the port runs the artifact inside a single transaction, so a failed apply leaves the
- * schema as it was, and re-running it would be a second chance at an operation whose first
- * outcome is already durable.
+ * That is the whole reason the halves are separate. The caller admits a command between them, so
+ * it needs a point where "can this restore be resolved at all?" is answered without having spent
+ * the answer. A refusal from here has cost nothing and reserved nothing.
  */
-export async function applyRollbackRestore(
-  config: RollbackRestoreConfig, environment: string, ports: Pick<BackupPorts, "restoreDatabaseInto">,
-): Promise<RollbackRestoreResult> {
+export async function resolveRollbackRestore(
+  config: RollbackRestoreConfig, environment: string,
+): Promise<RollbackRestoreResolved | RollbackRestoreRefusal> {
   const current = readCurrentDeployReceipt(config.store, config.projectId, environment);
   // BOUNDNESS ANSWERS FIRST. An unwired daemon has no destination for ANY environment, which is a
   // fact about the wiring and not about this deployment's history — reporting a missing receipt
@@ -188,12 +201,45 @@ export async function applyRollbackRestore(
   if (!bound.ok) return bound;
   const dump = await dumpToRestore(config, current.decisionId);
   if (!dump.ok) return dump;
+  return Object.freeze({ databaseUrl: bound.databaseUrl, dump: dump.path, ok: true as const });
+}
+
+/**
+ * THE EFFECT HALF, and it is the only code in this slice that moves a byte of anyone's data.
+ *
+ * ONE ATTEMPT PER ADMITTED COMMAND. `restoreDatabaseInto` is called exactly once here and a throw
+ * is a refusal, never a retry. A refused apply is NOT durable: `backup-ports.ts` runs psql under
+ * `--single-transaction` with `ON_ERROR_STOP=1`, so a failure rolls the reset and the dump back
+ * together and leaves the schema as it stood. A FRESH command may therefore resolve and apply
+ * again — a new decision with its own admission, not a retry of this one.
+ *
+ * What must never be re-run is a SUCCEEDED apply, durable and uncertain after a crash. That rule
+ * is enforced where the certainty lives, in the command's `intent === null` fence: this function
+ * cannot tell a first call from a second one.
+ */
+export async function applyResolvedRestore(
+  resolved: RollbackRestoreResolved, ports: Pick<BackupPorts, "restoreDatabaseInto">,
+): Promise<RollbackRestoreResult> {
   try {
-    await ports.restoreDatabaseInto(bound.databaseUrl, dump.path);
+    await ports.restoreDatabaseInto(resolved.databaseUrl, resolved.dump);
   } catch {
     // The port already collapses its own errors to `BACKUP_FAILED`; this catch is the second
     // fence, so nothing a pg client wrote can reach the refusal that leaves this module.
     return refuse("DEPLOY_ROLLBACK_RESTORE_FAILED");
   }
-  return Object.freeze({ dump: dump.path, ok: true as const });
+  // `databaseUrl` is deliberately dropped here: what leaves this module is the path alone.
+  return Object.freeze({ dump: resolved.dump, ok: true as const });
+}
+
+/**
+ * Resolves the destination and the dump, then applies ONE to the OTHER — in that order, so every
+ * refusal above happens while the database is still untouched. KEPT AS THE COMPOSITION for callers
+ * with no admission to interleave, and for the arms that exercise both halves through one entry.
+ */
+export async function applyRollbackRestore(
+  config: RollbackRestoreConfig, environment: string, ports: Pick<BackupPorts, "restoreDatabaseInto">,
+): Promise<RollbackRestoreResult> {
+  const resolved = await resolveRollbackRestore(config, environment);
+  if (!resolved.ok) return resolved;
+  return applyResolvedRestore(resolved, ports);
 }

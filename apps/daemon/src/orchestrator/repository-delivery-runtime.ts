@@ -8,6 +8,7 @@ import { createVerifiedWorkspacePort } from "../repository/git-verified-workspac
 import { createRepositoryExecutionPort } from "../repository/repository-execution-port.js";
 import { resolveRepositoryExecutionIdentity } from "../repository/repository-execution-identity.js";
 import { readLandingReceipt } from "../repository/landing-ledger.js";
+import { readRepositoryLandingEvidence } from "../repository/repository-landing-intent.js";
 import { landingReceiptId } from "../repository/landing-receipt-contracts.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import type { AgentSessionFence } from "./agent-session-fence.js";
@@ -33,9 +34,22 @@ interface RepositoryDeliveryRuntimeConfig {
   readonly verifier: Omit<NodeVerifierConfig, "nodes" | "verifiedWorkspace">;
 }
 
+/**
+ * A refusal that journaled no landing intent left no effect to reconcile. The discriminator is the
+ * journal itself rather than a list of refusal codes: every refusal decided before
+ * `commitJournaledLanding` has no intent by construction, and one decided after it always does.
+ * Without a handle the intent key cannot be computed, so the answer falls back to plain REFUSED —
+ * fail closed, because REFUSED contains the checkout and REFUSED_NO_EFFECT gives it away.
+ */
+function refusedFact(store: NodeVerifierConfig["store"], handle: RepositoryExecutionHandle | undefined): RepositoryDeliveryFacts {
+  if (handle === undefined) return "REFUSED";
+  const journal = readRepositoryLandingEvidence(store, handle);
+  return !journal.ok && journal.code === "REPOSITORY_RECOVERY_EVIDENCE_MISSING" ? "REFUSED_NO_EFFECT" : "REFUSED";
+}
+
 /** Durable facts only; agent acceptance and an absent landing receipt never free ownership. */
 export function readRepositoryDeliveryFacts(
-  store: NodeVerifierConfig["store"], projectId: string, nodeRef: string,
+  store: NodeVerifierConfig["store"], projectId: string, nodeRef: string, handle?: RepositoryExecutionHandle,
 ): RepositoryDeliveryFacts {
   try {
     const review = readReviewLedger(store, projectId, nodeRef);
@@ -44,7 +58,7 @@ export function readRepositoryDeliveryFacts(
       const landed = readLandingReceipt(store, projectId, landingReceiptId(projectId, nodeRef, review.accepted.verifierReceiptId));
       if (!landed.ok) return landed.code === "LANDING_RECEIPT_NOT_FOUND" ? "ACCEPTED" : "UNKNOWN";
       if (landed.receipt.subjectRef !== nodeRef || landed.receipt.verifierReceiptId !== review.accepted.verifierReceiptId) return "UNKNOWN";
-      return landed.receipt.outcome === "COMMITTED" && landed.receipt.commit !== null ? "LANDED" : "REFUSED";
+      return landed.receipt.outcome === "COMMITTED" && landed.receipt.commit !== null ? "LANDED" : refusedFact(store, handle);
     }
     if (review.escalated || review.replanned) return "UNKNOWN";
     return review.rounds.at(-1)?.routing.route === "ACCEPT" ? "SUBMITTED" : "READY";
@@ -69,7 +83,7 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
   });
   const coordinator = createRepositoryDeliveryCoordinator({
     controller: { controllerId: randomBytes(32).toString("hex"), controllerPid: process.pid },
-    facts: (nodeRef) => readRepositoryDeliveryFacts(store, projectId, nodeRef),
+    facts: (nodeRef, handle) => readRepositoryDeliveryFacts(store, projectId, nodeRef, handle),
     isProcessAlive: probeProcessAlive, port: repository, projectId,
     retired: (nodeRef) => config.fence.admit(`node.deliver@${nodeRef}`, new Date().toISOString()).ok,
     storeId: realpathSync.native(config.storePath),

@@ -9,7 +9,12 @@ import { validExecutionOwner } from "./repository-execution-record.js";
 
 const INTENT = "moe-repository-landing-intent/1";
 const COMPLETION = "moe-repository-landing-completion/1";
-const INTENT_KIND = "internal.repository.landing_intent";
+/**
+ * The command kind every journaled landing intent is committed under. EXPORTED so a reader that
+ * wants to know whether an acceptance had its intent journaled matches the kind rather than
+ * retyping the literal: two spellings of one kind is a silent miss, not a compile error.
+ */
+export const REPOSITORY_LANDING_INTENT_KIND = "internal.repository.landing_intent";
 const COMPLETION_KIND = "internal.repository.landing_completion";
 const hex = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{64}$/u.test(value);
 const oid = (value: unknown): value is string => typeof value === "string" && /^[a-f0-9]{40}(?:[a-f0-9]{24})?$/u.test(value);
@@ -24,6 +29,19 @@ export const repositoryRecoveryOwnerDigest = (owner: RepositoryExecutionOwner): 
 const intentId = (ownerDigest: string, baselineId: string, sessionId: string) => recoveryDigest([INTENT, ownerDigest, baselineId, sessionId]);
 const aggregate = (ownerDigest: string) => `repository-landing:${ownerDigest}`;
 const completionId = (id: string) => recoveryDigest([COMPLETION, id]);
+
+/**
+ * The exact identity of one journaled landing intent: the pair a reader asks about.
+ *
+ * The RECEIPT ID GOES FIRST and that is what makes the encoding unambiguous, not a convention.
+ * `verifierReceiptId` is `hex()` — exactly 64 lowercase hex characters, so it can contain
+ * neither the separator nor anything else — while `nodeRef` is bounded only by `ref()` (non-empty,
+ * <= 4096 chars, no control characters) and MAY contain a colon. With the free-form field first,
+ * `("a:b", "c")` and `("a", "b:c")` would produce the same string; with the fixed-width field
+ * first, the key always splits at index 64 and the pair round-trips for any nodeRef whatsoever.
+ */
+export const landingIntentKey = (nodeRef: string, verifierReceiptId: string): string =>
+  `${verifierReceiptId}:${nodeRef}`;
 
 export function decodeRepositoryLandingIntent(value: unknown): RepositoryLandingIntent | null {
   if (!record(value) || !exact(value, ["version", "intentId", "ownerDigest", "projectId", "nodeRef", "baselineId", "sessionId",
@@ -62,14 +80,14 @@ export function recordRepositoryLandingIntent(store: SqliteEventStore, input: Re
     gitDirectory: reservation.identity.gitDirectory, verifierReceiptId: input.verifierReceiptId, binding: input.binding,
     paths: [...input.paths].sort(), message: input.message });
   if (intent === null) return recoveryRefusal("REPOSITORY_RECOVERY_EVIDENCE_INVALID");
-  const written = writeRecoveryFact(store, owner.projectId, intent.intentId, INTENT_KIND, aggregate(ownerDigest), intent);
+  const written = writeRecoveryFact(store, owner.projectId, intent.intentId, REPOSITORY_LANDING_INTENT_KIND, aggregate(ownerDigest), intent);
   return written.ok ? { ok: true, intent } : written;
 }
 
 export function recordRepositoryLandingCompletion(store: SqliteEventStore, input: RepositoryLandingCompletionInput): RepositoryRecoveryResult<{ completion: RepositoryLandingCompletion }> {
   const intent = decodeRepositoryLandingIntent(input.intent);
   if (intent === null) return recoveryRefusal("REPOSITORY_RECOVERY_EVIDENCE_INVALID");
-  const stored = readRecoveryFact(store, intent.projectId, intent.intentId, INTENT_KIND, aggregate(intent.ownerDigest));
+  const stored = readRecoveryFact(store, intent.projectId, intent.intentId, REPOSITORY_LANDING_INTENT_KIND, aggregate(intent.ownerDigest));
   if (!stored.ok) return stored;
   if (JSON.stringify(stored.value) !== JSON.stringify(intent)) return recoveryRefusal("REPOSITORY_RECOVERY_EVIDENCE_INVALID");
   const completion = decodeCompletion({ version: COMPLETION, intentId: intent.intentId, commit: {
@@ -86,7 +104,7 @@ export function readRepositoryLandingEvidence(store: SqliteEventStore, handle: R
   const { owner, reservation } = handle;
   if (!validExecutionOwner(owner) || reservation.baselineId === null || reservation.sessionId === null) return recoveryRefusal("REPOSITORY_RECOVERY_EVIDENCE_MISSING");
   const ownerDigest = repositoryRecoveryOwnerDigest(owner); const id = intentId(ownerDigest, reservation.baselineId, reservation.sessionId);
-  const read = readRecoveryFact(store, owner.projectId, id, INTENT_KIND, aggregate(ownerDigest));
+  const read = readRecoveryFact(store, owner.projectId, id, REPOSITORY_LANDING_INTENT_KIND, aggregate(ownerDigest));
   if (!read.ok) return read;
   if (read.value === null) return recoveryRefusal("REPOSITORY_RECOVERY_EVIDENCE_MISSING");
   const intent = decodeRepositoryLandingIntent(read.value);

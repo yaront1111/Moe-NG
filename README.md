@@ -42,6 +42,58 @@ entry points, environment, and knobs.
   exactly one scaffold commit, binds and catalogs it, then creates the PRD-bound
   goal. This unseeded browser path was measured on 2026-09-06. GitHub is optional;
   remote creation was not live-proven because no owner or visibility was supplied.
+  The chain drives SIX commands, not five: `policy.validate` was added on
+  2026-09-09 because without it a browser-bootstrapped product could activate,
+  compile a plan and then never approve it — `approval.decide_intent`, the only
+  approval wire a paired durable human may ride, derives its policy ref from the
+  newest replay-verified `PolicyEvaluated`, and nothing else writes that row. The
+  refusal was `APPROVAL_INTENT_POLICY_REF_UNAVAILABLE @ DAEMON_APPROVAL_INTENT`.
+  The added slice grants nothing: no rules, no auto-approval opt-ins.
+
+- **A fresh product, end to end, as of 2026-09-09**: one drive takes a recorded
+  PRD from that same form to a real pull request —
+  <https://github.com/yaront1111/moe-live-proof-161b7e9d/pull/5> at sha
+  `d30f9094a931d4789bcbf50996748b1c3e4c741e`, whose body is the dossier with a
+  row for every one of the PRD's eight acceptance criteria. In between: Gate 1
+  with a material clarification answered by click, a design revision, a compiled
+  three-node plan, the plan gate taken by click, three nodes written by REAL
+  provider seats and landed by the real wrapper and lander at three distinct
+  shas, and 8/8 criteria VERIFIED by the contained criterion evidence service —
+  counted against the approved contract's own roster and against
+  `/documents/coverage/read`, so a dossier that dropped a criterion could not
+  report itself complete. The drive is
+  `tests/e2e/control-room/live-proof-prd.spec.ts`; the pull-request leg is opt-in
+  on `MOE_LIVE_RELEASE_PR=1` and records its own absence when unset.
+
+- **A forced crash mid-write, and the recovery a human takes in the browser, as
+  of 2026-09-09**: the same drive arms the development-only knob
+  `MOE_FAULT_INJECT_LANDING` at `after-completion`, so the process performing the
+  landing SIGKILLs itself in the window between the durable landing completion
+  and the receipt that records the outcome. After the restart the reservation is
+  BLOCKED and the shipped repository-recovery card offers exactly one action —
+  `RECONCILE_LANDED`, with `ABORT_UNEXECUTED` refused
+  `REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN` beside it — and a click takes it.
+  `repository.recover` requires a durable human with `project.admin` and refuses
+  the MCP, wrapper and verifier transports, so no agent seat can take that step.
+  The store then shows EXACTLY ONE landing outcome for that node, no doubled row
+  anywhere in the landing journal, and both remaining nodes landing after the
+  crash instant. The knob is off unless `MOE_DEVELOPMENT_ONLY=1` and a named
+  point are BOTH set, and refuses with a stable code otherwise.
+
+- **A preview environment, deployed, with its migration, as of 2026-09-09**: past
+  Gate 3 the same drive binds a deploy target, writes two environment variables
+  (read back only as sha256 fingerprints — the value never returns), and runs a
+  REAL `deployment.deploy`: `git archive <sha>` into `docker build`, a candidate
+  container, docker's own health verdict, and the Caddy proxy flipped to it.
+  Health is asked three ways, the last being `GET /health` on the receipt's own
+  URL from the host, through the proxy, answering `{"product":true,"status":"UP"}`.
+  The deploy runs the PRODUCT'S OWN migration, keyed by the deploy decision:
+  receipt `APPLIED`, both migration files named, a pre-migration `pg_dump` backup
+  referenced by path and sha256, and PostgreSQL itself asked what happened
+  (`pg_constraint` and the tool's own `pgmigrations` ledger). Two steps in that
+  paragraph are the OPERATOR'S and are not the product's: bringing the
+  environment up with `docker compose`, and installing the product's declared
+  dependencies.
 
 - **PRD lane**: `goal.create_with_source` binds a PRD to a goal; a planning
   agent reads it (paged) and proposes a versioned Product Contract with
@@ -197,7 +249,54 @@ missing or unverifiable evidence is `UNKNOWN` and gains no authority.
 
 ## What this is not
 
-Nothing here is a readiness, GA, or comparative claim. Measured on 2026-09-05,
+Nothing here is a readiness, GA, or comparative claim. The clauses below were
+re-measured on 2026-09-09 and are stated first, because the older text around
+them reasons from the state before that run.
+
+A DEPLOY IS AN UPDATE TO A RUNNING ENVIRONMENT, AND NOTHING IN MOE BRINGS ONE UP.
+`deployment.deploy` discovers a container labelled
+`com.docker.compose.service=proxy` on the target network, reads its Caddyfile and
+flips the upstream to the candidate it built and proved healthy; with no such
+environment it refuses `DEPLOY_BUILD_FAILED / DEPLOY_PROXY_MISSING_OR_AMBIGUOUS`.
+The generated infrastructure (`docker-compose.override.yml`, `docker/Caddyfile`)
+exists for exactly this, but `planDeploymentInfrastructure` still has NO caller —
+no command kind emits it — so a product's first environment is stood up by an
+operator with `docker compose`, and the product's own dependencies are installed
+by an operator too, because the deploy runs the PRODUCT's migration and resolves
+`node-pg-migrate` from the product's workspace.
+
+A CRASH MID-WRITE IS RECOVERABLE AT ONE POINT AND CONTAINED AT THE OTHER THREE,
+by design and not by omission. A landing journals an intent, starts an attempt,
+commits to Git, journals the completion and then records the receipt. A crash
+after the COMPLETION is reconcilable — the durable evidence proves what Git did,
+and `repository.recover` writes the one missing receipt. A crash before the
+intent, between intent and commit, or between commit and completion leaves the
+journal unable to prove what Git did, so the checkout stays HELD and the shipped
+recovery refuses with `REPOSITORY_RECOVERY_EVIDENCE_MISSING` or
+`REPOSITORY_RECOVERY_CONTAINMENT_UNKNOWN`. An operator whose daemon dies in those
+windows has a wedged reservation and no button. That is fail-closed, and it is
+the honest state of the product today.
+
+NODES OF ONE GOAL ARE DELIVERED ONE AT A TIME, and "staffed in parallel" has to
+be read narrowly because of it. The repository delivery coordinator admits
+exactly one checkout owner per repository root and answers the second node
+`REPOSITORY_EXECUTION_BUSY (REPOSITORY_DELIVERY)` for as long as the first holds
+the reservation — which is from staffing until the landing commits. So two nodes
+are claimed and attempted inside one wrapper pass, and that is what the parallel
+claim means; two commits are never being made at once. This is a designed
+invariant, not a defect, and the 2026-09-09 drive asserts it by that refusal code
+appearing strictly inside the first node's spawn-to-exit window.
+
+THE BROWSER CANNOT INSTALL THE STANDING VERIFIER AUTHORITY. `moe-verifier-policy/1`
+and `moe-reviewer-calibration/1` are installed by the demo seed and by no screen
+the control room ships; without them the wrapper prints "standing authority
+incomplete" and no delivered node is ever accepted. On a browser-bootstrapped
+product that step is the operator's, over the command wire. Related and also
+open: approving a criterion CHECK refuses the configured-operator wire
+`CRITERION_CHECK_HUMAN_REQUIRED @ CRITERION_EVIDENCE` and needs a durable human
+principal, and the control room ships no criterion-approval surface.
+
+Measured on 2026-09-05,
 these are still missing or manual: a multi-node goal was driven on a live
 project on 2026-09-05 — a real `claude` planning seat sealed a five-node DAG,
 a human approved it in the browser, the two independent nodes were staffed on

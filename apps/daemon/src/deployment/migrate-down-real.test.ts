@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
@@ -40,6 +40,12 @@ import type { MigrateDownHostContext } from "./migrate-down-command.js";
  * through the real `migrateWithBackup`, then reverts THE LAST ONE and asserts batch one survived.
  * A revert that unwound everything is a different and far more dangerous command.
  *
+ * THE WORKSPACE IS A REAL REPOSITORY and every sha here is a real commit. Both engines extract
+ * `migrations/` at the sha they are given out of the workspace's own repository, so a materialised
+ * non-repo carrying a fabricated 40-hex constant would refuse BEFORE `node-pg-migrate` ran and
+ * this arm would red for a reason that is not its subject. It also needs git on PATH now, which
+ * `git()` below reports as MIGRATION_TEST_GIT_UNAVAILABLE rather than as an empty failure.
+ *
  * TEARDOWN on every path: the holding recipe is released, the runner closed and the temp root
  * removed in nested `finally`s, and the arm asserts Docker reports NO container left (epic
  * rail 4).
@@ -48,7 +54,6 @@ import type { MigrateDownHostContext } from "./migrate-down-command.js";
 const RUN = process.env.MOE_MIGRATION_RESTORE === "1";
 const OPERATOR = "principal-1";
 const ENVIRONMENT = "staging";
-const SHA = "0123456789abcdef0123456789abcdef01234567";
 const DECIDED_AT = "2026-09-06T00:00:00.000Z";
 const REVERT_AT = "2026-09-06T01:00:00.000Z";
 const ADDED = "1700000000001_added.js";
@@ -61,6 +66,38 @@ function docker(args: readonly string[]): string {
     timeout: 30_000, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   if (result.status !== 0 || result.error) throw new Error("MIGRATION_TEST_DOCKER_FAILED");
   return result.stdout;
+}
+
+const IDENTITY = ["-c", "user.name=Moe", "-c", "user.email=moe@moe.local", "-c", "commit.gpgsign=false"];
+
+/** An ABSENT git and a FAILING git are separated, because this arm now needs git on PATH and a
+ *  host without it should say so rather than print an empty stderr. */
+function git(root: string, args: readonly string[]): string {
+  const result = spawnSync("git", [...IDENTITY, ...args], { cwd: root, shell: false,
+    windowsHide: true, timeout: 60_000, encoding: "utf8" });
+  if (result.error) throw new Error(`MIGRATION_TEST_GIT_UNAVAILABLE: ${result.error.message}`);
+  if (result.status !== 0) throw new Error(`MIGRATION_TEST_GIT_FAILED: ${result.stderr}`);
+  return result.stdout;
+}
+
+/**
+ * Commits `migrations/` and answers the sha that now contains it.
+ *
+ * The workspace has to be a REAL repository: the forward and revert engines both extract
+ * `migrations/` at the sha they are given OUT OF THIS REPOSITORY, so a non-repo with a fabricated
+ * constant would refuse before `node-pg-migrate` ever ran and this arm would red for a reason that
+ * is not its subject. The pathspec is `migrations` alone — the materialised tree carries an
+ * installed `node_modules` that belongs in no commit — and `core.autocrlf=false` is pinned so a
+ * host with the global flag on cannot make the committed bytes differ from the bytes written here.
+ */
+function commitMigrations(root: string): string {
+  if (!existsSync(join(root, ".git"))) {
+    git(root, ["init", "--initial-branch=main", "."]);
+    git(root, ["config", "core.autocrlf", "false"]);
+  }
+  git(root, ["add", "--", "migrations"]);
+  git(root, ["commit", "--no-gpg-sign", "-m", "migrations"]);
+  return git(root, ["rev-parse", "HEAD"]).trim();
 }
 
 function materialize(root: string): void {
@@ -120,11 +157,24 @@ it.runIf(RUN)("reverts the LAST batch against a live PostgreSQL and records it",
     expect(afterFirst).toContain("app_metadata");
     expect(query("SELECT count(*) FROM pgmigrations")).toBe("1");
 
+    // BATCH TWO'S MIGRATION IS WRITTEN AND COMMITTED BEFORE ANY SHA IS CONSUMED. It is the same
+    // commit the deploy below names, which is what the real system does: the image is built from
+    // the approved sha and the schema change that ships with it comes from that same commit.
+    writeFileSync(join(root, "migrations", ADDED),
+      "export const up = pgm => pgm.createTable('added_by_migration', { id: 'integer' });\n"
+      + "export const down = pgm => pgm.dropTable('added_by_migration');\n");
+    const sha = commitMigrations(root);
+    expect(sha).toMatch(/^[a-f0-9]{40}$/u);
+    // THE SHA CONTAINS THE MIGRATION UNDER TEST, asserted rather than assumed: a commit that missed
+    // the pathspec would extract an older `migrations/` and the revert would have nothing to undo.
+    expect(git(root, ["ls-tree", "-r", "--name-only", sha, "--", "migrations"]).split(/\r?\n/u))
+      .toContain(`migrations/${ADDED}`);
+
     store = openStore();
     driveThrough(store, "goal.close");
     const double = createDockerDouble({
       proxyConfig: PROXY_CONFIG, running: { app: "HEALTHY" },
-      health: { [candidateContainerName(ENVIRONMENT, SHA, "cmd-deploy-first")]: ["HEALTHY"] },
+      health: { [candidateContainerName(ENVIRONMENT, sha, "cmd-deploy-first")]: ["HEALTHY"] },
     });
     const entries = createAsyncCommandEntries({
       operatorPrincipalId: OPERATOR, projectId: PROJECT_ID, store,
@@ -162,15 +212,13 @@ it.runIf(RUN)("reverts the LAST batch against a live PostgreSQL and records it",
     });
     // The prerequisite the sequence table demands, committed by the REAL deploy command.
     await deploy({ envelope: envelopeFor(DEPLOYMENT_DEPLOY_COMMAND_KIND, "cmd-deploy-first",
-      { environment: ENVIRONMENT, sha: SHA }), principal });
+      { environment: ENVIRONMENT, sha }), principal });
 
-    // BATCH TWO, applied through the real forward engine against the live database.
-    writeFileSync(join(root, "migrations", ADDED),
-      "export const up = pgm => pgm.createTable('added_by_migration', { id: 'integer' });\n"
-      + "export const down = pgm => pgm.dropTable('added_by_migration');\n");
+    // BATCH TWO, applied through the real forward engine against the live database, from the
+    // COMMITTED `migrations/` at that sha rather than from whatever the working tree holds.
     const applied = await migrateWithBackup(store, {
       databaseUrl: url, environment: ENVIRONMENT, now: new Date(DECIDED_AT), projectId: PROJECT_ID,
-      projectRoot: root, requestId: "batch-two", sha: SHA, workspace: root,
+      projectRoot: root, requestId: "batch-two", sha, workspace: root,
     });
     expect(applied).toMatchObject({ applied: [ADDED], outcome: "APPLIED", refusal: null });
     const afterSecond = schema();

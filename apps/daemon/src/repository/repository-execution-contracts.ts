@@ -2,7 +2,8 @@ export const REPOSITORY_EXECUTION_PHASES = Object.freeze([
   "RESERVED", "EXECUTING", "VERIFYING", "AWAITING_LANDING", "LANDING", "BLOCKED", "PUBLISHING", "CRITERION_VERIFYING",
 ] as const);
 export type RepositoryExecutionPhase = typeof REPOSITORY_EXECUTION_PHASES[number];
-export type RepositoryExecutionReleaseReason = "ABORTED_BEFORE_EXECUTION" | "LANDED" | "PUBLISHED" | "CRITERIA_COMPLETED";
+/** LANDED_NOTHING releases a landing that refused before it journaled any intent: no Git effect exists to reconcile. */
+export type RepositoryExecutionReleaseReason = "ABORTED_BEFORE_EXECUTION" | "LANDED" | "LANDED_NOTHING" | "PUBLISHED" | "CRITERIA_COMPLETED";
 
 /** Daemon-only authority. Never serialize an owner or handle onto a public surface. */
 export interface RepositoryExecutionOwner {

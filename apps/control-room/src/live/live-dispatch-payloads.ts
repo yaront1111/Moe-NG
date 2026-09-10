@@ -1,4 +1,5 @@
-import type { JsonObject } from "@moe/contracts";
+import type { JsonObject, RuntimeCommandKind } from "@moe/contracts";
+import type { PolicyAutoApprovalTier } from "@moe/core";
 
 /**
  * THE CALLER HALF OF EVERY COMMAND THIS BOARD MAY AUTHOR.
@@ -26,14 +27,49 @@ const hex64 = (seed: string): string =>
 // the core producer without pulling Node's crypto into the bundle. Rotated by task-a888038d along
 // with the slice it names, because the finalize terminal now derives the sealed graph's
 // node-property fact ids and refuses the seal when no installed policy classifies them.
-// Pre-rotation: e7a5ee19…963a, over `{autoApprovalOptIns: [], rules: []}`.
-const POLICY_REF = "fff1cc915b3ed86b2e992c8b896f1abcdc7b8d98ea1eb196ceebd45cadd0290e";
+//
+// ROTATED AGAIN by task-a47301ee, which gave the slice its two standing auto-approval opt-ins.
+// Pre-rotation: fff1cc91...290e, over this same shape carrying an EMPTY opt-in list; before
+// that e7a5ee19...963a, over an empty opt-in list and empty rules with no classifications.
+//
+// AND THE PARITY CLAIM ABOVE IS NOW TRUE; until task-a47301ee it was not. No control-room test
+// called `derivePolicySliceDigest`, so a slice edit that forgot this constant shipped a GREEN leg
+// and was refused at runtime by the daemon's own recomputation. The arm now lives in
+// live-dispatch-policy-slice.test.ts: any edit to the slice below MUST rotate this constant to the
+// digest that arm prints, and hand-typing one is how the next silent refusal gets shipped.
+const POLICY_REF = "e1146659975d773af6511600782b51e12a185dc243e9bf52b69bf9854fa80f7f";
 const RISK_CLASSIFICATIONS = [
   { factId: "node.capability:capability-implement", tier: "R1" },
   { factId: "node.read_scope:services/api/src", tier: "R0" },
   { factId: "node.resource:resource-a", tier: "R0" },
   { factId: "node.write_scope:services/api/src/node", tier: "R2" },
 ];
+
+/**
+ * THE OPERATOR'S STANDING AUTO-APPROVAL DECLARATION, and it is HOST-SCOPED ON PURPOSE.
+ *
+ * `evaluatePolicy` matches an opt-in PER ACTION WITH A TIER CEILING:
+ * `entry.action === action && tierRank(entry.tier) >= tierRank(tier)`. The `tier` operand is the
+ * SUBJECT's, and it arrives from the folded fact classification (see RISK_CLASSIFICATIONS above),
+ * never from an opt-in. So these two entries say "this operator has opted the preview and release
+ * gates into the automatic path up to R1" - one declaration for the whole host, constant across
+ * every goal. A per-goal opt-in would be the wrong model AND would make the digest below
+ * non-constant; the goal's own risk class reaches the engine as a classification instead
+ * (v2/goals/goal-risk-tier.ts maps the form's advisory class onto that tier).
+ *
+ * THE CEILING CANNOT BE WIDENED HERE. `PolicyAutoApprovalTier` is `"R0" | "R1"`, so `"R2"` or
+ * `"R3"` below is a COMPILE error, not a runtime check this module writes - which is why a
+ * RESTRICTED goal (R3) can never be auto-approved by construction rather than by a branch.
+ * The action strings are pinned against `RuntimeCommandKind` for the same reason: a typo or a
+ * kind that leaves the shared roster fails to compile instead of installing a dead opt-in.
+ */
+const AUTO_APPROVAL_CEILING = "R1" satisfies PolicyAutoApprovalTier;
+const PREVIEW_GATE_ACTION = "preview.decide" satisfies RuntimeCommandKind;
+const RELEASE_GATE_ACTION = "release.decide" satisfies RuntimeCommandKind;
+const GATE_AUTO_APPROVAL_OPT_INS = Object.freeze([
+  Object.freeze({ action: PREVIEW_GATE_ACTION, tier: AUTO_APPROVAL_CEILING }),
+  Object.freeze({ action: RELEASE_GATE_ACTION, tier: AUTO_APPROVAL_CEILING }),
+]);
 /**
  * goal.create's entire caller half: a prose brief and nothing else. The daemon's
  * `admitGoalBrief` refuses any other key (GOAL_BRIEF_INPUT_INVALID), and it mints the
@@ -97,7 +133,8 @@ export const DEV_PAYLOADS: Readonly<Record<string, JsonObject>> = Object.freeze(
   "plan.propose": {},
   "policy.install": {
     slice: {
-      autoApprovalOptIns: [], riskClassifications: RISK_CLASSIFICATIONS, rules: [],
+      autoApprovalOptIns: GATE_AUTO_APPROVAL_OPT_INS,
+      riskClassifications: RISK_CLASSIFICATIONS, rules: [],
       sliceRef: POLICY_REF,
     },
   },

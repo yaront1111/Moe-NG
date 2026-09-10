@@ -42,11 +42,13 @@ export const BOOTSTRAP_NOT_OFFERED = "BOOTSTRAP_NOT_OFFERED" as const;
  * the daemon discloses this string on no browser-readable route. It is NOT operator input -
  * the operator types a directory, a PRD, a product name and optionally a GitHub target.
  *
- * RE-CHECK IT WHENEVER THE GENERATOR MOVES; it went controlled-1 -> controlled-2 on
- * 2026-09-06. Drift fails CLOSED and legibly rather than silently: the daemon answers
+ * RE-CHECK IT WHENEVER THE GENERATOR MOVES; controlled-1 -> controlled-2 was 2026-09-06;
+ * controlled-2 -> controlled-3 (db secret delivery) was 2026-09-09; controlled-3 -> controlled-4
+ * (compose refuses a newline-bearing db password before the database initialises) was 2026-09-10.
+ * Drift fails CLOSED: the daemon answers
  * BOOTSTRAP_PROFILE_VERSION_UNKNOWN @ DAEMON_INGRESS, which the form renders verbatim.
  */
-export const CONTROLLED_PROFILE_VERSION = "controlled-2" as const;
+export const CONTROLLED_PROFILE_VERSION = "controlled-4" as const;
 
 export type BootstrapVisibility = "internal" | "private" | "public";
 
