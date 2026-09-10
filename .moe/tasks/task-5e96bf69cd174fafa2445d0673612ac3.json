@@ -99,7 +99,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-10T09:53:18.816Z",
-  "updatedAt": "2026-09-10T10:27:56.396Z",
+  "updatedAt": "2026-09-10T10:28:09.811Z",
   "metrics": {
     "firstClaimAt": "2026-09-10T09:53:21.704Z",
     "plannedStepCount": 4,
@@ -130,7 +130,8 @@
   "planApprovedAt": "2026-09-10T09:55:40.235Z",
   "contextFetchedBy": [
     "worker-a11dcf70",
-    "qa-01b7fe3f"
+    "qa-01b7fe3f",
+    "governor-608c8a78"
   ],
   "workStartedAt": "2026-09-10T09:56:21.613Z",
   "reviewStartedAt": "2026-09-10T10:21:48.119Z",
@@ -149,7 +150,8 @@
     ".moe/tasks/task-8d2301ba2ef24c42a8fdca8364a9da6a.json",
     ".moe/tasks/task-b58778da10e7492fa6fee89269f56ef0.json",
     ".moe/tasks/task-d85fd8fd74354e94886d619c67f24c75.json",
-    ".moe/tasks/task-f7d38f752b074dc89da30631783aae04.json"
+    ".moe/tasks/task-f7d38f752b074dc89da30631783aae04.json",
+    ".moe/tasks/task-9255156954724b7dbbcbf03ae2aaa11c.json"
   ],
   "completionSummary": "`readReviewLedgers` now collects journaled landing-intent keys in its EXISTING decision walk and fails CLOSED. Three paths: repository-landing-intent.ts (102->120), review/review-read-model.ts (332->362), review/review-read-model.test.ts (144->313). Full gate transcript, drills and red attribution: comment-3bab036baa45482f9ac902b08a89f877.\n\nNOT IN THIS LEAF, DELIBERATELY: `landedWithNoEffect` (landing-receipt-contracts.ts:38) is UNCHANGED, its three consumers (criterion-artifact.ts:67, goal-landing-facts.ts:82, publication-goal-integration.ts:32) are UNCHANGED, and there is no runtime proof arm. `landingIntents` therefore has ZERO production consumers today. That is correct, not incomplete: the predicate, the three seams and the runtime arm are the parent's (task-f7d38f752b074dc89da30631783aae04), which declares this row in dependsOn and consumes what it lands.\n\nDoD 1: `landingIntents: ReadonlySet<string> | null` populated inside the same `decisionsOf(store, LEDGER_PAGE_SIZE)` loop, after the EFFECTS_COMMITTED guard. An arm counts pages via a proxy over `readCommandDecisionsAfter` and asserts exactly 1, with the sub-page bound measured (`decisionRows(...).length < 200`) rather than assumed.\nDoD 2: an intent written through the PRODUCTION writer (`recordRepositoryLandingIntent` via `recoveryEvidenceFixture`'s real LANDING handle + real verifier receipt) appears under `landingIntentKey(nodeRef, verifierReceiptId)`, asserted by KEY CONTENT twice — via the helper and as the literal `${receiptId}:${SUBJECT_REF}`. A different receiptId and a different nodeRef both miss.\nDoD 3: a committed decision of the intent kind with undecodable bytes makes it `null`, asserted AS NULL plus `not.toEqual(new Set())` and `not.toEqual(new Set([goodKey]))` — the last pins that one good intent does not rescue the walk, which is exactly the fail-OPEN answer.\nDoD 4: `git grep -n \"internal.repository.landing_intent\" -- apps/daemon/src` returns ONE line, the definition. `INTENT_KIND` was remove",
   "commits": [
@@ -175,6 +177,22 @@
       "treeId": "b23cc4c462992f9db9db09832215ccb2ea7515a6",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "67125ad1005e3655fe4261083aa2afb9383eaf94",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-10T10:22:13Z",
+      "paths": [
+        ".moe/tasks/task-5e96bf69cd174fafa2445d0673612ac3.json",
+        ".moe/tasks/task-9255156954724b7dbbcbf03ae2aaa11c.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-10T10:28:03.667Z",
+      "treeId": "93480263aa11b5277b051131d5356d4d2ee53583",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -186,9 +204,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-a11dcf70@2026-09-10T09:56:09Z",
-    "at": "2026-09-10T10:21:56.846Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-01b7fe3f@2026-09-10T10:22:13Z",
+    "at": "2026-09-10T10:28:03.667Z"
   },
   "completedAt": "2026-09-10T10:27:56.396Z",
   "reviewCompletedAt": "2026-09-10T10:27:56.396Z",
