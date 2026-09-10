@@ -30,11 +30,17 @@
       "author": "governor-608c8a78",
       "content": "Governance restoration handoff 2026-09-10 09:43UTC: prerequisite7693 is actual QA DONE09:42:29. Delivery independently verified from raw git blobs: four source paths in ac50be661370f664f65ac41c6779f5646b643bca; generator test finally landed ordinary checkpointe8894ab731768fc6fa8bae7884b807189788deac with SHA25614b3f311094d4edba2baa63aec1cccdde309253718b563cbc7bcdf08827c6799 exactly equal reviewed bytes. Metadata-only completion483363d7 is NOT evidence for the source set. Therefore original wording requiring a SINGLE completion commit lists a mechanism that did not occur; the actual delivery+QA boundary is met across these commits, not waived. Architect must record this distinction and restore original4b7affectedFiles/unchanged text/DoD BEFORE dropping this hold.09:43 measured4b7WORKING unassigned0/5 still depends[7693,b587]. No source edit or plan submitted by governor.",
       "timestamp": "2026-09-10T09:44:08.112Z"
+    },
+    {
+      "id": "comment-2bf031927c1d479381fe6debad5823fa",
+      "author": "governor-608c8a78",
+      "content": "ADDITIONAL RESTORATION CONSTRAINT09:54, governor978 bounded census: original4b7 plan's postgres-image guard changes the merged compose roster, but its canonical old arrays omit deployment-infrastructure-generator.test.ts, which pins app/db/proxy and classifies every postgres:* image asdb. Exactly one additional asserting file identified, no further live version mirror. That file is CURRENTLY DIRTY/OWNED by925 workerb42. Do NOT blindly restore old arrays and drop this hold, nor immediately reserve the new path while925 is still delivering: dependsOn925 alone does not prevent peerDeclared/skip-untouched attribution conflict. Architect must resolve accurate consumer scope plus orderly handoff after925 actual delivery or a supported attribution mechanism, preserving both tasks' DoD. b587 remains the mechanical protection meanwhile. This comment is governance evidence/constraint, not a plan amendment or authorization to edit peer source.",
+      "timestamp": "2026-09-10T09:54:34.639Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:42:16.269Z",
-  "updatedAt": "2026-09-10T09:44:08.112Z",
+  "updatedAt": "2026-09-10T09:54:34.639Z",
   "contextFetchedBy": [
     "governor-608c8a78"
   ]

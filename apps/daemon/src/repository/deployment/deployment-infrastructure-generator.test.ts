@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import type { Server } from "node:http";
@@ -12,6 +12,7 @@ import type { ProductContractV2Requirement } from "@moe/core";
 import { CONTROLLED_PROFILE_VERSION } from "../controlled-profile/controlled-profile-generator.js";
 import { controlledProfilePackageFiles } from "../controlled-profile/controlled-profile-package-templates.js";
 import { controlledProfileRootFiles } from "../controlled-profile/controlled-profile-root-templates.js";
+import { dockerUnavailableLine, probeDocker } from "./deployment-docker-probe.js";
 import {
   DEPLOY_PROFILE_VERSION_UNKNOWN,
   DEPLOY_REQUIREMENTS_ABSENT,
@@ -19,11 +20,32 @@ import {
 } from "./deployment-infrastructure-generator.js";
 import {
   DEPLOYMENT_APP_PORT,
+  DEPLOYMENT_DATABASE_URL_SECRET_PATH,
   DEPLOYMENT_ENTRY_PATH,
   DEPLOYMENT_HEALTH_PATH,
 } from "./deployment-infrastructure-templates.js";
 
 const lines = (body: readonly string[]): string => `${body.join("\n")}\n`;
+
+/**
+ * The live compose arm is opt-in for the same reason the sibling's build arm is: it needs a docker
+ * daemon, and unconditionally it would execute inside `pnpm --filter @moe/daemon test` — the gate
+ * every row on this board runs — and red on any host without one. It shares
+ * `MOE_DEPLOY_IMAGE_BUILD` rather than minting a private flag nobody sets, because a gate no lane
+ * turns on is a gate that never ran.
+ */
+const RUN_COMPOSE_VALIDATE = process.env.MOE_DEPLOY_IMAGE_BUILD === "1";
+
+/**
+ * SHAPE, not a credential: no scheme, no `@`, nothing a scanner would classify as live — the same
+ * discipline `platform-secret-canary.e2e.test.ts` states for its own canary. A plausible-looking
+ * secret committed to a test tree becomes its own incident.
+ */
+const PLANTED = "planted-not-a-secret-b42eccd4";
+
+/** `/run/secrets`, derived so no arm can pin a mount root the generator stopped using. */
+const SECRETS_MOUNT_ROOT =
+  DEPLOYMENT_DATABASE_URL_SECRET_PATH.slice(0, DEPLOYMENT_DATABASE_URL_SECRET_PATH.lastIndexOf("/"));
 
 const requirement = (requirementId: string): ProductContractV2Requirement => ({
   dependsOnRequirementIds: [],
@@ -106,6 +128,9 @@ const EXPECTED_OVERRIDE = lines([
   "#",
   "# `docker compose` merges this into docker-compose.yml automatically. The `db` service, its",
   "# healthcheck and the db-data volume live THERE and are deliberately not repeated here.",
+  "#",
+  "# DATABASE_URL arrives as a compose SECRET read from .env, never as an `environment:` entry:",
+  "# `environment:` values are container metadata and `docker inspect` prints them.",
   "services:",
   "  app:",
   "    build:",
@@ -117,7 +142,12 @@ const EXPECTED_OVERRIDE = lines([
   "        condition: service_healthy",
   "    environment:",
   "      PORT: 3000",
-  "      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL in .env}",
+  "    secrets:",
+  "      - source: DATABASE_URL",
+  "        target: database_url",
+  "    # `command:` replaces the image's CMD and leaves its ENTRYPOINT alone. An `entrypoint:` here",
+  "    # would clear CMD and start the app with nothing to exec. `$$` is compose's literal `$`.",
+  '    command: ["/bin/sh", "-c", "export DATABASE_URL=\\"$$(cat /run/secrets/database_url)\\"; exec node /app/dist/server.js"]',
   "    healthcheck:",
   '      test: ["CMD", "node", "/app/healthcheck.mjs"]',
   "      interval: 5s",
@@ -133,6 +163,12 @@ const EXPECTED_OVERRIDE = lines([
   '      - "3000:3000"',
   "    volumes:",
   '      - "./docker/Caddyfile:/etc/caddy/Caddyfile:rw"',
+  "",
+  "secrets:",
+  "  DATABASE_URL:",
+  "    environment: ${DATABASE_URL:+DATABASE_URL}",
+  "    # Only the NAME is emitted. Unset or empty refuses the project, naming DATABASE_URL:",
+  "    # set it in .env, which compose loads from this directory.",
 ]);
 
 const EXPECTED_CADDYFILE = lines([
@@ -200,6 +236,19 @@ function composeServices(yaml: string): ReadonlyMap<string, readonly string[]> {
     current?.push(line);
   }
   return services;
+}
+
+/**
+ * The lines nested under one 4-space service key, e.g. `    environment:` — and NOTHING that
+ * follows the next key at that depth. Reading a whole service body instead would let a value that
+ * moved out of `environment:` into `secrets:` keep satisfying an "is it under environment" check.
+ */
+function serviceSection(body: readonly string[], key: string): readonly string[] {
+  const start = body.indexOf(key);
+  if (start === -1) return [];
+  const rest = body.slice(start + 1);
+  const end = rest.findIndex((line) => /^ {4}\S/u.test(line));
+  return end === -1 ? rest : rest.slice(0, end);
 }
 
 const imageOf = (body: readonly string[]): string | null => {
@@ -316,7 +365,113 @@ describe("the generated deployment infrastructure", () => {
     expect(new Set(composeServices(override).keys())).toEqual(new Set(["app", "proxy"]));
     expect(override).not.toContain("postgres");
     expect(override).not.toContain("\nvolumes:");
+    // A top-level `secrets:` block is a TOP-LEVEL KEY, never a fourth service. `composeServices`
+    // resets on any column-0 key, so its 2-space children are not read as service names — pinned
+    // here because the override now emits one and a parser change would silently invent a service.
+    expect(override).toContain("\nsecrets:\n");
   });
+
+  it("delivers the app's connection string as a secret, so no value reaches container metadata", () => {
+    // THE DEFECT THIS ARM CLOSES: an `environment:` entry becomes the container's `.Config.Env`,
+    // which `docker inspect` prints to anyone who can reach the docker socket. Measured on docker
+    // 29.6.2: a planted value under `environment:` greps 1 in `docker inspect`, the same value
+    // delivered as a compose secret greps 0, and `docker compose config` resolves it to the NAME.
+    const override = written().get("docker-compose.override.yml") ?? "";
+    const base = controlledProfileRootFiles("probe").get("docker-compose.yml") ?? "";
+    const app = composeServices(override).get("app") ?? [];
+
+    // BOTH DIRECTIONS, ACROSS THE WHOLE MERGED PROJECT — the app service this row owns AND the db
+    // service the base file owns. Checking only the override would leave the incumbent's half of
+    // the leak invisible, which is exactly how this bug survived its own canary sweep.
+    for (const [name, body] of new Map([...composeServices(base), ...composeServices(override)])) {
+      const carriers = serviceSection(body, "    environment:")
+        .filter((line) => /(?:PASSWORD|SECRET|TOKEN|DATABASE_URL)/u.test(line))
+        .filter((line) => !new RegExp(`_FILE: ${SECRETS_MOUNT_ROOT}`, "u").test(line));
+      expect(carriers, `service ${name} still delivers a secret through environment:`).toEqual([]);
+    }
+
+    // Sourced from the compose ENVIRONMENT, so `.env` still supplies it and no operator has to
+    // hand-create a secret file. `:+` emits the NAME only when set and non-empty, KEEPING the
+    // fail-fast `:?` used to give (proved live by the arm below). A bare `${DATABASE_URL}` would
+    // mount an empty value and start the app on a blank connection string — the silent regression
+    // every byte golden in this file accepts, so it is named and excluded.
+    expect(app).toEqual(expect.arrayContaining(["      - source: DATABASE_URL", "        target: database_url"]));
+    expect(override).toContain("\nsecrets:\n  DATABASE_URL:\n    environment: ${DATABASE_URL:+DATABASE_URL}\n");
+    expect(override).not.toContain("${DATABASE_URL}");
+    expect(override).not.toContain("DATABASE_URL:?");
+
+    // THE ENTRYPOINT TRAP, AS AN ASSERTION RATHER THAN A COMMENT. Measured with the format string
+    // `imageCommandArgv` uses, on a real built product image: `.Config.Entrypoint` is the node base
+    // image's `["docker-entrypoint.sh"]` though the Dockerfile sets none, and `.Config.Cmd` is the
+    // Dockerfile's `CMD`. An `entrypoint:` key would CLEAR Cmd as `--entrypoint` does, leaving
+    // nothing to exec — a health timeout naming no cause. Anchored on a KEY at service depth: the
+    // emitted file's own comment names `entrypoint:` to say why it is absent.
+    expect(override).not.toMatch(/^ {4}entrypoint:/mu);
+    const command = app.find((line) => line.startsWith("    command: ")) ?? "";
+    expect(command).not.toBe("");
+    // ONE CONSTANT, TWO GENERATORS, so the override and the image cannot drift about what to start.
+    // The loader names a PATH and no value, with every literal `$` doubled — unescaped, compose
+    // refuses with "invalid interpolation format" before a container exists.
+    expect(command).toContain(`exec node ${DEPLOYMENT_ENTRY_PATH}`);
+    expect(written().get("Dockerfile")).toContain(`CMD ["node", "${DEPLOYMENT_ENTRY_PATH}"]`);
+    expect(command).toContain(`"$$(cat ${DEPLOYMENT_DATABASE_URL_SECRET_PATH})\\"`);
+    expect(command.replaceAll("$$", "")).not.toContain("$");
+  });
+
+  it.runIf(RUN_COMPOSE_VALIDATE)(
+    "refuses the whole project when DATABASE_URL is unset or empty, naming the variable",
+    () => {
+      // WHY LIVE. `${DATABASE_URL:?...}` used to refuse readably; the secrets block has no `:?`
+      // form, so losing the fail-fast is SILENT — every byte golden above passes either way, and
+      // only compose can say whether `:+` refuses. `config` creates NO container, so there is
+      // nothing to leak; the temp directory goes on the throwing path too (epic rail 4).
+      const availability = probeDocker();
+      // NOT a skip and NOT a silent pass: the arm was asked to run and cannot.
+      if (!availability.available) expect.fail(dockerUnavailableLine(availability.detail));
+
+      const directory = mkdtempSync(join(tmpdir(), "moe-compose-secret-"));
+      try {
+        writeFileSync(join(directory, "docker-compose.yml"),
+          controlledProfileRootFiles(CONTROLLED_PROFILE_VERSION).get("docker-compose.yml") ?? "", "utf8");
+        writeFileSync(join(directory, "docker-compose.override.yml"),
+          written().get("docker-compose.override.yml") ?? "", "utf8");
+
+        const config = (databaseUrl: string | null): { readonly text: string; readonly status: number | null } => {
+          const { DATABASE_URL: _omitted, ...inherited } = process.env;
+          writeFileSync(join(directory, ".env"), [
+            "POSTGRES_USER=app", `POSTGRES_PASSWORD=${PLANTED}`, "POSTGRES_DB=app",
+            ...(databaseUrl === null ? [] : [`DATABASE_URL=${databaseUrl}`]), "",
+          ].join("\n"), "utf8");
+          const outcome = spawnSync("docker", ["compose", "--project-name", "moecomposesecret", "config"],
+            { cwd: directory, encoding: "utf8", env: inherited, shell: false, timeout: 120_000 });
+          return { status: outcome.status, text: `${outcome.stdout ?? ""}${outcome.stderr ?? ""}` };
+        };
+
+        // POSITIVE CONTROL FIRST, or a refusal proves only that the file is broken: with the
+        // variable set the project resolves, exit 0, and the planted value appears NOWHERE in the
+        // resolved configuration — not under `environment:`, not in the secrets block.
+        const supplied = config(`postgres://app:${PLANTED}@db:5432/app`);
+        expect(supplied.status, supplied.text).toBe(0);
+        expect(supplied.text).not.toContain(PLANTED);
+        expect(supplied.text).toContain("environment: DATABASE_URL");
+
+        // THE FAIL-FAST. Absent and empty are DIFFERENT inputs and both must refuse: `:+` treats
+        // them alike, and an arm that tested only one would miss a `:-`-style regression.
+        for (const [label, value] of [["unset", null], ["empty", ""]] as const) {
+          const refused = config(value);
+          expect(refused.status, `${label} DATABASE_URL was accepted: ${refused.text}`).not.toBe(0);
+          // THE REASON, not just the refusal: compose must name the variable an operator has to
+          // set. A refusal for any other cause would satisfy a bare "did not succeed" assertion.
+          expect(refused.text, label).toContain('secret "DATABASE_URL" must declare either');
+          expect(refused.text, label).toContain("DATABASE_URL");
+          expect(refused.text, label).not.toContain(PLANTED);
+        }
+      } finally {
+        rmSync(directory, { force: true, maxRetries: 10, recursive: true, retryDelay: 200 });
+      }
+    },
+    180_000,
+  );
 
   it("publishes only the proxy port and keeps its writable admin configuration private", () => {
     const services = composeServices(written().get("docker-compose.override.yml") ?? "");

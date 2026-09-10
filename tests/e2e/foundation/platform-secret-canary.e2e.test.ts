@@ -22,7 +22,18 @@ import {
 } from "./platform-pipeline-harness.js";
 
 /**
- * DoD 5 FOR THE EPIC-FINAL ROW: NO SECRET SURFACES ANYWHERE ALONG THE PIPELINE.
+ * DoD 5 FOR THE EPIC-FINAL ROW: NO SECRET SURFACES IN ANY ARTIFACT THIS FILE SWEEPS — and the
+ * swept set is now the WHOLE running topology, not just the deployed candidate.
+ *
+ * WHAT "ANYWHERE ALONG THE PIPELINE" USED TO MEAN, AND WHY THE WORDING CHANGED. This file swept the
+ * candidate's `docker inspect` and logs, the proxy's Caddyfile, the receipts, the ledger and every
+ * generated and committed file — and NOT the compose-managed `app` or `db` containers. So `hits=0`
+ * was a true statement about the CANDIDATE while `docker-compose.override.yml` was still handing
+ * the app its connection string through `environment:`, which lands in that container's
+ * `.Config.Env` and is printed by `docker inspect` to anyone who can reach the docker socket. The
+ * sweep was not wrong; it was narrower than the sentence it was quoted for. It now covers the app,
+ * db and proxy containers' inspected configuration and the app's and db's logs, and the printed
+ * result names the container set so the scope of the claim travels with the number.
  *
  * A GREP THAT FINDS NOTHING PROVES NOTHING ON ITS OWN. Zero hits is equally consistent with
  * perfect secrecy and with a canary that was never set, so this file proves DELIVERY FIRST — the
@@ -62,6 +73,25 @@ interface Sweep {
 /** Every artifact swept, named. The label is what the failure message prints. */
 function hits(sweeps: readonly Sweep[]): readonly string[] {
   return sweeps.filter((sweep) => sweep.text.includes(CANARY)).map((sweep) => sweep.label);
+}
+
+/** The compose services whose containers are swept, alongside the candidate. */
+const SWEPT_SERVICES = ["app", "db", "proxy"] as const;
+
+/**
+ * A compose-managed container's name, by service label and project network — the pattern this file
+ * already uses for `db` and `proxy`.
+ *
+ * IT REFUSES AN EMPTY ANSWER RATHER THAN RETURNING ONE, and that is the whole point: `docker ps
+ * --filter` prints nothing when it matches nothing, and "" contains no canary, so a sweep built on
+ * an unresolvable name PASSES while sweeping air. That is the same class of defect as a sweep that
+ * swept zero artifacts, and it is how a container-level leak stays invisible.
+ */
+function composeContainer(project: string, service: string): string {
+  const name = dockerQuietly(["ps", "--filter", `label=com.docker.compose.service=${service}`,
+    "--filter", `network=${project}_default`, "--format", "{{.Names}}"]).stdout.trim();
+  if (name === "") throw new Error(`the compose ${service} service was not discoverable`);
+  return name;
 }
 
 function git(directory: string, args: readonly string[]): { readonly out: string; readonly status: number | null } {
@@ -227,6 +257,22 @@ describe("the planted canary", () => {
           label: `the committed fixture ${relative}`,
           text: readFileSync(`${workspace.directory}/${relative}`, "utf8"),
         })),
+        // THE INCUMBENT, WHICH THIS FILE NEVER SWEPT. The candidate above is held to "no value in
+        // `docker inspect`"; the compose-managed containers running the SAME generated application
+        // were not, so a value delivered through `environment:` sat in their `.Config.Env`
+        // unobserved. Each service gets its OWN labelled sweep so the failure message names which
+        // container leaked, and `composeContainer` THROWS on an unresolvable name rather than
+        // handing back "" — an empty text contains no canary and would pass while sweeping nothing.
+        ...SWEPT_SERVICES.flatMap((service) => {
+          const container = composeContainer(project, service);
+          return [{
+            label: `the compose ${service} container's inspected configuration`,
+            text: dockerQuietly(["inspect", container], 60_000).stdout,
+          }, {
+            label: `the compose ${service} container's logs`,
+            text: `${dockerQuietly(["logs", container], 60_000).stdout}${dockerQuietly(["logs", container], 60_000).stderr}`,
+          }];
+        }),
       ];
 
       expect(hits(sweeps), `the canary (shape ${CANARY_SHAPE}) surfaced in these artifacts`).toEqual([]);
@@ -237,6 +283,10 @@ describe("the planted canary", () => {
 
       process.stdout.write(
         `SECRET CANARY shape=${CANARY_SHAPE} swept=${String(sweeps.length)} artifacts, hits=0\n`
+        // THE SCOPE TRAVELS WITH THE NUMBER: `hits=0` is only as broad as the container set, and
+        // this file was once quoted for a claim about the whole pipeline while sweeping one
+        // container. Naming them here means a later reader cannot over-read the zero.
+        + `SECRET CANARY containers swept: the deployed candidate and the compose ${SWEPT_SERVICES.join(", ")} services (inspect and logs)\n`
         + `SECRET CANARY delivery proven by: encrypted-store read-back AND psql authentication against the running database\n`,
       );
       expect(liveContainers()).toContain(candidate);
