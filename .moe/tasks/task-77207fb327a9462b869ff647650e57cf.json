@@ -74,17 +74,26 @@
     {
       "stepId": "step-5",
       "description": "ITEM 4, THE GATES, AND THE ADVERSARIAL PASS (DoD 4, DoD 5).\n\nITEM 4 IS DECIDED: DO NOT ADD `MIGRATION_SOURCE_UNAVAILABLE`. The row asks the planner to decide and the answer is no. Its own test is \"only worth it if an operator has actually been confused by the parity code\", and no such confusion is recorded on this board; it costs three rosters plus a redaction count assertion, and one of those rosters is contentious under a concurrent row. The helper already distinguishes `SOURCE_COMMIT_UNAVAILABLE` from `SOURCE_PATH_UNAVAILABLE` internally, so the information exists where a debugger can reach it. DISCHARGE DoD 4 WITH ONE SENTENCE in the completion record saying it was considered and declined, and why.\n\nGATES (DoD 5): `pnpm --filter @moe/daemon typecheck` and `pnpm --filter @moe/daemon test`, both EXIT 0, both count lines quoted verbatim and nonzero. Read the OUTPUT, not the exit code: a `--filter` leg prints \"No projects matched the filters\" and EXITS 0, and \"0 passed\" is exit 0 too.\nPROVE THE BLAST RADIUS: `git diff --stat` must show no control-room file and no security roster touched. Quote it. The checkout is shared - report only your own paths, never revert or stash a foreign one, and NEVER checkout/stash/reset/clean while any `??` path is another row's only copy.\nIf a leg reds at a path this row does not own, attribute it with the path-attributed baseline and disclose it verbatim rather than fixing it.\n\nADVERSARIAL PASS (load `adversarial-self-review`). Ask, in order: after the fold, does the image build still archive the SAME bytes it did before - what would tell you if `core.autocrlf=false` changed them, given the four arms pass unedited either way? Does the shared primitive leak a temporary directory on any path where the old inline code did not, and is its teardown still prefix-fenced in BOTH callers? With the guard gone, is there any remaining caller that passes `request.workspace` and now silently has it ignored - or did you delete the key? Does the gated migrate-down arm now depend on git being present, and does it fail with a readable reason if it is not? And the question behind the row: is there anything left in the tree that still claims the migration source is the working tree?",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/deployment/deploy-migration-context.ts",
         "apps/daemon/src/deployment/deploy-image-build.ts",
         "apps/daemon/src/deployment/migrate-down-real.test.ts"
       ],
-      "startedAt": "2026-09-10T17:53:19.571Z"
+      "modifiedFiles": [
+        "apps/daemon/src/deployment/deploy-migration-context.ts",
+        "apps/daemon/src/deployment/deploy-migration-context.test.ts",
+        "apps/daemon/src/deployment/deploy-image-build.ts",
+        "apps/daemon/src/repository/git-source-extract.ts",
+        "apps/daemon/src/deployment/migrate-down-real.test.ts"
+      ],
+      "note": "STEP 5 DONE. NO PRODUCTION BYTES CHANGED IN THIS STEP — it is the decision, the gates and the adversarial pass. The five paths listed are this ROW's deliverable, already landed in commit ee96ff75 (wrapper checkpoint, `Moe-Task:` trailer present); they are clean at HEAD and are listed for attribution, not because step 5 edited them. Full evidence in comment-8494ec8a (gates) and comment-1552d114 (item 4 + adversarial). This session RESUMED a dead seat: steps 1-4 were re-verified from git rather than trusted.\n\nITEM 4 (DoD 4): `MIGRATION_SOURCE_UNAVAILABLE` CONSIDERED AND DECLINED — its own test is operator confusion that this board does not record, it costs three rosters plus the redaction count arm, and step 4's live drill showed today's parity answer is already specific (`MIGRATION_FAILED` + detail `MIGRATION_FILE_UNKNOWN`) while the helper keeps `SOURCE_COMMIT_UNAVAILABLE` vs `SOURCE_PATH_UNAVAILABLE` internally. No roster moved.\n\nGATES (DoD 5).\n- `pnpm --filter @moe/daemon typecheck` EXIT 0, echoing `$ tsc --project tsconfig.json` (the discriminator against a silent filter miss). Package-wide, not scoped.\n- THE FULL `pnpm --filter @moe/daemon test` WAS NOT RUN AND I AM NOT CLAIMING IT. `full-suite-gate` is HELD by task-4b7f4a85 (worker-ed22fae0, etaMs 1500000) with task-24b68b05 QUEUED ahead of me, and a peer full-suite vitest (PID 27940) was live while I measured. Substituted the sanctioned scoped blast-radius superset — every daemon test naming a module or symbol this row touched, plus the migration ports/services that compose `git-source-extract`: `Test Files 20 passed (20) / Tests 250 passed | 3 skipped (253)`, EXIT 0. Command is in comment-8494ec8a and regenerates its own file list from a `git grep`.\n- RAIL 3 DELTA, MEASURED NOT ARGUED. The board's long-running 8-arm red (health-probe-schedule.test.ts, daemon-store-dependencies.test.ts, owned by task-24b68b05) DOES load my diff transitively — a process-local guard config threw `OWNED_PATH_LOADED: /src/deployment/deploy-migration-context.ts` on both files, so the \"unrelated files\" shortcut would have been false here. Run at the live tree they are now GREEN: `Test Files 2 passed (2) / Tests 48 passed (48)`, EXIT 0. Zero HEAD failures in the pair ⇒ (HEAD minus merge-base) ∩ owned paths is EMPTY.\n- BLAST RADIUS: `git diff --stat ee96ff75^ ee96ff75` = 5 files, all under apps/daemon/src, 203 insertions / 98 deletions. `git diff --name-only … | grep -E \"control-room|tests/security\"` -> NONE.\n\nADVERSARIAL PASS, all five of the step's questions answered in comment-1552d114. The one that tests cannot answer, re-measured FRESH this step rather than inherited from step 3: the folded builder archives IDENTICAL bytes — old and new recipes both produce tar sha256 `0f8cefa8150eaa1fe70bb980023bd71c476c9f8c9856918155ea9369cefb3403`, `git config --local --get core.autocrlf` in the new bare repo exits 1, and the two repo configs are byte-identical, so the shared primitive's `-c core.autocrlf=false` cannot reach `git archive`.\n\nDISCLOSED, NOT FIXED: `apps/daemon/src/repository/git-publication-port.ts:62` is a THIRD copy of the bare-repo + alternates recipe, in no step's affectedFiles. Follow-up for the publication owner.\n\nSCRATCH REMOVED: `apps/daemon/basestate-77207fb3.config.ts` and `apps/daemon/basestate-77207fb3/` deleted; `find . -name \"*77207fb3*\"` outside `.moe/` returns nothing. Their vintage was proved before deletion — all five dumps sha256-identical to `git show ee96ff75^:<path>`.\n\nPEER DIRT UNTOUCHED: `.moe/**`, `.codex/**`, `.grok/config.toml`, the two ` M` daemon test files above, and `??` `Moe-NG_Deep_Review_2026-09-05.md`, `apps/daemon/src/preview/preview-goal-landing.test.ts`, `.moe/resources/*.json`.",
+      "startedAt": "2026-09-10T17:53:19.571Z",
+      "completedAt": "2026-09-10T18:24:58.802Z"
     }
   ],
-  "status": "WORKING",
-  "assignedWorkerId": "worker-883dc9b4",
+  "status": "REVIEW",
+  "assignedWorkerId": "qa-c85c997d",
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -114,16 +123,34 @@
       "author": "governor-608c8a78",
       "content": "Restoration check: helper path is structurally restored in steps1/3 and worker0e has claimed, but the audit in comment5d83e896 was NOT incorporated. Current step1 still predicts the literal objects/info/alternates grep should hit BOTH helper and builder; current step3 still accepts only-shared-file grep as DoD2 proof. The prior source census showed one helper COMMENT hit before the fold, builder writes via join arguments. Thus this is a vacuous metric, not merely obsolete untracked wording. The bounded new caller-error/lifetime/partial-setup regressions requested in the same audit have no declared test path; four existing builder tests are correctly preserved unedited but do not cover those edges. Asked architect-fa for an amendment preserving active/completed work and worker0e to surface the mismatch before refactoring. Do not extend into unrelated publication writer. No governor source/plan edits or task-status reset.",
       "timestamp": "2026-09-10T17:40:49.990Z"
+    },
+    {
+      "id": "comment-00291bd90f214d5799217f28ff948424",
+      "author": "governor-bd76ac8c",
+      "content": "Governor routing of this row's MOE_ATTRIBUTION_UNRESOLVED banner (checkpoint ee96ff7538f7, 18:17:52Z).\n\nSix of the eight unattributed paths are THIS row's drill scaffolding, authored by the 772 session that preceded worker-883dc9b4 (file mtime 17:58Z; the current claim is 18:17:47Z):\n\n  apps/daemon/basestate-77207fb3.config.ts\n  apps/daemon/basestate-77207fb3/deploy-image-build.ts.txt\n  apps/daemon/basestate-77207fb3/deploy-migration-context.test.ts.txt\n  apps/daemon/basestate-77207fb3/deploy-migration-context.ts.txt\n  apps/daemon/basestate-77207fb3/git-source-extract.ts.txt\n  apps/daemon/basestate-77207fb3/migrate-down-real.test.ts.txt\n\nWhat the config is, read directly: a vitest defineConfig with a pre-enforced transform that, for the five owned suffixes, returns the .txt baseline dump in place of the live file — an in-memory red-attribution harness, no on-disk mutation. It carries two non-vacuity guards: BASE_STATE_ALREADY_CARRIES_THE_DIFF (throws if a dump already contains the post-row token, i.e. a stale baseline) and LIVE_FILE_IS_NOT_THE_EDITED_ONE (throws if the live file is not the post-row one). QA_BASE=guard turns it into an OWNED_PATH_LOADED reachability probe. Token map: DEPLOY_MIGRATION_WORKSPACE_MISMATCH removed from the two deploy-migration-context files, withBareSourceRepository added to deploy-image-build.ts and git-source-extract.ts, commitMigrations added to migrate-down-real.test.ts.\n\nRuling: scaffolding, not a deliverable. Do NOT moe.declare_files these to clear the banner — that lands baseline dumps as repo dirt, the same call already refused for the .moe-scratch artifacts on task-4b7f4a85 at 17:51Z. Reuse the harness for the remaining step if it is useful, then delete all six before moe.complete_task. I did not delete them myself: they are untracked and I did not author them, and an untracked peer file has no undo.\n\nThe other two banner paths (daemon-store-dependencies.test.ts, health-probe-schedule.test.ts) are not yours — they are task-24b68b05's release/auto-decide blast-radius repair and are now declared there.\n\nUnrelated and still open from the prior governor seat: architect-978f68c6's readiness audit in comment-5d83e896 has not been incorporated into steps 1/3. Step 1 still predicts the literal objects/info/alternates grep hits both helper and builder, and step 3 still accepts an only-shared-file grep as DoD2 proof. No architect is registered to amend it. Flagging for QA review rather than blocking the row.",
+      "timestamp": "2026-09-10T18:20:55.524Z"
+    },
+    {
+      "id": "comment-8494ec8a5f7a41b293cc883e2c5e4bbd",
+      "author": "worker-883dc9b4",
+      "content": "STEP 5 EVIDENCE 1/2 — GATES, AND WHY THE FULL DAEMON LEG WAS SUBSTITUTED.\n\nTYPECHECK, package-wide, not scoped: `pnpm --filter @moe/daemon typecheck` printed `$ tsc --project tsconfig.json` and EXIT 0. (The echoed script line is the discriminator: a `--filter` miss prints \"No projects matched the filters\".)\n\nTHE FULL `pnpm --filter @moe/daemon test` WAS NOT RUN, AND THE REASON IS THE SHARED GATE, NOT A FAILURE. `.moe/resources/full-suite-gate.json` at 18:21:55Z, quoted verbatim:\n  holders: taskId task-4b7f4a857b504ccb9c64ff4e75280ec1, workerId worker-ed22fae0, note \"step-5 gates (resumed seat, prior seat worker-a11dcf70 dead: zero vitest procs at 18:18Z): pnpm --filter @moe/daemon test, --filter @moe/control-room test, pnpm typecheck\", etaMs 1500000\n  queue:   taskId task-24b68b05c865436ead05cd5ea375ff6f, workerId worker-26a27e7c, requestedAt 18:01:30Z\nA peer full-suite vitest (PID 27940, `run --root . --config package.json --maxWorkers=4`) was live at 21:19 local while I measured. I am third in line, so I ran the sanctioned substitute — a scoped blast-radius superset — rather than a second whole-daemon suite on top of the holder's.\n\nTHE SUBSTITUTE, EXIT 0, count line verbatim:\n  cd apps/daemon && npx vitest run --root . --config package.json --maxWorkers=2 --testTimeout=30000 --testNamePattern=\"^(?!.*LIVE_PROVIDER:)\" $(git grep -l -E \"deploy-migration-context|deploy-image-build|git-source-extract|extractCommittedPath|withBareSourceRepository|withMigrationSource|migration-ports|migration-down-ports|migration-service|migration-down-service|migrateWithBackup|revertLastBatch|nodeMigrationPorts|nodeMigrationDownPorts|createDeploymentImageBuilder|DeployMigrationContextCode\" -- 'src/**/*.test.ts')\n   Test Files  20 passed (20)\n        Tests  250 passed | 3 skipped (253)\n  EXIT=0\nThe 20 files are every daemon test that names a module or symbol this row touched, or the migration ports/services that compose `git-source-extract`.\n\nI DID NOT USE THE \"THOSE FILES CANNOT REACH MY CODE\" ARGUMENT — I TESTED IT AND IT WOULD HAVE BEEN FALSE. The two files this board has been red on for days (`src/monitoring/health-probe-schedule.test.ts`, `src/daemon-store-dependencies.test.ts`, 8 arms, owned by task-24b68b05) were run under a process-local vitest config whose `transform` THROWS when an owned path loads:\n  Error: OWNED_PATH_LOADED: /src/deployment/deploy-migration-context.ts\n  Test Files  2 failed (2)\nThey DO load my diff transitively. So I measured instead of arguing — and at the live tree those two files are now GREEN:\n  npx vitest run --root . --config package.json --maxWorkers=2 src/monitoring/health-probe-schedule.test.ts src/daemon-store-dependencies.test.ts\n   Test Files  2 passed (2)\n        Tests  48 passed (48)   EXIT=0\nZero failures at HEAD-with-my-diff in the historically-red pair, so rail 3's (HEAD failures minus merge-base failures) ∩ owned paths is EMPTY by inspection. task-24b68b05's in-flight ` M` edits to those two files appear to have closed their own red; I neither touched nor relied on that.\n\nBLAST RADIUS, `git diff --stat ee96ff75^ ee96ff75`:\n  apps/daemon/src/deployment/deploy-image-build.ts            |  38 +++----\n  apps/daemon/src/deployment/deploy-migration-context.test.ts |  58 ++++++----\n  apps/daemon/src/deployment/deploy-migration-context.ts      |  20 ++--\n  apps/daemon/src/deployment/migrate-down-real.test.ts        |  66 ++++++++++--\n  apps/daemon/src/repository/git-source-extract.ts            | 119 +++++++++++++++------\n  5 files changed, 203 insertions(+), 98 deletions(-)\n`git diff --name-only ee96ff75^ ee96ff75 | grep -E \"control-room|tests/security\"` -> NONE. DoD 5's no-control-room / no-security-roster clause holds.\n\nPEER DIRT, untouched: `.moe/**`, `.codex/**`, `.grok/config.toml`, `apps/daemon/src/daemon-store-dependencies.test.ts`, `apps/daemon/src/monitoring/health-probe-schedule.test.ts` (all ` M`), and `??` `Moe-NG_Deep_Review_2026-09-05.md`, `apps/daemon/src/preview/preview-goal-landing.test.ts`, the two `.moe/resources/*.json`.",
+      "timestamp": "2026-09-10T18:24:00.942Z"
+    },
+    {
+      "id": "comment-1552d1146af2457e8f823d200f56b811",
+      "author": "worker-883dc9b4",
+      "content": "STEP 5 EVIDENCE 2/2 — ITEM 4 DECLINED, AND THE ADVERSARIAL PASS ANSWERED QUESTION BY QUESTION.\n\nITEM 4 (DoD 4), ONE SENTENCE AS REQUIRED: a distinct `MIGRATION_SOURCE_UNAVAILABLE` code was CONSIDERED AND DECLINED — its own stated test is \"only worth it if an operator has actually been confused by the parity code\", no such confusion is recorded on this board, it would cost three rosters plus the redaction count arm, and step 4's live drill showed the existing parity answer is already specific (`MIGRATION_FAILED` + detail `MIGRATION_FILE_UNKNOWN`) while `extractCommittedPath` still separates `SOURCE_COMMIT_UNAVAILABLE` from `SOURCE_PATH_UNAVAILABLE` internally where a debugger reaches it. NO roster moved: `git diff --name-only ee96ff75^ ee96ff75` contains no `migration-receipt.ts`, no `deploy-ledger.ts`, no `deploy-refusal-redaction.test.ts`.\n\nADVERSARIAL PASS — the five questions the step names.\n\n(1) DOES THE IMAGE BUILD STILL ARCHIVE THE SAME BYTES? YES, and I re-measured it fresh this step rather than resting on step 3's probe, because the four arms pass either way and cannot answer it. The only behaviour delta the fold introduces for the builder is that `rev-parse` and `init --bare` now carry the helper's `-c core.autocrlf=false`; `archiveIntoDocker` still uses deploy-image-build.ts's OWN flag array without it. Ran both recipes over this repository at HEAD (ee96ff75), same object store, same sha:\n  old.tar sha256 0f8cefa8150eaa1fe70bb980023bd71c476c9f8c9856918155ea9369cefb3403\n  new.tar sha256 0f8cefa8150eaa1fe70bb980023bd71c476c9f8c9856918155ea9369cefb3403\n  git config --local --get core.autocrlf in the new bare repo -> exit 1, NOT PRESENT\n  diff old/config new/config -> CONFIGS IDENTICAL\nSo the `-c` override is not persisted into the temporary repository and the archive spawned there cannot inherit it. Byte parity is a measurement, not the comment's claim.\n\n(2) DOES THE SHARED PRIMITIVE LEAK A TEMPORARY DIRECTORY ANYWHERE THE INLINE CODE DID NOT? No. `withBareSourceRepository`'s `finally` wraps `use`, so an exception thrown by the caller's callback still tears down; the fence is the same `resolve(temporary).startsWith(temporaryRoot + sep)` test both callers carried before, now written once (git-source-extract.ts). Each caller keeps its OWN `mkdtempSync` prefix (`moe-deploy-source-`, `moe-source-objects-`), so a leaked directory still names the seam that made it. The primitive deliberately does NOT catch — both callers keep their own catch and their own refusal vocabulary — which is why the builder still answers `DEPLOY_BUILD_UNAVAILABLE` on a throw and `DEPLOY_COMMIT_UNAVAILABLE` on a refusal.\n\n(3) DOES ANY CALLER STILL PASS `request.workspace` AND NOW HAVE IT SILENTLY IGNORED? No, because I DELETED THE KEY, not just the check. `DeployMigrationContextRequest` now carries `environment`, `now?`, `requestId`, `sha` and a comment stating there is deliberately no caller-supplied workspace. A leftover `workspace:` in either production caller (deploy-command.ts, rollback-restore.ts) would now be a TypeScript excess-property error, and `pnpm --filter @moe/daemon typecheck` is EXIT 0. `git grep DEPLOY_MIGRATION_WORKSPACE_MISMATCH -- apps packages tests docs` -> ZERO HITS; the roster is exactly two keys.\n\n(4) DOES THE GATED MIGRATE-DOWN ARM NOW DEPEND ON GIT, AND DOES IT FAIL READABLY? Yes and yes, by construction: its `git()` helper throws `MIGRATION_TEST_GIT_UNAVAILABLE: <message>` when `spawnSync` reports `result.error` (binary absent) and `MIGRATION_TEST_GIT_FAILED: <stderr>` on a nonzero status. The old shape would have printed an empty stderr for a missing binary. The file header states the repository requirement so nobody re-fabricates a constant.\n\n(5) IS ANYTHING LEFT IN THE TREE CLAIMING THE MIGRATION SOURCE IS THE WORKING TREE? No. Every surviving \"working tree\" mention under apps/daemon/src/deployment, .../repository/migrations and git-source-extract.ts is a NEGATIVE claim — \"reading nothing from the working tree\", \"reverts the committed migration of the sha, not the working tree\", \"a `down()` read from the working tree reverts something other than what was approved\". None asserts the working tree is the source.\n\nSTILL-OPEN ITEM I AM DISCLOSING RATHER THAN FIXING (raised in step 3, unchanged): `apps/daemon/src/repository/git-publication-port.ts:62` holds a THIRD copy of the bare-repo + alternates recipe. It is in no step's affectedFiles and I did not touch it. DoD 2's gate is satisfied for this row's two callers; that third copy is a follow-up for whoever owns publication.\n\nSCRATCH REMOVED (epic rail: anything this row starts, it stops): the process-local measurement config and its base dumps (`apps/daemon/basestate-77207fb3.config.ts`, `apps/daemon/basestate-77207fb3/`) are deleted — `find . -name \"*77207fb3*\"` outside `.moe/` returns nothing — and nothing under `apps/daemon/src` was ever written by them. Before deleting I proved the dumps' VINTAGE rather than their age: all five are byte-identical by sha256 to `git show ee96ff75^:<path>`, the commit immediately before this row's only commit.",
+      "timestamp": "2026-09-10T18:24:30.067Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:24:18.695Z",
-  "updatedAt": "2026-09-10T18:17:47.654Z",
+  "updatedAt": "2026-09-10T18:26:19.453Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T17:07:10.791Z",
     "plannedStepCount": 5,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 4
+    "executedStepCount": 5
   },
   "priorHandoffs": [
     {
@@ -140,7 +167,8 @@
     "step-1",
     "step-2",
     "step-3",
-    "step-4"
+    "step-4",
+    "step-5"
   ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-10T17:38:40.486Z",
@@ -160,7 +188,63 @@
     "architect-978f68c6",
     "governor-608c8a78",
     "worker-0e797912",
-    "worker-883dc9b4"
+    "worker-883dc9b4",
+    "governor-bd76ac8c",
+    "qa-c85c997d"
   ],
-  "workStartedAt": "2026-09-10T17:39:03.781Z"
+  "workStartedAt": "2026-09-10T17:39:03.781Z",
+  "commits": [
+    {
+      "sha": "ee96ff7538f7d4da41ba6fae051ae8d50da0c66c",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-883dc9b4@2026-09-10T18:17:48Z",
+      "paths": [
+        ".moe/tasks/task-77207fb327a9462b869ff647650e57cf.json",
+        ".moe/tasks/task-8d2301ba2ef24c42a8fdca8364a9da6a.json",
+        "apps/daemon/src/deployment/deploy-image-build.ts",
+        "apps/daemon/src/deployment/deploy-migration-context.test.ts",
+        "apps/daemon/src/deployment/deploy-migration-context.ts",
+        "apps/daemon/src/deployment/migrate-down-real.test.ts",
+        "apps/daemon/src/repository/git-source-extract.ts"
+      ],
+      "recordedBy": "worker-883dc9b4",
+      "recordedAt": "2026-09-10T18:17:52.687Z",
+      "treeId": "55384b699dbcc58c390ed049a8bc9f1ff2a53bbe",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    "apps/daemon/src/deployment/deploy-migration-context.ts",
+    "apps/daemon/src/deployment/deploy-image-build.ts",
+    "apps/daemon/src/repository/git-source-extract.ts",
+    "apps/daemon/src/deployment/deploy-migration-context.test.ts",
+    "apps/daemon/src/deployment/migrate-down-real.test.ts"
+  ],
+  "unattributedPaths": [
+    "apps/daemon/basestate-77207fb3.config.ts",
+    "apps/daemon/basestate-77207fb3/deploy-image-build.ts.txt",
+    "apps/daemon/basestate-77207fb3/deploy-migration-context.test.ts.txt",
+    "apps/daemon/basestate-77207fb3/deploy-migration-context.ts.txt",
+    "apps/daemon/basestate-77207fb3/git-source-extract.ts.txt",
+    "apps/daemon/basestate-77207fb3/migrate-down-real.test.ts.txt",
+    "apps/daemon/src/daemon-store-dependencies.test.ts",
+    "apps/daemon/src/monitoring/health-probe-schedule.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-883dc9b4@2026-09-10T18:17:48Z",
+    "at": "2026-09-10T18:17:52.687Z"
+  },
+  "reviewStartedAt": "2026-09-10T18:26:11.106Z",
+  "verification": {
+    "command": "cd apps/daemon && npx vitest run --root . --config package.json --maxWorkers=2 --testNamePattern=\"^(?!.*LIVE_PROVIDER:)\" $(git grep -l -E \"git-source-extract|deploy-image-build|deploy-migration-context|migration-(down-)?(ports|service)|migrateWithBackup|revertLastBatch|DeployMigrationContextCode|withMigrationSource\" -- 'src/**/*.test.ts')",
+    "exitCode": 0,
+    "outputTail": " RUN  v4.1.10 D:/projexts/moe-next/apps/daemon\n\n Test Files  20 passed (20)\n      Tests  250 passed | 3 skipped (253)\n   Start at  21:25:39\n   Duration  14.43s (transform 9.59s, setup 0ms, import 18.95s, tests 7.72s, environment 1ms)\n\nEXIT=0",
+    "reportedAt": "2026-09-10T18:26:11.106Z"
+  },
+  "completionSummary": "All three items delivered; bytes landed in commit ee96ff75 (5 files, all apps/daemon/src). Evidence: comment-8494ec8a (gates), comment-1552d114 (item 4 + adversarial), step notes 2-5.\n\n(1) DEAD GUARD GONE. `git grep DEPLOY_MIGRATION_WORKSPACE_MISMATCH -- apps packages tests docs` = ZERO HITS. Roster 3 -> 2 keys; DeployMigrationContextCode narrowed with it. The `workspace` KEY is deleted from the request too, not just the check, so a caller that still passed it is now a type error. Test arms (d) and (e) rewritten to the two surviving codes, neither made vacuous.\n\n(2) FOLD DONE, AND NOT AS A DIRECT CALL. New `withBareSourceRepository<T>` in git-source-extract.ts owns the duplicated recipe with CALLER-OWNED teardown (`finally` around `use`), because the builder streams `git archive` out of that directory into Docker. `extractCommittedPath` composes it via a `precondition` hook that preserves its refusal ORDER. deploy-image-build.test.ts UNEDITED, 4 arms pass. Archived bytes proved IDENTICAL: both recipes give tar sha256 0f8cefa8...3403, and `-c core.autocrlf=false` is not persisted into the temporary repo's config.\n\n(3) GATED TWIN FIXED AND RUN LIVE. The fabricated 40-hex constant is deleted; the tree is `git init`-ed, each migration committed, and the real sha asserted to CONTAIN the migration under test via `ls-tree`. Live under MOE_MIGRATION_RESTORE=1 with docker up: `Test Files 1 passed (1) / Tests 2 passed (2)`, EXIT 0.\n\n(4) MIGRATION_SOURCE_UNAVAILABLE considered and DECLINED - no recorded operator confusion, three rosters plus a count arm of cost, and the parity answer is already specific (MIGRATION_FAILED + MIGRATION_FILE_UNKNOWN). No roster moved.\n\n(5) `pnpm --filter @moe/daemon typecheck` EXIT 0. THE FULL DAEMON TEST LEG WAS NOT RUN: full-suite-gate is HELD by task-4b7f4a85 with task-24b68b05 queued ahead of me. Substituted the 20-file blast-radius superset in verification (250 passed | 3 skipped, EXIT 0). Rail-3 delta MEASURED, not argued: the board's 8-arm "
 }
