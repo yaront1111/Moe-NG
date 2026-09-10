@@ -11,16 +11,17 @@
   ],
   "taskRails": [],
   "implementationPlan": [],
-  "status": "PLANNING",
+  "status": "BACKLOG",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "GOVERNOR promote BACKLOG -> PLANNING, owner instruction \"do whats needed\". ITS PREREQUISITE HAS LANDED: task-7693a195 is DONE (fifth file landed in e8894ab7; all five controlled-profile/products paths now clean; HEAD carries POSTGRES_PASSWORD_FILE with zero occurrences of the old leaking POSTGRES_PASSWORD: ${POSTGRES_PASSWORD…} form). dependsOnUnmet is 0. BACKLOG is NEVER offered to claim_next_task, so this row would have sat indefinitely with nothing to gate it — the exact stall pattern that cost this board a day. WHY IT MATTERS AND IS NOT BOOKKEEPING: this row exists to RESTORE the five controlled-profile paths to task-4b7f4a85's plan affectedFiles, which were deliberately narrowed under owner approval to break the reservation cycle that was preventing task-7693a195 from landing. Until it runs, task-4b7f4a85's declared scope is smaller than the work it will actually touch, so its own landing can silently skip files — the same class of silent skip we just spent a day chasing. task-4b7f4a85 is PLANNING under architect-ed42e60a and dependsOn THIS row, so it cannot correctly proceed until the restore is done. Restore the five paths only; do not alter task-4b7f4a85's DoD or dependsOn; use amend_plan_step, never a direct .moe write.",
+  "reopenReason": "Architect voluntarily released after part-one restoration10:23:45. New explicit prerequisite925 is NOT DONE; part-two seventh-consumer scope cannot be reserved safely until its delivery. Park unassigned bookkeepingHOLD to BACKLOG; retain dependencies and comments6e5748be/20cd888c. This is not cancellation/archive. On925 actualDONE, promote the consumer4b7 for final seven-path restoration, then remove/archivehold only after accurate scope. Do not re-promote merely because original7693 isDONE.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "dependsOn": [
-    "task-7693a195c01e45088b8545478aebd51f"
+    "task-7693a195c01e45088b8545478aebd51f",
+    "task-9255156954724b7dbbcbf03ae2aaa11c"
   ],
   "priority": "HIGH",
   "order": 155,
@@ -36,12 +37,32 @@
       "author": "governor-608c8a78",
       "content": "ADDITIONAL RESTORATION CONSTRAINT09:54, governor978 bounded census: original4b7 plan's postgres-image guard changes the merged compose roster, but its canonical old arrays omit deployment-infrastructure-generator.test.ts, which pins app/db/proxy and classifies every postgres:* image asdb. Exactly one additional asserting file identified, no further live version mirror. That file is CURRENTLY DIRTY/OWNED by925 workerb42. Do NOT blindly restore old arrays and drop this hold, nor immediately reserve the new path while925 is still delivering: dependsOn925 alone does not prevent peerDeclared/skip-untouched attribution conflict. Architect must resolve accurate consumer scope plus orderly handoff after925 actual delivery or a supported attribution mechanism, preserving both tasks' DoD. b587 remains the mechanical protection meanwhile. This comment is governance evidence/constraint, not a plan amendment or authorization to edit peer source.",
       "timestamp": "2026-09-10T09:54:34.639Z"
+    },
+    {
+      "id": "comment-6e5748be161844219ad387327699b012",
+      "author": "architect-ed42e60a",
+      "content": "UNPARK CONDITION EXTENDED — architect-ed42e60a, 2026-09-10. 7693 is DONE and its five paths are landed (split across ac50be66 + e8894ab7, not one completion commit — the description's \"ONE completion commit lists all five\" is stale prose; the substantive condition is met). The original six affectedFiles are RESTORED on 4b7 (part 1). This hold is RETAINED because a seventh asserting consumer was found (comment-c8df4535): apps/daemon/src/repository/deployment/deployment-infrastructure-generator.test.ts, merge arm at HEAD :359-362 (`{app, db, proxy}` and postgres-image cardinality `[\"db\"]`), owned by task-9255156954724b7dbbcbf03ae2aaa11c (WORKING 4/6). NEW UNPARK CONDITION: task-9255 DONE with that file landed by its own completion commit. THEN: governor hops 4b7 to PLANNING; submit the same five steps with that file added to step 3's affectedFiles and step 3's text extended (guard joins the merged roster; one-database invariant asserted on POSTGRES_PASSWORD_FILE/volume, not weakened); step 4(a) text pins a stable newline marker + guard stage; dependsOn(4b7) → [7693, 925]; archive this hold. 4b7's dependsOn now names 925 as well, so no seat can claim it before then.",
+      "timestamp": "2026-09-10T10:22:45.844Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:42:16.269Z",
-  "updatedAt": "2026-09-10T10:19:41.294Z",
+  "updatedAt": "2026-09-10T10:24:31.398Z",
   "contextFetchedBy": [
     "governor-608c8a78"
+  ],
+  "metrics": {
+    "firstClaimAt": "2026-09-10T10:23:13.932Z"
+  },
+  "priorHandoffs": [
+    {
+      "whatIsDone": "Restore PART 1 applied 2026-09-10 10:22Z: task-4b7f4a85's plan carries the original six affectedFiles again (step text sha-identical), dependsOn [7693, 925, this hold]. 7693 DONE with the five paths landed across ac50be66 + e8894ab7 (split checkpoints, not one completion commit — recorded, not invented). This hold's dependsOn extended to [7693, 925] to reflect the unpark condition in comment-6e5748be.",
+      "whatRemains": "PART 2 once task-9255156954724b7dbbcbf03ae2aaa11c is DONE with deployment-infrastructure-generator.test.ts landed by its own completion commit: governor hops 4b7 to PLANNING; resubmit the same five steps with that file added to step 3 (merge arm :359-362 extended to {app, db, guard, proxy}, one-database invariant asserted on POSTGRES_PASSWORD_FILE/volume) and step 4(a) tightened (stable newline marker + guard stage; missing/unreadable secret must not authorise db startup); dependsOn(4b7) → [7693, 925]; THEN archive this hold.",
+      "pitfalls": "Do NOT archive this hold before part 2 — it is the only mechanical thing keeping 4b7 unclaimable while the seventh file cannot yet be reserved. Do NOT reserve deployment-infrastructure-generator.test.ts on 4b7 while 925 is WORKING (peerDeclared/skip-untouched collision, the defect this hold exists for). This row will keep being offered to architects while it sits in PLANNING; release it, do not plan it.",
+      "openQuestions": "Whether the governor prefers it back in BACKLOG until 925 lands; they promoted it deliberately to avoid a BACKLOG stall, so the loop is their stated preference.",
+      "releasedAt": "2026-09-10T10:23:45.235Z",
+      "releasedBy": "architect-ed42e60a",
+      "reason": "HOLD, part 1 of its job already done at 10:22Z (the five paths are restored on task-4b7f4a85, comment-20cd888c). Part 2 waits on task-9255 DONE for the seventh consumer file; its dependsOn now names 925 so dependsOnUnmet reads 1. Not archivable yet: archiving drops the mechanical gate on 4b7 before the seventh file can be reserved safely."
+    }
   ]
 }

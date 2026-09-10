@@ -75,23 +75,55 @@ function hits(sweeps: readonly Sweep[]): readonly string[] {
   return sweeps.filter((sweep) => sweep.text.includes(CANARY)).map((sweep) => sweep.label);
 }
 
+/**
+ * A container observation that REFUSES TO BE COUNTED UNLESS IT SUCCEEDED. `dockerQuietly` returns
+ * the exit status instead of throwing, so a failed `docker inspect` hands back "" — and "" contains
+ * no canary, so the sweep goes green having read nothing. That is the same defect class as sweeping
+ * zero artifacts: a leak stays invisible because the observation, not the secrecy, is what held.
+ *
+ * ITS DIAGNOSTIC IS VALUE-FREE BY CONSTRUCTION — the artifact label and the exit status, never
+ * stdout, stderr or argv. Those are exactly the surfaces being searched for secrets, so a failure
+ * message that quoted them would leak the value it exists to catch.
+ *
+ * stdout and stderr are joined because `docker logs` splits an application's output across both and
+ * a secret is no less exposed for arriving on the error stream. One invocation, not two.
+ */
+function observed(label: string, args: readonly string[]): Sweep {
+  const leg = dockerQuietly(args, 60_000);
+  if (leg.status !== 0) throw new Error(`${label}: docker ${args[0] ?? "?"} exited ${String(leg.status)}`);
+  return { label, text: `${leg.stdout}${leg.stderr}` };
+}
+
 /** The compose services whose containers are swept, alongside the candidate. */
 const SWEPT_SERVICES = ["app", "db", "proxy"] as const;
 
 /**
- * A compose-managed container's name, by service label and project network — the pattern this file
- * already uses for `db` and `proxy`.
+ * A compose-managed container's name, by service label and project network.
  *
- * IT REFUSES AN EMPTY ANSWER RATHER THAN RETURNING ONE, and that is the whole point: `docker ps
- * --filter` prints nothing when it matches nothing, and "" contains no canary, so a sweep built on
- * an unresolvable name PASSES while sweeping air. That is the same class of defect as a sweep that
- * swept zero artifacts, and it is how a container-level leak stays invisible.
+ * `ps -a`, NOT THE RUNNING-ONLY DEFAULT THE REST OF THIS FILE USES, and the difference decides
+ * whether this sweep works at all. A successful deploy STOPS the incumbent (deploy-service.ts:344
+ * stops `lease.incumbent`, discovered as the compose `app` at :108), and these sweeps run after
+ * that deploy. A stopped container still carries `.Config.Env` and still answers `docker logs`, so
+ * it is still the artifact under test — but a running-only lookup cannot see it. Measured on
+ * docker 29.6.2: for a stopped container, `ps --filter network=<net>` prints nothing while
+ * `ps -a --filter network=<net>` prints its name.
+ *
+ * IT REFUSES AN AMBIGUOUS OR EMPTY ANSWER RATHER THAN RETURNING ONE. `docker ps --filter` prints
+ * nothing when it matches nothing, and "" contains no canary, so a sweep built on an unresolvable
+ * name PASSES while sweeping air; two matches would silently sweep whichever sorted first. Exactly
+ * one, or this throws — and a missing-container throw is a DIFFERENT failure from a leak, which is
+ * why its message says so rather than surfacing as an empty artifact.
  */
 function composeContainer(project: string, service: string): string {
-  const name = dockerQuietly(["ps", "--filter", `label=com.docker.compose.service=${service}`,
-    "--filter", `network=${project}_default`, "--format", "{{.Names}}"]).stdout.trim();
-  if (name === "") throw new Error(`the compose ${service} service was not discoverable`);
-  return name;
+  const leg = dockerQuietly(["ps", "-a", "--filter", `label=com.docker.compose.service=${service}`,
+    "--filter", `network=${project}_default`, "--format", "{{.Names}}"]);
+  if (leg.status !== 0) throw new Error(`the compose ${service} lookup exited ${String(leg.status)}`);
+  const names = leg.stdout.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line !== "");
+  const only = names[0];
+  if (names.length !== 1 || only === undefined) {
+    throw new Error(`expected exactly one compose ${service} container, discovered ${String(names.length)}`);
+  }
+  return only;
 }
 
 function git(directory: string, args: readonly string[]): { readonly out: string; readonly status: number | null } {
@@ -245,8 +277,10 @@ describe("the planted canary", () => {
         { label: "the whole deploy ledger for this environment", text: JSON.stringify(ledger) },
         { label: "the migration receipt", text: JSON.stringify(readMigrationReceipt(store, PROJECT_ID, "decision-canary")) },
         { label: "the health probe response body", text: (await awaitAnswer("/health", 60_000)).body },
-        { label: "the candidate container's inspected configuration", text: dockerQuietly(["inspect", candidate], 60_000).stdout },
-        { label: "the candidate container's logs", text: `${dockerQuietly(["logs", candidate], 60_000).stdout}${dockerQuietly(["logs", candidate], 60_000).stderr}` },
+        // STRENGTHENED, NEVER NARROWED: the same two candidate artifacts, now refusing to count an
+        // observation whose docker command failed. Previously an errored `inspect` swept "".
+        observed("the candidate container's inspected configuration", ["inspect", candidate]),
+        observed("the candidate container's logs", ["logs", candidate]),
         { label: "the proxy container's Caddyfile after the flip", text: dockerQuietly(["exec", dockerQuietly(["ps", "--filter", "label=com.docker.compose.service=proxy", "--filter", `network=${project}_default`, "--format", "{{.Names}}"]).stdout.trim(), "cat", "/etc/caddy/Caddyfile"], 60_000).stdout },
         { label: "the list of files git actually tracks", text: committed },
         ...infrastructure.map((relative) => ({
@@ -265,13 +299,10 @@ describe("the planted canary", () => {
         // handing back "" — an empty text contains no canary and would pass while sweeping nothing.
         ...SWEPT_SERVICES.flatMap((service) => {
           const container = composeContainer(project, service);
-          return [{
-            label: `the compose ${service} container's inspected configuration`,
-            text: dockerQuietly(["inspect", container], 60_000).stdout,
-          }, {
-            label: `the compose ${service} container's logs`,
-            text: `${dockerQuietly(["logs", container], 60_000).stdout}${dockerQuietly(["logs", container], 60_000).stderr}`,
-          }];
+          return [
+            observed(`the compose ${service} container's inspected configuration`, ["inspect", container]),
+            observed(`the compose ${service} container's logs`, ["logs", container]),
+          ];
         }),
       ];
 
@@ -287,7 +318,13 @@ describe("the planted canary", () => {
         // this file was once quoted for a claim about the whole pipeline while sweeping one
         // container. Naming them here means a later reader cannot over-read the zero.
         + `SECRET CANARY containers swept: the deployed candidate and the compose ${SWEPT_SERVICES.join(", ")} services (inspect and logs)\n`
-        + `SECRET CANARY delivery proven by: encrypted-store read-back AND psql authentication against the running database\n`,
+        + "SECRET CANARY delivery proven by: encrypted-store read-back AND a psql session the running database accepted\n"
+        // WHAT THAT psql LEG DOES NOT PROVE, said here because this file's printed lines get quoted.
+        // It runs INSIDE the db container over loopback, where postgres' pg_hba is `trust` — a WRONG
+        // password is accepted there too, so acceptance shows the database is reachable and running,
+        // not that the canary was verified as its password. The encrypted-store read-back above is
+        // what pins the value; an off-loopback wrong-password discriminator belongs to the db row.
+        + "SECRET CANARY not proven by that psql leg: password verification (in-container loopback is pg_hba trust)\n",
       );
       expect(liveContainers()).toContain(candidate);
     },
