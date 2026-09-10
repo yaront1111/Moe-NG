@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { nodeBackupPorts } from "../../backups/backup-ports.js";
 import { createVerifierProcessRunner } from "../../orchestrator/verifier-process-runner.js";
+import { withMigrationSource } from "./migration-ports.js";
 import { migrationFilename } from "./migration-receipt.js";
 
 /**
@@ -13,8 +14,11 @@ export interface MigrationDownPorts {
    *  up first for exactly the reason the forward path does -- and the receipt refuses to record a
    *  REVERTED outcome without a `backupRef`, so this cannot be skipped and still look successful. */
   dump(connection: string, path: string): Promise<void>;
-  /** Reverts `batch` (oldest first, WITH extension) and answers what it actually reverted. */
-  revert(workspace: string, connection: string, batch: readonly string[]): Promise<readonly string[]>;
+  /** Reverts `batch` (oldest first, WITH extension) and answers what it actually reverted.
+   *  `sha` is the commit whose `up()` ran — the SOURCE receipt's, never an operator's choice — and
+   *  it is REQUIRED: a `down()` read from the working tree reverts something other than what was
+   *  applied, and this is the leg where that is destructive rather than merely wrong. */
+  revert(workspace: string, connection: string, batch: readonly string[], sha: string): Promise<readonly string[]>;
 }
 
 /** The refusal the child emits when the named batch is not the tail of `pgmigrations`. */
@@ -48,12 +52,21 @@ export class MigrationDownError extends Error {
  *
  * The batch is INLINED as a JSON literal rather than passed through the environment: the runner
  * merges a delivered-variable allowlist, and a name that failed to survive it would turn a
- * guarded revert into an unguarded one. Every name is `migrationFilename`-validated first.
+ * guarded revert into an unguarded one. Every name is `migrationFilename`-validated first. `dir`,
+ * the extracted migration source, rides the same channel for the same reason.
+ *
+ * LEGACY RECEIPTS ARE A KNOWN, UNFIXED HAZARD, and it is a pre-existing one this change surfaces
+ * rather than creates. A source receipt written BEFORE the source was pinned may name a commit
+ * whose `migrations/` never contained the file that was applied, because that file came from the
+ * working tree. The extract then succeeds and `node-pg-migrate` refuses the DOWN with
+ * `Definitions of migrations ... have been deleted.`, so the answer is REVERT_FAILED and it
+ * arrives AFTER the pre-revert dump has been taken. Recovery is that dump. The alternative —
+ * falling back to the working tree when the extract lacks a name — is the defect itself.
  */
-const revertScript = (batch: readonly string[]): string => String.raw`
+const revertScript = (batch: readonly string[], dir: string): string => String.raw`
 import { runner, PG_MIGRATE_LOCK_ID } from 'node-pg-migrate';
 import pg from 'pg';
-import { basename, join } from 'node:path';
+import { basename } from 'node:path';
 const batch = ${JSON.stringify([...batch])};
 const bare = name => name.slice(0, name.lastIndexOf('.'));
 const emit = value => process.stdout.write('\nMOE_MIGRATION_DOWN_RESULT=' + JSON.stringify(value) + '\n');
@@ -76,7 +89,7 @@ try {
     if (tail.length !== want.length || want.some((name, index) => tail[index] !== name)) {
       emit({ reverted: [], code: '${MIGRATION_DOWN_NOT_LAST}' }); process.exitCode = 1;
     } else {
-      const undone = await runner({ dbClient: client, dir: join(process.cwd(), 'migrations'),
+      const undone = await runner({ dbClient: client, dir: ${JSON.stringify(dir)},
         migrationsSchema: 'public', migrationsTable: 'pgmigrations', direction: 'down', count: batch.length,
         singleTransaction: true, checkOrder: true, logger });
       emit({ reverted: undone.map(item => basename(item.path)), code: null });
@@ -88,10 +101,20 @@ try {
 `;
 
 async function revert(
-  workspace: string, connection: string, batch: readonly string[],
+  workspace: string, connection: string, batch: readonly string[], sha: string,
 ): Promise<readonly string[]> {
   if (batch.length === 0 || !batch.every(migrationFilename)) throw new MigrationDownError(null);
-  const script = revertScript(batch);
+  const source = await withMigrationSource(workspace, sha, dir => run(workspace, connection, batch, dir));
+  // An unproducible source answers REVERT_FAILED, the same answer a broken `down()` gives today.
+  // Nothing is reverted, and no new code reaches the receipt.
+  if (!source.ok) throw new MigrationDownError(null);
+  return source.value;
+}
+
+async function run(
+  workspace: string, connection: string, batch: readonly string[], dir: string,
+): Promise<readonly string[]> {
+  const script = revertScript(batch, dir);
   const runner = createVerifierProcessRunner({ timeoutMs: 120_000, delivered: { DATABASE_URL: connection },
     spawn: (file, args, options) => options.shell === true
       ? spawn(process.execPath, ["--input-type=module", "--eval", script], { ...options, shell: false, windowsHide: true })

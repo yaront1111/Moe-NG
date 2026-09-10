@@ -63,7 +63,10 @@ async function execute(
     ownsFile = true;
     await ports.dump(input.databaseUrl, path);
     backupRef = `${path}@sha256:${await backupFileHash(path)}`;
-    const applied = await ports.apply(input.workspace, input.databaseUrl);
+    // The sha the receipt is about to record is the sha whose FILES run: the port extracts
+    // `migrations/` at this commit rather than reading the working tree, so `sha` on the receipt
+    // is a claim about provenance and not just a label the caller supplied.
+    const applied = await ports.apply(input.workspace, input.databaseUrl, input.sha);
     return { ...base, applied, backupRef, outcome: "APPLIED", refusal: null };
   } catch (error) {
     // A workspace that was never installed cannot even RESOLVE its migration tool, so it never
