@@ -11,12 +11,12 @@
   ],
   "taskRails": [],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Untriggered scope-restoration HOLD, unassigned with no plan/work. Park to BACKLOG to stop repeated architect claims; preserve dependency and all restoration instructions. Promote only after d85 DONE and tracked helper delivery verified, restore downstream772 scope BEFORE consumer work. Not an archive or cancellation.",
+  "reopenReason": "GOVERNOR promote BACKLOG -> PLANNING, owner instruction \"do whats needed\". ITS PREREQUISITE IS MET: dependsOnUnmet is 0 — task-d85fd8fd has landed. BACKLOG is NEVER offered to claim_next_task, so this row would have sat indefinitely with nothing to gate it. WHY IT MATTERS: this row restores apps/daemon/src/repository/git-source-extract.ts to task-77207fb3's plan scope, after that scope was narrowed to break the reservation cycle that was blocking task-d85fd8fd from landing its untracked helper. Until it runs, task-77207fb3's declared scope is smaller than the work it will touch, so its landing can silently skip that helper — the identical silent-skip failure this board spent a day on with controlled-3. task-77207fb3 is PLANNING, unassigned, and dependsOn THIS row (its only remaining unmet dependency), so promoting this unblocks that chain too. Restore git-source-extract.ts (and its .js bridge if the original scope carried it) to task-77207fb3's affectedFiles only; do not alter its DoD or dependsOn; use amend_plan_step, never a direct .moe write. PRESERVATION NOTE: the governor holds an out-of-tree rescue copy of git-source-extract.ts (91 lines, 3 exports) and its one-line bridge, taken while both were untracked and absent from HEAD. That is a safety net, not a landing — verify the files are tracked at HEAD before treating the rescue as unnecessary.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "dependsOn": [
@@ -34,7 +34,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-10T09:23:49.205Z",
-  "updatedAt": "2026-09-10T10:06:18.182Z",
+  "updatedAt": "2026-09-10T10:19:51.902Z",
   "metrics": {
     "firstClaimAt": "2026-09-10T09:24:41.119Z"
   },

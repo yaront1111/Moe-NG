@@ -11,12 +11,12 @@
   ],
   "taskRails": [],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "GOVERNOR promote BACKLOG -> PLANNING, owner instruction \"do whats needed\". ITS PREREQUISITE HAS LANDED: task-7693a195 is DONE (fifth file landed in e8894ab7; all five controlled-profile/products paths now clean; HEAD carries POSTGRES_PASSWORD_FILE with zero occurrences of the old leaking POSTGRES_PASSWORD: ${POSTGRES_PASSWORD…} form). dependsOnUnmet is 0. BACKLOG is NEVER offered to claim_next_task, so this row would have sat indefinitely with nothing to gate it — the exact stall pattern that cost this board a day. WHY IT MATTERS AND IS NOT BOOKKEEPING: this row exists to RESTORE the five controlled-profile paths to task-4b7f4a85's plan affectedFiles, which were deliberately narrowed under owner approval to break the reservation cycle that was preventing task-7693a195 from landing. Until it runs, task-4b7f4a85's declared scope is smaller than the work it will actually touch, so its own landing can silently skip files — the same class of silent skip we just spent a day chasing. task-4b7f4a85 is PLANNING under architect-ed42e60a and dependsOn THIS row, so it cannot correctly proceed until the restore is done. Restore the five paths only; do not alter task-4b7f4a85's DoD or dependsOn; use amend_plan_step, never a direct .moe write.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "dependsOn": [
@@ -40,7 +40,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:42:16.269Z",
-  "updatedAt": "2026-09-10T09:54:34.639Z",
+  "updatedAt": "2026-09-10T10:19:41.294Z",
   "contextFetchedBy": [
     "governor-608c8a78"
   ]

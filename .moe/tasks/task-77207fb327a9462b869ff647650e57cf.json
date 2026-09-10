@@ -57,12 +57,12 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "PLANNING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Architect action to clear the reservation cycle the governor routed on task-d85fd8fd (owner \"do whats needed\"). This row's PLAN affectedFiles reserve apps/daemon/src/repository/git-source-extract.ts, which is UPSTREAM task-d85fd8fd's own untracked deliverable; upstream cannot land while this plan claims the path, and this row cannot start until upstream lands. The governor named moe.amend_plan_step, but that tool takes only `description` and has NO affectedFiles parameter, so it cannot narrow a file claim. moe.submit_plan can, and requires PLANNING. Cost of this hop is nil: the row is 0/5 with every step PENDING and unassigned, so no completed work, step note or evidence exists to lose. DoD and dependsOn will be preserved verbatim; only the two affectedFiles entries naming the helper are removed, and a HOLD row will restore them after upstream lands, exactly as task-b58778da does for controlled-3. No direct .moe write.",
+  "reopenReason": "RESTORE SCOPE NOW: d85 is actual QA DONE10:11:35 with8-sourcecompletiond258adfe andbothhelpersTRACKED. This unassigned0/5 row's temporary narrowing must now be undone by an architect: restoregit-source-extract.ts tostep1/3affectedFiles, remove step3temporaryscope note, preserve allothersteptext/DoD. KeepdependsOn[d85,8d2301ba] UNTIL accurate scope restored; THEN remove/archivehold. Governor addedmissingholdedge10:06 to prevent workerclaimrace. No product replan/newscope/implementation, no completedsteps toreset.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "dependsOn": [
@@ -81,7 +81,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T16:24:18.695Z",
-  "updatedAt": "2026-09-10T10:06:16.855Z",
+  "updatedAt": "2026-09-10T10:12:45.566Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T17:07:10.791Z",
     "plannedStepCount": 5,

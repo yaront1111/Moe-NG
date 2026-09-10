@@ -208,7 +208,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T14:58:42.770Z",
-  "updatedAt": "2026-09-10T10:11:35.816Z",
+  "updatedAt": "2026-09-10T10:12:33.033Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T16:02:54.059Z",
     "plannedStepCount": 8,
@@ -306,7 +306,9 @@
     "apps/daemon/src/repository/migrations/migration-service.ts",
     "apps/daemon/src/repository/migrations/migration-down-ports.ts",
     "apps/daemon/src/repository/migrations/migration-down-service.ts",
-    ".moe/tasks/task-d85fd8fd74354e94886d619c67f24c75.json"
+    ".moe/tasks/task-d85fd8fd74354e94886d619c67f24c75.json",
+    ".moe/tasks/task-77207fb327a9462b869ff647650e57cf.json",
+    ".moe/tasks/task-8d2301ba2ef24c42a8fdca8364a9da6a.json"
   ],
   "completionSummary": "The migration source is now PINNED to the built sha. `MigrationPorts.apply` takes a REQUIRED `sha` and `MigrationDownPorts.revert` a REQUIRED 4th; `withMigrationSource` extracts `migrations/` at that commit into `<workspace>/.moe-next/migration-source-*` via a new `git-source-extract.ts` (bare temp repo + alternates + checkout, `core.autocrlf=false`, show-toplevel refusal), inlines the path into the child's eval script, and tears the extract down after `runner.close()` on EVERY exit path. Extraction failure maps to today's MIGRATION_FAILED / REVERT_FAILED, so no code roster moves.\n\nEVIDENCE IS IN FOUR COMMENTS, not here: comment-6ae091d6 (both pre-fix REDs, untouched baseline), comment-412d9970 (preflight + scope + drills A-C), comment-0b21b241 (gate legs + rail-3 attribution), comment-2f7ee911 (DoD item 2's arm, all five drills, amended-DoD map).\n\nVERIFIED: typecheck EXIT 0 (and `tsc --listFiles` proves the tests are in the program); scoped 5 files 48 passed | 1 skipped (49) EXIT 0, +4 on the measured 44+1 pre-fix; three MOE_PLATFORM_PIPELINE=1 e2e files one at a time, all EXIT 0 (6 / 2 / 4 passed) including a real two-sha deploy and rollback; the docker-gated live arm passed earlier against real PostgreSQL. Five process-local mutation drills all killed, nothing written under `src`.\n\n`pnpm --filter @moe/daemon test` IS EXIT 1 and I am NOT claiming otherwise: `Tests 8 failed | 10974 passed | 13 skipped (10995)`, all 8 in health-probe-schedule.test.ts and daemon-store-dependencies.test.ts. Rail-3 attribution done by EXECUTION: a static import walk said my modules were unreachable and was WRONG (an executed probe fired OWNED_MODULE_LOADED on migration-service.ts), so I re-ran those files with all four changed tracked modules served from their `git show HEAD:` blob — `Tests 8 failed | 40 passed (48)`, identical arms. Delta EMPTY. Cause is landed peer code: release-auto-decide.ts:313 adds a second durable-schedule job (commit 330828c9, task-24b68b05, now PLANNING). Thos",
   "commits": [
@@ -332,6 +334,23 @@
       "treeId": "b788fe6af2bf006eaf239dd0c2faaa1cc67487ff",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "f2986d51fc3c6bc3311049d637bc8e736a9131af",
+      "ref": "refs/heads/moe/work-2026-09-04",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-01b7fe3f@2026-09-10T10:05:02Z",
+      "paths": [
+        ".moe/tasks/task-77207fb327a9462b869ff647650e57cf.json",
+        ".moe/tasks/task-8d2301ba2ef24c42a8fdca8364a9da6a.json",
+        ".moe/tasks/task-d85fd8fd74354e94886d619c67f24c75.json"
+      ],
+      "recordedBy": "qa-01b7fe3f",
+      "recordedAt": "2026-09-10T10:12:33.033Z",
+      "treeId": "227d92991f62b5e69b1cf5dee75e509c07a3960c",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -341,9 +360,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-0e797912@2026-09-10T09:32:41Z",
-    "at": "2026-09-10T10:05:03.274Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-01b7fe3f@2026-09-10T10:05:02Z",
+    "at": "2026-09-10T10:12:33.033Z"
   },
   "completedAt": "2026-09-10T10:11:35.816Z",
   "reviewCompletedAt": "2026-09-10T10:11:35.816Z",

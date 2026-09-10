@@ -130,17 +130,24 @@
           "reason": "Adds the mutation drill for the corrected discriminator (the journal half) and the re-check of the attack the original plan answered wrongly; the three follow-up comments already posted by the worker (5c197f55, 598c3e3c, and the release-row note) stand and are not repeated.",
           "amendedBy": "architect-ed42e60a",
           "amendedAt": "2026-09-10T09:23:12.502Z"
+        },
+        {
+          "amendmentId": "amend-2",
+          "description": "ADVERSARIAL SELF-REVIEW, DRILLS, then complete. The original attack list stands, but re-answer attack 2 HONESTLY: \"can a post-intent refusal be laundered into NOTHING_TO_COMMIT\" — the answer the original plan gave (no) was WRONG; the governor's reproducer is exactly that laundering, and the corrected predicate is what closes it. Re-answer with the corrected mechanism and cite comment-573c4f2c.\n\nTHEN ASK, in order:\n- Does the intent-key collection in `readReviewLedgers` cost a second decision walk? It must not — one pass. That property is the LEAF's to prove (task-5e96bf69 owns the arm); your job is to confirm you did not add a second walk on top of it from this row's seams.\n- Does a fresh acceptance (new verifierReceiptId) after an old post-intent refusal get credited correctly? Yes — the key includes the verifier receipt id. Prove it with the variant arm rather than asserting it.\n- IS THE FAIL-CLOSED NULL-HISTORY BEHAVIOUR STATED IN THE PREDICATE'S DOC? This replaces amend-1's question about \"the fail-open edge for an undecodable intent body\", which was written before the rule was corrected and describes a behaviour that no longer exists. There is NO fail-open edge: `landingIntents` is `null` when ANY intent decision fails to decode, and null credits NOTHING. The doc must say that unverifiable history gains no authority, and must not describe a permissive edge.\n- Does any seam still credit by code alone? Re-grep `landedWithNoEffect` and confirm all three call sites pass the set.\n\nMUTATION DRILLS, three, each proving one half:\n(a) drop the `!journaledIntents.has(...)` clause from `landedWithNoEffect` — the runtime POST-intent arm goes RED with `POST_INTENT_REFUSAL_MUST_NOT_BE_CREDITED`;\n(b) make the collection in `readReviewLedgers` skip the intent kind — the SAME arm goes RED, which proves the set is populated from the store rather than defaulting empty;\n(c) make the predicate ignore the code — the three seams' GIT_COMMIT_FAILED negative arms go RED.\n\nDRILL (b) IS PROCESS-LOCAL ONLY, AND THIS IS A SCOPE RULE, NOT A PREFERENCE. `review-read-model.ts` is the LEAF's production file, not this row's. A process-local read-only transform (in-memory Vite overlay, exactly as the governor's reproducer did) needs no ownership of the product source and is the required form here. An ON-DISK edit to that file from this row would be editing another row's path, so it is forbidden regardless of how carefully it is restored.\n\nDRILLS (a) AND (c) touch `landing-receipt-contracts.ts`, which IS this row's. Prefer process-local there too; if you go on disk: hold no full-suite lease, back up at `%TEMP%/moe-task-f7d38f75-<basename>-<workerId>` with the TASK ID mandatory in the path, hash the LIVE file at window-open, and prove the restore by SHA256 equality in a SEPARATE call. That file is TRACKED, so an empty `git diff` is a valid SUPPLEMENTARY check — but the hash is the rule, not the diff.\n\nThe three follow-ups the worker already posted as comments (preview seam 5c197f55, control-room card 598c3e3c, the release-row note) remain valid and are not re-posted; add ONE line to the preview follow-up: `preview-goal-landing.ts` must use the corrected two-part predicate when it is fixed, not the code alone.\n\nConfirm every DoD item — as amended by comment-a94b3eaa AND by this re-plan — maps to a landed assertion. Note for the record that DoD 3's \"pre-intent\" wording is satisfied by the corrected two-part rule (code AND no journaled intent for that acceptance), not by the withdrawn \"pre-intent by construction\" argument. Report every touched path in complete_step.modifiedFiles, and complete.",
+          "reason": "Bounded overlay fix governor-608c8a78 required in comment-07bdbfed. amend-1 was written before the collector moved to leaf task-5e96bf69 and before the rule became fail-CLOSED, so it is stale in exactly two ways: it asks the worker to document a \"fail-open edge for an undecodable intent body\" that no longer exists (null credits nothing), and it names review-read-model.ts as this row's on-disk drill target when that production scope now belongs to the leaf. Both corrected; the attack re-answer, all three drills, the restore protocol and the follow-up notes are preserved verbatim in substance. Five completed steps untouched, no submit_plan.",
+          "amendedBy": "architect-f04f69cf",
+          "amendedAt": "2026-09-10T10:20:27.908Z"
         }
       ],
-      "activeAmendmentId": "amend-1"
+      "activeAmendmentId": "amend-2"
     }
   ],
-  "status": "PLANNING",
+  "status": "WORKING",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "GOVERNOR: to PLANNING for a genuine RE-PLAN, owner instruction \"do whats needed\". This is the one row on the board whose approved premise is DISPROVED, so it needs an architect, and a BLOCKED row could never reach one. BLOCK PREMISE QUOTED VERBATIM (the hop nulls the field): \"Correctness + session-provenance block, not a resource wait. The approved pre-intent-by-code premise is disproved by the actual runtime retry in comment-573c4f2c623e4bfc99a40048f782e740; full executable reproducer is comment-d573098614d1411f9baad5c37e98a1bb. Actual durable receipt REFUSED/NOTHING_TO_COMMIT is credited=true while existing landing intent keeps deliveryFacts=REFUSED. Existing 81-test scoped green does not cover or repair that misclassification. Need corrected in-scope evidence discriminator/producer plan and regression before completion. Separately, new conversation turn/claim did not establish a fresh wrapper preflight: canonical task baseline still carries 20:03:35Z landed=1, not this claim. No product edits, full-suite execution, physical mutants or manual landing. Only read-only scoped 7 files 81 tests EXIT0 and subsequent standalone daemon typecheck EXIT0; no processes in flight. Released only this task's unused full-suite queue entry. Preserve nine checkpointed source paths and current steps; do not reset/reimplement blindly.\" WHAT THE ARCHITECT MUST DECIDE: the plan assumed the pre-intent could be established by code inspection; architect-978f68c6 reproduced the opposite through the REAL production runtime — a refused receipt with NOTHING_TO_COMMIT is credited as landed while the durable intent still reads REFUSED. That is a real product defect and the row's approach needs correcting before any completion. PRESERVE: five of seven steps COMPLETED, nine checkpointed source paths. Do NOT reimplement blindly and do NOT call submit_plan if an amendment will do — submit_plan REPLACES the step array. The session-provenance half resolves on its own once a freshly spawned wrapper-tracked seat claims the row; it is not a second defect.",
+  "reopenReason": "Completing the SPEED route governor-608c8a78 named in comment-07bdbfed. The PLANNING -> AWAITING_APPROVAL hop did not auto-advance: SPEED auto-approval fires on submit_plan only, and submit_plan is exactly what must not be called here because it would replace a step array holding five COMPLETED steps and step 6's amend-2. The bounded overlay fix is done (step 7 amend-2), dependsOn is intact, and the row needs a worker seat rather than an architect.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "dependsOn": [
@@ -243,7 +250,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-09T15:00:40.393Z",
-  "updatedAt": "2026-09-10T09:58:02.316Z",
+  "updatedAt": "2026-09-10T10:21:06.168Z",
   "metrics": {
     "firstClaimAt": "2026-09-09T17:08:24.544Z",
     "plannedStepCount": 7,
@@ -282,7 +289,7 @@
       "apps/daemon/src/http/affordance-planning-offers.ts"
     ]
   },
-  "planApprovedAt": "2026-09-09T19:36:16.439Z",
+  "planApprovedAt": "2026-09-10T10:21:06.168Z",
   "workStartedAt": "2026-09-09T19:36:41.671Z",
   "blockedReason": null,
   "blockedResourceId": null,

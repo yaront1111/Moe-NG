@@ -14,6 +14,9 @@ import {
   LANDING_RECEIPT_COMMAND_KIND, decodeLandingReceiptBytes, landingAggregateId,
 } from "../repository/landing-receipt-contracts.js";
 import type { LandingReceiptV1 } from "../repository/landing-receipt-contracts.js";
+import {
+  REPOSITORY_LANDING_INTENT_KIND, decodeRepositoryLandingIntent, landingIntentKey,
+} from "../repository/repository-landing-intent.js";
 import { decisionsOf } from "../decision-ledger-memo.js";
 
 /**
@@ -273,6 +276,17 @@ function ledgerOf(acc: Accumulator, decisionCount: number): ReviewLedger {
 }
 
 export interface ReviewLedgers {
+  /**
+   * The `landingIntentKey` of every landing intent this project journaled, or NULL when any
+   * intent decision in the walk did not decode.
+   *
+   * NULL IS NOT AN EMPTY SET and the difference is the whole point. Empty means "walked the
+   * ledger, found no intent" — a reader may then credit a landing on its receipt code alone.
+   * Null means "an intent was journaled and its bytes are unreadable", and unverifiable evidence
+   * gains no authority: a reader holding null credits nothing. Collapsing the two would let lost
+   * work be credited as landed, which is the defect this set exists to close.
+   */
+  readonly landingIntents: ReadonlySet<string> | null;
   /** The lander's receipt per subject (a commit, or a refusal with its code), where it decodes. */
   readonly landings: ReadonlyMap<string, LandingReceiptV1>;
   readonly ledgers: ReadonlyMap<string, ReviewLedger>;
@@ -299,6 +313,12 @@ export function readReviewLedgers(
     landingSubjects.set(landingAggregateId(subjectRef), subjectRef);
   }
   const landings = new Map<string, LandingReceiptV1>();
+  // EVERY project intent, never narrowed by `landingSubjects` the way the receipt branch is: the
+  // key is the exact (nodeRef, receiptId) pair and the nodeRef is known only AFTER decoding, so a
+  // subject filter would decode and then discard — all of the cost, none of the saving, and it
+  // would silently drop an intent a later caller asks about.
+  const landingIntents = new Set<string>();
+  let intentUnreadable = false;
   let decisionCount = 0;
   for (const decision of decisionsOf(store, LEDGER_PAGE_SIZE)) {
     if (decision.key.projectId !== projectId) continue;
@@ -311,6 +331,14 @@ export function readReviewLedgers(
       const decoded = decodeLandingReceiptBytes(decision.resultBytes);
       if (decoded.ok && decoded.receipt.subjectRef === landed) landings.set(landed, decoded.receipt);
     }
+    if (decision.commandKind === REPOSITORY_LANDING_INTENT_KIND) {
+      // FLAG, NEVER RETURN. The walk feeds `landings`, `receipts` and the `decisionCount` every
+      // subject's ledger carries, so leaving it early would corrupt the whole batch. Null the set
+      // once the walk is done instead.
+      const intent = decodeRepositoryLandingIntent(decodeResult(decision.resultBytes));
+      if (intent === null) intentUnreadable = true;
+      else landingIntents.add(landingIntentKey(intent.nodeRef, intent.verifierReceiptId));
+    }
   }
   const ledgers = new Map<string, ReviewLedger>();
   const receipts = new Map<string, VerifierExecutionEvidence>();
@@ -318,7 +346,9 @@ export function readReviewLedgers(
     ledgers.set(subjectRef, ledgerOf(acc, decisionCount));
     if (acc.receipt !== undefined) receipts.set(subjectRef, acc.receipt);
   }
-  return Object.freeze({ landings, ledgers, receipts });
+  return Object.freeze({
+    landingIntents: intentUnreadable ? null : landingIntents, landings, ledgers, receipts,
+  });
 }
 
 export function readReviewLedger(
