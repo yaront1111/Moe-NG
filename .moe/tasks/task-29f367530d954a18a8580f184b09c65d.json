@@ -163,7 +163,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-11T09:24:35.694Z",
-  "updatedAt": "2026-09-11T10:26:44.107Z",
+  "updatedAt": "2026-09-11T10:27:26.478Z",
   "metrics": {
     "firstClaimAt": "2026-09-11T09:28:59.155Z",
     "plannedStepCount": 7,
@@ -236,11 +236,28 @@
       "treeId": "3cda875637e2ac954c78894a557da932ef1b662b",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "101a71c05a075d5d7087d33b5d4aaf119f6d9c1e",
+      "ref": "refs/heads/moe/work-2026-09-11",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-77a9823a@2026-09-11T10:17:19Z",
+      "paths": [
+        ".moe/tasks/task-29f367530d954a18a8580f184b09c65d.json"
+      ],
+      "recordedBy": "qa-77a9823a",
+      "recordedAt": "2026-09-11T10:27:26.478Z",
+      "treeId": "f649d6cabd6b0f05d996775900a52af8e28b309e",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "unattributedPaths": [
     "apps/control-room/src/v2/goals/use-goal-reads.test.ts",
     "apps/control-room/src/v2/goals/use-goal-reads.ts",
+    "apps/control-room/src/v2/ops/environment-variables-screen.test.tsx",
+    "apps/control-room/src/v2/ops/environment-variables-screen.tsx",
     "apps/daemon/src/backups/scheduled-backup.ts",
     "apps/daemon/src/backups/scheduled-backup-proof-ownership.test.ts",
     "apps/daemon/src/documents/document-source-binding.js",
@@ -274,13 +291,15 @@
     "packages/store/src/store-projection-seam.test.ts"
   ],
   "lastCommitOutcome": {
-    "outcome": "nothing",
-    "kind": "completion",
-    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
-    "sessionId": "worker-883dc9b4@2026-09-11T09:32:41Z",
-    "at": "2026-09-11T10:17:25.955Z"
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "qa-77a9823a@2026-09-11T10:17:19Z",
+    "at": "2026-09-11T10:27:26.478Z"
   },
   "completedAt": "2026-09-11T10:26:44.107Z",
   "reviewCompletedAt": "2026-09-11T10:26:44.107Z",
-  "reviewSummary": "APPROVED. Full detail: comment-81ada90d.\nBYTES: b42f2db8, which HEAD e42caf08 contains. The 3 delivered paths are byte-identical at HEAD, and their SHA256 equals the worker's proof. node-lander.ts moves checkLandingVerification above the zero-delivered return, a pure move. That check only reads, so the refusal stays effect-free. CHANGED and UNCONFIGURED are each produced only at node-lander-verification.ts:29/:33, so the code names the layer. Production always passes verifiedWorkspace and always writes workspaceBinding.\nDoD1: the runtime arm (real repo, store, verifier and lander) verifies keep.txt=after, restores it, lands, and asserts CHANGED on the logs and the durable receipt, NOT NOTHING_TO_COMMIT. The unit arm pins the code:detail pair.\nDoD2: the counted port throws VERIFIED_WORKSPACE_NEVER_CONSULTED.\nDoD3: runtime \"derives REFUSED_NO_EFFECT\" earns a real receipt and still asserts landedWithNoEffect===true; goal-landing-facts.test.ts:129 is green.\nDoD4, my own in-memory transform drill, zero disk mutation, config deleted: CONTROL 51/51 EXIT 0. The pre-fix-order mutant gave EXIT 1, 4 failed | 47 passed (51). The reds were the 3 new arms plus the runtime reproduction, and each failed for the right reason.\nDoD5 + mine: 28-file lander superset EXIT 0, 336 passed | 1 skipped. src/orchestrator + src/repository: Test Files 101 passed (101), which equals 101 tracked; 1272 passed | 16 skipped. Daemon typecheck EXIT 0. Arm counts 19→22 and 6→6, none removed.\nI did not re-run the full daemon leg: full-suite-gate is held by task-3ccb12a9. The worker's run was EXIT 0, Test Files 612 passed (612), hash-anchored.\nAny NO-COMPLETION-COMMIT warning is a race: the QA pre-flight checkpoint came 1.3s before the worker's landing, which answered NOTHING_TO_COMMIT.\nFollow-up task-cab96ebcd covers transient capture failures."
+  "reviewSummary": "APPROVED. Full detail: comment-81ada90d.\nBYTES: b42f2db8, which HEAD e42caf08 contains. The 3 delivered paths are byte-identical at HEAD, and their SHA256 equals the worker's proof. node-lander.ts moves checkLandingVerification above the zero-delivered return, a pure move. That check only reads, so the refusal stays effect-free. CHANGED and UNCONFIGURED are each produced only at node-lander-verification.ts:29/:33, so the code names the layer. Production always passes verifiedWorkspace and always writes workspaceBinding.\nDoD1: the runtime arm (real repo, store, verifier and lander) verifies keep.txt=after, restores it, lands, and asserts CHANGED on the logs and the durable receipt, NOT NOTHING_TO_COMMIT. The unit arm pins the code:detail pair.\nDoD2: the counted port throws VERIFIED_WORKSPACE_NEVER_CONSULTED.\nDoD3: runtime \"derives REFUSED_NO_EFFECT\" earns a real receipt and still asserts landedWithNoEffect===true; goal-landing-facts.test.ts:129 is green.\nDoD4, my own in-memory transform drill, zero disk mutation, config deleted: CONTROL 51/51 EXIT 0. The pre-fix-order mutant gave EXIT 1, 4 failed | 47 passed (51). The reds were the 3 new arms plus the runtime reproduction, and each failed for the right reason.\nDoD5 + mine: 28-file lander superset EXIT 0, 336 passed | 1 skipped. src/orchestrator + src/repository: Test Files 101 passed (101), which equals 101 tracked; 1272 passed | 16 skipped. Daemon typecheck EXIT 0. Arm counts 19→22 and 6→6, none removed.\nI did not re-run the full daemon leg: full-suite-gate is held by task-3ccb12a9. The worker's run was EXIT 0, Test Files 612 passed (612), hash-anchored.\nAny NO-COMPLETION-COMMIT warning is a race: the QA pre-flight checkpoint came 1.3s before the worker's landing, which answered NOTHING_TO_COMMIT.\nFollow-up task-cab96ebcd covers transient capture failures.",
+  "touchedFiles": [
+    "apps/daemon/qa-drill-29f367.config.ts"
+  ]
 }
