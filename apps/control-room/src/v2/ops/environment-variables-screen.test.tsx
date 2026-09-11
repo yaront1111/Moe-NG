@@ -7,10 +7,10 @@
  * also trip a credential scanner on every clone of this repo.
  */
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import type { EnvironmentVariablesOutcome } from "../../live/live-environment-variables.js";
+import type { EnvironmentVariablesOutcome, EnvironmentVariablesView } from "../../live/live-environment-variables.js";
 import { ENVIRONMENT_REFUSAL_ADVICE } from "./environment-refusal-words.js";
 import { EnvironmentVariablesScreen } from "./environment-variables-screen.js";
 import type { EnvironmentWriteOutcome } from "./environment-variables-port.js";
@@ -25,7 +25,7 @@ const FINGERPRINT_B = "9f8e7d6c5b4a".padEnd(64, "0");
 
 const table = (
   variables: readonly { name: string; fingerprintSha256: string }[],
-): EnvironmentVariablesOutcome => ({
+): EnvironmentVariablesView => ({
   environment: "preview",
   status: "ENVIRONMENT_VARIABLES",
   variables: variables.map((entry) => ({
@@ -271,6 +271,15 @@ describe("NO VALUE IS EVER RENDERED OR RETAINED", () => {
     expect(domText(container)).toContain(SENTINEL);
   });
 
+  it("finds a planted nested child prop even when the DOM never renders it", () => {
+    function PropOnlyChild(_props: { readonly nested: { readonly value: string } }) {
+      return <span>Nothing sensitive rendered</span>;
+    }
+    const { container } = render(<PropOnlyChild nested={{ value: SENTINEL }} />);
+    expect(domText(container)).not.toContain(SENTINEL);
+    expect(fiberProps(container)).toContain(SENTINEL);
+  });
+
   it("(a) does not carry the sentinel anywhere after a SUCCESSFUL submit", async () => {
     const { port } = recordingPort({ commandId: "cmd-ok", ok: true });
     const { container } = renderScreen(table([]), port);
@@ -315,7 +324,7 @@ describe("NO VALUE IS EVER RENDERED OR RETAINED", () => {
       .toContain("ENV_VALUE_TOO_LARGE @ VALUE");
     expect(domText(container)).not.toContain(SENTINEL);
     expect(fiberProps(container)).not.toContain(SENTINEL);
-    // The dialog that owned the value is GONE, which is what drops it.
+    // The cleared dialog is gone; retrying must never restore the previous value.
     expect(screen.queryByTestId("cr.env-vars.dialog")).toBeNull();
     // Reopening the dialog to retry gives an EMPTY field, never the previous attempt.
     fireEvent.click(screen.getByTestId("cr.env-vars.set.DATABASE_URL"));
@@ -362,12 +371,103 @@ describe("NO VALUE IS EVER RENDERED OR RETAINED", () => {
     const { container } = renderScreen(table([]), port);
     fireEvent.click(screen.getByTestId("cr.env-vars.set.DATABASE_URL"));
     fireEvent.change(screen.getByTestId("cr.env-vars.value"), { target: { value: SENTINEL } });
-    // CONTROL: while the dialog is OPEN the field legitimately holds what is being typed, so the
-    // walker MUST find it here. That is what proves the walker reaches props at all.
+    // The field owns the typed bytes. The walker also reaches live DOM refs, so the separate
+    // planted-child control proves sensitivity to prop leaks without mistaking this for one.
+    expect((screen.getByTestId("cr.env-vars.value") as HTMLInputElement).value).toBe(SENTINEL);
     expect(fiberProps(container)).toContain(SENTINEL);
     fireEvent.submit(screen.getByTestId("cr.env-vars.dialog"));
     await waitFor(() => { expect(screen.queryByTestId("cr.env-vars.dialog")).toBeNull(); });
     expect(fiberProps(container)).not.toContain(SENTINEL);
+  });
+
+  it("clears the input before dispatch while delivering the original bytes exactly once", async () => {
+    const typed = `  ${SENTINEL}  `;
+    const calls: Recorded[] = [];
+    const atDispatch: string[] = [];
+    let input!: HTMLInputElement;
+    let release!: (answer: EnvironmentWriteOutcome) => void;
+    const pending = new Promise<EnvironmentWriteOutcome>((resolve) => { release = resolve; });
+    const port = {
+      set(environment: string, name: string, value: string): Promise<EnvironmentWriteOutcome> {
+        atDispatch.push(input.value);
+        calls.push({ environment, name, value });
+        return pending;
+      },
+      unset: async (): Promise<EnvironmentWriteOutcome> => ({ commandId: "unused", ok: true }),
+    };
+    const { container } = renderScreen(table([]), port);
+    fireEvent.click(screen.getByTestId("cr.env-vars.set.DATABASE_URL"));
+    input = screen.getByTestId("cr.env-vars.value") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: typed } });
+    fireEvent.submit(screen.getByTestId("cr.env-vars.dialog"));
+    expect(atDispatch).toEqual([""]);
+    expect(calls).toEqual([{ environment: "preview", name: "DATABASE_URL", value: typed }]);
+    expect(input.value).toBe("");
+    expect(fiberProps(container)).not.toContain(SENTINEL);
+    fireEvent.submit(screen.getByTestId("cr.env-vars.dialog"));
+    expect(calls).toEqual([{ environment: "preview", name: "DATABASE_URL", value: typed }]);
+    await act(async () => { release({ commandId: "stored", ok: true }); });
+    expect(input.isConnected).toBe(false);
+    expect(input.value).toBe("");
+    expect(fiberProps(container)).not.toContain(SENTINEL);
+  });
+
+  it.each(["cancel", "unmount"] as const)("clears a saved detached input on %s", (ending) => {
+    const { calls, port } = recordingPort({ commandId: "unused", ok: true });
+    const { container, unmount } = renderScreen(table([]), port);
+    fireEvent.click(screen.getByTestId("cr.env-vars.set.DATABASE_URL"));
+    const input = screen.getByTestId("cr.env-vars.value") as HTMLInputElement;
+    fireEvent.change(input, { target: { value: SENTINEL } });
+    expect(input.value).toBe(SENTINEL);
+    if (ending === "cancel") fireEvent.click(screen.getByTestId("cr.env-vars.cancel"));
+    else unmount();
+    expect(input.isConnected).toBe(false);
+    expect(input.value).toBe("");
+    expect(fiberProps(container)).not.toContain(SENTINEL);
+    expect(calls).toEqual([]);
+  });
+
+  it.each(["variable", "environment"] as const)("clears the old input when the %s changes", async (scope) => {
+    const { calls, port } = recordingPort({ commandId: "stored", ok: true });
+    const { container, rerender } = renderScreen(table([]), port);
+    fireEvent.click(screen.getByTestId("cr.env-vars.set.DATABASE_URL"));
+    const previousInput = screen.getByTestId("cr.env-vars.value") as HTMLInputElement;
+    fireEvent.change(previousInput, { target: { value: SENTINEL } });
+    if (scope === "variable") fireEvent.click(screen.getByTestId("cr.env-vars.set.SESSION_KEY"));
+    else rerender(
+      <EnvironmentVariablesScreen
+        environment="production" outcome={{ ...table([]), environment: "production" }}
+        port={port} requiredNames={[...REQUIRED]}
+      />,
+    );
+    const input = screen.getByTestId("cr.env-vars.value") as HTMLInputElement;
+    expect(input).not.toBe(previousInput);
+    expect(previousInput.isConnected).toBe(false);
+    expect(previousInput.value).toBe("");
+    expect(input.value).toBe("");
+    expect(fiberProps(container)).not.toContain(SENTINEL);
+    expect(calls).toEqual([]);
+    fireEvent.change(input, { target: { value: "new-target-value" } });
+    fireEvent.submit(screen.getByTestId("cr.env-vars.dialog"));
+    await waitFor(() => { expect(screen.getByTestId("cr.env-vars.write-ok")).not.toBeNull(); });
+    expect(calls).toEqual([{
+      environment: scope === "environment" ? "production" : "preview",
+      name: scope === "variable" ? "SESSION_KEY" : "DATABASE_URL",
+      value: "new-target-value",
+    }]);
+  });
+
+  it("reports a synchronous port throw as undelivered without retaining the input", async () => {
+    const port = {
+      set(): never { throw new Error("dispatch unavailable"); },
+      unset(): never { throw new Error("dispatch unavailable"); },
+    };
+    const { container } = renderScreen(table([]), port);
+    await submitSentinel("DATABASE_URL");
+    expect(screen.getByTestId("cr.env-vars.write-refusal").textContent)
+      .toContain("ENVIRONMENT_WRITE_UNDELIVERED @ CONTROL_ROOM_ENVIRONMENT_WRITE");
+    expect(fiberProps(container)).not.toContain(SENTINEL);
+    expect(screen.queryByTestId("cr.env-vars.dialog")).toBeNull();
   });
 
   it("keeps no sentinel in browser-local storage, on any path", async () => {
@@ -388,6 +488,24 @@ describe("NO VALUE IS EVER RENDERED OR RETAINED", () => {
     expect(field.getAttribute("type")).toBe("password");
     expect(field.getAttribute("autocomplete")).toBe("off");
     expect(field.getAttribute("spellcheck")).toBe("false");
+  });
+
+  it("associates each environment dialog label with its own password input", () => {
+    const { port } = recordingPort({ commandId: "unused", ok: true });
+    const { container } = render(
+      <>
+        <EnvironmentVariablesScreen environment="preview" outcome={table([])} port={port} requiredNames={[...REQUIRED]} />
+        <EnvironmentVariablesScreen environment="production" outcome={table([])} port={port} requiredNames={[...REQUIRED]} />
+      </>,
+    );
+    const buttons = container.querySelectorAll('[data-testid="cr.env-vars.set.DATABASE_URL"]');
+    expect(buttons).toHaveLength(2);
+    for (const button of buttons) fireEvent.click(button);
+    const labels = [...container.querySelectorAll("label")];
+    const inputs = [...container.querySelectorAll("input")];
+    expect(labels).toHaveLength(2);
+    expect(inputs).toHaveLength(2);
+    for (let index = 0; index < labels.length; index += 1) expect(labels[index]?.control).toBe(inputs[index]);
   });
 });
 
