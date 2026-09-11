@@ -1,0 +1,54 @@
+{
+  "id": "task-3ccb12a92f69432bb6996a3a4348e573",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "bug: preview and release disagree on which installed policy is effective, so a newer policy without opt-ins cannot disable automatic approval",
+  "description": "Found by an external review and re-measured by architect-bb193f43 at main 0c215e82 on 2026-09-11.\n\nTHE REPRODUCTION: with real SQLite and production handlers, installing a NEWER policy that declares NO auto-approval opt-ins still allowed preview approval to proceed under an OLDER opted-in policy. An operator who installs a policy to turn automatic approval OFF does not turn it off.\n\nMEASURED, in `apps/daemon/src/preview/preview-auto-composition.ts`, `evaluationSliceOf`:\n\n    const installed = installedSlices(stateOf(readDurableLedger(store, projectId), policyAggregateId(projectId)));\n    const refs = Object.keys(installed).filter((ref) => {\n      const slice = installed[ref];\n      return slice !== undefined && sliceKindOf(ref, slice) === \"EVALUATION\" && declaresPreviewOptIn(slice);\n    }).sort();\n    const ref = refs.length === 1 ? refs[0] : undefined;\n\nThis filters the ENTIRE historical installed set down to EVALUATION slices that declare a preview opt-in, then requires exactly one survivor. Installing a newer, opt-in-free policy does not remove the older opted-in slice from that set, so exactly one still survives and it still governs. Automatic RELEASE, by contrast, selects the NEWEST evaluation slice. Two gates, two different rules for the same question.\n\nNote the function's own header already argues that requiring a single declaring slice is the fail-closed reading, because two declaring slices would make the winner depend on key order. That reasoning is sound for AMBIGUITY and does not address SUPERSESSION. Read the whole header before changing it; the fix is not simply to take the newest.\n\nTHE DECISION THIS ROW OWES. One explicit rule for which policy is effective, applied by BOTH gates, that also answers how an operator disables automatic approval. That is a product decision, not only a code change - if the plan cannot settle it from the existing contracts, report blocked and route it rather than guessing.\n\nVERIFY BEFORE PLANNING: read `preview-auto-composition.ts` in full and find the release-side selector; do not plan against the excerpt above.",
+  "definitionOfDone": [
+    "The effective-policy rule is stated once, in one named exported function or constant, and BOTH the preview gate and the automatic release gate call it. Prove the single seam with a grep showing no second selector remains.",
+    "A test installs an older opted-in EVALUATION policy, then installs a newer one declaring no opt-ins, and asserts automatic preview approval is REFUSED with its stable code and layer. This is the reviewer's reproduction and it must go from red to green.",
+    "A test asserts preview and release select the SAME slice ref for the same store state, across at least the supersession case and the genuinely ambiguous two-declaring-slices case. Assert the ref, not merely that both allowed or both refused.",
+    "The ambiguity behaviour the current header defends is preserved: two declaring slices still refuse fail-closed, with the same code as today. Name the existing arm that proves it, or add one.",
+    "Non-vacuity: revert the selector to the historical-filter form and confirm the supersession arm goes red. Quote the red.",
+    "`pnpm --filter @moe/daemon test` and `pnpm --filter @moe/control-room test` both EXIT 0 with their `Test Files N passed (N)` count lines quoted."
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "BLOCKED",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "priority": "HIGH",
+  "order": 1011.4,
+  "comments": [
+    {
+      "id": "comment-494c57b8f55941358b8d7dbbe45e4ddf",
+      "author": "architect-e29e1d0e",
+      "content": "Planning measurement at production-at-claim HEAD 0c215e82b01a866cfaafaf97c0ec20d7f97f6bcd (no source edits). Read preview-auto-composition.ts and release-auto-approval.ts in full: preview evaluationSliceOf filters all historical EVALUATION slices by preview opt-in and requires one; release newestEvaluationSlice takes last installed EVALUATION regardless of opt-in. bootstrap-policy-services.ts:installPolicy appends immutable content-addressed EVALUATION slices; no supersedes/active selector field. Existing preview-auto-decision.test.ts arm 'declines when TWO installed slices both declare the preview gate\\'s opt-in' asserts PREVIEW_AUTO_POLICY_UNRESOLVED @ PREVIEW_AUTO_DECISION. release-auto-decide.test.ts has newest-opt-in-free reset arm asserting RELEASE_AUTO_NOT_ALLOWED @ CORE_REDUCER with AUTO_APPROVAL_NOT_OPTED_IN. Asked human in REPL whether an opt-in-free install should reset both gates and clear older declarations, with multiple subsequent declaring slices still ambiguous. This is a proposal awaiting confirmation, NOT an adopted product rule. moe-planning and explore-before-assume SKILL.md loaded via filesystem; this session exposes no Skill/ToolSearch tool and no installed superpowers:brainstorming skill was found. Serena prior knowledge on tier ceiling and layered refusal non-vacuity read. Foreign runtime/config dirt and untracked Moe-NG_Deep_Review_2026-09-05.md preserved.",
+      "timestamp": "2026-09-11T09:26:52.345Z"
+    },
+    {
+      "id": "comment-4c3bf2a0e1b04cba9e013863e883b9e6",
+      "author": "governor-bd76ac8c",
+      "content": "HUMAN RULING — the product decision this row blocked on is now ANSWERED. Authority, not a proposal.\n\nThe rule: an opt-in-free EVALUATION install is a RESET BOUNDARY. It clears older declarations for BOTH gates, so installing a policy that declares no opt-ins works as a kill switch on preview and release alike. After that reset boundary, if TWO OR MORE slices declare, both gates still refuse FAIL-CLOSED with today's existing code and layer. Ambiguity is preserved, not collapsed.\n\nThat is exactly the proposal architect-e29e1d0e recorded in comment-494c57b8 at 09:26:52 and correctly refused to implement without confirmation. It is now confirmed. Treat it as the adopted product rule and plan to it.\n\nI put three options to the human and this was chosen deliberately over the other two, so do not re-litigate either:\n- Newest-install-always-wins was REJECTED. It is simpler and matches release's current newestEvaluationSlice behaviour, but it makes ambiguity unreachable and therefore contradicts DoD 4, which requires the two-declaring fail-closed refusal be preserved with the same code as today. Choosing it would have meant striking DoD 4.\n- Adding an explicit active-policy or supersedes field to the durable slice was REJECTED for this row. It is the cleaner model and may be worth its own row later, but it changes the slice schema and bootstrap-policy-services installPolicy, which is wider than this bug and conflicts with DoD 1's requirement that the rule live in one exported function both gates call rather than in a new durable field.\n\nSo the shape is unchanged from the row as written: one named exported selector implementing reset-boundary-then-ambiguity, called by both preview-auto-composition and release-auto-approval, with the grep in DoD 1 proving no second selector survives. The existing arms you already located are the anchors — preview-auto-decision.test.ts's 'declines when TWO installed slices both declare the preview gate's opt-in' asserting PREVIEW_AUTO_POLICY_UNRESOLVED @ PREVIEW_AUTO_DECISION for DoD 4, and release-auto-decide.test.ts's newest-opt-in-free reset arm asserting RELEASE_AUTO_NOT_ALLOWED @ CORE_REDUCER with AUTO_APPROVAL_NOT_OPTED_IN.\n\nOne thing the ruling does NOT settle, because nobody asked and you should not assume it: what happens when a reset boundary is followed by exactly ONE declaring slice, and then ANOTHER reset, and then one more declaring slice. The rule says the most recent reset boundary is the one that counts, so only declarations after the LAST reset compete. If your reading of the code makes that reading unsound, say so on this row before planning rather than picking an interpretation.\n\nRecorded by governor-bd76ac8c. The row had already returned to PLANNING under your claim by the time the answer landed, so I made no status change and took no other action on it.",
+      "timestamp": "2026-09-11T09:32:32.757Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-11T09:25:02.794Z",
+  "updatedAt": "2026-09-11T09:32:39.062Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-11T09:25:20.906Z"
+  },
+  "contextFetchedBy": [
+    "architect-e29e1d0e"
+  ],
+  "blockedReason": "PRODUCT_DECISION_REQUIRED unchanged: same task was re-advertised as PLANNING after a successful block and no-work global claim. Fresh context still contains only comment-494c57b8f55941358b8d7dbbe45e4ddf (unconfirmed reset proposal), no product decision. User requested next-task, not approval of supersession semantics. Preserve this block until human confirms how no-opt-in reset clears competing policies while two declaring policies still refuse. No plan or source edits. Repeated queue re-offer has been reported to governors; do not interpret status transitions as policy authority.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "PLANNING",
+  "blockedAt": "2026-09-11T09:32:39.062Z",
+  "blockedOnTaskIds": null
+}
