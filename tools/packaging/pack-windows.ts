@@ -51,6 +51,8 @@ export interface PackOptions {
   readonly sourceSha: string;
   /** Exact tracked Git object tree selected by the packaging-source boundary. */
   readonly sourceRoot: string;
+  /** Installs the verified native broker into the private artifact before inventory. */
+  readonly stageBroker?: (artifactRoot: string) => void;
   /** Frozen identities resolved before materialization; ambient PATH is never tool authority. */
   readonly toolchain: WindowsPackToolchain;
 }
@@ -196,13 +198,20 @@ function removePackTemporaryOwner(owner: PackTemporaryOwner): void {
   }
 }
 
-export function packWindows(options: PackOptions): number {
-  const { log, outputRoot, sourceRoot } = options;
-  const zip = invalidateWindowsArtifact(outputRoot);
+/** Shares the same exclusive, marker-validated lifetime with native build scratch. */
+export function withPackTemporaryOwner<T>(run: (root: string) => T): T {
   const owner = createPackTemporaryOwner();
-  try {
-    const staging = join(owner.root, "staging");
-    const deployDir = join(owner.root, "deploy");
+  try { return run(owner.root); }
+  finally { removePackTemporaryOwner(owner); }
+}
+
+export function packWindows(options: PackOptions): number {
+  const { log, outputRoot, sourceRoot, stageBroker } = options;
+  if (stageBroker === undefined) throw new Error(`${PACK_STEP_FAILED}: broker staging unavailable`);
+  const zip = invalidateWindowsArtifact(outputRoot);
+  return withPackTemporaryOwner((temporaryRoot) => {
+    const staging = join(temporaryRoot, "staging");
+    const deployDir = join(temporaryRoot, "deploy");
     mkdirSync(staging, { recursive: false });
 
     log("pack: installing the selected commit's locked build dependencies");
@@ -222,6 +231,7 @@ export function packWindows(options: PackOptions): number {
       process.env, options.toolchain.powershell);
     const staged = reshapeDeploy(deployDir, staging);
     rmSync(deployDir, { force: true, recursive: true });
+    stageBroker(staging);
 
     const closureCount = writeArtifactFiles(staging, sourceRoot, staged, options);
     const pruned = pruneTestArtifacts(staging);
@@ -251,14 +261,12 @@ export function packWindows(options: PackOptions): number {
     log("pack: compressing and reopening the exact admitted snapshot");
     publishWindowsArchive({
       log, outputRoot, powershell: options.toolchain.powershell,
-      snapshot, staging, temporaryRoot: owner.root,
+      snapshot, staging, temporaryRoot,
     });
     const bytes = statSync(zip).size;
     log(`pack: ${zip}`);
     log(`pack: ${String(Math.round((bytes / 1024 / 1024) * 100) / 100)} MB, `
       + `${String(verdict.fileCount)} files, ${String(closureCount)} third-party packages`);
     return 0;
-  } finally {
-    removePackTemporaryOwner(owner);
-  }
+  });
 }
