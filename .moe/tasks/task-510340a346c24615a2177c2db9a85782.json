@@ -225,7 +225,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-11T09:25:23.210Z",
-  "updatedAt": "2026-09-11T22:45:20.185Z",
+  "updatedAt": "2026-09-11T22:46:14.111Z",
   "metrics": {
     "firstClaimAt": "2026-09-11T09:27:30.069Z",
     "plannedStepCount": 7,
@@ -309,7 +309,8 @@
     ".moe/tasks/task-aa6f9af4735449a5b5e098f52f78fc54.json",
     ".moe/tasks/task-b8af5916c0c4476ca9f545cb2690cda0.json",
     ".moe/tasks/task-c055f6af6e63412c905d02a3ac657a57.json",
-    ".moe/tasks/task-c7a66b703c73466eba616a7dc6fbef23.json"
+    ".moe/tasks/task-c7a66b703c73466eba616a7dc6fbef23.json",
+    ".moe/tasks/task-2c827d67524c432989d338e3ede86716.json"
   ],
   "completionSummary": "THE ROW'S TITLE IS INACCURATE and the next reader must not be misled: the ordinary journey does not record a `plan.approve` risk fact under the wrong action — it records NO policy-risk record AT ALL. Measured at HEAD f6e97a6b over a completed journeyWorld: policy-risk aggregates `[]`, and BOTH readPolicyRisk(\"plan.approve\") and readPolicyRisk(\"preview.decide\") answer POLICY_RISK_RECORD_MISSING @ DAEMON_POLICY_RISK. On the title's framing the fix is a rename; on the truth a rename finds nothing either. The architect corrected this in comment-b55eef20; DoD item 4 is amended in comment-c6a61b17. Plan and grade against those.\n\nDIRECTION TAKEN: consumer-side. Automatic preview now resolves its tier-bearing fact from the goal's OWN replay-verified planning-run evaluation (new `preview/preview-risk-fact.ts` + `.js` bridge, 3rd consumer of `readRunPolicyEvaluation` after approval-record-facts.ts and release-auto-approval.ts). No second risk record is invented, so the two copies cannot disagree. The reader is WRAPPED, never widened; the two pins it lacks live in the new module: the producing action must be `plan.finalize` (RUN_POLICY_ACTION, imported) and the evaluation's EXACT SINGLE graphNodeRevisionRefs member must equal goal.binding.graphContentHash. `decision` is deliberately NOT pinned — the journey's row is REQUIRE_HUMAN_APPROVAL.\n\nper-ACTION OPERATOR CONTROL UNCHANGED: `preview.decide` is still the evaluated action, the opt-in key and the waiver key; the operator principal is untouched. Asserted, including that an operator opted in to plan.approve + release.decide but NOT preview.decide gets AUTO_APPROVAL_NOT_OPTED_IN @ CORE_REDUCER and specifically NOT RISK_TIER_UNCLASSIFIABLE.\n\nDoD 1: end-to-end arm drives the ordinary journey through production handlers only and censuses the STORE for policy-risk aggregates (requires `[]`) before and after, so it cannot be \"fixed\" by seeding.\nDoD 2: 13 arms. Every negative pins BOTH tier null AND truthClass UNKNOWN plus the resolv",
   "commits": [
@@ -355,16 +356,30 @@
       "treeId": "f61e35c43eed9c073248ce03186801beb563a7d1",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "05c7258a6059f3ff0f5d477d71d2ab4ccdb288db",
+      "ref": "refs/heads/moe/work-2026-09-11",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-a8573597@2026-09-11T22:33:55Z",
+      "paths": [
+        ".moe/tasks/task-2c827d67524c432989d338e3ede86716.json",
+        ".moe/tasks/task-510340a346c24615a2177c2db9a85782.json"
+      ],
+      "recordedBy": "qa-a8573597",
+      "recordedAt": "2026-09-11T22:46:14.111Z",
+      "treeId": "5da9c3ad29df39b561982365332f1f82be013cae",
+      "status": "DONE",
+      "pushed": true
     }
   ],
-  "unattributedPaths": [
-    "apps/daemon/src/deployment/deploy-schema-guard.js"
-  ],
+  "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-da0aeedb@2026-09-11T21:26:10Z",
-    "at": "2026-09-11T22:35:10.734Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-a8573597@2026-09-11T22:33:55Z",
+    "at": "2026-09-11T22:46:14.111Z"
   },
   "touchedFiles": [
     "apps/daemon/src/preview/preview-risk-fact.ts",
