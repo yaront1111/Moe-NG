@@ -14,9 +14,9 @@
  * be asked to do reliably: it works out WHICH node's mission it just received (the wrapper
  * staffs every ready item through one command, so a seat that ignored stdin would deliver a
  * node on behalf of a mission that never claimed it), it marks the window it was alive in so
- * the concurrency clause has a falsifiable witness, and it refuses when the provider wrote
- * nothing. It contains no product code and no assertion: `SEAT_PROVIDER_WROTE_NOTHING` is the
- * only outcome it can manufacture, and that outcome is a FAILURE.
+ * the concurrency clause has a falsifiable witness, and it refuses if the provider fails or
+ * writes nothing. It contains no product code; its completion record carries process status
+ * and byte counts without provider output or executable paths.
  *
  * THE PROVIDER'S BRIEF IS THE PRODUCT'S OWN. The mission text comes from production
  * (`agent-mission-text.ts`'s `codeMission`), and the acceptance checks the provider is pointed
@@ -145,6 +145,8 @@ export function liveProviderSeat(options: {
   readonly briefs: readonly LiveSeatBrief[];
   readonly dir: string;
   readonly executable: string;
+  /** Injected subprocess tests can never produce the real-provider acceptance witness. */
+  readonly providerMode: "REAL_PROVIDER" | "INJECTED_TEST";
   readonly refs: Readonly<Record<string, string>>;
   readonly rendezvous: readonly string[];
   readonly workspace: string;
@@ -162,6 +164,7 @@ export function liveProviderSeat(options: {
     budgetMs: PROVIDER_SEAT_BUDGET_MS,
     claims,
     executable: options.executable,
+    providerMode: options.providerMode,
     marks: options.dir.replaceAll("\\", "/"),
     workspace: options.workspace.replaceAll("\\", "/"),
   }), "utf8");
@@ -191,6 +194,7 @@ function launcherSource(config: {
   readonly budgetMs: number;
   readonly claims: readonly unknown[];
   readonly executable: string;
+  readonly providerMode: "REAL_PROVIDER" | "INJECTED_TEST";
   readonly marks: string;
   readonly workspace: string;
 }): string {
@@ -202,6 +206,7 @@ function launcherSource(config: {
     `const MARKS = ${JSON.stringify(config.marks)};`,
     `const WORKSPACE = ${JSON.stringify(config.workspace)};`,
     `const AGENT = ${JSON.stringify(config.executable)};`,
+    `const PROVIDER_MODE = ${JSON.stringify(config.providerMode)};`,
     `const ARGV = ${JSON.stringify(SEAT_ARGV)};`,
     `const BUDGET_MS = ${String(config.budgetMs)};`,
     "const chunks = [];",
@@ -213,34 +218,31 @@ function launcherSource(config: {
     "  if (mine === undefined) process.exit(0);",
     "  const startedAt = Date.now();",
     "  const mark = function (suffix, body) {",
-    '    fs.writeFileSync(path.join(MARKS, "seat-" + mine.brief.nodeKey + suffix), JSON.stringify(body));',
+    '    const file = path.join(MARKS, "seat-" + mine.brief.nodeKey + suffix);',
+    '    const temporary = file + "." + String(process.pid) + ".tmp";',
+    "    fs.writeFileSync(temporary, JSON.stringify(body));",
+    "    fs.renameSync(temporary, file);",
     "  };",
-    "  mark(\".start\", { agent: AGENT, startedAt: startedAt });",
+    "  mark(\".start\", { startedAt: startedAt });",
     "  const peerSeen = mine.peers.every(function (key) {",
     '    return fs.existsSync(path.join(MARKS, "seat-" + key + ".start"));',
     "  });",
-    "  const before = fs.existsSync(mine.target);",
-    "  const run = spawnSync(AGENT, ARGV, {",
+    "  let run;",
+    "  try { run = spawnSync(AGENT, ARGV, {",
     "    cwd: WORKSPACE, encoding: \"utf8\", input: mission + mine.instruction,",
     "    maxBuffer: 32 * 1024 * 1024, shell: false, timeout: BUDGET_MS, windowsHide: true,",
-    "  });",
-    '  const transcript = String(run.stdout || "") + String(run.stderr || "");',
+    "  }); } catch { run = { pid: 0, status: null, error: true }; }",
     "  const wrote = fs.existsSync(mine.target)",
     '    && fs.readFileSync(mine.target, "utf8").trim().length > 0;',
-    "  if (!wrote) {",
-    '    process.stderr.write("SEAT_PROVIDER_WROTE_NOTHING node=" + mine.brief.nodeKey',
-    '      + " agent=" + AGENT + " status=" + String(run.status) + " existedBefore=" + String(before)',
-    '      + " tail=" + JSON.stringify(transcript.slice(-1500)) + "\\n");',
-    '    mark(".end", { agent: AGENT, endedAt: Date.now(), ok: false, peerSeen: peerSeen,',
-    "      providerStatus: run.status === undefined ? null : run.status, startedAt: startedAt,",
-    "      transcriptTail: transcript.slice(-1500) });",
-    "    process.exit(1);",
-    "  }",
-    '  mark(".end", { agent: AGENT, endedAt: Date.now(),',
-    '    moduleBytes: fs.statSync(mine.target).size, ok: true, peerSeen: peerSeen,',
-    "    providerStatus: run.status === undefined ? null : run.status, startedAt: startedAt,",
-    "    transcriptTail: transcript.slice(-1500) });",
-    "  process.exit(0);",
+    "  const executed = Number.isInteger(run.pid) && run.pid > 0;",
+    "  const completed = executed && run.error === undefined && run.status === 0;",
+    "  const ok = completed && wrote;",
+    '  mark(".end", { endedAt: Date.now(), moduleBytes: wrote ? fs.statSync(mine.target).size : 0,',
+    "    ok: ok, peerSeen: peerSeen, providerStatus: Number.isInteger(run.status) ? run.status : null,",
+    '    realProvider: PROVIDER_MODE === "REAL_PROVIDER" && executed, startedAt: startedAt });',
+    '  if (!ok) process.stderr.write((completed ? "SEAT_PROVIDER_WROTE_NOTHING" : "SEAT_PROVIDER_FAILED")',
+    '    + " node=" + mine.brief.nodeKey + " status=" + String(run.status) + "\\n");',
+    "  process.exit(ok ? 0 : 1);",
     "});",
     "",
   ].join("\n");
