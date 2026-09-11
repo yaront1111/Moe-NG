@@ -125,8 +125,8 @@
       "completedAt": "2026-09-11T10:14:33.915Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-77a9823a",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -153,16 +153,24 @@
       "author": "worker-883dc9b4",
       "content": "FOR QA — complete_task's stats.filesModified lists apps/daemon/src/orchestrator/node-lander-verification.ts. That entry is an attribution artefact, NOT an edit. I completed step 1, which was measure-only, with an empty modifiedFiles, so the wrapper fell back to step 1's PLANNED affectedFiles, which name that file. Measured after completion: `git status --porcelain` on it is empty, and `git diff --stat 0c215e82` on it is empty. It is byte-identical to 0c215e82.\n\nThis row delivered exactly THREE paths:\n- apps/daemon/src/orchestrator/node-lander.ts\n- apps/daemon/src/orchestrator/node-lander.test.ts\n- apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts\n\nThe third was added to the roster by architect-1c0fef54's amend-1 on step 4.",
       "timestamp": "2026-09-11T10:17:11.069Z"
+    },
+    {
+      "id": "comment-81ada90ddb6e42e78a10f905e6a39701",
+      "author": "qa-77a9823a",
+      "content": "QA EVIDENCE (qa-77a9823a). The detail behind reviewSummary.\n\nBYTES REVIEWED. Commit b42f2db8 is a checkpoint, and HEAD e42caf08 descends from it. `git diff b42f2db8 HEAD` on the 3 delivered paths is empty and the worktree is clean for them. Live SHA256 of node-lander.ts is 9fa6cfad…dcda0, of node-lander.test.ts 45780053…43, and of repository-delivery-runtime.test.ts 825197a0…33. All three equal the worker's freshness proof and b42f2db8's blob. The commit is on origin/moe/work-2026-09-11. node-lander-verification.ts is untouched; it appears in filesModified only as an attribution artefact (comment-5f46f90a).\n\nPRODUCTION. The change is a pure move: checkLandingVerification now sits above the zero-delivered return. That check only reads, through readVerifierReceipt and port.capture, and writes no journal, so the NOTHING_TO_COMMIT refusal stays effect-free. `git grep` over non-test apps/packages shows node-lander-verification.ts:29/:33 is the ONLY producer of LANDING_VERIFIED_WORKSPACE_CHANGED and _UNCONFIGURED, so each code identifies its layer. Production passes verifiedWorkspace unconditionally (repository-delivery-runtime.ts:72,79-80, with no readVerifiedBinding), and the production verifier always writes workspaceBinding (node-verifier.ts:202). So a genuine no-op still clears the check.\n\nDoD 1. The runtime arm \"keeps a refusal that already journaled an intent…\" stages the reproduction through production writers: a real temp repo and store, the real review.submit, and a real bound verification of keep.txt=after. The bytes are restored to \"before\", then it lands. It asserts CHANGED in the logs AND on the durable receipt, and NOT NOTHING_TO_COMMIT. The unit arm \"refuses a workspace restored…\" pins the exact code:detail pair.\nDoD 2. The \"consults the verified workspace before answering NOTHING_TO_COMMIT…\" arm uses a counted port whose assertConsulted THROWS VERIFIED_WORKSPACE_NEVER_CONSULTED.\nDoD 3. Runtime \"derives REFUSED_NO_EFFECT…\" now uses a REAL receipt and still asserts landedWithNoEffect===true through the real lander. goal-landing-facts.test.ts:129 is green. landedWithNoEffect is not in the diff.\n\nDRILL (DoD 4). This was an in-memory vitest transform with zero on-disk mutation. The config was apps/daemon/qa-drill-29f367.config.ts (enforce:pre; it throws if the anchor is absent), deleted after the run; `ls` answers No such file. Mutant A swaps the check block and the early return back into the exact pre-fix order. Files: node-lander, node-lander-journal, repository-delivery-runtime, goal-landing-facts.\n- CONTROL: EXIT 0, Tests 51 passed (51).\n- A: EXIT 1, Test Files 2 failed | 2 passed (4), Tests 4 failed | 47 passed (51). The reds are the 3 new arms plus the runtime reproduction arm. The worker's own drill only saw the 3 unit arms.\n- Red reasons: the no-op arm threw `Error: VERIFIED_WORKSPACE_NEVER_CONSULTED`. The CHANGED and UNCONFIGURED unit arms received `\"NOTHING_TO_COMMIT: no path in the workspace differs from the staffing baseline\"`. The runtime arm reported `expected '[lander] a: BASELINE_RECORDED (0 dirt…' to contain 'LANDING_VERIFIED_WORKSPACE_CHANGED'`.\n\nRUNS (mine, foreground):\n- A 28-file superset: every test that drives the lander or runtime, or names NOTHING_TO_COMMIT, landedWithNoEffect or the codes. EXIT 0, Test Files 28 passed (28), Tests 336 passed | 1 skipped.\n- The whole src/orchestrator and src/repository directories: EXIT 0, Test Files 101 passed (101), which equals 101 tracked test files with 0 untracked. Tests 1272 passed | 16 skipped.\n- `pnpm --filter @moe/daemon typecheck`: EXIT 0, 0 `error TS`.\n- Arithmetic: node-lander.test.ts went from 19 to 22 arms (3 added, none removed) and the runtime file stayed at 6.\n\nFULL LEG NOT RE-RUN BY ME. full-suite-gate has been held by task-3ccb12a9 (worker-ed22fae0) since 10:10:18Z for a multi-leg gate. The worker's run 3 was EXIT 0 with Test Files 612 passed (612), hash-anchored to the bytes above.\n\nLANDING RACE. My QA pre-flight checkpointed these bytes at 10:17:24.636Z, and the worker's completion landing answered MOE_COMMIT_NOTHING_TO_COMMIT at 10:17:25.955Z. Any NO-COMPLETION-COMMIT warning is that race, and nothing is left to land.\n\nNON-BLOCKING:\n(a) node-lander.ts is 277 lines, under the 400 cap. This row added 5 comment lines.\n(b) Transient capture failures now also durably refuse genuine no-ops. This is covered by task-cab96ebcd (PLANNING, dependsOn this row).\n(c) The journal-discriminator half is no longer exercised end-to-end, because the codes now differ. It stays pinned at goal-landing-facts.test.ts:144/:307.",
+      "timestamp": "2026-09-11T10:26:33.395Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-11T09:24:35.694Z",
-  "updatedAt": "2026-09-11T10:17:18.983Z",
+  "updatedAt": "2026-09-11T10:26:44.107Z",
   "metrics": {
     "firstClaimAt": "2026-09-11T09:28:59.155Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 4,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-11T10:26:44.107Z",
+    "wallClockMs": 3464952
   },
   "stepsCompleted": [
     "step-1",
@@ -204,7 +212,75 @@
     "apps/daemon/src/orchestrator/node-lander.ts",
     "apps/daemon/src/orchestrator/node-lander-verification.ts",
     "apps/daemon/src/orchestrator/node-lander.test.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts"
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts",
+    ".moe/tasks/task-29f367530d954a18a8580f184b09c65d.json",
+    ".moe/tasks/task-cab96ebcd3b6403cbbf412bdad839403.json"
   ],
-  "completionSummary": "LANDING-EVIDENCE fix, NOT proof of a release bypass. Criterion verification is a separate, untouched safeguard. In node-lander.ts, checkLandingVerification is hoisted ABOVE the zero-delivered NOTHING_TO_COMMIT return, a pure move (+10/-5). A workspace restored after verification now refuses LANDING_VERIFIED_WORKSPACE_CHANGED, not a credited no-effect answer. No new code or layer; the NOTHING_TO_COMMIT literal is unchanged.\n\nFLIPS (my step-1 prediction, adopted as amend-1; the plan's was wrong both ways): 0 in node-lander.test.ts, 2 in repository-delivery-runtime.test.ts. \"derives REFUSED_NO_EFFECT...\" used a stub receipt with no binding; it now earns a REAL receipt, keeps its subject and still asserts landedWithNoEffect===true. \"keeps a refusal that already journaled an intent...\" IS the review's reproduction; it now asserts CHANGED.\n\nADDED 3 arms: the reproduction (code+layer); a genuine no-op whose port throws VERIFIED_WORKSPACE_NEVER_CONSULTED (DoD 2); unconfigured (LANDING_VERIFIED_WORKSPACE_UNCONFIGURED, previously asserted nowhere).\n\nCREDIT INTACT (DoD 3): goal-landing-facts.test.ts \"is TRUE when the goal's only landing PROVABLY had nothing to commit\", at the production surface with no lander.\n\nDRILL (DoD 4): mutant = HEAD's node-lander.ts. 3 failed | 19 passed (22), exactly this row's 3 arms. Restore proven by SHA256 9fa6cfad...dcda0 in a separate call.\n\nGATE (DoD 5): run 3 EXIT 0, Test Files 612 passed (612). Runs 1-2 were red ONLY in preview/release files a peer edited mid-run; owned-path intersection empty. Owned bytes were last written 12:51, before run 3 collected at 13:04:49, hashes unchanged. Fresh scoped re-run at 10:15Z: 4 files, 51 tests, exit 0. Typecheck EXIT 0.\n\nFail-closed, not retroactive: unconfigured, legacy-receipt and HEAD-moved no-ops now refuse. Filed task-cab96ebcd3b6403cbbf412bdad839403 (transient capture failures never retried; pre-existing). Detail: comment-b0666f0f."
+  "completionSummary": "LANDING-EVIDENCE fix, NOT proof of a release bypass. Criterion verification is a separate, untouched safeguard. In node-lander.ts, checkLandingVerification is hoisted ABOVE the zero-delivered NOTHING_TO_COMMIT return, a pure move (+10/-5). A workspace restored after verification now refuses LANDING_VERIFIED_WORKSPACE_CHANGED, not a credited no-effect answer. No new code or layer; the NOTHING_TO_COMMIT literal is unchanged.\n\nFLIPS (my step-1 prediction, adopted as amend-1; the plan's was wrong both ways): 0 in node-lander.test.ts, 2 in repository-delivery-runtime.test.ts. \"derives REFUSED_NO_EFFECT...\" used a stub receipt with no binding; it now earns a REAL receipt, keeps its subject and still asserts landedWithNoEffect===true. \"keeps a refusal that already journaled an intent...\" IS the review's reproduction; it now asserts CHANGED.\n\nADDED 3 arms: the reproduction (code+layer); a genuine no-op whose port throws VERIFIED_WORKSPACE_NEVER_CONSULTED (DoD 2); unconfigured (LANDING_VERIFIED_WORKSPACE_UNCONFIGURED, previously asserted nowhere).\n\nCREDIT INTACT (DoD 3): goal-landing-facts.test.ts \"is TRUE when the goal's only landing PROVABLY had nothing to commit\", at the production surface with no lander.\n\nDRILL (DoD 4): mutant = HEAD's node-lander.ts. 3 failed | 19 passed (22), exactly this row's 3 arms. Restore proven by SHA256 9fa6cfad...dcda0 in a separate call.\n\nGATE (DoD 5): run 3 EXIT 0, Test Files 612 passed (612). Runs 1-2 were red ONLY in preview/release files a peer edited mid-run; owned-path intersection empty. Owned bytes were last written 12:51, before run 3 collected at 13:04:49, hashes unchanged. Fresh scoped re-run at 10:15Z: 4 files, 51 tests, exit 0. Typecheck EXIT 0.\n\nFail-closed, not retroactive: unconfigured, legacy-receipt and HEAD-moved no-ops now refuse. Filed task-cab96ebcd3b6403cbbf412bdad839403 (transient capture failures never retried; pre-existing). Detail: comment-b0666f0f.",
+  "commits": [
+    {
+      "sha": "b42f2db89ed1995fb4cf6df8a968f3565b882637",
+      "ref": "refs/heads/moe/work-2026-09-11",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-77a9823a@2026-09-11T10:17:19Z",
+      "paths": [
+        ".moe/tasks/task-29f367530d954a18a8580f184b09c65d.json",
+        ".moe/tasks/task-cab96ebcd3b6403cbbf412bdad839403.json",
+        "apps/daemon/src/orchestrator/node-lander.test.ts",
+        "apps/daemon/src/orchestrator/node-lander.ts",
+        "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts"
+      ],
+      "recordedBy": "qa-77a9823a",
+      "recordedAt": "2026-09-11T10:17:24.636Z",
+      "treeId": "3cda875637e2ac954c78894a557da932ef1b662b",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "unattributedPaths": [
+    "apps/control-room/src/v2/goals/use-goal-reads.test.ts",
+    "apps/control-room/src/v2/goals/use-goal-reads.ts",
+    "apps/daemon/src/backups/scheduled-backup.ts",
+    "apps/daemon/src/backups/scheduled-backup-proof-ownership.test.ts",
+    "apps/daemon/src/documents/document-source-binding.js",
+    "apps/daemon/src/documents/document-source-binding.ts",
+    "apps/daemon/src/documents/document-source-full-read.test.ts",
+    "apps/daemon/src/documents/document-source-full-read.ts",
+    "apps/daemon/src/documents/document-source-read.test.ts",
+    "apps/daemon/src/documents/document-source-read.ts",
+    "apps/daemon/src/http/http-listener.ts",
+    "apps/daemon/src/http/http-listener-failure-logging.test.ts",
+    "apps/daemon/src/mcp-http/mcp-http-node-bridge.test.ts",
+    "apps/daemon/src/mcp-http/mcp-http-node-bridge.ts",
+    "packages/mcp/src/http/http-adapter-lifecycle.js",
+    "packages/mcp/src/http/http-adapter-lifecycle.ts",
+    "packages/mcp/src/http/http-inflight-requests.js",
+    "packages/mcp/src/http/http-inflight-requests.ts",
+    "packages/mcp/src/http/http-server.ts",
+    "packages/mcp/src/http/http-server-sse-request-ids.test.ts",
+    "packages/mcp/src/http/http-server-terminal-close.test.ts",
+    "packages/mcp/src/http/http-session.ts",
+    "packages/mcp/src/mcp-runtime-entrypoint.test.ts",
+    "packages/store/src/backup-generation.ts",
+    "packages/store/src/backup-generation-request.ts",
+    "packages/store/src/backup-generation-source-protection.test.ts",
+    "packages/store/src/decision-ledger.ts",
+    "packages/store/src/event-ledger-transaction.ts",
+    "packages/store/src/outbox-relay/outbox-relay-contracts.ts",
+    "packages/store/src/outbox-relay/transactional-outbox-relay.test.ts",
+    "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
+    "packages/store/src/sqlite-event-store.ts",
+    "packages/store/src/store-projection-seam.test.ts"
+  ],
+  "lastCommitOutcome": {
+    "outcome": "nothing",
+    "kind": "completion",
+    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
+    "sessionId": "worker-883dc9b4@2026-09-11T09:32:41Z",
+    "at": "2026-09-11T10:17:25.955Z"
+  },
+  "completedAt": "2026-09-11T10:26:44.107Z",
+  "reviewCompletedAt": "2026-09-11T10:26:44.107Z",
+  "reviewSummary": "APPROVED. Full detail: comment-81ada90d.\nBYTES: b42f2db8, which HEAD e42caf08 contains. The 3 delivered paths are byte-identical at HEAD, and their SHA256 equals the worker's proof. node-lander.ts moves checkLandingVerification above the zero-delivered return, a pure move. That check only reads, so the refusal stays effect-free. CHANGED and UNCONFIGURED are each produced only at node-lander-verification.ts:29/:33, so the code names the layer. Production always passes verifiedWorkspace and always writes workspaceBinding.\nDoD1: the runtime arm (real repo, store, verifier and lander) verifies keep.txt=after, restores it, lands, and asserts CHANGED on the logs and the durable receipt, NOT NOTHING_TO_COMMIT. The unit arm pins the code:detail pair.\nDoD2: the counted port throws VERIFIED_WORKSPACE_NEVER_CONSULTED.\nDoD3: runtime \"derives REFUSED_NO_EFFECT\" earns a real receipt and still asserts landedWithNoEffect===true; goal-landing-facts.test.ts:129 is green.\nDoD4, my own in-memory transform drill, zero disk mutation, config deleted: CONTROL 51/51 EXIT 0. The pre-fix-order mutant gave EXIT 1, 4 failed | 47 passed (51). The reds were the 3 new arms plus the runtime reproduction, and each failed for the right reason.\nDoD5 + mine: 28-file lander superset EXIT 0, 336 passed | 1 skipped. src/orchestrator + src/repository: Test Files 101 passed (101), which equals 101 tracked; 1272 passed | 16 skipped. Daemon typecheck EXIT 0. Arm counts 19→22 and 6→6, none removed.\nI did not re-run the full daemon leg: full-suite-gate is held by task-3ccb12a9. The worker's run was EXIT 0, Test Files 612 passed (612), hash-anchored.\nAny NO-COMPLETION-COMMIT warning is a race: the QA pre-flight checkpoint came 1.3s before the worker's landing, which answered NOTHING_TO_COMMIT.\nFollow-up task-cab96ebcd covers transient capture failures."
 }
