@@ -136,8 +136,8 @@
       "completedAt": "2026-09-11T22:32:45.839Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-a8573597",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -215,16 +215,24 @@
       "author": "worker-da0aeedb",
       "content": "QA HANDOFF — the four things worth your time, and where to look first.\n\n## 1. THE ROW'S TITLE IS WRONG. Do not grade against it.\nIt says the journey \"records a plan.approve risk fact\". It records NOTHING. I re-measured at HEAD f6e97a6b: `store.enumerateAggregateIdsByPrefix(\"policy-risk:sha256:\")` over a completed `journeyWorld(\"SUBMITTED\")` returns `[]`, and both `readPolicyRisk(\"plan.approve\")` and `readPolicyRisk(\"preview.decide\")` answer POLICY_RISK_RECORD_MISSING @ DAEMON_POLICY_RISK. The architect corrected this himself in comment-b55eef20; DoD item 4 was amended in comment-c6a61b17. Grade against those two comments.\n\n## 2. THE VERIFICATION COMMAND IS SCOPED, AND THE REPO-WIDE LEG IS RED FOR A FOREIGN REASON\nDoD item 5 asks for `pnpm --filter @moe/daemon test` EXIT 0. It is EXIT 1, twice, and NOT because of me:\n  Error [ERR_MODULE_NOT_FOUND]: Cannot find module\n    'apps/daemon/src/deployment/deploy-schema-guard.js'\n    imported from apps/daemon/src/deployment/deploy-command.ts\n  Test Files 15 failed | 603 passed (618) / Tests 20 failed | 11083 passed | 22 skipped (11125)\nA peer added `deploy-schema-guard.ts` (untracked) and pointed `deploy-command.ts` at its `.js` bridge without creating the bridge. All 15 failing files fail from that ONE import. Path-attributed baseline per global rail 3: (1) pre-edit with apps/daemon CLEAN = 617/617, 11092 passed, exit 0; (2) HEAD = 603/618, exit 1; (3) delta ∩ my 9 owned paths = EMPTY. I pinged the owners and @governors (msg-0405a673) with the one-line fix and did NOT write it myself — it is another row's module.\nWHEN YOU RE-VERIFY: check `ls apps/daemon/src/deployment/deploy-schema-guard.js` FIRST. If it now exists, run the full leg and you should get a clean green; if it does not, you will reproduce my red and it is still not this row's.\nMy submitted leg is a genuine SUPERSET of this row's blast radius — I grepped every importer of the four modules I changed, and they are confined to src/preview, src/release, gates-compose-journey.test.ts and gates-unattended-fixtures.ts. The single `--exclude` names `graph-query-production-route.test.ts`, which SPAWNS the shipped daemon and inherits the foreign break; unexcluded that leg is `1 failed | 117 passed (118)` with the identical error, quoted so the exclusion is auditable rather than convenient.\n\n## 3. WHAT TO ATTACK IF YOU WANT TO BREAK THIS\n- The two pins are tested against `previewRiskFactFrom`, the exported PURE half, NOT end-to-end. That is deliberate and I measured why: the goal's run aggregate already carries the honest row its own finalize leg filed, so ANY row added makes the selector answer AMBIGUOUS before either pin is reached — a world with exactly ONE adverse row is not constructible. If you can build one, my split was unnecessary and you should say so.\n- Mutant D is the arm I would attack: weakening the graph pin to `refs.includes(...)` reds ONLY the multi-ref arm. If you think the multi-ref case is unreachable through production (`buildRunPolicyRow:152` does write exactly one ref), then that arm is guarding a future writer rather than a current one. I claim that is worth having; disagree if you like.\n- `PREVIEW_RISK_RUN_UNBOUND` is on the roster and NO world reaches it — `readCriterionGoal:23` refuses CRITERION_CHECK_GOAL_UNBOUND first. The roster arm asserts it is the complement, so it is declared rather than hidden. Same status as the `riskTier === null` narrowing, which the selector makes unreachable.\n- The FACT ID is `preview.run_policy_tier:<runId>`, its OWN id rather than reusing release's `release.run_policy_tier:`. Both gates read the SAME durable row so they cannot disagree about the tier, but `riskClassifications` are a per-gate operator judgement exactly as the opt-ins are; one shared id would make raising Gate 3 silently raise Gate 2. Consequence: `unattendedWorld` installs BOTH ids for an R2/R3 world. If you think they should share one id, that is a real design disagreement and I would rather argue it than have it found later.\n\n## 4. TWO FIXTURE GOTCHAS I HIT, BOTH NOW IN CODE COMMENTS\n- The foreign-run fixture must build its row BEFORE `installGateOptIns`. `evaluateRunPolicy` re-derives a tier under whichever slice `captureStableRunPolicySelection` picks, and the gate's opt-in slice declares no `riskClassifications`, so evaluating after the install refuses RUN_POLICY_UNCLASSIFIABLE and there is no honest row to file.\n- A Proxy store stub must BIND methods to the real store. Unbound, they run with the Proxy as `this`, better-sqlite3 throws on private fields, and `readCriterionGoal`'s own catch swallows it — the arm silently becomes a GOAL_UNREADABLE test.\n\nDrill table, SHA256 restore proof and the full gate transcript: comment-891b32d34a104c4cb076cb77ca0660bc.\nSuccessor for the upstream fail-open: task-c7a66b703c73466eba616a7dc6fbef23 (PLANNING, dependsOn this row).",
       "timestamp": "2026-09-11T22:33:15.036Z"
+    },
+    {
+      "id": "comment-42bbb03a0410428388424d6d03d05114",
+      "author": "qa-a8573597",
+      "content": "QA VERIFICATION EVIDENCE (qa-a8573597). Approving. Detail that exceeds the reviewSummary cap.\n\n## DELIVERED BYTES — Shape A split, and the completion commit IS recorded\nMy own pre-flight checkpoint 98b9a197 (`role=qa`) took ALL NINE source paths; the worker's completion fde9b4e7 (`Moe-Session: worker-da0aeedb@…`) landed ~35s later carrying only the two `.moe/tasks` JSONs. So `task.commits` holds both and NO-COMPLETION-COMMIT does not apply. Reviewed range = the 9 source paths in 98b9a197.\n- `git diff 98b9a197 -- apps/daemon/src/preview apps/daemon/src/gates-unattended-fixtures.ts apps/daemon/src/gates-compose-journey.test.ts apps/daemon/src/release` → EMPTY. Reviewed tree == delivered bytes.\n- `git status --porcelain --untracked-files=all -- apps/daemon` → EMPTY.\n- `git branch --contains 98b9a197` / `fde9b4e7` → `moe/work-2026-09-11`.\n\n## GATES I RE-RAN MYSELF\n- `pnpm --filter @moe/daemon test` **EXIT 0** — `Test Files 619 passed (619)` / `Tests 11111 passed | 20 skipped (11131)`, 303.52s. **This is DoD item 5 satisfied in full**, which the worker honestly recorded as NOT met: they submitted a grepped superset leg (117 files / 2220 tests, one named `--exclude`) because the full leg was EXIT 1 on a peer's missing `.js` bridge. That bridge is now on disk (peer row landed as 5ad74cdf) and the full leg is green. 619 = worker's 617 pre-edit baseline + this row's `preview-risk-fact.test.ts` + the peer's `deploy-schema-guard.test.ts`. Every file accounted for.\n- `pnpm --filter @moe/daemon typecheck` EXIT 0.\n- `pnpm test:security` EXIT 0 — `Test Files 12 passed (12) / Tests 1003 passed (1003)`. The new production module trips no layer scanner.\n\n## MY OWN NON-VACUITY DRILL — 3 mutants, IN-MEMORY, zero disk writes\nTemp vitest config OUTSIDE `src` with an `enforce: \"pre\"` transform on `preview-risk-fact.ts`, anchor THROWS when absent so a no-op replace cannot read as a vacuous green. Nothing under `apps/daemon/src` was ever written, so there is no restore to prove — only the scaffolding's deletion, shown above as an empty diff against the checkpoint.\n\n**A — DoD item 4 as amended: the whole new fact-resolution connection disabled.** `return resolveOrThrow(store, projectId, goalId);` → `return withheld(projectId, goalId, \"PREVIEW_RISK_EVIDENCE_UNREADABLE\");`. The step-2 end-to-end arm reds, quoting the code, the LAYER and the engine's reason:\n```\nFAIL  src/preview/preview-risk-fact.test.ts > the ORDINARY journey reaches an automatic preview\n      decision > auto-approves through production handlers only, with ZERO risk records in the store\nError: expected an automatic preview approval, got PREVIEW_AUTO_NOT_ALLOWED @ CORE_REDUCER\n       reasonCodes=[\"RISK_TIER_UNCLASSIFIABLE\"]\n```\n17 arms red in total, including every `gates-compose-journey` arm through `unattendedWorld`'s new `expect({code, tier, truthClass}).toEqual({code:null, tier:\"R1\", truthClass:\"DAEMON_VERIFIED\"})` precondition — i.e. that honesty assertion is itself load-bearing, not decoration.\n\n**B — producer-action pin deleted** (`evaluation.action !== RUN_POLICY_ACTION` → `false`): `Tests 2 failed | 11 passed`, `expected null to be 'PREVIEW_RISK_PRODUCER_ACTION_FOREIGN'`.\n\n**C — graph pin weakened from exact-single to contains** (`refs.length !== 1 || refs[0] !== graphContentHash` → `!refs.includes(graphContentHash)`): **EXACTLY ONE arm red**, `withholds when the evaluation names MORE THAN ONE graph revision`, `expected null to be 'PREVIEW_RISK_GRAPH_BINDING_MISMATCH'`. The exact-single clause is independently load-bearing, not argued-in-prose.\n\n## DoD, ITEM BY ITEM\n1. **MET.** `preview-risk-fact.test.ts:105` drives `journeyWorld(\"SUBMITTED\")` + production `installGateOptIns`, asserts provenance `{action: preview.decide, tier: R1}` on both the composition's answer and the committed record read back, and CENSUSES `enumerateAggregateIdsByPrefix(\"policy-risk:sha256:\")` → `[]` before AND after. The census reads the same primitive `readPolicyRisk` loads through, so a future seed reddens it before it can help.\n2. **MET, and stronger than asked.** Five negative worlds (no goal, corrupt row, foreign run, wrong graph, non-`plan.finalize`), each pinning BOTH `tier === null` AND `truthClass === \"UNKNOWN\"` — which is the correct floor, since `assessRisk` skips UNKNOWN outright but `maxTier`s a strong null-tier fact. Gate refusal pinned as `PREVIEW_AUTO_NOT_ALLOWED` @ `CORE_REDUCER` containing `RISK_TIER_UNCLASSIFIABLE`. The roster arm is BIDIRECTIONAL (five reached, the two unreached named with reasons) and asserts `cases.length === 5` so the sweep cannot silently yield zero.\n3. **MET.** `git grep -n 'seedGatePolicyRisk\\|seedPolicyRisk' -- apps/** packages** adapters**` → ZERO. Surviving `seedActiveGraph*` hits are budget/http/work fixtures for unrelated subsystems, correctly left alone per the plan. The six rewritten `preview-auto-decision.test.ts` arms did not loosen: the ex-\"no risk classification\" arm previously asserted only `toBeNull()` and now pins `PREVIEW_RISK_GOAL_UNREADABLE` + `PREVIEW_AUTO_NOT_ALLOWED` @ `CORE_REDUCER` + `RISK_TIER_UNCLASSIFIABLE`. Pure-R0 coverage survives at `preview-auto-decision.test.ts:274/291/305/313`.\n4. **MET** — mutant A above.\n5. **MET** — full leg, count line quoted.\n\n## ADVERSARIAL PASS\n- Stale/replayed evaluation publishing for a foreign goal: `runId` is never caller-supplied (read off `goal.graph.planningRunRef`); the selector pins project + exact run + single replay-valid row; the row adds producer-action and exact-single-graph-digest pins. The foreign-run arm proves the divergent row arrives as `RUN_POLICY_SELECTION_AMBIGUOUS` @ `DAEMON_RUN_POLICY_SELECTION` while reading back VERIFIED on its own aggregate — a divergence fixture, not a corrupt payload.\n- Null tier without UNKNOWN: unreachable. `withheld()` is module-private and sets both halves together; every negative arm asserts both.\n- Authority not widened: `preview.decide` is still the evaluated action, the opt-in key and the waiver key, and `principalId` is still `authenticatedPrincipal` (`:119`) and `actor` (`:129`) in the composition — only the FACT moved. The `plan.approve`-opted-in-but-not-`preview.decide` arm asserts `AUTO_APPROVAL_NOT_OPTED_IN` and explicitly `not.toContain(\"RISK_TIER_UNCLASSIFIABLE\")`, so it cannot pass by refusing for the wrong reason.\n- New throw surface: `resolvePreviewRiskFact` reaches a reader `readPolicyRisk` never did, and `preview-start-command.ts:207` calls the gate OUTSIDE the try at :209. Contained as `PREVIEW_RISK_EVIDENCE_UNREADABLE`, with a two-half arm distinguishing the selector's upstream guard from this backstop, each with its own positive control.\n\n## PER-FILE CAP\n`preview-risk-fact.ts` 211, `preview-auto-composition.ts` 142, `preview-auto-decision.ts` 134, `gates-unattended-fixtures.ts` 310 (test fixture, and it SHRANK by 18). All compliant.\n\n## TITLE CORRECTION STANDS\nThe board title is wrong and the worker said so in the completion record, as step 7 required: the ordinary journey writes NO risk record at all — not one under the wrong action. Re-measured by me through the drill: with the resolver disabled, the gate reaches `RISK_TIER_UNCLASSIFIABLE`, which is the pre-fix state. Successor `task-c7a66b703c73466eba616a7dc6fbef23` is real, on disk, `dependsOn` this row, and already WORKING — not a forward reference to a row that does not exist.",
+      "timestamp": "2026-09-11T22:44:41.947Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-11T09:25:23.210Z",
-  "updatedAt": "2026-09-11T22:34:02.955Z",
+  "updatedAt": "2026-09-11T22:45:20.185Z",
   "metrics": {
     "firstClaimAt": "2026-09-11T09:27:30.069Z",
     "plannedStepCount": 7,
     "plannedDistinctFileCount": 8,
-    "executedStepCount": 7
+    "executedStepCount": 7,
+    "doneAt": "2026-09-11T22:45:20.185Z",
+    "wallClockMs": 47870116
   },
   "priorHandoffs": [
     {
@@ -300,7 +308,8 @@
     ".moe/tasks/task-510340a346c24615a2177c2db9a85782.json",
     ".moe/tasks/task-aa6f9af4735449a5b5e098f52f78fc54.json",
     ".moe/tasks/task-b8af5916c0c4476ca9f545cb2690cda0.json",
-    ".moe/tasks/task-c055f6af6e63412c905d02a3ac657a57.json"
+    ".moe/tasks/task-c055f6af6e63412c905d02a3ac657a57.json",
+    ".moe/tasks/task-c7a66b703c73466eba616a7dc6fbef23.json"
   ],
   "completionSummary": "THE ROW'S TITLE IS INACCURATE and the next reader must not be misled: the ordinary journey does not record a `plan.approve` risk fact under the wrong action — it records NO policy-risk record AT ALL. Measured at HEAD f6e97a6b over a completed journeyWorld: policy-risk aggregates `[]`, and BOTH readPolicyRisk(\"plan.approve\") and readPolicyRisk(\"preview.decide\") answer POLICY_RISK_RECORD_MISSING @ DAEMON_POLICY_RISK. On the title's framing the fix is a rename; on the truth a rename finds nothing either. The architect corrected this in comment-b55eef20; DoD item 4 is amended in comment-c6a61b17. Plan and grade against those.\n\nDIRECTION TAKEN: consumer-side. Automatic preview now resolves its tier-bearing fact from the goal's OWN replay-verified planning-run evaluation (new `preview/preview-risk-fact.ts` + `.js` bridge, 3rd consumer of `readRunPolicyEvaluation` after approval-record-facts.ts and release-auto-approval.ts). No second risk record is invented, so the two copies cannot disagree. The reader is WRAPPED, never widened; the two pins it lacks live in the new module: the producing action must be `plan.finalize` (RUN_POLICY_ACTION, imported) and the evaluation's EXACT SINGLE graphNodeRevisionRefs member must equal goal.binding.graphContentHash. `decision` is deliberately NOT pinned — the journey's row is REQUIRE_HUMAN_APPROVAL.\n\nper-ACTION OPERATOR CONTROL UNCHANGED: `preview.decide` is still the evaluated action, the opt-in key and the waiver key; the operator principal is untouched. Asserted, including that an operator opted in to plan.approve + release.decide but NOT preview.decide gets AUTO_APPROVAL_NOT_OPTED_IN @ CORE_REDUCER and specifically NOT RISK_TIER_UNCLASSIFIABLE.\n\nDoD 1: end-to-end arm drives the ordinary journey through production handlers only and censuses the STORE for policy-risk aggregates (requires `[]`) before and after, so it cannot be \"fixed\" by seeding.\nDoD 2: 13 arms. Every negative pins BOTH tier null AND truthClass UNKNOWN plus the resolv",
   "commits": [
@@ -330,6 +339,22 @@
       "treeId": "e92f1f66f8d8f39f35b7eccb6cbb796e74d9dd27",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "fde9b4e7af0a644838c4b994f9e147fcb9e80f1b",
+      "ref": "refs/heads/moe/work-2026-09-11",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-da0aeedb@2026-09-11T21:26:10Z",
+      "paths": [
+        ".moe/tasks/task-510340a346c24615a2177c2db9a85782.json",
+        ".moe/tasks/task-c7a66b703c73466eba616a7dc6fbef23.json"
+      ],
+      "recordedBy": "worker-da0aeedb",
+      "recordedAt": "2026-09-11T22:35:10.734Z",
+      "treeId": "f61e35c43eed9c073248ce03186801beb563a7d1",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "unattributedPaths": [
@@ -337,8 +362,22 @@
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-a8573597@2026-09-11T22:33:55Z",
-    "at": "2026-09-11T22:34:02.954Z"
-  }
+    "kind": "completion",
+    "sessionId": "worker-da0aeedb@2026-09-11T21:26:10Z",
+    "at": "2026-09-11T22:35:10.734Z"
+  },
+  "touchedFiles": [
+    "apps/daemon/src/preview/preview-risk-fact.ts",
+    "apps/daemon/src/gates-compose-journey.test.ts",
+    "apps/daemon/src/preview/preview-auto-composition.ts",
+    "apps/daemon/src/release/release-auto-decide.test.ts",
+    "apps/daemon/src/preview/preview-auto-decision.ts",
+    "apps/daemon/src/preview/preview-risk-fact.test.ts",
+    "apps/daemon/qa-drill-task-510340a3.config.ts",
+    "apps/daemon/src/preview/preview-auto-decision.test.ts",
+    "apps/daemon/src/gates-unattended-fixtures.ts"
+  ],
+  "completedAt": "2026-09-11T22:45:20.185Z",
+  "reviewCompletedAt": "2026-09-11T22:45:20.185Z",
+  "reviewSummary": "APPROVED. All 5 DoD items met. Full evidence: comment-42bbb03a.\n\nGATES I RE-RAN: `pnpm --filter @moe/daemon test` EXIT 0, `Test Files 619 passed (619)` / `Tests 11111 passed | 20 skipped (11131)`. SUPERSEDES the worker's verification, an honest grepped-superset leg used because the full leg was EXIT 1 on a peer's missing `deploy-schema-guard.js` bridge; that bridge landed (5ad74cdf) and 619 = the 617 pre-edit baseline + this row's test file + the peer's. Also EXIT 0: daemon typecheck; `pnpm test:security` (12 files/1003 tests).\n\nMY OWN DRILL: 3 mutants, IN-MEMORY (vitest enforce:\"pre\" transform, anchor throws if absent) — zero bytes written under apps/daemon/src. A: disabling the new fact-resolution connection reds the end-to-end arm with `PREVIEW_AUTO_NOT_ALLOWED @ CORE_REDUCER reasonCodes=[\"RISK_TIER_UNCLASSIFIABLE\"]` (17 arms; the fixtures' new honesty precondition is load-bearing). B: deleting the producer-action pin reds its arm. C: weakening the graph pin to `includes` reds EXACTLY ONE arm. Scaffolding deleted; `git diff 98b9a197 -- <owned subtree>` and `git status --porcelain -- apps/daemon` EMPTY after.\n\nDoD: (1) journey through production handlers only, provenance pinned on composition AND read-back record, census `policy-risk:sha256:`=[] before and after. (2) five negatives pinning BOTH tier null AND truthClass UNKNOWN plus gate code+layer+reason; roster arm bidirectional, asserts its own case count. (3) grep seedGatePolicyRisk|seedPolicyRisk = ZERO; rewritten arms got STRONGER; pure-R0 coverage retained. (4) mutant A. (5) above.\n\nCOMMITS: Shape-A split — my pre-flight checkpoint 98b9a197 took all 9 source paths, worker completion fde9b4e7 the 2 board JSONs; both recorded, reviewed tree == delivered bytes.\n\nPer-file cap OK (new module 211 lines). Authority not widened: preview.decide stays the action/opt-in/waiver key, principalId stays authenticatedPrincipal+actor."
 }
