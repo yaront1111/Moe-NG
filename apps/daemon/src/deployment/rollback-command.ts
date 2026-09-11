@@ -15,7 +15,7 @@ import { readDeployReceipt } from "./deploy-ledger.js";
 import { admitEnvironmentName, deployReceiptId } from "./deploy-receipt-contracts.js";
 import type { DeployReceiptV1 } from "./deploy-receipt-contracts.js";
 import { createDeployService } from "./deploy-service.js";
-import { probeRollbackHost } from "./rollback-preflight.js";
+import { ROLLBACK_RESTORE_PRINCIPAL, probeRollbackHost } from "./rollback-preflight.js";
 import { applyResolvedRestore, resolveRollbackRestore } from "./rollback-restore.js";
 import type { RollbackRestoreResolved } from "./rollback-restore.js";
 
@@ -33,10 +33,11 @@ export const DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE = "DEPLOY_ROLLBACK_DAT
 const KIND = "deployment.rollback" as const;
 const INTENT_KIND = "internal.deployment.rollback_requested";
 const INTENT_PRINCIPAL = "daemon:rollback-command";
-/** The applied-restore MARKER's own decision key and kind. A third principal on the same command
- *  id, so the marker is a decision of its own and cannot be confused with intent or terminal. */
+/** The applied-restore MARKER's own decision kind. Its key is a third principal on the same command
+ *  id, so the marker is a decision of its own and cannot be confused with intent or terminal; that
+ *  principal, `ROLLBACK_RESTORE_PRINCIPAL`, lives in the preflight leaf because the dump walk READS
+ *  the marker to learn that a rollback moved the schema. */
 const RESTORE_KIND = "internal.deployment.rollback_restore_applied";
-const RESTORE_PRINCIPAL = "daemon:rollback-restore";
 /** Request stream versions: 1 after the request event, 2 once the restore marker has landed. */
 const REQUESTED_VERSION = 1, RESTORED_VERSION = 2;
 const encoder = new TextEncoder();
@@ -296,12 +297,13 @@ export function createRollbackCommandHandler(options: RollbackCommandOptions): A
           // The caller's answer is the binding's own, unchanged by having been recorded.
           throw new DomainRefusal(applied.code, applied.layer, applied.detail, 422);
         }
-        // THE MARKER, so recovery can tell an applied restore from an unapplied one. `dump` is a
-        // path; `databaseUrl` is the credential and never reaches this or any other payload.
+        // THE MARKER, so recovery can tell an applied restore from an unapplied one — and so a LATER
+        // rollback's dump walk knows this one moved the schema. `dump` is a path; `databaseUrl` is
+        // the credential and never reaches this or any other payload.
         const marker = bytes({ dump: applied.dump });
         const recorded = store.commitExpectedVersionDecisionLegs({ commandKind: RESTORE_KIND,
           committedResultBytes: marker, correlationId: envelope.correlationId, decidedAt,
-          key: { ...key, principalId: RESTORE_PRINCIPAL }, requestBytes,
+          key: { ...key, principalId: ROLLBACK_RESTORE_PRINCIPAL }, requestBytes,
           legs: [{ aggregateId, expectedVersion: REQUESTED_VERSION, events: [{
             eventId: `${aggregateId}-restore-applied`,
             eventType: "EnvironmentRollbackRestoreApplied", payload: marker }] }] });

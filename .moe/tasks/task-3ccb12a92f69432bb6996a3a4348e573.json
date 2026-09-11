@@ -194,7 +194,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-11T09:25:02.794Z",
-  "updatedAt": "2026-09-11T10:54:17.077Z",
+  "updatedAt": "2026-09-11T10:55:03.875Z",
   "metrics": {
     "firstClaimAt": "2026-09-11T09:25:20.906Z",
     "plannedStepCount": 6,
@@ -325,6 +325,24 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "e0ef27d2150d7334c632232ce0dd0b095a73a3b2",
+      "ref": "refs/heads/moe/work-2026-09-11",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-77a9823a@2026-09-11T10:39:56Z",
+      "paths": [
+        ".moe/tasks/task-29f367530d954a18a8580f184b09c65d.json",
+        ".moe/tasks/task-3ccb12a92f69432bb6996a3a4348e573.json",
+        ".moe/tasks/task-65a594816ed5460f999fbd46f40c5cea.json",
+        ".moe/tasks/task-aa6f9af4735449a5b5e098f52f78fc54.json"
+      ],
+      "recordedBy": "qa-77a9823a",
+      "recordedAt": "2026-09-11T10:55:03.874Z",
+      "treeId": "ecc4432e71ccf0545299ad096fba862021ceda45",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -335,13 +353,18 @@
     "apps/daemon/src/preview/preview-auto-composition.ts",
     "apps/daemon/src/release/release-auto-approval.ts",
     "apps/daemon/src/gates-unattended-fixtures.ts",
-    ".moe/tasks/task-3ccb12a92f69432bb6996a3a4348e573.json"
+    ".moe/tasks/task-3ccb12a92f69432bb6996a3a4348e573.json",
+    ".moe/tasks/task-29f367530d954a18a8580f184b09c65d.json",
+    ".moe/tasks/task-65a594816ed5460f999fbd46f40c5cea.json",
+    ".moe/tasks/task-aa6f9af4735449a5b5e098f52f78fc54.json"
   ],
   "unattributedPaths": [
     "apps/control-room/src/v2/goals/use-goal-reads.test.ts",
     "apps/control-room/src/v2/goals/use-goal-reads.ts",
     "apps/control-room/src/v2/ops/environment-variables-screen.test.tsx",
     "apps/control-room/src/v2/ops/environment-variables-screen.tsx",
+    "apps/daemon/src/backups/backup-ports.ts",
+    "apps/daemon/src/backups/scheduled-backup.test.ts",
     "apps/daemon/src/backups/scheduled-backup.ts",
     "apps/daemon/src/backups/scheduled-backup-proof-ownership.test.ts",
     "apps/daemon/src/documents/document-source-binding.js",
@@ -383,9 +406,9 @@
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-ed22fae0@2026-09-11T09:44:41Z",
-    "at": "2026-09-11T10:40:25.650Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-77a9823a@2026-09-11T10:39:56Z",
+    "at": "2026-09-11T10:55:03.874Z"
   },
   "workStartedAt": "2026-09-11T09:47:34.697Z",
   "declaredFiles": [
@@ -412,7 +435,8 @@
     "apps/daemon/src/release/release-auto-approval.ts",
     "apps/daemon/src/preview/preview-auto-decision.test.ts",
     "apps/daemon/src/bootstrap/effective-auto-policy.ts",
-    "apps/daemon/src/gates-unattended-fixtures.ts"
+    "apps/daemon/src/gates-unattended-fixtures.ts",
+    "apps/daemon/qa-drill-task-3ccb12a9-qa-77a9823a.config.ts"
   ],
   "completedAt": "2026-09-11T10:54:17.077Z",
   "reviewCompletedAt": "2026-09-11T10:54:17.077Z",

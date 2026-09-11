@@ -19,17 +19,16 @@ import { selectRollbackDumpDecision } from "./rollback-preflight.js";
  * no detail can be built out of the value it just read. This module keeps that discipline: its own
  * table below is fixed prose per code, with no template and no interpolation.
  *
- * WHICH DUMP is `selectRollbackDumpDecision`'s answer, and it is keyed on the deploy the rollback
- * is RETURNING TO — never on whatever happens to be deployed right now. The rule that holds: the
- * dump is the FIRST POST-TARGET DEPLOY THAT MIGRATED, reached by the durable join through THAT
- * deploy's `decisionId`. `rollback-preflight.ts`'s header carries the whole argument, including
- * why the target's own `backupRef` is one step too far and why keying on the current deploy pairs
- * a later schema with an earlier image.
+ * WHICH DUMP is `selectRollbackDumpDecision`'s answer, keyed on the deploy the rollback is
+ * RETURNING TO — never on whatever is deployed right now. It walks forward from that target to the
+ * FIRST later schema move the deploy ledger records: a deploy that migrated answers with its dump,
+ * and a rollback that RESTORED answers with a refusal, because it kept no copy of the schema it
+ * overwrote. `rollback-preflight.ts`'s header carries the argument and what the walk cannot see.
  *
- * IT REFUSES, IT NEVER SUBSTITUTES. An unknown target, no successor that migrated, an unreadable
- * migration record, a null `backupRef`, or an artifact whose bytes disagree with what the receipt
- * recorded each answer with their own stable code and the layer that answered, and each leave the
- * database exactly as it was.
+ * IT REFUSES, IT NEVER SUBSTITUTES. An unknown target, no later schema move, a restore that
+ * overwrote the target's schema, an unreadable migration record, a null `backupRef`, or an artifact
+ * whose bytes disagree with what the receipt recorded each answer with their own stable code and
+ * the layer that answered, and each leave the database exactly as it was.
  */
 
 /** The layer that answers for every refusal minted HERE. Forwarded refusals keep their own: the
@@ -53,6 +52,8 @@ export const ROLLBACK_RESTORE_DETAILS = Object.freeze({
     "the migration record naming the dump to restore could not be verified",
   DEPLOY_ROLLBACK_RESTORE_BACKUP_ABSENT:
     "the migration that moved the schema past the selected deploy recorded no backup to restore",
+  DEPLOY_ROLLBACK_RESTORE_SCHEMA_OVERWRITTEN:
+    "a rollback after the selected deploy restored over its schema and kept no backup of it to restore",
   DEPLOY_ROLLBACK_RESTORE_BACKUP_UNVERIFIED:
     "the recorded backup is absent or does not match the bytes its receipt recorded",
   DEPLOY_ROLLBACK_RESTORE_FAILED:
@@ -178,7 +179,7 @@ async function dumpToRestore(
 
 /**
  * THE READ HALF, and it moves nothing. Every refusal this module can mint about EVIDENCE — no
- * destination, no deploy, no migration, no verifiable artifact — is answered here, with the
+ * destination, no deploy, no dumped schema move, no verifiable artifact — is answered here, with the
  * database still untouched and no port in reach: this function does not take one.
  *
  * That is the whole reason the halves are separate. The caller admits a command between them, so
