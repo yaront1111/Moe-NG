@@ -157,16 +157,25 @@ describe("production repository delivery composition", () => {
     context.onTestFailed(() => { console.error(f.logs.join("\n")); });
     const started = await f.runtime.start(async () => ({ ok: true, pid: process.pid, exit: Promise.resolve() }))(f.request("a"));
     if (!started.ok) throw new Error(started.code);
-    await started.exit; f.retire();
-    // Cloned from the landing-disabled arm above, MINUS its file write: nothing differs from the baseline.
-    const seeded = seedVerifierReceipt(f.store, "a", f.projectId);
-    expect(send(f.store, { ...envelope("integration.accept_output", seeded.currentVersion,
-      { receiptId: seeded.receiptId, subjectRef: "a" }), projectId: f.projectId }).ok).toBe(true);
+    await started.exit;
+    // A REAL verification of a workspace the seat never edited — no file write anywhere in this
+    // arm, so git status stays clean and nothing differs from the baseline. This arm used to seed
+    // a legacy stub receipt instead, which carried no workspace binding at all; the lander then
+    // answered "nothing to commit" without ever looking at the tree it had accepted, so the credit
+    // below rested on an assertion rather than on evidence (task-29f367530d954a18a8580f184b09c65d).
+    f.expectVerified("before\n");
+    f.submit("a"); f.retire();
     // Captured while the reservation still exists; the intent key is (owner, baseline, session), all fixed by now.
     const held = createRepositoryExecutionPort().readOwned(f.workspace, f.storeId, f.projectId);
     if (!held.ok || held.handle === null) throw new Error("expected a live reservation to read");
     await f.runtime.advance();
     expect(f.logs.join("\n")).toContain("NOTHING_TO_COMMIT");
+    // AND the lander reached that answer THROUGH the verified-workspace check rather than around
+    // it: the acceptance this credit rests on binds a real tree, and the workspace still matched it.
+    const verifier = readVerifierReceipt(f.store, f.projectId,
+      readReviewLedger(f.store, f.projectId, "a").accepted!.verifierReceiptId);
+    expect(verifier.ok && verifier.receipt.execution.workspaceBinding?.treeSha)
+      .toBe(git(f.workspace, "rev-parse", "HEAD^{tree}"));
     expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a", held.handle)).toBe("REFUSED_NO_EFFECT");
     // Without a handle the intent key cannot be computed at all, so the answer fails closed to REFUSED.
     expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a")).toBe("REFUSED");
@@ -182,9 +191,11 @@ describe("production repository delivery composition", () => {
     expect(createRepositoryExecutionPort().inspect(f.workspace)).toEqual({ ok: true, reservation: null });
   }, 120_000);
 
-  // DoD 2, second bucket, asserted separately: the SAME refusal code with an intent already journaled
-  // stays REFUSED and still blocks. This is what makes the fix a narrowing rather than a blanket un-block —
-  // the discriminator is the journal, not the refusal code.
+  // DoD 2, second bucket, asserted separately: a landing whose bytes were REVERTED after verification
+  // stays REFUSED and still blocks, rather than being credited as a node that owed nothing. It used to
+  // reach here carrying the same code as a genuine no-op, with only the journal telling them apart;
+  // since task-29f367530d954a18a8580f184b09c65d the code itself also separates them, and the journal
+  // half is isolated at goal-landing-facts.test.ts rather than here.
   it("keeps a refusal that already journaled an intent in the REFUSED bucket and still blocks", async (context) => {
     const f = fixture(); let finish!: () => void;
     context.onTestFailed(() => { console.error(f.logs.join("\n")); });
@@ -199,22 +210,31 @@ describe("production repository delivery composition", () => {
     await f.runtime.advance();
     expect(f.logs.join("\n")).toContain("GIT_INDEX_LOCKED");
     rmSync(lock);
-    // The seat's change is reverted before the retry, so the second attempt has nothing to commit —
-    // same NOTHING_TO_COMMIT code as the arm above, but this time an intent is already durable.
+    // The seat's change is reverted before the retry. Pre-row the second attempt answered
+    // NOTHING_TO_COMMIT — the SAME code a genuine no-op mints — because the zero-delivered branch
+    // returned above the verification check. It now answers LANDING_VERIFIED_WORKSPACE_CHANGED,
+    // because the workspace no longer matches the tree the verifier accepted
+    // (task-29f367530d954a18a8580f184b09c65d). THIS ARM IS THAT REPRODUCTION, and the answer it
+    // asserts is the whole point: a revert after verification is no longer spellable as "no effect".
     writeFileSync(join(f.workspace, "keep.txt"), "before\n");
     await f.runtime.advance();
-    expect(f.logs.join("\n")).toContain("NOTHING_TO_COMMIT");
+    expect(f.logs.join("\n")).toContain("LANDING_VERIFIED_WORKSPACE_CHANGED");
+    expect(f.logs.join("\n")).not.toContain("NOTHING_TO_COMMIT");
     const held = createRepositoryExecutionPort().readOwned(f.workspace, f.storeId, f.projectId);
     if (!held.ok || held.handle === null) throw new Error("expected the wedged reservation to still exist");
     expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a", held.handle)).toBe("REFUSED");
-    // THE GOVERNOR'S REPRODUCER, LANDED (comment-573c4f2c). Identical refusal CODE to the arm
-    // above, but this acceptance journaled an intent and the seat's bytes were reverted, so the
-    // node's work is LOST. Crediting it toward goal closure or a publish offer would credit lost
-    // work as landed — which is exactly what the code-alone rule did before this row.
+    // THE GOVERNOR'S REPRODUCER, LANDED (comment-573c4f2c). This acceptance journaled an intent and
+    // the seat's bytes were reverted, so the node's work is LOST and crediting it toward goal
+    // closure or a publish offer would credit lost work as landed.
+    // IT NOW FAILS CLOSED ON TWO INDEPENDENT GROUNDS: the refusal code is no longer the no-effect
+    // code AT ALL, and an intent is journaled. The journal half is deliberately NOT proven here any
+    // more, because these two arms no longer share a code — it is isolated one literal apart, over
+    // constructed receipts, at goal-landing-facts.test.ts "is FALSE when that same no-effect refusal
+    // already JOURNALED a landing intent", which reaches goalHasLandedCommit without a lander.
     const after = readReviewLedgers(f.store, f.projectId, new Set(["a"]));
     const reverted = after.landings.get("a");
     if (reverted === undefined) throw new Error("expected a landing receipt for node a");
-    expect(reverted.refusal?.code).toBe("NOTHING_TO_COMMIT");
+    expect(reverted.refusal?.code).toBe("LANDING_VERIFIED_WORKSPACE_CHANGED");
     expect(after.landingIntents?.size).toBe(1);
     expect(landedWithNoEffect(reverted, after.landingIntents), "POST_INTENT_REFUSAL_MUST_NOT_BE_CREDITED").toBe(false);
     expect(createRepositoryExecutionPort().inspect(f.workspace)).toMatchObject({ ok: true, reservation: { phase: "BLOCKED" } });

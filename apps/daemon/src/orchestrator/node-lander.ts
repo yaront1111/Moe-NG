@@ -204,6 +204,16 @@ export function createNodeLander(config: NodeLanderConfig) {
       first.entries, before.entries, observed.observation.entries, untracked,
     );
     const delivered = [...deliveredPaths(before.entries, observed.observation.entries), ...earlier];
+    // ABOVE the zero-delivered return ON PURPOSE. "Nothing differs from the staffing baseline" is
+    // the one answer a caller reads as "this node owed no bytes", and `landedWithNoEffect` credits
+    // it toward goal progress. A seat whose verified bytes were restored before landing is ALSO
+    // zero-delivered, so asking the baseline alone cannot tell the two apart — only the verified
+    // candidate can. Both journal nothing, so the refusal stays effect-free either way.
+    const checked = await checkLandingVerification({
+      brief, nodeRef, port: config.verifiedWorkspace, projectId: config.projectId,
+      readBinding: config.readVerifiedBinding, receiptId: verifierReceiptId, store: config.store,
+    });
+    if (!checked.ok) return refuse(nodeRef, brief.workspace, verifierReceiptId, { code: checked.code, detail: checked.detail });
     if (delivered.length === 0) {
       return refuse(nodeRef, brief.workspace, verifierReceiptId, {
         code: "NOTHING_TO_COMMIT", detail: "no path in the workspace differs from the staffing baseline",
@@ -215,11 +225,6 @@ export function createNodeLander(config: NodeLanderConfig) {
     const carried = untrackedImports(delivered, untracked, (path) => readText(root, path));
     const paths = [...delivered, ...carried];
     const message = landingMessage(brief, nodeRef, verifierReceiptId);
-    const checked = await checkLandingVerification({
-      brief, nodeRef, port: config.verifiedWorkspace, projectId: config.projectId,
-      readBinding: config.readVerifiedBinding, receiptId: verifierReceiptId, store: config.store,
-    });
-    if (!checked.ok) return refuse(nodeRef, brief.workspace, verifierReceiptId, { code: checked.code, detail: checked.detail });
     const committed = await commitJournaledLanding({ handle: config.reservationHandle, store: config.store,
       port: checked.port, workspace: brief.workspace, paths, message, binding: checked.binding, verifierReceiptId });
     if (!committed.ok) {
