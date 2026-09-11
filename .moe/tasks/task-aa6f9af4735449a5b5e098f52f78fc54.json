@@ -1,0 +1,150 @@
+{
+  "id": "task-aa6f9af4735449a5b5e098f52f78fc54",
+  "epicId": "epic-3f9b9556a1364262a9d812e5fd1ea34e",
+  "title": "bug: rollback's dump walk cannot see a deployment.migrate_down, so a revert after the target makes a restoring rollback apply the wrong schema",
+  "description": "Parent: task-705977238f794b2cadb5c1dcdb98d6bd (found during its QA rework; same data-loss class, out of that row's one-rule scope). selectRollbackDumpDecision (apps/daemon/src/deployment/rollback-preflight.ts) walks readDeployLedger ONLY, but deployment.migrate_down (migrate-down-command.ts -> revertLastBatch, migration-down-service.ts:144) records a REVERTED migration receipt under its OWN requestId and writes no deploy receipt, so the walk never sees that schema move.\nShape, by code read (NOT executed - re-measure first): A -> B (migrates) -> migrate_down (reverts B's batch, schema back to A's) -> D (migrates; D.backupRef = schema A) -> rollback to B WITH restore: the walk skips nothing, stops at D, applies D's dump and starts B's image on schema A with no refusal.\nFix direction for the architect: the walk needs the environment's schema moves in order (deploy migrations, migrate_down reverts, restoring rollbacks), or must refuse when a revert it cannot order sits after the target.",
+  "definitionOfDone": [
+    "A test drives A -> B(migrates) -> deployment.migrate_down -> D(migrates) through production writers/handlers, then a rollback to B WITH restore, and asserts it either refuses with a stable code AND layer or applies the migrate_down's own pre-revert dump - never D's dump - with the restore port's recorded calls read back.",
+    "The new arm is proven non-vacuous by a mutation drill that removes the new rule and reds it.",
+    "`pnpm --filter @moe/daemon test` EXIT 0 with the `Test Files N passed (N)` count line quoted."
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "RE-MEASURE, AND TREAT THIS AS A GATE. No source edits.\n\nThe parent row task-70597723 was still WORKING on rollback-preflight.ts when this plan was written, and rollback-command-ordering.test.ts was dirty in the shared tree. dependsOn has kept you out until the parent is DONE, so the file you are about to edit has moved since I read it.\n\nConfirm at your claim HEAD: that selectRollbackDumpDecision still walks readDeployLedger's state.receipts and keys readMigrationReceipt by successor.decisionId; that deployment.migrate_down still records only a migration receipt under its own requestId and no deploy receipt; and that recordMigrationReceipt still writes targetAggregateId 'migration:' + receiptId.\n\nIF THE WALK'S SHAPE CHANGED, STOP AND REPORT BLOCKED. Do not adapt this plan yourself - an architect should re-plan against the delivered shape rather than have you infer it mid-step.\n\nAlso record: whether the parent added direct coverage for selectRollbackDumpDecision (it had none when I measured), and the daemon leg's baseline count line.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/rollback-preflight.ts",
+        "apps/daemon/src/repository/migrations/migration-receipt.ts",
+        "apps/daemon/src/repository/migrations/migration-down-service.ts"
+      ],
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "RE-MEASURE, AND TREAT THIS AS A GATE. No source edits. This text SUPERSEDES the base description.\n\nThe parent row task-705977238f794b2cadb5c1dcdb98d6bd was QA-rejected after this plan was first written. Its rework changes WHAT the walk decides without changing the loop's literal shape, so a shape-only gate would pass and let you drop a rule the parent's QA demanded. Measure the rules, not just the loop.\n\nConfirm at your claim HEAD, quoting each with a `grep -n`:\n  (a) selectRollbackDumpDecision in apps/daemon/src/deployment/rollback-preflight.ts still walks readDeployLedger's state.receipts and keys readMigrationReceipt by successor.decisionId.\n  (b) THE RESTORING-ROLLBACK RULE IS PRESENT: a successor with no migration receipt is checked for a restore marker - a decision under principal `daemon:rollback-restore` (exported as ROLLBACK_RESTORE_PRINCIPAL from rollback-preflight.ts) keyed by the successor's decisionId - and a hit refuses DEPLOY_ROLLBACK_RESTORE_SCHEMA_OVERWRITTEN rather than being skipped. Quote the refusal line and the arm in rollback-command-ordering.test.ts that pins it.\n  (c) deployment.migrate_down still records only a migration receipt under its own requestId and no deploy receipt.\n  (d) recordMigrationReceipt still writes targetAggregateId 'migration:' + receiptId through a command decision, so migration receipts appear in store.readCommandDecisionsAfter.\n\nIF (a) OR (b) DOES NOT HOLD AS WRITTEN, STOP AND REPORT BLOCKED with blockedOnTaskIds naming the parent. Do not adapt this plan yourself; an architect re-plans against the delivered shape.\n\nAlso record: whether the parent added direct coverage for selectRollbackDumpDecision, the full list of refusal codes the walk can return at HEAD, and the daemon leg's baseline `Test Files N passed (N)` line. `pnpm --filter @moe/daemon test` exits 0 on a wrong filter with no count line, so the count line is the evidence.",
+          "reason": "The parent task-705977238f794b2cadb5c1dcdb98d6bd was QA-rejected after this plan was written, and its rework adds a THIRD rule to the walk (a rollback that applied a restore is a dump-less schema move and refuses). This step's gate checks the walk's literal shape, which the rework keeps, so it would pass while steps 3-4 silently drop that rule. Amended by architect-1c0fef54, who planned the parent, so the gate fires on semantics rather than shape.",
+          "amendedBy": "architect-1c0fef54",
+          "amendedAt": "2026-09-11T10:45:31.910Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
+    },
+    {
+      "stepId": "step-2",
+      "description": "WRITE THE FAILING ARM FIRST. This is DoD item 1 and it is the whole row in one test.\n\nDrive the scenario through production writers and handlers, not fixtures that plant receipts: A deploys, B deploys and migrates, deployment.migrate_down reverts B's batch so the schema returns to A's state, then D deploys and migrates with its backupRef capturing schema A. Then request a rollback to B WITH database restore.\n\nToday the walk starts after B, sees only D among deploy receipts, and returns D's dump - which is schema A - so B's image would start on A's schema with no refusal at all. Assert the CURRENT wrong behaviour is what you observe, then let the fix flip it.\n\nThe arm must read the restore port's RECORDED CALLS back, as the DoD requires, rather than asserting on the selection return value alone. Assert the dump's identity, never merely that some dump was chosen.\n\nQuote the red.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/rollback-preflight.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/deployment/rollback-schema-moves.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "BUILD THE ORDERED SCHEMA-MOVE VIEW, in its own small module.\n\nEnumerate migration receipts with store.enumerateAggregateIdsByPrefix over the 'migration:' prefix - the same payload-free indexed range scan policy-risk-reader.ts and policy-waiver-reader.ts already use. Read each receipt, keep only this projectId and this environment, and keep only outcomes that actually MOVED the schema: APPLIED and REVERTED. Exclude REFUSED - it leaves the schema untouched, and including it would invent moves that never happened.\n\nORDER BY decidedAt, NOT BY THE SCAN. The prefix scan returns ids sorted by id and the id is a SHA256, so scan order carries no chronology. Note the cost in the step note: this reads every migration receipt payload for the project. That is acceptable because rollback is rare; do not put it on a hot read and do not cache it across commands.\n\nBe precise about what each dump represents. A REVERTED receipt's backupRef is the state before THE REVERT, not before the original migration. Getting this backwards restores the wrong schema while looking correct.\n\nCreate the .ts and its .js bridge together, the way the neighbouring deployment modules have theirs.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/repository/migrations/migration-receipt.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/deployment/rollback-schema-moves.ts",
+        "apps/daemon/src/deployment/rollback-schema-moves.js"
+      ],
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "BUILD THE ORDERED SCHEMA-HISTORY VIEW, in its own small module (apps/daemon/src/deployment/rollback-schema-moves.ts plus its one-line .js bridge `export * from \"./rollback-schema-moves.ts\";`, created together). This text SUPERSEDES the base description. Two of its instructions were wrong and are reversed below.\n\nTHE MODEL. The walk is looking for the first DUMP taken after the target, with no dump-less schema move before it. A dump is a snapshot of the schema at the moment it was taken, whatever happened afterwards, so what matters about each record is (1) did it take a dump, and (2) could it have moved the schema without one.\n\nORDER BY LEDGER POSITION, NEVER BY decidedAt. REVERSED from the base text. Walk store.readCommandDecisionsAfter from cursor 0n, the same paged walk deploy-ledger.ts's readDeployLedger uses. Its cursor is the stored `decision_position` (packages/store/src/decision-read-model.ts), a monotonic commit order. decidedAt is a wall clock: every rollback fixture in this directory uses a constant clock (rollback-command-ordering.test.ts `clock = () => \"2026-09-06T01:00:00.000Z\"`), so sorting by it ties on every record and falls back to SHA order. Production can also tie within a millisecond or step backwards across a clock adjustment. One walk of the ledger gives the target deploy receipt, every migration receipt and every restore marker in one total order, which also removes the need for the prefix scan.\n\nCLASSIFY EACH RECORD after the target, for this projectId and environment only:\n  - migration receipt with non-null backupRef, ANY outcome including REFUSED: a SNAPSHOT. REVERSED from the base text, which excluded REFUSED. migration-down-service.ts takes its dump BEFORE it reverts and returns `{ ...refused(base, code, code), backupRef }` on failure, including the path where the revert COMMITTED and the post-revert name check then threw. That dump is still the schema at the moment it was taken. Excluding it walks on to a later dump, which is the data-loss direction.\n  - migration receipt APPLIED or REVERTED with null backupRef: a DUMP-LESS MOVE. Refuse, never skip.\n  - migration receipt REFUSED with null backupRef: refused before any dump, schema untouched. Skip.\n  - restore marker (principal ROLLBACK_RESTORE_PRINCIPAL): a DUMP-LESS MOVE. Refuse. A marker carries no environment in its key; resolve it through the rollback's own records for the same commandId, and if the environment cannot be established, treat the marker as a move in THIS environment, because reading an applied restore as nothing-happened is the unsafe direction.\n  - deploy receipts: position only, needed to locate the target.\n\nA REVERTED receipt's backupRef is the state before THE REVERT, not before the original migration. That is exactly the schema a rollback to the deploy before the revert wants.\n\nNote the cost in the step note: one full ledger walk per restoring rollback. Acceptable because rollback is rare. Do not put it on a hot read and do not cache it across commands.",
+          "reason": "Two defects in the base text, both measured. First, ordering by decidedAt ties: every rollback fixture uses a constant clock, so the step-2 arm would pass or fail on SHA order. The ledger has a true commit-order key, decision_position, behind store.readCommandDecisionsAfter. Second, excluding every REFUSED receipt discards real dumps: migration-down-service.ts takes its dump BEFORE reverting and keeps backupRef on a refusal, including the case where the revert committed but the post-check threw. Skipping that receipt walks on to a LATER dump.",
+          "amendedBy": "architect-1c0fef54",
+          "amendedAt": "2026-09-11T10:45:48.299Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
+    },
+    {
+      "stepId": "step-4",
+      "description": "WIRE THE WALK TO THE ORDERED VIEW, and preserve the parent's rules.\n\nselectRollbackDumpDecision stops iterating deploy receipts and instead walks the environment's schema moves in order, forward from the target, taking the first move after it. A revert is now visible, so the scenario in step 2 resolves correctly.\n\nTHE DoD ALLOWS EITHER ANSWER: apply the migrate_down's own pre-revert dump, or refuse with a stable code AND layer. Choose deliberately and say why in the step note. Refusing is the safe fallback for a move the view genuinely cannot place; it should not be the answer for one it CAN place, because that would make restoring rollback unusable on any environment that has ever run a migrate_down.\n\nTWO EXISTING RULES MUST SURVIVE, and both carry comments explaining why - read them before editing the loop:\n  - a null backupRef refuses DEPLOY_ROLLBACK_RESTORE_BACKUP_ABSENT rather than skipping to a later dump, because a later dump is a later state and would destroy more than the rollback asked for;\n  - a receipt that will not decode answers DEPLOY_ROLLBACK_RESTORE_MIGRATION_UNVERIFIED.\nAdd arms pinning both if the parent did not already, so this row cannot silently drop them.\n\nThe step 2 arm should now be green.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/rollback-preflight.ts"
+      ],
+      "amendments": [
+        {
+          "amendmentId": "amend-1",
+          "description": "WIRE THE WALK TO THE ORDERED VIEW, and preserve ALL of the parent's rules. This text SUPERSEDES the base description.\n\nselectRollbackDumpDecision stops iterating deploy receipts alone and walks step 3's ordered view forward from the target, stopping at the FIRST record that is either a snapshot or a dump-less move. A revert is now visible, so the step-2 scenario resolves: the migrate_down's own pre-revert dump is the first snapshot after B, and it holds B's schema. That is the answer the DoD permits and the one to choose. A refusal is right only for a record the view genuinely cannot place, never for one it can, because that would make restoring rollback unusable on any environment that has ever run a migrate_down.\n\nTHREE EXISTING RULES MUST SURVIVE. The base text named two; the parent's QA rework added the third. Read each rule's comment before editing the loop:\n  1. A move with a null backupRef refuses DEPLOY_ROLLBACK_RESTORE_BACKUP_ABSENT rather than skipping to a later dump. A later dump is a later state and destroys more than the rollback asked for.\n  2. A receipt that will not decode answers DEPLOY_ROLLBACK_RESTORE_MIGRATION_UNVERIFIED.\n  3. A ROLLBACK THAT APPLIED A RESTORE refuses DEPLOY_ROLLBACK_RESTORE_SCHEMA_OVERWRITTEN. It replaced the schema with an older dump and kept no copy of what it overwrote, so no dump anywhere restores the target's schema. A migration-receipt-only view CANNOT see this case at all, which is why step 3 puts restore markers in the view. Losing it reintroduces the exact defect task-705977238f794b2cadb5c1dcdb98d6bd was rejected for: image B started on schema A with no refusal.\n\nAnd one rule must NOT be over-applied: a restoreDatabase:false rollback and a deploy refused before it migrated move nothing, and are still skipped.\n\nEach of the three rules must be pinned by an arm that goes red if the rule is removed. The parent pins rule 3 in rollback-command-ordering.test.ts; confirm it is still green after your rewrite and quote it. Add arms for rules 1 and 2 if the parent did not already.\n\nAlso add ONE arm for ordering: two schema records written with IDENTICAL decidedAt, in a known commit order, where only commit order gives the right answer. It must go red if the view sorts by decidedAt. The step-2 arm should now be green.",
+          "reason": "The base text lists TWO rules that must survive replacing the loop. The parent's QA rework adds a THIRD, the restoring-rollback refusal, and a migration-receipt-only view has no way to see a restore. Without naming it, this step deletes the fix QA rejected the parent to obtain.",
+          "amendedBy": "architect-1c0fef54",
+          "amendedAt": "2026-09-11T10:46:01.286Z"
+        }
+      ],
+      "activeAmendmentId": "amend-1"
+    },
+    {
+      "stepId": "step-5",
+      "description": "DRILL, THEN THE GATE. DoD items 2 and 3.\n\nDRILL: remove the new rule - revert the walk to iterating deploy receipts - and confirm the step 2 arm reds. Quote it. That is what proves the arm tests the schema-move view rather than the surrounding rollback machinery.\n\nThis mutates a file under apps/daemon/src, which a held full-suite gate CANNOT contain, because module-load reads happen on unleased daemon spawns. Keep the window narrow. Back the file up out of tree to a path carrying THIS TASK ID, not only your worker id; record the live file's SHA256 BEFORE mutating; restore by copying the backup back; prove the restore by SHA256 equality in a call SEPARATE from the restore. Never git checkout or git restore while other rows are mid-delivery.\n\nGATE: acquire full-suite-gate, post GATE START, run 'pnpm --filter @moe/daemon test', post GATE END, release. Quote the exit code AND the 'Test Files N passed (N)' line - an exit code with no count line means nothing ran. Compare against step 1's baseline and explain any movement. If the gate is peer-held, report blocked with resourceId; that keeps your seat and auto-unblocks on grant.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/rollback-preflight.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "ADVERSARIAL REVIEW, THEN THE COMPLETION RECORD.\n\nRead your own diff as an attacker, on a feature whose failure mode is destroying a database:\n  - Two schema moves with the SAME decidedAt: which wins, and is that deterministic across runs?\n  - A migration receipt for a DIFFERENT environment or project that happens to sort adjacently - can it enter the view?\n  - A revert of a revert. Does the view still name the right dump, or does it double back?\n  - A receipt that decodes but whose outcome is REFUSED - is it excluded everywhere, including the ordering, not just the selection?\n  - Does any path now restore a dump that represents a LATER state than the rollback target? That is the exact harm the parent's null-backupRef rule exists to prevent.\n  - Would I be comfortable if this shipped and an operator rolled back a production database on its answer?\n\nCOMPLETION RECORD: say which of the two DoD-permitted answers you implemented and why; state the cost of the ordered view in plain terms; and name the two parent rules you preserved with the arms that prove it.\n\nPut the gate table and drill detail in a row comment first if they would push the summary past its 2000-char cap, which truncates silently mid-word.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/deployment/rollback-preflight.ts",
+        "apps/daemon/src/deployment/rollback-schema-moves.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-705977238f794b2cadb5c1dcdb98d6bd"
+  ],
+  "priority": "HIGH",
+  "order": 158,
+  "comments": [
+    {
+      "id": "comment-8b1008795a8041038c11f3e6c8d526c9",
+      "author": "architect-1c0fef54",
+      "content": "ARCHITECT AMENDMENTS by architect-1c0fef54, who planned the parent task-705977238f794b2cadb5c1dcdb98d6bd. Steps 1, 3 and 4 carry amend-1. Read the AMENDED text: the base descriptions of those three steps are superseded. Steps 2, 5 and 6 are unchanged.\n\nWHY, in three measured findings. None is a matter of taste; each is a way the base plan restores the wrong schema without refusing.\n\n1. THE PLAN WOULD DELETE THE PARENT'S QA FIX. The parent was rejected at 10:25 for skipping a rollback that APPLIED A RESTORE. That rollback moved the schema and kept no dump of what it overwrote. The rework, in flight when this plan was submitted at 10:41, adds a restore-marker check and refuses DEPLOY_ROLLBACK_RESTORE_SCHEMA_OVERWRITTEN. Base step 4 lists two rules to preserve, not that one, and base step 3 builds a view from migration receipts only, which cannot see a restore at all. Base step 1's gate checks the loop's shape, which the rework keeps, so it would have passed.\n\n2. decidedAt TIES. Base step 3 said to order by decidedAt. Every fixture in apps/daemon/src/deployment uses a constant clock, so every record ties and order falls back to SHA. The ledger already has a true commit order: store.readCommandDecisionsAfter pages by `decision_position`, a stored monotonic bigint, per packages/store/src/decision-read-model.ts. One walk of it yields deploy receipts, migration receipts and restore markers in a single total order.\n\n3. EXCLUDING REFUSED DISCARDS REAL DUMPS. apps/daemon/src/repository/migrations/migration-down-service.ts takes its dump BEFORE it reverts and returns `{ ...refused(base, code, code), backupRef }` on failure. That includes the path where the revert committed and the post-revert name check threw afterwards. Such a dump is still the schema at the moment it was taken. Skipping it walks on to a later dump. The amended model is: the first SNAPSHOT after the target wins, whatever its outcome, unless a DUMP-LESS MOVE comes first, which refuses.\n\nNO DoD CHANGE and no file-roster change. rollback-schema-moves.ts and its bridge were already declared as step 3's new files. The amended step 3 no longer needs migration-receipt.ts edited, but it stays declared, which is harmless. dependsOn on the parent is correct and must stay.",
+      "timestamp": "2026-09-11T10:46:18.587Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-11T10:37:52.010Z",
+  "updatedAt": "2026-09-11T10:46:18.587Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-11T10:38:25.341Z",
+    "plannedStepCount": 6,
+    "plannedDistinctFileCount": 6
+  },
+  "planSizeWarnings": [
+    "Plan touches 6 distinct files (target <=5); plans over 20 are rejected. Small file-disjoint tasks review better and parallelize."
+  ],
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-11T10:41:12.783Z",
+  "planningNotes": {
+    "approachesConsidered": "REFUSE WHENEVER ANY REVERT EXISTS AFTER THE TARGET - the filing worker's fallback. Safe, but it makes restoring rollback unusable on any environment that has ever run a migrate_down, which is a normal operation. Worth keeping ONLY as the answer for a revert the ordered view genuinely cannot place; not as the primary design.\n\nADD A PREFIX TO THE MIGRATION RECEIPT ID so receipts become enumerable - unnecessary, and I checked before assuming. The aggregate id already carries `migration:`. Changing the id scheme would force a migration of existing receipts for nothing.\n\nHAVE migrate_down ALSO WRITE A DEPLOY RECEIPT so the existing walk sees it - rejected. It would put a non-deploy into the deploy ledger, and every other consumer of that ledger would then have to learn to skip it. The bug is that the walk reads one ledger; the fix is to give it the right view, not to corrupt the ledger's meaning.\n\nCHECK LINEAGE FROM D's OWN RECEIPT rather than building a view - rejected. The receipt records backupRef and the applied batch, but nothing that identifies the schema state it migrated FROM in a way the walk could compare against the target. It would be an inference where an ordered record is available.",
+    "codebaseInsights": "MEASURED 2026-09-11. The filing worker said this was a code read, not executed, and asked for re-measurement. I re-measured and the claim HOLDS.\n\n1. THE WALK IS STRUCTURALLY BLIND, confirmed. rollback-preflight.ts selectRollbackDumpDecision does `readDeployLedger(store, projectId).get(environment)` then iterates `state.receipts.slice(index + 1)`, and for each successor calls `readMigrationReceipt(store, projectId, successor.decisionId)`. It only ever asks about DEPLOY receipts. recordMigrationReceipt keys a receipt by the COMMAND's own requestId, and deployment.migrate_down writes no deploy receipt, so a revert can never appear in state.receipts and the walk cannot see that schema move. This is not a missing case in a branch; the iteration is over the wrong collection.\n\n2. THE FIX IS REACHABLE WITH EXISTING PRIMITIVES - no schema change, no data migration. recordMigrationReceipt writes targetAggregateId `migration:${receiptId}`. That prefix is enumerable: store.enumerateAggregateIdsByPrefix is already used by policy-risk-reader.ts:77 and policy-waiver-reader.ts:88, and affordance-deploy-target-offers.ts:36 documents it as a payload-free indexed range scan, cheap once per read, returning sorted ids.\n\n3. THE RECEIPT ALREADY CARRIES EVERYTHING THE ORDERED VIEW NEEDS: environment, decidedAt, outcome as APPLIED | REFUSED | REVERTED, backupRef, applied, sha. Its decoder is exact-key, so the field set cannot drift silently. Filter by projectId and environment, keep APPLIED and REVERTED, order by decidedAt, and that IS the environment's schema-move history.\n\n4. ORDER COMES FROM decidedAt, NOT FROM THE SCAN. enumerateAggregateIdsByPrefix returns ids sorted by id, and the id is a SHA256, so scan order is meaningless chronologically. You must read the payloads and sort by decidedAt. That is an O(n) payload read over the project's migration receipts; acceptable because rollback is rare, but say so in the step note rather than leaving it for a reviewer to notice.\n\n5. selectRollbackDumpDecision HAS NO DIRECT TEST TODAY. git grep for it returns only its own definition and its consumer rollback-restore.ts. The parent row is mid-flight and may add coverage - rollback-command-ordering.test.ts is dirty in the shared tree right now - so re-check before concluding anything about coverage.\n\n6. THE PARENT IS STILL WORKING ON THIS EXACT FILE (1 of 8 steps when I planned this). rollback-preflight.ts is tracked, so part of its work landed, but the shape can still move. dependsOn keeps this row out of WORKING until the parent is DONE.",
+    "risks": "THE PARENT OWNS THIS FILE RIGHT NOW. If its remaining steps reshape selectRollbackDumpDecision, this plan's step 3 is written against bytes that moved. Step 1 is a hard gate for exactly that: re-measure, and report blocked rather than adapting the plan yourself if the shape changed.\n\nDO NOT REGRESS THE PARENT'S TWO RULES. The existing walk already refuses DEPLOY_ROLLBACK_RESTORE_BACKUP_ABSENT rather than skipping past a null backupRef to a later dump, and answers DEPLOY_ROLLBACK_RESTORE_MIGRATION_UNVERIFIED when a receipt will not decode. Both are deliberate and both must survive. Read the comments above them before touching the loop.\n\nA REFUSED MIGRATION IS NOT A SCHEMA MOVE. outcome REFUSED leaves the schema untouched, so the ordered view must exclude it. Including it would invent moves that never happened and refuse correct rollbacks.\n\nA REVERTED RECEIPT'S backupRef IS THE STATE BEFORE THE REVERT, not before the original migration. Be precise about which side of the revert each dump represents, or the fix restores the wrong schema while looking correct.\n\nCOST: the ordered view reads every migration receipt payload for the project. Rollback is rare so this is fine, but do not put it on a hot read, and do not cache it across commands.\n\nDRILLS under apps/daemon/src cannot be contained by a held full-suite gate. Narrow window, back up out of tree keyed by TASK id, SHA256 restore proof in a call separate from the restore.",
+    "keyFiles": [
+      "apps/daemon/src/deployment/rollback-preflight.ts",
+      "apps/daemon/src/repository/migrations/migration-receipt.ts",
+      "apps/daemon/src/repository/migrations/migration-down-service.ts",
+      "apps/daemon/src/deployment/rollback-restore.ts",
+      "apps/daemon/src/deployment/migrate-down-command.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-11T10:41:14.922Z"
+}

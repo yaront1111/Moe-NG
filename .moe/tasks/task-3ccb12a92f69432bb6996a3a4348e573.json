@@ -132,8 +132,8 @@
       "completedAt": "2026-09-11T10:38:52.539Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-77a9823a",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
@@ -194,12 +194,14 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-11T09:25:02.794Z",
-  "updatedAt": "2026-09-11T10:40:07.672Z",
+  "updatedAt": "2026-09-11T10:54:17.077Z",
   "metrics": {
     "firstClaimAt": "2026-09-11T09:25:20.906Z",
     "plannedStepCount": 6,
     "plannedDistinctFileCount": 7,
-    "executedStepCount": 6
+    "executedStepCount": 6,
+    "doneAt": "2026-09-11T10:54:17.077Z",
+    "wallClockMs": 5336171
   },
   "contextFetchedBy": [
     "architect-e29e1d0e",
@@ -291,6 +293,38 @@
         }
       ],
       "pushed": true
+    },
+    {
+      "sha": "db5c28fb9c8e1cd27015382d6667034b3eb30343",
+      "ref": "refs/heads/moe/work-2026-09-11",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-ed22fae0@2026-09-11T09:44:41Z",
+      "paths": [
+        ".moe/tasks/task-3ccb12a92f69432bb6996a3a4348e573.json",
+        "apps/daemon/src/gates-unattended-fixtures.ts",
+        "apps/daemon/src/preview/preview-auto-composition.ts",
+        "apps/daemon/src/preview/preview-auto-decision.test.ts"
+      ],
+      "recordedBy": "worker-ed22fae0",
+      "recordedAt": "2026-09-11T10:40:25.650Z",
+      "treeId": "965afd3939535eeabcb50d1a76a3c9b0eb5dc04d",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/gates-unattended-fixtures.ts",
+          "taskId": "task-510340a346c24615a2177c2db9a85782"
+        },
+        {
+          "path": "apps/daemon/src/preview/preview-auto-composition.ts",
+          "taskId": "task-510340a346c24615a2177c2db9a85782"
+        },
+        {
+          "path": "apps/daemon/src/preview/preview-auto-decision.test.ts",
+          "taskId": "task-510340a346c24615a2177c2db9a85782"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -344,13 +378,14 @@
     "packages/store/src/outbox-relay/transactional-outbox-relay.test.ts",
     "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
     "packages/store/src/sqlite-event-store.ts",
-    "packages/store/src/store-projection-seam.test.ts"
+    "packages/store/src/store-projection-seam.test.ts",
+    "tests/e2e/foundation/platform-census.test.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-77a9823a@2026-09-11T10:39:56Z",
-    "at": "2026-09-11T10:40:01.643Z"
+    "kind": "completion",
+    "sessionId": "worker-ed22fae0@2026-09-11T09:44:41Z",
+    "at": "2026-09-11T10:40:25.650Z"
   },
   "workStartedAt": "2026-09-11T09:47:34.697Z",
   "declaredFiles": [
@@ -369,5 +404,17 @@
     "outputTail": "Fresh foreground run 2026-09-11T10:30:39Z-10:34:53Z, after the final delivered-byte change, under full-suite-gate.\n\n Test Files  614 passed (614)\n      Tests  11068 passed | 21 skipped (11089)\n   Start at  13:30:40\n   Duration  252.58s (transform 32.41s, setup 0ms, import 298.39s, tests 648.93s, environment 30ms)\n\nCompanion DoD leg, same window: pnpm --filter @moe/control-room test EXIT 0 -> Test Files  211 passed (211) / Tests  2745 passed (2745).",
     "reportedAt": "2026-09-11T10:39:54.845Z"
   },
-  "completionSummary": "Owner ruling 2026-09-11 implemented: NEWEST INSTALL RESETS, THEN AMBIGUITY STILL REFUSES. The same rule governs preview and automatic release.\n\nSHARED SEAM: new bootstrap/effective-auto-policy.ts (+.js bridge) exports selectEffectiveAutoApprovalPolicy(store, projectId). It scans install order in reverse, never digest order. The first valid opt-in-free EVALUATION slice is the reset boundary. One newer declaration is effective; with none, the reset itself is effective, so core refuses AUTO_APPROVAL_NOT_OPTED_IN under a named ref. Two or more give null. Declaration is action-independent. Evaluation-shaped bytes whose digest does not match their ref give null. Both gates call it (preview-auto-composition.ts:100, release-auto-approval.ts:165). The old selectors are deleted, with no match tree-wide. Code/layer maps are unchanged.\n\nDoD:\n- Supersession arm went semantic RED to GREEN, pinning PREVIEW_AUTO_NOT_ALLOWED @ CORE_REDUCER + AUTO_APPROVAL_NOT_OPTED_IN.\n- A call-through spy shows both gates select the same concrete ref across A, empty B, C, D and E, F. Mixed preview-only/release-only pairs and two-declaring cases give null for both.\n- The two-declaring arm still returns POLICY_UNRESOLVED @ PREVIEW_AUTO_DECISION.\n- Historical-filter mutant: `expected a declined automatic decision, got an approval` (preview-auto-decision.test.ts:549).\n- Mutants B/C/D/E red 8, 1, 12 and 32 of 96. No on-disk mutation; SHA256 restore proven.\n\nGATES, fresh after the final byte change:\n- `pnpm --filter @moe/daemon test` EXIT 0, `Test Files  614 passed (614)`.\n- `pnpm --filter @moe/control-room test` EXIT 0, `Test Files  211 passed (211)`.\n- typecheck, verify:foundation, verify:store and test:security all EXIT 0.\n\nFOREIGN RED: `pnpm test` fails 2 arms in tests/e2e/foundation/platform-census.test.ts:98 (ANSI codes break a regex). The file is clean and untracked by this row, and imports nothing from apps/**. Its intersection with owned paths is empty.\n\nEvidence is in comment-2070fa15 (gates) a"
+  "completionSummary": "Owner ruling 2026-09-11 implemented: NEWEST INSTALL RESETS, THEN AMBIGUITY STILL REFUSES. The same rule governs preview and automatic release.\n\nSHARED SEAM: new bootstrap/effective-auto-policy.ts (+.js bridge) exports selectEffectiveAutoApprovalPolicy(store, projectId). It scans install order in reverse, never digest order. The first valid opt-in-free EVALUATION slice is the reset boundary. One newer declaration is effective; with none, the reset itself is effective, so core refuses AUTO_APPROVAL_NOT_OPTED_IN under a named ref. Two or more give null. Declaration is action-independent. Evaluation-shaped bytes whose digest does not match their ref give null. Both gates call it (preview-auto-composition.ts:100, release-auto-approval.ts:165). The old selectors are deleted, with no match tree-wide. Code/layer maps are unchanged.\n\nDoD:\n- Supersession arm went semantic RED to GREEN, pinning PREVIEW_AUTO_NOT_ALLOWED @ CORE_REDUCER + AUTO_APPROVAL_NOT_OPTED_IN.\n- A call-through spy shows both gates select the same concrete ref across A, empty B, C, D and E, F. Mixed preview-only/release-only pairs and two-declaring cases give null for both.\n- The two-declaring arm still returns POLICY_UNRESOLVED @ PREVIEW_AUTO_DECISION.\n- Historical-filter mutant: `expected a declined automatic decision, got an approval` (preview-auto-decision.test.ts:549).\n- Mutants B/C/D/E red 8, 1, 12 and 32 of 96. No on-disk mutation; SHA256 restore proven.\n\nGATES, fresh after the final byte change:\n- `pnpm --filter @moe/daemon test` EXIT 0, `Test Files  614 passed (614)`.\n- `pnpm --filter @moe/control-room test` EXIT 0, `Test Files  211 passed (211)`.\n- typecheck, verify:foundation, verify:store and test:security all EXIT 0.\n\nFOREIGN RED: `pnpm test` fails 2 arms in tests/e2e/foundation/platform-census.test.ts:98 (ANSI codes break a regex). The file is clean and untracked by this row, and imports nothing from apps/**. Its intersection with owned paths is empty.\n\nEvidence is in comment-2070fa15 (gates) a",
+  "touchedFiles": [
+    "apps/daemon/qa-drill-task-3ccb12a9-worker-ed22fae0.config.ts",
+    "apps/daemon/src/preview/preview-auto-composition.ts",
+    "apps/daemon/src/release/release-auto-decide.test.ts",
+    "apps/daemon/src/release/release-auto-approval.ts",
+    "apps/daemon/src/preview/preview-auto-decision.test.ts",
+    "apps/daemon/src/bootstrap/effective-auto-policy.ts",
+    "apps/daemon/src/gates-unattended-fixtures.ts"
+  ],
+  "completedAt": "2026-09-11T10:54:17.077Z",
+  "reviewCompletedAt": "2026-09-11T10:54:17.077Z",
+  "reviewSummary": "APPROVED by qa-77a9823a against delivered commits bd117a7f (4 source paths) and db5c28fb (completion, 3 contested paths; every hunk is this row's, task-510340 has no work in them). Full diff read, 7 paths, +726/-110.\n\nDoD1: selectEffectiveAutoApprovalPolicy in bootstrap/effective-auto-policy.ts (152 lines) plus a .js bridge; smoke-load OK. git grep finds exactly 2 call sites (preview-auto-composition.ts:100, release-auto-approval.ts:165). Full-tree grep for the old selectors: exit 1.\nDoD2: arm 'newer opt-in-free policy resets preview auto approval' pins PREVIEW_AUTO_NOT_ALLOWED@CORE_REDUCER plus AUTO_APPROVAL_NOT_OPTED_IN and checks the preview.start handler.\nDoD3: call-through spy asserts concrete refs [a,a],[b,b],[c,c],[null,null], plus the E/F sequence and the mixed pair.\nDoD4: two-declaring arm unchanged at POLICY_UNRESOLVED@PREVIEW_AUTO_DECISION.\nDoD5: own in-memory mutants, no disk edits:\n- A (historical filter): `expected a declined automatic decision, got an approval` at preview-auto-decision.test.ts:549, matching the recorded red.\n- B (ambiguity removed): 8/96 red, incl. DoD4 arm and all 3 parity arms.\n- C (guard removed): 1/96 red.\n- D (reset returns null): 12/96 red, incl. the supersession arm on its code.\nConfig deleted; SHA256 still equals the pre-drill values.\nDoD6: under full-suite-gate, daemon test EXIT 0, `Test Files  614 passed (614)`. control-room test EXIT 0, `Test Files  211 passed (211)`. Focused run 115/115. Daemon typecheck EXIT 0.\n\nA reset slice cannot auto-approve: core refuses empty opt-ins; a null tier hits HOLD_UNKNOWN or TIER_UNCOVERED.\nFollow-up: the doc at preview-auto-decision.ts:67 is stale (outside owned paths, disclosed by the worker). The platform-census root-lane red is foreign."
 }
