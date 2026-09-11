@@ -150,7 +150,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-11T10:12:54.995Z",
-  "updatedAt": "2026-09-11T22:55:15.108Z",
+  "updatedAt": "2026-09-11T22:55:23.975Z",
   "metrics": {
     "firstClaimAt": "2026-09-11T10:34:54.846Z",
     "plannedStepCount": 7,
@@ -273,6 +273,22 @@
       "treeId": "f9b3fa33409729211a1fcd3823b0997a9fef495c",
       "status": "BLOCKED",
       "pushed": true
+    },
+    {
+      "sha": "4b208e3be626575544c46849c2cfd7f26f4d772f",
+      "ref": "refs/heads/moe/work-2026-09-11",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-da0aeedb@2026-09-11T22:35:42Z",
+      "paths": [
+        ".moe/tasks/task-510340a346c24615a2177c2db9a85782.json",
+        ".moe/tasks/task-cab96ebcd3b6403cbbf412bdad839403.json"
+      ],
+      "recordedBy": "worker-da0aeedb",
+      "recordedAt": "2026-09-11T22:55:23.975Z",
+      "treeId": "18bd4ac0cedb23f1be34279f1e8683bcf666b654",
+      "status": "REVIEW",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -282,7 +298,9 @@
     "apps/daemon/src/orchestrator/node-lander-verification.test.ts",
     "apps/daemon/src/orchestrator/repository-delivery-runtime.ts",
     "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts",
-    "apps/daemon/src/orchestrator/node-lander.test.ts"
+    "apps/daemon/src/orchestrator/node-lander.test.ts",
+    ".moe/tasks/task-510340a346c24615a2177c2db9a85782.json",
+    ".moe/tasks/task-cab96ebcd3b6403cbbf412bdad839403.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/orchestrator/node-lander-verification.ts",
@@ -295,9 +313,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "worker-1b2cd09b@2026-09-11T12:12:39Z",
-    "at": "2026-09-11T12:17:51.202Z"
+    "kind": "completion",
+    "sessionId": "worker-da0aeedb@2026-09-11T22:35:42Z",
+    "at": "2026-09-11T22:55:23.975Z"
   },
   "blockedReason": null,
   "blockedResourceId": null,
