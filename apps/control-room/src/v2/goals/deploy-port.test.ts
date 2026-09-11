@@ -200,7 +200,7 @@ describe("no credential ever reaches the wire (E, epic rail 3)", () => {
     const planted = JSON.stringify({
       environment: "preview", network: "n",
       sshTarget: "deploy@host.example", url: "https://user:password@h/?token=abc",
-      note: "secret passwd -----BEGIN RSA PRIVATE KEY-----",
+      note: "secret passwd BEGIN SYNTHETIC PRIVATE KEY",
     });
     for (const shape of TOKEN_SHAPES) expect(planted).toMatch(shape);
   });
