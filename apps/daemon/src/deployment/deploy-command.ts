@@ -2,7 +2,9 @@ import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonObject, JsonValue } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 
-import { commitAccepted, refuse, stateOf, versionOf } from "../bootstrap/bootstrap-ledger.js";
+import {
+  commitAccepted, commitAcceptedLegs, refuse, stateOf, versionOf,
+} from "../bootstrap/bootstrap-ledger.js";
 import type { CommandHandler, HandlerTable } from "../bootstrap/bootstrap-ledger-vocabulary.js";
 import { aggregateIdFor } from "../bootstrap/bootstrap-sequence.js";
 import { BOOTSTRAP_HANDLERS, admitBootstrapCommand, runBootstrapCommand }
@@ -19,6 +21,11 @@ import { candidateEnvironmentPort } from "./deploy-candidate-environment.js";
 import { nodeDockerRunner, nodeImageTransfer, nodeSshRunner } from "./deploy-ports.js";
 import type { DeployMigrationResult, DeployPorts } from "./deploy-ports.js";
 import { resolveDeployMigrationContext } from "./deploy-migration-context.js";
+import { environmentSchemaGuardId } from "./environment-schema-guard.js";
+import {
+  deploySchemaReleaseLeg, guardDeployMigration, openDeploySchemaHold,
+} from "./deploy-schema-guard.js";
+import type { DeploySchemaReservation } from "./deploy-schema-guard.js";
 import type { EnvironmentCredentialSource } from "../environment/environment-projection.js";
 import { migrateWithBackup } from "../repository/migrations/migration-service.js";
 import { createDeployService } from "./deploy-service.js";
@@ -61,6 +68,24 @@ export const DEPLOY_BUILD_CONTEXT_UNCONFIGURED = "DEPLOY_BUILD_CONTEXT_UNCONFIGU
 /** The request never reached the engine: its sha or environment did not admit, so no receipt
  *  exists to carry a code. The SEAM refused, and the layer says so. */
 export const DEPLOY_REQUEST_REJECTED = "DEPLOY_REQUEST_REJECTED" as const;
+
+/** ANOTHER COMMAND HOLDS THIS ENVIRONMENT'S SCHEMA — a restoring `deployment.rollback` or a
+ *  `deployment.migrate_down` has the shared per-environment guard reserved. A SEAM CODE, NOT AN
+ *  ENGINE ONE, and that is load-bearing: `DEPLOY_REFUSAL_CODES` (`deploy-receipt-contracts.ts`:41)
+ *  is a frozen four whose members each carry a `DeployEngineStamp` onto a durable receipt, while
+ *  this is a fact about two commands racing at THIS seam. Minted beside `DEPLOY_GOAL_UNBOUND`, at
+ *  409 not 422 because it is RETRYABLE — as `DEPLOY_ROLLBACK_IN_PROGRESS` is for the rollback. */
+export const DEPLOY_ENVIRONMENT_SCHEMA_BUSY = "DEPLOY_ENVIRONMENT_SCHEMA_BUSY" as const;
+
+/** THIS COMMAND ID ALREADY RESERVED THIS ENVIRONMENT FOR DIFFERENT BYTES, so the reservation on
+ *  record is not this request's to release. Reachable, not defensive: a deploy that died before its
+ *  terminal leaves no terminal decision, `replayOf` returns null, and the same command id under a
+ *  DIFFERENT payload re-runs the handler — which without this refusal would free an environment
+ *  whose schema is still mid-flight. Fails closed at 409; a fresh command id is the operator's
+ *  move. Both precedents mint their own code rather than share one (`rollback-command.ts`:70,
+ *  `migrate-down-admission.ts`:60). */
+export const DEPLOY_ENVIRONMENT_SCHEMA_INTENT_CONFLICT
+  = "DEPLOY_ENVIRONMENT_SCHEMA_INTENT_CONFLICT" as const;
 
 /** The durable event a decided deploy appends. The engine's own receipt lands separately on
  *  `deploy:<projectId>:<environment>`; this one records that the COMMAND was decided, so the
@@ -134,7 +159,9 @@ const unreachableHandler: CommandHandler = (context) =>
 /** One committed decision per deploy, refusals included: an operator whose deploy refused after
  *  `docker build` needs the ledger to say the command was decided, which an uncommitted refusal
  *  cannot. The caller still receives the refusal — see `refusalOf` below. */
-function commitReport(report: DeployReport): CommandHandler {
+function commitReport(
+  report: DeployReport, reservation: DeploySchemaReservation | null,
+): CommandHandler {
   return (context) => {
     const { ledger, request, store } = context;
     const aggregateId = aggregateIdFor(request, null);
@@ -146,13 +173,25 @@ function commitReport(report: DeployReport): CommandHandler {
       detail: report.detail, environment: report.environment, outcome: report.outcome,
       receiptId: report.receipt?.receiptId ?? null, sha: report.receipt?.sha ?? null,
     } satisfies JsonObject;
-    return commitAccepted(store, request, {
+    const plan = {
       aggregateId,
       eventPayload: result as unknown as JsonValue,
       eventType: ENVIRONMENT_DEPLOY_DECIDED_EVENT,
       expectedVersion: versionOf(ledger, aggregateId),
       result: result as unknown as JsonValue,
-    });
+    };
+    /**
+     * NO RESERVATION, NO RELEASE LEG — a real arm, not a defensive `?.`. A deploy refused before
+     * its migration (build context unconfigured, goal unbound, a failed build, a missing digest)
+     * reserved nothing, and a release leg fired there would fence a stream at an EVEN version and
+     * fail the WHOLE terminal, turning a readable refusal into a bare conflict. `legs[0]` is
+     * byte-identical either way: `commitAcceptedLegs` builds it from the same `CommitPlan` through
+     * the same `eventDraft` (`bootstrap-ledger.ts`:240-244).
+     */
+    return reservation === null
+      ? commitAccepted(store, request, plan)
+      : commitAcceptedLegs(store, request, plan,
+        [deploySchemaReleaseLeg(reservation, request.commandId, result)]);
   };
 }
 
@@ -230,7 +269,7 @@ export function createDeployCommandHandler(options: DeployCommandOptions): Async
       throw new DomainRefusal("BOOTSTRAP_EXPECTED_VERSION_STALE", DAEMON_COMMAND_SEAM, "deployment offer has a stale aggregate version", 409);
     }
 
-    const ports = options.ports ?? {
+    const basePorts = options.ports ?? {
       ...productionDeployPorts(store, projectId),
       /**
        * COMPOSED ONLY WHEN THE DAEMON HAS AN ENVIRONMENT CREDENTIAL, and that condition is a
@@ -302,6 +341,32 @@ export function createDeployCommandHandler(options: DeployCommandOptions): Async
           "the release receipt for this goal and commit could not be verified", 422);
       },
     };
+    /**
+     * THE SHARED PER-ENVIRONMENT SCHEMA GUARD, TAKEN AROUND THE MIGRATION AND GIVEN BACK BY THE
+     * TERMINAL. `environment-schema-guard.ts`'s header carries the invariant and the span;
+     * `deploy-schema-guard.ts`'s carries why the wrapper is shaped as it is. What belongs HERE is
+     * the vocabulary — the derivation, the code and the layer this seam answers with. The hold is
+     * mutable and NOT on the `DeployReport`, which must not grow a guard field.
+     */
+    // OPENED BEFORE THE ENGINE RUNS, so a re-issued command id carries its own prior reservation
+    // down EVERY path the engine can take — including the receipt-replay one, which returns before
+    // the migration and would otherwise commit a terminal with no release leg.
+    const hold = openDeploySchemaHold(store, admitted.request);
+    if (hold === null) {
+      throw new DomainRefusal(DEPLOY_ENVIRONMENT_SCHEMA_INTENT_CONFLICT, DAEMON_COMMAND_SEAM,
+        "this command id already reserved this environment for different bytes", 409);
+    }
+    const innerMigrate = basePorts.migrate;
+    const ports: DeployPorts = innerMigrate === undefined ? basePorts : {
+      ...basePorts,
+      migrate: guardDeployMigration({
+        busy: {
+          code: DEPLOY_ENVIRONMENT_SCHEMA_BUSY, detail: "", layer: DAEMON_COMMAND_SEAM, ok: false,
+        },
+        guardIdFor: (environment: string) => environmentSchemaGuardId(projectId, environment),
+        hold, inner: innerMigrate, now: clock, request: admitted.request, store,
+      }),
+    };
     const report = await createDeployService({
       ports, projectId, store,
       // Spread rather than assigned: under exactOptionalPropertyTypes an explicit `undefined`
@@ -314,8 +379,17 @@ export function createDeployCommandHandler(options: DeployCommandOptions): Async
     }).deploy(deployRequestOf(envelope, context));
 
     const committed = runBootstrapCommand(store, bytes, {
-      ...BOOTSTRAP_HANDLERS, [DEPLOYMENT_DEPLOY_COMMAND_KIND]: commitReport(report),
+      ...BOOTSTRAP_HANDLERS,
+      [DEPLOYMENT_DEPLOY_COMMAND_KIND]: commitReport(report, hold.reservation),
     } satisfies HandlerTable);
+    // AHEAD OF `refusalOf`: the engine's report is not the authority here. A deploy that never took
+    // the guard was refused by THIS seam; the receipt records only `DEPLOY_BUILD_FAILED` with the
+    // cause in its detail, the same bucket the engine uses for any migration refusal
+    // (`deploy-service.ts`:311-319). The operator gets the code and layer that actually decided.
+    if (committed.ok && hold.busy) {
+      throw new DomainRefusal(DEPLOY_ENVIRONMENT_SCHEMA_BUSY, DAEMON_COMMAND_SEAM,
+        "another command holds this environment's schema", 409);
+    }
     // The decision is durable either way; a refused deploy still answers with the engine's own
     // code and layer rather than a committed success the operator would misread as a deploy.
     if (committed.ok && report.outcome === "REFUSED") throw refusalOf(report);
