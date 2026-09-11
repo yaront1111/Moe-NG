@@ -7,7 +7,7 @@ import { describe, expect, it } from "vitest";
 
 import { DurableStoreError, SqliteEventStore } from "./index.js";
 import type { CommitInput, CommitResult } from "./index.js";
-import type { CommitApply } from "./sqlite-event-store.js";
+import type { CommitApply, CommitApplyContext, CommitReplayValidator } from "./sqlite-event-store.js";
 import { bytes } from "./sqlite-event-store-test-helpers.js";
 
 const PROJECTION_NAME = "seam-probe";
@@ -191,6 +191,71 @@ describe("projection commit seam", () => {
     });
   });
 
+  it("validates a durable replay under the write lock without repeating the apply", () => {
+    withDurableStore((open, databasePath) => {
+      const calls: string[] = [];
+      const apply: CommitApply = ({ summary }) => { calls.push(`apply:${summary.disposition}`); };
+      const contender = new DatabaseSync(databasePath);
+      contender.exec("PRAGMA busy_timeout = 0");
+      const validate = (context: CommitApplyContext): void => {
+        calls.push(`validate:${context.summary.disposition}`);
+        expect(context.database.isTransaction).toBe(true);
+        expect(selectPositions(context.database, "cmd-1")).toEqual([1]);
+        expect(() => contender.exec("BEGIN IMMEDIATE")).toThrow(/locked|busy/u);
+      };
+      const first = open();
+      try {
+        expect(first.commitWithApply(commitInput("1", 0), apply, validate).disposition)
+          .toBe("COMMITTED");
+      } finally { first.close(); }
+      const reopened = open();
+      try {
+        expect(reopened.commitWithApply(commitInput("1", 0), apply, validate).disposition)
+          .toBe("REPLAYED");
+        expect(calls).toEqual(["apply:COMMITTED", "validate:REPLAYED"]);
+        expect(reopened.readEvents("goal-1").map(({ eventId }) => eventId)).toEqual(["evt-1"]);
+      } finally { reopened.close(); contender.close(); }
+    });
+  });
+
+  it("rolls back a failed replay validator while preserving the original receipt", () => {
+    withDurableStore((open, databasePath) => {
+      const store = open();
+      try {
+        store.commit(commitInput("1", 0));
+        const original = store.getCommandReceipt("cmd-1");
+        const cause = new Error("durable replay evidence does not match");
+        const failure = captureThrow(() => store.commitWithApply(
+          commitInput("1", 0), () => { throw new Error("must not apply twice"); },
+          (context: CommitApplyContext) => {
+            context.database.prepare(INSERT_PROJECTION).run(PROJECTION_NAME, "1", "not-durable");
+            throw cause;
+          },
+        ));
+        expect(failure.code).toBe("PROJECTION_APPLY_FAILED");
+        expect(failure.cause).toBe(cause);
+        expect(store.getCommandReceipt("cmd-1")).toEqual(original);
+        expect(readProjectionNames(databasePath)).toEqual([]);
+        expect(store.commit(commitInput("2", 1)).disposition).toBe("COMMITTED");
+      } finally { store.close(); }
+    });
+  });
+
+  it("refuses an asynchronous replay validator", () => {
+    withEphemeralStore((store) => {
+      store.commit(commitInput("1", 0));
+      const original = store.getCommandReceipt("cmd-1");
+      const failure = captureThrow(() => store.commitWithApply(
+        commitInput("1", 0), () => { throw new Error("must not apply twice"); },
+        () => Promise.resolve(),
+      ));
+      expect(failure.code).toBe("PROJECTION_APPLY_FAILED");
+      expect(failure.message).toContain("must be synchronous");
+      expect(store.getCommandReceipt("cmd-1")).toEqual(original);
+      expect(store.commit(commitInput("2", 1)).disposition).toBe("COMMITTED");
+    });
+  });
+
   it("keeps the stable code when the apply throws an undescribable value", () => {
     withEphemeralStore((store) => {
       const failure = captureThrow(() => {
@@ -221,18 +286,23 @@ describe("projection commit seam", () => {
   it("never invokes the apply on a conflicting command", () => {
     withEphemeralStore((store) => {
       const applyCalls: string[] = [];
+      const validationCalls: string[] = [];
       const record: CommitApply = (context) => {
         applyCalls.push(context.summary.commandId);
       };
+      const validate: CommitReplayValidator = (context) => {
+        validationCalls.push(context.summary.commandId);
+      };
       store.commit(commitInput("1", 0));
       const reused = { ...commitInput("1", 0), commandBytes: bytes("{}") };
-      expect(captureThrow(() => store.commitWithApply(reused, record)).code).toBe(
+      expect(captureThrow(() => store.commitWithApply(reused, record, validate)).code).toBe(
         "COMMAND_ID_CONFLICT",
       );
-      expect(captureThrow(() => store.commitWithApply(commitInput("2", 0), record)).code).toBe(
+      expect(captureThrow(() => store.commitWithApply(commitInput("2", 0), record, validate)).code).toBe(
         "EXPECTED_VERSION_CONFLICT",
       );
       expect(applyCalls).toEqual([]);
+      expect(validationCalls).toEqual([]);
     });
   });
 
