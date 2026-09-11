@@ -4,13 +4,10 @@ import type { JsonValue } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 
 import { POLICY_EVALUATOR_VERSION } from "../bootstrap/bootstrap-policy-authority.js";
-import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
-import { installedSlices } from "../bootstrap/bootstrap-policy-services.js";
-import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
+import { selectEffectiveAutoApprovalPolicy } from "../bootstrap/effective-auto-policy.js";
 import { evaluationChain, resolvePolicyWaivers } from "../bootstrap/policy-fact-resolver.js";
 import { readRunPolicyEvaluation } from "../bootstrap/run-policy-selection.js";
 import { readCriterionGoal } from "../criterion-evidence/criterion-goal.js";
-import { sliceKindOf } from "../http/policy-read.js";
 import { RELEASE_DECIDE_COMMAND_KIND } from "./release-decide-contracts.js";
 
 /**
@@ -19,16 +16,18 @@ import { RELEASE_DECIDE_COMMAND_KIND } from "./release-decide-contracts.js";
  *
  * IT DECIDES NOTHING THE POLICY ENGINE DECIDES. `evaluatePolicy` (@moe/core, bare specifier) is
  * the authority for tier ranking, opt-in matching and the dominance lattice, and none of those is
- * reimplemented here. This module owns four things: which installed slice is the chain, which
- * durable row grounds the subject's tier, composing the evaluation input the daemon's established
- * way, and reading the engine's verdict back into a NAMED provenance.
+ * reimplemented here. This module owns three things: which durable row grounds the subject's
+ * tier, composing the evaluation input the daemon's established way, and reading the engine's
+ * verdict back into a NAMED provenance.
  *
- * THE NEWEST INSTALLED EVALUATION SLICE GOVERNS, and that is deliberately stricter than picking
- * whichever slice happens to declare this gate's opt-in. `foldSlices` returns the LAST slice's
- * `optIns` (policy-composition.ts:161-166), so an operator who installs a fresh policy carrying
- * no opt-in has turned automatic release OFF; selecting the declaring slice instead would keep it
- * on across a policy replacement the operator meant as a reset. `policy.install` appends
- * `{...current, [sliceRef]: slice}` under a hex64 ref, so insertion order IS install order.
+ * WHICH POLICY IS EFFECTIVE IS NOT THIS MODULE'S QUESTION EITHER. It is asked of
+ * `selectEffectiveAutoApprovalPolicy` (bootstrap/effective-auto-policy.ts), the ONE seam the
+ * automatic PREVIEW gate reads too. This module used to answer it by taking the newest installed
+ * EVALUATION slice while the preview gate narrowed the whole installed history to slices
+ * declaring its own action — two gates, two answers, and an operator installing an opt-in-free
+ * policy could not turn preview's automatic approval off. The shared rule (a newer opt-in-free
+ * install RESETS, and two declarations after the last reset still refuse fail-closed) is
+ * documented once, at that seam.
  *
  * THE TIER IS THE RUN'S, READ THROUGH THE DAEMON'S OWN SELECTOR. `readRunPolicyEvaluation` is
  * run-scoped and replay-verified -- the same source `approval-record-facts.ts:215-231` consumes --
@@ -55,7 +54,10 @@ export const RELEASE_AUTO_CODE_LAYER_MAP = Object.freeze({
   RELEASE_AUTO_OPT_IN_UNNAMEABLE: "RELEASE_AUTO_DECISION",
   /** CORE: the composed input was structurally rejected (INPUT_INVALID). */
   RELEASE_AUTO_POLICY_INPUT_INVALID: "CORE_REDUCER",
-  /** No installed EVALUATION slice, so there is no chain to evaluate. */
+  /** NO EFFECTIVE POLICY, so there is no chain to evaluate: nothing installed, nothing declared
+   *  since the most recent reset, TWO OR MORE declarations competing after it (ambiguous, and
+   *  ambiguity refuses rather than picking), or a candidate whose bytes do not address their own
+   *  ref, or a durable ledger that could not be read at all. */
   RELEASE_AUTO_POLICY_UNRESOLVED: "RELEASE_AUTO_DECISION",
   /** ALLOW, but the tier is outside `POLICY_AUTO_APPROVAL_TIERS`. Unreachable while the engine
    *  holds; kept so this module refuses on its own authority rather than on trust. */
@@ -121,26 +123,6 @@ export interface ReleaseAutoApprovalRequest {
   readonly projectId: string;
 }
 
-/** The LAST digest-addressed installed EVALUATION slice, or nothing. Selection, not judgement. */
-function newestEvaluationSlice(
-  store: SqliteEventStore, projectId: string,
-): { readonly ref: string; readonly slice: JsonValue } | null {
-  let selected: { readonly ref: string; readonly slice: JsonValue } | null = null;
-  let installed: Readonly<Record<string, JsonValue>>;
-  try {
-    installed = installedSlices(
-      stateOf(readDurableLedger(store, projectId), policyAggregateId(projectId)),
-    );
-  } catch {
-    return null;
-  }
-  for (const ref of Object.keys(installed)) {
-    const slice = installed[ref];
-    if (slice !== undefined && sliceKindOf(ref, slice) === "EVALUATION") selected = { ref, slice };
-  }
-  return selected;
-}
-
 /** The goal's replay-verified planning-run tier, or null. NOTHING here derives a tier. */
 function subjectTierOf(
   store: SqliteEventStore, projectId: string, goalId: string,
@@ -180,7 +162,7 @@ export function evaluateReleaseAutoApproval(
   store: SqliteEventStore, request: ReleaseAutoApprovalRequest,
 ): ReleaseAutoApproval {
   const { decidedAt, goalId, operatorPrincipalId, projectId } = request;
-  const selected = newestEvaluationSlice(store, projectId);
+  const selected = selectEffectiveAutoApprovalPolicy(store, projectId);
   if (selected === null) return releaseAutoDecline("RELEASE_AUTO_POLICY_UNRESOLVED");
   const subject = subjectTierOf(store, projectId, goalId);
   if (subject === null) return releaseAutoDecline("RELEASE_AUTO_TIER_UNRESOLVED");
