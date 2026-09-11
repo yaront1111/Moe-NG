@@ -88,14 +88,12 @@ export async function writeWebResponse(
   // and an SSE stream that has not yet emitted an event writes nothing — so the client blocks
   // waiting for headers that are sitting in a buffer. Measured: without this, a GET opening the
   // event stream never resolves at the client at all.
-  target.flushHeaders();
   // Streamed rather than buffered: SSE is the adapter's default transport mode and a buffered
   // read would never resolve for a long-lived event stream.
   const reader = response.body.getReader();
   let sourceDone = false;
   let disconnected = false;
-  let onDisconnect: () => void = () => undefined;
-  const disconnect = new Promise<void>((resolve) => { onDisconnect = resolve; });
+  const disconnect = new AbortController();
   const handleClose = (): void => {
     if (disconnected) return;
     disconnected = true;
@@ -104,7 +102,7 @@ export async function writeWebResponse(
     // `sourceDone` because 'close' also follows a NORMAL end, where the source already
     // finished and a second teardown is not this pump's to issue.
     if (!sourceDone) void reader.cancel().catch(() => undefined);
-    onDisconnect();
+    disconnect.abort();
   };
   // REGISTERED BEFORE THE FIRST READ, or the window between them silently swallows the only
   // disconnect notification node ever sends; the `destroyed` check covers a client that was
@@ -112,6 +110,7 @@ export async function writeWebResponse(
   target.on("close", handleClose);
   if (target.destroyed) handleClose();
   try {
+    target.flushHeaders();
     for (;;) {
       const chunk = await reader.read();
       if (chunk.done) {
@@ -121,13 +120,23 @@ export async function writeWebResponse(
       if (disconnected) break;
       // BACKPRESSURE IS HONOURED. A false return parks the pump until node drains the socket
       // buffer — ignoring it buffers an unbounded SSE backlog in process memory for a slow
-      // reader. Raced against disconnect because a vanished client never emits 'drain'.
+      // reader. Disconnect aborts the wait because a vanished client never emits 'drain'.
       if (!target.write(chunk.value)) {
-        await Promise.race([once(target, "drain"), disconnect]);
+        try {
+          await once(target, "drain", { signal: disconnect.signal });
+        } catch (error) {
+          // Ignore only our own cancellation; an error followed by close still fails.
+          if (!(disconnect.signal.aborted && error instanceof Error
+            && error.name === "AbortError" && error.cause === disconnect.signal.reason)) throw error;
+        }
       }
     }
   } finally {
     target.off("close", handleClose);
+    // A write/flush/drain failure can exit before close; this pump still owns source cleanup.
+    // Do not await the source's cancellation hook: a broken hook must not pin the socket.
+    if (!sourceDone && !disconnected) void reader.cancel().catch(() => undefined);
+    reader.releaseLock();
     target.end();
   }
 }
