@@ -1,5 +1,6 @@
 import type { KeyObject } from "node:crypto";
-import { resolve, sep } from "node:path";
+import { realpathSync } from "node:fs";
+import { basename, dirname, resolve, sep } from "node:path";
 
 import {
   type BackupGenerationRefused,
@@ -108,17 +109,45 @@ function comparablePath(value: string): string {
   return process.platform === "win32" ? resolved.toLowerCase() : resolved;
 }
 
+/** Resolve existing ancestors too: a not-yet-created staging directory can still
+ * traverse a junction or symlink in its parent path. Each sibling is resolved
+ * independently because a link at the final destination does not alias its siblings. */
+function physicalPath(value: string): string {
+  let existing = resolve(value);
+  const missing: string[] = [];
+  for (;;) {
+    try {
+      return comparablePath(resolve(realpathSync(existing), ...missing));
+    } catch (error) {
+      const parent = dirname(existing);
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT" || parent === existing) throw error;
+      missing.unshift(basename(existing));
+      existing = parent;
+    }
+  }
+}
+
+function pathsOverlap(first: string, second: string): boolean {
+  const below = (parent: string, child: string): boolean =>
+    child.startsWith(parent.endsWith(sep) ? parent : parent + sep);
+  return first === second || below(first, second) || below(second, first);
+}
+
 /**
- * A destination may not be, contain, or live inside the database it captures.
- * Compared on resolved absolute paths with a trailing separator, so `/data/dbx`
- * is not mistaken for a child of `/data/db`.
+ * Every path publish or recovery can remove must be disjoint from each source
+ * file before the first mutation. Protect the final destination and both
+ * reserved siblings, including physical aliases through existing ancestors.
  */
-export function destinationIsUnsafe(destinationPath: string, databasePath: string): boolean {
-  const destination = comparablePath(destinationPath);
-  const database = comparablePath(databasePath);
-  return (
-    destination === database ||
-    database.startsWith(destination + sep) ||
-    destination.startsWith(database + sep)
-  );
+export function destinationIsUnsafe(destinationPath: string, sourcePath: string): boolean {
+  try {
+    const destination = resolve(destinationPath);
+    const source = comparablePath(sourcePath);
+    const physicalSource = physicalPath(sourcePath);
+    return [destination, `${destination}.staging`, `${destination}.previous`].some((candidate) =>
+      pathsOverlap(comparablePath(candidate), source)
+      || pathsOverlap(physicalPath(candidate), physicalSource));
+  } catch {
+    // An unreadable path topology cannot authorize recursive removal.
+    return true;
+  }
 }
