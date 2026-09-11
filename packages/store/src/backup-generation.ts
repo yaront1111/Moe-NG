@@ -120,7 +120,8 @@ export async function createBackupGeneration(
     return refuseBackupGeneration("DESTINATION_UNSAFE");
   }
   for (const entry of request.objects) {
-    if (entry.logicalPath.includes("..") || entry.logicalPath.startsWith("/")) {
+    if (destinationIsUnsafe(request.destinationPath, entry.sourcePath)
+      || entry.logicalPath.includes("..") || entry.logicalPath.startsWith("/")) {
       return refuseBackupGeneration("DESTINATION_UNSAFE");
     }
   }
