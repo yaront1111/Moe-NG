@@ -133,7 +133,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-11T10:12:54.995Z",
-  "updatedAt": "2026-09-11T11:09:30.890Z",
+  "updatedAt": "2026-09-11T11:11:14.270Z",
   "metrics": {
     "firstClaimAt": "2026-09-11T10:34:54.846Z",
     "plannedStepCount": 7,
@@ -168,5 +168,52 @@
   "contextFetchedBy": [
     "worker-1b2cd09b"
   ],
-  "workStartedAt": "2026-09-11T10:38:00.774Z"
+  "workStartedAt": "2026-09-11T10:38:00.774Z",
+  "commits": [
+    {
+      "sha": "de76ccb1b281074fa1a22503b65fcd4155c5aea1",
+      "ref": "refs/heads/moe/work-2026-09-11",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-1b2cd09b@2026-09-11T10:37:26Z",
+      "paths": [
+        ".moe/tasks/task-705977238f794b2cadb5c1dcdb98d6bd.json",
+        ".moe/tasks/task-cab96ebcd3b6403cbbf412bdad839403.json",
+        "apps/daemon/src/orchestrator/node-lander.ts",
+        "apps/daemon/src/orchestrator/node-lander-verification.test.ts",
+        "apps/daemon/src/orchestrator/node-lander-verification.ts",
+        "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts",
+        "apps/daemon/src/orchestrator/repository-delivery-runtime.ts"
+      ],
+      "recordedBy": "worker-1b2cd09b",
+      "recordedAt": "2026-09-11T11:11:14.270Z",
+      "treeId": "fcf4da22c6f6c90b30f6a0b9909e4bb0f0baf506",
+      "status": "WORKING",
+      "pushed": true
+    }
+  ],
+  "filesModified": [
+    ".moe/tasks/task-705977238f794b2cadb5c1dcdb98d6bd.json",
+    ".moe/tasks/task-cab96ebcd3b6403cbbf412bdad839403.json",
+    "apps/daemon/src/orchestrator/node-lander.ts",
+    "apps/daemon/src/orchestrator/node-lander-verification.test.ts",
+    "apps/daemon/src/orchestrator/node-lander-verification.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.ts"
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/orchestrator/node-lander-verification.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts",
+    "apps/daemon/drill-task-cab96ebcd3b6403cbbf412bdad839403.config.ts",
+    "apps/daemon/src/orchestrator/node-lander.ts",
+    "apps/daemon/src/orchestrator/node-lander-verification.test.ts",
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "checkpoint",
+    "sessionId": "worker-1b2cd09b@2026-09-11T10:37:26Z",
+    "at": "2026-09-11T11:11:14.270Z"
+  }
 }
