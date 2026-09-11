@@ -16,28 +16,40 @@
     {
       "stepId": "step-1",
       "description": "PIN THE SEAM BEFORE EDITING - read only. Re-run the four censuses the row demands and confirm each: `policy-risk-leg.ts:141` is still `return built.ok ? [...legs, built.leg] : legs;`; `withPolicyRiskLeg` still has exactly TWO production callers (`approval-activation.ts:192`, `graph-activation-service.ts:249`); `resolvePolicyFact` still has exactly ONE production caller (`bootstrap-policy-services.ts:173`, validatePolicy's caller-named action) with preview NO LONGER among them (`preview/preview-risk-fact.ts` owns that now); `readCurrentActiveGraph` still answers ACTIVE_GRAPH_ABSENT on the ordinary journey. THEN PIN THE TWO HAZARDS THAT WILL OTHERWISE COST A SESSION EACH. (a) `approval-record-facts.test.ts:419` asserts `activation.match(/commitAcceptedLegs\\(/gu)` has length EXACTLY 1 - a TEXT SCAN over approval-activation.ts's source. Any fix that adds a second `commitAcceptedLegs(` call reds it, so the marker must ride the SAME single commit. (b) `approval-activation.ts:200` already branches on `riskLegs.length === 0` to decide `slotFenceLegs` - the silent drop is ALREADY load-bearing downstream, so changing what `withPolicyRiskLeg` returns must preserve that branch's meaning exactly. Finally confirm the marker's event type and aggregate prefix are unused: `git grep` the literals you intend to mint across ALL file types. If any census disagrees, moe.report_blocked rather than adapting.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/policy-risk-leg.ts",
         "apps/daemon/src/planning/approval-activation.ts",
         "apps/daemon/src/planning/graph-activation-service.ts"
-      ]
+      ],
+      "note": "SEAM PINNED. All four censuses AGREE with the plan; no block owed.\n\n1. `policy-risk-leg.ts:141` is verbatim `  return built.ok ? [...legs, built.leg] : legs;`\n2. `withPolicyRiskLeg` has exactly TWO production callers: `approval-activation.ts:192` (import :28) and `graph-activation-service.ts:249` (import :27). The third grep hit, `preview/preview-risk-fact.ts:19`, is a COMMENT naming it, not a call.\n3. `resolvePolicyFact` has exactly ONE production call site: `bootstrap-policy-services.ts:173` (validatePolicy's `callerRequestedAction`). The other four hits are the definition (`policy-fact-resolver.ts:137`) and three COMMENTS (`approval-record-facts.ts:17`, `preview-auto-composition.ts:30` and `:99`, `preview-risk-fact.ts:15`). Preview's departure CONFIRMED by grep, not inherited.\n4. MEASURED PROBE over a real `journeyWorld(\"SUBMITTED\")` (throwaway `src/planning/zz-probe-a1cf5270.test.ts`, vitest 1 passed, file deleted — `ls` confirms gone):\n   PROBE risk-ids []\n   PROBE absent-ids []\n   PROBE active {\"code\":\"ACTIVE_GRAPH_ABSENT\",\"layer\":\"ACTIVE_GRAPH_PROJECTION\",\"ok\":false,\"sourceCode\":null,\"sourceLayer\":null}\n   PROBE read {\"code\":\"POLICY_RISK_RECORD_MISSING\",\"layer\":\"DAEMON_POLICY_RISK\",\"ok\":false,\"tier\":null,\"truthClass\":\"UNKNOWN\"}\n\nHAZARD (a) CONFIRMED LIVE: `approval-record-facts.test.ts:416` `activation.lastIndexOf(\"commitAcceptedLegs(\")`, `:419` `expect(activation.match(/commitAcceptedLegs\\(/gu)).toHaveLength(1)`. A second call site reds it.\nHAZARD (b) CONFIRMED LIVE: `approval-activation.ts:202` `riskLegs.length === 0 || approvalSourceFences !== undefined ? [] : [slot fence]`, consumed at :211-212. Must become an explicit is-this-a-RISK-leg test.\n\nMARKER LITERALS ARE FREE (git grep, ALL file types, repo root): `policy.risk-absence` 0 hits; `POLICY_RISK_ABSENCE` 0 hits; `policy-risk-absent` 1 hit and it is `.moe/tasks/task-c7a66b7…json` — this row's own plan text, not code.\n\nCOLLISION SAFETY MEASURED, not assumed: `policy-risk-reader.ts:45` `AGGREGATE_PREFIX = \"policy-risk:sha256:\"` and `loadRecords` :77-91 fails the WHOLE read to UNREADABLE if any enumerated aggregate holds a non-`POLICY_RISK_EVENT_TYPE` event. `\"policy-risk-absent:sha256:X\".startsWith(\"policy-risk:sha256:\")` is FALSE (char 12 is `-` vs `:`), so the marker stream is invisible to that enumeration. I will pin this in an arm.\n\nREPLAY/RACE NOTE for step 2: `commitAcceptedLegs` (bootstrap-ledger.ts:228-249) rides ONE `commitExpectedVersionDecisionLegs` keyed by `decisionKey(request)`, so a replayed command returns the recorded decision without re-committing any leg. Keying the marker aggregate on the COMMAND avoids the cross-approval expectedVersion race the plan's risks section names.\n\nEPIC RAILS 1 AND 2 DO NOT FIRE — confirmed, not assumed: this row adds an event type on a new aggregate stream and NO runtime command kind, so no `pnpm --filter @moe/control-room test` leg and no digest-mirror census is owed.\n\nFOREIGN-RED STATUS CHANGED SINCE THE PARENT ROW: `apps/daemon/src/deployment/deploy-schema-guard.js` NOW EXISTS (Sep 12 01:32). task-510340a3's disclosed 15-file/20-test red is therefore expected to be gone; I will re-measure at step 7 rather than inherit it.\n\nSHARED CHECKOUT: 7 foreign dirty paths noted (.moe/* task+message+role JSON, .codex/.grok config, 3 node-*-e2e-proj-k3x0md deletions, 2 untracked .moe/resources gate files, Moe-NG_Deep_Review_2026-09-05.md). None touched, none a stop condition.",
+      "startedAt": "2026-09-11T22:45:45.301Z",
+      "completedAt": "2026-09-11T22:48:26.943Z"
     },
     {
       "stepId": "step-2",
       "description": "MINT THE ABSENCE MARKER IN `policy-risk-leg.ts`, the leaf that already owns this decision. `buildPolicyRiskLeg` has SIX refusal exits - ACTOR_NOT_HUMAN, DECISION_REF_MISSING, STEP_UP_MISSING, TIER_MISSING, SUBJECT_UNAVAILABLE (:62-75) and `buildPolicyRiskRecord`'s own `!record.ok` - and every one of them is discarded at :141. Add a builder that turns a refusal into a durable leg on its OWN aggregate (a `policy-risk-absent:` stream keyed the way `policyRiskAggregateIdFor` keys the record stream), carrying the refusal's CODE and LAYER from the existing `policyRiskRefusal` value verbatim. Then change `withPolicyRiskLeg` so the refusal arm appends the ABSENCE leg instead of returning `legs` unchanged: the function keeps returning `readonly ExpectedVersionDecisionLeg[]`, so neither caller's shape moves and the `riskLegs.length === 0` branch in step 3 is handled deliberately rather than by accident. A SEPARATE STREAM AND NOT A FIELD: do not add a key to `GoalExecutionEnabled`'s event payload and do not touch `plan.result` (`approval-activation.ts:182` commits `verdict.state`, a domain object this row has no business widening) - a new field on an existing durable payload risks every strict decoder and replay path that reads it, where a new stream risks nothing that exists.",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "affectedFiles": [
         "apps/daemon/src/planning/policy-risk-leg.ts"
-      ]
+      ],
+      "modifiedFiles": [
+        "apps/daemon/src/planning/policy-risk-leg.ts",
+        "apps/daemon/src/bootstrap/policy-risk-absence-record.ts",
+        "apps/daemon/src/bootstrap/policy-risk-absence-record.js"
+      ],
+      "note": "ABSENCE MARKER MINTED. `withPolicyRiskLeg`'s refusal arm now appends a durable marker instead of returning `legs` unchanged; return type `readonly ExpectedVersionDecisionLeg[]` is UNCHANGED, so neither caller's shape moves.\n\n`policy-risk-leg.ts` (142 -> 187 lines):\n- `policyRiskAbsenceLeg(store, input, refusal)` (:107) builds the leg from the EXISTING `policyRiskRefusal` value verbatim — `code: refusal.code, layer: refusal.layer`, no re-derivation and no new vocabulary.\n- `:184-186` is now `built.ok ? [...legs, built.leg] : [...legs, policyRiskAbsenceLeg(store, input, built)]`. It covers ALL SIX refusal exits by construction: the arm is on `built.ok`, and every exit in `buildPolicyRiskLeg` (:68 ACTOR_NOT_HUMAN, :70 DECISION_REF_MISSING, :73 STEP_UP_MISSING, :76 TIER_MISSING, :79 SUBJECT_UNAVAILABLE, :91 `!record.ok` -> POLICY_RISK_RECORD_INVALID) returns through it. Nothing is discarded any more.\n- `hasPolicyRiskRecordLeg(legs)` (:137) exported for step 3. It asks `event.eventType === POLICY_RISK_EVENT_TYPE`, the one durable discriminator — NOT an aggregate-id prefix parse, and not `.every` (the slot fence leg carries `events: []`, which `.every` would misclassify as a match).\n\nNEW FILE `apps/daemon/src/bootstrap/policy-risk-absence-record.ts` (105 lines) + its `.js` bridge. SPLIT DELIBERATELY, not drift: holding the codec in `policy-risk-leg.ts` measured 266 physical lines, over the project rail's <=250-per-production-file target. The codec now lives beside `policy-risk-record.ts`, the record it mirrors, and the LEG is still minted in `policy-risk-leg.ts` as the step directs. Both files are now well inside the target (187 / 105). The `.js` bridge matches house convention (`export * from \"./policy-risk-absence-record.ts\";`) — memory `a-missing-js-bridge-reds-15-daemon-files-on-one-import` says omitting it reds unrelated files.\n\nTHE STREAM IS SEPARATE, NOT A FIELD, exactly as the step requires. `GoalExecutionEnabled`'s `eventPayload` is untouched and `plan.result` (`approval-activation.ts:182`, `verdict.state`) is untouched.\n\nAGGREGATE KEY — deliberate divergence from the record stream's tuple, with the reason in the header. Same MECHANISM as `policyRiskAggregateIdFor` (sha256 over a domain-separated JSON tuple, own domain `moe.policy-risk-absence.aggregate.v1`) but keyed on (projectId, actionKind, COMMAND ID) rather than on the subject, for two reasons: (1) the subject is the very thing a SUBJECT_UNAVAILABLE marker reports as unreadable, so it cannot be part of the key; (2) a per-project key would put two concurrent approvals on ONE aggregate at ONE `expectedVersion` and fail one of them — and a failed extra leg fails the WHOLE approval, turning this fail-OPEN path fail-CLOSED and inverting the property DoD 2 pins. One command, one aggregate, zero contention. This answers the plan's named race risk.\n\nCOLLISION: impossible by prefix. `policy-risk-absent:sha256:` is not a prefix-match of the reader's `policy-risk:sha256:`; I will pin that in an arm at step 6.\n\nCODEC IS STRICT, per house style: exact key roster (`Reflect.ownKeys` length + `Object.hasOwn`), refusal code must be in `POLICY_RISK_RECORD_CODES` or `POLICY_RISK_WRITER_CODES`, layer must equal `POLICY_RISK_LAYER`, `assessedAt` through the existing `isIsoInstant`. `decodePolicyRiskAbsenceRecord` returns `null` on any miss — the test asserts through this production surface rather than hand-rolling JSON.parse.\n\nVERIFIED: `npx tsc --project apps/daemon/tsconfig.json --noEmit` exit 0. The `withPolicyRiskLeg` header at :157-168 still claims silence — step 5 rewrites it, as planned.",
+      "startedAt": "2026-09-11T22:49:19.574Z",
+      "completedAt": "2026-09-11T22:51:12.894Z"
     },
     {
       "stepId": "step-3",
       "description": "WIRE `approval-activation.ts` AND KEEP THE SLOT FENCE HONEST - this is the step most likely to introduce a silent regression. With step 2 in place `riskLegs` is NEVER empty on a refusal (it now carries the absence marker), so the existing `riskLegs.length === 0` test at :200 would flip meaning and the slot fence would start being taken where it previously was not. Replace that length test with an explicit check of whether a RISK leg (not an absence leg) was produced, so the fence's behaviour is byte-identical to today's for every input. Preserve the single `commitAcceptedLegs(` call - step 1(a) pins it - and leave the ordering of `extraLegs`, `sourceFences` and `replayLeg` untouched; the burn must stay last, as :216's comment requires. Extend the comment block at :185-190, which currently says a builder refusal 'omits only risk authority': it now RECORDS that omission with its reason, and that sentence must say so rather than remaining half-true.",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "affectedFiles": [
         "apps/daemon/src/planning/approval-activation.ts"
-      ]
+      ],
+      "startedAt": "2026-09-11T22:51:15.426Z"
     },
     {
       "stepId": "step-4",
@@ -86,7 +98,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -99,16 +111,27 @@
   ],
   "priority": "HIGH",
   "order": 87,
-  "comments": [],
+  "comments": [
+    {
+      "id": "comment-612abc32aa7841718dbd8b7e44b76a8f",
+      "author": "worker-a1cf5270",
+      "content": "MEASUREMENT THAT BLOCKS THE PLAN'S CHOSEN DESIGN — worker-a1cf5270, step 3, branch moe/work-2026-09-11.\n\nTHE ORDINARY JOURNEY'S PLAN APPROVAL ALREADY RIDES EXACTLY 8 LEGS, AND 8 IS THE STORE'S HARD MAXIMUM. Adding the absence marker makes it 9 and the store THROWS.\n\nMeasured with a logging Proxy over `store.commitExpectedVersionDecisionLegs` (methods bound to the real store), driving `approvePlan` over the production `boundWorld -> committedRevision -> approveGate1 -> submit` path — the same path `journeyWorld` takes:\n\n    PROBE4 legs 9 [\"goal-1\",\"moe-budget-ledger/1|aggregate|9:pr\",\"policy-risk-absent:sha256:e008473e\",\"run-1\",\"planning-authority/run-1\",\"project-1-policy\",\"policy-run-evaluation:run-1\",\"active-graph-slot:project-1\",\"moe.session-authority.v1/replay/ad\"]\n    PROBE4 THREW DurableStoreError: STORE_LIMIT_EXCEEDED: legs cannot exceed 8 elements\n\nRemove leg 3 (my marker) and it is exactly 8. The budget on `activateInitialGraphWithApprovalReplay` is fixed: 1 primary (goal) + 1 GENESIS budget root + N risk legs + 5 source fences (`approval-intent-source-fences.ts:59-65` — run, planning-authority, project-policy, run-policy, active-graph-slot) + 1 replay marker. `slotFenceLegs` is already `[]` on this path because `approvalSourceFences !== undefined`. So N must be 0, and today it always is — because the risk leg is ALWAYS refused here (`readCurrentActiveGraph` answers ACTIVE_GRAPH_ABSENT, subject null, POLICY_RISK_SUBJECT_UNAVAILABLE).\n\nTHE CONSEQUENCE THE PLAN DID NOT ANTICIPATE: the silent drop is load-bearing in a SECOND and much harder way than planningNotes.codebaseInsights found. It is not only what the `riskLegs.length === 0` slot-fence test reads (that part of the plan is correct and I implemented it) — it is also what keeps this decision UNDER the store's leg ceiling. A risk leg that actually BUILT on this path would already throw today. The path has ZERO spare leg budget.\n\nThis inverts exactly the property DoD 2 pins: a marker leg turns a fail-OPEN approval into a hard STORE_LIMIT_EXCEEDED throw. Blast radius measured on the full daemon suite with the marker in place: 60+ failures across gates-compose-journey, bootstrap-durability, criterion-approval/command/integrated/read/run — every suite whose fixture approves a plan.\n\nTHE CAP IS NOT MINE TO MOVE. `packages/store/src/decision-legs-contracts.ts:9` `export const MAX_DECISION_LEGS = 8 as const`, with the docstring \"Kept small on purpose: every leg costs one more version probe and one more receipt inside the single write transaction\". It is outside this row's owned paths and has its own pinned arms (`command-decision-multi-leg.test.ts:620` \"accepts exactly MAX_DECISION_LEGS legs and refuses one more\", `:652` \"counts read-only fences toward MAX_DECISION_LEGS\").\n\nSECOND, SMALLER FINDING for whoever replans — a pinned-golden consumer the plan's hazard list did not name. `approval-activation.test.ts:371-374` pins four identity digests (EXISTING_ROOT_/GENESIS_ DECISION_/EFFECT_SHA256) with the comment \"captured on the PRE-COLLAPSE tree and must not move\". Any design that changes this decision's leg set moves them. Measured new values, for whoever re-captures them deliberately: EXISTING_ROOT_DECISION 209347c5a382669cc2610c063b5c7075ba7c9653d72e749057544f27f74dcd2f, GENESIS_DECISION 91b0b3551e0797ef7ab84e2aa451fb8b6a70f5d1a6107066705b468eca882c64 (effect digests not captured — the decision assert fails first). Those literals appear in NO other source file (`git grep`).\n\nTHIRD: a new module with no importer cannot survive on this branch. `runtime-entrypoint.test.ts:255` asserts `unexpected: []` over the `.js` bridge roster and named `bootstrap\\policy-risk-absence-record.js` the moment the module was unreachable from runtime. Global rail 4 clause 1, enforced by a test.\n\nUSEFUL FOR THE REPLAN — a SECOND distinct refusal code, so arm (b)'s \"two causes\" is cheap. `approval-activation.test.ts`'s own `approval()` world (no humanReview witness, `approvedBy` null) refuses POLICY_RISK_ACTOR_NOT_HUMAN, measured:\n    {\"actionKind\":\"plan.approve\",\"assessedAt\":\"2026-08-08T00:00:00.000Z\",\"code\":\"POLICY_RISK_ACTOR_NOT_HUMAN\",\"commandId\":\"cmd-approval.decide\",\"layer\":\"DAEMON_POLICY_RISK\",\"projectId\":\"project-1\"}\nwhile the `journeyWorld` path refuses POLICY_RISK_SUBJECT_UNAVAILABLE.\n\nTREE STATE: fully restored. Both tracked files back to HEAD bae9758d bytes (`git status --porcelain` on them is empty), both files I created deleted, `pnpm --filter @moe/daemon test` equivalent re-run GREEN — `Test Files 619 passed (619)`, exit 0. Nothing of mine is left on the branch.",
+      "timestamp": "2026-09-11T23:13:40.693Z"
+    }
+  ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-11T22:30:19.748Z",
-  "updatedAt": "2026-09-11T22:34:47.936Z",
+  "updatedAt": "2026-09-11T23:16:26.068Z",
   "metrics": {
     "firstClaimAt": "2026-09-11T22:30:21.932Z",
     "plannedStepCount": 8,
-    "plannedDistinctFileCount": 4
+    "plannedDistinctFileCount": 4,
+    "executedStepCount": 2
   },
-  "stepsCompleted": [],
+  "stepsCompleted": [
+    "step-1",
+    "step-2"
+  ],
   "failedDodItems": [],
   "planSubmittedAt": "2026-09-11T22:34:45.683Z",
   "planningNotes": {
@@ -124,5 +147,13 @@
       "apps/daemon/src/gates-journey-fixtures.ts"
     ]
   },
-  "planApprovedAt": "2026-09-11T22:34:47.936Z"
+  "planApprovedAt": "2026-09-11T22:34:47.936Z",
+  "contextFetchedBy": [
+    "worker-a1cf5270"
+  ],
+  "workStartedAt": "2026-09-11T22:45:45.301Z",
+  "blockedReason": "PLAN'S DESIGN UNWORKABLE ON THE ONE PATH THIS ROW EXISTS TO FIX. Measurement, leg list, new digests: comment-612abc32aa7841718dbd8b7e44b76a8f.\n\nMEASURED: the ordinary journey's plan approval already commits EXACTLY 8 decision legs; MAX_DECISION_LEGS is 8. The marker makes 9 and the store throws:\n  PROBE4 legs 9 [goal-1, budget-root, policy-risk-absent:sha256:e008473e, run-1, planning-authority/run-1, project-1-policy, policy-run-evaluation:run-1, active-graph-slot:project-1, session-authority/replay]\n  PROBE4 THREW DurableStoreError: STORE_LIMIT_EXCEEDED: legs cannot exceed 8 elements\n(logging Proxy over commitExpectedVersionDecisionLegs, bound to the real store, over production boundWorld->approveGate1->submit->approvePlan.) Drop the marker: exactly 8.\n\nHARD BLOCK, not a redesign I should take: delivered bytes become non-working exactly as DoD 2 forbids - a fail-OPEN approval becomes a hard throw. 60+ failures with the marker in, across gates-compose-journey, bootstrap-durability and all five criterion-evidence suites.\n\nRESHAPES THE ROW: codebaseInsights found ONE way the silent drop is load-bearing (riskLegs.length===0 at approval-activation.ts:202) and I implemented that fix. A SECOND it missed: the drop is ALSO what keeps this decision under the leg ceiling - the risk leg always refuses here (ACTIVE_GRAPH_ABSENT -> null subject), so one that actually BUILT would already throw today. Zero spare budget, so \"append a leg to the same commitAcceptedLegs array\" cannot hold.\n\nDECIDE, all outside my owned paths: (a) raise MAX_DECISION_LEGS (packages/store/src/decision-legs-contracts.ts:9); (b) a LEG-FREE design - approachesConsidered rejected \"return the refusal to the caller\" for reasons sound WITHOUT the cap; (c) marker on an aggregate already in the leg set. (d) closed by approval-record-facts.test.ts:419.\n\nTREE CLEAN: restored to HEAD bae9758d, suite 619 passed (619) exit 0.",
+  "blockedResourceId": null,
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-11T23:16:26.068Z"
 }
