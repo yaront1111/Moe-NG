@@ -1,10 +1,13 @@
 #!/usr/bin/env node
 import { lstatSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { dirname, isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { packWindows } from "./pack-windows.js";
+import { packWindows, withPackTemporaryOwner } from "./pack-windows.js";
+import type { PackOptions } from "./pack-windows.js";
+import { runPackStep } from "./pack-command.js";
+import type { PackStepRunner } from "./pack-command.js";
 import { parseWindowsPackToolchain } from "./pack-toolchain-codec.js";
 import { PACK_STEP_FAILED } from "./pack-tool-identity.js";
 
@@ -152,22 +155,17 @@ export function verifyArtifactBroker(pin: BrokerPin, artifactRoot: string): void
   }
 }
 
-/**
- * The locked-build output inside the materialized checkout, matching
- * `BROKER_RELATIVE_PATH` — WORKSPACE-ROOT relative, not packages/runner relative.
- *
- * The build itself is the caller's precondition rather than a step taken here:
- * `cargo` is admitted and leased into the pack's child PATH by the toolchain
- * boundary, but running it needs the hardened child-launch path (packChildEnvironment
- * and the trusted-directory PATH rebuild) that lives outside this module's owned
- * paths. Duplicating that authority here would fork it. Absent bytes therefore
- * REFUSE via stageArtifactBroker rather than being skipped.
- */
-function brokerSourcePath(sourceRoot: string): string {
-  return join(sourceRoot, "dist", "windows-job-native", "release", "moe-windows-job-broker.exe");
+interface MaterializedPackDependencies {
+  readonly log?: (line: string) => void;
+  readonly pack?: (options: PackOptions) => number;
+  readonly runStep?: PackStepRunner;
+  /** Test seam; the CLI always derives its private, tracked materialization root. */
+  readonly sourceRoot?: string;
 }
 
-export function runMaterializedWindowsPack(argv: readonly string[]): number {
+export function runMaterializedWindowsPack(
+  argv: readonly string[], dependencies: MaterializedPackDependencies = {},
+): number {
   const arguments_ = parseArguments(argv);
   const manifestStat = lstatSync(arguments_.toolchainManifest);
   if (!manifestStat.isFile() || manifestStat.isSymbolicLink()
@@ -178,21 +176,33 @@ export function runMaterializedWindowsPack(argv: readonly string[]): number {
   const digest = createHash("sha256").update(manifest).digest("hex");
   if (digest !== arguments_.toolchainDigest) throw new Error(INPUT_ERROR);
   const toolchain = parseWindowsPackToolchain(manifest.toString("utf8"));
-  const sourceRoot = fileURLToPath(new URL("../..", import.meta.url));
-  // FAIL-CLOSED, and unconditional on purpose. DoD 1 forbids silently skipping a
-  // broker, so an unbuilt one must stop the pack rather than yield an artifact whose
-  // runner cannot prove a process tree dead. The locked build that produces this
-  // path is the caller's precondition — see the note on brokerSourcePath.
-  const brokerPin = stageArtifactBroker(brokerSourcePath(sourceRoot), sourceRoot);
-  verifyArtifactBroker(brokerPin, sourceRoot);
-  const status = packWindows({
-    log: (line) => process.stdout.write(`${line}\n`),
-    outputRoot: arguments_.outputRoot,
-    sourceRoot,
-    sourceSha: arguments_.sourceSha,
-    toolchain,
+  const sourceRoot = resolve(dependencies.sourceRoot ?? fileURLToPath(new URL("../..", import.meta.url)));
+  const log = dependencies.log ?? ((line: string) => process.stdout.write(`${line}\n`));
+  // Native outputs belong to a separate owned lifetime: neither the tracked
+  // source census nor the publication root admits generated build directories.
+  return withPackTemporaryOwner((nativeRoot) => {
+    const targetRoot = join(nativeRoot, "windows-job-native");
+    log("pack: building the selected commit's locked Windows broker");
+    (dependencies.runStep ?? runPackStep)(toolchain.cargo, [
+      "build", "--locked", "--release", "--manifest-path",
+      "packages/runner/src/platform/windows/native/Cargo.toml",
+      "--target-dir", targetRoot, "-p", "moe-windows-job-broker",
+    ], sourceRoot, log, process.env, toolchain.powershell);
+    const brokerPin = stageArtifactBroker(
+      join(targetRoot, "release", "moe-windows-job-broker.exe"), nativeRoot,
+    );
+    return (dependencies.pack ?? packWindows)({
+      log,
+      outputRoot: arguments_.outputRoot,
+      sourceRoot,
+      sourceSha: arguments_.sourceSha,
+      stageBroker: (artifactRoot) => {
+        stageArtifactBroker(join(nativeRoot, ...PACKAGED_BROKER_ARTIFACT_PATH.split("/")), artifactRoot);
+        verifyArtifactBroker(brokerPin, artifactRoot);
+      },
+      toolchain,
+    });
   });
-  return status;
 }
 
 const meta = import.meta as ImportMeta & { readonly main?: boolean };
