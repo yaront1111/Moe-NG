@@ -6,6 +6,7 @@ import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 import { DomainRefusal } from "../daemon-command-dispatch.js";
 import { DAEMON_COMMAND_SEAM } from "../http/http-async-contract.js";
 import type { CommandHandlerInput } from "../http/http-contract.js";
+import { environmentSchemaGuardId, legacyMigrateDownGuardId } from "./environment-schema-guard.js";
 
 export const MIGRATE_DOWN_KIND = "deployment.migrate_down" as const;
 const INTENT_KIND = "internal.deployment.migrate_down_requested";
@@ -36,8 +37,10 @@ export function migrationCommandIdentity(input: CommandHandlerInput, projectId: 
     payload: { environment, toMigrationRequestId: sourceRequestId } });
   const key = { commandId: envelope.commandId, principalId: principal.principalId, projectId };
   const aggregateId = `migrate-down-request:${createHash("sha256").update(encode(key)).digest("hex")}`;
-  const guardAggregateId = `migrate-down-environment:${createHash("sha256")
-    .update(encode([projectId, environment])).digest("hex")}`;
+  // THE SHARED SCHEMA GUARD, derived in the leaf so `deployment.rollback` reserves the SAME stream.
+  // A private derivation here is what let a revert and a restoring rollback move one environment's
+  // schema at once; `environment-schema-guard.ts`'s header carries the invariant.
+  const guardAggregateId = environmentSchemaGuardId(projectId, environment);
   return { environment, sourceRequestId, requestBytes, key, expectedVersion: envelope.expectedVersion,
     aggregateId, guardAggregateId, correlationId: envelope.correlationId,
     intentKey: { ...key, principalId: INTENT_PRINCIPAL } };
@@ -58,22 +61,43 @@ function assertIdentity(
   }
 }
 
-function intentGuardVersion(record: CommandDecisionRecord): number {
+/** WHICH STREAM THIS REQUEST RESERVED, AND AT WHAT VERSION — read from its own intent, never
+ *  re-derived, so a request admitted before the guard was shared still releases the stream it
+ *  really took. */
+type IntentGuard = Readonly<{ aggregateId: string; version: number }>;
+
+/**
+ * TWO ACCEPTED SHAPES AND NO OTHERS. `{guardVersion}` alone is an intent committed BEFORE the
+ * schema guard was shared; `{guardId, guardVersion}` is everything committed since. An ABSENT id
+ * is the only condition that takes the legacy derivation — a present one that is not a non-empty
+ * string is a REFUSAL, never a coerced value, and any third key roster is refused outright, which
+ * is the closed-roster rule the one-key check enforced before this widened it by exactly one shape.
+ */
+function intentGuard(record: CommandDecisionRecord, identity: MigrationCommandIdentity): IntentGuard {
   const decoded = decodeBoundedJsonBytes(record.resultBytes);
   if (!decoded.ok || decoded.value === null || Array.isArray(decoded.value) || typeof decoded.value !== "object") {
     return migrateDownRefuse("MIGRATE_DOWN_COMMAND_RESULT_INVALID");
   }
   const value = decoded.value as JsonObject, version = value["guardVersion"];
-  if (Object.keys(value).length !== 1 || typeof version !== "number" || !Number.isSafeInteger(version)
+  const roster = Object.keys(value).sort().join(",");
+  if ((roster !== "guardVersion" && roster !== "guardId,guardVersion")
+    || typeof version !== "number" || !Number.isSafeInteger(version)
     || version <= 0 || version % 2 !== 1) return migrateDownRefuse("MIGRATE_DOWN_COMMAND_RESULT_INVALID");
-  return version;
+  const recorded = value["guardId"];
+  if (roster === "guardVersion") {
+    return { aggregateId: legacyMigrateDownGuardId(identity.key.projectId, identity.environment), version };
+  }
+  if (typeof recorded !== "string" || recorded.length === 0) {
+    return migrateDownRefuse("MIGRATE_DOWN_COMMAND_RESULT_INVALID");
+  }
+  return { aggregateId: recorded, version };
 }
 
 export function migrationCommandHistory(store: SqliteEventStore, identity: MigrationCommandIdentity) {
   const decided = store.getCommandDecision(identity.key);
   const intent = store.getCommandDecision(identity.intentKey);
   if (decided !== null) assertIdentity(decided, MIGRATE_DOWN_KIND, identity, 1);
-  if (intent !== null) { assertIdentity(intent, INTENT_KIND, identity, 0); intentGuardVersion(intent); }
+  if (intent !== null) { assertIdentity(intent, INTENT_KIND, identity, 0); intentGuard(intent, identity); }
   if (decided !== null && intent === null) migrateDownRefuse("MIGRATE_DOWN_COMMAND_RESULT_INVALID");
   return { decided, intent };
 }
@@ -106,7 +130,10 @@ export function reserveMigrationCommand(
   const guardVersion = store.getAggregateVersion(guardAggregateId);
   if (guardVersion % 2 !== 0) migrateDownRefuse("MIGRATE_DOWN_IN_PROGRESS", 409);
   const admitted = store.commitExpectedVersionDecisionLegs({ commandKind: INTENT_KIND,
-    committedResultBytes: encode({ guardVersion: guardVersion + 1 }), correlationId: identity.correlationId, decidedAt,
+    // THE STREAM THIS REQUEST ACTUALLY RESERVED, recorded so its terminal releases THAT one. Only
+    // an intent predating the shared guard carries no id; see the leaf's upgrade-hazard note.
+    committedResultBytes: encode({ guardId: guardAggregateId, guardVersion: guardVersion + 1 }),
+    correlationId: identity.correlationId, decidedAt,
     key: identity.intentKey, requestBytes: identity.requestBytes, legs: [
       { aggregateId, expectedVersion: 0, events: [{ eventId: `${aggregateId}-requested`,
         eventType: "EnvironmentMigrateDownRequested", payload: identity.requestBytes }] },
@@ -129,9 +156,11 @@ export function finishMigrationCommand(
   const history = migrationCommandHistory(store, identity);
   if (history.decided !== null) return history.decided;
   if (history.intent === null) return migrateDownRefuse("MIGRATE_DOWN_COMMAND_RESULT_INVALID");
-  const guardVersion = intentGuardVersion(history.intent);
+  const guard = intentGuard(history.intent, identity);
   // No receipt means effects may have happened without durable evidence. Only the explicit
-  // project-lock refusal proves the engine did not enter its effect section.
+  // project-lock refusal proves the engine did not enter its effect section. UNCHANGED by the
+  // shared guard: after unification a stuck-odd stream blocks a rollback too, which is correct —
+  // the schema's state is unknown, so nothing else may move it.
   const releaseGuard = terminal.outcome === "RECEIPTED" || terminal.code === "MIGRATION_IN_PROGRESS";
   const result = store.commitExpectedVersionDecisionLegs({ commandKind: MIGRATE_DOWN_KIND,
     committedResultBytes: encode(terminal), correlationId: identity.correlationId, decidedAt,
@@ -140,7 +169,7 @@ export function finishMigrationCommand(
         eventId: `${identity.aggregateId}-decided`,
         eventType: "EnvironmentMigrateDownDecided", payload: encode(eventPayload),
       }] },
-      { aggregateId: identity.guardAggregateId, expectedVersion: guardVersion,
+      { aggregateId: guard.aggregateId, expectedVersion: guard.version,
         events: releaseGuard ? [{ eventId: `${identity.aggregateId}-guard-released`,
           eventType: "EnvironmentMigrateDownGuardReleased", payload: encode(terminal) }] : [] },
     ] });

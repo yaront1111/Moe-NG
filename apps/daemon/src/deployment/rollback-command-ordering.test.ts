@@ -19,6 +19,7 @@ import { DEPLOY_MIGRATION_DATABASE_VARIABLE } from "./deploy-migration-context.j
 import { createDockerDouble } from "./deploy-ports.js";
 import { candidateContainerName } from "./deploy-service.js";
 import { deployReceiptId } from "./deploy-receipt-contracts.js";
+import { environmentSchemaGuardId } from "./environment-schema-guard.js";
 import { createRollbackCommandHandler } from "./rollback-command.js";
 import { ROLLBACK_RESTORE_DETAILS, ROLLBACK_RESTORE_STAMP } from "./rollback-restore.js";
 
@@ -61,7 +62,19 @@ const digestOf = (value: unknown): string =>
  */
 const requestStream = (commandId: string): string =>
   `rollback-request:${digestOf({ commandId, principalId: "operator", projectId: PROJECT_ID })}`;
-const guardStream = (): string => `rollback-environment:${digestOf({ projectId: PROJECT_ID, environment })}`;
+/**
+ * MIRRORED BY HAND, AND THE MIRROR IS NOW PROVEN RATHER THAN TRUSTED. The comment above claimed a
+ * drift from the handler's derivation could only produce "a loud red"; it could not. A drifted id
+ * names a stream with no events, so `durableSurfaces` sweeps ZERO guard events in SILENCE and the
+ * secrecy arms keep passing while no longer reading the surface they exist to read — which is
+ * exactly what happened when `rollback-command.ts` moved to the shared schema guard. The equality
+ * against the production leaf is asserted here so that drift is loud for real.
+ */
+const guardStream = (): string => {
+  const mirrored = `environment-schema:${digestOf({ projectId: PROJECT_ID, environment })}`;
+  expect(mirrored).toBe(environmentSchemaGuardId(PROJECT_ID, environment));
+  return mirrored;
+};
 const commandKey = (commandId: string) => ({ commandId, principalId: "operator", projectId: PROJECT_ID });
 
 /**

@@ -15,6 +15,7 @@ import { readDeployReceipt } from "./deploy-ledger.js";
 import { admitEnvironmentName, deployReceiptId } from "./deploy-receipt-contracts.js";
 import type { DeployReceiptV1 } from "./deploy-receipt-contracts.js";
 import { createDeployService } from "./deploy-service.js";
+import { environmentSchemaGuardId, legacyRollbackGuardId } from "./environment-schema-guard.js";
 import { ROLLBACK_RESTORE_PRINCIPAL, probeRollbackHost } from "./rollback-preflight.js";
 import { applyResolvedRestore, resolveRollbackRestore } from "./rollback-restore.js";
 import type { RollbackRestoreResolved } from "./rollback-restore.js";
@@ -137,7 +138,10 @@ export function createRollbackCommandHandler(options: RollbackCommandOptions): A
       payload: { environment: request.environment, toReceiptRef: request.receiptId, restoreDatabase: request.restore } });
     const key = { commandId: envelope.commandId, principalId: principal.principalId, projectId };
     const aggregateId = `rollback-request:${createHash("sha256").update(bytes(key)).digest("hex")}`;
-    const guardId = `rollback-environment:${createHash("sha256").update(bytes({ projectId, environment: request.environment })).digest("hex")}`;
+    // THE SHARED SCHEMA GUARD, derived in the leaf so `deployment.migrate_down` reserves the SAME
+    // stream. A private derivation here is what let a revert and a restore move one environment's
+    // schema at once; `environment-schema-guard.ts`'s header carries the invariant.
+    const freshGuardId = environmentSchemaGuardId(projectId, request.environment);
     const decided = store.getCommandDecision(key);
     if (decided !== null) assertIdentity(decided, KIND, requestBytes, aggregateId);
     const intentKey = { ...key, principalId: INTENT_PRINCIPAL };
@@ -233,12 +237,18 @@ export function createRollbackCommandHandler(options: RollbackCommandOptions): A
     }
     const decidedAt = clock();
     let guardVersion: number;
+    let guardId: string;
     if (intent === null) {
+      guardId = freshGuardId;
       const priorGuardVersion = store.getAggregateVersion(guardId);
       if (priorGuardVersion % 2 !== 0) refuse("DEPLOY_ROLLBACK_IN_PROGRESS", undefined, 409);
       guardVersion = priorGuardVersion + 1;
       const admitted = store.commitExpectedVersionDecisionLegs({ commandKind: INTENT_KIND,
-        committedResultBytes: bytes({ guardVersion }), correlationId: envelope.correlationId, decidedAt,
+        // THE STREAM THIS REQUEST ACTUALLY RESERVED, recorded so recovery releases THAT one. An
+        // intent that predates the shared guard carries no `guardId`, and only such an intent takes
+        // the legacy fallback below; see `environment-schema-guard.ts`'s upgrade-hazard note.
+        committedResultBytes: bytes({ guardId, guardVersion }),
+        correlationId: envelope.correlationId, decidedAt,
         key: intentKey, requestBytes, legs: [
           { aggregateId, expectedVersion: 0, events: [{ eventId: `${aggregateId}-requested`,
             eventType: "EnvironmentRollbackRequested", payload: requestBytes }] },
@@ -315,12 +325,30 @@ export function createRollbackCommandHandler(options: RollbackCommandOptions): A
       }
     } else {
       const decoded = decodeBoundedJsonBytes(intent.resultBytes);
-      const value = decoded.ok && decoded.value !== null && !Array.isArray(decoded.value)
-        && typeof decoded.value === "object" && "guardVersion" in decoded.value ? decoded.value.guardVersion : null;
+      const record = decoded.ok && decoded.value !== null && !Array.isArray(decoded.value)
+        && typeof decoded.value === "object" ? decoded.value : null;
+      const value = record !== null && "guardVersion" in record ? record.guardVersion : null;
       if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 1 || value % 2 !== 1) {
         refuse("DEPLOY_ROLLBACK_RECEIPT_INVALID");
       }
       guardVersion = value;
+      /**
+       * THE STREAM THIS REQUEST RESERVED, NOT THE ONE A FRESH REQUEST WOULD TAKE. An intent
+       * committed before the guard was shared carries no `guardId`, and its release leg has to go
+       * to the stream it really reserved or its expectedVersion can never agree and that commandId
+       * is stranded forever. ABSENT is the only condition that takes the legacy derivation; a
+       * present-but-wrong-typed id is a REFUSAL, never a coerced value, because a decision whose
+       * bytes will not decode as this command wrote them is not one to finish on a guess.
+       */
+      // ABSENT is `undefined` and NOT `null`, deliberately: JSON can carry an explicit
+      // `"guardId": null`, and collapsing the two would let such an intent take the legacy path in
+      // silence instead of refusing. Only a key that is not there at all is a pre-change intent.
+      const recorded = record !== null && "guardId" in record ? record.guardId : undefined;
+      if (recorded !== undefined && (typeof recorded !== "string" || recorded.length === 0)) {
+        refuse("DEPLOY_ROLLBACK_RECEIPT_INVALID");
+      }
+      guardId = typeof recorded === "string"
+        ? recorded : legacyRollbackGuardId(projectId, request.environment);
     }
     let receipt: DeployReceiptV1;
     if (recovered.ok) {
