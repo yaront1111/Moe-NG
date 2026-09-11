@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { stripVTControlCharacters } from "node:util";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { runDocker } = vi.hoisted(() => ({ runDocker: vi.fn() }));
@@ -53,7 +54,7 @@ describe.each(readers)("Docker census observations: $name", ({ read, argv }) => 
 });
 
 /** The child uses worker THREADS: killing its bounded process cannot orphan a worker process. */
-async function runCensusFile(mode: "flagless" | "unavailable") {
+async function runCensusFile(mode: "flagless" | "unavailable", forceColor: "0" | "1") {
   const { spawnSync } = await vi.importActual<typeof import("node:child_process")>("node:child_process");
   const root = fileURLToPath(new URL("../../../", import.meta.url));
   const temporary = mkdtempSync(join(tmpdir(), "moe-census-lane-"));
@@ -81,17 +82,25 @@ async function runCensusFile(mode: "flagless" | "unavailable") {
   try {
     return spawnSync(process.execPath, ["--input-type=module", "--eval", script], {
       cwd: root, encoding: "utf8", shell: false, windowsHide: true, timeout: 60_000, killSignal: "SIGKILL",
-      env: { ...process.env, MOE_PLATFORM_PIPELINE: mode === "flagless" ? "" : "1",
+      env: { ...process.env, FORCE_COLOR: forceColor === "1" ? "1" : undefined,
+        NO_COLOR: forceColor === "0" ? "1" : undefined,
+        MOE_PLATFORM_PIPELINE: mode === "flagless" ? "" : "1",
         MOE_CENSUS_TEST_MODE: mode, MOE_CENSUS_TEST_CACHE: temporary },
       maxBuffer: 1024 * 1024,
     });
   } finally { rmSync(temporary, { force: true, recursive: true }); }
 }
 
-describe("the real teardown file's Docker opt-in", () => {
+describe.each([
+  { label: "plain", forceColor: "0" },
+  { label: "ANSI", forceColor: "1" },
+] as const)("the real teardown file's Docker opt-in with $label output", ({ forceColor }) => {
   it("runs its pure flagless arm without any Docker call", async () => {
-    const result = await runCensusFile("flagless");
-    const output = result.stdout + result.stderr;
+    const result = await runCensusFile("flagless", forceColor);
+    const rawOutput = result.stdout + result.stderr;
+    expect(rawOutput.includes("\u001b[")).toBe(forceColor === "1");
+    // Terminal styling can split summary words and counts even when the child is healthy.
+    const output = stripVTControlCharacters(rawOutput);
     expect(result.error).toBeUndefined();
     expect(result.status, output).toBe(0);
     expect(output).not.toContain("FLAGLESS_DOCKER_CALL");
@@ -100,8 +109,10 @@ describe("the real teardown file's Docker opt-in", () => {
   }, 70_000);
 
   it("fails explicitly, rather than skipping, when opted in without Docker", async () => {
-    const result = await runCensusFile("unavailable");
-    const output = result.stdout + result.stderr;
+    const result = await runCensusFile("unavailable", forceColor);
+    const rawOutput = result.stdout + result.stderr;
+    expect(rawOutput.includes("\u001b[")).toBe(forceColor === "1");
+    const output = stripVTControlCharacters(rawOutput);
     expect(result.error).toBeUndefined();
     expect(result.status).toBe(1);
     expect(output).toContain("DEPLOY_DOCKER_UNAVAILABLE @ PLATFORM_PIPELINE_HARNESS");
@@ -109,4 +120,3 @@ describe("the real teardown file's Docker opt-in", () => {
     expect(output).toMatch(/Tests\s+1 failed/u);
   }, 70_000);
 });
-
