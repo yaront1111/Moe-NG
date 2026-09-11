@@ -47,7 +47,8 @@ describe("materialized Windows broker prerequisite", () => {
   it("includes the exact built broker in the real packing pipeline's archive snapshot", () => {
     const test = fixture();
     mkdirSync(test.outputRoot);
-    writeFileSync(join(test.sourceRoot, "package.json"), JSON.stringify({ version: "0.1.0" }));
+    const fixtureVersion = "9.8.7";
+    writeFileSync(join(test.sourceRoot, "package.json"), JSON.stringify({ version: fixtureVersion }));
     writeFileSync(join(test.sourceRoot, "LICENSE"), "synthetic fixture license");
     const bytes = "synthetic built broker for archive snapshot";
     let targetRoot = "";
@@ -64,8 +65,8 @@ describe("materialized Windows broker prerequisite", () => {
         const deploy = args.at(-1) ?? "";
         const runner = join(deploy, "node_modules", "@moe", "runner");
         mkdirSync(runner, { recursive: true });
-        writeFileSync(join(runner, "package.json"), JSON.stringify({ name: "@moe/runner", version: "0.1.0" }));
-        writeFileSync(join(deploy, "package.json"), JSON.stringify({ name: "@moe/daemon", version: "0.1.0" }));
+        writeFileSync(join(runner, "package.json"), JSON.stringify({ name: "@moe/runner", version: fixtureVersion }));
+        writeFileSync(join(deploy, "package.json"), JSON.stringify({ name: "@moe/daemon", version: fixtureVersion }));
         for (const file of ["cli/moe-cli-main.ts", "daemon-main.ts",
           "orchestrator/agent-wrapper-main.ts", "orchestrator/moe-up-main.ts"]) {
           const path = join(deploy, "src", file);
