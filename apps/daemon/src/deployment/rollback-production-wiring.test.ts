@@ -139,8 +139,12 @@ it("forwards the environment credential and the workspace to the rollback restor
     } as unknown as CommandHandlerInput;
 
     await expect(handler!(input)).rejects.toMatchObject({ code: "ENV_ENVIRONMENT_UNKNOWN", layer: "SCOPE" });
-    // Refused before any Docker effect, exactly as the arm above requires of the unrestored path.
-    expect(docker.calls).toEqual([]);
+    // REFUSED BEFORE ANY DOCKER EFFECT, exactly as the arm above requires of the unrestored path.
+    // Not `toEqual([])` any more: the pre-admission host probe runs first now and is read-only, so
+    // the assertion pins that argv EXACTLY and leaves no room for a build, create, start or cp.
+    // Deleting the assertion instead would be how this arm stopped testing its subject.
+    expect(docker.calls).toEqual([["version", "--format", "{{.Server.Version}}"]]);
+    expect(docker.sshCalls).toEqual([]);
   } finally {
     rmSync(directory, { force: true, recursive: true });
   }

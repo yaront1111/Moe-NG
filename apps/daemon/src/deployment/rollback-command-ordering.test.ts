@@ -92,6 +92,26 @@ afterEach(() => {
   }
 });
 
+/** THE PRE-ADMISSION HOST PROBE's argv. `docker version` starts nothing, writes nothing and
+ *  reserves nothing, which is the only reason an arm whose subject is "no bytes moved" may see it
+ *  at all. Held as a constant so a probe that grew a side effect would have to edit this line. */
+const HOST_PROBE: readonly string[] = ["version", "--format", "{{.Server.Version}}"];
+
+/**
+ * NOT `toEqual([])`, AND NOT DELETED EITHER. The precheck this row added makes a bare emptiness
+ * assertion false on every restoreDatabase:true path, and replacing one with nothing is how a file
+ * stops testing its own subject. `probes` is EXACT: the argv list must be that many read-only
+ * probes and nothing else, so a build, create, start, cp, reload or a second unexplained probe
+ * still reds, and ssh stays empty outright.
+ */
+function expectNoDockerEffect(
+  docker: { readonly calls: readonly (readonly string[])[]; readonly sshCalls: readonly (readonly string[])[] },
+  probes: number,
+): void {
+  expect(docker.calls).toEqual(Array.from({ length: probes }, () => [...HOST_PROBE]));
+  expect(docker.sshCalls).toEqual([]);
+}
+
 function harness(store = openStore()) {
   const source = recordDeployReceipt(store, { projectId: PROJECT_ID, environment, sha,
     imageDigest: digest, decisionId: "original", decidedAt: clock(), refusal: null, releaseDecision: null, url: null });
@@ -158,6 +178,69 @@ async function boundHarness(
   return { ...h, bound, calls, dump, envelopeFor, handler: createRollbackCommandHandler(bound) };
 }
 
+/**
+ * DoD 2 — AN UNUSABLE HOST REFUSES BEFORE THE DUMP IS EVEN NAMED.
+ *
+ * The defect this closes: the restore was resolved and APPLIED at :243 while the only docker
+ * reachability check lived in the deploy service ~60 lines further on, so an operator whose host
+ * was down got the database reverted under a still-running current application — the two ends of
+ * the deployment at different versions, silently, which is worse than either refusing outright or
+ * doing nothing at all.
+ *
+ * PROVES NOT-REACHED, NOT MERELY NOT-SUCCEEDED. `restoreDatabaseInto` here RECORDS and then
+ * THROWS. Recording makes "it was never called" a readable fact rather than an inference from
+ * silence; throwing makes a regression loud — if the probe ever stopped running first, the apply
+ * would be reached and the rejection would become DEPLOY_ROLLBACK_RESTORE_FAILED, so this arm
+ * cannot be satisfied by a handler that restored and then refused for the host.
+ */
+it("(vi) an UNUSABLE HOST refuses DOCKER_UNAVAILABLE before the restore is resolved or reached", async () => {
+  const b = await boundHarness();
+  const reached: { connection: string; path: string }[] = [];
+  const probed: string[][] = [];
+  const handler = createRollbackCommandHandler({ ...b.bound,
+    backupPorts: { restoreDatabaseInto: async (connection: string, path: string): Promise<void> => {
+      reached.push({ connection, path });
+      throw new Error("the restore port must not be reached when the host is unusable");
+    } },
+    // A HOST THAT ANSWERS NOTHING. Modelled on the double's own `dockerUnavailable` shape: a
+    // null code is what a `docker` binary that is not there produces.
+    ports: { ...b.bound.ports, docker: async (args: readonly string[]) => {
+      probed.push([...args]);
+      return { code: null, stderr: "docker: not found", stdout: "" };
+    } } });
+
+  await expect(handler({ ...b.input, envelope: b.envelopeFor(true) })).rejects.toMatchObject({
+    code: "DEPLOY_DOCKER_UNAVAILABLE", layer: "DAEMON_DEPLOY_ENGINE",
+  });
+
+  // THE POSITIVE CONTROL: the precheck really executed, and the ONLY thing it ran is the
+  // read-only probe. An arm where nothing ran would satisfy every absence below for free.
+  expect(probed).toEqual([[...HOST_PROBE]]);
+  // THE SUBJECT: the restore was not REACHED. The port that would have recorded it recorded
+  // nothing, so this is an observation and not an inference from an absent error.
+  expect(reached).toEqual([]);
+  // ...and no durable trace of a restore exists either, on any of the three surfaces that would
+  // carry one: the request stream's event, the marker decision under its own principal, and the
+  // deploy receipt the engine would have minted.
+  const commandId = b.input.envelope.commandId;
+  expect(b.store.readEvents(requestStream(commandId)).map(event => event.eventType))
+    .not.toContain("EnvironmentRollbackRestoreApplied");
+  expect(b.store.getCommandDecision({ commandId, principalId: "daemon:rollback-restore", projectId: PROJECT_ID }))
+    .toBeNull();
+  expect(readDeployReceipt(b.store, PROJECT_ID, deployReceiptId(PROJECT_ID, environment, commandId)).ok).toBe(false);
+
+  // NO DOCKER STDERR ON THE REFUSAL. This one is minted before any receipt exists, so it never
+  // passes through the engine's declassification and an external process's output must not reach
+  // it (epic rail 3). POSITIVE CONTROL FIRST: without it, "the detail does not contain the
+  // stderr" is equally true of an empty detail, a missing key or a refusal that never happened.
+  const caught: unknown = await handler({ ...b.input, envelope: b.envelopeFor(true) })
+    .then(() => null, (error: unknown) => error);
+  const detail = (caught as { readonly detail?: unknown }).detail;
+  expect(typeof detail).toBe("string");
+  expect(detail).toContain("did not answer a version probe");
+  expect(detail).not.toContain("not found");
+});
+
 it("(i) a STALE expectedVersion refuses CONFLICT with the database never touched", async () => {
   const b = await boundHarness();
   const fresh = b.envelopeFor(true);
@@ -173,8 +256,9 @@ it("(i) a STALE expectedVersion refuses CONFLICT with the database never touched
   // no invocation at all, not a no-op one. Read from the recorded calls, never from a flag.
   expect(b.calls).toEqual([]);
   // ...and nothing else ran either, so the refusal is not being satisfied by an earlier guard.
-  expect(b.docker.calls).toEqual([]);
-  expect(b.docker.sshCalls).toEqual([]);
+  // The host probe DID run and is the only argv there: it is read-only, and its presence is the
+  // positive control that the precheck executed rather than the assertion having gone slack.
+  expectNoDockerEffect(b.docker, 1);
   expect(readDeployReceipt(b.store, PROJECT_ID,
     deployReceiptId(PROJECT_ID, environment, b.input.envelope.commandId)).ok).toBe(false);
 });
@@ -234,7 +318,9 @@ it("(iii) a post-admission apply failure records a REFUSED terminal and frees th
     code: "DEPLOY_ROLLBACK_RESTORE_FAILED", layer: ROLLBACK_RESTORE_STAMP,
   });
   expect(b.calls).toHaveLength(1);
-  expect(b.docker.calls).toEqual([]);
+  // One read-only probe, nothing that moves a byte: the apply failed AFTER admission, so the
+  // rollback's own docker phase must never have been reached.
+  expectNoDockerEffect(b.docker, 1);
   expect(readDeployReceipt(b.store, PROJECT_ID, deployReceiptId(PROJECT_ID, environment, first)).ok).toBe(false);
 
   // THE DURABLE ANSWER IS A TERMINAL DECISION, not an absent one and not a deploy receipt.

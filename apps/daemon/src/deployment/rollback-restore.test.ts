@@ -12,9 +12,10 @@ import {
 } from "../environment/environment-test-fixtures.js";
 import { setEnvironmentVariable } from "../environment/environment-store.js";
 import type { EnvironmentStoreConfig } from "../environment/environment-store.js";
-import { migrationRefusal, recordMigrationReceipt } from "../repository/migrations/migration-receipt.js";
+import { migrationRefusal, readMigrationReceipt, recordMigrationReceipt } from "../repository/migrations/migration-receipt.js";
 import type { MigrationReceipt } from "../repository/migrations/migration-receipt.js";
 import { recordDeployReceipt } from "./deploy-ledger.js";
+import { deployReceiptId } from "./deploy-receipt-contracts.js";
 import { DEPLOY_MIGRATION_DATABASE_VARIABLE } from "./deploy-migration-context.js";
 import { MIGRATION_RECEIPT_VERSION, migrationReceiptId } from "../repository/migrations/migration-receipt.js";
 import {
@@ -168,6 +169,11 @@ async function fixture(options: {
   return { config: {
     credential: options.credential === false ? undefined : environment.credential,
     now: environment.now, projectId: PROJECT_ID, projectRoot: root, store,
+    // THE ROLLBACK TARGET IS THE KEPT DEPLOY, which is what a rollback from the current deploy
+    // actually asks for. Under the rule the selection now holds -- the dump is the FIRST
+    // POST-TARGET deploy that migrated -- the kept receipt's first migrating successor IS the
+    // current deploy, so every arm below keeps the answer it has always asserted.
+    toReceiptRef: deployReceiptId(PROJECT_ID, ENVIRONMENT, KEPT_DECISION),
     workspace: options.workspace === false ? undefined : root,
   }, currentRef, keptRef, ports: recordingPorts(options.fail === true), root, store };
 }
@@ -283,7 +289,12 @@ describe("applyRollbackRestore", () => {
       sha: CURRENT_SHA, url: "https://app.example.test",
     })).toMatchObject({ ok: true });
 
-    const refusal = refusalOf(await applyRollbackRestore(f.config, "staging", f.ports));
+    // THE TARGET RECEIPT IS "staging"'s OWN. The fixture's default target names a PRODUCTION
+    // receipt, and a receipt belonging to another environment is not a target this one can be
+    // returned to -- the selection would refuse DEPLOY_ROLLBACK_RESTORE_DEPLOY_UNKNOWN first and
+    // this arm would stop measuring forwarding at all.
+    const staging = { ...f.config, toReceiptRef: deployReceiptId(PROJECT_ID, "staging", "cmd-deploy-staging") };
+    const refusal = refusalOf(await applyRollbackRestore(staging, "staging", f.ports));
 
     expect(refusal.code).toBe("ENV_ENVIRONMENT_UNKNOWN");
     expect(refusal.layer).toBe("SCOPE");
@@ -344,6 +355,67 @@ describe("applyRollbackRestore", () => {
     expect(surfaces).toHaveLength(8);
     for (const surface of surfaces) expect(carries(surface)).toBe(false);
     expect(carries(ROLLBACK_RESTORE_DETAILS)).toBe(false);
+  });
+
+  /**
+   * DoD 1 — THREE DEPLOYS, AND THE DUMP IS KEYED ON THE TARGET, NEVER ON CURRENT.
+   *
+   * A → B → C, each driven through the PRODUCTION WRITERS (`recordDeployReceipt`,
+   * `recordMigrationReceipt`) and each carrying its own distinct pre-migration dump. The operator
+   * asks to return to A, so the schema that must come back is the one A itself ran against.
+   *
+   * WHY B AND NOT A: `migrateWithBackup` dumps BEFORE it applies, so A's own `backupRef` is the
+   * schema as it stood before A migrated — the state the deploy BEFORE A ran against, one step
+   * too far. B's `backupRef` is the state before B migrated, which is exactly what A left behind.
+   * And not C's, which holds schema B and would pair a later schema with A's image: that pairing
+   * is the data-loss this arm exists to rule out.
+   */
+  it("(a2) selects the TARGET's successor dump across A -> B -> C, never the current deploy's", async () => {
+    const store = openMemoryStore();
+    const environment = environmentConfig(store);
+    const root = workspace();
+    seedVariable(environment, PRODUCTION_URL);
+
+    const history = [
+      { decision: "cmd-deploy-a", migration: "1700000000001_a.js", name: "a.sql", sha: "1".repeat(40) },
+      { decision: "cmd-deploy-b", migration: "1700000000002_b.js", name: "b.sql", sha: "2".repeat(40) },
+      { decision: "cmd-deploy-c", migration: "1700000000003_c.js", name: "c.sql", sha: "3".repeat(40) },
+    ] as const;
+    let day = 4;
+    for (const deploy of history) {
+      const ref = await seedDump(root, deploy.name, `-- schema before ${deploy.decision}
+CREATE TABLE ${deploy.name.slice(0, 1)}();
+`);
+      seedDeploy(store, deploy.decision, deploy.sha, `2026-09-0${day++}T00:00:00.000Z`);
+      seedMigration(store, deploy.decision, deploy.sha, deploy.migration, ref);
+    }
+    // THE FIXTURE CAN TELL THE THREE APART. Without this a selection that returned any of them
+    // could satisfy the assertions below by coincidence.
+    const dumpOf = (decision: string): string => {
+      const receipt = readMigrationReceipt(store, PROJECT_ID, decision);
+      const ref = receipt?.backupRef;
+      if (ref === undefined || ref === null) throw new Error(`no backupRef recorded for ${decision}`);
+      return pathOf(ref);
+    };
+    const [dumpA, dumpB, dumpC] = [dumpOf("cmd-deploy-a"), dumpOf("cmd-deploy-b"), dumpOf("cmd-deploy-c")];
+    expect(new Set([dumpA, dumpB, dumpC]).size).toBe(3);
+
+    const ports = recordingPorts();
+    const result = await applyRollbackRestore({
+      credential: environment.credential, now: environment.now, projectId: PROJECT_ID,
+      projectRoot: root, store, toReceiptRef: deployReceiptId(PROJECT_ID, ENVIRONMENT, "cmd-deploy-a"),
+      workspace: root,
+    }, ENVIRONMENT, ports);
+
+    // READ BACK FROM THE STORE, not repeated from the fixture: the identifier is the assertion.
+    expect(result).toEqual({ dump: dumpB, ok: true });
+    expect(ports.calls).toHaveLength(1);
+    expect(ports.calls[0]?.path).toBe(dumpB);
+    // C is the CURRENT deploy, which is what the defect selected; A's own dump is one step too far.
+    expect(ports.calls[0]?.path).not.toBe(dumpC);
+    expect(ports.calls[0]?.path).not.toBe(dumpA);
+    // ...and the destination still came from the environment credential seam.
+    expect(ports.calls[0]?.connection).toBe(PRODUCTION_URL);
   });
 
   it("(f) a failing restore refuses RESTORE_FAILED with code and layer after exactly ONE attempt", async () => {
