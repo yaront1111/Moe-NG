@@ -4,7 +4,13 @@ import type { SqliteEventStore } from "@moe/store";
 import { MIGRATION_TOOL_MISSING } from "../controlled-profile/controlled-profile-generator.js";
 
 export const MIGRATION_RECEIPT_VERSION = "moe-migration-receipt/1";
-const principal = "daemon:migration-engine";
+/** The decision principal every migration receipt is keyed under. EXPORTED for the same reason
+ *  `MIGRATION_RECEIPT_COMMAND_KIND` below is: a reader that has to RECOGNISE a receipt while
+ *  walking the decision ledger — `rollback-schema-moves.ts`, which cannot invert the receipt id's
+ *  SHA256 to ask for one by key — must name the constant this module writes rather than retype
+ *  the string and drift from it silently. */
+export const MIGRATION_RECEIPT_PRINCIPAL = "daemon:migration-engine" as const;
+const principal: string = MIGRATION_RECEIPT_PRINCIPAL;
 /** The command kind every migration receipt commits under. EXPORTED so a reader that has to
  *  recognise the kind — the activity feed's verdict roster — names the same constant this module
  *  writes, rather than retyping the string and drifting from it silently. */
