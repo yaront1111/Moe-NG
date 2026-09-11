@@ -14,6 +14,8 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { PNG_MAGIC, capturePreviewJourneys } from "./preview-capture.js";
+import { launchPreviewBrowser } from "./preview-browser.js";
+import type { PreviewBrowser } from "./preview-browser.js";
 import { previewCaptureDirectory } from "./preview-receipt-contracts.js";
 import {
   LISTENING_SERVER, cleanupFixtureWorkspaces, fixtureWorkspace,
@@ -23,6 +25,45 @@ const GOAL = "goal-capture";
 const SHA = "abc1234567890abc1234567890abc1234567890a";
 
 const children: ChildProcess[] = [];
+type CaptureFailure = { readonly operation: string; readonly category: string };
+
+/** Preserve the swallowed operation for CI without logging URLs, paths, or browser output. */
+async function diagnosticBrowser(failures: CaptureFailure[]): Promise<PreviewBrowser> {
+  const observe = async (operation: string, attempt: () => Promise<unknown>): Promise<unknown> => {
+    try { return await attempt(); } catch (error) {
+      const message = error instanceof Error ? error.message : "";
+      const categories: readonly (readonly [string, RegExp])[] = [
+        ["NETWORK_ERROR", /net::ERR_/u], ["PAGE_CRASHED", /Page crashed/iu],
+        ["TARGET_CLOSED", /(?:Target|Session|page|context|browser).*closed/iu],
+        ["SCREENSHOT_UNAVAILABLE", /unable to capture screenshot/iu],
+        ["PROTOCOL_ERROR", /Protocol error/iu],
+        ["FILESYSTEM_ERROR", /\b(?:ENOENT|EACCES|ENOSPC|EPERM)\b/u],
+      ];
+      const category = error instanceof Error && error.name === "TimeoutError" ? "TIMEOUT"
+        : categories.find(([, pattern]) => pattern.test(message))?.[0] ?? "UNKNOWN_ERROR";
+      failures.push({ operation, category });
+      throw error;
+    }
+  };
+  const browser = await launchPreviewBrowser();
+  return {
+    close: () => browser.close(),
+    newContext: async (options) => {
+      const context = await browser.newContext(options);
+      return {
+        close: () => context.close(),
+        newPage: async () => {
+          const page = await context.newPage();
+          return {
+            close: () => page.close(),
+            goto: (url, options) => observe("NAVIGATION", () => page.goto(url, options)),
+            screenshot: (options) => observe("SCREENSHOT", () => page.screenshot(options)),
+          };
+        },
+      };
+    },
+  };
+}
 
 afterEach(() => {
   while (children.length > 0) {
@@ -101,6 +142,7 @@ describe("capturing a preview journey", () => {
   it("writes ONE png per journey, under this run's own directory", async () => {
     const workspace = serverWorkspace();
     const origin = await startFixtureServer(workspace);
+    const failures: CaptureFailure[] = [];
 
     const written = await capturePreviewJourneys({
       directory: workspace,
@@ -111,10 +153,10 @@ describe("capturing a preview journey", () => {
       ],
       origin,
       sha: SHA,
-    });
+    }, { launch: () => diagnosticBrowser(failures) });
 
     const prefix = `${previewCaptureDirectory(GOAL, SHA)}/`;
-    expect(written.map((entry) => entry.path)).toStrictEqual([
+    expect(written.map((entry) => entry.path), JSON.stringify({ captureFailures: failures })).toStrictEqual([
       `${prefix}journey-home.png`,
       `${prefix}journey-checkout.png`,
     ]);
@@ -157,6 +199,7 @@ describe("capturing a preview journey", () => {
     // rather than naming a file the browser never wrote — a receipt cannot advertise a capture
     // that is not on disk.
     const workspace = serverWorkspace();
+    const failures: CaptureFailure[] = [];
 
     const written = await capturePreviewJourneys({
       directory: workspace,
@@ -164,9 +207,10 @@ describe("capturing a preview journey", () => {
       journeys: [{ journeyRef: "journey-home", path: "/" }],
       origin: "http://127.0.0.1:1",
       sha: SHA,
-    }, { navigationTimeoutMs: 2_000 });
+    }, { launch: () => diagnosticBrowser(failures), navigationTimeoutMs: 2_000 });
 
     expect(written).toStrictEqual([]);
+    expect(failures).toStrictEqual([{ operation: "NAVIGATION", category: "NETWORK_ERROR" }]);
     expect(existsSync(join(workspace, ...previewCaptureDirectory(GOAL, SHA).split("/"), "journey-home.png")))
       .toBe(false);
   }, 120_000);
