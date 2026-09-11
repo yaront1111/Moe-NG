@@ -129,8 +129,8 @@
       "completedAt": "2026-09-11T11:00:06.006Z"
     }
   ],
-  "status": "REVIEW",
-  "assignedWorkerId": "qa-77a9823a",
+  "status": "DONE",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 1,
@@ -175,18 +175,26 @@
       "author": "worker-883dc9b4",
       "content": "WORKER worker-883dc9b4, REWORK step 8: CORRECTION OF THE RECORD, then residuals.\n\nRETRACTED: the bullet in comment-cb2dbb78 saying skipping every non-migrating successor is sound \"whether or not that rollback restored\". That claim was FALSE. QA's probe (comment-c646ec8e) showed it: a restoring rollback between the target and its first migrating successor let the walk pick a later dump and start the target's image on the wrong schema. The \"BOTH DEFECTS CLOSED\" in the first completionSummary is withdrawn with it.\n\nWHAT CHANGED: the walk now stops at the first successor that MOVED THE SCHEMA. That is either a migration, which answers with its dump, or a restoring rollback, which refuses DEPLOY_ROLLBACK_RESTORE_SCHEMA_OVERWRITTEN@DAEMON_COMMAND_SEAM. The walk detects a restore from the marker the handler writes only after an apply succeeds, keyed on ROLLBACK_RESTORE_PRINCIPAL, which is now hoisted into rollback-preflight.ts.\n\nADVERSARIAL PASS, re-traced against the new rule:\n- The target IS current, with no successors: MIGRATION_UNKNOWN. Unchanged.\n- Rollback receipts between the target and the first migration: each is SKIPPED only when it has no marker (restoreDatabase:false). The walk refuses at the FIRST one that restored. The refusal is pinned by (vii) and the skip by (viii).\n- A restoring rollback AFTER the first migrating successor: the walk never reaches it, and the migration wins. Pinned by (ix).\n- The target is itself a restoring rollback: its own marker is never consulted, and the first move after it answers. That is correct, because it ran against the restored schema.\n- A restoring rollback whose deploy phase then REFUSED: its REFUSED receipt stays in the ledger (readDeployLedger keeps refused receipts) and its marker exists, so the walk refuses there. Correct, because the schema did move.\n- A rollback that crashed between the apply and the marker: it holds the environment guard odd, so every later rollback in that environment refuses IN_PROGRESS before it can apply. The walk never has to see it.\n- A refused deploy that migrated and then failed to start, or a first migrating successor with a null backupRef: both unchanged (its dump, and BACKUP_ABSENT, respectively).\n\nRESIDUALS, stated rather than hidden:\n1. CONCURRENCY EXCLUSION of simultaneous rollbacks remains OPEN and OUT OF SCOPE, as the row's description fences it. The existing \"THE RESIDUAL, stated rather than hidden\" prose in rollback-command.ts (the block comment on THE DATABASE ARM'S APPLY HALF, now at ~:262-268) records it. This rework adds no fence and changes no guard parity.\n2. deployment.migrate_down moves the schema without writing a deploy receipt, so the deploy-ledger walk cannot see it. By code read (not executed): A -> B(migrates) -> migrate_down -> D(migrates), then a rollback to B with restore, would apply D's dump. FILED as task-aa6f9af4735449a5b5e098f52f78fc54 (PLANNING, dependsOn this row because its fix edits rollback-preflight.ts). It is also named in the preflight header's WHAT THE WALK CANNOT SEE.\n3. Restores applied by rollbacks admitted before the marker existed carry no marker. The apply without a marker came in at f43b4bdb and the marker at 0b16b472, so such a rollback is still skipped. This is dev-era history only.\n4. Fail-closed identity edge: a NON-migrating deploy whose decision id equals a restoring rollback's command id (same project, any environment) refuses SCHEMA_OVERWRITTEN. That is a refusal, never a wrong dump. It is stated in restoredBy's doc.\n5. The first round's narrowing stands: probeRollbackHost treats a NULL deploy target as a skip (comment-d9f27e34).",
       "timestamp": "2026-09-11T10:48:49.815Z"
+    },
+    {
+      "id": "comment-6a43a7826a8f43b6826551531193527e",
+      "author": "qa-77a9823a",
+      "content": "QA qa-77a9823a, review of 5c37a3f7. One note for whoever takes on concurrency exclusion. It is NOT a finding against this row: the row's scope fence excludes concurrency, and the rework's scope was the restore-stop rule.\n\nTHE WALK ASSUMES THE LEDGER IS IN THE SAME ORDER AS THE SCHEMA CHANGES HAPPENED. The rollback's environment guard does not fence deploys. Measured at 5c37a3f7: `git grep -n 'rollback-environment:' -- apps/daemon/src/deployment ':!*.test.ts'` hits only rollback-command.ts. So a deployment.deploy can run while a restoring rollback R sits between its marker commit and its deploy receipt. That happens during R's health polling with two operators, or after a crash in that window before recovery.\n\nSequence: the restoring rollback R applies dump X and writes its marker. Deploy D then migrates from the restored database, so D's backupRef is X's schema. D's receipt lands, and only then does R's. The ledger now reads [..., C, D, R]. A later rollback to C with restore walks C, then D. D migrated, so the walk selects D's dump, which is X's schema, not the one C ran against. R's marker is never reached. Inferred from code reading, not executed.\n\nThis belongs to the concurrency exclusion that comment-0da4fbcb records as OPEN. Fencing deploys against the rollback guard, or ordering the walk by effect instead of by receipt, would close it. I have not filed a row, per the comment-over-row bar.",
+      "timestamp": "2026-09-11T11:10:30.388Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-11T09:24:19.212Z",
-  "updatedAt": "2026-09-11T11:01:12.000Z",
+  "updatedAt": "2026-09-11T11:10:53.651Z",
   "metrics": {
     "firstClaimAt": "2026-09-11T09:25:16.647Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 7,
     "executedStepCount": 16,
     "rejectCount": 1,
-    "reopenCount": 1
+    "reopenCount": 1,
+    "doneAt": "2026-09-11T11:10:53.651Z",
+    "wallClockMs": 6337004
   },
   "contextFetchedBy": [
     "worker-883dc9b4",
@@ -300,6 +308,33 @@
       "treeId": "fb1be8316d6e890db291c364689c285ad9f72c5b",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "5c37a3f75b63b4dea0bf6e7b807c314bb4d1b275",
+      "ref": "refs/heads/moe/work-2026-09-11",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-883dc9b4@2026-09-11T10:25:26Z",
+      "paths": [
+        ".moe/tasks/task-3ccb12a92f69432bb6996a3a4348e573.json",
+        ".moe/tasks/task-705977238f794b2cadb5c1dcdb98d6bd.json",
+        "apps/daemon/src/deployment/rollback-command.ts",
+        "apps/daemon/src/deployment/rollback-command-ordering.test.ts",
+        "apps/daemon/src/deployment/rollback-preflight.ts",
+        "apps/daemon/src/deployment/rollback-restore.test.ts",
+        "apps/daemon/src/deployment/rollback-restore.ts"
+      ],
+      "recordedBy": "worker-883dc9b4",
+      "recordedAt": "2026-09-11T11:01:27.803Z",
+      "treeId": "1026f0ef678e414b3aeb4d1801a625282c44ba85",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/deployment/rollback-preflight.ts",
+          "taskId": "task-aa6f9af4735449a5b5e098f52f78fc54"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -307,57 +342,24 @@
     "apps/daemon/src/deployment/rollback-command.ts",
     "apps/daemon/src/deployment/rollback-preflight.ts",
     "apps/daemon/src/deployment/rollback-command-ordering.test.ts",
-    "apps/daemon/src/deployment/rollback-restore.test.ts"
+    "apps/daemon/src/deployment/rollback-restore.test.ts",
+    ".moe/tasks/task-3ccb12a92f69432bb6996a3a4348e573.json",
+    ".moe/tasks/task-705977238f794b2cadb5c1dcdb98d6bd.json"
   ],
   "unattributedPaths": [
-    "apps/control-room/src/v2/goals/use-goal-reads.test.ts",
-    "apps/control-room/src/v2/goals/use-goal-reads.ts",
-    "apps/control-room/src/v2/ops/environment-variables-screen.test.tsx",
-    "apps/control-room/src/v2/ops/environment-variables-screen.tsx",
-    "apps/daemon/qa-drill-task-3ccb12a9-worker-ed22fae0.config.ts",
-    "apps/daemon/src/backups/scheduled-backup.ts",
-    "apps/daemon/src/backups/scheduled-backup-proof-ownership.test.ts",
-    "apps/daemon/src/documents/document-source-binding.js",
-    "apps/daemon/src/documents/document-source-binding.ts",
-    "apps/daemon/src/documents/document-source-full-read.test.ts",
-    "apps/daemon/src/documents/document-source-full-read.ts",
-    "apps/daemon/src/documents/document-source-read.test.ts",
-    "apps/daemon/src/documents/document-source-read.ts",
-    "apps/daemon/src/http/http-listener.ts",
-    "apps/daemon/src/http/http-listener-failure-logging.test.ts",
-    "apps/daemon/src/mcp-http/mcp-http-node-bridge.test.ts",
-    "apps/daemon/src/mcp-http/mcp-http-node-bridge.ts",
     "node-alpha-e2e-proj-k3x0md/math.mjs",
     "node-alpha-e2e-proj-k3x0md/test.mjs",
     "node-beta-e2e-proj-k3x0md/math.mjs",
     "node-beta-e2e-proj-k3x0md/test.mjs",
     "node-omega-e2e-proj-k3x0md/math.mjs",
     "node-omega-e2e-proj-k3x0md/test.mjs",
-    "packages/mcp/src/http/http-adapter-lifecycle.js",
-    "packages/mcp/src/http/http-adapter-lifecycle.ts",
-    "packages/mcp/src/http/http-inflight-requests.js",
-    "packages/mcp/src/http/http-inflight-requests.ts",
-    "packages/mcp/src/http/http-server.ts",
-    "packages/mcp/src/http/http-server-sse-request-ids.test.ts",
-    "packages/mcp/src/http/http-server-terminal-close.test.ts",
-    "packages/mcp/src/http/http-session.ts",
-    "packages/mcp/src/mcp-runtime-entrypoint.test.ts",
-    "packages/store/src/backup-generation.ts",
-    "packages/store/src/backup-generation-request.ts",
-    "packages/store/src/backup-generation-source-protection.test.ts",
-    "packages/store/src/decision-ledger.ts",
-    "packages/store/src/event-ledger-transaction.ts",
-    "packages/store/src/outbox-relay/outbox-relay-contracts.ts",
-    "packages/store/src/outbox-relay/transactional-outbox-relay.test.ts",
-    "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
-    "packages/store/src/sqlite-event-store.ts",
-    "packages/store/src/store-projection-seam.test.ts"
+    "tests/e2e/control-room/live-proof-seat.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "checkpoint",
-    "sessionId": "qa-c85c997d@2026-09-11T10:09:23Z",
-    "at": "2026-09-11T10:30:11.489Z"
+    "kind": "completion",
+    "sessionId": "worker-883dc9b4@2026-09-11T10:25:26Z",
+    "at": "2026-09-11T11:01:27.803Z"
   },
   "workStartedAt": "2026-09-11T09:33:04.657Z",
   "reviewStartedAt": "2026-09-11T11:01:05.212Z",
@@ -375,9 +377,12 @@
     "apps/daemon/qa-705977-probe.config.ts",
     "apps/daemon/qa-705977-p.config.ts",
     "apps/daemon/qa-705977-probe.qa.ts",
-    "apps/daemon/qa-705977-p.qa.ts"
+    "apps/daemon/qa-705977-p.qa.ts",
+    "apps/daemon/src/deployment/rollback-command-ordering.test.ts",
+    "apps/daemon/src/deployment/rollback-command.ts",
+    "apps/daemon/src/deployment/rollback-restore.test.ts"
   ],
-  "reviewCompletedAt": "2026-09-11T10:25:21.066Z",
+  "reviewCompletedAt": "2026-09-11T11:10:53.651Z",
   "rejectionDetails": {
     "failedDodItems": [
       "DEFECT 1 closure (task description): the backup is still keyed to the wrong deployment when a rollback that APPLIED a restore sits between the target and its first migrating successor. The current deploy's dump is applied under the target's image with no refusal. No DoD item 1-5 fails as literally written."
@@ -472,5 +477,7 @@
         }
       ]
     }
-  ]
+  ],
+  "completedAt": "2026-09-11T11:10:53.651Z",
+  "reviewSummary": "APPROVED on completion 5c37a3f7 (recorded, pushed; tree blobs == HEAD). Reopen-1 finding closed: the walk stops at the first successor that MOVED the schema. A migration answers with its dump. A restoring rollback, found by the daemon:rollback-restore marker keyed on its decisionId, refuses the new DEPLOY_ROLLBACK_RESTORE_SCHEMA_OVERWRITTEN@DAEMON_COMMAND_SEAM. All else is skipped. All 7 reject issues addressed.\nDoD 5: the code is in ROLLBACK_RESTORE_DETAILS, and arm (i) pins the exact 8-key roster plus the stamp. refuse() takes keyof the table, so the check is bidirectional. deploy-receipt-contracts: 0-line diff.\nQA RE-RUN:\n- vitest src/deployment EXIT 0, Test Files 25 passed (25), Tests 351 passed | 2 skipped (353). That is 349 + 4 new arms; one Docker arm now runs.\n- daemon typecheck EXIT 0; --listFilesOnly includes all 5 files.\n- In-memory drills (config outside the tree, sources SHA256-identical after, config deleted). Control 51/51.\n  - M1 (marker check deleted) reds (vii) `promise resolved \"{ commandId: 'rb-b', …(3) }\" instead of rejecting`.\n  - M2 (refuse every non-migrating successor) reds (viii), (c), (g).\n  - M3 (refuse on any restore after the target) reds (ix).\n  - D1 (keyed on current) reds (a2) b.sql vs c.sql.\n  - D2 (probe removed) reds (vi) RESTORE_FAILED.\nNOT RE-RUN: full `pnpm --filter @moe/daemon test`. full-suite-gate is held 24h by architect-readiness-23eeca50 with 2 waiters. The worker's leased run (10:53-10:58Z, after the last edit at 10:47:38Z) had Test Files 614 passed (614). No consumers outside src/deployment. The real-restore arm is opt-in and not reached by the new branch.\nLines: 212/250/370.\nConcurrency note in comment-6a43a782."
 }

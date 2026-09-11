@@ -14,6 +14,7 @@ import { readReviewLedger } from "../review/review-read-model.js";
 import type { AgentSessionFence } from "./agent-session-fence.js";
 import type { AgentSpawnStart } from "./agent-spawn-contract.js";
 import { createNodeLander } from "./node-lander.js";
+import { landingVerificationClass } from "./node-lander-verification.js";
 import { createNodePublisher } from "./node-publisher.js";
 import type { ReleasePublisher } from "../release/release-decide-service.js";
 import { createNodeVerifier } from "./node-verifier.js";
@@ -117,7 +118,10 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
       }
       const reports = await landerFor(nodeRef, root, baselineId, reservationHandle).landOnce();
       for (const report of reports) config.log(`[lander] ${report.nodeRef}: ${report.outcome} (${report.detail})`);
-      return reports.some((report) => report.outcome === "GIT_INDEX_LOCKED") ? "RETRY" : undefined;
+      // Only what provably had no effect is retried: the strict port's index lock, and a verification
+      // refusal the lander's table calls TRANSIENT, decided before any intent. Anything else blocks.
+      return reports.some((report) => report.outcome === "GIT_INDEX_LOCKED"
+        || landingVerificationClass(report.outcome) === "TRANSIENT") ? "RETRY" : undefined;
     },
   });
   const storeId = realpathSync.native(config.storePath);

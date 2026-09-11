@@ -59,7 +59,7 @@ function fixture() {
     mission: "implement", sessionId: randomUUID(), workItemId: `node.deliver@${nodeRef}`, workspace });
   return { runtime, workspace, store, projectId, logs, submit, request, tests: () => tests,
     storeId: realpathSync.native(storePath),
-    disableLanding: () => { landingOn = false; }, retire: () => { retired = true; },
+    disableLanding: () => { landingOn = false; }, enableLanding: () => { landingOn = true; }, retire: () => { retired = true; },
     /** The content the verifier's own test command asserts; a node that changes nothing leaves it at the baseline. */
     expectVerified: (content: string) => { verified = content; } };
 }
@@ -240,5 +240,38 @@ describe("production repository delivery composition", () => {
     expect(createRepositoryExecutionPort().inspect(f.workspace)).toMatchObject({ ok: true, reservation: { phase: "BLOCKED" } });
     const next = await f.runtime.start(async () => ({ ok: true, pid: process.pid, exit: Promise.resolve() }))(f.request("b"));
     expect({ ok: next.ok, code: next.ok ? null : next.code }).toEqual({ ok: false, code: "REPOSITORY_EXECUTION_BUSY" });
+  }, 600_000);
+
+  // task-cab96ebcd3b6403cbbf412bdad839403, the production half. The lander leaves a TRANSIENT capture
+  // failure unrecorded for "the next pass", but in this composition a next pass only happens when land()
+  // answers RETRY. Anything else is block()ed, and a BLOCKED checkout with no receipt has no recovery
+  // proof at all. The moment is real here: a HEAD detached after verification fails the capture's
+  // `symbolic-ref`, which the shared git invoker reports as VERIFIED_WORKSPACE_GIT_FAILED.
+  it("re-queues a transient capture failure and lands the same acceptance once the moment passes", async (context) => {
+    const f = fixture();
+    context.onTestFailed(() => { console.error(f.logs.join("\n")); });
+    const started = await f.runtime.start(async () => ({ ok: true, pid: process.pid, exit: Promise.resolve() }))(f.request("a"));
+    if (!started.ok) throw new Error(started.code);
+    await started.exit;
+    writeFileSync(join(f.workspace, "keep.txt"), "after\n");
+    f.submit("a"); f.retire();
+    // Verify with landing held off, so the acceptance exists before the workspace moves.
+    f.disableLanding(); await f.runtime.advance();
+    expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a")).toBe("ACCEPTED");
+    git(f.workspace, "checkout", "--quiet", "--detach");
+    const version = f.store.getAggregateVersion(landingAggregateId("a"));
+    f.enableLanding(); await f.runtime.advance();
+    expect(f.logs).toContain("[lander] a: VERIFIED_WORKSPACE_GIT_FAILED (VERIFIED_WORKSPACE_GIT_FAILED)");
+    // Read from the ledger: no receipt and no landing event. The checkout is still held FOR THIS
+    // landing — neither released (pre-row: a durable refusal gave it away) nor wedged in BLOCKED.
+    expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a")).toBe("ACCEPTED");
+    expect(f.store.getAggregateVersion(landingAggregateId("a"))).toBe(version);
+    expect(createRepositoryExecutionPort().inspect(f.workspace))
+      .toMatchObject({ ok: true, reservation: { nodeRef: "a", phase: "AWAITING_LANDING" } });
+    git(f.workspace, "checkout", "--quiet", "main");
+    await f.runtime.advance();
+    expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a")).toBe("LANDED");
+    expect(git(f.workspace, "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD")).toBe("keep.txt");
+    expect(createRepositoryExecutionPort().inspect(f.workspace)).toEqual({ ok: true, reservation: null });
   }, 600_000);
 });
