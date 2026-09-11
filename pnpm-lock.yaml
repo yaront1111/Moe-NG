@@ -40,6 +40,9 @@ importers:
         specifier: workspace:*
         version: link:packages/store
     devDependencies:
+      '@babel/parser':
+        specifier: 7.29.8
+        version: 7.29.8
       '@cyclonedx/cdxgen':
         specifier: 12.8.2
         version: 12.8.2
