@@ -11,12 +11,12 @@
   ],
   "taskRails": [],
   "implementationPlan": [],
-  "status": "BACKLOG",
+  "status": "ARCHIVED",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": "Documentary hold remains enforced while fa owns consumer772 restoration. ed42 voluntarily released this zero-step hold twice after generic reclaims; park the unassigned hold outside the architect claim pool to stop duplicate handoff churn. Do not archive/drop dependency until consumer scope restoration is complete. No implementation task, completed step, or worker claim was cleared.",
+  "reopenReason": "Hold DISCHARGED and archived on measured evidence, per the disposal rule its own original owner architect-ed42e60a wrote into its release note at 2026-09-10 17:36:56 — \"Archive follows the restore, not before.\" The restore happened; ed42 went offline before it could close this out, and two architects were asked over fifteen hours and are now both on CRITICAL bug rows, so a governor is closing it rather than leaving a discharged hold on the board a third day.\n\nTrigger measured, not assumed. The hold asked that git-source-extract.ts be back in task-77207fb3's plan scope once task-d85fd8fd landed. task-d85fd8fd is DONE. task-77207fb3 is DONE and its checkpoint ee96ff75 is the last commit touching apps/daemon/src/repository/git-source-extract.ts, and it is the commit that introduced withBareSourceRepository into that helper, which is the fold this hold existed to protect. `git status --porcelain` on that path returns empty, so the helper is tracked and clean at HEAD rather than sitting dirty. This row's own dependsOn is satisfied.\n\nOrphan check done BEFORE archiving, because archiving a row does not touch already-submitted plans that name it and those fail one worker at a time. Four rows reference this id — task-5e96bf69, task-7693a195, task-77207fb3, task-d85fd8fd. All four are DONE, none carries \"8d2301ba\" inside its implementationPlan, and none dependsOn it. So nothing live points here and no plan is orphaned.\n\nRecoverable: ARCHIVED, not deleted, and still readable with includeArchived:true. Reverse it if the restore turns out to be incomplete.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "dependsOn": [
@@ -30,11 +30,17 @@
       "author": "governor-608c8a78",
       "content": "GOVERNANCE10:06: fixed missing mechanical hold. Consumer772 was WORKING unassigned0/5 with narrowed arrays butdependsOn[d85]ONLY, so this HOLD could not prevent workers starting immediately when producerQAapproves. Added existing8d2301ba to772dependsOn, preservingd85 andallPENDINGsteps. Producer is nowREVIEW/QA01 and actualcompletiond258adfe46ef684fb931b842c35edae6ef721a34 contains all8sourcepaths+metadata; both helpers tracked and scoped workingdiffempty. Wait for actuald85DONE, then architect restores helper to772step1/3affectedFiles and removes temporarynote, preserves othertext/DoD, THENremoveholddependency/archivehold. No sourceedit or governorplan. This is the same already-authorized scope-restoration contract, now mechanically enforced.",
       "timestamp": "2026-09-10T10:06:18.181Z"
+    },
+    {
+      "id": "comment-29d7fac40a5d455dac6d03918d06900f",
+      "author": "architect-1c0fef54",
+      "content": "THIS ROW IS MOOT. Every clause in its Definition of Done is already true at main 0c215e82, measured 2026-09-11 by architect-1c0fef54. Recommending ARCHIVE rather than execution. BACKLOG is human/governor-gated, so this is a filing, not an action.\n\nCLAUSE 1 - the upstream landed and the file is tracked.\n  $ git ls-files apps/daemon/src/repository/git-source-extract.ts apps/daemon/src/repository/git-source-extract.js\n  apps/daemon/src/repository/git-source-extract.js\n  apps/daemon/src/repository/git-source-extract.ts\n  $ git status --porcelain apps/daemon/src/repository/git-source-extract.*\n  (empty - clean, no longer untracked)\ntask-d85fd8fd74354e94886d619c67f24c75 reads DONE on disk. The preservation warning in this row's description no longer applies: the working tree is not the only copy any more.\n\nCLAUSE 2 - the narrowing is already reversed. task-77207fb3's implementationPlan step 1 and step 3 each name `apps/daemon/src/repository/git-source-extract.ts` in affectedFiles today. Nothing to restore.\n\nCLAUSE 3 - the temporary scope note is gone. Step 3's description carries no restoration or narrowing language; its tail is the alternates-flag instruction and the DoD-2 grep gate. activeAmendmentId is null, so the base description is the effective text.\n\nCLAUSE 4 - \"left in a state a worker can claim\" was overtaken by events. task-77207fb327a9462b869ff647650e57cf is DONE, completedAt 2026-09-10T18:32:12.427Z, with step 3 COMPLETED. The downstream row did not stop on the stale scope note; it ran and landed with the path declared.\n\nSo the failure this row existed to prevent - a deliberate temporary narrowing becoming a permanent silent one - did not occur. The narrowing was reversed before the downstream executed, and the bookkeeping row simply outlived its subject. Editing a DONE row's plan now would change nothing a reader depends on and would make a finished row look reopened.\n\nWith this filed, the epic has no open work outside task-705977238f794b2cadb5c1dcdb98d6bd, which is WORKING.",
+      "timestamp": "2026-09-11T09:42:54.530Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-10T09:23:49.205Z",
-  "updatedAt": "2026-09-10T17:39:22.632Z",
+  "updatedAt": "2026-09-11T09:42:54.530Z",
   "metrics": {
     "firstClaimAt": "2026-09-10T09:24:41.119Z"
   },
