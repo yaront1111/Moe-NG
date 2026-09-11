@@ -4,7 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   lstatSync, realpathSync, statSync, unlinkSync, writeFileSync,
 } from "node:fs";
-import { delimiter, dirname, isAbsolute, join, relative, sep } from "node:path";
+import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { PACKAGING_SOURCE_LAYER, PackSourceError, type PackSourceDependencies,
@@ -383,13 +383,13 @@ export function packWindowsFromRepository(
   });
 }
 
+export const WINDOWS_PACK_REPOSITORY_ROOT = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const meta = import.meta as ImportMeta & { readonly main?: boolean };
 if (meta.main === true) {
-  const repositoryRoot = fileURLToPath(new URL("../..", import.meta.url));
   try {
     if (process.argv.length !== 2) throw new PackSourceError("PACK_SOURCE_INPUT_INVALID");
     process.exitCode = packWindowsFromRepository(
-      repositoryRoot,
+      WINDOWS_PACK_REPOSITORY_ROOT,
       (line) => process.stdout.write(`${line}\n`),
     );
   } catch (error) {
