@@ -169,7 +169,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-11T21:29:38.972Z",
-  "updatedAt": "2026-09-11T23:16:17.382Z",
+  "updatedAt": "2026-09-11T23:16:24.880Z",
   "metrics": {
     "firstClaimAt": "2026-09-11T21:33:05.038Z",
     "plannedStepCount": 8,
@@ -230,7 +230,8 @@
     "apps/daemon/src/deployment/deploy-schema-guard.ts",
     "apps/daemon/src/deployment/deploy-schema-guard.test.ts",
     "apps/daemon/src/deployment/deploy-schema-guard.js",
-    ".moe/tasks/task-2c827d67524c432989d338e3ede86716.json"
+    ".moe/tasks/task-2c827d67524c432989d338e3ede86716.json",
+    ".moe/tasks/task-cab96ebcd3b6403cbbf412bdad839403.json"
   ],
   "completionSummary": "`deployment.deploy` now takes the SHARED per-environment schema guard. Delivered: deploy-command.ts + environment-schema-guard.ts (modified), deploy-schema-guard.{ts,js,test.ts} (new). All 5 declared.\n\nSPAN (DoD 2): reserve at the MIGRATION, release with the TERMINAL — held across migrate/candidate start/health poll/proxy flip, NOT across docker build or ssh transfer. environment-schema-guard.ts:25-45 now says so, names the mid-flight intent as a deliberate departure with a do-not-fix-back note, and states the residual: a rollback admitted during the build phase still wins, so the deploy refuses after a completed build — a wasted build, never a corrupted schema. The \"IS DELIBERATELY NOT AMONG THEM YET / filed as a successor to task-b8af5916\" paragraph is gone (`git grep` returns ZERO). Four further sentences that were stale once deploy joined (two-commands census, the reservation-legs note, the strands-both paragraph, the ONE-STREAM-BOTH doc) were corrected too.\n\nDoD 1: `git grep -n environmentSchemaGuardId -- .../deploy-command.ts` -> :366; `git grep -n 'deploy-environment:' -- apps/daemon/src ':!*.test.ts'` -> ZERO. No private prefix minted.\nDoD 3/4: arms assert `{code, httpStatus, layer}` — DEPLOY_ROLLBACK_IN_PROGRESS/409/DAEMON_COMMAND_SEAM with `restores == []`, and DEPLOY_ENVIRONMENT_SCHEMA_BUSY/409/DAEMON_COMMAND_SEAM with `migrations == []`. New codes sit beside DEPLOY_GOAL_UNBOUND, NOT in the frozen DEPLOY_REFUSAL_CODES.\nDoD 5: both mutants in comment-25534099, every red verbatim, zero on-disk mutation (in-memory transform, config deleted, absence proven, clean re-run green). Mutant B's mirror red IS the defect: a deploy DECIDED/EFFECTS_COMMITTED while a revert holds the environment.\nDoD 6: driven, not described — deploy reserves, migrates, records its receipt, dies in its terminal; guard ODD; SAME command id re-issued; guard back to EVEN; migration NOT re-run (proving the receipt-replay path, the one that would otherwise strand forever); then a real migrat",
   "commits": [
@@ -253,6 +254,22 @@
       "treeId": "987cffaf154d031b902ef5d323f654252bb331a7",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "8534e4cd46c2601434ab694b78e0d159812ec663",
+      "ref": "refs/heads/moe/work-2026-09-11",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-a8573597@2026-09-11T22:46:46Z",
+      "paths": [
+        ".moe/tasks/task-2c827d67524c432989d338e3ede86716.json",
+        ".moe/tasks/task-cab96ebcd3b6403cbbf412bdad839403.json"
+      ],
+      "recordedBy": "qa-a8573597",
+      "recordedAt": "2026-09-11T23:16:24.880Z",
+      "treeId": "9d1c68c3025613ce77f9887da090082e3f2a3236",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "touchedFiles": [
@@ -263,9 +280,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-a1cf5270@2026-09-11T22:04:14Z",
-    "at": "2026-09-11T22:41:43.435Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-a8573597@2026-09-11T22:46:46Z",
+    "at": "2026-09-11T23:16:24.880Z"
   },
   "completedAt": "2026-09-11T23:16:17.381Z",
   "reviewCompletedAt": "2026-09-11T23:16:17.381Z",
