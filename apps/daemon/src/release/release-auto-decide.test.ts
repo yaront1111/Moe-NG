@@ -496,10 +496,13 @@ describe("R2 and R3 subjects are human-only, and the engine says so", () => {
  * answered. The ref asserted is a CONCRETE one returned by the install that produced it, never
  * "whatever the other gate got" — two gates agreeing on the wrong slice would satisfy that.
  *
- * THE SEEDED SUBJECT TIER IS AN ISOLATION PRECONDITION, NOT A CAPABILITY CLAIM. `unattendedWorld`
- * seeds the preview gate's durable risk classification so the only thing varying across the
- * sequence below is WHICH POLICY IS EFFECTIVE. Whether a real journey can ground that tier without
- * a seeded record is a different defect, owned by another row, and nothing here certifies it.
+ * THE SUBJECT TIER IS AN ISOLATION PRECONDITION, NOT A CAPABILITY CLAIM, and it is no longer
+ * SEEDED. `unattendedWorld` used to insert the preview gate's durable risk classification by hand;
+ * it now installs nothing, because both gates read the goal's own replay-verified planning-run
+ * tier. So the only thing varying across the sequence below is still WHICH POLICY IS EFFECTIVE,
+ * and it is now varying over a world the ordinary journey actually produces. The defect this
+ * comment used to defer to -- that a real journey could not ground Gate 2's tier at all -- is
+ * closed; these arms needed no change for it, which is what that separation was for.
  */
 describe("the preview gate and the release gate select the SAME effective policy", () => {
   /**

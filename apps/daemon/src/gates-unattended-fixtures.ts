@@ -14,11 +14,20 @@
  * under a later install silently does nothing and every arm built on it is vacuous. The action
  * strings are read from the kind constants, never hand-typed.
  *
- * THE TWO GATES GROUND THEIR SUBJECT TIER DIFFERENTLY, and a fixture that pretended otherwise
- * would test one of them twice. Gate 2's tier is the operator's durable `readPolicyRisk`
- * classification for `preview.decide`, joined on the current ACTIVE GRAPH. Gate 3's is the goal's
- * replay-verified PLANNING-RUN tier through `readRunPolicyEvaluation` (this journey's run
- * evaluates to R1), which an operator RAISES through the slice's own `riskClassifications`.
+ * BOTH GATES NOW GROUND THEIR SUBJECT TIER THE SAME WAY, AND THIS MODULE NO LONGER SEEDS ONE.
+ * It used to INSERT the preview gate's `readPolicyRisk` record by hand, joined on a graph
+ * revision it also fabricated, because the ordinary journey leaves neither behind -- which meant
+ * Gate 2 was proven against a world production never produces, and on every real project it
+ * reached RISK_TIER_UNCLASSIFIABLE. Both gates now read the goal's replay-verified PLANNING-RUN
+ * tier: Gate 3 through `release-auto-approval.ts`, Gate 2 through `preview/preview-risk-fact.ts`.
+ * This journey's run evaluates to R1, so R1 is the tier both gates see with nothing installed.
+ *
+ * AN ELEVATED SUBJECT IS RAISED THROUGH THE SLICE'S OWN `riskClassifications`, which is the
+ * operator-facing mechanism and the same fold `assessRisk` applies in production. It can only
+ * RAISE (`maxTier`), so R0 is not reachable on this journey and `UnattendedOptions.subjectTier`
+ * excludes it at the TYPE level rather than accepting it and silently doing nothing. Each gate
+ * has its OWN fact id, so an elevated world installs BOTH -- `previewRunFactId` and
+ * `releaseRunFactId`, each DERIVED through the reader production uses.
  *
  * NOTHING HERE DECIDES. No tier is derived, ranked or compared; no opt-in is matched. Every
  * judgement stays in `@moe/core` and in the two production gate modules.
@@ -29,9 +38,6 @@ import { expect } from "vitest";
 
 import { readDurableLedger, versionOf } from "./bootstrap/bootstrap-ledger.js";
 import { envelope, send } from "./bootstrap/bootstrap-test-fixtures.js";
-import {
-  POLICY_RISK_EVENT_TYPE, buildPolicyRiskRecord, policyRiskAggregateIdFor,
-} from "./bootstrap/policy-risk-record.js";
 import { readCriterionGoal } from "./criterion-evidence/criterion-goal.js";
 import {
   BASE, DECIDED_AT, GOAL_ID, PROJECT_ID, dossierFacts, journeyWorld,
@@ -39,17 +45,13 @@ import {
 import type { DesignStep, JourneyWorld } from "./gates-journey-fixtures.js";
 import type { CommandHandlerInput } from "./http/http-contract.js";
 import { readRunGoalPublication } from "./http/run-goal-publication.js";
-import {
-  graphRevisionAggregateId, readCurrentActiveGraph,
-} from "./planning/active-graph-projection.js";
-import { putGraphBody } from "./planning/graph-body-record.js";
-import { PRIMARY, activePathFor } from "./planning/graph-query-test-fixtures.js";
 import { OPERATOR } from "./planning/plan-reject-test-fixtures.js";
 import { PREVIEW_DECIDE_COMMAND_KIND } from "./preview/preview-contracts.js";
 import {
   previewAutoCommandId, resolvePreviewAutoDecision,
 } from "./preview/preview-auto-composition.js";
 import type { PreviewAutoDecision } from "./preview/preview-auto-decision.js";
+import { previewRunRiskFactId, resolvePreviewRiskFact } from "./preview/preview-risk-fact.js";
 import { readPreviewDecision } from "./preview/preview-decision-record.js";
 import { previewReceiptId } from "./preview/preview-receipt-contracts.js";
 import type { PreviewReceiptV1 } from "./preview/preview-receipt-contracts.js";
@@ -62,7 +64,6 @@ import { RELEASE_DECIDE_COMMAND_KIND } from "./release/release-decide-contracts.
 import { releaseDossierAggregateId } from "./release/release-dossier-contracts.js";
 import { readPublishLedger, recordPublishReceipt } from "./repository/publish-ledger.js";
 
-const ENCODER = new TextEncoder();
 let installs = 0;
 
 /** One standing declaration. `tier` is `PolicyAutoApprovalTier`, so the COMPILER refuses an R2 or
@@ -77,16 +78,29 @@ export interface GateClassification {
   readonly tier: PolicyRiskTier;
 }
 
-/** The fact id `evaluateReleaseAutoApproval` composes for this goal's planning run. DERIVED
- *  through the same reader production uses, so a classification addresses the real subject. */
-export function releaseRunFactId(world: JourneyWorld): string {
+/** This goal's planning run, read through the reader BOTH gates use. Shared by the two fact-id
+ *  derivations below so neither can address a run the goal does not actually carry. */
+function journeyRunId(world: JourneyWorld): string {
   const goal = readCriterionGoal(world.store, PROJECT_ID, GOAL_ID);
   if (!goal.ok) throw new Error(`the journey goal is unreadable: ${goal.code}`);
   const runId = goal.graph.planningRunRef;
   if (runId === undefined || runId === "") {
     throw new Error("the journey goal carries no planning run to classify");
   }
-  return `release.run_policy_tier:${runId}`;
+  return runId;
+}
+
+/** The fact id `evaluateReleaseAutoApproval` composes for this goal's planning run. DERIVED
+ *  through the same reader production uses, so a classification addresses the real subject. */
+export function releaseRunFactId(world: JourneyWorld): string {
+  return `release.run_policy_tier:${journeyRunId(world)}`;
+}
+
+/** The fact id `resolvePreviewRiskFact` composes for the SAME run. Taken from the PRODUCTION
+ *  `previewRunRiskFactId`, never spelled here, so a classification cannot address a name the
+ *  gate stopped using -- which would leave an elevated-subject arm silently testing R1. */
+export function previewRunFactId(world: JourneyWorld): string {
+  return previewRunRiskFactId(journeyRunId(world));
 }
 
 /**
@@ -114,96 +128,60 @@ export function installGateOptIns(
   return digest.digest;
 }
 
-/**
- * AN ACTIVE GRAPH REVISION, which the journey's plan approval does not leave behind: it compiles
- * a graph (`activeCompiledGraphs` finds it) but writes no GRAPH REVISION, and those are different
- * projections. MEASURED, not assumed -- without this `readCurrentActiveGraph` answers
- * ACTIVE_GRAPH_ABSENT, `readPolicyRisk`'s fifth gate has nothing to join on, every risk record
- * answers POLICY_RISK_SUBJECT_STALE and Gate 2's fact stays null-tier UNKNOWN.
- */
-function seedActiveGraph(world: JourneyWorld): void {
-  const revisionId = "graph-revision-gates-unattended";
-  const aggregateId = graphRevisionAggregateId(PROJECT_ID, revisionId);
-  const commandId = `seed-${revisionId}`;
-  world.store.commit({
-    aggregateId,
-    commandBytes: ENCODER.encode(commandId),
-    commandId,
-    committedAt: DECIDED_AT,
-    events: activePathFor(revisionId, PRIMARY).map((event, index) => ({
-      eventId: `${commandId}-${String(index)}`,
-      eventType: event.kind,
-      payload: ENCODER.encode(JSON.stringify(event)),
-    })),
-    expectedVersion: world.store.getAggregateVersion(aggregateId),
-  });
-  const body = putGraphBody(world.store, PROJECT_ID, PRIMARY);
-  if (!body.ok) throw new Error(`graph body fixture refused: ${body.code}`);
-}
-
-/**
- * The operator's durable risk classification for a gate action: the only thing that can ground
- * Gate 2's tier, and HUMAN_APPROVED by `readPolicyRisk`'s own contract. Joined on the CURRENT
- * ACTIVE GRAPH -- without that join every record answers POLICY_RISK_SUBJECT_STALE, the fact stays
- * null-tier UNKNOWN, and the evaluation folds to HOLD_UNKNOWN.
- */
-export function seedGatePolicyRisk(
-  world: JourneyWorld, tier: PolicyRiskTier, action: string = PREVIEW_DECIDE_COMMAND_KIND,
-): void {
-  const active = readCurrentActiveGraph(world.store, PROJECT_ID);
-  if (!active.ok) throw new Error(`the journey world has no active graph: ${active.code}`);
-  const record = {
-    actionKind: action, approvedBy: OPERATOR, assessedAt: DECIDED_AT,
-    decisionRef: `decision-unattended-${action}-${tier}`, projectId: PROJECT_ID,
-    subjectRef: active.graphContentHash, subjectRevision: active.graphEpoch, tier,
-  };
-  const built = buildPolicyRiskRecord(record);
-  if (!built.ok) throw new Error(`policy risk fixture refused: ${built.code}`);
-  const aggregateId = policyRiskAggregateIdFor(record);
-  world.store.commit({
-    aggregateId,
-    commandBytes: ENCODER.encode(`seed-${record.decisionRef}`),
-    commandId: `seed-${record.decisionRef}`,
-    committedAt: DECIDED_AT,
-    events: [{
-      eventId: `event-${record.decisionRef}`, eventType: POLICY_RISK_EVENT_TYPE,
-      payload: built.bytes,
-    }],
-    expectedVersion: world.store.getAggregateVersion(aggregateId),
-  });
-}
+/** The tier this journey's own planning run evaluates to, MEASURED at HEAD f6e97a6b: run-1's
+ *  replay-verified `PolicyEvaluated` row is R1, produced by `plan.finalize`. It is the tier BOTH
+ *  gates see with no classification installed, and it is ASSERTED below rather than assumed. */
+export const JOURNEY_SUBJECT_TIER = "R1" as const;
 
 export interface UnattendedOptions {
   /** Which design step the journey took. Defaults to an AUTHORED design. */
   readonly design?: DesignStep;
   /** The ceiling the operator's standing opt-in covers, for BOTH gate actions. Defaults to R1. */
   readonly optInTier?: PolicyAutoApprovalTier;
-  /** The tier the SUBJECT carries. R2 and R3 drive the human-only negatives; they are refused by
-   *  the engine, never by anything this module writes. Defaults to R0. */
-  readonly subjectTier?: PolicyRiskTier;
+  /**
+   * The tier the SUBJECT carries. R2 and R3 drive the human-only negatives; they are refused by
+   * the engine, never by anything this module writes. Defaults to the journey's own R1.
+   *
+   * R0 IS EXCLUDED AT THE TYPE LEVEL, not omitted by oversight. A `riskClassifications` entry can
+   * only RAISE a tier (`assessRisk` takes `maxTier(fact.tier, declared)`), so asking for R0 on a
+   * journey whose run evaluates to R1 would silently hand back an R1 world and every arm built on
+   * it would be testing something other than what it says. The COMPILER refuses it instead.
+   */
+  readonly subjectTier?: Exclude<PolicyRiskTier, "R0">;
 }
 
 /**
- * The journey world with the operator's opt-ins in force -- ONE helper for the R0/R1, R2/R3 and
- * gap cases, because the only thing that varies between them is the tier each gate's subject
- * carries and whether the release evidence binds.
+ * The journey world with the operator's opt-ins in force -- ONE helper for the R1, R2/R3 and gap
+ * cases, because the only thing that varies between them is the tier each gate's subject carries
+ * and whether the release evidence binds.
  *
  * ORDER MATTERS: the policy install is LAST, so it is the one declaration standing after the
  * seed's own opt-in-free installs, and therefore the policy `selectEffectiveAutoApprovalPolicy`
  * hands to BOTH gates.
+ *
+ * NOTHING IS SEEDED. The journey's own planning-run evaluation is the evidence both gates read,
+ * so a world built here contains no record production would not have written. The R1 default is
+ * ASSERTED through the production resolver before the elevated classifications are chosen: if the
+ * journey's graph or its evaluator ever moved that tier, this throws here instead of leaving the
+ * R2/R3 arms quietly classifying against an already-elevated subject.
  */
 export function unattendedWorld(options: UnattendedOptions = {}): JourneyWorld {
-  const subjectTier = options.subjectTier ?? "R0";
+  const subjectTier = options.subjectTier ?? JOURNEY_SUBJECT_TIER;
   const optInTier = options.optInTier ?? "R1";
   const world = journeyWorld(options.design ?? "SUBMITTED");
-  seedActiveGraph(world);
-  seedGatePolicyRisk(world, subjectTier);
-  // Gate 3's subject is the planning run's own tier (R1 in this journey). It is RAISED to R2/R3
-  // through the slice's classifications, which is the operator-facing mechanism and the same fold
-  // `assessRisk` applies in production; an R0/R1 world leaves the run's own tier alone.
-  const classifications = subjectTier === "R2" || subjectTier === "R3"
-    ? [{ factId: releaseRunFactId(world), tier: subjectTier }]
-    : [];
+  const resolved = resolvePreviewRiskFact(world.store, PROJECT_ID, GOAL_ID);
+  expect({ code: resolved.code, tier: resolved.fact.tier, truthClass: resolved.fact.truthClass })
+    .toEqual({ code: null, tier: JOURNEY_SUBJECT_TIER, truthClass: "DAEMON_VERIFIED" });
+  // Each gate reads its OWN fact id off the SAME durable row, so an elevated subject installs
+  // BOTH. This is the operator-facing mechanism and the same fold `assessRisk` applies in
+  // production; an R1 world installs nothing and leaves the run's own tier alone.
+  const classifications: readonly GateClassification[] =
+    subjectTier === "R2" || subjectTier === "R3"
+      ? [
+        { factId: previewRunFactId(world), tier: subjectTier },
+        { factId: releaseRunFactId(world), tier: subjectTier },
+      ]
+      : [];
   installGateOptIns(world, [
     { action: PREVIEW_DECIDE_COMMAND_KIND, tier: optInTier },
     { action: RELEASE_DECIDE_COMMAND_KIND, tier: optInTier },

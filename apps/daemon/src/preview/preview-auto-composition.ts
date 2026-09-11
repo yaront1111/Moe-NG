@@ -5,13 +5,12 @@ import type { SqliteEventStore } from "@moe/store";
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import { POLICY_EVALUATOR_VERSION } from "../bootstrap/bootstrap-policy-authority.js";
 import { selectEffectiveAutoApprovalPolicy } from "../bootstrap/effective-auto-policy.js";
-import {
-  evaluationChain, resolvePolicyFact, resolvePolicyWaivers,
-} from "../bootstrap/policy-fact-resolver.js";
+import { evaluationChain, resolvePolicyWaivers } from "../bootstrap/policy-fact-resolver.js";
 import { previewAutoDecisionFor, previewAutoDecline } from "./preview-auto-decision.js";
 import type { PreviewAutoDecision } from "./preview-auto-decision.js";
 import { PREVIEW_DECIDE_COMMAND_KIND } from "./preview-contracts.js";
 import { decodePreviewDecisionRecord } from "./preview-decision-record.js";
+import { resolvePreviewRiskFact } from "./preview-risk-fact.js";
 import { previewAggregateId } from "./preview-receipt-contracts.js";
 import type { PreviewReceiptV1 } from "./preview-receipt-contracts.js";
 
@@ -26,6 +25,17 @@ import type { PreviewReceiptV1 } from "./preview-receipt-contracts.js";
  * NOTHING HERE JUDGES, AND NOTHING HERE SELECTS EITHER. It resolves the one tier-bearing fact
  * through the daemon's own resolver and hands the composed input to the pure half. No tier is
  * derived, ranked or compared in this file.
+ *
+ * WHICH FACT THAT IS MOVED, AND THE OLD ONE WAS UNREACHABLE. It used to be
+ * `resolvePolicyFact(..., PREVIEW_DECIDE_COMMAND_KIND)` -- an operator-recorded `readPolicyRisk`
+ * classification -- and the ordinary journey writes NO policy-risk record at all, so that lookup
+ * answered POLICY_RISK_RECORD_MISSING and this gate reached RISK_TIER_UNCLASSIFIABLE on every
+ * real project. It is now the goal's own replay-verified PLANNING-RUN tier, resolved by
+ * `preview-risk-fact.ts`, which is where that whole argument and its two extra pins are
+ * documented. THE ACTION DID NOT MOVE WITH IT: `preview.decide` is still the evaluated action,
+ * still the opt-in lookup key and still the waiver lookup key, and the operator principal is
+ * still the configured one -- the run's tier is evidence about the SUBJECT, never authority to
+ * approve, so per-action operator control is unchanged.
  *
  * WHICH POLICY IS EFFECTIVE IS NOT THIS MODULE'S QUESTION. It is asked of
  * `selectEffectiveAutoApprovalPolicy` (bootstrap/effective-auto-policy.ts), the ONE seam the
@@ -83,9 +93,10 @@ export interface PreviewAutoDecisionRequest {
 
 /**
  * Whether the daemon may decide this preview itself, composed against the durable store. THE INPUT
- * SHAPE IS THE DAEMON'S ESTABLISHED ONE: `resolvePolicyFact` for the single tier-bearing fact,
- * `evaluationChain`, `resolvePolicyWaivers` and `POLICY_EVALUATOR_VERSION`, exactly as
- * `validatePolicy` (bootstrap-policy-services.ts:164-192) composes them.
+ * SHAPE IS THE DAEMON'S ESTABLISHED ONE: `evaluationChain`, `resolvePolicyWaivers` and
+ * `POLICY_EVALUATOR_VERSION`, exactly as `validatePolicy` (bootstrap-policy-services.ts:164-192)
+ * composes them, with `resolvePreviewRiskFact` supplying the single tier-bearing fact in place of
+ * the `resolvePolicyFact` lookup `validatePolicy` still makes for its own caller-named action.
  */
 export function resolvePreviewAutoDecision(
   request: PreviewAutoDecisionRequest,
@@ -120,7 +131,7 @@ export function resolvePreviewAutoDecision(
     decisionDigest: previewAutoDecisionDigest(projectId, receipt.receiptId),
     evaluatedAtEpochMs,
     evaluatorVersion: POLICY_EVALUATOR_VERSION,
-    facts: [resolvePolicyFact(store, projectId, principalId, PREVIEW_DECIDE_COMMAND_KIND)],
+    facts: [resolvePreviewRiskFact(store, projectId, receipt.goalId).fact],
     graphNodeRevisionRefs: [],
     policyRevisionRef: selected.ref,
     requiredFactIds: [],

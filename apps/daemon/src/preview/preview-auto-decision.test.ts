@@ -32,13 +32,12 @@ import {
   GOAL_ID, PROJECT_ID, closeStores, driveThrough, envelope, hex64, openStore, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
 import { readDurableLedger, stateOf, versionOf } from "../bootstrap/bootstrap-ledger.js";
+import { JOURNEY_SUBJECT_TIER } from "../gates-unattended-fixtures.js";
+import { journeyWorld } from "../gates-journey-fixtures.js";
 import { installedSlices } from "../bootstrap/bootstrap-policy-services.js";
 import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
 import { sliceKindOf } from "../http/policy-read.js";
 import { POLICY_EVALUATOR_VERSION } from "../bootstrap/bootstrap-policy-authority.js";
-import {
-  POLICY_RISK_EVENT_TYPE, buildPolicyRiskRecord, policyRiskAggregateIdFor,
-} from "../bootstrap/policy-risk-record.js";
 import { createDaemonCommandPorts } from "../daemon-command-registry.js";
 import { OPERATOR_PRINCIPAL_KINDS } from "../daemon-command-vocabulary.js";
 import { seedLandingReceipt, seedReviewAcceptance } from "../goals/goal-closure-test-fixtures.js";
@@ -47,13 +46,9 @@ import type { CommandHandlerInput } from "../http/http-contract.js";
 import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import {
-  graphRevisionAggregateId, readCurrentActiveGraph,
-} from "../planning/active-graph-projection.js";
-import { putGraphBody } from "../planning/graph-body-record.js";
-import { PRIMARY, activePathFor } from "../planning/graph-query-test-fixtures.js";
-import {
   previewAutoCommandId, resolvePreviewAutoDecision,
 } from "./preview-auto-composition.js";
+import { resolvePreviewRiskFact } from "./preview-risk-fact.js";
 import {
   PREVIEW_AUTO_CODES, previewAutoDecisionFor, previewAutoDecline,
 } from "./preview-auto-decision.js";
@@ -76,11 +71,15 @@ import type { PreviewReceiptV1 } from "./preview-receipt-contracts.js";
 type Store = ReturnType<typeof openStore>;
 
 const SHA = "0123456789abcdef0123456789abcdef01234567";
+/** A second sha, so a REFUSED receipt gets its OWN id instead of replaying the STARTED one. */
+const REFUSED_SHA = "89abcdef0123456789abcdef0123456789abcdef";
 const DECIDED_AT = "2026-09-10T08:00:00.000Z";
 const OPERATOR = "operator-auto-preview";
 const NODE_KEY = "node-a";
 const FACT_ID = "preview-auto-fact";
-const ENCODER = new TextEncoder();
+/** The tier the ORDINARY JOURNEY's own planning run carries, taken from the fixture module that
+ *  measures it rather than spelled again here. */
+const JOURNEY_TIER = JOURNEY_SUBJECT_TIER;
 
 afterEach(() => { closeStores(); });
 
@@ -139,37 +138,14 @@ function scopedRef(store: Store, nodeKey: string): string {
 }
 
 /**
- * An ACTIVE graph revision for the bootstrap project, which the seed sequence never creates.
+ * The BOOTSTRAP SEED world with its one execution-bearing node landed as a real commit.
  *
- * IT IS NOT DECORATION. `readPolicyRisk` joins its fifth gate on the CURRENT ACTIVE graph's
- * content hash and epoch, so without one every risk record answers POLICY_RISK_SUBJECT_STALE, the
- * fact stays null-tier UNKNOWN, and `assessRisk` folds the whole evaluation to HOLD_UNKNOWN. That
- * is the correct production behaviour and it is asserted in its own arm below — but it would make
- * every APPROVAL arm vacuous, so the positive arms build the world where a tier is reachable.
+ * IT CANNOT GROUND GATE 2'S TIER, and that is now a PROPERTY rather than a limitation: the seed
+ * sequence binds no product contract and approves no plan, so `readCriterionGoal` refuses and
+ * there is no planning-run evaluation to read. Arms whose refusal fires BEFORE the risk fact is
+ * resolved -- a REFUSED receipt, an unresolved policy -- and the arm about the seed world's own
+ * slice count belong here. Every arm that needs an APPROVABLE world uses `journeyStore` below.
  */
-function seedActiveGraph(store: Store): void {
-  const revisionId = "graph-revision-auto-preview";
-  const aggregateId = graphRevisionAggregateId(PROJECT_ID, revisionId);
-  const commandId = `seed-${revisionId}`;
-  store.commit({
-    aggregateId,
-    commandBytes: ENCODER.encode(commandId),
-    commandId,
-    committedAt: DECIDED_AT,
-    events: activePathFor(revisionId, PRIMARY).map((event, index) => ({
-      eventId: `${commandId}-${String(index)}`,
-      eventType: event.kind,
-      payload: ENCODER.encode(JSON.stringify(event)),
-    })),
-    expectedVersion: store.getAggregateVersion(aggregateId),
-  });
-  const body = putGraphBody(store, PROJECT_ID, PRIMARY);
-  if (!body.ok) throw new Error(`graph body fixture refused: ${body.code}`);
-  const active = readCurrentActiveGraph(store, PROJECT_ID);
-  if (!active.ok) throw new Error(`active graph fixture refused: ${active.code}`);
-}
-
-/** The seed world with its one execution-bearing node landed as a real commit. */
 function landedWorld(): Store {
   const store = openStore();
   driveThrough(store, "goal.close");
@@ -179,6 +155,27 @@ function landedWorld(): Store {
   // Asserted, not assumed: every arm depends on the landing gate being PASSABLE, so a fixture
   // that silently stopped landing would make the approval arms vacuous.
   expect(readGoalLandingStatus(store, PROJECT_ID, GOAL_ID).allLanded).toBe(true);
+  return store;
+}
+
+/**
+ * THE ORDINARY JOURNEY'S STORE, and the only world in this file that can reach an approval.
+ *
+ * Gate 2's tier used to come from a risk record this file INSERTED BY HAND over the seed world,
+ * joined on a graph revision it also fabricated -- neither of which the product ever writes, so
+ * every approval arm was proven against a world production never produces. The gate now reads the
+ * goal's own replay-verified planning-run tier, which only the real journey leaves behind.
+ *
+ * THE PRECONDITION IS ASSERTED THROUGH PRODUCTION, so an arm below cannot pass vacuously: the
+ * risk fact resolves VERIFIED at `JOURNEY_TIER` and the store holds ZERO policy-risk aggregates.
+ * The second half is what stops this fixture from quietly regaining a seeded record.
+ */
+function journeyStore(): Store {
+  const store = journeyWorld("SUBMITTED").store;
+  const resolved = resolvePreviewRiskFact(store, PROJECT_ID, GOAL_ID);
+  expect({ code: resolved.code, tier: resolved.fact.tier, truthClass: resolved.fact.truthClass })
+    .toEqual({ code: null, tier: JOURNEY_TIER, truthClass: "DAEMON_VERIFIED" });
+  expect(store.enumerateAggregateIdsByPrefix("policy-risk:sha256:")).toEqual([]);
   return store;
 }
 
@@ -217,38 +214,13 @@ function installOptInPolicy(
   return digest.digest;
 }
 
-/** The operator's durable risk classification for the preview gate: the only thing that can
- *  ground a tier, and it is HUMAN_APPROVED by the reader's own contract. */
-function seedPolicyRisk(store: Store, tier: PolicyRiskTier, action = PREVIEW_DECIDE_COMMAND_KIND):
-void {
-  const active = readCurrentActiveGraph(store, PROJECT_ID);
-  if (!active.ok) throw new Error(`active graph fixture refused: ${active.code}`);
-  const record = {
-    actionKind: action, approvedBy: OPERATOR, assessedAt: DECIDED_AT,
-    decisionRef: `decision-auto-${action}-${tier}`, projectId: PROJECT_ID,
-    subjectRef: active.graphContentHash, subjectRevision: active.graphEpoch, tier,
-  };
-  const built = buildPolicyRiskRecord(record);
-  if (!built.ok) throw new Error(`policy risk fixture refused: ${built.code}`);
-  const aggregateId = policyRiskAggregateIdFor(record);
-  store.commit({
-    aggregateId,
-    commandBytes: ENCODER.encode(`seed-${record.decisionRef}`),
-    commandId: `seed-${record.decisionRef}`,
-    committedAt: DECIDED_AT,
-    events: [{
-      eventId: `event-${record.decisionRef}`, eventType: POLICY_RISK_EVENT_TYPE,
-      payload: built.bytes,
-    }],
-    expectedVersion: store.getAggregateVersion(aggregateId),
-  });
-}
-
 /** A receipt written by the PRODUCTION writer. `code` null records STARTED, a code REFUSED. */
-function receipt(store: Store, code: "PREVIEW_START_TIMEOUT" | null = null): PreviewReceiptV1 {
+function receipt(
+  store: Store, code: "PREVIEW_START_TIMEOUT" | null = null, sha: string = SHA,
+): PreviewReceiptV1 {
   const recorded = recordPreviewReceipt(store, {
     code, decidedAt: DECIDED_AT, goalId: GOAL_ID, pid: code === null ? 4242 : null,
-    projectId: PROJECT_ID, screenshots: [], sha: SHA,
+    projectId: PROJECT_ID, screenshots: [], sha,
     url: code === null ? "http://127.0.0.1:5199/" : null,
   });
   if (!recorded.ok) throw new Error(`receipt fixture refused: ${recorded.code}`);
@@ -418,10 +390,8 @@ describe("the auto-approval ceiling is core's, and this row did not move it", ()
 
 describe("preview.start auto-approves over a real store, with no human decision", () => {
   it("commits an APPROVE whose persisted record NAMES the opt-in it acted under", async () => {
-    const store = landedWorld();
-    seedActiveGraph(store);
+    const store = journeyStore();
     installOptInPolicy(store, [{ action: PREVIEW_DECIDE_COMMAND_KIND, tier: "R1" }]);
-    seedPolicyRisk(store, "R0");
     const { released, supervisor } = stubSupervisor(store);
     await startPreview(store, supervisor);
 
@@ -430,19 +400,40 @@ describe("preview.start auto-approves over a real store, with no human decision"
     if (record === null) throw new Error("no automatic decision was committed");
     expect(record.decision).toBe("APPROVE");
     // THE SUBJECT OF THIS ROW. A verdict-only assertion would pass against a human approval.
-    expect(record.provenance).toEqual({ action: PREVIEW_DECIDE_COMMAND_KIND, tier: "R0" });
+    expect(record.provenance)
+      .toEqual({ action: PREVIEW_DECIDE_COMMAND_KIND, tier: JOURNEY_TIER });
     expect(record.version).toBe("moe-preview-decision/2");
     // The decision reached the runner through the existing release seam, not a second path.
     expect(released).toEqual([receiptId]);
   });
 
-  it("leaves the gate pending when the operator has recorded NO risk classification", async () => {
+  /**
+   * NO PLANNING-RUN EVIDENCE FOR THE GOAL AT ALL. This arm used to say "the operator has recorded
+   * NO risk classification", which described the hand-inserted record that no longer exists; the
+   * condition that actually leaves the gate pending is that the seed world binds no goal, so
+   * there is no run evaluation to read. The POSITIVE CONTROL for it is the approval arm above,
+   * whose only difference is that its world is the real journey.
+   */
+  it("leaves the gate pending on a world with NO planning-run evidence for the goal", async () => {
     const store = landedWorld();
     installOptInPolicy(store, [{ action: PREVIEW_DECIDE_COMMAND_KIND, tier: "R1" }]);
     const { released, supervisor } = stubSupervisor(store);
     await startPreview(store, supervisor);
     expect(autoDecisionRecord(store, receipt(store).receiptId)).toBeNull();
     expect(released).toEqual([]);
+    // AND WHICH CONDITION ANSWERED, not merely that nothing was committed: the fact is withheld
+    // with no tier and no strong truth, and CORE is what declines on it.
+    const resolved = resolvePreviewRiskFact(store, PROJECT_ID, GOAL_ID);
+    expect(resolved.code).toBe("PREVIEW_RISK_GOAL_UNREADABLE");
+    expect(resolved.fact.tier).toBeNull();
+    expect(resolved.fact.truthClass).toBe("UNKNOWN");
+    const result = declined(resolvePreviewAutoDecision({
+      decidedAt: DECIDED_AT, principalId: OPERATOR, projectId: PROJECT_ID,
+      receipt: receipt(store), store,
+    }));
+    expect(result.code).toBe("PREVIEW_AUTO_NOT_ALLOWED");
+    expect(result.layer).toBe("CORE_REDUCER");
+    expect(result.reasonCodes).toContain("RISK_TIER_UNCLASSIFIABLE");
   });
 
   /**
@@ -453,10 +444,8 @@ describe("preview.start auto-approves over a real store, with no human decision"
    * is answered where it belongs — by the ENGINE, with its own AUTO_APPROVAL_NOT_OPTED_IN.
    */
   it("leaves the gate pending when the effective policy declares only the release gate", async () => {
-    const store = landedWorld();
-    seedActiveGraph(store);
+    const store = journeyStore();
     installOptInPolicy(store, [{ action: "release.decide", tier: "R1" }]);
-    seedPolicyRisk(store, "R0");
     const { released, supervisor } = stubSupervisor(store);
     await startPreview(store, supervisor);
     expect(autoDecisionRecord(store, receipt(store).receiptId)).toBeNull();
@@ -472,12 +461,16 @@ describe("preview.start auto-approves over a real store, with no human decision"
   });
 
   it("never fires on a REFUSED receipt, which names a code and served no url", () => {
-    const store = landedWorld();
-    seedActiveGraph(store);
+    const store = journeyStore();
     installOptInPolicy(store, [{ action: PREVIEW_DECIDE_COMMAND_KIND, tier: "R1" }]);
-    seedPolicyRisk(store, "R0");
-    const refused = receipt(store, "PREVIEW_START_TIMEOUT");
+    // A DISTINCT SHA, because the receiptId is `(projectId, goalId, sha)` and the journey already
+    // recorded a STARTED receipt at its landing sha -- `recordPreviewReceipt:105` REPLAYS an
+    // existing id, so reusing it would hand this arm a STARTED receipt and it would be testing
+    // nothing. Measured: that is exactly how it failed first.
+    const refused = receipt(store, "PREVIEW_START_TIMEOUT", REFUSED_SHA);
     expect(refused.outcome).toBe("REFUSED");
+    // THE POSITIVE CONTROL IS THE WORLD ITSELF: `journeyStore` asserted the risk fact resolves
+    // VERIFIED here, so this refusal cannot be the unclassifiable path wearing another name.
     const result = declined(resolvePreviewAutoDecision({
       decidedAt: DECIDED_AT, principalId: OPERATOR, projectId: PROJECT_ID, receipt: refused, store,
     }));
@@ -494,9 +487,7 @@ describe("preview.start auto-approves over a real store, with no human decision"
    * most recent reset".
    */
   it("declines when TWO installed slices both declare the preview gate's opt-in", () => {
-    const store = landedWorld();
-    seedActiveGraph(store);
-    seedPolicyRisk(store, "R0");
+    const store = journeyStore();
     installOptInPolicy(store, [{ action: PREVIEW_DECIDE_COMMAND_KIND, tier: "R1" }]);
     const body = {
       autoApprovalOptIns: [{ action: PREVIEW_DECIDE_COMMAND_KIND, tier: "R1" }],
@@ -526,9 +517,7 @@ describe("preview.start auto-approves over a real store, with no human decision"
    * that declares nothing left exactly one survivor, the OLD one, and it still governed.
    */
   it("newer opt-in-free policy resets preview auto approval", async () => {
-    const store = landedWorld();
-    seedActiveGraph(store);
-    seedPolicyRisk(store, "R0");
+    const store = journeyStore();
     const declaring = installOptInPolicy(
       store, [{ action: PREVIEW_DECIDE_COMMAND_KIND, tier: "R1" }], "preview-auto-reset-a",
     );
@@ -621,10 +610,8 @@ describe("a recorded human decision WINS, and the automatic path never overturns
   /** The world every arm in this block shares: auto-approvable in every respect BUT the
    *  precedence gate, so an arm that declined for another reason reddens the control below. */
   function contestedWorld(): { readonly receiptId: string; readonly store: Store } {
-    const store = landedWorld();
-    seedActiveGraph(store);
+    const store = journeyStore();
     installOptInPolicy(store, [{ action: PREVIEW_DECIDE_COMMAND_KIND, tier: "R1" }]);
-    seedPolicyRisk(store, "R0");
     return { receiptId: receipt(store).receiptId, store };
   }
 
@@ -635,7 +622,7 @@ describe("a recorded human decision WINS, and the automatic path never overturns
       receipt: receipt(store), store,
     });
     if (!result.ok) throw new Error(`control expected an approval, got ${result.code}`);
-    expect(result.provenance).toEqual({ action: PREVIEW_DECIDE_COMMAND_KIND, tier: "R0" });
+    expect(result.provenance).toEqual({ action: PREVIEW_DECIDE_COMMAND_KIND, tier: JOURNEY_TIER });
   });
 
   it("declines with PREVIEW_AUTO_ALREADY_DECIDED at its own layer when a REJECT is recorded", () => {
@@ -669,7 +656,8 @@ describe("a recorded human decision WINS, and the automatic path never overturns
     const first = stubSupervisor(store);
     await startPreview(store, first.supervisor);
     const committed = autoDecisionRecord(store, receiptId);
-    expect(committed?.provenance).toEqual({ action: PREVIEW_DECIDE_COMMAND_KIND, tier: "R0" });
+    expect(committed?.provenance)
+      .toEqual({ action: PREVIEW_DECIDE_COMMAND_KIND, tier: JOURNEY_TIER });
     expect(first.released).toEqual([receiptId]);
     // TAKEN, NEVER SPELLED. A frozen literal here would be a number this row guessed about a
     // shared aggregate; what the arm actually needs is that the SECOND start moves nothing.
@@ -685,8 +673,7 @@ describe("a recorded human decision WINS, and the automatic path never overturns
   });
 
   it("re-offers the gate on a REPLAYED start, so an opt-in installed later still closes it", async () => {
-    const store = landedWorld();
-    seedActiveGraph(store);
+    const store = journeyStore();
     const receiptId = receipt(store).receiptId;
     // FIRST start: the receipt exists but no policy does, so the gate correctly stays pending.
     const before = stubSupervisor(store);
@@ -694,12 +681,11 @@ describe("a recorded human decision WINS, and the automatic path never overturns
     expect(autoDecisionRecord(store, receiptId)).toBeNull();
 
     installOptInPolicy(store, [{ action: PREVIEW_DECIDE_COMMAND_KIND, tier: "R1" }]);
-    seedPolicyRisk(store, "R0");
     const after = stubSupervisor(store);
     await startPreview(store, after.supervisor);
     // Without the replay-path call this stays null forever and only a human can close the gate.
     expect(autoDecisionRecord(store, receiptId)?.provenance)
-      .toEqual({ action: PREVIEW_DECIDE_COMMAND_KIND, tier: "R0" });
+      .toEqual({ action: PREVIEW_DECIDE_COMMAND_KIND, tier: JOURNEY_TIER });
     expect(after.released).toEqual([receiptId]);
   });
 

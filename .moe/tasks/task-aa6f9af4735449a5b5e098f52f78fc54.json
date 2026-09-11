@@ -204,7 +204,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-11T10:37:52.010Z",
-  "updatedAt": "2026-09-11T22:14:20.393Z",
+  "updatedAt": "2026-09-11T22:14:29.205Z",
   "metrics": {
     "firstClaimAt": "2026-09-11T10:38:25.341Z",
     "plannedStepCount": 6,
@@ -391,6 +391,21 @@
       "treeId": "e8a4ca95d31fa6028e7f63ddedfc27ac16e0e6be",
       "status": "REVIEW",
       "pushed": true
+    },
+    {
+      "sha": "6fc152da3734b803941a0bda13e0cd4a050729fa",
+      "ref": "refs/heads/moe/work-2026-09-11",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-a8573597@2026-09-11T22:03:53Z",
+      "paths": [
+        ".moe/tasks/task-aa6f9af4735449a5b5e098f52f78fc54.json"
+      ],
+      "recordedBy": "qa-a8573597",
+      "recordedAt": "2026-09-11T22:14:29.205Z",
+      "treeId": "5e6f17fff563f8d6e30a9e652867533d601af0f1",
+      "status": "DONE",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -407,9 +422,9 @@
   "unattributedPaths": [],
   "lastCommitOutcome": {
     "outcome": "committed",
-    "kind": "completion",
-    "sessionId": "worker-a1cf5270@2026-09-11T21:42:22Z",
-    "at": "2026-09-11T22:03:42.831Z"
+    "kind": "checkpoint",
+    "sessionId": "qa-a8573597@2026-09-11T22:03:53Z",
+    "at": "2026-09-11T22:14:29.205Z"
   },
   "workStartedAt": "2026-09-11T12:12:59.286Z",
   "declaredFiles": [
@@ -428,7 +443,8 @@
     "apps/daemon/src/deployment/rollback-schema-moves.test.ts",
     "apps/daemon/src/deployment/.arms-fragment.txt",
     "apps/daemon/attr-task-aa6f9af4-a1cf5270.config.ts",
-    "apps/daemon/qa-drill-task-aa6f9af4-a1cf5270.config.ts"
+    "apps/daemon/qa-drill-task-aa6f9af4-a1cf5270.config.ts",
+    "apps/daemon/qa-drill-aa6f9af4.config.ts"
   ],
   "priorBlockedReason": "RESOURCE WAIT ONLY, per step 5's own instruction. Work finished and green; ONE leased command outstanding - a single `pnpm --filter @moe/daemon test`. Then step 5's note, step 6, complete_task. Nothing in the code is unresolved. Long form: comment-e6817ce8. Drill table: comment-4c37cdf1.\n\nGATE: held by worker-8534621f / task-510340a3 since 12:18:31Z; I am #1 of 2. Asked 12:34, 12:40, 12:42. Its lease note is the one it wrote while QUEUED, so it does not say what is running. A daemon leg measured 306s here this morning and the hold is now ~25 min, so this may be a dead session rather than a long run - put to @worker-8534621f and @governors at 12:40 (msg-d128d4b4) rather than acted on. Did NOT force-release; governor's call.\n\nVERIFIED ON EVERY UNLEASED LEG, fresh:\n  pnpm --filter @moe/daemon typecheck          EXIT 0\n  vitest --config package.json src/deployment  Test Files 26 passed (26)\n                                               Tests 356 passed | 2 skipped (358)\n  step-1 pre-edit full daemon baseline         Test Files 615 passed (615)\n                                               Tests 11081 passed | 20 skipped (11101), exit 0\nAt the gate expect 616 files / 11086 tests; the +4 on the deployment leg is exactly my new arms beyond (x).\n\nDoD 1 DONE - arm (x) drives A -> B(migrates) -> migrate_down -> D(migrates) through the real handlers, rolls back to B with restore, reads the restore port's recorded calls back, and applies the migrate_down's own pre-revert dump, asserted by CONTENT not just filename.\nDoD 2 DONE - six mutants, each red on its target arm, zero on-disk mutation.\nDoD 3 is the ONLY outstanding item and it is this lease.\n\nFIVE PATHS, stable since 15:41 and untouched while the lease is held: rollback-preflight.ts, migration-receipt.ts, rollback-schema-moves.{ts,js,test.ts}. No foreign path touched.\n\nOPEN FOR REVIEW: one deviation from step-3 amend-1, raised with @architect-1c0fef54 at 12:28 (msg-d76fddc5), unanswered.",
   "blockedOnTaskIds": null,
