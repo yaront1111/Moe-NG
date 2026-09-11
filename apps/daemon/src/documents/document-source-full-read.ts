@@ -13,6 +13,7 @@
 import type { SqliteEventStore } from "@moe/store";
 
 import { decodeDocumentSourceRecord } from "./document-source-codec.js";
+import { documentSourceMatchesRef } from "./document-source-binding.js";
 import { decodeGoalCatalogEntry } from "../http/goal-catalog-entry.js";
 import { copyFixedBytes, exactDataArray, exactDataRecord } from "./document-work-safe-value.js";
 
@@ -97,7 +98,7 @@ export function createGoalSourceReadPort(options: {
     if (payload === null) return refused("GOAL_SOURCE_INVALID");
     const record = decodeDocumentSourceRecord(payload);
     if (record === null || record.contentSha256 !== binding.contentSha256
-      || record.byteLength !== binding.byteLength) {
+      || record.byteLength !== binding.byteLength || !documentSourceMatchesRef(record, binding.sourceRef)) {
       return refused("GOAL_SOURCE_INVALID");
     }
     return Object.freeze({

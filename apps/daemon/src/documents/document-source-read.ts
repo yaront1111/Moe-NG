@@ -1,4 +1,5 @@
 import { decodeDocumentSourceRecord, documentSourceView } from "./document-source-codec.js";
+import { documentSourceMatchesRef } from "./document-source-binding.js";
 import type { DocumentSourceView } from "./document-source-contract.js";
 import { documentSourceAggregateId } from "./document-source-identifiers.js";
 import { refuse } from "./document-work-result.js";
@@ -53,6 +54,7 @@ export function readDocumentSourceView(
   const payload = eventPayloadBytes(items[0]);
   if (payload === null) return sourceInvalid();
   const record = decodeDocumentSourceRecord(payload);
-  if (record === null || record.contentSha256 !== contentSha256) return sourceInvalid();
+  if (record === null || record.contentSha256 !== contentSha256
+    || !documentSourceMatchesRef(record, sourceRef)) return sourceInvalid();
   return { kind: "VIEW", view: documentSourceView(record) };
 }

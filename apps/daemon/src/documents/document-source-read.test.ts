@@ -4,7 +4,8 @@ import { SqliteEventStore } from "@moe/store";
 import type { CursorPage, StoredEvent } from "@moe/store";
 import { describe, expect, it } from "vitest";
 
-import { DOCUMENT_SOURCE_SCHEMA_VERSION } from "./document-source-contract.js";
+import { DOCUMENT_SOURCE_RECORD_COMMAND_KIND, DOCUMENT_SOURCE_SCHEMA_VERSION } from "./document-source-contract.js";
+import { documentSourceLegOf, documentSourceRecordOf } from "./document-source-leg.js";
 import {
   documentSourceAggregateId,
   legacyDocumentSourceRef,
@@ -105,6 +106,67 @@ describe("dossier source read", () => {
     } finally {
       real.close();
     }
+  });
+
+  it.each([
+    { displayPath: "different/source.md" },
+    { mediaType: "text/plain" },
+  ])("refuses current source metadata substituted under its bound ref: %j", (replacement) => {
+    const real = SqliteEventStore.openEphemeralForProjectTest(PROJECT_ID);
+    try {
+      const ingested = ingestDocument(real, {
+        correlationId: "metadata-integrity", decidedAt: "2026-09-11T10:00:00.000Z",
+        payload: { displayPath: "approved/prd.md", mediaType: "text/markdown", text: "# Same text\n" },
+        principalId: "operator-1", projectId: PROJECT_ID,
+      });
+      if (!ingested.ok) throw new Error("ingest was refused");
+      const store = {
+        commitExpectedVersionDecision: real.commitExpectedVersionDecision.bind(real),
+        getAggregateVersion: real.getAggregateVersion.bind(real),
+        getCommandDecision: real.getCommandDecision.bind(real),
+        readAggregateEvents: (...args: Parameters<SqliteEventStore["readAggregateEvents"]>) => {
+          const page = real.readAggregateEvents(...args);
+          if (args[0] !== ingested.sourceAggregateId) return page;
+          return { ...page, items: page.items.map((event) => ({
+            ...event,
+            payload: encoder.encode(JSON.stringify({
+              ...JSON.parse(new TextDecoder().decode(event.payload)), ...replacement,
+            })),
+          })) };
+        },
+      };
+      expect(readLatestDocumentWorkDossier(store, PROJECT_ID)).toMatchObject({
+        code: "DOCUMENT_WORK_DOSSIER_SOURCE_INVALID", layer: "DAEMON_READ_MODEL",
+        ok: false, outcome: "REFUSED",
+      });
+      expect(readLatestDocumentWorkDossier(real, PROJECT_ID)).toMatchObject({
+        ok: true, source: { displayPath: "approved/prd.md", mediaType: "text/markdown" },
+      });
+    } finally { real.close(); }
+  });
+
+  it("preserves explicit and omitted legacy content-only source lookups", () => {
+    const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT_ID);
+    try {
+      const record = documentSourceRecordOf({
+        displayPath: "legacy/path.md", mediaType: "text/markdown", objective: "Read legacy source",
+        text: "# Legacy content\n",
+      });
+      const sourceRef = legacyDocumentSourceRef(record.contentSha256);
+      const leg = documentSourceLegOf(PROJECT_ID, record, sourceRef);
+      store.commitExpectedVersionDecision({
+        commandKind: DOCUMENT_SOURCE_RECORD_COMMAND_KIND, committedResultBytes: leg.payload,
+        correlationId: "legacy-reader", decidedAt: "2026-08-21T10:00:00.000Z",
+        events: [leg.event], expectedVersion: 0,
+        key: { commandId: leg.commandId, principalId: "legacy-operator", projectId: PROJECT_ID },
+        requestBytes: leg.payload, targetAggregateId: leg.aggregateId,
+      });
+      const explicit = readDocumentSourceView(store, PROJECT_ID, record.contentSha256, sourceRef);
+      expect(explicit).toMatchObject({
+        kind: "VIEW", view: { displayPath: record.displayPath, mediaType: record.mediaType },
+      });
+      expect(readDocumentSourceView(store, PROJECT_ID, record.contentSha256)).toEqual(explicit);
+    } finally { store.close(); }
   });
 
   // The identifier derivation is DOMAIN-SEPARATED: framedDigest seeds the hash with the domain
