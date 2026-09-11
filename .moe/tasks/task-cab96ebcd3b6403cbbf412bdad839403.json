@@ -1,0 +1,28 @@
+{
+  "id": "task-cab96ebcd3b6403cbbf412bdad839403",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "bug: the lander durably refuses on a TRANSIENT verified-workspace capture failure and never retries",
+  "description": "Found by worker-883dc9b4 during the adversarial review of task-29f367530d954a18a8580f184b09c65d (parent row). node-lander.ts records EVERY checkLandingVerification failure through refuse(), a durable landing receipt, and landOne then returns null for that acceptance forever. But capture can fail transiently: git-verified-workspace-capture.ts:63 raises VERIFIED_WORKSPACE_DRIFT when HEAD moves mid-capture, and a 30s git timeout surfaces as VERIFIED_WORKSPACE_GIT_FAILED. The lander's own observe path already follows the opposite house rule, at the \"reported, not recorded: the next pass retries\" comment in landOne, so a one-off git hiccup permanently burns an ACCEPTED delivery, with no retry and no credit.\n\nThis PRE-DATES the parent row on the delivered path, where it is worse because real work is lost. The parent's hoist extends the same exposure to genuine no-ops, which previously answered NOTHING_TO_COMMIT and were credited by landedWithNoEffect. Fix sketch: classify capture refusal codes into structural and transient, and return transient ones unrecorded, the way the observe path does. dependsOn the parent because both rows edit landOne in node-lander.ts.",
+  "definitionOfDone": [
+    "Task completed as described"
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-29f367530d954a18a8580f184b09c65d"
+  ],
+  "priority": "MEDIUM",
+  "order": 1012.3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-11T10:12:54.995Z",
+  "updatedAt": "2026-09-11T10:12:54.995Z"
+}

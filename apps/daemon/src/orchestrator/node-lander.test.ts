@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import type { GitCommitResult, GitLandingPort, GitObserveResult } from "../repository/git-landing-port.js";
 import { readLandingReceipt, readLatestLandingBaseline } from "../repository/landing-ledger.js";
-import { DELETED_BLOB, landingReceiptId } from "../repository/landing-receipt-contracts.js";
+import { DELETED_BLOB, LANDING_NOTHING_TO_COMMIT, landingReceiptId } from "../repository/landing-receipt-contracts.js";
 import type { LandingBaselineEntry } from "../repository/landing-receipt-contracts.js";
 import { PROJECT_ID, closeStores, hex64, openStore, seedVerifierReceipt } from "../review/review-test-fixtures.js";
 import { readVerifierReceipt } from "../review/verifier-receipt-ledger.js";
@@ -65,6 +65,27 @@ function bindingOptions(git: GitLandingPort): {
   return {
     readVerifiedBinding: () => BINDING,
     verifiedWorkspace: { capture: async () => ({ binding: BINDING, ok: true as const }), commit: git.commit.bind(git) },
+  };
+}
+
+/**
+ * A verified-workspace port that counts its consultations, so an arm can make NEVER BEING
+ * CONSULTED fatal. Without it a zero-delivered arm passes just as well when the lander skips
+ * the verification check altogether — which is exactly the defect this file now pins.
+ */
+function countedWorkspace(git: GitLandingPort, captured: VerifiedWorkspaceBinding): {
+  assertConsulted: () => void;
+  port: VerifiedWorkspacePort;
+} {
+  let captures = 0;
+  return {
+    assertConsulted: () => {
+      if (captures === 0) throw new Error("VERIFIED_WORKSPACE_NEVER_CONSULTED");
+    },
+    port: {
+      capture: async () => { captures += 1; return { binding: captured, ok: true as const }; },
+      commit: git.commit.bind(git),
+    },
   };
 }
 
@@ -301,6 +322,94 @@ describe("createNodeLander", () => {
     expect(reports[0]?.detail).toContain("NOTHING_TO_COMMIT");
     const receipt = readLandingReceipt(store, PROJECT_ID, landingReceiptId(PROJECT_ID, NODE, VERIFIER_RECEIPT));
     expect(receipt.ok && receipt.receipt.outcome).toBe("REFUSED");
+  });
+
+  // THE SUCCEEDING HALF of the zero-delivered path. The arm above states the ANSWER; this one states
+  // the answer was EARNED — the verified candidate was consulted and MATCHED before the lander said
+  // "nothing differs from the staffing baseline". `assertConsulted` throws when the port was never
+  // called, so this arm cannot pass while the check is skipped, which is exactly how the pre-row
+  // lander behaved. It pins the two halves `landedWithNoEffect` reads from the lander's side.
+  it("consults the verified workspace before answering NOTHING_TO_COMMIT for a genuine no-op", async () => {
+    const operator = { blobId: BLOB_A, path: "operator-dirty.ts" };
+    const git = fakeGit(observation([operator]));
+    const workspace = countedWorkspace(git, BINDING);
+    const { made, store } = lander(git, { verifierReceiptId: VERIFIER_RECEIPT }, brief,
+      { readVerifiedBinding: () => BINDING, verifiedWorkspace: workspace.port });
+    await made.baseline(NODE);
+    const reports = await made.landOnce();
+    workspace.assertConsulted();
+    expect(reports).toEqual([{
+      detail: "NOTHING_TO_COMMIT: no path in the workspace differs from the staffing baseline",
+      nodeRef: NODE, outcome: "REFUSED",
+    }]);
+    expect(git.commits).toEqual([]);
+    // Against the production constant `landedWithNoEffect` compares on, not a local literal.
+    const receipt = readLandingReceipt(store, PROJECT_ID, landingReceiptId(PROJECT_ID, NODE, VERIFIER_RECEIPT));
+    expect(receipt.ok && receipt.receipt.outcome).toBe("REFUSED");
+    expect(receipt.ok && receipt.receipt.refusal?.code).toBe(LANDING_NOTHING_TO_COMMIT);
+    expect(receipt.ok && receipt.receipt.commit).toBeNull();
+  });
+
+  // THE EXTERNAL REVIEW'S REPRODUCTION (2026-09-11): the seat changed real bytes, the verifier
+  // accepted THAT workspace, and the bytes were restored before landing. Nothing then differs from
+  // the staffing baseline, so the zero-delivered branch is the only branch that can answer — and
+  // it was precisely the branch that never consulted the verified tree. It must not answer a bare
+  // no-effect success, because `landedWithNoEffect` credits that answer toward goal progress
+  // (task-f7d38f752b074dc89da30631783aae04) on the assumption that it is TRUE.
+  it("refuses a workspace restored to its staffed state after a different state was verified", async () => {
+    const operator = { blobId: BLOB_A, path: "operator-dirty.ts" };
+    const git = fakeGit(observation([operator]));
+    // The receipt binds the workspace as the verifier saw it, with the seat's edit present.
+    const verified = { ...BINDING, treeSha: "3".repeat(40) };
+    const workspace = countedWorkspace(git, BINDING);
+    const { made, store } = lander(git, { verifierReceiptId: VERIFIER_RECEIPT }, brief,
+      { readVerifiedBinding: () => verified, verifiedWorkspace: workspace.port });
+    await made.baseline(NODE);
+    // Restored: the observation is byte-for-byte the staffing baseline, so `deliveredPaths` is
+    // empty and the pre-fix lander answered NOTHING_TO_COMMIT without ever reaching the check.
+    const reports = await made.landOnce();
+    // THE CODE AND THE LAYER. This exact code/detail pair is authored only by
+    // `checkLandingVerification` in node-lander-verification.ts — never by the lander's own
+    // refusals, never by the commit port. Asserting the whole report rather than "it refused"
+    // also states that the answer is NOT NOTHING_TO_COMMIT.
+    expect(reports).toEqual([{
+      detail: "LANDING_VERIFIED_WORKSPACE_CHANGED: current workspace differs from the verified candidate",
+      nodeRef: NODE, outcome: "REFUSED",
+    }]);
+    expect(git.commits).toEqual([]);
+    // Independently of the code: the check must have RUN on this path. Without this the arm
+    // would still pass if a later edit answered the right code without consulting the tree.
+    workspace.assertConsulted();
+    // Read the durable receipt back rather than trusting the report, as the neighbouring arms do.
+    const receipt = readLandingReceipt(store, PROJECT_ID, landingReceiptId(PROJECT_ID, NODE, VERIFIER_RECEIPT));
+    expect(receipt.ok && receipt.receipt.refusal?.code).toBe("LANDING_VERIFIED_WORKSPACE_CHANGED");
+    expect(receipt.ok && receipt.receipt.commit).toBeNull();
+  });
+
+  // THE UNCONFIGURED CASE, pinned here because verification now answers FIRST on the zero-delivered
+  // path, so this is a reachable answer where it previously was not. Nothing in the tree asserted
+  // LANDING_VERIFIED_WORKSPACE_UNCONFIGURED before this row; without this arm the behaviour would be
+  // produced by the lander and covered by nobody.
+  it("refuses a zero-delivered landing when no verified workspace port is configured", async () => {
+    const operator = { blobId: BLOB_A, path: "operator-dirty.ts" };
+    const git = fakeGit(observation([operator]));
+    const store = openStore();
+    const made = createNodeLander({
+      // A binding IS readable, so this refusal is about the missing PORT and cannot be satisfied by
+      // the binding-missing branch that sits one line above it.
+      readVerifiedBinding: () => BINDING,
+      clock: () => "2026-09-03T12:00:00.000Z", git, nodeMission: () => brief,
+      nodes: () => [{ nodeRef: NODE }], projectId: PROJECT_ID,
+      readAccepted: () => ({ verifierReceiptId: VERIFIER_RECEIPT }), store,
+    });
+    await made.baseline(NODE);
+    expect(await made.landOnce()).toEqual([{
+      detail: "LANDING_VERIFIED_WORKSPACE_UNCONFIGURED: verified workspace port unavailable",
+      nodeRef: NODE, outcome: "REFUSED",
+    }]);
+    expect(git.commits).toEqual([]);
+    const receipt = readLandingReceipt(store, PROJECT_ID, landingReceiptId(PROJECT_ID, NODE, VERIFIER_RECEIPT));
+    expect(receipt.ok && receipt.receipt.refusal?.code).toBe("LANDING_VERIFIED_WORKSPACE_UNCONFIGURED");
   });
 
   // The property the checkout release depends on: this refusal is decided BEFORE the journal, so it
