@@ -1,0 +1,47 @@
+{
+  "id": "task-241e1808a20346d99c4afe1e55821a9b",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "Coordinate user-authorized production-readiness resource leases",
+  "description": "User-authorized 2026-09-11 production-readiness run in the interactive Codex session. Coordination-only task for exclusive full-suite-gate and browser-e2e-gate leases; no source implementation, no wrapper preflight, no completion/landing authority claimed. The parent runs gates and the existing shipped live-proof-prd acceptance in an isolated clone. Shipped capability anchor: DONE task-161b7e9d566b4c47b429490a54a6cca1; observed tests/e2e/control-room/live-proof-prd.spec.ts and apps/daemon/package.json live lane. Release only these task-keyed leases after every child exits; archive this coordination row and deregister only the new identity.",
+  "definitionOfDone": [
+    "Record acquired resource task and owner IDs before any exclusive gate begins.",
+    "Record parent acceptance results without claiming implementation approval, wrapper preflight or source delivery.",
+    "Release exact owned leases after child shutdown, archive only this coordination task and deregister only this identity."
+  ],
+  "taskRails": [
+    "Resource coordination only; no source or live .moe file edits.",
+    "Do not claim peer work, force release resources, send chat messages, or open remote pull requests.",
+    "Do not use this PLANNING row as implementation approval or as a wrapper completion record."
+  ],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": "architect-readiness-23eeca50",
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "ARCHITECT",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-161b7e9d566b4c47b429490a54a6cca1"
+  ],
+  "priority": "HIGH",
+  "order": 1013.3,
+  "comments": [
+    {
+      "id": "comment-5f938983a6b44ee8903f1342f5752047",
+      "author": "governor-bd76ac8c",
+      "content": "AUTHORIZATION CONFIRMED by the human, directly, at 2026-09-11 10:48Z in the governor session. Their words: \"yes i authorized it\".\n\nThis supersedes my note in #architects msg-83f5716d, where I recorded that the description's \"user-authorized\" claim was unverified from this session. It is verified now. Plan and run without re-asking, and nobody needs to route this back to a human for permission to exist.\n\nWhat the confirmation covers and what it does not. It confirms the RUN is authorized: the production-readiness gates and the existing shipped live-proof-prd acceptance in an isolated clone, with the exclusive full-suite-gate and browser-e2e-gate leases this row exists to coordinate. It does not widen the row beyond its own DoD. Your three clauses still bind exactly as written — record acquired resource task and owner ids before any exclusive gate begins, record parent acceptance results without claiming implementation approval or wrapper preflight or source delivery, and release exactly the leases you own before archiving only this row and deregistering only this identity. An authorized run is not authority to land sources or approve anything.\n\nThe sequencing request in that same message stands and is not affected by the confirmation, because it protects other rows rather than gating yours. Make the lease window the RUN, not the row: acquire when the clone is ready to execute, post GATE START, run, post GATE END with the count lines, release. full-suite-gate is the fleet's only serialisation point and four rows are live, each needing it to close a verification leg. If you need a long window, put the duration in the lease note so the queue can read it.\n\nMeasured state at 10:46:51, worth re-reading immediately before you acquire rather than trusting this: full-suite-gate held by qa-77a9823a for the task-3ccb12a9 review with a 15-minute estimate and an empty queue; browser-e2e-gate free with no holder and no queue.\n\nOne standing fact for your acceptance run: Docker was measured down on this host at 2026-09-11 (yesterday evening UTC) by worker-ed22fae0 — `docker version` exited 1 and the named pipe was absent. I have NOT re-measured it today, so treat that as a lead rather than a finding. Check it before opening a window with both gates held rather than discovering it inside one.\n\nRecorded by governor-bd76ac8c. No status change, no lease taken, no scope added.",
+      "timestamp": "2026-09-11T12:09:45.314Z"
+    }
+  ],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-11T10:46:53.080Z",
+  "updatedAt": "2026-09-11T12:09:45.315Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-11T10:47:04.835Z"
+  },
+  "contextFetchedBy": [
+    "architect-readiness-23eeca50"
+  ]
+}

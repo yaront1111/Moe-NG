@@ -104,7 +104,7 @@
       ]
     }
   ],
-  "status": "WORKING",
+  "status": "BLOCKED",
   "assignedWorkerId": "worker-1b2cd09b",
   "branch": null,
   "prLink": null,
@@ -129,11 +129,17 @@
       "author": "governor-bd76ac8c",
       "content": "GOVERNOR FLAG FOR WHOEVER REVIEWS THIS ROW. Do not grade it against the definitionOfDone field.\n\nThat field contains exactly one clause, \"Task completed as described\", which is a placeholder and not a bar. A reviewer who grades the field alone would approve this row on no criteria at all.\n\nThe gradeable Definition of Done is comment-6a2a721eb01a4e0c85a8b2b5df37e44a, written by architect-bb193f43 at 10:36:16, which states in its own words that it is the authority for the DoD because the field is not gradeable. The plan's steps cite \"DoD item 1\", \"DoD items 3 and 4\" and \"DoD item 6\" — those numbers index that comment, not the field, so a reviewer reading the field will find the step notes referring to clauses that appear to not exist.\n\nThat comment also corrects two premises the row DESCRIPTION gets wrong, so the description is not a safe substitute either. One example it names: VERIFIED_WORKSPACE_GIT_FAILED does not appear in git-verified-workspace-capture.ts as the description implies; it is raised in git-verified-workspace-runtime.ts:34 and git-verified-workspace-commit.ts:39,64, and capture reaches it transitively through the shared verifiedGit invoker.\n\nNothing here is a criticism of the planning. The architect spotted that the field was unusable, wrote a real DoD, declared it the authority, pointed step 1 at it before any source read, and credited worker-883dc9b4 for finding the bug during the parent row's adversarial review including the inconvenient part — that the defect pre-dates the parent and the parent's hoist widens it. That is the right handling of a bad field.\n\nI am flagging it because the failure mode is on the REVIEW side and it is silent: a DoD amendment that lives in a comment rather than the field is invisible to anyone who grades the field, and there is no tool to rewrite definitionOfDone after creation. Recorded on the row rather than in chat so it survives until someone claims this for review.",
       "timestamp": "2026-09-11T10:42:07.259Z"
+    },
+    {
+      "id": "comment-31c540ab327844bc9c809a16299ed500",
+      "author": "worker-1b2cd09b",
+      "content": "STEP 6, FIRST HALF DONE: THE DRILL. Second half (the daemon gate) is parked on full-suite-gate — see the block reason. Recording here so the next session does not redo it.\n\nDRILL: REVERT THE CLASSIFICATION, CONFIRM THE STEP-2 ARM REDS.\nMutant: `unrecordedLandingReport`'s whole body replaced with `return null;`, i.e. exactly the pre-fix behaviour — no classification, so `landOne`'s `unrecordedLandingReport(checked, nodeRef) ?? refuse(...)` records EVERY code durably.\n\nIN-MEMORY, ZERO ON-DISK MUTATION. A Vite `transform` (`enforce: \"pre\"`) in apps/daemon/drill-task-cab96ebcd3b6403cbbf412bdad839403.config.ts, keyed by env CAB96_DRILL, anchored on the four exact source lines and THROWING `CAB96_DRILL anchor missing` if the anchor is absent, so a silent no-op replace cannot read as a green arm. It prints CAB96_DRILL_APPLIED when it fires. This is why no restore proof is needed at all and why the drill could not have reddened a peer's run: nothing under apps/daemon/src was ever written. Config deleted after the run; it sat outside src.\n\nRED, `CAB96_DRILL=REVERT_CLASSIFICATION pnpm exec vitest run --root . --config drill-task-cab96ebcd3b6403cbbf412bdad839403.config.ts --testTimeout=30000 src/orchestrator/node-lander-verification.test.ts` from apps/daemon:\n  EXIT=1, \"Test Files  1 failed (1)\", \"Tests  3 failed | 4 passed (7)\"\n  CAB96_DRILL_APPLIED REVERT_CLASSIFICATION D:/projexts/moe-next/apps/daemon/src/orchestrator/node-lander-verification.ts\n- step-2's arm \"reports a transient capture failure without recording it, then lands on the next pass\", at :193:\n    -     \"detail\": \"VERIFIED_WORKSPACE_DRIFT\",\n    +     \"detail\": \"VERIFIED_WORKSPACE_DRIFT: VERIFIED_WORKSPACE_DRIFT\",\n    -     \"outcome\": \"VERIFIED_WORKSPACE_DRIFT\",\n    +     \"outcome\": \"REFUSED\",\n  Byte-identical to the pre-fix red recorded in step-2's note: this arm tests the split, not the surrounding harness.\n- the sweep \"records every STRUCTURAL code durably and leaves every TRANSIENT one to the next pass\" reds on the same diff at :229, labelled VERIFIED_WORKSPACE_DRIFT.\n- \"answers LANDING_VERIFICATION_UNCLASSIFIED for a code outside the table and records nothing\" reds at :266: `- \"outcome\": \"LANDING_VERIFICATION_UNCLASSIFIED\"` / `+ \"outcome\": \"REFUSED\"`.\nThe STRUCTURAL arms stay GREEN under this mutant, as they must — the mutant only removes the retry.\n\nCONTROL, same config, CAB96_DRILL=NONE: EXIT=0, \"Test Files  1 passed (1)\", \"Tests  7 passed (7)\", and NO CAB96_DRILL_APPLIED line. The harness is not the cause of the red.\n\nON-DISK PROOF after both runs, separate call: `git status --porcelain --untracked-files=all -- apps/daemon/src` EMPTY; sha256 of node-lander-verification.ts = 2fffa67fc51092017982a729346a9e23ba9788798ce273460c7e285984de73f1. All of steps 2-5's bytes are already on the branch in wip commits 81fc9e75 / 862b3e48 / aab06cfc / de76ccb1, so the five owned paths are clean against HEAD.\n\nSTEP 7 ADVERSARIAL READ, done now while parked:\n- A persistently transient condition retries FOREVER — unbounded, deliberately matching the observe path. It is NOT silent: repository-delivery-runtime.ts:120 logs `[lander] <node>: <outcome> (<detail>)` on every pass, so a wedged workspace prints VERIFIED_WORKSPACE_GIT_FAILED each cycle; what it lacks is a DURABLE receipt, which is the whole point (a receipt consumes the acceptance). A bound belongs in its own row, not here.\n- A STRUCTURAL code cannot reach the transient branch: `unrecordedLandingReport` returns null for STRUCTURAL and `landOne` then refuses; a code the table does not name gets neither class — reported as LANDING_VERIFICATION_UNCLASSIFIED and NOT retried by the runtime (`landingVerificationClass(...) === \"TRANSIENT\"` is false), so it is contained, not livelocked.\n- The transient return happens BEFORE commitJournaledLanding: no intent, no reservation transition, no Git effect. Asserted by reading the ledger (receipt absent, landing aggregate version unchanged, recovery evidence MISSING), not the report shape.\n- A new code added next month without classification: the roster arm reds in BOTH directions (set equality against the codes walked out of the capture sources), and the runtime silently declines to retry it rather than guessing.",
+      "timestamp": "2026-09-11T12:16:14.948Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-11T10:12:54.995Z",
-  "updatedAt": "2026-09-11T11:42:32.232Z",
+  "updatedAt": "2026-09-11T12:17:38.481Z",
   "metrics": {
     "firstClaimAt": "2026-09-11T10:34:54.846Z",
     "plannedStepCount": 7,
@@ -166,7 +172,8 @@
   },
   "planApprovedAt": "2026-09-11T10:37:22.764Z",
   "contextFetchedBy": [
-    "worker-1b2cd09b"
+    "worker-1b2cd09b",
+    "architect-e29e1d0e"
   ],
   "workStartedAt": "2026-09-11T10:38:00.774Z",
   "commits": [
@@ -260,7 +267,11 @@
     "outcome": "nothing",
     "kind": "checkpoint",
     "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
-    "sessionId": "worker-1b2cd09b@2026-09-11T11:42:27Z",
-    "at": "2026-09-11T11:42:32.231Z"
-  }
+    "sessionId": "worker-1b2cd09b@2026-09-11T11:57:33Z",
+    "at": "2026-09-11T11:57:38.054Z"
+  },
+  "blockedReason": "Step 6's DRILL is DONE; only its GATE half remains, and full-suite-gate is peer-held. My plan step says to park on the resource rather than run the daemon suite unleased, and I agree: architect-readiness-23eeca50 holds it since 10:58Z for a user-authorized readiness acceptance that spawns a daemon and an app on this host, so a concurrent daemon leg would contend for ports and CPU and could red their run. I am #2, behind task-510340. Their lease carries no etaMs.\n\nALL BYTES ARE ALREADY ON THE BRANCH in wip commits 81fc9e75 / 862b3e48 / aab06cfc / de76ccb1; the five owned paths are clean against HEAD, so nothing is at risk while parked. Steps 1-5 are COMPLETED with notes.\n\nDRILL RESULT, recorded in full in comment-31c540ab327844bc9c809a16299ed500: reverting the classification (unrecordedLandingReport's body replaced with `return null;`, i.e. pre-fix behaviour) reds step-2's transient arm with the byte-identical diff recorded before the fix — `- \"outcome\": \"VERIFIED_WORKSPACE_DRIFT\"` / `+ \"outcome\": \"REFUSED\"` — EXIT=1, \"Tests 3 failed | 4 passed (7)\". Control with the mutant off: EXIT=0, 7 passed. The drill was an IN-MEMORY vitest transform with an anchor that throws when absent, so there were ZERO writes under apps/daemon/src and nothing to restore; proven after the fact by an empty `git status --porcelain --untracked-files=all -- apps/daemon`. The temp config is deleted.\n\nWHAT REMAINS on grant, one session: `pnpm --filter @moe/daemon test` (DoD item 6), quote EXIT and the Test Files count line, compare against step-1's baseline (scoped 9 files / 89 tests green; parent reference 612 files / 11056 passed; census now 612 tracked + 2 untracked peer test files), then complete_step step-6 and step-7's completion record. Step 7's adversarial pass is already written in that same comment.\n\nNon-resource work left: none. Everything that does not need the suite is done.",
+  "blockedResourceId": "full-suite-gate",
+  "blockedFromStatus": "WORKING",
+  "blockedAt": "2026-09-11T12:17:38.481Z"
 }
