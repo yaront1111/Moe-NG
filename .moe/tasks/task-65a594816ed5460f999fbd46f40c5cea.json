@@ -1,0 +1,28 @@
+{
+  "id": "task-65a594816ed5460f999fbd46f40c5cea",
+  "epicId": "epic-8ebe64173d934f72a339c32bc2eaaf7d",
+  "title": "bug: an observe-path transient git failure wedges the delivery checkout BLOCKED with no recovery proof",
+  "description": "Found by worker-1b2cd09b on task-cab96ebcd3b6403cbbf412bdad839403. The following was read at HEAD cdca7094; no test reproduces it yet.\n\nlandOne (node-lander.ts:198) reports an observe GIT_FAILED without recording it and says \"the next pass retries\". In production that is false: repository-delivery-runtime.ts:120 returns RETRY only for GIT_INDEX_LOCKED, so repository-delivery-coordinator.ts:174 calls block(). BLOCKED has no transitions. Recovery needs either !everExecuted or a durable refusal receipt, and this path has neither, so the checkout is held forever and every later node is refused with REPOSITORY_EXECUTION_BUSY.\n\nParent row task-cab96ebc adds the RETRY edge for transient VERIFICATION codes. Extend that edge to the observe path once the parent lands; both rows edit the same land() line.",
+  "definitionOfDone": [
+    "Task completed as described"
+  ],
+  "taskRails": [],
+  "implementationPlan": [],
+  "status": "PLANNING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-cab96ebcd3b6403cbbf412bdad839403"
+  ],
+  "priority": "HIGH",
+  "order": 1014.3,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-11T10:52:11.402Z",
+  "updatedAt": "2026-09-11T10:52:11.402Z"
+}
