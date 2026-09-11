@@ -11,9 +11,45 @@
  * THE LINES ARE VERBATIM from the run of 2026-09-09 (refs shortened), not invented formats: a
  * fixture that guessed the wrapper's wording would pass while the production line drifted.
  */
-import { describe, expect, it } from "vitest";
+import { ChildProcess } from "node:child_process";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join, relative, isAbsolute } from "node:path";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { concurrentStaffing } from "./live-proof-landing.js";
+import type { DaemonLane, LaneScratch } from "./daemon-ports.js";
+import { concurrentStaffing, landLiveProofNodes } from "./live-proof-landing.js";
+
+const boundary = vi.hoisted(() => ({
+  kill: vi.fn(), resolveScratch: vi.fn(), startWrapper: vi.fn(),
+}));
+vi.mock("./wrapper-lane.js", () => ({
+  resolveLaneScratch: boundary.resolveScratch, startWrapper: boundary.startWrapper,
+  wrapperEnv: () => ({}), WRAPPER_INTERVAL_MS: 1,
+}));
+vi.mock("./daemon-children.js", async (original) => ({
+  ...await original<typeof import("./daemon-children.js")>(), killTree: boundary.kill,
+}));
+vi.mock("@moe/store", async (original) => ({
+  ...await original<typeof import("@moe/store")>(),
+  SqliteEventStore: { openForProject: () => ({ close: () => {} }) },
+}));
+vi.mock("../../../apps/daemon/src/orchestrator/compiled-node-source.js", () => ({
+  activeCompiledGraphs: () => [{ content: { snapshot: { nodes: [{ nodeKey: "node-auth-api" }] } } }],
+}));
+vi.mock("../../../apps/daemon/src/orchestrator/compiled-execution-ref.js", () => ({
+  compiledExecutionRef: () => "node:v1:aaa1",
+}));
+
+const created: string[] = [];
+afterEach(() => {
+  vi.clearAllMocks();
+  for (const dir of created.splice(0)) {
+    const within = relative(tmpdir(), dir);
+    if (within.startsWith("..") || isAbsolute(within)) throw new Error("fixture escaped temp root");
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 const A = "node:v1:aaa1";
 const B = "node:v1:bbb2";
@@ -78,5 +114,64 @@ describe("concurrentStaffing", () => {
 
     expect(witness.concurrent).toBe(true);
     expect(witness.holder).toBe(A);
+  });
+});
+
+/** Real marker reads and refusal/teardown; no wrapper, provider, Git, or daemon is launched. */
+async function refusedSeat(mark: Readonly<Record<string, unknown>>) {
+  const root = mkdtempSync(join(tmpdir(), "moe-live-refusal-test-"));
+  created.push(root);
+  const nodeSpecsDir = join(root, "node-specs");
+  mkdirSync(nodeSpecsDir);
+  const scratch: LaneScratch = {
+    catalogPath: join(root, "catalog.json"), nodeRef: A, nodeSpecsDir, projectId: "project-test",
+    root, storePath: join(root, "store.sqlite"), tag: "test", workspace: root, workspaceSha: "",
+  };
+  const lane: DaemonLane = {
+    ...scratch, approvePairing: null, baseUrl: "", credential: "", csrfToken: "",
+    daemonOrigin: "", daemonPid: 0, repoRoot: root, seedPid: null, serverPid: 0,
+  };
+  const marker = join(root, "seat-node-auth-api.end");
+  writeFileSync(marker, JSON.stringify(mark));
+  boundary.resolveScratch.mockReturnValue(scratch);
+  boundary.startWrapper.mockImplementation((_root, _env, tracked: ChildProcess[]) => {
+    const child = new ChildProcess();
+    tracked.push(child);
+    return { child, transcript: () => spawned(A), waitFor: async () => null };
+  });
+  boundary.kill.mockImplementation(async () => { rmSync(marker); });
+  const result = await landLiveProofNodes(lane, root, ["node-auth-api"], []);
+  expect(boundary.kill).toHaveBeenCalledOnce();
+  expect(existsSync(marker)).toBe(false);
+  expect(result.ok).toBe(false);
+  if (result.ok) throw new Error("expected the provider completion refusal");
+  expect(result.detail.split("\n")[0]).toBe("SEAT_PROVIDER_COMPLETION_UNPROVEN node-auth-api");
+  return result;
+}
+
+describe("live landing refusal evidence", () => {
+  it.each([
+    { label: "nonzero exit after writing", providerStatus: 1, moduleBytes: 23, realProvider: true },
+    { label: "provider timeout", providerStatus: null, moduleBytes: 0, realProvider: true },
+    { label: "injected process", providerStatus: 0, moduleBytes: 23, realProvider: false },
+  ])("retains the $label witness after teardown", async ({ label: _label, ...fields }) => {
+    const result = await refusedSeat({ ...fields, startedAt: 100, endedAt: 200, ok: false });
+    expect(result).toHaveProperty("seats", [
+      { ...fields, nodeKey: "node-auth-api", startedAt: 100, endedAt: 200 },
+    ]);
+  });
+
+  it("publishes only validated scalar fields from an untrusted marker", async () => {
+    const privateText = "PRIVATE-PROVIDER-DIAGNOSTIC";
+    const result = await refusedSeat({
+      agent: privateText, transcriptTail: privateText, providerStatus: privateText,
+      moduleBytes: { text: privateText }, realProvider: privateText,
+      startedAt: privateText, endedAt: [privateText], ok: false,
+    });
+    expect(result).toHaveProperty("seats", [{
+      nodeKey: "node-auth-api", providerStatus: null, moduleBytes: 0,
+      realProvider: false, startedAt: 0, endedAt: 0,
+    }]);
+    expect(JSON.stringify(result)).not.toContain(privateText);
   });
 });
