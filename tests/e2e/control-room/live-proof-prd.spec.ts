@@ -340,7 +340,7 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
           record("node-landings", landed.ok
             ? { ok: true, crash: landed.crash, landings: landed.landings, seats: landed.seats,
               staffing: landed.staffing }
-            : { detail: landed.detail.slice(0, 1500), ok: false });
+            : { detail: landed.detail.slice(0, 1500), ok: false, seats: landed.seats });
           expect(landed.ok, landed.ok ? "landed" : landed.detail).toBe(true);
           if (landed.ok) {
             const keys = PLAN_NODES.map((node) => node.nodeKey).sort();

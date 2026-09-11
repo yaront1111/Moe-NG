@@ -147,6 +147,8 @@ export interface LiveProofLanded {
 export interface LiveProofLandingRefused {
   readonly detail: string;
   readonly ok: false;
+  /** Completed seat markers captured before the lane removes its temporary files. */
+  readonly seats: readonly LiveSeatWindow[];
   readonly wrapperPid: number | null;
 }
 
@@ -290,6 +292,22 @@ function readMark(dir: string, nodeKey: string): Readonly<Record<string, unknown
   catch { return null; }
 }
 
+/** Keep only scalar completion evidence; provider diagnostics and paths never cross this edge. */
+function readSeatWindows(dir: string, keys: readonly string[]): readonly LiveSeatWindow[] {
+  const nonNegative = (value: unknown): number =>
+    typeof value === "number" && Number.isSafeInteger(value) && value >= 0 ? value : 0;
+  return keys.flatMap((nodeKey) => {
+    const mark = readMark(dir, nodeKey);
+    if (mark === null) return [];
+    const status = mark["providerStatus"];
+    return [{
+      endedAt: nonNegative(mark["endedAt"]), moduleBytes: nonNegative(mark["moduleBytes"]), nodeKey,
+      providerStatus: typeof status === "number" && Number.isSafeInteger(status) ? status : null,
+      realProvider: mark["realProvider"] === true, startedAt: nonNegative(mark["startedAt"]),
+    }];
+  });
+}
+
 /**
  * Installs the STANDING VERIFIER AUTHORITY, on the operator wire, and says so.
  *
@@ -351,12 +369,12 @@ export async function landLiveProofNodes(
 ): Promise<LiveProofLanded | LiveProofLandingRefused> {
   const scratch = resolveLaneScratch(lane);
   if (scratch === null) {
-    return { detail: "LANE_SCRATCH_UNRESOLVED", ok: false, wrapperPid: null };
+    return { detail: "LANE_SCRATCH_UNRESOLVED", ok: false, seats: [], wrapperPid: null };
   }
   const refs = liveCompiledRefs(scratch, keys);
   const missing = keys.filter((key) => refs[key] === undefined);
   if (missing.length > 0) {
-    return { detail: `NO_COMPILED_EXECUTION_NODE ${missing.join(",")}`, ok: false, wrapperPid: null };
+    return { detail: `NO_COMPILED_EXECUTION_NODE ${missing.join(",")}`, ok: false, seats: [], wrapperPid: null };
   }
   retireSpecNode(scratch);
   const seat = liveProviderSeat({
@@ -414,7 +432,8 @@ export async function landLiveProofNodes(
         .filter((line) => !line.includes("plan.propose@") && line.trim() !== "")
         .filter((line) => { const had = seen.has(line); seen.add(line); return !had; });
     });
-    return { detail: `${detail}\n${lines.slice(-40).join("\n")}`, ok: false, wrapperPid };
+    return { detail: `${detail}\n${lines.slice(-40).join("\n")}`, ok: false,
+      seats: readSeatWindows(scratch.root, keys), wrapperPid };
   };
   try {
     // ONE NODE AT A TIME, BY THE PRODUCT'S RULE AND NOT BY PREFERENCE. The delivery coordinator
@@ -514,15 +533,7 @@ export async function landLiveProofNodes(
     if (unresolved.length > 0) {
       return refuse(`LANDING_COMMIT_UNRESOLVED ${unresolved.map((row) => row.nodeKey).join(",")}`);
     }
-    const seats = keys.map((key) => {
-      const mark = readMark(scratch.root, key);
-      return {
-        endedAt: Number(mark?.["endedAt"] ?? 0), moduleBytes: Number(mark?.["moduleBytes"] ?? 0), nodeKey: key,
-        providerStatus: typeof mark?.["providerStatus"] === "number" ? mark["providerStatus"] : null,
-        realProvider: mark?.["realProvider"] === true,
-        startedAt: Number(mark?.["startedAt"] ?? 0),
-      };
-    });
+    const seats = readSeatWindows(scratch.root, keys);
     return {
       crash, landings: resolved, ok: true, seats,
       // EVERY PASS, NOT THE LAST ONE. The concurrency window belongs to the FIRST node's
