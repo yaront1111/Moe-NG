@@ -35,9 +35,12 @@ overwriting an existing config, so re-running it is safe.
 
 ## Running real agents
 
-The spawned \`claude --bare\` children read no keychain, so \`moe start\` refuses
-before it spawns anything unless ONE agent credential is set. On a Claude
-subscription this is the default path:
+Moe can use your existing Claude sign-in. If you have not signed in, run
+\`claude\` and use \`/login\` once. \`moe start\` looks for \`.credentials.json\`
+in \`CLAUDE_CONFIG_DIR\`, or in \`%USERPROFILE%\\.claude\` by default.
+
+Alternatively, set an environment credential before starting Moe. For a
+Claude subscription:
 
     claude setup-token
     $env:CLAUDE_CODE_OAUTH_TOKEN = "<token printed by setup-token>"
@@ -46,12 +49,14 @@ An API key is the alternative:
 
     $env:ANTHROPIC_API_KEY = "<your key>"
 
-With none set the refusal names all three accepted variables:
-\`MOE_UP_ENV_MISSING: CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_AUTH_TOKEN,
-ANTHROPIC_API_KEY\`. Measured on Claude Code 2.1.235, \`claude --bare\` does not
-read \`CLAUDE_CODE_OAUTH_TOKEN\` itself, so the launcher delivers that value to
-its children as \`ANTHROPIC_AUTH_TOKEN\`; exporting \`ANTHROPIC_AUTH_TOKEN\`
-yourself is equivalent.
+You can also set \`ANTHROPIC_AUTH_TOKEN\` directly. Environment credentials take
+precedence over the saved sign-in. The launcher supplies
+\`CLAUDE_CODE_OAUTH_TOKEN\` to its children as \`ANTHROPIC_AUTH_TOKEN\` unless
+\`ANTHROPIC_AUTH_TOKEN\` is already set.
+
+If no accepted environment credential or saved sign-in is present,
+\`moe start\` refuses before spawning children. \`MOE_UP_ENV_MISSING\` names
+the three accepted variables and the sign-in path it checked.
 
 ## Control room
 
