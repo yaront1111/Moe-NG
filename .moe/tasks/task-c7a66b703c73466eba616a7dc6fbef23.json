@@ -1,0 +1,128 @@
+{
+  "id": "task-c7a66b703c73466eba616a7dc6fbef23",
+  "epicId": "epic-af14d73585e14c0da0264d48c37587c3",
+  "title": "bug: withPolicyRiskLeg SILENTLY DROPS the risk leg when its build refuses, so the ordinary journey records no policy-risk authority at all and nothing says so",
+  "description": "SUCCESSOR TO task-510340a346c24615a2177c2db9a85782, filed by worker-da0aeedb on 2026-09-12 from that row's step 7. That row was required to file this rather than leave it in a sentence. It fixed the CONSUMER (automatic preview now reads the goal's replay-verified planning-run tier); this row is the UPSTREAM fail-open it deliberately did not take, because changing approval activation touches EVERY action and not just preview.\n\nTHE FAIL-OPEN, measured by me at HEAD f6e97a6b with an out-of-tree probe over a completed `journeyWorld(\"SUBMITTED\")`:\n\n    store.enumerateAggregateIdsByPrefix(\"policy-risk:sha256:\")  ->  []          (ZERO records)\n    readPolicyRisk(store, project-1, OPERATOR, \"plan.approve\")  ->  POLICY_RISK_RECORD_MISSING @ DAEMON_POLICY_RISK, tier null, truthClass UNKNOWN\n    readPolicyRisk(store, project-1, OPERATOR, \"preview.decide\") -> POLICY_RISK_RECORD_MISSING @ DAEMON_POLICY_RISK, tier null, truthClass UNKNOWN\n    readCurrentActiveGraph(store, project-1)                    ->  ACTIVE_GRAPH_ABSENT @ ACTIVE_GRAPH_PROJECTION\n\nTHE MECHANISM, three files, each verified in source:\n1. `apps/daemon/src/planning/policy-risk-leg.ts:141` -- `withPolicyRiskLeg` ends\n   `return built.ok ? [...legs, built.leg] : legs`. It DROPS the leg on refusal and tells NOBODY:\n   no code, no log, no counter, no refusal reaching any caller.\n2. `policy-risk-leg.ts:72-74` -- `buildPolicyRiskLeg` refuses POLICY_RISK_SUBJECT_UNAVAILABLE when\n   `input.subject === null` or `subjectRevision < 1`.\n3. `apps/daemon/src/planning/approval-activation.ts` Path B has no graph-revision activation leg.\n   It reads `readCurrentActiveGraph` and supplies `subject: null` when that answers\n   ACTIVE_GRAPH_ABSENT -- which IS the ordinary journey. So the leg never runs on any real project.\n\nWHY THE SILENCE IS THE DEFECT AND NOT THE DROP. policy-risk-leg.ts:118-121 argues the refusal is silent on purpose: \"a human approving a plan must not be blocked by the absence of a risk tier ... those are reasons to record NO risk authority, not reasons to refuse the approval.\" That reasoning is sound and this row should NOT turn it into an approval refusal. What is not sound is that the intended state (\"no risk authority was recorded, and here is which of the five conditions caused it\") is INDISTINGUISHABLE from \"the writer ran and everything was fine\". A whole class of consumer bugs hides in that gap -- task-510340a3 is one instance, found by an external review and not by any gate, and the suite stayed green for weeks because the tests inserted the missing record by hand.\n\nWHAT THIS ROW LIKELY OWES, for the architect to shape rather than accept as given:\n- Make the DROP OBSERVABLE without making it blocking. The refusal already carries a code and a\n  layer (`policyRiskRefusal`); today they are discarded. Surfacing them -- a returned diagnosis\n  alongside the legs, or a durable \"risk authority not recorded, reason X\" marker -- is the\n  smallest change that makes the state legible to an operator and assertable by a test.\n- DECIDE whether Path B should activate a graph revision at all. `gates-unattended-fixtures.ts`\n  used to FABRICATE one after approval precisely because the journey leaves none behind, with a\n  comment saying so; task-510340a3 deleted that fabrication. If plan approval is supposed to leave\n  an active graph revision, that is a real product gap and its blast radius is every consumer of\n  `readCurrentActiveGraph`, not just the risk reader.\n- COUNT THE OTHER CONSUMERS before choosing. `readPolicyRisk` is reached through\n  `resolvePolicyFact`, which `bootstrap-policy-services.ts:173` still uses for `validatePolicy`'s\n  caller-named action. Automatic preview NO LONGER reads it (task-510340a3 moved that to\n  `preview/preview-risk-fact.ts`), so measure who is left rather than assuming.\n\nVERIFY BEFORE PLANNING, because this description is stale by default:\n    grep -n 'built.ok ? ' apps/daemon/src/planning/policy-risk-leg.ts\n    grep -rn 'withPolicyRiskLeg' apps/daemon/src --include=*.ts | grep -v test\n    grep -rn 'readCurrentActiveGraph' apps/daemon/src --include=*.ts | grep -v test\n    grep -rn 'resolvePolicyFact' apps/daemon/src --include=*.ts | grep -v test\nRead task-510340a3's completionSummary and comment-891b32d34a104c4cb076cb77ca0660bc first: it records the measurement, the reachability limits of the journey world, and why the consumer-side fix was taken.\n\nNOT A DUPLICATE: I searched epic-af14d735 for an owner of this capability before filing. The six related rows (task-a47301ee, task-d56a0cc5, task-b8571cfe, task-24b68b05, task-6cbcf5ff, task-510340a3) are all DONE or this row's parent, and none owns the upstream writer's silence.",
+  "definitionOfDone": [
+    "The ordinary journey's failure to record policy-risk authority is OBSERVABLE: a test drives the production approval path over a real journey world, asserts zero policy-risk records, and asserts the specific refusal CODE and LAYER that explain why (today POLICY_RISK_SUBJECT_UNAVAILABLE at the writer, from ACTIVE_GRAPH_ABSENT @ ACTIVE_GRAPH_PROJECTION upstream). Asserting only 'no record exists' is the vacuous form this row exists to end.",
+    "A human plan approval is still NEVER blocked by the absence of a risk tier, an unauthenticated transport, or an unreadable subject. Assert it: an approval whose risk leg is refused still COMMITS, and the arm names the refusal reason it tolerated.",
+    "Every remaining consumer of readPolicyRisk / resolvePolicyFact is enumerated by grep at plan time and named, with its behaviour on the no-record state asserted or explicitly out of scope. Automatic preview is NOT one of them any more (task-510340a3 moved it to preview/preview-risk-fact.ts) - confirm that by grep rather than inheriting it.",
+    "If the row concludes that plan approval SHOULD leave an active graph revision, that change is either made with every readCurrentActiveGraph consumer named in the plan's owned paths, or split out as its own row with the gap measured consumer by consumer. It is not half-made.",
+    "Non-vacuity: re-introduce the silent drop (or re-null the subject) and confirm the observability arm reds with the specific code and layer, not merely with a count change. Quote the red.",
+    "pnpm --filter @moe/daemon test EXIT 0 with the `Test Files N passed (N)` count line quoted. If a foreign red is present, record the path-attributed baseline per global rail 3 and disclose it verbatim."
+  ],
+  "taskRails": [],
+  "implementationPlan": [
+    {
+      "stepId": "step-1",
+      "description": "PIN THE SEAM BEFORE EDITING - read only. Re-run the four censuses the row demands and confirm each: `policy-risk-leg.ts:141` is still `return built.ok ? [...legs, built.leg] : legs;`; `withPolicyRiskLeg` still has exactly TWO production callers (`approval-activation.ts:192`, `graph-activation-service.ts:249`); `resolvePolicyFact` still has exactly ONE production caller (`bootstrap-policy-services.ts:173`, validatePolicy's caller-named action) with preview NO LONGER among them (`preview/preview-risk-fact.ts` owns that now); `readCurrentActiveGraph` still answers ACTIVE_GRAPH_ABSENT on the ordinary journey. THEN PIN THE TWO HAZARDS THAT WILL OTHERWISE COST A SESSION EACH. (a) `approval-record-facts.test.ts:419` asserts `activation.match(/commitAcceptedLegs\\(/gu)` has length EXACTLY 1 - a TEXT SCAN over approval-activation.ts's source. Any fix that adds a second `commitAcceptedLegs(` call reds it, so the marker must ride the SAME single commit. (b) `approval-activation.ts:200` already branches on `riskLegs.length === 0` to decide `slotFenceLegs` - the silent drop is ALREADY load-bearing downstream, so changing what `withPolicyRiskLeg` returns must preserve that branch's meaning exactly. Finally confirm the marker's event type and aggregate prefix are unused: `git grep` the literals you intend to mint across ALL file types. If any census disagrees, moe.report_blocked rather than adapting.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/policy-risk-leg.ts",
+        "apps/daemon/src/planning/approval-activation.ts",
+        "apps/daemon/src/planning/graph-activation-service.ts"
+      ]
+    },
+    {
+      "stepId": "step-2",
+      "description": "MINT THE ABSENCE MARKER IN `policy-risk-leg.ts`, the leaf that already owns this decision. `buildPolicyRiskLeg` has SIX refusal exits - ACTOR_NOT_HUMAN, DECISION_REF_MISSING, STEP_UP_MISSING, TIER_MISSING, SUBJECT_UNAVAILABLE (:62-75) and `buildPolicyRiskRecord`'s own `!record.ok` - and every one of them is discarded at :141. Add a builder that turns a refusal into a durable leg on its OWN aggregate (a `policy-risk-absent:` stream keyed the way `policyRiskAggregateIdFor` keys the record stream), carrying the refusal's CODE and LAYER from the existing `policyRiskRefusal` value verbatim. Then change `withPolicyRiskLeg` so the refusal arm appends the ABSENCE leg instead of returning `legs` unchanged: the function keeps returning `readonly ExpectedVersionDecisionLeg[]`, so neither caller's shape moves and the `riskLegs.length === 0` branch in step 3 is handled deliberately rather than by accident. A SEPARATE STREAM AND NOT A FIELD: do not add a key to `GoalExecutionEnabled`'s event payload and do not touch `plan.result` (`approval-activation.ts:182` commits `verdict.state`, a domain object this row has no business widening) - a new field on an existing durable payload risks every strict decoder and replay path that reads it, where a new stream risks nothing that exists.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/policy-risk-leg.ts"
+      ]
+    },
+    {
+      "stepId": "step-3",
+      "description": "WIRE `approval-activation.ts` AND KEEP THE SLOT FENCE HONEST - this is the step most likely to introduce a silent regression. With step 2 in place `riskLegs` is NEVER empty on a refusal (it now carries the absence marker), so the existing `riskLegs.length === 0` test at :200 would flip meaning and the slot fence would start being taken where it previously was not. Replace that length test with an explicit check of whether a RISK leg (not an absence leg) was produced, so the fence's behaviour is byte-identical to today's for every input. Preserve the single `commitAcceptedLegs(` call - step 1(a) pins it - and leave the ordering of `extraLegs`, `sourceFences` and `replayLeg` untouched; the burn must stay last, as :216's comment requires. Extend the comment block at :185-190, which currently says a builder refusal 'omits only risk authority': it now RECORDS that omission with its reason, and that sentence must say so rather than remaining half-true.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/approval-activation.ts"
+      ]
+    },
+    {
+      "stepId": "step-4",
+      "description": "WIRE `graph-activation-service.ts:249`, the second and quieter caller. It supplies `subject` from the TRANSITION rather than from `readCurrentActiveGraph` (see its comment at :245), so its risk leg normally BUILDS and the absence marker is the rare path there - but it is the same shared helper and it must not keep a silent drop after this row. Confirm it still rides one `commitAcceptedLegs` with `extraLegs` in the existing order (the revision leg is ALWAYS present per :240-243), and that an epoch-0 activation - which that comment says 'refuses SUBJECT_UNAVAILABLE downstream' - now leaves a marker naming that code rather than nothing. Do NOT unify the two callers' subject derivation; :245 explains deliberately why they differ, and that question belongs to task-c055f6af6e63412c905d02a3ac657a57.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/graph-activation-service.ts"
+      ]
+    },
+    {
+      "stepId": "step-5",
+      "description": "STATE THE PROPERTY IN THE HEADER, because the current one argues for a behaviour this row changes. `policy-risk-leg.ts:118-121` says the refusal is silent on purpose and gives a sound reason - a human approving a plan must not be blocked by a missing tier, an unauthenticated transport or an unreadable subject. KEEP that reasoning; it is correct and this row does not overturn it. What must change is the claim of SILENCE: rewrite the paragraph to say the approval is still never blocked AND the omission is now recorded with the code and layer that caused it, so 'no risk authority was recorded, for reason X' is distinguishable from 'the writer ran and everything was fine' - which is the gap that let task-510340a3's consumer bug hide behind a green suite for weeks. Also enumerate, in the header, the consumers that read the no-record state, measured in step 1: `resolvePolicyFact` -> `readPolicyRisk` has ONE production caller (`bootstrap-policy-services.ts:173`) and automatic preview is NOT among them any more. Name preview's departure explicitly so the next reader does not re-inherit the stale belief.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/policy-risk-leg.ts"
+      ]
+    },
+    {
+      "stepId": "step-6",
+      "description": "THE ARMS, in a new `policy-risk-observability.test.ts`, all driving PRODUCTION paths. (a) DoD 1, the one this row exists for: drive the real approval path over a real `journeyWorld(\"SUBMITTED\")`, assert `enumerateAggregateIdsByPrefix(\"policy-risk:sha256:\")` is still EMPTY, and assert the absence marker names POLICY_RISK_SUBJECT_UNAVAILABLE with its layer. Asserting only that no record exists is the vacuous form this row exists to end - the arm must fail if the code or the layer changes. (b) DoD 2, fail-open preserved: the approval whose risk leg was refused still COMMITS, and the arm names the refusal reason it tolerated. Cover at least TWO distinct causes so the marker is not accidentally hard-coded to one - SUBJECT_UNAVAILABLE from the journey, plus one of ACTOR_NOT_HUMAN or TIER_MISSING driven by input. (c) THE SLOT-FENCE REGRESSION GUARD for step 3: an approval that takes the slot fence today must still take it, and one that does not must still not - assert the fence leg's presence directly, because this is the behaviour most likely to flip silently. (d) DoD 3: assert `bootstrap-policy-services.ts`'s `validatePolicy` path still answers its UNKNOWN truthClass on the no-record state - unchanged by this row, pinned so it stays that way.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/policy-risk-leg.ts"
+      ],
+      "newFiles": [
+        "apps/daemon/src/planning/policy-risk-observability.test.ts"
+      ]
+    },
+    {
+      "stepId": "step-7",
+      "description": "VERIFY, ONCE, AT THE END. First the non-vacuity DoD 5 demands: restore `policy-risk-leg.ts:141` to `built.ok ? [...legs, built.leg] : legs`, re-run arm (a), and QUOTE THE RED showing it fails on the missing CODE AND LAYER - not merely on a count change. Restore the fix, then run `pnpm --filter @moe/daemon test` and quote the `Test Files N passed (N)` line with the exit code; an exit code alone is not evidence. This row adds NO runtime command kind - only an event type on a new stream - so epic rails 1 and 2 do not fire: no `pnpm --filter @moe/control-room test` leg and no digest-mirror census is owed. Confirm that in step 1 rather than assuming it. Expect `approval-record-facts.test.ts`, `approval-activation.test.ts` and `graph-activation-service.test.ts` to be the legitimate neighbours; a red anywhere else on this shared branch is more likely a peer row's bytes than yours - attribute before fixing, and if a foreign red is present record the path-attributed baseline per global rail 3 and disclose it verbatim.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/policy-risk-leg.ts",
+        "apps/daemon/src/planning/approval-activation.ts"
+      ]
+    },
+    {
+      "stepId": "step-8",
+      "description": "ADVERSARIAL SELF-REVIEW, ONCE, AT THE END - read the diff as someone trying to make an approval silently lose its risk authority again. Answer each with a file:line. (1) Is there ANY refusal exit in `buildPolicyRiskLeg` - all six, including `buildPolicyRiskRecord`'s `!record.ok` - that still returns without a marker? Walk every one. (2) Did the slot fence's behaviour move for ANY input, now that `riskLegs` is never empty on a refusal? This is the regression step 3 was written to prevent; prove it with the arm, not by reading. (3) Does `approval-activation.ts` still contain EXACTLY ONE `commitAcceptedLegs(` occurrence, so `approval-record-facts.test.ts:419`'s text scan holds? (4) Can the absence marker's aggregate id ever COLLIDE with a real `policy-risk:` record id, and can two approvals in one project both write a marker without an expectedVersion race? (5) Does the header now describe the behaviour the code has - never blocking, but no longer silent - and does it name preview's departure from the consumer list rather than leaving the stale belief in place? A 'yes' with no file:line is not an answer.",
+      "status": "PENDING",
+      "affectedFiles": [
+        "apps/daemon/src/planning/policy-risk-leg.ts",
+        "apps/daemon/src/planning/approval-activation.ts",
+        "apps/daemon/src/planning/graph-activation-service.ts"
+      ]
+    }
+  ],
+  "status": "WORKING",
+  "assignedWorkerId": null,
+  "branch": null,
+  "prLink": null,
+  "reopenCount": 0,
+  "reopenReason": null,
+  "createdBy": "WORKER",
+  "parentTaskId": null,
+  "dependsOn": [
+    "task-510340a346c24615a2177c2db9a85782"
+  ],
+  "priority": "HIGH",
+  "order": 87,
+  "comments": [],
+  "hasPendingQuestion": false,
+  "createdAt": "2026-09-11T22:30:19.748Z",
+  "updatedAt": "2026-09-11T22:34:47.936Z",
+  "metrics": {
+    "firstClaimAt": "2026-09-11T22:30:21.932Z",
+    "plannedStepCount": 8,
+    "plannedDistinctFileCount": 4
+  },
+  "stepsCompleted": [],
+  "failedDodItems": [],
+  "planSubmittedAt": "2026-09-11T22:34:45.683Z",
+  "planningNotes": {
+    "approachesConsidered": "THREE SURFACING SHAPES WERE WEIGHED; the durable absence marker on its OWN stream won.\n\nREJECTED - a field on the existing durable payload. `approval-activation.ts:175-183` commits `eventPayload: {activation, approval, events}` as `GoalExecutionEnabled` and `result: verdict.state`. Adding a risk-diagnosis key to either would widen a durable event schema and a domain object this row has no business touching, and this codebase decodes strictly (`exact(...)` key checks are the house style - see `migration-receipt.ts`), so a new key risks every decoder and replay path that reads it. A new stream risks nothing that already exists.\n\nREJECTED - return the refusal to the caller and let each caller decide. Smallest diff, but a diagnosis both callers discard is no more legible to an operator than today's silence, and it would not satisfy DoD 1's demand that the CODE and LAYER be assertable from a test driving the PRODUCTION path. It also changes `withPolicyRiskLeg`'s return type, which forces both call sites and every test that composes them.\n\nREJECTED - turn the refusal into an approval refusal. `policy-risk-leg.ts:118-121` argues correctly that a human approving a plan must not be blocked by a missing tier, an unauthenticated transport or an unreadable subject. The row's own description says not to overturn this, and DoD 2 pins it. The defect is the silence, never the drop.\n\nCHOSEN - append an absence leg carrying the refusal's existing code and layer to the SAME `commitAcceptedLegs` array. `withPolicyRiskLeg` keeps its `readonly ExpectedVersionDecisionLeg[]` return type, so no caller signature moves; the commit stays atomic and single (which `approval-record-facts.test.ts:419` requires); the fail-open property is untouched; and the state becomes both operator-legible and test-assertable from the production path.",
+    "codebaseInsights": "THE DROP IS ALREADY LOAD-BEARING, and this is the finding that reshapes the row. `approval-activation.ts:200` reads `riskLegs.length === 0` to decide whether to take the slot fence. So the call site ALREADY detects the silent drop - by counting legs - and changes behaviour because of it. What is missing is not the fact of the drop but WHICH of the six conditions caused it. It also means step 2's change makes `riskLegs` non-empty on a refusal, which would silently flip that fence for every ordinary approval unless step 3 replaces the length test with an explicit is-this-a-risk-leg test. A worker who does not know this will ship a regression that no existing arm catches.\n\nA TEXT-SCAN TEST CONSTRAINS THE SHAPE OF THE FIX. `approval-record-facts.test.ts:416-419` does `activation.lastIndexOf(\"commitAcceptedLegs(\")` and asserts `activation.match(/commitAcceptedLegs\\(/gu)` has length exactly 1, over approval-activation.ts's SOURCE TEXT. Any design that commits the diagnosis in a second write reds it. The marker must ride the existing single commit - which it does, since it is just another leg in the same array.\n\nTHE TWO CALLERS ARE NOT SYMMETRIC. `graph-activation-service.ts:245` derives the risk subject from the TRANSITION and not from `readCurrentActiveGraph`, with a comment explaining that the graph is not active yet at that point - so its leg normally builds and the marker is its rare path. `approval-activation.ts:191` reads `readCurrentActiveGraph`, which answers ACTIVE_GRAPH_ABSENT on the ordinary journey, so its leg NEVER builds on a real project. Same helper, opposite everyday outcome. Do not unify them here.\n\nTHE CONSUMER COUNT IS SMALLER THAN THE ROW FEARED. `resolvePolicyFact` has exactly ONE production caller - `bootstrap-policy-services.ts:173`, validatePolicy's caller-named action. Automatic preview left this path in task-510340a3 and now owns `preview/preview-risk-fact.ts`. So DoD 3's enumeration is one consumer plus a documented departure, not an open-ended sweep.\n\nEPIC RAILS 1 AND 2 DO NOT FIRE. Both are scoped to rows that add a RUNTIME COMMAND KIND. This row adds an event type on a new aggregate stream and no command kind, so no control-room leg and no digest-mirror census is owed. Rail 4 DOES bind: every refusal is asserted WITH its layer, never merely that something failed - which is exactly the form DoD 1 and DoD 5 demand.",
+    "risks": "THE SLOT-FENCE FLIP IS THE REGRESSION THIS ROW IS MOST LIKELY TO SHIP. `riskLegs.length === 0` at approval-activation.ts:200 becomes permanently false once a refusal appends a marker. Every ordinary approval would start taking a slot fence it does not take today. Step 3 exists solely for this and arm (c) exists solely to prove it; do not let either be dropped as ceremony.\n\nMARKER IDENTITY AND VERSION RACES. The absence leg needs an aggregate id that can never collide with a real `policy-risk:` record id, and its `expectedVersion` must be read the way the risk leg reads its own (`store.getAggregateVersion(aggregateId)` at policy-risk-leg.ts:96). Two approvals in one project writing markers must not race each other into a failed commit - a failed extra leg would fail the WHOLE approval, converting a fail-open path into a fail-closed one and inverting the property DoD 2 pins.\n\nWRITE AMPLIFICATION IS REAL AND ACCEPTED. Today the ordinary journey records NO risk authority, so after this row every ordinary approval writes a marker. That is intended - it is the observability being bought - but it should be a small payload on its own stream, not a copy of the approval.\n\nDO NOT DRIFT INTO THE ACTIVE-GRAPH QUESTION. Whether plan approval should leave an active graph revision at all is DoD 4's split and is FILED as task-c055f6af6e63412c905d02a3ac657a57, with all fifteen production `readCurrentActiveGraph` call sites enumerated in it. That row exists - name it by id, do not re-derive it, and do not half-make it here. This row leaves ACTIVE_GRAPH_ABSENT exactly as it finds it and only makes its consequence legible.\n\nSHARED BRANCH: peers are live on moe/work-2026-09-11 in apps/daemon/src/deployment and the preview/lander slices. No overlap with planning/, but attribute any red outside the three named neighbours before touching it.",
+    "keyFiles": [
+      "apps/daemon/src/planning/policy-risk-leg.ts",
+      "apps/daemon/src/planning/approval-activation.ts",
+      "apps/daemon/src/planning/graph-activation-service.ts",
+      "apps/daemon/src/bootstrap/policy-risk-reader.ts",
+      "apps/daemon/src/bootstrap/bootstrap-policy-services.ts",
+      "apps/daemon/src/gates-journey-fixtures.ts"
+    ]
+  },
+  "planApprovedAt": "2026-09-11T22:34:47.936Z"
+}
