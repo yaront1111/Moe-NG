@@ -182,14 +182,28 @@ function landedWorld(): Store {
   return store;
 }
 
-/** Installs an EVALUATION slice carrying the operator's standing opt-in, through the PRODUCTION
- *  `policy.install` command. The digest is derived, never spelled, so the ref is the slice. */
+/**
+ * Installs an EVALUATION slice carrying the operator's standing opt-in, through the PRODUCTION
+ * `policy.install` command. The digest is derived, never spelled, so the ref is the slice.
+ *
+ * `marker` EXISTS SO A WORLD CAN INSTALL MORE THAN ONE. `sliceRef` is EXCLUDED from the digest
+ * (it is the digest's own address), so two installs differing only in ref collide at
+ * BOOTSTRAP_POLICY_SLICE_ALREADY_INSTALLED and an arm meaning to test supersession would instead
+ * be testing an install refusal. The marker classifies a factId NO fact in these worlds carries,
+ * so it moves the digest without moving any tier — inert by construction, not by convention. The
+ * commandId is unique per install for the same reason: the store dedupes a repeated one.
+ */
+let installs = 0;
 function installOptInPolicy(
-  store: Store, optIns: readonly { readonly action: string; readonly tier: "R0" | "R1" }[],
+  store: Store,
+  optIns: readonly { readonly action: string; readonly tier: "R0" | "R1" }[],
+  marker: string | null = null,
 ): string {
   const body = {
     autoApprovalOptIns: optIns,
-    riskClassifications: [{ factId: FACT_ID, tier: "R0" }],
+    riskClassifications: marker === null
+      ? [{ factId: FACT_ID, tier: "R0" }]
+      : [{ factId: FACT_ID, tier: "R0" }, { factId: marker, tier: "R0" }],
     rules: [], sliceRef: "pending-auto-opt-in-slice",
   };
   const digest = derivePolicySliceDigest(body);
@@ -197,7 +211,7 @@ function installOptInPolicy(
   const slice = { ...body, sliceRef: digest.digest };
   const version = versionOf(readDurableLedger(store, PROJECT_ID), `${PROJECT_ID}-policy`);
   const outcome = send(store, envelope(
-    "policy.install", version, { slice }, "cmd-install-auto-opt-in",
+    "policy.install", version, { slice }, `cmd-install-auto-opt-in-${String(installs += 1)}`,
   ));
   if (!outcome.ok) throw new Error(`opt-in policy install refused: ${outcome.code}`);
   return digest.digest;
@@ -431,7 +445,14 @@ describe("preview.start auto-approves over a real store, with no human decision"
     expect(released).toEqual([]);
   });
 
-  it("leaves the gate pending when no installed slice DECLARES the preview gate's opt-in", async () => {
+  /**
+   * A SLICE DECLARING ONLY THE OTHER GATE IS STILL THE EFFECTIVE POLICY, and that is the point of
+   * the shared seam. `selectEffectiveAutoApprovalPolicy` is action-INDEPENDENT: filtering it by
+   * the caller's own action is exactly what let preview and release disagree about which policy
+   * governs. So this world's release-only declaration IS selected here, and the action mismatch
+   * is answered where it belongs — by the ENGINE, with its own AUTO_APPROVAL_NOT_OPTED_IN.
+   */
+  it("leaves the gate pending when the effective policy declares only the release gate", async () => {
     const store = landedWorld();
     seedActiveGraph(store);
     installOptInPolicy(store, [{ action: "release.decide", tier: "R1" }]);
@@ -440,14 +461,14 @@ describe("preview.start auto-approves over a real store, with no human decision"
     await startPreview(store, supervisor);
     expect(autoDecisionRecord(store, receipt(store).receiptId)).toBeNull();
     expect(released).toEqual([]);
-    // The CODE, not merely the absence: a slice declaring only the release gate is not a chain
-    // this subject may be evaluated against, so selection refuses before core is asked.
+    // The CODE AND THE LAYER, not merely the absence: core answered, and it named its own reason.
     const result = declined(resolvePreviewAutoDecision({
       decidedAt: DECIDED_AT, principalId: OPERATOR, projectId: PROJECT_ID,
       receipt: receipt(store), store,
     }));
-    expect(result.code).toBe("PREVIEW_AUTO_POLICY_UNRESOLVED");
-    expect(result.layer).toBe("PREVIEW_AUTO_DECISION");
+    expect(result.code).toBe("PREVIEW_AUTO_NOT_ALLOWED");
+    expect(result.layer).toBe("CORE_REDUCER");
+    expect(result.reasonCodes).toContain("AUTO_APPROVAL_NOT_OPTED_IN");
   });
 
   it("never fires on a REFUSED receipt, which names a code and served no url", () => {
@@ -465,11 +486,12 @@ describe("preview.start auto-approves over a real store, with no human decision"
   });
 
   /**
-   * MEASURED ON THE SHIPPED SEED WORLD, and it changed this row's production selector. The
-   * bootstrap sequence installs TWO EVALUATION slices, so a rule of "exactly one EVALUATION
-   * slice" would have made the automatic path unreachable on every real project while every arm
-   * over a hand-built world stayed green. The selector filters on the DECLARATION instead, and
-   * the arm below pins the remaining ambiguity: two slices BOTH declaring this gate.
+   * TWO DECLARING SLICES IS STILL A REFUSAL, and the owner's 2026-09-11 ruling kept it one. Which
+   * of them governs would depend on key order, and no reading of that is fail-closed — so the
+   * shared selector refuses instead, at THIS layer, before core is asked. The arm is unchanged in
+   * code and layer by the move to that selector; only the reason it reaches the refusal moved,
+   * from "more than one survived a historical filter" to "more than one was declared after the
+   * most recent reset".
    */
   it("declines when TWO installed slices both declare the preview gate's opt-in", () => {
     const store = landedWorld();
@@ -496,7 +518,59 @@ describe("preview.start auto-approves over a real store, with no human decision"
     expect(result.layer).toBe("PREVIEW_AUTO_DECISION");
   });
 
-  it("the shipped seed world installs TWO evaluation slices, which is why selection filters on the declaration", () => {
+  /**
+   * THE REVIEWER'S REPRODUCTION, and the owner's 2026-09-11 ruling: an opt-in-free install is HOW
+   * an operator turns automatic approval off, and it CLEARS the older declaration rather than
+   * sitting beside it. The historical filter this row replaced narrowed the WHOLE installed set to
+   * declaring EVALUATION slices and accepted the single survivor — so installing a newer policy
+   * that declares nothing left exactly one survivor, the OLD one, and it still governed.
+   */
+  it("newer opt-in-free policy resets preview auto approval", async () => {
+    const store = landedWorld();
+    seedActiveGraph(store);
+    seedPolicyRisk(store, "R0");
+    const declaring = installOptInPolicy(
+      store, [{ action: PREVIEW_DECIDE_COMMAND_KIND, tier: "R1" }], "preview-auto-reset-a",
+    );
+    // THE PRECONDITION, ASSERTED IN BOTH HALVES: automatic approval is ON under A, and NOTHING is
+    // committed yet — so the refusal below cannot be the already-decided gate answering instead
+    // of selection, and the arm cannot pass on a world where approval was never reachable.
+    expect(resolvePreviewAutoDecision({
+      decidedAt: DECIDED_AT, principalId: OPERATOR, projectId: PROJECT_ID,
+      receipt: receipt(store), store,
+    }).ok).toBe(true);
+    expect(autoDecisionRecord(store, receipt(store).receiptId)).toBeNull();
+
+    const reset = installOptInPolicy(store, [], "preview-auto-reset-b");
+    // The two installs are DISTINCT slices, asserted: `sliceRef` is excluded from the digest, so
+    // a fixture that moved only the ref would have collided instead of superseding.
+    expect(reset).not.toBe(declaring);
+
+    const result = declined(resolvePreviewAutoDecision({
+      decidedAt: DECIDED_AT, principalId: OPERATOR, projectId: PROJECT_ID,
+      receipt: receipt(store), store,
+    }));
+    expect(result.code).toBe("PREVIEW_AUTO_NOT_ALLOWED");
+    expect(result.layer).toBe("CORE_REDUCER");
+    expect(result.reasonCodes).toContain("AUTO_APPROVAL_NOT_OPTED_IN");
+
+    // AND THROUGH THE PRODUCTION HANDLER, not only the composition: `preview.start` commits no
+    // automatic decision and releases nothing to the supervisor.
+    const { released, supervisor } = stubSupervisor(store);
+    await startPreview(store, supervisor);
+    expect(autoDecisionRecord(store, receipt(store).receiptId)).toBeNull();
+    expect(released).toEqual([]);
+  });
+
+  /**
+   * MEASURED ON THE SHIPPED SEED WORLD, and it is why "exactly one installed EVALUATION slice"
+   * can never be the rule: the bootstrap sequence installs TWO, so that reading would make the
+   * automatic path unreachable on every real project while every arm over a hand-built world
+   * stayed green. It is also why the shared selector needs a RESET BOUNDARY rather than a count —
+   * both seeded slices carry no opt-in, so they are resets, and the declaration installed after
+   * them is the one that arms automation.
+   */
+  it("the shipped seed world installs MORE THAN ONE evaluation slice, so no count can be the rule", () => {
     const store = landedWorld();
     const declaring = installOptInPolicy(
       store, [{ action: PREVIEW_DECIDE_COMMAND_KIND, tier: "R1" }],
@@ -508,6 +582,10 @@ describe("preview.start auto-approves over a real store, with no human decision"
       .filter((ref) => sliceKindOf(ref, installed[ref] as never) === "EVALUATION");
     expect(evaluation).toContain(declaring);
     expect(evaluation.length).toBeGreaterThan(1);
+    // The SEEDED ones are opt-in-free, which is what makes them resets rather than competitors.
+    for (const ref of evaluation.filter((one) => one !== declaring)) {
+      expect(installed[ref]).toMatchObject({ autoApprovalOptIns: [] });
+    }
   });
 });
 

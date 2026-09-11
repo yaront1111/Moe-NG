@@ -1,16 +1,13 @@
 import { createHash } from "node:crypto";
 
-import type { JsonValue } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import { POLICY_EVALUATOR_VERSION } from "../bootstrap/bootstrap-policy-authority.js";
-import { installedSlices } from "../bootstrap/bootstrap-policy-services.js";
-import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
+import { selectEffectiveAutoApprovalPolicy } from "../bootstrap/effective-auto-policy.js";
 import {
   evaluationChain, resolvePolicyFact, resolvePolicyWaivers,
 } from "../bootstrap/policy-fact-resolver.js";
-import { sliceKindOf } from "../http/policy-read.js";
 import { previewAutoDecisionFor, previewAutoDecline } from "./preview-auto-decision.js";
 import type { PreviewAutoDecision } from "./preview-auto-decision.js";
 import { PREVIEW_DECIDE_COMMAND_KIND } from "./preview-contracts.js";
@@ -26,9 +23,19 @@ import type { PreviewReceiptV1 } from "./preview-receipt-contracts.js";
  * a store at all. Everything here needs one. The pure half stays the thing a reviewer reads to see
  * what the gate DECIDES; this half is what it reads FROM.
  *
- * NOTHING HERE JUDGES. It selects the chain, resolves the one tier-bearing fact through the
- * daemon's own resolver, and hands the composed input to the pure half. No tier is derived,
- * ranked or compared in this file.
+ * NOTHING HERE JUDGES, AND NOTHING HERE SELECTS EITHER. It resolves the one tier-bearing fact
+ * through the daemon's own resolver and hands the composed input to the pure half. No tier is
+ * derived, ranked or compared in this file.
+ *
+ * WHICH POLICY IS EFFECTIVE IS NOT THIS MODULE'S QUESTION. It is asked of
+ * `selectEffectiveAutoApprovalPolicy` (bootstrap/effective-auto-policy.ts), the ONE seam the
+ * automatic release gate reads too. This file used to answer it locally by narrowing the whole
+ * historical installed set to slices declaring THIS gate's action and accepting the single
+ * survivor — and the release gate answered it by taking the newest. Two gates, two answers, and
+ * the preview reading meant a newer opt-in-free policy could not turn automatic approval off,
+ * because the older declaring slice was still that filter's only survivor. The shared rule and
+ * the reasoning behind it (including the ambiguity refusal this header used to defend, which it
+ * preserves) are documented once, at that seam.
  */
 
 const AUTO_DECISION_DOMAIN = "moe.preview-auto-decision.v1";
@@ -47,45 +54,6 @@ export function previewAutoDecisionDigest(projectId: string, receiptId: string):
  *  key dedupes a retry even before the already-decided gate sees it. */
 export function previewAutoCommandId(projectId: string, receiptId: string): string {
   return `preview-auto-${previewAutoDecisionDigest(projectId, receiptId).slice(0, 32)}`;
-}
-
-/** Whether a slice DECLARES a standing opt-in for this gate. An ACTION EQUALITY and nothing
- *  more: no tier is read, ranked or compared here — that stays the engine's. */
-function declaresPreviewOptIn(slice: JsonValue): boolean {
-  if (slice === null || typeof slice !== "object" || Array.isArray(slice)) return false;
-  const optIns = (slice as Readonly<Record<string, JsonValue>>)["autoApprovalOptIns"];
-  return Array.isArray(optIns) && optIns.some((entry) =>
-    entry !== null && typeof entry === "object" && !Array.isArray(entry)
-    && (entry as Readonly<Record<string, JsonValue>>)["action"] === PREVIEW_DECIDE_COMMAND_KIND);
-}
-
-/**
- * THE ONE INSTALLED SLICE THAT DECLARES THIS GATE'S OPT-IN, or nothing.
- *
- * SELECTION IS NOT JUDGEMENT — the same move `validatePolicy` makes when its existence check
- * "stopped being the whole judgement and became the SELECTOR". A wire decide names its
- * `policyRevisionRef`; a SERVER-SIDE decision has no caller to name one, so the subject picks the
- * chain: the slice on which this operator declared the preview gate automatic. MEASURED, NOT
- * ASSUMED: the shipped bootstrap sequence installs TWO EVALUATION slices, so "exactly one
- * EVALUATION slice" would make this path unreachable on every real project while every arm over a
- * hand-built world stayed green. TWO DECLARING SLICES IS STILL A REFUSAL: which one governs would
- * depend on key order, and no reading of that is fail-closed.
- */
-function evaluationSliceOf(
-  store: SqliteEventStore, projectId: string,
-): { readonly ref: string; readonly slice: JsonValue } | null {
-  const installed = installedSlices(
-    stateOf(readDurableLedger(store, projectId), policyAggregateId(projectId)),
-  );
-  const refs = Object.keys(installed).filter((ref) => {
-    const slice = installed[ref];
-    return slice !== undefined && sliceKindOf(ref, slice) === "EVALUATION"
-      && declaresPreviewOptIn(slice);
-  }).sort();
-  const ref = refs.length === 1 ? refs[0] : undefined;
-  if (ref === undefined) return null;
-  const slice = installed[ref];
-  return slice === undefined ? null : { ref, slice };
 }
 
 /**
@@ -129,7 +97,7 @@ export function resolvePreviewAutoDecision(
   if (previewAlreadyDecided(store, projectId, receipt.goalId)) {
     return previewAutoDecline("PREVIEW_AUTO_ALREADY_DECIDED");
   }
-  const selected = evaluationSliceOf(store, projectId);
+  const selected = selectEffectiveAutoApprovalPolicy(store, projectId);
   if (selected === null) return previewAutoDecline("PREVIEW_AUTO_POLICY_UNRESOLVED");
   const evaluatedAtEpochMs = Date.parse(decidedAt);
   if (!Number.isSafeInteger(evaluatedAtEpochMs) || evaluatedAtEpochMs < 0) {

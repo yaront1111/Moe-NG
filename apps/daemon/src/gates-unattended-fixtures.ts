@@ -4,11 +4,14 @@
  * is CALLED, never reimplemented, so an unattended arm and a human one differ only in what this
  * module installed.
  *
- * THE OPT-IN MUST BE ON THE LAST INSTALLED SLICE OR IT IS NOT IN FORCE. `foldSlices`
- * (policy-composition.ts:132-170) returns the LAST slice's `autoApprovalOptIns` and both gate
- * modules select the newest installed EVALUATION slice, so an opt-in on an earlier slice silently
- * does nothing and every arm built on it is vacuous. `installGateOptIns` therefore installs ONE
- * slice carrying BOTH gate actions, and it is the last install a world performs. The action
+ * THE OPT-IN MUST BE THE ONLY DECLARATION SINCE THE LAST RESET OR IT IS NOT IN FORCE. Both gates
+ * ask `selectEffectiveAutoApprovalPolicy` (bootstrap/effective-auto-policy.ts) which policy is
+ * effective: an install declaring NO opt-ins RESETS automation and clears older declarations, and
+ * two declarations standing after the most recent reset refuse fail-closed. The seeded world's
+ * EVALUATION slices all carry `autoApprovalOptIns: []`, so they are resets — which is exactly why
+ * `installGateOptIns` installs ONE slice carrying BOTH gate actions after them, and why installing
+ * a SECOND declaring slice would make a world refuse rather than double-arm it. An opt-in buried
+ * under a later install silently does nothing and every arm built on it is vacuous. The action
  * strings are read from the kind constants, never hand-typed.
  *
  * THE TWO GATES GROUND THEIR SUBJECT TIER DIFFERENTLY, and a fixture that pretended otherwise
@@ -185,8 +188,9 @@ export interface UnattendedOptions {
  * gap cases, because the only thing that varies between them is the tier each gate's subject
  * carries and whether the release evidence binds.
  *
- * ORDER MATTERS: the policy install is LAST, so it is the slice `foldSlices` folds to and the
- * newest EVALUATION slice both gate modules select.
+ * ORDER MATTERS: the policy install is LAST, so it is the one declaration standing after the
+ * seed's own opt-in-free installs, and therefore the policy `selectEffectiveAutoApprovalPolicy`
+ * hands to BOTH gates.
  */
 export function unattendedWorld(options: UnattendedOptions = {}): JourneyWorld {
   const subjectTier = options.subjectTier ?? "R0";

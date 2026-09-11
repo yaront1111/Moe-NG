@@ -184,11 +184,17 @@
       "author": "worker-ed22fae0",
       "content": "STEP 6 NON-VACUITY DRILL (worker-ed22fae0, under full-suite-gate). Method: in-memory Vite `transform` (enforce:\"pre\") from a temp config OUTSIDE src, apps/daemon/qa-drill-task-3ccb12a9-worker-ed22fae0.config.ts, keyed by env QA_DRILL, targeting ids ending /bootstrap/effective-auto-policy.ts. Each anchor must occur EXACTLY once or the transform THROWS (count checked), so a silent no-op cannot pass as a vacuous arm. NO on-disk mutation of any source file.\n\nPre-drill live state (10:28:16Z): both files untracked (`??`). SHA256 effective-auto-policy.ts a931723cf433f83895cae318b8b9c28d928b32a6cae28a61ffb03b3c6b61b85c, effective-auto-policy.js dda64cc67d0efbddca0cfb3dd5505de070d02779f79d667756c49df1b0503de7.\n\nMUTANT A — REQUIRED historical-filter mutant: replaces the scan with the replaced preview rule (every installed EVALUATION slice declaring preview.decide, `.sort()`, exactly-one-or-null, resets ignored). Ran the EXACT named step-1 arm `newer opt-in-free policy resets preview auto approval`: EXIT 1, `Tests 1 failed | 36 skipped (37)`, `Error: expected a declined automatic decision, got an approval` at preview-auto-decision.test.ts:549. That is the recorded pre-fix RED verbatim (same assertion, same arm; the line moved from 541 because of step-4 doc edits above it). The arm's own precondition (approves under A) passed first, so old A still approving is what reddened it.\n\nMutants B-E each ran preview-auto-decision.test.ts + release-auto-decide.test.ts (96 tests):\n- B ambiguity refusal removed (`if (declared !== null) continue;`): EXIT 1, `Tests 8 failed | 88 passed (96)`. Red: preserved preview two-declaring arm, release two-declaring arm, selector two-declarations / clears-ambiguity / NO-reset arms, and all 3 cross-gate parity arms incl. the mixed preview-only/release-only arm.\n- C candidate-validity guard removed: EXIT 1, `Tests 1 failed | 95 passed (96)`. Exactly ONE red, the lookalike arm: `AssertionError: expected { …(2) } to be null`.\n- D reset answers null instead of itself: EXIT 1, `Tests 12 failed | 84 passed (96)`. The step-1 supersession arm reddens ON THE CODE: `expected 'PREVIEW_AUTO_POLICY_UNRESOLVED' to be 'PREVIEW_AUTO_NOT_ALLOWED'`. That proves the refusal arms pin code+layer and are not satisfied by a different layer refusing first (rail: assert the reason code). Also red: release reset/stock-journey arms, reset-supersedes selector arm, parity arms, the reconciler `stops releasing...` arm.\n- E digest-sorted scan instead of install order: EXIT 1, `Tests 32 failed | 64 passed (96)`. Includes `selects by INSTALL order even when digest order disagrees with it` and `selects the same ref after the store is closed and REOPENED from disk`.\n\nRESTORE: nothing on disk was mutated. The scratch config was deleted in one call. In a SEPARATE call (10:30:24Z): SHA256 of both live files was re-taken and equals the pre-drill values above byte for byte, and `ls apps/daemon/qa-drill-*` answers `No such file or directory`. No git restore/checkout was used, and no git diff was relied on.\n\nADVERSARIAL REVIEW, findings:\n(1) Coverage gap FIXED: no arm reached the branch where the scan runs off the start of history with no reset ever installed. Added `applies the same one-or-refuse rule when NO reset was ever installed` on a bare openStore(), asserting the case was generated (two EVALUATION slices, both declaring, installed keys exactly [first, second]). Mutant B reddens it. Delivered bytes changed, so ALL step-5 legs were rerun: daemon 614/614 files EXIT 0 (`Tests 11068 passed | 21 skipped (11089)`, +1 test), control-room 211/211 EXIT 0 (`Tests 2745 passed (2745)`), typecheck EXIT 0, verify:foundation 35/35, verify:store 54/54, test:security 12/12 1003/1003 all EXIT 0. Root lane: the same 2 foreign platform-census reds and nothing else.\n(2) NEW EXPOSURE CHECKED: preview now composes against a RESET slice, which it never did before. Core cannot ALLOW one. assessTier with empty opt-ins adds AUTO_APPROVAL_NOT_OPTED_IN. A null tier returns ALLOW only when computedTier is null, which is exactly when assessRisk sets unclassifiable, so HOLD_UNKNOWN dominates. Waivers only touch the rule/relaxation layer (policy-evaluation.ts:13-14, 145-161, 59-85).\n(3) Theoretical, NOT changed: an operator can no longer keep SEPARATE preview-only and release-only policies. Declaration is action-independent per the ruling, so a mixed pair refuses both gates, and the fixture already installs one both-action slice. Also, re-selection re-reads the ledger each call, and a concurrent install between selection and waiver resolution is pre-existing behaviour. The hex64 keys are never array indices (a 64-char string is never a canonical integer <= 2^32-2), so JS never reorders them.",
       "timestamp": "2026-09-11T10:38:36.323Z"
+    },
+    {
+      "id": "comment-113d262ea9eb49adb64a3f6563c966c6",
+      "author": "worker-ed22fae0",
+      "content": "Correction to the completionSummary wording: tests/e2e/foundation/platform-census.test.ts is TRACKED and CLEAN, and this row never touched it. The summary said \"untracked by this row\", which was meant as \"not touched by this row\". comment-2070fa15 has the precise attribution. The summary was also cut at 2000 chars; its last sentence was this follow-up. The PREVIEW_AUTO_POLICY_UNRESOLVED doc comment in preview-auto-decision.ts is stale, and that file is outside this row's owned paths.",
+      "timestamp": "2026-09-11T10:40:07.672Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-11T09:25:02.794Z",
-  "updatedAt": "2026-09-11T10:39:56.026Z",
+  "updatedAt": "2026-09-11T10:40:07.672Z",
   "metrics": {
     "firstClaimAt": "2026-09-11T09:25:20.906Z",
     "plannedStepCount": 6,
@@ -252,6 +258,39 @@
       "treeId": "2a4579d588ddf5711f470ee618a4d9f8af910f86",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "bd117a7f138dde6646449b41987fdb32086e4628",
+      "ref": "refs/heads/moe/work-2026-09-11",
+      "kind": "checkpoint",
+      "role": "qa",
+      "sessionId": "qa-77a9823a@2026-09-11T10:39:56Z",
+      "paths": [
+        ".moe/tasks/task-3ccb12a92f69432bb6996a3a4348e573.json",
+        "apps/daemon/src/bootstrap/effective-auto-policy.js",
+        "apps/daemon/src/bootstrap/effective-auto-policy.ts",
+        "apps/daemon/src/release/release-auto-approval.ts",
+        "apps/daemon/src/release/release-auto-decide.test.ts"
+      ],
+      "recordedBy": "qa-77a9823a",
+      "recordedAt": "2026-09-11T10:40:01.643Z",
+      "treeId": "30389c155bc64b8feb0bd4789fc4c2e531b6ef94",
+      "status": "REVIEW",
+      "contested": [
+        {
+          "path": "apps/daemon/src/gates-unattended-fixtures.ts",
+          "taskId": "task-510340a346c24615a2177c2db9a85782"
+        },
+        {
+          "path": "apps/daemon/src/preview/preview-auto-composition.ts",
+          "taskId": "task-510340a346c24615a2177c2db9a85782"
+        },
+        {
+          "path": "apps/daemon/src/preview/preview-auto-decision.test.ts",
+          "taskId": "task-510340a346c24615a2177c2db9a85782"
+        }
+      ],
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -261,21 +300,57 @@
     "apps/daemon/src/bootstrap/effective-auto-policy.js",
     "apps/daemon/src/preview/preview-auto-composition.ts",
     "apps/daemon/src/release/release-auto-approval.ts",
-    "apps/daemon/src/gates-unattended-fixtures.ts"
+    "apps/daemon/src/gates-unattended-fixtures.ts",
+    ".moe/tasks/task-3ccb12a92f69432bb6996a3a4348e573.json"
   ],
   "unattributedPaths": [
+    "apps/control-room/src/v2/goals/use-goal-reads.test.ts",
+    "apps/control-room/src/v2/goals/use-goal-reads.ts",
+    "apps/control-room/src/v2/ops/environment-variables-screen.test.tsx",
+    "apps/control-room/src/v2/ops/environment-variables-screen.tsx",
+    "apps/daemon/src/backups/scheduled-backup.ts",
+    "apps/daemon/src/backups/scheduled-backup-proof-ownership.test.ts",
+    "apps/daemon/src/documents/document-source-binding.js",
+    "apps/daemon/src/documents/document-source-binding.ts",
+    "apps/daemon/src/documents/document-source-full-read.test.ts",
+    "apps/daemon/src/documents/document-source-full-read.ts",
+    "apps/daemon/src/documents/document-source-read.test.ts",
+    "apps/daemon/src/documents/document-source-read.ts",
+    "apps/daemon/src/http/http-listener.ts",
+    "apps/daemon/src/http/http-listener-failure-logging.test.ts",
+    "apps/daemon/src/mcp-http/mcp-http-node-bridge.test.ts",
+    "apps/daemon/src/mcp-http/mcp-http-node-bridge.ts",
     "node-alpha-e2e-proj-k3x0md/math.mjs",
     "node-alpha-e2e-proj-k3x0md/test.mjs",
     "node-beta-e2e-proj-k3x0md/math.mjs",
     "node-beta-e2e-proj-k3x0md/test.mjs",
     "node-omega-e2e-proj-k3x0md/math.mjs",
-    "node-omega-e2e-proj-k3x0md/test.mjs"
+    "node-omega-e2e-proj-k3x0md/test.mjs",
+    "packages/mcp/src/http/http-adapter-lifecycle.js",
+    "packages/mcp/src/http/http-adapter-lifecycle.ts",
+    "packages/mcp/src/http/http-inflight-requests.js",
+    "packages/mcp/src/http/http-inflight-requests.ts",
+    "packages/mcp/src/http/http-server.ts",
+    "packages/mcp/src/http/http-server-sse-request-ids.test.ts",
+    "packages/mcp/src/http/http-server-terminal-close.test.ts",
+    "packages/mcp/src/http/http-session.ts",
+    "packages/mcp/src/mcp-runtime-entrypoint.test.ts",
+    "packages/store/src/backup-generation.ts",
+    "packages/store/src/backup-generation-request.ts",
+    "packages/store/src/backup-generation-source-protection.test.ts",
+    "packages/store/src/decision-ledger.ts",
+    "packages/store/src/event-ledger-transaction.ts",
+    "packages/store/src/outbox-relay/outbox-relay-contracts.ts",
+    "packages/store/src/outbox-relay/transactional-outbox-relay.test.ts",
+    "packages/store/src/outbox-relay/transactional-outbox-relay.ts",
+    "packages/store/src/sqlite-event-store.ts",
+    "packages/store/src/store-projection-seam.test.ts"
   ],
   "lastCommitOutcome": {
     "outcome": "committed",
     "kind": "checkpoint",
-    "sessionId": "worker-ed22fae0@2026-09-11T09:44:41Z",
-    "at": "2026-09-11T09:44:45.082Z"
+    "sessionId": "qa-77a9823a@2026-09-11T10:39:56Z",
+    "at": "2026-09-11T10:40:01.643Z"
   },
   "workStartedAt": "2026-09-11T09:47:34.697Z",
   "declaredFiles": [
