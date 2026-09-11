@@ -38,6 +38,10 @@ interface Attempt {
   ref: string; sha256: string | null; proof: BackupProof | null;
   failure: ReturnType<typeof backupFailure> | null;
 }
+interface AttemptResult {
+  readonly backup: ScheduledBackupResult;
+  readonly ownsDestination: boolean;
+}
 interface Retention { prunedRefs: string[]; pruneFailedRefs: string[] }
 const safeName = (name: string): boolean => /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/u.test(name);
 
@@ -83,7 +87,7 @@ function assertForwardClock(directory: string, stamp: string): void {
 async function backupOne(
   input: ScheduledBackupInput, environment: string, kind: Attempt["kind"], source: string,
   ports: BackupPorts, fs: ActivationReceiptFs, retention: Retention,
-): Promise<ScheduledBackupResult> {
+): Promise<AttemptResult> {
   const state: Attempt = { environment: safeName(environment) ? environment : "INVALID_ENVIRONMENT",
     kind, stage: "WRITE", ref: "", sha256: null, proof: null, failure: null };
   let lock: string | null = null;
@@ -112,7 +116,8 @@ async function backupOne(
       catch { state.failure = backupFailure(); state.stage = "CLEANUP"; }
     }
   }
-  return Object.freeze({ ...state, status: state.failure === null ? "VERIFIED" : "FAILED" });
+  return { backup: Object.freeze({ ...state, status: state.failure === null ? "VERIFIED" : "FAILED" }),
+    ownsDestination };
 }
 
 /** The write half of the durable restore-proof record. Narrowed to the one method this module
@@ -120,7 +125,7 @@ async function backupOne(
 export type ScheduledBackupProofWriter = Pick<BackupRestoreProofStore, "recordChecked">;
 
 /**
- * ONE RESTORE-PROOF RECORD PER ATTEMPT THAT NAMED A DESTINATION.
+ * ONE RESTORE-PROOF RECORD PER ATTEMPT THAT OWNED ITS DESTINATION.
  *
  * Deliberately AFTER every attempt has returned: `backupOne` releases its lock and removes its
  * own material in its `finally` before it hands a result back, so nothing here can leak a
@@ -133,9 +138,10 @@ export type ScheduledBackupProofWriter = Pick<BackupRestoreProofStore, "recordCh
  * mapping a new outcome onto a proof.
  *
  * WHAT IS DELIBERATELY NOT RECORDED. A SKIPPED environment (`DATABASE_ABSENT`) never reaches
- * this loop: no artifact was written, and a NOT_CHECKED row for it would later read as a backup
- * somebody took and nobody verified. An attempt that failed before naming a destination carries
- * `ref === ""` and has no key to record against.
+ * this loop. A lock, destination collision or clock refusal also owns no artifact: recording
+ * that attempt would overwrite another run's restore proof or invent a backup never attempted.
+ * Ownership is captured at admission to the write, so genuine write/restore failures still
+ * record FAILED even when cleanup removed their incomplete artifact.
  *
  * A REFUSED RECORD NEVER FAILS THE RUN. The record admits a stricter environment name than the
  * filesystem guard above does (the served surface shares one environment vocabulary with the
@@ -144,10 +150,10 @@ export type ScheduledBackupProofWriter = Pick<BackupRestoreProofStore, "recordCh
  * function's behaviour is a delivered contract that must not change.
  */
 function persistRestoreProofs(
-  backups: readonly ScheduledBackupResult[], proofs: ScheduledBackupProofWriter, checkedAt: string,
+  attempts: readonly AttemptResult[], proofs: ScheduledBackupProofWriter, checkedAt: string,
 ): void {
-  for (const result of backups) {
-    if (result.ref === "") continue;
+  for (const { backup: result, ownsDestination } of attempts) {
+    if (!ownsDestination || result.ref === "") continue;
     proofs.recordChecked({
       checkedAt, environment: result.environment, kind: result.kind,
       ref: basename(result.ref), sha256: result.sha256, status: result.status,
@@ -165,17 +171,18 @@ export async function runScheduledBackup(
 ): Promise<ScheduledBackupReceipt> {
   const retention: Retention = { prunedRefs: [], pruneFailedRefs: [] };
   const run = { ...input, now: input.now ?? new Date() };
-  const backups = [await backupOne(run, "store", "STORE", input.storePath, ports, fs, retention)];
+  const attempts = [await backupOne(run, "store", "STORE", input.storePath, ports, fs, retention)];
   const skipped: { environment: string; reason: "DATABASE_ABSENT" }[] = [];
   for (const environment of input.environments) {
     if (environment.databaseUrl === null && safeName(environment.name)) {
       skipped.push(Object.freeze({ environment: environment.name, reason: "DATABASE_ABSENT" }));
     } else {
-      backups.push(await backupOne(run, environment.name, "POSTGRES", environment.databaseUrl ?? "", ports, fs, retention));
+      attempts.push(await backupOne(run, environment.name, "POSTGRES", environment.databaseUrl ?? "", ports, fs, retention));
     }
   }
-  if (proofs !== undefined) persistRestoreProofs(backups, proofs, run.now.toISOString());
-  return Object.freeze({ schemaVersion: "moe-scheduled-backup/1", backups: Object.freeze(backups),
+  if (proofs !== undefined) persistRestoreProofs(attempts, proofs, run.now.toISOString());
+  return Object.freeze({ schemaVersion: "moe-scheduled-backup/1",
+    backups: Object.freeze(attempts.map(attempt => attempt.backup)),
     skipped: Object.freeze(skipped), prunedRefs: Object.freeze(retention.prunedRefs),
     pruneFailedRefs: Object.freeze(retention.pruneFailedRefs) });
 }
