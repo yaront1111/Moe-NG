@@ -196,6 +196,8 @@ it("excludes every test module for a named reason, and only those", () => {
     "http/http-parity.test.ts": "test-file",
     "http/http-server-close-latch.test.ts": "test-file",
     "http/http-server-lifecycle.test.ts": "test-file",
+    "http/http-server-sse-request-ids.test.ts": "test-file",
+    "http/http-server-terminal-close.test.ts": "test-file",
     "http/http-server-test-helpers.ts": "helpers-suffix",
     "http/http-server.test.ts": "test-file",
     "http/http-session.test.ts": "test-file",
