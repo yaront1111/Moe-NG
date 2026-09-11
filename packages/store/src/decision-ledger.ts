@@ -13,7 +13,7 @@ import type {
   StoredEvent,
   StoreHealth,
 } from "./store-contracts.js";
-import type { CommitApply } from "./event-ledger-transaction.js";
+import type { CommitApply, CommitReplayValidator } from "./event-ledger-transaction.js";
 import type { CommitExpectedVersionDecisionLegsInput } from "./decision-legs-contracts.js";
 import { RecoveryInitialInstallStore } from "./recovery-initial-install.js";
 import type { RecoveryInitialInstallResult } from "./recovery-initial-install-contracts.js";
@@ -65,7 +65,9 @@ export interface DecisionLedgerCore {
     input: CommitExpectedVersionDecisionInput,
     apply: CommitApply,
   ) => CommandDecisionResponse;
-  readonly commitWithApply: (input: CommitInput, apply: CommitApply) => CommitResult;
+  readonly commitWithApply: (
+    input: CommitInput, apply: CommitApply, validateReplay?: CommitReplayValidator,
+  ) => CommitResult;
   readonly enumerateAggregateIdsByPrefix: (aggregateIdPrefix: string) => readonly string[];
   readonly getAggregateVersion: (aggregateId: string) => number;
   readonly getCommandDecision: (key: CommandDecisionKey) => CommandDecisionRecord | null;
@@ -132,8 +134,9 @@ export function createDecisionLedgerCore(
       input: CommitExpectedVersionDecisionInput,
       apply: CommitApply,
     ) => ledger.commitExpectedVersionDecisionWithApply(input, apply),
-    commitWithApply: (input: CommitInput, apply: CommitApply) =>
-      ledger.commitWithApply(input, apply),
+    commitWithApply: (
+      input: CommitInput, apply: CommitApply, validateReplay?: CommitReplayValidator,
+    ) => ledger.commitWithApply(input, apply, validateReplay),
     enumerateAggregateIdsByPrefix: (aggregateIdPrefix: string) =>
       ledger.enumerateAggregateIdsByPrefix(aggregateIdPrefix),
     getAggregateVersion: (aggregateId: string) => ledger.getAggregateVersion(aggregateId),

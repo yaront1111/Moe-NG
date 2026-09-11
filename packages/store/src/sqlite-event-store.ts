@@ -26,7 +26,9 @@ import type {
   RecoveryInstallResult,
 } from "./recovery-install-contracts.js";
 import type { RecoveryInitialInstallResult } from "./recovery-initial-install-contracts.js";
-import type { CommitApply, CommitApplyContext } from "./event-ledger-transaction.js";
+import type {
+  CommitApply, CommitApplyContext, CommitReplayValidator,
+} from "./event-ledger-transaction.js";
 import { requireIdentifier } from "./store-input.js";
 import { readScalar, requireRowString } from "./store-rows.js";
 import {
@@ -40,7 +42,7 @@ import {
 export * from "./store-contracts.js";
 export * from "./decision-legs-contracts.js";
 export { RECEIPT_OUTBOX_QUERY } from "./event-ledger.js";
-export type { CommitApply, CommitApplyContext };
+export type { CommitApply, CommitApplyContext, CommitReplayValidator };
 
 const journalModeRetrySignal = new Int32Array(new SharedArrayBuffer(4));
 const JOURNAL_MODE_RETRY_COUNT = 500;
@@ -279,8 +281,11 @@ export class SqliteEventStore {
     return this.#core.commitExpectedVersionDecisionWithApply(input, apply);
   }
 
-  public commitWithApply(input: CommitInput, apply: CommitApply): CommitResult {
-    return this.#core.commitWithApply(input, apply);
+  public commitWithApply(
+    input: CommitInput, apply: CommitApply,
+    validateReplay: CommitReplayValidator | undefined = undefined,
+  ): CommitResult {
+    return this.#core.commitWithApply(input, apply, validateReplay);
   }
 
   /**

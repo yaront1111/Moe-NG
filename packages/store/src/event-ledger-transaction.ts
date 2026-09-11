@@ -38,6 +38,11 @@ export interface CommitApplyContext {
  */
 export type CommitApply = (context: CommitApplyContext) => void;
 
+/** Optional read-only check of durable replay evidence. Runs synchronously under
+ * the command transaction with a REPLAYED summary; it must not end the transaction.
+ * A refusal throws and is wrapped as PROJECTION_APPLY_FAILED, like an apply failure. */
+export type CommitReplayValidator = (context: CommitApplyContext) => void;
+
 function describeApplyFailure(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
@@ -56,17 +61,18 @@ function isThenable(value: unknown): boolean {
   return typeof (value as { then?: unknown }).then === "function";
 }
 
-/** Runs a synchronous caller projection inside an already-open commit transaction. */
+/** Runs a synchronous callback inside an already-open commit transaction. */
 export function applyCommitWithinTransaction(
   database: DatabaseSync,
   apply: CommitApply,
   stored: StoredCommitResult,
+  disposition: CommitResult["disposition"] = "COMMITTED",
 ): void {
   let returned: unknown;
   try {
     returned = apply({
       database,
-      summary: toCommitResult(stored, "COMMITTED"),
+      summary: toCommitResult(stored, disposition),
     });
   } catch (error) {
     throw new DurableStoreError("PROJECTION_APPLY_FAILED", describeApplyFailure(error), {
@@ -90,15 +96,20 @@ export class EventTransactionStore extends EventRecoveryStore {
   /**
    * Commits the append and `apply` as one transaction. A throwing `apply`
    * rolls the whole append back as PROJECTION_APPLY_FAILED; a replayed
-   * command never reaches it.
+   * command never reaches it. An optional validator checks durable replay
+   * evidence under the same transaction before a receipt can be returned.
    */
-  public commitWithApply(rawInput: CommitInput, apply: CommitApply): CommitResult {
-    return this.runCommandTransaction(rawInput, apply);
+  public commitWithApply(
+    rawInput: CommitInput, apply: CommitApply,
+    validateReplay: CommitReplayValidator | undefined = undefined,
+  ): CommitResult {
+    return this.runCommandTransaction(rawInput, apply, validateReplay);
   }
 
   private runCommandTransaction(
     rawInput: CommitInput,
     apply: CommitApply | null,
+    validateReplay?: CommitReplayValidator,
   ): CommitResult {
     this.requireOpen();
     if (this.projectId === null || !this.writeProjectAsserted) {
@@ -111,7 +122,7 @@ export class EventTransactionStore extends EventRecoveryStore {
     assertExternalCommitIdentifiers(input);
     const requestSha256 = identifyCommandRequest(input);
     return this.withCommandTransaction(
-      () => this.resolveCommand(input, requestSha256, apply),
+      () => this.resolveCommand(input, requestSha256, apply, validateReplay),
       (outcome) => toCommitResult(outcome.stored, outcome.disposition),
     );
   }
@@ -120,6 +131,7 @@ export class EventTransactionStore extends EventRecoveryStore {
     input: SnapshotCommitInput,
     requestSha256: string,
     apply: CommitApply | null,
+    validateReplay?: CommitReplayValidator,
   ): TransactionOutcome {
     this.assertDurableProjectBinding();
     const receipt = this.loadReceipt(input.commandId);
@@ -132,6 +144,9 @@ export class EventTransactionStore extends EventRecoveryStore {
           "STORE_CORRUPT",
           `command receipt ${JSON.stringify(input.commandId)} does not match its key`,
         );
+      }
+      if (validateReplay !== undefined) {
+        applyCommitWithinTransaction(this.database, validateReplay, receipt, "REPLAYED");
       }
       return { disposition: "REPLAYED", stored: receipt };
     }

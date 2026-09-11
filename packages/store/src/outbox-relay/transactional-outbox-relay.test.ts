@@ -340,6 +340,69 @@ describe("transactional outbox relay", () => {
     });
   });
 
+  it.each(["payload", "topic", "headers"] as const)(
+    "refuses a replayed command whose inbound %s changed", (field) => {
+      withStore((open, path) => {
+        usingStore(open, (store) => seed(store));
+        const before = snapshotDatabase(path);
+        const calls: string[] = [];
+        const message = { ...INBOUND, [field]: field === "topic" ? "changed-topic" : bytes("changed") };
+        const result = refused(usingStore(open, (store) => relayMessage(
+          store, ask(delivery("1"), 0, { calls, message }),
+        )));
+        expect([result.code, result.layer]).toEqual(["OUTBOX_RELAY_INBOX_CONFLICT", "INBOX"]);
+        expect(calls).toEqual([]);
+        expect(snapshotDatabase(path)).toEqual(before);
+      });
+    },
+  );
+
+  it("refuses a raw prior commit whose relay inbox was never applied", () => {
+    withStore((open, path) => {
+      usingStore(open, (store) => store.commit(commitInput(delivery("1"), 0)));
+      const before = snapshotDatabase(path);
+      expect(before.inbox).toEqual([]);
+      expect(before.projection).toBeNull();
+      const calls: string[] = [];
+      const result = refused(usingStore(open, (store) => relayMessage(
+        store, ask(delivery("1"), 0, { calls }),
+      )));
+      expect([result.code, result.layer]).toEqual(["OUTBOX_RELAY_COMMIT_MISMATCH", "COMMIT"]);
+      expect(calls).toEqual([]);
+      expect(snapshotDatabase(path)).toEqual(before);
+    });
+  });
+
+  it("replays an honest command after restart and later projection progress", () => {
+    withStore((open, path) => {
+      const calls: string[] = [];
+      const request = ask(delivery("1"), 0, { calls });
+      const first = applied(usingStore(open, (store) => relayMessage(store, request)));
+      applied(usingStore(open, (store) => relayMessage(store, ask(delivery("2"), 1, {
+        calls, checkpoint: first.checkpoint.globalPosition,
+        message: { ...INBOUND, messageId: "inbound-2" }, state: first.state,
+      }))));
+      const before = snapshotDatabase(path);
+      const retry = deduplicated(usingStore(open, (store) => relayMessage(store, request)));
+      expect(retry.deduplicatedBy).toBe("COMMAND_RECEIPT");
+      expect(retry.commit).toEqual({ ...first.commit, disposition: "REPLAYED" });
+      expect(calls).toEqual(["evt-1", "evt-2"]);
+      expect(snapshotDatabase(path)).toEqual(before);
+    });
+  });
+
+  it("does not credit a replay when a custom seam drops its validator", () => {
+    withStore((open, path) => {
+      usingStore(open, (store) => seed(store));
+      const before = snapshotDatabase(path);
+      const error = usingStore(open, (store) => captureThrow(() => relayMessage({
+        commitWithApply: (input, apply) => store.commitWithApply(input, apply),
+      }, ask(delivery("1"), 0))));
+      expect(error.code).toBe("OUTCOME_UNKNOWN");
+      expect(snapshotDatabase(path)).toEqual(before);
+    });
+  });
+
   const STALE = [
     { checkpoint: 0n, label: "checkpoint", state: ORIGIN_STATE },
     { checkpoint: 1n, label: "state digest", state: Object.freeze({ count: 99, last: "evt-1" }) },

@@ -136,6 +136,20 @@ function requireFreshInbox(database: DatabaseSync, plan: RelayPlan): void {
     `${JSON.stringify(plan.messageId)} with different envelope bytes`));
 }
 
+/** A command receipt authenticates the append, not the separately supplied inbound
+ * message. An honest retry must also have the exact inbox evidence from its relay. */
+function requireReplayInbox(database: DatabaseSync, plan: RelayPlan): void {
+  const row = database.prepare(INBOX_QUERY).get(plan.consumerId, plan.messageId);
+  if (row === undefined) {
+    rollback(refuse("OUTBOX_RELAY_COMMIT_MISMATCH", "COMMIT",
+      "the replayed command has no durable inbox receipt for this consumer and message"));
+  }
+  if (row["receipt_digest"] !== plan.receiptDigest) {
+    rollback(refuse("OUTBOX_RELAY_INBOX_CONFLICT", "INBOX",
+      "the replayed command's inbox receipt covers different envelope bytes"));
+  }
+}
+
 /** Rebuilds exactly the batch this command just appended from its own rows plus the
  *  pre-transaction snapshot, so the fold never sees an event the commit did not write. */
 function materializeEvents(
@@ -240,10 +254,14 @@ export function relayMessage(
   const plan = planRelay(request);
   if ("outcome" in plan) { return plan; }
   const recorded: OutboxRelayApplied[] = [];
+  let replayValidated = false;
   let commit: CommitResult;
   try {
     commit = store.commitWithApply(plan.commit, (context) => {
       recorded.push(applyRelay(plan, context));
+    }, (context) => {
+      requireReplayInbox(context.database, plan);
+      replayValidated = true;
     });
   } catch (error) {
     const rolled = error instanceof DurableStoreError && error.code === "PROJECTION_APPLY_FAILED"
@@ -252,6 +270,11 @@ export function relayMessage(
     throw error;
   }
   if (commit.disposition === "REPLAYED") {
+    if (!replayValidated) {
+      throw new DurableStoreError(
+        "OUTCOME_UNKNOWN", "the relay's commit seam did not validate durable replay evidence",
+      );
+    }
     return Object.freeze({
       commit, deduplicatedBy: "COMMAND_RECEIPT" as const, outcome: "ALREADY_APPLIED" as const,
     });

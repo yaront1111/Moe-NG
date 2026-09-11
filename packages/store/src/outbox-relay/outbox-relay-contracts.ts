@@ -2,7 +2,7 @@ import type {
   ProjectionCheckpoint, ProjectionFoldCode, ProjectionFoldLayer, ProjectionReducer, ProjectionState,
 } from "../projections/projection-fold.js";
 import type { StoredEventUpcaster, UpcastFailure } from "../projections/projection-upcast.js";
-import type { CommitApply } from "../event-ledger-transaction.js";
+import type { CommitApply, CommitReplayValidator } from "../event-ledger-transaction.js";
 import type { CommitInput, CommitResult } from "../store-contracts.js";
 
 /**
@@ -27,7 +27,9 @@ export interface OutboxRelayRequest {
 }
 /** Structural view of the commit seam, so the relay depends on the transaction, not the class. */
 export interface RelayCommitSeam {
-  commitWithApply(input: CommitInput, apply: CommitApply): CommitResult;
+  commitWithApply(
+    input: CommitInput, apply: CommitApply, validateReplay?: CommitReplayValidator,
+  ): CommitResult;
 }
 
 export type OutboxRelayLayer = "COMMIT" | "INBOX" | "INPUT" | "PROJECTION";
