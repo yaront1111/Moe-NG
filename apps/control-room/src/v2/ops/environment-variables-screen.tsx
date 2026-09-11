@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useId, useLayoutEffect, useRef, useState } from "react";
 import type { FormEvent, JSX } from "react";
 
 import { ActionButton, Card } from "../components/primitives.js";
@@ -15,13 +15,12 @@ import type { EnvironmentVariablesPort, EnvironmentWriteOutcome } from "./enviro
  * THE ENVIRONMENTS SCREEN: per environment, which variables the approved contract REQUIRES,
  * which of them are set, each fingerprint and each last update, plus the set and unset dialogs.
  *
- * THIS SCREEN NEVER RENDERS A VALUE AND NEVER RETAINS ONE. It is the only place in the product
- * where a secret is typed, so it is the likeliest place one leaks. The rules it holds to:
+ * This screen keeps typed values out of React state and props. It is the only place in the
+ * product where a secret is typed, so it is the likeliest place one leaks. Its rules:
  *
- *   1. The typed value lives in ONE piece of state, inside the dialog, and the dialog is
- *      UNMOUNTED on every settled submit - the refused path included. Echoing the value back so
- *      the operator can correct it is the helpful-looking behaviour that puts a secret in a
- *      screenshot, and it is the exact thing the tests mutate to prove the arm is real.
+ *   1. The typed value lives in the password field. The field is cleared before dispatch and
+ *      when the dialog unmounts, including cancellation. Settled submits unmount the dialog,
+ *      refusal included; values are never echoed back for correction.
  *   2. No message is built from input. Codes and the daemon's fixed prose only.
  *   3. The value is never passed downward as a prop: a value handed to a child is visible in a
  *      devtools inspector even when nothing paints it. It goes from the field to the port and
@@ -108,25 +107,33 @@ interface DialogProps {
 }
 
 /**
- * THE ONE PLACE A VALUE IS TYPED. `value` is local to this component and dies with it; the
- * parent unmounts the dialog on every settled submit, refusal included. `type="password"` keeps
- * it off the screen while typing and `autoComplete="off"` keeps a browser autofill or a password
- * manager from capturing it into a store this product does not control.
+ * Keep the field uncontrolled: React can retain previous state and props in alternate fibers
+ * after a dialog closes. Password masking hides typing; autocomplete is disabled as a hint to
+ * the browser, while explicit clearing bounds the field's lifetime in this screen.
  */
 function SetDialog({ busy, name, onCancel, onSubmit }: DialogProps): JSX.Element {
-  const [value, setValue] = useState("");
+  const fieldId = useId();
+  const input = useRef<HTMLInputElement>(null);
+  useLayoutEffect(() => {
+    // Capture the node: React may detach the ref before unmount cleanup runs.
+    const field = input.current;
+    return () => { if (field !== null) field.value = ""; };
+  }, []);
   const submit = useCallback((event: FormEvent): void => {
     event.preventDefault();
+    const field = input.current;
+    if (field === null || busy) return;
+    const value = field.value;
+    field.value = "";
     onSubmit(value);
-  }, [onSubmit, value]);
+  }, [busy, onSubmit]);
   return (
     <form data-testid="cr.env-vars.dialog" onSubmit={submit}>
-      <label htmlFor="cr-env-vars-value">{`Value for ${name}`}</label>
+      <label htmlFor={fieldId}>{`Value for ${name}`}</label>
       <input
         autoComplete="off" data-testid="cr.env-vars.value" disabled={busy}
-        id="cr-env-vars-value" name="cr-env-vars-value"
-        onChange={(event) => { setValue(event.target.value); }}
-        spellCheck={false} type="password" value={value}
+        id={fieldId} name="cr-env-vars-value"
+        ref={input} spellCheck={false} type="password"
       />
       <p data-testid="cr.env-vars.dialog-note">
         This value cannot be read back. Once it is stored you will see only its sha256
@@ -148,8 +155,7 @@ export function EnvironmentVariablesScreen({
   const [answer, setAnswer] = useState<EnvironmentWriteOutcome | null>(null);
   const rows = environmentTableRows(outcome, requiredNames);
   const settle = useCallback((next: EnvironmentWriteOutcome): void => {
-    // THE TYPED VALUE DIES HERE, ON EVERY SETTLED SUBMIT, REFUSED INCLUDED. Clearing `editing`
-    // unmounts the dialog that owns it; there is nowhere else it is held.
+    // Close the cleared dialog on every settled submit, refusal included.
     setEditing(null);
     setBusy(false);
     setAnswer(next);
@@ -159,7 +165,11 @@ export function EnvironmentVariablesScreen({
     if (port === null) return;
     setBusy(true);
     setAnswer(null);
-    void run(port).then(settle, () => { settle(UNDELIVERED); });
+    try {
+      void run(port).then(settle, () => { settle(UNDELIVERED); });
+    } catch {
+      settle(UNDELIVERED);
+    }
   }, [port, settle]);
   const onSubmit = useCallback((value: string): void => {
     if (editing === null) return;
@@ -195,7 +205,8 @@ export function EnvironmentVariablesScreen({
       </table>
       {editing !== null && (
         <SetDialog
-          busy={busy} name={editing} onCancel={() => { setEditing(null); }} onSubmit={onSubmit}
+          busy={busy} key={JSON.stringify([environment, editing])} name={editing}
+          onCancel={() => { setEditing(null); }} onSubmit={onSubmit}
         />
       )}
       {answer !== null && !answer.ok && (
