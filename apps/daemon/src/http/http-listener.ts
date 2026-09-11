@@ -331,10 +331,13 @@ export async function startControlRoomListener(
         // A throw from the handler must still answer and must still leave the
         // listener closable; it may never surface as a hung socket. The cause is
         // logged host-side (never sent to the client) so a 500 stays diagnosable.
-        const cause = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-        requestOptions.log?.(
-          `LISTENER_REQUEST_FAILED ${request.method ?? "?"} ${request.url ?? "?"} ${cause}`,
-        );
+        try {
+          const cause = error instanceof Error ? `${error.name}: ${error.message}` : String(error);
+          const path = (request.url ?? "?").split("?")[0] ?? "";
+          requestOptions.log?.(`LISTENER_REQUEST_FAILED ${request.method ?? "?"} ${path} ${cause}`);
+        } catch {
+          // A failed diagnostic sink must not prevent the stable error response.
+        }
         if (!response.headersSent) refuseRequest(response, "LISTENER_REQUEST_FAILED");
         else response.end();
       });
