@@ -104,12 +104,12 @@
       ]
     }
   ],
-  "status": "BLOCKED",
-  "assignedWorkerId": "worker-1b2cd09b",
+  "status": "WORKING",
+  "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
   "reopenCount": 0,
-  "reopenReason": null,
+  "reopenReason": "Owner-approved restore after a dead-seat gate wedge. This row was queue position 2 on full-suite-gate behind a 9h10m lease held by worker-8534621f (task-510340a3, acquired 12:18:31Z). All three seats — holder and both waiters — are gone from list_workers AND from the live moe-agent.ps1 wrapper roster, and zero vitest processes exist host-wide, so the grant that would have woken this row could never fire. Governor emptied the gate at 21:29Z with the owner's nod (removedFromQueue: this row and task-aa6f9af4, grantedTo: []). Restoring BLOCKED->WORKING so a live worker can claim it; the row is unassigned and its blockedReason is stale — its premise that architect-readiness-23eeca50 holds the gate is doubly obsolete (that seat deregistered at 12:18:48Z). Work state per the departed seat's own record: steps 1-5 COMPLETED, the step-6 DRILL done and recorded in comment-31c540ab327844bc9c809a16299ed500 (in-memory vitest transform, zero on-disk mutation), step-7's adversarial pass already written, and all bytes already on the branch in wip commits 81fc9e75 / 862b3e48 / aab06cfc / de76ccb1 with the five owned paths clean against HEAD. Remaining, one session: acquire full-suite-gate yourself — it is now free, do not assume the old queue entry — run `pnpm --filter @moe/daemon test` for DoD 6, quote EXIT and the Test Files line against step-1's baseline (612 files / 11056 passed), then complete_step 6 and 7.",
   "createdBy": "WORKER",
   "parentTaskId": null,
   "dependsOn": [
@@ -139,7 +139,7 @@
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-11T10:12:54.995Z",
-  "updatedAt": "2026-09-11T12:17:38.481Z",
+  "updatedAt": "2026-09-11T21:29:55.106Z",
   "metrics": {
     "firstClaimAt": "2026-09-11T10:34:54.846Z",
     "plannedStepCount": 7,
@@ -243,6 +243,22 @@
       "treeId": "10825f540305e5edca1e22742ca046d352f92776",
       "status": "WORKING",
       "pushed": true
+    },
+    {
+      "sha": "185b169a4ab0f5d8f1755fa99cd66c96f19b2e59",
+      "ref": "refs/heads/moe/work-2026-09-11",
+      "kind": "checkpoint",
+      "role": "worker",
+      "sessionId": "worker-1b2cd09b@2026-09-11T12:12:39Z",
+      "paths": [
+        ".moe/tasks/task-241e1808a20346d99c4afe1e55821a9b.json",
+        ".moe/tasks/task-cab96ebcd3b6403cbbf412bdad839403.json"
+      ],
+      "recordedBy": "worker-1b2cd09b",
+      "recordedAt": "2026-09-11T12:17:51.202Z",
+      "treeId": "f9b3fa33409729211a1fcd3823b0997a9fef495c",
+      "status": "BLOCKED",
+      "pushed": true
     }
   ],
   "filesModified": [
@@ -252,7 +268,8 @@
     "apps/daemon/src/orchestrator/node-lander-verification.test.ts",
     "apps/daemon/src/orchestrator/node-lander-verification.ts",
     "apps/daemon/src/orchestrator/repository-delivery-runtime.test.ts",
-    "apps/daemon/src/orchestrator/repository-delivery-runtime.ts"
+    "apps/daemon/src/orchestrator/repository-delivery-runtime.ts",
+    ".moe/tasks/task-241e1808a20346d99c4afe1e55821a9b.json"
   ],
   "touchedFiles": [
     "apps/daemon/src/orchestrator/node-lander-verification.ts",
@@ -264,14 +281,15 @@
   ],
   "unattributedPaths": [],
   "lastCommitOutcome": {
-    "outcome": "nothing",
+    "outcome": "committed",
     "kind": "checkpoint",
-    "code": "MOE_COMMIT_NOTHING_TO_COMMIT",
-    "sessionId": "worker-1b2cd09b@2026-09-11T11:57:33Z",
-    "at": "2026-09-11T11:57:38.054Z"
+    "sessionId": "worker-1b2cd09b@2026-09-11T12:12:39Z",
+    "at": "2026-09-11T12:17:51.202Z"
   },
-  "blockedReason": "Step 6's DRILL is DONE; only its GATE half remains, and full-suite-gate is peer-held. My plan step says to park on the resource rather than run the daemon suite unleased, and I agree: architect-readiness-23eeca50 holds it since 10:58Z for a user-authorized readiness acceptance that spawns a daemon and an app on this host, so a concurrent daemon leg would contend for ports and CPU and could red their run. I am #2, behind task-510340. Their lease carries no etaMs.\n\nALL BYTES ARE ALREADY ON THE BRANCH in wip commits 81fc9e75 / 862b3e48 / aab06cfc / de76ccb1; the five owned paths are clean against HEAD, so nothing is at risk while parked. Steps 1-5 are COMPLETED with notes.\n\nDRILL RESULT, recorded in full in comment-31c540ab327844bc9c809a16299ed500: reverting the classification (unrecordedLandingReport's body replaced with `return null;`, i.e. pre-fix behaviour) reds step-2's transient arm with the byte-identical diff recorded before the fix — `- \"outcome\": \"VERIFIED_WORKSPACE_DRIFT\"` / `+ \"outcome\": \"REFUSED\"` — EXIT=1, \"Tests 3 failed | 4 passed (7)\". Control with the mutant off: EXIT=0, 7 passed. The drill was an IN-MEMORY vitest transform with an anchor that throws when absent, so there were ZERO writes under apps/daemon/src and nothing to restore; proven after the fact by an empty `git status --porcelain --untracked-files=all -- apps/daemon`. The temp config is deleted.\n\nWHAT REMAINS on grant, one session: `pnpm --filter @moe/daemon test` (DoD item 6), quote EXIT and the Test Files count line, compare against step-1's baseline (scoped 9 files / 89 tests green; parent reference 612 files / 11056 passed; census now 612 tracked + 2 untracked peer test files), then complete_step step-6 and step-7's completion record. Step 7's adversarial pass is already written in that same comment.\n\nNon-resource work left: none. Everything that does not need the suite is done.",
-  "blockedResourceId": "full-suite-gate",
-  "blockedFromStatus": "WORKING",
-  "blockedAt": "2026-09-11T12:17:38.481Z"
+  "blockedReason": null,
+  "blockedResourceId": null,
+  "blockedFromStatus": null,
+  "blockedAt": null,
+  "priorBlockedReason": "Step 6's DRILL is DONE; only its GATE half remains, and full-suite-gate is peer-held. My plan step says to park on the resource rather than run the daemon suite unleased, and I agree: architect-readiness-23eeca50 holds it since 10:58Z for a user-authorized readiness acceptance that spawns a daemon and an app on this host, so a concurrent daemon leg would contend for ports and CPU and could red their run. I am #2, behind task-510340. Their lease carries no etaMs.\n\nALL BYTES ARE ALREADY ON THE BRANCH in wip commits 81fc9e75 / 862b3e48 / aab06cfc / de76ccb1; the five owned paths are clean against HEAD, so nothing is at risk while parked. Steps 1-5 are COMPLETED with notes.\n\nDRILL RESULT, recorded in full in comment-31c540ab327844bc9c809a16299ed500: reverting the classification (unrecordedLandingReport's body replaced with `return null;`, i.e. pre-fix behaviour) reds step-2's transient arm with the byte-identical diff recorded before the fix — `- \"outcome\": \"VERIFIED_WORKSPACE_DRIFT\"` / `+ \"outcome\": \"REFUSED\"` — EXIT=1, \"Tests 3 failed | 4 passed (7)\". Control with the mutant off: EXIT=0, 7 passed. The drill was an IN-MEMORY vitest transform with an anchor that throws when absent, so there were ZERO writes under apps/daemon/src and nothing to restore; proven after the fact by an empty `git status --porcelain --untracked-files=all -- apps/daemon`. The temp config is deleted.\n\nWHAT REMAINS on grant, one session: `pnpm --filter @moe/daemon test` (DoD item 6), quote EXIT and the Test Files count line, compare against step-1's baseline (scoped 9 files / 89 tests green; parent reference 612 files / 11056 passed; census now 612 tracked + 2 untracked peer test files), then complete_step step-6 and step-7's completion record. Step 7's adversarial pass is already written in that same comment.\n\nNon-resource work left: none. Everything that does not need the suite is done.",
+  "blockedOnTaskIds": null
 }
