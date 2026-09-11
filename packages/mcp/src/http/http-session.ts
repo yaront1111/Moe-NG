@@ -236,7 +236,9 @@ export async function screenRequest<TAttachment>(
 /**
  * Binds a freshly minted transport-level session id to the daemon session. The port is told
  * FIRST and the entry becomes routable only after it accepts, so a failed bind can never leave
- * a session this adapter would route to.
+ * a session this adapter would route to. An optional lifecycle signal seals a closing adapter:
+ * a bind that accepts after shutdown is released instead of entering the routing table. The
+ * caller observes cancellation through the same signal; a compensating release failure throws.
  */
 export async function bindDaemonSession<TAttachment>(
   registry: HttpSessionRegistry<TAttachment>,
@@ -245,8 +247,15 @@ export async function bindDaemonSession<TAttachment>(
   verdict: HttpAuthAccepted,
   attachment: TAttachment,
   boundAt?: number,
+  signal?: AbortSignal,
 ): Promise<void> {
+  const cancelled = (): boolean => signal?.aborted === true;
+  if (cancelled()) return;
   await port.bindSession(mcpSessionId, verdict);
+  if (cancelled()) {
+    await port.closeSession(mcpSessionId);
+    return;
+  }
   registry.bind(mcpSessionId, verdict, attachment, boundAt);
 }
 
