@@ -60,7 +60,7 @@ function docker(
 
 function disposeContainer(name: string): void {
   if (docker(["ps", "-aq", "--filter", `name=^${name}$`]).length === 0) return;
-  docker(["rm", "-f", name]);
+  docker(["rm", "-f", "--volumes", name]);
   if (docker(["ps", "-aq", "--filter", `name=^${name}$`]).length !== 0) throw fail();
 }
 

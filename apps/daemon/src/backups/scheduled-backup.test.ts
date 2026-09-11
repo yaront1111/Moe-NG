@@ -34,6 +34,7 @@ const docker = (args: readonly string[]) => execFileSync("docker", [...args], {
   encoding: "utf8", shell: false, windowsHide: true, timeout: 30_000, stdio: ["ignore", "pipe", "pipe"],
 }).trim();
 const containers = () => docker(["ps", "-aq", "--filter", "name=moe-backup-"]).split(/\s+/u).filter(Boolean).sort();
+const volumes = () => docker(["volume", "ls", "-q"]).split(/\s+/u).filter(Boolean).sort();
 
 describe("scheduled backups", () => {
   it("proves a real online SQLite backup and records matching restored bytes", async () => {
@@ -193,6 +194,7 @@ describe("scheduled backups", () => {
 describe.runIf(RUN_POSTGRES_RESTORE)("real PostgreSQL backup restore", () => {
   it("restores the seeded row, rejects corruption, and tears down on both exits", async () => {
     const before = containers();
+    const volumesBefore = volumes();
     const name = `moe-backup-fixture-${randomUUID()}`;
     const temporaryBefore = readdirSync(tmpdir()).filter(name => name.startsWith("moe-backup-restore-")).sort();
     try {
@@ -224,9 +226,10 @@ describe.runIf(RUN_POSTGRES_RESTORE)("real PostgreSQL backup restore", () => {
       expect(broken.backups[1]).toMatchObject({ status: "FAILED", failure, stage: "RESTORE", proof: null });
       expect(existsSync(broken.backups[1]!.ref)).toBe(false);
     } finally {
-      docker(["rm", "-f", name]);
+      docker(["rm", "-f", "--volumes", name]);
       expect(containers()).toEqual(before);
       expect(readdirSync(tmpdir()).filter(name => name.startsWith("moe-backup-restore-")).sort()).toEqual(temporaryBefore);
+      expect(volumes(), "restore checks left anonymous PostgreSQL data volumes behind").toEqual(volumesBefore);
     }
   }, 120_000);
 });
