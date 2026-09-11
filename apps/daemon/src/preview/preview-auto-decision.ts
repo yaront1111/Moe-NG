@@ -16,8 +16,10 @@ import type { PreviewDecisionProvenance } from "./preview-decision-record.js";
  * FAIL-CLOSED IS STRUCTURAL, NOT A BRANCH. `assessRisk` grounds a tier only from a fact clearing
  * the strong-truth floor, and `evaluatePolicy` folds `dominant(decision, unclassifiable ?
  * "HOLD_UNKNOWN" : "ALLOW")` with HOLD_UNKNOWN dominating ALLOW, so a tier-free ALLOW is not
- * reachable as a deciding path. `resolvePolicyFact` mints a null-tier UNKNOWN fact on every miss:
- * this module cannot approve what the operator has not durably classified AND opted in.
+ * reachable as a deciding path. `resolvePreviewRiskFact` (preview-risk-fact.ts) mints a null-tier
+ * UNKNOWN fact on every miss -- absent, unreadable, ambiguous, foreign-run or wrong-graph
+ * evidence all land there: this module cannot approve what the goal's own planning run has not
+ * verifiably tiered AND the operator has not opted in to.
  *
  * WHY ALLOW ALONE DOES NOT SETTLE IT, AND WHY THE OPT-IN ITSELF IS NOT QUOTED. An automatic
  * approval must be DISTINGUISHABLE from a human one, so it names what it acted under. `assessTier`

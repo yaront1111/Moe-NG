@@ -31,6 +31,7 @@ import {
   readDesignRevision, readPreviewDecision, readReleaseReceipt, releaseReceiptId, submitDesign,
 } from "./gates-journey-fixtures.js";
 import {
+  JOURNEY_SUBJECT_TIER,
   autoPreviewDecision, landedNodeRef, markPushed, onlyOutcome, releaseAutoDepsOver,
   releaseDecidedCount, resolveUnattendedPreview, startPreviewUnattended, unattendedWorld,
 } from "./gates-unattended-fixtures.js";
@@ -220,8 +221,11 @@ describe("one approval at Gate 1, then Gates 2 and 3 close with no human", () =>
     const decision = autoPreviewDecision(world, receiptId);
     if (decision === null) throw new Error("Gate 2 left no automatic decision on the record");
     expect(decision.decision).toBe("APPROVE");
-    // The subject is R0 and the standing opt-in covers R1; the record names WHAT IT ACTED UNDER.
-    expect(decision.provenance).toEqual({ action: PREVIEW_DECIDE_COMMAND_KIND, tier: "R0" });
+    // The subject is R1 -- the goal's OWN replay-verified planning-run tier, which the gate now
+    // reads instead of a hand-inserted record -- and the standing opt-in covers R1; the record
+    // names WHAT IT ACTED UNDER.
+    expect(decision.provenance)
+      .toEqual({ action: PREVIEW_DECIDE_COMMAND_KIND, tier: JOURNEY_SUBJECT_TIER });
 
     // GATE 3 -- one tick of the reconciler over the pushed candidate. Again no human command.
     markPushed(world);
