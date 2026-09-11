@@ -501,3 +501,33 @@ describe("resolveRollbackRestore / applyResolvedRestore", () => {
     expect(throwing.calls).toHaveLength(1);
   });
 });
+
+/**
+ * THE CLOSED CODE-TO-LAYER MAP, pinned from the table's side. Every code this seam mints leaves
+ * through `refuse`, which accepts only a key of `ROLLBACK_RESTORE_DETAILS` and stamps it with
+ * `ROLLBACK_RESTORE_STAMP`, so a code minted outside the table is already a TYPE error. This arm is
+ * the other direction: a code added to or dropped from the table without this roster changing in
+ * the same commit reds here. The layer each code answers under at the handler is asserted by the
+ * arms that reach it — `rollback-command-ordering.test.ts` (vii) for SCHEMA_OVERWRITTEN.
+ */
+describe("ROLLBACK_RESTORE_DETAILS", () => {
+  it("(i) is exactly the closed roster of codes, each with its own fixed prose, all under one layer", () => {
+    expect(Object.keys(ROLLBACK_RESTORE_DETAILS).sort()).toEqual([
+      "DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE",
+      "DEPLOY_ROLLBACK_RESTORE_BACKUP_ABSENT",
+      "DEPLOY_ROLLBACK_RESTORE_BACKUP_UNVERIFIED",
+      "DEPLOY_ROLLBACK_RESTORE_DEPLOY_UNKNOWN",
+      "DEPLOY_ROLLBACK_RESTORE_FAILED",
+      "DEPLOY_ROLLBACK_RESTORE_MIGRATION_UNKNOWN",
+      "DEPLOY_ROLLBACK_RESTORE_MIGRATION_UNVERIFIED",
+      "DEPLOY_ROLLBACK_RESTORE_SCHEMA_OVERWRITTEN",
+    ]);
+    // FIXED PROSE PER CODE, and no two codes sharing one: a shared detail would let an operator
+    // read one refusal as another.
+    const details = Object.values(ROLLBACK_RESTORE_DETAILS);
+    for (const detail of details) expect(detail.length).toBeGreaterThan(0);
+    expect(new Set(details).size).toBe(details.length);
+    // THE LAYER COLUMN: one stamp for every code minted here.
+    expect(ROLLBACK_RESTORE_STAMP).toBe("DAEMON_COMMAND_SEAM");
+  });
+});

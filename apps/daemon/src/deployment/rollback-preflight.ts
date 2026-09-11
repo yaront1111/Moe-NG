@@ -20,31 +20,56 @@ import type { DeployReceiptV1 } from "./deploy-receipt-contracts.js";
  *              └─ next.backupRef = the schema before M = WHAT THE TARGET RAN AGAINST ◀── this one
  *        └─ target.backupRef = the schema before the deploy BEFORE the target — one step too far
  *
- * So the dump that restores the target's schema is the FIRST POST-TARGET DEPLOY THAT MIGRATED,
- * never the target's own `backupRef` (a schema older than the image being rolled to) and never
- * the environment's CURRENT deploy unless current happens to BE that first successor. Keying on
- * current is the defect this module exists to close: rolling A ─▶ B ─▶ C back to A would select
- * C's dump, which holds schema B, and pair it with A's image.
+ * So the dump that restores the target's schema belongs to the FIRST SCHEMA MOVE AFTER THE TARGET,
+ * never to the target itself (a schema older than the image being rolled to) and never to the
+ * environment's CURRENT deploy unless current happens to BE that first move. Keying on current is
+ * the defect this module exists to close: rolling A ─▶ B ─▶ C back to A would select C's dump,
+ * which holds schema B, and pair it with A's image.
+ *
+ * IN THE DEPLOY LEDGER TWO THINGS MOVE A SCHEMA, AND ONLY ONE DUMPS FIRST. A deploy that migrated
+ * took its dump before it applied, so its `backupRef` IS the answer. A ROLLBACK THAT RESTORED
+ * replaced the schema with an older dump and kept NO copy of the one it overwrote — so when it is
+ * the first move after the target, no dump of the target's schema exists anywhere, and every later
+ * dump is a snapshot taken after the overwrite. The only honest answer there is a refusal. What
+ * moves nothing is skipped: a deploy refused before it migrated, a rollback that restored nothing.
+ * The walk therefore stops at the FIRST successor that migrated OR restored; a restore further on
+ * is history it never reaches, so a migration that came before it still wins.
  *
  * THE JOIN IS DURABLE AND NEVER A FILENAME. `deploy-command.ts:267` passes a deploy's
  * `decisionId` as the migration's `requestId`, so a deploy receipt's `decisionId` is the
- * deterministic key `readMigrationReceipt` looks its dump up under. No hash scan, no
- * newest-file heuristic, no value taken from a request payload.
+ * deterministic key `readMigrationReceipt` looks its dump up under. A rollback's receipt carries
+ * its COMMAND id as `decisionId`, which is the key its restore marker is written under. No hash
+ * scan, no newest-file heuristic, no value taken from a request payload.
  *
  * IT REFUSES, IT NEVER SUBSTITUTES. Every gap — unknown target, unreadable migration record, a
- * migration that recorded no dump, no successor that migrated at all — answers with its own
- * stable code and leaves the database exactly as it was.
+ * migration that recorded no dump, a restore that overwrote the target's schema, nothing moved
+ * since the target at all — answers with its own stable code and leaves the database as it was.
+ *
+ * WHAT THE WALK CANNOT SEE, stated rather than hidden. It reads the DEPLOY ledger, so a schema move
+ * that leaves no deploy receipt is invisible to it: a `deployment.migrate_down` revert records its
+ * migration receipt under its own request id and no deploy receipt at all, and a restore applied by
+ * a rollback admitted before the marker existed carries no marker to find.
  */
 
-/** Every code the dump selection can answer with. All four are already keys of
- *  `ROLLBACK_RESTORE_DETAILS`, so the caller mints the prose and this module mints no new
- *  vocabulary. Returned bare rather than as a built refusal so that the detail table stays in
- *  one file and this module never depends on the one that consumes it. */
+/**
+ * THE RESTORE MARKER'S DECISION PRINCIPAL. `rollback-command.ts` WRITES the marker under it, on the
+ * rollback's own command id and only once a restore has really been applied; the walk below READS
+ * it to learn that a rollback moved the schema. It lives in this leaf so writer and reader name one
+ * constant: the command imports this module, so the reverse import would close a cycle.
+ */
+export const ROLLBACK_RESTORE_PRINCIPAL = "daemon:rollback-restore" as const;
+
+/** Every code the dump selection can answer with. Each is a key of `ROLLBACK_RESTORE_DETAILS` —
+ *  the caller's `refuse` takes only those keys, so a code missing from that table is a type
+ *  error there — and the caller mints the prose. Returned bare rather than as a built refusal so
+ *  that the detail table stays in one file and this module never depends on the one that
+ *  consumes it. */
 export type RollbackDumpSelectionCode =
   | "DEPLOY_ROLLBACK_RESTORE_BACKUP_ABSENT"
   | "DEPLOY_ROLLBACK_RESTORE_DEPLOY_UNKNOWN"
   | "DEPLOY_ROLLBACK_RESTORE_MIGRATION_UNKNOWN"
-  | "DEPLOY_ROLLBACK_RESTORE_MIGRATION_UNVERIFIED";
+  | "DEPLOY_ROLLBACK_RESTORE_MIGRATION_UNVERIFIED"
+  | "DEPLOY_ROLLBACK_RESTORE_SCHEMA_OVERWRITTEN";
 
 /**
  * `target` IS PRESENT ON EVERY ANSWER THAT HAS ONE, evidence refusals included, and that is what
@@ -70,6 +95,17 @@ const deployUnknown = Object.freeze({
 } as const);
 
 /**
+ * DID THE ROLLBACK BEHIND THIS RECEIPT APPLY A RESTORE? Its marker is keyed on the rollback's
+ * command id, which is the receipt's `decisionId`. EXISTENCE IS THE WHOLE TEST and nothing about
+ * the record is filtered: reading an applied restore as "nothing happened" is the unsafe direction,
+ * so a non-migrating deploy whose decision id collides with a restoring rollback's command id
+ * refuses here too.
+ */
+function restoredBy(store: SqliteEventStore, projectId: string, decisionId: string): boolean {
+  return store.getCommandDecision({ commandId: decisionId, principalId: ROLLBACK_RESTORE_PRINCIPAL, projectId }) !== null;
+}
+
+/**
  * WHICH DEPLOY'S DUMP RESTORES THE TARGET'S SCHEMA, from the durable ledger alone.
  *
  * `toReceiptRef` is the ALREADY-ADMITTED target receipt id. It is matched against the
@@ -84,9 +120,9 @@ export function selectRollbackDumpDecision(
   const index = state.receipts.findIndex(receipt => receipt.receiptId === toReceiptRef);
   const target = index === -1 ? undefined : state.receipts[index];
   if (target === undefined) return deployUnknown;
-  // FORWARD FROM THE TARGET, stopping at the FIRST successor that recorded a migration. The
-  // ledger is uncollapsed and keeps rollback receipts and refused deploys, and neither records a
-  // migration — so successors with no receipt are SKIPPED rather than treated as the answer.
+  // FORWARD FROM THE TARGET, stopping at the FIRST successor that MOVED THE SCHEMA. The ledger is
+  // uncollapsed and keeps rollback receipts and refused deploys; neither records a migration, so a
+  // successor with no migration receipt is SKIPPED — unless it restored, which is a move as well.
   for (const successor of state.receipts.slice(index + 1)) {
     let receipt: MigrationReceipt | null;
     try {
@@ -96,7 +132,15 @@ export function selectRollbackDumpDecision(
       // a relayed message is a surface built out of a value just read.
       return Object.freeze({ code: "DEPLOY_ROLLBACK_RESTORE_MIGRATION_UNVERIFIED", ok: false as const, target });
     }
-    if (receipt === null) continue;
+    if (receipt === null) {
+      // A RESTORE IS A SCHEMA MOVE WITH NO DUMP BEHIND IT. It overwrote the schema the target ran
+      // against without taking a copy, so no dump anywhere restores that schema and every later
+      // one is a snapshot taken after the overwrite. Refused here, never walked past.
+      if (restoredBy(store, projectId, successor.decisionId)) {
+        return Object.freeze({ code: "DEPLOY_ROLLBACK_RESTORE_SCHEMA_OVERWRITTEN", ok: false as const, target });
+      }
+      continue;
+    }
     // NEVER SKIP PAST A NULL `backupRef` TO A LATER DUMP. The schema moved here with no record of
     // the state before it; a later dump is a LATER state and restoring it would destroy strictly
     // more than the rollback asked for. The honest answer is that the backup is absent.
@@ -105,8 +149,8 @@ export function selectRollbackDumpDecision(
     }
     return Object.freeze({ dumpDecisionId: successor.decisionId, ok: true as const, target });
   }
-  // Nothing has moved the schema since the target deployed, so no dump identifies its state --
-  // including the case where the target IS the environment's current deploy.
+  // Nothing has moved the schema since the target deployed — no migration, no restore — so no
+  // dump identifies its state, including the case where the target IS the current deploy.
   return Object.freeze({ code: "DEPLOY_ROLLBACK_RESTORE_MIGRATION_UNKNOWN", ok: false as const, target });
 }
 
