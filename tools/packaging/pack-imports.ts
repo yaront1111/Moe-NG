@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { join, posix } from "node:path";
 
 /**
@@ -19,24 +20,66 @@ export interface ImportFaults {
   readonly devDependency: readonly string[];
 }
 
-const SOURCE_FILE = /\.(ts|tsx|mts|cts|js|mjs|cjs)$/u;
-/**
- * All three shapes an edge takes here: `from "x"`, `import("x")` — dynamic AND
- * the type-position form this repo uses — and the side-effect `import "x";`.
- * Matching only the first would let a lost target hide behind the other two.
- */
-const RELATIVE_PATTERNS = Object.freeze([
-  /\bfrom\s*["'](\.[^"']*)["']/gu,
-  /\bimport\s*\(\s*["'](\.[^"']*)["']/gu,
-  /(?:^|\n)\s*import\s*["'](\.[^"']*)["']/gu,
-]);
-const BARE_PATTERNS = Object.freeze([
-  /\bfrom\s*["']([^."'][^"']*)["']/gu,
-  /\bimport\s*\(\s*["']([^."'][^"']*)["']/gu,
-]);
+const SOURCE_FILE = /\.(ts|tsx|mts|cts|js|jsx|mjs|cjs)$/u;
+export const PACK_SOURCE_SYNTAX_INVALID = "PACK_SOURCE_SYNTAX_INVALID" as const;
+// The materialized entry loads before its frozen install. Resolve the parser
+// only when the post-install inventory runs, never while importing this module.
+const requireParser = createRequire(import.meta.url);
 
-function specifiersOf(text: string, patterns: readonly RegExp[]): readonly string[] {
-  return patterns.flatMap((pattern) => [...text.matchAll(pattern)].map((match) => match[1] ?? ""));
+function record(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? value as Record<string, unknown> : null;
+}
+
+function literalSpecifier(value: unknown): string | null {
+  const node = record(value);
+  if (node?.["type"] === "StringLiteral" && typeof node["value"] === "string") return node["value"];
+  if (node?.["type"] !== "TemplateLiteral" || !Array.isArray(node["expressions"])
+    || node["expressions"].length !== 0 || !Array.isArray(node["quasis"])) return null;
+  const cooked = record(record(node["quasis"][0])?.["value"])?.["cooked"];
+  return typeof cooked === "string" ? cooked : null;
+}
+
+function specifiersOf(text: string, file: string): readonly string[] {
+  const { parse } = requireParser("@babel/parser") as typeof import("@babel/parser");
+  let ast: ReturnType<typeof parse>;
+  try {
+    ast = parse(text, {
+      createImportExpressions: true,
+      plugins: [
+        ...(/\.[cm]?tsx?$/u.test(file) ? ["typescript" as const] : []),
+        ...(/\.[jt]sx$/u.test(file) ? ["jsx" as const] : []),
+      ],
+      sourceType: /\.c[jt]s$/u.test(file) ? "commonjs" : "unambiguous",
+    });
+  } catch {
+    // Parser diagnostics can quote source. A syntax refusal carries no source text.
+    throw new Error(PACK_SOURCE_SYNTAX_INVALID);
+  }
+  const specifiers: string[] = [];
+  const pending: unknown[] = [ast];
+  while (pending.length > 0) {
+    const value = pending.pop();
+    if (Array.isArray(value)) { pending.push(...value); continue; }
+    const node = record(value);
+    if (node === null) continue;
+    let target: unknown;
+    if (["ImportDeclaration", "ExportNamedDeclaration", "ExportAllDeclaration", "ImportExpression"]
+      .includes(String(node["type"]))) target = node["source"];
+    else if (node["type"] === "TSImportType") target = node["argument"];
+    else if (node["type"] === "TSExternalModuleReference") target = node["expression"];
+    else if (node["type"] === "CallExpression") {
+      const callee = record(node["callee"]);
+      if (callee?.["type"] === "Import"
+        || (callee?.["type"] === "Identifier" && callee["name"] === "require")) {
+        target = Array.isArray(node["arguments"]) ? node["arguments"][0] : undefined;
+      }
+    }
+    const specifier = literalSpecifier(target);
+    if (specifier !== null) specifiers.push(specifier);
+    pending.push(...Object.values(node));
+  }
+  return specifiers;
 }
 
 /** `./x.js` in a source file is `./x.ts` on disk, and either end satisfies the import. */
@@ -69,13 +112,15 @@ export function collectImportFaults(
   for (const file of files) {
     if (file.split("/").includes("node_modules") || !SOURCE_FILE.test(file)) continue;
     const text = readFileSync(join(root, file), "utf8");
-    for (const specifier of specifiersOf(text, RELATIVE_PATTERNS)) {
-      if (importCandidates(file, specifier).some((path) => present.has(path))) continue;
-      dangling.add(`${file} -> ${specifier}`);
-    }
-    for (const specifier of specifiersOf(text, BARE_PATTERNS)) {
-      const name = packageNameOf(specifier);
-      if (dev.has(name)) devImports.add(`${file} -> ${name}`);
+    for (const specifier of specifiersOf(text, file)) {
+      if (specifier.startsWith(".")) {
+        if (!importCandidates(file, specifier).some((path) => present.has(path))) {
+          dangling.add(`${file} -> ${specifier}`);
+        }
+      } else {
+        const name = packageNameOf(specifier);
+        if (dev.has(name)) devImports.add(`${file} -> ${name}`);
+      }
     }
   }
   return Object.freeze({

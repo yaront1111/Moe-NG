@@ -1,6 +1,8 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
+import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 import { afterAll, describe, expect, it } from "vitest";
 
@@ -40,6 +42,87 @@ function faultsOf(root: string, devDependencies: readonly string[] = ["vitest"])
 }
 
 describe("collectImportFaults over a staged tree", () => {
+  it("admits actual controlled-profile template modules without reading generated code as imports", () => {
+    const directory = "apps/daemon/src/repository/controlled-profile/";
+    const root = tree("controlled-profile", {
+      ...Object.fromEntries([
+        "controlled-profile-package-templates.ts", "controlled-profile-root-templates.ts",
+      ].map((file) => [directory + file,
+        readFileSync(new URL(`../../../${directory}${file}`, import.meta.url), "utf8")])),
+      // Its real source import remains required; only generated-file text is inert.
+      "apps/daemon/src/environment/environment-required-variables.js": "export {};\n",
+    });
+    expect(faultsOf(root, ["@vitejs/plugin-react", "vite", "vitest", "@playwright/test"]))
+      .toEqual({ dangling: [], devDependency: [] });
+  });
+
+  it("ignores inert quoted, template, comment, regex, and JSX content", () => {
+    const root = tree("inert-source", {
+      "packages/a/src/templates.tsx": [
+        'const quoted = \'import { x } from "./quoted.js"\';',
+        'const template = `import("./template.js")`;',
+        '// import "./line-comment.js";',
+        '/* export { x } from "./block-comment.js"; */',
+        'const regex = /import("vitest")/u;',
+        'if (true) /from "vitest"/u.test(quoted);',
+        'const element = <div>import("./jsx-text.js")</div>;',
+      ].join("\n"),
+    });
+    expect(faultsOf(root)).toEqual({ dangling: [], devDependency: [] });
+  });
+
+  it("keeps actual dynamic, require, template-expression, JSX-expression, and type import edges", () => {
+    const root = tree("executed-imports", {
+      "packages/a/src/caller.tsx": [
+        'const dynamic = import /* comment */ ("./dynamic.js");',
+        'const common = require("./common.cjs");',
+        'const template = `inert import("./ignore.js") ${import("./expression.js")}`;',
+        'const element = <div>{require("./jsx-expression.cjs")}</div>;',
+        'type Shape = import("./types.js").Shape;',
+        'const dev = require("vitest");',
+        'const devSubpath = import("vitest/config");',
+        'import "@vitejs/plugin-react";',
+      ].join("\n"),
+    });
+    expect(faultsOf(root, ["vitest", "@vitejs/plugin-react"])).toEqual({
+      dangling: ["./common.cjs", "./dynamic.js", "./expression.js", "./jsx-expression.cjs", "./types.js"]
+        .map((specifier) => `packages/a/src/caller.tsx -> ${specifier}`),
+      devDependency: ["packages/a/src/caller.tsx -> @vitejs/plugin-react", "packages/a/src/caller.tsx -> vitest"],
+    });
+  });
+
+  it.each(["cjs", "cts"])("preserves legal CommonJS syntax while checking %s dependency edges", (extension) => {
+    const file = `packages/a/src/caller.${extension}`;
+    const root = tree(`commonjs-${extension}`, {
+      [file]: 'if (!enabled) return; const target = new.target; require("./missing.cjs");',
+    });
+    expect(faultsOf(root)).toEqual({ dangling: [`${file} -> ./missing.cjs`], devDependency: [] });
+  });
+
+  it.each([
+    'const broken = "PRIVATE-SOURCE-DIAGNOSTIC',
+    'const broken = `PRIVATE-SOURCE-DIAGNOSTIC ${import("./real.js")}',
+    'const broken = /PRIVATE-SOURCE-DIAGNOSTIC',
+  ])("refuses malformed source without exposing parser diagnostics", (source) => {
+    const root = tree(`malformed-${String(source.length)}`, { "packages/a/src/broken.ts": source });
+    expect(() => faultsOf(root)).toThrow(/^PACK_SOURCE_SYNTAX_INVALID$/u);
+  });
+
+  it("loads the scanner through its Node bridge before the materialization has node_modules", () => {
+    const root = tree("bootstrap-import", { "package.json": '{"type":"module"}' });
+    for (const extension of ["ts", "js"]) {
+      copyFileSync(new URL(`../../../tools/packaging/pack-imports.${extension}`, import.meta.url),
+        join(root, `pack-imports.${extension}`));
+    }
+    const loaded = spawnSync(process.execPath, ["--input-type=module", "-e",
+      `const imported = await import(${JSON.stringify(pathToFileURL(join(root, "pack-imports.js")).href)});`
+        + 'process.stdout.write(typeof imported.collectImportFaults);'], {
+      cwd: root, encoding: "utf8", shell: false, timeout: 10_000, windowsHide: true,
+    });
+    expect(loaded.status, loaded.stderr).toBe(0);
+    expect(loaded.stdout).toBe("function");
+  });
+
   it("admits a tree whose every relative import resolves", () => {
     const root = tree("clean", {
       "packages/a/src/index.ts": 'export { work } from "./work.js";\n',

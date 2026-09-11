@@ -45,6 +45,7 @@
     "@moe/store": "workspace:*"
   },
   "devDependencies": {
+    "@babel/parser": "7.29.8",
     "@cyclonedx/cdxgen": "12.8.2",
     "@playwright/test": "1.62.1",
     "@types/node": "24.13.3",
