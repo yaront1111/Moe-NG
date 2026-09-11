@@ -15,6 +15,7 @@ import { readDeployReceipt } from "./deploy-ledger.js";
 import { admitEnvironmentName, deployReceiptId } from "./deploy-receipt-contracts.js";
 import type { DeployReceiptV1 } from "./deploy-receipt-contracts.js";
 import { createDeployService } from "./deploy-service.js";
+import { probeRollbackHost } from "./rollback-preflight.js";
 import { applyResolvedRestore, resolveRollbackRestore } from "./rollback-restore.js";
 import type { RollbackRestoreResolved } from "./rollback-restore.js";
 
@@ -117,6 +118,10 @@ function outcome(record: CommandDecisionRecord, receipt: DeployReceiptV1, replay
 export function createRollbackCommandHandler(options: RollbackCommandOptions): AsyncCommandHandler {
   const { store, projectId, operatorPrincipalId } = options;
   const clock = options.clock ?? (() => new Date().toISOString());
+  /** ONE PORTS OBJECT FOR BOTH READERS. The pre-admission host probe and the deploy service below
+   *  must not be able to drift onto different docker daemons: a probe that answered for a host the
+   *  rollback then never used would be worth nothing. */
+  const deployPorts = options.ports ?? productionDeployPorts(store, projectId);
   return async (input): Promise<DurableDecision> => {
     const { envelope, principal } = input;
     if (principal.principalId !== operatorPrincipalId) {
@@ -170,7 +175,15 @@ export function createRollbackCommandHandler(options: RollbackCommandOptions): A
       refuse("DEPLOY_ROLLBACK_COMMAND_ID_SPENT", undefined, 409);
     }
     /**
-     * THE DATABASE ARM'S READ HALF, and its position is half of the arm's safety.
+     * THE HOST PROBE AND THE DATABASE ARM'S READ HALF, and their positions are half of the arm's
+     * safety.
+     *
+     * THE HOST ANSWERS BEFORE THE DUMP IS EVEN NAMED. A dump applied against a host that cannot
+     * then start the target image leaves the database reverted underneath the still-running
+     * CURRENT application — the two ends of the deployment at different versions, silently, which
+     * is worse than either refusing or doing nothing. The probe is read-only, so it keeps this
+     * block's cost-nothing property; the refusal it forwards is the deploy engine's own code and
+     * layer, unchanged by having been asked one phase earlier.
      *
      * HERE, and only the RESOLVE, because every read-only guard above has admitted the request and
      * nothing durable has been written yet: a restore that cannot name its destination or its dump
@@ -193,9 +206,23 @@ export function createRollbackCommandHandler(options: RollbackCommandOptions): A
      */
     let resolved: RollbackRestoreResolved | null = null;
     if (request.restore && intent === null) {
+      // THE HOST ANSWERS FIRST, and only where a restore is actually about to be resolved. The
+      // probe is `docker version`: it starts nothing, writes nothing and reserves nothing, so it
+      // keeps this line's "a refusal here has cost nothing" property intact. Its code and layer
+      // are the deploy engine's own, forwarded unchanged.
+      //
+      // NOT ON AN UNWIRED DAEMON. `credential` absent means no environment on this daemon has a
+      // bound destination at all, so the restore refuses UNAVAILABLE whatever the host says and
+      // probing it would ask a question nobody's answer depends on. Boundness answers first here
+      // for the same reason `rollback-restore.ts` answers it first.
+      if (options.environmentCredential !== undefined) {
+        const host = await probeRollbackHost(deployPorts, request.environment);
+        if (!host.ok) throw new DomainRefusal(host.code, host.layer, host.detail, 422);
+      }
       const resolution = await resolveRollbackRestore({
         credential: options.environmentCredential, now: clock, projectId,
-        projectRoot: options.migrationWorkspace, store, workspace: options.migrationWorkspace,
+        projectRoot: options.migrationWorkspace, store, toReceiptRef: request.receiptId,
+        workspace: options.migrationWorkspace,
       }, request.environment);
       // The binding's code and the LAYER THAT ANSWERED, forwarded unchanged: an unbound
       // environment still refuses DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE at this seam, and
@@ -303,7 +330,7 @@ export function createRollbackCommandHandler(options: RollbackCommandOptions): A
       // trade one broken deploy for another. Composed on the same wiring condition as the deploy's.
       const report = await createDeployService({ ...options,
         ports: options.ports ?? {
-          ...productionDeployPorts(store, projectId),
+          ...deployPorts,
           ...(options.environmentCredential === undefined ? {} : {
             environment: candidateEnvironmentPort({
               credential: options.environmentCredential, now: clock, projectId, store,

@@ -29,6 +29,26 @@ const clock = () => "2026-09-06T01:00:00.000Z";
 // destination. A suite pinned to "staging" could seed no destination at all and every bound
 // arm below would have proved the unbound path twice under two different names.
 const environment = "production", sha = "a".repeat(40), digest = `sha256:${"b".repeat(64)}`;
+/** THE PRE-ADMISSION HOST PROBE's argv. `docker version` starts nothing, writes nothing and
+ *  reserves nothing, which is the only reason an arm whose subject is "no bytes moved" may see it
+ *  at all. Held as a constant so a probe that grew a side effect would have to edit this line. */
+const HOST_PROBE: readonly string[] = ["version", "--format", "{{.Server.Version}}"];
+
+/**
+ * NOT `toEqual([])`, AND NOT DELETED EITHER. The precheck this row added makes a bare emptiness
+ * assertion false on every restoreDatabase:true path, and replacing one with nothing is how a file
+ * stops testing its own subject. `probes` is EXACT: the argv list must be that many read-only
+ * probes and nothing else, so a build, create, start, cp, reload or a second unexplained probe
+ * still reds, and ssh stays empty outright.
+ */
+function expectNoDockerEffect(
+  docker: { readonly calls: readonly (readonly string[])[]; readonly sshCalls: readonly (readonly string[])[] },
+  probes: number,
+): void {
+  expect(docker.calls).toEqual(Array.from({ length: probes }, () => [...HOST_PROBE]));
+  expect(docker.sshCalls).toEqual([]);
+}
+
 function harness(store = openStore()) {
   const source = recordDeployReceipt(store, { projectId: PROJECT_ID, environment, sha,
     imageDigest: digest, decisionId: "original", decidedAt: clock(), refusal: null, releaseDecision: null, url: null });
@@ -271,9 +291,10 @@ it("(c) still refuses UNAVAILABLE with code and layer when the bound environment
   await expect(b.handler({ ...b.input, envelope: b.envelopeFor(true) })).rejects.toMatchObject({
     code: "DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE", layer: DAEMON_COMMAND_SEAM,
   });
-  // Zero calls, and no rollback receipt: the schema and the deployment are both untouched.
+  // No restore call, one read-only host probe and no rollback receipt: the schema and the
+  // deployment are both untouched, and the probe's presence shows the precheck really ran.
   expect(b.calls).toEqual([]);
-  expect(b.docker.calls).toEqual([]);
+  expectNoDockerEffect(b.docker, 1);
   expect(readDeployReceipt(b.store, PROJECT_ID,
     deployReceiptId(PROJECT_ID, environment, b.input.envelope.commandId)).ok).toBe(false);
 });
@@ -294,8 +315,7 @@ it("(d) a FAILING restore refuses with code and layer, attempts once, and RELEAS
   // and that the guard did not stay held. The refusal is recorded as a REFUSED TERMINAL decision
   // with NO deploy receipt -- a receipt would have to be bucketed into the engine's closed refusal
   // roster and would then stand as this environment's CURRENT deploy.
-  expect(b.docker.calls).toEqual([]);
-  expect(b.docker.sshCalls).toEqual([]);
+  expectNoDockerEffect(b.docker, 1);
   expect(readDeployReceipt(b.store, PROJECT_ID, deployReceiptId(PROJECT_ID, environment, first)).ok).toBe(false);
 
   // THE SAME COMMAND ID ANSWERS FROM THE RECORD, not by trying again. Without this a replay would
@@ -311,7 +331,9 @@ it("(d) a FAILING restore refuses with code and layer, attempts once, and RELEAS
   await expect(b.handler({ ...b.input, envelope: { ...b.envelopeFor(true), commandId: second } }))
     .rejects.toMatchObject({ code: "DEPLOY_ROLLBACK_RESTORE_FAILED", layer: ROLLBACK_RESTORE_STAMP });
   expect(b.calls).toHaveLength(2);
-  expect(b.docker.calls).toEqual([]);
+  // TWO probes, not one: the fresh command id ran its own precheck, and the REPLAY between them
+  // answered from the record without probing. Still nothing that moves a byte.
+  expectNoDockerEffect(b.docker, 2);
   // NEITHER id minted a deploy receipt.
   expect(readDeployReceipt(b.store, PROJECT_ID, deployReceiptId(PROJECT_ID, environment, first)).ok).toBe(false);
   expect(readDeployReceipt(b.store, PROJECT_ID, deployReceiptId(PROJECT_ID, environment, second)).ok).toBe(false);

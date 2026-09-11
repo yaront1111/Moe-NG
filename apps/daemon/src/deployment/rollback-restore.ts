@@ -4,8 +4,8 @@ import type { BackupPorts } from "../backups/backup-ports.js";
 import type { EnvironmentCredentialSource } from "../environment/environment-projection.js";
 import { readMigrationReceipt } from "../repository/migrations/migration-receipt.js";
 import type { MigrationReceipt } from "../repository/migrations/migration-receipt.js";
-import { readCurrentDeployReceipt } from "./deploy-ledger.js";
 import { resolveDeployMigrationContext } from "./deploy-migration-context.js";
+import { selectRollbackDumpDecision } from "./rollback-preflight.js";
 
 /**
  * WHICH DATABASE, AND WHICH DUMP — the two questions a rollback's schema restore has to answer
@@ -19,24 +19,17 @@ import { resolveDeployMigrationContext } from "./deploy-migration-context.js";
  * no detail can be built out of the value it just read. This module keeps that discipline: its own
  * table below is fixed prose per code, with no template and no interpolation.
  *
- * WHICH DUMP is the CURRENT deploy's PRE-MIGRATION dump, and this is the one decision in the file
- * that must not be re-litigated at a keyboard. `migrateWithBackup` dumps BEFORE it applies, so a
- * receipt's `backupRef` is the schema as it stood BEFORE that receipt's own migration:
+ * WHICH DUMP is `selectRollbackDumpDecision`'s answer, and it is keyed on the deploy the rollback
+ * is RETURNING TO — never on whatever happens to be deployed right now. The rule that holds: the
+ * dump is the FIRST POST-TARGET DEPLOY THAT MIGRATED, reached by the durable join through THAT
+ * deploy's `decisionId`. `rollback-preflight.ts`'s header carries the whole argument, including
+ * why the target's own `backupRef` is one step too far and why keying on the current deploy pairs
+ * a later schema with an earlier image.
  *
- *     prior ──L──▶ kept ──M──▶ current
- *                             └─ current.backupRef = the schema BEFORE M = what `kept` ran against
- *              └─ kept.backupRef = the schema BEFORE L — one step too far
- *
- * Restoring the KEPT receipt's own `backupRef` would discard the schema the kept deploy itself
- * applied. The dump is reached by the DURABLE JOIN and never by a filename, a hash, a newest-file
- * scan or an arbitrary request id: `deploy-command.ts:267` passes the deploy's `decisionId` as the
- * migration's `requestId`, so the current deploy receipt's `decisionId` is the deterministic key
- * `readMigrationReceipt` looks the dump up under.
- *
- * IT REFUSES, IT NEVER SUBSTITUTES. No current deploy receipt, no migration receipt for that
- * decision, an unreadable one, a null `backupRef`, or an artifact whose bytes disagree with what
- * the receipt recorded each answer with their own stable code and the layer that answered, and
- * each leave the database exactly as it was.
+ * IT REFUSES, IT NEVER SUBSTITUTES. An unknown target, no successor that migrated, an unreadable
+ * migration record, a null `backupRef`, or an artifact whose bytes disagree with what the receipt
+ * recorded each answer with their own stable code and the layer that answered, and each leave the
+ * database exactly as it was.
  */
 
 /** The layer that answers for every refusal minted HERE. Forwarded refusals keep their own: the
@@ -53,13 +46,13 @@ export const ROLLBACK_RESTORE_DETAILS = Object.freeze({
   DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE:
     "no database restoration port is bound to the selected deployment environment",
   DEPLOY_ROLLBACK_RESTORE_DEPLOY_UNKNOWN:
-    "the environment has no current deploy receipt, so there is no schema state to restore",
+    "the environment has no deploy history holding the selected receipt, so there is no schema state to restore",
   DEPLOY_ROLLBACK_RESTORE_MIGRATION_UNKNOWN:
-    "the current deploy recorded no migration, so no pre-migration dump is identified",
+    "no deploy after the selected one recorded a migration, so no pre-migration dump is identified",
   DEPLOY_ROLLBACK_RESTORE_MIGRATION_UNVERIFIED:
-    "the current deploy's migration record could not be verified",
+    "the migration record naming the dump to restore could not be verified",
   DEPLOY_ROLLBACK_RESTORE_BACKUP_ABSENT:
-    "the current deploy's migration recorded no backup to restore",
+    "the migration that moved the schema past the selected deploy recorded no backup to restore",
   DEPLOY_ROLLBACK_RESTORE_BACKUP_UNVERIFIED:
     "the recorded backup is absent or does not match the bytes its receipt recorded",
   DEPLOY_ROLLBACK_RESTORE_FAILED:
@@ -108,6 +101,10 @@ export interface RollbackRestoreConfig {
   readonly projectId: string;
   readonly projectRoot: string | undefined;
   readonly store: SqliteEventStore;
+  /** THE ALREADY-ADMITTED TARGET RECEIPT ID — the deploy this rollback returns to, forwarded from
+   *  the request after the handler validated it as 64 hex and matched it to a real deploy receipt.
+   *  An IDENTIFIER, never a URL or free text, and interpolated into no detail. */
+  readonly toReceiptRef: string;
   readonly workspace: string | undefined;
 }
 
@@ -151,7 +148,7 @@ function destination(
   return Object.freeze({ code: resolved.code, detail: resolved.detail, layer: resolved.layer, ok: false as const });
 }
 
-/** The current deploy's pre-migration dump, verified against the bytes its receipt recorded. */
+/** The named deploy's pre-migration dump, verified against the bytes its receipt recorded. */
 async function dumpToRestore(
   config: RollbackRestoreConfig, decisionId: string,
 ): Promise<{ readonly ok: true; readonly path: string } | RollbackRestoreRefusal> {
@@ -191,15 +188,22 @@ async function dumpToRestore(
 export async function resolveRollbackRestore(
   config: RollbackRestoreConfig, environment: string,
 ): Promise<RollbackRestoreResolved | RollbackRestoreRefusal> {
-  const current = readCurrentDeployReceipt(config.store, config.projectId, environment);
   // BOUNDNESS ANSWERS FIRST. An unwired daemon has no destination for ANY environment, which is a
   // fact about the wiring and not about this deployment's history — reporting a missing receipt
   // there would name the wrong cause and would change the code an unbound environment refuses with.
   if (config.credential === undefined) return refuse("DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE");
-  if (current === null) return refuse("DEPLOY_ROLLBACK_RESTORE_DEPLOY_UNKNOWN");
-  const bound = destination(config, environment, current.decisionId, current.sha);
+  const selection = selectRollbackDumpDecision(config.store, config.projectId, environment, config.toReceiptRef);
+  if (selection.target === null) return refuse(selection.code);
+  // THE TARGET KEYS THE DESTINATION and the selected successor keys the DUMP — both name the
+  // deployment the operator asked to return to, and keying either on the CURRENT deploy is how an
+  // earlier image came to be paired with a later schema. THE DESTINATION IS RESOLVED BEFORE THE
+  // DUMP EVIDENCE IS JUDGED, the order that held before this fix and the one the forwarding arms
+  // depend on: an environment the store does not have is answered by the ENVIRONMENT slice's own
+  // code and layer, never by this seam noticing that nothing migrated after the target.
+  const bound = destination(config, environment, selection.target.decisionId, selection.target.sha);
   if (!bound.ok) return bound;
-  const dump = await dumpToRestore(config, current.decisionId);
+  if (!selection.ok) return refuse(selection.code);
+  const dump = await dumpToRestore(config, selection.dumpDecisionId);
   if (!dump.ok) return dump;
   return Object.freeze({ databaseUrl: bound.databaseUrl, dump: dump.path, ok: true as const });
 }
