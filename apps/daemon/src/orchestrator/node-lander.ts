@@ -13,7 +13,7 @@ import type { LandingBaselineEntry, LandingRefusal } from "../repository/landing
 import { readReviewLedger } from "../review/review-read-model.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import { untrackedImports } from "./landing-imports.js";
-import { checkLandingVerification } from "./node-lander-verification.js";
+import { checkLandingVerification, unrecordedLandingReport } from "./node-lander-verification.js";
 import type { VerifiedWorkspaceBinding, VerifiedWorkspacePort } from "../repository/verified-workspace-contracts.js";
 import type { RepositoryExecutionHandle } from "../repository/repository-execution-contracts.js";
 import { commitJournaledLanding, landingJournalGate } from "./node-lander-journal.js";
@@ -32,8 +32,9 @@ import { commitJournaledLanding, landingJournalGate } from "./node-lander-journa
  * never swept into a Moe commit.
  *
  * One landing per acceptance: the receipt id is a function of the verifier
- * receipt, so a wrapper restart lands nothing twice, and a refusal is recorded
- * with its code rather than retried forever.
+ * receipt, so a wrapper restart lands nothing twice, and a structural refusal is
+ * recorded with its code rather than retried forever. A refusal that describes a
+ * moment (a git call failed, HEAD moved mid-capture) is reported and retried.
  */
 
 export interface NodeLanderConfig {
@@ -213,7 +214,12 @@ export function createNodeLander(config: NodeLanderConfig) {
       brief, nodeRef, port: config.verifiedWorkspace, projectId: config.projectId,
       readBinding: config.readVerifiedBinding, receiptId: verifierReceiptId, store: config.store,
     });
-    if (!checked.ok) return refuse(nodeRef, brief.workspace, verifierReceiptId, { code: checked.code, detail: checked.detail });
+    if (!checked.ok) {
+      // The observe path's rule again: a MOMENT is reported, not recorded, and the next pass retries;
+      // recording it would consume this acceptance forever. The closed table decides which are moments.
+      return unrecordedLandingReport(checked, nodeRef)
+        ?? refuse(nodeRef, brief.workspace, verifierReceiptId, { code: checked.code, detail: checked.detail });
+    }
     if (delivered.length === 0) {
       return refuse(nodeRef, brief.workspace, verifierReceiptId, {
         code: "NOTHING_TO_COMMIT", detail: "no path in the workspace differs from the staffing baseline",
