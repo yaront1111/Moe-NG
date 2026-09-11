@@ -29,10 +29,27 @@ import { SqliteEventStore } from "@moe/store";
 
 import { derivePolicySliceDigest, POLICY_AUTO_APPROVAL_TIERS } from "@moe/core";
 import type { PolicyRiskTier } from "@moe/core";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { GOAL_ID, PROJECT_ID, envelope, send } from "../bootstrap/bootstrap-test-fixtures.js";
-import { readDurableLedger, versionOf } from "../bootstrap/bootstrap-ledger.js";
+import {
+  GOAL_ID, PROJECT_ID, driveThrough, envelope, openStore, send,
+} from "../bootstrap/bootstrap-test-fixtures.js";
+import { readDurableLedger, stateOf, versionOf } from "../bootstrap/bootstrap-ledger.js";
+import { installedSlices } from "../bootstrap/bootstrap-policy-services.js";
+import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
+import {
+  selectEffectiveAutoApprovalPolicy,
+} from "../bootstrap/effective-auto-policy.js";
+// The NAMESPACE import is what makes the call-through spy below possible: both gate modules call
+// this same module record, so recording its export intercepts the calls PRODUCTION makes.
+import * as effectivePolicy from "../bootstrap/effective-auto-policy.js";
+import {
+  installGateOptIns, resolveUnattendedPreview, unattendedWorld,
+} from "../gates-unattended-fixtures.js";
+import type { GateClassification, GateOptIn } from "../gates-unattended-fixtures.js";
+import { sliceKindOf } from "../http/policy-read.js";
+import { PREVIEW_DECIDE_COMMAND_KIND } from "../preview/preview-contracts.js";
+import type { PreviewAutoDecision } from "../preview/preview-auto-decision.js";
 import { DomainRefusal } from "../daemon-command-dispatch.js";
 import { OPERATOR_PRINCIPAL_KINDS, PAYLOAD_KEYS, agentCapabilitiesFor }
   from "../daemon-command-vocabulary.js";
@@ -124,6 +141,15 @@ function declined(result: ReleaseAutoApproval): {
   return { code: result.code, layer: result.layer, reasonCodes: result.reasonCodes };
 }
 
+/** The same narrowing for the PREVIEW gate's own result, so a cross-gate arm can assert the code
+ *  and the layer each gate paired, rather than only that neither approved. */
+function previewDeclined(result: PreviewAutoDecision): {
+  readonly code: string; readonly layer: string; readonly reasonCodes: readonly string[];
+} {
+  if (result.ok) throw new Error("expected a declined preview decision, got an approval");
+  return { code: result.code, layer: result.layer, reasonCodes: result.reasonCodes };
+}
+
 describe("evaluateReleaseAutoApproval names the opt-in it acted under", () => {
   it("approves the journey's R1 subject under an R1 opt-in and NAMES action and tier", () => {
     const world = journeyWorld("SUBMITTED");
@@ -157,8 +183,9 @@ describe("evaluateReleaseAutoApproval names the opt-in it acted under", () => {
     const world = journeyWorld("SUBMITTED");
     installSlice(world, [RELEASE_OPT_IN]);
     expect(evaluate(world).ok).toBe(true);
-    // The operator installs a fresh policy with no standing opt-in. That is a RESET, and the
-    // newest slice governs -- exactly what `foldSlices` does with the last slice's opt-ins.
+    // The operator installs a fresh policy with no standing opt-in. That is a RESET: it clears
+    // the older declaration rather than sitting beside it, so the reset ITSELF becomes the
+    // effective policy and core refuses under it with its own AUTO_APPROVAL_NOT_OPTED_IN.
     // The classification names a factId no fact carries: it changes only the slice's DIGEST, so
     // this install cannot collide with the seed's own opt-in-less slice at the same content.
     installSlice(world, [], [{ factId: "release-auto-unrelated-fact", tier: "R0" }]);
@@ -168,11 +195,270 @@ describe("evaluateReleaseAutoApproval names the opt-in it acted under", () => {
     expect(result.reasonCodes).toContain("AUTO_APPROVAL_NOT_OPTED_IN");
   });
 
+  /**
+   * AMBIGUITY IS STILL A REFUSAL, on the release side too. The owner's 2026-09-11 ruling keeps the
+   * fail-closed reading the preview gate's header already defended: when more than one slice
+   * declares an opt-in AFTER the most recent reset, which one governs would depend on key order,
+   * so neither does. Before the shared selector this gate took the newest and released.
+   */
+  it("declines when TWO installed slices declare an opt-in after the last reset", () => {
+    const world = journeyWorld("SUBMITTED");
+    // POSITIVE CONTROL on this very world: ONE declaration releases this R1 subject, so the
+    // refusal below is the ambiguity and not a subject the gate could never have approved.
+    installSlice(world, [RELEASE_OPT_IN]);
+    expect(evaluate(world).ok).toBe(true);
+    // A second DECLARING slice. The classification names a factId no fact carries: it moves the
+    // digest only, because `sliceRef` is excluded from it and a ref-only change would collide.
+    installSlice(world, [RELEASE_OPT_IN], [{ factId: "release-auto-second-declaring", tier: "R0" }]);
+    const result = declined(evaluate(world));
+    expect(result.code).toBe("RELEASE_AUTO_POLICY_UNRESOLVED");
+    expect(result.layer).toBe("RELEASE_AUTO_DECISION");
+    // Selection answered FIRST: core was never asked, so it contributed no reason code.
+    expect(result.reasonCodes).toEqual([]);
+  });
+
   it("declines the stock journey: both seeded EVALUATION slices carry no opt-in at all", () => {
     const world = journeyWorld("SUBMITTED");
     const result = declined(evaluate(world));
     expect(result.code).toBe("RELEASE_AUTO_NOT_ALLOWED");
     expect(result.reasonCodes).toContain("AUTO_APPROVAL_NOT_OPTED_IN");
+  });
+});
+
+/**
+ * THE SHARED EFFECTIVE-POLICY SEAM, read directly. These arms address the selector rather than a
+ * gate, so a rule change shows up here as a REF rather than as a refusal code two layers away.
+ * The cross-gate parity arms that prove BOTH gates read this one answer are further below.
+ */
+describe("selectEffectiveAutoApprovalPolicy is the ONE effective-policy rule", () => {
+  /** Installs bytes that `sliceKindOf` classifies EVALUATION but whose digest does NOT address
+   *  them: `validSlice` is exact-arity, so the extra key makes the derivation refuse, and
+   *  `policy.install` only enforces the content address when the bytes ARE an exact core slice. */
+  function installEvaluationLookalike(world: JourneyWorld, ref: string): string {
+    const slice = {
+      autoApprovalOptIns: [], note: "not an exact core slice", rules: [], sliceRef: ref,
+    };
+    const version = versionOf(readDurableLedger(world.store, PROJECT_ID), `${PROJECT_ID}-policy`);
+    const outcome = send(world.store, envelope(
+      "policy.install", version, { slice }, `cmd-install-lookalike-${ref.slice(0, 8)}`,
+    ));
+    if (!outcome.ok) throw new Error(`lookalike install refused: ${outcome.code}`);
+    return ref;
+  }
+
+  /** Installs a policy ARTIFACT: a non-hex ref, so `sliceKindOf` answers ARTIFACT and the
+   *  selector must treat it as inert rather than as a reset or a declaration. */
+  function installArtifact(world: JourneyWorld, ref: string): void {
+    const version = versionOf(readDurableLedger(world.store, PROJECT_ID), `${PROJECT_ID}-policy`);
+    const outcome = send(world.store, envelope(
+      "policy.install", version, { slice: { calibration: "none", sliceRef: ref } },
+      `cmd-install-artifact-${ref}`,
+    ));
+    if (!outcome.ok) throw new Error(`artifact install refused: ${outcome.code}`);
+  }
+
+  const select = (world: JourneyWorld) =>
+    selectEffectiveAutoApprovalPolicy(world.store, PROJECT_ID);
+
+  it("answers nothing on a store with no policy installed at all", () => {
+    const store = openStore();
+    expect(selectEffectiveAutoApprovalPolicy(store, PROJECT_ID)).toBeNull();
+  });
+
+  it("selects the ONE declaration installed after the seed's own opt-in-free slices", () => {
+    const world = journeyWorld("SUBMITTED");
+    // ASSERTED, not assumed: the seeded tail really is opt-in-free, so the declaration below is
+    // what re-arms automation rather than something the seed had already armed.
+    expect(select(world)?.slice).toMatchObject({ autoApprovalOptIns: [] });
+    const ref = installSlice(world, [RELEASE_OPT_IN]);
+    expect(select(world)?.ref).toBe(ref);
+  });
+
+  it("selects the RESET ITSELF once it supersedes an older declaration", () => {
+    const world = journeyWorld("SUBMITTED");
+    installSlice(world, [RELEASE_OPT_IN]);
+    const reset = installSlice(world, [], [{ factId: "select-reset-marker", tier: "R0" }]);
+    // The reset slice, NOT null: the gate still composes against a policy the operator installed
+    // and core refuses under a named ref, instead of the ref being lost at the selection layer.
+    expect(select(world)?.ref).toBe(reset);
+    expect(select(world)?.slice).toMatchObject({ autoApprovalOptIns: [] });
+  });
+
+  it("re-arms on the one declaration installed after that reset", () => {
+    const world = journeyWorld("SUBMITTED");
+    installSlice(world, [RELEASE_OPT_IN]);
+    installSlice(world, [], [{ factId: "select-reset-then-rearm", tier: "R0" }]);
+    const rearmed = installSlice(world, [RELEASE_OPT_IN], [{ factId: "select-rearm", tier: "R0" }]);
+    expect(select(world)?.ref).toBe(rearmed);
+  });
+
+  it("refuses when TWO declarations stand after the last reset", () => {
+    const world = journeyWorld("SUBMITTED");
+    const first = installSlice(world, [RELEASE_OPT_IN]);
+    expect(select(world)?.ref).toBe(first);
+    installSlice(world, [RELEASE_OPT_IN], [{ factId: "select-second-declaring", tier: "R0" }]);
+    expect(select(world)).toBeNull();
+  });
+
+  it("clears an earlier ambiguity at the NEXT reset, and re-arms after it", () => {
+    const world = journeyWorld("SUBMITTED");
+    installSlice(world, [RELEASE_OPT_IN]);
+    installSlice(world, [RELEASE_OPT_IN], [{ factId: "select-ambiguous-b", tier: "R0" }]);
+    expect(select(world)).toBeNull();
+    const reset = installSlice(world, [], [{ factId: "select-clearing-reset", tier: "R0" }]);
+    expect(select(world)?.ref).toBe(reset);
+    const after = installSlice(world, [RELEASE_OPT_IN], [{ factId: "select-after-clear", tier: "R0" }]);
+    expect(select(world)?.ref).toBe(after);
+  });
+
+  it("treats a non-EVALUATION artifact as INERT: neither a reset nor a declaration", () => {
+    const world = journeyWorld("SUBMITTED");
+    const ref = installSlice(world, [RELEASE_OPT_IN]);
+    installArtifact(world, "select-inert-artifact");
+    // The artifact did not reset the declaration, and it did not become the answer either.
+    expect(select(world)?.ref).toBe(ref);
+  });
+
+  it("refuses rather than letting evaluation-LOOKALIKE bytes pose as a reset", () => {
+    const world = journeyWorld("SUBMITTED");
+    installSlice(world, [RELEASE_OPT_IN]);
+    installSlice(world, [RELEASE_OPT_IN], [{ factId: "select-lookalike-second", tier: "R0" }]);
+    const ref = installEvaluationLookalike(world, createHash("sha256").update("lookalike").digest("hex"));
+    // THE CASE WAS ACTUALLY GENERATED, asserted through the SAME production surfaces the selector
+    // uses: these bytes classify EVALUATION and their digest refuses to address them.
+    const installed = installedSlices(
+      stateOf(readDurableLedger(world.store, PROJECT_ID), policyAggregateId(PROJECT_ID)),
+    );
+    expect(sliceKindOf(ref, installed[ref])).toBe("EVALUATION");
+    expect(derivePolicySliceDigest(installed[ref]).ok).toBe(false);
+    // So it clears nothing and resolves nothing: the ambiguity it sits on top of stays refused.
+    expect(select(world)).toBeNull();
+  });
+
+  it("answers nothing on a store it cannot read, and the CALLER refuses UNRESOLVED", () => {
+    // Opened OUTSIDE the fixture registry so `closeStores` cannot close it a second time.
+    const store = SqliteEventStore.openEphemeralForProjectTest(PROJECT_ID);
+    store.close();
+    expect(selectEffectiveAutoApprovalPolicy(store, PROJECT_ID)).toBeNull();
+    const result = evaluateReleaseAutoApproval(store, {
+      decidedAt: AT, goalId: GOAL_ID, operatorPrincipalId: OPERATOR, projectId: PROJECT_ID,
+    });
+    if (result.ok) throw new Error("an unreadable store must never approve a release");
+    expect(result.code).toBe("RELEASE_AUTO_POLICY_UNRESOLVED");
+    expect(result.layer).toBe("RELEASE_AUTO_DECISION");
+  });
+
+  /** The digest of a slice body, derived BEFORE it is installed. `sliceRef` is excluded from the
+   *  derivation, so this is a pure function of the opt-ins and the classification table. */
+  function digestOf(
+    optIns: readonly OptIn[], classifications: readonly Classification[],
+  ): string {
+    const derived = derivePolicySliceDigest({
+      autoApprovalOptIns: optIns, riskClassifications: classifications, rules: [],
+      sliceRef: "pending-digest-probe",
+    });
+    if (!derived.ok) throw new Error(`digest probe body is invalid: ${derived.code}`);
+    return derived.digest;
+  }
+
+  /**
+   * INSTALL ORDER IS THE AUTHORITY, AND DIGEST ORDER IS NOT. The old preview selector called
+   * `.sort()` on refs, which are content digests — lexicographic, carrying no chronology at all.
+   * This arm builds a world where the two orders DISAGREE, so a selector that sorted would pick
+   * the wrong slice, and it asserts the disagreement was actually generated rather than hoped for.
+   */
+  it("selects by INSTALL order even when digest order disagrees with it", () => {
+    const world = journeyWorld("SUBMITTED");
+    const declaring: Classification[] = [{ factId: "order-declaring", tier: "R0" }];
+    const declaringDigest = digestOf([RELEASE_OPT_IN], declaring);
+    let reset: Classification[] | null = null;
+    for (let attempt = 0; attempt < 64 && reset === null; attempt += 1) {
+      const candidate = [{ factId: `order-reset-${String(attempt)}`, tier: "R0" as const }];
+      if (digestOf([], candidate) < declaringDigest) reset = candidate;
+    }
+    if (reset === null) throw new Error("no reset marker digested below the declaring slice");
+    const resetDigest = digestOf([], reset);
+    // THE CASE WAS ACTUALLY GENERATED: the reset is installed SECOND but sorts FIRST, so
+    // "sort and take the last" would answer the declaring slice and auto-approve.
+    expect(resetDigest < declaringDigest).toBe(true);
+
+    expect(installSlice(world, [RELEASE_OPT_IN], declaring)).toBe(declaringDigest);
+    expect(select(world)?.ref).toBe(declaringDigest);
+    expect(installSlice(world, [], reset)).toBe(resetDigest);
+    expect(select(world)?.ref).toBe(resetDigest);
+  });
+
+  /**
+   * ACROSS A REBUILD OF THE SLICE MAP, on a real file-backed ledger. Insertion order tracks
+   * install order only because `installPolicy` folds `{ ...current, [sliceRef]: slice }` one
+   * install at a time; that is an INCIDENTAL property of a map whose keys are hex strings, and a
+   * serialisation that reordered them would silently move which policy governs. This arm closes
+   * and REOPENS the store so the map is rebuilt from the persisted decision bytes.
+   */
+  /** Installs one EVALUATION slice on ANY store — including one no journey was built on — through
+   *  the production `policy.install` command. The inert marker gives each install its own digest. */
+  function installOn(store: SqliteEventStore, optIns: readonly OptIn[], marker: string): string {
+    const classifications = [{ factId: marker, tier: "R0" as const }];
+    const body = {
+      autoApprovalOptIns: optIns, riskClassifications: classifications, rules: [],
+      sliceRef: digestOf(optIns, classifications),
+    };
+    const version = versionOf(readDurableLedger(store, PROJECT_ID), `${PROJECT_ID}-policy`);
+    const outcome = send(store, envelope(
+      "policy.install", version, { slice: body }, `cmd-install-on-${marker}`,
+    ));
+    if (!outcome.ok) throw new Error(`install on store refused: ${outcome.code}`);
+    return body.sliceRef;
+  }
+
+  /**
+   * NO RESET EVER INSTALLED. Every other arm runs on a seeded world whose opt-in-free slices end
+   * the scan, so the branch where the scan runs off the START of the history is only reachable on
+   * a store the bootstrap sequence never touched. The same 0/1/many rule must hold there too.
+   */
+  it("applies the same one-or-refuse rule when NO reset was ever installed", () => {
+    const store = openStore();
+    const first = installOn(store, [RELEASE_OPT_IN], "no-reset-first");
+    expect(selectEffectiveAutoApprovalPolicy(store, PROJECT_ID)?.ref).toBe(first);
+    const second = installOn(store, [RELEASE_OPT_IN], "no-reset-second");
+    // THE CASE WAS ACTUALLY GENERATED: two EVALUATION slices, both declaring, none a reset — so
+    // the refusal below cannot be a reset boundary answering instead of the no-reset branch.
+    const installed = installedSlices(
+      stateOf(readDurableLedger(store, PROJECT_ID), policyAggregateId(PROJECT_ID)),
+    );
+    expect(Object.keys(installed)).toEqual([first, second]);
+    for (const ref of [first, second]) {
+      expect(sliceKindOf(ref, installed[ref])).toBe("EVALUATION");
+      expect(installed[ref]).toMatchObject({ autoApprovalOptIns: [RELEASE_OPT_IN] });
+    }
+    expect(selectEffectiveAutoApprovalPolicy(store, PROJECT_ID)).toBeNull();
+  });
+
+  it("selects the same ref after the store is closed and REOPENED from disk", () => {
+    const directory = mkdtempSync(join(tmpdir(), "moe-effective-auto-policy-"));
+    const path = join(directory, "ledger.sqlite");
+    let first: SqliteEventStore | null = null;
+    let reopened: SqliteEventStore | null = null;
+    try {
+      first = SqliteEventStore.openForProject(path, PROJECT_ID);
+      // The PRODUCTION sequence, up to (not including) `policy.validate`: it is what installs
+      // the two seeded opt-in-free EVALUATION slices this selection has to look past.
+      driveThrough(first, "policy.validate");
+      const declaring = installOn(first, [RELEASE_OPT_IN], "reopen-declaring");
+      expect(selectEffectiveAutoApprovalPolicy(first, PROJECT_ID)?.ref).toBe(declaring);
+      first.close();
+      first = null;
+
+      reopened = SqliteEventStore.openForProject(path, PROJECT_ID);
+      expect(selectEffectiveAutoApprovalPolicy(reopened, PROJECT_ID)?.ref).toBe(declaring);
+      // And a reset installed on the REOPENED store still supersedes what disk handed back.
+      const reset = installOn(reopened, [], "reopen-reset");
+      expect(selectEffectiveAutoApprovalPolicy(reopened, PROJECT_ID)?.ref).toBe(reset);
+    } finally {
+      first?.close();
+      reopened?.close();
+      rmSync(directory, { force: true, recursive: true });
+    }
   });
 });
 
@@ -197,6 +483,151 @@ describe("R2 and R3 subjects are human-only, and the engine says so", () => {
 
   it("keeps the auto-approval ceiling at exactly R0 and R1", () => {
     expect([...POLICY_AUTO_APPROVAL_TIERS]).toEqual(["R0", "R1"]);
+  });
+});
+
+/**
+ * BOTH GATES, ONE ANSWER, ON ONE STORE. This is the property the row exists to establish: the
+ * preview gate and the automatic release gate select the SAME slice ref for the same store state.
+ *
+ * WHY A CALL-THROUGH SPY AND NOT A MOCK. Mocking the selector's answer would prove only that two
+ * call sites read one stub. The spy here REPLACES NOTHING: it records that each gate asked the
+ * shared seam exactly once, with THIS store and THIS project, and what the real implementation
+ * answered. The ref asserted is a CONCRETE one returned by the install that produced it, never
+ * "whatever the other gate got" — two gates agreeing on the wrong slice would satisfy that.
+ *
+ * THE SEEDED SUBJECT TIER IS AN ISOLATION PRECONDITION, NOT A CAPABILITY CLAIM. `unattendedWorld`
+ * seeds the preview gate's durable risk classification so the only thing varying across the
+ * sequence below is WHICH POLICY IS EFFECTIVE. Whether a real journey can ground that tier without
+ * a seeded record is a different defect, owned by another row, and nothing here certifies it.
+ */
+describe("the preview gate and the release gate select the SAME effective policy", () => {
+  /**
+   * Runs one gate and reports what the SHARED selector answered for it. Asserts the gate asked
+   * once, asked about this store and project, and that the real selector RETURNED rather than
+   * threw. The spy is restored in `finally`, so an assertion failure cannot leak it into the
+   * next test and make a later arm order-dependent.
+   */
+  function observed<T>(world: JourneyWorld, gate: () => T): {
+    readonly answer: T; readonly ref: string | null;
+  } {
+    const spy = vi.spyOn(effectivePolicy, "selectEffectiveAutoApprovalPolicy");
+    try {
+      const answer = gate();
+      expect(spy.mock.calls).toHaveLength(1);
+      expect(spy.mock.calls[0]?.[0]).toBe(world.store);
+      expect(spy.mock.calls[0]?.[1]).toBe(PROJECT_ID);
+      const result = spy.mock.results[0];
+      expect(result?.type).toBe("return");
+      const value = result?.type === "return" ? result.value : undefined;
+      return { answer, ref: value?.ref ?? null };
+    } finally {
+      spy.mockRestore();
+    }
+  }
+
+  /** The effective ref each gate selected, and what each gate then answered. */
+  function bothGates(world: JourneyWorld): {
+    readonly preview: { readonly answer: PreviewAutoDecision; readonly ref: string | null };
+    readonly release: { readonly answer: ReleaseAutoApproval; readonly ref: string | null };
+  } {
+    return {
+      preview: observed(world, () => resolveUnattendedPreview(world)),
+      release: observed(world, () => evaluate(world)),
+    };
+  }
+
+  /** Both gates selected `ref` and both APPROVED under it. */
+  function bothApprove(world: JourneyWorld, ref: string): void {
+    const { preview, release } = bothGates(world);
+    expect([preview.ref, release.ref]).toEqual([ref, ref]);
+    if (!preview.answer.ok) {
+      throw new Error(`expected a preview approval, got ${preview.answer.code}`);
+    }
+    if (!release.answer.ok) {
+      throw new Error(`expected a release approval, got ${release.answer.code}`);
+    }
+    expect(release.answer.sliceRef).toBe(ref);
+  }
+
+  /** Both gates selected `ref` — a RESET — and the ENGINE refused each of them under it. */
+  function bothRefuseAtCore(world: JourneyWorld, ref: string): void {
+    const { preview, release } = bothGates(world);
+    expect([preview.ref, release.ref]).toEqual([ref, ref]);
+    expect(previewDeclined(preview.answer)).toMatchObject({
+      code: "PREVIEW_AUTO_NOT_ALLOWED", layer: "CORE_REDUCER",
+    });
+    expect(previewDeclined(preview.answer).reasonCodes).toContain("AUTO_APPROVAL_NOT_OPTED_IN");
+    expect(declined(release.answer)).toMatchObject({
+      code: "RELEASE_AUTO_NOT_ALLOWED", layer: "CORE_REDUCER",
+    });
+    expect(declined(release.answer).reasonCodes).toContain("AUTO_APPROVAL_NOT_OPTED_IN");
+  }
+
+  /** Both gates selected NOTHING, and each refused with its own UNRESOLVED code and layer. */
+  function bothRefuseUnresolved(world: JourneyWorld): void {
+    const { preview, release } = bothGates(world);
+    expect([preview.ref, release.ref]).toEqual([null, null]);
+    expect(previewDeclined(preview.answer)).toMatchObject({
+      code: "PREVIEW_AUTO_POLICY_UNRESOLVED", layer: "PREVIEW_AUTO_DECISION",
+    });
+    expect(declined(release.answer)).toMatchObject({
+      code: "RELEASE_AUTO_POLICY_UNRESOLVED", layer: "RELEASE_AUTO_DECISION",
+    });
+  }
+
+  const bothActions = (tier: "R0" | "R1"): readonly GateOptIn[] => [
+    { action: PREVIEW_DECIDE_COMMAND_KIND, tier }, { action: RELEASE_DECIDE_COMMAND_KIND, tier },
+  ];
+  const inert = (marker: string): readonly GateClassification[] =>
+    [{ factId: `parity-${marker}`, tier: "R0" }];
+
+  it("agrees through reset, re-arm and ambiguity: A, empty B, declaring C, declaring D", () => {
+    const world = unattendedWorld();
+    // `unattendedWorld` already installed ONE declaring slice. Reset first, so every later ref
+    // asserted below is one THIS arm installed and can name.
+    installGateOptIns(world, [], inert("isolate"));
+    const a = installGateOptIns(world, bothActions("R1"), inert("a"));
+    bothApprove(world, a);
+
+    const b = installGateOptIns(world, [], inert("b"));
+    expect(b).not.toBe(a);
+    bothRefuseAtCore(world, b);
+
+    const c = installGateOptIns(world, bothActions("R1"), inert("c"));
+    bothApprove(world, c);
+
+    installGateOptIns(world, bothActions("R1"), inert("d"));
+    bothRefuseUnresolved(world);
+  });
+
+  it("clears that ambiguity at the LAST reset E and re-arms on F, for both gates", () => {
+    const world = unattendedWorld();
+    installGateOptIns(world, [], inert("isolate"));
+    installGateOptIns(world, bothActions("R1"), inert("c"));
+    installGateOptIns(world, bothActions("R1"), inert("d"));
+    bothRefuseUnresolved(world);
+
+    const e = installGateOptIns(world, [], inert("e"));
+    bothRefuseAtCore(world, e);
+    const f = installGateOptIns(world, bothActions("R1"), inert("f"));
+    bothApprove(world, f);
+  });
+
+  /**
+   * A PREVIEW-ONLY AND A RELEASE-ONLY DECLARATION STILL COMPETE. This is the arm that pins the
+   * selector's action-INDEPENDENCE, which is the actual fix: an action-filtered selector would see
+   * exactly one declaration per gate here and happily hand each gate a DIFFERENT effective policy
+   * — the original defect wearing a different hat. Both gates must refuse instead.
+   */
+  it("refuses both gates when a preview-only and a release-only declaration compete", () => {
+    const world = unattendedWorld();
+    installGateOptIns(world, [], inert("isolate"));
+    installGateOptIns(world, [{ action: PREVIEW_DECIDE_COMMAND_KIND, tier: "R1" }],
+      inert("preview-only"));
+    installGateOptIns(world, [{ action: RELEASE_DECIDE_COMMAND_KIND, tier: "R1" }],
+      inert("release-only"));
+    bothRefuseUnresolved(world);
   });
 });
 
