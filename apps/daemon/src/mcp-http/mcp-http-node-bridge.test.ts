@@ -56,7 +56,7 @@ function fakeTarget(writeReturns: readonly boolean[] = [], destroyed = false): F
 }
 
 /** An SSE-shaped source: open until told otherwise, with `cancel()` observable as a flag. */
-function sseSource(): {
+function sseSource(onCancel: () => void | Promise<void> = () => undefined): {
   readonly body: ReadableStream<Uint8Array>;
   readonly cancelled: () => boolean;
   readonly close: () => void;
@@ -65,7 +65,7 @@ function sseSource(): {
   let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
   let cancelled = false;
   const body = new ReadableStream<Uint8Array>({
-    cancel: (): void => { cancelled = true; },
+    cancel: (): void | Promise<void> => { cancelled = true; return onCancel(); },
     start: (c): void => { controller = c; },
   });
   return {
@@ -180,5 +180,74 @@ describe("writeWebResponse — pump teardown and backpressure", () => {
     sink.target.emit("close");
     expect(await settlesWithin("drop during drain wait", pump)).toBe("settled");
     expect(source.cancelled()).toBe(true);
+  });
+
+  it("cancels the live source when a backpressured socket fails", async () => {
+    const source = sseSource();
+    const sink = fakeTarget([false]);
+    const failure = new Error("socket write failed");
+    const pump = writeWebResponse(new Response(source.body), sink.target);
+    const rejected = expect(pump).rejects.toBe(failure);
+    source.push("one");
+    await delay(25);
+    expect(sink.writes).toHaveLength(1);
+
+    sink.target.emit("error", failure);
+    await rejected;
+    expect(source.cancelled()).toBe(true);
+    expect(source.body.locked).toBe(false);
+    expect(sink.ended()).toBe(true);
+  });
+
+  it("removes drain listeners when a backpressured client disconnects", async () => {
+    const source = sseSource();
+    const sink = fakeTarget([false]);
+    const pump = writeWebResponse(new Response(source.body), sink.target);
+    source.push("one");
+    await delay(25);
+    expect(sink.target.listenerCount("drain")).toBe(1);
+
+    sink.target.emit("close");
+    expect(await settlesWithin("drain listener cleanup", pump)).toBe("settled");
+    expect(sink.target.listenerCount("drain")).toBe(0);
+    expect(sink.target.listenerCount("error")).toBe(0);
+    expect(source.body.locked).toBe(false);
+  });
+
+  it("preserves a socket error immediately followed by disconnect", async () => {
+    const source = sseSource();
+    const sink = fakeTarget([false]);
+    const failure = new Error("socket failed before close");
+    const pump = writeWebResponse(new Response(source.body), sink.target);
+    const rejected = expect(pump).rejects.toBe(failure);
+    source.push("one");
+    await delay(25);
+    expect(sink.writes).toHaveLength(1);
+
+    sink.target.emit("error", failure);
+    sink.target.emit("close");
+    await rejected;
+    expect(source.cancelled()).toBe(true);
+    expect(source.body.locked).toBe(false);
+    expect(sink.target.listenerCount("drain")).toBe(0);
+  });
+
+  it.each(["rejects", "never settles"])("finishes cleanup when the source cancellation hook %s", async (behavior) => {
+    const source = sseSource(() => behavior === "rejects"
+      ? Promise.reject(new Error("source cancellation failed"))
+      : new Promise<void>(() => undefined));
+    const sink = fakeTarget();
+    const failure = new Error("headers failed");
+    Object.assign(sink.target, { flushHeaders: (): never => { throw failure; } });
+
+    const result = await Promise.race([
+      writeWebResponse(new Response(source.body), sink.target).catch((error: unknown) => error),
+      delay(1_000).then(() => "still pumping"),
+    ]);
+    expect(result).toBe(failure);
+    expect(source.cancelled()).toBe(true);
+    expect(source.body.locked).toBe(false);
+    expect(sink.ended()).toBe(true);
+    expect(sink.target.listenerCount("close")).toBe(0);
   });
 });
