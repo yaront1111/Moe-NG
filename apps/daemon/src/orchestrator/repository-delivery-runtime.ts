@@ -118,9 +118,14 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
       }
       const reports = await landerFor(nodeRef, root, baselineId, reservationHandle).landOnce();
       for (const report of reports) config.log(`[lander] ${report.nodeRef}: ${report.outcome} (${report.detail})`);
-      // Only what provably had no effect is retried: the strict port's index lock, and a verification
-      // refusal the lander's table calls TRANSIENT, decided before any intent. Anything else blocks.
+      // Only what provably had no effect is retried: the strict port's index lock, a bare observe
+      // GIT_FAILED — a read-only `status`/`hash-object` that failed before this attempt journaled
+      // any intent, which the lander reports without recording exactly so a later pass can retry
+      // it — and a verification refusal the lander's table calls TRANSIENT, likewise decided before
+      // any intent. Each keeps the ACCEPTED work and its reservation for the next pass. Anything
+      // else blocks: an unknown or post-effect outcome is never retried by default.
       return reports.some((report) => report.outcome === "GIT_INDEX_LOCKED"
+        || report.outcome === "GIT_FAILED"
         || landingVerificationClass(report.outcome) === "TRANSIENT") ? "RETRY" : undefined;
     },
   });

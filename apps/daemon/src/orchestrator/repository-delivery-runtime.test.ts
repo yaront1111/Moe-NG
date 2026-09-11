@@ -4,11 +4,13 @@ import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { SqliteEventStore } from "@moe/store";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { calibration, envelope, packageItems, policyInput, seedVerifierReceipt, send, submitPayload } from "../review/review-test-fixtures.js";
-import { landedWithNoEffect, landingAggregateId } from "../repository/landing-receipt-contracts.js";
+import * as gitLandingPort from "../repository/git-landing-port.js";
+import { readLandingReceipt } from "../repository/landing-ledger.js";
+import { landedWithNoEffect, landingAggregateId, landingReceiptId } from "../repository/landing-receipt-contracts.js";
 import { readReviewLedger, readReviewLedgers } from "../review/review-read-model.js";
 import { NODE_VERIFIER_PRINCIPAL_ID, readVerifierReceipt } from "../review/verifier-receipt-ledger.js";
 import { createRepositoryExecutionPort } from "../repository/repository-execution-port.js";
@@ -274,4 +276,107 @@ describe("production repository delivery composition", () => {
     expect(git(f.workspace, "diff-tree", "--no-commit-id", "--name-only", "-r", "HEAD")).toBe("keep.txt");
     expect(createRepositoryExecutionPort().inspect(f.workspace)).toEqual({ ok: true, reservation: null });
   }, 600_000);
+  // task-65a594816ed5460f999fbd46f40c5cea, the OBSERVE half of the same wedge. The lander leaves a
+  // non-structural observe failure UNRECORDED for "the next pass" (node-lander.ts:198), but in this
+  // composition a next pass only happens when land() answers RETRY. Pre-row it did not for a bare
+  // GIT_FAILED, so coordinator:174 block()ed a checkout that carries no receipt and no
+  // !everExecuted recovery proof - terminal BLOCKED, every later node refused forever. The moment
+  // is real: a `status` or `hash-object` subprocess that exits nonzero is exactly what
+  // git-landing-port.ts:157 and :163 turn into a bare GIT_FAILED.
+  const OBSERVE_TRANSIENT_SUBCOMMANDS = ["status", "hash-object"] as const;
+  const executedObserveCases = new Set<string>();
+  it.each(OBSERVE_TRANSIENT_SUBCOMMANDS)("retries observe %s failures without losing the accepted reservation", async (subcommand) => {
+    executedObserveCases.add(subcommand);
+    // The REAL factory over a runner that delegates every other invocation to the real git: only
+    // the one named subprocess is faulted, and only once armed. Nothing else is stubbed - the
+    // lander, coordinator, facts, receipt readers and verifier authority are all production.
+    const createPort = gitLandingPort.createGitLandingPort;
+    let armed = false;
+    let injected = 0;
+    const spy = vi.spyOn(gitLandingPort, "createGitLandingPort").mockImplementation((runner) =>
+      createPort(async (cwd, args, stdin) => {
+        if (armed && args[0] === subcommand) {
+          injected += 1;
+          return { code: 1, stderr: "OBSERVE_TRANSIENT_TEST", stdout: "" };
+        }
+        return (runner ?? gitLandingPort.nodeGitRunner)(cwd, args, stdin);
+      }));
+    const f = fixture();
+    try {
+      const started = await f.runtime.start(async () => ({ ok: true, pid: process.pid, exit: Promise.resolve() }))(f.request("a"));
+      if (!started.ok) throw new Error(started.code);
+      await started.exit;
+      writeFileSync(join(f.workspace, "keep.txt"), "after\n");
+      f.submit("a"); f.retire();
+      // Genuine acceptance FIRST, with landing held off: a baseline or verification refusal must
+      // not be able to stand in for the observe failure this arm is about.
+      f.disableLanding(); await f.runtime.advance();
+      expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a")).toBe("ACCEPTED");
+      const accepted = readReviewLedger(f.store, f.projectId, "a").accepted!;
+      const verifier = readVerifierReceipt(f.store, f.projectId, accepted.verifierReceiptId);
+      const verifiedTree = verifier.ok ? verifier.receipt.execution.workspaceBinding?.treeSha : null;
+      expect(typeof verifiedTree).toBe("string");
+      const receiptId = landingReceiptId(f.projectId, "a", accepted.verifierReceiptId);
+      const head = git(f.workspace, "rev-parse", "HEAD");
+      const version = f.store.getAggregateVersion(landingAggregateId("a"));
+      const held = createRepositoryExecutionPort().readOwned(f.workspace, f.storeId, f.projectId);
+      if (!held.ok || held.handle === null) throw new Error("expected a live reservation to read");
+      const owner = held.handle.owner;
+      const { baselineId, sessionId } = held.handle.reservation;
+      armed = true; f.enableLanding();
+      for (const pass of [1, 2]) {
+        injected = 0;
+        await f.runtime.advance();
+        expect(injected, `pass ${String(pass)} must fault the ${subcommand} subprocess exactly once`).toBe(1);
+        expect(f.logs).toContain("[lander] a: GIT_FAILED (OBSERVE_TRANSIENT_TEST)");
+        expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a")).toBe("ACCEPTED");
+        // The SAME reservation is still awaiting its landing. Only the revision may move: owner,
+        // baseline and session are the acceptance's identity and must survive the retry.
+        const still = createRepositoryExecutionPort().readOwned(f.workspace, f.storeId, f.projectId);
+        if (!still.ok || still.handle === null) throw new Error(`pass ${String(pass)} lost the reservation`);
+        expect(still.handle.owner).toEqual(owner);
+        expect({ baselineId: still.handle.reservation.baselineId, phase: still.handle.reservation.phase,
+          sessionId: still.handle.reservation.sessionId }).toEqual({ baselineId, phase: "AWAITING_LANDING", sessionId });
+        // Read-only failure, so nothing was written: no commit, no landing event, no receipt, no intent.
+        expect(git(f.workspace, "rev-parse", "HEAD")).toBe(head);
+        expect(f.store.getAggregateVersion(landingAggregateId("a"))).toBe(version);
+        expect(readLandingReceipt(f.store, f.projectId, receiptId)).toEqual({ code: "LANDING_RECEIPT_NOT_FOUND", ok: false });
+        expect(readReviewLedgers(f.store, f.projectId, new Set(["a"])).landingIntents).toEqual(new Set());
+        expect(f.tests()).toBe(1);
+        // HELD, not free: an independent node is refused by the delivery layer while a retry is owed.
+        const busy = await f.runtime.start(async () => ({ ok: true, pid: process.pid, exit: Promise.resolve() }))(f.request("b"));
+        expect(busy).toEqual({ code: "REPOSITORY_EXECUTION_BUSY", layer: "REPOSITORY_DELIVERY", ok: false });
+      }
+      armed = false;
+      await f.runtime.advance();
+      expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a")).toBe("LANDED");
+      const landed = readLandingReceipt(f.store, f.projectId, receiptId);
+      if (!landed.ok) throw new Error(landed.code);
+      expect({ outcome: landed.receipt.outcome, sha: landed.receipt.commit?.sha, subjectRef: landed.receipt.subjectRef,
+        verifierReceiptId: landed.receipt.verifierReceiptId }).toEqual({ outcome: "COMMITTED",
+        sha: git(f.workspace, "rev-parse", "HEAD"), subjectRef: "a", verifierReceiptId: accepted.verifierReceiptId });
+      // The bytes that landed are the ones the ORIGINAL verification accepted, not a later state,
+      // and the acceptance was consumed exactly once: the verifier never ran again.
+      expect(verifiedTree).toBe(git(f.workspace, "rev-parse", "HEAD^{tree}"));
+      expect(f.tests()).toBe(1);
+      expect(createRepositoryExecutionPort().inspect(f.workspace)).toEqual({ ok: true, reservation: null });
+      // Idempotent: a further pass mints neither a second commit nor another landing event.
+      const landedHead = git(f.workspace, "rev-parse", "HEAD");
+      const landedVersion = f.store.getAggregateVersion(landingAggregateId("a"));
+      await f.runtime.advance();
+      expect(git(f.workspace, "rev-parse", "HEAD")).toBe(landedHead);
+      expect(f.store.getAggregateVersion(landingAggregateId("a"))).toBe(landedVersion);
+      const next = await f.runtime.start(async () => ({ ok: true, pid: process.pid, exit: Promise.resolve() }))(f.request("b"));
+      expect({ code: next.ok ? null : next.code, ok: next.ok }).toEqual({ code: null, ok: true });
+      if (next.ok) await next.exit;
+      expect(createRepositoryExecutionPort().inspect(f.workspace)).toMatchObject({ ok: true, reservation: { nodeRef: "b" } });
+    } finally {
+      spy.mockRestore();
+      await f.runtime.close();
+    }
+  }, 600_000);
+  // A generated sweep that silently yields no case passes. This names the cases that actually ran.
+  it("runs every observe transient subcommand case", () => {
+    expect([...executedObserveCases].toSorted()).toEqual([...OBSERVE_TRANSIENT_SUBCOMMANDS].toSorted());
+  });
 });
