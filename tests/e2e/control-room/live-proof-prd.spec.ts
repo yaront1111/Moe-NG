@@ -237,6 +237,7 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
     // ---- GATE 1: the planner proposes and asks; the human answers and approves, by click. ----
     await proposeContract(lane, afterBootstrap.body, goalId, CONTRACT_ID, PRD_SHA256);
     const contractRef = await askClarification(lane, goalId, CONTRACT_ID);
+    expect(contractRef, "the live proof requires a concrete contract before design").not.toBeNull();
     await driveGate1InBrowser(page, lane, goalId);
 
     const wall = await askDaemon(lane, "/affordances/read", {});
@@ -247,6 +248,7 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
     // reaching it at all is the gate's own witness that Gate 1 really committed. ----
     const designOffer = offerFor(wall.body, "design.submit");
     record("design-offer", designOffer === null ? null : designOffer["targetAggregateId"]);
+    expect(designOffer, "the live proof must reach design.submit").not.toBeNull();
     if (designOffer !== null && contractRef !== null) {
       const submitted = await askDaemon(lane, "/command", envelope(
         designOffer, "design.submit", "live-proof-design",
@@ -260,6 +262,7 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
       // ---- THE PLAN. ----
       const planOffer = offerFor(afterDesign.body, "planning.submit_decomposition");
       record("plan-offer", planOffer === null ? null : planOffer["targetAggregateId"]);
+      expect(planOffer, "the live proof must reach planning.submit_decomposition").not.toBeNull();
       if (planOffer !== null) {
         const compiled = await askDaemon(lane, "/command", envelope(
           planOffer, "planning.submit_decomposition", "live-proof-plan",
@@ -279,6 +282,7 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
         record("plan-run", intent === null ? null : {
           expectedVersion: intent["expectedVersion"], runId: intent["targetAggregateId"],
         });
+        expect(intent, "the live proof must reach the compiled plan approval").not.toBeNull();
 
         // ---- THE PLAN GATE, THEN TWO NODES LANDED CONCURRENTLY (DoD 1's execution half). ----
         if (intent !== null) {
@@ -334,11 +338,21 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
               return reading.confirmed ? null : reading.refusal ?? "RECOVERY_NOT_CONFIRMED";
             });
           record("node-landings", landed.ok
-            ? { crash: landed.crash, landings: landed.landings, seats: landed.seats,
+            ? { ok: true, crash: landed.crash, landings: landed.landings, seats: landed.seats,
               staffing: landed.staffing }
             : { detail: landed.detail.slice(0, 1500), ok: false });
           expect(landed.ok, landed.ok ? "landed" : landed.detail).toBe(true);
           if (landed.ok) {
+            const keys = PLAN_NODES.map((node) => node.nodeKey).sort();
+            expect(landed.landings.map((row) => row.nodeKey).sort()).toEqual(keys);
+            expect(landed.seats.map((row) => row.nodeKey).sort()).toEqual(keys);
+            for (const seat of landed.seats) {
+              expect(seat.realProvider, `${seat.nodeKey}: a real provider must execute`).toBe(true);
+              expect(seat.providerStatus, `${seat.nodeKey}: provider exit status`).toBe(0);
+              expect(seat.moduleBytes, `${seat.nodeKey}: nonempty delivered module`).toBeGreaterThan(0);
+              expect(seat.startedAt).toBeGreaterThan(0);
+              expect(seat.endedAt).toBeGreaterThanOrEqual(seat.startedAt);
+            }
             // TWO DISTINCT COMMITS, so a single landing counted twice cannot pass.
             expect(new Set(landed.landings.map((row) => row.sha)).size).toBe(PLAN_NODES.length);
             // THE CONCURRENCY CLAIM, and it is the WRAPPER'S OWN transcript rather than an

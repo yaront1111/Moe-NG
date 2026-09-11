@@ -110,7 +110,11 @@ export interface LiveLandingCrash {
 /** When a seat ran, from its own markers. Windows do not overlap: delivery is serialized. */
 export interface LiveSeatWindow {
   readonly endedAt: number;
+  readonly moduleBytes: number;
   readonly nodeKey: string;
+  readonly providerStatus: number | null;
+  /** Configured provider process was launched; its executable is attested outside this log. */
+  readonly realProvider: boolean;
   readonly startedAt: number;
 }
 
@@ -362,6 +366,7 @@ export async function landLiveProofNodes(
     })),
     dir: scratch.root,
     executable: providerExecutable(),
+    providerMode: "REAL_PROVIDER",
     refs,
     rendezvous,
     workspace,
@@ -422,14 +427,20 @@ export async function landLiveProofNodes(
     const landings: LiveNodeLanding[] = [];
     while (remaining.length > 0) {
       const seatDeadline = Date.now() + SEAT_WRITE_BUDGET_MS;
+      // The file may become visible before its JSON write finishes; wait for a complete mark.
       const ready = (): string | undefined =>
-        remaining.find((row) => existsSync(join(workspace, modulePath(row))));
+        remaining.find((row) => readMark(scratch.root, row) !== null);
       let key = ready();
       while (key === undefined && Date.now() < seatDeadline) {
         await delay(250);
         key = ready();
       }
       if (key === undefined) return refuse(`SEAT_NEVER_WROTE ${remaining.join(",")}`);
+      const mark = readMark(scratch.root, key);
+      if (mark?.["ok"] !== true || mark["realProvider"] !== true || mark["providerStatus"] !== 0
+        || typeof mark["moduleBytes"] !== "number" || !(mark["moduleBytes"] > 0)) {
+        return refuse(`SEAT_PROVIDER_COMPLETION_UNPROVEN ${key}`);
+      }
       const nodeRef = refs[key]!;
       const round = await submitProductRound(lane, scratch, workspace, key, nodeRef);
       if (round !== null) return refuse(round);
@@ -506,7 +517,9 @@ export async function landLiveProofNodes(
     const seats = keys.map((key) => {
       const mark = readMark(scratch.root, key);
       return {
-        endedAt: Number(mark?.["endedAt"] ?? 0), nodeKey: key,
+        endedAt: Number(mark?.["endedAt"] ?? 0), moduleBytes: Number(mark?.["moduleBytes"] ?? 0), nodeKey: key,
+        providerStatus: typeof mark?.["providerStatus"] === "number" ? mark["providerStatus"] : null,
+        realProvider: mark?.["realProvider"] === true,
         startedAt: Number(mark?.["startedAt"] ?? 0),
       };
     });
