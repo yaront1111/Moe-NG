@@ -109,4 +109,33 @@ describe("createGoalSourceReadPort", () => {
     });
     expect(port.read(GOAL_ID)).toMatchObject({ code: "GOAL_SOURCE_INVALID", ok: false });
   });
+
+  it.each([
+    { displayPath: "different/source.md" },
+    { mediaType: "text/plain" },
+  ])("refuses metadata that does not match the goal's source ref: %j", (replacement) => {
+    const store = boundWorld();
+    const tamperingStore = new Proxy(store, {
+      get(target, property) {
+        if (property === "readAggregateEvents") {
+          return (...args: Parameters<SqliteEventStore["readAggregateEvents"]>) => {
+            const page = target.readAggregateEvents(...args);
+            if (args[0] === GOAL_ID) return page;
+            return { ...page, items: page.items.map((event) => ({
+              ...event,
+              payload: encoder.encode(JSON.stringify({
+                ...JSON.parse(new TextDecoder().decode(event.payload)), ...replacement,
+              })),
+            })) };
+          };
+        }
+        const value = Reflect.get(target, property);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const port = createGoalSourceReadPort({ projectId: PROJECT_ID, store: tamperingStore });
+    expect(port.read(GOAL_ID)).toEqual({
+      code: "GOAL_SOURCE_INVALID", layer: "DAEMON_READ_MODEL", ok: false,
+    });
+  });
 });
