@@ -5,10 +5,11 @@ import { fileURLToPath } from "node:url";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { MIDDOT } from "../glyphs.js";
 import { credentialSource, credentialSourceWords } from "./resources-credential.js";
 import {
   CREDENTIAL_VALUE, HEAD_SHA, REMOTE_URL, REPO_ROOT, STORE_PATH, activation, allRead,
-  withProviderReceipt,
+  withProviderReceipt, withReceipt,
 } from "./resources-frames.fixture.js";
 import { ResourcesScreen } from "./resources-screen.js";
 import type { ResourceReads } from "./resources-model.js";
@@ -56,13 +57,29 @@ describe("resources screen, the project's measured facts", () => {
     }
   });
 
-  it("states a fact no read serves rather than omitting it", () => {
+  it("states a fact no read serves as untracked, never as a failed read, and never omits it", () => {
     render(<ResourcesScreen reads={allRead()} />);
     for (const id of ["repository.branch", "store.size"]) {
-      expect(screen.getByTestId(`cr.resources.fact.${id}`).getAttribute("data-state")).toBe("REFUSED");
-      expect(screen.getByTestId(`cr.resources.refusal.${id}`).textContent)
-        .toContain("RESOURCES_FACT_NOT_SERVED @ CONTROL_ROOM_RESOURCES");
+      expect(screen.getByTestId(`cr.resources.fact.${id}`).getAttribute("data-state")).toBe("UNSERVED");
+      expect(screen.getByTestId(`cr.resources.unserved.${id}`).textContent).toBe("Not tracked by this build.");
+      expect(screen.queryByTestId(`cr.resources.refusal.${id}`), id).toBeNull();
     }
+  });
+
+  it("counts only the facts a read serves, and names a failure count only when a read failed", () => {
+    // The fixture's backup receipt is ACTIVATION_READ_BACKUP_DEFERRED: the one real refusal
+    // among the eleven served facts. The two unserved rows sit outside both numbers.
+    render(<ResourcesScreen reads={allRead()} />);
+    expect(screen.getByTestId("cr.resources.banner").textContent)
+      .toBe(`10 of 11 facts measured ${MIDDOT} 1 could not be read`);
+    cleanup();
+
+    // Every served fact measured: no failure count at all, rather than "0 could not be read".
+    render(<ResourcesScreen reads={{ ...allRead(), activation: activation(withReceipt("backup", {
+      code: null, hash: null, layer: null, measured: true, member: "backup",
+      reason: "a backup was taken", ref: "backup/2026-09-05",
+    })) }} />);
+    expect(screen.getByTestId("cr.resources.banner").textContent).toBe("11 of 11 facts measured");
   });
 
   it("reads pending until a read answers, without dropping the row", () => {

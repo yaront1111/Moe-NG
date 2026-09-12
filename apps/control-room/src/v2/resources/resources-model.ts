@@ -25,10 +25,13 @@ import type { CredentialSource } from "./resources-credential.js";
  * REFUSED rows carrying the daemon's code and layer, and leaves every other fact
  * standing. Omitting a fact would say "this project has no such resource", which is a
  * different and false claim from "I could not read it".
+ *
+ * A FACT NO READ SERVES IS NOT A FAILURE. It is stated as UNSERVED - still on the page,
+ * still in its section - but it carries no code, because nothing refused, and the screen
+ * keeps it out of the "could not be read" count for the same reason: on a healthy daemon
+ * the two unserved rows were being counted as two failed reads.
  */
 
-/** No read this build consumes carries the fact. Stated, never omitted. */
-export const FACT_NOT_SERVED = "RESOURCES_FACT_NOT_SERVED";
 /** The activation roster answered without the receipt this fact is folded from. */
 export const RECEIPT_ABSENT = "RESOURCES_RECEIPT_ABSENT";
 /** A carrier stated the store path as an empty string, which is not a path. */
@@ -39,7 +42,9 @@ export interface ResourceRefusal { readonly code: string; readonly layer: string
 export type ResourceFactState =
   | { readonly kind: "MEASURED"; readonly value: string }
   | { readonly kind: "PENDING" }
-  | { readonly kind: "REFUSED"; readonly refusal: ResourceRefusal; readonly said: string };
+  | { readonly kind: "REFUSED"; readonly refusal: ResourceRefusal; readonly said: string }
+  /** No read this build consumes carries the fact: stated, never omitted, never a failure. */
+  | { readonly kind: "UNSERVED" };
 
 export interface ResourceFact {
   readonly id: string;
@@ -67,7 +72,7 @@ const measured = (value: string): ResourceFactState =>
 const pending = (): ResourceFactState => Object.freeze({ kind: "PENDING" as const });
 const refused = (code: string, layer: string, said: string): ResourceFactState =>
   Object.freeze({ kind: "REFUSED" as const, refusal: Object.freeze({ code, layer }), said });
-const unserved = (said: string): ResourceFactState => refused(FACT_NOT_SERVED, RESOURCES_LAYER, said);
+const unserved = (): ResourceFactState => Object.freeze({ kind: "UNSERVED" as const });
 
 const fact = (id: string, label: string, state: ResourceFactState): ResourceFact =>
   Object.freeze({ id, label, state });
@@ -120,9 +125,8 @@ function repositorySection(reads: ResourceReads): ResourceSection {
     facts: Object.freeze([
       repo("root", "Repository root", (view) => view.toplevel),
       repo("head", "HEAD commit", (view) => view.headSha),
-      fact("branch", "Checked-out branch", unserved(
-        "No read this daemon serves states the checked-out branch, so this build cannot show it.",
-      )),
+      // No read this daemon serves states the checked-out branch.
+      fact("branch", "Checked-out branch", unserved()),
       fact("remote", "Bound git remote", remote === null
         ? pending()
         : remote.status !== "REMOTE"
@@ -192,9 +196,8 @@ function storeSection(reads: ResourceReads): ResourceSection {
   return Object.freeze({
     facts: Object.freeze([
       fact("path", "Store file", storePath(reads)),
-      fact("size", "Store size on disk", unserved(
-        "No read this daemon serves measures the store's size on disk, so this build cannot show it.",
-      )),
+      // No read this daemon serves measures the store's size on disk.
+      fact("size", "Store size on disk", unserved()),
       fact("backup", "Last store backup", activationState(reads.activation, STORE_SAID, (answer) => fromReceipt(
         answer.members, "backup", STORE_SAID, (receipt) => measured(receipt.ref ?? "taken, with no ref stated"),
       ))),

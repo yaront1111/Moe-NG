@@ -165,8 +165,12 @@ export const allRead = (): ResourceReads => ({
   activation: activation(), health: health(), policy: policy(), remote: remote(), sessions: sessions(),
 });
 
-/** The activation frame with the provider receipt's fields replaced wholesale. */
-export const withProviderReceipt = (receipt: Readonly<Record<string, unknown>>): unknown => ({
+/** The activation frame with ONE named member's receipt replaced wholesale. */
+export const withReceipt = (member: string, receipt: Readonly<Record<string, unknown>>): unknown => ({
   ...ACTIVATION_BODY,
-  members: ACTIVATION_BODY.members.map((row) => (row.member === "provider" ? receipt : row)),
+  members: ACTIVATION_BODY.members.map((row) => (row.member === member ? receipt : row)),
 });
+
+/** The activation frame with the provider receipt's fields replaced wholesale. */
+export const withProviderReceipt = (receipt: Readonly<Record<string, unknown>>): unknown =>
+  withReceipt("provider", receipt);
