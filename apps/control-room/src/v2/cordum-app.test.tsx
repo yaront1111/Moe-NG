@@ -569,7 +569,8 @@ describe("CordumApp feed projection roster", () => {
  * rather than merely absent from the fixture.
  */
 const NO_TERMINAL_SENTENCE = "Moe was started without a terminal it can listen on. "
-  + "Stop it and run pnpm start from a terminal window, then reload this page.";
+  + "Stop it and start it again from a terminal window (moe start <dir> for the packaged build, "
+  + "pnpm start from source), then reload this page.";
 const UNAVAILABLE_LABEL = "beef-cafe-d00d";
 const UNAVAILABLE_REQUEST_ID = "fa".repeat(32);
 

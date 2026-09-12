@@ -175,7 +175,8 @@ export function LiveRefusalNotice({ busy, onRetry, setup }: Readonly<{
  * bypassing PairingConfirmation rather than showing an unusable pairing ritual.
  */
 const NO_OPERATOR_CHANNEL_COPY = "Moe was started without a terminal it can listen on."
-  + " Stop it and run pnpm start from a terminal window, then reload this page.";
+  + " Stop it and start it again from a terminal window (moe start <dir> for the packaged build,"
+  + " pnpm start from source), then reload this page.";
 export function NoOperatorChannel(): JSX.Element {
   return <div className="cr2-pairing">
     <section aria-label="Pairing unavailable" className="cr2-pairing-card">

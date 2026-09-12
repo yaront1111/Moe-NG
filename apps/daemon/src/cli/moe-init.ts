@@ -147,7 +147,7 @@ export function planInit(inputs: InitInputs): InitResolution {
     refusals.push(refusal(MOE_INIT_CONFIG_PRESENT, MOE_CONFIG_FILENAME));
   }
   if (probe.entries.length > 0 && !force) {
-    refusals.push(refusal(MOE_INIT_TARGET_NOT_EMPTY, `${targetDir} (${String(probe.entries.length)} entries)`));
+    refusals.push(refusal(MOE_INIT_TARGET_NOT_EMPTY, `${targetDir} (${String(probe.entries.length)} entries; pass --force to initialize an existing directory)`));
   }
   if (refusals.length > 0) return Object.freeze({ ok: false, refusals: Object.freeze(refusals) });
 
