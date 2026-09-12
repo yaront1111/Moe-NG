@@ -4,7 +4,6 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { Gate1ApprovalPortV1, Gate1PendingViewV1 } from "./gate1-v1-approval.js";
 import { Gate1CardV1 } from "./gate1-v1-card.js";
-import { familyOf } from "./gate1-v1-rosters.js";
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -94,6 +93,8 @@ describe("the V1 Gate 1 card with a 300-statement contract", () => {
     expect(screen.getByTestId("cr.gate1.criteria.group.CRT-UX").textContent).toContain("CRT-UX");
     expect(screen.getByTestId("cr.gate1.requirements").textContent).toContain("REQUIREMENTS");
     expect(screen.getByTestId("cr.gate1.criteria").textContent).toContain("ACCEPTANCE CRITERIA");
+    expect(screen.getByTestId("cr.gate1.requirements.openall").textContent).toBe("Open all");
+    expect(screen.getByTestId("cr.gate1.criteria.openall").textContent).toBe("Open all");
 
     // No statement row is in the tree until a family is opened: 0 of the 300.
     expect(screen.queryAllByTestId(/^cr\.gate1\.requirement\./u)).toHaveLength(0);
@@ -145,15 +146,5 @@ describe("the V1 Gate 1 card with a 300-statement contract", () => {
     expect(precedes(screen.getByTestId("cr.gate1.totals"), screen.getByTestId("cr.gate1.requirements")))
       .toBe(true);
     expect(screen.queryAllByTestId(/^cr\.gate1\.requirement\./u)).toHaveLength(0);
-  });
-});
-
-describe("familyOf", () => {
-  it("is everything before the last dash segment, or the whole identifier without one", () => {
-    expect(familyOf("REQ-AI-001")).toBe("REQ-AI");
-    expect(familyOf("crit-sso-1")).toBe("crit-sso");
-    expect(familyOf("req-1")).toBe("req");
-    expect(familyOf("solo")).toBe("solo");
-    expect(familyOf("-lead")).toBe("-lead");
   });
 });

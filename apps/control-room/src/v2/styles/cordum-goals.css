@@ -680,8 +680,29 @@
   width: 100%;
 }
 
-/* Statement rosters fold by identifier family (gate1-v1-rosters.tsx): a closed family is
-   one toggle row; its statements mount only once opened. */
+/* Statement rosters fold by identifier family (statement-folds.tsx): a closed family is
+   one toggle row; its statements mount only once opened. The fold bar above the groups
+   carries the one control that opens or closes every family. */
+.cr2-approve-fold-bar {
+  margin: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cr2-approve-openall {
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+  cursor: pointer;
+}
+
+.cr2-approve-openall:hover,
+.cr2-approve-openall:focus-visible { color: var(--cr-accent); }
+
 .cr2-approve-groups {
   list-style: none;
   margin: 0;
