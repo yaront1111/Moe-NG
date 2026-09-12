@@ -27,9 +27,15 @@ const SEAT: SessionView = {
   status: "OPEN",
 };
 
+/**
+ * The provider row AS THE DAEMON SERVES IT: `ref` is the committed `provider.probe` envelope
+ * ref and the credential presence ref rides in `reason` (activation-receipts-measure.ts
+ * `measureProvider` -> activation-read.ts `receiptRow`). This helper once carried the two
+ * swapped, and every arm below was green against a wire the daemon never serves.
+ */
 const receipt = (over: Partial<ActivationReceiptView>): ActivationReceiptView => ({
   code: null, hash: null, layer: null, measured: true, member: "provider",
-  reason: "", ref: "credential/claude/env:ANTHROPIC_AUTH_TOKEN", ...over,
+  reason: "credential/claude/env:ANTHROPIC_AUTH_TOKEN", ref: "provider-profile-1", ...over,
 });
 
 const activationWith = (provider: ActivationReceiptView): ActivationReadOutcome => ({
@@ -60,12 +66,13 @@ const renderedText = (): string => document.body.textContent ?? "";
  *
  * A credential in an operator's screenshot cannot be recalled: it is pasted into a bug
  * report, indexed, and the only remedy left is rotating the credential. These arms exist so
- * that the day someone reaches for `receipt.ref` because the grammar "was not showing
+ * that the day someone echoes `receipt.reason` because the grammar "was not showing
  * anything useful", the suite says no.
  */
 describe("no credential VALUE is ever rendered", () => {
-  it("renders the SOURCE only when a credential-shaped value rides in on the ref", () => {
-    renderDisclosure(activationWith(receipt({ ref: `credential/claude/env:${CREDENTIAL_VALUE}` })));
+  it("renders the SOURCE only when a credential-shaped value rides in on the reason", () => {
+    // `reason` is the ONE field the grammar reads, so it is the field a value would arrive on.
+    renderDisclosure(activationWith(receipt({ reason: `credential/claude/env:${CREDENTIAL_VALUE}` })));
     // THE GREP: the value appears nowhere in the rendered output, at all.
     expect(renderedText()).not.toContain(CREDENTIAL_VALUE);
     // ASSERTED POSITIVELY TOO, so the arm cannot pass merely because nothing rendered: the
@@ -76,17 +83,17 @@ describe("no credential VALUE is ever rendered", () => {
       .toBe("The credential source was not stated in a form this screen can show.");
   });
 
-  it("renders the SOURCE only when a value rides in on the receipt's REASON", () => {
+  it("renders the SOURCE only when a value rides in on the receipt's REF", () => {
     // A measured receipt's other fields are not read at all, which is what makes the
     // property structural: there is no field left through which a value could arrive.
-    renderDisclosure(activationWith(receipt({ reason: `signed in; token ${CREDENTIAL_VALUE}` })));
+    renderDisclosure(activationWith(receipt({ ref: `provider-profile-${CREDENTIAL_VALUE}` })));
     expect(renderedText()).not.toContain(CREDENTIAL_VALUE);
     expect(screen.getByTestId("cr.sessions.credential").textContent)
       .toBe("claude \u00b7 Signed in through the ANTHROPIC_AUTH_TOKEN environment variable.");
   });
 
   it("names the variable that IS set, never its value, and says which CLI", () => {
-    renderDisclosure(activationWith(receipt({ ref: "credential/codex/login-file" })));
+    renderDisclosure(activationWith(receipt({ reason: "credential/codex/login-file" })));
     expect(screen.getByTestId("cr.sessions.credential").textContent)
       .toBe("codex \u00b7 Signed in through a signed-in credential file on this host.");
     expect(screen.queryByTestId("cr.sessions.credential.code")).toBeNull();
