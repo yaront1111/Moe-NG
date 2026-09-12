@@ -3,9 +3,9 @@ import { afterEach, describe, expect, it } from "vitest";
 import { PROJECT_ID, closeStores, decisionCount, openStore } from "../review/review-test-fixtures.js";
 import {
   AGENT_WRAPPER_PRINCIPAL_ID, PROVIDER_PAUSE_COMMAND_KIND, PROVIDER_PAUSE_VERSION,
-  SEAT_EXIT_COMMAND_KIND, SEAT_EXIT_VERSION, clearProviderPause, providerPauseAggregateId,
-  providerPauseRecordId, readProviderPause, recordProviderPause, recordSeatExit,
-  seatExitAggregateId, seatExitRecordId,
+  SEAT_EXIT_COMMAND_KIND, SEAT_EXIT_VERSION, clearProviderPause, commit, decodeSeatExitBytes,
+  providerPauseAggregateId, providerPauseRecordId, readProviderPause, recordProviderPause,
+  recordSeatExit, seatExitAggregateId, seatExitRecordId,
 } from "./provider-pause-ledger.js";
 
 afterEach(closeStores);
@@ -32,14 +32,34 @@ function seatExitInput(overrides: Record<string, unknown> = {}) {
     exitCode: 1,
     kind: "PROVIDER_LIMIT",
     lastLine: LIMIT_LINE,
+    outputSeen: true,
     projectId: PROJECT_ID,
     provider: "claude",
     resetAt: RESET_AT,
     sessionId: "sess-wrap-ae8048c4",
+    terminatedByWrapper: false,
     workItemId: "item-7",
     ...overrides,
   };
 }
+
+/**
+ * A row exactly as the writer laid it down BEFORE the two flags existed (every seat exit
+ * recorded up to 2026-09-13): ten keys, no output flag, no termination flag. Copied from
+ * that writer's own test expectation, never re-derived.
+ */
+const OLDER_ROW = {
+  decidedAt: SINCE,
+  exitCode: 1,
+  kind: "PROVIDER_LIMIT",
+  lastLine: LIMIT_LINE,
+  projectId: PROJECT_ID,
+  provider: "claude",
+  resetAt: RESET_AT,
+  sessionId: "sess-wrap-ae8048c4",
+  version: "moe-seat-exit/1",
+  workItemId: "item-7",
+};
 
 describe("recordProviderPause / readProviderPause", () => {
   it("reads back the pause with exact keys while the reset is still ahead", () => {
@@ -209,13 +229,18 @@ describe("recordSeatExit", () => {
       exitCode: 1,
       kind: "PROVIDER_LIMIT",
       lastLine: LIMIT_LINE,
+      outputSeen: true,
       projectId: PROJECT_ID,
       provider: "claude",
       resetAt: RESET_AT,
       sessionId: "sess-wrap-ae8048c4",
+      terminatedByWrapper: false,
       version: SEAT_EXIT_VERSION,
       workItemId: "item-7",
     });
+    // The two flags are ADDITIVE under the same version: another reader of this record
+    // (the /sessions/read fold) keys on this exact string and must keep decoding new rows.
+    expect(SEAT_EXIT_VERSION).toBe("moe-seat-exit/1");
     const commandId = seatExitRecordId(PROJECT_ID, "sess-wrap-ae8048c4", SINCE);
     const decision = store.getCommandDecision({
       commandId, principalId: AGENT_WRAPPER_PRINCIPAL_ID, projectId: PROJECT_ID,
@@ -268,5 +293,90 @@ describe("recordSeatExit", () => {
     expect(recordSeatExit(store, seatExitInput({ sessionId: "sess-wrap-other" })).ok).toBe(true);
     expect(store.readEvents(seatExitAggregateId(PROJECT_ID, "sess-wrap-ae8048c4")).length).toBe(1);
     expect(store.readEvents(seatExitAggregateId(PROJECT_ID, "sess-wrap-other")).length).toBe(1);
+  });
+
+  // The exit facts the live hang (seat pid 88288, 2026-09-12 21:55Z) left NO trace of: the
+  // seat was killed at its 30-minute timeout (taskkill: exit 1, no signal) having printed
+  // nothing, and its record was indistinguishable from any seat that failed on its own.
+  it("records the output-seen flag and the wrapper-termination flag of a killed seat", () => {
+    const store = openStore();
+    const written = recordSeatExit(store, seatExitInput({
+      exitCode: 1, kind: "FAILED", lastLine: null, outputSeen: false, resetAt: null,
+      terminatedByWrapper: true,
+    }));
+    expect(written.ok && written.record).toMatchObject({
+      exitCode: 1, lastLine: null, outputSeen: false, terminatedByWrapper: true,
+    });
+  });
+
+  it("writes both flags as null for a caller that never measured them", () => {
+    const store = openStore();
+    const { outputSeen: _o, terminatedByWrapper: _t, ...unmeasured } = seatExitInput();
+    const written = recordSeatExit(store, unmeasured);
+    expect(written.ok && written.record).toMatchObject({ outputSeen: null, terminatedByWrapper: null });
+    const commandId = seatExitRecordId(PROJECT_ID, "sess-wrap-ae8048c4", SINCE);
+    const decision = store.getCommandDecision({
+      commandId, principalId: AGENT_WRAPPER_PRINCIPAL_ID, projectId: PROJECT_ID,
+    });
+    // On the ledger too, never omitted: one row shape per writer.
+    expect(Object.keys(JSON.parse(new TextDecoder().decode(decision?.resultBytes)) as object))
+      .toContain("terminatedByWrapper");
+  });
+
+  it("keeps a fact nobody measured as null on both flags", () => {
+    const store = openStore();
+    const written = recordSeatExit(store, seatExitInput({
+      outputSeen: null, terminatedByWrapper: null,
+    }));
+    expect(written.ok && written.record).toMatchObject({ outputSeen: null, terminatedByWrapper: null });
+  });
+
+  it("still decodes a row written before the flags existed, reading both as null", () => {
+    const decoded = decodeSeatExitBytes(encoder.encode(JSON.stringify(OLDER_ROW)));
+    expect(decoded.ok && decoded.record).toEqual({
+      ...OLDER_ROW, outputSeen: null, terminatedByWrapper: null,
+    });
+  });
+
+  it("replays an older row already on the ledger instead of rewriting it with the flags", () => {
+    const store = openStore();
+    const commandId = seatExitRecordId(PROJECT_ID, "sess-wrap-ae8048c4", SINCE);
+    expect(commit(store, {
+      aggregateId: seatExitAggregateId(PROJECT_ID, "sess-wrap-ae8048c4"),
+      commandId, commandKind: SEAT_EXIT_COMMAND_KIND, correlationId: "agent-wrapper-seat-exit",
+      decidedAt: SINCE, eventType: "SeatExitRecorded", projectId: PROJECT_ID,
+      resultBytes: encoder.encode(JSON.stringify(OLDER_ROW)),
+    })).toBe(true);
+    const before = decisionCount(store);
+    const again = recordSeatExit(store, seatExitInput());
+    expect(again.ok && again.replayed).toBe(true);
+    // The older row's facts answer, not the new input's: nothing measured that seat's output.
+    expect(again.ok && again.record.outputSeen).toBeNull();
+    expect(decisionCount(store)).toBe(before);
+  });
+
+  it.each([
+    ["a non-boolean output flag", { outputSeen: "yes" }],
+    ["a non-boolean termination flag", { terminatedByWrapper: 1 }],
+  ] as const)("refuses %s, and never writes it", (_label, overrides) => {
+    const store = openStore();
+    const before = decisionCount(store);
+    const bad = recordSeatExit(store, seatExitInput(overrides as Record<string, unknown>));
+    expect(!bad.ok && bad.code).toBe("SEAT_EXIT_RECORD_INVALID");
+    expect(decisionCount(store)).toBe(before);
+  });
+
+  it("still refuses a key outside the roster, with the flags present or absent", () => {
+    for (const row of [
+      { ...OLDER_ROW, signal: null },
+      { ...OLDER_ROW, outputSeen: true, signal: null, terminatedByWrapper: false },
+    ]) {
+      expect(decodeSeatExitBytes(encoder.encode(JSON.stringify(row))).ok).toBe(false);
+    }
+  });
+
+  it("refuses a row missing a required key even when both flags are present", () => {
+    const { lastLine: _dropped, ...short } = { ...OLDER_ROW, outputSeen: true, terminatedByWrapper: false };
+    expect(decodeSeatExitBytes(encoder.encode(JSON.stringify(short))).ok).toBe(false);
   });
 });
