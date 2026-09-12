@@ -13,11 +13,31 @@ import { graphRevisionAggregateId } from "./active-graph-projection.js";
 /**
  * The initial active-graph transition, as ONE decision leg on the graph-revision aggregate.
  *
- * `graph-revision-reducer.ts:11-15` names the missing production piece in its own header:
- * "Initial activation is therefore THREE reducer results the daemon must commit in one atomic
- * transaction". Until this module the daemon committed only the goal's, so `reduceGraphRevision`
- * had no production caller at all and `readCurrentActiveGraph` could never answer for a real
- * project — every graph-revision history in the tree was written by a test fixture.
+ * WHY THIS MODULE EXISTS — history, and read it as history.
+ * `packages/core/src/planning/graph-revision-reducer.ts:12-15` (the CORE package, not this one;
+ * grepping apps/daemon for it finds nothing) names what was missing, in its own header: "Initial
+ * activation is therefore THREE reducer results the daemon must commit in one atomic
+ * transaction". Before this module the daemon committed only the goal's, so `reduceGraphRevision`
+ * HAD no production caller at all and `readCurrentActiveGraph` COULD never answer for a real
+ * project — every graph-revision history in the tree was then written by a test fixture.
+ *
+ * THAT IS NO LONGER THE STATE OF THE TREE (task-c055f6af). `buildGraphRevisionActivationLeg` has
+ * a production caller: `graph-transition-legs.ts:102`, reached from the `graph.approve` command
+ * through `activateApprovedGraph`. `readCurrentActiveGraph` answers for any project where that
+ * command has run, and on that surface the revision leg is unconditional
+ * (`graph-activation-service.ts:240`).
+ *
+ * WHAT IT DOES NOT MEAN, stated precisely because "activates a revision" is ambiguous.
+ * `graph.approve` is the only command that performs the INITIAL activation — this leg. One other
+ * command moves the projection afterwards: `graph.supersede` builds a successor revision leg at
+ * `predecessor.graphEpoch + 1` (`graph-supersede-legs.ts:214-228`), and it can never stand in for
+ * this one, because it replays a predecessor it requires to be ACTIVE already
+ * (`graph-supersede-facts.ts:204`). Both writers live in this graph-revision family.
+ *
+ * PLAN APPROVAL IS NOT ONE OF THEM. `activateInitialGraph` in `approval-activation.ts` writes
+ * `GoalExecutionEnabled` on the GOAL and no revision leg at all, so ACTIVE_GRAPH_ABSENT after an
+ * ordinary approval is the intended state rather than a gap this module still leaves open. That
+ * decision and its reasoning live in `approval-activation.ts`'s header.
  *
  * NOTHING HERE DECIDES. The lifecycle, the binding equality, the `graphEpoch === 1` rule and
  * every refusal are the core reducer's; this module folds the durable facts into commands, stops
