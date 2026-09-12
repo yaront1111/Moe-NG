@@ -12,6 +12,8 @@ import { readSessionLedger } from "../identity/session-read-model.js";
 import type { SessionLedger } from "../identity/session-read-model.js";
 import { agentProviderFact, resolveAgentProvider } from "../orchestrator/agent-provider-resolve.js";
 import { providerFor } from "../orchestrator/moe-up-credentials.js";
+import { readSeatExitLedger } from "../orchestrator/seat-exit-ledger-read.js";
+import type { SeatExitLedger } from "../orchestrator/seat-exit-ledger-read.js";
 import { SEAT_START_UNKNOWN, readSeatStartLedger } from "../orchestrator/seat-start-ledger.js";
 import type { SeatStartLedger } from "../orchestrator/seat-start-ledger.js";
 import { readWorkClaimLedger } from "../work/work-claim-read-model.js";
@@ -88,6 +90,20 @@ export interface SessionsAgentProvider {
   readonly envOverride: boolean;
 }
 /**
+ * HOW ONE SEAT ENDED, quoted from the wrapper's own exit record (`orchestrator/seat-exit-ledger-read.ts`).
+ * Second-hand in the same way the `AtStart` members are: the wrapper observed the child's exit and
+ * wrote it down; nothing here observes a process. `exitCode` is null when the seat died on a signal
+ * rather than an exit code — the record's documented meaning — and `lastLine` is the last non-empty
+ * line the seat printed, clipped at the record's bound, or null. EXACT KEYS: the browser decodes this
+ * object by exact arity, so a member added here must be added there in the same change.
+ */
+export interface SeatExitView {
+  readonly at: string;
+  readonly exitCode: number | null;
+  readonly kind: string;
+  readonly lastLine: string | null;
+}
+/**
  * WHAT THIS SEAT WAS STARTED WITH — a THIRD kind of fact, and neither of the two above.
  *
  * `activeSeats` IS measured, by this read, from ledgers it folds itself. `configuredAgentLimit`
@@ -119,6 +135,13 @@ export interface SessionView {
    */
   readonly agentVersionAtStart: string;
   readonly capabilities: readonly string[];
+  /**
+   * How this seat ended, or null when no exit record speaks for it: a seat still running, a seat
+   * whose wrapper had no pause gate to record with, and every seat that exited before that ledger
+   * existed. Before this member the Health screen listed past seats as a count, so a seat killed
+   * after hanging for seven minutes with no network read exactly like one that completed.
+   */
+  readonly exit: SeatExitView | null;
   readonly expiresAt: string;
   /** Work items this seat holds an OPEN, unexpired claim on, at the daemon's clock. */
   readonly holding: readonly string[];
@@ -132,6 +155,13 @@ export interface SessionView {
    */
   readonly providerAtStart: string;
   readonly sessionId: string;
+  /**
+   * The wrapper's clock when it spawned this seat, from the same start record as the two `AtStart`
+   * members, or null for a seat with no readable record. The session ledger itself states no open
+   * instant, so a paired browser and every seat older than the start ledger read null here — never
+   * the read's own clock, which would date them to the wrong moment.
+   */
+  readonly startedAt: string | null;
   readonly status: "CLOSED" | "OPEN";
 }
 export interface SessionsView {
@@ -184,8 +214,24 @@ export interface SessionsReadOptions {
    * production reader, so the fallback and the real thing are the same code path.
    */
   readonly readProvider?: (store: SqliteEventStore, projectId: string) => (goalId: string) => string | null;
+  /** The wrapper's seat-exit notes, defaulted to the production fold under the same rule as `readSeatStarts`. */
+  readonly readSeatExits?: (store: SqliteEventStore, projectId: string) => SeatExitLedger;
   readonly readSessions?: (store: SqliteEventStore, projectId: string) => SessionLedger;
   readonly store: SqliteEventStore;
+}
+
+/**
+ * A WRAPPER NOTE MAY NEVER WEDGE THIS READ. The session and claim folds are load bearing — a Seats
+ * screen without them says nothing true — but a note about how a seat started or ended is
+ * decoration on top of them. A reader that throws yields NO notes, which degrades every seat to the
+ * same stated unknown a seat opened before the ledger existed already carries.
+ */
+function decoration<T>(read: () => ReadonlyMap<string, T>): ReadonlyMap<string, T> {
+  try {
+    return read();
+  } catch {
+    return new Map();
+  }
 }
 
 /**
@@ -210,6 +256,7 @@ export function createSessionsReadPort(options: SessionsReadOptions): SessionsRe
   const readSessions = options.readSessions ?? readSessionLedger;
   const readClaims = options.readClaims ?? readWorkClaimLedger;
   const readSeatStarts = options.readSeatStarts ?? readSeatStartLedger;
+  const readSeatExits = options.readSeatExits ?? readSeatExitLedger;
   const readProvider = options.readProvider ?? agentProviderFact;
   const envAgentCommand = "envAgentCommand" in options
     ? options.envAgentCommand : process.env["MOE_AGENT_COMMAND"];
@@ -218,17 +265,8 @@ export function createSessionsReadPort(options: SessionsReadOptions): SessionsRe
       const now = clock();
       const ledger = readSessions(store, projectId);
       const claims = readClaims(store, projectId);
-      // A SEAT-START READ MAY NEVER WEDGE THIS READ. The session and claim folds are load
-      // bearing — a Seats screen without them says nothing true — but a note about which
-      // version a seat started with is decoration on top of them. A reader that throws
-      // degrades every seat to the stated unknown instead of refusing the whole frame, which
-      // is the same answer the read gives for every seat opened before this ledger existed.
-      let seatStarts: SeatStartLedger;
-      try {
-        seatStarts = readSeatStarts(store, projectId);
-      } catch {
-        seatStarts = new Map();
-      }
+      const seatStarts: SeatStartLedger = decoration(() => readSeatStarts(store, projectId));
+      const seatExits: SeatExitLedger = decoration(() => readSeatExits(store, projectId));
       const holdings = new Map<string, string[]>();
       for (const record of claims.claims.values()) {
         if (activeClaim(record, now) === null) continue;
@@ -251,15 +289,19 @@ export function createSessionsReadPort(options: SessionsReadOptions): SessionsRe
         // No note for this seat is the NORMAL case, not an error, so it takes the same stated
         // unknown a failed probe takes rather than a second vocabulary.
         const started = seatStarts.get(record.sessionId) ?? SEAT_START_UNKNOWN;
+        const exit = seatExits.get(record.sessionId);
         sessions.push(Object.freeze({
           agentVersionAtStart: started.agentVersion,
           capabilities: record.capabilities,
+          exit: exit === undefined ? null
+            : Object.freeze({ at: exit.at, exitCode: exit.exitCode, kind: exit.kind, lastLine: exit.lastLine }),
           expiresAt: record.expiresAt,
           holding,
           liveness,
           principalId: record.principalId,
           providerAtStart: started.provider,
           sessionId: record.sessionId,
+          startedAt: started.startedAt,
           status: record.status,
         }));
       }
