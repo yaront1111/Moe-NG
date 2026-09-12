@@ -472,9 +472,9 @@ describe("the sessions read discloses what each seat was started with", () => {
     // DoD-1 is about the NAME, and a name is not something a value assertion can check. A
     // member called `provider` would satisfy every arm above while claiming a present-tense
     // observation the daemon cannot perform, so the declaration itself is pinned.
-    const source = readFileSync(new URL("./sessions-read.ts", import.meta.url), "utf8");
+    const source = readFileSync(new URL("./sessions-read-contracts.ts", import.meta.url), "utf8");
     const body = /export interface SessionView \{\r?\n(?<members>[\s\S]*?)\r?\n\}/u.exec(source)?.groups?.["members"];
-    if (body === undefined) throw new Error("SessionView not found in sessions-read.ts");
+    if (body === undefined) throw new Error("SessionView not found in sessions-read-contracts.ts");
     const declared = [...body.matchAll(/^ {2}readonly (?<name>[A-Za-z]+)[?]?:/gmu)].map((match) => match.groups?.["name"]);
     expect(declared).toContain("providerAtStart");
     expect(declared).toContain("agentVersionAtStart");
@@ -567,9 +567,9 @@ describe("the sessions read discloses when each seat started and how it exited",
   });
 
   it("declares BOTH members on SessionView, where the browser's exact-arity decode is pinned to", () => {
-    const source = readFileSync(new URL("./sessions-read.ts", import.meta.url), "utf8");
+    const source = readFileSync(new URL("./sessions-read-contracts.ts", import.meta.url), "utf8");
     const body = /export interface SessionView \{\r?\n(?<members>[\s\S]*?)\r?\n\}/u.exec(source)?.groups?.["members"];
-    if (body === undefined) throw new Error("SessionView not found in sessions-read.ts");
+    if (body === undefined) throw new Error("SessionView not found in sessions-read-contracts.ts");
     const declared = [...body.matchAll(/^ {2}readonly (?<name>[A-Za-z]+)[?]?:/gmu)].map((match) => match.groups?.["name"]);
     expect(declared).toContain("startedAt");
     expect(declared).toContain("exit");

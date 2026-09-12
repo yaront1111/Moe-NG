@@ -78,9 +78,9 @@ describe("mapSessionsAnswer decodes the concurrency the daemon states", () => {
     // Both halves of this frame must move together or the screen blanks. Read the daemon's
     // interface as source text — the control room must never IMPORT apps/daemon — and hold
     // it against the decoder's own roster, not against a list retyped here.
-    const source = readFileSync(resolve(process.cwd(), "..", "daemon", "src", "http", "sessions-read.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "..", "daemon", "src", "http", "sessions-read-contracts.ts"), "utf8");
     const body = /export interface SessionsView \{\r?\n(?<members>[\s\S]*?)\r?\n\}/u.exec(source)?.groups?.["members"];
-    if (body === undefined) throw new Error("SessionsView not found in apps/daemon/src/http/sessions-read.ts");
+    if (body === undefined) throw new Error("SessionsView not found in apps/daemon/src/http/sessions-read-contracts.ts");
     // Two-space indent anchors this to TOP-LEVEL members: `totals` declares its own
     // `readonly closed/expired/live` inline, and those are not frame keys.
     const declared = [...body.matchAll(/^ {2}readonly (?<name>[A-Za-z]+)[?]?:/gmu)].map((match) => match.groups?.["name"]);
@@ -221,9 +221,9 @@ describe("mapSessionsAnswer decodes what each SEAT was started with", () => {
     // THE GUARD THIS ROW ADDS. The pin above covers `SessionsView` (the FRAME); this covers
     // `SessionView` (ONE SEAT), whose drift is what actually blanks the Seats screen. Read as
     // source text because the control room must never import apps/daemon.
-    const source = readFileSync(resolve(process.cwd(), "..", "daemon", "src", "http", "sessions-read.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "..", "daemon", "src", "http", "sessions-read-contracts.ts"), "utf8");
     const body = /export interface SessionView \{\r?\n(?<members>[\s\S]*?)\r?\n\}/u.exec(source)?.groups?.["members"];
-    if (body === undefined) throw new Error("SessionView not found in apps/daemon/src/http/sessions-read.ts");
+    if (body === undefined) throw new Error("SessionView not found in apps/daemon/src/http/sessions-read-contracts.ts");
     const declared = [...body.matchAll(/^ {2}readonly (?<name>[A-Za-z]+)[?]?:/gmu)].map((match) => match.groups?.["name"]);
     expect(declared.length).toBeGreaterThan(0);
     expect([...declared].sort()).toEqual([...SESSION_KEYS].sort());
@@ -312,9 +312,9 @@ describe("mapSessionsAnswer decodes when a seat started and how it ended", () =>
     // The same guard the SessionView pin gives the seat: this nested decode is exact-arity too,
     // so a member the daemon adds to the exit (a signal, say) blanks the screen unless it lands
     // here in the same change. Read as source text; the control room never imports apps/daemon.
-    const source = readFileSync(resolve(process.cwd(), "..", "daemon", "src", "http", "sessions-read.ts"), "utf8");
+    const source = readFileSync(resolve(process.cwd(), "..", "daemon", "src", "http", "sessions-read-contracts.ts"), "utf8");
     const body = /export interface SeatExitView \{\r?\n(?<members>[\s\S]*?)\r?\n\}/u.exec(source)?.groups?.["members"];
-    if (body === undefined) throw new Error("SeatExitView not found in apps/daemon/src/http/sessions-read.ts");
+    if (body === undefined) throw new Error("SeatExitView not found in apps/daemon/src/http/sessions-read-contracts.ts");
     const declared = [...body.matchAll(/^ {2}readonly (?<name>[A-Za-z]+)[?]?:/gmu)].map((match) => match.groups?.["name"]);
     expect(declared.length).toBeGreaterThan(0);
     expect([...declared].sort()).toEqual([...SEAT_EXIT_KEYS].sort());

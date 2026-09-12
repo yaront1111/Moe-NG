@@ -18,7 +18,7 @@ import { decisionsOf } from "../decision-ledger-memo.js";
  * the DAEMON process, folding those records so `/sessions/read` can state, per seat, which
  * provider it was actually started with and what that provider's CLI reported. Two processes,
  * one durable record between them — which is precisely why the published members are named for
- * the START, not for now: see `SessionView` in `http/sessions-read.ts`.
+ * the START, not for now: see `SessionView` in `http/sessions-read-contracts.ts`.
  *
  * The commit path is `recordSeatExit`'s, not a second one: `commit` and `existing` are imported
  * from the pause ledger rather than copied, so a replay rule that changes changes for both.
