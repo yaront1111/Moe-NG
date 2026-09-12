@@ -471,23 +471,35 @@ function expectDecisionControls(): void {
 }
 
 describe("the decision controls exist only once there is a plan to decide on", () => {
-  it("renders the one-line wait and NO controls when the read says there is no plan and no offer names this run", async () => {
-    const cases: readonly { readonly read: PlanningRunOutcome; readonly why: string }[] =
-      Object.freeze([
-        { read: RUN_UNKNOWN, why: "the run has no durable record yet: Gate 1 still pending" },
-        { read: UNSEALED, why: "the run exists but no plan is sealed into it" },
-      ]);
-    expect(cases.length).toBeGreaterThan(0);
-    for (const entry of cases) {
-      cleanup();
-      const harness = renderApproval(
-        frameWith([]), { code: "UNREACHED", layer: "UNREACHED", ok: false }, [entry.read],
-      );
-      const line = await screen.findByTestId("cr.approve.no-plan");
-      expect(line.textContent, entry.why).toBe(NO_PLAN_LINE);
-      expectNoDecisionControls();
-      expect(harness.submit).not.toHaveBeenCalled();
-    }
+  it("renders the one-line wait and NO controls when the daemon knows no such run and no offer names it", async () => {
+    const harness = renderApproval(
+      frameWith([]), { code: "UNREACHED", layer: "UNREACHED", ok: false }, [RUN_UNKNOWN],
+    );
+    const line = await screen.findByTestId("cr.approve.no-plan");
+    expect(line.textContent).toBe(NO_PLAN_LINE);
+    expectNoDecisionControls();
+    expect(harness.submit).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A RUN WHOSE BODIES DID NOT RE-VERIFY IS NOT A RUN WITH NO PLAN. The daemon answers
+   * RUN with `plan: null` only for a run that already carries a submissionHash and a
+   * lifecycle (planning-run-read.ts readPlanningRun) - a run that WAS proposed and sealed
+   * (planning-authority-persistence.ts commits the record and the bodies in one leg) whose
+   * bodies then failed verifyBodies. That is unverifiable evidence, not absence, so the wait
+   * line ("once the contract is approved and compiled") would claim a state the read did not
+   * measure, directly under the body that says "not sealed yet". The not-sealed body stands
+   * alone: no controls, no wait line.
+   */
+  it("shows the honest not-sealed body alone when the run exists but its bodies do not verify", async () => {
+    const harness = renderApproval(
+      frameWith([]), { code: "UNREACHED", layer: "UNREACHED", ok: false }, [UNSEALED],
+    );
+    expect((await screen.findByTestId("cr.approve.empty")).textContent)
+      .toContain("The plan is not sealed yet; nothing to review.");
+    expectNoDecisionControls();
+    expect(screen.queryByTestId("cr.approve.no-plan")).toBeNull();
+    expect(harness.submit).not.toHaveBeenCalled();
   });
 
   /**

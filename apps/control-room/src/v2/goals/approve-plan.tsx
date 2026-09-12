@@ -55,18 +55,22 @@ const UNREAD_AUTHORIZATION: ApprovalAuthorization = Object.freeze({
 const RUN_UNKNOWN_CODE = "PLANNING_RUN_READ_RUN_UNKNOWN";
 
 /**
- * Whether the read established a plan revision to decide on. ABSENT is a POSITIVE answer -
- * the daemon knows no such run, or knows the run and seals no plan into it. Every other
- * refusal or error (a capability, a project mismatch, a malformed frame) says nothing about
- * the plan and stays UNKNOWN, so the wait line below never claims a state the read did not
- * measure.
+ * Whether the read established a plan revision to decide on. ABSENT is a POSITIVE answer
+ * with exactly one source: the daemon knows no such run. A RUN whose `plan` is null is NOT
+ * absence - the daemon answers RUN only for a record that already carries a submissionHash
+ * and a lifecycle (planning-run-read.ts readPlanningRun), i.e. a run that was proposed and
+ * sealed in one leg (planning-authority-persistence.ts buildPlanningAuthorityLeg has no
+ * run-without-bodies path), whose sealed bodies then failed re-verification. That is
+ * unverifiable evidence and stays UNKNOWN, as does every other refusal or error (a
+ * capability, a project mismatch, a malformed frame): none of them says the contract is
+ * still uncompiled, so the wait line below never claims a state the read did not measure.
  */
 type PlanPresence = "ABSENT" | "PRESENT" | "UNKNOWN";
 
 function planPresence(state: ApprovePlanLoadState): PlanPresence {
   if (state.phase !== "LOADED") return "UNKNOWN";
   const { outcome } = state;
-  if (outcome.status === "RUN") return outcome.plan === null ? "ABSENT" : "PRESENT";
+  if (outcome.status === "RUN") return outcome.plan === null ? "UNKNOWN" : "PRESENT";
   return outcome.status === "REFUSED" && outcome.code === RUN_UNKNOWN_CODE ? "ABSENT" : "UNKNOWN";
 }
 
