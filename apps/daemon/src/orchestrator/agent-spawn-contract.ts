@@ -299,6 +299,29 @@ export const COMPILER_STEPS: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * THE PROJECT ACTIVATION CHAIN: the six bootstrap kinds the operator's browser commits to bring
+ * a project to READY. The wrapper never staffs them. MEASURED 2026-09-13 on a real project:
+ * every one sat READY and unclaimed on the surface until the browser activated the project, and
+ * the wrapper spent a claude seat on each (about 28 s per seat, three attempts per item per
+ * wrapper process); every seat was refused inside claude and exited.
+ *
+ * A SEPARATE ROSTER FROM `HUMAN_ONLY_STEPS`, CONSULTED ONE LAYER UP, and the reason is measured
+ * rather than chosen. `agent-wrapper.test.ts` and its siblings (`agent-wrapper-retry`,
+ * `-reclaim`, `agent-provider-pause`) exercise the wrapper's identity, claim and fence
+ * mechanics against a FRESH project's real surface, whose only READY steps are
+ * `project.register` and `policy.install`: adding these six kinds to `HUMAN_ONLY_STEPS` reds 34
+ * of that file's 51 cases (measured 2026-09-13), and `preview-start-command.test.ts` pins the
+ * served members of `HUMAN_ONLY_STEPS` by strict equality against a hand transcription. So this
+ * roster is enforced by `agent-staffing-surface.ts`, the view of the surface the PRODUCTION
+ * binary hands the wrapper (`agent-wrapper-main.ts`); `createAgentWrapper` over a raw port still
+ * sees the chain, which is what those suites rely on.
+ */
+export const OPERATOR_ACTIVATION_STEPS: ReadonlySet<string> = new Set([
+  "project.register", "project.bind_repository", "provider.probe",
+  "policy.install", "policy.validate", "project.activate",
+]);
+
+/**
  * Outcomes the durable staffing gate answers BEFORE any identity is minted.
  * They are not attempts: nothing was spent, and the condition they report
  * (a live predecessor, a held claim, a record the fence cannot read) clears
