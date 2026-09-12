@@ -134,6 +134,19 @@ const refusedStep = (kind: ActivationChainKind, code: string): ActivationStep =>
   ({ kind, outcome: { code, layer: ACTIVATION_LAYER, ok: false }, state: "ANSWERED" });
 
 /**
+ * A refusal that IS the daemon saying "already done". `policy.install` stays OFFERED after it
+ * committed (installing a further slice is legal), so the surface never calls it COMMITTED and
+ * the chain re-submits it; a second Activate press was then refused
+ * `BOOTSTRAP_POLICY_SLICE_ALREADY_INSTALLED` and stopped BEFORE `policy.validate` and
+ * `project.activate` (measured 2026-09-13 on a registered UnAI project: 5 of 6 receipts, backup
+ * never written, every press ending at this row). Only the codes listed here are read that way,
+ * and only for their own kind; any other refusal still stops the chain unrewritten.
+ */
+const ALREADY_DONE_REFUSALS: Readonly<Partial<Record<ActivationChainKind, string>>> = Object.freeze({
+  "policy.install": "BOOTSTRAP_POLICY_SLICE_ALREADY_INSTALLED",
+});
+
+/**
  * Drives the chain in order, stopping at the FIRST refusal so a person sees exactly which
  * command the daemon refused and why, at the refusing authority's own code and layer. Each
  * step reads the surface fresh; a read that throws and an unreachable command are each their
@@ -163,6 +176,10 @@ export async function driveActivationChain(
       break;
     }
     const outcome = await port.submit(kind, offer);
+    if (!outcome.ok && outcome.code === ALREADY_DONE_REFUSALS[kind]) {
+      steps.push({ kind, state: "ALREADY_COMMITTED" });
+      continue;
+    }
     steps.push({ kind, outcome, state: "ANSWERED" });
     if (!outcome.ok) break;
   }

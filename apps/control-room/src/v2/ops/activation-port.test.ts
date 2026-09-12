@@ -118,6 +118,35 @@ describe("driveActivationChain", () => {
     expect(sent.map(([kind]) => kind)).not.toContain("project.activate");
   });
 
+  it("reads policy.install's ALREADY_INSTALLED refusal as already done and reaches project.activate", async () => {
+    // The daemon keeps offering policy.install after it committed, so a resumed chain re-sends
+    // it. Before this the second Activate press stopped here, and project.activate never ran.
+    const { port, sent } = recordingPort({
+      "policy.install": { code: "BOOTSTRAP_POLICY_SLICE_ALREADY_INSTALLED", layer: "DAEMON_PREREQUISITE" },
+    });
+
+    const steps = await driveActivationChain(port, () => Promise.resolve(allOffered(0)));
+
+    expect(kindsOf(steps)).toEqual([...ACTIVATION_CHAIN_KINDS]);
+    expect(steps[3]).toEqual({ kind: "policy.install", state: "ALREADY_COMMITTED" });
+    expect(sent.map(([kind]) => kind)).toEqual([...ACTIVATION_CHAIN_KINDS]);
+    expect(steps.at(-1)?.state).toBe("ANSWERED");
+  });
+
+  it("does NOT read the same code as already done for any other kind", async () => {
+    const { port, sent } = recordingPort({
+      "policy.validate": { code: "BOOTSTRAP_POLICY_SLICE_ALREADY_INSTALLED", layer: "DAEMON_PREREQUISITE" },
+    });
+
+    const steps = await driveActivationChain(port, () => Promise.resolve(allOffered(0)));
+
+    expect(kindsOf(steps)).toEqual(ACTIVATION_CHAIN_KINDS.slice(0, 5));
+    const last = steps.at(-1);
+    expect(last?.state).toBe("ANSWERED");
+    expect(last?.state === "ANSWERED" ? last.outcome.ok : null).toBe(false);
+    expect(sent.map(([kind]) => kind)).not.toContain("project.activate");
+  });
+
   it("records an unreachable command as its own code at this layer, and sends nothing for it", async () => {
     const withoutActivate = surface(
       ACTIVATION_CHAIN_KINDS.filter((kind) => kind !== "project.activate")
