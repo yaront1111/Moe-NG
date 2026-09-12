@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import type {
@@ -10,6 +9,7 @@ import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
 import { contractGateKey, notDecidedYet, useContractGates } from "./contract-gates.js";
 import type { ContractGateMap, Gate1Reader } from "./contract-gates.js";
+import { useLiveCoverage } from "./live-coverage.js";
 import { FoldedRoster } from "./statement-folds.js";
 
 /**
@@ -208,40 +208,13 @@ export interface LiveContractDossierProps {
 }
 
 /**
- * Reads coverage on the goal, then one Gate 1 verdict per cited revision. A coverage read
- * that throws becomes a visible ERROR outcome, never a silent empty dossier.
+ * Reads coverage on the goal (live-coverage.ts: a poll that answers the same dossier keeps
+ * the same state), then one Gate 1 verdict per cited revision (contract-gates.ts, likewise).
  */
 export function LiveContractDossier(
   { goalId, pollMs, readCoverage, readGate }: LiveContractDossierProps,
 ): JSX.Element {
-  const [coverage, setCoverage] = useState<DocumentCoverageOutcome | null>(null);
+  const coverage = useLiveCoverage(goalId, readCoverage, pollMs ?? DEFAULT_POLL_MS);
   const gates = useContractGates(coverage, readGate, pollMs ?? DEFAULT_POLL_MS);
-  const generation = useRef(0);
-  useEffect(() => {
-    const run = generation.current + 1;
-    generation.current = run;
-    setCoverage(null);
-    let inFlight = false;
-    const tick = (): void => {
-      if (inFlight) return;
-      inFlight = true;
-      void readCoverage(goalId).then((outcome) => {
-        inFlight = false;
-        if (generation.current === run) setCoverage(outcome);
-      }, () => {
-        inFlight = false;
-        if (generation.current === run) {
-          setCoverage({
-            code: "CONTRACT_DOSSIER_COVERAGE_READ_FAILED",
-            layer: "CONTROL_ROOM_GOALS",
-            status: "ERROR",
-          });
-        }
-      });
-    };
-    tick();
-    const timer = setInterval(tick, pollMs ?? DEFAULT_POLL_MS);
-    return (): void => { generation.current += 1; clearInterval(timer); };
-  }, [goalId, pollMs, readCoverage]);
   return <ContractDossier coverage={coverage} gates={gates} />;
 }
