@@ -45,6 +45,46 @@ const UNREAD_AUTHORIZATION: ApprovalAuthorization = Object.freeze({
   status: "WITHHELD" as const,
 });
 
+/**
+ * THE DAEMON'S OWN "no such run" answer (`PLANNING_RUN_READ_RUN_UNKNOWN`, planning-run-read.ts).
+ * A goal's `planningRunRef` is minted at GoalCreated, but the run gains a durable record only
+ * when the compiler submits a decomposition, so a goal still waiting at Gate 1 reads its own
+ * run as unknown. Measured 2026-09-13: that goal's board rendered Approve plan, Send the plan
+ * back and the reason box while the Runs screen said "No plan has been run for this goal yet".
+ */
+const RUN_UNKNOWN_CODE = "PLANNING_RUN_READ_RUN_UNKNOWN";
+
+/**
+ * Whether the read established a plan revision to decide on. ABSENT is a POSITIVE answer -
+ * the daemon knows no such run, or knows the run and seals no plan into it. Every other
+ * refusal or error (a capability, a project mismatch, a malformed frame) says nothing about
+ * the plan and stays UNKNOWN, so the wait line below never claims a state the read did not
+ * measure.
+ */
+type PlanPresence = "ABSENT" | "PRESENT" | "UNKNOWN";
+
+function planPresence(state: ApprovePlanLoadState): PlanPresence {
+  if (state.phase !== "LOADED") return "UNKNOWN";
+  const { outcome } = state;
+  if (outcome.status === "RUN") return outcome.plan === null ? "ABSENT" : "PRESENT";
+  return outcome.status === "REFUSED" && outcome.code === RUN_UNKNOWN_CODE ? "ABSENT" : "UNKNOWN";
+}
+
+/**
+ * NO PLAN, NO DECISION. The controls are not rendered at all rather than rendered disabled:
+ * a disabled Approve over a goal that has no plan reads as a decision the operator is being
+ * refused, when none is being asked of them yet (the same reasoning as the sent-back note in
+ * approve-plan-gate.tsx). Rendered only on a positive ABSENT, never on an unread plan or one
+ * refused for another reason.
+ */
+function NoPlanYet(): JSX.Element {
+  return (
+    <p className="cr2-slot-body" data-testid="cr.approve.no-plan">
+      The plan appears here once the contract is approved and compiled.
+    </p>
+  );
+}
+
 export interface ApprovePlanProps {
   readonly runId: string;
   readonly title: string;
@@ -81,6 +121,13 @@ export function ApprovePlan(
   }, [applied, read, runId]);
 
   const authorization = approval?.authorization ?? UNREAD_AUTHORIZATION;
+  const presence = planPresence(state);
+  // A DECISION IS ON THE TABLE when the daemon offers this run's approval (its word, not
+  // the read's), when the read holds a sealed plan (the offer may be withdrawn - after an
+  // approval binds - and the controls still name why), or while a sent-back plan waits for
+  // its successor. Otherwise nothing is asked of the operator, and nothing is offered.
+  const decidable = approval?.sentBack === true
+    || authorization.status === "AUTHORIZED" || presence === "PRESENT";
   const decide = (decisionReason: string | null): void => {
     if (approval === undefined || authorization.status !== "AUTHORIZED" || busy) return;
     setBusy(true);
@@ -111,15 +158,17 @@ export function ApprovePlan(
           for. Without this, rejecting run A and then being offered its successor B would
           return the controls with A's reason still in the box and Reject already enabled -
           one stray click away from sending B back for a reason nobody wrote about it. */}
-      <ApproveGate
-        authorization={authorization}
-        busy={busy}
-        key={runId}
-        onApprove={(): void => { decide(null); }}
-        onReject={(decisionReason): void => { decide(decisionReason); }}
-        refusal={refusal}
-        sentBack={approval?.sentBack ?? false}
-      />
+      {decidable ? (
+        <ApproveGate
+          authorization={authorization}
+          busy={busy}
+          key={runId}
+          onApprove={(): void => { decide(null); }}
+          onReject={(decisionReason): void => { decide(decisionReason); }}
+          refusal={refusal}
+          sentBack={approval?.sentBack ?? false}
+        />
+      ) : presence === "ABSENT" ? <NoPlanYet /> : null}
       <ActionButton onClick={onBack} testId="cr.approve.back" variant="secondary">
         {`${ARROW_LEFT} Back to goals`}
       </ActionButton>

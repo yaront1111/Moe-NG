@@ -6,7 +6,7 @@ import {
   RUNTIME_QUERY_ENVELOPE_VERSION,
 } from "@moe/contracts";
 import { StrictMode } from "react";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -904,6 +904,17 @@ const SEALED_RUN = Object.freeze({
   submissionHash: "submission-hash-durable",
 });
 
+/**
+ * The daemon's answer for a run that has no durable record yet - a goal still waiting at
+ * Gate 1, whose `planningRunRef` was minted at GoalCreated and never compiled into. The
+ * route's own three-key refusal frame, as `planning-run-read.ts` `refused()` composes it.
+ */
+const RUN_UNKNOWN_BODY = Object.freeze({
+  code: "PLANNING_RUN_READ_RUN_UNKNOWN",
+  layer: "PLANNING_RUN_READ",
+  outcome: "REFUSED",
+});
+
 /** The `/1` pending answer as the daemon's V1 read composes it (product-contract-pending-read.ts). */
 const V1_PENDING_BODY = Object.freeze({
   approval: {
@@ -971,6 +982,7 @@ function renderWiredApp(
   pendingBody: unknown = { outcome: "NONE" },
   plane: "V1" | "V2" = "V1",
   command?: (body: string) => unknown,
+  planningBody: unknown = SEALED_RUN,
 ): WiredApp {
   bootstrapPlane = plane;
   commandHook = command ?? null;
@@ -1015,7 +1027,7 @@ function renderWiredApp(
     }
     if (input === "/planning/run/read") {
       planningReads.push(String(init?.body ?? ""));
-      return Promise.resolve(jsonResponse(SEALED_RUN));
+      return Promise.resolve(jsonResponse(planningBody));
     }
     return handshakeResponse(input, init);
   }));
@@ -1265,6 +1277,34 @@ describe("CordumApp wires the durable run and the daemon's approval grant", () =
     const reason = await screen.findByTestId("cr.approve.reason");
     expect(reason.textContent).toContain("APPROVAL_AFFORDANCE_ABSENT");
     expect(reason.textContent).toContain(PLAN_APPROVAL_LAYER);
+  });
+
+  /**
+   * NO PLAN YET, NO DECISION CONTROLS. Measured 2026-09-13 via the accessibility tree: a goal
+   * still waiting at Gate 1 - the Runs screen said "No plan has been run for this goal yet" -
+   * rendered "Approve plan", "Send the plan back" and the reason box on its board. Its
+   * `planningRunRef` names a run the daemon answers PLANNING_RUN_READ_RUN_UNKNOWN for and
+   * offers nothing on; the plan fold must say the plan is not here yet and offer no decision.
+   * The arm above is this one's control: same wiring, only the read's answer differs.
+   */
+  it("offers no plan decision on a goal whose run the daemon does not know yet", async () => {
+    const app = renderWiredApp([], { outcome: "NONE" }, "V1", undefined, RUN_UNKNOWN_BODY);
+    await openTheDurableBoard();
+
+    const fold = await screen.findByTestId("cr.goal.planfold");
+    expect((await within(fold).findByTestId("cr.approve.no-plan")).textContent)
+      .toBe("The plan appears here once the contract is approved and compiled.");
+    // The read really was made for this goal's run and really was refused as unknown.
+    expect(app.planningReads.length).toBeGreaterThan(0);
+    expect((await within(fold).findByTestId("cr.approve.refusal")).textContent)
+      .toContain("PLANNING_RUN_READ_RUN_UNKNOWN");
+    expect(within(fold).queryByRole("button", { name: "Approve plan" })).toBeNull();
+    expect(within(fold).queryByRole("button", { name: "Send the plan back" })).toBeNull();
+    expect(within(fold).queryByLabelText("Why are you sending this plan back?")).toBeNull();
+    expect(screen.queryByTestId("cr.approve.button")).toBeNull();
+    expect(screen.queryByTestId("cr.approve.reject")).toBeNull();
+    expect(screen.queryByTestId("cr.approve.reason.input")).toBeNull();
+    expect(screen.queryByTestId("cr.approve.reason")).toBeNull();
   });
 });
 
