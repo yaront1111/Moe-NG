@@ -32,6 +32,43 @@ import { withPolicyRiskLeg } from "./policy-risk-leg.js";
  * payload carries the approval, so activation and approval are one decision with the bare
  * `GoalState` result readers expect. Auxiliary legs follow atomically. Only the registry witness
  * supplies `approvedBy`; nothing here decides—the core validates, then one commit persists.
+ *
+ * THIS PATH DELIBERATELY LEAVES NO ACTIVE GRAPH REVISION, and the name `activateInitialGraph` is
+ * the reason that has to be said out loud (task-c055f6af). What it activates is a GOAL: the one
+ * durable event is `GoalExecutionEnabled` on `input.goalId`. It writes no graph-revision
+ * aggregate and commits no revision leg, so `readCurrentActiveGraph` does not begin answering
+ * because an approval landed.
+ *
+ * THE GRAPH-REVISION COMMANDS OWN THAT TRANSITION. `graph.approve` routes to
+ * `activateApprovedGraph` (`daemon-command-graph-edges.ts:26`, called at
+ * `daemon-command-graph-approve.ts:168`), and on that surface the revision leg is unconditional —
+ * "an activation that activates no graph is not a state this surface can express"
+ * (`graph-activation-service.ts:240`). `graph.supersede` then moves the projection forward
+ * (`graph-supersede-legs.ts:214-228`), and only ever from a predecessor it requires to be ACTIVE
+ * already (`graph-supersede-facts.ts:204`). Both are commands ON THE GRAPH, and between them the
+ * projection has exactly one lifecycle with one entry point.
+ *
+ * A REVISION LEG HERE WOULD ADD A THIRD WRITER FROM OUTSIDE THAT FAMILY — one that mints a
+ * current graph as a side effect of approving a plan, with no `graph.approve` in the sequence and
+ * no lifecycle ordering against the other two. They could then disagree about which revision is
+ * current with no reader able to adjudicate, and fifteen production sites resolve against that
+ * projection, so the disagreement would be theirs to discover. That is why the read at
+ * `readCurrentActiveGraph` below is a CONSUMER of the projection and never its writer.
+ *
+ * SO ACTIVE_GRAPH_ABSENT AFTER AN ORDINARY APPROVAL IS NOT A FAILURE — it means the project has
+ * not run `graph.approve` yet, which the plan-approval journey never does. Nothing was dropped
+ * and nothing needs repairing; `active-graph-projection.ts` answers ACTIVE_GRAPH_ABSENT @
+ * ACTIVE_GRAPH_PROJECTION exactly as designed, and every reader forwards that code with its
+ * layer rather than restamping it. `approval-activation-graph-absence.test.ts` pins the state so
+ * a change that silently starts activating a revision here reds instead of landing.
+ *
+ * ITS ONE CONSEQUENCE, which is what sent this question to the board: with no active graph there
+ * is no `graphContentHash` to name, so the policy-risk subject below is `null` and this approval
+ * records no risk authority. The subject is NOT what omits the record on the ordinary journey —
+ * `buildPolicyRiskLeg` refuses upstream at POLICY_RISK_DECISION_REF_MISSING @ DAEMON_POLICY_RISK,
+ * before it ever looks at the subject (task-c7a66b70, which also made that refusal reported
+ * rather than discarded). Readers answer UNKNOWN from the absent record, which is the honest
+ * answer for a project whose graph is not active.
  */
 
 export interface ActivationInput {
@@ -184,9 +221,11 @@ function activateInitialGraphDecision(
   // LEGS[0] STAYS THE GOAL. `commitAcceptedLegs` builds the primary leg exactly as the
   // single-aggregate path builds its only one and APPENDS the extras, so the decision record a
   // reader sees is unchanged in shape and the replay identity of this command does not move.
-  // Path B has no graph-revision activation leg of its own, so the durable CURRENT projection is
-  // the risk subject. A projection or builder refusal omits only risk authority; the approval
-  // itself remains valid and readers continue to answer UNKNOWN from the absent record.
+  // Path B has no graph-revision activation leg of its own BY DESIGN — `graph.approve` owns that
+  // transition; see this module's header — so the durable CURRENT projection is the risk subject
+  // and reading ACTIVE_GRAPH_ABSENT here is the ordinary case, not a defect to chase. A
+  // projection or builder refusal omits only risk authority; the approval itself remains valid
+  // and readers continue to answer UNKNOWN from the absent record.
   const slot = observeActiveGraphSlot(store, request.projectId);
   const active = readCurrentActiveGraph(store, request.projectId);
   // The refusal that used to be DISCARDED here (task-c7a66b70) is now reported by the helper with
