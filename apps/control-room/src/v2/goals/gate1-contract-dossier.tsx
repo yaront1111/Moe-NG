@@ -2,6 +2,13 @@ import type { ProductContractRevisionV2, ProductContractV2Requirement } from "@m
 import type { JSX, ReactNode } from "react";
 
 import { MIDDOT } from "../glyphs.js";
+import { FoldedRoster } from "./statement-folds.js";
+
+/**
+ * The V2 Gate 1 dossier: every admitted section of a revision, each section's rows folded
+ * by identifier family (statement-folds.tsx) so the 128 + 150 statement contract that
+ * stalled the V1 card paints toggles, not statements, once cutover.activate mounts this card.
+ */
 
 interface DossierItem {
   readonly details?: readonly string[];
@@ -32,17 +39,20 @@ function DossierSection({
       {items === undefined ? children : items.length === 0 ? (
         <p className="cr2-approve-note">None recorded in this revision.</p>
       ) : (
-        <ul className="cr2-approve-obligations">
-          {items.map((item) => (
-            <li className="cr2-approve-obligation" key={item.id}>
+        <FoldedRoster
+          idOf={(item): string => item.id}
+          items={items}
+          row={(item): JSX.Element => (
+            <li className="cr2-approve-obligation" data-testid={`cr.gate1.contract.${sectionId}.row.${item.id}`}>
               <span className="cr2-approve-mono">{item.id}</span>
               <span className="cr2-approve-step-body">{item.statement}</span>
               {item.details?.map((detail) => (
                 <span className="cr2-approve-evidence" key={detail}>{detail}</span>
               ))}
             </li>
-          ))}
-        </ul>
+          )}
+          testIdPrefix={`cr.gate1.contract.${sectionId}`}
+        />
       )}
     </section>
   );

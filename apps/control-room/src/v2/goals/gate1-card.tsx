@@ -22,6 +22,9 @@ import { Gate1ContractDossier } from "./gate1-contract-dossier.js";
  * asks the same goal-bound route again and renders the authenticated CURRENT
  * revision and slot. It makes no claim that a planning compiler is active.
  * A refusal stays on screen with the code and layer that answered.
+ *
+ * ORDER while PENDING: banner, open questions, Approve, and only then the dossier - measured
+ * on the V1 card 2026-09-13, the control sat below every statement, and this card had it last too.
  */
 
 export interface Gate1CardProps {
@@ -179,7 +182,6 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
               : "The planning agent proposed this Product Contract from your PRD. Approving it"
                 + " records this revision as the daemon's current Gate 1 contract."}
           </p>
-          <Gate1ContractDossier revision={shownState.outcome.revision} />
           {shownState.outcome.clarifications.map((row) => (
             <section
               className="cr2-approve-block"
@@ -215,6 +217,7 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
               {busy ? "Approving..." : "Approve contract"}
             </ActionButton>
           )}
+          <Gate1ContractDossier revision={shownState.outcome.revision} />
         </>
       ) : shownState.outcome.status === "CURRENT" ? (
         <>
