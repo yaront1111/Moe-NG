@@ -8,6 +8,7 @@ import type {
 import { OutcomeNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
+import type { ProductContractGate1Outcome } from "../../live/live-product-contract-gate-1.js";
 import { contractGateKey, useContractGates } from "./contract-gates.js";
 import type { ContractGateMap, Gate1Reader } from "./contract-gates.js";
 
@@ -81,6 +82,21 @@ function RequirementRow(
   );
 }
 
+/**
+ * The reader's answer for a revision no human has decided, matched on status, code AND layer.
+ * apps/daemon/src/product-contract/product-contract-gate-1-reader.ts:232 refuses
+ * PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT at PRODUCT_CONTRACT_GATE_1_READER when the gate
+ * aggregate holds zero events - the state of every contract between proposal and approval. The
+ * daemon reads that exact pair as pending itself (http/document-coverage-read.ts:167 folds it to
+ * gate1: "PENDING"), so it is an undecided gate, not an unreadable one. Every other code, and this
+ * code at any other layer or status, stays a failed read with its provenance behind Details.
+ */
+function notDecidedYet(outcome: Exclude<ProductContractGate1Outcome, { status: "GATE" }>): boolean {
+  return outcome.status === "REFUSED"
+    && outcome.code === "PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT"
+    && outcome.layer === "PRODUCT_CONTRACT_GATE_1_READER";
+}
+
 /** The DURABLE Gate 1 answer for one revision triple, or the words for not having one yet. */
 function Gate1Verdict({ contract, gates }: {
   readonly contract: CoverageContractView;
@@ -100,6 +116,13 @@ function Gate1Verdict({ contract, gates }: {
       <p className="cr2-approve-banner" data-testid={testId}>
         {`Gate 1 approved by a named human ${MIDDOT} approved revision ${contract.revisionId}`
           + ` ${MIDDOT} digest ${outcome.revisionDigest}`}
+      </p>
+    );
+  }
+  if (notDecidedYet(outcome)) {
+    return (
+      <p className="cr2-needs-note" data-testid={`${testId}.undecided`}>
+        Not decided yet.
       </p>
     );
   }

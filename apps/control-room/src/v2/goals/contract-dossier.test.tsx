@@ -128,7 +128,7 @@ describe("ContractDossier", () => {
 });
 
 describe("LiveContractDossier", () => {
-  it("refreshes a refused gate after approval without changing the revision", async () => {
+  it("refreshes an undecided gate after approval without changing the revision", async () => {
     let approved = false;
     let gateReads = 0;
     render(<LiveContractDossier goalId="goal-sign-in" pollMs={10}
@@ -140,14 +140,14 @@ describe("LiveContractDossier", () => {
         };
       }} />);
     await waitFor(() => expect(screen.queryByTestId(
-      `cr.contract.gate1.${REAL_GATE_1_REF.contractId}.refusal`,
+      `cr.contract.gate1.${REAL_GATE_1_REF.contractId}.undecided`,
     )).not.toBeNull());
     approved = true;
     await waitFor(() => expect(screen.queryByTestId(
       `cr.contract.gate1.${REAL_GATE_1_REF.contractId}`,
     )).not.toBeNull());
     expect(gateReads).toBeGreaterThan(1);
-    expect(screen.queryByTestId(`cr.contract.gate1.${REAL_GATE_1_REF.contractId}.refusal`)).toBeNull();
+    expect(screen.queryByTestId(`cr.contract.gate1.${REAL_GATE_1_REF.contractId}.undecided`)).toBeNull();
   });
 
   it("reads coverage on the goal and one Gate 1 verdict per cited revision", async () => {
@@ -275,5 +275,47 @@ describe("ContractDossier refusals and absence", () => {
         .toContain("CONTRACT_DOSSIER_COVERAGE_READ_FAILED @ CONTROL_ROOM_GOALS");
     });
     expect(screen.queryByTestId("cr.contract.body")).toBeNull();
+  });
+});
+
+/**
+ * NOT DECIDED IS NOT UNREADABLE. Between proposal and approval the reader refuses
+ * PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT at PRODUCT_CONTRACT_GATE_1_READER
+ * (product-contract-gate-1-reader.ts:232, zero events on the gate aggregate) - the ordinary
+ * state of every fresh contract, and the daemon's own coverage read folds that exact pair to
+ * gate1: "PENDING" (document-coverage-read.ts:167). Rendering it as "could not be read" told
+ * the operator something broke when nothing had.
+ */
+describe("ContractDossier undecided Gate 1", () => {
+  const gateId = `cr.contract.gate1.${REAL_GATE_1_REF.contractId}`;
+
+  it("says Not decided yet, not could-not-be-read, for a revision no human has decided", () => {
+    render(<ContractDossier coverage={decodedCoverage()} gates={new Map([[contractGateKey(REAL_GATE_1_REF), {
+      code: "PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT", layer: "PRODUCT_CONTRACT_GATE_1_READER", status: "REFUSED",
+    }]])} />);
+    expect(screen.getByTestId(`${gateId}.undecided`).textContent).toBe("Not decided yet.");
+    expect(screen.queryByTestId(`${gateId}.refusal`)).toBeNull();
+    expect(screen.queryByTestId(gateId)).toBeNull();
+    expect(screen.getByTestId("cr.contract.card").textContent).not.toContain("could not be read");
+    // INDEPENDENCE: the coverage beside it still renders.
+    expect(screen.getByTestId("cr.contract.criterion.crit-sso-1").getAttribute("data-status"))
+      .toBe("EVIDENCE_REQUIRED");
+  });
+
+  it("keeps every other Gate 1 answer as could-not-be-read, the same code at another layer or status included", () => {
+    for (const outcome of [
+      { code: "PRODUCT_CONTRACT_GATE_1_DECISION_UNRESOLVED", layer: "PRODUCT_CONTRACT_GATE_1_READER", status: "REFUSED" as const },
+      { code: "STORAGE_DEGRADED", layer: "PRODUCT_CONTRACT_GATE_1_READER", status: "REFUSED" as const },
+      { code: "PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT", layer: "CONTROL_ROOM_LIVE_PRODUCT_CONTRACT", status: "REFUSED" as const },
+      { code: "PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT", layer: "PRODUCT_CONTRACT_GATE_1_READER", status: "ERROR" as const },
+    ]) {
+      cleanup();
+      render(<ContractDossier coverage={decodedCoverage()} gates={new Map([[contractGateKey(REAL_GATE_1_REF), outcome]])} />);
+      const note = screen.getByTestId(`${gateId}.refusal`);
+      expect(note.querySelector(".cr2-outcome-said")?.textContent, `${outcome.status} ${outcome.code} @ ${outcome.layer}`)
+        .toBe("The Gate 1 verdict for this revision could not be read right now.");
+      expect(note.querySelector("code")?.textContent).toBe(`${outcome.code} @ ${outcome.layer}`);
+      expect(screen.queryByTestId(`${gateId}.undecided`), `${outcome.status} ${outcome.code} @ ${outcome.layer}`).toBeNull();
+    }
   });
 });
