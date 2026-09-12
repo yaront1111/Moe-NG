@@ -64,8 +64,14 @@ export type AgentProcessFailureReason = "EXIT_NONZERO" | "EXIT_SIGNAL" | "SPAWN_
 
 export class AgentProcessFailureError extends Error {
   readonly code = "AGENT_PROCESS_FAILED";
+  /**
+   * `outputSeen` is the spawner's own stream reading; a failure minted without one (a test
+   * stub, a SPAWN_ERROR before any pipe existed) defaults to what its tail proves, so the flag
+   * can never contradict the lines beside it.
+   */
   constructor(readonly reason: AgentProcessFailureReason, readonly exitCode: number | null,
-    readonly signal: NodeJS.Signals | null, readonly tail: readonly string[] = []) {
+    readonly signal: NodeJS.Signals | null, readonly tail: readonly string[] = [],
+    readonly outputSeen: boolean = tail.length > 0) {
     super(`AGENT_PROCESS_FAILED:${reason}${exitCode !== null ? `:${String(exitCode)}`
       : signal !== null ? `:${signal}` : ""}`);
     this.name = "AgentProcessFailureError";
@@ -172,8 +178,22 @@ export interface RunOnceReport {
  */
 export interface SeatExitReport {
   readonly exitCode: number | null;
+  /**
+   * Whether ANY byte reached the tee from the seat's stdout or stderr. Null only where no
+   * stream was observed (a legacy void lifetime, an uncoded failure). Seat pid 88288
+   * (2026-09-12, real project) printed nothing for its whole 30-minute lifetime and its exit
+   * record read like any other exit-1; this fact is what tells the two apart.
+   */
+  readonly outputSeen: boolean | null;
   readonly signal: NodeJS.Signals | null;
   readonly tail: readonly string[];
+  /**
+   * Whether the WRAPPER began the seat's termination (lifetime timeout, stdin failure, shutdown)
+   * rather than the seat closing on its own. On Windows `taskkill /F` closes with exit 1 and no
+   * signal, indistinguishable from the seat's own failure unless the wrapper writes this down.
+   * Null where no lifetime was observed.
+   */
+  readonly terminatedByWrapper: boolean | null;
 }
 
 /**

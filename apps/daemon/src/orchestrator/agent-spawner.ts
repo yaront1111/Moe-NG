@@ -213,7 +213,11 @@ function spawnRuntime(
       // exists is lost, and an unread pipe eventually blocks the child.
       const tail = createOutputTail();
       const sinks = options.output ?? { stderr: process.stderr, stdout: process.stdout };
+      // Set on the first byte from either stream, so the exit facts state directly whether
+      // the seat ever spoke rather than inferring it from a bounded tail.
+      let outputSeen = false;
       const tee = (sink: NodeJS.WritableStream) => (chunk: Buffer): void => {
+        outputSeen = true;
         sink.write(chunk);
         tail.push(chunk);
       };
@@ -250,7 +254,11 @@ function spawnRuntime(
         if (settled) return;
         settled = true;
         cleanup();
-        resolve({ exitCode: lastClose.code, signal: lastClose.signal, tail: tail.lines() });
+        resolve({
+          exitCode: lastClose.code, outputSeen, signal: lastClose.signal, tail: tail.lines(),
+          // `terminating` is set by beginTermination alone: timeout, stdin failure, or close().
+          terminatedByWrapper: terminating,
+        });
       };
       const failProcess = (
         reason: AgentProcessFailureReason,
@@ -260,7 +268,7 @@ function spawnRuntime(
         if (settled) return;
         settled = true;
         cleanup();
-        reject(new AgentProcessFailureError(reason, exitCode, signal, tail.lines()));
+        reject(new AgentProcessFailureError(reason, exitCode, signal, tail.lines(), outputSeen));
       };
       const failContainment = (reason: AgentProcessContainmentReason): void => {
         if (settled) return;
@@ -370,7 +378,11 @@ function spawnRuntime(
       terminateOwned = beginTermination;
       const failInput = (): void => { beginTermination(); };
       child.on("close", (code, signal) => {
-        log(`[wrapper] ${request.workItemId} agent exited ${String(code)}`);
+        // The line names what the durable record carries: a seat killed at its timeout after
+        // printing nothing must read differently from one that failed on its own.
+        log(`[wrapper] ${request.workItemId} agent exited ${String(code)}`
+          + ` (signal ${signal ?? "none"}, output ${outputSeen ? "seen" : "none"}`
+          + `, ${terminating ? "terminated by wrapper" : "closed on its own"})`);
         childClosed = true;
         lastClose = { code, signal };
         if (terminating) maybeFinishTermination();

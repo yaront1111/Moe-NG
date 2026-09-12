@@ -241,7 +241,11 @@ describe("claudeSpawner", () => {
     await done;
     // The config file — the only place the credential is written — is gone.
     expect(existsSync(configPath)).toBe(false);
-    expect(logs).toEqual(["[wrapper] project.register@proj-1 agent exited 0"]);
+    // The exit line names every fact the durable record carries: a seat that hung with no
+    // output and was killed reads differently from one that finished on its own.
+    expect(logs).toEqual([
+      "[wrapper] project.register@proj-1 agent exited 0 (signal none, output none, closed on its own)",
+    ]);
   });
 
   it("gives code-node agents file/exec tools and runs them in their workspace", async () => {
@@ -1180,6 +1184,7 @@ describe("seat output tee", () => {
       code: "AGENT_PROCESS_FAILED",
       exitCode: 1,
       message: "AGENT_PROCESS_FAILED:EXIT_NONZERO:1",
+      outputSeen: true,
       reason: "EXIT_NONZERO",
       tail: ["hello", LIMIT_LINE],
     });
@@ -1197,7 +1202,10 @@ describe("seat output tee", () => {
     await drainMicrotasks();
     child.emitter.emit("close", 0, null);
 
-    expect(await exit).toEqual({ exitCode: 0, signal: null, tail: ["hello", LIMIT_LINE] });
+    expect(await exit).toEqual({
+      exitCode: 0, outputSeen: true, signal: null, tail: ["hello", LIMIT_LINE],
+      terminatedByWrapper: false,
+    });
     expect(Buffer.concat(outChunks).equals(Buffer.from("hello\n"))).toBe(true);
     expect(Buffer.concat(errChunks).equals(Buffer.from(`${LIMIT_LINE}\n`))).toBe(true);
   });
@@ -1218,6 +1226,99 @@ describe("seat output tee", () => {
     const report = await exit as { readonly tail: readonly string[] };
     expect(Buffer.concat(outChunks).equals(Buffer.concat([head, rest]))).toBe(true);
     expect(report.tail).toEqual(["€"]);
+  });
+
+  /**
+   * THE SHAPE OF THE LIVE HANG (seat pid 88288, 2026-09-12 21:55Z): a seat that printed nothing
+   * and made no connection for its whole lifetime, ended by something other than its own exit.
+   * The report must say both — no output was ever seen, and the wrapper did the terminating —
+   * because a `taskkill /F` on Windows closes with exit 1 and no signal, indistinguishable from
+   * a seat that failed on its own unless the wrapper writes down that it pulled the trigger.
+   */
+  it("reports a silent seat the wrapper had to kill: no output seen, terminated by the wrapper", async () => {
+    vi.useFakeTimers();
+    const { calls, spawn } = fakeSpawn(7312);
+    const logs: string[] = [];
+    const { made: start } = inSandbox(claudeSpawnStarter, {
+      command: "claude", killGraceMs: 30, killProcessGroup: () => undefined,
+      log: (line) => { logs.push(line); }, platform: "linux", spawn, timeoutMs: 20,
+    });
+    try {
+      const { child, exit } = await admit(start, calls);
+      await vi.advanceTimersByTimeAsync(20);
+      child.emitter.emit("close", null, "SIGKILL");
+
+      expect(await exit).toEqual({
+        exitCode: null, outputSeen: false, signal: "SIGKILL", tail: [], terminatedByWrapper: true,
+      });
+      expect(logs).toContain(
+        "[wrapper] project.register@proj-1 agent exited null"
+        + " (signal SIGKILL, output none, terminated by wrapper)",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("carries the output flag on a nonzero exit that printed nothing", async () => {
+    const { calls, start } = teedStart();
+    const { child, exit } = await admit(start, calls);
+    const settled = exit.then(() => null, (error: unknown) => error);
+
+    child.emitter.emit("close", 1, null);
+
+    expect(await settled).toMatchObject({ code: "AGENT_PROCESS_FAILED", outputSeen: false, tail: [] });
+  });
+
+  /**
+   * CONTROL for the two wrapper-side hang hypotheses that were ruled out in review: the live
+   * wrapper admitted its two seats 2 ms apart (21:55:05.534Z and .536Z), so a shared config
+   * path or a mission lost to the second spawn would have shown up exactly here. Each seat gets
+   * its own credentialed file, its own mission bytes, and its own EOF, with no await between
+   * the two starts.
+   */
+  it("keeps two seats admitted in one tick apart: own config file, own mission, own EOF", async () => {
+    const { calls, spawn } = fakeSpawn(7313);
+    const { configDir, made: start } = inSandbox(claudeSpawnStarter, {
+      command: "claude", log: () => undefined, platform: "linux", spawn,
+    });
+    const first = request({
+      credential: "agent-secret-first", mission: "mission for the first seat",
+      sessionId: "sess-wrap-first", workItemId: "product_contract.propose_revision@goal-1",
+    });
+    const second = request({
+      credential: "agent-secret-second", mission: "mission for the second seat",
+      sessionId: "sess-wrap-second", workItemId: "plan.propose@run-live-1",
+    });
+    const pendingFirst = start(first);
+    const pendingSecond = start(second);
+    const [a, b] = calls;
+    if (a === undefined || b === undefined) throw new Error("two seats were not spawned");
+    a.emitter.emit("spawn");
+    b.emitter.emit("spawn");
+    const [startedA, startedB] = await Promise.all([pendingFirst, pendingSecond]);
+    if (!startedA.ok || !startedB.ok) throw new Error("a start was refused");
+
+    const pathA = configPathOf(a);
+    const pathB = configPathOf(b);
+    expect(pathA).not.toBe(pathB);
+    const bearerOf = (path: string): string => (JSON.parse(readFileSync(path, "utf8")) as {
+      mcpServers: { "moe-next": { headers: { Authorization: string } } };
+    }).mcpServers["moe-next"].headers.Authorization;
+    expect([bearerOf(pathA), bearerOf(pathB)])
+      .toEqual(["Bearer agent-secret-first", "Bearer agent-secret-second"]);
+    const missionOf = (child: FakeChild): Promise<string> => new Promise((resolve) => {
+      let text = "";
+      child.stdin.on("data", (chunk: Buffer) => { text += chunk.toString("utf8"); });
+      child.stdin.on("end", () => { resolve(text); });
+    });
+    expect(await Promise.all([missionOf(a), missionOf(b)]))
+      .toEqual([first.mission, second.mission]);
+
+    a.emitter.emit("close", 0, null);
+    b.emitter.emit("close", 0, null);
+    await Promise.all([startedA.exit, startedB.exit]);
+    expect(readdirSync(configDir)).toEqual([]);
   });
 });
 

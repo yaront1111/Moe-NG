@@ -94,7 +94,8 @@ function harness(): Harness {
 }
 
 const report = (overrides: Partial<SeatExitReport> = {}): SeatExitReport => ({
-  exitCode: 1, signal: null, tail: [LIMIT_LINE], ...overrides,
+  exitCode: 1, outputSeen: true, signal: null, tail: [LIMIT_LINE], terminatedByWrapper: false,
+  ...overrides,
 });
 
 /**
@@ -121,7 +122,9 @@ function withStaleSeatExitVersion(store: SqliteEventStore): SqliteEventStore {
 interface DecodedSeatExit {
   readonly kind: string;
   readonly lastLine: string | null;
+  readonly outputSeen: boolean | null;
   readonly sessionId: string;
+  readonly terminatedByWrapper: boolean | null;
 }
 
 /** Every seat-exit record a project holds, oldest first, read back off the store. */
@@ -135,7 +138,10 @@ function seatExitRecordsIn(store: SqliteEventStore, projectId: string): DecodedS
         || decision.key.projectId !== projectId
         || decision.effectDisposition !== "EFFECTS_COMMITTED") continue;
       const record = JSON.parse(new TextDecoder().decode(decision.resultBytes)) as DecodedSeatExit;
-      decoded.push({ kind: record.kind, lastLine: record.lastLine, sessionId: record.sessionId });
+      decoded.push({
+        kind: record.kind, lastLine: record.lastLine, outputSeen: record.outputSeen,
+        sessionId: record.sessionId, terminatedByWrapper: record.terminatedByWrapper,
+      });
     }
     if (!page.hasMore || page.nextCursor === null) break;
     cursor = page.nextCursor;
@@ -153,7 +159,8 @@ describe("createProviderPauseGate", () => {
     expect(reading).toBe("PROVIDER_LIMIT");
     expect(refund).toHaveBeenCalledTimes(1);
     expect(seatExitRecords(store)).toEqual([
-      { kind: "PROVIDER_LIMIT", lastLine: LIMIT_LINE, sessionId: "sess-1" },
+      { kind: "PROVIDER_LIMIT", lastLine: LIMIT_LINE, outputSeen: true, sessionId: "sess-1",
+        terminatedByWrapper: false },
     ]);
     expect(readProviderPause(store, PROJECT_ID, "claude", EXIT_AT)).toMatchObject({
       cause: { lastLine: LIMIT_LINE, workItemId: "item-7" },
@@ -260,7 +267,8 @@ describe("createProviderPauseGate", () => {
 
     expect(refund).not.toHaveBeenCalled();
     expect(seatExitRecords(store)).toEqual([
-      { kind: "FAILED", lastLine: "    at main (x.ts:1:1)", sessionId: "sess-1" },
+      { kind: "FAILED", lastLine: "    at main (x.ts:1:1)", outputSeen: true, sessionId: "sess-1",
+        terminatedByWrapper: false },
     ]);
     expect(readProviderPause(store, PROJECT_ID, "claude", EXIT_AT)).toBeNull();
     expect(gate.paused(Date.parse(EXIT_AT))).toBeNull();
@@ -275,7 +283,8 @@ describe("createProviderPauseGate", () => {
 
     expect(refund).not.toHaveBeenCalled();
     expect(seatExitRecords(store)).toEqual([
-      { kind: "COMPLETED", lastLine: LIMIT_LINE, sessionId: "sess-1" },
+      { kind: "COMPLETED", lastLine: LIMIT_LINE, outputSeen: true, sessionId: "sess-1",
+        terminatedByWrapper: false },
     ]);
     expect(readProviderPause(store, PROJECT_ID, "claude", EXIT_AT)).toBeNull();
   });
@@ -291,7 +300,8 @@ describe("createProviderPauseGate", () => {
     // Same session at the same instant derives the same command id, so child 1's ledger
     // REPLAYS it: one record, not two, and no refusal to report.
     expect(seatExitRecords(store)).toEqual([
-      { kind: "PROVIDER_LIMIT", lastLine: LIMIT_LINE, sessionId: "sess-1" },
+      { kind: "PROVIDER_LIMIT", lastLine: LIMIT_LINE, outputSeen: true, sessionId: "sess-1",
+        terminatedByWrapper: false },
     ]);
     expect(logs.filter((line) => line.includes("not recorded"))).toEqual([]);
     expect(readProviderPause(store, PROJECT_ID, "claude", EXIT_AT)?.resetAt).toBe(PARSED_RESET_AT);
@@ -431,21 +441,40 @@ describe("staffing exit hook", () => {
     const seen: SeatExitReport[] = [];
     const { cleanups, exit, staffing } = await staffed((r) => { seen.push(r); return "COMPLETED"; });
 
-    exit.resolve({ exitCode: 0, signal: null, tail: ["done"] });
+    exit.resolve({
+      exitCode: 0, outputSeen: true, signal: null, tail: ["done"], terminatedByWrapper: false,
+    });
     await expect(staffing.settle()).resolves.toBeUndefined();
 
-    expect(seen).toEqual([{ exitCode: 0, signal: null, tail: ["done"] }]);
+    expect(seen).toEqual([{
+      exitCode: 0, outputSeen: true, signal: null, tail: ["done"], terminatedByWrapper: false,
+    }]);
     expect(cleanups).toEqual([true]);
   });
 
-  it("reads a void resolution from a legacy stub as a clean exit", async () => {
+  it("reads a void resolution from a legacy stub as a clean exit with unmeasured facts", async () => {
     const seen: SeatExitReport[] = [];
     const { exit, staffing } = await staffed((r) => { seen.push(r); return "COMPLETED"; });
 
     exit.resolve();
     await expect(staffing.settle()).resolves.toBeUndefined();
 
-    expect(seen).toEqual([{ exitCode: 0, signal: null, tail: [] }]);
+    // Nothing observed the seat's streams or its termination, so neither flag may claim a value.
+    expect(seen).toEqual([{
+      exitCode: 0, outputSeen: null, signal: null, tail: [], terminatedByWrapper: null,
+    }]);
+  });
+
+  it("hands the observer a rejected lifetime's output flag, and a termination it did not do", async () => {
+    const seen: SeatExitReport[] = [];
+    const { exit, staffing } = await staffed((r) => { seen.push(r); return "FAILED"; });
+
+    exit.reject(new AgentProcessFailureError("EXIT_NONZERO", 1, null, [], false));
+    await expect(staffing.settle()).resolves.toBeUndefined();
+
+    expect(seen).toEqual([{
+      exitCode: 1, outputSeen: false, signal: null, tail: [], terminatedByWrapper: false,
+    }]);
   });
 
   it("records BOTH failures when the observer itself throws", async () => {
@@ -589,9 +618,10 @@ describe("createAgentWrapper with a provider pause", () => {
       expect(harness.logs).toEqual([
         `[wrapper] provider limit: claude paused until ${pause.resetAt} (${LIMIT_LINE})`,
       ]);
-      expect(seatExitRecordsIn(harness.reader, projectId)).toEqual([
-        { kind: "PROVIDER_LIMIT", lastLine: LIMIT_LINE, sessionId: seat.sessionId },
-      ]);
+      expect(seatExitRecordsIn(harness.reader, projectId)).toEqual([{
+        kind: "PROVIDER_LIMIT", lastLine: LIMIT_LINE, outputSeen: true,
+        sessionId: seat.sessionId, terminatedByWrapper: false,
+      }]);
       // The EXISTING exit cleanup did both; the gate never releases anything (task rail 2).
       expect(readWorkClaimLedger(harness.reader, projectId).claims.get(seat.workItemId))
         .toMatchObject({ status: "RELEASED" });
@@ -650,9 +680,10 @@ describe("createAgentWrapper with a provider pause", () => {
       expect(next.spawned[1]).toMatchObject({
         outcome: "SPAWNED", workItemId: `project.register@${projectId}`,
       });
-      expect(seatExitRecordsIn(harness.reader, projectId)).toEqual([
-        { kind: "FAILED", lastLine: "    at main (x.ts:1:1)", sessionId: seat.sessionId },
-      ]);
+      expect(seatExitRecordsIn(harness.reader, projectId)).toEqual([{
+        kind: "FAILED", lastLine: "    at main (x.ts:1:1)", outputSeen: true,
+        sessionId: seat.sessionId, terminatedByWrapper: false,
+      }]);
       expect(readProviderPause(harness.reader, projectId, "claude", nowIso(NOW))).toBeNull();
       expect(harness.logs).toEqual([]);
       harness.exits[1]?.resolve();
@@ -699,15 +730,47 @@ describe("createAgentWrapper with a provider pause", () => {
     try {
       const seat = await staffOne(harness);
 
-      seat.exit.resolve({ exitCode: 0, signal: null, tail: ["done"] });
+      seat.exit.resolve({
+        exitCode: 0, outputSeen: true, signal: null, tail: ["done"], terminatedByWrapper: false,
+      });
       await expect(harness.wrapper.settle()).resolves.toBeUndefined();
 
-      expect(seatExitRecordsIn(harness.reader, projectId)).toEqual([
-        { kind: "COMPLETED", lastLine: "done", sessionId: seat.sessionId },
-      ]);
+      expect(seatExitRecordsIn(harness.reader, projectId)).toEqual([{
+        kind: "COMPLETED", lastLine: "done", outputSeen: true,
+        sessionId: seat.sessionId, terminatedByWrapper: false,
+      }]);
       expect(readProviderPause(harness.reader, projectId, "claude", nowIso(NOW))).toBeNull();
       expect(readSessionLedger(harness.reader, projectId).sessions.get(seat.sessionId))
         .toMatchObject({ status: "CLOSED" });
+      expect(harness.logs).toEqual([]);
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  /**
+   * THE LIVE HANG'S RECORD (seat pid 88288, 2026-09-12): killed by the wrapper at its 30-minute
+   * timeout after printing nothing. On Windows that close is exit 1 with no signal — the same
+   * facts as a seat that failed on its own — so the record must carry the two facts that
+   * separate them, written by the REAL observer through the REAL ledger.
+   */
+  it("records a silent seat the wrapper killed as FAILED with no output and the termination noted", async () => {
+    const projectId = "proj-pause-wrapper-killed";
+    const harness = wrapperHarness(projectId);
+    try {
+      const seat = await staffOne(harness);
+
+      seat.exit.resolve({
+        exitCode: 1, outputSeen: false, signal: null, tail: [], terminatedByWrapper: true,
+      });
+      await expect(harness.wrapper.settle()).resolves.toBeUndefined();
+
+      expect(seatExitRecordsIn(harness.reader, projectId)).toEqual([{
+        kind: "FAILED", lastLine: null, outputSeen: false,
+        sessionId: seat.sessionId, terminatedByWrapper: true,
+      }]);
+      // A timeout kill is the wrapper's doing, never a provider limit: nothing is parked.
+      expect(readProviderPause(harness.reader, projectId, "claude", nowIso(NOW))).toBeNull();
       expect(harness.logs).toEqual([]);
     } finally {
       harness.dispose();
@@ -823,7 +886,11 @@ describe("createAgentWrapper with a provider pause", () => {
         });
         expect(planted.ok, "the pause was not planted").toBe(true);
         const report = await harness.wrapper.runOnce();
-        for (const exit of harness.exits) exit.resolve({ exitCode: 0, signal: null, tail: [] });
+        for (const exit of harness.exits) {
+          exit.resolve({
+            exitCode: 0, outputSeen: false, signal: null, tail: [], terminatedByWrapper: false,
+          });
+        }
         await harness.wrapper.settle();
         return {
           outcome: report.surfaceOutcome,
