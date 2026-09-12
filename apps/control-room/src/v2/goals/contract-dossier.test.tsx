@@ -11,6 +11,7 @@
  *    these arms go red instead of rendering a hand-shaped object the daemon never sent.
  */
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { mapDocumentCoverageAnswer } from "../../live/live-document-coverage.js";
@@ -124,6 +125,81 @@ describe("ContractDossier", () => {
     expect(screen.queryByTestId(`cr.contract.gate1.${REAL_GATE_1_REF.contractId}`)).toBeNull();
     // The criteria still render: an unanswered Gate 1 read does not blank the coverage.
     expect(screen.getByTestId("cr.contract.criterion.crit-sso-1")).toBeTruthy();
+  });
+});
+
+/**
+ * Six identifier families of 25 requirements, each with one criterion: 150 + 150 = 300
+ * statements of ~400 characters - the shape of the live PRD contract (128 + 150, ~111 KB)
+ * whose flat render stalled the tab. The daemon feeds the dossier the PENDING revision
+ * when none is approved (document-coverage-read.ts), so this is the first paint of the
+ * goal board while the Gate 1 card above it waits for the same decision.
+ */
+const FAMILIES = ["AI", "CON", "DATA", "OPS", "SEC", "UX"] as const;
+const PER_FAMILY = 25;
+const FILLER = "the daemon records the decision and the board shows it ".repeat(7);
+const CONTRACT_ID = REAL_GATE_1_REF.contractId;
+
+function largeStatement(kind: string, family: string, index: number): string {
+  return `${kind} ${family} ${String(index)}: ${FILLER}`;
+}
+
+function largeCoverage(): DocumentCoverageOutcome {
+  const numbered = (index: number): string => String(index + 1).padStart(3, "0");
+  const requirements = FAMILIES.flatMap((family) => Array.from({ length: PER_FAMILY }, (_, index) => ({
+    criteria: [{
+      criterionId: `CRT-${family}-${numbered(index)}`, nodeKey: null, nodeTestStatus: null,
+      statement: largeStatement("Criterion", family, index + 1), status: "UNPLANNED",
+    }],
+    requirementId: `REQ-${family}-${numbered(index)}`,
+    statement: largeStatement("Requirement", family, index + 1),
+  })));
+  const outcome = mapDocumentCoverageAnswer(200, {
+    ...COVERAGE_WIRE,
+    contracts: [{ ...COVERAGE_WIRE.contracts[0], gate1: "PENDING", requirements }],
+    totals: { ...COVERAGE_WIRE.totals, criteria: 150, requirements: 150 },
+  });
+  if (outcome.status !== "COVERAGE") throw new Error(`large wire frame refused: ${outcome.code}`);
+  return outcome;
+}
+
+describe("ContractDossier with a 300-statement contract", () => {
+  it("mounts the counts, the verdict and six closed families - none of the 300 rows", () => {
+    render(<ContractDossier coverage={largeCoverage()} gates={gateMap()} />);
+    const counts = screen.getByTestId(`cr.contract.counts.${CONTRACT_ID}`).textContent;
+    expect(counts).toContain("150 requirements");
+    expect(counts).toContain("150 acceptance criteria");
+    expect(screen.getByTestId(`cr.contract.gate1.${CONTRACT_ID}`)).toBeTruthy();
+    expect(screen.getByTestId("cr.contract.body")).toBeTruthy();
+
+    const toggles = screen.getAllByTestId(/^cr\.contract\.requirements\..*\.group\./u);
+    expect(toggles.map((toggle) => toggle.textContent))
+      .toEqual(FAMILIES.map((family) => `REQ-${family}· 25`));
+    for (const toggle of toggles) expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    // The load-bearing count: 0 of the 150 requirement rows and 0 of the 150 criterion rows.
+    expect(screen.queryAllByTestId(/^cr\.contract\.requirement\./u)).toHaveLength(0);
+    expect(screen.queryAllByTestId(/^cr\.contract\.criterion\./u)).toHaveLength(0);
+    expect(screen.queryByText(largeStatement("Requirement", "AI", 1))).toBeNull();
+  });
+
+  it("opens one family: its 25 requirements with their 25 criteria, and nothing else", async () => {
+    const user = userEvent.setup();
+    render(<ContractDossier coverage={largeCoverage()} gates={gateMap()} />);
+    await user.click(screen.getByTestId(`cr.contract.requirements.${CONTRACT_ID}.group.REQ-CON`));
+    const requirements = screen.getAllByTestId(/^cr\.contract\.requirement\./u);
+    expect(requirements).toHaveLength(PER_FAMILY);
+    expect(requirements.every((row) => row.getAttribute("data-testid")?.startsWith("cr.contract.requirement.REQ-CON-")))
+      .toBe(true);
+    const criteria = screen.getAllByTestId(/^cr\.contract\.criterion\./u);
+    expect(criteria).toHaveLength(PER_FAMILY);
+    expect(criteria.every((row) => row.getAttribute("data-testid")?.startsWith("cr.contract.criterion.CRT-CON-")))
+      .toBe(true);
+    expect(screen.getByTestId("cr.contract.criterion.CRT-CON-007").getAttribute("data-status"))
+      .toBe("UNPLANNED");
+    expect(screen.getByTestId("cr.contract.requirement.REQ-CON-007").textContent)
+      .toContain(largeStatement("Requirement", "CON", 7));
+    expect(screen.getByTestId(`cr.contract.requirements.${CONTRACT_ID}.group.REQ-AI`).getAttribute("aria-expanded"))
+      .toBe("false");
   });
 });
 

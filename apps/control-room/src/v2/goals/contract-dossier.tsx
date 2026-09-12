@@ -10,6 +10,7 @@ import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
 import { contractGateKey, notDecidedYet, useContractGates } from "./contract-gates.js";
 import type { ContractGateMap, Gate1Reader } from "./contract-gates.js";
+import { FoldedRoster } from "./statement-folds.js";
 
 /**
  * THE APPROVED PRODUCT CONTRACT, ON THE GOAL THAT IS BUILDING IT.
@@ -26,6 +27,12 @@ import type { ContractGateMap, Gate1Reader } from "./contract-gates.js";
  * verbatim; a genuinely empty answer renders words that say it is empty. An empty
  * requirements list shown for a refused read would read to an operator as "this contract
  * asks for nothing", which is a different and false claim.
+ *
+ * THE ROWS FOLD. The daemon feeds this dossier the PENDING revision when none is approved,
+ * so it mounts right under the Gate 1 card on the same first paint; measured 2026-09-13,
+ * a flat render of the 128 + 150 statement contract was the second half of the tab's
+ * 20-30 s stall. Requirements fold by identifier family (statement-folds.tsx), each with
+ * its criteria nested, and a family mounts its rows only once opened.
  */
 
 const DEFAULT_POLL_MS = 10_000;
@@ -147,11 +154,12 @@ function ContractBlock({ contract, gates }: {
           This revision states no requirement yet.
         </p>
       ) : (
-        <ul className="cr2-approve-obligations">
-          {contract.requirements.map((requirement) => (
-            <RequirementRow key={requirement.requirementId} requirement={requirement} />
-          ))}
-        </ul>
+        <FoldedRoster
+          idOf={(requirement): string => requirement.requirementId}
+          items={contract.requirements}
+          row={(requirement): JSX.Element => <RequirementRow requirement={requirement} />}
+          testIdPrefix={`cr.contract.requirements.${contract.contractId}`}
+        />
       )}
     </section>
   );
