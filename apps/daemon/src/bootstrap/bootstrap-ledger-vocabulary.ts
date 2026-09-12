@@ -8,6 +8,7 @@ import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 import type { ActivationReceipts } from "./activation-receipts.js";
 import type { BootstrapCommandKind, BootstrapRequest } from "./bootstrap-contracts.js";
 import type { CompiledContractBinding } from "../planning/compiled-contract-binding.js";
+import type { PolicyRiskOmissionObserver } from "../planning/policy-risk-leg.js";
 
 /**
  * WHAT A BOOTSTRAP REFUSAL MAY SAY, and the shapes a service hands back.
@@ -241,6 +242,12 @@ export interface HandlerContext {
   readonly compiledContractBinding?: CompiledContractBinding;
   readonly humanReview?: HumanReviewWitness;
   readonly ledger: DurableLedger;
+  /**
+   * Where an OMITTED policy-risk leg is reported, assembled by the composition root and never
+   * decoded from request bytes. Absent means "no override supplied" and falls back to the helper's
+   * default stderr sink — never to silence, which is the defect task-c7a66b70 exists to end.
+   */
+  readonly policyRiskOmissions?: PolicyRiskOmissionObserver;
   /**
    * What THIS daemon measured for a `project.activate`, assembled by the composition root and
    * never decoded from request bytes. Absent means nothing was measured, which fails closed.

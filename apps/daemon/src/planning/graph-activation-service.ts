@@ -246,7 +246,11 @@ export function activateApprovedGraph(
   // graph is not the active one yet — this decision is what makes it one — so the slot would bind
   // the record to the PREDECESSOR revision, or to nothing at all on a first activation, and it
   // would never resolve for the graph it assessed. Epoch 0 refuses SUBJECT_UNAVAILABLE downstream.
-  return commitAcceptedLegs(store, request, plan, withPolicyRiskLeg(store, extraLegs, {
+  // This caller's leg normally BUILDS, so the refusal is its rare path — but a rare silent drop is
+  // still a silent drop (task-c7a66b70), and the helper now reports it with its code and layer.
+  // `risk.legs` is `extraLegs` UNCHANGED when it refuses, so the count this decision commits is
+  // the same on both arms and the refusal path cannot push it past `MAX_DECISION_LEGS`.
+  const risk = withPolicyRiskLeg(store, extraLegs, {
     approval: input.approval,
     approvedBy: input.humanReview?.principalId ?? null,
     commandId: request.commandId,
@@ -255,5 +259,6 @@ export function activateApprovedGraph(
     subject: {
       subjectRef: transition.state.graphContentHash, subjectRevision: transition.state.graphEpoch,
     },
-  }));
+  }, context.policyRiskOmissions);
+  return commitAcceptedLegs(store, request, plan, risk.legs);
 }
