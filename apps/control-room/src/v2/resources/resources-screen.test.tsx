@@ -1,3 +1,7 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -262,5 +266,21 @@ describe("the credential grammar fails closed", () => {
       .toBe("the ANTHROPIC_AUTH_TOKEN environment variable");
     expect(credentialSourceWords("login-file")).toBe("a signed-in credential file on this host");
     expect(credentialSourceWords("ungated")).toBe("no credential gate for this command");
+  });
+});
+
+/**
+ * THE SOURCE RAIL (AGENTS.md: at most 250 lines per production source). MEASURED on
+ * d2c85616: resources-model.ts was 252 lines, 243 on main 8b80d247, the overrun being a
+ * doc block above `providerSection` that restated what resources-credential.ts and the
+ * describe above already say. Counted as `wc -l` counts, by line terminators. The path is
+ * joined from `import.meta.url` as goal-publish.test.tsx does: under this jsdom environment
+ * `new URL(name, import.meta.url)` resolves to the document origin, not to a file.
+ */
+describe("resources-model.ts stays inside the production source rail", () => {
+  it("is at most 250 lines", () => {
+    const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "resources-model.ts"), "utf8");
+    const lines = (source.match(/\r?\n/gu) ?? []).length;
+    expect(lines, `resources-model.ts is ${lines} lines`).toBeLessThanOrEqual(250);
   });
 });

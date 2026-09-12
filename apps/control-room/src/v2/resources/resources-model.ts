@@ -77,8 +77,9 @@ const receiptOf = (
 ): ActivationReceiptView | undefined => members.find((row) => row.member === member);
 
 /**
- * A receipt's own answer, folded WITHOUT its free-form `reason`: measured hands the
- * caller its value, unmeasured renders the receipt's stable code and layer verbatim.
+ * A receipt's own answer: measured hands the caller the receipt to fold, unmeasured renders
+ * its stable code and layer verbatim. Reads no `reason` itself; the provider fold parses
+ * (never renders) its `reason` through the closed grammar, and no other fold reads one.
  */
 function fromReceipt(
   members: readonly ActivationReceiptView[], member: string, said: string,
@@ -134,16 +135,9 @@ function repositorySection(reads: ResourceReads): ResourceSection {
 }
 
 /**
- * THE PROVIDER SECTION. Both rows are built from `credentialSource()` alone, over the
- * receipt's `reason`, because that is the field the daemon carries the credential ref in.
- * `measureProvider` (apps/daemon/src/bootstrap/activation-receipts-measure.ts) builds
- * `measuredReceipt("provider", probeRef, credential.ref)`: the receipt's `ref` is the
- * committed `provider.probe` envelope ref - `provider-profile-1`, this browser's own probe
- * payload - and the credential ref is its `detail`, which activation-read.ts `receiptRow`
- * publishes as `reason`. MEASURED 2026-09-13: parsing `ref` here fed `provider-profile-1`
- * to the grammar, and both rows refused RESOURCES_CREDENTIAL_SOURCE_UNRECOGNISED on a real
- * project whose Goals card was showing `credential/claude/login-file` for the same receipt.
- * The `reason` is parsed, never echoed; no other field but the stable code and layer is read.
+ * Both rows parse the receipt's `reason`, not its `ref`: `measureProvider` builds
+ * `measuredReceipt("provider", probeRef, credential.ref)` and activation-read.ts `receiptRow`
+ * publishes that `detail` as `reason`, while `ref` is the probe envelope ref `provider-profile-1`.
  */
 function providerSection(reads: ResourceReads): ResourceSection {
   const source = (pick: (parsed: CredentialSource) => string): ResourceFactState =>
