@@ -13,12 +13,13 @@ import type { CredentialSource } from "./resources-credential.js";
  *
  * NO CREDENTIAL VALUE EVER REACHES A ROW. The provider row states the credential's
  * SOURCE - an environment variable's NAME, or that a sign-in file was found - and is
- * built ONLY from `credentialSource()`, a CLOSED grammar over the activation receipt's
- * ref. Anything the grammar does not recognise renders as a refusal code rather than as
- * text, so a value that rides in on a field renders NOTHING instead of rendering itself.
- * The daemon already scrubs values at the boundary that publishes
- * (apps/daemon/src/http/activation-read.ts, `secretValues`/`scrub`); this is the second
- * fence, not a second scrub, and no free-form `reason` from any read is rendered here.
+ * built ONLY from `credentialSource()`, a CLOSED grammar over the credential ref the
+ * daemon carries in the provider receipt's `reason` (see `providerSection`). Anything the
+ * grammar does not recognise renders as a refusal code rather than as text, so a value
+ * that rides in on a field renders NOTHING instead of rendering itself. The daemon already
+ * scrubs values at the boundary that publishes (apps/daemon/src/http/activation-read.ts,
+ * `secretValues`/`scrub`); this is the second fence, not a second scrub. No `reason` from
+ * any read is RENDERED here: the provider receipt's is parsed and nothing else's is read.
  *
  * A FACT IS NEVER SILENTLY OMITTED. A read that refuses turns ITS OWN facts into
  * REFUSED rows carrying the daemon's code and layer, and leaves every other fact
@@ -133,14 +134,22 @@ function repositorySection(reads: ResourceReads): ResourceSection {
 }
 
 /**
- * THE PROVIDER SECTION. Both rows are built from `credentialSource()` alone. No field
- * of the receipt other than its stable code, its layer and the parsed source is read.
+ * THE PROVIDER SECTION. Both rows are built from `credentialSource()` alone, over the
+ * receipt's `reason`, because that is the field the daemon carries the credential ref in.
+ * `measureProvider` (apps/daemon/src/bootstrap/activation-receipts-measure.ts) builds
+ * `measuredReceipt("provider", probeRef, credential.ref)`: the receipt's `ref` is the
+ * committed `provider.probe` envelope ref - `provider-profile-1`, this browser's own probe
+ * payload - and the credential ref is its `detail`, which activation-read.ts `receiptRow`
+ * publishes as `reason`. MEASURED 2026-09-13: parsing `ref` here fed `provider-profile-1`
+ * to the grammar, and both rows refused RESOURCES_CREDENTIAL_SOURCE_UNRECOGNISED on a real
+ * project whose Goals card was showing `credential/claude/login-file` for the same receipt.
+ * The `reason` is parsed, never echoed; no other field but the stable code and layer is read.
  */
 function providerSection(reads: ResourceReads): ResourceSection {
   const source = (pick: (parsed: CredentialSource) => string): ResourceFactState =>
     activationState(reads.activation, PROVIDER_SAID, (answer) => fromReceipt(
       answer.members, "provider", PROVIDER_SAID, (receipt) => {
-        const parsed = credentialSource(receipt.ref);
+        const parsed = credentialSource(receipt.reason);
         return parsed === null
           ? refused(CREDENTIAL_SOURCE_UNRECOGNISED, RESOURCES_LAYER,
             "The provider credential's source was not stated in a form this screen can show.")

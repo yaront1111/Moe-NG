@@ -65,9 +65,14 @@ export const ACTIVATION_BODY = {
       code: null, hash: "b".repeat(64), layer: null, measured: true, member: "repository",
       reason: "HEAD is at b1b1b1b1", ref: "repo/head",
     },
+    // THE DAEMON'S SHAPE, not the grammar's: `ref` is the committed `provider.probe` envelope
+    // ref (the browser's own payload, live/live-dispatch-payloads.ts) and the credential
+    // presence ref rides in `reason` (activation-receipts-measure.ts `measureProvider` ->
+    // activation-read.ts `receiptRow`). This row once carried the two swapped, and every
+    // arm folded from it was green against a wire the daemon never serves.
     {
       code: null, hash: null, layer: null, measured: true, member: "provider",
-      reason: "claude is on PATH", ref: "credential/claude/env:ANTHROPIC_AUTH_TOKEN",
+      reason: "credential/claude/env:ANTHROPIC_AUTH_TOKEN", ref: "provider-profile-1",
     },
     {
       code: null, hash: null, layer: null, measured: true, member: "store",
