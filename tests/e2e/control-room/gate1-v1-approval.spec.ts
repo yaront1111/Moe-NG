@@ -230,7 +230,11 @@ test("R4-2: Gate 1 reads and approves a /1 revision on the plane the daemon stat
     await page.getByTestId(`cr.goals.card.${createdGoalId}.open`).click();
     const card = page.getByTestId("cr.gate1.card");
     await expect(card, "the Gate 1 card must render for the source-bound goal").toBeVisible({ timeout: 20_000 });
+    // The rosters fold by identifier family and a closed family mounts no rows: open the
+    // `req` and `crit` families before reading their one statement each.
+    await page.getByTestId("cr.gate1.requirements.group.req").click();
     await expect(page.getByTestId("cr.gate1.requirement.req-1")).toContainText(REQUIREMENT);
+    await page.getByTestId("cr.gate1.criteria.group.crit").click();
     await expect(page.getByTestId("cr.gate1.criterion.crit-1")).toContainText(CRITERION);
     const approve = page.getByTestId("cr.gate1.approve");
     await expect(approve, "the daemon minted an approval, so Approve is offered").toBeEnabled();
