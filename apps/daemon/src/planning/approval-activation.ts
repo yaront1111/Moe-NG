@@ -189,7 +189,11 @@ function activateInitialGraphDecision(
   // itself remains valid and readers continue to answer UNKNOWN from the absent record.
   const slot = observeActiveGraphSlot(store, request.projectId);
   const active = readCurrentActiveGraph(store, request.projectId);
-  const riskLegs = withPolicyRiskLeg(store, [], {
+  // The refusal that used to be DISCARDED here (task-c7a66b70) is now reported by the helper with
+  // its code and layer, and handed back so the slot fence can keep reading it. It COSTS NO LEG:
+  // this decision already commits exactly `MAX_DECISION_LEGS` (8) and a 9th would throw, so the
+  // diagnosis is off-ledger by measurement, not by preference. See `policy-risk-leg.ts`'s header.
+  const risk = withPolicyRiskLeg(store, [], {
     approval: input.approval,
     approvedBy: input.humanReview?.principalId ?? null,
     commandId: request.commandId,
@@ -198,8 +202,11 @@ function activateInitialGraphDecision(
     subject: active.ok
       ? { subjectRef: active.graphContentHash, subjectRevision: active.graphEpoch }
       : null,
-  });
-  const slotFenceLegs: readonly ExpectedVersionDecisionLeg[] = riskLegs.length === 0
+  }, context.policyRiskOmissions);
+  // `risk.refusal !== null` is the SAME predicate the old `riskLegs.length === 0` expressed — the
+  // helper is seeded with `[]`, so an empty result and a refusal are the same event — but it now
+  // says what it means instead of inferring it from a length a future caller could seed non-empty.
+  const slotFenceLegs: readonly ExpectedVersionDecisionLeg[] = risk.refusal !== null
     || approvalSourceFences !== undefined
     ? []
     : [Object.freeze({
@@ -208,8 +215,8 @@ function activateInitialGraphDecision(
       expectedVersion: slot.version,
     })];
   const extraLegs = root.source === "GENESIS"
-    ? [root.leg, ...riskLegs, ...slotFenceLegs]
-    : [...riskLegs, ...slotFenceLegs];
+    ? [root.leg, ...risk.legs, ...slotFenceLegs]
+    : [...risk.legs, ...slotFenceLegs];
   const sourceFences = approvalSourceFences === undefined ? []
     : buildApprovalIntentSourceFenceLegs(
         approvalSourceFences, request.projectId, input.binding.runId,
