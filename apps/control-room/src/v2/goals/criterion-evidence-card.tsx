@@ -9,6 +9,18 @@ import type { CriterionEvidencePort } from "./criterion-evidence-port.js";
 import "../styles/cordum-repository-effects.css";
 interface Props { readonly outcome: CriterionEvidenceOutcome | null; readonly port: CriterionEvidencePort | null; readonly onRecorded?: () => void }
 
+/**
+ * The daemon's answer for a goal no approved plan binds yet, matched on status, code AND layer.
+ * apps/daemon/src/criterion-evidence/criterion-goal.ts:21-23 refuses CRITERION_CHECK_GOAL_UNBOUND at
+ * CRITERION_EVIDENCE when activeCompiledGraphs (EXECUTION_ENABLED, CLOSING, COMPLETED) holds no graph
+ * for the goal: the state of every goal between creation and plan approval, and nothing failed to
+ * read. Every other refusal - CRITERION_CHECK_UNREADABLE, COMPILED_CONTRACT_BINDING_ABSENT, a scope
+ * mismatch, a transport error - stays a failed read with its code behind Details.
+ */
+function noPlanApprovedYet(outcome: Exclude<CriterionEvidenceOutcome, { status: "CRITERION_EVIDENCE" }>): boolean {
+  return outcome.status === "REFUSED" && outcome.code === "CRITERION_CHECK_GOAL_UNBOUND" && outcome.layer === "CRITERION_EVIDENCE";
+}
+
 function EvidenceBody({ view, port, onRecorded }: { readonly view: CriterionEvidenceView; readonly port: CriterionEvidencePort | null;
   readonly onRecorded: (() => void) | undefined }): JSX.Element {
   const [busy, setBusy] = useState(false); const sending = useRef(false); const mounted = useRef(true);
@@ -61,7 +73,9 @@ export function CriterionEvidenceCard({ outcome, port, onRecorded }: Props): JSX
   return <section className="cr2-approve" data-testid="cr.criteria.card">
     <h3 className="cr2-approve-heading">Criterion checks</h3>
     {outcome === null ? <p>Reading criterion evidence…</p> : outcome.status !== "CRITERION_EVIDENCE"
-      ? <OutcomeNote code={outcome.code} layer={outcome.layer} said="Criterion evidence could not be read." testId="cr.criteria.read-refusal" />
+      ? noPlanApprovedYet(outcome)
+        ? <p className="cr2-needs-note" data-testid="cr.criteria.none">No criterion checks yet: they appear once a plan is approved.</p>
+        : <OutcomeNote code={outcome.code} layer={outcome.layer} said="Criterion evidence could not be read." testId="cr.criteria.read-refusal" />
       : <EvidenceBody key={`${outcome.view.goalRef}:${outcome.view.planningRunRef}:${outcome.view.contractRef.revisionDigest}:${outcome.view.verifyOffer?.["expectedVersion"] ?? "held"}:${outcome.view.run?.runRef ?? "none"}`}
         view={outcome.view} port={port} onRecorded={onRecorded} />}
   </section>;
