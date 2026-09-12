@@ -146,7 +146,11 @@ export async function runSingleProjectMain(options: ProjectSingleMainOptions): P
   if (options.operatorInput !== undefined) {
     void consumePairingOperatorLines(options.operatorInput, async (line) => {
       if (/^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u.test(line)) {
-        await runtime.approvePairing(instanceId, line);
+        // Answer the operator, but never echo the label: it is a bearer until consumed.
+        // Before this the console stayed silent on both outcomes (measured 2026-09-13).
+        const result = await runtime.approvePairing(instanceId, line);
+        if (result.ok) options.log("moe start: pairing approved");
+        else disclose(result, options.log);
       }
     });
   }

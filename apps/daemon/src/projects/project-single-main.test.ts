@@ -136,6 +136,42 @@ describe("runSingleProjectMain", () => {
     });
     expect(approvePairing).toHaveBeenCalledTimes(1);
     expect(logs.join("\n")).not.toContain(label);
+    await vi.waitFor(() => { expect(logs).toContain("moe start: pairing approved"); });
+    finish({
+      code: "PROJECT_RUNTIME_COMPLETED", exitCode: 0,
+      layer: "PROJECT_RUNTIME_SUPERVISOR", ok: true,
+    });
+    expect(await completed).toBe(0);
+  });
+
+  it("discloses a refused label by code and layer, still without echoing the label", async () => {
+    const label = "dead-beef-9999";
+    const approvePairing = vi.fn(async () => ({
+      code: "PROJECT_RUNTIME_PAIRING_REFUSED" as const,
+      layer: "PROJECT_RUNTIME_SUPERVISOR" as const,
+      ok: false as const,
+    }));
+    let finish!: (value: {
+      code: "PROJECT_RUNTIME_COMPLETED"; exitCode: number;
+      layer: "PROJECT_RUNTIME_SUPERVISOR"; ok: true;
+    }) => void;
+    const wait = vi.fn(() => new Promise<{
+      code: "PROJECT_RUNTIME_COMPLETED"; exitCode: number;
+      layer: "PROJECT_RUNTIME_SUPERVISOR"; ok: true;
+    }>((resolve) => { finish = resolve; }));
+    const supervisor = runtime({ approvePairing, wait });
+    const logs: string[] = [];
+    const completed = runSingleProjectMain({
+      dependencies: dependencies(supervisor), env: { ANTHROPIC_API_KEY: "key" },
+      log: (line) => { logs.push(line); }, onSignal: vi.fn(),
+      operatorInput: operatorChunks(`${label}\n`),
+      platform: "win32", projectRoot: PROJECT.root, root: "D:\\artifact",
+    });
+    await vi.waitFor(() => {
+      expect(logs).toContain("PROJECT_RUNTIME_PAIRING_REFUSED PROJECT_RUNTIME_SUPERVISOR");
+    });
+    expect(logs.join("\n")).not.toContain(label);
+    expect(logs).not.toContain("moe start: pairing approved");
     finish({
       code: "PROJECT_RUNTIME_COMPLETED", exitCode: 0,
       layer: "PROJECT_RUNTIME_SUPERVISOR", ok: true,
