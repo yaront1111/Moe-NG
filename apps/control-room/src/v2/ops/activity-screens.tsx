@@ -11,6 +11,8 @@ import type { ProviderPause } from "../shell/pause-context.js";
 import { agoWords, decisionWords, isSeatRecord, principalWords, seatLimitWords, seatWords } from "./activity-words.js";
 import type { AgentProviderPort } from "./agent-provider-port.js";
 import { SeatDisclosure, SeatStartFacts } from "./seat-disclosure.js";
+import { SeatExits } from "./seat-exits.js";
+import { seatStartWords } from "./seat-lifetime-words.js";
 
 /**
  * ACTIVITY and SESSIONS, the pure panels. Activity is the decision ledger in a person's
@@ -165,8 +167,12 @@ export function SessionsPanel({
             const browsers = outcome.sessions.filter((session) => seatWords(session.sessionId) === "a paired browser");
             const row = (session: SessionView): JSX.Element => (
               <li className="cr2-activity-row" data-liveness={session.liveness} data-testid={`cr.sessions.row.${session.sessionId}`} key={session.sessionId}>
+                {/* "started 12 min ago" BEFORE "live until": a seat that hung for seven minutes read
+                    "live until <expiry>" exactly like a working one, and the start age is what lets
+                    an operator see how long it has been sitting there. Null names its own absence. */}
                 <span className="cr2-activity-when">{session.liveness === "LIVE"
-                  ? `live until ${session.expiresAt}` : session.liveness === "EXPIRED" ? `expired ${agoWords(session.expiresAt, nowMs)}` : "closed"}</span>
+                  ? `${seatStartWords(session.startedAt, nowMs)} ${MIDDOT} live until ${session.expiresAt}`
+                  : session.liveness === "EXPIRED" ? `expired ${agoWords(session.expiresAt, nowMs)}` : "closed"}</span>
                 <span className="cr2-activity-what">
                   {`${seatWords(session.sessionId)}${session.holding.length === 0 ? "" : ` ${MIDDOT} working on ${session.holding.join(", ")}`}`}
                 </span>
@@ -179,6 +185,9 @@ export function SessionsPanel({
                 {agents.length === 0 ? (
                   <p className="cr2-needs-note" data-testid="cr.sessions.noagents">No agent seat is open right now. Agents appear here while the wrapper is running.</p>
                 ) : <ul className="cr2-activity-list" data-testid="cr.sessions.list">{agents.map(row)}</ul>}
+                {/* In the open, not behind the past-seats fold: the fold is the "16 closed" count the
+                    finding measured, and a reason an operator has to expand for is one they miss. */}
+                <SeatExits nowMs={nowMs} seats={agentSeats} />
                 {past.length === 0 ? null : (
                   <details className="cr2-approve-inspect" data-testid="cr.sessions.past">
                     <summary className="cr2-approve-inspect-summary">{`${String(past.length)} past agent seats ${MIDDOT} expired or closed`}</summary>
