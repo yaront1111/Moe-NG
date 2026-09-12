@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 
 import provider from "../daemon-store-dependencies.js";
 import { startDaemon } from "../daemon-entry.js";
+import type { DaemonStartOptions } from "../daemon-entry.js";
 import { NODE_TRANSFORM_TYPES_FLAG } from "../orchestrator/moe-up-spawn.js";
 import {
   createNodeProjectStackConfigFs,
@@ -108,6 +109,24 @@ export async function* projectStackControlLines(input: Readable): AsyncIterable<
   if (pending.byteLength > 0) yield pending;
 }
 
+/**
+ * The hosted daemon's start options. `pairingOperatorChannelAvailable` is TRUE here ON
+ * PURPOSE: inside a stack host the daemon's own stdin is never a terminal, but its approval
+ * path is the host's control frame — `moe start` forwards the label typed at its console
+ * and `moe projects` forwards the manager's approval — so an operator channel is always
+ * present. Without the flag the pairing route answered `operatorChannelAvailable: false`
+ * and the control room told an artifact user to stop Moe and "run pnpm start", with no
+ * label to type (measured 2026-09-13: `moe start <dir>` from a real PowerShell console).
+ */
+export function hostedDaemonStartOptions(bindings: ProjectStackBindings): DaemonStartOptions {
+  return Object.freeze({
+    assetRoot: bindings.assetRoot,
+    assetSecrets: [bindings.credential],
+    dependencies: provider,
+    pairingOperatorChannelAvailable: true,
+  });
+}
+
 export interface ProjectStackHostMainOptions {
   readonly controls: AsyncIterable<string | Uint8Array>;
   readonly env: Readonly<Record<string, string | undefined>>;
@@ -167,11 +186,7 @@ if (meta.main === true) {
     fs: createNodeProjectStackConfigFs(),
     incarnationId: randomUUID,
     log: (line) => process.stderr.write(`${line}\n`),
-    startDaemon: async (bindings) => startDaemon({
-      assetRoot: bindings.assetRoot,
-      assetSecrets: [bindings.credential],
-      dependencies: provider,
-    }),
+    startDaemon: async (bindings) => startDaemon(hostedDaemonStartOptions(bindings)),
     startWrapper: (bindings) => startNodeWrapper(bindings, process.env, wrapperEntry),
     write: (line) => { process.stdout.write(line); },
   });

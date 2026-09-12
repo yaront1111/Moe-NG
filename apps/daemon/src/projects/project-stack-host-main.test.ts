@@ -11,10 +11,12 @@ import {
   PROJECT_STACK_PROTOCOL_VERSION,
 } from "./project-stack-protocol.js";
 import {
+  hostedDaemonStartOptions,
   projectStackControlLines,
   projectStackWrapperLaunch,
   runProjectStackHostMain,
 } from "./project-stack-host-main.js";
+import { resolveProjectStackConfig } from "./project-stack-config.js";
 import type { ProjectStackConfigFs } from "./project-stack-config.js";
 
 const CONFIG_PATH = "C:\\work\\alpha\\moe.config.json";
@@ -162,5 +164,20 @@ describe("project stack production wrapper launch", () => {
 
   it("ships the exact host entry selected by the curated runner boundary", () => {
     expect(existsSync(join(import.meta.dirname, "project-stack-host-main.ts"))).toBe(true);
+  });
+});
+
+describe("hostedDaemonStartOptions", () => {
+  it("advertises the host's control frame as the daemon's pairing operator channel", () => {
+    const resolved = resolveProjectStackConfig({
+      argv: [`--config=${CONFIG_PATH}`, `--asset-root=${ASSET_ROOT}`], env, fs: configFs(),
+    });
+    if (!resolved.ok) throw new Error(resolved.code);
+    const options = hostedDaemonStartOptions(resolved.bindings);
+    // The daemon's stdin is a pipe from the host, never a terminal; the label reaches it
+    // through the host frame. `false` here is what sent artifact users to "pnpm start".
+    expect(options.pairingOperatorChannelAvailable).toBe(true);
+    expect(options.assetRoot).toBe(ASSET_ROOT);
+    expect(options.assetSecrets).toEqual([CREDENTIAL]);
   });
 });
