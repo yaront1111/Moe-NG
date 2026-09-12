@@ -148,7 +148,7 @@
       "activeAmendmentId": "amend-1"
     }
   ],
-  "status": "REVIEW",
+  "status": "DONE",
   "assignedWorkerId": null,
   "branch": null,
   "prLink": null,
@@ -188,16 +188,24 @@
       "author": "worker-a1cf5270",
       "content": "ATTRIBUTION NOTE FOR QA — complete_task's `stats.filesModified` lists five paths; I modified THREE.\n\nActually modified by this row:\n  apps/daemon/src/planning/approval-activation.ts                 (comment only, 257 -> 296)\n  apps/daemon/src/planning/graph-revision-activation-leg.ts       (comment only, 243 -> 263)\n  apps/daemon/src/planning/approval-activation-graph-absence.test.ts  (new, 118 lines)\n\nNOT modified, listed only because they are in the plan's `affectedFiles` and the daemon harvested them:\n  apps/daemon/src/planning/graph-activation-service.ts\n  apps/daemon/src/planning/active-graph-projection.ts\n\nBoth are byte-identical to HEAD and I can prove it — they were the two files the step-6 drill mutated IN MEMORY, so I hashed them afterwards:\n  graph-activation-service.ts   — read only, never opened for edit\n  active-graph-projection.ts    — `git hash-object` 764ad0ab6f6ed78780a5f4756f2e4a18bab88878 == `git rev-parse HEAD:<path>` 764ad0ab6f6ed78780a5f4756f2e4a18bab88878\n  gates-journey-fixtures.ts     — same check, 0a34decfd3ed8b8669e0e8dfa7f491ab60191529 both sides (also drilled in memory, also unmodified, and not even in the list)\n\n`git status --porcelain --untracked-files=all -- apps/daemon/src` at delivery shows exactly the three real paths and nothing else. Since the wrapper commits by explicit pathspec, the two unmodified entries contribute no bytes — this note exists so the list is not misread as undisclosed scope.",
       "timestamp": "2026-09-12T03:29:50.170Z"
+    },
+    {
+      "id": "comment-4cdab88aa0e946d4a007cf00285c7fec",
+      "author": "qa-a8573597",
+      "content": "QA EVIDENCE (qa-a8573597) — full detail; reviewSummary carries the short form.\n\nANCHOR: completion commit 2e8819e7, `git branch --contains` -> moe/work-2026-09-11. Reviewed the commit, not the dirty shared tree. 4 paths, Moe-Inferred: 0.\n\nGATE RE-RUN BY ME, foreground, fresh: `pnpm --filter @moe/daemon test` ->\n    Test Files  621 passed (621)\n    Tests  11126 passed | 21 skipped (11147)\n    Duration 280.96s\nPIPESTATUS0=0 (piped through `grep -v '^policy-risk:'`; tail's status would have been the wrong one to read). Count line present and nonzero, so the leg executed. Identical to task.verification.\n\nNON-VACUITY DRILLED INDEPENDENTLY — I did not grade the worker's transcript, I wrote my own drill. Out-of-tree config in %TEMP%, in-memory Vite `transform` with `enforce: \"pre\"`, each mutant anchored on an exact literal with `throw new Error(\"DRILL_ANCHOR_MISSING_*\")`, mutant chosen by `MOE_DRILL_MUTANT` with a throw on any unrecognised value. ZERO on-disk mutation: `git status --porcelain --untracked-files=all -- apps/daemon/src` EMPTY before and after, so no restore proof is owed.\n\n  CLEAN CONTROL, production config: `npx vitest run --root . --config package.json src/planning/approval-activation-graph-absence.test.ts` -> Test Files 1 passed (1) / Tests 2 passed (2), exit 0.\n\n  MUTANT `layeronly` — swaps ONLY `    layer: ACTIVE_GRAPH_PROJECTION_LAYER,` inside `refuse()` (active-graph-projection.ts:100), leaving the EXPORTED constant untouched. Code- and count-preserving, so an arm asserting merely `ok:false` or merely the code stays green on it. RED at :81 and :107:\n      - \"layer\": \"ACTIVE_GRAPH_PROJECTION\",\n      + \"layer\": \"QA_DRILL_WRONG_LAYER\",\n    with \"code\": \"ACTIVE_GRAPH_ABSENT\" held on both sides. This is what discharges the \"code AND layer\" half of epic rail 4; nothing else does.\n\n  MUTANT `activate` — injects `seedActivationGraph(store)` immediately after `approvePlan(store, sealed.runId)` in gates-journey-fixtures.ts, reproducing the deleted gates-unattended-fixtures.ts fabrication verbatim. RED at :81:\n      - \"code\": \"ACTIVE_GRAPH_ABSENT\", - \"layer\": \"ACTIVE_GRAPH_PROJECTION\", - \"ok\": false,\n      + \"ok\": true,\n\n  BOTH reds are ASSERTION reds over a world that PROVABLY BUILT — arm (a)'s two inline commit assertions (:69-73, the GoalExecutionEnabled count and activeCompiledGraphs containing GOAL_ID) ran and passed before the failure line. Neither is the setup throw the amendment forbids. I did NOT drill `refuse(\"ACTIVE_GRAPH_ABSENT\")` itself: budget-genesis-binding.ts:38 branches on that exact string, so it setup-throws — the worker measured and disclosed that, and I confirm the reasoning rather than repeating the run.\n\nDoD 1 and 5 — every header citation spot-checked on disk and EXACT, not merely plausible:\n  daemon-command-graph-edges.ts:26 `graph.approve -> activateApprovedGraph (task-eacea969)`\n  daemon-command-graph-approve.ts:168 `return activateApprovedGraph(...)`\n  graph-activation-service.ts:240 \"The revision leg is ALWAYS present\"\n  graph-supersede-legs.ts:214-228 `successorGraphEpoch: predecessor.graphEpoch + 1`\n  graph-supersede-facts.ts:204 `readCurrentActiveGraph` -> GRAPH_SUPERSEDE_CURRENT_GRAPH_UNAVAILABLE\n  graph-transition-legs.ts:102 `buildGraphRevisionActivationLeg({`\n  packages/core/src/planning/graph-revision-reducer.ts:12-15 — the quoted sentence starts on 12; the worker's one-notch correction off the step text is RIGHT.\n  active-graph-projection.ts:36 ACTIVE_GRAPH_PROJECTION_LAYER = \"ACTIVE_GRAPH_PROJECTION\"\n  `git grep 'no production caller' -- apps/daemon/src packages` -> one hit in this module, line 21, inside the \"read it as history\" paragraph, past tense. The other three hits are unrelated modules.\n\nDoD 2 — I spot-checked 5 of the 15 classifications against the source rather than accepting the tally: graph-query.ts:239 `if (!read.ok) return read;` (refusal passes through UNTOUCHED — the strongest single item, and it is real); bootstrap/policy-risk-reader.ts:121 `if (!active.ok) return activeUnknown(active)`; work/foundation-dispatch-derivation.ts:143 `foundationAttemptRefusal(graph.code, graph.layer)` as the first statement; daemon-store-foundation-composition.ts:440 is a port-wiring lambda (c); supersession-preparation-ledger.ts:82 is `export const RELEASE_ACTIVATION_EVIDENCE: ActivationEvidencePort = readCurrentActiveGraph` — a const alias, not a call (c). All accurate. 0 in category (b) stands, so the overturn condition correctly did not fire.\n\nDoD 3 — NOT APPLICABLE, and declared rather than skipped. It is the YES branch; the answer is NO and DoD 4 is its counterpart. No placeholder test was manufactured to fill the slot. I confirm the row asserts neither POLICY_RISK_SUBJECT_UNAVAILABLE (the DoD parenthetical's wrong code) nor any other policy-risk code in the new suite.\n\nNO BEHAVIOUR CHANGE — measured by me, not accepted: both production diffs filtered to added AND removed lines that are not comment return EMPTY. The only executable bytes the row adds are the test file. So epic rails 1 and 2 do not fire — no control-room leg, no digest-mirror census owed.\n\nPER-FILE: approval-activation.ts 296, graph-revision-activation-leg.ts 263, the new test 118. All under the 400 split bar. The two over the 250 target are over it on COMMENT growth alone; consistent with the standing QA already recorded for approval-activation.ts and not a rejection reason.\n\nSHARED CHECKOUT: 7 dirty peer paths (.moe/**, .codex/**, node-*-e2e-* deletions, Moe-NG_Deep_Review_2026-09-05.md). Untouched, not a stop condition, apps/daemon/src itself is clean.",
+      "timestamp": "2026-09-12T03:36:44.988Z"
     }
   ],
   "hasPendingQuestion": false,
   "createdAt": "2026-09-11T22:32:29.393Z",
-  "updatedAt": "2026-09-12T03:29:50.170Z",
+  "updatedAt": "2026-09-12T03:37:18.490Z",
   "metrics": {
     "firstClaimAt": "2026-09-12T03:02:01.162Z",
     "plannedStepCount": 8,
     "plannedDistinctFileCount": 5,
-    "executedStepCount": 8
+    "executedStepCount": 8,
+    "doneAt": "2026-09-12T03:37:18.490Z",
+    "wallClockMs": 2117328
   },
   "stepsCompleted": [
     "step-1",
@@ -226,7 +234,8 @@
   },
   "planApprovedAt": "2026-09-12T03:04:18.240Z",
   "contextFetchedBy": [
-    "worker-a1cf5270"
+    "worker-a1cf5270",
+    "qa-a8573597"
   ],
   "workStartedAt": "2026-09-12T03:04:51.467Z",
   "reviewStartedAt": "2026-09-12T03:29:35.159Z",
@@ -241,7 +250,43 @@
     "apps/daemon/src/planning/graph-activation-service.ts",
     "apps/daemon/src/planning/graph-revision-activation-leg.ts",
     "apps/daemon/src/planning/active-graph-projection.ts",
-    "apps/daemon/src/planning/approval-activation-graph-absence.test.ts"
+    "apps/daemon/src/planning/approval-activation-graph-absence.test.ts",
+    ".moe/tasks/task-c055f6af6e63412c905d02a3ac657a57.json"
   ],
-  "completionSummary": "THE DECISION IS NO: plan approval deliberately does NOT leave an active graph revision. Recorded in code, gated by an arm, no behaviour changed — `git diff -U0 -- apps/daemon/src` filtered to non-comment added lines returns ZERO, so the only executable bytes are the new test.\n\nDoD 3 IS NOT APPLICABLE, AND THAT IS A RESULT, NOT AN OMISSION. DoD 3 is the YES branch (\"if approval SHOULD activate a revision, drive it and assert readCurrentActiveGraph answers OK, plus a non-empty policy-risk record\"). The answer is NO, so the branch does not arise; DoD 4 is its NO-branch counterpart and is met. I did not manufacture a placeholder test to fill the slot. DoD 3's parenthetical also names the wrong refusal code (comment-e9864132); I assert neither it nor the corrected code anywhere.\n\nWHY NO. (1) `graph.approve -> activateApprovedGraph` already owns the transition (daemon-command-graph-edges.ts:26, called daemon-command-graph-approve.ts:168) and there the revision leg is unconditional (graph-activation-service.ts:240). (2) The journey NEVER RUNS it — zero grep hits for `graph\\.approve|graphApprove` in gates-journey/unattended fixtures. So ABSENT means the activating command has not run, not that approval forgot. Plan approval's durable effect is `GoalExecutionEnabled` on the GOAL.\n\nMY OWN ADVERSARIAL PASS OVERTURNED PART OF MY HEADERS. I first wrote \"graph.approve is the ONLY command that activates a revision\". FALSE: `graph-supersede-legs.ts:214-228` builds a successor revision at predecessor.graphEpoch+1, so `graph.supersede` is a second writer of the projection. Fixed in both headers. It does not change the verdict — it sharpens it: both writers are commands ON THE GRAPH with one lifecycle; a leg here would be a THIRD writer from outside that family.\n\nDoD 2 — fifteen readers re-grepped at HEAD (all present, same lines) and CLASSIFIED, in step-2's note: 13 fail-closed forwarding the projection's own code AND layer, 2 out of scope (port-wiring lambda at daemon-store-foundati"
+  "completionSummary": "THE DECISION IS NO: plan approval deliberately does NOT leave an active graph revision. Recorded in code, gated by an arm, no behaviour changed — `git diff -U0 -- apps/daemon/src` filtered to non-comment added lines returns ZERO, so the only executable bytes are the new test.\n\nDoD 3 IS NOT APPLICABLE, AND THAT IS A RESULT, NOT AN OMISSION. DoD 3 is the YES branch (\"if approval SHOULD activate a revision, drive it and assert readCurrentActiveGraph answers OK, plus a non-empty policy-risk record\"). The answer is NO, so the branch does not arise; DoD 4 is its NO-branch counterpart and is met. I did not manufacture a placeholder test to fill the slot. DoD 3's parenthetical also names the wrong refusal code (comment-e9864132); I assert neither it nor the corrected code anywhere.\n\nWHY NO. (1) `graph.approve -> activateApprovedGraph` already owns the transition (daemon-command-graph-edges.ts:26, called daemon-command-graph-approve.ts:168) and there the revision leg is unconditional (graph-activation-service.ts:240). (2) The journey NEVER RUNS it — zero grep hits for `graph\\.approve|graphApprove` in gates-journey/unattended fixtures. So ABSENT means the activating command has not run, not that approval forgot. Plan approval's durable effect is `GoalExecutionEnabled` on the GOAL.\n\nMY OWN ADVERSARIAL PASS OVERTURNED PART OF MY HEADERS. I first wrote \"graph.approve is the ONLY command that activates a revision\". FALSE: `graph-supersede-legs.ts:214-228` builds a successor revision at predecessor.graphEpoch+1, so `graph.supersede` is a second writer of the projection. Fixed in both headers. It does not change the verdict — it sharpens it: both writers are commands ON THE GRAPH with one lifecycle; a leg here would be a THIRD writer from outside that family.\n\nDoD 2 — fifteen readers re-grepped at HEAD (all present, same lines) and CLASSIFIED, in step-2's note: 13 fail-closed forwarding the projection's own code AND layer, 2 out of scope (port-wiring lambda at daemon-store-foundati",
+  "commits": [
+    {
+      "sha": "2e8819e772552a5c542f7d0955a3ee51010d7eac",
+      "ref": "refs/heads/moe/work-2026-09-11",
+      "kind": "completion",
+      "role": "worker",
+      "sessionId": "worker-a1cf5270@2026-09-12T03:04:30Z",
+      "paths": [
+        ".moe/tasks/task-c055f6af6e63412c905d02a3ac657a57.json",
+        "apps/daemon/src/planning/approval-activation.ts",
+        "apps/daemon/src/planning/approval-activation-graph-absence.test.ts",
+        "apps/daemon/src/planning/graph-revision-activation-leg.ts"
+      ],
+      "recordedBy": "worker-a1cf5270",
+      "recordedAt": "2026-09-12T03:30:00.318Z",
+      "treeId": "2051ad80b123f5edb63ebff7b22e7eb01754358d",
+      "status": "REVIEW",
+      "pushed": true
+    }
+  ],
+  "touchedFiles": [
+    "apps/daemon/src/planning/approval-activation-graph-absence.test.ts",
+    "apps/daemon/src/planning/approval-activation.ts",
+    "apps/daemon/src/planning/graph-revision-activation-leg.ts"
+  ],
+  "unattributedPaths": [],
+  "lastCommitOutcome": {
+    "outcome": "committed",
+    "kind": "completion",
+    "sessionId": "worker-a1cf5270@2026-09-12T03:04:30Z",
+    "at": "2026-09-12T03:30:00.318Z"
+  },
+  "completedAt": "2026-09-12T03:37:18.490Z",
+  "reviewCompletedAt": "2026-09-12T03:37:18.490Z",
+  "reviewSummary": "APPROVED at completion commit 2e8819e7 (branch --contains moe/work-2026-09-11), reviewed from the commit not the dirty tree. Full evidence in comment-4cdab88a.\n\nGATE RE-RUN BY ME, foreground: `pnpm --filter @moe/daemon test` -> `Test Files 621 passed (621)` / `Tests 11126 passed | 21 skipped (11147)`, PIPESTATUS0=0. Nonzero count line. Identical to task.verification.\n\nDoD 6 DRILLED INDEPENDENTLY — my own drill, not the worker's transcript. Out-of-tree config, in-memory enforce:\"pre\" transform, anchors throw when missing, ZERO on-disk mutation (git status -uall on apps/daemon/src empty before AND after). Clean control 2 passed exit 0.\n- layeronly: moves ONLY `layer:` inside refuse(), exported constant untouched, code- and count-preserving -> RED :81 and :107, `- \"ACTIVE_GRAPH_PROJECTION\" / + \"QA_DRILL_WRONG_LAYER\"` with code held. This discharges \"code AND layer\".\n- activate: seeds a revision right after approvePlan in gates-journey-fixtures, reproducing the deleted unattended-fixture fabrication -> RED :81, `+ \"ok\": true`.\nBoth ASSERTION reds over a world that PROVABLY BUILT — arm (a)'s inline commit assertions at :69-73 passed first. Neither is a setup throw.\n\nDoD 1/5: every header citation spot-checked on disk and EXACT (edges:26, approve:168, activation-service:240, supersede-legs:214-228, supersede-facts:204, transition-legs:102, core reducer 12-15, LAYER const :36). \"No production caller\" is now one hit, past tense, in the history paragraph.\nDoD 2: 5 of 15 classifications verified against source (graph-query:239 returns the refusal untouched; policy-risk-reader:121; foundation-dispatch:143; composition:440 port lambda; ledger:82 const alias). 0 in category (b) stands.\nDoD 3: correctly NOT APPLICABLE (YES branch), declared not skipped.\n\nNO BEHAVIOUR CHANGE, measured: both production diffs filtered to non-comment added AND removed lines return EMPTY. Rails 1/2 do not fire. Per-file 296/263/118, under 400."
 }
