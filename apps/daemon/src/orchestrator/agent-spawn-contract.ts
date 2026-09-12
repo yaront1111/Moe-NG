@@ -188,10 +188,10 @@ export interface SeatExitReport {
   readonly signal: NodeJS.Signals | null;
   readonly tail: readonly string[];
   /**
-   * Whether the WRAPPER began the seat's termination (lifetime timeout, stdin failure, shutdown)
-   * rather than the seat closing on its own. On Windows `taskkill /F` closes with exit 1 and no
-   * signal, indistinguishable from the seat's own failure unless the wrapper writes this down.
-   * Null where no lifetime was observed.
+   * Whether the WRAPPER began the seat's termination (lifetime timeout, stdin failure, a child
+   * `error` event after a pid was assigned, shutdown) rather than the seat closing on its own. On
+   * Windows `taskkill /F` closes with exit 1 and no signal, indistinguishable from the seat's own
+   * failure unless the wrapper writes this down. Null where no lifetime was observed.
    */
   readonly terminatedByWrapper: boolean | null;
 }

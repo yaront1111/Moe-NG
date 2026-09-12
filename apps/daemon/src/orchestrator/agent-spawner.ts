@@ -256,7 +256,9 @@ function spawnRuntime(
         cleanup();
         resolve({
           exitCode: lastClose.code, outputSeen, signal: lastClose.signal, tail: tail.lines(),
-          // `terminating` is set by beginTermination alone: timeout, stdin failure, or close().
+          // `terminating` is set by beginTermination alone, from its four callers below: the
+          // lifetime timer, failInput (an stdin error or a throwing write), a child `error`
+          // event after a pid was assigned, and close() through terminateOwned.
           terminatedByWrapper: terminating,
         });
       };

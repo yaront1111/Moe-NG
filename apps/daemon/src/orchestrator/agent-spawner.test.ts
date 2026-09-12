@@ -1260,6 +1260,74 @@ describe("seat output tee", () => {
     }
   });
 
+  /**
+   * THE FOURTH beginTermination CALLER, beside the lifetime timer, failInput and close(): a
+   * child `error` event that arrives after a pid was assigned contains the tree instead of
+   * failing the process (agent-spawner.ts, the `error` listener), so the lifetime RESOLVES and
+   * its report must say the wrapper did the terminating.
+   */
+  it("reports a post-admission child error with a pid as terminated by the wrapper", async () => {
+    const { calls, spawn } = fakeSpawn(7314);
+    const groupKills: number[] = [];
+    const { made: start } = inSandbox(claudeSpawnStarter, {
+      command: "claude", killGraceMs: 30, killProcessGroup: (pid) => { groupKills.push(pid); },
+      log: () => undefined, platform: "linux", spawn,
+    });
+    const { child, exit } = await admit(start, calls);
+
+    child.emitter.emit("error", new Error("runtime error after start"));
+    expect(groupKills).toEqual([-7314]);
+    child.emitter.emit("close", null, "SIGKILL");
+
+    expect(await exit).toEqual({
+      exitCode: null, outputSeen: false, signal: "SIGKILL", tail: [], terminatedByWrapper: true,
+    });
+  });
+
+  /**
+   * THE LIVE WIN32 SIGNATURE, end to end through the starter the wrapper binary holds: the
+   * lifetime timer spawns `taskkill /T /F`, the killer closes 0, and the agent closes (1, null),
+   * because a force-killed Windows process reports exit 1 and no signal. That is exactly the
+   * record seat pid 88288 left (exit 1, nothing printed), so the report and the log line must
+   * carry the two facts that separate it from a crash: no byte seen, terminated by the wrapper.
+   */
+  it("pins the live win32 signature: taskkill closes 0, the agent closes (1, null), terminated by the wrapper", async () => {
+    vi.useFakeTimers();
+    const agent = fakeSpawn(88288);
+    const killer = fakeSpawn(9876);
+    const order = [agent, killer];
+    const spawn: NonNullable<AgentSpawnerOptions["spawn"]> = (file, args, options) => {
+      const selected = order.shift();
+      if (selected === undefined) throw new Error("unexpected extra spawn");
+      return selected.spawn(file, args, options);
+    };
+    const logs: string[] = [];
+    const { made: start } = inSandbox(claudeSpawnStarter, {
+      command: "claude", environment: { SYSTEMROOT: "C:\\Windows" }, killGraceMs: 30,
+      log: (line) => { logs.push(line); }, platform: "win32", spawn, timeoutMs: 20,
+    });
+    try {
+      const { child, exit } = await admit(start, agent.calls);
+      await vi.advanceTimersByTimeAsync(20);
+      expect(killer.calls[0]).toMatchObject({
+        args: ["/pid", "88288", "/T", "/F"], file: "C:\\Windows\\System32\\taskkill.exe",
+      });
+
+      child.emitter.emit("close", 1, null);
+      killer.calls[0]?.emitter.emit("close", 0, null);
+
+      expect(await exit).toEqual({
+        exitCode: 1, outputSeen: false, signal: null, tail: [], terminatedByWrapper: true,
+      });
+      expect(logs).toContain(
+        "[wrapper] project.register@proj-1 agent exited 1"
+        + " (signal none, output none, terminated by wrapper)",
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("carries the output flag on a nonzero exit that printed nothing", async () => {
     const { calls, start } = teedStart();
     const { child, exit } = await admit(start, calls);
