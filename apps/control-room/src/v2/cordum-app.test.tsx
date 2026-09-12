@@ -1204,8 +1204,11 @@ describe("CordumApp wires the durable run and the daemon's approval grant", () =
     });
     await openTheDurableBoard();
 
-    // The V1 plane reads the `/1` route with the same goal ref, never `/v2/...`.
-    expect((await screen.findByTestId("cr.gate1.requirement.req-1")).textContent)
+    // The V1 plane reads the `/1` route with the same goal ref, never `/v2/...`. The roster
+    // folds by identifier family and a closed family mounts no rows, so the `req` family is
+    // opened before its one requirement is read.
+    await userEvent.click(await screen.findByTestId("cr.gate1.requirements.group.req"));
+    expect(screen.getByTestId("cr.gate1.requirement.req-1").textContent)
       .toContain("Users can sign in.");
     expect(app.pendingReads).toEqual([
       `/product-contract/pending/read ${JSON.stringify({ goalRef: DURABLE.goalRef })}`,
