@@ -11,7 +11,9 @@ import {
   PROJECT_STACK_PROTOCOL_VERSION,
 } from "./project-stack-protocol.js";
 import {
+  WRAPPER_LOG_RELATIVE_PATH,
   hostedDaemonStartOptions,
+  openWrapperLog,
   projectStackControlLines,
   projectStackWrapperLaunch,
   runProjectStackHostMain,
@@ -160,6 +162,44 @@ describe("project stack production wrapper launch", () => {
         windowsHide: true,
       },
     });
+  });
+
+  it("writes the wrapper's stdout AND stderr to the sink it was given, stdin still closed", () => {
+    const request = projectStackWrapperLaunch({
+      assetRoot: ASSET_ROOT,
+      configPath: CONFIG_PATH,
+      credential: CREDENTIAL,
+      instanceId: INSTANCE_ID,
+      projectId: "alpha",
+      projectRoot: "C:\work\alpha",
+      storePath: STORE_PATH,
+    }, env, "C:\Moe\apps\daemon\src\orchestrator\agent-wrapper-main.ts", 7);
+    // Both streams to ONE descriptor: a seat's stderr (the crash) must land beside its stdout.
+    expect(request.options.stdio).toEqual(["ignore", 7, 7]);
+  });
+
+  it("opens <project>/.moe-next/wrapper.log for append and answers null where it cannot", () => {
+    const { mkdtempSync, closeSync, existsSync, rmSync } = require("node:fs") as typeof import("node:fs");
+    const { tmpdir } = require("node:os") as typeof import("node:os");
+    const root = mkdtempSync(join(tmpdir(), "moe-wrapper-log-"));
+    try {
+      const fd = openWrapperLog(root);
+      expect(fd).not.toBeNull();
+      if (fd !== null) closeSync(fd);
+      expect(existsSync(join(root, WRAPPER_LOG_RELATIVE_PATH))).toBe(true);
+    } finally {
+      rmSync(root, { force: true, recursive: true });
+    }
+    // A FILE where the project directory should be: mkdir refuses, and the launch falls back
+    // to "ignore" instead of failing the whole project start over a log.
+    const blocker = mkdtempSync(join(tmpdir(), "moe-wrapper-log-blocker-"));
+    try {
+      const { writeFileSync } = require("node:fs") as typeof import("node:fs");
+      writeFileSync(join(blocker, "file"), "");
+      expect(openWrapperLog(join(blocker, "file"))).toBeNull();
+    } finally {
+      rmSync(blocker, { force: true, recursive: true });
+    }
   });
 
   it("ships the exact host entry selected by the curated runner boundary", () => {

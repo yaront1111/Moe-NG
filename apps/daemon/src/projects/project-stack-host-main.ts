@@ -1,6 +1,9 @@
 #!/usr/bin/env node
 import { spawn } from "node:child_process";
+import type { StdioOptions } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { closeSync, mkdirSync, openSync } from "node:fs";
+import { join } from "node:path";
 import type { Readable } from "node:stream";
 import { fileURLToPath } from "node:url";
 
@@ -35,15 +38,26 @@ interface WrapperLaunch {
     readonly cwd: string;
     readonly env: Readonly<Record<string, string | undefined>>;
     readonly shell: false;
-    readonly stdio: "ignore";
+    readonly stdio: "ignore" | readonly ["ignore", number, number];
     readonly windowsHide: true;
   };
 }
 
+/** Where the wrapper's console goes: every seat's stdout and stderr are teed into it. */
+export const WRAPPER_LOG_RELATIVE_PATH = join(".moe-next", "wrapper.log");
+
+/**
+ * `sink` is an open file descriptor the wrapper's stdout AND stderr are written to. Without
+ * one the console is dropped. It used to be dropped ALWAYS: seat output tees into the
+ * wrapper's stdio (agent-spawner.ts), the host spawned the wrapper with stdio "ignore", and
+ * a seat that hung for its whole 30-minute lifetime left no trace anywhere (measured
+ * 2026-09-13, seat pid 88288 on a real project: zero connections, nothing on any screen).
+ */
 export function projectStackWrapperLaunch(
   bindings: ProjectStackBindings,
   env: Readonly<Record<string, string | undefined>>,
   wrapperEntry: string,
+  sink?: number,
 ): WrapperLaunch {
   return Object.freeze({
     argv: Object.freeze([NODE_TRANSFORM_TYPES_FLAG, wrapperEntry]),
@@ -52,10 +66,20 @@ export function projectStackWrapperLaunch(
       cwd: bindings.projectRoot,
       env,
       shell: false as const,
-      stdio: "ignore" as const,
+      stdio: sink === undefined ? "ignore" as const : Object.freeze(["ignore", sink, sink] as const),
       windowsHide: true as const,
     }),
   });
+}
+
+/** Opens the project's wrapper log for append, or answers null when the project refuses it. */
+export function openWrapperLog(projectRoot: string): number | null {
+  try {
+    mkdirSync(join(projectRoot, ".moe-next"), { recursive: true });
+    return openSync(join(projectRoot, WRAPPER_LOG_RELATIVE_PATH), "a", 0o600);
+  } catch {
+    return null;
+  }
 }
 
 function startNodeWrapper(
@@ -63,11 +87,19 @@ function startNodeWrapper(
   env: Readonly<Record<string, string | undefined>>,
   wrapperEntry: string,
 ): ProjectStackWrapperHandle {
-  const request = projectStackWrapperLaunch(bindings, env, wrapperEntry);
+  const sink = openWrapperLog(bindings.projectRoot);
+  const request = projectStackWrapperLaunch(bindings, env, wrapperEntry, sink ?? undefined);
+  const stdio: StdioOptions = sink === null ? "ignore" : ["ignore", sink, sink];
   const child = spawn(request.command, [...request.argv], {
     ...request.options,
     env: { ...request.options.env },
+    stdio,
   });
+  if (sink !== null) {
+    // The child holds its own handle once spawned; this one is closed on either outcome.
+    child.once("spawn", () => { try { closeSync(sink); } catch { /* already closed */ } });
+    child.once("error", () => { try { closeSync(sink); } catch { /* already closed */ } });
+  }
   const completed = new Promise<Readonly<{ readonly code: number | null }>>((resolve) => {
     let done = false;
     const settle = (code: number | null): void => {
