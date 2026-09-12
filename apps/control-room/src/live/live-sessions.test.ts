@@ -10,14 +10,15 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { SEAT_FACT_UNMEASURED, SESSIONS_FRAME_KEYS, SESSION_KEYS, mapSessionsAnswer } from "./live-sessions.js";
+import { SEAT_EXIT_KEYS, SEAT_FACT_UNMEASURED, SESSIONS_FRAME_KEYS, SESSION_KEYS, mapSessionsAnswer } from "./live-sessions.js";
 
 const SESSION = {
   agentVersionAtStart: "2.1.263 (Claude Code)",
-  capabilities: ["review.write", "work.write"], expiresAt: "2026-09-03T11:00:00.000Z",
+  capabilities: ["review.write", "work.write"], exit: null, expiresAt: "2026-09-03T11:00:00.000Z",
   holding: ["node.deliver@node-a"], liveness: "LIVE", principalId: "sess-wrap-abc",
-  providerAtStart: "claude", sessionId: "sess-wrap-abc", status: "OPEN",
+  providerAtStart: "claude", sessionId: "sess-wrap-abc", startedAt: "2026-09-03T09:48:00.000Z", status: "OPEN",
 };
+const EXIT = { at: "2026-09-03T09:58:00.000Z", exitCode: 1, kind: "FAILED", lastLine: "Error: spawn claude ENOENT" };
 /** A frame carrying exactly the seats given, so a per-SEAT arm can vary one row at a time. */
 const seatFrame = (...rows: readonly unknown[]): Record<string, unknown> => ({
   agentProvider: { configured: "claude", envOverride: false },
@@ -158,9 +159,9 @@ describe("mapSessionsAnswer decodes what each SEAT was started with", () => {
     expect(outcome.sessions).toHaveLength(1);
     expect(outcome.sessions[0]).toEqual({
       agentVersionAtStart: "2.1.263 (Claude Code)", capabilities: ["review.write", "work.write"],
-      expiresAt: "2026-09-03T11:00:00.000Z", holding: ["node.deliver@node-a"], liveness: "LIVE",
+      exit: null, expiresAt: "2026-09-03T11:00:00.000Z", holding: ["node.deliver@node-a"], liveness: "LIVE",
       principalId: "sess-wrap-abc", providerAtStart: "claude", sessionId: "sess-wrap-abc",
-      status: "OPEN",
+      startedAt: "2026-09-03T09:48:00.000Z", status: "OPEN",
     });
     // Both members MOVE with the frame: a hard-coded "claude"/version could not pass this pair.
     const other = mapSessionsAnswer(200, seatFrame(
@@ -195,7 +196,7 @@ describe("mapSessionsAnswer decodes what each SEAT was started with", () => {
       delete short[key];
       expect(mapSessionsAnswer(200, seatFrame(short))).toEqual(INVALID);
     }
-    expect(SESSION_KEYS.length).toBe(9);
+    expect(SESSION_KEYS.length).toBe(11);
   });
 
   it("REJECTS a WRONG-TYPED per-seat member, including values a truthiness check accepts", () => {
@@ -233,5 +234,89 @@ describe("mapSessionsAnswer decodes what each SEAT was started with", () => {
     // the daemon side reddens here rather than silently teaching the browser a dead word.
     const source = readFileSync(resolve(process.cwd(), "..", "daemon", "src", "orchestrator", "seat-start-contracts.ts"), "utf8");
     expect(source).toContain(`export const SEAT_FACT_UNMEASURED = "${SEAT_FACT_UNMEASURED}" as const;`);
+  });
+});
+
+/**
+ * WHEN A SEAT STARTED AND HOW IT ENDED — the two per-seat members the Health screen could not
+ * show. Measured on a live drive: a seat that hung for seven minutes read "live until <expiry>"
+ * like a working one, and its exit was one more "closed" in a count. Both arrive from the daemon
+ * as VALUES OR NULL and are shaped verbatim; the decode refuses every other shape by code and
+ * layer, because a browser that defaulted "started just now" or "completed" would put a fact on
+ * screen the daemon never stated.
+ */
+describe("mapSessionsAnswer decodes when a seat started and how it ended", () => {
+  it("shapes the start instant verbatim, and carries the daemon's null through as null", () => {
+    const outcome = mapSessionsAnswer(200, seatFrame(SESSION));
+    if (outcome.status !== "SESSIONS") throw new Error(`expected SESSIONS, got ${outcome.code}`);
+    expect(outcome.sessions[0]?.startedAt).toBe("2026-09-03T09:48:00.000Z");
+    // It MOVES with the frame, and null is a value here, not a blank: a paired browser and every
+    // seat older than the start ledger arrive as null and must render as "not recorded".
+    const other = mapSessionsAnswer(200, seatFrame({ ...SESSION, startedAt: "2026-09-03T09:55:00.000Z" }));
+    expect(other.status === "SESSIONS" && other.sessions[0]?.startedAt).toBe("2026-09-03T09:55:00.000Z");
+    const none = mapSessionsAnswer(200, seatFrame({ ...SESSION, startedAt: null }));
+    expect(none.status === "SESSIONS" && none.sessions[0]?.startedAt).toBeNull();
+  });
+
+  it("REJECTS a start instant that is neither a non-empty string nor null", () => {
+    // `""` catches a bare typeof check; `0`, `false`, `[]`, `{}` catch a truthiness one; and
+    // `undefined` (the key present, the value missing) must not read as "null".
+    for (const bad of ["", 0, 1, false, true, [], {}, undefined]) {
+      expect(mapSessionsAnswer(200, seatFrame({ ...SESSION, startedAt: bad }))).toEqual(INVALID);
+    }
+  });
+
+  it("shapes a recorded exit verbatim: kind, exit code, last line and instant", () => {
+    const outcome = mapSessionsAnswer(200, seatFrame({ ...SESSION, exit: EXIT, liveness: "CLOSED", status: "CLOSED" }));
+    if (outcome.status !== "SESSIONS") throw new Error(`expected SESSIONS, got ${outcome.code}`);
+    expect(outcome.sessions[0]?.exit).toEqual(EXIT);
+    // A seat killed on a signal has NO exit code and no last line: both nulls are VALUES the
+    // screen renders as such, never coerced to 0 or "".
+    const killed = mapSessionsAnswer(200, seatFrame({ ...SESSION, exit: { ...EXIT, exitCode: null, lastLine: null } }));
+    expect(killed.status === "SESSIONS" && killed.sessions[0]?.exit).toEqual({ at: EXIT.at, exitCode: null, kind: "FAILED", lastLine: null });
+    const done = mapSessionsAnswer(200, seatFrame({ ...SESSION, exit: { ...EXIT, exitCode: 0, kind: "COMPLETED" } }));
+    expect(done.status === "SESSIONS" && done.sessions[0]?.exit?.kind).toBe("COMPLETED");
+    expect(done.status === "SESSIONS" && done.sessions[0]?.exit?.exitCode).toBe(0);
+  });
+
+  it("REJECTS an exit object with an EXTRA or a DROPPED key, by code and by layer", () => {
+    expect(mapSessionsAnswer(200, seatFrame({ ...SESSION, exit: { ...EXIT, signal: "SIGKILL" } }))).toEqual(INVALID);
+    for (const key of SEAT_EXIT_KEYS) {
+      const short: Record<string, unknown> = { ...EXIT };
+      delete short[key];
+      expect(mapSessionsAnswer(200, seatFrame({ ...SESSION, exit: short }))).toEqual(INVALID);
+    }
+    expect(SEAT_EXIT_KEYS.length).toBe(4);
+  });
+
+  it("REJECTS a WRONG-TYPED exit member, including values a truthiness check accepts", () => {
+    // `"1"` is the arm that catches an exit code read as text; `1.5` catches a non-integer; `""`
+    // catches a bare typeof on the instant and the kind; `0` on lastLine catches truthiness.
+    for (const exitCode of ["1", 1.5, "", false, [], {}, undefined]) {
+      expect(mapSessionsAnswer(200, seatFrame({ ...SESSION, exit: { ...EXIT, exitCode } }))).toEqual(INVALID);
+    }
+    for (const lastLine of [0, 1, false, true, [], {}, undefined]) {
+      expect(mapSessionsAnswer(200, seatFrame({ ...SESSION, exit: { ...EXIT, lastLine } }))).toEqual(INVALID);
+    }
+    for (const bad of ["", 0, null, false, [], {}, undefined]) {
+      expect(mapSessionsAnswer(200, seatFrame({ ...SESSION, exit: { ...EXIT, at: bad } }))).toEqual(INVALID);
+      expect(mapSessionsAnswer(200, seatFrame({ ...SESSION, exit: { ...EXIT, kind: bad } }))).toEqual(INVALID);
+    }
+    // The exit member itself: anything but null or an exact record.
+    for (const bad of ["", 0, 1, false, true, [], "FAILED", undefined]) {
+      expect(mapSessionsAnswer(200, seatFrame({ ...SESSION, exit: bad }))).toEqual(INVALID);
+    }
+  });
+
+  it("expects exactly the members the DAEMON's SeatExitView declares", () => {
+    // The same guard the SessionView pin gives the seat: this nested decode is exact-arity too,
+    // so a member the daemon adds to the exit (a signal, say) blanks the screen unless it lands
+    // here in the same change. Read as source text; the control room never imports apps/daemon.
+    const source = readFileSync(resolve(process.cwd(), "..", "daemon", "src", "http", "sessions-read.ts"), "utf8");
+    const body = /export interface SeatExitView \{\r?\n(?<members>[\s\S]*?)\r?\n\}/u.exec(source)?.groups?.["members"];
+    if (body === undefined) throw new Error("SeatExitView not found in apps/daemon/src/http/sessions-read.ts");
+    const declared = [...body.matchAll(/^ {2}readonly (?<name>[A-Za-z]+)[?]?:/gmu)].map((match) => match.groups?.["name"]);
+    expect(declared.length).toBeGreaterThan(0);
+    expect([...declared].sort()).toEqual([...SEAT_EXIT_KEYS].sort());
   });
 });

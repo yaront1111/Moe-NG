@@ -21,10 +21,10 @@ const CREDENTIAL_VALUE = "sk-ant-oat01-7Qb3xZ9fLm2KpVtRw8YsNc4Hj6Ee1Ua0Bd5Gi7Ko9
 const CONFIGURED: SessionsAgentProvider = { configured: "claude", envOverride: false };
 
 const SEAT: SessionView = {
-  agentVersionAtStart: "2.1.263 (Claude Code)", capabilities: ["work.write"],
+  agentVersionAtStart: "2.1.263 (Claude Code)", capabilities: ["work.write"], exit: null,
   expiresAt: "2026-09-03T11:00:00.000Z", holding: [], liveness: "LIVE",
   principalId: "sess-wrap-abc", providerAtStart: "claude", sessionId: "sess-wrap-abc",
-  status: "OPEN",
+  startedAt: "2026-09-03T09:48:00.000Z", status: "OPEN",
 };
 
 /**

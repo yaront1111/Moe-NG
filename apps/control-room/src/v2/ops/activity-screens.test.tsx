@@ -28,11 +28,12 @@ const SESSIONS: SessionsOutcome = {
   concurrency: { activeSeats: 2, configuredAgentLimit: 2 },
   readAt: "2026-09-03T10:00:00.000Z",
   sessions: [
-    { agentVersionAtStart: "2.1.263 (Claude Code)", capabilities: ["review.write", "work.write"], expiresAt: "2026-09-03T11:00:00.000Z", holding: ["node.deliver@node-a"], liveness: "LIVE", principalId: "sess-wrap-abc", providerAtStart: "claude", sessionId: "sess-wrap-abc", status: "OPEN" },
+    { agentVersionAtStart: "2.1.263 (Claude Code)", capabilities: ["review.write", "work.write"], exit: null, expiresAt: "2026-09-03T11:00:00.000Z", holding: ["node.deliver@node-a"], liveness: "LIVE", principalId: "sess-wrap-abc", providerAtStart: "claude", sessionId: "sess-wrap-abc", startedAt: "2026-09-03T09:48:00.000Z", status: "OPEN" },
     // Neither of these is an AGENT seat, so nothing ever measured a provider or a CLI version
-    // for them: they carry the daemon's one stated unknown, exactly as a live read would.
-    { agentVersionAtStart: "UNKNOWN", capabilities: ["project.admin"], expiresAt: "2026-09-03T09:00:00.000Z", holding: [], liveness: "EXPIRED", principalId: "principal-1", providerAtStart: "UNKNOWN", sessionId: "sess-op-1", status: "OPEN" },
-    { agentVersionAtStart: "UNKNOWN", capabilities: ["project.admin"], expiresAt: "2026-09-03T11:00:00.000Z", holding: [], liveness: "LIVE", principalId: "operator-local", providerAtStart: "UNKNOWN", sessionId: "4be93d1a-902e-41f4-ad1a-89fc588d2ff4", status: "OPEN" },
+    // for them: they carry the daemon's one stated unknown, exactly as a live read would, and
+    // no start or exit record speaks for them either (null, as the daemon states it).
+    { agentVersionAtStart: "UNKNOWN", capabilities: ["project.admin"], exit: null, expiresAt: "2026-09-03T09:00:00.000Z", holding: [], liveness: "EXPIRED", principalId: "principal-1", providerAtStart: "UNKNOWN", sessionId: "sess-op-1", startedAt: null, status: "OPEN" },
+    { agentVersionAtStart: "UNKNOWN", capabilities: ["project.admin"], exit: null, expiresAt: "2026-09-03T11:00:00.000Z", holding: [], liveness: "LIVE", principalId: "operator-local", providerAtStart: "UNKNOWN", sessionId: "4be93d1a-902e-41f4-ad1a-89fc588d2ff4", startedAt: null, status: "OPEN" },
   ],
   status: "SESSIONS", totals: { closed: 0, expired: 1, live: 1 }, unreadable: false,
 };
