@@ -7,7 +7,7 @@ import type {
   ActivationMember, ActivationProviderView, ActivationReadOutcome, ActivationReceiptView,
 } from "../../live/live-activation.js";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
-import { ActivateScreen, LiveActivate } from "./activation-screen.js";
+import { ActivateScreen, LiveActivate, activatedOn } from "./activation-screen.js";
 import type { ActivationChainState } from "./activation-screen.js";
 import type { ActivationPort, ActivationStep } from "./activation-port.js";
 
@@ -70,7 +70,7 @@ const allMeasured = (): ActivationReadOutcome =>
   activationView(ACTIVATION_MEMBERS.map((member) => measuredRow(member, `${member} measured`)));
 
 const chainState = (steps: readonly ActivationStep[] = [], busy = false): ActivationChainState =>
-  ({ busy, onActivate: vi.fn(), steps });
+  ({ activated: false, busy, onActivate: vi.fn(), steps });
 
 describe("ActivateScreen renders the daemon's six receipts", () => {
   it("shows every measured receipt with its own testid, and counts only the six", () => {
@@ -207,10 +207,61 @@ describe("ActivateScreen renders the chain's own answers", () => {
   });
 
   it("offers no button and says why when no wire is attached", () => {
-    render(<ActivateScreen chain={{ busy: false, onActivate: null, steps: [] }} outcome={allMeasured()} />);
+    render(<ActivateScreen chain={{ activated: false, busy: false, onActivate: null, steps: [] }} outcome={allMeasured()} />);
 
     expect(screen.queryByTestId("cr.activate.button")).toBeNull();
     expect(screen.getByTestId("cr.activate.nowire").textContent).toContain("project.admin");
+  });
+});
+
+describe("ActivateScreen on an activated project", () => {
+  it("says activated, hides the button, and keeps the deferred backup row honest", () => {
+    const chain: ActivationChainState = { activated: true, busy: false, onActivate: () => undefined, steps: [] };
+    render(<ActivateScreen chain={chain} outcome={allMeasured()} />);
+    expect(screen.getByTestId("cr.activate.count").textContent).toContain("Project activated");
+    expect(screen.getByTestId("cr.activate.done")).not.toBeNull();
+    expect(screen.queryByTestId("cr.activate.button")).toBeNull();
+  });
+});
+
+describe("activatedOn reads the daemon's own word on project.activate", () => {
+  it("is true only for a COMMITTED project.activate step, never for an offer or another kind", () => {
+    const step = (kind: string, status: string): unknown =>
+      ({ aggregateId: "p", claim: null, kind, missing: [], status, version: 3 });
+    const frame = (steps: unknown[]): SurfaceFrame => ({ offers: [], steps } as unknown as SurfaceFrame);
+    expect(activatedOn(frame([step("project.activate", "COMMITTED")]))).toBe(true);
+    expect(activatedOn(frame([step("project.activate", "READY")]))).toBe(false);
+    expect(activatedOn(frame([step("policy.install", "COMMITTED")]))).toBe(false);
+    expect(activatedOn(frame([]))).toBe(false);
+  });
+});
+
+describe("LiveActivate takes activation from the app's board feed, not a read of its own", () => {
+  it("reports activated and offers no button when the feed says so", async () => {
+    const readSurface = vi.fn(() => Promise.resolve({ offers: [], steps: [] } as unknown as SurfaceFrame));
+    render(<LiveActivate
+      activated
+      headers={{}}
+      port={{ submit: () => Promise.resolve({ commandId: "cmd", ok: true }) }}
+      read={() => Promise.resolve(allMeasured())}
+      readSurface={readSurface}
+    />);
+    expect(await screen.findByTestId("cr.activate.done")).not.toBeNull();
+    expect(screen.queryByTestId("cr.activate.button")).toBeNull();
+    // No surface read was issued by the card itself.
+    expect(readSurface).not.toHaveBeenCalled();
+  });
+
+  it("keeps offering the button while the feed has not committed project.activate", async () => {
+    render(<LiveActivate
+      activated={false}
+      headers={{}}
+      port={{ submit: () => Promise.resolve({ commandId: "cmd", ok: true }) }}
+      read={() => Promise.resolve(allMeasured())}
+      readSurface={() => Promise.resolve({ offers: [], steps: [] } as unknown as SurfaceFrame)}
+    />);
+    expect(await screen.findByTestId("cr.activate.button")).not.toBeNull();
+    expect(screen.queryByTestId("cr.activate.done")).toBeNull();
   });
 });
 

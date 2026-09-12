@@ -51,7 +51,7 @@ import { LiveNeedsYou } from "./approvals/live-needs-you.js";
 import { LiveRuns } from "./runs/live-runs.js";
 import { HEALTH_FAILURE, LiveHealth, LivePolicy, useOpsRead } from "./ops/live-ops.js";
 import { LiveResources } from "./resources/live-resources.js";
-import { LiveActivate } from "./ops/activation-screen.js";
+import { LiveActivate, activatedOn } from "./ops/activation-screen.js";
 import { readHealth } from "../live/live-ops.js";
 import type { HealthOutcome } from "../live/live-ops.js";
 import { ProviderPauseProvider } from "./shell/pause-context.js";
@@ -440,6 +440,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
             one - the daemon MEASURES on every activation read (git HEAD, store, manifest).
           */}
           {live.setup.ok && <LiveActivate
+            activated={boardFrame !== null && activatedOn(boardFrame)}
             headers={live.setup.headers} pollMs={PAUSE_POLL_MS} setup={live.setup}
           />}
           <LiveGoalsHome

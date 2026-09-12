@@ -47,10 +47,22 @@ const ACTIVATION_FAILURE: ActivationReadOutcome = Object.freeze({
 
 /** What the card knows about driving: the handler (null with no wire), whether one runs, each answer. */
 export interface ActivationChainState {
+  /**
+   * The daemon's own surface says `project.activate` is COMMITTED. The receipts read alone
+   * cannot say so: its backup member is DEFERRED on every read by design (activation-read.ts),
+   * so a card built from the read alone shows "5 of 6" and an Activate button FOREVER on an
+   * activated project. Measured 2026-09-13: an operator pressed it, read a refusal, and
+   * concluded activation had failed.
+   */
+  readonly activated: boolean;
   readonly busy: boolean;
   readonly onActivate: (() => void) | null;
   readonly steps: readonly ActivationStep[];
 }
+
+/** What the surface must say for the card to call the project activated. */
+export const activatedOn = (surface: SurfaceFrame): boolean =>
+  surface.steps.some((step) => step.kind === "project.activate" && step.status === "COMMITTED");
 
 const kindWords = (kind: string): string => WORK_KIND_LABELS[kind]?.label ?? kind;
 
@@ -154,10 +166,13 @@ export function ActivateScreen({ chain, outcome }: {
     );
   }
   const measured = outcome.members.filter((row) => row.measured).length;
+  const activated = chain?.activated === true;
   return (
     <section className="cr2-ops-card cr2-policy-standard" data-testid="cr.activate.root">
       <p className="cr2-slot-kicker" data-testid="cr.activate.count">
-        {`Activate the project ${MIDDOT} ${String(measured)} of ${String(outcome.members.length)} receipts measured`}
+        {activated
+          ? `Project activated ${MIDDOT} ${String(measured)} of ${String(outcome.members.length)} receipts read back; the backup is written by activation itself`
+          : `Activate the project ${MIDDOT} ${String(measured)} of ${String(outcome.members.length)} receipts measured`}
       </p>
       <ul className="cr2-approve-obligations" data-testid="cr.activate.receipts">
         {outcome.members.map((receipt) => (
@@ -169,7 +184,11 @@ export function ActivateScreen({ chain, outcome }: {
         ))}
       </ul>
       <SigningRow signing={outcome.signing} />
-      {chain === undefined || chain.onActivate === null ? (
+      {activated ? (
+        <p className="cr2-needs-note" data-testid="cr.activate.done">
+          This project is activated. Goals can be created below.
+        </p>
+      ) : chain === undefined || chain.onActivate === null ? (
         <p className="cr2-needs-note" data-testid="cr.activate.nowire">
           Pair a session with project.admin to activate from here.
         </p>
@@ -188,6 +207,11 @@ export function ActivateScreen({ chain, outcome }: {
 }
 
 export interface LiveActivateProps {
+  /**
+   * From the board feed's surface (`activatedOn`), which the app already reads: the card
+   * issues no surface read of its own, so the feed's connection accounting stays exact.
+   */
+  readonly activated?: boolean | undefined;
   readonly headers: Readonly<Record<string, string>>;
   /** Injectable for tests; the default drives the real chain. */
   readonly drive?: ((
@@ -206,7 +230,7 @@ export interface LiveActivateProps {
 }
 
 export function LiveActivate({
-  drive, headers, onConnection, pollMs, port, read, readSurface, setup,
+  activated, drive, headers, onConnection, pollMs, port, read, readSurface, setup,
 }: LiveActivateProps): JSX.Element {
   const [reader] = useState(() => read ?? ((): Promise<ActivationReadOutcome> => readActivation(headers)));
   const { outcome, refresh } = useOpsRead(reader, ACTIVATION_FAILURE, pollMs ?? POLL_MS, onConnection);
@@ -233,7 +257,7 @@ export function LiveActivate({
     }, settle);
   }, [chainPort, driver, refresh, surfaceReader]);
   const chain: ActivationChainState = {
-    busy, onActivate: chainPort === null ? null : onActivate, steps,
+    activated: activated === true, busy, onActivate: chainPort === null ? null : onActivate, steps,
   };
   return <ActivateScreen chain={chain} outcome={outcome} />;
 }
