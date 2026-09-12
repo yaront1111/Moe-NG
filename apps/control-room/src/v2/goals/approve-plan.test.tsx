@@ -479,6 +479,12 @@ describe("the decision controls exist only once there is a plan to decide on", (
     expect(line.textContent).toBe(NO_PLAN_LINE);
     expectNoDecisionControls();
     expect(harness.submit).not.toHaveBeenCalled();
+    // ONE LINE, NOT A FAILED READ ABOVE IT. Before this arm the fold also rendered the
+    // refusal note "PLANNING_RUN_READ_RUN_UNKNOWN @ PLANNING_RUN_READ - The plan could not
+    // be read right now." directly over the wait line, framing an ordinary not-yet state
+    // as a fault. The daemon's "no such run" IS the plan's absence; it is not reported twice.
+    expect(screen.queryByTestId("cr.approve.refusal")).toBeNull();
+    expect(screen.queryByTestId("cr.approve.empty")).toBeNull();
   });
 
   /**
@@ -573,6 +579,12 @@ describe("the decision controls exist only once there is a plan to decide on", (
         expect(screen.queryByTestId("cr.approve.reason")).toBeNull();
       } else {
         expect(screen.getByTestId("cr.approve.reason").textContent).toContain(entry.withheld);
+      }
+      // With a decision on the table the read's refusal is REPORTED beside the controls,
+      // never replaced by the wait line: the daemon offered this run, so "no plan yet" would
+      // contradict the offer, and hiding the refusal would hide why the body is missing.
+      if (entry.read.status === "REFUSED") {
+        expect(screen.getByTestId("cr.approve.refusal").textContent).toContain(entry.read.code);
       }
     }
   });

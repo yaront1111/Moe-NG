@@ -1294,10 +1294,17 @@ describe("CordumApp wires the durable run and the daemon's approval grant", () =
     const fold = await screen.findByTestId("cr.goal.planfold");
     expect((await within(fold).findByTestId("cr.approve.no-plan")).textContent)
       .toBe("The plan appears here once the contract is approved and compiled.");
-    // The read really was made for this goal's run and really was refused as unknown.
+    // The read really was made for this goal's OWN run; the wait line above is rendered on
+    // the daemon's PLANNING_RUN_READ_RUN_UNKNOWN answer and on nothing else, so its presence
+    // is the proof that this read was refused as unknown.
     expect(app.planningReads.length).toBeGreaterThan(0);
-    expect((await within(fold).findByTestId("cr.approve.refusal")).textContent)
-      .toContain("PLANNING_RUN_READ_RUN_UNKNOWN");
+    for (const body of app.planningReads) {
+      expect(JSON.parse(body)).toEqual({ runId: DURABLE.runRef });
+    }
+    // NOTHING OR ONE LINE. The fold used to render the refusal note
+    // "PLANNING_RUN_READ_RUN_UNKNOWN @ PLANNING_RUN_READ - The plan could not be read right
+    // now." directly above the wait line, framing an ordinary not-yet state as a failed read.
+    expect(within(fold).queryByTestId("cr.approve.refusal")).toBeNull();
     expect(within(fold).queryByRole("button", { name: "Approve plan" })).toBeNull();
     expect(within(fold).queryByRole("button", { name: "Send the plan back" })).toBeNull();
     expect(within(fold).queryByLabelText("Why are you sending this plan back?")).toBeNull();

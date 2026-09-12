@@ -79,7 +79,11 @@ function planPresence(state: ApprovePlanLoadState): PlanPresence {
  * a disabled Approve over a goal that has no plan reads as a decision the operator is being
  * refused, when none is being asked of them yet (the same reasoning as the sent-back note in
  * approve-plan-gate.tsx). Rendered only on a positive ABSENT, never on an unread plan or one
- * refused for another reason.
+ * refused for another reason - and rendered IN PLACE OF the run body, not under it: the
+ * daemon's "no such run" is the ordinary state of a goal whose contract is not yet approved
+ * and compiled, and the refusal note it used to sit beneath ("PLANNING_RUN_READ_RUN_UNKNOWN
+ * @ PLANNING_RUN_READ - The plan could not be read right now.") framed that wait as a failed
+ * read. The fold is nothing or this one line.
  */
 function NoPlanYet(): JSX.Element {
   return (
@@ -154,6 +158,11 @@ export function ApprovePlan(
       <h2 className="cr2-slot-title">{title}</h2>
       {state.phase === "LOADING" ? (
         <p className="cr2-slot-kicker" data-testid="cr.approve.loading">Reading the plan...</p>
+      ) : !decidable && presence === "ABSENT" ? (
+        // The wait line REPLACES the body. With a decision on the table (an offer, a
+        // sent-back plan) the read's refusal is reported beside the controls instead,
+        // because "no plan yet" would contradict the offer that put the decision there.
+        <NoPlanYet />
       ) : (
         <OutcomeView outcome={state.outcome} />
       )}
@@ -172,7 +181,7 @@ export function ApprovePlan(
           refusal={refusal}
           sentBack={approval?.sentBack ?? false}
         />
-      ) : presence === "ABSENT" ? <NoPlanYet /> : null}
+      ) : null}
       <ActionButton onClick={onBack} testId="cr.approve.back" variant="secondary">
         {`${ARROW_LEFT} Back to goals`}
       </ActionButton>
