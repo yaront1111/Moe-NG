@@ -66,19 +66,51 @@ describe("resources screen, the project's measured facts", () => {
     }
   });
 
-  it("counts only the facts a read serves, and names a failure count only when a read failed", () => {
-    // The fixture's backup receipt is ACTIVATION_READ_BACKUP_DEFERRED: the one real refusal
-    // among the eleven served facts. The two unserved rows sit outside both numbers.
+  it("states the backup the activation read defers as not measured, never as a failed read", () => {
+    // The fixture's backup receipt is the daemon's own ACTIVATION_READ_BACKUP_DEFERRED @
+    // ACTIVATION_READ (activation-read.ts deferredBackupRow, excluded from `blocking` there):
+    // the read never takes a backup, so on a healthy daemon this row is not a failure.
     render(<ResourcesScreen reads={allRead()} />);
-    expect(screen.getByTestId("cr.resources.banner").textContent)
-      .toBe(`10 of 11 facts measured ${MIDDOT} 1 could not be read`);
+    const row = screen.getByTestId("cr.resources.fact.store.backup");
+    expect(row.getAttribute("data-state")).toBe("DEFERRED");
+    expect(screen.getByTestId("cr.resources.deferred.store.backup").textContent)
+      .toBe("Not measured by a read; the backup is written when project.activate runs.");
+    expect(screen.queryByTestId("cr.resources.refusal.store.backup")).toBeNull();
+    expect(screen.queryByTestId("cr.resources.value.store.backup")).toBeNull();
+  });
+
+  it("keeps every other unmeasured backup receipt a refusal, the deferred code at another layer included", () => {
+    for (const [code, layer] of [
+      ["ACTIVATION_BACKUP_FAILED", "DAEMON_ACTIVATION_RECEIPTS"],
+      ["ACTIVATION_READ_BACKUP_DEFERRED", "DAEMON_ACTIVATION_RECEIPTS"],
+      ["ACTIVATION_BACKUP_FAILED", "ACTIVATION_READ"],
+    ] as const) {
+      cleanup();
+      render(<ResourcesScreen reads={{ ...allRead(), activation: activation(withReceipt("backup", {
+        code, hash: null, layer, measured: false, member: "backup", reason: "the backup did not complete", ref: null,
+      })) }} />);
+      const key = `${code} @ ${layer}`;
+      expect(screen.getByTestId("cr.resources.fact.store.backup").getAttribute("data-state"), key).toBe("REFUSED");
+      expect(screen.getByTestId("cr.resources.refusal.store.backup").textContent, key).toContain(key);
+      expect(screen.queryByTestId("cr.resources.deferred.store.backup"), key).toBeNull();
+      expect(screen.getByTestId("cr.resources.banner").textContent, key)
+        .toBe(`10 of 11 facts measured ${MIDDOT} 1 could not be read`);
+    }
+  });
+
+  it("counts only the facts a read measures or refuses, and names a failure count only when a read failed", () => {
+    // Healthy daemon: ten facts measured, the deferred backup and the two unserved rows outside
+    // both numbers, and no "could not be read" figure at all.
+    render(<ResourcesScreen reads={allRead()} />);
+    expect(screen.getByTestId("cr.resources.banner").textContent).toBe("10 of 10 facts measured");
     cleanup();
 
-    // Every served fact measured: no failure count at all, rather than "0 could not be read".
+    // A backup taken (project.activate ran): the row joins the count as a measured fact.
     render(<ResourcesScreen reads={{ ...allRead(), activation: activation(withReceipt("backup", {
       code: null, hash: null, layer: null, measured: true, member: "backup",
       reason: "a backup was taken", ref: "backup/2026-09-05",
     })) }} />);
+    expect(valueOf("store.backup")).toBe("backup/2026-09-05");
     expect(screen.getByTestId("cr.resources.banner").textContent).toBe("11 of 11 facts measured");
   });
 

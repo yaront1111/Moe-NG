@@ -11,9 +11,10 @@ import type { ResourceFact, ResourceReads } from "./resources-model.js";
  * Every row is always present. A fact the daemon refused shows the refusal's stable
  * code and layer where its value would be, because a row that vanished would read as
  * "this project has no such resource" - a different and false claim from "I could not
- * read it". A fact no read serves is stated as not tracked rather than left off the
- * page, and it is NOT a failure: the banner counts only served facts, and names a
- * "could not be read" figure only when a served fact actually refused.
+ * read it". A fact no read serves is stated as not tracked, and the backup the
+ * activation read deliberately never takes is stated as not measured; neither is left
+ * off the page and neither is a failure: the banner counts only the facts a read
+ * measured or refused, and names a "could not be read" figure only when one refused.
  *
  * The provider rows carry the credential's SOURCE and never its value; that fence is
  * held in resources-model.ts and this file renders only what the model handed it.
@@ -35,6 +36,8 @@ function FactRow({ fact, sectionId }: {
           <span className="cr2-slot-kicker" data-testid={`cr.resources.pending.${id}`}>Reading...</span>
         ) : fact.state.kind === "UNSERVED" ? (
           <span className="cr2-slot-kicker" data-testid={`cr.resources.unserved.${id}`}>Not tracked by this build.</span>
+        ) : fact.state.kind === "DEFERRED" ? (
+          <span className="cr2-slot-kicker" data-testid={`cr.resources.deferred.${id}`}>{fact.state.said}</span>
         ) : (
           <OutcomeNote
             code={fact.state.refusal.code}
@@ -50,9 +53,10 @@ function FactRow({ fact, sectionId }: {
 
 export function ResourcesScreen({ reads }: { readonly reads: ResourceReads }): JSX.Element {
   const sections = resourceSections(reads);
-  // The banner counts the facts a read SERVES. An unserved row is on the page but outside
-  // both numbers: it never measures and it never fails.
-  const served = sections.flatMap((section) => section.facts).filter((row) => row.state.kind !== "UNSERVED");
+  // The banner counts the facts a read MEASURES OR REFUSES. An unserved or deferred row is
+  // on the page but outside both numbers: it never measures and it never fails.
+  const served = sections.flatMap((section) => section.facts)
+    .filter((row) => row.state.kind !== "UNSERVED" && row.state.kind !== "DEFERRED");
   const readable = served.filter((row) => row.state.kind === "MEASURED").length;
   const refusedCount = served.filter((row) => row.state.kind === "REFUSED").length;
   const stillReading = served.some((row) => row.state.kind === "PENDING");
