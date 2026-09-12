@@ -344,9 +344,10 @@ describe("the pins hold, and each is the only mechanism that answers its own arm
     ]);
     // Direction 2: the advertised roster holds exactly those five, plus the two this sweep does
     // not build a world for. EVIDENCE_UNREADABLE has its own arm below (a throwing store), and
-    // RUN_UNBOUND is a structural guard no reachable world produces -- `readCriterionGoal:23`
-    // refuses CRITERION_CHECK_GOAL_UNBOUND before a goal with an absent planning run can be
-    // returned, so it protects against that reader changing rather than being a dead entry.
+    // RUN_UNBOUND is a structural guard no reachable world produces -- `readCriterionGoal`
+    // refuses (GOAL_ABSENT, GOAL_UNBOUND, GOAL_CANCELLED or UNREADABLE) before a goal with an
+    // absent planning run can be returned, so it protects against that reader changing rather
+    // than being a dead entry.
     expect([...PREVIEW_RISK_FACT_CODES].filter((code) => !reached.has(code)))
       .toEqual(["PREVIEW_RISK_EVIDENCE_UNREADABLE", "PREVIEW_RISK_RUN_UNBOUND"]);
   });
