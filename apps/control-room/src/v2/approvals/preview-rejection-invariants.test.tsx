@@ -157,7 +157,7 @@ describe("a rejection moves nothing (DoD 3)", () => {
     rerender(
       <NeedsYou
         data={dataWith(ITEM)}
-        decisionResults={new Map([["goal-1", { busy: false, outcome: { commandId: "c", ok: true } }]])}
+        decisionResults={new Map([["PREVIEW:goal-1", { busy: false, outcome: { commandId: "c", ok: true } }]])}
         onDecide={vi.fn()} onOpenBoard={vi.fn()} onPreviewDecide={vi.fn()}
       />,
     );
@@ -181,7 +181,7 @@ describe("a rejection moves nothing (DoD 3)", () => {
     rerender(
       <NeedsYou
         data={dataWith(ITEM)}
-        decisionResults={new Map([["goal-1", { busy: false, outcome: { commandId: "c", ok: true } }]])}
+        decisionResults={new Map([["PREVIEW:goal-1", { busy: false, outcome: { commandId: "c", ok: true } }]])}
         onDecide={vi.fn()} onOpenBoard={onOpenBoard} onPreviewDecide={vi.fn()}
       />,
     );

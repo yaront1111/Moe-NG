@@ -177,7 +177,7 @@ describe("sending the preview back with findings (DoD 3)", () => {
     rerender(
       <NeedsYou
         data={dataWith(previewItem(FACTS))}
-        decisionResults={new Map([["goal-1", {
+        decisionResults={new Map([["PREVIEW:goal-1", {
           busy: false, outcome: { commandId: "preview-1", ok: true },
         }]])}
         onDecide={vi.fn()}
@@ -204,7 +204,7 @@ describe("sending the preview back with findings (DoD 3)", () => {
   });
 
   it("disables both answers while the decision is in flight", () => {
-    renderCard({ results: new Map([["goal-1", { busy: true, outcome: null }]]) });
+    renderCard({ results: new Map([["PREVIEW:goal-1", { busy: true, outcome: null }]]) });
 
     expect((screen.getByTestId("cr.needsyou.preview.approve") as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByTestId("cr.needsyou.preview.reject") as HTMLButtonElement).disabled).toBe(true);
@@ -222,7 +222,7 @@ describe("sending the preview back with findings (DoD 3)", () => {
     rerender(
       <NeedsYou
         data={dataWith(previewItem(FACTS))}
-        decisionResults={new Map([["goal-1", { busy: false, outcome: { commandId: "c", ok: true } }]])}
+        decisionResults={new Map([["PREVIEW:goal-1", { busy: false, outcome: { commandId: "c", ok: true } }]])}
         onDecide={vi.fn()} onOpenBoard={vi.fn()} onPreviewDecide={onPreviewDecide}
       />,
     );

@@ -38,6 +38,7 @@ export type NeedsYouChoice = "REPLAN";
 
 export interface NeedsYouProps {
   readonly data: NeedsYouData;
+  /** Keyed by `resultKeyOf(item)`: the kind AND the decision key, one slot per card. */
   readonly decisionResults?: ReadonlyMap<string, DecisionResult> | undefined;
   /** Fetches a PREVIEW item's captures with the session headers; absent shows none. */
   readonly loadCapture?: CaptureLoader | undefined;
@@ -75,7 +76,7 @@ interface InlineDecision {
   readonly testId: string;
 }
 
-/** The key a decision's result is kept under: the node for an escalation, else the goal. */
+/** The identity a card's controls carry: the node for an escalation, else the goal. */
 export function decisionKeyOf(item: NeedsYouItem): string {
   const incident = item.incident;
   if (incident !== undefined) return incidentKeyOf(incident.environment, incident.incidentId);
@@ -84,6 +85,17 @@ export function decisionKeyOf(item: NeedsYouItem): string {
   const nodeRef = escalation.affordance["targetAggregateId"];
   return typeof nodeRef === "string" && nodeRef.length > 0
     ? nodeRef : JSON.stringify([item.goalId, escalation.nodeKey]);
+}
+
+/**
+ * THE SLOT A RESULT LIVES IN: the kind AND the decision key. One goal carries several kinds
+ * at once - the model pushes PREVIEW, RELEASE, DEPLOY, GATE_1 and READY_TO_CLOSE under the same
+ * goalId, and goal-status.ts documents that Gate 2 and ready-to-close coexist. Measured before
+ * this: a slot keyed by the goal alone let a PREVIEW verdict render the READY_TO_CLOSE card as
+ * "Closed" for a goal.close never sent, and a preview refusal under every card of that goal.
+ */
+export function resultKeyOf(item: NeedsYouItem): string {
+  return `${item.kind}:${decisionKeyOf(item)}`;
 }
 
 function decisionOf(item: NeedsYouItem): InlineDecision | null {
@@ -249,14 +261,14 @@ export function NeedsYou({
           {data.items.map((item) => (
             <DecisionCard
               item={item}
-              key={`${item.kind}:${decisionKeyOf(item)}`}
+              key={resultKeyOf(item)}
               loadCapture={loadCapture}
               onDecide={onDecide}
               onDismissIncident={onDismissIncident}
               onOpenBoard={onOpenBoard}
               onPreviewDecide={onPreviewDecide}
               onRollback={onRollback}
-              result={decisionResults?.get(decisionKeyOf(item))}
+              result={decisionResults?.get(resultKeyOf(item))}
             />
           ))}
         </ul>

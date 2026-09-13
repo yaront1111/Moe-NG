@@ -159,7 +159,7 @@ describe("the confirm names the target sha and the environment", () => {
     render(
       <NeedsYou
         data={derive()}
-        decisionResults={new Map([[KEY, {
+        decisionResults={new Map([[`INCIDENT:${KEY}`, {
           busy: false,
           outcome: { code: "DEPLOY_ROLLBACK_IN_PROGRESS", layer: "DAEMON_DEPLOY_ENGINE", ok: false },
         }]])}
@@ -222,7 +222,7 @@ describe("two environments in an open incident do not share a confirm", () => {
     render(
       <NeedsYou
         data={derive({ health: healthMap(health(), staging()) })}
-        decisionResults={new Map([["staging#7", {
+        decisionResults={new Map([["INCIDENT:staging#7", {
           busy: false,
           outcome: { code: "DEPLOY_ROLLBACK_IN_PROGRESS", layer: "DAEMON_DEPLOY_ENGINE", ok: false },
         }]])}

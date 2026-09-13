@@ -2,8 +2,8 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
-import { NeedsYou } from "./needs-you.js";
-import type { NeedsYouData } from "./needs-you-model.js";
+import { NeedsYou, resultKeyOf } from "./needs-you.js";
+import type { NeedsYouData, NeedsYouItem } from "./needs-you-model.js";
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -36,11 +36,53 @@ describe("the Needs-you queue", () => {
         latestRoute: "REJECT_PLAN", nodeKey: "api", unsuccessfulRounds: 3 },
     }));
     render(<NeedsYou data={{ countLabel: "2", items, note: null }} onDecide={vi.fn()} onOpenBoard={vi.fn()}
-      decisionResults={new Map([["execution-a", { busy: false, outcome: { ok: true, commandId: "allowed-a" } }]])} />);
+      decisionResults={new Map([["ESCALATION:execution-a", { busy: false, outcome: { ok: true, commandId: "allowed-a" } }]])} />);
     const buttons = screen.getAllByRole("button", { name: "Allow more attempts on api" });
     expect((buttons[0] as HTMLButtonElement).disabled).toBe(true);
     expect((buttons[1] as HTMLButtonElement).disabled).toBe(false);
   });
+  /**
+   * ONE GOAL, TWO DECISIONS. The model pushes PREVIEW and READY_TO_CLOSE under the same goalId
+   * (needs-you-model.ts itemsFor), and goal-status.ts documents that Gate 2 and ready-to-close
+   * coexist. Measured before this arm: a result was kept under the goal ALONE, so approving the
+   * preview made the close card read "Closed" and print the closed line for a goal.close that
+   * was never sent, and a preview refusal appeared under every other card of that goal.
+   */
+  it("keeps a PREVIEW verdict off the READY_TO_CLOSE card of the same goal", () => {
+    const preview: NeedsYouItem = {
+      actionLabel: "Open the goal", detail: "Your product is running.", goalId: "goal-1",
+      headline: "Your product is running and needs your verdict", kind: "PREVIEW",
+      planningRunRef: "run-1", title: "Alpha",
+      preview: {
+        affordance: { commandKind: "preview.decide", targetAggregateId: "preview:goal-1" },
+        captures: [], nodes: [{ nodeKey: "api", nodeRef: "node-api", objective: "" }],
+        receiptId: "preview-receipt/abc", url: "http://127.0.0.1:4173/",
+      },
+    };
+    const close: NeedsYouItem = {
+      actionLabel: "Open the goal", close: { affordance: { commandKind: "goal.close" } },
+      detail: "All 3 acceptance criteria verified by the daemon's verifier.", goalId: "goal-1",
+      headline: "Everything the contract states is verified", kind: "READY_TO_CLOSE",
+      planningRunRef: "run-1", title: "Alpha",
+    };
+    // The slot is the kind AND the key: the writer (live-needs-you.tsx) and this reader share it.
+    expect(resultKeyOf(preview)).toBe("PREVIEW:goal-1");
+    expect(resultKeyOf(close)).toBe("READY_TO_CLOSE:goal-1");
+    render(<NeedsYou
+      data={{ countLabel: "2 DECISIONS", items: [preview, close], note: null }}
+      decisionResults={new Map([["PREVIEW:goal-1", { busy: false, outcome: { commandId: "c", ok: true } }]])}
+      onDecide={vi.fn()} onOpenBoard={vi.fn()} onPreviewDecide={vi.fn()}
+    />);
+    // The preview card took the verdict...
+    expect((screen.getByTestId("cr.needsyou.preview.approve") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByTestId("cr.needsyou.preview.said").textContent).toContain("Approved.");
+    // ...and the close card did not: still armed to ask, and no "Closed." line anywhere.
+    const button = screen.getByTestId("cr.needsyou.close.goal-1") as HTMLButtonElement;
+    expect(button.disabled).toBe(false);
+    expect(button.textContent).toBe("Close the goal");
+    expect(screen.queryByText(/Closed. The goal is complete/u)).toBeNull();
+  });
+
   it("renders one card per decision with its goal, headline, detail and one action", async () => {
     const onOpenBoard = vi.fn();
     render(<NeedsYou data={DATA} onOpenBoard={onOpenBoard} />);
@@ -71,13 +113,13 @@ describe("the Needs-you queue", () => {
     // The second answer: replan the work instead of retrying it.
     await userEvent.click(screen.getByTestId("cr.needsyou.replan.node-x"));
     expect(onEscalate).toHaveBeenLastCalledWith(item, "REPLAN");
-    rerender(<NeedsYou data={data} decisionResults={new Map([["node-x", { busy: false, choice: "REPLAN", outcome: { commandId: "c", ok: true } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
+    rerender(<NeedsYou data={data} decisionResults={new Map([["ESCALATION:node-x", { busy: false, choice: "REPLAN", outcome: { commandId: "c", ok: true } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
     expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("Replanned.");
     expect((screen.getByTestId("cr.needsyou.replan.node-x") as HTMLButtonElement).disabled).toBe(true);
-    rerender(<NeedsYou data={data} decisionResults={new Map([["node-x", { busy: false, outcome: { commandId: "c", ok: true } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
+    rerender(<NeedsYou data={data} decisionResults={new Map([["ESCALATION:node-x", { busy: false, outcome: { commandId: "c", ok: true } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
     expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("Allowed.");
     expect((screen.getByTestId("cr.needsyou.escalate.node-x") as HTMLButtonElement).disabled).toBe(true);
-    rerender(<NeedsYou data={data} decisionResults={new Map([["node-x", { busy: false, outcome: { code: "REVIEW_ESCALATION_NOT_REACHED", layer: "DAEMON_PREREQUISITE", ok: false } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
+    rerender(<NeedsYou data={data} decisionResults={new Map([["ESCALATION:node-x", { busy: false, outcome: { code: "REVIEW_ESCALATION_NOT_REACHED", layer: "DAEMON_PREREQUISITE", ok: false } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
     expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("That didn't go through.");
     expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("REVIEW_ESCALATION_NOT_REACHED @ DAEMON_PREREQUISITE");
   });
@@ -104,7 +146,7 @@ describe("the Needs-you queue", () => {
     await userEvent.click(screen.getByTestId("cr.needsyou.close.goal-1"));
     expect(onDecide).toHaveBeenCalledTimes(1);
     expect(onDecide).toHaveBeenCalledWith(item);
-    rerender(<NeedsYou data={data} decisionResults={new Map([["goal-1", { busy: false, outcome: { commandId: "c", ok: true } }]])} onDecide={onDecide} onOpenBoard={vi.fn()} />);
+    rerender(<NeedsYou data={data} decisionResults={new Map([["READY_TO_CLOSE:goal-1", { busy: false, outcome: { commandId: "c", ok: true } }]])} onDecide={onDecide} onOpenBoard={vi.fn()} />);
     expect(screen.getByTestId("cr.needsyou.result.goal-1").textContent).toContain("Closed.");
     expect((screen.getByTestId("cr.needsyou.close.goal-1") as HTMLButtonElement).disabled).toBe(true);
     // Without the daemon's offer the card carries no close button at all.
@@ -144,7 +186,7 @@ describe("the Needs-you queue", () => {
     };
     render(<NeedsYou
       data={{ countLabel: "1 DECISION · NEEDS YOU", items: [item], note: null }}
-      decisionResults={new Map([["goal-1", { busy: false, outcome: { code, layer, ok: false as const } }]])}
+      decisionResults={new Map([["READY_TO_CLOSE:goal-1", { busy: false, outcome: { code, layer, ok: false as const } }]])}
       onDecide={vi.fn()}
       onOpenBoard={vi.fn()}
     />);

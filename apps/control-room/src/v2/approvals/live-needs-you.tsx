@@ -34,7 +34,7 @@ import { deployedEnvironmentsOf, useIncidentHealth } from "./use-incident-health
 import { incidentKeyOf } from "./needs-you-incident.js";
 import { createGoalClosePort } from "./goal-close-port.js";
 import type { GoalClosePort } from "./goal-close-port.js";
-import { NeedsYou, decisionKeyOf } from "./needs-you.js";
+import { NeedsYou, resultKeyOf } from "./needs-you.js";
 import type { DecisionResult } from "./needs-you.js";
 import { deriveNeedsYou } from "./needs-you-model.js";
 import type { NeedsYouItem } from "./needs-you-model.js";
@@ -158,7 +158,7 @@ export function LiveNeedsYou({
   surfaceRef.current = surface;
   const [successor] = useState(() => successorPort ?? createReplanSuccessorPort(setup, () => surfaceRef.current));
   const onDecide = useCallback((item: NeedsYouItem, choice?: NeedsYouChoice) => {
-    const key = decisionKeyOf(item);
+    const key = resultKeyOf(item);
     const escalation = item.escalation;
     const spend = escalation !== undefined
       ? (choice === "REPLAN"
@@ -182,13 +182,14 @@ export function LiveNeedsYou({
     });
   }, [close, escalate, runs, successor]);
   // GATE 2. The offer is the daemon's and the port spends it verbatim; the result is kept
-  // under the goal, which is the key `decisionKeyOf` gives a PREVIEW item.
+  // under THIS card's slot (`resultKeyOf`: kind + goal), so the goal's READY_TO_CLOSE card
+  // never reads a preview verdict as its own.
   const onPreviewDecide = useCallback((
     item: NeedsYouItem, decision: PreviewDecision, findings: readonly PreviewFinding[],
   ) => {
     const facts = item.preview;
     if (facts === undefined) return;
-    const key = decisionKeyOf(item);
+    const key = resultKeyOf(item);
     setResults((previous) => new Map(previous).set(key, { busy: true, outcome: null }));
     // THE RECEIPT ID, NOT THE OFFER'S TARGET. `preview.decide` resolves `previewRef` as the
     // preview receipt id; `facts.receiptId` is what `/preview/read` answered (needs-you-preview.ts).
@@ -215,7 +216,7 @@ export function LiveNeedsYou({
   const onRollback = useCallback((item: NeedsYouItem) => {
     const facts = item.incident;
     if (facts?.rollback === undefined || facts.rollback === null) return;
-    const key = incidentKeyOf(facts.environment, facts.incidentId);
+    const key = resultKeyOf(item);
     setResults((previous) => new Map(previous).set(key, { busy: true, outcome: null }));
     void rollback.submit(facts.rollback, facts.environment).then((outcome) => {
       setResults((previous) => new Map(previous).set(key, { busy: false, outcome }));
