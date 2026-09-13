@@ -270,6 +270,9 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "SESSION_AUTHORITY_DAEMON_LAYERS", file: "apps/daemon/src/identity/session-authority-contracts.ts", axis: "integrity" },
   { constant: "AGENT_STAFFING_LAYER", file: "apps/daemon/src/orchestrator/agent-session-fence.ts", axis: "scheduler-activation" },
   { constant: "SPAWN_INVOCATION_LAYER", file: "apps/daemon/src/orchestrator/agent-spawn-invocation.ts", axis: "scheduler-activation" },
+  // The spawner's own refusal layer: a closed spawner answers AGENT_SPAWNER_CLOSED by code (measured
+  // 2026-09-13: it threw, and the coordinator read the throw as an unknown containment and BLOCKed).
+  { constant: "AGENT_SPAWNER_LAYER", file: "apps/daemon/src/orchestrator/agent-spawn-contract.ts", axis: "scheduler-activation" },
   // The daemon's projection of the ACTIVE graph revision and the record carrying that
   // revision's body. Both are `scheduler-activation` by SUBJECT: they answer for which
   // planning graph is in force for admission, not for a codec's content identity — the
@@ -604,7 +607,7 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * Same lesson as the entry above, one lane over: the declaring row's `pnpm --filter @moe/daemon
  * test` and `pnpm typecheck` were both EXIT 0 while this lane was red.
  */
-const EXPECTED_ROSTER_SIZE = 180;
+const EXPECTED_ROSTER_SIZE = 181;
 
 /**
  * The per-area split. A scanner that silently matched only one directory
@@ -612,7 +615,7 @@ const EXPECTED_ROSTER_SIZE = 180;
  * distribution catches it.
  */
 const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
-  "apps/daemon": 89,
+  "apps/daemon": 90,
   "packages/benchmark": 5,
   "packages/runner": 23,
   "packages/core": 22,
@@ -841,12 +844,12 @@ describe("scanner matches the annotated declaration form", () => {
  */
 /**
  * The invisible share, stated once so no arm re-derives it. WIDE numerator, WIDE denominator:
- * 81 module-private declarations against those 81 plus the 180 exported ones. The per-mille pin
- * is `Math.round`ed by the arm below, so 81/261 = 310.3 pins at 310.
+ * 81 module-private declarations against those 81 plus the 181 exported ones. The per-mille pin
+ * is `Math.round`ed by the arm below, so 81/262 = 309.2 pins at 309.
  */
 const EXPECTED_INVISIBLE_NUMERATOR = EXPECTED_PRIVATE_COUNT;
-const EXPECTED_INVISIBLE_DENOMINATOR = 261;
-const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 310;
+const EXPECTED_INVISIBLE_DENOMINATOR = 262;
+const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 309;
 
 describe("TASK-LV module-private layer declarations are bounded", () => {
   it("TASK-LV scans a non-empty module-private population", () => {

@@ -86,6 +86,9 @@ import {
   agentSpawnInvocation,
 } from "../../apps/daemon/src/orchestrator/agent-spawn-invocation.js";
 import type { SpawnInvocationRefusalCode } from "../../apps/daemon/src/orchestrator/agent-spawn-invocation.js";
+import { AGENT_SPAWNER_LAYER } from "../../apps/daemon/src/orchestrator/agent-spawn-contract.js";
+import type { SpawnRequest } from "../../apps/daemon/src/orchestrator/agent-wrapper.js";
+import { claudeSpawnStarter } from "../../apps/daemon/src/orchestrator/agent-spawner.js";
 import {
   PRINCIPAL_ID,
   PROJECT_ID,
@@ -861,6 +864,25 @@ function staffingFenceWithLiveChild(
   return fence;
 }
 
+
+// THE SPAWNER'S OWN REFUSAL. A closed spawner answers `AGENT_SPAWNER_CLOSED` by code before
+// any child exists (measured 2026-09-13: it THREW, the delivery coordinator read the throw as
+// an unknown containment, and an operator stop that landed mid-baseline BLOCKed the checkout
+// for good). No process is ever reached: `spawn` here would be the defect itself.
+const SPAWNER_REQUEST: SpawnRequest = Object.freeze({
+  credential: "agent-secret-hostile", expiresAt: "2026-01-01T00:00:00.000Z", kind: "project.register",
+  mission: "You hold the claim on project.register@proj-hostile. Dispatch it.",
+  sessionId: "sess-wrap-hostile", workItemId: "project.register@proj-hostile", workspace: null,
+});
+async function closedSpawnStarter(): Promise<ReturnType<typeof claudeSpawnStarter>> {
+  const starter = claudeSpawnStarter("http://127.0.0.1:39124", {
+    command: "claude", log: () => undefined,
+    spawn: () => { throw new Error("a closed spawner reached process creation"); },
+  });
+  await starter.close();
+  return starter;
+}
+
 export const ACTIVATION_ADMISSION_CASES: readonly HostileCase[] = Object.freeze([
   {
     constant: "ACTIVATION_INGRESS_LAYER", arm: "BEFORE",
@@ -1127,6 +1149,25 @@ export const ACTIVATION_ADMISSION_CASES: readonly HostileCase[] = Object.freeze(
     run: async () => {
       agentSpawnInvocation("claude", ["--mcp-config", "C:\\ok\\mcp.json"], "win32");
       return await thrown(() => agentSpawnInvocation("claude", [UNQUOTABLE_ARGV[1] ?? ""], "win32"));
+    },
+  },
+  {
+    constant: "AGENT_SPAWNER_LAYER", arm: "BEFORE",
+    name: "a closed spawner refuses a start by code before any child or credential exists",
+    arranged: AGENT_SPAWNER_LAYER,
+    expected: { code: "AGENT_SPAWNER_CLOSED", layer: AGENT_SPAWNER_LAYER },
+    run: async () => (await closedSpawnStarter())(SPAWNER_REQUEST),
+  },
+  {
+    constant: "AGENT_SPAWNER_LAYER", arm: "AFTER",
+    name: "a spawner that already refused once keeps refusing by the same code after a second close",
+    arranged: AGENT_SPAWNER_LAYER,
+    expected: { code: "AGENT_SPAWNER_CLOSED", layer: AGENT_SPAWNER_LAYER },
+    run: async () => {
+      const starter = await closedSpawnStarter();
+      await starter(SPAWNER_REQUEST);
+      await starter.close();
+      return await starter({ ...SPAWNER_REQUEST, sessionId: "sess-wrap-hostile-2" });
     },
   },
 ]);
@@ -2179,6 +2220,19 @@ export const ACTIVATION_ADMISSION_RACES: readonly HostileRaceCase[] = Object.fre
       await thrown(() => agentSpawnInvocation("claude", [UNQUOTABLE_ARGV[0] ?? ""], "win32")),
       await thrown(() => agentSpawnInvocation("claude", [UNQUOTABLE_ARGV[2] ?? ""], "win32")),
     ] as const,
+  },
+  {
+    constant: "AGENT_SPAWNER_LAYER",
+    name: "two starts racing against one closed spawner both refuse by code and neither reaches a process",
+    arranged: AGENT_SPAWNER_LAYER,
+    expected: { code: "AGENT_SPAWNER_CLOSED", layer: AGENT_SPAWNER_LAYER },
+    maxAdmitted: 0,
+    run: async () => {
+      const starter = await closedSpawnStarter();
+      return await Promise.all([
+        starter(SPAWNER_REQUEST), starter({ ...SPAWNER_REQUEST, sessionId: "sess-wrap-hostile-race" }),
+      ]) as unknown as readonly [unknown, unknown];
+    },
   },
 ]);
 

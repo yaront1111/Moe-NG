@@ -194,7 +194,8 @@ describe("scheduler-activation axis versus the declared-boundary roster", () => 
     // compiler and the two product-contract `/2` command services (clarification, propose).
     // Arms in recent-v2-cutover- and recent-product-contract-v2-hostile-cases.ts.
     // Repository delivery and recovery now each carry three hostile authority arms.
-    expect(ROSTER_AXIS).toHaveLength(48);
+    // 48 -> 49 on 2026-09-13: AGENT_SPAWNER_LAYER, the spawner's own coded refusal once closed.
+    expect(ROSTER_AXIS).toHaveLength(49);
   });
 
   it("covers every scheduler-activation boundary the roster declares", () => {
