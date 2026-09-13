@@ -6,6 +6,7 @@ import type { RepositoryExecutionHandle, RepositoryExecutionPort } from "../repo
 import { createRepositoryExecutionPort } from "../repository/repository-execution-port.js";
 import { createVerifiedWorkspacePort } from "../repository/git-verified-workspace-port.js";
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
+import { landingVerificationClass } from "../orchestrator/node-lander-verification.js";
 import { readCriterionGoal } from "./criterion-goal.js";
 import type { CriterionGoal } from "./criterion-goal.js";
 import { queueAutomaticCriterionVerification, readCriterionRuns } from "./criterion-run.js";
@@ -62,16 +63,32 @@ export function createCriterionRunner(options: CriterionRunnerOptions) {
   };
   const release = (handle: RepositoryExecutionHandle) => repository.release(handle.reservation.identity.root,
     handle.owner, handle.reservation.revision, "CRITERIA_COMPLETED", controller.controllerId);
-  const captureMatches = async (run: CriterionRun): Promise<boolean> => {
-    const captured = await verifiedWorkspace.capture(run.artifact.root);
-    return captured.ok && captured.binding.root === run.artifact.root && captured.binding.headSha === run.artifact.sha
-      && captured.binding.treeSha === run.artifact.treeSha;
+  /** The reservation before any check ran: RESERVED and never executed, so the port admits this release. */
+  const giveBack = (handle: RepositoryExecutionHandle): void => {
+    if (!stillOwned(handle) || handle.reservation.phase !== "RESERVED") return;
+    repository.release(handle.reservation.identity.root, handle.owner, handle.reservation.revision,
+      "ABORTED_BEFORE_EXECUTION", controller.controllerId);
   };
+  // A refusal the lander's table calls TRANSIENT (a 30s git timeout, an index lock, HEAD read
+  // mid-move) is a moment, not a verdict on the artifact; every other answer is one.
+  const capture = async (run: CriterionRun): Promise<"MATCHED" | "MISMATCHED" | "TRANSIENT"> => {
+    const captured = await verifiedWorkspace.capture(run.artifact.root);
+    if (!captured.ok) return landingVerificationClass(captured.code) === "TRANSIENT" ? "TRANSIENT" : "MISMATCHED";
+    return captured.binding.root === run.artifact.root && captured.binding.headSha === run.artifact.sha
+      && captured.binding.treeSha === run.artifact.treeSha ? "MATCHED" : "MISMATCHED";
+  };
+  const captureMatches = async (run: CriterionRun): Promise<boolean> => await capture(run) === "MATCHED";
 
   const execute = async (goal: CriterionGoal, run: CriterionRun, handle: RepositoryExecutionHandle): Promise<void> => {
     let currentRun = run;
     try {
-      if (!sameCriterionArtifact(run.artifact, options.artifactFor(goal)) || !await captureMatches(run)) { block(handle, run); return; }
+      if (!sameCriterionArtifact(run.artifact, options.artifactFor(goal))) { block(handle, run); return; }
+      const captured = await capture(run);
+      // Nothing has run yet. Blocking here wedged delivery, publishing and criteria behind a
+      // reservation nothing could release (operator recovery refuses `criterion:` refs); giving the
+      // untouched checkout back leaves the run QUEUED for the next tick to retry.
+      if (captured === "TRANSIENT") { giveBack(handle); return; }
+      if (captured === "MISMATCHED") { block(handle, run); return; }
       const changed = transition(handle, "CRITERION_VERIFYING", run);
       if (!changed.ok) return;
       handle = changed.handle;
