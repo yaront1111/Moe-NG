@@ -58,19 +58,26 @@ function precedes(first: Element, second: Element): boolean {
 }
 
 describe("the Product Contract /2 Gate 1 dossier", () => {
-  it("puts the decision - approve, or the open question - before the dossier", async () => {
+  it("puts the decision row - the totals with approve, or the open question - before the dossier", async () => {
     // Measured on the V1 card 2026-09-13: Approve sat below every statement. The V2 card
-    // mounted the dossier first and the control last the same way.
+    // mounted the dossier first and the control last the same way, with no totals at all.
     const ready = await pending(GATE1_V2_READY_BODY);
     render(<Gate1Card goalId="goal-live-1" port={portWith()} read={async () => ready} />);
     const approve = await screen.findByTestId("cr.gate1.approve");
-    expect(precedes(approve, screen.getByTestId("cr.gate1.pending"))).toBe(true);
+    const decision = screen.getByTestId("cr.gate1.decision");
+    expect(decision.contains(approve)).toBe(true);
+    // Six requirements across the six sections of the fixture revision, six criteria.
+    expect(screen.getByTestId("cr.gate1.totals").textContent)
+      .toBe("6 requirements · 6 acceptance criteria");
+    expect(precedes(decision, screen.getByTestId("cr.gate1.pending"))).toBe(true);
+    expect(precedes(screen.getByTestId("cr.gate1.banner"), decision)).toBe(true);
     cleanup();
 
     const open = await pending(GATE1_V2_OPEN_BODY);
     render(<Gate1Card goalId="goal-live-1" port={portWith()} read={async () => open} />);
     const answer = await screen.findByTestId("cr.gate1.answer.clarification-profile.option-a");
-    expect(precedes(answer, screen.getByTestId("cr.gate1.pending"))).toBe(true);
+    expect(precedes(answer, screen.getByTestId("cr.gate1.decision"))).toBe(true);
+    expect(precedes(screen.getByTestId("cr.gate1.totals"), screen.getByTestId("cr.gate1.pending"))).toBe(true);
     expect(screen.queryByTestId("cr.gate1.approve")).toBeNull();
   });
 
