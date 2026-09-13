@@ -7,11 +7,15 @@ import { MIDDOT } from "../glyphs.js";
  * STATEMENT ROSTERS THAT MOUNT BY GROUP, NOT BY STATEMENT.
  *
  * MEASURED 2026-09-13 on a live PRD (128 requirements + 150 acceptance criteria, ~111 KB
- * of statement text): a roster that mounted all 278 bordered rows in one synchronous pass
- * stopped the tab for 20-30 s (a CDP screenshot timed out at 30 s). Three surfaces render
- * such rosters - the V1 Gate 1 card (gate1-v1-rosters.tsx), the coverage dossier mounted
- * right under it (contract-dossier.tsx) and the V2 Gate 1 dossier
- * (gate1-contract-dossier.tsx) - and all three fold through this one component, so the
+ * of statement text): opening the goal board stopped the tab for 20-30 s (a CDP screenshot
+ * timed out at 30 s). That one paint mounted at least THREE flat copies of the 278 bordered
+ * rows in one synchronous pass - the V1 Gate 1 card (gate1-v1-rosters.tsx), the coverage
+ * dossier right under it (contract-dossier.tsx) and PRD coverage inside the closed
+ * "Everything else" fold (prd-coverage.tsx; React mounts a closed <details>' children).
+ * The share of the stall each copy carried was NOT measured separately: the per-roster
+ * attribution is inferred from the DOM each one built, and the board has not been re-timed
+ * since the folds landed. The V2 Gate 1 dossier (gate1-contract-dossier.tsx) would mount a
+ * fourth copy after cutover.activate. All four fold through this one component, so the
  * first paint of each scales with the number of GROUPS, never with the statements.
  *
  * - Up to FLAT_LIMIT rows render flat: a one-statement roster (the e2e fixtures' `req-1`)
@@ -20,6 +24,10 @@ import { MIDDOT } from "../glyphs.js";
  *   than CHUNK_SIZE splits into runs named by their first and last id, so ONE click never
  *   mounts more than a run; when every family holds one row (ids with no shared prefix)
  *   the whole roster is one such family and folds into runs the same way.
+ * - LIMIT: only a roster whose families are ALL singletons falls back to runs. A mixed
+ *   roster - named families beside dash-less or one-off ids - keeps one toggle per singleton
+ *   family, so 40 `REQ-AI-*` rows beside 30 bare ids show two family toggles and 30 more.
+ *   Whether real PRDs mix the two shapes has not been observed; "Open all" covers it.
  * - Every group is closed by default and mounts its rows only while open; "Open all"
  *   opens (and then closes) every group at once.
  */

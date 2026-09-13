@@ -30,10 +30,11 @@ import { FoldedRoster } from "./statement-folds.js";
  * asks for nothing", which is a different and false claim.
  *
  * THE ROWS FOLD. The daemon feeds this dossier the PENDING revision when none is approved,
- * so it mounts right under the Gate 1 card on the same first paint; measured 2026-09-13,
- * a flat render of the 128 + 150 statement contract was the second half of the tab's
- * 20-30 s stall. Requirements fold by identifier family (statement-folds.tsx), each with
- * its criteria nested, and a family mounts its rows only once opened.
+ * so it mounts right under the Gate 1 card on the same first paint; on the page measured
+ * 2026-09-13 to stall the tab for 20-30 s, this was one of the flat copies of the 128 + 150
+ * statement contract (statement-folds.tsx holds the measurement and what it does not
+ * attribute). Requirements fold by identifier family, each with its criteria nested, and a
+ * family mounts its rows only once opened.
  */
 
 const DEFAULT_POLL_MS = 10_000;
