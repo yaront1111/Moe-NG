@@ -92,6 +92,9 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
         if (!bound.ok) return deliveryRefusal(bound.code);
         handle = bound.handle;
       }
+      // The runtime's own closed guard was read before the awaited baseline; a stop that landed
+      // inside it must not move the row to EXECUTING against a spawner that will refuse.
+      if (config.closed?.() === true) return deliveryRefusal("REPOSITORY_DELIVERY_CLOSED");
       const executing = change(handle, { phase: "EXECUTING", sessionId: request.sessionId, pid: null });
       if (!executing.ok) return deliveryRefusal(executing.code);
       handle = executing.handle;

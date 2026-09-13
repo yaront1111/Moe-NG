@@ -82,7 +82,9 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
     baselineId: () => baselineId,
     ...(reservationHandle === undefined ? {} : { reservationHandle }),
   });
+  let closed = false;
   const coordinator = createRepositoryDeliveryCoordinator({
+    closed: () => closed,
     controller: { controllerId: randomBytes(32).toString("hex"), controllerPid: process.pid },
     facts: (nodeRef, handle) => readRepositoryDeliveryFacts(store, projectId, nodeRef, handle),
     isProcessAlive: probeProcessAlive, port: repository, projectId,
@@ -135,7 +137,6 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
     projectId, store, workspace: config.compiledWorkspace });
   const criteria = createCriterionEvidenceService({ store, projectId, storeId,
     workspace: config.compiledWorkspace, clock: () => new Date().toISOString() });
-  let closed = false;
   const close = (): Promise<void> => { closed = true; return criteria.close(); };
   const start: (spawn: AgentSpawnStart) => AgentSpawnStart = (spawn) => async (request) => {
     if (closed) return deliveryRefusal("REPOSITORY_DELIVERY_CLOSED");

@@ -985,6 +985,26 @@ describe("claudeSpawnStarter", () => {
     expect(executed).toBe(UNQUOTABLE_TOKENS.length);
   });
 
+  it("answers the coded refusal AGENT_SPAWNER_CLOSED once closed, reaching no process and no credential", async () => {
+    // Pre-fix `attemptSpawn` THREW a plain Error here. A node.deliver spawn whose git baseline
+    // straddled the operator's stop then rejected inside the delivery coordinator, which maps
+    // every throw from spawn() to a BLOCKED reservation that repository.recover cannot release
+    // (measured 2026-09-13). A closed spawner refuses BEFORE any child exists, so it must say so
+    // in the coded shape every pre-spawn transition can be reverted from.
+    const { calls, spawn } = fakeSpawn(4242);
+    const { configDir, made: start } = inSandbox(claudeSpawnStarter, {
+      command: "claude", log: () => undefined, spawn,
+    });
+    await (start as unknown as { readonly close: () => Promise<void> }).close();
+    const req = request();
+
+    await expect(start(req)).resolves.toStrictEqual({
+      code: "AGENT_SPAWNER_CLOSED", layer: "agent-spawner", ok: false,
+    });
+    expect(calls, "a closed starter reached process creation").toEqual([]);
+    expect(existsSync(join(configDir, `${req.sessionId}.json`))).toBe(false);
+  });
+
   it("admits a start on the spawn event and hands back a still-pending exit", async () => {
     const { calls, spawn } = fakeSpawn(4242);
     const { configDir, made: start } = inSandbox(claudeSpawnStarter, {

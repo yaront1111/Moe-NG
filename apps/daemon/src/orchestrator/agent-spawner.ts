@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import { agentEnvironment,
   trustedMcpOrigin } from "./agent-spawn-environment.js";
 import { agentRoleForWorkspace } from "./agent-role-contract.js";
-import { AgentProcessContainmentError, AgentProcessFailureError } from "./agent-spawn-contract.js";
+import { AGENT_SPAWNER_LAYER, AgentProcessContainmentError, AgentProcessFailureError } from "./agent-spawn-contract.js";
 import type { AgentProcessContainmentReason, AgentProcessFailureReason, AgentSpawnStartResult,
   AgentSpawnStarter, AgentSpawner, AgentSpawnerOptions, SeatExitReport,
   SpawnAttempt } from "./agent-spawn-contract.js";
@@ -111,7 +111,9 @@ function spawnRuntime(
   // Moot for containment while the pair above makes the mode advisory anyway. Full table:
   // `mem:gotcha-codex-exec-approval-pair-and-the-sandbox-mode-floor`.
   const attemptSpawn = (request: SpawnRequest): SpawnAttempt => {
-    if (closed) throw new Error("AGENT_SPAWNER_CLOSED");
+    // A coded refusal, never a throw: answered before any child, so the caller reverts its own
+    // pre-spawn transitions (a throw here left a delivery reservation BLOCKED, 2026-09-13).
+    if (closed) return Object.freeze({ ok: false as const, code: "AGENT_SPAWNER_CLOSED" as const, layer: AGENT_SPAWNER_LAYER });
     const { codex: codexSeat, command } = spawnSeatFor(request.provider, options.command);
     const mcpConfigPath = join(configDir, `${request.sessionId}.json`);
     // Code-node agents get coding tools; chain-step agents keep the MCP-only surface.
@@ -403,7 +405,10 @@ function spawnRuntime(
     // The legacy contract is the process LIFETIME, so admission is deliberately
     // not awaited here: a child that exits without ever emitting `spawn` still
     // settles exactly as this caller has always observed.
-    if (!("admitted" in attempt)) throw new SpawnInvocationRefusal(attempt.code);
+    if (!("admitted" in attempt)) {
+      throw attempt.layer === SPAWN_INVOCATION_LAYER
+        ? new SpawnInvocationRefusal(attempt.code) : new Error(attempt.code);
+    }
     void attempt.admitted.catch(() => undefined);
     // The legacy contract answers VOID; the seat report the lifetime now carries is
     // handed to `startAgent`'s caller, not to this one.

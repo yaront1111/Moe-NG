@@ -285,6 +285,8 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       if (!GATE_REFUSALS.has(report.outcome)) attempts.set(workItemId, tried + 1);
       spawned.push(report);
       if (staffing.failureOutcome() !== null) break;
+      // A closed spawner admits nothing else this pass: stop before minting more identities.
+      if (report.refusal?.code === "AGENT_SPAWNER_CLOSED") break;
     }
     const idled = stalled !== null && spawned.length === 0;
     return { active: staffing.activeCount(), spawned,

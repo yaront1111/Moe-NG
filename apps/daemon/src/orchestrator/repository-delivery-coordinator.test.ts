@@ -21,7 +21,7 @@ function request(workspace: string, nodeRef = "node-a"): SpawnRequest {
   return { credential: "secret", expiresAt: "2026-09-06T00:00:00.000Z", kind: "node.deliver",
     mission: "implement", sessionId: `session-${nodeRef}`, workItemId: `node.deliver@${nodeRef}`, workspace };
 }
-function fixture(workspace = repository(), controllerId = "controller-a", controllerPid = 101) {
+function fixture(workspace = repository(), controllerId = "controller-a", controllerPid = 101, closed?: () => boolean) {
   const port = createRepositoryExecutionPort();
   // The real port does the work; the wrapper only records the REASON, which the port does not keep.
   const releases: RepositoryExecutionReleaseReason[] = [];
@@ -35,6 +35,7 @@ function fixture(workspace = repository(), controllerId = "controller-a", contro
   const verify = vi.fn(async () => { facts = "ACCEPTED"; });
   const land = vi.fn(async () => { facts = "LANDED"; });
   const coordinator = createRepositoryDeliveryCoordinator({ baseline, controller: { controllerId, controllerPid },
+    ...(closed === undefined ? {} : { closed }),
     facts: () => facts, isProcessAlive: (pid: number) => live.has(pid), land, port: recording, projectId: "project-a",
     retired: () => retired, storeId: "store-a", verify, workspaces: () => [workspace] });
   let finish!: () => void;
@@ -206,6 +207,43 @@ describe("repository delivery lifetime", () => {
     expect((await f.coordinator.start(request(f.workspace), f.spawn)).ok).toBe(true);
     expect((await f.coordinator.start(request(other, "node-b"), f.spawn)).ok).toBe(true);
     f.finish(); await f.exit;
+  }, 120_000);
+
+  // THE STOP THAT LANDS DURING THE BASELINE (measured 2026-09-13). The runtime's own `closed`
+  // guard is read once at closure entry, before the awaited git baseline; a stop inside that
+  // window used to reach spawn(), whose closed spawner threw, and the catch below moved a
+  // reservation already carrying everExecuted+sessionId to BLOCKED - a phase with no exit that
+  // repository.recover answers CONTAINMENT_UNKNOWN for. Both halves are pinned: the spawner now
+  // REFUSES by code (the existing `!started.ok` arm reverts to RESERVED), and the coordinator
+  // re-reads the stop after the baseline so a closed runtime never reaches EXECUTING at all.
+  it("reverts to RESERVED with its baseline when the spawner refuses AGENT_SPAWNER_CLOSED after the baseline", async () => {
+    const f = fixture();
+    f.spawn.mockResolvedValueOnce({ ok: false, code: "AGENT_SPAWNER_CLOSED", layer: "agent-spawner" } as never);
+    expect(await f.coordinator.start(request(f.workspace), f.spawn))
+      .toMatchObject({ ok: false, code: "AGENT_SPAWNER_CLOSED", layer: "agent-spawner" });
+    expect(f.port.inspect(f.workspace)).toMatchObject({ reservation: { phase: "RESERVED", baselineId: "baseline-original", sessionId: null } });
+    // The next wrapper (old controller dead) starts the node over the baseline already captured.
+    const other = fixture(f.workspace, "controller-b", 102); other.live.delete(101);
+    const started = await other.coordinator.start(request(f.workspace), other.spawn);
+    expect(started.ok).toBe(true);
+    expect(other.baseline).not.toHaveBeenCalled();
+    other.finish(); if (started.ok) await started.exit;
+  }, 120_000);
+
+  it("refuses REPOSITORY_DELIVERY_CLOSED when the runtime closes during the baseline, spawning nothing", async () => {
+    let closed = false;
+    const f = fixture(undefined, "controller-a", 101, () => closed);
+    f.baseline.mockImplementationOnce(async () => { closed = true; return "baseline-original"; });
+    expect(await f.coordinator.start(request(f.workspace), f.spawn))
+      .toMatchObject({ ok: false, code: "REPOSITORY_DELIVERY_CLOSED", layer: "REPOSITORY_DELIVERY" });
+    expect(f.spawn).not.toHaveBeenCalled();
+    // Never EXECUTING: the row carries neither a session nor a BLOCKED phase, only its baseline.
+    expect(f.port.inspect(f.workspace)).toMatchObject({ reservation: { phase: "RESERVED", baselineId: "baseline-original", sessionId: null } });
+    const other = fixture(f.workspace, "controller-b", 102); other.live.delete(101);
+    const started = await other.coordinator.start(request(f.workspace), other.spawn);
+    expect(started.ok).toBe(true);
+    expect(other.baseline).not.toHaveBeenCalled();
+    other.finish(); if (started.ok) await started.exit;
   }, 120_000);
 
   it("does not spawn when baseline recording fails", async () => {

@@ -19,6 +19,8 @@ export type RepositoryDeliveryRefusal = Readonly<{ ok: false; layer: typeof REPO
 export type RepositoryDeliveryFacts = "READY" | "SUBMITTED" | "ACCEPTED" | "LANDED" | "REFUSED" | "REFUSED_NO_EFFECT" | "UNKNOWN";
 export interface RepositoryDeliveryConfig {
   readonly baseline: (nodeRef: string, reservedRoot: string) => Promise<string | null>;
+  /** Whether the owning runtime has begun closing; re-read after the awaited baseline. */
+  readonly closed?: (() => boolean) | undefined;
   readonly controller: RepositoryExecutionController;
   /** The handle is what lets a refusal be told apart from a refusal that journaled nothing. */
   readonly facts: (nodeRef: string, handle?: RepositoryExecutionHandle) => RepositoryDeliveryFacts;

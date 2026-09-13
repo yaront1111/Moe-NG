@@ -16,6 +16,7 @@ import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js
 import { WORK_CLAIM_SCHEMA_VERSION } from "../work/work-claim-contracts.js";
 import { readWorkClaimLedger, runWorkClaimCommand } from "../work/work-claim-services.js";
 import { SqliteEventStore } from "@moe/store";
+import { AGENT_SPAWNER_LAYER } from "./agent-spawn-contract.js";
 import type { AgentSpawnStartResult, SpawnReport,
   SpawnStartRefusal } from "./agent-spawn-contract.js";
 import { SPAWN_INVOCATION_LAYER } from "./agent-spawn-invocation.js";
@@ -1849,6 +1850,55 @@ describe("createAgentWrapper — durable staffing fence", () => {
         "record:provisional", `retire:${entry.workItemId}`,
       ]));
     } finally {
+      harness.dispose();
+    }
+  });
+
+  it("reports a closed spawner by code, staffs nothing further that pass, and settles clean", async () => {
+    // The operator's stop closes the spawner while a pass may still be staffing. Pre-fix the
+    // spawner THREW for that, the throw was recorded as a permanent staffing failure, settle()
+    // rethrew it, and main exited 1 printing AGENT_SPAWNER_CLOSED after a clean stop. A closed
+    // spawner is a coded refusal answered before any child exists: reported, cleaned, not fatal.
+    const projectId = "proj-wrapper-spawner-closed";
+    const harness = isolatedHarness(projectId);
+    const store = SqliteEventStore.openForProject(harness.storePath, projectId);
+    try {
+      let suffix = 0;
+      let spawns = 0;
+      const closing = createAgentWrapper({
+        affordances: harness.port, claimTtlMs: 60_000, clock: () => NOW,
+        deps: harness.isolated.provide(), maxAgents: 2,
+        mintSecret: () => `closed-${String(suffix += 1).padStart(4, "0")}${"0".repeat(27)}`,
+        operatorCredential: OPERATOR,
+        spawnAgent: async () => {
+          spawns += 1;
+          return Object.freeze({
+            code: "AGENT_SPAWNER_CLOSED" as const, layer: AGENT_SPAWNER_LAYER, ok: false as const,
+          });
+        },
+      });
+
+      const report = await closing.runOnce();
+      expect(report.surfaceOutcome).toBe("SURFACE");
+      // The fresh surface offers MORE than one READY step and the first refusal ends the pass:
+      // a closed spawner admits nothing else, so no further identity is minted against it.
+      expect(report.spawned).toHaveLength(1);
+      const seat = report.spawned[0];
+      expect(seat).toMatchObject({
+        outcome: "AGENT_SPAWNER_CLOSED",
+        refusal: { code: "AGENT_SPAWNER_CLOSED", layer: AGENT_SPAWNER_LAYER, ok: false },
+      });
+      expect(spawns).toBe(1);
+      // Nothing was recorded as a failure: the shutdown that follows resolves, and the seat's
+      // claim and session were cleaned by the refusal path like every other coded refusal.
+      await expect(closing.settle()).resolves.toBeUndefined();
+      expect(closing.activeCount()).toBe(0);
+      expect(readWorkClaimLedger(store, projectId).claims.get(seat?.workItemId ?? "")?.status)
+        .toBe("RELEASED");
+      expect(readSessionLedger(store, projectId).sessions.get(seat?.sessionId ?? "")?.status)
+        .toBe("CLOSED");
+    } finally {
+      store.close();
       harness.dispose();
     }
   });

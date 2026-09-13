@@ -92,12 +92,27 @@ export interface AgentSpawner {
  * timeout — and with `shell: true` Node's `spawn` event admits the SHELL that
  * was created, never the readiness of the `claude` command inside it.
  */
+/**
+ * The spawner's OWN refusal layer, distinct from the invocation's: a closed runtime admits no
+ * new child. Answered BEFORE any process or credential exists, so every pre-spawn transition a
+ * caller made (a checkout moved to EXECUTING, a provisional staffing record) can be reverted.
+ * It used to be a thrown plain Error, which the delivery coordinator mapped to a BLOCKED
+ * reservation nobody could recover when a stop landed during a git baseline (2026-09-13).
+ */
+export const AGENT_SPAWNER_LAYER = "agent-spawner" as const;
+export type AgentSpawnerRefusalCode = "AGENT_SPAWNER_CLOSED";
+
 export type AgentSpawnStartResult =
   | RepositoryDeliveryRefusal
   | {
     readonly ok: false;
     readonly code: SpawnInvocationRefusalCode;
     readonly layer: typeof SPAWN_INVOCATION_LAYER;
+  }
+  | {
+    readonly ok: false;
+    readonly code: AgentSpawnerRefusalCode;
+    readonly layer: typeof AGENT_SPAWNER_LAYER;
   }
   | {
     readonly ok: true;
@@ -125,7 +140,10 @@ export interface AgentSpawnStarter {
 
 /** Either the coded refusal, or a live attempt whose two facts stay separate. */
 export type SpawnAttempt =
-  | Extract<AgentSpawnStartResult, { readonly ok: false; readonly layer: typeof SPAWN_INVOCATION_LAYER }>
+  | Extract<AgentSpawnStartResult, {
+    readonly ok: false;
+    readonly layer: typeof SPAWN_INVOCATION_LAYER | typeof AGENT_SPAWNER_LAYER;
+  }>
   | {
     readonly admitted: Promise<void>;
     readonly done: Promise<SeatExitReport | void>;
@@ -348,4 +366,8 @@ export const OPERATOR_ACTIVATION_STEPS: ReadonlySet<string> = new Set([
  * (a live predecessor, a held claim, a record the fence cannot read) clears
  * on its own time, not the wrapper's.
  */
-export const GATE_REFUSALS: ReadonlySet<string> = new Set([...AGENT_STAFFING_REFUSAL_CODES, ...REPOSITORY_DELIVERY_REFUSAL_CODES]);
+export const GATE_REFUSALS: ReadonlySet<string> = new Set([
+  ...AGENT_STAFFING_REFUSAL_CODES, ...REPOSITORY_DELIVERY_REFUSAL_CODES,
+  // The spawner closing under a pass is the process ending, not the item failing its turn.
+  "AGENT_SPAWNER_CLOSED" satisfies AgentSpawnerRefusalCode,
+]);
