@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProductContractRef } from "@moe/control-room-model";
 import type { LiveSetup } from "../../live/live-config.js";
@@ -48,6 +48,57 @@ async function answerFor(plane: "V1" | "V2") {
 
 describe("selected definition identity", () => {
   for (const plane of ["V1", "V2"] as const) {
+    it(`${plane} retries the exact definition after an explicit refresh`, async () => {
+      const answer = await answerFor(plane), setup = setupFor(plane);
+      const read = plane === "V1" ? vi.mocked(readPendingContractV1) : vi.mocked(readPendingContract);
+      read.mockResolvedValueOnce({ status: "ERROR", code: "DEFINITION_TRANSIENT", layer: "HTTP" });
+      const view = render(<LiveProductDefinition setup={setup} goalId="goal-a" source={null}
+        expectedRef={reference(answer, plane)} readRevision={0} />);
+      expect((await screen.findByTestId("cr.gate1.refusal")).textContent).toContain("DEFINITION_TRANSIENT");
+      view.rerender(<LiveProductDefinition setup={setup} goalId="goal-a" source={null}
+        expectedRef={reference(answer, plane)} readRevision={1} />);
+      await screen.findByTestId("cr.gate1.approve");
+      expect(read).toHaveBeenCalledTimes(2);
+    });
+    it(`${plane} queues a refresh until its pending decision settles without losing the answer`, async () => {
+      const answer = await answerFor(plane), setup = setupFor(plane);
+      const read = plane === "V1" ? vi.mocked(readPendingContractV1) : vi.mocked(readPendingContract);
+      let finish!: (value: { ok: false; code: string; layer: string }) => void;
+      ports[plane === "V1" ? "v1" : "v2"].submit.mockReturnValueOnce(new Promise(resolve => { finish = resolve; }));
+      const view = render(<LiveProductDefinition setup={setup} goalId="goal-a" source={null}
+        expectedRef={reference(answer, plane)} readRevision={0} />);
+      const approve = await screen.findByTestId("cr.gate1.approve");
+      await act(async () => { fireEvent.click(approve); });
+      view.rerender(<LiveProductDefinition setup={setup} goalId="goal-a" source={null}
+        expectedRef={reference(answer, plane)} readRevision={1} />);
+      expect(screen.getByTestId("cr.gate1.approve")).toBe(approve);
+      expect(approve.matches(":disabled")).toBe(true);
+      expect(read).toHaveBeenCalledTimes(1);
+      await act(async () => { finish({ ok: false, code: "EXACT_DECISION_REFUSED", layer: "DAEMON" }); });
+      await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+      expect(screen.getByTestId("cr.gate1.dispatchrefusal").textContent).toContain("EXACT_DECISION_REFUSED");
+      expect(ports[plane === "V1" ? "v1" : "v2"].submit).toHaveBeenCalledTimes(1);
+    });
+    it(`${plane} permits historical requirement disclosure while keeping decisions disabled`, async () => {
+      const answer = await answerFor(plane);
+      const rows = Array.from({ length: 21 }, (_, index) => ({ requirementId: `REQ-${index + 1}`,
+        statement: `Historical requirement ${index + 1}`, priority: "MUST" as const,
+        dependsOnRequirementIds: [], supersedesRequirementId: null }));
+      if ("revision" in answer) vi.mocked(readPendingContract).mockResolvedValue({ ...answer,
+        revision: { ...answer.revision, functionalRequirements: rows } });
+      else vi.mocked(readPendingContractV1).mockResolvedValue({ ...answer, requirements: rows });
+      render(<LiveProductDefinition setup={setupFor(plane)} goalId="goal-a" source={null}
+        expectedRef={reference(answer, plane)} readOnly />);
+      const open = await screen.findByTestId(plane === "V1" ? "cr.gate1.requirements.openall"
+        : "cr.gate1.contract.requirements.functional.openall");
+      expect(open.matches(":disabled")).toBe(false);
+      fireEvent.click(open);
+      expect(screen.getByText("Historical requirement 21")).toBeTruthy();
+      const approve = screen.getByTestId("cr.gate1.approve");
+      expect(approve.matches(":disabled")).toBe(true);
+      expect(approve.textContent).toBe("Approve contract");
+      expect(ports.v1.submit).not.toHaveBeenCalled(); expect(ports.v2.submit).not.toHaveBeenCalled();
+    });
     for (const field of ["contractId", "revisionId", "revisionDigest", "plane"] as const) {
       it(`${plane} refuses changed ${field} before exposing an approval`, async () => {
         const answer = await answerFor(plane);

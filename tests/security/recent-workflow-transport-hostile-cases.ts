@@ -20,12 +20,16 @@ const activationRefusal = async (): Promise<unknown> => {
   return step?.state === "ANSWERED" ? step.outcome : step;
 };
 
-function providerSource(ref: string | null): unknown {
+/**
+ * The credential ref rides in the provider row's `reason` (activation-read.ts `receiptRow`
+ * publishes the receipt's `detail` there); `ref` is the committed probe envelope ref.
+ */
+function providerSource(credentialRef: string): unknown {
   const reads: ResourceReads = {
     activation: {
       status: "ACTIVATION", blocking: [], distribution: null, measuredAt: "2026-09-06T00:00:00Z",
-      members: [{ member: "provider", measured: true, ref, hash: null, code: null, layer: null,
-        reason: "" }],
+      members: [{ member: "provider", measured: true, ref: "provider-profile-1", hash: null,
+        code: null, layer: null, reason: credentialRef }],
       provider: null, repository: null, schemaVersion: "moe-activation-receipts/1",
       signing: { measured: false, member: "signing", reason: "", ref: "unmeasured", trustBoundary: false },
       store: null,
@@ -101,9 +105,10 @@ const specs: readonly Spec[] = [
   {
     boundary: "RESOURCES_LAYER",
     expected: { code: "RESOURCES_CREDENTIAL_SOURCE_UNRECOGNISED", layer: "CONTROL_ROOM_RESOURCES" },
-    // Null and malformed source references cannot become a displayed credential source.
-    // No credential values or canaries are created, retained, or printed by this table.
-    hostile: () => providerSource(null),
+    // Empty and malformed credential refs, on the field the model reads, cannot become a
+    // displayed credential source. No credential values or canaries are created, retained,
+    // or printed by this table.
+    hostile: () => providerSource(""),
     observe: () => providerSource("not-a-source-reference"),
   },
   {

@@ -21,9 +21,14 @@ export const RESOURCES_LAYER = "CONTROL_ROOM_RESOURCES";
 export const CREDENTIAL_SOURCE_UNRECOGNISED = "RESOURCES_CREDENTIAL_SOURCE_UNRECOGNISED";
 
 /**
- * The ref as the daemon writes it
+ * The credential PRESENCE ref as the daemon writes it
  * (apps/daemon/src/bootstrap/activation-receipts-measure.ts, `credentialRef`):
  * `credential/<provider leaf>/env:<VAR NAME>`, `.../login-file`, or `.../ungated`.
+ *
+ * WHERE IT TRAVELS. It is the provider receipt's `detail`, which /activation/read publishes
+ * as the row's `reason` (activation-read.ts `receiptRow`). The row's `ref` is a DIFFERENT
+ * ref - the committed `provider.probe` envelope ref, `provider-profile-1` - and never
+ * matches this grammar. Callers hand this function the provider row's `reason`.
  *
  * An environment variable NAME is upper snake case; an API credential is not. The
  * grammar therefore cannot match a value even if one is substituted for the name.
@@ -37,9 +42,9 @@ export interface CredentialSource {
   readonly source: string;
 }
 
-export function credentialSource(ref: string | null): CredentialSource | null {
-  if (ref === null) return null;
-  const match = CREDENTIAL_REF.exec(ref);
+export function credentialSource(credentialRef: string | null): CredentialSource | null {
+  if (credentialRef === null) return null;
+  const match = CREDENTIAL_REF.exec(credentialRef);
   const cli = match?.[1];
   const source = match?.[2];
   return cli === undefined || source === undefined ? null : Object.freeze({ cli, source });

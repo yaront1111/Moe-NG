@@ -97,12 +97,19 @@ export function LiveProductWorkspace({ setup, route, query, update, onBack, onNe
   }
   // Pending may disappear before a submitted command answers. Keep only this scope's exact review identity.
   const definitionRef = retainedDefinition.current.ref;
+  const pinDecisionArtifact = () => {
+    const artifactId = model.selection.selectedId;
+    if (artifactId === null) return;
+    // A decision makes this observed artifact the user's selection even if other reads are still pending.
+    update(current => current?.goalId === route.goalId && current.artifactId === null
+      ? { ...current, artifactId } : current, true);
+  };
   // An independent current-proposal read must not expose a decision before its selected identity is known.
   const definition = definitionRef === null ? <article><h2>Product definition</h2><p role="status">
     {reads.definition === null ? "Reading your product definition…" : reads.definition?.status === "NONE"
       ? "No product definition is recorded yet." : "The exact product definition could not be read. Refresh to try again."}
   </p></article> : <LiveProductDefinition setup={setup} goalId={route.goalId} source={reads.source} expectedRef={definitionRef}
-    readOnly={observed.historical || currentDefinitionRef === null} />;
+    readOnly={observed.historical || currentDefinitionRef === null} readRevision={readRevision} onDecisionStart={pinDecisionArtifact} />;
   const definitionOnCanvas = model.selection.artifact === null || model.selection.artifact.kind === "DEFINITION";
   const definitionRecord = definitionOnCanvas ? <><p>The definition review stays on the product canvas.</p>
     <button type="button" onClick={() => update({ ...query, inspector: null })}>Review definition</button></> : definition;

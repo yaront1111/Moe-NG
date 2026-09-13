@@ -14,14 +14,15 @@ type ById = (instanceId: string) => Promise<ProjectHomeResult>;
 export interface ProjectHomeProps {
   readonly projects: readonly ProjectHomeProject[];
   readonly onCreateProject: Intake;
-  readonly onRefreshProjects: () => Promise<ProjectHomeResult>;
+  /** Null means a newer read owns the displayed result. */
+  readonly onRefreshProjects: () => Promise<ProjectHomeResult | null>;
   readonly onRegisterProject: Intake;
   readonly onStartProject: ById;
   readonly onStopProject: ById;
   readonly onOpenProject: ById;
 }
 
-type RunOperation = (busyKey: string, reportKey: string, operation: () => Promise<ProjectHomeResult>) => Promise<ProjectHomeResult>;
+type RunOperation = (busyKey: string, reportKey: string, operation: () => Promise<ProjectHomeResult | null>) => Promise<ProjectHomeResult | null>;
 
 /** The sentence is the headline; `CODE @ LAYER` stays verbatim behind Details so
     the daemon's own word is always one click away and never the first thing read. */
@@ -86,7 +87,7 @@ function IntakeForm({ id, busyKey, onCreate, onRegister, report, run }: IntakeFo
     const input = { root: root.trim(), title: title.trim() };
     const result = await run(INTAKE_KEY, INTAKE_KEY, () =>
       kind === "create" ? onCreate(input) : onRegister(input));
-    if (result.ok) { setRoot(""); setTitle(""); }
+    if (result?.ok) { setRoot(""); setTitle(""); }
   };
 
   return (
@@ -208,10 +209,14 @@ export function ProjectHome({ projects, onCreateProject, onRefreshProjects, onRe
     if (busy.current) return PROJECT_HOME_LOCAL_REFUSAL;
     busy.current = true;
     setBusyKey(key);
-    let result: ProjectHomeResult;
-    try { result = safeResult(await operation()); }
+    let result: ProjectHomeResult | null;
+    try {
+      const answer = await operation();
+      result = key === "refresh" && answer === null ? null : safeResult(answer);
+    }
     catch { result = PROJECT_HOME_LOCAL_REFUSAL; }
     busy.current = false; setBusyKey(null);
+    if (result === null) return null;
     setReports((current) => new Map(current).set(reportKey, result));
     return result;
   };

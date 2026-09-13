@@ -1,9 +1,9 @@
-import { afterEach, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { closeStores, GOAL_ID, PROJECT_ID, RUN_ID } from "../bootstrap/bootstrap-test-fixtures.js";
-import { OPERATOR } from "../planning/plan-reject-test-fixtures.js";
+import { OPERATOR, approveGate1, approvePlan, boundWorld, committedRevision, submit } from "../planning/plan-reject-test-fixtures.js";
 import { OPERATOR_CAPABILITIES } from "../daemon-command-vocabulary.js";
 import { createOperatorSessionHandshakePort } from "../identity/session-handshake.js";
-import { criterionWorld } from "./criterion-test-fixtures.js";
+import { criterionWorld, recordGoalObservation } from "./criterion-test-fixtures.js";
 import { CRITERION_APPROVE, CRITERION_PRINCIPAL, CRITERION_SCHEMA_VERSION } from "./criterion-contracts.js";
 import { criterionBytes, criterionHash } from "./criterion-codec.js";
 import { CRITERION_EXECUTOR_VERSION } from "./criterion-approval.js";
@@ -115,3 +115,44 @@ it.each(["new command identity", "same command id from another human"] as const)
     expect(readCriterionReceipt(store, run, "crit-api")?.result.status).toBe("PASSED");
   },
 );
+
+/**
+ * THE GOAL'S OWN STATE DECIDES THE CODE. The board renders CRITERION_CHECK_GOAL_UNBOUND as
+ * "no checks yet" (criterion-evidence-card.tsx), so that code may cover exactly one state: the
+ * goal exists and no plan is approved. A goal that does not exist, a goal that was cancelled,
+ * and an ENABLED goal whose sealed plan no longer resolves each answer their own code, so none
+ * of them can be rendered as ordinary emptiness.
+ */
+const refusal = (code: string) => ({ ok: false, code, layer: "CRITERION_EVIDENCE" });
+describe("readCriterionGoal names which state the goal is in", () => {
+  it("refuses GOAL_UNBOUND while the goal is a DRAFT, and reads it once its plan is approved", () => {
+    const store = boundWorld();
+    expect(readCriterionGoal(store, PROJECT_ID, GOAL_ID)).toEqual(refusal("CRITERION_CHECK_GOAL_UNBOUND"));
+    // A compiled plan at PLAN_REVIEW is still no APPROVED plan: the goal stays DRAFT.
+    const ref = committedRevision(store); approveGate1(store, ref); expect(submit(store, ref).ok).toBe(true);
+    expect(readCriterionGoal(store, PROJECT_ID, GOAL_ID)).toEqual(refusal("CRITERION_CHECK_GOAL_UNBOUND"));
+    approvePlan(store, RUN_ID);
+    expect(readCriterionGoal(store, PROJECT_ID, GOAL_ID)).toMatchObject({ ok: true, binding: { goalRef: GOAL_ID, planningRunRef: RUN_ID } });
+  });
+  it("refuses GOAL_ABSENT, never the nothing-yet code, for a goalRef this project does not carry", () => {
+    const world = criterionWorld();
+    expect(readCriterionGoal(world.store, PROJECT_ID, "missing-goal")).toEqual(refusal("CRITERION_CHECK_GOAL_ABSENT"));
+    expect(readCriterionGoal(world.store, "another-project", GOAL_ID)).toEqual(refusal("CRITERION_CHECK_GOAL_ABSENT"));
+    expect(world.service.read("missing-goal")).toEqual({ outcome: "REFUSED", code: "CRITERION_CHECK_GOAL_ABSENT", layer: "CRITERION_EVIDENCE" });
+  });
+  it("refuses GOAL_CANCELLED, never the nothing-yet code, once the goal is cancelled", () => {
+    const world = criterionWorld();
+    recordGoalObservation(world.store, { lifecycle: "CANCELLED", planningRunRef: RUN_ID });
+    expect(readCriterionGoal(world.store, PROJECT_ID, GOAL_ID)).toEqual(refusal("CRITERION_CHECK_GOAL_CANCELLED"));
+    expect(world.service.read(GOAL_ID)).toEqual({ outcome: "REFUSED", code: "CRITERION_CHECK_GOAL_CANCELLED", layer: "CRITERION_EVIDENCE" });
+  });
+  it("refuses UNREADABLE, never the nothing-yet code, when an ENABLED goal's plan chain does not resolve", () => {
+    const world = criterionWorld();
+    // The observation keeps the goal ENABLED and points it at a run no aggregate carries, so
+    // activeCompiledGraphs walks the chain and yields nothing: an approved plan that cannot be
+    // read back is a failure on this goal, not a goal with no plan.
+    recordGoalObservation(world.store, { lifecycle: "EXECUTION_ENABLED", planningRunRef: "run-missing" });
+    expect(readCriterionGoal(world.store, PROJECT_ID, GOAL_ID)).toEqual(refusal("CRITERION_CHECK_UNREADABLE"));
+    expect(world.service.read(GOAL_ID)).toEqual({ outcome: "REFUSED", code: "CRITERION_CHECK_UNREADABLE", layer: "CRITERION_EVIDENCE" });
+  });
+});

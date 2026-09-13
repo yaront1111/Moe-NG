@@ -670,6 +670,90 @@
   letter-spacing: var(--cr-track-wide);
 }
 
+/* The Gate 1 decision row: the totals beside the one control the reviewer came for,
+   ahead of the rosters (gate1-v1-card.tsx). */
+.cr2-approve-decision {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  width: 100%;
+}
+
+/* Statement rosters fold by identifier family (statement-folds.tsx): a closed family is
+   one toggle row; its statements mount only once opened. The fold bar above the groups
+   carries the one control that opens or closes every family. */
+.cr2-approve-fold-bar {
+  margin: 0;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.cr2-approve-openall {
+  padding: 2px 0;
+  border: 0;
+  background: none;
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink-soft);
+  cursor: pointer;
+}
+
+.cr2-approve-openall:hover,
+.cr2-approve-openall:focus-visible { color: var(--cr-accent); }
+
+.cr2-approve-groups {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.cr2-approve-group-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--cr-line);
+  border-radius: 8px;
+  background: var(--cr-surface);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.cr2-approve-group-toggle::before {
+  content: "\25B8";
+  color: var(--cr-ink-soft);
+}
+
+.cr2-approve-group-toggle[aria-expanded="true"]::before { content: "\25BE"; }
+
+.cr2-approve-group-toggle:hover,
+.cr2-approve-group-toggle:focus-visible { border-color: var(--cr-accent); }
+
+.cr2-approve-group-name {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  letter-spacing: var(--cr-track-wide);
+  color: var(--cr-ink);
+}
+
+.cr2-approve-group-count {
+  font-family: var(--cr-font-mono);
+  font-size: var(--cr-fs-mono);
+  color: var(--cr-ink-soft);
+}
+
+.cr2-approve-group > .cr2-approve-obligations {
+  margin-top: 6px;
+  padding-left: 12px;
+}
+
 .cr2-approve-hashes {
   margin: 8px 0 0;
   display: grid;

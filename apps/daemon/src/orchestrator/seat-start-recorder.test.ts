@@ -138,7 +138,7 @@ describe("createSeatStartRecorder writes what the seat was started with", () => 
     await recorder(store, async () => "2.1.263 (Claude Code)\n")
       .record({ provider: "claude", sessionId: "sess-a" });
     expect(readSeatStartLedger(store, PROJECT).get("sess-a"))
-      .toEqual({ agentVersion: "2.1.263 (Claude Code)", provider: "claude" });
+      .toEqual({ agentVersion: "2.1.263 (Claude Code)", provider: "claude", startedAt: AT });
   });
 
   it("names a KNOWN provider by its roster leaf when the command is a path", async () => {

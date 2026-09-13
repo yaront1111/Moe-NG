@@ -39,7 +39,7 @@ describe("plan approval requires the displayed run body", () => {
     const submit = vi.fn(() => command.promise);
     const mounted = render(view("A", read, submit, null));
     await waitFor(() => expect(screen.queryByTestId("cr.approve.loading")).toBeNull());
-    expect(button().disabled).toBe(true);
+    expect(screen.queryByTestId("cr.approve.button")).toBeNull();
     mounted.rerender(view("A", read, submit, "A", "first-offer"));
     await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
     expect(button().disabled).toBe(true);

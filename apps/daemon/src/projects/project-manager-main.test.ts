@@ -294,6 +294,36 @@ describe("createProjectBoundaryOpener", () => {
 });
 
 describe("runProjectManagerMain", () => {
+  it.runIf(process.platform === "win32")("waits for the owned operator reader to release during stop", async () => {
+    let release!: (result: IteratorResult<string>) => void;
+    const input = { destroy: vi.fn(), [Symbol.asyncIterator]: () => ({
+      next: () => new Promise<IteratorResult<string>>((settle) => { release = settle; }),
+    }) };
+    let signal: (() => void) | undefined;
+    let finished = false;
+    const completed = runProjectManagerMain({
+      dependencies: { createRuntime: () => runtime([]), resolveAssetRoot: () => "D:\\artifact",
+        startHttp: async () => ({ approvePairing: () => ({ code: "PAIRING_CONFIRMATION_UNKNOWN",
+          layer: "CONTROL_ROOM_PAIRING_APPROVAL", ok: false }), close: async () => undefined,
+          ok: true, origin: "http://127.0.0.2:39122", port: 39122 }) },
+      env: { LOCALAPPDATA: await temporary() }, log: () => undefined,
+      onSignal: (handler) => { signal = handler; }, operatorInput: input,
+      platform: "win32", root: "D:\\artifact",
+    }).then((code) => { finished = true; return code; });
+    try {
+      await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+      signal!();
+      await vi.waitFor(() => expect(input.destroy).toHaveBeenCalledTimes(1));
+      expect(finished).toBe(false);
+      release({ done: true, value: undefined });
+      expect(await completed).toBe(0);
+    } finally {
+      release?.({ done: true, value: undefined });
+      signal?.();
+      await completed;
+    }
+  });
+
   it.runIf(process.platform === "win32").each(["missing", "eof", "error"] as const)(
     "reports live operator availability after %s", async (ending) => {
       const localAppData = await temporary();

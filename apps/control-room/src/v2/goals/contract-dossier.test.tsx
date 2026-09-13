@@ -11,6 +11,7 @@
  *    these arms go red instead of rendering a hand-shaped object the daemon never sent.
  */
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { mapDocumentCoverageAnswer } from "../../live/live-document-coverage.js";
@@ -127,8 +128,83 @@ describe("ContractDossier", () => {
   });
 });
 
+/**
+ * Six identifier families of 25 requirements, each with one criterion: 150 + 150 = 300
+ * statements of ~400 characters - the shape of the live PRD contract (128 + 150, ~111 KB)
+ * whose flat render stalled the tab. The daemon feeds the dossier the PENDING revision
+ * when none is approved (document-coverage-read.ts), so this is the first paint of the
+ * goal board while the Gate 1 card above it waits for the same decision.
+ */
+const FAMILIES = ["AI", "CON", "DATA", "OPS", "SEC", "UX"] as const;
+const PER_FAMILY = 25;
+const FILLER = "the daemon records the decision and the board shows it ".repeat(7);
+const CONTRACT_ID = REAL_GATE_1_REF.contractId;
+
+function largeStatement(kind: string, family: string, index: number): string {
+  return `${kind} ${family} ${String(index)}: ${FILLER}`;
+}
+
+function largeCoverage(): DocumentCoverageOutcome {
+  const numbered = (index: number): string => String(index + 1).padStart(3, "0");
+  const requirements = FAMILIES.flatMap((family) => Array.from({ length: PER_FAMILY }, (_, index) => ({
+    criteria: [{
+      criterionId: `CRT-${family}-${numbered(index)}`, nodeKey: null, nodeTestStatus: null,
+      statement: largeStatement("Criterion", family, index + 1), status: "UNPLANNED",
+    }],
+    requirementId: `REQ-${family}-${numbered(index)}`,
+    statement: largeStatement("Requirement", family, index + 1),
+  })));
+  const outcome = mapDocumentCoverageAnswer(200, {
+    ...COVERAGE_WIRE,
+    contracts: [{ ...COVERAGE_WIRE.contracts[0], gate1: "PENDING", requirements }],
+    totals: { ...COVERAGE_WIRE.totals, criteria: 150, requirements: 150 },
+  });
+  if (outcome.status !== "COVERAGE") throw new Error(`large wire frame refused: ${outcome.code}`);
+  return outcome;
+}
+
+describe("ContractDossier with a 300-statement contract", () => {
+  it("mounts the counts, the verdict and six closed families - none of the 300 rows", () => {
+    render(<ContractDossier coverage={largeCoverage()} gates={gateMap()} />);
+    const counts = screen.getByTestId(`cr.contract.counts.${CONTRACT_ID}`).textContent;
+    expect(counts).toContain("150 requirements");
+    expect(counts).toContain("150 acceptance criteria");
+    expect(screen.getByTestId(`cr.contract.gate1.${CONTRACT_ID}`)).toBeTruthy();
+    expect(screen.getByTestId("cr.contract.body")).toBeTruthy();
+
+    const toggles = screen.getAllByTestId(/^cr\.contract\.requirements\..*\.group\./u);
+    expect(toggles.map((toggle) => toggle.textContent))
+      .toEqual(FAMILIES.map((family) => `REQ-${family}· 25`));
+    for (const toggle of toggles) expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    // The load-bearing count: 0 of the 150 requirement rows and 0 of the 150 criterion rows.
+    expect(screen.queryAllByTestId(/^cr\.contract\.requirement\./u)).toHaveLength(0);
+    expect(screen.queryAllByTestId(/^cr\.contract\.criterion\./u)).toHaveLength(0);
+    expect(screen.queryByText(largeStatement("Requirement", "AI", 1))).toBeNull();
+  });
+
+  it("opens one family: its 25 requirements with their 25 criteria, and nothing else", async () => {
+    const user = userEvent.setup();
+    render(<ContractDossier coverage={largeCoverage()} gates={gateMap()} />);
+    await user.click(screen.getByTestId(`cr.contract.requirements.${CONTRACT_ID}.group.REQ-CON`));
+    const requirements = screen.getAllByTestId(/^cr\.contract\.requirement\./u);
+    expect(requirements).toHaveLength(PER_FAMILY);
+    expect(requirements.every((row) => row.getAttribute("data-testid")?.startsWith("cr.contract.requirement.REQ-CON-")))
+      .toBe(true);
+    const criteria = screen.getAllByTestId(/^cr\.contract\.criterion\./u);
+    expect(criteria).toHaveLength(PER_FAMILY);
+    expect(criteria.every((row) => row.getAttribute("data-testid")?.startsWith("cr.contract.criterion.CRT-CON-")))
+      .toBe(true);
+    expect(screen.getByTestId("cr.contract.criterion.CRT-CON-007").getAttribute("data-status"))
+      .toBe("UNPLANNED");
+    expect(screen.getByTestId("cr.contract.requirement.REQ-CON-007").textContent)
+      .toContain(largeStatement("Requirement", "CON", 7));
+    expect(screen.getByTestId(`cr.contract.requirements.${CONTRACT_ID}.group.REQ-AI`).getAttribute("aria-expanded"))
+      .toBe("false");
+  });
+});
+
 describe("LiveContractDossier", () => {
-  it("refreshes a refused gate after approval without changing the revision", async () => {
+  it("refreshes an undecided gate after approval without changing the revision", async () => {
     let approved = false;
     let gateReads = 0;
     render(<LiveContractDossier goalId="goal-sign-in" pollMs={10}
@@ -140,14 +216,14 @@ describe("LiveContractDossier", () => {
         };
       }} />);
     await waitFor(() => expect(screen.queryByTestId(
-      `cr.contract.gate1.${REAL_GATE_1_REF.contractId}.refusal`,
+      `cr.contract.gate1.${REAL_GATE_1_REF.contractId}.undecided`,
     )).not.toBeNull());
     approved = true;
     await waitFor(() => expect(screen.queryByTestId(
       `cr.contract.gate1.${REAL_GATE_1_REF.contractId}`,
     )).not.toBeNull());
     expect(gateReads).toBeGreaterThan(1);
-    expect(screen.queryByTestId(`cr.contract.gate1.${REAL_GATE_1_REF.contractId}.refusal`)).toBeNull();
+    expect(screen.queryByTestId(`cr.contract.gate1.${REAL_GATE_1_REF.contractId}.undecided`)).toBeNull();
   });
 
   it("reads coverage on the goal and one Gate 1 verdict per cited revision", async () => {
@@ -275,5 +351,47 @@ describe("ContractDossier refusals and absence", () => {
         .toContain("CONTRACT_DOSSIER_COVERAGE_READ_FAILED @ CONTROL_ROOM_GOALS");
     });
     expect(screen.queryByTestId("cr.contract.body")).toBeNull();
+  });
+});
+
+/**
+ * NOT DECIDED IS NOT UNREADABLE. Between proposal and approval the reader refuses
+ * PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT at PRODUCT_CONTRACT_GATE_1_READER
+ * (product-contract-gate-1-reader.ts:232, zero events on the gate aggregate) - the ordinary
+ * state of every fresh contract, and the daemon's own coverage read folds that exact pair to
+ * gate1: "PENDING" (document-coverage-read.ts:167). Rendering it as "could not be read" told
+ * the operator something broke when nothing had.
+ */
+describe("ContractDossier undecided Gate 1", () => {
+  const gateId = `cr.contract.gate1.${REAL_GATE_1_REF.contractId}`;
+
+  it("says Not decided yet, not could-not-be-read, for a revision no human has decided", () => {
+    render(<ContractDossier coverage={decodedCoverage()} gates={new Map([[contractGateKey(REAL_GATE_1_REF), {
+      code: "PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT", layer: "PRODUCT_CONTRACT_GATE_1_READER", status: "REFUSED",
+    }]])} />);
+    expect(screen.getByTestId(`${gateId}.undecided`).textContent).toBe("Not decided yet.");
+    expect(screen.queryByTestId(`${gateId}.refusal`)).toBeNull();
+    expect(screen.queryByTestId(gateId)).toBeNull();
+    expect(screen.getByTestId("cr.contract.card").textContent).not.toContain("could not be read");
+    // INDEPENDENCE: the coverage beside it still renders.
+    expect(screen.getByTestId("cr.contract.criterion.crit-sso-1").getAttribute("data-status"))
+      .toBe("EVIDENCE_REQUIRED");
+  });
+
+  it("keeps every other Gate 1 answer as could-not-be-read, the same code at another layer or status included", () => {
+    for (const outcome of [
+      { code: "PRODUCT_CONTRACT_GATE_1_DECISION_UNRESOLVED", layer: "PRODUCT_CONTRACT_GATE_1_READER", status: "REFUSED" as const },
+      { code: "STORAGE_DEGRADED", layer: "PRODUCT_CONTRACT_GATE_1_READER", status: "REFUSED" as const },
+      { code: "PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT", layer: "CONTROL_ROOM_LIVE_PRODUCT_CONTRACT", status: "REFUSED" as const },
+      { code: "PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT", layer: "PRODUCT_CONTRACT_GATE_1_READER", status: "ERROR" as const },
+    ]) {
+      cleanup();
+      render(<ContractDossier coverage={decodedCoverage()} gates={new Map([[contractGateKey(REAL_GATE_1_REF), outcome]])} />);
+      const note = screen.getByTestId(`${gateId}.refusal`);
+      expect(note.querySelector(".cr2-outcome-said")?.textContent, `${outcome.status} ${outcome.code} @ ${outcome.layer}`)
+        .toBe("The Gate 1 verdict for this revision could not be read right now.");
+      expect(note.querySelector("code")?.textContent).toBe(`${outcome.code} @ ${outcome.layer}`);
+      expect(screen.queryByTestId(`${gateId}.undecided`), `${outcome.status} ${outcome.code} @ ${outcome.layer}`).toBeNull();
+    }
   });
 });

@@ -10,6 +10,7 @@ import type {
   Gate1ReadOutcome,
 } from "./gate1-approval.js";
 import { Gate1ContractDossier } from "./gate1-contract-dossier.js";
+import { Gate1PendingDecision } from "./gate1-pending-decision.js";
 
 /**
  * The GATE 1 card (approve the Product Contract): rendered above the plan
@@ -22,12 +23,18 @@ import { Gate1ContractDossier } from "./gate1-contract-dossier.js";
  * asks the same goal-bound route again and renders the authenticated CURRENT
  * revision and slot. It makes no claim that a planning compiler is active.
  * A refusal stays on screen with the code and layer that answered.
+ *
+ * ORDER while PENDING: banner, open questions, the decision row (totals + Approve), and only
+ * then the dossier (gate1-pending-decision.tsx) - measured on the V1 card 2026-09-13, the
+ * control sat below every statement, and this card had it last too.
  */
 
 export interface Gate1CardProps {
   readonly goalId: string;
   readonly port: Gate1ApprovalPort;
   readonly read: (goalId: string) => Promise<Gate1ReadOutcome>;
+  readonly readOnly?: boolean;
+  readonly readRevision?: number;
 }
 
 type LoadState =
@@ -48,7 +55,7 @@ function idleDispatch(goalId: string, goalGeneration: number): DispatchState {
   return { approvedOnce: false, busy: false, goalGeneration, goalId, refusal: null };
 }
 
-export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element | null {
+export function Gate1Card({ goalId, port, read, readOnly = false, readRevision = 0 }: Gate1CardProps): JSX.Element | null {
   const goalIdentity = useRef({ generation: 0, goalId, port, read });
   if (goalIdentity.current.goalId !== goalId || goalIdentity.current.port !== port
     || goalIdentity.current.read !== read) {
@@ -70,6 +77,10 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
   const shownDispatch = dispatch.goalGeneration === goalGeneration
     ? dispatch : idleDispatch(goalId, goalGeneration);
   const { approvedOnce, busy, refusal } = shownDispatch;
+  // Queue an explicit refresh until the decision settles: rereading now would invalidate its response generation.
+  const heldRevision = useRef(readRevision);
+  if (!busy) heldRevision.current = readRevision;
+  const refreshRevision = heldRevision.current;
 
   useEffect(() => {
     const run = generation.current + 1;
@@ -90,7 +101,7 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
       }
     });
     return (): void => { generation.current += 1; };
-  }, [applied, goalGeneration, goalId, read]);
+  }, [applied, goalGeneration, goalId, read, refreshRevision]);
 
   const onAnswer = useCallback((
     clarification: Gate1ClarificationView, optionId: string,
@@ -169,52 +180,14 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
         </p>
       ) : shownState.outcome.status === "PENDING" ? (
         <>
-          <p className="cr2-approve-banner" data-reviewable="true" data-testid="cr.gate1.banner">
-            {shownState.outcome.approval === null
-              ? shownState.outcome.clarifications.length > 0
-                ? "The planning agent needs a product decision before this contract can be"
-                  + " approved. Pick an answer below."
-                : "The product decision is recorded. Approval remains withheld while the"
-                  + " daemon advances the contract fence."
-              : "The planning agent proposed this Product Contract from your PRD. Approving it"
-                + " records this revision as the daemon's current Gate 1 contract."}
-          </p>
+          <Gate1PendingDecision
+            busy={busy}
+            readOnly={readOnly}
+            onAnswer={onAnswer}
+            onApprove={onApprove}
+            pending={shownState.outcome}
+          />
           <Gate1ContractDossier revision={shownState.outcome.revision} />
-          {shownState.outcome.clarifications.map((row) => (
-            <section
-              className="cr2-approve-block"
-              data-testid={`cr.gate1.question.${row.clarificationId}`}
-              key={row.clarificationId}
-            >
-              <h3 className="cr2-approve-heading">{row.question}</h3>
-              {row.options.map((option) => (
-                <ActionButton
-                  disabled={busy}
-                  key={option.optionId}
-                  onClick={(): void => {
-                    if (shownState.outcome.status === "PENDING") {
-                      onAnswer(row, option.optionId);
-                    }
-                  }}
-                  testId={`cr.gate1.answer.${row.clarificationId}.${option.optionId}`}
-                  variant="secondary"
-                >
-                  {option.label}
-                </ActionButton>
-              ))}
-            </section>
-          ))}
-          {shownState.outcome.approval === null ? null : (
-            <ActionButton
-              disabled={busy}
-              onClick={(): void => {
-                if (shownState.outcome.status === "PENDING") onApprove(shownState.outcome);
-              }}
-              testId="cr.gate1.approve"
-            >
-              {busy ? "Approving..." : "Approve contract"}
-            </ActionButton>
-          )}
         </>
       ) : shownState.outcome.status === "CURRENT" ? (
         <>

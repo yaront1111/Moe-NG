@@ -118,10 +118,11 @@ describe("automatic criterion queue", () => {
     }
     expect(world.store.getAggregateVersion(criterionRunsId(PROJECT_ID, GOAL_ID, RUN_ID))).toBe(0);
   });
-  it("preserves the unbound-goal refusal without adding a run", () => {
+  it("preserves the absent-goal refusal without adding a run", () => {
     const world = criterionWorld();
+    // A goalRef no goal carries is ABSENT, not the UNBOUND the board renders as "no checks yet".
     expect(queueAutomaticCriterionVerification(world.store, PROJECT_ID, "missing-goal", NOW, () => artifact))
-      .toEqual({ ok: false, code: "CRITERION_CHECK_GOAL_UNBOUND", layer: "CRITERION_EVIDENCE" });
+      .toEqual({ ok: false, code: "CRITERION_CHECK_GOAL_ABSENT", layer: "CRITERION_EVIDENCE" });
     expect(world.store.getAggregateVersion(criterionRunsId(PROJECT_ID, GOAL_ID, RUN_ID))).toBe(0);
   });
   it.each(["approvals", "runs"] as const)("refuses an unreadable %s catalog", (catalog) => {

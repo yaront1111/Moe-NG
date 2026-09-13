@@ -30,10 +30,13 @@ export interface RecordSeatExitInput {
   readonly exitCode: number | null;
   readonly kind: string;
   readonly lastLine: string | null;
+  /** Optional for a caller without the stream reading; written as null: "not measured". */
+  readonly outputSeen?: boolean | null;
   readonly projectId: string;
   readonly provider: string;
   readonly resetAt: string | null;
   readonly sessionId: string;
+  readonly terminatedByWrapper?: boolean | null;
   readonly workItemId: string;
 }
 
@@ -130,10 +133,13 @@ export function recordSeatExit(
     exitCode: input.exitCode,
     kind: input.kind,
     lastLine: clip(input.lastLine),
+    // Both flags are ALWAYS written, null when unmeasured: one row shape per writer version.
+    outputSeen: input.outputSeen ?? null,
     projectId: input.projectId,
     provider: input.provider,
     resetAt: input.resetAt,
     sessionId: input.sessionId,
+    terminatedByWrapper: input.terminatedByWrapper ?? null,
     version: SEAT_EXIT_VERSION,
     workItemId: input.workItemId,
   }));

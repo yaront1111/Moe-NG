@@ -102,8 +102,9 @@ describe("readSeatStartLedger folds only notes that speak for their own seat", (
     expect(recordSeatStart(store, input({ agentVersion: "2.0.0", startedAt: "2026-09-03T10:30:00.000Z" })).ok).toBe(true);
     expect(recordSeatStart(store, input({ provider: "codex", agentVersion: "codex-cli 0.153.4", sessionId: "sess-b" })).ok).toBe(true);
     const ledger = readSeatStartLedger(store, PROJECT);
-    expect(ledger.get("sess-a")).toEqual({ agentVersion: "2.0.0", provider: "claude" });
-    expect(ledger.get("sess-b")).toEqual({ agentVersion: "codex-cli 0.153.4", provider: "codex" });
+    // The START INSTANT rides the same note: the Health screen says "started 12 min ago" from it.
+    expect(ledger.get("sess-a")).toEqual({ agentVersion: "2.0.0", provider: "claude", startedAt: "2026-09-03T10:30:00.000Z" });
+    expect(ledger.get("sess-b")).toEqual({ agentVersion: "codex-cli 0.153.4", provider: "codex", startedAt: AT });
     expect(ledger.size).toBe(2);
   });
 
@@ -118,7 +119,8 @@ describe("readSeatStartLedger folds only notes that speak for their own seat", (
     const store = storeAt(databasePath());
     expect(readSeatStartLedger(store, PROJECT).get("sess-never-started")).toBeUndefined();
     // What the read publishes in that case, asserted as the exact token and not as falsiness.
-    expect(SEAT_START_UNKNOWN).toEqual({ agentVersion: "UNKNOWN", provider: "UNKNOWN" });
+    // The instant has no word for "unknown" that is also an instant, so it is null there.
+    expect(SEAT_START_UNKNOWN).toEqual({ agentVersion: "UNKNOWN", provider: "UNKNOWN", startedAt: null });
     expect(SEAT_FACT_UNMEASURED).toBe("UNKNOWN");
   });
 });

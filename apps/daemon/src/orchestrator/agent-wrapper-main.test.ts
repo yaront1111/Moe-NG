@@ -302,10 +302,30 @@ describe("wrapper binary staffing wiring", () => {
       .toContain("designBrief: createDesignBriefResolver({")).toThrow();
   });
 
-  it("still passes the offer surface the wrapper watches", () => {
+  it("passes the wrapper the STAFFING VIEW of the offer surface, never the raw port", () => {
     // `affordances,` sat BETWEEN the two moved closures; the extraction that made room for
-    // designBrief deleted it once. An unwired offer surface staffs nothing at all.
-    expect(wrapperCall(SOURCE)).toMatch(/^\s+affordances,\r?$/mu);
+    // designBrief deleted it once. An unwired offer surface staffs nothing at all -- and the RAW
+    // port staffs too much: over it the binary spawned claude seats on the activation chain and
+    // on plan.propose@run-live-1 (measured 2026-09-13, agent-staffing-surface.ts). The view's
+    // BEHAVIOUR is proven next door; this arm proves the binary actually hands it over.
+    const call = wrapperCall(SOURCE);
+    expect(call).toMatch(/^\s+affordances: staffingSurfaceOf\(affordances\),\r?$/mu);
+    expect(call).not.toMatch(/^\s+affordances,\r?$/mu);
+  });
+
+  it("hands the MCP host the RAW surface: the view is the wrapper's read, not the seats'", () => {
+    const start = SOURCE.indexOf("createMcpHttpHost({");
+    expect(start).toBeGreaterThan(-1);
+    const host = SOURCE.slice(start, SOURCE.indexOf("    });", start));
+    expect(host).toMatch(/^\s+affordances,\r?$/mu);
+    expect(host).not.toContain("staffingSurfaceOf(");
+  });
+
+  it("scans a staffing-view slice that can actually fail (positive control)", () => {
+    const unwired = SOURCE.replace("affordances: staffingSurfaceOf(affordances),", "affordances,");
+    expect(unwired).not.toBe(SOURCE);
+    expect(() => expect(wrapperCall(unwired))
+      .toMatch(/^\s+affordances: staffingSurfaceOf\(affordances\),\r?$/mu)).toThrow();
   });
 
   it("tells the operator which provider is paused and until when", () => {

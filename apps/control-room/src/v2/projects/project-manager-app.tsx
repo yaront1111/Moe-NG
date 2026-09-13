@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import "../cordum-fonts.js";
@@ -119,9 +119,19 @@ export function ProjectManagerApp({ prepared, openWindow = defaultOpenWindow,
   reloadPage = defaultReloadPage }: ProjectManagerAppProps): JSX.Element {
   const [resolution, setResolution] = useState<Resolution>({ status: "PENDING" });
   const [refreshRefusal, setRefreshRefusal] = useState<ProjectManagerRefusal | null>(null);
+  const mounted = useRef(false);
+  const readGeneration = useRef(0);
+  const connectionScope = useRef({ prepared, version: 0 });
+  if (connectionScope.current.prepared !== prepared) {
+    connectionScope.current = { prepared, version: connectionScope.current.version + 1 };
+    readGeneration.current += 1;
+  }
 
   useEffect(() => {
     let cancelled = false;
+    mounted.current = true;
+    setResolution({ status: "PENDING" });
+    setRefreshRefusal(null);
     void prepared.then((result) => {
       if (cancelled) return;
       if (isPairingPending(result)) {
@@ -132,21 +142,27 @@ export function ProjectManagerApp({ prepared, openWindow = defaultOpenWindow,
     }, () => {
       if (!cancelled) setResolution({ refusal: APP_REFUSAL, status: "REFUSED" });
     });
-    return (): void => { cancelled = true; };
+    return (): void => { cancelled = true; mounted.current = false; readGeneration.current += 1; };
   }, [prepared]);
 
   const claimPairing = useCallback((): void => {
-    if (resolution.status !== "PAIRING" || resolution.busy) return;
+    if (!mounted.current || connectionScope.current.prepared !== prepared
+      || resolution.status !== "PAIRING" || resolution.busy) return;
     const pairing = resolution.pairing;
     setResolution({ busy: true, pairing, status: "PAIRING" });
     void pairing.claim().then((result) => {
+      if (!mounted.current || connectionScope.current.prepared !== prepared) return;
       if (isPairingPending(result)) {
         setResolution({ busy: false, pairing: result, status: "PAIRING" });
       } else if (result.ok) {
         setResolution({ client: result.client, projects: result.projects, status: "READY" });
       } else setResolution({ refusal: stableRefusal(result), status: "REFUSED" });
-    }, () => { setResolution({ refusal: APP_REFUSAL, status: "REFUSED" }); });
-  }, [resolution]);
+    }, () => {
+      if (mounted.current && connectionScope.current.prepared === prepared) {
+        setResolution({ refusal: APP_REFUSAL, status: "REFUSED" });
+      }
+    });
+  }, [prepared, resolution]);
 
   /**
    * Three paths refresh the list: the poll, the reload after an accepted
@@ -155,12 +171,20 @@ export function ProjectManagerApp({ prepared, openWindow = defaultOpenWindow,
    * and not also shown by this frame - one refusal, one alert - and any
    * frame-level refusal still standing is cleared so it cannot pair with the new one.
    */
-  const refresh = useCallback(async (client: ProjectManagerClient, reportHere = true): Promise<ProjectHomeResult> => {
+  const refresh = useCallback(async (client: ProjectManagerClient, reportHere = true): Promise<ProjectHomeResult | null> => {
+    if (!mounted.current || connectionScope.current.prepared !== prepared) return null;
+    const generation = ++readGeneration.current;
+    const current = (): boolean => mounted.current && connectionScope.current.prepared === prepared
+      && generation === readGeneration.current;
     if (!reportHere) setRefreshRefusal(null);
     const report = (refusal: ProjectManagerRefusal): void => { if (reportHere) setRefreshRefusal(refusal); };
     let result: Awaited<ReturnType<ProjectManagerClient["listProjects"]>>;
     try { result = await client.listProjects(); }
-    catch { report(APP_REFUSAL); return APP_REFUSAL; }
+    catch {
+      if (!current()) return null;
+      report(APP_REFUSAL); return APP_REFUSAL;
+    }
+    if (!current()) return null;
     if (result.ok) {
       setRefreshRefusal(null);
       setResolution({ client, projects: result.projects, status: "READY" });
@@ -169,7 +193,7 @@ export function ProjectManagerApp({ prepared, openWindow = defaultOpenWindow,
     const refused = stableRefusal(result);
     report(refused);
     return refused;
-  }, []);
+  }, [prepared]);
 
   const run = useCallback(async (operation: () => Promise<ProjectHomeResult>): Promise<ProjectHomeResult> => {
     const result = await operation();
@@ -211,6 +235,7 @@ export function ProjectManagerApp({ prepared, openWindow = defaultOpenWindow,
     body = <>
       <ResultReport result={refreshRefusal ?? undefined} />
       <ProjectHome
+        key={connectionScope.current.version}
         onCreateProject={(input) => run(() => client.createProject(input))}
         onOpenProject={(instanceId) => client.openProject(instanceId, openWindow)}
         onRefreshProjects={() => refresh(client, false)}

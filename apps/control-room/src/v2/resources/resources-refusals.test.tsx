@@ -135,19 +135,20 @@ describe("nothing readable renders something honest, not an empty panel", () => 
     }} />);
   };
 
-  it("keeps every row on screen, each carrying a code", () => {
+  it("keeps every row on screen, each served fact carrying a code", () => {
     allRefused();
     const rows = [...screen.getByTestId("cr.resources.screen")
       .querySelectorAll("[data-testid^='cr.resources.fact.']")];
     expect(rows).toHaveLength(13);
-    for (const row of rows) {
-      expect(row.getAttribute("data-state"), row.getAttribute("data-testid") ?? "").toBe("REFUSED");
-    }
+    const states = rows.map((row) => row.getAttribute("data-state"));
+    expect(states.filter((state) => state === "REFUSED")).toHaveLength(11);
+    // The two facts no read serves are not failures, so they are not counted as such.
+    expect(states.filter((state) => state === "UNSERVED")).toHaveLength(2);
     expect(screen.queryAllByTestId(/^cr\.resources\.value\./u)).toHaveLength(0);
-    // And it SAYS so, with the denominator, rather than looking like a project that
-    // simply has no resources.
+    // And it SAYS so, with the denominator of facts a read serves, rather than looking
+    // like a project that simply has no resources.
     expect(screen.getByTestId("cr.resources.banner").textContent)
-      .toBe("None of this project's resources could be read. 13 of 13 facts state why below.");
+      .toBe("None of this project's resources could be read. 11 of 11 facts state why below.");
   });
 
   it("carries each refusing read's OWN code, so the rows are not one generic failure", () => {
@@ -158,7 +159,6 @@ describe("nothing readable renders something honest, not an empty panel", () => 
       ["store.path", "HEALTH_READ_FORBIDDEN"],
       ["governance.policy", "POLICY_READ_FORBIDDEN"],
       ["governance.seatlimit", "SESSIONS_READ_FORBIDDEN"],
-      ["repository.branch", "RESOURCES_FACT_NOT_SERVED"],
     ] as const) {
       expect(refusalText(id), id).toContain(`${code} @ `);
     }

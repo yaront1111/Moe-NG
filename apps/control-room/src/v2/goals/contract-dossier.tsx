@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import type {
@@ -8,8 +7,11 @@ import type {
 import { OutcomeNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
-import { contractGateKey, useContractGates } from "./contract-gates.js";
+import { contractGateKey, notDecidedYet, useContractGates } from "./contract-gates.js";
 import type { ContractGateMap, Gate1Reader } from "./contract-gates.js";
+import { sameDossier, useLiveCoverage } from "./live-coverage.js";
+import type { CoverageSurface } from "./live-coverage.js";
+import { FoldedRoster } from "./statement-folds.js";
 
 /**
  * THE APPROVED PRODUCT CONTRACT, ON THE GOAL THAT IS BUILDING IT.
@@ -26,9 +28,21 @@ import type { ContractGateMap, Gate1Reader } from "./contract-gates.js";
  * verbatim; a genuinely empty answer renders words that say it is empty. An empty
  * requirements list shown for a refused read would read to an operator as "this contract
  * asks for nothing", which is a different and false claim.
+ *
+ * THE ROWS FOLD. The daemon feeds this dossier the PENDING revision when none is approved,
+ * so it mounts right under the Gate 1 card on the same first paint; on the page measured
+ * 2026-09-13 to stall the tab for 20-30 s, this was one of the flat copies of the 128 + 150
+ * statement contract (statement-folds.tsx holds the measurement and what it does not
+ * attribute). Requirements fold by identifier family, each with its criteria nested, and a
+ * family mounts its rows only once opened.
  */
 
 const DEFAULT_POLL_MS = 10_000;
+/** What this dossier shows of a coverage answer (live-coverage.ts). */
+const DOSSIER_COVERAGE: CoverageSurface = {
+  readFailed: { code: "CONTRACT_DOSSIER_COVERAGE_READ_FAILED", layer: "CONTROL_ROOM_GOALS" },
+  same: sameDossier,
+};
 
 export interface ContractDossierProps {
   readonly coverage: DocumentCoverageOutcome | null;
@@ -103,6 +117,13 @@ function Gate1Verdict({ contract, gates }: {
       </p>
     );
   }
+  if (notDecidedYet(outcome)) {
+    return (
+      <p className="cr2-needs-note" data-testid={`${testId}.undecided`}>
+        Not decided yet.
+      </p>
+    );
+  }
   return (
     <OutcomeNote
       code={outcome.code}
@@ -140,11 +161,12 @@ function ContractBlock({ contract, gates }: {
           This revision states no requirement yet.
         </p>
       ) : (
-        <ul className="cr2-approve-obligations">
-          {contract.requirements.map((requirement) => (
-            <RequirementRow key={requirement.requirementId} requirement={requirement} />
-          ))}
-        </ul>
+        <FoldedRoster
+          idOf={(requirement): string => requirement.requirementId}
+          items={contract.requirements}
+          row={(requirement): JSX.Element => <RequirementRow requirement={requirement} />}
+          testIdPrefix={`cr.contract.requirements.${contract.contractId}`}
+        />
       )}
     </section>
   );
@@ -193,40 +215,13 @@ export interface LiveContractDossierProps {
 }
 
 /**
- * Reads coverage on the goal, then one Gate 1 verdict per cited revision. A coverage read
- * that throws becomes a visible ERROR outcome, never a silent empty dossier.
+ * Reads coverage on the goal (live-coverage.ts: a poll that answers the same dossier keeps
+ * the same state), then one Gate 1 verdict per cited revision (contract-gates.ts, likewise).
  */
 export function LiveContractDossier(
   { goalId, pollMs, readCoverage, readGate }: LiveContractDossierProps,
 ): JSX.Element {
-  const [coverage, setCoverage] = useState<DocumentCoverageOutcome | null>(null);
+  const coverage = useLiveCoverage(goalId, readCoverage, pollMs ?? DEFAULT_POLL_MS, DOSSIER_COVERAGE);
   const gates = useContractGates(coverage, readGate, pollMs ?? DEFAULT_POLL_MS);
-  const generation = useRef(0);
-  useEffect(() => {
-    const run = generation.current + 1;
-    generation.current = run;
-    setCoverage(null);
-    let inFlight = false;
-    const tick = (): void => {
-      if (inFlight) return;
-      inFlight = true;
-      void readCoverage(goalId).then((outcome) => {
-        inFlight = false;
-        if (generation.current === run) setCoverage(outcome);
-      }, () => {
-        inFlight = false;
-        if (generation.current === run) {
-          setCoverage({
-            code: "CONTRACT_DOSSIER_COVERAGE_READ_FAILED",
-            layer: "CONTROL_ROOM_GOALS",
-            status: "ERROR",
-          });
-        }
-      });
-    };
-    tick();
-    const timer = setInterval(tick, pollMs ?? DEFAULT_POLL_MS);
-    return (): void => { generation.current += 1; clearInterval(timer); };
-  }, [goalId, pollMs, readCoverage]);
   return <ContractDossier coverage={coverage} gates={gates} />;
 }

@@ -18,6 +18,7 @@ import { agentProviderFact } from "./agent-provider-resolve.js";
 import { createAgentSessionFence } from "./agent-session-fence.js";
 import { claudeSpawnStarter } from "./agent-spawner.js";
 import type { AgentSpawnStart, AgentSpawnStarter } from "./agent-spawner.js";
+import { staffingSurfaceOf } from "./agent-staffing-surface.js";
 import { createAgentWrapper } from "./agent-wrapper.js";
 import { runReclaimPass } from "./agent-wrapper-reclaim.js";
 import { createCompiledNodeSource } from "./compiled-node-source.js";
@@ -201,7 +202,11 @@ async function main(): Promise<void> {
       payloadHint: (kind, target) =>
         (hintModule?.payloadFor?.(kind, target) ?? null) as never,
       compilerGateRef: missionInputs.compilerGateRef,
-      affordances,
+      // THE WRAPPER'S READ, NOT THE BOARD'S. Over the raw port this binary spawned claude seats
+      // on the activation chain (project.register, policy.install, ...) before the browser had
+      // activated the project, and on plan.propose@run-live-1, a run no real goal owns; each was
+      // refused inside claude (measured 2026-09-13). The MCP host below keeps the raw port.
+      affordances: staffingSurfaceOf(affordances),
       compilerInstructions: missionInputs.compilerInstructions,
       // THE GOAL'S DESIGN, threaded for real. Declared and consumed since the design row landed
       // but never SUPPLIED, so every live compiler seat evaluated `undefined ?? null` and read

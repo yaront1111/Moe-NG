@@ -47,6 +47,25 @@ const UNREAD_AUTHORIZATION: ApprovalAuthorization = Object.freeze({
   status: "WITHHELD" as const,
 });
 
+type PlanPresence = "ABSENT" | "PRESENT" | "UNKNOWN";
+
+/** GoalCreated reserves a run id before compilation. Only this reader's exact
+ * unknown-run refusal proves absence; failed body verification or another refusal
+ * establishes no such fact. Presence controls visibility, never dispatch authority. */
+function planPresence(state: ApprovePlanLoadState): PlanPresence {
+  if (state.phase !== "LOADED") return "UNKNOWN";
+  const { outcome } = state;
+  if (outcome.status === "RUN") return outcome.plan === null ? "UNKNOWN" : "PRESENT";
+  return outcome.status === "REFUSED" && outcome.code === "PLANNING_RUN_READ_RUN_UNKNOWN"
+    && outcome.layer === "PLANNING_RUN_READ" ? "ABSENT" : "UNKNOWN";
+}
+
+function NoPlanYet(): JSX.Element {
+  return <p className="cr2-slot-body" data-testid="cr.approve.no-plan">
+    The plan appears here once the contract is approved and compiled.
+  </p>;
+}
+
 export interface ApprovePlanProps {
   readonly runId: string;
   readonly title: string;
@@ -115,6 +134,11 @@ function ApprovePlanReview(
     && state.outcome.plan !== null && state.outcome.acceptance !== null && state.outcome.approval === "ABSENT"
     && authorization.status === "AUTHORIZED" && authorization.grant.runId === runId
     && authorization.grant.affordance["targetAggregateId"] === runId;
+  const presence = planPresence(state);
+  // An offer or an observed plan explains a decision; a pending write and its
+  // refusal keep the same mounted reason field even if the offer disappears.
+  const showDecision = approval?.sentBack === true || authorization.status === "AUTHORIZED"
+    || presence === "PRESENT" || busy || refusal !== null;
   const decide = (decisionReason: string | null): void => {
     if (approval === undefined || authorization.status !== "AUTHORIZED" || !reviewReady || pending.current) return;
     pending.current = true;
@@ -145,6 +169,8 @@ function ApprovePlanReview(
       <h2 className="cr2-slot-title">{title}</h2>
       {state.phase === "LOADING" ? (
         <p className="cr2-slot-kicker" data-testid="cr.approve.loading">Reading the plan...</p>
+      ) : !showDecision && presence === "ABSENT" ? (
+        <NoPlanYet />
       ) : (
         <OutcomeView outcome={state.outcome} />
       )}
@@ -157,7 +183,7 @@ function ApprovePlanReview(
           for. Without this, rejecting run A and then being offered its successor B would
           return the controls with A's reason still in the box and Reject already enabled -
           one stray click away from sending B back for a reason nobody wrote about it. */}
-      <ApproveGate
+      {showDecision ? <ApproveGate
         authorization={authorization}
         busy={busy || !reviewReady}
         key={runId}
@@ -165,7 +191,7 @@ function ApprovePlanReview(
         onReject={(decisionReason): void => { decide(decisionReason); }}
         refusal={refusal}
         sentBack={approval?.sentBack ?? false}
-      />
+      /> : null}
       <ActionButton onClick={onBack} testId="cr.approve.back" variant="secondary">
         {`${ARROW_LEFT} Back to goals`}
       </ActionButton>

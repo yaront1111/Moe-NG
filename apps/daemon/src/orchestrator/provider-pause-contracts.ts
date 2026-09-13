@@ -15,7 +15,10 @@ import { SEAT_EXIT_KINDS } from "./seat-exit-classifier.js";
  * registry and are never reachable over MCP.
  *
  * Both records are EXACT-KEY: a decode that finds one key too many or too few refuses, so a record
- * written by a future shape is ignored rather than half-read.
+ * written by a future shape is ignored rather than half-read. The seat-exit record has since grown
+ * two OPTIONAL members under the same version (`outputSeen`, `terminatedByWrapper`): a row written
+ * before they existed decodes with both null, a row carrying them must type them, and any key
+ * outside that roster still refuses.
  */
 
 export const SEAT_EXIT_COMMAND_KIND = "internal.wrapper.seat_exit" as const;
@@ -38,10 +41,18 @@ export interface SeatExitRecordV1 {
   readonly exitCode: number | null;
   readonly kind: (typeof SEAT_EXIT_KINDS)[number];
   readonly lastLine: string | null;
+  /**
+   * Whether the seat printed ANY byte before closing. Null when the row predates the member or
+   * the wrapper observed no stream. Added after seat pid 88288 (2026-09-12, real project) was
+   * killed at its 30-minute timeout having printed nothing, and its record read like any exit-1.
+   */
+  readonly outputSeen: boolean | null;
   readonly projectId: string;
   readonly provider: string;
   readonly resetAt: string | null;
   readonly sessionId: string;
+  /** Whether the WRAPPER ended the seat (timeout, stdin failure, shutdown); null as above. */
+  readonly terminatedByWrapper: boolean | null;
   readonly version: typeof SEAT_EXIT_VERSION;
   readonly workItemId: string;
 }
@@ -60,6 +71,8 @@ const SEAT_EXIT_KEYS = [
   "decidedAt", "exitCode", "kind", "lastLine", "projectId", "provider", "resetAt", "sessionId",
   "version", "workItemId",
 ] as const;
+/** Written on every row since the members landed; a row without them is a valid older row. */
+const SEAT_EXIT_OPTIONAL_KEYS = ["outputSeen", "terminatedByWrapper"] as const;
 const PAUSE_KEYS = ["cause", "projectId", "provider", "resetAt", "since", "version"] as const;
 const CAUSE_KEYS = ["lastLine", "workItemId"] as const;
 
@@ -99,8 +112,22 @@ function exact(value: JsonObject, keys: readonly string[]): boolean {
   return actual.length === keys.length && actual.every((key) => keys.includes(key));
 }
 
+/** Every required key present, and no key outside required plus optional. */
+function within(
+  value: JsonObject, required: readonly string[], optional: readonly string[],
+): boolean {
+  const actual = Object.keys(value);
+  return required.every((key) => actual.includes(key))
+    && actual.every((key) => required.includes(key) || optional.includes(key));
+}
+
 function ref(value: JsonValue | undefined): value is string {
   return typeof value === "string" && value.length > 0;
+}
+
+/** An optional boolean member: absent (an older row), null (not measured), or a boolean. */
+function optionalFlag(value: JsonValue | undefined): value is boolean | null | undefined {
+  return value === undefined || value === null || typeof value === "boolean";
 }
 
 /**
@@ -139,15 +166,19 @@ export type ProviderPauseDecodeResult =
 export function decodeSeatExitBytes(input: unknown): SeatExitDecodeResult {
   const refused = { code: "SEAT_EXIT_RECORD_INVALID", ok: false } as const;
   const decoded = decodeBoundedJsonBytes(input);
-  if (!decoded.ok || !isObject(decoded.value) || !exact(decoded.value, SEAT_EXIT_KEYS)) return refused;
+  if (!decoded.ok || !isObject(decoded.value)
+    || !within(decoded.value, SEAT_EXIT_KEYS, SEAT_EXIT_OPTIONAL_KEYS)) {
+    return refused;
+  }
   const value = decoded.value;
-  const { decidedAt, exitCode, kind, lastLine, projectId, provider, resetAt, sessionId } = value;
-  const { version, workItemId } = value;
+  const { decidedAt, exitCode, kind, lastLine, outputSeen, projectId, provider, resetAt } = value;
+  const { sessionId, terminatedByWrapper, version, workItemId } = value;
   if (version !== SEAT_EXIT_VERSION || !instant(decidedAt) || !ref(projectId) || !ref(provider)
     || !ref(sessionId) || !ref(workItemId) || !optionalLine(lastLine)
     || !(SEAT_EXIT_KINDS as readonly string[]).includes(kind as string)
     || !(exitCode === null || (typeof exitCode === "number" && Number.isInteger(exitCode)))
-    || !(resetAt === null || instant(resetAt))) {
+    || !(resetAt === null || instant(resetAt))
+    || !optionalFlag(outputSeen) || !optionalFlag(terminatedByWrapper)) {
     return refused;
   }
   return {
@@ -157,10 +188,12 @@ export function decodeSeatExitBytes(input: unknown): SeatExitDecodeResult {
       exitCode: exitCode as number | null,
       kind: kind as SeatExitRecordV1["kind"],
       lastLine: lastLine as string | null,
+      outputSeen: outputSeen ?? null,
       projectId,
       provider,
       resetAt: resetAt as string | null,
       sessionId,
+      terminatedByWrapper: terminatedByWrapper ?? null,
       version: SEAT_EXIT_VERSION,
       workItemId,
     }),

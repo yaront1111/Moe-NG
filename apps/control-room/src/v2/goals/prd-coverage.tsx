@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import type {
-  CoverageContractView, CoverageCriterionView, DocumentCoverageOutcome,
+  CoverageContractView, CoverageCriterionView, CoverageRequirementView, DocumentCoverageOutcome,
 } from "../../live/live-document-coverage.js";
 import { OutcomeNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
+import { sameAnswer, useLiveCoverage } from "./live-coverage.js";
+import type { CoverageSurface } from "./live-coverage.js";
+import { FoldedRoster } from "./statement-folds.js";
 
 /**
  * PRD COVERAGE: how much of the opened goal's PRD is built, as the daemon can prove it.
@@ -20,9 +22,26 @@ import { readFailedSaid } from "../outcome-words.js";
  *
  * The section map is the daemon's ADVISORY citation walk over the PRD prose and is labelled
  * as such; it helps a human find the parts of the document no requirement cites yet.
+ *
+ * THE ROWS FOLD. This card mounts inside the goal board's closed "Everything else" fold
+ * (cordum-app.tsx) on the same first paint as the Gate 1 card, and React mounts a closed
+ * <details>' children, so a flat map of every requirement and criterion was one more copy
+ * of the 128 + 150 statement roster on the page that stalled (statement-folds.tsx holds the
+ * measurement). Requirements fold by identifier family, criteria nested in their
+ * requirement's row, and a family mounts its rows only once opened. THE POLL KEEPS ITS
+ * STATE while the daemon answers the same coverage (live-coverage.ts), so the folded body is
+ * not reconciled every DEFAULT_POLL_MS for an unchanged answer.
  */
 
 const DEFAULT_POLL_MS = 5_000;
+/**
+ * Everything the card shows - totals, document line, contracts, section map - so only a
+ * whole answer is the same one; a read that throws is named under this card's own layer.
+ */
+const PRD_COVERAGE: CoverageSurface = {
+  readFailed: { code: "COVERAGE_READ_FAILED", layer: "CONTROL_ROOM_COVERAGE" },
+  same: sameAnswer,
+};
 
 export interface PrdCoverageProps {
   readonly goalId: string;
@@ -30,10 +49,6 @@ export interface PrdCoverageProps {
   readonly pollMs?: number | undefined;
   readonly read: (goalId: string) => Promise<DocumentCoverageOutcome>;
 }
-
-type LoadState =
-  | { readonly phase: "LOADING" }
-  | { readonly outcome: DocumentCoverageOutcome; readonly phase: "LOADED" };
 
 type Coverage = Extract<DocumentCoverageOutcome, { status: "COVERAGE" }>;
 
@@ -85,7 +100,27 @@ function CriterionRow({ criterion }: { readonly criterion: CoverageCriterionView
   );
 }
 
+function RequirementRow(
+  { requirement }: { readonly requirement: CoverageRequirementView },
+): JSX.Element {
+  return (
+    <li
+      className="cr2-approve-obligation"
+      data-testid={`cr.coverage.requirement.${requirement.requirementId}`}
+    >
+      <span className="cr2-approve-mono">{requirement.requirementId}</span>
+      <span className="cr2-approve-step-body">{requirement.statement}</span>
+      <ul className="cr2-coverage-criteria">
+        {requirement.criteria.map((criterion) => (
+          <CriterionRow criterion={criterion} key={criterion.criterionId} />
+        ))}
+      </ul>
+    </li>
+  );
+}
+
 function ContractBlock({ contract }: { readonly contract: CoverageContractView }): JSX.Element {
+  const criteria = contract.requirements.reduce((sum, row) => sum + row.criteria.length, 0);
   return (
     <section className="cr2-approve-block" data-testid={`cr.coverage.contract.${contract.contractId}`}>
       <h3 className="cr2-approve-heading">
@@ -94,25 +129,15 @@ function ContractBlock({ contract }: { readonly contract: CoverageContractView }
       </h3>
       <details className="cr2-approve-inspect" data-testid={`cr.coverage.contract.${contract.contractId}.requirements`}>
         <summary className="cr2-approve-inspect-summary">
-          {`${String(contract.requirements.length)} requirements ${MIDDOT} ${String(contract.requirements.reduce((sum, row) => sum + row.criteria.length, 0))} acceptance criteria ${MIDDOT} each with its status`}
+          {`${String(contract.requirements.length)} requirements ${MIDDOT} ${String(criteria)}`
+            + ` acceptance criteria ${MIDDOT} each with its status`}
         </summary>
-      <ul className="cr2-approve-obligations">
-        {contract.requirements.map((requirement) => (
-          <li
-            className="cr2-approve-obligation"
-            data-testid={`cr.coverage.requirement.${requirement.requirementId}`}
-            key={requirement.requirementId}
-          >
-            <span className="cr2-approve-mono">{requirement.requirementId}</span>
-            <span className="cr2-approve-step-body">{requirement.statement}</span>
-            <ul className="cr2-coverage-criteria">
-              {requirement.criteria.map((criterion) => (
-                <CriterionRow criterion={criterion} key={criterion.criterionId} />
-              ))}
-            </ul>
-          </li>
-        ))}
-      </ul>
+        <FoldedRoster
+          idOf={(requirement): string => requirement.requirementId}
+          items={contract.requirements}
+          row={(requirement): JSX.Element => <RequirementRow requirement={requirement} />}
+          testIdPrefix={`cr.coverage.requirements.${contract.contractId}`}
+        />
       </details>
     </section>
   );
@@ -182,45 +207,18 @@ function CoverageBody({ coverage }: { readonly coverage: Coverage }): JSX.Elemen
 }
 
 export function PrdCoverage({ goalId, pollMs, read }: PrdCoverageProps): JSX.Element {
-  const [state, setState] = useState<LoadState>({ phase: "LOADING" });
-  const generation = useRef(0);
-
-  useEffect(() => {
-    const run = generation.current + 1;
-    generation.current = run;
-    setState({ phase: "LOADING" });
-    let inFlight = false;
-    const tick = (): void => {
-      if (inFlight) return;
-      inFlight = true;
-      void read(goalId).then((outcome) => {
-        inFlight = false;
-        if (generation.current === run) setState({ outcome, phase: "LOADED" });
-      }, () => {
-        inFlight = false;
-        if (generation.current === run) {
-          setState({ outcome: {
-            code: "COVERAGE_READ_FAILED", layer: "CONTROL_ROOM_COVERAGE", status: "ERROR",
-          }, phase: "LOADED" });
-        }
-      });
-    };
-    tick();
-    const timer = setInterval(tick, pollMs ?? DEFAULT_POLL_MS);
-    return (): void => { generation.current += 1; clearInterval(timer); };
-  }, [goalId, pollMs, read]);
-
+  const outcome = useLiveCoverage(goalId, read, pollMs ?? DEFAULT_POLL_MS, PRD_COVERAGE);
   return (
     <section className="cr2-approve" data-testid="cr.coverage.card">
       <p className="cr2-slot-kicker">PRD coverage</p>
-      {state.phase === "LOADING" ? (
+      {outcome === null ? (
         <p className="cr2-slot-kicker" data-testid="cr.coverage.loading">Reading coverage...</p>
-      ) : state.outcome.status === "COVERAGE" ? (
-        <CoverageBody coverage={state.outcome} />
+      ) : outcome.status === "COVERAGE" ? (
+        <CoverageBody coverage={outcome} />
       ) : (
         <OutcomeNote
-          code={state.outcome.code}
-          layer={state.outcome.layer}
+          code={outcome.code}
+          layer={outcome.layer}
           said={readFailedSaid("coverage")}
           testId="cr.coverage.refusal"
         />

@@ -27,16 +27,42 @@ export function contractGateKey(contract: ProductContractRevisionRefInput): stri
   return JSON.stringify([contract.contractId, contract.revisionId, contract.revisionDigest]);
 }
 
+/**
+ * The reader's answer for a revision no human has decided, matched on status, code AND layer.
+ * apps/daemon/src/product-contract/product-contract-gate-1-reader.ts:232 refuses
+ * PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT at PRODUCT_CONTRACT_GATE_1_READER when the gate
+ * aggregate holds zero events - the state of every contract between proposal and approval. The
+ * daemon reads that exact pair as pending itself (http/document-coverage-read.ts:167 folds it to
+ * gate1: "PENDING"), so it is an undecided gate, not an unreadable one. Every other code, and this
+ * code at any other layer or status, stays a failed read with its provenance behind Details.
+ */
+export function notDecidedYet(outcome: Exclude<ProductContractGate1Outcome, { status: "GATE" }>): boolean {
+  return outcome.status === "REFUSED"
+    && outcome.code === "PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT"
+    && outcome.layer === "PRODUCT_CONTRACT_GATE_1_READER";
+}
+
 function citedContracts(
   coverage: DocumentCoverageOutcome | null,
 ): readonly CoverageContractView[] {
   return coverage !== null && coverage.status === "COVERAGE" ? coverage.contracts : [];
 }
 
+/** Two answers that agree key for key and field for field are one answer: no new state. */
+function sameGates(previous: ContractGateMap, next: ContractGateMap): boolean {
+  if (previous.size !== next.size) return false;
+  for (const [key, outcome] of next) {
+    const before = previous.get(key);
+    if (before === undefined || JSON.stringify(before) !== JSON.stringify(outcome)) return false;
+  }
+  return true;
+}
+
 /**
  * Reads Gate 1 for every contract the coverage frame cites. A read that throws leaves that
  * contract absent rather than inventing an outcome; a read that refuses is kept VERBATIM,
- * because a refusal is the answer the operator has to see.
+ * because a refusal is the answer the operator has to see. A poll that answers what the
+ * map already holds keeps the SAME map, so the dossier above is not reconciled for it.
  */
 export function useContractGates(
   coverage: DocumentCoverageOutcome | null,
@@ -71,7 +97,8 @@ export function useContractGates(
       })).then((rows) => {
         inFlight = false;
         if (!live) return;
-        setGates(new Map(rows.flatMap((row) => (row === null ? [] : [row]))));
+        const next: ContractGateMap = new Map(rows.flatMap((row) => (row === null ? [] : [row])));
+        setGates((previous) => (sameGates(previous, next) ? previous : next));
       });
     };
     tick();
