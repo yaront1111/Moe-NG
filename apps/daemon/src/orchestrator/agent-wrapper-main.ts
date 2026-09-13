@@ -40,6 +40,7 @@ import type { VerifierProcessRunner } from "./verifier-process-runner.js";
 import { providerFor } from "./moe-up-credentials.js";
 import { createSeatStartRecorder } from "./seat-start-recorder.js";
 import { readWrapperKnobs } from "./wrapper-knobs.js";
+import { createPassLogger } from "./wrapper-pass-log.js";
 
 export {
   createWrapperStopSignal,
@@ -304,7 +305,9 @@ async function main(): Promise<void> {
     if (stop.requested()) return;
 
     const { intervalMs, once } = knobs;
-    let lastIdle = "";
+    // The per-pass lines live in ./wrapper-pass-log.ts: this file stood at the 400-line split
+    // rail, and the command-plane wiring above could not land until the loop's log moved out.
+    const logPass = createPassLogger((line) => { process.stdout.write(line); });
     for (;;) {
       if (stop.requested()) return;
       // Repository ownership gates every effect, including submissions made by
@@ -326,29 +329,11 @@ async function main(): Promise<void> {
         // its reads by code now; this is the last line. A single pass still fails loudly.
         if (once) throw error;
         const message = error instanceof Error ? error.message : String(error);
-        process.stderr.write(`[wrapper] pass failed: ${message}\n`);
+        process.stderr.write(`[wrapper] pass failed: ${message}
+`);
         return null;
       });
-      for (const entry of report?.spawned ?? []) {
-        // Name the refusing layer: two layers can refuse a start, and the code
-        // alone does not say which one answered.
-        const refused = entry.refusal === null ? "" : ` (${entry.refusal.layer})`;
-        process.stdout.write(`[wrapper] ${entry.workItemId}: ${entry.outcome}${refused}\n`);
-      }
-      if (report !== null && report.spawned.length === 0) {
-        // Say so: a silent pass reads as a hung wrapper to an operator watching it.
-        // Once per distinct idle state, not once per interval — the continuous
-        // loop would otherwise print the same line every few seconds.
-        // A parked fleet is not an idle one: say which provider and until when.
-        const idle = report.paused === undefined
-          ? `[wrapper] nothing to staff (surface ${report.surfaceOutcome}, active ${String(report.active)})\n`
-          : `[wrapper] provider paused: ${report.paused.provider} until ${report.paused.resetAt}`
-            + ` (active ${String(report.active)})\n`;
-        if (idle !== lastIdle) process.stdout.write(idle);
-        lastIdle = idle;
-      } else {
-        lastIdle = "";
-      }
+      if (report !== null) logPass(report);
       if (once) {
         await wrapper.settle();
         if (stop.requested()) return;

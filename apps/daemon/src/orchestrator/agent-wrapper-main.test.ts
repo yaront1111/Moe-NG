@@ -350,10 +350,31 @@ describe("wrapper binary staffing wiring", () => {
     expect(() => expect(loop).toContain("wrapper.runOnce().catch(")).toThrow();
   });
 
+  // The per-pass log MOVED to ./wrapper-pass-log.ts to bring this file under the 400-line split
+  // rail. The paused-line claim did not change, only where it is measured; the binary is still
+  // asserted to route every pass report through that logger and nothing else.
+  const PASS_LOG = readFileSync(
+    new URL("./wrapper-pass-log.ts", import.meta.url), "utf8",
+  );
+
   it("tells the operator which provider is paused and until when", () => {
     // The wrapper log is the operator's only view of a paused fleet; a paused pass that
     // printed the ordinary idle line would read as "nothing to do", not "parked".
-    expect(SOURCE).toContain("[wrapper] provider paused:");
+    expect(PASS_LOG).toContain("[wrapper] provider paused:");
+  });
+
+  it("routes every pass report through the extracted logger, over the real stdout", () => {
+    expect(SOURCE).toContain("const logPass = createPassLogger((line) => { process.stdout.write(line); });");
+    expect(SOURCE.split("logPass(report);").length - 1).toBe(1);
+    // The loop's own copy is gone: a second printer beside the logger would double every line.
+    expect(SOURCE).not.toContain("for (const entry of report.spawned)");
+    expect(SOURCE).not.toContain("lastIdle");
+  });
+
+  it("scans a logger slice that can actually fail (positive control)", () => {
+    const unwired = SOURCE.replace("logPass(report);", "");
+    expect(unwired).not.toBe(SOURCE);
+    expect(() => expect(unwired.split("logPass(report);").length - 1).toBe(1)).toThrow();
   });
 
   it("announces incomplete standing verifier authority at startup, from the real store", () => {
