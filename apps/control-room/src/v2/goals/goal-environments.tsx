@@ -3,6 +3,7 @@ import type { JSX } from "react";
 
 import type { EnvironmentVariablesOutcome } from "../../live/live-environment-variables.js";
 import type { LiveSetup } from "../../live/live-config.js";
+import { MIDDOT } from "../glyphs.js";
 import { LiveEnvironmentVariables } from "../ops/live-environment-variables.js";
 import {
   ENVIRONMENT_NAMES, environmentTableRows, requiredEnvironmentNames, unsetRequiredCount,
@@ -71,15 +72,40 @@ async function readRequiredNames(
  *
  * IT NAMES THE ENVIRONMENT. "2 unset for preview" and "2 unset for production" are different
  * facts, and a card that omits which one it means invites the operator to fix the wrong one.
+ *
+ * A COUNT IS A MEASUREMENT. Until `/environments/read` has answered for this environment the
+ * card says it is reading, and when the read refused it carries the daemon's code and layer;
+ * neither state carries a number. Measured before this: with no answer, and forever after a
+ * refusal, every required name read unset and "2 required variables unset for preview" was
+ * stated as a fact with nothing beside it to say nobody had counted.
  */
-function UnsetCard({ count, environment }: {
-  readonly count: number; readonly environment: string;
+function UnsetCard({ environment, outcome, requiredNames }: {
+  readonly environment: string;
+  readonly outcome: EnvironmentVariablesOutcome | null;
+  readonly requiredNames: readonly string[];
 }): JSX.Element {
+  const testId = `cr.env-vars.unset-card.${environment}`;
+  const href = `#${GOAL_SECTION_IDS.environments}`;
+  if (outcome === null) {
+    return (
+      <p data-state="PENDING" data-testid={testId}>
+        <a href={href}>{`Reading the required variables for ${environment}...`}</a>
+      </p>
+    );
+  }
+  if (outcome.status !== "ENVIRONMENT_VARIABLES") {
+    return (
+      <p data-state="REFUSED" data-testid={testId}>
+        <a href={href}>
+          {`Required variables for ${environment} could not be counted ${MIDDOT} ${outcome.code} @ ${outcome.layer}`}
+        </a>
+      </p>
+    );
+  }
+  const count = unsetRequiredCount(environmentTableRows(outcome, requiredNames));
   return (
-    <p data-count={String(count)} data-testid={`cr.env-vars.unset-card.${environment}`}>
-      <a href={`#${GOAL_SECTION_IDS.environments}`}>
-        {`${String(count)} required variables unset for ${environment}`}
-      </a>
+    <p data-count={String(count)} data-state="MEASURED" data-testid={testId}>
+      <a href={href}>{`${String(count)} required variables unset for ${environment}`}</a>
     </p>
   );
 }
@@ -136,8 +162,8 @@ export function LiveGoalEnvironments({
     <div id={GOAL_SECTION_IDS.environments}>
       {requiredNames.length > 0 && ENVIRONMENT_NAMES.map((environment) => (
         <UnsetCard
-          count={unsetRequiredCount(environmentTableRows(tables[environment] ?? null, requiredNames))}
           environment={environment} key={environment}
+          outcome={tables[environment] ?? null} requiredNames={requiredNames}
         />
       ))}
       {ENVIRONMENT_NAMES.map((environment) => (

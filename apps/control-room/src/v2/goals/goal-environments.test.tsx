@@ -100,6 +100,50 @@ describe("the unset count", () => {
       .toContain("unset for production");
   });
 
+  /**
+   * A COUNT IS A MEASUREMENT, NOT A DEFAULT. Measured before these two arms: with no answer
+   * from `/environments/read` yet, and forever after it refused, every required name read
+   * unset and the card stated "2 required variables unset for preview" as a fact with no
+   * pending or refused state and no code beside it.
+   */
+  it("says it is still reading, with NO count, until the environment's table has answered", async () => {
+    render(
+      <LiveGoalEnvironments
+        goalId="goal-1"
+        readContract={() => Promise.resolve(contractWith(["DATABASE_URL", "SESSION_KEY"]))}
+        readVariables={() => new Promise<EnvironmentVariablesOutcome>(() => undefined)}
+        setup={SETUP}
+      />,
+    );
+    const card = await screen.findByTestId("cr.env-vars.unset-card.preview");
+    expect(card.getAttribute("data-state")).toBe("PENDING");
+    expect(card.getAttribute("data-count")).toBeNull();
+    expect(card.textContent).not.toContain("unset");
+    expect(card.textContent).toContain("preview");
+  });
+
+  it("names the refusal, with NO count, when the environment's table could not be read", async () => {
+    render(
+      <LiveGoalEnvironments
+        goalId="goal-1"
+        readContract={() => Promise.resolve(contractWith(["DATABASE_URL", "SESSION_KEY"]))}
+        readVariables={(environment) => Promise.resolve(environment === "preview"
+          ? { code: "ENVIRONMENT_READ_CAPABILITY_DENIED", detail: null, layer: "CONTROL_ROOM_LISTENER", status: "REFUSED" as const }
+          : tableWith(environment, ["DATABASE_URL", "SESSION_KEY"]))}
+        setup={SETUP}
+      />,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId("cr.env-vars.unset-card.preview").getAttribute("data-state")).toBe("REFUSED");
+    });
+    const card = screen.getByTestId("cr.env-vars.unset-card.preview");
+    expect(card.getAttribute("data-count")).toBeNull();
+    expect(card.textContent).not.toContain("unset");
+    expect(card.textContent).toContain("ENVIRONMENT_READ_CAPABILITY_DENIED @ CONTROL_ROOM_LISTENER");
+    // The environments that DID answer still count, so a refusal on one never blanks the others.
+    expect(screen.getByTestId("cr.env-vars.unset-card.production").getAttribute("data-count")).toBe("0");
+  });
+
   it("(b) is ABSENT when the contract requires nothing - absent, not a zero badge", async () => {
     renderSection({ required: [], set: {} });
     // The section itself renders, so the absence below is not just "nothing mounted".

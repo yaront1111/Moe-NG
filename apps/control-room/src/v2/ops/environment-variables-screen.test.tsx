@@ -121,6 +121,13 @@ describe("the required-vs-set table", () => {
     expect(screen.getByTestId("cr.env-vars.updated.SESSION_KEY").textContent).toBe("Never");
   });
 
+  it("does NOT state a count before the table has answered", () => {
+    renderScreen(null);
+    const summary = screen.getByTestId("cr.env-vars.summary").textContent ?? "";
+    expect(summary).not.toContain("required variables unset");
+    expect(summary).toContain("preview");
+  });
+
   it("states the unset count and names the environment it counts for", () => {
     renderScreen(table([{ fingerprintSha256: FINGERPRINT_A, name: "DATABASE_URL" }]));
     expect(screen.getByTestId("cr.env-vars.summary").textContent)

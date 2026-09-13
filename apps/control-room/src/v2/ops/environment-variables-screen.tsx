@@ -183,9 +183,14 @@ export function EnvironmentVariablesScreen({
     <Card testId="cr.env-vars.root">
       <h2 data-testid="cr.env-vars.kicker">{`Environment variables ${MIDDOT} ${environment}`}</h2>
       <p data-testid="cr.env-vars.summary">
-        {`${String(unset)} of ${String(requiredNames.length)} required variables unset for `
-          + `${environment}. Values are never readable back; the sha256 fingerprint is how you `
-          + "confirm a change took."}
+        {/* A count only once the table has answered: an unanswered or refused read is not a
+            measurement of anything, and "N of N unset" over one was stated as a fact. */}
+        {(outcome === null
+          ? `Reading the required variables for ${environment}... `
+          : outcome.status !== "ENVIRONMENT_VARIABLES"
+            ? `Required variables for ${environment} could not be counted. `
+            : `${String(unset)} of ${String(requiredNames.length)} required variables unset for ${environment}. `)
+          + "Values are never readable back; the sha256 fingerprint is how you confirm a change took."}
       </p>
       {outcome !== null && outcome.status !== "ENVIRONMENT_VARIABLES" && (
         <OutcomeNote
