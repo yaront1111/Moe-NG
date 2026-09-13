@@ -26,6 +26,23 @@ export interface AttachedOperatorInput {
   release(): Promise<void>;
 }
 
+/** The bare label the pairing window mints: lowercase hex, so folding case is lossless. */
+export const CONFIRMATION_LABEL = /^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u;
+/** The manager's per-project form: `<instanceId> <label>`, one space once normalised. */
+export const PROJECT_INSTANCE_LABEL =
+  /^(?<instanceId>[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}) (?<label>[0-9a-f]{4}(?:-[0-9a-f]{4}){2})$/u;
+
+/**
+ * Trim, fold case, and collapse inner whitespace BEFORE the label crosses a trust
+ * boundary, exactly as moe-up-main.ts and daemon-main.ts do. The two project mains
+ * tested the raw line, so "DEAD-BEEF-1234" and a label pasted with a trailing space
+ * were dropped without a word while the same input paired under `moe up` (measured
+ * 2026-09-13). The authority and the wire stay strict; only the console is lenient.
+ */
+export function normalizeOperatorLine(line: string): string {
+  return line.trim().toLowerCase().replaceAll(/\s+/gu, " ");
+}
+
 const NOTHING_ATTACHED: AttachedOperatorInput = Object.freeze({
   ended: Promise.resolve(),
   release: async (): Promise<void> => undefined,

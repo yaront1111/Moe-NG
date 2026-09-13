@@ -491,6 +491,68 @@ describe("runProjectManagerMain", () => {
   );
 
   it.runIf(process.platform === "win32")(
+    "normalises shouted or padded manager and project labels, and names an ignored line", async () => {
+    const localAppData = await temporary();
+    const order: string[] = [];
+    let signal = (): void => { throw new Error("signal not registered"); };
+    const approveManager = vi.fn((_label: string) => ({
+      code: "PAIRING_CONFIRMATION_APPROVED" as const,
+      layer: "CONTROL_ROOM_PAIRING_APPROVAL" as const,
+      ok: true as const,
+      requestId: "e".repeat(64),
+      state: "APPROVED" as const,
+    }));
+    const approveProject = vi.fn(async (_instanceId: string, _label: string) => ({
+      code: "PROJECT_RUNTIME_PAIRING_APPROVED" as const,
+      layer: "PROJECT_RUNTIME_SUPERVISOR" as const,
+      ok: true as const,
+    }));
+    const supervisor = Object.freeze({ ...runtime(order), approvePairing: approveProject });
+    const logs: string[] = [];
+    const completed = runProjectManagerMain({
+      dependencies: {
+        createRuntime: () => supervisor,
+        resolveAssetRoot: () => "D:\\artifact\\apps\\control-room\\dist",
+        startHttp: async () => ({
+          approvePairing: approveManager,
+          close: async () => { order.push("http-close"); },
+          ok: true,
+          origin: "http://127.0.0.2:39122",
+          port: 39122,
+        }),
+      },
+      env: { LOCALAPPDATA: localAppData },
+      log: (line) => { logs.push(line); },
+      onSignal: (handler) => { signal = handler; },
+      // Sentinel last: the exact lowercase label proves every earlier line was consumed.
+      operatorInput: operatorChunks(
+        "CAFE-BABE-1234\n",
+        " cafe-babe-5678 \n",
+        `${INSTANCE_ID.toUpperCase()}  DEAD-BEEF-1234 \n`,
+        "not-an-approval\n",
+        "0000-0000-0000\n",
+      ),
+      platform: "win32",
+      root: "D:\\artifact",
+    });
+
+    await vi.waitFor(() => { expect(approveManager).toHaveBeenCalledWith("0000-0000-0000"); });
+    expect(approveManager.mock.calls.map((call) => call[0]))
+      .toEqual(["cafe-babe-1234", "cafe-babe-5678", "0000-0000-0000"]);
+    expect(approveProject).toHaveBeenCalledTimes(1);
+    expect(approveProject).toHaveBeenCalledWith(INSTANCE_ID, "dead-beef-1234");
+    expect(logs.filter((line) => line === "PROJECT_MANAGER_OPERATOR_LINE_IGNORED PROJECT_MANAGER_MAIN"))
+      .toHaveLength(1);
+    expect(logs.join("\n")).not.toContain("not-an-approval");
+    expect(logs.join("\n")).not.toContain("cafe-babe");
+    expect(logs.join("\n")).not.toContain("dead-beef");
+
+    signal();
+    expect(await completed).toBe(0);
+    },
+  );
+
+  it.runIf(process.platform === "win32")(
     "releases a held-open operator stdin after the Ctrl-C drain so the process can exit", async () => {
     // The manager's drain closed HTTP and shut the runtime down but never touched the
     // stdin consumer, so a console `moe projects` stayed up after Ctrl-C (measured 2026-09-13).

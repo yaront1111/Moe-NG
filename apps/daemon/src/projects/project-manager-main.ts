@@ -50,7 +50,12 @@ import type {
   ProjectRuntimeSupervisor,
   ProjectRuntimeSupervisorOptions,
 } from "./project-runtime-supervisor.js";
-import { attachOperatorInput } from "./project-operator-input.js";
+import {
+  CONFIRMATION_LABEL,
+  PROJECT_INSTANCE_LABEL,
+  attachOperatorInput,
+  normalizeOperatorLine,
+} from "./project-operator-input.js";
 import type { PairingOperatorInput } from "../http/pairing-operator-channel.js";
 
 export const PROJECT_MANAGER_MAIN_LAYER = "PROJECT_MANAGER_MAIN" as const;
@@ -61,6 +66,8 @@ export const PROJECT_MANAGER_ASSET_ROOT_MISSING = "PROJECT_MANAGER_ASSET_ROOT_MI
 export const PROJECT_MANAGER_SIGNAL_REGISTRATION_FAILED = "PROJECT_MANAGER_SIGNAL_REGISTRATION_FAILED" as const;
 export const PROJECT_MANAGER_SHUTDOWN_FAILED = "PROJECT_MANAGER_SHUTDOWN_FAILED" as const;
 export const PROJECT_MANAGER_START_FAILED = "PROJECT_MANAGER_START_FAILED" as const;
+/** A typed line that is neither a manager label nor `<instanceId> <label>`; never echoed. */
+export const PROJECT_MANAGER_OPERATOR_LINE_IGNORED = "PROJECT_MANAGER_OPERATOR_LINE_IGNORED" as const;
 export const PROJECT_MANAGER_PORT = 39_122;
 export const PROJECT_MANAGER_DIRECTORY_NAME = "Moe" as const;
 export const PROJECT_MANAGER_CATALOG_FILENAME = "projects.json" as const;
@@ -283,16 +290,19 @@ export async function runProjectManagerMain(options: ProjectManagerMainOptions):
   }
 
   const operator = attachOperatorInput(options.operatorInput, async (line) => {
-    if (/^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u.test(line)) {
-      const result = listener.approvePairing(line);
+    const label = normalizeOperatorLine(line);
+    if (CONFIRMATION_LABEL.test(label)) {
+      const result = listener.approvePairing(label);
       if (!result.ok) disclose(result, options.log);
       return;
     }
-    const project = /^(?<instanceId>[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}) (?<label>[0-9a-f]{4}(?:-[0-9a-f]{4}){2})$/u.exec(line)?.groups;
+    const project = PROJECT_INSTANCE_LABEL.exec(label)?.groups;
     if (project?.["instanceId"] !== undefined && project["label"] !== undefined) {
       const result = await runtime.approvePairing(project["instanceId"], project["label"]);
       if (!result.ok) disclose(result, options.log);
+      return;
     }
+    disclose(mainRefusal(PROJECT_MANAGER_OPERATOR_LINE_IGNORED), options.log);
   });
   // The pairing route reports the LIVE channel: a console that hit EOF or failed can no
   // longer take a typed label, so the flag follows the consumer's end, not only stop().

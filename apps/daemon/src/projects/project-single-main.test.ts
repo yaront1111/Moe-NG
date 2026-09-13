@@ -188,6 +188,48 @@ describe("runSingleProjectMain", () => {
     expect(await completed).toBe(0);
   });
 
+  it("normalises a shouted or padded label like moe up does, and names an ignored line", async () => {
+    // Sentinel last: once the exact lowercase label reaches approvePairing every earlier
+    // line has been consumed, so a missing call is a dropped label, not a race.
+    const approvePairing = vi.fn(async (_instanceId: string, _label: string) => ({
+      code: "PROJECT_RUNTIME_PAIRING_APPROVED" as const,
+      layer: "PROJECT_RUNTIME_SUPERVISOR" as const,
+      ok: true as const,
+    }));
+    let finish!: (value: {
+      code: "PROJECT_RUNTIME_COMPLETED"; exitCode: number;
+      layer: "PROJECT_RUNTIME_SUPERVISOR"; ok: true;
+    }) => void;
+    const wait = vi.fn(() => new Promise<{
+      code: "PROJECT_RUNTIME_COMPLETED"; exitCode: number;
+      layer: "PROJECT_RUNTIME_SUPERVISOR"; ok: true;
+    }>((resolve) => { finish = resolve; }));
+    const supervisor = runtime({ approvePairing, wait });
+    const logs: string[] = [];
+    const completed = runSingleProjectMain({
+      dependencies: dependencies(supervisor), env: { ANTHROPIC_API_KEY: "key" },
+      log: (line) => { logs.push(line); }, onSignal: vi.fn(),
+      operatorInput: operatorChunks(
+        "DEAD-BEEF-1234\n", "  dead-beef-5678 \n", "wrong-line\n", "0000-0000-0000\n",
+      ),
+      platform: "win32", projectRoot: PROJECT.root, root: "D:\\artifact",
+    });
+    await vi.waitFor(() => {
+      expect(approvePairing).toHaveBeenCalledWith(INSTANCE_ID, "0000-0000-0000");
+    });
+    expect(approvePairing.mock.calls.map((call) => call[1]))
+      .toEqual(["dead-beef-1234", "dead-beef-5678", "0000-0000-0000"]);
+    expect(logs.filter((line) => line === "PROJECT_SINGLE_OPERATOR_LINE_IGNORED PROJECT_SINGLE_MAIN"))
+      .toHaveLength(1);
+    expect(logs.join("\n")).not.toContain("wrong-line");
+    expect(logs.join("\n")).not.toContain("dead-beef");
+    finish({
+      code: "PROJECT_RUNTIME_COMPLETED", exitCode: 0,
+      layer: "PROJECT_RUNTIME_SUPERVISOR", ok: true,
+    });
+    expect(await completed).toBe(0);
+  });
+
   it("discloses a refused label by code and layer, still without echoing the label", async () => {
     const label = "dead-beef-9999";
     const approvePairing = vi.fn(async () => ({

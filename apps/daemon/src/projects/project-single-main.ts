@@ -9,7 +9,11 @@ import type { PairingOperatorInput } from "../http/pairing-operator-channel.js";
 import { createNodeProjectManagerFiles } from "./project-manager-files.js";
 import type { ProjectManagerFilesPort } from "./project-manager-files.js";
 import { createProjectBoundaryOpener } from "./project-manager-main.js";
-import { attachOperatorInput } from "./project-operator-input.js";
+import {
+  CONFIRMATION_LABEL,
+  attachOperatorInput,
+  normalizeOperatorLine,
+} from "./project-operator-input.js";
 import { createProjectRuntimeSupervisor } from "./project-runtime-supervisor.js";
 import type {
   ProjectRuntimeBoundary,
@@ -24,6 +28,8 @@ export const PROJECT_SINGLE_ASSET_ROOT_MISSING = "PROJECT_SINGLE_ASSET_ROOT_MISS
 export const PROJECT_SINGLE_INSTANCE_ID_INVALID = "PROJECT_SINGLE_INSTANCE_ID_INVALID" as const;
 export const PROJECT_SINGLE_SIGNAL_REGISTRATION_FAILED =
   "PROJECT_SINGLE_SIGNAL_REGISTRATION_FAILED" as const;
+/** A typed line that is not a confirmation label; the line itself is never echoed. */
+export const PROJECT_SINGLE_OPERATOR_LINE_IGNORED = "PROJECT_SINGLE_OPERATOR_LINE_IGNORED" as const;
 
 type ProjectBoundaryOpener = (
   request: WindowsProjectStackRequest,
@@ -144,13 +150,16 @@ export async function runSingleProjectMain(options: ProjectSingleMainOptions): P
     return 1;
   }
   const operator = attachOperatorInput(options.operatorInput, async (line) => {
-    if (/^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u.test(line)) {
-      // Answer the operator, but never echo the label: it is a bearer until consumed.
-      // Before this the console stayed silent on both outcomes (measured 2026-09-13).
-      const result = await runtime.approvePairing(instanceId, line);
-      if (result.ok) options.log("moe start: pairing approved");
-      else disclose(result, options.log);
+    const label = normalizeOperatorLine(line);
+    if (!CONFIRMATION_LABEL.test(label)) {
+      disclose(refusal(PROJECT_SINGLE_OPERATOR_LINE_IGNORED), options.log);
+      return;
     }
+    // Answer the operator, but never echo the label: it is a bearer until consumed.
+    // Before this the console stayed silent on both outcomes (measured 2026-09-13).
+    const result = await runtime.approvePairing(instanceId, label);
+    if (result.ok) options.log("moe start: pairing approved");
+    else disclose(result, options.log);
   });
   try {
     options.log("moe start: project runtime ready");
