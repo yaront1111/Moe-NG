@@ -22,7 +22,8 @@ import type { ResourceReads } from "./resources-model.js";
  *
  * Shapes are taken from the routes themselves: apps/daemon/src/http/activation-read.ts
  * (nine frame keys, seven per receipt, five on signing), health-read.ts, policy-read.ts,
- * sessions-read.ts and repository-remote-read.ts, cross-checked against the committed
+ * sessions-read-contracts.ts (the /sessions/read shape, declared beside sessions-read.ts) and
+ * repository-remote-read.ts, cross-checked against the committed
  * activation frame at v2/cordum-app.test.tsx.
  */
 
