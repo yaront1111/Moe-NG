@@ -73,6 +73,8 @@ async function* stopControl(): AsyncIterable<string> {
 describe("runProjectStackHostMain", () => {
   it("composes the proven config into one daemon and one wrapper", async () => {
     const lines: string[] = [];
+    const effects: string[] = [];
+    let preparedBindings: unknown;
     let daemonBindings: unknown;
     let wrapperBindings: unknown;
     let wrapperKills = 0;
@@ -84,7 +86,14 @@ describe("runProjectStackHostMain", () => {
       fs: configFs(),
       incarnationId: () => INCARNATION_ID,
       log: () => undefined,
+      prepareRepository: async (bindings) => {
+        preparedBindings = bindings;
+        await Promise.resolve();
+        effects.push("prepared");
+        return { ok: true };
+      },
       startDaemon: async (bindings) => {
+        effects.push("daemon");
         daemonBindings = bindings;
         return {
           approvePairing: () => ({ ok: true, state: "APPROVED" }),
@@ -93,6 +102,7 @@ describe("runProjectStackHostMain", () => {
         };
       },
       startWrapper: (bindings) => {
+        effects.push("wrapper");
         wrapperBindings = bindings;
         return {
           completed: new Promise((resolve) => {
@@ -104,6 +114,8 @@ describe("runProjectStackHostMain", () => {
       write: (line) => lines.push(line),
     });
     expect(code).toBe(0);
+    expect(effects).toEqual(["prepared", "daemon", "wrapper"]);
+    expect(preparedBindings).toEqual(daemonBindings);
     expect(daemonBindings).toEqual(wrapperBindings);
     expect(daemonBindings).toMatchObject({ instanceId: INSTANCE_ID, projectRoot: "C:\\work\\alpha" });
     expect(lines.map((line) => (JSON.parse(line) as { kind: string }).kind)).toEqual(["READY", "TERMINAL"]);
@@ -111,6 +123,7 @@ describe("runProjectStackHostMain", () => {
 
   it("refuses invalid configuration before starting any authority", async () => {
     let starts = 0;
+    let preparations = 0;
     const logs: string[] = [];
     const code = await runProjectStackHostMain([
       `--config=${CONFIG_PATH}`, `--asset-root=${ASSET_ROOT}`, "--shell=cmd.exe",
@@ -120,14 +133,51 @@ describe("runProjectStackHostMain", () => {
       fs: configFs(),
       incarnationId: () => INCARNATION_ID,
       log: (line) => logs.push(line),
+      prepareRepository: async () => { preparations += 1; return { ok: true }; },
       startDaemon: async () => { starts += 1; throw new Error("must not start"); },
       startWrapper: () => { starts += 1; throw new Error("must not start"); },
       write: () => undefined,
     });
     expect(code).toBe(1);
     expect(starts).toBe(0);
+    expect(preparations).toBe(0);
     expect(logs).toEqual(["PROJECT_STACK_ARGUMENTS_INVALID PROJECT_STACK_HOST"]);
   });
+
+  it.each(["refused", "thrown", "unsafe refusal"] as const)(
+    "refuses failed repository preparation before daemon or wrapper effects (%s)",
+    async (failure) => {
+      let starts = 0;
+      const lines: string[] = [];
+      const logs: string[] = [];
+      const code = await runProjectStackHostMain([
+        `--config=${CONFIG_PATH}`, `--asset-root=${ASSET_ROOT}`,
+      ], {
+        controls: stopControl(), env, fs: configFs(), incarnationId: () => INCARNATION_ID,
+        log: (line) => logs.push(line),
+        prepareRepository: async () => {
+          if (failure === "thrown") throw new Error(`private credential ${CREDENTIAL}`);
+          return failure === "refused"
+            ? { ok: false, code: "RUNTIME_METADATA_EXCLUDES_UNAVAILABLE", layer: "RUNTIME_METADATA_EXCLUDES" }
+            : { ok: false, code: CREDENTIAL, layer: `private credential ${CREDENTIAL}` };
+        },
+        startDaemon: async () => { starts += 1; throw new Error("must not start"); },
+        startWrapper: () => { starts += 1; throw new Error("must not start"); },
+        write: (line) => lines.push(line),
+      });
+      expect(code).toBe(1);
+      expect(starts).toBe(0);
+      const expected = failure === "refused"
+        ? { code: "RUNTIME_METADATA_EXCLUDES_UNAVAILABLE", layer: "RUNTIME_METADATA_EXCLUDES" }
+        : { code: "PROJECT_RUNTIME_METADATA_PREPARATION_FAILED", layer: "PROJECT_STACK_HOST" };
+      expect(lines.map((line) => JSON.parse(line))).toEqual([{
+        ...expected, incarnationId: INCARNATION_ID, kind: "START_REFUSED",
+        schemaVersion: PROJECT_STACK_PROTOCOL_VERSION,
+      }]);
+      expect(logs).toEqual([`${expected.code} ${expected.layer}`]);
+      expect(JSON.stringify({ lines, logs })).not.toContain(CREDENTIAL);
+    },
+  );
 });
 
 describe("project stack production wrapper launch", () => {

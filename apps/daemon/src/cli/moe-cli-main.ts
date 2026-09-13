@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { prepareRuntimeMetadataExcludes } from "../repository/runtime-metadata-excludes.js";
 import { parseCliArgv } from "./moe-cli-argv.js";
 import type { CliInit, CliStart } from "./moe-cli-argv.js";
 import { isMainModule } from "./moe-cli-entry.js";
@@ -87,7 +88,7 @@ function probeTarget(targetDir: string): InitProbe {
   }
 }
 
-function runInit(invocation: CliInit, io: CliIo): number {
+async function runInit(invocation: CliInit, io: CliIo): Promise<number> {
   const targetDir = resolve(io.cwd, invocation.targetDir);
   const plan = planInit({
     force: invocation.force,
@@ -101,6 +102,13 @@ function runInit(invocation: CliInit, io: CliIo): number {
   }
   try {
     mkdirSync(targetDir, { recursive: true });
+    const prepared = await prepareRuntimeMetadataExcludes({
+      configPath: plan.configPath, initializing: true, projectRoot: targetDir, storePath: plan.storePath,
+    });
+    if (!prepared.ok) {
+      io.log(`${prepared.code} ${prepared.layer}`);
+      return 1;
+    }
     // `wx` closes the window between the probe above and this write: a second
     // `moe init` racing the first must lose here rather than silently replace a
     // config — and orphan the store the first one minted a credential for.

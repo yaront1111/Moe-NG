@@ -11,6 +11,7 @@ import provider from "../daemon-store-dependencies.js";
 import { startDaemon } from "../daemon-entry.js";
 import type { DaemonStartOptions } from "../daemon-entry.js";
 import { NODE_TRANSFORM_TYPES_FLAG } from "../orchestrator/moe-up-spawn.js";
+import { prepareRuntimeMetadataExcludes } from "../repository/runtime-metadata-excludes.js";
 import {
   createNodeProjectStackConfigFs,
   resolveProjectStackConfig,
@@ -188,6 +189,9 @@ export interface ProjectStackHostMainOptions {
   readonly fs: ProjectStackConfigFs;
   readonly incarnationId: () => string;
   readonly log: (line: string) => void;
+  readonly prepareRepository: (
+    bindings: ProjectStackBindings,
+  ) => Promise<Readonly<{ ok: true }> | ProjectStackRefused>;
   readonly startDaemon: (
     bindings: ProjectStackBindings,
   ) => Promise<ProjectStackDaemonHandle | ProjectStackRefused>;
@@ -225,7 +229,21 @@ export async function runProjectStackHostMain(
     instanceId: bindings.instanceId,
     log: options.log,
     projectId: bindings.projectId,
-    startDaemon: () => options.startDaemon(bindings),
+    startDaemon: async () => {
+      let prepared: Readonly<{ ok: true }> | ProjectStackRefused;
+      const fallback: ProjectStackRefused = {
+        ok: false, code: "PROJECT_RUNTIME_METADATA_PREPARATION_FAILED", layer: "PROJECT_STACK_HOST",
+      };
+      try { prepared = await options.prepareRepository(bindings); }
+      catch { prepared = fallback; }
+      if (!prepared.ok) {
+        const safe = /^[A-Z][A-Z0-9_]{0,127}$/u;
+        const refusal = safe.test(prepared.code) && safe.test(prepared.layer) ? prepared : fallback;
+        options.log(`${refusal.code} ${refusal.layer}`);
+        return refusal;
+      }
+      return await options.startDaemon(bindings);
+    },
     startWrapper: () => options.startWrapper(bindings),
     storePath: bindings.storePath,
     write: options.write,
@@ -241,6 +259,7 @@ if (meta.main === true) {
     fs: createNodeProjectStackConfigFs(),
     incarnationId: randomUUID,
     log: (line) => process.stderr.write(`${line}\n`),
+    prepareRepository: prepareRuntimeMetadataExcludes,
     startDaemon: async (bindings) => startDaemon(hostedDaemonStartOptions(bindings)),
     startWrapper: (bindings) => startNodeWrapper(bindings, process.env, wrapperEntry),
     write: (line) => { process.stdout.write(line); },

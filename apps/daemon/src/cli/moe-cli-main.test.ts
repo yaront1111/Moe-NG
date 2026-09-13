@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -63,6 +64,60 @@ async function run(artifactRoot: string, argv: readonly string[], io: Partial<Cl
 }
 
 describe("moe init", () => {
+  it("preserves an existing application store instead of adopting or hiding it during init", async () => {
+    const root = temp();
+    execFileSync("git", ["init", "--quiet"], { cwd: root, windowsHide: true });
+    const excludePath = join(root, ".git", "info", "exclude");
+    const originalExcludes = readFileSync(excludePath);
+    const applicationData = "existing application data\n";
+    writeFileSync(join(root, "store.sqlite"), applicationData);
+
+    const result = await run(root, ["init", "--force"]);
+
+    expect(result.code).toBe(1);
+    expect(result.lines).toEqual(["RUNTIME_METADATA_PATH_OCCUPIED RUNTIME_METADATA_EXCLUDES"]);
+    expect(existsSync(join(root, MOE_CONFIG_FILENAME))).toBe(false);
+    expect(readFileSync(excludePath)).toEqual(originalExcludes);
+    expect(readFileSync(join(root, "store.sqlite"), "utf8")).toBe(applicationData);
+    expect(execFileSync("git", ["ls-files", "-z", "--others", "--exclude-standard"], {
+      cwd: root, encoding: "utf8", windowsHide: true,
+    })).toBe("store.sqlite\0");
+  });
+
+  it("keeps newly initialized runtime metadata out of Git while application files stay visible", async () => {
+    const root = temp();
+    execFileSync("git", ["init", "--quiet"], { cwd: root, windowsHide: true });
+    writeFileSync(join(root, "application.ts"), "export const application = true;\n");
+
+    const result = await run(root, ["init", "--force"]);
+
+    expect(result.code).toBe(0);
+    for (const suffix of ["", "-shm", "-wal", "-journal", ".moe-stack.lock"]) {
+      writeFileSync(join(root, `store.sqlite${suffix}`), "runtime only\n");
+    }
+    const visible = execFileSync("git", ["ls-files", "-z", "--others", "--exclude-standard"], {
+      cwd: root, encoding: "utf8", windowsHide: true,
+    }).split("\0").filter(Boolean);
+    expect(visible).toEqual(["application.ts"]);
+    expect(readFileSync(join(root, MOE_CONFIG_FILENAME), "utf8")).toContain(CREDENTIAL);
+    expect(result.lines.join("\n")).not.toContain(CREDENTIAL);
+  });
+
+  it("refuses before writing a credential when Git metadata exclusions cannot be prepared", async () => {
+    const root = temp();
+    execFileSync("git", ["init", "--quiet"], { cwd: root, windowsHide: true });
+    const excludePath = join(root, ".git", "info", "exclude");
+    rmSync(excludePath);
+    mkdirSync(excludePath);
+
+    const result = await run(root, ["init", "--force"]);
+
+    expect(result.code).toBe(1);
+    expect(existsSync(join(root, MOE_CONFIG_FILENAME))).toBe(false);
+    expect(result.lines).toEqual(["RUNTIME_METADATA_EXCLUDES_UNAVAILABLE RUNTIME_METADATA_EXCLUDES"]);
+    expect(result.lines.join("\n")).not.toContain(CREDENTIAL);
+  });
+
   it("resolves a relative project against the operator cwd, not the extracted artifact", async () => {
     const artifactRoot = temp();
     const operatorCwd = temp();
