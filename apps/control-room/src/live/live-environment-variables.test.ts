@@ -17,6 +17,9 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import {
+  EMPTY_NEXT_ALLOWED_COMMANDS, RUNTIME_ERROR_REGISTRY_VERSION, createRuntimeError, lookupRuntimeError,
+} from "@moe/contracts";
 import { describe, expect, it } from "vitest";
 
 import { DEV_PROXY_PATHS } from "./dev-proxy-paths.js";
@@ -165,6 +168,82 @@ describe("each refusing authority keeps its OWN code and layer", () => {
     expect(mapEnvironmentVariablesAnswer(
       503, { code: "LISTENER_ENVIRONMENTS_UNAVAILABLE", layer: "CONTROL_ROOM_LISTENER" },
     )).toMatchObject({ code: "LISTENER_ENVIRONMENTS_UNAVAILABLE", status: "REFUSED" });
+  });
+});
+
+/**
+ * THE THREE REFUSALS THE ROUTE ANSWERS BEFORE THE STORE IS ASKED, measured off
+ * apps/daemon/src/http/environments-read.ts:103-115 and http-command-ingress.ts:73-81,89-111:
+ * the route's own `{code, layer, outcome}` at 200 for a session without ADMIN, the
+ * authenticator's PORT_REFUSED frame for a replayed session, and HttpRefused for an expired
+ * credential or a wire-protocol mismatch. Each carries a stable code; decoding one as
+ * RESPONSE_INVALID tells the operator the daemon answered garbage when it answered a reason.
+ */
+describe("the route's, the authenticator's and the ingress refusals keep their own codes", () => {
+  const ROUTE_DENIAL = {
+    code: "ENVIRONMENTS_READ_CAPABILITY_DENIED", layer: "CONTROL_ROOM_LISTENER", outcome: "REFUSED",
+  } as const;
+  /** The frozen RECOVERY_REPLAYED refusal (apps/daemon/src/identity/session-authenticator.ts:47-55), forwarded whole at 401. */
+  const REPLAYED = {
+    httpStatus: 401, ok: false, outcome: "PORT_REFUSED", stage: "AUTHENTICATE",
+    refusal: {
+      code: "SESSION_REPLAYED", detail: "The session belongs to a prior recovery incarnation or key epoch.",
+      httpStatus: 401, layer: "IDENTITY",
+    },
+  } as const;
+
+  it("keeps the route's CAPABILITY_DENIED at 200, with its layer and no detail", () => {
+    expect(mapEnvironmentVariablesAnswer(200, ROUTE_DENIAL)).toEqual({
+      code: "ENVIRONMENTS_READ_CAPABILITY_DENIED", detail: null,
+      layer: "CONTROL_ROOM_LISTENER", status: "REFUSED",
+    });
+  });
+
+  it("keeps the authenticator's SESSION_REPLAYED, its IDENTITY layer and its fixed detail", () => {
+    expect(mapEnvironmentVariablesAnswer(401, REPLAYED)).toEqual({
+      code: "SESSION_REPLAYED", detail: "The session belongs to a prior recovery incarnation or key epoch.",
+      layer: "IDENTITY", status: "REFUSED",
+    });
+  });
+
+  it("keeps AUTHENTICATION_FAILED for an expired credential, at the AUTHENTICATE stage", () => {
+    const error = createRuntimeError({ code: "AUTHENTICATION_FAILED" });
+    // CONTROL: the factory built the named code rather than failing closed to UNKNOWN_ERROR.
+    expect(error.code).toBe("AUTHENTICATION_FAILED");
+    expect(mapEnvironmentVariablesAnswer(
+      401, { error, httpStatus: 401, ok: false, outcome: "REFUSED", stage: "AUTHENTICATE" },
+    )).toEqual({ code: "AUTHENTICATION_FAILED", detail: null, layer: "AUTHENTICATE", status: "REFUSED" });
+  });
+
+  it("keeps DISTRIBUTION_MISMATCH for a wire-protocol mismatch, at the COMPATIBILITY stage", () => {
+    // Built the way http-command-ingress.ts:60-71 builds it: a frozen literal off the registry
+    // row, because the factory fails closed to UNKNOWN_ERROR for this code without a source.
+    const row = lookupRuntimeError("DISTRIBUTION_MISMATCH");
+    const error = Object.freeze({
+      code: "DISTRIBUTION_MISMATCH", correlationId: null, details: {},
+      nextAllowedCommands: EMPTY_NEXT_ALLOWED_COMMANDS, recoveryCategory: row.recoveryCategory,
+      recoveryCommands: row.recoveryCommands, registryVersion: RUNTIME_ERROR_REGISTRY_VERSION,
+      retryability: row.retryability, transport: row.transport, truthClass: "OBSERVED",
+    });
+    // CONTROL: the registry row is the named one, so the frame is the ingress's, not a stand-in.
+    expect(row.code).toBe("DISTRIBUTION_MISMATCH");
+    expect(row.transport.httpStatus).toBe(422);
+    expect(mapEnvironmentVariablesAnswer(
+      422, { error, httpStatus: 422, ok: false, outcome: "REFUSED", stage: "COMPATIBILITY" },
+    )).toEqual({ code: "DISTRIBUTION_MISMATCH", detail: null, layer: "COMPATIBILITY", status: "REFUSED" });
+  });
+
+  it("still names a leak on a route refusal that grew a value slot", () => {
+    expect(mapEnvironmentVariablesAnswer(200, { ...ROUTE_DENIAL, value: "zzz-sentinel" })).toEqual({
+      code: "ENVIRONMENT_VARIABLES_VALUE_PRESENT", layer: CLIENT_LAYER, status: "ERROR",
+    });
+  });
+
+  it("fails closed on a PORT_REFUSED frame whose refusal carries no text code", () => {
+    const answer = mapEnvironmentVariablesAnswer(401, { ...REPLAYED, refusal: { code: 7 } });
+    expect(answer).toEqual({
+      code: "ENVIRONMENT_VARIABLES_RESPONSE_INVALID", layer: CLIENT_LAYER, status: "ERROR",
+    });
   });
 });
 

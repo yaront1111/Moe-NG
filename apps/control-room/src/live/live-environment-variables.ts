@@ -124,11 +124,28 @@ export function carriesValueShapedKey(body: unknown): boolean {
     || carriesValueShapedKey((body as Record<string, unknown>)[key]));
 }
 
+/** One own data property's value, read without touching a getter; `undefined` when absent. */
+function ownValue(record: unknown, key: string): unknown {
+  if (typeof record !== "object" || record === null) return undefined;
+  try {
+    const descriptor = Object.getOwnPropertyDescriptor(record, key);
+    return descriptor !== undefined && "value" in descriptor ? descriptor.value : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /**
- * The two refusal envelopes this route answers with: the store's own `{code, detail, layer, ok}`
- * at 200, and the listener's `{code, layer}` at 400/503. The store shape is matched FIRST and
- * kept whole - its `detail` is the fixed prose an operator acts on, and dropping it would leave
- * ENV_STORE_KEY_UNAVAILABLE as a bare code nobody can fix.
+ * The five refusal envelopes this route answers with, each at exact arity so none can shadow
+ * another: the store's own `{code, detail, layer, ok}` at 200; the listener's `{code, layer}` at
+ * 400/503; the route's own `{code, layer, outcome}` at 200 for a session without ADMIN
+ * (apps/daemon/src/http/environments-read.ts:54-58,111-115); the authenticator's PORT_REFUSED
+ * frame for a replayed session and HttpRefused for an expired credential or a protocol mismatch
+ * (http-command-ingress.ts:73-81,89-111, forwarded whole at environments-read.ts:106-108). The
+ * store shape is matched FIRST and kept whole - its `detail` is the fixed prose an operator acts
+ * on, and dropping it would leave ENV_STORE_KEY_UNAVAILABLE as a bare code nobody can fix. The
+ * port refusal's `detail` and `layer` are kept for the same reason: they name the authority that
+ * refused (IDENTITY), which the transport `stage` alone does not.
  */
 function refusalFrom(response: unknown): EnvironmentVariablesRefusal | null {
   const store = exactDataRecord(response, ["code", "detail", "layer", "ok"]);
@@ -138,6 +155,22 @@ function refusalFrom(response: unknown): EnvironmentVariablesRefusal | null {
   const listener = exactDataRecord(response, ["code", "layer"]);
   if (listener !== null && text(listener.code) && text(listener.layer)) {
     return refused(listener.code, listener.layer, null);
+  }
+  const route = exactDataRecord(response, ["code", "layer", "outcome"]);
+  if (route !== null && route.outcome === "REFUSED" && text(route.code) && text(route.layer)) {
+    return refused(route.code, route.layer, null);
+  }
+  const port = exactDataRecord(response, ["httpStatus", "ok", "outcome", "refusal", "stage"]);
+  if (port !== null && port.ok === false && port.outcome === "PORT_REFUSED" && text(port.stage)) {
+    const code = ownValue(port.refusal, "code");
+    const layer = ownValue(port.refusal, "layer");
+    const detail = ownValue(port.refusal, "detail");
+    return text(code) ? refused(code, text(layer) ? layer : port.stage, text(detail) ? detail : null) : null;
+  }
+  const http = exactDataRecord(response, ["error", "httpStatus", "ok", "outcome", "stage"]);
+  if (http !== null && http.ok === false && http.outcome === "REFUSED" && text(http.stage)) {
+    const code = ownValue(http.error, "code");
+    return text(code) ? refused(code, http.stage, null) : null;
   }
   return null;
 }
