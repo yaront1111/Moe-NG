@@ -85,6 +85,21 @@ export type ReleaseOutcome =
 const nullableText = (value: unknown): value is string | null => value === null || effectText(value);
 const invalid = (): EffectReadFailure => ({ status: "ERROR", code: "RELEASE_RESPONSE_INVALID", layer: LAYER });
 
+/**
+ * THE CAPS ARE CORE'S, NOT THE SHARED DECODER'S. The daemon serves one row per contract
+ * criterion titled with the criterion's FULL statement (release-durable-facts.ts:136
+ * `title: criterion.statement`), and core admits a statement up to 32_768 bytes and a
+ * roster up to 512 criteria (PRODUCT_CONTRACT_LIMITS, product-contract-contract.ts). The
+ * shared `effectText` stops at 4096 chars and `effectList` at 256 rows; measured with those,
+ * a goal on a large contract read ERROR RELEASE_RESPONSE_INVALID on exactly the Gate 3 card
+ * whose UNKNOWN rows an operator most needs. Chars bound bytes, so 32_768 chars admits every
+ * statement core can hold and nothing past it.
+ */
+const MAX_CRITERIA = 512;
+const MAX_STATEMENT_CHARS = 32_768;
+const statementText = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0 && value.length <= MAX_STATEMENT_CHARS;
+
 function gapOf(value: unknown): ReleaseGapView | null {
   const row = effectRecord(value, ["code", "criterionId", "detail"]);
   if (row === null || !effectText(row.code) || !effectText(row.criterionId) || !effectText(row.detail)) return null;
@@ -96,7 +111,7 @@ function criterionOf(value: unknown): ReleaseCriterionView | null {
     ["command", "criterionId", "exitCode", "gaps", "landing", "nodeKey", "receiptSha", "title"]);
   if (row === null || !effectText(row.command) || !effectText(row.criterionId) || !effectText(row.exitCode)
     || !effectText(row.landing) || !effectText(row.nodeKey) || !effectText(row.receiptSha)
-    || !effectText(row.title)) return null;
+    || !statementText(row.title)) return null;
   const gaps = effectList(row.gaps, gapOf, 64);
   if (gaps === null) return null;
   return { command: row.command, criterionId: row.criterionId, exitCode: row.exitCode, gaps,
@@ -135,7 +150,7 @@ function evidenceOf(value: unknown): ReleaseEvidenceView | null {
     "preview", "receipt", "reviewRounds", "sha"]);
   if (row === null || typeof row.ancestryMeasured !== "boolean" || !effectText(row.goalId)
     || !effectText(row.goalTitle) || !(row.sha === null || effectSha(row.sha))) return null;
-  const criteria = effectList(row.criteria, criterionOf, 256);
+  const criteria = effectList(row.criteria, criterionOf, MAX_CRITERIA);
   const reviewRounds = effectList(row.reviewRounds, roundOf, 256);
   if (criteria === null || reviewRounds === null) return null;
   const preview = row.preview === null ? null : previewOf(row.preview);
