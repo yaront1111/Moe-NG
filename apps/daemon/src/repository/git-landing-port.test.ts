@@ -85,6 +85,31 @@ describe("createGitLandingPort against a real repository", () => {
     expect(!observed.ok && observed.code).toBe("NOT_A_REPOSITORY");
   });
 
+  // MEASURED 2026-09-13 (git 2.54): outside a repository `rev-parse --show-toplevel` exits 128 with
+  // `fatal: not a git repository (or any of the parent directories): .git`. A spawn error (Node
+  // `code: "ENOENT"`, a string) and a timeout kill (`code: null, killed: true`) both reach the port as
+  // `code: null`, and a fatal about something else is also 128. Before the fix every one of them read
+  // as NOT_A_REPOSITORY, the one observe code the lander records as a durable REFUSED receipt for the
+  // accepted delivery; the port now says NOT_A_REPOSITORY only for git's own words about it.
+  it.each([
+    ["a spawn failure", { code: null, stderr: "Error: spawn git ENOENT", stdout: "" }],
+    ["a timeout kill", { code: null, stderr: "", stdout: "" }],
+    ["a fatal that is not the missing repository", { code: 128, stderr: "fatal: detected dubious ownership in repository at 'D:/anywhere'\n", stdout: "" }],
+  ])("reports %s of rev-parse as a retryable failure, never as the structural refusal", async (_label, answer) => {
+    const port = createGitLandingPort(async () => answer);
+    expect(await port.observe("D:/anywhere")).toMatchObject({ ok: false, code: "GIT_FAILED" });
+    expect(await port.push("D:/anywhere", "https://example.test/r.git")).toMatchObject({ ok: false, code: "GIT_PUSH_FAILED" });
+    expect(await port.commit("D:/anywhere", ["src/a.ts"], "m\n")).toMatchObject({ ok: false, code: "GIT_COMMIT_FAILED" });
+  });
+
+  it("keeps NOT_A_REPOSITORY for git's own words about it", async () => {
+    const port = createGitLandingPort(async () => ({
+      code: 128, stderr: "fatal: not a git repository (or any of the parent directories): .git\n", stdout: "",
+    }));
+    expect(await port.observe("D:/anywhere")).toMatchObject({ ok: false, code: "NOT_A_REPOSITORY" });
+    expect(await port.push("D:/anywhere", "https://example.test/r.git")).toMatchObject({ ok: false, code: "NOT_A_REPOSITORY" });
+  });
+
   it("commits exactly the named paths as Moe on the current branch, leaving other dirt alone", async () => {
     const root = scratchRepository();
     writeFileSync(join(root, "src", "tracked.ts"), "export const before = 2;\n", "utf8");

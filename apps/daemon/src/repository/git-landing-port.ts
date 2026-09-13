@@ -94,9 +94,19 @@ export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLanding
   // The repository root as git states it (a real path); the workspace resolved the same way,
   // so a temp directory reached through a symlink (macOS /var -> /private/var) does not read
   // as a path outside the repository when the two are made relative.
-  const root = async (workspace: string): Promise<string | null> => {
+  // MEASURED 2026-09-13 (git 2.54): outside a repository `rev-parse --show-toplevel` exits 128 and
+  // says `fatal: not a git repository`. Only those words are structural. A spawn error and a
+  // timeout kill both arrive as `code: null`, and any other fatal is also 128: each is a moment
+  // the lander must retry, never a refusal it records against the accepted delivery.
+  const root = async (workspace: string): Promise<
+    Readonly<{ top: string }> | Readonly<{ top: null; code: "NOT_A_REPOSITORY" | "GIT_FAILED"; detail: string }>
+  > => {
     const top = await run(workspace, ["rev-parse", "--show-toplevel"]);
-    return top.code === 0 ? top.stdout.trim() : null;
+    if (top.code === 0) return { top: top.stdout.trim() };
+    if (top.code === 128 && /not a git repository/u.test(top.stderr)) {
+      return { code: "NOT_A_REPOSITORY", detail: `${workspace} is not inside a git repository`, top: null };
+    }
+    return { code: "GIT_FAILED", detail: tail(top.stderr), top: null };
   };
   const realWorkspace = (workspace: string): string => {
     try {
@@ -107,10 +117,9 @@ export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLanding
   };
 
   const observe = async (workspace: string): Promise<GitObserveResult> => {
-    const top = await root(workspace);
-    if (top === null) {
-      return { code: "NOT_A_REPOSITORY", detail: `${workspace} is not inside a git repository`, ok: false };
-    }
+    const located = await root(workspace);
+    if (located.top === null) return { code: located.code, detail: located.detail, ok: false };
+    const top = located.top;
     // Only the workspace subtree, named relative to the root so the paths agree everywhere.
     const scope = relative(realWorkspace(top), realWorkspace(workspace)).split(sep).join("/");
     if (scope.startsWith("..")) {
@@ -151,8 +160,9 @@ export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLanding
   const commit = async (
     workspace: string, paths: readonly string[], message: string,
   ): Promise<GitCommitResult> => {
-    const top = await root(workspace);
-    if (top === null) return { code: "GIT_COMMIT_FAILED", detail: "not a repository", ok: false };
+    const located = await root(workspace);
+    if (located.top === null) return { code: "GIT_COMMIT_FAILED", detail: located.detail, ok: false };
+    const top = located.top;
     const pathspecs = `${paths.join("\0")}\0`;
     const added = await run(top, ["add", "--pathspec-from-file=-", "--pathspec-file-nul"], pathspecs);
     if (added.code !== 0) return { code: "GIT_COMMIT_FAILED", detail: tail(added.stderr), ok: false };
@@ -187,8 +197,11 @@ export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLanding
   };
 
   const push = async (workspace: string, remoteUrl: string): Promise<GitPushResult> => {
-    const top = await root(workspace);
-    if (top === null) return { code: "NOT_A_REPOSITORY", detail: `${workspace} is not inside a git repository`, ok: false };
+    const located = await root(workspace);
+    if (located.top === null) {
+      return { code: located.code === "NOT_A_REPOSITORY" ? "NOT_A_REPOSITORY" : "GIT_PUSH_FAILED", detail: located.detail, ok: false };
+    }
+    const top = located.top;
     const branch = await run(top, ["rev-parse", "--abbrev-ref", "HEAD"]);
     const head = await run(top, ["rev-parse", "HEAD"]);
     if (branch.code !== 0 || head.code !== 0) {
