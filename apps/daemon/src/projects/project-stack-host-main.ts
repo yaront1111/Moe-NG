@@ -25,6 +25,7 @@ import {
   encodeProjectStackHostFrame,
 } from "./project-stack-protocol.js";
 import { runProjectStackHost } from "./project-stack-host.js";
+import { stopWrapperChild } from "./project-stack-wrapper-stop.js";
 import type {
   ProjectStackDaemonHandle,
   ProjectStackRefused,
@@ -41,7 +42,7 @@ interface WrapperLaunch {
     readonly cwd: string;
     readonly env: Readonly<Record<string, string | undefined>>;
     readonly shell: false;
-    readonly stdio: "ignore" | readonly ["ignore", number, number];
+    readonly stdio: readonly ["pipe", "ignore" | number, "ignore" | number];
     readonly windowsHide: true;
   };
 }
@@ -52,6 +53,10 @@ interface WrapperLaunch {
  * wrapper's stdio (agent-spawner.ts), the host spawned the wrapper with stdio "ignore", and
  * a seat that hung for its whole 30-minute lifetime left no trace anywhere (measured
  * 2026-09-13, seat pid 88288 on a real project: zero connections, nothing on any screen).
+ *
+ * stdin is a PIPE, never "ignore": it carries the wrapper's stop token (see
+ * project-stack-wrapper-stop.ts). With stdin ignored the only stop the host could give the
+ * wrapper was TerminateProcess, which skips the exit path that retires the seats.
  */
 export function projectStackWrapperLaunch(
   bindings: ProjectStackBindings,
@@ -66,7 +71,9 @@ export function projectStackWrapperLaunch(
       cwd: bindings.projectRoot,
       env,
       shell: false as const,
-      stdio: sink === undefined ? "ignore" as const : Object.freeze(["ignore", sink, sink] as const),
+      stdio: sink === undefined
+        ? Object.freeze(["pipe", "ignore", "ignore"] as const)
+        : Object.freeze(["pipe", sink, sink] as const),
       windowsHide: true as const,
     }),
   });
@@ -89,7 +96,7 @@ function startNodeWrapper(
 ): ProjectStackWrapperHandle {
   const sink = openWrapperLog(bindings.projectRoot);
   const request = projectStackWrapperLaunch(bindings, env, wrapperEntry, sink ?? undefined);
-  const stdio: StdioOptions = sink === null ? "ignore" : ["ignore", sink, sink];
+  const stdio: StdioOptions = sink === null ? ["pipe", "ignore", "ignore"] : ["pipe", sink, sink];
   const child = spawn(request.command, [...request.argv], {
     ...request.options,
     env: { ...request.options.env },
@@ -112,7 +119,7 @@ function startNodeWrapper(
   });
   return Object.freeze({
     completed,
-    kill: (): void => { child.kill(); },
+    kill: (): void => { stopWrapperChild(child); },
   });
 }
 

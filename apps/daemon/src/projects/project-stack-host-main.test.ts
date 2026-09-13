@@ -159,13 +159,13 @@ describe("project stack production wrapper launch", () => {
         cwd: "C:\\work\\alpha",
         env,
         shell: false,
-        stdio: "ignore",
+        stdio: ["pipe", "ignore", "ignore"],
         windowsHide: true,
       },
     });
   });
 
-  it("writes the wrapper's stdout AND stderr to the sink it was given, stdin still closed", () => {
+  it("writes the wrapper's stdout AND stderr to the sink it was given, stdin piped for the stop token", () => {
     const request = projectStackWrapperLaunch({
       assetRoot: ASSET_ROOT,
       configPath: CONFIG_PATH,
@@ -177,7 +177,9 @@ describe("project stack production wrapper launch", () => {
       storePath: STORE_PATH,
     }, env, "C:\Moe\apps\daemon\src\orchestrator\agent-wrapper-main.ts", 7);
     // Both streams to ONE descriptor: a seat's stderr (the crash) must land beside its stdout.
-    expect(request.options.stdio).toEqual(["ignore", 7, 7]);
+    // stdin is the pipe the stop token travels on: with it ignored the host's only stop was
+    // TerminateProcess, and a seat live at stop time held the Job open past the broker's poll.
+    expect(request.options.stdio).toEqual(["pipe", 7, 7]);
   });
 
   it("opens <project>/.moe-next/wrapper.log for append and answers null where it cannot", () => {
