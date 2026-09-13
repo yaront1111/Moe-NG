@@ -1193,6 +1193,25 @@ describe("the Activate card is reachable on the goals screen", () => {
 });
 
 /**
+ * THE RESOURCES VIEW REPORTS ITS CONNECTION LIKE EVERY OTHER LIVE VIEW. Measured before this
+ * arm: `navigate` clears the shell's connection and LiveResources was the one live view
+ * mounted with no `onConnection`, so the banner said "Connecting to the daemon. Nothing on
+ * this surface is shown as a number until it answers." over a screen rendering five daemon
+ * answers, and the strip chip stayed "Coming online" with no freshness.
+ */
+describe("the Resources view reports the daemon connection to the shell", () => {
+  it("drops the coming-online banner once a Resources read has answered", async () => {
+    renderWiredApp();
+    await screen.findByTestId("cr.activate.receipt.repository");
+    await userEvent.click(screen.getByTestId("cr.nav.resources"));
+    await screen.findByTestId("cr.resources.screen");
+    // The activation read is answered by the stub above, so the daemon HAS answered here.
+    await waitFor(() => { expect(screen.queryByTestId("cr.banner.offline")).toBeNull(); });
+    expect(screen.getByTestId("cr.shell.connection").textContent).toBe("Connected");
+  });
+});
+
+/**
  * REACHABILITY AGAIN, and the arm whose ABSENCE sent this row back once already. A component
  * test that mounts NewProductForm on its own proves the form renders; only rendering the
  * served app proves an operator can get to it. The ORDER is asserted too, because order is

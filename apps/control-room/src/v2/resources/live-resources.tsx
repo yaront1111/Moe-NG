@@ -36,6 +36,14 @@ const SESSIONS_FAILURE: SessionsOutcome
 
 export interface LiveResourcesProps {
   readonly headers: Readonly<Record<string, string>>;
+  /**
+   * The shell's connection sink, fed from the activation read alone - one read is one fact
+   * about whether the daemon answers, the way LiveHealth feeds it from its health read.
+   * Measured without it: `navigate` clears the shell's connection and this was the one live
+   * view that never reported one, so the OFFLINE banner ("Connecting to the daemon. Nothing on
+   * this surface is shown as a number until it answers.") sat over five measured answers.
+   */
+  readonly onConnection?: ((connection: "CONNECTED" | "DISCONNECTED") => void) | undefined;
   readonly pollMs?: number | undefined;
   /** Injectable for tests; each default spends the attached session's own wire. */
   readonly readActivationOutcome?: (() => Promise<ActivationReadOutcome>) | undefined;
@@ -46,7 +54,7 @@ export interface LiveResourcesProps {
 }
 
 export function LiveResources({
-  headers, pollMs, readActivationOutcome, readHealthOutcome, readPolicyOutcome,
+  headers, onConnection, pollMs, readActivationOutcome, readHealthOutcome, readPolicyOutcome,
   readRemoteOutcome, readSessionsOutcome,
 }: LiveResourcesProps): JSX.Element {
   const every = pollMs ?? POLL_MS;
@@ -60,7 +68,7 @@ export function LiveResources({
     ?? ((): Promise<RepositoryRemoteOutcome> => readRepositoryRemote(headers)));
   const [sessionsReader] = useState(() => readSessionsOutcome
     ?? ((): Promise<SessionsOutcome> => readSessions(headers)));
-  const activation = useOpsRead(activationReader, ACTIVATION_FAILURE, every, undefined).outcome;
+  const activation = useOpsRead(activationReader, ACTIVATION_FAILURE, every, onConnection).outcome;
   const health = useOpsRead(healthReader, HEALTH_FAILURE, every, undefined).outcome;
   const policy = useOpsRead(policyReader, POLICY_FAILURE, every, undefined).outcome;
   const remote = useOpsRead(remoteReader, REMOTE_FAILURE, every, undefined).outcome;

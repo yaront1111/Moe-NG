@@ -113,7 +113,7 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   } else if (view === "health" && live.setup.ok) {
     body = <LiveHealth headers={live.setup.headers} setup={live.setup} onConnection={reportConnection} />;
   } else if (view === "resources" && live.setup.ok) {
-    body = <LiveResources headers={live.setup.headers} />;
+    body = <LiveResources headers={live.setup.headers} onConnection={reportConnection} />;
   } else if (view === "approvals" && live.setup.ok) {
     body = <LiveNeedsYou onConnection={reportConnection} onCount={setNeedsYouCount} onOpenBoard={openBoard}
       readCoverage={readCoverage ?? undefined} setup={live.setup} />;
