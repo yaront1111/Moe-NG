@@ -30,6 +30,9 @@ import type {
   ProjectStackRefused,
   ProjectStackWrapperHandle,
 } from "./project-stack-host.js";
+import { wrapperLogPath } from "./project-wrapper-log.js";
+
+export { WRAPPER_LOG_RELATIVE_PATH } from "./project-wrapper-log.js";
 
 interface WrapperLaunch {
   readonly argv: readonly string[];
@@ -42,9 +45,6 @@ interface WrapperLaunch {
     readonly windowsHide: true;
   };
 }
-
-/** Where the wrapper's console goes: every seat's stdout and stderr are teed into it. */
-export const WRAPPER_LOG_RELATIVE_PATH = join(".moe-next", "wrapper.log");
 
 /**
  * `sink` is an open file descriptor the wrapper's stdout AND stderr are written to. Without
@@ -76,7 +76,7 @@ export function projectStackWrapperLaunch(
 export function openWrapperLog(projectRoot: string): number | null {
   try {
     mkdirSync(join(projectRoot, ".moe-next"), { recursive: true });
-    return openSync(join(projectRoot, WRAPPER_LOG_RELATIVE_PATH), "a", 0o600);
+    return openSync(wrapperLogPath(projectRoot), "a", 0o600);
   } catch {
     return null;
   }

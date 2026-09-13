@@ -161,14 +161,42 @@ describe("runSingleProjectMain", () => {
     expect(supervisor.approvePairing).not.toHaveBeenCalled();
     // No operatorInput: the console says so, with the switch that attaches one, before
     // the banner. Under piped stdio nothing else names `--operator-stdin` (2026-09-13).
+    // A runtime that ends on its own is SAID, with the exit and where its console went:
+    // the prompt used to just return after the Ctrl-C line (measured 2026-09-13).
     expect(logs).toEqual([
       "PROJECT_SINGLE_OPERATOR_CHANNEL_ABSENT PROJECT_SINGLE_MAIN",
       "moe start: no operator terminal; pairing labels cannot be typed here - relaunch from a console or with --operator-stdin",
       "moe start: project runtime ready",
       "moe start: http://127.0.0.1:49152",
       "moe start: Ctrl-C stops this project runtime",
+      "PROJECT_SINGLE_RUNTIME_ENDED PROJECT_SINGLE_MAIN",
+      `moe start: project runtime ended with exit 7; the wrapper console is in ${join(PROJECT.root, ".moe-next", "wrapper.log")}`,
     ]);
     expect(logs.join("\n")).not.toContain(CREDENTIAL);
+  });
+
+  it("says so when the runtime ends cleanly on its own, since a clean end and a wrapper death look alike", async () => {
+    for (const exitCode of [0, 1]) {
+      const supervisor = runtime({
+        wait: vi.fn(async () => ({
+          code: "PROJECT_RUNTIME_COMPLETED" as const, exitCode,
+          layer: "PROJECT_RUNTIME_SUPERVISOR" as const, ok: true as const,
+        })),
+      });
+      const logs: string[] = [];
+      const result = await runSingleProjectMain({
+        dependencies: dependencies(supervisor), env: { ANTHROPIC_API_KEY: "key" },
+        log: (line) => { logs.push(line); }, onSignal: vi.fn(),
+        operatorInput: heldOpenOperatorInput(), platform: "win32",
+        projectRoot: PROJECT.root, root: "D:\\artifact",
+      });
+      expect(result, String(exitCode)).toBe(exitCode);
+      const ctrlC = logs.indexOf("moe start: Ctrl-C stops this project runtime");
+      expect(logs.slice(ctrlC + 1), String(exitCode)).toEqual([
+        "PROJECT_SINGLE_RUNTIME_ENDED PROJECT_SINGLE_MAIN",
+        `moe start: project runtime ended with exit ${String(exitCode)}; the wrapper console is in ${join(PROJECT.root, ".moe-next", "wrapper.log")}`,
+      ]);
+    }
   });
 
   it.runIf(process.platform === "win32")(

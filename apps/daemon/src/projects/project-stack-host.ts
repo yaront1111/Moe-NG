@@ -10,6 +10,8 @@ export const PROJECT_STACK_HOST_LAYER = "PROJECT_STACK_HOST" as const;
 export const PROJECT_STACK_CONTROL_REFUSED = "PROJECT_STACK_CONTROL_REFUSED" as const;
 export const PROJECT_STACK_DAEMON_START_FAILED = "PROJECT_STACK_DAEMON_START_FAILED" as const;
 export const PROJECT_STACK_WRAPPER_START_FAILED = "PROJECT_STACK_WRAPPER_START_FAILED" as const;
+/** The wrapper ended on its own; the TERMINAL frame carries the exit, this line the reason. */
+export const PROJECT_STACK_WRAPPER_EXITED = "PROJECT_STACK_WRAPPER_EXITED" as const;
 export const PROJECT_STACK_PAIRING_APPROVAL_UNAVAILABLE =
   "PROJECT_STACK_PAIRING_APPROVAL_UNAVAILABLE" as const;
 
@@ -183,6 +185,10 @@ export async function runProjectStackHost(options: ProjectStackHostOptions): Pro
       wrapper.completed.then((value) => ({ kind: "WRAPPER" as const, value })),
     ]);
     if (event.kind === "WRAPPER") {
+      // This branch used to emit TERMINAL and nothing else, so a wrapper death left no
+      // line on the host's stderr (measured 2026-09-13). The supervisor still drains that
+      // stderr; the operator-facing line is `moe start`'s, this is the host's own record.
+      options.log(`${PROJECT_STACK_WRAPPER_EXITED} ${PROJECT_STACK_HOST_LAYER}`);
       const code = event.value.code ?? 1;
       const stopped = await stopHandles(daemon, wrapper, false);
       const exitCode = stopped ? code : 1;

@@ -21,6 +21,7 @@ import type {
   ProjectRuntimeSupervisor,
   ProjectRuntimeSupervisorOptions,
 } from "./project-runtime-supervisor.js";
+import { wrapperLogPath } from "./project-wrapper-log.js";
 
 export const PROJECT_SINGLE_MAIN_LAYER = "PROJECT_SINGLE_MAIN" as const;
 export const PROJECT_SINGLE_PLATFORM_UNSUPPORTED = "PROJECT_SINGLE_PLATFORM_UNSUPPORTED" as const;
@@ -30,6 +31,8 @@ export const PROJECT_SINGLE_SIGNAL_REGISTRATION_FAILED =
   "PROJECT_SINGLE_SIGNAL_REGISTRATION_FAILED" as const;
 /** A typed line that is not a confirmation label; the line itself is never echoed. */
 export const PROJECT_SINGLE_OPERATOR_LINE_IGNORED = "PROJECT_SINGLE_OPERATOR_LINE_IGNORED" as const;
+/** The runtime ended on its own (a proven native exit), not on Ctrl-C. */
+export const PROJECT_SINGLE_RUNTIME_ENDED = "PROJECT_SINGLE_RUNTIME_ENDED" as const;
 /** No console is attached: nothing in this process reads a typed pairing label. */
 export const PROJECT_SINGLE_OPERATOR_CHANNEL_ABSENT = "PROJECT_SINGLE_OPERATOR_CHANNEL_ABSENT" as const;
 export const PROJECT_SINGLE_OPERATOR_CHANNEL_ABSENT_MESSAGE =
@@ -197,6 +200,15 @@ export async function runSingleProjectMain(options: ProjectSingleMainOptions): P
       disclose(outcome.result, options.log);
       return 1;
     }
+    // A self-ending runtime (a wrapper death, MOE_WRAPPER_ONCE, a host crash) is proven at
+    // the supervisor but was never SAID here: the prompt returned right after the Ctrl-C
+    // line (measured 2026-09-13). The host's stderr is drained by design, so the only
+    // durable console is the wrapper log, and nothing on screen named it.
+    disclose({
+      code: PROJECT_SINGLE_RUNTIME_ENDED, layer: PROJECT_SINGLE_MAIN_LAYER,
+      message: `moe start: project runtime ended with exit ${String(outcome.result.exitCode)}; `
+        + `the wrapper console is in ${wrapperLogPath(prepared.project.root)}`,
+    }, options.log);
     return outcome.result.exitCode;
   } finally {
     // The console stdin is released on EVERY path out of here, a throwing wait() or

@@ -199,6 +199,9 @@ describe("runProjectStackHost", () => {
     expect(await harness.result).toBe(7);
     expect(shutdowns).toBe(1);
     expect(harness.frame(1)["exitCode"]).toBe(7);
+    // The host's own record of WHY it ended: this branch emitted TERMINAL and nothing
+    // else, so a wrapper death left no line on the host's stderr (measured 2026-09-13).
+    expect(harness.lines).toEqual(["PROJECT_STACK_WRAPPER_EXITED PROJECT_STACK_HOST"]);
   });
 
   it("publishes an exact start refusal and starts no wrapper when the daemon refuses", async () => {
