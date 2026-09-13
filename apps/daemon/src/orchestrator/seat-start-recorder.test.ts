@@ -10,12 +10,12 @@
  * to answer anyway. `expect(TIMEOUT_MS).toBe(10_000)` would pass against a probe with no timeout
  * wired at all.
  */
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { SqliteEventStore } from "@moe/store";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { SEAT_FACT_UNMEASURED } from "./seat-start-contracts.js";
 import { readSeatStartLedger } from "./seat-start-ledger.js";
@@ -28,6 +28,8 @@ const PROJECT = "project-1";
 const AT = "2026-09-03T09:30:00.000Z";
 const sandboxes: string[] = [];
 const opened: SqliteEventStore[] = [];
+/** Grandchild pids a probe was expected to kill; SIGKILLed after the arm so a red never leaks one. */
+const grandchildren: number[] = [];
 
 function databasePath(): string {
   const directory = mkdtempSync(join(tmpdir(), "moe-seat-start-recorder-"));
@@ -54,7 +56,55 @@ function hangingCommand(): string {
   chmodSync(script, 0o755);
   return script;
 }
+/**
+ * A real executable that prints the two operator variables it can see, bracketed, and one
+ * allowlisted runtime key beside them so an EMPTY environment cannot pass for a scrubbed one.
+ * In a batch file an undefined variable expands to nothing, so an unset one prints `[]`.
+ */
+function environmentEchoCommand(): string {
+  const directory = mkdtempSync(join(tmpdir(), "moe-probe-env-"));
+  sandboxes.push(directory);
+  if (process.platform === "win32") {
+    const script = join(directory, "echo-env.cmd");
+    writeFileSync(script,
+      "@echo off\r\necho [%MOE_DAEMON_CREDENTIAL%][%MOE_STORE_PATH%][%PATHEXT%]\r\n", "utf8");
+    return script;
+  }
+  const script = join(directory, "echo-env.sh");
+  writeFileSync(script, '#!/bin/sh\necho "[$MOE_DAEMON_CREDENTIAL][$MOE_STORE_PATH][$PATH]"\n', "utf8");
+  chmodSync(script, 0o755);
+  return script;
+}
+/**
+ * A shim shaped like the real `claude.cmd`: it launches the ACTUAL binary as a grandchild. That
+ * grandchild writes its pid and then lives for a minute, so the arm can ask the OS afterwards
+ * whether the probe's kill reached past the shell it started.
+ */
+function orphaningCommand(): { readonly command: string; readonly pidFile: string } {
+  const directory = mkdtempSync(join(tmpdir(), "moe-probe-orphan-"));
+  sandboxes.push(directory);
+  const pidFile = join(directory, "grandchild.pid");
+  const script = join(directory, "grandchild.cjs");
+  writeFileSync(script, [
+    'const { writeFileSync } = require("node:fs");',
+    `writeFileSync(${JSON.stringify(pidFile)}, String(process.pid));`,
+    "setTimeout(() => undefined, 60_000);",
+  ].join("\n"), "utf8");
+  if (process.platform === "win32") {
+    const shim = join(directory, "claude.cmd");
+    writeFileSync(shim, `@echo off\r\n"${process.execPath}" "${script}"\r\n`, "utf8");
+    return { command: shim, pidFile };
+  }
+  const shim = join(directory, "claude.sh");
+  writeFileSync(shim, `#!/bin/sh\n"${process.execPath}" "${script}"\n`, "utf8");
+  chmodSync(shim, 0o755);
+  return { command: shim, pidFile };
+}
 afterEach(() => {
+  while (grandchildren.length > 0) {
+    const pid = grandchildren.pop();
+    if (pid !== undefined) { try { process.kill(pid, "SIGKILL"); } catch { /* already dead */ } }
+  }
   while (opened.length > 0) opened.pop()?.close();
   while (sandboxes.length > 0) {
     const directory = sandboxes.pop();
@@ -84,6 +134,46 @@ describe("probeAgentVersion answers, or answers nothing, but never throws or han
     // And production's own bound is finite and short enough to matter.
     expect(AGENT_VERSION_PROBE_TIMEOUT_MS).toBeGreaterThan(0);
     expect(AGENT_VERSION_PROBE_TIMEOUT_MS).toBeLessThanOrEqual(30_000);
+  });
+
+  it("hands the probed binary the SEAT's environment, never the wrapper's operator variables", async () => {
+    // The probe runs the operator-named agent command in the WRAPPER process, whose process.env
+    // carries MOE_DAEMON_CREDENTIAL and MOE_STORE_PATH. The spawner scrubs every MOE_* variable
+    // for the very same binary (agent-spawn-environment.ts); a probe that inherits process.env
+    // hands the operator bearer to a child the spawner promised never receives it.
+    const saved = ["MOE_DAEMON_CREDENTIAL", "MOE_STORE_PATH"].map((key) => [key, process.env[key]] as const);
+    process.env["MOE_DAEMON_CREDENTIAL"] = "operator-bearer-8f3a2c";
+    process.env["MOE_STORE_PATH"] = "D:\\moe\\secret-store.db";
+    try {
+      const stdout = await probeAgentVersion(environmentEchoCommand());
+      expect(stdout).not.toBeNull();
+      expect(stdout ?? "").not.toContain("operator-bearer-8f3a2c");
+      expect(stdout ?? "").not.toContain("secret-store");
+      // Both operator slots EMPTY and the runtime slot FULL: scrubbed, not dropped wholesale.
+      expect(stdout ?? "").toMatch(/^\[\]\[\]\[.+\]/u);
+    } finally {
+      for (const [key, value] of saved) {
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  });
+
+  it("kills the WHOLE probe tree at the bound: the binary behind a shim does not outlive the probe", async () => {
+    // On Windows the invocation is `cmd.exe /c "<shim> --version"`, so a direct kill reaches
+    // cmd.exe alone and the real `node claude.js --version` behind it kept running (measured
+    // 2026-09-13: a heartbeat 654 ms after the probe resolved, holding the inherited
+    // environment). The seat spawner tree-kills for exactly this reason; the probe must too.
+    const { command, pidFile } = orphaningCommand();
+    const probe = probeAgentVersion(command, 1_000);
+    await vi.waitFor(() => { expect(existsSync(pidFile)).toBe(true); }, { interval: 25, timeout: 10_000 });
+    const pid = Number(readFileSync(pidFile, "utf8"));
+    expect(Number.isInteger(pid) && pid > 0).toBe(true);
+    grandchildren.push(pid);
+    await expect(probe).resolves.toBeNull();
+    // Signal 0 delivers nothing and only asks; once the probe has answered, the grandchild
+    // must already be gone, not merely orphaned.
+    expect(() => process.kill(pid, 0)).toThrow();
   });
 
   it("answers null for a command the SPAWN layer refuses to quote", async () => {
