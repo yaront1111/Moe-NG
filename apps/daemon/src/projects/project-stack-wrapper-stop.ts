@@ -27,11 +27,13 @@ export type WrapperStopRequest = "ASKED" | "KILLED";
  * `child.kill()` on Windows is TerminateProcess: the wrapper's exit path
  * (`shutdownWrapperRuntime` -> `agentSpawner.close()` -> one tree kill per seat) never runs,
  * and every seat outlives it inside the Job. The host did exactly that on every stop until
- * 2026-09-13 (`kill: () => child.kill()`, wrapper stdin "ignore"): a seat live at stop time
- * held the Job open past the broker's Job-empty poll, the manager's stop read the broker's
- * UNKNOWN instead of STOPPED, and the seats died only when the broker closed the Job. The
- * token reaches `createWrapperStopSignal` over the wrapper's piped stdin, the same way
- * `moe up` sends it. A stdin that cannot be written falls back to the kill.
+ * 2026-09-13 (`kill: () => child.kill()`, wrapper stdin "ignore"). What that costs is read
+ * off the code path, not off a measured stop: a seat live at stop time keeps the Job
+ * non-empty, the broker's Job-empty wait then settles `Unobserved::JobActive` (its
+ * settle.rs), so the manager's stop would read the broker's UNKNOWN instead of STOPPED and
+ * the seats would die only when the broker closed the Job. The token reaches
+ * `createWrapperStopSignal` over the wrapper's piped stdin, the same way `moe up` sends it.
+ * A stdin that cannot be written falls back to the kill.
  */
 export function stopWrapperChild(
   child: StoppableWrapperChild, graceMs: number = HOSTED_WRAPPER_STOP_GRACE_MS,
