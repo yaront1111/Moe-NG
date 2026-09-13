@@ -7,27 +7,28 @@ import type { CredentialSource } from "./resources-credential.js";
 
 /**
  * THE PROJECT'S MEASURED FACTS, one fact per row, folded from the reads the daemon
- * ALREADY serves. Pure: no fetch, no clock, every arm assertable by value.
- *
- * Two properties this module exists to hold.
+ * ALREADY serves. Pure: no fetch, no clock, every arm assertable by value. Three
+ * properties this module exists to hold.
  *
  * NO CREDENTIAL VALUE EVER REACHES A ROW. The provider row states the credential's
- * SOURCE - an environment variable's NAME, or that a sign-in file was found - and is
- * built ONLY from `credentialSource()`, a CLOSED grammar over the activation receipt's
- * ref. Anything the grammar does not recognise renders as a refusal code rather than as
- * text, so a value that rides in on a field renders NOTHING instead of rendering itself.
- * The daemon already scrubs values at the boundary that publishes
- * (apps/daemon/src/http/activation-read.ts, `secretValues`/`scrub`); this is the second
- * fence, not a second scrub, and no free-form `reason` from any read is rendered here.
+ * SOURCE - an environment variable's NAME, or that a sign-in file was found - built ONLY
+ * from `credentialSource()`, a CLOSED grammar over the credential ref the daemon carries in
+ * the provider receipt's `reason` (see `providerSection`). Anything the grammar does not
+ * recognise renders as a refusal code, so a value that rides in on a field renders NOTHING
+ * instead of itself. The daemon scrubs values at the boundary that publishes
+ * (activation-read.ts, `secretValues`/`scrub`); this is the second fence, not a second
+ * scrub. No `reason` is RENDERED here: the provider receipt's is parsed, no other is read.
  *
- * A FACT IS NEVER SILENTLY OMITTED. A read that refuses turns ITS OWN facts into
- * REFUSED rows carrying the daemon's code and layer, and leaves every other fact
- * standing. Omitting a fact would say "this project has no such resource", which is a
- * different and false claim from "I could not read it".
+ * A FACT IS NEVER SILENTLY OMITTED. A read that refuses turns ITS OWN facts into REFUSED
+ * rows carrying the daemon's code and layer, and leaves every other fact standing: an
+ * omitted fact would say "this project has no such resource", a different and false claim.
+ *
+ * NOT EVERY UNMEASURED FACT IS A FAILURE. A fact no read serves is UNSERVED; the backup
+ * the activation READ deliberately never takes is DEFERRED. Both stay on the page in their
+ * section, carry no code because nothing refused, and stay out of the screen's "could not
+ * be read" count: on a healthy daemon those three rows were counted as three failed reads.
  */
 
-/** No read this build consumes carries the fact. Stated, never omitted. */
-export const FACT_NOT_SERVED = "RESOURCES_FACT_NOT_SERVED";
 /** The activation roster answered without the receipt this fact is folded from. */
 export const RECEIPT_ABSENT = "RESOURCES_RECEIPT_ABSENT";
 /** A carrier stated the store path as an empty string, which is not a path. */
@@ -38,7 +39,11 @@ export interface ResourceRefusal { readonly code: string; readonly layer: string
 export type ResourceFactState =
   | { readonly kind: "MEASURED"; readonly value: string }
   | { readonly kind: "PENDING" }
-  | { readonly kind: "REFUSED"; readonly refusal: ResourceRefusal; readonly said: string };
+  | { readonly kind: "REFUSED"; readonly refusal: ResourceRefusal; readonly said: string }
+  /** No read this build consumes carries the fact: stated, never omitted, never a failure. */
+  | { readonly kind: "UNSERVED" }
+  /** The read answered and, by its own design, did not measure this: stated, never a failure. */
+  | { readonly kind: "DEFERRED"; readonly said: string };
 
 export interface ResourceFact {
   readonly id: string;
@@ -61,23 +66,21 @@ export interface ResourceReads {
   readonly sessions: SessionsOutcome | null;
 }
 
-const measured = (value: string): ResourceFactState =>
-  Object.freeze({ kind: "MEASURED" as const, value });
+const measured = (value: string): ResourceFactState => Object.freeze({ kind: "MEASURED" as const, value });
 const pending = (): ResourceFactState => Object.freeze({ kind: "PENDING" as const });
 const refused = (code: string, layer: string, said: string): ResourceFactState =>
   Object.freeze({ kind: "REFUSED" as const, refusal: Object.freeze({ code, layer }), said });
-const unserved = (said: string): ResourceFactState => refused(FACT_NOT_SERVED, RESOURCES_LAYER, said);
+const unserved = (): ResourceFactState => Object.freeze({ kind: "UNSERVED" as const });
+const deferred = (said: string): ResourceFactState => Object.freeze({ kind: "DEFERRED" as const, said });
+type ActivationAnswer = Extract<ActivationReadOutcome, { status: "ACTIVATION" }>;
 
-const fact = (id: string, label: string, state: ResourceFactState): ResourceFact =>
-  Object.freeze({ id, label, state });
-
-const receiptOf = (
-  members: readonly ActivationReceiptView[], member: string,
-): ActivationReceiptView | undefined => members.find((row) => row.member === member);
+const fact = (id: string, label: string, state: ResourceFactState): ResourceFact => Object.freeze({ id, label, state });
+const receiptOf = (members: readonly ActivationReceiptView[], member: string): ActivationReceiptView | undefined =>
+  members.find((row) => row.member === member);
 
 /**
- * A receipt's own answer, folded WITHOUT its free-form `reason`: measured hands the
- * caller its value, unmeasured renders the receipt's stable code and layer verbatim.
+ * A receipt's own answer: measured hands the caller the receipt to fold, unmeasured renders
+ * its stable code and layer. Reads no `reason`; only the provider fold parses (never renders) one.
  */
 function fromReceipt(
   members: readonly ActivationReceiptView[], member: string, said: string,
@@ -94,7 +97,7 @@ function fromReceipt(
 /** Applies an activation read's refusal to every fact folded from it. */
 function activationState(
   activation: ActivationReadOutcome | null, said: string,
-  fold: (answer: Extract<ActivationReadOutcome, { status: "ACTIVATION" }>) => ResourceFactState,
+  fold: (answer: ActivationAnswer) => ResourceFactState,
 ): ResourceFactState {
   if (activation === null) return pending();
   if (activation.status !== "ACTIVATION") return refused(activation.code, activation.layer, said);
@@ -118,9 +121,8 @@ function repositorySection(reads: ResourceReads): ResourceSection {
     facts: Object.freeze([
       repo("root", "Repository root", (view) => view.toplevel),
       repo("head", "HEAD commit", (view) => view.headSha),
-      fact("branch", "Checked-out branch", unserved(
-        "No read this daemon serves states the checked-out branch, so this build cannot show it.",
-      )),
+      // No read this daemon serves states the checked-out branch.
+      fact("branch", "Checked-out branch", unserved()),
       fact("remote", "Bound git remote", remote === null
         ? pending()
         : remote.status !== "REMOTE"
@@ -133,14 +135,15 @@ function repositorySection(reads: ResourceReads): ResourceSection {
 }
 
 /**
- * THE PROVIDER SECTION. Both rows are built from `credentialSource()` alone. No field
- * of the receipt other than its stable code, its layer and the parsed source is read.
+ * Both rows parse the receipt's `reason`, not its `ref`: `measureProvider` builds
+ * `measuredReceipt("provider", probeRef, credential.ref)` and activation-read.ts `receiptRow`
+ * publishes that `detail` as `reason`, while `ref` is the probe envelope ref `provider-profile-1`.
  */
 function providerSection(reads: ResourceReads): ResourceSection {
   const source = (pick: (parsed: CredentialSource) => string): ResourceFactState =>
     activationState(reads.activation, PROVIDER_SAID, (answer) => fromReceipt(
       answer.members, "provider", PROVIDER_SAID, (receipt) => {
-        const parsed = credentialSource(receipt.ref);
+        const parsed = credentialSource(receipt.reason);
         return parsed === null
           ? refused(CREDENTIAL_SOURCE_UNRECOGNISED, RESOURCES_LAYER,
             "The provider credential's source was not stated in a form this screen can show.")
@@ -159,16 +162,12 @@ function providerSection(reads: ResourceReads): ResourceSection {
 
 /**
  * The store path is carried by BOTH `/activation/read` and `/health/read`, and a refusal
- * from one does not blank the row while the other still states it.
- *
- * THE TWO CARRIERS ARE NOT EQUALLY STRICT, which is why the empty case is handled here
- * rather than assumed away. `/activation/read`'s decoder requires a NON-EMPTY path
- * (live-activation.ts:204-206, `nonEmptyString`), so an empty one there fails the whole
- * frame and never reaches this fold. `/health/read`'s checks only the TYPE
- * (live-ops.ts:244, `typeof daemon.storePath !== "string"`), so `""` decodes cleanly and
- * does reach here. Rendering it would give the operator a blank row that reads as a bug
- * rather than as a fact, so an empty answer falls through to the other carrier, and the
- * row refuses with a code when neither states a path.
+ * from one does not blank the row while the other still states it. The carriers are not
+ * equally strict: `/activation/read`'s decoder requires a NON-EMPTY path (live-activation.ts,
+ * `nonEmptyString`), so an empty one fails the whole frame; `/health/read`'s checks only the
+ * TYPE (live-ops.ts, `typeof daemon.storePath !== "string"`), so `""` decodes and reaches
+ * here. An empty answer falls through to the other carrier, and the row refuses with a code
+ * when neither states a path, rather than rendering a blank that reads as a bug.
  */
 function storePath(reads: ResourceReads): ResourceFactState {
   const health = reads.health;
@@ -185,16 +184,29 @@ function storePath(reads: ResourceReads): ResourceFactState {
     : refused(health.code, health.layer, STORE_SAID);
 }
 
+const BACKUP_DEFERRED_SAID = "Not measured by a read; the backup is written when project.activate runs.";
+
+/**
+ * `/activation/read` never takes a backup (activation-read.ts, `readOnlyActivationPorts`): it
+ * answers the member under its OWN layer as ACTIVATION_READ_BACKUP_DEFERRED and keeps it out of
+ * `blocking`. That exact code+layer pair is DEFERRED here. Any other unmeasured backup receipt -
+ * ACTIVATION_BACKUP_FAILED @ DAEMON_ACTIVATION_RECEIPTS is a backup that FAILED - stays refused.
+ */
+function backupState(answer: ActivationAnswer): ResourceFactState {
+  const receipt = receiptOf(answer.members, "backup");
+  const deferredByRead = receipt !== undefined && !receipt.measured
+    && receipt.code === "ACTIVATION_READ_BACKUP_DEFERRED" && receipt.layer === "ACTIVATION_READ";
+  if (deferredByRead) return deferred(BACKUP_DEFERRED_SAID);
+  return fromReceipt(answer.members, "backup", STORE_SAID, (row) => measured(row.ref ?? "taken, with no ref stated"));
+}
+
 function storeSection(reads: ResourceReads): ResourceSection {
   return Object.freeze({
     facts: Object.freeze([
       fact("path", "Store file", storePath(reads)),
-      fact("size", "Store size on disk", unserved(
-        "No read this daemon serves measures the store's size on disk, so this build cannot show it.",
-      )),
-      fact("backup", "Last store backup", activationState(reads.activation, STORE_SAID, (answer) => fromReceipt(
-        answer.members, "backup", STORE_SAID, (receipt) => measured(receipt.ref ?? "taken, with no ref stated"),
-      ))),
+      // No read this daemon serves measures the store's size on disk.
+      fact("size", "Store size on disk", unserved()),
+      fact("backup", "Last store backup", activationState(reads.activation, STORE_SAID, backupState)),
       fact("distribution", "Distribution", activationState(reads.activation, STORE_SAID, (answer) => (
         answer.distribution === null
           ? fromReceipt(answer.members, "distribution", STORE_SAID, () => refused(RECEIPT_ABSENT, RESOURCES_LAYER, STORE_SAID))
@@ -234,10 +246,5 @@ type SessionsConcurrencyView = Extract<SessionsOutcome, { status: "SESSIONS" }>[
 
 /** Every section, in screen order. Always the same rows: a fact is refused, never dropped. */
 export function resourceSections(reads: ResourceReads): readonly ResourceSection[] {
-  return Object.freeze([
-    repositorySection(reads),
-    providerSection(reads),
-    storeSection(reads),
-    governanceSection(reads),
-  ]);
+  return Object.freeze([repositorySection(reads), providerSection(reads), storeSection(reads), governanceSection(reads)]);
 }

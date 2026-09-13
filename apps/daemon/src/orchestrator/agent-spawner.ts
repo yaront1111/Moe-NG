@@ -2,7 +2,7 @@ import { spawn as nodeSpawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join, win32 as windowsPath } from "node:path";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { agentEnvironment,
@@ -15,6 +15,7 @@ import type { AgentProcessContainmentReason, AgentProcessFailureReason, AgentSpa
 import { agentSpawnInvocation, SpawnInvocationRefusal, SPAWN_INVOCATION_LAYER } from "./agent-spawn-invocation.js";
 import { spawnSeatFor } from "./agent-provider-resolve.js";
 import { createOutputTail } from "./seat-output-tail.js";
+import { spawnWindowsTreeKill } from "./seat-tree-kill.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 
 export { AgentProcessContainmentError, AgentProcessFailureError } from "./agent-spawn-contract.js";
@@ -213,7 +214,11 @@ function spawnRuntime(
       // exists is lost, and an unread pipe eventually blocks the child.
       const tail = createOutputTail();
       const sinks = options.output ?? { stderr: process.stderr, stdout: process.stdout };
+      // Set on the first byte from either stream, so the exit facts state directly whether
+      // the seat ever spoke rather than inferring it from a bounded tail.
+      let outputSeen = false;
       const tee = (sink: NodeJS.WritableStream) => (chunk: Buffer): void => {
+        outputSeen = true;
         sink.write(chunk);
         tail.push(chunk);
       };
@@ -250,7 +255,13 @@ function spawnRuntime(
         if (settled) return;
         settled = true;
         cleanup();
-        resolve({ exitCode: lastClose.code, signal: lastClose.signal, tail: tail.lines() });
+        resolve({
+          exitCode: lastClose.code, outputSeen, signal: lastClose.signal, tail: tail.lines(),
+          // `terminating` is set by beginTermination alone, from its four callers below: the
+          // lifetime timer, failInput (an stdin error or a throwing write), a child `error`
+          // event after a pid was assigned, and close() through terminateOwned.
+          terminatedByWrapper: terminating,
+        });
       };
       const failProcess = (
         reason: AgentProcessFailureReason,
@@ -260,7 +271,7 @@ function spawnRuntime(
         if (settled) return;
         settled = true;
         cleanup();
-        reject(new AgentProcessFailureError(reason, exitCode, signal, tail.lines()));
+        reject(new AgentProcessFailureError(reason, exitCode, signal, tail.lines(), outputSeen));
       };
       const failContainment = (reason: AgentProcessContainmentReason): void => {
         if (settled) return;
@@ -280,13 +291,6 @@ function spawnRuntime(
       const maybeFinishTermination = (): void => {
         if (terminating && treeKillConfirmed && childClosed) finish();
       };
-      const systemRoot = (): string | null => {
-        const environment = options.environment ?? process.env;
-        const entry = Object.entries(environment).find(([key, value]) =>
-          key.toUpperCase() === "SYSTEMROOT" && typeof value === "string" && value !== "");
-        const value = entry?.[1];
-        return value !== undefined && windowsPath.isAbsolute(value) ? value : null;
-      };
       const killTree = (): void => {
         if (child.pid === undefined) {
           killDirectBestEffort();
@@ -294,48 +298,16 @@ function spawnRuntime(
           return;
         }
         if (platform === "win32") {
-          const root = systemRoot();
-          if (root === null) {
-            killDirectBestEffort();
-            failContainment("TREE_KILL_FAILED");
-            return;
-          }
-          try {
-            const killer = spawn(
-              windowsPath.join(root, "System32", "taskkill.exe"),
-              ["/pid", String(child.pid), "/T", "/F"],
-              { stdio: "ignore", windowsHide: true },
-            );
-            killHelper = killer;
-            try { killer.unref(); } catch { /* injected children may omit it */ }
-            let killerSettled = false;
-            const failKiller = (): void => {
-              if (killerSettled) return;
-              killerSettled = true;
-              killDirectBestEffort();
-              failContainment("TREE_KILL_FAILED");
-            };
-            killer.once("error", failKiller);
-            killer.once("close", (code) => {
-              if (killerSettled) return;
-              killerSettled = true;
-              // 128 is taskkill's "no running instance": the tree is ALREADY
-              // dead, which is the outcome containment exists to reach, not an
-              // escape from it. A closed direct child is the same proof for any
-              // other nonzero exit — an agent that dies in the same instant the
-              // killer lands must not shut the whole wrapper down.
-              if (code !== 0 && code !== 128 && !childClosed) {
-                killDirectBestEffort();
-                failContainment("TREE_KILL_FAILED");
-                return;
-              }
-              treeKillConfirmed = true;
-              maybeFinishTermination();
-            });
-          } catch {
-            killDirectBestEffort();
-            failContainment("TREE_KILL_FAILED");
-          }
+          // The killer is kept so cleanup can SIGKILL and unref it; undefined means the helper
+          // already reported the failure through onFailed before returning.
+          killHelper = spawnWindowsTreeKill({
+            childClosed: () => childClosed,
+            environment: options.environment ?? process.env,
+            onConfirmed: () => { treeKillConfirmed = true; maybeFinishTermination(); },
+            onFailed: () => { killDirectBestEffort(); failContainment("TREE_KILL_FAILED"); },
+            pid: child.pid,
+            spawn,
+          });
           return;
         }
         try {
@@ -370,7 +342,11 @@ function spawnRuntime(
       terminateOwned = beginTermination;
       const failInput = (): void => { beginTermination(); };
       child.on("close", (code, signal) => {
-        log(`[wrapper] ${request.workItemId} agent exited ${String(code)}`);
+        // The line names what the durable record carries: a seat killed at its timeout after
+        // printing nothing must read differently from one that failed on its own.
+        log(`[wrapper] ${request.workItemId} agent exited ${String(code)}`
+          + ` (signal ${signal ?? "none"}, output ${outputSeen ? "seen" : "none"}`
+          + `, ${terminating ? "terminated by wrapper" : "closed on its own"})`);
         childClosed = true;
         lastClose = { code, signal };
         if (terminating) maybeFinishTermination();

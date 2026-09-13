@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { PROJECT_ID, closeStores, driveThrough, openStore } from "../bootstrap/bootstrap-test-fixtures.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
 import { setAgentProvider } from "../orchestrator/agent-provider-store.js";
+import { recordSeatExit } from "../orchestrator/provider-pause-ledger.js";
 import { SEAT_FACT_UNMEASURED } from "../orchestrator/seat-start-contracts.js";
 import { recordSeatStart } from "../orchestrator/seat-start-ledger.js";
 import { readWrapperKnobs } from "../orchestrator/wrapper-knobs.js";
@@ -471,13 +472,106 @@ describe("the sessions read discloses what each seat was started with", () => {
     // DoD-1 is about the NAME, and a name is not something a value assertion can check. A
     // member called `provider` would satisfy every arm above while claiming a present-tense
     // observation the daemon cannot perform, so the declaration itself is pinned.
-    const source = readFileSync(new URL("./sessions-read.ts", import.meta.url), "utf8");
+    const source = readFileSync(new URL("./sessions-read-contracts.ts", import.meta.url), "utf8");
     const body = /export interface SessionView \{\r?\n(?<members>[\s\S]*?)\r?\n\}/u.exec(source)?.groups?.["members"];
-    if (body === undefined) throw new Error("SessionView not found in sessions-read.ts");
+    if (body === undefined) throw new Error("SessionView not found in sessions-read-contracts.ts");
     const declared = [...body.matchAll(/^ {2}readonly (?<name>[A-Za-z]+)[?]?:/gmu)].map((match) => match.groups?.["name"]);
     expect(declared).toContain("providerAtStart");
     expect(declared).toContain("agentVersionAtStart");
     expect(declared).not.toContain("provider");
     expect(declared).not.toContain("agentVersion");
+  });
+});
+
+/**
+ * WHEN EACH SEAT STARTED AND HOW IT ENDED — the two facts the Health screen could not show.
+ *
+ * Measured on a live drive (2026-09-12): a seat that hung for seven minutes with zero network was
+ * listed as "live until <expiry>", identical to a working seat, and its exit showed as one more
+ * "closed" in a count. Both facts were already DURABLE — `startedAt` in the seat-start record and
+ * kind/exit code/last line in the seat-exit record — and neither reached the read. Every arm here
+ * writes through the wrapper's own record path and reads through the port's DEFAULT fold, so a
+ * reader that was never wired to production could not pass.
+ */
+describe("the sessions read discloses when each seat started and how it exited", () => {
+  const viewOver = (store: SqliteEventStore, rows: Parameters<typeof ledgerWith>[0]): SessionsView =>
+    sessions(createSessionsReadPort({
+      clock: () => NOW, configuredAgentLimit: 2, envAgentCommand: undefined, projectId: PROJECT_ID,
+      readClaims: () => claims([]), readSessions: () => ledgerWith(rows), store,
+    }).readSessions());
+  const rowsOf = (view: SessionsView) => new Map(view.sessions.map((row) => [row.sessionId, row]));
+  const exitInput = (overrides: Partial<Parameters<typeof recordSeatExit>[1]>) => ({
+    decidedAt: "2026-09-03T09:58:00.000Z", exitCode: 1, kind: "FAILED", lastLine: "Error: spawn claude ENOENT",
+    projectId: PROJECT_ID, provider: "claude", resetAt: null, sessionId: "sess-closed",
+    workItemId: "node.deliver@node-a", ...overrides,
+  });
+
+  it("publishes the start instant the wrapper wrote at spawn, and null for a seat with no record", () => {
+    const store = openStore();
+    expect(recordSeatStart(store, {
+      agentVersion: "2.1.263 (Claude Code)", projectId: PROJECT_ID, provider: "claude",
+      sessionId: "sess-live", startedAt: "2026-09-03T09:48:00.000Z",
+    }).ok).toBe(true);
+    expect(recordSeatStart(store, {
+      agentVersion: "2.1.263 (Claude Code)", projectId: PROJECT_ID, provider: "claude",
+      sessionId: "sess-live-2", startedAt: "2026-09-03T09:55:00.000Z",
+    }).ok).toBe(true);
+    const rows = rowsOf(viewOver(store, [
+      session("sess-live", "2026-09-03T12:00:00.000Z"), session("sess-live-2", "2026-09-03T12:00:00.000Z"),
+      session("sess-no-record", "2026-09-03T12:00:00.000Z"),
+    ]));
+    expect(rows.get("sess-live")?.startedAt).toBe("2026-09-03T09:48:00.000Z");
+    // It MOVES: a second seat's instant is not the first one's answer.
+    expect(rows.get("sess-live-2")?.startedAt).toBe("2026-09-03T09:55:00.000Z");
+    // NULL, not "UNKNOWN" and not the read's clock: a paired browser and every seat older than the
+    // start ledger have no instant, and a placeholder here would date them to the wrong moment.
+    expect(rows.get("sess-no-record")?.startedAt).toBeNull();
+    // The seat's liveness words are untouched by the new member.
+    expect(rows.get("sess-live")?.liveness).toBe("LIVE");
+  });
+
+  it("publishes the exit the wrapper recorded - kind, exit code, last line, instant - and null for none", () => {
+    const store = openStore();
+    expect(recordSeatExit(store, exitInput({})).ok).toBe(true);
+    // Killed on a signal: the record's exit code is NULL and so is the view's, never 0 or -1. This
+    // is the exact fact the hung seat carried and the screen could not show.
+    expect(recordSeatExit(store, exitInput({ exitCode: null, kind: "FAILED", lastLine: null, sessionId: "sess-killed" })).ok).toBe(true);
+    expect(recordSeatExit(store, exitInput({ exitCode: 0, kind: "COMPLETED", lastLine: "done", sessionId: "sess-done" })).ok).toBe(true);
+    const rows = rowsOf(viewOver(store, [
+      session("sess-closed", "2026-09-03T12:00:00.000Z", "CLOSED"), session("sess-killed", "2026-09-03T12:00:00.000Z", "CLOSED"),
+      session("sess-done", "2026-09-03T09:00:00.000Z"), session("sess-quiet", "2026-09-03T09:00:00.000Z"),
+    ]));
+    expect(rows.get("sess-closed")?.exit).toEqual({
+      at: "2026-09-03T09:58:00.000Z", exitCode: 1, kind: "FAILED", lastLine: "Error: spawn claude ENOENT",
+    });
+    expect(rows.get("sess-killed")?.exit).toEqual({ at: "2026-09-03T09:58:00.000Z", exitCode: null, kind: "FAILED", lastLine: null });
+    expect(rows.get("sess-done")?.exit).toEqual({ at: "2026-09-03T09:58:00.000Z", exitCode: 0, kind: "COMPLETED", lastLine: "done" });
+    // No record: NULL, not a placeholder object. The browser renders "reason not recorded" for
+    // exactly this, and a made-up kind here would put a reason on screen nobody observed.
+    expect(rows.get("sess-quiet")?.exit).toBeNull();
+    // EXACT keys on the exit object: the browser decodes it by exact arity.
+    expect(Object.keys(rows.get("sess-closed")?.exit as object).sort()).toEqual(["at", "exitCode", "kind", "lastLine"]);
+  });
+
+  it("degrades to null when the exit ledger CANNOT be read, not to a refusal", () => {
+    // How a seat ended is decoration on a session, never a source of one: the read still answers
+    // SESSIONS, with the exit unknown, exactly as it does for an unreadable start ledger.
+    const view = sessions(createSessionsReadPort({
+      clock: () => NOW, configuredAgentLimit: 2, envAgentCommand: undefined, projectId: PROJECT_ID,
+      readClaims: () => claims([]), readSeatExits: () => { throw new Error("exit ledger unreadable"); },
+      readSessions: () => ledgerWith([session("sess-closed", "2026-09-03T12:00:00.000Z", "CLOSED")]), store: openStore(),
+    }).readSessions());
+    expect(view.outcome).toBe("SESSIONS");
+    expect(view.sessions[0]?.exit).toBeNull();
+    expect(view.sessions[0]?.startedAt).toBeNull();
+  });
+
+  it("declares BOTH members on SessionView, where the browser's exact-arity decode is pinned to", () => {
+    const source = readFileSync(new URL("./sessions-read-contracts.ts", import.meta.url), "utf8");
+    const body = /export interface SessionView \{\r?\n(?<members>[\s\S]*?)\r?\n\}/u.exec(source)?.groups?.["members"];
+    if (body === undefined) throw new Error("SessionView not found in sessions-read-contracts.ts");
+    const declared = [...body.matchAll(/^ {2}readonly (?<name>[A-Za-z]+)[?]?:/gmu)].map((match) => match.groups?.["name"]);
+    expect(declared).toContain("startedAt");
+    expect(declared).toContain("exit");
   });
 });

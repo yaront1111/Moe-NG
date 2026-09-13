@@ -51,13 +51,21 @@ function processFailure(error: unknown): Error {
   return error instanceof Error ? error : new Error("AGENT_PROCESS_FAILED:UNKNOWN");
 }
 
-/** What one exit left behind, for a lifetime that settled without a report. */
-const CLEAN_EXIT: SeatExitReport = { exitCode: 0, signal: null, tail: [] };
+/** What one exit left behind, for a lifetime that settled without a report. Nothing observed
+ *  its streams or its termination, so neither flag may claim a value. */
+const CLEAN_EXIT: SeatExitReport = {
+  exitCode: 0, outputSeen: null, signal: null, tail: [], terminatedByWrapper: null,
+};
 
 function factsOf(error: unknown): SeatExitReport {
+  // A typed process failure is a seat that closed ON ITS OWN: the spawner's termination path
+  // resolves the lifetime (agent-spawner.ts, maybeFinishTermination), it never rejects it.
   return error instanceof AgentProcessFailureError
-    ? { exitCode: error.exitCode, signal: error.signal, tail: error.tail }
-    : { exitCode: null, signal: null, tail: [] };
+    ? {
+      exitCode: error.exitCode, outputSeen: error.outputSeen, signal: error.signal,
+      tail: error.tail, terminatedByWrapper: false,
+    }
+    : { exitCode: null, outputSeen: null, signal: null, tail: [], terminatedByWrapper: null };
 }
 
 class AgentWrapperStaffingState implements AgentWrapperStaffing {

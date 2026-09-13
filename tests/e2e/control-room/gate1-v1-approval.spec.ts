@@ -230,6 +230,8 @@ test("R4-2: Gate 1 reads and approves a /1 revision on the plane the daemon stat
     await page.getByTestId(`cr.goals.card.${createdGoalId}.open`).click();
     const card = page.getByTestId("cr.gate1.card");
     await expect(card, "the Gate 1 card must render for the source-bound goal").toBeVisible({ timeout: 20_000 });
+    // A roster of one statement renders flat (statement-folds.tsx FLAT_LIMIT), so the
+    // seeded requirement and criterion are read without opening a family first.
     await expect(page.getByTestId("cr.gate1.requirement.req-1")).toContainText(REQUIREMENT);
     await expect(page.getByTestId("cr.gate1.criterion.crit-1")).toContainText(CRITERION);
     const approve = page.getByTestId("cr.gate1.approve");

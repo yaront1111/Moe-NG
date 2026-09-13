@@ -429,3 +429,163 @@ describe("the Approve control against a daemon grant", () => {
     expect(screen.getByTestId("cr.approve.dispatch-refusal").textContent).toContain(refusal.code);
   });
 });
+
+/**
+ * THE DECISION CONTROLS EXIST ONLY ONCE THERE IS A PLAN TO DECIDE ON.
+ *
+ * Measured 2026-09-13 via the accessibility tree, on a goal whose Product Contract was
+ * still waiting at Gate 1: the Runs screen said "No plan has been run for this goal yet",
+ * yet the board rendered "Approve plan", "Send the plan back" and the reason box. The
+ * goal's `planningRunRef` is minted at GoalCreated, but the run gains a durable record
+ * only when the compiler submits, so the plan read answers the daemon's own
+ * PLANNING_RUN_READ_RUN_UNKNOWN (planning-run-read.ts) - and the gate rendered anyway,
+ * disabled, as a decision being refused rather than one not yet asked.
+ *
+ * Every arm queries by ACCESSIBLE ROLE AND NAME beside the test id, because the
+ * accessibility tree is where the symptom was measured.
+ */
+const RUN_UNKNOWN: PlanningRunOutcome = Object.freeze({
+  code: "PLANNING_RUN_READ_RUN_UNKNOWN",
+  layer: "PLANNING_RUN_READ",
+  status: "REFUSED",
+});
+
+const NO_PLAN_LINE = "The plan appears here once the contract is approved and compiled.";
+
+function expectNoDecisionControls(): void {
+  expect(screen.queryByRole("button", { name: "Approve plan" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "Send the plan back" })).toBeNull();
+  expect(screen.queryByLabelText("Why are you sending this plan back?")).toBeNull();
+  expect(screen.queryByTestId("cr.approve.button")).toBeNull();
+  expect(screen.queryByTestId("cr.approve.reject")).toBeNull();
+  expect(screen.queryByTestId("cr.approve.reason.input")).toBeNull();
+  // Nor the withheld-reason display: no decision is being refused, because none is asked.
+  expect(screen.queryByTestId("cr.approve.reason")).toBeNull();
+}
+
+function expectDecisionControls(): void {
+  expect(screen.getByRole("button", { name: "Approve plan" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Send the plan back" })).toBeTruthy();
+  expect(screen.getByLabelText("Why are you sending this plan back?")).toBeTruthy();
+  expect(screen.queryByTestId("cr.approve.no-plan")).toBeNull();
+}
+
+describe("the decision controls exist only once there is a plan to decide on", () => {
+  it("renders the one-line wait and NO controls when the daemon knows no such run and no offer names it", async () => {
+    const harness = renderApproval(
+      frameWith([]), { code: "UNREACHED", layer: "UNREACHED", ok: false }, [RUN_UNKNOWN],
+    );
+    const line = await screen.findByTestId("cr.approve.no-plan");
+    expect(line.textContent).toBe(NO_PLAN_LINE);
+    expectNoDecisionControls();
+    expect(harness.submit).not.toHaveBeenCalled();
+    // ONE LINE, NOT A FAILED READ ABOVE IT. Before this arm the fold also rendered the
+    // refusal note "PLANNING_RUN_READ_RUN_UNKNOWN @ PLANNING_RUN_READ - The plan could not
+    // be read right now." directly over the wait line, framing an ordinary not-yet state
+    // as a fault. The daemon's "no such run" IS the plan's absence; it is not reported twice.
+    expect(screen.queryByTestId("cr.approve.refusal")).toBeNull();
+    expect(screen.queryByTestId("cr.approve.empty")).toBeNull();
+  });
+
+  /**
+   * A RUN WHOSE BODIES DID NOT RE-VERIFY IS NOT A RUN WITH NO PLAN. The daemon answers
+   * RUN with `plan: null` only for a run that already carries a submissionHash and a
+   * lifecycle (planning-run-read.ts readPlanningRun) - a run that WAS proposed and sealed
+   * (planning-authority-persistence.ts commits the record and the bodies in one leg) whose
+   * bodies then failed verifyBodies. That is unverifiable evidence, not absence, so the wait
+   * line ("once the contract is approved and compiled") would claim a state the read did not
+   * measure, directly under the body that says "not sealed yet". The not-sealed body stands
+   * alone: no controls, no wait line.
+   */
+  it("shows the honest not-sealed body alone when the run exists but its bodies do not verify", async () => {
+    const harness = renderApproval(
+      frameWith([]), { code: "UNREACHED", layer: "UNREACHED", ok: false }, [UNSEALED],
+    );
+    expect((await screen.findByTestId("cr.approve.empty")).textContent)
+      .toContain("The plan is not sealed yet; nothing to review.");
+    expectNoDecisionControls();
+    expect(screen.queryByTestId("cr.approve.no-plan")).toBeNull();
+    expect(harness.submit).not.toHaveBeenCalled();
+  });
+
+  /**
+   * A read refused for a reason that says nothing about the plan (a capability, not an
+   * unknown run) establishes neither that a plan exists nor that it does not. The refusal
+   * is shown alone: the wait line would claim the contract is still unapproved, a state
+   * this read did not measure.
+   */
+  it("shows a capability refusal alone: no controls, and no claim that the plan is not compiled yet", async () => {
+    renderApproval(frameWith([]), { code: "UNREACHED", layer: "UNREACHED", ok: false }, [REFUSED]);
+    expect((await screen.findByTestId("cr.approve.refusal")).textContent)
+      .toContain("PLANNING_RUN_READ_CAPABILITY_DENIED");
+    expectNoDecisionControls();
+    expect(screen.queryByTestId("cr.approve.no-plan")).toBeNull();
+  });
+
+  it("renders neither the controls nor the wait line before the read answers", () => {
+    const pending = vi.fn(() => new Promise<PlanningRunOutcome>(() => { /* never answers */ }));
+    render(
+      <ApprovePlan
+        approval={{
+          authorization: authorizeApproval(frameWith([]), DURABLE.runRef),
+          submit: vi.fn() as unknown as (grant: ApprovalGrant) => Promise<PlanApprovalOutcome>,
+        }}
+        goalId="goal-live-1"
+        onBack={vi.fn()}
+        read={pending}
+        runId={DURABLE.runRef}
+        title="Recovery goal"
+      />,
+    );
+    expect(screen.getByTestId("cr.approve.loading")).toBeTruthy();
+    expectNoDecisionControls();
+    expect(screen.queryByTestId("cr.approve.no-plan")).toBeNull();
+  });
+
+  it("keeps the controls exactly as before once a plan awaits approval", async () => {
+    renderApproval(
+      frameWith([offerFor(DURABLE.runRef)]), { commandId: "unreached", ok: true }, [SEALED_REVIEWABLE],
+    );
+    const approve = await screen.findByRole("button", { name: "Approve plan" });
+    expect((approve as HTMLButtonElement).disabled).toBe(false);
+    expectDecisionControls();
+    // Reject stays disabled until a reason is typed, exactly as before.
+    expect((screen.getByRole("button", { name: "Send the plan back" }) as HTMLButtonElement).disabled)
+      .toBe(true);
+  });
+
+  /**
+   * TWO SUFFICIENT SIGNALS, each alone. A sealed plan in the read keeps the controls even
+   * when the daemon offers nothing (disabled, naming why - the state after an approval binds
+   * and the offer is withdrawn); the daemon's own offer keeps them even when the read refused
+   * (the daemon says a decision is asked; the read's trouble is reported beside the controls,
+   * not by hiding them).
+   */
+  it("keeps the controls on a sealed plan the daemon does not offer, and on an offer whose read refused", async () => {
+    const cases: readonly {
+      readonly frame: SurfaceFrame; readonly read: PlanningRunOutcome; readonly withheld: string | null;
+    }[] = Object.freeze([
+      { frame: frameWith([]), read: SEALED_REVIEWABLE, withheld: "APPROVAL_AFFORDANCE_ABSENT" },
+      { frame: frameWith([offerFor(DURABLE.runRef)]), read: RUN_UNKNOWN, withheld: null },
+    ]);
+    expect(cases.length).toBeGreaterThan(0);
+    for (const entry of cases) {
+      cleanup();
+      renderApproval(entry.frame, { code: "UNREACHED", layer: "UNREACHED", ok: false }, [entry.read]);
+      const approve = await screen.findByRole("button", { name: "Approve plan" });
+      expect((approve as HTMLButtonElement).disabled).toBe(entry.withheld !== null);
+      expectDecisionControls();
+      if (entry.withheld === null) {
+        expect(screen.queryByTestId("cr.approve.reason")).toBeNull();
+      } else {
+        expect(screen.getByTestId("cr.approve.reason").textContent).toContain(entry.withheld);
+      }
+      // With a decision on the table the read's refusal is REPORTED beside the controls,
+      // never replaced by the wait line: the daemon offered this run, so "no plan yet" would
+      // contradict the offer, and hiding the refusal would hide why the body is missing.
+      if (entry.read.status === "REFUSED") {
+        expect(screen.getByTestId("cr.approve.refusal").textContent).toContain(entry.read.code);
+      }
+    }
+  });
+});

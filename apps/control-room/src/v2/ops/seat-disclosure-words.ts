@@ -13,10 +13,11 @@ import {
  * pasted into a bug report cannot be recalled.
  *
  * That property is STRUCTURAL here, not a matter of care. `credentialWords` reads the
- * activation receipt's ref ONLY through the CLOSED grammar in resources-credential.ts and
- * renders ONLY that grammar's OUTPUT - `parsed.cli` and `credentialSourceWords(parsed.source)`.
- * The ref itself is never returned, never interpolated and never fallen back to. A ref the
- * grammar refuses yields the refusal CODE where the source would have gone, which is that
+ * credential ref the daemon carries in the provider receipt's `reason` ONLY through the
+ * CLOSED grammar in resources-credential.ts and renders ONLY that grammar's OUTPUT -
+ * `parsed.cli` and `credentialSourceWords(parsed.source)`. The reason itself is never
+ * returned, never interpolated and never fallen back to. A reason the grammar refuses
+ * yields the refusal CODE where the source would have gone, which is that
  * module's designed failure mode: rendering LESS, never more. This module writes NO second
  * grammar and NO second scrub - a second one would be the exact defect resources-credential.ts
  * was written to prevent.
@@ -72,8 +73,14 @@ const receiptOf = (
 /**
  * DoD-2 AND DoD-3, and the split between them is the whole design.
  *
- * A MEASURED receipt is parsed by the closed grammar and NOTHING else is read from it. An
- * UNMEASURED one has no ref to parse, so its `reason` is repeated VERBATIM - that is the
+ * A MEASURED receipt's `reason` is the credential PRESENCE ref - the receipt's `detail` as
+ * activation-receipts-measure.ts `measureProvider` builds it; its `ref` is the committed
+ * probe envelope ref, `provider-profile-1`, and is not read - and is parsed by the closed
+ * grammar, never echoed. This module used to parse `ref`, the identical misread that
+ * resources-model.ts was MEASURED making on a real project (2026-09-13): the grammar was
+ * handed `provider-profile-1` and refused RESOURCES_CREDENTIAL_SOURCE_UNRECOGNISED while
+ * the Goals card showed `credential/claude/login-file` for the same receipt. An UNMEASURED
+ * receipt's `reason` is repeated VERBATIM - that is the
  * daemon's own stated absence, scrubbed at the boundary that publishes it, and for a missing
  * credential it is the launcher's `MOE_UP_ENV_MISSING` line naming the variables the operator
  * must set. Paraphrasing it into "no credential" is exactly what DoD-3 forbids: an operator
@@ -100,9 +107,9 @@ export function credentialWords(activation: ActivationReadOutcome | null): Crede
     // VERBATIM. The daemon's words, not this screen's summary of them.
     return Object.freeze({ code: receipt.code, cli: null, said: receipt.reason });
   }
-  const parsed = credentialSource(receipt.ref);
+  const parsed = credentialSource(receipt.reason);
   if (parsed === null) {
-    // The ref is NOT echoed. A value that rode in on it renders as this code and nothing else.
+    // The reason is NOT echoed. A value that rode in on it renders as this code and nothing else.
     return Object.freeze({
       code: CREDENTIAL_SOURCE_UNRECOGNISED, cli: null,
       said: "The credential source was not stated in a form this screen can show.",

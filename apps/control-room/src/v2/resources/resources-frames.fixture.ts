@@ -22,7 +22,8 @@ import type { ResourceReads } from "./resources-model.js";
  *
  * Shapes are taken from the routes themselves: apps/daemon/src/http/activation-read.ts
  * (nine frame keys, seven per receipt, five on signing), health-read.ts, policy-read.ts,
- * sessions-read.ts and repository-remote-read.ts, cross-checked against the committed
+ * sessions-read-contracts.ts (the /sessions/read shape, declared beside sessions-read.ts) and
+ * repository-remote-read.ts, cross-checked against the committed
  * activation frame at v2/cordum-app.test.tsx.
  */
 
@@ -65,9 +66,14 @@ export const ACTIVATION_BODY = {
       code: null, hash: "b".repeat(64), layer: null, measured: true, member: "repository",
       reason: "HEAD is at b1b1b1b1", ref: "repo/head",
     },
+    // THE DAEMON'S SHAPE, not the grammar's: `ref` is the committed `provider.probe` envelope
+    // ref (the browser's own payload, live/live-dispatch-payloads.ts) and the credential
+    // presence ref rides in `reason` (activation-receipts-measure.ts `measureProvider` ->
+    // activation-read.ts `receiptRow`). This row once carried the two swapped, and every
+    // arm folded from it was green against a wire the daemon never serves.
     {
       code: null, hash: null, layer: null, measured: true, member: "provider",
-      reason: "claude is on PATH", ref: "credential/claude/env:ANTHROPIC_AUTH_TOKEN",
+      reason: "credential/claude/env:ANTHROPIC_AUTH_TOKEN", ref: "provider-profile-1",
     },
     {
       code: null, hash: null, layer: null, measured: true, member: "store",
@@ -160,8 +166,12 @@ export const allRead = (): ResourceReads => ({
   activation: activation(), health: health(), policy: policy(), remote: remote(), sessions: sessions(),
 });
 
-/** The activation frame with the provider receipt's fields replaced wholesale. */
-export const withProviderReceipt = (receipt: Readonly<Record<string, unknown>>): unknown => ({
+/** The activation frame with ONE named member's receipt replaced wholesale. */
+export const withReceipt = (member: string, receipt: Readonly<Record<string, unknown>>): unknown => ({
   ...ACTIVATION_BODY,
-  members: ACTIVATION_BODY.members.map((row) => (row.member === "provider" ? receipt : row)),
+  members: ACTIVATION_BODY.members.map((row) => (row.member === member ? receipt : row)),
 });
+
+/** The activation frame with the provider receipt's fields replaced wholesale. */
+export const withProviderReceipt = (receipt: Readonly<Record<string, unknown>>): unknown =>
+  withReceipt("provider", receipt);

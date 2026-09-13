@@ -2,7 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { ActivityOutcome } from "../../live/live-activity.js";
-import type { SessionsOutcome } from "../../live/live-sessions.js";
+import type { SessionView, SessionsOutcome } from "../../live/live-sessions.js";
 import { ProviderPauseProvider } from "../shell/pause-context.js";
 import type { ProviderPause } from "../shell/pause-context.js";
 import { ActivityPanel, SessionsPanel } from "./activity-screens.js";
@@ -28,13 +28,21 @@ const SESSIONS: SessionsOutcome = {
   concurrency: { activeSeats: 2, configuredAgentLimit: 2 },
   readAt: "2026-09-03T10:00:00.000Z",
   sessions: [
-    { agentVersionAtStart: "2.1.263 (Claude Code)", capabilities: ["review.write", "work.write"], expiresAt: "2026-09-03T11:00:00.000Z", holding: ["node.deliver@node-a"], liveness: "LIVE", principalId: "sess-wrap-abc", providerAtStart: "claude", sessionId: "sess-wrap-abc", status: "OPEN" },
+    { agentVersionAtStart: "2.1.263 (Claude Code)", capabilities: ["review.write", "work.write"], exit: null, expiresAt: "2026-09-03T11:00:00.000Z", holding: ["node.deliver@node-a"], liveness: "LIVE", principalId: "sess-wrap-abc", providerAtStart: "claude", sessionId: "sess-wrap-abc", startedAt: "2026-09-03T09:48:00.000Z", status: "OPEN" },
     // Neither of these is an AGENT seat, so nothing ever measured a provider or a CLI version
-    // for them: they carry the daemon's one stated unknown, exactly as a live read would.
-    { agentVersionAtStart: "UNKNOWN", capabilities: ["project.admin"], expiresAt: "2026-09-03T09:00:00.000Z", holding: [], liveness: "EXPIRED", principalId: "principal-1", providerAtStart: "UNKNOWN", sessionId: "sess-op-1", status: "OPEN" },
-    { agentVersionAtStart: "UNKNOWN", capabilities: ["project.admin"], expiresAt: "2026-09-03T11:00:00.000Z", holding: [], liveness: "LIVE", principalId: "operator-local", providerAtStart: "UNKNOWN", sessionId: "4be93d1a-902e-41f4-ad1a-89fc588d2ff4", status: "OPEN" },
+    // for them: they carry the daemon's one stated unknown, exactly as a live read would, and
+    // no start or exit record speaks for them either (null, as the daemon states it).
+    { agentVersionAtStart: "UNKNOWN", capabilities: ["project.admin"], exit: null, expiresAt: "2026-09-03T09:00:00.000Z", holding: [], liveness: "EXPIRED", principalId: "principal-1", providerAtStart: "UNKNOWN", sessionId: "sess-op-1", startedAt: null, status: "OPEN" },
+    { agentVersionAtStart: "UNKNOWN", capabilities: ["project.admin"], exit: null, expiresAt: "2026-09-03T11:00:00.000Z", holding: [], liveness: "LIVE", principalId: "operator-local", providerAtStart: "UNKNOWN", sessionId: "4be93d1a-902e-41f4-ad1a-89fc588d2ff4", startedAt: null, status: "OPEN" },
   ],
   status: "SESSIONS", totals: { closed: 0, expired: 1, live: 1 }, unreadable: false,
+};
+/** An agent seat that failed two minutes ago: the wrapper recorded kind, exit code and last line. */
+const EXITED: SessionView = {
+  agentVersionAtStart: "2.1.263 (Claude Code)", capabilities: ["work.write"],
+  exit: { at: "2026-09-03T09:58:00.000Z", exitCode: 1, kind: "FAILED", lastLine: "Error: spawn claude ENOENT" },
+  expiresAt: "2026-09-03T09:59:00.000Z", holding: [], liveness: "CLOSED", principalId: "sess-wrap-dead",
+  providerAtStart: "claude", sessionId: "sess-wrap-dead", startedAt: "2026-09-03T09:51:00.000Z", status: "CLOSED",
 };
 
 const PAUSE: ProviderPause = {
@@ -221,6 +229,49 @@ describe("SessionsPanel", () => {
     render(<SessionsPanel nowMs={NOW} outcome={SESSIONS} paused={{ ...PAUSE, lastLine: "   " }} />);
     expect(screen.getByTestId("cr.sessions.paused").textContent)
       .toBe(`Agents paused: claude limit, resumes ${new Date("2026-09-03T11:30:00.000Z").toLocaleString()} - last line from the seat: (no output)`);
+  });
+
+  /**
+   * The finding: a seat that hung for seven minutes with zero network read "live until
+   * <expiry>" exactly like a working seat. The start age is the difference an operator can see.
+   * Spelled out, never built by calling `seatStartWords`.
+   */
+  it("says how long ago each live seat started, before the lease it holds", () => {
+    render(<SessionsPanel nowMs={NOW} outcome={SESSIONS} />);
+    expect(screen.getByTestId("cr.sessions.row.sess-wrap-abc").querySelector(".cr2-activity-when")?.textContent)
+      .toBe("started 12 min ago · live until 2026-09-03T11:00:00.000Z");
+    // No start record - a paired browser, or any seat older than the start ledger - NAMES the
+    // absence; it is never dated to the browser's clock as "started just now".
+    expect(screen.getByTestId(`cr.sessions.row.${BROWSER_ID}`).querySelector(".cr2-activity-when")?.textContent)
+      .toBe("start not recorded · live until 2026-09-03T11:00:00.000Z");
+    // A past seat's row is unchanged: its exit is the exits list's business, below.
+    expect(screen.getByTestId("cr.sessions.row.sess-op-1").querySelector(".cr2-activity-when")?.textContent).toBe("expired 1 h ago");
+  });
+
+  it("lists the last exited agent seats with the recorded reason, and names the absence for the rest", () => {
+    render(<SessionsPanel nowMs={NOW} outcome={{ ...SESSIONS, sessions: [...SESSIONS.sessions, EXITED] }} />);
+    // In the open, not inside the past-seats fold, and the recorded exit leads.
+    expect(screen.getByTestId("cr.sessions.past").contains(screen.getByTestId("cr.sessions.exits"))).toBe(false);
+    expect(screen.getByTestId("cr.sessions.exits.heading").textContent).toBe("The last 2 agent seats to exit · why each one ended");
+    const dead = screen.getByTestId("cr.sessions.exit.sess-wrap-dead");
+    expect(dead.querySelector(".cr2-activity-when")?.textContent).toBe("exited 2 min ago");
+    expect(dead.querySelector(".cr2-activity-what")?.textContent).toBe("failed, exit code 1");
+    expect(dead.querySelector(".cr2-activity-target")?.textContent).toBe("sess-wrap-dead · last line: Error: spawn claude ENOENT");
+    // sess-op-1 expired with no exit record: the count said "1 expired"; this row says why not.
+    const unrecorded = screen.getByTestId("cr.sessions.exit.sess-op-1");
+    expect(unrecorded.querySelector(".cr2-activity-when")?.textContent).toBe("expired 1 h ago");
+    expect(unrecorded.querySelector(".cr2-activity-what")?.textContent).toBe("reason not recorded");
+    expect(unrecorded.querySelector(".cr2-activity-target")?.textContent).toBe("sess-op-1");
+    // The paired browser is not an agent seat and never appears here.
+    expect(screen.getByTestId("cr.sessions.exits").textContent).not.toContain(BROWSER_ID);
+  });
+
+  it("renders no exits list while no agent seat has exited", () => {
+    render(<SessionsPanel nowMs={NOW} outcome={{
+      ...SESSIONS, sessions: SESSIONS.sessions.filter((session) => session.liveness === "LIVE"), totals: { closed: 0, expired: 0, live: 1 },
+    }} />);
+    expect(screen.getByTestId("cr.sessions.row.sess-wrap-abc")).toBeTruthy();
+    expect(screen.queryByTestId("cr.sessions.exits")).toBeNull();
   });
 });
 

@@ -122,10 +122,12 @@ export function createProviderPauseGate(config: ProviderPauseGateConfig): Provid
       exitCode: input.report.exitCode,
       kind: input.kind,
       lastLine: input.lastLine,
+      outputSeen: input.report.outputSeen,
       projectId,
       provider: input.provider,
       resetAt: input.resetAt,
       sessionId: input.sessionId,
+      terminatedByWrapper: input.report.terminatedByWrapper,
       workItemId: input.workItemId,
     });
     if (!result.ok) log(`[wrapper] seat exit not recorded: ${result.code}`);

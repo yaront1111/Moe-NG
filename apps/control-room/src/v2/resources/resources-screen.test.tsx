@@ -1,10 +1,15 @@
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
+import { MIDDOT } from "../glyphs.js";
 import { credentialSource, credentialSourceWords } from "./resources-credential.js";
 import {
   CREDENTIAL_VALUE, HEAD_SHA, REMOTE_URL, REPO_ROOT, STORE_PATH, activation, allRead,
-  withProviderReceipt,
+  withProviderReceipt, withReceipt,
 } from "./resources-frames.fixture.js";
 import { ResourcesScreen } from "./resources-screen.js";
 import type { ResourceReads } from "./resources-model.js";
@@ -52,13 +57,61 @@ describe("resources screen, the project's measured facts", () => {
     }
   });
 
-  it("states a fact no read serves rather than omitting it", () => {
+  it("states a fact no read serves as untracked, never as a failed read, and never omits it", () => {
     render(<ResourcesScreen reads={allRead()} />);
     for (const id of ["repository.branch", "store.size"]) {
-      expect(screen.getByTestId(`cr.resources.fact.${id}`).getAttribute("data-state")).toBe("REFUSED");
-      expect(screen.getByTestId(`cr.resources.refusal.${id}`).textContent)
-        .toContain("RESOURCES_FACT_NOT_SERVED @ CONTROL_ROOM_RESOURCES");
+      expect(screen.getByTestId(`cr.resources.fact.${id}`).getAttribute("data-state")).toBe("UNSERVED");
+      expect(screen.getByTestId(`cr.resources.unserved.${id}`).textContent).toBe("Not tracked by this build.");
+      expect(screen.queryByTestId(`cr.resources.refusal.${id}`), id).toBeNull();
     }
+  });
+
+  it("states the backup the activation read defers as not measured, never as a failed read", () => {
+    // The fixture's backup receipt is the daemon's own ACTIVATION_READ_BACKUP_DEFERRED @
+    // ACTIVATION_READ (activation-read.ts deferredBackupRow, excluded from `blocking` there):
+    // the read never takes a backup, so on a healthy daemon this row is not a failure.
+    render(<ResourcesScreen reads={allRead()} />);
+    const row = screen.getByTestId("cr.resources.fact.store.backup");
+    expect(row.getAttribute("data-state")).toBe("DEFERRED");
+    expect(screen.getByTestId("cr.resources.deferred.store.backup").textContent)
+      .toBe("Not measured by a read; the backup is written when project.activate runs.");
+    expect(screen.queryByTestId("cr.resources.refusal.store.backup")).toBeNull();
+    expect(screen.queryByTestId("cr.resources.value.store.backup")).toBeNull();
+  });
+
+  it("keeps every other unmeasured backup receipt a refusal, the deferred code at another layer included", () => {
+    for (const [code, layer] of [
+      ["ACTIVATION_BACKUP_FAILED", "DAEMON_ACTIVATION_RECEIPTS"],
+      ["ACTIVATION_READ_BACKUP_DEFERRED", "DAEMON_ACTIVATION_RECEIPTS"],
+      ["ACTIVATION_BACKUP_FAILED", "ACTIVATION_READ"],
+    ] as const) {
+      cleanup();
+      render(<ResourcesScreen reads={{ ...allRead(), activation: activation(withReceipt("backup", {
+        code, hash: null, layer, measured: false, member: "backup", reason: "the backup did not complete", ref: null,
+      })) }} />);
+      const key = `${code} @ ${layer}`;
+      expect(screen.getByTestId("cr.resources.fact.store.backup").getAttribute("data-state"), key).toBe("REFUSED");
+      expect(screen.getByTestId("cr.resources.refusal.store.backup").textContent, key).toContain(key);
+      expect(screen.queryByTestId("cr.resources.deferred.store.backup"), key).toBeNull();
+      expect(screen.getByTestId("cr.resources.banner").textContent, key)
+        .toBe(`10 of 11 facts measured ${MIDDOT} 1 could not be read`);
+    }
+  });
+
+  it("counts only the facts a read measures or refuses, and names a failure count only when a read failed", () => {
+    // Healthy daemon: ten facts measured, the deferred backup and the two unserved rows outside
+    // both numbers, and no "could not be read" figure at all.
+    render(<ResourcesScreen reads={allRead()} />);
+    expect(screen.getByTestId("cr.resources.banner").textContent).toBe("10 of 10 facts measured");
+    cleanup();
+
+    // A backup taken (project.activate ran): the row joins the count as a measured fact.
+    render(<ResourcesScreen reads={{ ...allRead(), activation: activation(withReceipt("backup", {
+      code: null, hash: null, layer: null, measured: true, member: "backup",
+      reason: "a backup was taken", ref: "backup/2026-09-05",
+    })) }} />);
+    expect(valueOf("store.backup")).toBe("backup/2026-09-05");
+    expect(screen.getByTestId("cr.resources.banner").textContent).toBe("11 of 11 facts measured");
   });
 
   it("reads pending until a read answers, without dropping the row", () => {
@@ -69,6 +122,62 @@ describe("resources screen, the project's measured facts", () => {
     expect(screen.getByTestId("cr.resources.fact.provider.cli")).toBeTruthy();
     expect(screen.getByTestId("cr.resources.banner").textContent)
       .toBe("Reading this project's resources...");
+  });
+});
+
+/**
+ * THE DAEMON'S REAL WIRE SHAPE for the provider receipt. `measureProvider`
+ * (apps/daemon/src/bootstrap/activation-receipts-measure.ts) builds
+ * `measuredReceipt("provider", probeRef, credential.ref)`: the receipt's `ref` is the
+ * committed `provider.probe` envelope ref - `provider-profile-1`, the value this browser's
+ * own probe payload sends (live/live-dispatch-payloads.ts) - and the credential PRESENCE
+ * ref is the receipt's `detail`, which /activation/read publishes as the row's `reason`
+ * (activation-read.ts `receiptRow`; pinned by activation-read.test.ts "PRESENCE is still
+ * reported" and activation-receipts-measure.test.ts "reports a sign-in file as presence").
+ *
+ * MEASURED on a real project (2026-09-13): the Goals card rendered the provider receipt's
+ * reason as `credential/claude/login-file` while this screen showed both provider rows as
+ * RESOURCES_CREDENTIAL_SOURCE_UNRECOGNISED, because it fed `provider-profile-1` to the
+ * grammar. These arms feed the daemon's rows, not a fixture shaped after the grammar.
+ */
+describe("the provider rows read the field the daemon carries the credential ref in", () => {
+  /** One provider row exactly as the daemon serves it for a sign-in file credential. */
+  const loginFileRow = {
+    code: null, hash: null, layer: null, measured: true, member: "provider",
+    reason: "credential/claude/login-file", ref: "provider-profile-1",
+  };
+
+  it("states the sign-in file source from the daemon's login-file row", () => {
+    render(<ResourcesScreen reads={{
+      ...allRead(), activation: activation(withProviderReceipt(loginFileRow)),
+    }} />);
+    expect(screen.queryByTestId("cr.resources.refusal.provider.credential")).toBeNull();
+    expect(valueOf("provider.cli")).toBe("claude");
+    expect(valueOf("provider.credential")).toBe("a signed-in credential file on this host");
+  });
+
+  it("states the variable NAME from the daemon's env row", () => {
+    render(<ResourcesScreen reads={{
+      ...allRead(), activation: activation(withProviderReceipt({
+        ...loginFileRow, reason: "credential/claude/env:ANTHROPIC_AUTH_TOKEN",
+      })),
+    }} />);
+    expect(valueOf("provider.cli")).toBe("claude");
+    expect(valueOf("provider.credential")).toBe("the ANTHROPIC_AUTH_TOKEN environment variable");
+  });
+
+  it("never parses the probe envelope ref as a credential source", () => {
+    // The two fields swapped: a credential-shaped `ref` beside a prose `reason` is the shape
+    // this suite's fixture used to carry, and it is NOT what the daemon serves. Reading `ref`
+    // would render a source the daemon never stated.
+    render(<ResourcesScreen reads={{
+      ...allRead(), activation: activation(withProviderReceipt({
+        ...loginFileRow, reason: "claude is on PATH", ref: "credential/claude/login-file",
+      })),
+    }} />);
+    expect(screen.queryByTestId("cr.resources.value.provider.credential")).toBeNull();
+    expect(screen.getByTestId("cr.resources.refusal.provider.credential").textContent)
+      .toContain("RESOURCES_CREDENTIAL_SOURCE_UNRECOGNISED @ CONTROL_ROOM_RESOURCES");
   });
 });
 
@@ -93,17 +202,18 @@ function renderedText(): string {
 }
 
 describe("resources screen never renders a credential value", () => {
-  it("renders the SOURCE and not the value when a value rides in on the receipt's prose", () => {
-    // The MEASURED leak activation-read.ts:113-131 exists to stop: a git stderr tail that
-    // echoed the environment. Here it arrives at the browser unscrubbed anyway, and the
-    // ref is the well-formed one, so the source IS renderable and the value is beside it.
+  it("renders the SOURCE and not the value when a value rides in on the receipt's ref and hash", () => {
+    // The two fields the grammar does NOT read. The daemon's `ref` here is the probe
+    // envelope ref, so a value in it is a probe payload echoing a token; whatever it
+    // carries, nothing of it is rendered, and the source is still stated from the
+    // well-formed `reason` beside it.
     const reads = allRead();
     const poisoned: ResourceReads = {
       ...reads,
       activation: activation(withProviderReceipt({
         code: null, hash: CREDENTIAL_VALUE, layer: null, measured: true, member: "provider",
-        reason: `fatal: env ANTHROPIC_AUTH_TOKEN=${CREDENTIAL_VALUE}`,
-        ref: "credential/claude/env:ANTHROPIC_AUTH_TOKEN",
+        reason: "credential/claude/env:ANTHROPIC_AUTH_TOKEN",
+        ref: `provider-profile-${CREDENTIAL_VALUE}`,
       })),
     };
     render(<ResourcesScreen reads={poisoned} />);
@@ -118,27 +228,38 @@ describe("resources screen never renders a credential value", () => {
     expect(rendered).toContain("ANTHROPIC_AUTH_TOKEN");
   });
 
-  it("refuses with a code, rather than rendering it, when the value rides in on the ref", () => {
-    const reads = allRead();
-    const poisoned: ResourceReads = {
-      ...reads,
-      activation: activation(withProviderReceipt({
-        code: null, hash: null, layer: null, measured: true, member: "provider",
-        reason: "claude is on PATH", ref: `credential/claude/env:${CREDENTIAL_VALUE}`,
-      })),
-    };
-    render(<ResourcesScreen reads={poisoned} />);
+  it("refuses with a code, rather than rendering it, when the value rides in on the reason", () => {
+    // `reason` is the ONE field the grammar reads, so this is the field a value would have
+    // to arrive on. Two shapes: a grammar-shaped one with the value where the NAME goes, and
+    // the MEASURED leak activation-read.ts `secretValues` exists to stop - a git stderr tail
+    // echoing the environment - arriving at the browser unscrubbed anyway.
+    const shapes = [
+      `credential/claude/env:${CREDENTIAL_VALUE}`,
+      `fatal: env ANTHROPIC_AUTH_TOKEN=${CREDENTIAL_VALUE}`,
+    ];
+    for (const reason of shapes) {
+      cleanup();
+      const reads = allRead();
+      const poisoned: ResourceReads = {
+        ...reads,
+        activation: activation(withProviderReceipt({
+          code: null, hash: null, layer: null, measured: true, member: "provider",
+          reason, ref: "provider-profile-1",
+        })),
+      };
+      render(<ResourcesScreen reads={poisoned} />);
 
-    const rendered = renderedText();
-    expect(rendered).not.toContain(CREDENTIAL_VALUE);
-    // The grammar failed CLOSED: the row states a code where the source would have gone.
-    for (const id of ["provider.cli", "provider.credential"]) {
-      expect(screen.queryByTestId(`cr.resources.value.${id}`)).toBeNull();
-      expect(screen.getByTestId(`cr.resources.refusal.${id}`).textContent)
-        .toContain("RESOURCES_CREDENTIAL_SOURCE_UNRECOGNISED @ CONTROL_ROOM_RESOURCES");
+      const rendered = renderedText();
+      expect(rendered, reason).not.toContain(CREDENTIAL_VALUE);
+      // The grammar failed CLOSED: the row states a code where the source would have gone.
+      for (const id of ["provider.cli", "provider.credential"]) {
+        expect(screen.queryByTestId(`cr.resources.value.${id}`), `${id} ${reason}`).toBeNull();
+        expect(screen.getByTestId(`cr.resources.refusal.${id}`).textContent)
+          .toContain("RESOURCES_CREDENTIAL_SOURCE_UNRECOGNISED @ CONTROL_ROOM_RESOURCES");
+      }
+      // Every other fact still renders: failing closed on the provider blanks nothing else.
+      expect(valueOf("store.path")).toBe(STORE_PATH);
     }
-    // Every other fact still renders: failing closed on the provider blanks nothing else.
-    expect(valueOf("store.path")).toBe(STORE_PATH);
   });
 
   it("renders a sign-in file as a source without naming any path beyond the daemon's word", () => {
@@ -147,7 +268,7 @@ describe("resources screen never renders a credential value", () => {
       ...reads,
       activation: activation(withProviderReceipt({
         code: null, hash: null, layer: null, measured: true, member: "provider",
-        reason: `signed in; token ${CREDENTIAL_VALUE}`, ref: "credential/codex/login-file",
+        reason: "credential/codex/login-file", ref: `provider-profile-${CREDENTIAL_VALUE}`,
       })),
     }} />);
 
@@ -194,5 +315,21 @@ describe("the credential grammar fails closed", () => {
       .toBe("the ANTHROPIC_AUTH_TOKEN environment variable");
     expect(credentialSourceWords("login-file")).toBe("a signed-in credential file on this host");
     expect(credentialSourceWords("ungated")).toBe("no credential gate for this command");
+  });
+});
+
+/**
+ * THE SOURCE RAIL (AGENTS.md: at most 250 lines per production source). MEASURED on
+ * d2c85616: resources-model.ts was 252 lines, 243 on main 8b80d247, the overrun being a
+ * doc block above `providerSection` that restated what resources-credential.ts and the
+ * describe above already say. Counted as `wc -l` counts, by line terminators. The path is
+ * joined from `import.meta.url` as goal-publish.test.tsx does: under this jsdom environment
+ * `new URL(name, import.meta.url)` resolves to the document origin, not to a file.
+ */
+describe("resources-model.ts stays inside the production source rail", () => {
+  it("is at most 250 lines", () => {
+    const source = readFileSync(join(dirname(fileURLToPath(import.meta.url)), "resources-model.ts"), "utf8");
+    const lines = (source.match(/\r?\n/gu) ?? []).length;
+    expect(lines, `resources-model.ts is ${lines} lines`).toBeLessThanOrEqual(250);
   });
 });

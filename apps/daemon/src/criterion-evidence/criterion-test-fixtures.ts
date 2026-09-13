@@ -14,6 +14,29 @@ import { createCriterionEvidenceService } from "./criterion-service.js";
 import type { CriterionEvidenceOptions } from "./criterion-service.js";
 import { commitCriterionRecord, criterionCatalogId, criterionReceiptId, criterionRunsId } from "./criterion-storage.js";
 
+/**
+ * Overwrites the goal aggregate's FOLDED state with one observation - the technique
+ * `compiled-node-identity-test-fixtures.ts` uses for historical goals. `readDurableLedger` takes
+ * the LAST committed decision on an aggregate as its state, so this is how a reader test reaches
+ * a lifecycle no production handler in this daemon can write yet (there is no `goal.cancel`
+ * handler) or a goal whose planning-run chain no longer resolves.
+ */
+export function recordGoalObservation(store: SqliteEventStore, observation: {
+  readonly lifecycle: "CANCELLED" | "EXECUTION_ENABLED"; readonly planningRunRef: string;
+}): void {
+  const version = store.getAggregateVersion(GOAL_ID);
+  const bytes = new TextEncoder().encode(JSON.stringify({ goalId: GOAL_ID, projectId: PROJECT_ID, ...observation }));
+  const id = `criterion-goal-observation-${String(version)}`;
+  const result = store.commitExpectedVersionDecision({
+    commandKind: "criterion.fixture", committedResultBytes: bytes, correlationId: id,
+    decidedAt: "2026-09-06T00:00:00.000Z", expectedVersion: version,
+    events: [{ domainSchemaVersion: "criterion-fixture/1", eventId: id, eventType: "CriterionGoalObservation", payload: bytes }],
+    key: { commandId: id, principalId: OPERATOR, projectId: PROJECT_ID },
+    requestBytes: bytes, targetAggregateId: GOAL_ID,
+  });
+  if (result.decision.effectDisposition !== "EFFECTS_COMMITTED") throw new Error("goal observation refused");
+}
+
 export function criterionWorld(overrides: Partial<Omit<CriterionEvidenceOptions, "store" | "projectId">> = {}) {
   const store = boundWorld(); const ref = committedRevision(store);
   approveGate1(store, ref); expect(submit(store, ref).ok).toBe(true); approvePlan(store, RUN_ID);

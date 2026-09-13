@@ -18,7 +18,7 @@ import { decisionsOf } from "../decision-ledger-memo.js";
  * the DAEMON process, folding those records so `/sessions/read` can state, per seat, which
  * provider it was actually started with and what that provider's CLI reported. Two processes,
  * one durable record between them — which is precisely why the published members are named for
- * the START, not for now: see `SessionView` in `http/sessions-read.ts`.
+ * the START, not for now: see `SessionView` in `http/sessions-read-contracts.ts`.
  *
  * The commit path is `recordSeatExit`'s, not a second one: `commit` and `existing` are imported
  * from the pause ledger rather than copied, so a replay rule that changes changes for both.
@@ -81,6 +81,13 @@ const LEDGER_PAGE_SIZE = 200;
 export interface SeatStartFacts {
   readonly agentVersion: string;
   readonly provider: string;
+  /**
+   * The wrapper's clock when it spawned the seat — the record's own `startedAt`, which the read
+   * never surfaced before: the Health screen said "live until" and nothing about how long a seat had
+   * been sitting there. Null for a seat with no readable record, because no word means "unknown"
+   * and is also an instant.
+   */
+  readonly startedAt: string | null;
 }
 
 export type SeatStartLedger = ReadonlyMap<string, SeatStartFacts>;
@@ -112,6 +119,7 @@ export function readSeatStartLedger(store: SqliteEventStore, projectId: string):
     }
     seats.set(decoded.record.sessionId, Object.freeze({
       agentVersion: decoded.record.agentVersion, provider: decoded.record.provider,
+      startedAt: decoded.record.startedAt,
     }));
   }
   return seats;
@@ -119,5 +127,5 @@ export function readSeatStartLedger(store: SqliteEventStore, projectId: string):
 
 /** What a seat with no readable start record publishes: the one stated unknown, on both members. */
 export const SEAT_START_UNKNOWN: SeatStartFacts = Object.freeze({
-  agentVersion: SEAT_FACT_UNMEASURED, provider: SEAT_FACT_UNMEASURED,
+  agentVersion: SEAT_FACT_UNMEASURED, provider: SEAT_FACT_UNMEASURED, startedAt: null,
 });
