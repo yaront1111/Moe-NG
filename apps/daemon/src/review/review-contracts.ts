@@ -86,11 +86,18 @@ export type ReviewIngressRefusalCode = (typeof REVIEW_INGRESS_REFUSAL_CODES)[num
  * `REVIEW_COMMAND_BYTES_CONFLICT` is the replay fence's second arm: the decision key covers
  * neither kind nor payload, so a commandId reused under the same kind with different bytes is
  * refused instead of being handed the earlier decision as an accepted replay.
+ *
+ * `REVIEW_COMMAND_ID_SPENT` is its third arm: a commandId whose decision row is a refusal
+ * (NO_BUSINESS_EFFECT) carries no same-bytes evidence, and the store folds the presented
+ * version into the request identity, so a resubmit at the refreshed version raised
+ * IdempotencyConflictError from the commit seam — a bare 409 — while the replay comment
+ * promised "decided again from scratch". The id is spent; resubmit under a new one.
  */
 export const REVIEW_PREREQUISITE_REFUSAL_CODES = Object.freeze([
   "REVIEW_ALREADY_ACCEPTED",
   "REVIEW_COMMAND_BYTES_CONFLICT",
   "REVIEW_COMMAND_ID_REUSED",
+  "REVIEW_COMMAND_ID_SPENT",
   "REVIEW_EXPECTED_VERSION_STALE",
   "REVIEW_LINEAGE_UNREADABLE",
   "REVIEW_ESCALATION_NOT_REACHED",

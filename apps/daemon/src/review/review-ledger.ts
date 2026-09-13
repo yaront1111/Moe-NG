@@ -214,9 +214,16 @@ export function replayOf(store: SqliteEventStore, request: ReviewRequest): Revie
     return refuse(request.kind, "REVIEW_COMMAND_ID_REUSED", "DAEMON_PREREQUISITE");
   }
   // A refused decision's receipt carries no request digest (it commits the rejection audit
-  // payload), so nothing here could prove the resubmit is the command that was decided: fall
-  // through and decide it again from scratch. This must stay AHEAD of the byte compare below.
-  if (existing.effectDisposition !== "EFFECTS_COMMITTED") return null;
+  // payload), so nothing here could prove the resubmit is the command that was decided. It
+  // used to fall through as "decide it again from scratch", but the store folds the presented
+  // version into the request identity, so a resubmit at the refreshed version reached the
+  // commit seam as a different request under the same key and raised IdempotencyConflictError
+  // (a bare 409 at the transport), while a resubmit at the stale version only replayed the
+  // refusal. The id is spent: say so under this layer's own code, and stay AHEAD of the byte
+  // compare below, which reads a digest only an accepted decision carries.
+  if (existing.effectDisposition !== "EFFECTS_COMMITTED") {
+    return refuse(request.kind, "REVIEW_COMMAND_ID_SPENT", "DAEMON_PREREQUISITE");
+  }
   // The key does not cover the payload either. A caller reusing a commandId under the SAME kind
   // with DIFFERENT bytes (another subject, another round, other findings) would otherwise be
   // handed the earlier decision as an accepted replay: durable authority for a command never

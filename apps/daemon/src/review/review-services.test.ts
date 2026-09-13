@@ -3,8 +3,8 @@ import { REVIEW_REASON_CODES, findingFingerprint } from "@moe/review";
 import type { ReviewPackageBoundItem, ReviewPackageItemInput } from "@moe/review";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { REVIEW_COMMAND_KINDS, REVIEW_SCHEMA_VERSION } from "./review-contracts.js";
-import { readReviewLedger } from "./review-ledger.js";
+import { REVIEW_COMMAND_KINDS, REVIEW_SCHEMA_VERSION, decodeReviewRequestBytes } from "./review-contracts.js";
+import { commitAccepted, readReviewLedger } from "./review-ledger.js";
 import type { StoredPackageItems } from "./review-round-items.js";
 import { runReviewCommand } from "./review-services.js";
 import {
@@ -448,5 +448,50 @@ describe("a refusal names the code AND the layer that produced it", () => {
     if (!replay.ok) throw new Error("expected replay");
     expect(replay.disposition).toBe("REPLAYED");
     expect(replay.decision.decisionId).toBe(first.decision.decisionId);
+  });
+});
+
+/**
+ * A refused command id is SPENT. The store folds the presented expectedVersion into the
+ * request identity, so a resubmit under the same commandId at the refreshed version carried
+ * different request bytes under the same key: `replayOf` declined to answer from the
+ * NO_BUSINESS_EFFECT row ("decide it again from scratch"), the handler's own version check
+ * passed, `commitAccepted` reached the store, and the store threw IdempotencyConflictError —
+ * a bare 409 at the transport. The bootstrap family closed the same hole with
+ * BOOTSTRAP_COMMAND_ID_SPENT.
+ */
+describe("runReviewCommand spends a refused command id", () => {
+  it("refuses the resubmit at the refreshed version with a stable code, never a store throw", () => {
+    const store = openStore();
+    expect(submit(store, 1).ok).toBe(true);
+    // The daemon's own version pre-check answers a stale fence before the store, so the
+    // NO_BUSINESS_EFFECT row a concurrent commit leaves behind is written here through the
+    // PRODUCTION commit seam under a stale fence, not forged.
+    const decoded = decodeReviewRequestBytes(new TextEncoder().encode(JSON.stringify(
+      envelope("review.submit", 0, submitPayload(2), "cmd-spent"),
+    )));
+    if (!decoded.ok) throw new Error(decoded.code);
+    const refused = commitAccepted(store, decoded.request, {
+      aggregateId: SUBJECT_REF, eventPayload: { ignored: true }, eventType: "ReviewRoundRecorded",
+      expectedVersion: 0, result: { ignored: true },
+    });
+    expect(refused).toMatchObject({
+      code: "EXPECTED_VERSION_CONFLICT", ok: false, refusedBy: "DURABLE_STORE",
+    });
+    const before = decisionCount(store);
+
+    const spent = { code: "REVIEW_COMMAND_ID_SPENT", ok: false, refusedBy: "DAEMON_PREREQUISITE" };
+    expect(send(store, envelope("review.submit", 1, submitPayload(2), "cmd-spent")))
+      .toMatchObject(spent);
+    expect(send(store, envelope("review.submit", 0, submitPayload(2), "cmd-spent")))
+      .toMatchObject(spent);
+    expect(send(store, envelope("review.submit", 1, submitPayload(3), "cmd-spent")))
+      .toMatchObject(spent);
+    expect(decisionCount(store)).toBe(before);
+    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).rounds).toHaveLength(1);
+
+    // The retry path is a NEW id at the refreshed version.
+    expect(send(store, envelope("review.submit", 1, submitPayload(2), "cmd-spent-2")))
+      .toMatchObject({ disposition: "DECIDED", ok: true });
   });
 });

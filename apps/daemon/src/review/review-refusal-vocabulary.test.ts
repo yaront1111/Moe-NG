@@ -3,7 +3,9 @@ import { afterEach, expect, it } from "vitest";
 import {
   REVIEW_INGRESS_REFUSAL_CODES,
   REVIEW_PREREQUISITE_REFUSAL_CODES,
+  decodeReviewRequestBytes,
 } from "./review-contracts.js";
+import { commitAccepted } from "./review-ledger.js";
 import type { ReviewOutcome } from "./review-ledger.js";
 import { runReviewCommand } from "./review-services.js";
 import {
@@ -58,6 +60,7 @@ const EXPECTED_DAEMON_CODES = [
   "REVIEW_ALREADY_ACCEPTED",
   "REVIEW_COMMAND_BYTES_CONFLICT",
   "REVIEW_COMMAND_ID_REUSED",
+  "REVIEW_COMMAND_ID_SPENT",
   "REVIEW_COMMAND_UNKNOWN",
   "REVIEW_DELTA_EVIDENCE_UNSUPPLIABLE",
   "REVIEW_DELTA_NODES_EMPTY",
@@ -97,6 +100,19 @@ function driveDaemonRefusals(): readonly string[] {
   expect(submit(reuseStore, 1).ok).toBe(true);
   const bytesStore = openStore();
   expect(submit(bytesStore, 1).ok).toBe(true);
+  // A refused (NO_BUSINESS_EFFECT) row under "cmd-spent", written by the PRODUCTION commit seam
+  // under a stale fence: the daemon's own version pre-check answers a stale fence itself, so
+  // only a commit racing that check leaves such a row behind.
+  const spentStore = openStore();
+  expect(submit(spentStore, 1).ok).toBe(true);
+  const spentRequest = decodeReviewRequestBytes(encoder.encode(JSON.stringify(
+    envelope("review.submit", 0, submitPayload(2), "cmd-spent"),
+  )));
+  if (!spentRequest.ok) throw new Error(spentRequest.code);
+  expect(commitAccepted(spentStore, spentRequest.request, {
+    aggregateId: "node-run-1", eventPayload: { ignored: true }, eventType: "ReviewRoundRecorded",
+    expectedVersion: 0, result: { ignored: true },
+  }).ok).toBe(false);
   const cappedStore = openStore();
   driveRounds(cappedStore, 3);
   // Three failed rounds, then the human answers REPLAN: the node takes no further round.
@@ -210,6 +226,9 @@ function driveDaemonRefusals(): readonly string[] {
     ))),
     daemonCode("commandId reused under the same kind with other bytes", send(bytesStore, envelope(
       "review.submit", 0, submitPayload(7, [], { subjectRef: "node-run-OTHER" }), "cmd-round-1",
+    ))),
+    daemonCode("refused commandId resubmitted at the refreshed version", send(spentStore, envelope(
+      "review.submit", 1, submitPayload(2), "cmd-spent",
     ))),
     daemonCode("fourth round with no recorded escalation", send(cappedStore, envelope(
       "review.submit", 3, submitPayload(4), "cmd-fourth-round",
