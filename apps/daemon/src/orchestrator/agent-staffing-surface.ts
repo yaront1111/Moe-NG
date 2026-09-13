@@ -17,8 +17,15 @@ import { OPERATOR_ACTIVATION_STEPS } from "./agent-spawn-contract.js";
  *
  * This view withholds exactly two shapes and rewrites nothing else:
  *
- *  1. Every step of `OPERATOR_ACTIVATION_STEPS`. The roster's own comment says why it is not
- *     folded into `HUMAN_ONLY_STEPS`.
+ *  1. Every step of `OPERATOR_ACTIVATION_STEPS`, UNTIL the project is activated: while the
+ *     surface's `project.activate` step is not COMMITTED the chain is the browser's to drive
+ *     and no seat takes any of it. Once it is committed the chain passes through again, and
+ *     what that leaves staffable is a `policy.validate` the chain did not send: the shipped
+ *     seed (demo-seed-plan.ts) activates without one, and the J3 crash-recovery e2e (the
+ *     foundation lane) staffs the seeded project's wrapper on exactly that step (measured
+ *     2026-09-13: with the chain withheld unconditionally, "the agent never wrote its pid
+ *     file" on every host). The roster's own comment says why it is not folded into
+ *     `HUMAN_ONLY_STEPS`.
  *  2. A READY `plan.propose` step the surface does not OFFER at that run. The bootstrap loop
  *     (affordance-read.ts:333) deliberately pushes no generic offer for `plan.propose`; the only
  *     offer comes from the per-goal ladder (affordance-planning-offers.ts `offersForGoal`),
@@ -44,16 +51,23 @@ import { OPERATOR_ACTIVATION_STEPS } from "./agent-spawn-contract.js";
  */
 
 const LEGACY_PLANNING_KIND = "plan.propose";
+const ACTIVATION_KIND = "project.activate";
 
 function offeredAt(surface: AffordanceSurface, step: ChainStep): boolean {
   return surface.nextAllowedCommands.some((entry) =>
     entry.commandKind === step.kind && entry.targetAggregateId === step.aggregateId);
 }
 
+/** The chain has been driven to its end: `project.activate` is committed on this surface. */
+function activated(surface: AffordanceSurface): boolean {
+  return surface.steps.some((step) => step.kind === ACTIVATION_KIND && step.status === "COMMITTED");
+}
+
 /** The steps of one surface a seat may be staffed onto; the rest is the board's business. */
 export function staffableSteps(surface: AffordanceSurface): readonly ChainStep[] {
+  const chainIsTheBrowsers = !activated(surface);
   return Object.freeze(surface.steps.filter((step) => {
-    if (OPERATOR_ACTIVATION_STEPS.has(step.kind)) return false;
+    if (chainIsTheBrowsers && OPERATOR_ACTIVATION_STEPS.has(step.kind)) return false;
     if (step.kind === LEGACY_PLANNING_KIND && step.status === "READY") {
       return offeredAt(surface, step);
     }

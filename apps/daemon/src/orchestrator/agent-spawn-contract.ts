@@ -320,7 +320,8 @@ export const COMPILER_STEPS: ReadonlySet<string> = new Set([
 
 /**
  * THE PROJECT ACTIVATION CHAIN: the six bootstrap kinds the operator's browser commits to bring
- * a project to READY. The wrapper never staffs them. MEASURED 2026-09-13 on a real project:
+ * a project to READY. The wrapper staffs none of them until `project.activate` is committed
+ * (agent-staffing-surface.ts says what is staffable after). MEASURED 2026-09-13 on a real project:
  * every one sat READY and unclaimed on the surface until the browser activated the project, and
  * the wrapper spent a claude seat on each (about 28 s per seat, three attempts per item per
  * wrapper process); every seat was refused inside claude and exited.

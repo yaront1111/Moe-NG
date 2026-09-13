@@ -42,6 +42,11 @@ const readyStep = (kind: string, aggregateId: string, version = 0): ChainStep =>
   status: "READY" as const, version,
 });
 
+const committedStep = (kind: string, aggregateId: string, version = 1): ChainStep => Object.freeze({
+  aggregateId, claim: null, claimAggregateVersion: 0, kind, missing: [],
+  status: "COMMITTED" as const, version,
+});
+
 const offerOf = (kind: string, aggregateId: string, version = 0): NextAllowedCommand =>
   Object.freeze({
     commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
@@ -201,6 +206,34 @@ describe("staffableSteps", () => {
       seen.push(kind);
     }
     expect(seen).toHaveLength(6);
+  });
+
+  it("lets the chain through once `project.activate` is COMMITTED: the seeded project's READY policy.validate is staffed", () => {
+    // The J3 crash-recovery e2e (foundation lane): the shipped seed commits the chain WITHOUT a
+    // policy.validate, and the wrapper's fake agent is staffed on exactly that step. With the
+    // chain withheld unconditionally that agent was never spawned (measured 2026-09-13).
+    const seeded = surfaceOf(
+      [
+        committedStep("project.register", PROJECT), committedStep("project.bind_repository", PROJECT),
+        committedStep("provider.probe", `${PROJECT}-provider`), committedStep("policy.install", `${PROJECT}-policy`),
+        committedStep("project.activate", PROJECT), readyStep("policy.validate", `${PROJECT}-policy`),
+      ],
+      [offerOf("policy.validate", `${PROJECT}-policy`)],
+      {},
+    );
+    expect(staffableSteps(seeded)).toEqual([...seeded.steps]);
+  });
+
+  it("keeps withholding a READY policy.validate while `project.activate` is only READY, not committed", () => {
+    const midChain = surfaceOf(
+      [
+        committedStep("policy.install", `${PROJECT}-policy`), readyStep("policy.validate", `${PROJECT}-policy`),
+        readyStep("project.activate", PROJECT),
+      ],
+      [offerOf("policy.validate", `${PROJECT}-policy`), offerOf("project.activate", PROJECT)],
+      {},
+    );
+    expect(staffableSteps(midChain)).toEqual([]);
   });
 
   it("keys the legacy planning row on the OFFER, not on the goal refs: a source-bound goal's run is withheld", () => {
