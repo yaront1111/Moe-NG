@@ -5,6 +5,24 @@ import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { mapDocumentCoverageAnswer } from "../../live/live-document-coverage.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import { PrdCoverage, coverageBanner, coverageComplete } from "./prd-coverage.js";
+import type { FoldedRosterProps } from "./statement-folds.js";
+
+/**
+ * The roster, counted: FoldedRoster is the production component, called through a wrapper
+ * that records each render. React reconciles the whole CoverageBody - and so this roster -
+ * whenever the card's state moves, and only then; the count is the observable.
+ */
+const roster = vi.hoisted(() => ({ renders: 0 }));
+vi.mock("./statement-folds.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./statement-folds.js")>();
+  return {
+    ...actual,
+    FoldedRoster: <T,>(props: FoldedRosterProps<T>) => {
+      roster.renders += 1;
+      return actual.FoldedRoster(props);
+    },
+  };
+});
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -138,7 +156,36 @@ describe("the PRD coverage card", () => {
       .toContain("The coverage could not be read right now.");
     cleanup();
     render(<PrdCoverage goalId="goal-1" pollMs={60_000} read={() => Promise.reject(new Error("x"))} />);
-    expect((await screen.findByTestId("cr.coverage.refusal")).textContent).toContain("COVERAGE_READ_FAILED");
+    expect((await screen.findByTestId("cr.coverage.refusal")).textContent)
+      .toContain("COVERAGE_READ_FAILED @ CONTROL_ROOM_COVERAGE");
+  });
+
+  it("renders the roster once while every poll answers the same coverage, again when the answer moves", async () => {
+    let reads = 0;
+    let goals = 1;
+    // A fresh object per poll with the same content, as the wire decoder hands one over.
+    const read = async (): Promise<DocumentCoverageOutcome> => {
+      reads += 1;
+      const current = coverage();
+      return { ...current, totals: { ...current.totals, goals } };
+    };
+    roster.renders = 0;
+    render(<PrdCoverage goalId="goal-1" pollMs={5} read={read} />);
+    await screen.findByTestId("cr.coverage.body");
+    expect(screen.getByTestId("cr.coverage.document").textContent).toContain("1 goal ");
+    const rendersAtSettle = roster.renders;
+    const readsAtSettle = reads;
+    await waitFor(() => expect(reads).toBeGreaterThan(readsAtSettle + 5));
+    // Five later polls each decoded the same answer: the roster was not rendered again.
+    expect(roster.renders).toBe(rendersAtSettle);
+
+    // A second goal cites the PRD: the contracts are unchanged but the document line is not,
+    // so the whole answer - not only `contracts` - decides what a poll keeps.
+    goals = 2;
+    await waitFor(() => {
+      expect(screen.getByTestId("cr.coverage.document").textContent).toContain("2 goals");
+    });
+    expect(roster.renders).toBeGreaterThan(rendersAtSettle);
   });
 
   it("re-reads on its poll cadence and drops a stale answer after unmount", async () => {

@@ -9,7 +9,8 @@ import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
 import { contractGateKey, notDecidedYet, useContractGates } from "./contract-gates.js";
 import type { ContractGateMap, Gate1Reader } from "./contract-gates.js";
-import { useLiveCoverage } from "./live-coverage.js";
+import { sameDossier, useLiveCoverage } from "./live-coverage.js";
+import type { CoverageSurface } from "./live-coverage.js";
 import { FoldedRoster } from "./statement-folds.js";
 
 /**
@@ -36,6 +37,11 @@ import { FoldedRoster } from "./statement-folds.js";
  */
 
 const DEFAULT_POLL_MS = 10_000;
+/** What this dossier shows of a coverage answer (live-coverage.ts). */
+const DOSSIER_COVERAGE: CoverageSurface = {
+  readFailed: { code: "CONTRACT_DOSSIER_COVERAGE_READ_FAILED", layer: "CONTROL_ROOM_GOALS" },
+  same: sameDossier,
+};
 
 export interface ContractDossierProps {
   readonly coverage: DocumentCoverageOutcome | null;
@@ -214,7 +220,7 @@ export interface LiveContractDossierProps {
 export function LiveContractDossier(
   { goalId, pollMs, readCoverage, readGate }: LiveContractDossierProps,
 ): JSX.Element {
-  const coverage = useLiveCoverage(goalId, readCoverage, pollMs ?? DEFAULT_POLL_MS);
+  const coverage = useLiveCoverage(goalId, readCoverage, pollMs ?? DEFAULT_POLL_MS, DOSSIER_COVERAGE);
   const gates = useContractGates(coverage, readGate, pollMs ?? DEFAULT_POLL_MS);
   return <ContractDossier coverage={coverage} gates={gates} />;
 }

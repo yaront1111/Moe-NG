@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import type {
@@ -7,6 +6,8 @@ import type {
 import { OutcomeNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
+import { sameAnswer, useLiveCoverage } from "./live-coverage.js";
+import type { CoverageSurface } from "./live-coverage.js";
 import { FoldedRoster } from "./statement-folds.js";
 
 /**
@@ -27,10 +28,20 @@ import { FoldedRoster } from "./statement-folds.js";
  * <details>' children, so a flat map of every requirement and criterion was one more copy
  * of the 128 + 150 statement roster on the page that stalled (statement-folds.tsx holds the
  * measurement). Requirements fold by identifier family, criteria nested in their
- * requirement's row, and a family mounts its rows only once opened.
+ * requirement's row, and a family mounts its rows only once opened. THE POLL KEEPS ITS
+ * STATE while the daemon answers the same coverage (live-coverage.ts), so the folded body is
+ * not reconciled every DEFAULT_POLL_MS for an unchanged answer.
  */
 
 const DEFAULT_POLL_MS = 5_000;
+/**
+ * Everything the card shows - totals, document line, contracts, section map - so only a
+ * whole answer is the same one; a read that throws is named under this card's own layer.
+ */
+const PRD_COVERAGE: CoverageSurface = {
+  readFailed: { code: "COVERAGE_READ_FAILED", layer: "CONTROL_ROOM_COVERAGE" },
+  same: sameAnswer,
+};
 
 export interface PrdCoverageProps {
   readonly goalId: string;
@@ -38,10 +49,6 @@ export interface PrdCoverageProps {
   readonly pollMs?: number | undefined;
   readonly read: (goalId: string) => Promise<DocumentCoverageOutcome>;
 }
-
-type LoadState =
-  | { readonly phase: "LOADING" }
-  | { readonly outcome: DocumentCoverageOutcome; readonly phase: "LOADED" };
 
 type Coverage = Extract<DocumentCoverageOutcome, { status: "COVERAGE" }>;
 
@@ -200,45 +207,18 @@ function CoverageBody({ coverage }: { readonly coverage: Coverage }): JSX.Elemen
 }
 
 export function PrdCoverage({ goalId, pollMs, read }: PrdCoverageProps): JSX.Element {
-  const [state, setState] = useState<LoadState>({ phase: "LOADING" });
-  const generation = useRef(0);
-
-  useEffect(() => {
-    const run = generation.current + 1;
-    generation.current = run;
-    setState({ phase: "LOADING" });
-    let inFlight = false;
-    const tick = (): void => {
-      if (inFlight) return;
-      inFlight = true;
-      void read(goalId).then((outcome) => {
-        inFlight = false;
-        if (generation.current === run) setState({ outcome, phase: "LOADED" });
-      }, () => {
-        inFlight = false;
-        if (generation.current === run) {
-          setState({ outcome: {
-            code: "COVERAGE_READ_FAILED", layer: "CONTROL_ROOM_COVERAGE", status: "ERROR",
-          }, phase: "LOADED" });
-        }
-      });
-    };
-    tick();
-    const timer = setInterval(tick, pollMs ?? DEFAULT_POLL_MS);
-    return (): void => { generation.current += 1; clearInterval(timer); };
-  }, [goalId, pollMs, read]);
-
+  const outcome = useLiveCoverage(goalId, read, pollMs ?? DEFAULT_POLL_MS, PRD_COVERAGE);
   return (
     <section className="cr2-approve" data-testid="cr.coverage.card">
       <p className="cr2-slot-kicker">PRD coverage</p>
-      {state.phase === "LOADING" ? (
+      {outcome === null ? (
         <p className="cr2-slot-kicker" data-testid="cr.coverage.loading">Reading coverage...</p>
-      ) : state.outcome.status === "COVERAGE" ? (
-        <CoverageBody coverage={state.outcome} />
+      ) : outcome.status === "COVERAGE" ? (
+        <CoverageBody coverage={outcome} />
       ) : (
         <OutcomeNote
-          code={state.outcome.code}
-          layer={state.outcome.layer}
+          code={outcome.code}
+          layer={outcome.layer}
           said={readFailedSaid("coverage")}
           testId="cr.coverage.refusal"
         />
