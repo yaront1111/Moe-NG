@@ -4,27 +4,25 @@ import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { JsonObject } from "@moe/contracts";
 
 import { agentCapabilitiesFor } from "../daemon-store-dependencies.js";
-import type { AffordancePort, ChainStep } from "../http/affordance-contract.js";
+import type { ChainStep } from "../http/affordance-contract.js";
 import { handleCommandRequest } from "../http/http-adapter.js";
-import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import { workItemIdFor } from "../http/affordance-read.js";
 import { createAgentAuthorityCleanup } from "./agent-authority-cleanup.js";
 import { DESIGN_STEP_KIND, byStaffingRank } from "./agent-staffing-order.js";
-import { type DesignBrief, codeMission, compilerMission, designMission, mission }
-  from "./agent-mission-text.js";
-import type { AgentSessionFence } from "./agent-session-fence.js";
+import { codeMission, compilerMission, designMission, mission } from "./agent-mission-text.js";
 import { PROVIDER_PAUSED_OUTCOME } from "./agent-provider-pause.js";
-import type { ProviderPauseGate } from "./agent-provider-pause.js";
 import { decideSeatProvider, pauseProviderOf } from "./agent-provider-resolve.js";
 import { COMPILER_STEPS, GATE_REFUSALS, HUMAN_ONLY_STEPS } from "./agent-spawn-contract.js";
-import type { AgentSpawnStart, ProviderPauseFacts, RunOnceReport,
-  SpawnReport } from "./agent-spawn-contract.js";
+import type { ProviderPauseFacts, RunOnceReport, SpawnReport } from "./agent-spawn-contract.js";
+import type { AgentWrapperConfig, NodeMission } from "./agent-wrapper-config.js";
 import { createAgentWrapperStaffing } from "./agent-wrapper-staffing.js";
 
 // The kind rosters live in the contract file (data, not behaviour); re-exported here so
 // the offer surface's test keeps importing HUMAN_ONLY_STEPS from the wrapper it guards.
 export { HUMAN_ONLY_STEPS } from "./agent-spawn-contract.js";
+// The config contract moved file, not home: every importer of these three keeps its path.
+export type { AgentWrapperConfig, NodeMission, SpawnRequest } from "./agent-wrapper-config.js";
 
 /**
  * The wrapper: watches the daemon's own offer surface and staffs it — the
@@ -43,93 +41,6 @@ export { HUMAN_ONLY_STEPS } from "./agent-spawn-contract.js";
  * doesn't. `runOnce` reports what was observed and what was started, nothing
  * more.
  */
-
-export interface SpawnRequest {
-  /** The agent's bearer credential. Hand it to the process environment only. */
-  readonly credential: string;
-  /** The CLAIM's expiry, the horizon the mission names; the bearer's is longer. */
-  readonly expiresAt: string;
-  readonly kind: string;
-  readonly mission: string;
-  /** The agent command THIS seat is spawned with; absent keeps the spawner's own chain. */
-  readonly provider?: string;
-  readonly sessionId: string;
-  readonly workItemId: string;
-  /** For code nodes: the directory the agent works in; null for chain steps. */
-  readonly workspace: string | null;
-}
-
-/** Operator-authored coding brief for one node (full spec file). */
-export interface NodeMission {
-  readonly instructions: string;
-  readonly test: string;
-  readonly title: string;
-  readonly workspace: string;
-}
-
-export interface AgentWrapperConfig {
-  readonly affordances: AffordancePort;
-  /** The durable agent-provider setting for one scope ("" is the project default), or
-   *  null when it has none. A fact, not a store handle. */
-  readonly agentProvider?: ((goalId: string) => string | null) | undefined;
-  /**
-   * Claim lifetime per spawn: the reap horizon when a child dies without
-   * releasing. The agent renews it if the work runs longer.
-   */
-  readonly claimTtlMs: number;
-  readonly clock: () => number;
-  readonly deps: CommandAdapterDeps;
-  readonly maxAgents: number;
-  /** Stops restaffing one unmoved item; leaving READY re-arms the counter. */
-  readonly maxItemAttempts?: number | undefined;
-  readonly mintSecret: () => string;
-  /** Coding brief per node ref; a node step without one is not staffed. */
-  readonly nodeMission?: ((nodeRef: string) => NodeMission | null) | undefined;
-  readonly operatorCredential: string;
-  /**
-   * Provider-limit pause: reads every seat exit, refunds a limit exit's attempt and
-   * parks staffing until the reset; absent = today's behaviour.
-   */
-  readonly providerPause?: ProviderPauseGate | undefined;
-  /**
-   * Optional development payload suggestion embedded in the mission, so a real
-   * model does not have to guess witness hashes. Advisory text only — the
-   * daemon's decoder remains the sole payload authority.
-   */
-  readonly payloadHint?: ((kind: string, target: string | null) => JsonObject | null) | undefined;
-  /**
-   * The Gate 1 approval triple for a source-bound goal, resolved from durable
-   * state for the DISPATCHER mission only. Convenience, not authority: the
-   * compile dispatcher re-verifies the gate and digest on every submit, so a
-   * wrong answer here buys a refusal, never a compile.
-   */
-  readonly compilerGateRef?: ((goalId: string | null) => JsonObject | null) | undefined;
-  /** The goal's own operator instructions (a replan's findings live there); null when absent. */
-  readonly compilerInstructions?: ((goalId: string | null) => string | null) | undefined;
-  /** The goal's design outcome for briefs that plan from it. A null answer is STATED as ABSENT
-   *  in the brief, never omitted: a seat that cannot tell a skip from a failed read guesses. */
-  readonly designBrief?: ((kind: string, target: string | null) => DesignBrief | null) | undefined;
-  /** The project the seat's MCP host serves, named in every brief so graph_get is callable. */
-  readonly projectId?: string | undefined;
-  /**
-   * Bearer lifetime per spawn, independent of the claim's. The exit-path
-   * release runs under the agent's own secret, so the bearer must outlive the
-   * child process: a session bound to the claim TTL dies while a long task is
-   * still renewing its claim, and every later release is refused as
-   * unauthenticated. Production derives it from the agent lifetime knob
-   * (wrapper-knobs.ts); absent, it falls back to `claimTtlMs`.
-   */
-  readonly sessionTtlMs?: number | undefined;
-  /**
-   * Starts the agent process and resolves on STARTUP ADMISSION — a coded
-   * refusal, or an accepted start whose `exit` is the child's separate lifetime.
-   * Injectable for tests.
-   */
-  readonly spawnAgent: AgentSpawnStart;
-  /** Durable pre-identity gate. The lifecycle retains its in-process active map;
-   * this injected port survives restarts and expired claims over live children. */
-  readonly staffingFence?: AgentSessionFence | undefined;
-}
 
 const encoder = new TextEncoder();
 function setupError(action: string): Error {
