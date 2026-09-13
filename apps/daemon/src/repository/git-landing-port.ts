@@ -89,15 +89,25 @@ export function landingEnvironment(): NodeJS.ProcessEnv {
 }
 
 export const nodeGitRunner: GitRunner = (cwd, args, stdin) => new Promise((resolve) => {
+  let inputError: unknown = null;
   const child = execFile("git", [...args], {
     cwd, encoding: "utf8", env: landingEnvironment(), maxBuffer: MAX_OUTPUT_BYTES,
     timeout: GIT_TIMEOUT_MS, windowsHide: true,
   }, (error, stdout, stderr) => {
-    const code = error === null ? 0
+    const exit = error === null ? 0
       : typeof (error as { code?: unknown }).code === "number" ? (error as { code: number }).code : null;
-    resolve({ code, stderr: `${stderr}${error === null || code !== null ? "" : String(error)}`, stdout });
+    // A git that exited 0 without taking its whole input did not do what it was asked.
+    const code = exit === 0 && inputError !== null ? null : exit;
+    const words = `${stderr}${error === null || exit !== null ? "" : String(error)}`;
+    resolve({ code, stderr: inputError === null ? words : `${words}stdin: ${String(inputError)}`, stdout });
   });
   if (child.stdin !== null) {
+    // MEASURED 2026-09-13: `hash-object --stdin-paths` aborts on the first path it cannot open
+    // (exit 128) and never drains a payload larger than the pipe. The pending write then fails
+    // asynchronously on this stream (EOF on Windows, EPIPE on POSIX); without a listener that is
+    // an uncaught exception, and it killed the process running the runner before the callback
+    // above ever fired. git's own exit code and words remain the answer.
+    child.stdin.on("error", (error) => { inputError = error; });
     if (stdin !== undefined) child.stdin.write(stdin);
     child.stdin.end();
   }

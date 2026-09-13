@@ -1,11 +1,11 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createGitLandingPort } from "./git-landing-port.js";
+import { createGitLandingPort, nodeGitRunner } from "./git-landing-port.js";
 import { DELETED_BLOB } from "./landing-receipt-contracts.js";
 
 const roots: string[] = [];
@@ -52,6 +52,30 @@ describe("createGitLandingPort against a real repository", () => {
     // The untracked subset, root-relative and sorted: new.ts only (tracked.ts is modified).
     expect(observed.observation.untracked).toEqual(["src/new.ts"]);
   });
+
+  // MEASURED 2026-09-13 (git 2.54, Node 24.16, Windows): `hash-object --stdin-paths` aborts on the
+  // first path it cannot open (exit 128) and never drains the rest of the payload. The pending
+  // write then fails asynchronously on the stdin stream ("EOF" here, EPIPE on POSIX); with no
+  // listener that was an uncaught exception, and a process running the runner died with it
+  // before the runner ever resolved. The child below is that process: it must stay up and answer
+  // git's own exit code. The payload is generated inside the child (a 3.8 MB argv would not fit).
+  it("survives git exiting before it drains a stdin payload larger than the pipe", () => {
+    const root = scratchRepository();
+    const script = [
+      `import { nodeGitRunner } from ${JSON.stringify(new URL("./git-landing-port.ts", import.meta.url).href)};`,
+      `const result = await nodeGitRunner(${JSON.stringify(root)}, ["hash-object", "--stdin-paths"], "does-not-exist.txt\\n".repeat(200_000));`,
+      "process.stdout.write(JSON.stringify({ code: result.code, named: result.stderr.includes(\"does-not-exist.txt\") }));",
+    ].join("\n");
+    const child = spawnSync(process.execPath, ["--input-type=module", "-e", script],
+      { encoding: "utf8", timeout: 60_000, windowsHide: true });
+    expect({ status: child.status, stdout: child.stdout }, child.stderr).toEqual({ status: 0, stdout: JSON.stringify({ code: 128, named: true }) });
+  }, 60_000);
+
+  it("answers git's code and words in-process for the same early exit", async () => {
+    const root = scratchRepository();
+    const result = await nodeGitRunner(root, ["hash-object", "--stdin-paths"], "does-not-exist.txt\n".repeat(200_000));
+    expect({ code: result.code, named: result.stderr.includes("does-not-exist.txt") }).toEqual({ code: 128, named: true });
+  }, 60_000);
 
   it("refuses a directory outside any repository by name", async () => {
     const outside = mkdtempSync(join(tmpdir(), "moe-landing-outside-"));
