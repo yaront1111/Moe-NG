@@ -401,6 +401,7 @@ describe("wrapper binary staffing wiring", () => {
     const pinned = normalised.replace(from, to);
     expect(pinned).not.toBe(normalised);
     expect(() => assertPlaneWiring(pinned)).toThrow();
+  });
 
   // The per-pass log MOVED to ./wrapper-pass-log.ts to bring this file under the 400-line split
   // rail. The paused-line claim did not change, only where it is measured; the binary is still
@@ -408,6 +409,30 @@ describe("wrapper binary staffing wiring", () => {
   const PASS_LOG = readFileSync(
     new URL("./wrapper-pass-log.ts", import.meta.url), "utf8",
   );
+
+  it("loads the payload-hint table through the loader that tells absence from failure", () => {
+    // The installed artifact stages no control-room source (tools/packaging/pack-windows.ts),
+    // so a bare dynamic import here opened every artifact wrapper.log with an
+    // ERR_MODULE_NOT_FOUND line for a designed absence. The loader's behaviour is proven in
+    // wrapper-payload-hints.test.ts; this arm proves the binary calls it, on the dev table's
+    // path, disclosing on stderr.
+    const start = SOURCE.indexOf("const hintModule = await loadPayloadHints({");
+    expect(start).toBeGreaterThan(-1);
+    const call = SOURCE.slice(start, SOURCE.indexOf("    });", start));
+    expect(call).toContain(
+      'moduleUrl: new URL("../../../control-room/src/live/live-dispatch.ts", import.meta.url),',
+    );
+    expect(call).toContain("log: (line) => { console.error(line); },");
+    // No second loader: a bare import beside it would mint the very line the loader retired.
+    expect(SOURCE).not.toContain("await import(");
+    expect(SOURCE).not.toContain("payload hints unavailable");
+  });
+
+  it("scans a payload-hint slice that can actually fail (positive control)", () => {
+    const bare = SOURCE.replace("const hintModule = await loadPayloadHints({", "const hintModule = await import(");
+    expect(bare).not.toBe(SOURCE);
+    expect(() => expect(bare).not.toContain("await import(")).toThrow();
+  });
 
   it("tells the operator which provider is paused and until when", () => {
     // The wrapper log is the operator's only view of a paused fleet; a paused pass that

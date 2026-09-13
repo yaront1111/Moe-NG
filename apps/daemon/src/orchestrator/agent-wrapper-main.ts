@@ -109,8 +109,14 @@ async function main(): Promise<void> {
     const v1Deps = provider.provide();
     const deps = createPlaneFollowingDeps({ commandAuthorityPlane, deps: v1Deps, v2Deps });
 
-    // DEVELOPMENT payload suggestions, loaded leniently and DISCLOSED when absent (see the loader).
-    const hintModule = await loadPayloadHints((line) => { console.error(line); });
+    // DEVELOPMENT payload suggestions from the control room's dev table, loaded leniently by
+    // ./wrapper-payload-hints.ts: ABSENT (the installed artifact stages no control-room source)
+    // and UNAVAILABLE (present, does not load) are each disclosed by name on stderr, never
+    // swallowed, and missions then carry no hint. The module's header says why both matter.
+    const hintModule = await loadPayloadHints({
+      log: (line) => { console.error(line); },
+      moduleUrl: new URL("../../../control-room/src/live/live-dispatch.ts", import.meta.url),
+    });
     if (stop.requested()) return;
 
     // COMPILED nodes (sealed by an approved compiled plan) are briefed from the
