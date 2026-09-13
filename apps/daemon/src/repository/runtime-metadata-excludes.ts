@@ -5,6 +5,9 @@ import { nodeGitRunner } from "./git-process-runner.js";
 import type { GitRunner } from "./git-process-runner.js";
 import { replaceRuntimeExcludeBlock } from "./runtime-metadata-exclude-file.js";
 
+/** The exclusion step's refusal layer, declared once so the TASK-LV literal census resolves it. */
+const RUNTIME_METADATA_EXCLUDES_LAYER = "RUNTIME_METADATA_EXCLUDES" as const;
+
 export interface RuntimeMetadataPaths {
   readonly projectRoot: string;
   readonly configPath: string;
@@ -12,7 +15,7 @@ export interface RuntimeMetadataPaths {
   readonly initializing?: true;
 }
 export type RuntimeMetadataResult = Readonly<{ ok: true }> | Readonly<{ ok: false; code: string; layer: string }>;
-const refuse = (code: string): RuntimeMetadataResult => ({ ok: false, code, layer: "RUNTIME_METADATA_EXCLUDES" });
+const refuse = (code: string): RuntimeMetadataResult => ({ ok: false, code, layer: RUNTIME_METADATA_EXCLUDES_LAYER });
 const oneLine = (value: string) => value.replace(/\r?\n$/u, "");
 function localName(root: string, path: string): string | null {
   const name = relative(root, path);

@@ -25,7 +25,7 @@ import {
   MAX_PROJECT_STACK_FRAME_BYTES,
   encodeProjectStackHostFrame,
 } from "./project-stack-protocol.js";
-import { runProjectStackHost } from "./project-stack-host.js";
+import { PROJECT_STACK_HOST_LAYER, runProjectStackHost } from "./project-stack-host.js";
 import { stopWrapperChild } from "./project-stack-wrapper-stop.js";
 import type { StoppableWrapperChild } from "./project-stack-wrapper-stop.js";
 import type {
@@ -232,7 +232,7 @@ export async function runProjectStackHostMain(
     startDaemon: async () => {
       let prepared: Readonly<{ ok: true }> | ProjectStackRefused;
       const fallback: ProjectStackRefused = {
-        ok: false, code: "PROJECT_RUNTIME_METADATA_PREPARATION_FAILED", layer: "PROJECT_STACK_HOST",
+        ok: false, code: "PROJECT_RUNTIME_METADATA_PREPARATION_FAILED", layer: PROJECT_STACK_HOST_LAYER,
       };
       try { prepared = await options.prepareRepository(bindings); }
       catch { prepared = fallback; }

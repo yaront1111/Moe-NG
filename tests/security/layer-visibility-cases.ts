@@ -161,7 +161,7 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
  * for. See the matching note above `EXPECTED_ROSTER_SIZE` in boundary-roster.security.ts.
  */
 // 80 -> 81 for the read-only completed project-pairing validation boundary.
-const EXPECTED_PRIVATE_COUNT = 82;
+const EXPECTED_PRIVATE_COUNT = 83;
 
 /**
  * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
@@ -253,6 +253,7 @@ const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
   { constant: "RECURSION_LAYER", file: "packages/scheduler/src/node-authority/node-authority-recursion.ts" },
   { constant: "REGISTRATION_LAYER", file: "apps/daemon/src/provider-profile/provider-profile-codec.ts" },
   { constant: "RUNNER_SCOPE_LAYER", file: "apps/daemon/src/work/foundation-input-hydrator.ts" },
+  { constant: "RUNTIME_METADATA_EXCLUDES_LAYER", file: "apps/daemon/src/repository/runtime-metadata-excludes.ts" },
   { constant: "SECTION_LAYER", file: "apps/daemon/src/work/launch-runtime-section.ts" },
   { constant: "SESSION_CHALLENGE_OPERANDS_READ_LAYER", file: "apps/daemon/src/http/session-challenge-operands-read.ts" },
   { constant: "SET_LAYER", file: "packages/scheduler/src/supersession/supersession-dispositions.ts" },
