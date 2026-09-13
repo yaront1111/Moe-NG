@@ -106,6 +106,7 @@ describe("createProjectBoundaryOpener", () => {
       },
       nodeExecutable: "C:\\Program Files\\nodejs\\node.exe",
       openBoundary,
+      operatorChannelAvailable: false,
       root: "D:\\artifact",
     });
     expect(opener(ENTRY)).toMatchObject({ truthClass: "UNKNOWN" });
@@ -118,6 +119,7 @@ describe("createProjectBoundaryOpener", () => {
         ANTHROPIC_API_KEY: "provider-secret",
         MOE_DAEMON_CREDENTIAL: CREDENTIAL,
         MOE_AGENT_COMMAND: "claude",
+        MOE_OPERATOR_CHANNEL: "false",
         MOE_PROJECT_ID: "alpha",
       },
       instanceId: ENTRY.instanceId,
@@ -125,6 +127,42 @@ describe("createProjectBoundaryOpener", () => {
       storePath: ENTRY.storePath,
     });
     expect(JSON.stringify(openBoundary.mock.calls)).not.toContain("attacker.js");
+  });
+
+  it("carries the measured operator-channel fact to the host and ignores a caller's assertion of it", () => {
+    // The host cannot see its parent's console, so the fact travels as a server-owned
+    // variable: what the CLI measured, never what the environment claims (measured
+    // 2026-09-13: hostedDaemonStartOptions hardcoded true with no parameter to carry it).
+    const launchFs = {
+      canonicalDirectory: (path: string) => path,
+      canonicalFile: (path: string) => path,
+      readConfig: () => JSON.stringify({
+        credential: CREDENTIAL,
+        projectId: "alpha",
+        schemaVersion: "moe-cli-config/1",
+        storePath: ENTRY.storePath,
+      }),
+    };
+    for (const available of [true, false]) {
+      const openBoundary = vi.fn(() => ({
+        code: "PROCESS_BOUNDARY_TEST", layer: "WINDOWS_PROCESS_TEST", truthClass: "UNKNOWN" as const,
+      }));
+      createProjectBoundaryOpener({
+        assetRoot: "D:\\artifact\\apps\\control-room\\dist",
+        environment: {
+          ANTHROPIC_API_KEY: "provider-secret",
+          MOE_OPERATOR_CHANNEL: available ? "false" : "true",
+        },
+        launchFs,
+        nodeExecutable: "C:\\node.exe",
+        openBoundary,
+        operatorChannelAvailable: available,
+        root: "D:\\artifact",
+      })(ENTRY);
+      expect(openBoundary, String(available)).toHaveBeenCalledWith(expect.objectContaining({
+        environment: expect.objectContaining({ MOE_OPERATOR_CHANNEL: String(available) }),
+      }));
+    }
   });
 
   it("passes only the selected Codex credential into the project stack", () => {
@@ -156,6 +194,7 @@ describe("createProjectBoundaryOpener", () => {
       },
       nodeExecutable: "C:\\Program Files\\nodejs\\node.exe",
       openBoundary,
+      operatorChannelAvailable: false,
       root: "D:\\artifact",
     });
 
@@ -165,6 +204,7 @@ describe("createProjectBoundaryOpener", () => {
         CODEX_HOME: "C:\\Users\\operator\\.codex",
         MOE_AGENT_COMMAND: "codex",
         MOE_DAEMON_CREDENTIAL: CREDENTIAL,
+        MOE_OPERATOR_CHANNEL: "false",
         MOE_PROJECT_ID: "alpha",
         SYSTEMROOT: "C:\\Windows",
       },
@@ -197,6 +237,7 @@ describe("createProjectBoundaryOpener", () => {
         launchFs,
         nodeExecutable: "C:\\node.exe",
         openBoundary,
+        operatorChannelAvailable: false,
         root: "D:\\artifact",
       });
 
@@ -215,6 +256,7 @@ describe("createProjectBoundaryOpener", () => {
           CLAUDE_CONFIG_DIR: custom,
           MOE_AGENT_COMMAND: "claude",
           MOE_DAEMON_CREDENTIAL: CREDENTIAL,
+          MOE_OPERATOR_CHANNEL: "false",
           MOE_PROJECT_ID: "alpha",
           USERPROFILE: home,
         },
@@ -278,6 +320,7 @@ describe("createProjectBoundaryOpener", () => {
       },
       nodeExecutable: "C:\\Program Files\\nodejs\\node.exe",
       openBoundary,
+      operatorChannelAvailable: false,
       root: "D:\\artifact",
     });
 
@@ -286,6 +329,7 @@ describe("createProjectBoundaryOpener", () => {
       environment: {
         MOE_AGENT_COMMAND: "C:\\tools\\noop-agent.cmd",
         MOE_DAEMON_CREDENTIAL: CREDENTIAL,
+        MOE_OPERATOR_CHANNEL: "false",
         MOE_PROJECT_ID: "alpha",
       },
     }));
@@ -318,6 +362,7 @@ describe("createProjectBoundaryOpener", () => {
       },
       nodeExecutable: "C:\\Program Files\\nodejs\\node.exe",
       openBoundary,
+      operatorChannelAvailable: false,
       root: "D:\\artifact",
     });
 
@@ -328,6 +373,7 @@ describe("createProjectBoundaryOpener", () => {
         CLAUDE_CODE_OAUTH_TOKEN: "subscription-token",
         MOE_AGENT_COMMAND: "claude.cmd",
         MOE_DAEMON_CREDENTIAL: CREDENTIAL,
+        MOE_OPERATOR_CHANNEL: "false",
         MOE_PROJECT_ID: "alpha",
       },
     }));
@@ -360,6 +406,7 @@ describe("createProjectBoundaryOpener", () => {
       },
       nodeExecutable: "C:\\Program Files\\nodejs\\node.exe",
       openBoundary,
+      operatorChannelAvailable: false,
       root: "D:\\artifact",
     })(ENTRY);
 
@@ -393,6 +440,7 @@ describe("createProjectBoundaryOpener", () => {
       },
       nodeExecutable: "C:\\node.exe",
       openBoundary,
+      operatorChannelAvailable: false,
       root: "D:\\artifact",
     })(ENTRY);
     expect(result).toEqual({
@@ -418,6 +466,7 @@ describe("createProjectBoundaryOpener", () => {
       },
       nodeExecutable: "C:\\node.exe",
       openBoundary,
+      operatorChannelAvailable: false,
       root: "D:\\artifact",
     })(ENTRY);
     expect(result).toEqual({
@@ -536,7 +585,11 @@ describe("runProjectManagerMain", () => {
     await vi.waitFor(() => { expect(manager).not.toBeNull(); });
     expect(receivedPort).toBe(PROJECT_MANAGER_PORT);
     expect(await manager!.list()).toEqual({ projects: [], schemaVersion: "moe-project-manager/1" });
+    // No operatorInput: the console says so, with the switch that attaches one, before
+    // the banner. Under piped stdio nothing else names `--operator-stdin`.
     expect(logs).toEqual([
+      "PROJECT_MANAGER_OPERATOR_CHANNEL_ABSENT PROJECT_MANAGER_MAIN",
+      "moe projects: no operator terminal; pairing labels cannot be typed here - relaunch from a console or with --operator-stdin",
       "moe projects: project manager ready",
       "moe projects: http://127.0.0.2:39122",
       "moe projects: Ctrl-C stops the manager and every project runtime",

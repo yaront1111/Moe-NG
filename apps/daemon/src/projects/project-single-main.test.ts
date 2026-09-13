@@ -1,4 +1,5 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { realpathSync } from "node:fs";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -158,13 +159,68 @@ describe("runSingleProjectMain", () => {
     expect(supervisor.open).toHaveBeenCalledWith(INSTANCE_ID);
     expect(supervisor.wait).toHaveBeenCalledWith(INSTANCE_ID);
     expect(supervisor.approvePairing).not.toHaveBeenCalled();
+    // No operatorInput: the console says so, with the switch that attaches one, before
+    // the banner. Under piped stdio nothing else names `--operator-stdin` (2026-09-13).
     expect(logs).toEqual([
+      "PROJECT_SINGLE_OPERATOR_CHANNEL_ABSENT PROJECT_SINGLE_MAIN",
+      "moe start: no operator terminal; pairing labels cannot be typed here - relaunch from a console or with --operator-stdin",
       "moe start: project runtime ready",
       "moe start: http://127.0.0.1:49152",
       "moe start: Ctrl-C stops this project runtime",
     ]);
     expect(logs.join("\n")).not.toContain(CREDENTIAL);
   });
+
+  it.runIf(process.platform === "win32")(
+    "hands the stack host the measured operator-channel fact through the real boundary opener", async () => {
+    // Product path: real supervisor, real opener, real launch fs over a real project on
+    // disk (canonicalised first: a Windows temp path can come back in 8.3 form). The
+    // boundary spy refuses so nothing spawns, but it sees the environment the host would
+    // get. The hosted daemon used to assert `pairingOperatorChannelAvailable: true`
+    // whatever the console was.
+    const root = realpathSync.native(await temporary());
+    const project = Object.freeze({
+      configPath: join(root, "moe.config.json"),
+      projectId: "alpha",
+      root,
+      storePath: join(root, "store.sqlite"),
+    });
+    await writeFile(project.configPath, JSON.stringify({
+      credential: CREDENTIAL, projectId: "alpha", schemaVersion: "moe-cli-config/1",
+      storePath: project.storePath,
+    }), "utf8");
+    for (const attached of [true, false]) {
+      const openBoundary = vi.fn(() => ({
+        code: "PROCESS_BOUNDARY_TEST", layer: "WINDOWS_PROCESS_TEST", truthClass: "UNKNOWN" as const,
+      }));
+      const logs: string[] = [];
+      const result = await runSingleProjectMain({
+        dependencies: {
+          createFiles: () => ({
+            create: async () => ({ code: "UNUSED", layer: "PROJECT_MANAGER_FILES", ok: false }),
+            discard: async () => undefined,
+            register: async () => ({ ok: true, project, written: { ...REGISTERED_WRITTEN, root } }),
+          }),
+          mintUuid: () => INSTANCE_ID,
+          openBoundary,
+          resolveAssetRoot: () => "D:\\artifact\\control-room",
+        },
+        env: { ANTHROPIC_API_KEY: "key", MOE_OPERATOR_CHANNEL: attached ? "false" : "true" },
+        log: (line) => { logs.push(line); },
+        onSignal: vi.fn(),
+        ...(attached ? { operatorInput: heldOpenOperatorInput() } : {}),
+        platform: "win32",
+        projectRoot: root,
+        root: "D:\\artifact",
+      });
+      expect(result, String(attached)).toBe(1);
+      expect(logs).toEqual(["PROCESS_BOUNDARY_TEST WINDOWS_PROCESS_TEST"]);
+      expect(openBoundary, String(attached)).toHaveBeenCalledWith(expect.objectContaining({
+        environment: expect.objectContaining({ MOE_OPERATOR_CHANNEL: String(attached) }),
+      }));
+    }
+    },
+  );
 
   it("routes only an exact foreground label to this project instance", async () => {
     const label = "dead-beef-1234";

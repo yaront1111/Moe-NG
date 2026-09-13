@@ -43,6 +43,9 @@ describe("prepareProjectManagerLaunch", () => {
     const result = prepareProjectManagerLaunch(ENTRY, {
       ANTHROPIC_API_KEY: "provider-secret",
       MOE_DAEMON_CREDENTIAL: "caller-secret",
+      // Server-owned like the four above: the opener measures whether an operator
+      // channel exists; a caller's value must not assert one.
+      MOE_OPERATOR_CHANNEL: "true",
       MOE_PROJECT_ID: "foreign",
       MOE_PROJECT_INSTANCE_ID: "foreign-instance",
       MOE_STORE_PATH: "C:\\foreign.sqlite",

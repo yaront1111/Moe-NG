@@ -57,11 +57,24 @@ describe("resolveProjectStackConfig", () => {
       configPath: CONFIG_PATH,
       credential: CREDENTIAL,
       instanceId: INSTANCE_ID,
+      operatorChannelAvailable: false,
       projectId: "alpha",
       projectRoot: "C:\\work\\alpha",
       storePath: STORE_PATH,
     });
     expect(Object.isFrozen(result.bindings)).toBe(true);
+  });
+
+  it("reads the operator-channel fact from MOE_OPERATOR_CHANNEL and fails it closed otherwise", () => {
+    // The host cannot observe its parent's console; the fact arrives measured, or not at
+    // all. Only the exact "true" asserts a channel: absence and any other value are false.
+    for (const [value, expected] of [["true", true], ["false", false], ["yes", false], ["TRUE", false]] as const) {
+      const result = resolveProjectStackConfig(input({
+        env: { ...input().env, MOE_OPERATOR_CHANNEL: value },
+      }));
+      if (!result.ok) throw new Error(result.code);
+      expect(result.bindings.operatorChannelAvailable, value).toBe(expected);
+    }
   });
 
   it("canonicalizes aliases before comparing the store identity", () => {

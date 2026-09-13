@@ -39,6 +39,8 @@ const CREDENTIAL = /^[0-9a-f]{64}$/u;
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const SERVER_OWNED_ENVIRONMENT = new Set([
   "MOE_DAEMON_CREDENTIAL",
+  // Measured by the opener from the CLI's attached console; never taken from a caller.
+  "MOE_OPERATOR_CHANNEL",
   "MOE_PROJECT_ID",
   "MOE_PROJECT_INSTANCE_ID",
   "MOE_STORE_PATH",

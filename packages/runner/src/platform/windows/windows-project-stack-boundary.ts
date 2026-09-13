@@ -47,6 +47,9 @@ export const PROJECT_STACK_ENVIRONMENT_KEYS = Object.freeze([
   // R3-4: Foundation daemon inputs are admitted only to the project stack host.
   "MOE_FOUNDATION_WORKSPACE_CATALOG",
   "MOE_NODE_SPECS_DIR",
+  // The parent CLI's MEASURED fact of an attached operator console, "true" or "false";
+  // server-owned at the launch edge, so a caller's environment cannot assert it.
+  "MOE_OPERATOR_CHANNEL",
   "MOE_PRINCIPAL_ID",
   "MOE_PROJECT_CONFIGURATION_DIGEST",
   "MOE_PROJECT_ID",

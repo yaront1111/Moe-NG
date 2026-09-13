@@ -30,6 +30,10 @@ export const PROJECT_SINGLE_SIGNAL_REGISTRATION_FAILED =
   "PROJECT_SINGLE_SIGNAL_REGISTRATION_FAILED" as const;
 /** A typed line that is not a confirmation label; the line itself is never echoed. */
 export const PROJECT_SINGLE_OPERATOR_LINE_IGNORED = "PROJECT_SINGLE_OPERATOR_LINE_IGNORED" as const;
+/** No console is attached: nothing in this process reads a typed pairing label. */
+export const PROJECT_SINGLE_OPERATOR_CHANNEL_ABSENT = "PROJECT_SINGLE_OPERATOR_CHANNEL_ABSENT" as const;
+export const PROJECT_SINGLE_OPERATOR_CHANNEL_ABSENT_MESSAGE =
+  "moe start: no operator terminal; pairing labels cannot be typed here - relaunch from a console or with --operator-stdin";
 
 type ProjectBoundaryOpener = (
   request: WindowsProjectStackRequest,
@@ -119,6 +123,9 @@ export async function runSingleProjectMain(options: ProjectSingleMainOptions): P
       environment: options.env,
       nodeExecutable: process.execPath,
       openBoundary: dependencies.openBoundary,
+      // Measured, like daemon-main.ts: the hosted daemon can only report what THIS
+      // process consumes, and it used to assert a channel whatever the console was.
+      operatorChannelAvailable: options.operatorInput !== undefined,
       root: options.root,
     }),
   });
@@ -165,6 +172,13 @@ export async function runSingleProjectMain(options: ProjectSingleMainOptions): P
     if (result.ok) options.log("moe start: pairing approved");
     else disclose(result, options.log);
   });
+  if (options.operatorInput === undefined) {
+    // Said here, before the banner: under piped stdio no other surface names the switch.
+    disclose({
+      code: PROJECT_SINGLE_OPERATOR_CHANNEL_ABSENT, layer: PROJECT_SINGLE_MAIN_LAYER,
+      message: PROJECT_SINGLE_OPERATOR_CHANNEL_ABSENT_MESSAGE,
+    }, options.log);
+  }
   try {
     options.log("moe start: project runtime ready");
     options.log(`moe start: ${opened.origin}`);

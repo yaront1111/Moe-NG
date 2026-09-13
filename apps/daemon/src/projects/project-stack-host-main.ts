@@ -142,20 +142,20 @@ export async function* projectStackControlLines(input: Readable): AsyncIterable<
 }
 
 /**
- * The hosted daemon's start options. `pairingOperatorChannelAvailable` is TRUE here ON
- * PURPOSE: inside a stack host the daemon's own stdin is never a terminal, but its approval
- * path is the host's control frame — `moe start` forwards the label typed at its console
- * and `moe projects` forwards the manager's approval — so an operator channel is always
- * present. Without the flag the pairing route answered `operatorChannelAvailable: false`
- * and the control room told an artifact user to stop Moe and "run pnpm start", with no
- * label to type (measured 2026-09-13: `moe start <dir>` from a real PowerShell console).
+ * The hosted daemon's start options. Inside a stack host the daemon's own stdin is never
+ * a terminal; its approval path is the host's control frame, fed by the label the parent
+ * CLI reads from ITS console. So the flag is the parent's MEASURED fact, carried in as
+ * MOE_OPERATOR_CHANNEL. Hardcoded `false` sent artifact users to "pnpm start" with no
+ * label to type (measured 2026-09-13 from a real PowerShell console); hardcoded `true`
+ * told a piped-stdio operator to type a label nobody read (measured 2026-09-13, Git Bash,
+ * `process.stdin.isTTY` undefined, no consumer attached).
  */
 export function hostedDaemonStartOptions(bindings: ProjectStackBindings): DaemonStartOptions {
   return Object.freeze({
     assetRoot: bindings.assetRoot,
     assetSecrets: [bindings.credential],
     dependencies: provider,
-    pairingOperatorChannelAvailable: true,
+    pairingOperatorChannelAvailable: bindings.operatorChannelAvailable,
   });
 }
 

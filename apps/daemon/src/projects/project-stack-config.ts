@@ -31,6 +31,12 @@ export interface ProjectStackBindings {
   readonly configPath: string;
   readonly credential: string;
   readonly instanceId: string;
+  /**
+   * The parent CLI's measured fact: it consumes typed pairing labels (console or
+   * `--operator-stdin`) or it does not. Read from MOE_OPERATOR_CHANNEL; only the
+   * exact "true" asserts a channel, absence and any other value fail closed to false.
+   */
+  readonly operatorChannelAvailable: boolean;
   readonly projectId: string;
   readonly projectRoot: string;
   readonly storePath: string;
@@ -120,11 +126,13 @@ export function resolveProjectStackConfig(
   let envProjectId: unknown;
   let envStorePath: unknown;
   let instanceId: unknown;
+  let operatorChannel: unknown;
   try {
     envCredential = input.env["MOE_DAEMON_CREDENTIAL"];
     envProjectId = input.env["MOE_PROJECT_ID"];
     envStorePath = input.env["MOE_STORE_PATH"];
     instanceId = input.env["MOE_PROJECT_INSTANCE_ID"];
+    operatorChannel = input.env["MOE_OPERATOR_CHANNEL"];
   } catch {
     return refuse(PROJECT_STACK_CONFIG_INVALID);
   }
@@ -151,6 +159,7 @@ export function resolveProjectStackConfig(
       configPath,
       credential: envCredential,
       instanceId,
+      operatorChannelAvailable: operatorChannel === "true",
       projectId: envProjectId,
       projectRoot: win32.dirname(configPath),
       storePath,

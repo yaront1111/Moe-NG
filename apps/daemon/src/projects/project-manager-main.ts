@@ -68,6 +68,10 @@ export const PROJECT_MANAGER_SHUTDOWN_FAILED = "PROJECT_MANAGER_SHUTDOWN_FAILED"
 export const PROJECT_MANAGER_START_FAILED = "PROJECT_MANAGER_START_FAILED" as const;
 /** A typed line that is neither a manager label nor `<instanceId> <label>`; never echoed. */
 export const PROJECT_MANAGER_OPERATOR_LINE_IGNORED = "PROJECT_MANAGER_OPERATOR_LINE_IGNORED" as const;
+/** No console is attached: nothing in this process reads a typed pairing label. */
+export const PROJECT_MANAGER_OPERATOR_CHANNEL_ABSENT = "PROJECT_MANAGER_OPERATOR_CHANNEL_ABSENT" as const;
+export const PROJECT_MANAGER_OPERATOR_CHANNEL_ABSENT_MESSAGE =
+  "moe projects: no operator terminal; pairing labels cannot be typed here - relaunch from a console or with --operator-stdin";
 export const PROJECT_MANAGER_PORT = 39_122;
 export const PROJECT_MANAGER_DIRECTORY_NAME = "Moe" as const;
 export const PROJECT_MANAGER_CATALOG_FILENAME = "projects.json" as const;
@@ -83,6 +87,13 @@ export interface CreateProjectBoundaryOpenerOptions {
   readonly launchFs?: ProjectManagerLaunchFs;
   readonly nodeExecutable: string;
   readonly openBoundary: ProjectBoundaryOpener;
+  /**
+   * Whether THIS process consumes typed pairing labels for the hosted daemon: the CLI
+   * attached its console (or `--operator-stdin`) or it did not. The hosted daemon cannot
+   * observe that and used to assert `true`, so under piped stdio the control room told
+   * the operator to type a label nobody read (measured 2026-09-13, `isTTY` undefined).
+   */
+  readonly operatorChannelAvailable: boolean;
   readonly root: string;
 }
 
@@ -179,7 +190,11 @@ export function createProjectBoundaryOpener(
       configPath: entry.configPath,
       cwd: entry.root,
       entryPath,
-      environment: prepared.environment,
+      // Server-owned: prepareProjectManagerLaunch dropped any caller value of this name.
+      environment: Object.freeze({
+        ...prepared.environment,
+        MOE_OPERATOR_CHANNEL: String(options.operatorChannelAvailable),
+      }),
       instanceId: entry.instanceId,
       nodeExecutable: options.nodeExecutable,
       storePath: entry.storePath,
@@ -256,6 +271,7 @@ export async function runProjectManagerMain(options: ProjectManagerMainOptions):
       environment: options.env,
       nodeExecutable: process.execPath,
       openBoundary: dependencies.openBoundary,
+      operatorChannelAvailable: options.operatorInput !== undefined,
       root: options.root,
     }),
   });
@@ -333,6 +349,13 @@ export async function runProjectManagerMain(options: ProjectManagerMainOptions):
   } catch {
     disclose(mainRefusal(PROJECT_MANAGER_SIGNAL_REGISTRATION_FAILED), options.log);
     return await drain(listener, runtime, options.log).then(() => released(1));
+  }
+  if (options.operatorInput === undefined) {
+    // Said here, before the banner: under piped stdio no other surface names the switch.
+    disclose({
+      code: PROJECT_MANAGER_OPERATOR_CHANNEL_ABSENT, layer: PROJECT_MANAGER_MAIN_LAYER,
+      message: PROJECT_MANAGER_OPERATOR_CHANNEL_ABSENT_MESSAGE,
+    }, options.log);
   }
   options.log("moe projects: project manager ready");
   options.log(`moe projects: ${listener.origin}`);

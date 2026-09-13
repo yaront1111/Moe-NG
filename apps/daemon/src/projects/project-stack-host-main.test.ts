@@ -147,6 +147,7 @@ describe("project stack production wrapper launch", () => {
       configPath: CONFIG_PATH,
       credential: CREDENTIAL,
       instanceId: INSTANCE_ID,
+      operatorChannelAvailable: false,
       projectId: "alpha",
       projectRoot: "C:\\work\\alpha",
       storePath: STORE_PATH,
@@ -170,6 +171,7 @@ describe("project stack production wrapper launch", () => {
       configPath: CONFIG_PATH,
       credential: CREDENTIAL,
       instanceId: INSTANCE_ID,
+      operatorChannelAvailable: false,
       projectId: "alpha",
       projectRoot: "C:\work\alpha",
       storePath: STORE_PATH,
@@ -208,16 +210,23 @@ describe("project stack production wrapper launch", () => {
 });
 
 describe("hostedDaemonStartOptions", () => {
-  it("advertises the host's control frame as the daemon's pairing operator channel", () => {
-    const resolved = resolveProjectStackConfig({
-      argv: [`--config=${CONFIG_PATH}`, `--asset-root=${ASSET_ROOT}`], env, fs: configFs(),
-    });
-    if (!resolved.ok) throw new Error(resolved.code);
-    const options = hostedDaemonStartOptions(resolved.bindings);
+  it("forwards the MEASURED operator-channel fact instead of asserting one", () => {
     // The daemon's stdin is a pipe from the host, never a terminal; the label reaches it
-    // through the host frame. `false` here is what sent artifact users to "pnpm start".
-    expect(options.pairingOperatorChannelAvailable).toBe(true);
-    expect(options.assetRoot).toBe(ASSET_ROOT);
-    expect(options.assetSecrets).toEqual([CREDENTIAL]);
+    // through the host frame ONLY when the parent CLI attached a console consumer. A
+    // hardcoded `true` made the control room tell a piped-stdio operator to type a label
+    // nobody read (measured 2026-09-13); a hardcoded `false` sent artifact users to
+    // "pnpm start". Both arms, so neither literal can come back.
+    for (const [value, expected] of [["true", true], ["false", false]] as const) {
+      const resolved = resolveProjectStackConfig({
+        argv: [`--config=${CONFIG_PATH}`, `--asset-root=${ASSET_ROOT}`],
+        env: { ...env, MOE_OPERATOR_CHANNEL: value },
+        fs: configFs(),
+      });
+      if (!resolved.ok) throw new Error(resolved.code);
+      const options = hostedDaemonStartOptions(resolved.bindings);
+      expect(options.pairingOperatorChannelAvailable, value).toBe(expected);
+      expect(options.assetRoot).toBe(ASSET_ROOT);
+      expect(options.assetSecrets).toEqual([CREDENTIAL]);
+    }
   });
 });
