@@ -50,7 +50,7 @@ import type {
   ProjectRuntimeSupervisor,
   ProjectRuntimeSupervisorOptions,
 } from "./project-runtime-supervisor.js";
-import { consumePairingOperatorLines } from "../http/pairing-operator-channel.js";
+import { attachOperatorInput } from "./project-operator-input.js";
 import type { PairingOperatorInput } from "../http/pairing-operator-channel.js";
 
 export const PROJECT_MANAGER_MAIN_LAYER = "PROJECT_MANAGER_MAIN" as const;
@@ -282,44 +282,44 @@ export async function runProjectManagerMain(options: ProjectManagerMainOptions):
     return 1;
   }
 
+  const operator = attachOperatorInput(options.operatorInput, async (line) => {
+    if (/^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u.test(line)) {
+      const result = listener.approvePairing(line);
+      if (!result.ok) disclose(result, options.log);
+      return;
+    }
+    const project = /^(?<instanceId>[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}) (?<label>[0-9a-f]{4}(?:-[0-9a-f]{4}){2})$/u.exec(line)?.groups;
+    if (project?.["instanceId"] !== undefined && project["label"] !== undefined) {
+      const result = await runtime.approvePairing(project["instanceId"], project["label"]);
+      if (!result.ok) disclose(result, options.log);
+    }
+  });
+  // The pairing route reports the LIVE channel: a console that hit EOF or failed can no
+  // longer take a typed label, so the flag follows the consumer's end, not only stop().
+  void operator.ended.then(() => { operatorChannelAvailable = false; });
+  // The drain never touched the console stdin, so `moe projects` stayed up after Ctrl-C
+  // with HTTP closed and the runtime down (measured 2026-09-13); released on both exits.
+  const released = async (code: number): Promise<number> => {
+    await operator.release();
+    return code;
+  };
   let settle!: (code: number) => void;
   const completed = new Promise<number>((resolve) => { settle = resolve; });
-  const operatorAbort = new AbortController();
-  let operatorConsumption: Promise<void> = Promise.resolve();
   let stopping = false;
   const stop = (): void => {
     if (stopping) return;
     stopping = true;
     operatorChannelAvailable = false;
-    operatorAbort.abort();
-    void drain(listener, runtime, options.log).then(settle);
+    void drain(listener, runtime, options.log).then(released).then(settle);
   };
   try {
     (options.onSignal ?? defaultSignalRegistration)(stop);
   } catch {
     disclose(mainRefusal(PROJECT_MANAGER_SIGNAL_REGISTRATION_FAILED), options.log);
-    return await drain(listener, runtime, options.log).then(() => 1);
+    return await drain(listener, runtime, options.log).then(() => released(1));
   }
   options.log("moe projects: project manager ready");
   options.log(`moe projects: ${listener.origin}`);
   options.log("moe projects: Ctrl-C stops the manager and every project runtime");
-  if (options.operatorInput !== undefined) {
-    operatorConsumption = consumePairingOperatorLines(options.operatorInput, async (line) => {
-      if (/^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u.test(line)) {
-        const result = listener.approvePairing(line);
-        if (!result.ok) disclose(result, options.log);
-        return;
-      }
-      const project = /^(?<instanceId>[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}) (?<label>[0-9a-f]{4}(?:-[0-9a-f]{4}){2})$/u.exec(line)?.groups;
-      if (project?.["instanceId"] !== undefined && project["label"] !== undefined) {
-        const result = await runtime.approvePairing(project["instanceId"], project["label"]);
-        if (!result.ok) disclose(result, options.log);
-      }
-    }, { signal: operatorAbort.signal }).finally(() => { operatorChannelAvailable = false; });
-  }
-  try { return await completed; }
-  finally {
-    operatorAbort.abort();
-    await operatorConsumption;
-  }
+  return await completed;
 }

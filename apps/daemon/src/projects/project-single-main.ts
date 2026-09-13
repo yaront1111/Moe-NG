@@ -5,11 +5,11 @@ import { openWindowsProjectStackBoundary } from "@moe/runner";
 import type { WindowsProjectStackRequest } from "@moe/runner";
 
 import { controlRoomAssetRoot } from "../orchestrator/moe-up-spawn.js";
-import { consumePairingOperatorLines } from "../http/pairing-operator-channel.js";
 import type { PairingOperatorInput } from "../http/pairing-operator-channel.js";
 import { createNodeProjectManagerFiles } from "./project-manager-files.js";
 import type { ProjectManagerFilesPort } from "./project-manager-files.js";
 import { createProjectBoundaryOpener } from "./project-manager-main.js";
+import { attachOperatorInput } from "./project-operator-input.js";
 import { createProjectRuntimeSupervisor } from "./project-runtime-supervisor.js";
 import type {
   ProjectRuntimeBoundary,
@@ -113,13 +113,11 @@ export async function runSingleProjectMain(options: ProjectSingleMainOptions): P
     }),
   });
   let signal!: () => void;
-  const operatorAbort = new AbortController();
   const signalled = new Promise<"SIGNAL">((resolve) => {
     let fired = false;
     signal = (): void => {
       if (fired) return;
       fired = true;
-      operatorAbort.abort();
       resolve("SIGNAL");
     };
   });
@@ -145,18 +143,15 @@ export async function runSingleProjectMain(options: ProjectSingleMainOptions): P
     if (!shutdown.ok) disclose(shutdown, options.log);
     return 1;
   }
-  let operatorConsumption: Promise<void> = Promise.resolve();
-  if (options.operatorInput !== undefined) {
-    operatorConsumption = consumePairingOperatorLines(options.operatorInput, async (line) => {
-      if (/^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u.test(line)) {
-        // Answer the operator, but never echo the label: it is a bearer until consumed.
-        // Before this the console stayed silent on both outcomes (measured 2026-09-13).
-        const result = await runtime.approvePairing(instanceId, line);
-        if (result.ok) options.log("moe start: pairing approved");
-        else disclose(result, options.log);
-      }
-    }, { signal: operatorAbort.signal });
-  }
+  const operator = attachOperatorInput(options.operatorInput, async (line) => {
+    if (/^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u.test(line)) {
+      // Answer the operator, but never echo the label: it is a bearer until consumed.
+      // Before this the console stayed silent on both outcomes (measured 2026-09-13).
+      const result = await runtime.approvePairing(instanceId, line);
+      if (result.ok) options.log("moe start: pairing approved");
+      else disclose(result, options.log);
+    }
+  });
   try {
     options.log("moe start: project runtime ready");
     options.log(`moe start: ${opened.origin}`);
@@ -177,7 +172,9 @@ export async function runSingleProjectMain(options: ProjectSingleMainOptions): P
     }
     return outcome.result.exitCode;
   } finally {
-    operatorAbort.abort();
-    await operatorConsumption;
+    // The console stdin is released on EVERY path out of here, a throwing wait() or
+    // shutdown() included: a surviving handle keeps the process alive after the runtime
+    // is proven down, and the exit code is never seen.
+    await operator.release();
   }
 }

@@ -16,6 +16,7 @@ import type { ProjectManagerMainDependencies } from "./project-manager-main.js";
 import type {
   ProjectRuntimeSupervisor,
 } from "./project-runtime-supervisor.js";
+import type { CancellablePairingOperatorInput } from "../http/pairing-operator-channel.js";
 
 const CREDENTIAL = "a".repeat(64);
 const INSTANCE_ID = "11111111-1111-4111-8111-111111111111";
@@ -41,6 +42,23 @@ async function temporary(): Promise<string> {
 
 async function* operatorChunks(...chunks: readonly string[]): AsyncIterable<string> {
   for (const chunk of chunks) yield chunk;
+}
+
+/** A console stdin: never typed into and closed by nobody, so only destroy() ends the read. */
+function heldOpenOperatorInput(): CancellablePairingOperatorInput & { destroys(): number } {
+  let destroys = 0;
+  let settleNext: ((value: IteratorResult<string>) => void) | undefined;
+  return {
+    [Symbol.asyncIterator]: () => ({
+      next: async (): Promise<IteratorResult<string>> =>
+        await new Promise<IteratorResult<string>>((resolve) => { settleNext = resolve; }),
+    }),
+    destroy: (): void => {
+      destroys += 1;
+      settleNext?.({ done: true, value: undefined });
+    },
+    destroys: () => destroys,
+  };
 }
 
 function runtime(order: string[]): ProjectRuntimeSupervisor {
@@ -469,6 +487,49 @@ describe("runProjectManagerMain", () => {
     signal();
     expect(await completed).toBe(0);
     expect(order).toEqual(["http-close", "shutdown"]);
+    },
+  );
+
+  it.runIf(process.platform === "win32")(
+    "releases a held-open operator stdin after the Ctrl-C drain so the process can exit", async () => {
+    // The manager's drain closed HTTP and shut the runtime down but never touched the
+    // stdin consumer, so a console `moe projects` stayed up after Ctrl-C (measured 2026-09-13).
+    const localAppData = await temporary();
+    const order: string[] = [];
+    let signal = (): void => { throw new Error("signal not registered"); };
+    const stdin = heldOpenOperatorInput();
+    let registered = false;
+    const completed = runProjectManagerMain({
+      dependencies: {
+        createRuntime: () => runtime(order),
+        resolveAssetRoot: () => "D:\\artifact\\apps\\control-room\\dist",
+        startHttp: async () => {
+          return {
+            approvePairing: () => ({
+              code: "PAIRING_CONFIRMATION_UNKNOWN" as const,
+              layer: "CONTROL_ROOM_PAIRING_APPROVAL" as const,
+              ok: false as const,
+            }),
+            close: async () => { order.push("http-close"); },
+            ok: true,
+            origin: "http://127.0.0.2:39122",
+            port: 39122,
+          };
+        },
+      },
+      env: { LOCALAPPDATA: localAppData },
+      log: vi.fn(),
+      onSignal: (handler) => { signal = handler; registered = true; },
+      operatorInput: stdin,
+      platform: "win32",
+      root: "D:\\artifact",
+    });
+    await vi.waitFor(() => { expect(registered).toBe(true); });
+    expect(stdin.destroys()).toBe(0);
+    signal();
+    expect(await completed).toBe(0);
+    expect(order).toEqual(["http-close", "shutdown"]);
+    expect(stdin.destroys()).toBe(1);
     },
   );
 

@@ -5,6 +5,7 @@ import {
 } from "./project-single-main.js";
 import type { ProjectSingleMainDependencies } from "./project-single-main.js";
 import type { ProjectRuntimeSupervisor } from "./project-runtime-supervisor.js";
+import type { CancellablePairingOperatorInput } from "../http/pairing-operator-channel.js";
 
 const CREDENTIAL = "a".repeat(64);
 const INSTANCE_ID = "11111111-1111-4111-8111-111111111111";
@@ -22,6 +23,23 @@ const REGISTERED_WRITTEN = Object.freeze({
 
 async function* operatorChunks(...chunks: readonly string[]): AsyncIterable<string> {
   for (const chunk of chunks) yield chunk;
+}
+
+/** A console stdin: never typed into and closed by nobody, so only destroy() ends the read. */
+function heldOpenOperatorInput(): CancellablePairingOperatorInput & { destroys(): number } {
+  let destroys = 0;
+  let settleNext: ((value: IteratorResult<string>) => void) | undefined;
+  return {
+    [Symbol.asyncIterator]: () => ({
+      next: async (): Promise<IteratorResult<string>> =>
+        await new Promise<IteratorResult<string>>((resolve) => { settleNext = resolve; }),
+    }),
+    destroy: (): void => {
+      destroys += 1;
+      settleNext?.({ done: true, value: undefined });
+    },
+    destroys: () => destroys,
+  };
 }
 
 function runtime(overrides: Partial<ProjectRuntimeSupervisor> = {}): ProjectRuntimeSupervisor {
@@ -223,6 +241,38 @@ describe("runSingleProjectMain", () => {
     signal();
     expect(await pending).toBe(0);
     expect(shutdown).toHaveBeenCalledTimes(1);
+  });
+
+  it("releases a held-open operator stdin on Ctrl-C so the process can exit", async () => {
+    // A console TTY is never closed by anyone. Without an active release the stdin
+    // consumer keeps the event loop alive after the runtime is down: the main returned
+    // 0 but the process stayed up until the window was closed (measured 2026-09-13).
+    let signal = (): void => { throw new Error("signal missing"); };
+    const stdin = heldOpenOperatorInput();
+    const supervisor = runtime({ wait: vi.fn(() => new Promise<never>(() => undefined)) });
+    const pending = runSingleProjectMain({
+      dependencies: dependencies(supervisor), env: { ANTHROPIC_API_KEY: "key" },
+      log: vi.fn(), onSignal: (handler) => { signal = handler; }, operatorInput: stdin,
+      platform: "win32", projectRoot: PROJECT.root, root: "D:\\artifact",
+    });
+    await vi.waitFor(() => { expect(supervisor.open).toHaveBeenCalled(); });
+    expect(stdin.destroys()).toBe(0);
+    signal();
+    expect(await pending).toBe(0);
+    expect(supervisor.shutdown).toHaveBeenCalledTimes(1);
+    expect(stdin.destroys()).toBe(1);
+  });
+
+  it("releases a held-open operator stdin when the runtime ends on its own", async () => {
+    const stdin = heldOpenOperatorInput();
+    const supervisor = runtime();
+    const result = await runSingleProjectMain({
+      dependencies: dependencies(supervisor), env: { ANTHROPIC_API_KEY: "key" },
+      log: vi.fn(), onSignal: vi.fn(), operatorInput: stdin,
+      platform: "win32", projectRoot: PROJECT.root, root: "D:\\artifact",
+    });
+    expect(result).toBe(7);
+    expect(stdin.destroys()).toBe(1);
   });
 
   it("preserves exact preparation and runtime refusals and opens no ticket", async () => {
