@@ -2,11 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import type {
-  CoverageContractView, CoverageCriterionView, DocumentCoverageOutcome,
+  CoverageContractView, CoverageCriterionView, CoverageRequirementView, DocumentCoverageOutcome,
 } from "../../live/live-document-coverage.js";
 import { OutcomeNote } from "../components/outcome-note.js";
 import { MIDDOT } from "../glyphs.js";
 import { readFailedSaid } from "../outcome-words.js";
+import { FoldedRoster } from "./statement-folds.js";
 
 /**
  * PRD COVERAGE: how much of the opened goal's PRD is built, as the daemon can prove it.
@@ -20,6 +21,13 @@ import { readFailedSaid } from "../outcome-words.js";
  *
  * The section map is the daemon's ADVISORY citation walk over the PRD prose and is labelled
  * as such; it helps a human find the parts of the document no requirement cites yet.
+ *
+ * THE ROWS FOLD. This card mounts inside the goal board's closed "Everything else" fold
+ * (cordum-app.tsx) on the same first paint as the Gate 1 card, and React mounts a closed
+ * <details>' children, so a flat map of every requirement and criterion was one more copy
+ * of the 128 + 150 statement roster on the page that stalled (statement-folds.tsx holds the
+ * measurement). Requirements fold by identifier family, criteria nested in their
+ * requirement's row, and a family mounts its rows only once opened.
  */
 
 const DEFAULT_POLL_MS = 5_000;
@@ -85,7 +93,27 @@ function CriterionRow({ criterion }: { readonly criterion: CoverageCriterionView
   );
 }
 
+function RequirementRow(
+  { requirement }: { readonly requirement: CoverageRequirementView },
+): JSX.Element {
+  return (
+    <li
+      className="cr2-approve-obligation"
+      data-testid={`cr.coverage.requirement.${requirement.requirementId}`}
+    >
+      <span className="cr2-approve-mono">{requirement.requirementId}</span>
+      <span className="cr2-approve-step-body">{requirement.statement}</span>
+      <ul className="cr2-coverage-criteria">
+        {requirement.criteria.map((criterion) => (
+          <CriterionRow criterion={criterion} key={criterion.criterionId} />
+        ))}
+      </ul>
+    </li>
+  );
+}
+
 function ContractBlock({ contract }: { readonly contract: CoverageContractView }): JSX.Element {
+  const criteria = contract.requirements.reduce((sum, row) => sum + row.criteria.length, 0);
   return (
     <section className="cr2-approve-block" data-testid={`cr.coverage.contract.${contract.contractId}`}>
       <h3 className="cr2-approve-heading">
@@ -94,25 +122,15 @@ function ContractBlock({ contract }: { readonly contract: CoverageContractView }
       </h3>
       <details className="cr2-approve-inspect" data-testid={`cr.coverage.contract.${contract.contractId}.requirements`}>
         <summary className="cr2-approve-inspect-summary">
-          {`${String(contract.requirements.length)} requirements ${MIDDOT} ${String(contract.requirements.reduce((sum, row) => sum + row.criteria.length, 0))} acceptance criteria ${MIDDOT} each with its status`}
+          {`${String(contract.requirements.length)} requirements ${MIDDOT} ${String(criteria)}`
+            + ` acceptance criteria ${MIDDOT} each with its status`}
         </summary>
-      <ul className="cr2-approve-obligations">
-        {contract.requirements.map((requirement) => (
-          <li
-            className="cr2-approve-obligation"
-            data-testid={`cr.coverage.requirement.${requirement.requirementId}`}
-            key={requirement.requirementId}
-          >
-            <span className="cr2-approve-mono">{requirement.requirementId}</span>
-            <span className="cr2-approve-step-body">{requirement.statement}</span>
-            <ul className="cr2-coverage-criteria">
-              {requirement.criteria.map((criterion) => (
-                <CriterionRow criterion={criterion} key={criterion.criterionId} />
-              ))}
-            </ul>
-          </li>
-        ))}
-      </ul>
+        <FoldedRoster
+          idOf={(requirement): string => requirement.requirementId}
+          items={contract.requirements}
+          row={(requirement): JSX.Element => <RequirementRow requirement={requirement} />}
+          testIdPrefix={`cr.coverage.requirements.${contract.contractId}`}
+        />
       </details>
     </section>
   );

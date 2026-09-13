@@ -1,6 +1,8 @@
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { mapDocumentCoverageAnswer } from "../../live/live-document-coverage.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
 import { PrdCoverage, coverageBanner, coverageComplete } from "./prd-coverage.js";
 
@@ -165,5 +167,83 @@ describe("the PRD coverage card", () => {
     resolve(coverage());
     await waitFor(() => expect(screen.queryByTestId("cr.coverage.loading")).toBeNull());
     expect(screen.getByTestId("cr.coverage.body")).toBeTruthy();
+  });
+});
+
+/**
+ * Six identifier families of 25 requirements, each with one criterion: 150 + 150 = 300
+ * statements of ~400 characters, decoded by the production decoder. PrdCoverage mounts
+ * inside the goal board's closed "Everything else" fold on the same first paint as the
+ * Gate 1 card (cordum-app.tsx), and React mounts a closed <details>' children, so a flat
+ * map here was one more copy of the 128 + 150 statement roster on the page that stalled.
+ */
+const FAMILIES = ["AI", "CON", "DATA", "OPS", "SEC", "UX"] as const;
+const PER_FAMILY = 25;
+const FILLER = "the daemon records the decision and the board shows it ".repeat(7).trim();
+const LARGE_CONTRACT = "contract-large";
+
+function largeStatement(kind: string, family: string, index: number): string {
+  return `${kind} ${family} ${String(index)}: ${FILLER}`;
+}
+
+function largeCoverage(): DocumentCoverageOutcome {
+  const numbered = (index: number): string => String(index + 1).padStart(3, "0");
+  const requirements = FAMILIES.flatMap((family) => Array.from({ length: PER_FAMILY }, (_, index) => ({
+    criteria: [{
+      criterionId: `CRT-${family}-${numbered(index)}`, nodeKey: null, nodeTestStatus: null,
+      statement: largeStatement("Criterion", family, index + 1), status: "UNPLANNED",
+    }],
+    requirementId: `REQ-${family}-${numbered(index)}`,
+    statement: largeStatement("Requirement", family, index + 1),
+  })));
+  const outcome = mapDocumentCoverageAnswer(200, {
+    contracts: [{
+      contractId: LARGE_CONTRACT, gate1: "PENDING", plane: "V1", requirements,
+      revisionDigest: "a".repeat(64), revisionId: "rev-large",
+    }],
+    document: { byteLength: 111_000, contentSha256: "e".repeat(64), displayPath: "PRD.md" },
+    goals: [{ goalId: "goal-1", lastActivityAt: null, lifecycle: null, planningRunRef: null, title: null }],
+    outcome: "COVERAGE",
+    sections: null,
+    totals: { contracts: 1, criteria: 150, goals: 1, planned: 0, requirements: 150, unattributable: 0, verified: 0 },
+  });
+  if (outcome.status !== "COVERAGE") throw new Error(`large wire frame refused: ${outcome.code}`);
+  return outcome;
+}
+
+describe("the PRD coverage card with a 300-statement contract", () => {
+  it("mounts the counts and six closed families - none of the 300 rows", async () => {
+    render(<PrdCoverage goalId="goal-1" pollMs={60_000} read={async () => largeCoverage()} />);
+    const fold = await screen.findByTestId(`cr.coverage.contract.${LARGE_CONTRACT}.requirements`);
+    expect(fold.textContent).toContain("150 requirements");
+    expect(fold.textContent).toContain("150 acceptance criteria");
+    const toggles = screen.getAllByTestId(/^cr\.coverage\.requirements\..*\.group\./u);
+    expect(toggles.map((toggle) => toggle.textContent))
+      .toEqual(FAMILIES.map((family) => `REQ-${family}· 25`));
+    for (const toggle of toggles) {
+      expect(fold.contains(toggle)).toBe(true);
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    }
+    // The load-bearing count: 0 of the 150 requirement rows and 0 of the 150 criterion rows.
+    expect(screen.queryAllByTestId(/^cr\.coverage\.requirement\./u)).toHaveLength(0);
+    expect(screen.queryAllByTestId(/^cr\.coverage\.criterion\./u)).toHaveLength(0);
+    expect(screen.queryByText(largeStatement("Requirement", "AI", 1))).toBeNull();
+  });
+
+  it("opens one family: its 25 requirements with their 25 criteria and statuses, nothing else", async () => {
+    const user = userEvent.setup();
+    render(<PrdCoverage goalId="goal-1" pollMs={60_000} read={async () => largeCoverage()} />);
+    await user.click(await screen.findByTestId(`cr.coverage.requirements.${LARGE_CONTRACT}.group.REQ-CON`));
+    const requirements = screen.getAllByTestId(/^cr\.coverage\.requirement\./u);
+    expect(requirements).toHaveLength(PER_FAMILY);
+    expect(requirements.every((row) => row.getAttribute("data-testid")?.startsWith("cr.coverage.requirement.REQ-CON-")))
+      .toBe(true);
+    const criteria = screen.getAllByTestId(/^cr\.coverage\.criterion\./u);
+    expect(criteria).toHaveLength(PER_FAMILY);
+    expect(screen.getByTestId("cr.coverage.criterion.CRT-CON-007").getAttribute("data-status")).toBe("UNPLANNED");
+    expect(screen.getByTestId("cr.coverage.requirement.REQ-CON-007").textContent)
+      .toContain(largeStatement("Requirement", "CON", 7));
+    expect(screen.getByTestId(`cr.coverage.requirements.${LARGE_CONTRACT}.group.REQ-AI`).getAttribute("aria-expanded"))
+      .toBe("false");
   });
 });
