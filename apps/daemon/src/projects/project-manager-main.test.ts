@@ -118,6 +118,7 @@ describe("createProjectBoundaryOpener", () => {
       environment: {
         ANTHROPIC_API_KEY: "provider-secret",
         MOE_DAEMON_CREDENTIAL: CREDENTIAL,
+        MOE_NODE_WORKSPACE: ENTRY.root,
         MOE_OPERATOR_CHANNEL: "false",
         MOE_PROJECT_ID: "alpha",
       },
@@ -197,6 +198,7 @@ describe("createProjectBoundaryOpener", () => {
     expect(environment).toEqual({
       ANTHROPIC_API_KEY: "provider-secret",
       MOE_DAEMON_CREDENTIAL: CREDENTIAL,
+      MOE_NODE_WORKSPACE: ENTRY.root,
       MOE_OPERATOR_CHANNEL: "false",
       MOE_PROJECT_ID: "alpha",
     });
@@ -241,6 +243,7 @@ describe("createProjectBoundaryOpener", () => {
         CODEX_HOME: "C:\\Users\\operator\\.codex",
         MOE_AGENT_COMMAND: "codex",
         MOE_DAEMON_CREDENTIAL: CREDENTIAL,
+        MOE_NODE_WORKSPACE: ENTRY.root,
         MOE_OPERATOR_CHANNEL: "false",
         MOE_PROJECT_ID: "alpha",
         SYSTEMROOT: "C:\\Windows",
@@ -292,6 +295,7 @@ describe("createProjectBoundaryOpener", () => {
         environment: {
           CLAUDE_CONFIG_DIR: custom,
           MOE_DAEMON_CREDENTIAL: CREDENTIAL,
+          MOE_NODE_WORKSPACE: ENTRY.root,
           MOE_OPERATOR_CHANNEL: "false",
           MOE_PROJECT_ID: "alpha",
           USERPROFILE: home,
@@ -368,6 +372,7 @@ describe("createProjectBoundaryOpener", () => {
       environment: {
         MOE_AGENT_COMMAND: "C:\\tools\\noop-agent.cmd",
         MOE_DAEMON_CREDENTIAL: CREDENTIAL,
+        MOE_NODE_WORKSPACE: ENTRY.root,
         MOE_OPERATOR_CHANNEL: "false",
         MOE_PROJECT_ID: "alpha",
       },
@@ -412,6 +417,7 @@ describe("createProjectBoundaryOpener", () => {
         CLAUDE_CODE_OAUTH_TOKEN: "subscription-token",
         MOE_AGENT_COMMAND: "claude.cmd",
         MOE_DAEMON_CREDENTIAL: CREDENTIAL,
+        MOE_NODE_WORKSPACE: ENTRY.root,
         MOE_OPERATOR_CHANNEL: "false",
         MOE_PROJECT_ID: "alpha",
       },

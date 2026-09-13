@@ -56,6 +56,7 @@ describe("prepareProjectManagerLaunch", () => {
       environment: {
         ANTHROPIC_API_KEY: "provider-secret",
         MOE_DAEMON_CREDENTIAL: CREDENTIAL,
+        MOE_NODE_WORKSPACE: ROOT,
         MOE_PROJECT_ID: "alpha",
         PATH: "C:\\Windows\\System32",
       },
@@ -63,6 +64,64 @@ describe("prepareProjectManagerLaunch", () => {
     });
     expect(JSON.stringify(result)).not.toContain("caller-secret");
     expect(JSON.stringify(result)).not.toContain("attacker.js");
+  });
+
+  it("binds compiled work to the canonical registered root without an environment override", () => {
+    const canonicalRoot = "C:\\Work\\Alpha";
+    const result = prepareProjectManagerLaunch(ENTRY, {}, {
+      canonicalDirectory: () => canonicalRoot,
+      canonicalFile: () => `${canonicalRoot}\\moe.config.json`,
+      readConfig: () => config(),
+    });
+    expect(result).toEqual({
+      environment: {
+        MOE_DAEMON_CREDENTIAL: CREDENTIAL,
+        MOE_NODE_WORKSPACE: canonicalRoot,
+        MOE_PROJECT_ID: "alpha",
+      },
+      ok: true,
+    });
+    if (!result.ok) throw new Error("expected the registered project launch");
+    // An omitted test command remains omitted so the wrapper keeps its existing default.
+    expect(Object.hasOwn(result.environment, "MOE_NODE_TEST_COMMAND")).toBe(false);
+  });
+
+  it.each(["MOE_NODE_WORKSPACE", "moe_node_workspace", "Moe_Node_Workspace"])(
+    "replaces inherited %s with this project's canonical workspace",
+    (name) => {
+      expect(prepareProjectManagerLaunch(ENTRY, { [name]: "D:\\foreign-project" }, fs())).toEqual({
+        environment: {
+          MOE_DAEMON_CREDENTIAL: CREDENTIAL,
+          MOE_NODE_WORKSPACE: ROOT,
+          MOE_PROJECT_ID: "alpha",
+        },
+        ok: true,
+      });
+    },
+  );
+
+  it("refuses duplicate case-varied workspace variables", () => {
+    expect(prepareProjectManagerLaunch(ENTRY, {
+      MOE_NODE_WORKSPACE: "D:\\foreign-project",
+      moe_node_workspace: "D:\\another-project",
+    }, fs())).toEqual({
+      code: "PROJECT_MANAGER_LAUNCH_ENVIRONMENT_INVALID",
+      layer: PROJECT_MANAGER_LAUNCH_LAYER,
+      ok: false,
+    });
+  });
+
+  it("preserves the operator's compiled-node test command", () => {
+    const testCommand = "pnpm exec vitest run --config vitest.integration.ts";
+    expect(prepareProjectManagerLaunch(ENTRY, { MOE_NODE_TEST_COMMAND: testCommand }, fs())).toEqual({
+      environment: {
+        MOE_DAEMON_CREDENTIAL: CREDENTIAL,
+        MOE_NODE_TEST_COMMAND: testCommand,
+        MOE_NODE_WORKSPACE: ROOT,
+        MOE_PROJECT_ID: "alpha",
+      },
+      ok: true,
+    });
   });
 
   it.each([

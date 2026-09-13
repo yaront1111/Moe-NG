@@ -171,12 +171,36 @@ describe("the curated Windows project-stack request", () => {
     }
   });
 
+  it("carries compiled-node host settings without widening provider launch", () => {
+    const settings = {
+      MOE_NODE_WORKSPACE: "C:\\Work\\alpha",
+      MOE_NODE_TEST_COMMAND: "pnpm run verify:project",
+    };
+    const encoded = encodeProjectStackLaunchPayload({
+      ...REQUEST, environment: { ...REQUEST.environment, ...settings },
+    });
+    expect(encoded).toBeInstanceOf(Uint8Array);
+    const payload = new TextDecoder().decode(encoded as Uint8Array);
+    for (const [name, value] of Object.entries(settings)) {
+      expect(payload).toContain(name);
+      expect(payload).toContain(value);
+      const provider = encodeLaunchPayload({
+        argv: [], cwd: REQUEST.cwd, executable: REQUEST.nodeExecutable,
+        environment: { SYSTEMROOT: REQUEST.environment.SYSTEMROOT, [name]: value },
+      });
+      expect(provider).toMatchObject({
+        code: "PROCESS_BOUNDARY_ENVIRONMENT_REJECTED", layer: "WINDOWS_PROCESS_REQUEST",
+      });
+    }
+  });
+
   it("publishes a finite reviewed environment roster", () => {
     expect(PROJECT_STACK_ENVIRONMENT_KEYS).toEqual([
       ...ALLOWED_ENVIRONMENT_KEYS,
       ...PROJECT_STACK_PROVIDER_CREDENTIAL_KEYS,
       "MOE_AGENT_COMMAND", "MOE_AGENT_TIMEOUT_MS", "MOE_DAEMON_CREDENTIAL",
-      "MOE_FOUNDATION_WORKSPACE_CATALOG", "MOE_NODE_SPECS_DIR", "MOE_OPERATOR_CHANNEL",
+      "MOE_FOUNDATION_WORKSPACE_CATALOG", "MOE_NODE_SPECS_DIR", "MOE_NODE_TEST_COMMAND",
+      "MOE_NODE_WORKSPACE", "MOE_OPERATOR_CHANNEL",
       "MOE_PRINCIPAL_ID",
       "MOE_PROJECT_CONFIGURATION_DIGEST", "MOE_PROJECT_ID", "MOE_PROJECT_INSTANCE_ID",
       "MOE_RUNTIME_PIN_ROOT", "MOE_STORE_PATH", "MOE_VERIFICATION_CATALOG",

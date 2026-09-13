@@ -39,6 +39,8 @@ const CREDENTIAL = /^[0-9a-f]{64}$/u;
 const IDENTIFIER = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/u;
 const SERVER_OWNED_ENVIRONMENT = new Set([
   "MOE_DAEMON_CREDENTIAL",
+  // The selected project's canonical root owns compiled execution, never inherited host state.
+  "MOE_NODE_WORKSPACE",
   // Measured by the opener from the CLI's attached console; never taken from a caller.
   "MOE_OPERATOR_CHANNEL",
   "MOE_PROJECT_ID",
@@ -164,6 +166,7 @@ export function prepareProjectManagerLaunch(
     environment: Object.freeze({
       ...environment,
       MOE_DAEMON_CREDENTIAL: config.credential,
+      MOE_NODE_WORKSPACE: canonicalRoot,
       MOE_PROJECT_ID: config.projectId,
     }),
     ok: true,
