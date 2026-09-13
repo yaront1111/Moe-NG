@@ -38,6 +38,15 @@ describe("PairingConfirmation first-run copy", () => {
     expect(card.textContent).not.toMatch(/\b60\b|seconds/u);
   });
 
+  it("asks the manager owner to confirm promptly before the label expires", () => {
+    render(<PairingConfirmation confirmationLabel={LABEL} onConfirm={vi.fn()} scope="manager" />);
+    const items = within(screen.getByRole("list")).getAllByRole("listitem");
+    expect(items[2]?.textContent).toBe("Come back to this tab promptly and press the button below before the label expires.");
+    expect(screen.getByText(/The label expires/u).textContent)
+      .toContain("Entering it in the terminal does not extend that time.");
+    expect(screen.queryByRole("timer")).toBeNull();
+  });
+
   it("keeps the two pins the no-touch CordumApp seam test holds: one regex match and the button name", () => {
     render(<PairingConfirmation confirmationLabel={LABEL} onConfirm={vi.fn()} />);
 
@@ -91,5 +100,17 @@ describe("PairingConfirmation first-run copy", () => {
     expect(bounce()).toBe(region);
     expect(bounce()?.textContent).toMatch(/Not paired yet/u);
     expect(bounce()?.textContent).toMatch(/press the button again/u);
+  });
+
+  it.each(["manager", "daemon"] as const)("does not infer missing approval from an unfinished %s claim", scope => {
+    const props = { confirmationLabel: LABEL, onConfirm: vi.fn(), scope };
+    const view = render(<PairingConfirmation {...props} busy />);
+    view.rerender(<PairingConfirmation {...props} busy={false} />);
+
+    const message = document.querySelector("p.cr2-pairing-bounce")?.textContent;
+    expect(message).toContain("Not paired yet - pairing is not complete.");
+    expect(message).not.toMatch(/has not approved|not approved|approval was refused/iu);
+    expect(message).toContain("press the button again");
+    expect(screen.getByRole("button", { name: "I entered this label" }).hasAttribute("disabled")).toBe(false);
   });
 });

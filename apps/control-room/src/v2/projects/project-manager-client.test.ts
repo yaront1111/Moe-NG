@@ -100,7 +100,7 @@ describe("project manager request/approve/claim session", () => {
     expect(await pairing.claim()).toBe(pairing);
   });
 
-  it("reuses an authenticated HttpOnly cookie without creating a pairing request", async () => {
+  it("uses fresh bootstrap authentication without creating a pairing request", async () => {
     const fetchImpl = vi.fn<ProjectManagerFetch>(async (path) => path === "/manager/bootstrap"
       ? bootstrap(true) : projectList());
     const result = await connectProjectManager({ fetchImpl });

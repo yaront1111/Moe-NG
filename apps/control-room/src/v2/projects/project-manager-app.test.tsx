@@ -118,6 +118,44 @@ describe("ProjectManagerApp connection state", () => {
     expect(alert.textContent).toContain("PROJECT_MANAGER_PAIRING_REFUSED @ CONTROL_ROOM_PROJECT_MANAGER");
     expect(alert.textContent).not.toContain("@ PROJECT_MANAGER_HTTP");
   });
+
+  it.each([
+    ["PAIRING_REQUEST_EXPIRED", "This pairing request expired before the browser finished pairing."],
+    ["PAIRING_REQUEST_ALREADY_CLAIMED", "This pairing request has already been used."],
+    ["PAIRING_REQUEST_UNKNOWN", "Moe Projects does not recognize this pairing request."],
+  ])("preserves %s from the claim and offers a fresh pairing request", async (code, said) => {
+    const user = userEvent.setup();
+    const reloadPage = vi.fn();
+    const claim = vi.fn(async () => {
+      return { code, layer: "CONTROL_ROOM_PAIRING_APPROVAL", ok: false } as ProjectManagerConnection;
+    });
+    renderApp({ prepared: Promise.resolve({ claim, confirmationLabel: "abcd-ef01-2345",
+      status: "AWAITING_OPERATOR" }), reloadPage });
+    await user.click(await screen.findByRole("button", { name: "I entered this label" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.firstElementChild?.textContent).toBe(said);
+    expect(alert.textContent).toContain(`${code} @ CONTROL_ROOM_PAIRING_APPROVAL`);
+    expect(alert.textContent).toContain("Reload this page for a new label, enter it in the terminal, then confirm promptly here.");
+    expect(screen.queryByRole("button", { name: "I entered this label" })).toBeNull();
+    expect(screen.queryByTestId("cr.projects.list")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Reload this page" }));
+    expect(reloadPage).toHaveBeenCalledTimes(1);
+    expect(claim).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { code: "PAIRING_REQUEST_EXPIRED", layer: "PROJECT_MANAGER_HTTP", ok: false },
+    { code: "PAIRING_REQUEST_EXPIRED", layer: "CONTROL_ROOM_PAIRING_APPROVAL", ok: false,
+      detail: "untrusted extra payload" },
+  ])("does not diagnose expiry from an invalid refusal shape: %o", async (refused) => {
+    renderApp({ prepared: Promise.resolve(refused as ProjectManagerConnection) });
+    const alert = await screen.findByRole("alert");
+    expect(alert.firstElementChild?.textContent).toBe("Pairing with Moe Projects did not go through.");
+    expect(alert.textContent).toContain("PROJECT_MANAGER_PAIRING_REFUSED @ CONTROL_ROOM_PROJECT_MANAGER");
+    expect(alert.textContent).not.toContain("PAIRING_REQUEST_EXPIRED");
+    expect(alert.textContent).not.toContain("untrusted extra payload");
+  });
 });
 
 /**

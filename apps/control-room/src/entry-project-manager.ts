@@ -20,7 +20,7 @@ const PROJECT_MANAGER_QUERY_KEY = "projects";
  *   by being served on that origin, so the route needs no flag.
  * - `?projects=1` selects it ONLY while `development` is true. A production build
  *   must not let a query string move the operator onto the manager surface: the
- *   manager's authority is a same-origin cookie session established by
+ *   manager's authority is a separately paired manager session established by
  *   `connectProjectManager`, so a query that reached the manager on a project
  *   origin would render a surface that can never legitimately connect.
  *

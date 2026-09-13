@@ -59,7 +59,7 @@ export function PairingConfirmation({
             Type this label there in lowercase, exactly as shown, then press Enter. That window
             prints no prompt and no confirmation - Moe answers here, not there.
           </li>
-          <li className="cr2-pairing-step">Come back to this tab and press the button below.</li>
+          <li className="cr2-pairing-step">Come back to this tab promptly and press the button below before the label expires.</li>
         </ol>
         {scope === "manager" ? null : (
           <details className="cr2-pairing-alt">
@@ -71,15 +71,15 @@ export function PairingConfirmation({
           </details>
         )}
         <p className="cr2-pairing-note">
-          The label expires quickly and is valid only for this local instance. Reload this page for
-          a new one.
+          The label expires quickly and is valid only for this local instance. Entering it in the
+          terminal does not extend that time. Reload this page for a new one.
         </p>
         {/* Mounted from the first render: a polite region is announced reliably
             when its text changes inside a node already in the tree, not when the
             node itself appears. The sheet collapses its box while it is empty. */}
         <p className="cr2-pairing-bounce" data-filled={bounced && !busy ? "true" : "false"} role="status">
           {bounced && !busy
-            ? "Not paired yet - Moe has not approved this label. Check that you typed it and pressed"
+            ? "Not paired yet - pairing is not complete. Check that you typed the label and pressed"
               + " Enter in that terminal window, then press the button again. If it still does not"
               + " pair, reload this page for a new label."
             : ""}
