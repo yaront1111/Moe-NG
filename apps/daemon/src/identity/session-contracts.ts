@@ -80,6 +80,11 @@ export type SessionIngressRefusalCode = (typeof SESSION_INGRESS_REFUSAL_CODES)[n
  */
 export const SESSION_PREREQUISITE_REFUSAL_CODES = Object.freeze([
   "SESSION_COMMAND_ID_REUSED",
+  // The replay fence's second arm: the decision key covers neither kind nor payload, so a
+  // commandId reused under the same kind with different bytes is refused instead of being
+  // handed the earlier decision as an accepted replay (measured: `session.close` naming
+  // another session under a spent id answered OK while that session stayed OPEN).
+  "SESSION_COMMAND_BYTES_CONFLICT",
   "SESSION_EXPECTED_VERSION_STALE",
   "SESSION_LEDGER_UNREADABLE",
   "SESSION_RECOVERY_BINDING_UNAVAILABLE",

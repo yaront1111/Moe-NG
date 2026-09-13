@@ -281,3 +281,77 @@ describe("ingress and fail-closed arms", () => {
     });
   });
 });
+
+/**
+ * A replay must PROVE same bytes before it echoes the stored decision. The decision key is
+ * {commandId, principalId, projectId} — neither the kind nor the payload — and `replayOf`
+ * answers before any store write, so without a byte compare a resubmit under the same kind
+ * with DIFFERENT bytes was handed the earlier decision as "ok, REPLAYED": authority for a
+ * command never decided with those bytes, invisible to the store's own conflict arm. The
+ * bootstrap, work-claim and review families already close this hole the same way.
+ */
+describe("session replay proves same bytes", () => {
+  const BETA_CREDENTIAL = "client-generated-bearer-credential-beta";
+
+  it("refuses an open resubmit whose bytes diverge instead of echoing the stored open", () => {
+    const store = openStore();
+    openDefaultSession(store, {}, "cmd-open-shared");
+    const outcome = send(store, envelope("session.open", 0, openPayload({
+      credentialSha256: hashOf(BETA_CREDENTIAL), sessionId: "session-beta",
+    }), "cmd-open-shared"));
+    expect(refusalOf(outcome)).toEqual({
+      code: "SESSION_COMMAND_BYTES_CONFLICT",
+      refusedBy: "DAEMON_PREREQUISITE",
+    });
+    const ledger = readSessionLedger(store, PROJECT_ID);
+    expect(ledger.sessions.get("session-beta")).toBeUndefined();
+    expect(ledger.decisionCount).toBe(1);
+  });
+
+  it("refuses a close resubmit naming another session, which stays OPEN", () => {
+    const store = openStore();
+    openDefaultSession(store, {}, "cmd-open-alpha");
+    openDefaultSession(store, {
+      credentialSha256: hashOf(BETA_CREDENTIAL), sessionId: "session-beta",
+    }, "cmd-open-beta");
+    expect(send(
+      store, envelope("session.close", 1, { sessionId: SESSION_ID }, "cmd-close-shared"),
+    ).ok).toBe(true);
+
+    const outcome = send(
+      store, envelope("session.close", 1, { sessionId: "session-beta" }, "cmd-close-shared"),
+    );
+
+    expect(refusalOf(outcome)).toEqual({
+      code: "SESSION_COMMAND_BYTES_CONFLICT",
+      refusedBy: "DAEMON_PREREQUISITE",
+    });
+    expect(readSessionLedger(store, PROJECT_ID).sessions.get("session-beta")?.status).toBe("OPEN");
+    // The honest replay still answers: identical bytes under the same key.
+    const replay = send(
+      store, envelope("session.close", 1, { sessionId: SESSION_ID }, "cmd-close-shared"),
+    );
+    expect(replay.ok).toBe(true);
+    if (!replay.ok) throw new Error("expected replay acceptance");
+    expect(replay.disposition).toBe("REPLAYED");
+  });
+
+  it("refuses a renew resubmit carrying a later expiry, and the fold keeps the first", () => {
+    const store = openStore();
+    openDefaultSession(store);
+    const later = "2026-08-09T18:00:00.000Z";
+    expect(send(store, envelope(
+      "session.renew", 1, { expiresAt: later, sessionId: SESSION_ID }, "cmd-renew-shared",
+    )).ok).toBe(true);
+
+    const outcome = send(store, envelope("session.renew", 1, {
+      expiresAt: "2026-08-09T23:00:00.000Z", sessionId: SESSION_ID,
+    }, "cmd-renew-shared"));
+
+    expect(refusalOf(outcome)).toEqual({
+      code: "SESSION_COMMAND_BYTES_CONFLICT",
+      refusedBy: "DAEMON_PREREQUISITE",
+    });
+    expect(readSessionLedger(store, PROJECT_ID).sessions.get(SESSION_ID)?.expiresAt).toBe(later);
+  });
+});

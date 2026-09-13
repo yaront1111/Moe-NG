@@ -512,8 +512,8 @@ describe("the runtime pin root is host configuration, and an absent one refuses"
     expect(LAUNCH_RUNTIME_SECTION_CODES).toContain("LAUNCH_RUNTIME_PIN_ROOT_INVALID");
   });
 
-  it("consumes the closed eight-member session prerequisite roster and its three layers", () => {
-    expect(SESSION_PREREQUISITE_REFUSAL_CODES).toHaveLength(8);
+  it("consumes the closed nine-member session prerequisite roster and its three layers", () => {
+    expect(SESSION_PREREQUISITE_REFUSAL_CODES).toHaveLength(9);
     expect(SESSION_PREREQUISITE_REFUSAL_CODES)
       .toContain("SESSION_CREDENTIAL_DIGEST_UNAVAILABLE");
     expect(SESSION_PREREQUISITE_REFUSAL_CODES).toContain("SESSION_LEDGER_UNREADABLE");

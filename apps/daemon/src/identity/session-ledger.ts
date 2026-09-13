@@ -1,4 +1,5 @@
 import type { JsonObject, JsonValue, RuntimeError } from "@moe/contracts";
+import { identifyReplayRequest } from "@moe/store";
 import type {
   CommandDecisionKey,
   CommandDecisionRecord,
@@ -131,6 +132,14 @@ function eventDraft(request: SessionRequest, plan: CommitPlan): EventDraft {
 }
 
 /**
+ * The bytes a session command is decided AND replay-checked against. One definition, so the
+ * replay fence in `replayOf` compares exactly what `commitAccepted` stored.
+ */
+function requestBytesOf(request: SessionRequest): Uint8Array {
+  return encoder.encode(JSON.stringify({ kind: request.kind, payload: request.payload }));
+}
+
+/**
  * The single durable seam. Every accepted session command commits exactly one decision here, so
  * "one durable terminal decision" is a property of this function rather than of three call sites.
  */
@@ -147,7 +156,7 @@ export function commitAccepted(
     events: [eventDraft(request, plan)],
     expectedVersion: plan.expectedVersion,
     key: decisionKey(request),
-    requestBytes: encoder.encode(JSON.stringify({ kind: request.kind, payload: request.payload })),
+    requestBytes: requestBytesOf(request),
     targetAggregateId: plan.aggregateId,
   });
   // The store does not throw on a version mismatch: it writes a NO_BUSINESS_EFFECT audit row and
@@ -180,7 +189,18 @@ export function replayOf(store: SqliteEventStore, request: SessionRequest): Sess
   if (existing.commandKind !== request.kind) {
     return refuse(request.kind, "SESSION_COMMAND_ID_REUSED", "DAEMON_PREREQUISITE");
   }
+  // A refused decision's receipt carries no request digest, so nothing here could prove the
+  // resubmit is the command that was decided. This must stay AHEAD of the byte compare below.
   if (existing.effectDisposition !== "EFFECTS_COMMITTED") return null;
+  // The key does not cover the payload either. A caller reusing a commandId under the SAME kind
+  // with DIFFERENT bytes (another session id, another expiry, another credential) was handed the
+  // earlier decision as an accepted replay: `session.close` naming session B under the id that
+  // closed A answered OK while B stayed OPEN. Recomputed from the STORED decision's own fence,
+  // so the resubmitted bytes are the only free variable and a match is byte equality; the
+  // bootstrap, work-claim and review families close the same hole the same way.
+  if (identifyReplayRequest(existing, requestBytesOf(request)) !== existing.replayRequestSha256) {
+    return refuse(request.kind, "SESSION_COMMAND_BYTES_CONFLICT", "DAEMON_PREREQUISITE");
+  }
   return Object.freeze({
     advisoryOnly: false as const,
     authority: "DURABLE_DECISION" as const,
