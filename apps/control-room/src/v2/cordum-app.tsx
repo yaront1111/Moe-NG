@@ -49,6 +49,10 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   const navigation = useProductRoute(attached, search, fixtures ? PRODUCT_EXAMPLE_DATA : null);
   const { open, openProduct, back: closeProduct } = navigation;
   const [view, setView] = useState<Exclude<CordumRoute["kind"], "board">>("goals");
+  // THE COUNT IS A MEASUREMENT OF THE VIEW THAT IS OPEN: only the Goals home and the Needs-you
+  // queue derive it, and both unmount when a product or another view opens. Null there, not the
+  // last number seen - measured before this, a plan approved from the board left the rail badge
+  // at its pre-approval count until the operator returned to Goals.
   const [needsYouCount, setNeedsYouCount] = useState<number | null>(null);
   const [connection, setConnection] = useState<ConnectionState | null>(null);
   const [answeredAtMs, setAnsweredAtMs] = useState<number | null>(null);
@@ -57,10 +61,10 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
     if (attached !== null) setHomeFrame({ setup: attached, frame });
   }, [attached]);
   const openBoard = useCallback((goalId: string, planningRunRef: string, title: string) => {
-    setConnection(null); openProduct(goalId, planningRunRef, title);
+    setConnection(null); setNeedsYouCount(null); openProduct(goalId, planningRunRef, title);
   }, [openProduct]);
   const openFromProduct = useCallback((goalId: string, title: string) => {
-    setConnection(null); openProduct(goalId, "", title);
+    setConnection(null); setNeedsYouCount(null); openProduct(goalId, "", title);
   }, [openProduct]);
   const back = useCallback(() => { setConnection(null); closeProduct(); }, [closeProduct]);
   const reportConnection = useCallback((next: SurfaceFrame["connection"]) => {
@@ -68,6 +72,9 @@ export function CordumApp({ liveSetup, search = "" }: CordumAppProps): JSX.Eleme
   }, []);
   const navigate = useCallback((route: CordumRoute) => {
     setConnection(null);
+    // Leaving a measuring view: the count is unknown until one mounts again. Arriving at one
+    // clears nothing, so a same-view click cannot blank a badge the mounted view still holds.
+    if (route.kind !== "goals" && route.kind !== "approvals") setNeedsYouCount(null);
     if (route.kind === "board") openProduct(route.goalId, route.planningRunRef, route.title);
     else { closeProduct(); setView(route.kind); }
   }, [openProduct, closeProduct]);

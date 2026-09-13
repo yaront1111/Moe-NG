@@ -1193,6 +1193,26 @@ describe("the Activate card is reachable on the goals screen", () => {
 });
 
 /**
+ * THE NEEDS-YOU BADGE IS A MEASUREMENT OF THE VIEW THAT IS OPEN. Only LiveGoalsHome and
+ * LiveNeedsYou derive the count, and both unmount when a board opens. Measured before this
+ * arm: the rail kept the count from the last home mount for as long as the board stayed open,
+ * so a plan approved from the board left the badge at its pre-approval "1" until the operator
+ * came back to Goals. With nothing measuring, the honest badge is no badge.
+ */
+describe("the Needs-you badge follows the view that measures it", () => {
+  it("drops while a board is open and is re-measured on returning to Goals", async () => {
+    renderWiredApp();
+    await waitFor(() => { expect(screen.getByTestId("cr.nav.approvals.badge").textContent).toBe("1"); });
+    await openTheDurableBoard();
+    // The product workspace is what opens over the home now; the home is unmounted either way.
+    await screen.findByTestId("cr.product.workspace");
+    expect(screen.queryByTestId("cr.nav.approvals.badge")).toBeNull();
+    await userEvent.click(screen.getByTestId("cr.nav.goals"));
+    await waitFor(() => { expect(screen.getByTestId("cr.nav.approvals.badge").textContent).toBe("1"); });
+  });
+});
+
+/**
  * THE RESOURCES VIEW REPORTS ITS CONNECTION LIKE EVERY OTHER LIVE VIEW. Measured before this
  * arm: `navigate` clears the shell's connection and LiveResources was the one live view
  * mounted with no `onConnection`, so the banner said "Connecting to the daemon. Nothing on
