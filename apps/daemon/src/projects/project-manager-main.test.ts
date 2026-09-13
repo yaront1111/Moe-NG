@@ -1,6 +1,7 @@
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { PassThrough } from "node:stream";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -293,6 +294,44 @@ describe("createProjectBoundaryOpener", () => {
 });
 
 describe("runProjectManagerMain", () => {
+  it.runIf(process.platform === "win32").each(["missing", "eof", "error"] as const)(
+    "reports live operator availability after %s", async (ending) => {
+      const localAppData = await temporary();
+      const input = new PassThrough();
+      let available: (() => boolean) | undefined;
+      let signal: (() => void) | undefined;
+      const completed = runProjectManagerMain({
+        dependencies: {
+          createRuntime: () => runtime([]),
+          resolveAssetRoot: () => "D:\\artifact\\apps\\control-room\\dist",
+          startHttp: async (options) => {
+            available = options.operatorChannelAvailable;
+            return { approvePairing: () => ({ code: "PAIRING_CONFIRMATION_UNKNOWN",
+              layer: "CONTROL_ROOM_PAIRING_APPROVAL", ok: false }),
+              close: async () => undefined, ok: true,
+              origin: "http://127.0.0.2:39122", port: 39122 };
+          },
+        },
+        env: { LOCALAPPDATA: localAppData }, log: () => undefined,
+        onSignal: (handler) => { signal = handler; },
+        ...(ending === "missing" ? {} : { operatorInput: input }),
+        platform: "win32", root: "D:\\artifact",
+      });
+      try {
+        await vi.waitFor(() => expect(signal).toBeTypeOf("function"));
+        expect(available).toBeTypeOf("function");
+        expect(available!()).toBe(ending !== "missing");
+        if (ending === "error") input.destroy(new Error("operator stream failed"));
+        else input.end();
+        await vi.waitFor(() => expect(available!()).toBe(false));
+      } finally {
+        input.destroy();
+        signal?.();
+        await completed;
+      }
+    },
+  );
+
   it.runIf(process.platform === "win32")(
     "starts one fixed-host manager, waits, then closes HTTP before every project Job", async () => {
     const localAppData = await temporary();

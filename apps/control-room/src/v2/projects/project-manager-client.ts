@@ -57,11 +57,15 @@ export interface ProjectManagerReady {
   readonly ok: true;
   readonly projects: readonly ProjectManagerProject[];
 }
-export interface ProjectManagerRefusal {
+export type ProjectManagerRefusal = {
   readonly code: string;
   readonly layer: typeof PROJECT_MANAGER_LOCAL_LAYER;
   readonly ok: false;
-}
+} | {
+  readonly code: "OPERATOR_CHANNEL_UNAVAILABLE";
+  readonly layer: "PROJECT_MANAGER_HTTP";
+  readonly ok: false;
+};
 export interface ProjectManagerPairingPending {
   claim(): Promise<ProjectManagerConnection>;
   readonly confirmationLabel: string;
@@ -119,6 +123,15 @@ function decodeResult(value: unknown): ProjectManagerResult | undefined {
     || typeof value["layer"] !== "string" || !STABLE_NAME.test(value["code"])
     || !STABLE_NAME.test(value["layer"])) return undefined;
   return { code: value["code"], layer: value["layer"], ok: value["ok"] };
+}
+function operatorChannelRefusal(answer: BoundedResponse | undefined): ProjectManagerRefusal | undefined {
+  if (answer === undefined || answer.response.ok) return undefined;
+  const decoded = decodeResult(answer.value);
+  if (decoded?.ok === false && decoded.code === "OPERATOR_CHANNEL_UNAVAILABLE"
+    && decoded.layer === "PROJECT_MANAGER_HTTP") {
+    return { code: decoded.code, layer: decoded.layer, ok: false };
+  }
+  return undefined;
 }
 function decodeProjects(value: unknown): readonly ProjectManagerProject[] | undefined {
   if (!record(value) || !exact(value, ["projects", "schemaVersion"])
@@ -261,6 +274,8 @@ export async function connectProjectManager(input: {
   const created = await request(input.fetchImpl, "/manager/session/pair/request", {
     body: "{}", headers: headers(csrfToken, credential), method: "POST",
   }, true);
+  const unavailable = operatorChannelRefusal(created);
+  if (unavailable !== undefined) return unavailable;
   if (created === undefined || !created.response.ok || !record(created.value)
     || !exact(created.value, ["confirmationLabel", "ok", "requestId"])
     || created.value["ok"] !== true
@@ -279,6 +294,8 @@ export async function connectProjectManager(input: {
       method: "POST",
     }, true);
     if (paired === undefined) return refusal(LOCAL_CODE.pairingRefused);
+    const unavailable = operatorChannelRefusal(paired);
+    if (unavailable !== undefined) return unavailable;
     if (paired.response.status === 409 && record(paired.value)
       && (paired.value["code"] === "PAIRING_APPROVAL_REQUIRED"
         || paired.value["code"] === "PAIRING_REQUEST_BUSY")) return pending;

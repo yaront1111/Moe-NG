@@ -15,7 +15,7 @@ The local bare-repository release fixture contradicted the production remote con
 
 The original positive browser assertions remain available with an explicit admitted-remote opt-in. This is a declared coverage change, not new evidence of a successful PR journey. Details and exact opt-in variables are in [release browser coverage](../../tests/e2e/control-room/release-approval.md).
 
-## Fresh verification
+## Verification for workspace commit `d461c50a`
 
 | Gate | Result |
 |---|---|
@@ -31,7 +31,19 @@ The original positive browser assertions remain available with an explicit admit
 | Local publication refusal | One real-daemon journey passed, including downstream cutoff |
 | Final browser checks | Desktop at 1,440px, phone at 390px and two production smoke checks passed |
 
-The UI and preview lifecycle fixes received independent review. Focused tests established failure before each fix. Final screenshots showed no clipping or horizontal overflow; navigation, focus, history and fixture isolation checks passed. The last build left `apps/control-room/dist` in production mode.
+The UI and preview lifecycle fixes received independent review. Focused tests established failure before each fix. Product-workspace screenshots showed no clipping or horizontal overflow; navigation, focus, history and fixture isolation checks passed. These screenshots did not cover the project manager's composed page. The last build left `apps/control-room/dist` in production mode.
+
+## Manager front-door follow-up
+
+Inspection of the actual source manager exposed a separate layout gap that was also present before `d461c50a`: the manager inherited the workspace's two-column sidebar grid without supplying a sidebar. Its brand occupied a full-height left column. At 390 by 600 pixels the pairing confirmation button was clipped, and the page could not scroll to reveal it. The manager now owns a top header and scrollable content region across pairing, connection notices and the project list. Refresh refusals remain in the same content flow as the retained list.
+
+Existing projects appear before the folder setup form. A native Add project link moves keyboard focus to that form. Mobile header text aligns left, the two actions share a row, and reduced-motion preferences apply to the new link.
+
+The first background source-manager launch also lacked a usable operator input. Pairing could issue a label even though no input consumer could approve it. The repaired local launcher owns an open private input pipe and uses the supported `projects --operator-stdin` mode. Restarting invalidated the earlier browser label; a fresh user-provided label is required. This operator-channel repair does not establish that the user's browser has claimed a session.
+
+The manager now observes its operator stream until EOF or failure. An unavailable channel refuses new pairing requests and unapproved claims with `OPERATOR_CHANNEL_UNAVAILABLE @ PROJECT_MANAGER_HTTP`; the browser shows terminal-restart recovery instead of an unusable label. Existing approved claims and busy reservations retain their original behavior. Successful response bodies and bootstrap schemas are unchanged.
+
+Follow-up gates passed: workspace typecheck; Control Room 232 files / 2,945 tests; daemon 628 files / 11,193 tests, 21 skipped; root 454 files / 10,610 tests, 50 skipped; foundation 756 tests; store 709 tests. The final six production-bundle browser cases passed, covering pairing, populated lists, refresh failure, unavailable input, short screens at 390px and 320px, keyboard navigation and reduced motion. The browser API responses for authenticated states are explicit fixtures; they do not establish a live paired session. Separate inspection of the running source manager at 1,440px and 390 by 600 pixels found no overflow, clipped confirmation button, failed asset request or browser error. All fixes received independent review. The final build remains production mode.
 
 ## Local application identity and remaining limits
 

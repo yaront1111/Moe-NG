@@ -67,11 +67,12 @@ const INTAKE_CHOICES = Object.freeze([
 ]);
 
 interface IntakeFormProps {
+  readonly id: string;
   readonly busyKey: string | null; readonly onCreate: Intake; readonly onRegister: Intake;
   readonly report: ProjectHomeResult | undefined; readonly run: RunOperation;
 }
 
-function IntakeForm({ busyKey, onCreate, onRegister, report, run }: IntakeFormProps): JSX.Element {
+function IntakeForm({ id, busyKey, onCreate, onRegister, report, run }: IntakeFormProps): JSX.Element {
   const titleId = useId(), rootId = useId(), choiceName = useId(), hintId = useId();
   const [kind, setKind] = useState<"create" | "register">("create");
   const [title, setTitle] = useState("");
@@ -89,7 +90,7 @@ function IntakeForm({ busyKey, onCreate, onRegister, report, run }: IntakeFormPr
   };
 
   return (
-    <form aria-label="Add a project" className="cr2-project-intake"
+    <form aria-label="Add a project" className="cr2-project-intake" id={id} tabIndex={-1}
       onSubmit={(event) => { void submit(event); }}>
       <div>
         <p className="cr2-project-intake-kicker">ADD A PROJECT</p>
@@ -201,7 +202,7 @@ export function ProjectHome({ projects, onCreateProject, onRefreshProjects, onRe
   onStartProject, onStopProject, onOpenProject }: ProjectHomeProps): JSX.Element {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [reports, setReports] = useState<ReadonlyMap<string, ProjectHomeResult>>(() => new Map());
-  const busy = useRef(false), hintId = useId();
+  const busy = useRef(false), hintId = useId(), intakeId = useId();
 
   const run: RunOperation = async (key, reportKey, operation) => {
     if (busy.current) return PROJECT_HOME_LOCAL_REFUSAL;
@@ -221,6 +222,7 @@ export function ProjectHome({ projects, onCreateProject, onRefreshProjects, onRe
         <div><p>ON THIS COMPUTER</p><h2>Projects</h2></div>
         <div className="cr2-project-home-tools">
           <p>A project is a folder on this computer that Moe runs for you. Add one below, then press Start.</p>
+          {projects.length > 0 ? <a className="cr2-project-add-link" href={`#${intakeId}`}>Add project</a> : null}
           <button disabled={busyKey !== null} onClick={() => { void run("refresh", "refresh", onRefreshProjects); }}
             type="button">{busyKey === "refresh" ? "Refreshing" : "Refresh"}</button>
         </div>
@@ -230,8 +232,6 @@ export function ProjectHome({ projects, onCreateProject, onRefreshProjects, onRe
         <p>NOTHING HERE YET</p><h2>Add your first project</h2>
         <span>Moe is not tracking any folder yet. Point it at one below, then press Start to run it.</span>
       </section> : null}
-      <IntakeForm busyKey={busyKey} onCreate={onCreateProject} onRegister={onRegisterProject}
-        report={reports.get(INTAKE_KEY)} run={run} />
       {projects.length > 0 ? <section aria-labelledby="cr2-project-ledger-heading" className="cr2-project-ledger">
         <div className="cr2-project-ledger-heading"><p>ADDED SO FAR</p><h2 id="cr2-project-ledger-heading">Your projects</h2></div>
         <p className="cr2-project-ledger-hint" id={hintId}>
@@ -244,6 +244,8 @@ export function ProjectHome({ projects, onCreateProject, onRefreshProjects, onRe
             report={reports.get(`project:${project.instanceId}`)} run={run} />)}
         </ul>
       </section> : null}
+      <IntakeForm busyKey={busyKey} id={intakeId} onCreate={onCreateProject} onRegister={onRegisterProject}
+        report={reports.get(INTAKE_KEY)} run={run} />
     </main>
   );
 }

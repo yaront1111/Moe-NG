@@ -1,11 +1,15 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { createServer, request as httpRequest } from "node:http";
+import { createServer, IncomingMessage, request as httpRequest, ServerResponse } from "node:http";
+import { Socket } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { afterAll, describe, expect, it, vi } from "vitest";
 
 import { PAIRING_APPROVAL_LAYER } from "../http/pairing-approval-contract.js";
+import { createPairingApprovalWindow } from "../http/pairing-approval-window.js";
+import { resolveControlRoomAssetRoot } from "../http/static-asset-host.js";
+import { serveProjectManagerRequest } from "./project-manager-http-routing.js";
 import {
   PROJECT_MANAGER_CREDENTIAL_HEADER,
   PROJECT_MANAGER_HTTP_LAYER,
@@ -59,6 +63,7 @@ async function options(overrides: Partial<StartProjectManagerHttpOptions> = {}):
     csrfToken: CSRF,
     manager: manager(),
     mintSessionSecret: () => SESSION_SECRET,
+    operatorChannelAvailable: () => true,
     pairingRandomBytes: (size) => new Uint8Array(size).fill(size === 32 ? 0xab : 0xcd),
     ...overrides,
   };
@@ -131,6 +136,99 @@ const mutation = (listener: ProjectManagerHttpListener, credential: string) => (
 });
 
 describe.runIf(process.platform !== "darwin")("manager plain-origin request/approve/claim", () => {
+  it.each(["missing", "closed", "unreadable"] as const)(
+    "refuses a %s operator channel before creating a pairing request", async (channel) => {
+      const { operatorChannelAvailable: _available, ...configured } = await options();
+      const random = vi.fn((size: number) => new Uint8Array(size).fill(0xab));
+      await withListener({ ...configured, pairingRandomBytes: random,
+        ...(channel === "missing" ? {} : { operatorChannelAvailable: () => {
+          if (channel === "unreadable") throw new Error("operator stream unavailable");
+          return false;
+        } }),
+      }, async (listener) => {
+        const created = await call(listener, { body: "{}", method: "POST", origin: listener.origin,
+          path: "/manager/session/pair/request" });
+        expect(created.status).toBe(403);
+        expect(created.body).toEqual({ code: "OPERATOR_CHANNEL_UNAVAILABLE",
+          layer: "PROJECT_MANAGER_HTTP", ok: false });
+        expect(random).not.toHaveBeenCalled();
+        expect(created.raw).not.toMatch(/confirmationLabel|requestId|sessionCredential/u);
+        expect(created.headers["set-cookie"]).toBeUndefined();
+      });
+    },
+  );
+
+  it("reports a closed operator channel for an outstanding unapproved request", async () => {
+    let available = true;
+    await withListener(await options({ operatorChannelAvailable: () => available }), async (listener) => {
+      const created = await call(listener, { body: "{}", method: "POST", origin: listener.origin,
+        path: "/manager/session/pair/request" });
+      expect(created.status).toBe(200);
+      available = false;
+      const claimed = await call(listener, { body: JSON.stringify({ requestId: created.body!["requestId"] }),
+        method: "POST", origin: listener.origin, path: "/manager/session/pair/claim" });
+      expect(claimed.status).toBe(403);
+      expect(claimed.body).toEqual({ code: "OPERATOR_CHANNEL_UNAVAILABLE",
+        layer: "PROJECT_MANAGER_HTTP", ok: false });
+      expect(claimed.raw).not.toContain(SESSION_SECRET);
+      expect(claimed.headers["set-cookie"]).toBeUndefined();
+    });
+  });
+
+  it("preserves an operator approval granted before the input stream closed", async () => {
+    let available = true;
+    await withListener(await options({ operatorChannelAvailable: () => available }), async (listener) => {
+      const created = await call(listener, { body: "{}", method: "POST", origin: listener.origin,
+        path: "/manager/session/pair/request" });
+      expect(listener.approvePairing(created.body!["confirmationLabel"])).toEqual({ ok: true, state: "APPROVED" });
+      available = false;
+      const claimed = await call(listener, { body: JSON.stringify({ requestId: created.body!["requestId"] }),
+        method: "POST", origin: listener.origin, path: "/manager/session/pair/claim" });
+      expect(claimed.status).toBe(200);
+      expect(claimed.body).toEqual({ code: "PROJECT_MANAGER_PAIRED", layer: "PROJECT_MANAGER_HTTP",
+        ok: true, sessionCredential: SESSION_SECRET });
+    });
+  });
+
+  it("preserves a busy approved reservation when the operator channel closes", async () => {
+    const configured = await options();
+    const assetRoot = resolveControlRoomAssetRoot(configured.assetRoot, []);
+    if (assetRoot.kind === "LISTENER_REFUSAL") throw new Error(assetRoot.code);
+    const pairing = createPairingApprovalWindow();
+    const created = pairing.requests.create();
+    if (!created.ok) throw new Error(created.code);
+    pairing.operator.approve(created.confirmationLabel);
+    const reserved = pairing.requests.reserve(created.requestId);
+    if (!reserved.ok) throw new Error(reserved.code);
+    const request = new IncomingMessage(new Socket());
+    request.method = "POST";
+    request.url = "/manager/session/pair/claim";
+    request.headers = { host: "127.0.0.2:39122", origin: "http://127.0.0.2:39122",
+      "content-type": "application/json", "x-moe-manager-csrf": CSRF,
+      "x-moe-manager-protocol-version": PROJECT_MANAGER_PROTOCOL_VERSION };
+    request.push(JSON.stringify({ requestId: created.requestId }));
+    request.push(null);
+    const response = new ServerResponse(request);
+    const status = vi.spyOn(response, "writeHead").mockReturnValue(response);
+    const ended = vi.spyOn(response, "end").mockReturnValue(response);
+    const available = vi.fn(() => false);
+    try {
+      await serveProjectManagerRequest(request, response, { assets: assetRoot,
+        authority: "127.0.0.2:39122", csrfToken: CSRF, manager: manager(),
+        operatorChannelAvailable: available, origin: "http://127.0.0.2:39122",
+        pairing, sessionSecret: SESSION_SECRET });
+      expect(status.mock.calls[0]?.[0]).toBe(409);
+      expect(JSON.parse(String(ended.mock.calls[0]?.[0]))).toEqual({ code: "PAIRING_REQUEST_BUSY",
+        layer: "CONTROL_ROOM_PAIRING_APPROVAL", ok: false });
+      expect(available).not.toHaveBeenCalled();
+    } finally {
+      reserved.reservation.commit();
+      pairing.close();
+      request.destroy();
+      response.destroy();
+    }
+  });
+
   it("binds 127.0.0.2 and exposes no authority in its URL or bootstrap", async () => {
     await withListener(await options(), async (listener) => {
       expect(listener.origin).toBe(`http://127.0.0.2:${listener.port}`);

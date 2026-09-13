@@ -71,6 +71,7 @@ export function lifecycleWord(lifecycle: string): string {
 export type ResultWords = readonly [said: string, next: string];
 
 export const RESULT_WORDS: Readonly<Record<string, ResultWords>> = Object.freeze({
+  OPERATOR_CHANNEL_UNAVAILABLE: ["Moe Projects cannot receive a pairing label.", "Restart Moe Projects in a terminal, then reload this page."],
   MOE_INIT_CONFIG_PRESENT: ["Moe is already set up in that folder.", "Choose \u201cMoe already set this folder up\u201d above and add it again."],
   MOE_INIT_TARGET_NOT_EMPTY: ["That folder already has files in it, so Moe would not set it up.", "Point Moe at a new or empty folder, then copy your files in after it is added."],
   MOE_INIT_TARGET_UNWRITABLE: ["Moe cannot write into that folder.", "Pick a folder you can write to, then press Add project again."],

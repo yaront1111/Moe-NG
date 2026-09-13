@@ -65,6 +65,8 @@ describe("ProjectManagerApp connection state", () => {
     expect(root.getAttribute("data-connection")).toBe("OFFLINE");
     expect(root.classList.contains("cr2-manager-root")).toBe(true);
     expect(root.getAttribute("style")).toBeNull();
+    expect(screen.getByRole("banner", { name: "Moe project manager" }).textContent).toContain("Moe");
+    expect(screen.getByRole("main").closest(".cr2-manager-content")).not.toBeNull();
     expect(screen.queryByTestId("cr.projects.list")).toBeNull();
   });
 
@@ -94,6 +96,27 @@ describe("ProjectManagerApp connection state", () => {
     expect(screen.getByText("C:\\work\\atlas")).toBeTruthy();
     expect(screen.getByTestId("cr.manager.root").getAttribute("data-connection")).toBe("CONNECTED");
     expect(screen.getByLabelText("Moe project manager").textContent).toContain("PROJECTS");
+  });
+
+  it("preserves the exact unavailable operator channel refusal and explains how to recover", async () => {
+    renderApp({ prepared: Promise.resolve({ ok: false, code: "OPERATOR_CHANNEL_UNAVAILABLE",
+      layer: "PROJECT_MANAGER_HTTP" } as ProjectManagerConnection) });
+
+    const alert = await screen.findByRole("alert");
+    expect(screen.getByRole("heading", { name: "No projects loaded" })).toBeTruthy();
+    expect(alert.textContent).toContain("Moe Projects cannot receive a pairing label.");
+    expect(alert.textContent).toContain("Restart Moe Projects in a terminal, then reload this page.");
+    expect(alert.textContent).toContain("OPERATOR_CHANNEL_UNAVAILABLE @ PROJECT_MANAGER_HTTP");
+    expect(screen.queryByRole("button", { name: "I entered this label" })).toBeNull();
+  });
+
+  it("keeps rewriting other stable manager refusals to the existing local boundary", async () => {
+    renderApp({ prepared: Promise.resolve({ ok: false, code: "PROJECT_MANAGER_PAIRING_REFUSED",
+      layer: "PROJECT_MANAGER_HTTP" } as ProjectManagerConnection) });
+
+    const alert = await screen.findByRole("alert");
+    expect(alert.textContent).toContain("PROJECT_MANAGER_PAIRING_REFUSED @ CONTROL_ROOM_PROJECT_MANAGER");
+    expect(alert.textContent).not.toContain("@ PROJECT_MANAGER_HTTP");
   });
 });
 
@@ -278,6 +301,10 @@ describe("ProjectManagerApp project operations", () => {
     expect(alerts[0]?.firstElementChild?.textContent).toBe("Moe Projects did not send the project list.");
     expect(alerts[0]?.textContent).toContain("PROJECT_MANAGER_PROJECTS_UNAVAILABLE @ CONTROL_ROOM_PROJECT_MANAGER");
     expect(alerts[0]?.closest("main.cr2-project-home")).toBeNull();
+    const content = screen.getByRole("main").closest(".cr2-manager-content");
+    expect(content).not.toBeNull();
+    expect(content?.contains(alerts[0] ?? null)).toBe(true);
+    expect(content?.contains(screen.getByRole("heading", { name: "Atlas" }))).toBe(true);
   });
 });
 
@@ -375,6 +402,7 @@ describe("task-999a363f PairingConfirmation scope", () => {
     // The manager scope owns its document's main landmark: ProjectManagerApp's
     // root is a div and its other branches are mutually exclusive with PAIRING.
     expect(document.querySelectorAll("main")).toHaveLength(1);
+    expect(screen.getByRole("main").closest(".cr2-manager-content")).not.toBeNull();
     // The accessible name rides the section, which `region` can carry - a
     // generic wrapper cannot, so the daemon arm below would lose it silently.
     expect(screen.getByRole("region", { name: "Pair this browser with Moe Projects" })).toBeTruthy();

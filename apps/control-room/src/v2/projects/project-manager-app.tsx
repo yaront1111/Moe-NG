@@ -4,6 +4,7 @@ import type { JSX } from "react";
 import "../cordum-fonts.js";
 import "../styles/cordum-tokens.css";
 import "../styles/cordum-shell.css";
+import "./project-manager.css";
 import { PairingConfirmation } from "../live/pairing-confirmation.js";
 import { ProjectHome, ResultReport } from "./project-home.js";
 import type { ProjectHomeResult } from "./project-home.js";
@@ -44,6 +45,9 @@ export interface ProjectManagerAppProps {
 }
 
 function stableRefusal(value: ProjectManagerRefusal): ProjectManagerRefusal {
+  if (!value.ok && value.code === "OPERATOR_CHANNEL_UNAVAILABLE" && value.layer === "PROJECT_MANAGER_HTTP") {
+    return { code: value.code, layer: value.layer, ok: false };
+  }
   if (!value.ok && STABLE_NAME.test(value.code) && STABLE_NAME.test(value.layer)) {
     return { code: value.code, layer: PROJECT_MANAGER_LOCAL_LAYER, ok: false };
   }
@@ -220,12 +224,16 @@ export function ProjectManagerApp({ prepared, openWindow = defaultOpenWindow,
 
   return (
     <div className="cr2-shell cr2-manager-root" data-connection={connection} data-testid="cr.manager.root">
-      <div className="cr2-brand" aria-label="Moe project manager">
-        <span aria-hidden="true" className="cr2-brand-mark">M</span>
-        <span className="cr2-brand-name">Moe</span>
-        <span className="cr2-brand-version">PROJECTS</span>
+      <header className="cr2-manager-header" aria-label="Moe project manager">
+        <div className="cr2-brand">
+          <span aria-hidden="true" className="cr2-brand-mark">M</span>
+          <span className="cr2-brand-name">Moe</span>
+          <span className="cr2-brand-version">PROJECTS</span>
+        </div>
+      </header>
+      <div className="cr2-manager-content">
+        <div className="cr2-manager-body">{body}</div>
       </div>
-      {body}
     </div>
   );
 }

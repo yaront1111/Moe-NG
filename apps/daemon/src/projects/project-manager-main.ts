@@ -264,11 +264,13 @@ export async function runProjectManagerMain(options: ProjectManagerMainOptions):
     return 1;
   }
   let listener: StartProjectManagerHttpResult;
+  let operatorChannelAvailable = options.operatorInput !== undefined;
   try {
     listener = await dependencies.startHttp({
       assetRoot,
       csrfToken,
       manager,
+      operatorChannelAvailable: () => operatorChannelAvailable,
       port: PROJECT_MANAGER_PORT,
     });
   } catch {
@@ -286,6 +288,7 @@ export async function runProjectManagerMain(options: ProjectManagerMainOptions):
   const stop = (): void => {
     if (stopping) return;
     stopping = true;
+    operatorChannelAvailable = false;
     void drain(listener, runtime, options.log).then(settle);
   };
   try {
@@ -309,7 +312,7 @@ export async function runProjectManagerMain(options: ProjectManagerMainOptions):
         const result = await runtime.approvePairing(project["instanceId"], project["label"]);
         if (!result.ok) disclose(result, options.log);
       }
-    });
+    }).finally(() => { operatorChannelAvailable = false; });
   }
   return await completed;
 }
