@@ -562,3 +562,59 @@ describe("a claim whose holder seat is not live may be released by a non-claiman
       .toEqual(["WorkClaimed"]);
   });
 });
+
+/**
+ * A refused command id is SPENT. The store folds the presented expectedVersion into the
+ * request identity, so the resubmit the conflict refusal itself invited (same commandId,
+ * the observed version) carried different request bytes under the same key: `replayOf`
+ * declined to answer from the NO_BUSINESS_EFFECT row ("decided again from scratch"),
+ * `commitAccepted` reached the store, and the store threw IdempotencyConflictError — a
+ * bare 409 "same command identity with different request bytes" at the transport for a
+ * seat that followed the refusal's own retry advice (the bootstrap family had closed the
+ * same hole with BOOTSTRAP_COMMAND_ID_SPENT).
+ */
+describe("runWorkClaimCommand spends a refused command id", () => {
+  it("refuses the resubmit at the observed version with a stable code, never a store throw", () => {
+    const item = "goal.close@goal-spent-1";
+    const renewal = { expiresAt: "2026-08-09T14:00:00.000Z", workItemId: item };
+    expect(run("work.claim", "agent-a", { expiresAt: LATER, workItemId: item }))
+      .toMatchObject({ ok: true });
+    const stale = run(
+      "work.renew", "agent-a", renewal, 0, "2026-08-09T12:00:00.000Z", "cmd-spent-renew",
+    );
+    expect(stale).toMatchObject({
+      code: "EXPECTED_VERSION_CONFLICT", ok: false, refusedBy: "DURABLE_STORE",
+    });
+    expectConflictNamesObservedVersion(stale, item, 0);
+    const before = {
+      events: store.readEvents(aggregateIdFor(item)),
+      record: readWorkClaimLedger(store, PROJECT).claims.get(item),
+    };
+    const observed = store.getAggregateVersion(aggregateIdFor(item));
+
+    const spent = {
+      code: "WORK_CLAIM_COMMAND_ID_SPENT", ok: false, refusedBy: "DAEMON_PREREQUISITE",
+    };
+    // At the version the refusal named, at the stale one, and with other bytes: all spent.
+    expect(run(
+      "work.renew", "agent-a", renewal, observed, "2026-08-09T12:00:00.000Z", "cmd-spent-renew",
+    )).toMatchObject(spent);
+    expect(run(
+      "work.renew", "agent-a", renewal, 0, "2026-08-09T12:00:00.000Z", "cmd-spent-renew",
+    )).toMatchObject(spent);
+    expect(run(
+      "work.renew", "agent-a", { ...renewal, expiresAt: "2026-08-09T16:00:00.000Z" },
+      observed, "2026-08-09T12:00:00.000Z", "cmd-spent-renew",
+    )).toMatchObject(spent);
+    expect({
+      events: store.readEvents(aggregateIdFor(item)),
+      record: readWorkClaimLedger(store, PROJECT).claims.get(item),
+    }).toEqual(before);
+
+    // The retry path is a NEW id at the observed version.
+    expect(run(
+      "work.renew", "agent-a", renewal, observed, "2026-08-09T12:00:00.000Z", "cmd-spent-renew-2",
+    )).toMatchObject({ disposition: "DECIDED", ok: true });
+    expect(readWorkClaimLedger(store, PROJECT).claims.get(item)?.expiresAt).toBe(renewal.expiresAt);
+  });
+});

@@ -47,6 +47,12 @@ export type WorkClaimIngressRefusalCode = (typeof WORK_CLAIM_INGRESS_REFUSAL_COD
 export const WORK_CLAIM_PREREQUISITE_REFUSAL_CODES = Object.freeze([
   "WORK_CLAIM_COMMAND_ID_REUSED",
   "WORK_CLAIM_COMMAND_BYTES_CONFLICT",
+  // A commandId whose decision row is a refusal (NO_BUSINESS_EFFECT). Such a row carries no
+  // same-bytes evidence, and the store folds the presented version into the request
+  // identity, so the resubmit a conflict refusal itself invites (same id, the observed
+  // version) raised IdempotencyConflictError from the commit seam — a bare 409 — while the
+  // replay comment promised "decided again from scratch". The id is spent; retry under a new one.
+  "WORK_CLAIM_COMMAND_ID_SPENT",
   "WORK_CLAIM_HELD",
   "WORK_CLAIM_NOT_FOUND",
   "WORK_CLAIM_NOT_CLAIMANT",

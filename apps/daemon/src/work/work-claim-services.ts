@@ -146,9 +146,18 @@ function replayOf(store: SqliteEventStore, request: WorkClaimRequest): WorkClaim
     return refuse(request.kind, "WORK_CLAIM_COMMAND_ID_REUSED", "DAEMON_PREREQUISITE");
   }
   // A refused decision carries no same-bytes evidence (`replayRequestSha256` is
-  // null), so nothing could prove the resubmit is the command that was decided;
-  // it is decided again from scratch. Must stay AHEAD of the byte compare below.
-  if (existing.effectDisposition !== "EFFECTS_COMMITTED") return null;
+  // null), so nothing could prove the resubmit is the command that was decided.
+  // It used to fall through as "decided again from scratch", but the store folds
+  // the presented expectedVersion into the request identity, so the resubmit the
+  // conflict refusal itself invites (same id, the observed version) reached the
+  // commit seam as a different request under the same key and raised
+  // IdempotencyConflictError — a bare 409 at the transport — while a resubmit at
+  // the stale version only replayed the refusal. The id is spent: say so under
+  // this layer's own code. Must stay AHEAD of the byte compare below, which reads
+  // a digest only an accepted decision carries.
+  if (existing.effectDisposition !== "EFFECTS_COMMITTED") {
+    return refuse(request.kind, "WORK_CLAIM_COMMAND_ID_SPENT", "DAEMON_PREREQUISITE");
+  }
   // The decision key covers neither the kind (guarded above) nor the payload,
   // so reusing a commandId with DIFFERENT bytes would otherwise be handed the
   // stored result as an accepted replay — authority for a command never decided
