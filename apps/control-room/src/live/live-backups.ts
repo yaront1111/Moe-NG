@@ -22,6 +22,8 @@
  * where a restore-proof state used to be.
  */
 
+import { effectRefusal } from "./live-effect-read.js";
+
 const LAYER = "CONTROL_ROOM_BACKUPS";
 const INVALID_RESPONSE_CODE = "BACKUPS_RESPONSE_INVALID";
 const TRANSPORT_FAILED_CODE = "TRANSPORT_REQUEST_FAILED";
@@ -121,9 +123,10 @@ const MAX_BACKUPS = 20_000;
  * the third is how a store refusal would arrive as a generic invalid response with its cause
  * erased, and an operator would be told the frame was malformed when the record was unreadable.
  *
- * The authenticator's own refusals are five-key and are deliberately NOT matched here, exactly
- * as in live-deployments-health.ts: they carry a nested RuntimeError rather than a code and a
- * layer, and admitting them would mean decoding a second shape family for no gain.
+ * The authenticator's own refusals are five-key with the code nested under `refusal` or
+ * `error`; they are the shared `effectRefusal` helper's family and are matched last, exactly
+ * as in live-deployments-health.ts. Measured while they were omitted: an expired session read
+ * ERROR BACKUPS_RESPONSE_INVALID, a shape fault, instead of the refusal with its stable code.
  */
 function refusalFrom(response: unknown): Refusal | null {
   const listener = exactDataRecord(response, ["code", "layer"]);
@@ -138,7 +141,13 @@ function refusalFrom(response: unknown): Refusal | null {
   if (store !== null && store.ok === false && text(store.code) && text(store.layer)) {
     return refused(store.code, store.layer);
   }
-  return null;
+  // THE AUTHENTICATOR'S OWN FRAMES, forwarded verbatim by the route: `{httpStatus, ok:false,
+  // outcome:"PORT_REFUSED", refusal, stage}` with the authenticator's `{code, layer}` inside,
+  // and `{error, httpStatus, ok:false, outcome:"REFUSED", stage}` whose RuntimeError carries a
+  // code but no layer (the stage stands in). Measured before this fallback: both decoded as
+  // the invalid-response error, so an expired session read as a daemon shape fault.
+  const outer = effectRefusal(response);
+  return outer !== null && outer.status === "REFUSED" ? refused(outer.code, outer.layer) : null;
 }
 
 /**

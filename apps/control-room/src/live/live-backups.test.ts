@@ -208,6 +208,26 @@ describe("an unreadable member never reads as an absent one", () => {
 });
 
 describe("each refusal envelope arrives with its own code and its own layer", () => {
+  /**
+   * THE AUTHENTICATOR'S OWN FRAMES, forwarded verbatim by backups-read.ts. Measured before
+   * these arms: both decoded as ERROR BACKUPS_RESPONSE_INVALID, so an expired session reading
+   * the backups card was told the frame was malformed rather than which authority refused.
+   */
+  it("carries the authenticator's PORT_REFUSED frame with the nested code and layer", () => {
+    expect(mapBackupsAnswer(401, {
+      httpStatus: 401, ok: false, outcome: "PORT_REFUSED",
+      refusal: { code: "SESSION_REPLAYED", detail: "The session belongs to a prior recovery incarnation or key epoch.", httpStatus: 401, layer: "IDENTITY" },
+      stage: "AUTHENTICATE",
+    })).toEqual({ code: "SESSION_REPLAYED", layer: "IDENTITY", status: "REFUSED" });
+  });
+
+  it("carries the authenticator's REFUSED frame with its code, at the stage that refused", () => {
+    expect(mapBackupsAnswer(401, {
+      error: { code: "AUTHENTICATION_FAILED", correlationId: null, details: {}, nextAllowedCommands: [], recoveryCategory: "RETRY", recoveryCommands: [], registryVersion: "moe-runtime-error/1" },
+      httpStatus: 401, ok: false, outcome: "REFUSED", stage: "AUTHENTICATE",
+    })).toEqual({ code: "AUTHENTICATION_FAILED", layer: "AUTHENTICATE", status: "REFUSED" });
+  });
+
   it("decodes the LISTENER refusal, which carries code and layer only", () => {
     const outcome = mapBackupsAnswer(503, {
       code: "LISTENER_BACKUPS_UNAVAILABLE", layer: "CONTROL_ROOM_LISTENER",

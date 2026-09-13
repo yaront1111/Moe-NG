@@ -13,6 +13,8 @@
  * this client's tests instead of reaching production as a plausible blank.
  */
 
+import { effectRefusal } from "./live-effect-read.js";
+
 const LAYER = "CONTROL_ROOM_DEPLOYMENTS_HEALTH";
 const INVALID_RESPONSE_CODE = "DEPLOYMENTS_HEALTH_RESPONSE_INVALID";
 const TRANSPORT_FAILED_CODE = "TRANSPORT_REQUEST_FAILED";
@@ -169,10 +171,11 @@ const duration = (value: unknown): value is number => count(value) && value > 0;
 const MAX_SERIES_POINTS = 1440;
 
 /**
- * The three refusal envelopes this route can answer with. The third, `{code, layer, ok:false}`,
- * is the probe store's own shape and is NOT matched by the shared `effectRefusal` helper, whose
- * key lists stop at `{code, layer}` and `{outcome, code, layer}`. Omitting it here is how
+ * The refusal envelopes this route can answer with. The third, `{code, layer, ok:false}`, is
+ * the probe store's own shape and is NOT matched by the shared `effectRefusal` helper, whose
+ * flat key lists stop at `{code, layer}` and `{outcome, code, layer}`. Omitting it here is how
  * PROBE_STORE_UNAVAILABLE would arrive as a generic invalid response with its cause erased.
+ * The authenticator's five-key frames are the shared helper's nested family, matched last.
  */
 function refusalFrom(response: unknown): Refusal | null {
   const listener = exactDataRecord(response, ["code", "layer"]);
@@ -187,7 +190,13 @@ function refusalFrom(response: unknown): Refusal | null {
   if (store !== null && store.ok === false && text(store.code) && text(store.layer)) {
     return refused(store.code, store.layer);
   }
-  return null;
+  // THE AUTHENTICATOR'S OWN FRAMES, forwarded verbatim by the route: `{httpStatus, ok:false,
+  // outcome:"PORT_REFUSED", refusal, stage}` with the authenticator's `{code, layer}` inside,
+  // and `{error, httpStatus, ok:false, outcome:"REFUSED", stage}` whose RuntimeError carries a
+  // code but no layer (the stage stands in). Measured before this fallback: both decoded as
+  // the invalid-response error, so an expired session read as a daemon shape fault.
+  const outer = effectRefusal(response);
+  return outer !== null && outer.status === "REFUSED" ? refused(outer.code, outer.layer) : null;
 }
 
 function probeOf(value: unknown): EnvironmentProbeView | null {

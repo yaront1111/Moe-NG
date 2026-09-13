@@ -288,6 +288,30 @@ describe("the deployment-health read client carries refusals at their own layer"
     });
   });
 
+  /**
+   * THE AUTHENTICATOR'S OWN FRAMES. The route forwards `authenticateHttpRequest`'s answer
+   * verbatim (deployments-health-read.ts): `{httpStatus, ok:false, outcome:"PORT_REFUSED",
+   * refusal, stage}` with the authenticator's `{code, detail, httpStatus, layer}` inside, and
+   * `{error, httpStatus, ok:false, outcome:"REFUSED", stage}` whose RuntimeError carries a code
+   * but no layer. Measured before these arms: both decoded as ERROR
+   * DEPLOYMENTS_HEALTH_RESPONSE_INVALID, so an expired browser session polling the health card
+   * read as a daemon shape fault rather than as the refusal with its stable code.
+   */
+  it("carries the authenticator's PORT_REFUSED frame with the nested code and layer", () => {
+    expect(mapDeploymentsHealthAnswer(401, {
+      httpStatus: 401, ok: false, outcome: "PORT_REFUSED",
+      refusal: { code: "SESSION_REPLAYED", detail: "The session belongs to a prior recovery incarnation or key epoch.", httpStatus: 401, layer: "IDENTITY" },
+      stage: "AUTHENTICATE",
+    })).toEqual({ code: "SESSION_REPLAYED", layer: "IDENTITY", status: "REFUSED" });
+  });
+
+  it("carries the authenticator's REFUSED frame with its code, at the stage that refused", () => {
+    expect(mapDeploymentsHealthAnswer(401, {
+      error: { code: "AUTHENTICATION_FAILED", correlationId: null, details: {}, nextAllowedCommands: [], recoveryCategory: "RETRY", recoveryCommands: [], registryVersion: "moe-runtime-error/1" },
+      httpStatus: 401, ok: false, outcome: "REFUSED", stage: "AUTHENTICATE",
+    })).toEqual({ code: "AUTHENTICATION_FAILED", layer: "AUTHENTICATE", status: "REFUSED" });
+  });
+
   it("carries the listener body refusal with its code and layer", () => {
     expect(mapDeploymentsHealthAnswer(400, {
       code: "LISTENER_DEPLOYMENTS_HEALTH_UNKNOWN_KEY", layer: "CONTROL_ROOM_LISTENER",
