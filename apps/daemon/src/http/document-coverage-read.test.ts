@@ -15,7 +15,7 @@ import type { ProductContractRevisionRef } from "@moe/core";
 import {
   GOAL_CREATE_COMMAND_ID, GOAL_ID, PROJECT_ID, closeStores, driveThrough, envelope, openStore, send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
-import { humanReviewWitness } from "../bootstrap/bootstrap-ledger.js";
+import { humanReviewWitness, readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { OPERATOR_CAPABILITIES } from "../daemon-command-vocabulary.js";
 import { createGoalSourceReadPort } from "../documents/document-source-full-read.js";
 import { refsOfGoal } from "../goals/goal-identity.js";
@@ -39,6 +39,7 @@ import { runProductContractProposeRevision } from "../product-contract/product-c
 import { commitProductContractRevisionV2 } from "../product-contract/product-contract-v2-store.js";
 import { runReviewCommand } from "../review/review-services.js";
 import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
+import { createCompilerLanePort } from "./affordance-compiler-lane.js";
 import type { DocumentCoverageView } from "./document-coverage-contract.js";
 import { createDocumentCoverageReadPort } from "./document-coverage-read.js";
 import type { DocumentCoverageReadOptions } from "./document-coverage-read.js";
@@ -482,5 +483,57 @@ describe("createDocumentCoverageReadPort", () => {
     const { sha, store } = boundWorld();
     expect(portFor(store, { readActive: () => { throw new Error("walk exploded"); } }).readCoverage({ contentSha256: sha }))
       .toEqual({ code: "DOCUMENT_COVERAGE_READ_UNREADABLE", layer: "DOCUMENT_COVERAGE_READ", outcome: "REFUSED" });
+  });
+});
+
+/**
+ * Before any compile binds a goal, the coverage card and the compiler lane must name the SAME
+ * approved revision: the lane's `approvedGateRef` is what `product_contract.read` hands the
+ * planning seat and what `submit_decomposition` then compiles. Two approved revisions of one
+ * contract (the `/1` proposer admits a second revision; Gate 1 approves per revision) were
+ * picked by different rules: the coverage sorted the LARGEST `contractId revisionId` while the
+ * lane takes the EARLIEST Gate 1 approval in ledger order, so the card reported the
+ * requirement and criteria roster of a revision the seat was not planning against, then
+ * flipped once the compiled binding existed.
+ */
+describe("createDocumentCoverageReadPort approved-revision choice", () => {
+  function laneRef(store: SqliteEventStore) {
+    const facts = createCompilerLanePort({
+      ledger: readDurableLedger(store, PROJECT_ID), projectId: PROJECT_ID, store,
+    }).factsFor(GOAL_ID);
+    if (facts.lane !== "COMPILER" || facts.approvedGateRef === null) {
+      throw new Error(`expected an approved compiler lane, got ${facts.lane}`);
+    }
+    return facts.approvedGateRef;
+  }
+
+  it("names the revision the compiler lane hands the seat when two revisions are approved", () => {
+    const { sha, store } = boundWorld();
+    const first = proposeRevision(store, sha, "rev-cover-1");
+    approveGate1(store, first, "cmd-gate-first");
+    const second = proposeRevision(store, sha, "rev-cover-2");
+    approveGate1(store, second, "cmd-gate-second");
+    const lane = laneRef(store);
+    // The lane's own rule, measured rather than assumed: the earliest approval, not the largest id.
+    expect(lane.revisionId).toBe("rev-cover-1");
+
+    const view = coverage(portFor(store).readCoverage({ contentSha256: sha }));
+    expect(view.contracts.map((contract) => [contract.revisionId, contract.gate1]))
+      .toEqual([[lane.revisionId, "APPROVED"]]);
+    expect(view.contracts[0]?.revisionDigest).toBe(lane.revisionDigest);
+    expect(coverage(portFor(store).readCoverage({ goalRef: GOAL_ID })).contracts[0]?.revisionId)
+      .toBe(lane.revisionId);
+  });
+
+  it("follows the lane when the later-named revision was approved first", () => {
+    const { sha, store } = boundWorld();
+    const first = proposeRevision(store, sha, "rev-cover-1");
+    const second = proposeRevision(store, sha, "rev-cover-2");
+    approveGate1(store, second, "cmd-gate-second");
+    approveGate1(store, first, "cmd-gate-first");
+    const lane = laneRef(store);
+    expect(lane.revisionId).toBe("rev-cover-2");
+    const view = coverage(portFor(store).readCoverage({ contentSha256: sha }));
+    expect(view.contracts.map((contract) => contract.revisionId)).toEqual([lane.revisionId]);
   });
 });

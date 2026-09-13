@@ -3,8 +3,10 @@
  *  - goals bound to the document: the catalog's GoalCreated bindings;
  *  - Product Contract revisions citing the document on either plane (the `/1` writer's
  *    aggregates and the `/2` family's revision events), using exact compiled bindings
- *    where available, else the approved or pending revision the
- *    Gate 1 card would offer (the smallest `contractId revisionId`, as the pending read picks);
+ *    where available, else the approved revision the compiler lane hands the planning seat
+ *    (the earliest Gate 1 approval in ledger order, the rule `affordance-compiler-lane.ts`
+ *    resolves `approvedGateRef` by), else the pending revision the Gate 1 card would offer
+ *    (the smallest `contractId revisionId`, as the pending read picks);
  *  - the sealed nodes of the bound goals' activated plans (widened to COMPLETED goals so
  *    closed work keeps counting), whose `criterionBindings` say which criteria a node
  *    delivers;
@@ -29,6 +31,7 @@ import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import type { ActiveCompiledGraph } from "../orchestrator/compiled-node-source.js";
 import { legacyCompiledNodeKeys, nodesBlockedByIdentity } from "../orchestrator/compiled-node-identity.js";
 import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
+import { deriveProductContractGate1AggregateId } from "../product-contract/product-contract-gate-1-contract.js";
 import { readProductContractGate1Approval } from "../product-contract/product-contract-gate-1-reader.js";
 import { PRODUCT_CONTRACT_REVISION_V2_EVENT_TYPE } from "../product-contract/product-contract-v2-event-contract.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
@@ -45,6 +48,8 @@ import { coverageContractKey as candidateKey, readCoverageCriterionAuthority } f
 
 const V1_REVISION_PREFIX = "product-contract-revision:";
 const V2_REVISION_PREFIX = "product-contract-revision.v2:";
+/** The prefix `deriveProductContractGate1AggregateId` writes; `affordance-compiler-lane.ts` scans the same one. */
+const GATE_1_AGGREGATE_PREFIX = "product-contract-gate-1-";
 const V2_REQUIREMENT_SECTIONS = Object.freeze([
   "functionalRequirements", "nonFunctionalRequirements", "securityPrivacyRequirements",
   "technologyRequirements", "uxAccessibilityRequirements", "deploymentRequirements",
@@ -157,20 +162,27 @@ export function createDocumentCoverageReadPort(options: DocumentCoverageReadOpti
   const readReviews = options.readReviews
     ?? ((s: SqliteEventStore, p: string, refs: ReadonlySet<string>) => readReviewLedgers(s, p, refs).ledgers);
 
-  const approved = (candidate: Candidate): boolean | { readonly code: string; readonly layer: string } => {
+  /** The Gate 1 aggregate an approved candidate was approved under, `null` when unapproved. */
+  const approved = (candidate: Candidate): { readonly gateAggregateId: string | null } | { readonly code: string; readonly layer: string } => {
     const admitted = admitProductContractRevisionRef({
       contractId: candidate.contractId, revisionDigest: candidate.revisionDigest, revisionId: candidate.revisionId,
     });
     if (!admitted.ok) return { code: admitted.code, layer: admitted.layer };
     const read = readProductContractGate1Approval(store, { projectId, ref: admitted.ref });
-    if (read.ok) return true;
-    if (read.code === "PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT") return false;
+    if (read.ok) return { gateAggregateId: deriveProductContractGate1AggregateId(read.gate.workRef) };
+    if (read.code === "PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT") return { gateAggregateId: null };
     return { code: read.code, layer: read.layer };
   };
 
   /** Goal closure counts its exact bound contract; document views may span several revisions. */
   const contractsOf = (ledger: DurableLedger, sha: string, carried: ReadonlyMap<string, Carrier>, graphs: readonly ActiveCompiledGraph[], goalScoped: boolean): ContractCoverage[] | { readonly code: string; readonly layer: string } => {
-    const byContract = new Map<string, { approved: Candidate[]; pending: Candidate[] }>();
+    const byContract = new Map<string, { approved: { candidate: Candidate; order: number }[]; pending: Candidate[] }>();
+    // Gate 1 aggregates in ledger order: an aggregate is first targeted by its own approval
+    // decision, so this is the order the approvals were committed in.
+    const gateOrder = new Map<string, number>();
+    for (const [aggregateId] of ledger.aggregates) {
+      if (aggregateId.startsWith(GATE_1_AGGREGATE_PREFIX)) gateOrder.set(aggregateId, gateOrder.size);
+    }
     for (const [aggregateId] of ledger.aggregates) {
       let outcome: CandidateOutcome = null;
       if (aggregateId.startsWith(V1_REVISION_PREFIX)) {
@@ -182,9 +194,10 @@ export function createDocumentCoverageReadPort(options: DocumentCoverageReadOpti
       if (outcome === null) continue;
       if (!("candidate" in outcome)) return outcome;
       const gate = approved(outcome.candidate);
-      if (typeof gate !== "boolean") return gate;
+      if (!("gateAggregateId" in gate)) return gate;
       const bucket = byContract.get(outcome.candidate.contractId) ?? { approved: [], pending: [] };
-      (gate ? bucket.approved : bucket.pending).push(outcome.candidate);
+      if (gate.gateAggregateId === null) bucket.pending.push(outcome.candidate);
+      else bucket.approved.push({ candidate: outcome.candidate, order: gateOrder.get(gate.gateAggregateId) ?? Number.MAX_SAFE_INTEGER });
       byContract.set(outcome.candidate.contractId, bucket);
     }
     const { associations, verified } = readCoverageCriterionAuthority(store, projectId, graphs);
@@ -204,10 +217,16 @@ export function createDocumentCoverageReadPort(options: DocumentCoverageReadOpti
     const sortKey = (row: Candidate): string => `${row.contractId} ${row.revisionId}`;
     const contracts: ContractCoverage[] = [];
     for (const [contractId, bucket] of byContract) {
-      const bound = bucket.approved.filter((candidate) => [...associations.values()].includes(candidateKey(candidate)));
+      const bound = bucket.approved.map((row) => row.candidate)
+        .filter((candidate) => [...associations.values()].includes(candidateKey(candidate)));
       if (goalScoped && associations.size > 0 && bound.length === 0) continue;
+      // Unbound: the EARLIEST-approved revision, the one `affordance-compiler-lane.ts` resolves as
+      // `approvedGateRef` and `product_contract.read` hands the seat. Measured with two approved
+      // revisions of one contract: this card named the larger id while the lane named the earlier
+      // approval, so the roster shown was one the seat was not planning against.
       const selected = bound.length > 0 ? bound : [bucket.approved.length > 0
-        ? [...bucket.approved].sort((a, b) => sortKey(b).localeCompare(sortKey(a)))[0]
+        ? [...bucket.approved].sort((a, b) => a.order - b.order
+          || sortKey(a.candidate).localeCompare(sortKey(b.candidate)))[0]?.candidate
         : [...bucket.pending].sort((a, b) => sortKey(a).localeCompare(sortKey(b)))[0]];
       for (const chosen of selected) {
       if (chosen === undefined) continue;
