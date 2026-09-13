@@ -103,6 +103,11 @@ export function PreviewCard({
   const [nodeRef, setNodeRef] = useState("");
   const [detail, setDetail] = useState("");
   const [sent, setSent] = useState<readonly PreviewFinding[]>(NO_FINDINGS);
+  // THE CONTROL IDS ARE THIS CARD'S OWN. Two goals can await a Gate 2 verdict at once, and
+  // measured with fixed ids every card rendered id="cr-preview-node", so the second card's
+  // labels pointed at the first card's select and textarea. The receipt id names one preview.
+  const nodeId = `cr-preview-node-${facts.receiptId}`;
+  const detailId = `cr-preview-detail-${facts.receiptId}`;
   const chosen = nodeRef === "" ? facts.nodes[0]?.nodeRef ?? "" : nodeRef;
   const canReject = chosen !== "" && detail.trim() !== "" && !busy && !accepted;
 
@@ -120,14 +125,14 @@ export function PreviewCard({
       <Captures facts={facts} load={loadCapture ?? NO_LOADER} />
       {accepted && sent.length === 0 ? null : (
         <div className="cr2-preview-reject">
-          <label className="cr2-preview-label" htmlFor="cr-preview-node">
+          <label className="cr2-preview-label" htmlFor={nodeId}>
             Which node has to change
           </label>
           <select
             className="cr2-preview-node"
             data-testid="cr.needsyou.preview.node"
             disabled={facts.nodes.length === 0 || busy || accepted}
-            id="cr-preview-node"
+            id={nodeId}
             onChange={(event): void => setNodeRef(event.target.value)}
             value={chosen}
           >
@@ -137,14 +142,14 @@ export function PreviewCard({
               </option>
             ))}
           </select>
-          <label className="cr2-preview-label" htmlFor="cr-preview-detail">
+          <label className="cr2-preview-label" htmlFor={detailId}>
             What is wrong with it
           </label>
           <textarea
             className="cr2-preview-detail"
             data-testid="cr.needsyou.preview.detail"
             disabled={busy || accepted}
-            id="cr-preview-detail"
+            id={detailId}
             onChange={(event): void => setDetail(event.target.value)}
             value={detail}
           />

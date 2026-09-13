@@ -77,6 +77,40 @@ const renderCard = (
 };
 
 describe("the Gate 2 preview card (DoD 1)", () => {
+  /**
+   * TWO GATE 2 CARDS IN ONE QUEUE. Measured before this arm: every card rendered
+   * id="cr-preview-node" / id="cr-preview-detail", so with two goals awaiting a verdict the ids
+   * duplicated and the second card's labels pointed at the FIRST card's select and textarea -
+   * a click on "Which node has to change" under goal-2 focused goal-1's control.
+   */
+  it("gives each preview card its own control ids, so a label reaches its own card's control", () => {
+    const second: NeedsYouItem = {
+      ...previewItem({ ...FACTS, affordance: { commandKind: "preview.decide", targetAggregateId: "preview:goal-2" },
+        receiptId: "preview-receipt/def" }),
+      goalId: "goal-2", title: "Beta",
+    };
+    render(
+      <NeedsYou
+        data={{ countLabel: "2 decisions need you", items: [previewItem(FACTS), second], note: null }}
+        onDecide={vi.fn()} onOpenBoard={vi.fn()} onPreviewDecide={vi.fn()}
+      />,
+    );
+    const roots = screen.getAllByTestId("cr.needsyou.preview.root");
+    expect(roots).toHaveLength(2);
+    const ids = new Set<string>();
+    for (const root of roots) {
+      const select = root.querySelector("select");
+      const textarea = root.querySelector("textarea");
+      expect(select?.id).toBeTruthy();
+      expect(textarea?.id).toBeTruthy();
+      ids.add(select?.id ?? "").add(textarea?.id ?? "");
+      // Each label targets the control beside it, in THIS card.
+      const labels = [...root.querySelectorAll("label")].map((label) => label.htmlFor);
+      expect(labels).toEqual([select?.id, textarea?.id]);
+    }
+    expect(ids.size).toBe(4);
+  });
+
   it("shows the loopback url as a link that opens in a NEW TAB, and the captures inline", async () => {
     const loadCapture = vi.fn(async (_url: string): Promise<Blob | null> => PNG);
     renderCard({ loadCapture });
