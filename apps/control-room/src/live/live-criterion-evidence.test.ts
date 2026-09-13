@@ -44,3 +44,38 @@ describe("criterion evidence read", () => {
     expect(post).toHaveBeenCalledWith('{"goalRef":"goal-a"}');
   });
 });
+
+/**
+ * THE BOUNDS ARE CORE'S ADMISSION LIMITS, NOT THE EFFECT READER'S DEFAULTS. Core admits up to
+ * 512 criteria per revision and 32_768 UTF-8 BYTES per statement
+ * (packages/core/src/product-contract/product-contract-contract.ts:23,27; bytes measured at
+ * product-contract-admission.ts:49), and the daemon serves every admitted criterion and
+ * statement verbatim (apps/daemon/src/criterion-evidence/criterion-read.ts:64-67). A frame at
+ * those bounds is one the daemon really answers for an admitted revision; one past them is not.
+ */
+describe("criteria and statements decode at core's admission bounds", () => {
+  const INVALID = { status: "ERROR", code: "CRITERION_EVIDENCE_RESPONSE_INVALID", layer: "CONTROL_ROOM_CRITERIA" };
+  const criteriaOf = (count: number) => Array.from({ length: count }, (_, index) => ({ ...criterion, criterionId: `criterion-${index}` }));
+  const withStatement = (statement: string) => ({ ...CRITERION_FRAME, criteria: [{ ...criterion, statement }] });
+  it("carries 512 criteria, the most core admits in one revision", () => {
+    const frame = { ...CRITERION_FRAME, criteria: criteriaOf(512) };
+    expect(mapCriterionEvidenceAnswer(200, frame)).toEqual({ status: "CRITERION_EVIDENCE", view: frame });
+  });
+  it("refuses 513 criteria, one more than core admits", () => {
+    expect(mapCriterionEvidenceAnswer(200, { ...CRITERION_FRAME, criteria: criteriaOf(513) })).toEqual(INVALID);
+  });
+  it("carries a 32_768-byte statement, the longest core admits", () => {
+    const frame = withStatement("s".repeat(32_768));
+    expect(mapCriterionEvidenceAnswer(200, frame)).toEqual({ status: "CRITERION_EVIDENCE", view: frame });
+  });
+  it("refuses a 32_769-byte statement, one byte past core's bound", () => {
+    expect(mapCriterionEvidenceAnswer(200, withStatement("s".repeat(32_769)))).toEqual(INVALID);
+  });
+  it("measures the statement in UTF-8 bytes as core does, not in UTF-16 code units", () => {
+    // U+20AC is three UTF-8 bytes: 10_922 of them are 32_766 bytes (admitted) and 10_923 are
+    // 32_769 bytes (refused), while both counts sit far below 32_768 code units.
+    const admitted = withStatement("\u20AC".repeat(10_922));
+    expect(mapCriterionEvidenceAnswer(200, admitted)).toEqual({ status: "CRITERION_EVIDENCE", view: admitted });
+    expect(mapCriterionEvidenceAnswer(200, withStatement("\u20AC".repeat(10_923)))).toEqual(INVALID);
+  });
+});

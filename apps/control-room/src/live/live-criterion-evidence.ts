@@ -4,6 +4,19 @@ export type { CriterionCheckInput, CriterionEvidenceOutcome, CriterionEvidenceVi
 const LAYER = "CONTROL_ROOM_CRITERIA";
 const invalid = (): CriterionEvidenceOutcome => ({ status: "ERROR", code: "CRITERION_EVIDENCE_RESPONSE_INVALID", layer: LAYER });
 const checkRef = (value: unknown): value is string => effectText(value) && value.length <= 128 && value.normalize("NFC") === value;
+/**
+ * Core's admission bounds for one bound revision, restated here the way the browser's other
+ * revision readers restate them: `maxCriteria: 512` and `maxStatementBytes: 32_768` in
+ * packages/core/src/product-contract/product-contract-contract.ts:23,27, the latter measured in
+ * UTF-8 bytes (product-contract-admission.ts:49). The daemon serves every admitted criterion and
+ * statement verbatim (apps/daemon/src/criterion-evidence/criterion-read.ts:64-67), so the shared
+ * effect defaults (256 items, 4096 code units) refused whole frames core had admitted.
+ */
+const MAX_CRITERIA = 512;
+const MAX_STATEMENT_BYTES = 32_768;
+const encoder = new TextEncoder();
+const statementOf = (value: unknown): value is string =>
+  typeof value === "string" && value.length > 0 && encoder.encode(value).byteLength <= MAX_STATEMENT_BYTES;
 
 function approvalOf(value: unknown): CriterionCheckApproval | null {
   const row = effectRecord(value, ["approvalId", "checkId", "checkVersion", "program", "args", "timeoutMs", "executorDigest"]);
@@ -27,7 +40,7 @@ function evidenceOf(value: unknown): CriterionCheckEvidence | null {
 }
 function criterionOf(value: unknown): CriterionEvidenceRow | null {
   const row = effectRecord(value, ["criterionId", "statement", "approval", "evidence", "approveOffer"]);
-  if (row === null || !effectText(row.criterionId) || !effectText(row.statement)) return null;
+  if (row === null || !effectText(row.criterionId) || !statementOf(row.statement)) return null;
   const approval = row.approval === null ? null : approvalOf(row.approval);
   const evidence = row.evidence === null ? null : evidenceOf(row.evidence);
   const approveOffer = row.approveOffer === null ? null : effectOffer(row.approveOffer, "criterion_check.approve");
@@ -50,7 +63,7 @@ export function mapCriterionEvidenceAnswer(status: number, body: unknown): Crite
   if (contract === null || !effectText(contract.contractId) || !effectText(contract.revisionId) || !effectHash(contract.revisionDigest)) return invalid();
   const artifact = row.integratedArtifact === null ? null : effectRecord(row.integratedArtifact, ["sha", "treeSha"]);
   if (row.integratedArtifact !== null && (artifact === null || !effectSha(artifact.sha) || !effectSha(artifact.treeSha))) return invalid();
-  const criteria = effectList(row.criteria, criterionOf);
+  const criteria = effectList(row.criteria, criterionOf, MAX_CRITERIA);
   const run = row.run === null ? null : runOf(row.run);
   const verifyOffer = row.verifyOffer === null ? null : effectOffer(row.verifyOffer, "criterion_check.verify");
   if (criteria === null || new Set(criteria.map((item) => item.criterionId)).size !== criteria.length
