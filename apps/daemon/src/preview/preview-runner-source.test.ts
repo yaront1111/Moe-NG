@@ -9,6 +9,7 @@ import { GOAL_ID, PROJECT_ID, closeStores, driveThrough, openStore }
 import { seedLandingReceipt, seedReviewAcceptance } from "../goals/goal-closure-test-fixtures.js";
 import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import { compiledExecutionRef } from "../orchestrator/compiled-execution-ref.js";
+import { probeProcessAlive } from "../orchestrator/process-runner-lifecycle.js";
 import { nodeGitRunner } from "../repository/git-landing-port.js";
 import { runPreview } from "./preview-runner.js";
 import type { PreviewRunnerConfig } from "./preview-runner.js";
@@ -106,7 +107,8 @@ describe("preview source selection", () => {
     expect(readFileSync(source, "utf8")).toBe(dirty);
     expect(readFileSync(join(workspace, "untracked.txt"), "utf8")).toBe("preserve me");
     await result.started.handle.stop();
-    expect(existsSync(capturedSource)).toBe(false);
+    await expect.poll(result.started.handle.alive, { timeout: 10_000 }).toBe(false);
+    await expect.poll(() => existsSync(capturedSource), { timeout: 10_000 }).toBe(false);
   }, 40_000);
 
   it("refuses an absent commit before starting a product process", async () => {
@@ -166,15 +168,35 @@ describe("preview source selection", () => {
   it("stops the product and removes its source when capture throws", async () => {
     const { workspace, sha } = await committedProduct();
     let candidate = "";
-    const result = await runPreview({ ...landedConfig(), capture: async input => {
+    let origin = "";
+    let productPid: number | undefined;
+    const result = await runPreview({ ...landedConfig(), process: { startTimeoutMs: 15_000,
+      spawn: (file, args, options) => {
+        const child = spawn(file, [...args], options);
+        if (options.shell) productPid = child.pid;
+        return child;
+      },
+    }, capture: async input => {
       candidate = input.workspace;
+      origin = input.origin;
       throw new Error("capture failure");
     } }, { goalId: GOAL_ID, sha, workspace });
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected capture refusal");
     expect(result.refusal).toMatchObject({ code: "PREVIEW_START_TIMEOUT", layer: "RUNNER" });
+    expect(candidate).not.toBe("");
     expect(candidate).not.toBe(workspace);
-    expect(existsSync(candidate)).toBe(false);
+    expect(productPid).toBeDefined();
+    await expect.poll(() => probeProcessAlive(productPid!), { timeout: 10_000 }).toBe(false);
+    await expect.poll(async () => {
+      try { await fetch(origin, { signal: AbortSignal.timeout(1_000) }); return false; }
+      catch (error) {
+        // A hung listener or an unrelated fetch failure does not prove that the port closed.
+        return error instanceof Error && (error.cause as NodeJS.ErrnoException | undefined)?.code === "ECONNREFUSED";
+      }
+    }, { timeout: 10_000 }).toBe(true);
+    // Windows can release the process before another host handle releases its source files.
+    await expect.poll(() => existsSync(candidate), { timeout: 10_000 }).toBe(false);
     expect(existsSync(workspace)).toBe(true);
   }, 40_000);
 
