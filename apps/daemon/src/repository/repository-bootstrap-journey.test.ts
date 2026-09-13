@@ -15,6 +15,7 @@ import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { MOE_CONFIG_FILENAME, parseMoeConfig } from "../cli/moe-init.js";
 import { createDaemonCommandPorts } from "../daemon-command-registry.js";
 import type { RepositoryBootstrapSeams } from "../daemon-command-async-entries.js";
+import { createAffordancePort } from "../http/affordance-read.js";
 import {
   handleAsyncCommandRequest, handleCommandRequest,
 } from "../http/http-adapter.js";
@@ -180,12 +181,28 @@ function registerProject(deps: CommandAdapterDeps): void {
 
 async function bootstrap(
   deps: CommandAdapterDeps, commandId: string,
-  payload: Readonly<Record<string, unknown>>,
+  payload: Readonly<Record<string, unknown>>, expectedVersion = 0,
 ): Promise<Awaited<ReturnType<typeof handleAsyncCommandRequest>>> {
   return await handleAsyncCommandRequest(deps, {
-    body: body(commandId, "repository.bootstrap", payload, 0),
+    body: body(commandId, "repository.bootstrap", payload, expectedVersion),
     credential: CREDENTIAL, protocolVersion: WIRE_PROTOCOL_VERSION,
   }, "HTTP_LISTENER");
+}
+
+/** The bootstrap step and offer as `/affordances/read` would serve them off THIS store. */
+function bootstrapSurface(store: SqliteEventStore): {
+  readonly offer: { expectedVersion: number; targetAggregateId: string } | undefined;
+  readonly step: { status: string; version: number | null } | undefined;
+} {
+  let minted = 0;
+  const read = createAffordancePort({
+    mintId: (kind): string => `${kind}-${String(minted += 1)}`, projectId: PROJECT, store,
+  }).readSurface();
+  if (read.outcome !== "SURFACE") throw new Error(`surface refused: ${read.code}`);
+  return {
+    offer: read.nextAllowedCommands.find((entry) => entry.commandKind === "repository.bootstrap"),
+    step: read.steps.find((entry) => entry.kind === "repository.bootstrap"),
+  };
 }
 
 /** The receipt as the store holds it, not as the handler returned it. */
@@ -537,6 +554,53 @@ describe("repository.bootstrap through the registered command", { timeout: 60_00
       outcome: "REFUSED", refusal: { code: "BOOTSTRAP_PROFILE_VERSION_UNKNOWN" }, sha: null,
     });
   });
+
+  /**
+   * A REFUSED RECEIPT IS DURABLE, BUT IT IS NOT A REPOSITORY. The command edge commits every
+   * receipt as an EFFECTS_COMMITTED `repository.bootstrap` decision so a refusal after `git init`
+   * leaves a durable record; `readDurableLedger` then folds the kind into `kinds` and the surface
+   * called the step COMMITTED. Measured on this tree before the fix: after the profile typo above,
+   * `/affordances/read` answered `{status: "COMMITTED", version: 1}` and NO offer, so the New
+   * product card read BOOTSTRAP_NOT_OFFERED on that store from then on - one typo that wrote
+   * nothing consumed the project's only bootstrap.
+   */
+  it("keeps offering repository.bootstrap after a REFUSED receipt, at the receipt's version",
+    async () => {
+      const { deps, store } = harness("refused-offer", { gh: recordingGh([], "ABSENT") });
+      registerProject(deps);
+      expect(bootstrapSurface(store)).toMatchObject({
+        offer: { expectedVersion: 0 }, step: { status: "READY", version: 0 },
+      });
+
+      const refused = await bootstrap(deps, "cmd-journey-refused-offer-1", {
+        dir: join(scratch("refused-offer-dir"), "product"),
+        productName: "journey-product", profileVersion: "controlled-999",
+      });
+      expect(refused).toMatchObject({
+        outcome: "PORT_REFUSED", refusal: { code: "BOOTSTRAP_PROFILE_VERSION_UNKNOWN" },
+      });
+      expect(committedReceipt(store)).toMatchObject({ outcome: "REFUSED" });
+
+      // STILL READY, STILL OFFERED, and at the version the refused receipt advanced the
+      // aggregate to - the version the next receipt is fenced at.
+      const renewed = bootstrapSurface(store);
+      expect(renewed.step).toMatchObject({ status: "READY", version: 1 });
+      expect(renewed.offer).toMatchObject({
+        expectedVersion: 1, targetAggregateId: `${PROJECT}-bootstrap`,
+      });
+
+      // AND THE RENEWED OFFER IS SPENDABLE: a corrected request at that version bootstraps.
+      const dir = join(scratch("refused-offer-retry-dir"), "product");
+      const retried = await bootstrap(deps, "cmd-journey-refused-offer-2", { dir, ...PRODUCT },
+        renewed.offer?.expectedVersion ?? -1);
+      expect(retried).toMatchObject({ outcome: "ACCEPTED" });
+      expect(committedReceipt(store)).toMatchObject({ outcome: "BOOTSTRAPPED" });
+      expect(gitLines(dir, ["log", "--oneline"])).toHaveLength(1);
+      // CONTROL: a BOOTSTRAPPED receipt is the one case that reads COMMITTED and stops the offer.
+      expect(bootstrapSurface(store)).toMatchObject({
+        offer: undefined, step: { status: "COMMITTED", version: 2 },
+      });
+    });
 
   it("refuses BOOTSTRAP_GIT_UNAVAILABLE with code and layer when git cannot run", async () => {
     const { deps, store } = harness("git-absent", { gh: recordingGh([], "ABSENT") });

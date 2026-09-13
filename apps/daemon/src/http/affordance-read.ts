@@ -25,6 +25,7 @@ import { readDesignRevision } from "../design/design-store.js";
 
 import { createGoalLandingReader } from "../repository/goal-landing-facts.js";
 import { readPublishLedger } from "../repository/publish-ledger.js";
+import { effectiveBootstrapLedger } from "../repository/repository-bootstrap-read.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { readVerifierStandingAuthority } from "../review/verifier-authority-provider.js";
 import { activeClaim, readWorkClaimLedger } from "../work/work-claim-services.js";
@@ -270,8 +271,11 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
     durable: DurableLedger, offers: NextAllowedCommand[],
     claims: WorkClaimLedger, now: string, planningSubject: PlanningSubject | null,
   ): ChainStep[] => {
-    const ledger = effectiveLedger(
-      durable, bootstrapAggregateId("plan.propose", config.projectId, planningSubject));
+    // A REFUSED bootstrap receipt is durable but is not a repository: `effectiveBootstrapLedger`
+    // owns why the kind reads COMMITTED only while the current receipt says BOOTSTRAPPED.
+    const ledger = effectiveBootstrapLedger(effectiveLedger(
+      durable, bootstrapAggregateId("plan.propose", config.projectId, planningSubject)),
+    config.projectId);
     // BOUND means at least one environment has a target, because the offer is one per GOAL
     // and the environment is chosen at dispatch. A goal with `preview` bound and
     // `production` unbound is therefore OFFERED: the per-environment refusal is the

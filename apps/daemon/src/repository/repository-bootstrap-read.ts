@@ -1,6 +1,8 @@
 import type { SqliteEventStore } from "@moe/store";
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
-import { BOOTSTRAP_RECEIPT_VERSION } from "./repository-bootstrap-contracts.js";
+import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
+import { BOOTSTRAP_RECEIPT_VERSION, REPOSITORY_BOOTSTRAP_COMMAND_KIND }
+  from "./repository-bootstrap-contracts.js";
 import type { BootstrapCode, BootstrapDetail, BootstrapReceiptV1, BootstrapRefusal }
   from "./repository-bootstrap-contracts.js";
 
@@ -100,11 +102,37 @@ function receiptView(value: unknown): BootstrapReceiptView | null {
   return Object.freeze({ ...base, outcome, sha, remoteUrl, refusal: null });
 }
 
+/** The receipt's own stream, as `aggregateIdFor` names it for this kind (bootstrap-sequence.ts). */
+const bootstrapAggregateId = (projectId: string): string => `${projectId}-bootstrap`;
+
+/**
+ * The ledger as a SURFACE should read the bootstrap kind. The command edge commits EVERY receipt,
+ * REFUSED included, as an EFFECTS_COMMITTED `repository.bootstrap` decision, because an operator
+ * whose bootstrap refused after `git init` needs a durable receipt saying so
+ * (repository-bootstrap-command.ts `commitReceipt`). `readDurableLedger` then folds the kind into
+ * `kinds` like any other committed decision, so a surface keyed on `kinds` alone called a REFUSED
+ * bootstrap COMMITTED and stopped offering it. Measured: one `controlled-999` profile typo answered
+ * BOOTSTRAP_PROFILE_VERSION_UNKNOWN, wrote nothing, and the surface then read
+ * `repository.bootstrap` as COMMITTED at version 1 with no offer, so the New product card answered
+ * BOOTSTRAP_NOT_OFFERED on that store from then on. The kind counts as committed only while the
+ * CURRENT receipt decodes as BOOTSTRAPPED; an unreadable receipt proves nothing and is not promoted.
+ * The aggregate and its version are left in place, so the renewed offer carries the version the
+ * next receipt will be fenced at.
+ */
+export function effectiveBootstrapLedger(ledger: DurableLedger, projectId: string): DurableLedger {
+  if (!ledger.kinds.has(REPOSITORY_BOOTSTRAP_COMMAND_KIND)) return ledger;
+  const receipt = receiptView(stateOf(ledger, bootstrapAggregateId(projectId)));
+  if (receipt !== null && receipt.outcome === "BOOTSTRAPPED") return ledger;
+  const kinds = new Set(ledger.kinds);
+  kinds.delete(REPOSITORY_BOOTSTRAP_COMMAND_KIND);
+  return Object.freeze({ aggregates: ledger.aggregates, decisionCount: ledger.decisionCount, kinds });
+}
+
 /** Current durable receipt only. A present null (including corrupt JSON) is NOT absence. */
 export function readBootstrapReceipt(store: SqliteEventStore, projectId: string): BootstrapReadView {
   try {
     const ledger = readDurableLedger(store, projectId);
-    const aggregateId = `${projectId}-bootstrap`;
+    const aggregateId = bootstrapAggregateId(projectId);
     if (!ledger.aggregates.has(aggregateId)) return ABSENT;
     const receipt = receiptView(stateOf(ledger, aggregateId));
     return receipt === null ? UNREADABLE : Object.freeze({ outcome: "BOOTSTRAP_READ", receipt });
