@@ -7,6 +7,7 @@ import {
   createStoreDependencies,
   readStoreDependencyEnv,
 } from "../daemon-store-dependencies.js";
+import { createPlaneFollowingDeps } from "../http/command-plane-deps.js";
 import { createMcpHttpHost } from "../mcp-http/mcp-http-host.js";
 import { createProductContractReadPort } from "../product-contract/product-contract-read-port.js";
 import {
@@ -95,6 +96,18 @@ async function main(): Promise<void> {
     if (affordances === undefined) throw new Error("provider serves no affordance surface");
     const subscriptions = provider.subscriptions?.();
     if (subscriptions === undefined) throw new Error("provider serves no subscription surface");
+    // THE WRAPPER'S DEPS FOLLOW THE CUTOVER PLANE. A /1 deps value captured at start is the
+    // /1 plane for the life of the process: once `cutover.activate` binds current
+    // readiness, every session.open this binary dispatches, every exit-path release, the boot
+    // reclaim and the verifier answer V1_AUTHORITY_RETIRED, and each READY item is charged an
+    // attempt per pass until STAFFING_ATTEMPTS_EXHAUSTED (measured over the shipped
+    // composition, agent-wrapper-command-plane.test.ts). Both planes are required by name.
+    const commandAuthorityPlane = provider.commandAuthorityPlane?.();
+    if (commandAuthorityPlane === undefined) throw new Error("provider serves no command plane reader");
+    const v2Deps = provider.provideV2?.();
+    if (v2Deps === undefined) throw new Error("provider serves no /2 command plane");
+    const v1Deps = provider.provide();
+    const deps = createPlaneFollowingDeps({ commandAuthorityPlane, deps: v1Deps, v2Deps });
 
     // DEVELOPMENT payload suggestions, loaded leniently and DISCLOSED when absent (see the loader).
     const hintModule = await loadPayloadHints((line) => { console.error(line); });
@@ -171,7 +184,7 @@ async function main(): Promise<void> {
       log: (line) => { process.stdout.write(`${line}\n`); },
       nodes: listNodes, storePath: config.storePath,
       verifier: {
-        deps: provider.provide(), mintId: () => randomUUID(), nodeMission,
+        deps, mintId: () => randomUUID(), nodeMission,
         operatorCredential: config.credential, projectId: config.projectId,
         runTest: verifierRunner, store: verifierStore,
         verificationAuthority: createVerifierAuthorityProvider({ projectId: config.projectId, store: verifierStore }),
@@ -213,7 +226,7 @@ async function main(): Promise<void> {
       // under the dead secret wedged the wrapper on AGENT_CLEANUP_FAILED.
       claimTtlMs: knobs.claimTtlMs,
       clock: () => Date.now(),
-      deps: provider.provide(),
+      deps,
       maxAgents: knobs.maxAgents,
       maxItemAttempts: knobs.maxItemAttempts,
       mintSecret: () => randomUUID().replaceAll("-", ""),
@@ -262,9 +275,12 @@ async function main(): Promise<void> {
     // authority; the per-agent config contains only its scoped bearer and this origin.
     mcpHost = createMcpHttpHost({
       affordances,
+      // Both planes and the reader, as mcp-http-main.ts passes them: the port resolves the plane
+      // per dispatch, so a seat that outlives cutover.activate is not refused on every call.
+      commandAuthorityPlane,
       // The planning seat's contract read: the approved revision's criteria, by id.
       contract: createProductContractReadPort({ projectId: config.projectId, store: verifierStore }),
-      deps: provider.provide(),
+      deps: v1Deps,
       // The seat's design read, on the same reasoning as the contract read one line up: this is
       // the seats' only MCP host, so without the port every `design.read` a seat makes would
       // refuse INPUT_INVALID however correct its payload. The port binds NO projectId -- the
@@ -276,6 +292,7 @@ async function main(): Promise<void> {
       // seat made refused INPUT_INVALID, whatever the brief told it to send (2026-09-05).
       graph: provider.graph?.(),
       subscriptions,
+      v2Deps,
     });
     const mcpStarted = await mcpHost.start();
     if (!mcpStarted.ok) throw new Error(mcpStarted.code);
@@ -294,7 +311,7 @@ async function main(): Promise<void> {
     // Boot reclaim, ONCE before the first staffing pass: a restart otherwise leaves
     // its own dead children's claims fenced for the full 30-minute claim expiry.
     const reclaimed = runReclaimPass({
-      clock: () => Date.now(), deps: provider.provide(), isProcessAlive: probeProcessAlive,
+      clock: () => Date.now(), deps, isProcessAlive: probeProcessAlive,
       log: (line: string) => { process.stdout.write(`${line}\n`); },
       mintSecret: () => randomUUID().replaceAll("-", ""), operatorCredential: config.credential,
       projectId: config.projectId, store: verifierStore,

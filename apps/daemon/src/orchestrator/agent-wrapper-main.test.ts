@@ -350,6 +350,58 @@ describe("wrapper binary staffing wiring", () => {
     expect(() => expect(loop).toContain("wrapper.runOnce().catch(")).toThrow();
   });
 
+  /**
+   * THE COMMAND PLANE. `agent-wrapper-command-plane.test.ts` proves the plane-following value
+   * WORKS over the shipped composition; these arms prove the binary PASSES it. Before this row
+   * every `deps:` in the binary was a `provider.provide()` captured at start, and the seats'
+   * host got neither plane reader nor /2 deps, so after `cutover.activate` the wrapper's own
+   * session.open and every seat command answered V1_AUTHORITY_RETIRED.
+   */
+  const hostCall = (source: string): string => {
+    const start = source.indexOf("createMcpHttpHost({");
+    expect(start).toBeGreaterThan(-1);
+    return source.slice(start, source.indexOf("    });", start));
+  };
+  const sliceOf = (source: string, marker: string, end: string): string => {
+    const start = source.indexOf(marker);
+    expect(start).toBeGreaterThan(-1);
+    return source.slice(start, source.indexOf(end, start));
+  };
+  const assertPlaneWiring = (source: string): void => {
+    // ONE /1 capture, feeding the plane-following value and the host; nothing else holds it.
+    expect(source.split("provider.provide()").length - 1).toBe(1);
+    expect(source).toContain("const v1Deps = provider.provide();");
+    expect(source).toContain(
+      "const deps = createPlaneFollowingDeps({ commandAuthorityPlane, deps: v1Deps, v2Deps });",
+    );
+    // The wrapper's own dispatches, the boot reclaim and the verifier all follow the plane.
+    expect(wrapperCall(source)).toMatch(/^\s+deps,\r?$/mu);
+    expect(sliceOf(source, "runReclaimPass({", "});")).toContain(" deps, ");
+    expect(sliceOf(source, "verifier: {", "      },")).toContain(" deps, ");
+    // The seats' host gets both planes and the reader, the shape mcp-http-main.ts passes.
+    const host = hostCall(source);
+    expect(host).toMatch(/^\s+commandAuthorityPlane,\r?$/mu);
+    expect(host).toMatch(/^\s+v2Deps,\r?$/mu);
+    expect(host).toContain("deps: v1Deps,");
+  };
+
+  it("builds one plane-following deps value from both shipped planes and hands it to every dispatcher", () => {
+    assertPlaneWiring(SOURCE);
+  });
+
+  it.each([
+    ["host plane reader", "      commandAuthorityPlane,\n", ""],
+    ["host /2 deps", "      v2Deps,\n    });\n    const mcpStarted", "    });\n    const mcpStarted"],
+    ["wrapper deps", "      deps,\n      maxAgents: knobs.maxAgents,", "      deps: v1Deps,\n      maxAgents: knobs.maxAgents,"],
+    ["reclaim deps", "clock: () => Date.now(), deps, isProcessAlive", "clock: () => Date.now(), deps: v1Deps, isProcessAlive"],
+    ["verifier deps", "        deps, mintId:", "        deps: v1Deps, mintId:"],
+    ["plane-following construction", "createPlaneFollowingDeps({ commandAuthorityPlane, deps: v1Deps, v2Deps })", "v1Deps"],
+  ])("rejects a binary that pins the %s to /1 (positive control)", (_name, from, to) => {
+    const normalised = SOURCE.replaceAll("\r\n", "\n");
+    const pinned = normalised.replace(from, to);
+    expect(pinned).not.toBe(normalised);
+    expect(() => assertPlaneWiring(pinned)).toThrow();
+
   // The per-pass log MOVED to ./wrapper-pass-log.ts to bring this file under the 400-line split
   // rail. The paused-line claim did not change, only where it is measured; the binary is still
   // asserted to route every pass report through that logger and nothing else.

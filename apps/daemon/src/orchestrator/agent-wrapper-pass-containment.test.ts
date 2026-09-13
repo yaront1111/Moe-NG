@@ -205,7 +205,7 @@ describe("the real STORE_BUSY: two connections on one file, the wrapper's handle
     const contended = contendedHandle(h.storePath, h.projectId);
     const gate = createProviderPauseGate({
       clock: () => NOW, log: () => undefined, projectId: h.projectId, provider: "claude",
-      store: contended.handle,
+      secrets: () => [], store: contended.handle,
     });
     // The surface is read over the composition's own handle, which this arm never contends.
     const { spawned, wrapper } = wrapperOver(h, { providerPause: gate });
