@@ -148,7 +148,7 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
 }
 
 /**
- * Stated at the WIDE pattern width (`[A-Z0-9_]+`): 80 declarations on 2026-09-10.
+ * Stated at the WIDE pattern width (`[A-Z0-9_]+`): 81 declarations on 2026-09-13.
  * The TWO wide-only names are PRODUCT_CONTRACT_GATE_1_READ_LAYER and
  * LIVE_GATE_1_LAYER, each hidden twice over — module-private AND digit-bearing. Quoting a
  * private count against an exported count of a DIFFERENT width is the recurring error in this
@@ -160,7 +160,8 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
  * one would advertise a channel that does not exist. That is the route this population exists
  * for. See the matching note above `EXPECTED_ROSTER_SIZE` in boundary-roster.security.ts.
  */
-const EXPECTED_PRIVATE_COUNT = 80;
+// 80 -> 81 for the read-only completed project-pairing validation boundary.
+const EXPECTED_PRIVATE_COUNT = 81;
 
 /**
  * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
@@ -238,6 +239,7 @@ const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
   { constant: "PREVIEW_AUTO_POLICY_LAYER", file: "apps/daemon/src/preview/preview-auto-decision.ts" },
   { constant: "PLANNING_RUN_READ_LAYER", file: "apps/daemon/src/http/planning-run-read.ts" },
   { constant: "POLICY_INSTALL_LAYER", file: "apps/control-room/src/v2/ops/policy-install-port.ts" },
+  { constant: "PAIRING_SESSION_LAYER", file: "apps/daemon/src/http/pairing-session-validation.ts" },
   { constant: "PUBLISH_LAYER", file: "apps/control-room/src/v2/goals/publish-port.ts" },
   { constant: "PRODUCER_LAYER", file: "apps/daemon/src/work/launch-template-authority.ts" },
   { constant: "PRODUCT_CONTRACT_GATE_1_READ_LAYER", file: "apps/daemon/src/http/product-contract-gate-1-read.ts" },
@@ -379,7 +381,8 @@ const resolvedLayerLiterals = (): readonly string[] => {
 // 104 -> 105 on 2026-09-13: ProjectManagerRefusal now names the existing
 // CONTROL_ROOM_PAIRING_APPROVAL value declared by http/pairing-approval-contract.ts.
 // The resolved population grows by one; the unresolved values remain unchanged.
-const EXPECTED_LITERAL_COUNT = 105;
+// 105 -> 106 for the validation route's method refusal, resolved by PAIRING_SESSION_LAYER.
+const EXPECTED_LITERAL_COUNT = 106;
 const EXPECTED_UNRESOLVED_LITERAL_COUNT = 39;
 
 /**

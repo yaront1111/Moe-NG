@@ -45,6 +45,7 @@ it("proxies the complete project-daemon v2 surface without manager authority", (
     "/session/pair/claim",
     "/session/pair/open",
     "/session/pair/request",
+    "/session/validate",
     "/sessions/read",
   ]);
   expect(new Set(DEV_PROXY_PATHS).size).toBe(DEV_PROXY_PATHS.length);

@@ -9,6 +9,8 @@ import {
   signSessionChallenge,
 } from "@moe/control-room-client";
 import type { SessionKeyGenerated } from "@moe/control-room-client";
+import { validLiveTabCredential } from "./live-tab-session.js";
+import type { LiveTabSessionBinding } from "./live-tab-session.js";
 
 export type LiveKeyedPostPath = "/session/pair/claim" | "/session/pair/open";
 export interface LiveKeyedPostResult {
@@ -30,6 +32,7 @@ export interface LiveKeyedSessionInput {
   readonly requestId: string;
 }
 export interface LiveKeyedOpened {
+  readonly binding: LiveTabSessionBinding;
   readonly ok: true;
   readonly sessionCredential: string;
 }
@@ -109,7 +112,7 @@ function admitClaim(
     || !Array.isArray(body["capabilities"]) || body["capabilities"].length === 0
     || !body["capabilities"].every(nonBlank)
     || !isIsoInstant(body["expiresAt"])
-    || !nonBlank(body["principalId"]) || !nonBlank(body["sessionCredential"])
+    || !nonBlank(body["principalId"]) || !validLiveTabCredential(body["sessionCredential"])
     || body["protocolVersion"] !== input.protocolVersion) return null;
   if (!nonBlank(body["projectId"]) || body["projectId"] !== input.projectId) return "PROJECT";
   const challenge = body["challenge"];
@@ -216,7 +219,11 @@ export function createLiveKeyedSession(input: LiveKeyedSessionInput): LiveKeyedS
         || opened.body["sessionId"] !== openBody["sessionId"]) {
         return refuse("session pairing open refused");
       }
-      return Object.freeze({ ok: true as const, sessionCredential: claim.sessionCredential });
+      return Object.freeze({
+        binding: Object.freeze({ sessionId: String(openBody["sessionId"]),
+          credentialId: String(openBody["credentialId"]), clientKeyId: key.clientKeyId, generation: 1 }),
+        ok: true as const, sessionCredential: claim.sessionCredential,
+      });
     },
   });
 }

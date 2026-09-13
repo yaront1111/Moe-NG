@@ -7,6 +7,7 @@ import { resolveProjectManagerMode } from "./entry-project-manager.js";
 import { gateDevelopmentQuery } from "./entry-route.js";
 import { resolveLiveSetupFromHandshake } from "./live/live-handshake.js";
 import type { LiveHandshakeResult } from "./live/live-handshake.js";
+import { createLiveTabSession } from "./live/live-tab-session.js";
 import { ClockProvider } from "./performance/command-latency.js";
 import type { Clock } from "./performance/command-latency.js";
 import { CordumApp } from "./v2/cordum-app.js";
@@ -78,9 +79,11 @@ function prepareV2LiveSetup(
 ): LiveAttempts | undefined {
   const params = new URLSearchParams(search);
   if (managerMode || params.get("fixtures") === "1") return undefined;
+  const session = createLiveTabSession(globalThis.location?.origin ?? "", () => window.sessionStorage);
   const start = (signal?: AbortSignal): Promise<LiveHandshakeResult> =>
     resolveLiveSetupFromHandshake({
       fetchImpl: (input, init) => fetch(input, init),
+      session,
       ...(signal === undefined ? {} : { signal }),
     });
   return Object.freeze({ initial: start(), retry: (signal: AbortSignal) => start(signal) });
