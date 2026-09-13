@@ -9,8 +9,8 @@ import { JSON_READ_PAGE_MAX_BYTES, JSON_READ_PAGE_MAX_CHARS, jsonReadPage } from
 export const PRODUCT_CONTRACT_READ_PAGE_MAX_BYTES = JSON_READ_PAGE_MAX_BYTES;
 export const PRODUCT_CONTRACT_READ_PAGE_MAX_CHARS = JSON_READ_PAGE_MAX_CHARS;
 export const PRODUCT_CONTRACT_READ_PAGE_FORMAT = "moe-product-contract-json-page/1";
-const KEYS = ["goalRef", "offset", "limit", "gateRef", "contentSha256"];
-const REF_KEYS = ["contractId", "revisionDigest", "revisionId"];
+const KEYS: readonly string[] = Object.freeze(["goalRef", "offset", "limit", "gateRef", "contentSha256"]);
+const REF_KEYS: readonly string[] = Object.freeze(["contractId", "revisionDigest", "revisionId"]);
 const DIGEST = /^[0-9a-f]{64}$/u;
 const encoder = new TextEncoder();
 const bytesOf = (value: unknown): Uint8Array => encoder.encode(JSON.stringify(value));

@@ -108,7 +108,8 @@ describe("runtime vocabulary is closed and disjoint", () => {
       expect(commands.has(kind)).toBe(false);
     }
     expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS);
-    // Independent cardinality: design.read belongs exclusively to the query roster.
+    // Literal 121, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the Set only,
+    // so the literal is what catches it. 122 -> 121 when design.read moved to the query roster.
     expect(commands.size).toBe(121);
     expect(RUNTIME_COMMAND_KINDS).toContain("plan.propose");
     // task-749e585a: the operator's per-environment health-probe interval. Named here as well as

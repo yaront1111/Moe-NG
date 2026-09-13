@@ -77,7 +77,7 @@ function compilerDesignLines(design: DesignBrief | null): readonly string[] {
       `THE DESIGN STATE FOR THIS GOAL COULD NOT BE READ: the durable read refused`,
       `${design.code}, answered by the ${design.layer} layer. THAT IS A FAILED READ, NOT A GOAL`,
       "WITHOUT A DESIGN - a submitted design may well exist and simply be unreachable from here,",
-      "so do not conclude either way. Call design_read yourself, payload {\"goalRef\": \"...\"}:",
+      "so do not conclude either way. Call design_read yourself with the paging protocol below:",
       "if it answers, plan the decomposition from what it gives you; if it refuses as well,",
       "report that refusal code and stop rather than planning around it.",
       ...DESIGN_READ_MISSION_LINES,
@@ -86,7 +86,7 @@ function compilerDesignLines(design: DesignBrief | null): readonly string[] {
   return [
     "NO DESIGN ACCOMPANIES THIS BRIEF, and the operator has not declared that it plans",
     "without one. Plan from the approved contract and the PRD alone; if one was submitted",
-    "after you were staffed, design_read with payload {\"goalRef\": \"...\"} answers it.",
+    "after you were staffed, design_read with the paging protocol below answers it.",
     ...DESIGN_READ_MISSION_LINES,
   ];
 }

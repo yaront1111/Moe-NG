@@ -21,8 +21,9 @@
  *   - advertised vs SERVED: CONTAINMENT (served ⊆ advertised). Equality is FALSE BY PRODUCTION
  *     DESIGN -- `daemon-command-vocabulary.ts:220` and `goals/goal-create-with-source.ts:35` both
  *     record kinds advertised in the shared contract and deliberately not served by this daemon's
- *     command registry, and `design.read` is one of them. Asserting equality here would be a
- *     fabricated gate that reds on a documented intermediate state.
+ *     command registry. (`design.read` used to be one of them; it is a QUERY and now lives on
+ *     RUNTIME_QUERY_KINDS only.) Asserting equality here would be a fabricated gate that reds on
+ *     a documented intermediate state.
  * The direction that MATTERS is the one asserted as equality-shaped: nothing the daemon SERVES
  * may be missing from what it ADVERTISES.
  *
