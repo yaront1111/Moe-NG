@@ -104,7 +104,7 @@ function runLauncher(entries: readonly string[]): Run {
  * `PROJECT_SINGLE_ASSET_ROOT_MISSING PROJECT_SINGLE_MAIN` (measured 2026-09-13 through the
  * real front door). An operator or wrapper waiting for the documented line waited forever.
  */
-const DOC = installDoc({ closureCount: 3, nodeRange: ">=24.16 <25", version: "0.1.0-test" });
+const DOC = installDoc({ closureCount: 3, nodeRange: ">=24.16 <25", version: "9.9.9-test" });
 const PROJECT = Object.freeze({
   configPath: "C:\\work\\demo\\moe.config.json",
   projectId: "demo",
