@@ -57,7 +57,7 @@ import { createDocumentCoverageReadPort } from "./http/document-coverage-read.js
 import { createRunsReadPort } from "./http/runs-read.js";
 import type { RunsReadPort } from "./http/runs-read-contract.js";
 import {
-  activationReceiptInput, activationReceiptPorts,
+  activationReceiptPorts, durableActivationReceiptInput,
 } from "./bootstrap/activation-command-entry.js";
 import { createActivationReadPort } from "./http/activation-read.js";
 import type { ActivationReadPort } from "./http/activation-read.js";
@@ -515,10 +515,20 @@ export function createStoreDependencies(
    * policy would read UNMEASURED forever on a project that has in fact probed and installed.
    * `createActivationReadPort` then applies `readOnlyActivationPorts`, which neuters `backup`
    * and `fs.mkdir` — so this stays a read and never creates `<projectRoot>/.moe-next/backups/`.
+   *
+   * THE INPUT IS RESOLVED PER READ TOO. Its provider rung reads the durable
+   * `project.set_agent_provider` setting (`durableActivationReceiptInput`), and the port this
+   * factory returns is built ONCE at daemon entry (daemon-store-dependencies.ts `activation`),
+   * so an input captured here would go on certifying the provider the operator had chosen when
+   * the daemon started. The ports and the read-only wrapper are closures and cost nothing to
+   * rebuild; the measurement itself was always per call.
    */
-  const activation = (): ActivationReadPort => createActivationReadPort({
-    input: activationReceiptInput(config.projectId),
-    ports: activationReceiptPorts(store, config.projectId),
+  const activation = (): ActivationReadPort => Object.freeze({
+    boundProjectId: config.projectId,
+    readActivation: () => createActivationReadPort({
+      input: durableActivationReceiptInput(store, config.projectId),
+      ports: activationReceiptPorts(store, config.projectId),
+    }).readActivation(),
   });
   /** The process facts this composition holds, plus the ledger it reads; the plane is read live. */
   const composedAt = (config.clock ?? (() => new Date().toISOString()))();

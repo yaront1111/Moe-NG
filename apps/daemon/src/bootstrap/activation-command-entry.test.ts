@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { activationReceiptInput, activationReceiptPorts } from "./activation-command-entry.js";
+import { setAgentProvider } from "../orchestrator/agent-provider-store.js";
+import {
+  activationReceiptInput, activationReceiptPorts, durableActivationReceiptInput,
+} from "./activation-command-entry.js";
 import { ACTIVATION_RECEIPT_CODES } from "./activation-receipts.js";
 import { measureActivationReceipts } from "./activation-receipts-measure.js";
 import type { ActivationReceiptPorts } from "./activation-receipts-ports.js";
@@ -32,11 +35,14 @@ describe("the daemon's activation receipt ports read the durable store", () => {
   afterEach(() => { closeStores(); });
 
   /** Everything EXCEPT the two durable readers is faked, so only they are under test. */
-  function hostPorts(store: SqliteEventStore): ActivationReceiptPorts {
+  function hostPorts(
+    store: SqliteEventStore, env: Readonly<Record<string, string | undefined>> = {},
+    probed: string[] = [],
+  ): ActivationReceiptPorts {
     const present = new Set(["/fixture/store.sqlite"]);
     return activationReceiptPorts(store, PROJECT_ID, {
       backup: () => Promise.resolve({ byteLength: 1, ok: true as const, sha256: "a".repeat(64) }),
-      env: {},
+      env,
       fs: {
         exists: (path: string) => present.has(path),
         mkdir: (path: string) => { present.add(path); },
@@ -50,8 +56,10 @@ describe("the daemon's activation receipt ports read the durable store", () => {
       // `fixture-agent` is not installed on any host, and the REAL reader would correctly
       // refuse it ACTIVATION_PROVIDER_UNMEASURED. What these arms measure is the two DURABLE
       // readers, so the CLI probe is faked out like every other non-durable port.
-      providerVersion: () =>
-        Promise.resolve({ code: 0, stderr: "", stdout: "fixture-agent 1.0.0\n" }),
+      providerVersion: (command: string) => {
+        probed.push(command);
+        return Promise.resolve({ code: 0, stderr: "", stdout: "fixture-agent 1.0.0\n" });
+      },
       sqliteApplicationId: () => 1297040689,
     });
   }
@@ -115,6 +123,46 @@ describe("the daemon's activation receipt ports read the durable store", () => {
     expect(outcome.code).toBe(ACTIVATION_RECEIPT_CODES.policy);
     expect(outcome.refusedBy).toBe("DAEMON_ACTIVATION_RECEIPTS");
   });
+
+  /**
+   * THE PROVIDER THE ACTIVATION CERTIFIES IS THE PROVIDER THE SEATS SPAWN. The wrapper resolves a
+   * seat's command as env -> per-goal setting -> per-project `project.set_agent_provider` ->
+   * claude (agent-provider-resolve.ts); the activation input read only the env and defaulted to
+   * claude. Measured on this tree before the fix: with no `MOE_AGENT_COMMAND` and a committed
+   * codex setting, `agentCommand` was `claude`, so the provider member probed `claude --version`
+   * and its credential ref named claude for a project whose seats run codex.
+   */
+  it("resolves the agent command like a seat: env, then the durable project setting, then claude",
+    async () => {
+      const store = openStore();
+      driveThrough(store, "project.activate");
+      const config = { now: (): string => "2026-09-13T00:00:00.000Z", projectId: PROJECT_ID, store };
+      // Rung 4 with nothing set: the literal, exactly as before.
+      expect(durableActivationReceiptInput(store, PROJECT_ID, {}, "/cwd").agentCommand).toBe("claude");
+
+      const written = setAgentProvider(config, { base: "main", goalId: "", provider: "codex" });
+      expect(written.ok).toBe(true);
+      // Rung 3: the durable project setting, read fresh on this call rather than at composition.
+      const input = durableActivationReceiptInput(store, PROJECT_ID, {}, "/cwd");
+      expect(input.agentCommand).toBe("codex");
+      // Rung 1: the host override still wins, exactly as it does at spawn.
+      expect(durableActivationReceiptInput(store, PROJECT_ID, { MOE_AGENT_COMMAND: "claude" }, "/cwd")
+        .agentCommand).toBe("claude");
+
+      // AND THE MEASUREMENT FOLLOWS THE RESOLUTION: the CLI probed and the credential certified
+      // are codex's, through the production ports. The credential is a NAME only; its value is a
+      // throwaway literal that never reaches a ref.
+      const probed: string[] = [];
+      const receipts = await measureActivationReceipts(
+        input, hostPorts(store, { OPENAI_API_KEY: "test-only-not-a-credential" }, probed),
+      );
+      const provider = memberOf(receipts.members, "provider");
+      expect(provider.measured).toBe(true);
+      if (!provider.measured) throw new Error(provider.code);
+      expect(provider.detail).toBe("credential/codex/env:OPENAI_API_KEY");
+      expect(receipts.provider).toEqual({ command: "codex", version: "1.0.0" });
+      expect(probed).toEqual(["codex"]);
+    });
 
   it("reads host-scoped configuration RAW, defaulting nothing that must fail closed", () => {
     // An unconfigured store path stays EMPTY so the measurer answers "no store path

@@ -1,5 +1,6 @@
 import type { SqliteEventStore } from "@moe/store";
 
+import { agentProviderFact, resolveAgentProvider } from "../orchestrator/agent-provider-resolve.js";
 import { readProbe } from "../provider-profile/provider-profile-reader-checks.js";
 import {
   measureActivationReceipts,
@@ -62,20 +63,49 @@ export function activationReceiptPorts(
  * `projectRoot` falls back to the process CWD rather than to "", because the measurer resolves
  * the real repository through `git rev-parse --show-toplevel` FROM this directory — the daemon
  * is started inside the project it serves.
+ *
+ * `agentCommand` IS THE SEAT'S OWN RESOLUTION, not the env alone. It used to read
+ * `MOE_AGENT_COMMAND ?? "claude"`, while the wrapper staffs a seat through `resolveAgentProvider`
+ * (env, then the per-goal setting, then the durable per-project `project.set_agent_provider`
+ * setting, then claude). With the env unset and the project set to codex, the provider member
+ * therefore probed `claude --version` and certified claude's credential for a project whose
+ * seats spawn codex — measured on this tree: `durableActivationReceiptInput` answered `claude`
+ * against a store holding a committed codex setting. The same resolver now answers here, with
+ * no goal (an activation is project-scoped), so the credential ref, the `--version` reading and
+ * the minted witness describe the provider the wrapper will actually launch. `settingFor` is
+ * the durable rung; a caller without a store passes none and gets the env-or-claude answer.
  */
 export function activationReceiptInput(
   projectId: string,
   env: Readonly<Record<string, string | undefined>> = process.env,
   cwd: string = process.cwd(),
+  settingFor?: (goalId: string) => string | null,
 ): ActivationReceiptInput {
   const projectRoot = env["MOE_PROJECT_ROOT"] ?? cwd;
   return Object.freeze({
-    agentCommand: env["MOE_AGENT_COMMAND"] ?? "claude",
+    agentCommand: resolveAgentProvider({
+      envCommand: env["MOE_AGENT_COMMAND"], goalRef: null, settingFor,
+    }),
     artifactRoot: projectRoot,
     projectId,
     projectRoot,
     storePath: env["MOE_STORE_PATH"] ?? "",
   });
+}
+
+/**
+ * The input bound to THIS daemon's durable store: the provider rung reads the committed
+ * `project.set_agent_provider` setting through the SAME fact the wrapper reads per staffed
+ * seat (`agentProviderFact`). Resolved on every call, never at composition, so a setting the
+ * operator changes while the daemon runs reaches the very next measurement.
+ */
+export function durableActivationReceiptInput(
+  store: SqliteEventStore,
+  projectId: string,
+  env: Readonly<Record<string, string | undefined>> = process.env,
+  cwd: string = process.cwd(),
+): ActivationReceiptInput {
+  return activationReceiptInput(projectId, env, cwd, agentProviderFact(store, projectId));
 }
 
 export interface ActivationReceiptSource {
@@ -94,7 +124,7 @@ export function createActivationReceiptMeasurer(
 ): () => Promise<ActivationReceipts> {
   const { projectId, store } = source;
   return async (): Promise<ActivationReceipts> => await measureActivationReceipts(
-    activationReceiptInput(projectId, source.env ?? process.env),
+    durableActivationReceiptInput(store, projectId, source.env ?? process.env),
     activationReceiptPorts(store, projectId),
   );
 }
