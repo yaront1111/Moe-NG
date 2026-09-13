@@ -47,6 +47,12 @@ const committedStep = (kind: string, aggregateId: string, version = 1): ChainSte
   status: "COMMITTED" as const, version,
 });
 
+/** A chain step whose prerequisites have not committed: what a fresh project serves for it. */
+const blockedStep = (kind: string, missing: readonly string[]): ChainStep => Object.freeze({
+  aggregateId: null, claim: null, claimAggregateVersion: 0, kind, missing: [...missing],
+  status: "BLOCKED" as const, version: null,
+});
+
 const offerOf = (kind: string, aggregateId: string, version = 0): NextAllowedCommand =>
   Object.freeze({
     commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,
@@ -210,8 +216,9 @@ describe("staffableSteps", () => {
 
   it("lets the chain through once `project.activate` is COMMITTED: the seeded project's READY policy.validate is staffed", () => {
     // The J3 crash-recovery e2e (foundation lane): the shipped seed commits the chain WITHOUT a
-    // policy.validate, and the wrapper's fake agent is staffed on exactly that step. With the
-    // chain withheld unconditionally that agent was never spawned (measured 2026-09-13).
+    // policy.validate, and that READY step is what keeps the wrapper's ONCE pass deterministic
+    // (its node.deliver rows can refuse first). Withheld unconditionally, the agent arm never
+    // spawned an agent on any CI host (measured 2026-09-13).
     const seeded = surfaceOf(
       [
         committedStep("project.register", PROJECT), committedStep("project.bind_repository", PROJECT),
@@ -222,6 +229,24 @@ describe("staffableSteps", () => {
       {},
     );
     expect(staffableSteps(seeded)).toEqual([...seeded.steps]);
+  });
+
+  it("withholds the fresh project's READY project.register and policy.install while project.activate sits BLOCKED", () => {
+    // THE MEASURED SHAPE (2026-09-13): a fresh project's surface lists every bootstrap kind,
+    // the two unblocked ones READY with offers and the rest BLOCKED on their prerequisites.
+    // The wrapper spent a seat on each READY one before the browser had activated anything.
+    const fresh = surfaceOf(
+      [
+        readyStep("project.register", PROJECT), blockedStep("project.bind_repository", ["project.register"]),
+        blockedStep("provider.probe", ["project.register"]), readyStep("policy.install", `${PROJECT}-policy`),
+        blockedStep("policy.validate", ["policy.install"]),
+        blockedStep("project.activate", ["project.bind_repository", "provider.probe"]),
+        readyStep("plan.propose", DEFAULT_RUN_SUBJECT),
+      ],
+      [offerOf("project.register", PROJECT), offerOf("policy.install", `${PROJECT}-policy`)],
+      {},
+    );
+    expect(staffableSteps(fresh)).toEqual([]);
   });
 
   it("keeps withholding a READY policy.validate while `project.activate` is only READY, not committed", () => {

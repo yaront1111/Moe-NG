@@ -18,14 +18,21 @@ import { OPERATOR_ACTIVATION_STEPS } from "./agent-spawn-contract.js";
  * This view withholds exactly two shapes and rewrites nothing else:
  *
  *  1. Every step of `OPERATOR_ACTIVATION_STEPS`, UNTIL the project is activated: while the
- *     surface's `project.activate` step is not COMMITTED the chain is the browser's to drive
- *     and no seat takes any of it. Once it is committed the chain passes through again, and
- *     what that leaves staffable is a `policy.validate` the chain did not send: the shipped
- *     seed (demo-seed-plan.ts) activates without one, and the J3 crash-recovery e2e (the
- *     foundation lane) staffs the seeded project's wrapper on exactly that step (measured
- *     2026-09-13: with the chain withheld unconditionally, "the agent never wrote its pid
- *     file" on every host). The roster's own comment says why it is not folded into
- *     `HUMAN_ONLY_STEPS`.
+ *     surface's `project.activate` step is not COMMITTED (BLOCKED on a fresh project, READY
+ *     mid-chain) the chain is the browser's to drive and no seat takes any of it. Once it is
+ *     committed the chain passes through again. COMMITTED is monotonic (bootstrap-ledger.ts
+ *     never drops a kind) and the other five are prerequisites of `project.activate` or of its
+ *     receipts, so the only chain step that can be READY after activation is a
+ *     `policy.validate` the activator did not send. The browser always sends it before
+ *     `project.activate` (activation-port.ts); the shipped seed (demo-seed-plan.ts) does not,
+ *     BY DESIGN: demo-seed-policy.ts installs the hinted validatable slice so that an agent
+ *     seat can complete the offered step, and the J3 crash-recovery e2e (foundation lane)
+ *     depends on it: its ONCE pass is deterministic only because a READY `policy.validate`
+ *     is always there to staff (measured 2026-09-13: withheld unconditionally, "the agent
+ *     never wrote its pid file" on every CI host). So a project activated without
+ *     `policy.validate` spends up to `maxItemAttempts` seats on it per wrapper process;
+ *     that is main's behaviour before this view and not the measured finding. The roster's
+ *     own comment says why it is not folded into `HUMAN_ONLY_STEPS`.
  *  2. A READY `plan.propose` step the surface does not OFFER at that run. The bootstrap loop
  *     (affordance-read.ts:333) deliberately pushes no generic offer for `plan.propose`; the only
  *     offer comes from the per-goal ladder (affordance-planning-offers.ts `offersForGoal`),
