@@ -4,6 +4,7 @@ import type { HttpDispatchContext, StdioDispatchPort } from "@moe/mcp";
 import type { AffordancePort } from "./http/affordance-contract.js";
 import type { GoalSourceReadPort } from "./documents/document-source-full-read.js";
 import type { ProductContractReadPort } from "./product-contract/product-contract-read-port.js";
+import { answerProductContractReadQuery } from "./mcp-product-contract-read-query.js";
 import {
   eventStreamAccessUnavailable, eventStreamSubscriberMismatch,
 } from "./http/event-stream-access.js";
@@ -278,27 +279,14 @@ const SOURCE_PAGE_MAX_CHARS = 32_768;
 
 // The planning seat's read of the goal's APPROVED contract: the Gate 1 triple and the
 // revision's requirements and criteria — resolved from durable state, never from the seat.
-const answerProductContractRead: QueryHandler = (envelope, context, config) => {
-  if (config.contract === undefined) return queryRefusal();
-  const authenticated = authenticateHttpRequest(
-    authenticatorOf(config.deps),
-    context?.credential ?? config.fallbackCredential ?? null,
-    WIRE_PROTOCOL_VERSION,
-  );
-  if (!authenticated.ok) return bytesOf(authenticated);
-  const payload = envelope["payload"];
-  if (typeof payload !== "object" || payload === null || Array.isArray(payload)) {
-    return queryRefusal();
-  }
-  const request = payload as Record<string, unknown>;
-  if (Object.keys(request).length !== 1 || typeof request["goalRef"] !== "string") {
-    return queryRefusal();
-  }
-  return bytesOf(config.contract.read(request["goalRef"]));
-};
+const answerProductContractRead: QueryHandler = (envelope, context, config) => answerProductContractReadQuery({
+  authenticator: authenticatorOf(config.deps), body: envelope["payload"],
+  credential: context?.credential ?? config.fallbackCredential ?? null,
+  port: config.contract, protocolVersion: WIRE_PROTOCOL_VERSION,
+});
 
 // The seat's read of the goal's design revision. A DELEGATE and nothing else: the whole answer
-// -- absent-port refusal, authentication, the `{goalRef, version?}` payload vocabulary, and the
+// -- absent-port refusal, authentication, version-pinned paging, and the
 // rule that `projectId` comes off the AUTHENTICATED PRINCIPAL and never off the payload -- lives
 // in `mcp-design-read-query.ts`, so the table keeps its shape and the security decision stays
 // beside the code that makes it. `design.read` is the ONE kind this row serves over MCP for a

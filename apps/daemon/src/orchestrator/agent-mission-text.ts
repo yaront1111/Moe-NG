@@ -10,6 +10,7 @@ import { type DesignBrief, compilerDesignLines, nodeDesignLines }
   from "./agent-mission-design.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import { agentRoleForWorkspace } from "./agent-role-contract.js";
+import { CONTRACT_READ_MISSION_LINES } from "./agent-mission-contract-read.js";
 
 /**
  * RE-EXPORTED, not re-declared: `agent-wrapper.ts` and `agent-mission-text.test.ts` both import
@@ -184,9 +185,8 @@ export function compilerMission(
       ...(gateRef === null ? [] : [
         `The Gate 1 approval for this goal is gateRef ${JSON.stringify(gateRef)}.`,
       ]),
-      "Call product_contract_read with payload {\"goalRef\": \"...\"}: it answers the",
-      "APPROVED revision - gateRef, requirements, and criteria with their criterionIds and",
-      "statements. Those ids are what your structure binds; read the PRD pages only where a",
+      ...CONTRACT_READ_MISSION_LINES,
+      "Those ids are what your structure binds; read the PRD pages only where a",
       "criterion's statement needs its context.",
       // THE DECOMPOSITION ARM ONLY. A design is submitted AFTER Gate 1 approves a contract,
       // so the propose_revision arm above runs at a moment when no design can exist yet and
@@ -254,9 +254,8 @@ export function designMission(
     `You are a moe-next DESIGN agent. You hold the durable claim on work item`,
     `"${workItemId}" (command kind ${kind}) until ${expiresAt}.`,
     `First call work_get_context and find the daemon's offered command for your step.`,
-    "The product authority is the PRD text and the APPROVED Gate 1 contract. Call",
-    "product_contract_read with payload {\"goalRef\": \"...\"}: it answers the APPROVED",
-    "revision - gateRef, requirements, and criteria with their criterionIds and statements.",
+    "The product authority is the PRD text and the APPROVED Gate 1 contract.",
+    ...CONTRACT_READ_MISSION_LINES,
     "Design the product those criteria describe; every criterion must be reachable through",
     "something you draw.",
     ...prdPaging(goal),

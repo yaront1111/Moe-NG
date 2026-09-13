@@ -39,7 +39,7 @@ const EXPECTED_COMMAND_KINDS = [
   "budget.reconcile", "context.repackage", "criterion_check.approve", "criterion_check.verify", "cutover.abort", "cutover.activate",
   "cutover.preview", "cutover.quiesce", "dependency.challenge",
   "deployment.deploy", "deployment.migrate_down", "deployment.rollback",
-  "deployment.set_target", "design.read", "design.submit", "effect.activate",
+  "deployment.set_target", "design.submit", "effect.activate",
   "effect.adopt_result", "effect.confirm_absent", "effect.observe", "effect.reconcile",
   "environment.set_variable", "environment.unset_variable",
   "escalation.decide", "events.resume", "evidence.rerun", "evidence.run", "expansion.decline", "export.run",
@@ -98,7 +98,7 @@ describe("runtime vocabulary is closed and disjoint", () => {
   it("keeps queries, commands, and telemetry disjoint and frozen", () => {
     const commands = new Set<string>(RUNTIME_COMMAND_KINDS);
     expect(RUNTIME_QUERY_KINDS).toEqual([
-      "budget.get", "dependency.explain", "doctor.get", "documents.source_read", "events.read",
+      "budget.get", "dependency.explain", "design.read", "doctor.get", "documents.source_read", "events.read",
       "events.wait", "evidence.get", "frontier.get", "goal.get", "goal.list", "graph.get",
       "graph.preview", "product_contract.read", "project.get", "quarantine.get", "reconciliation.get",
       "scheduler.readiness_explain", "work.get_context",
@@ -108,11 +108,8 @@ describe("runtime vocabulary is closed and disjoint", () => {
       expect(commands.has(kind)).toBe(false);
     }
     expect(RUNTIME_COMMAND_KINDS).toEqual(EXPECTED_COMMAND_KINDS);
-    // Literal 121, not `RUNTIME_COMMAND_KINDS.length`: a duplicated member shrinks the set only.
-    // The comment read 119 against an assertion of 120 at 3a056078 — a prior addition bumped the
-    // number and left the prose behind. Repaired here rather than grown, so the next reader can
-    // trust it.
-    expect(commands.size).toBe(122);
+    // Independent cardinality: design.read belongs exclusively to the query roster.
+    expect(commands.size).toBe(121);
     expect(RUNTIME_COMMAND_KINDS).toContain("plan.propose");
     // task-749e585a: the operator's per-environment health-probe interval. Named here as well as
     // in EXPECTED_COMMAND_KINDS so a mistranscription of the hand-written roster above cannot

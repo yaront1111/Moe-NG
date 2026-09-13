@@ -195,7 +195,6 @@ export interface GeneratedCommandBuilders {
   readonly ["deployment.migrate_down"]: CommandBuilder<"deployment.migrate_down">;
   readonly ["deployment.rollback"]: CommandBuilder<"deployment.rollback">;
   readonly ["deployment.set_target"]: CommandBuilder<"deployment.set_target">;
-  readonly ["design.read"]: CommandBuilder<"design.read">;
   readonly ["design.submit"]: CommandBuilder<"design.submit">;
   readonly ["effect.activate"]: CommandBuilder<"effect.activate">;
   readonly ["effect.adopt_result"]: CommandBuilder<"effect.adopt_result">;
@@ -321,7 +320,6 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
     ["deployment.migrate_down"]: commandBuilderFor("deployment.migrate_down"),
     ["deployment.rollback"]: commandBuilderFor("deployment.rollback"),
     ["deployment.set_target"]: commandBuilderFor("deployment.set_target"),
-    ["design.read"]: commandBuilderFor("design.read"),
     ["design.submit"]: commandBuilderFor("design.submit"),
     ["effect.activate"]: commandBuilderFor("effect.activate"),
     ["effect.adopt_result"]: commandBuilderFor("effect.adopt_result"),
@@ -427,6 +425,7 @@ export const GENERATED_COMMAND_BUILDERS: GeneratedCommandBuilders =
 export interface GeneratedQueryBuilders {
   readonly ["budget.get"]: QueryBuilder<"budget.get">;
   readonly ["dependency.explain"]: QueryBuilder<"dependency.explain">;
+  readonly ["design.read"]: QueryBuilder<"design.read">;
   readonly ["doctor.get"]: QueryBuilder<"doctor.get">;
   readonly ["documents.source_read"]: QueryBuilder<"documents.source_read">;
   readonly ["events.read"]: QueryBuilder<"events.read">;
@@ -448,6 +447,7 @@ export interface GeneratedQueryBuilders {
 export const GENERATED_QUERY_BUILDERS: GeneratedQueryBuilders = Object.freeze({
   ["budget.get"]: queryBuilderFor("budget.get"),
   ["dependency.explain"]: queryBuilderFor("dependency.explain"),
+  ["design.read"]: queryBuilderFor("design.read"),
   ["doctor.get"]: queryBuilderFor("doctor.get"),
   ["documents.source_read"]: queryBuilderFor("documents.source_read"),
   ["events.read"]: queryBuilderFor("events.read"),
@@ -940,7 +940,7 @@ export interface GeneratedContractPins {
   readonly queryEnvelopeVersion: typeof RUNTIME_QUERY_ENVELOPE_VERSION;
 }
 
-export const GENERATED_CONTRACT_DIGEST = "f1878eeaa08a050c12000a0e9885a4fef11c12c824602c1b50696d970f2dd295";
+export const GENERATED_CONTRACT_DIGEST = "cbe06719726c8bb40ff2e6273a91666adc63921d1138d1864f85becc5a2e5708";
 
 export const GENERATED_CONTRACT_PINS: GeneratedContractPins = Object.freeze({
   commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION,

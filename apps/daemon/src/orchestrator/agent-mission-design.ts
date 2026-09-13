@@ -1,4 +1,5 @@
 import { DESIGN_SECTION_KEYS } from "../design/design-contracts.js";
+import { DESIGN_READ_MISSION_LINES } from "./agent-mission-design-read.js";
 
 /**
  * THE DESIGN PARAGRAPHS EVERY MISSION CARRIES, and the type that makes them unambiguous.
@@ -56,10 +57,11 @@ function compilerDesignLines(design: DesignBrief | null): readonly string[] {
   if (design !== null && design.outcome === "PRESENT") {
     return [
       `A DESIGN EXISTS for this goal, submitted under design ref "${design.ref}". Read it with`,
-      "design_read, payload {\"goalRef\": \"...\"} and nothing else: it answers the five sections",
+      "design_read with the paging protocol below. The complete document answers the five sections",
       `${DESIGN_SECTION_KEYS.join(", ")} plus openDecisions. Plan the decomposition FROM it -`,
       "every screen and entity it draws must be implemented by some node, and each node's",
       "objective names the screens and entities that node implements.",
+      ...DESIGN_READ_MISSION_LINES,
     ];
   }
   if (design !== null && design.outcome === "SKIPPED") {
@@ -78,12 +80,14 @@ function compilerDesignLines(design: DesignBrief | null): readonly string[] {
       "so do not conclude either way. Call design_read yourself, payload {\"goalRef\": \"...\"}:",
       "if it answers, plan the decomposition from what it gives you; if it refuses as well,",
       "report that refusal code and stop rather than planning around it.",
+      ...DESIGN_READ_MISSION_LINES,
     ];
   }
   return [
     "NO DESIGN ACCOMPANIES THIS BRIEF, and the operator has not declared that it plans",
     "without one. Plan from the approved contract and the PRD alone; if one was submitted",
     "after you were staffed, design_read with payload {\"goalRef\": \"...\"} answers it.",
+    ...DESIGN_READ_MISSION_LINES,
   ];
 }
 

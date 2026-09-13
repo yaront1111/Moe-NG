@@ -72,7 +72,7 @@ export const RUNTIME_AGGREGATES: readonly RuntimeAggregate[] = Object.freeze(
 
 /** Section 17 read-only operations. None of these may ever become a mutation affordance. */
 export const RUNTIME_QUERY_KINDS = Object.freeze([
-  "budget.get", "dependency.explain", "doctor.get", "documents.source_read", "events.read",
+  "budget.get", "dependency.explain", "design.read", "doctor.get", "documents.source_read", "events.read",
   "events.wait", "evidence.get", "frontier.get", "goal.get", "goal.list", "graph.get",
   "graph.preview", "product_contract.read", "project.get", "quarantine.get", "reconciliation.get",
   "scheduler.readiness_explain", "work.get_context",
@@ -89,7 +89,7 @@ export const RUNTIME_COMMAND_KINDS = Object.freeze([
   "budget.reconcile", "context.repackage", "criterion_check.approve", "criterion_check.verify", "cutover.abort", "cutover.activate",
   "cutover.preview", "cutover.quiesce", "dependency.challenge",
   "deployment.deploy", "deployment.migrate_down", "deployment.rollback",
-  "deployment.set_target", "design.read", "design.submit", "effect.activate",
+  "deployment.set_target", "design.submit", "effect.activate",
   "effect.adopt_result", "effect.confirm_absent", "effect.observe", "effect.reconcile",
   "environment.set_variable", "environment.unset_variable",
   "escalation.decide", "events.resume", "evidence.rerun", "evidence.run", "expansion.decline", "export.run",

@@ -19,6 +19,23 @@ import { codeMission, compilerMission, designMission, mission }
 
 const EXPIRES = "2026-08-30T13:00:00.000Z";
 
+it("teaches planning and design seats to finish revision-pinned contract pages", () => {
+  const briefs = [
+    compilerMission("planning.submit_decomposition@goal-1", "planning.submit_decomposition", EXPIRES, "goal-1"),
+    designMission("design.submit@goal-1", "design.submit", EXPIRES, "goal-1@v1", "project-1"),
+  ];
+  for (const brief of briefs) {
+    expect(brief).toContain("moe-product-contract-json-page/1");
+    expect(brief).toContain('"limit": 4096');
+    expect(brief).toContain("contentSha256");
+    expect(brief).toContain("nextOffset is null");
+    expect(brief).toContain("JSON text fragments");
+    expect(brief).toContain("PRODUCT_CONTRACT_READ_REVISION_CHANGED");
+    expect(brief).toContain("every criterionId and requirementId");
+    expect(brief).toContain("No file-read tool is needed");
+  }
+});
+
 describe("compilerMission", () => {
   it("briefs the contract-authoring step: read the PRD, draft, submit, no hints", () => {
     const text = compilerMission(
@@ -147,6 +164,17 @@ describe("the design outcome the compiler seat is handed", () => {
     for (const section of DESIGN_SECTION_KEYS) expect(text).toContain(section);
     // The sweep's denominator, so a roster deletion cannot shrink this loop silently.
     expect(DESIGN_SECTION_KEYS.length).toBe(5);
+  });
+
+  it("teaches every planning design-read path to consume version-pinned pages", () => {
+    for (const design of [PRESENT, { outcome: "ABSENT" } as const,
+      { outcome: "UNREADABLE", code: "DESIGN_STORE_UNREADABLE", layer: "DESIGN_READ" } as const]) {
+      const text = decomposition(design);
+      expect(text).toContain("moe-design-json-page/1");
+      expect(text).toContain('"version": <first page version>');
+      expect(text).toContain("DESIGN_READ_REVISION_CHANGED");
+      expect(text).toContain("every design page until nextOffset is null");
+    }
   });
 
   it("STATES that the design step was skipped, and carries the operator's reason", () => {

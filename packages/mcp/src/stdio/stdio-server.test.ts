@@ -107,6 +107,24 @@ const subject: ConformanceSubject = {
 registerDispatchConformanceSuite(subject);
 
 describe("stdio server tool listing", () => {
+  it("routes design_read through the query envelope without a command id or expected version", async () => {
+    const queries: unknown[] = [];
+    const answer = JSON.stringify({ ok: true, record: { goalRef: "goal-stdio-design", version: 1 } });
+    const port: StdioDispatchPort = {
+      authenticate: () => ({ ok: true }),
+      dispatchCommandBytes: () => { throw new Error("design.read reached the mutation port"); },
+      dispatchQueryBytes: (bytes) => {
+        queries.push(JSON.parse(new TextDecoder().decode(bytes)));
+        return new TextEncoder().encode(answer);
+      },
+    };
+    const result = await withClient(port, (client) => client.callTool({ name: "design_read",
+      arguments: { correlationId: "corr-design-query", payload: { goalRef: "goal-stdio-design" } } }));
+    expect(textOf(result)).toBe(answer);
+    expect(queries).toEqual([{ correlationId: "corr-design-query", payload: { goalRef: "goal-stdio-design" },
+      queryKind: "design.read", schemaVersion: RUNTIME_QUERY_ENVELOPE_VERSION, sessionCredential: CREDENTIAL }]);
+  });
+
   it("advertises exactly the generated tools with their schemas", async () => {
     const listed = await withClient(createRecordingPort(), async (client) => client.listTools());
     expect(listed.tools).toHaveLength(

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { createRuntimeError } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 
@@ -5,6 +6,7 @@ import type { DesignReadInput, DesignReadResult } from "./design/design-store.js
 import { readDesignRevision } from "./design/design-store.js";
 import { authenticateHttpRequest } from "./http/http-adapter.js";
 import type { Authenticator } from "./http/http-contract.js";
+import { JSON_READ_PAGE_MAX_BYTES, JSON_READ_PAGE_MAX_CHARS, jsonReadPage } from "./mcp-json-read-page.js";
 
 /**
  * The design slice's read, answered over MCP as `design.read`.
@@ -20,8 +22,8 @@ import type { Authenticator } from "./http/http-contract.js";
  * matches the stored record's projectId against the INPUT, so a forged input would simply
  * agree with itself. `planning/graph-query.ts:13-18` states the same rule for `graph.get` —
  * the principal check is what stops a principal authenticated for another project from being
- * answered by this daemon at all. The wire payload therefore carries only `{goalRef}` plus an
- * optional `version`, and a payload naming `projectId` is refused as an unknown key.
+ * answered by this daemon at all. The wire payload carries `{goalRef}`, an optional `version`,
+ * and paging fields; a payload naming `projectId` is refused as an unknown key.
  */
 
 /** The design read, narrowed to one method and closed over its store by the composer. */
@@ -46,7 +48,8 @@ export function createDesignReadPort(options: {
  * The payload's whole vocabulary. A key outside this set is refused rather than ignored: an
  * ignored key lets a caller believe a filter was applied that never was.
  */
-const DESIGN_READ_PAYLOAD_KEYS: readonly string[] = Object.freeze(["goalRef", "version"]);
+const DESIGN_READ_PAYLOAD_KEYS: readonly string[] = Object.freeze(["goalRef", "version", "offset", "limit", "contentSha256"]);
+export const DESIGN_READ_PAGE_FORMAT = "moe-design-json-page/1";
 
 const encoder = new TextEncoder();
 
@@ -68,25 +71,47 @@ function queryRefusal(): Uint8Array {
  * the caller. A getter would otherwise run inside this daemon and could return a different
  * value on its second read than the one this function validated.
  */
-function decodePayload(payload: unknown): { goalRef: string; version?: number } | null {
+interface DesignPageRequest {
+  goalRef: string;
+  version?: number;
+  offset: number;
+  limit: number;
+  contentSha256?: string;
+  paged: boolean;
+}
+
+function decodePayload(payload: unknown): DesignPageRequest | null {
   if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return null;
+  const prototype: unknown = Object.getPrototypeOf(payload);
+  if (prototype !== Object.prototype && prototype !== null) return null;
   const request = payload as Record<string, unknown>;
-  for (const key of Object.keys(request)) {
-    if (!DESIGN_READ_PAYLOAD_KEYS.includes(key)) return null;
+  for (const key of Reflect.ownKeys(request)) {
+    if (typeof key !== "string" || !DESIGN_READ_PAYLOAD_KEYS.includes(key)) return null;
+    const descriptor = Object.getOwnPropertyDescriptor(request, key);
+    if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) return null;
   }
   const goalRefDescriptor = Object.getOwnPropertyDescriptor(request, "goalRef");
   if (goalRefDescriptor === undefined) return null;
   const goalRef: unknown = goalRefDescriptor.value;
   if (typeof goalRef !== "string" || goalRef.length === 0) return null;
-  if (!Object.hasOwn(request, "version")) return { goalRef };
-  const versionDescriptor = Object.getOwnPropertyDescriptor(request, "version");
-  if (versionDescriptor === undefined) return null;
-  const version: unknown = versionDescriptor.value;
-  // `Number.isSafeInteger` rejects NaN, Infinity, 1.5 and 2**53 in one predicate. A version
-  // outside the safe range could never match a stored record, so admitting it would turn a
-  // malformed request into a DESIGN_REVISION_ABSENT that reads like a real answer.
-  if (typeof version !== "number" || !Number.isSafeInteger(version) || version < 0) return null;
-  return { goalRef, version };
+  const offset = Object.hasOwn(request, "offset") ? request["offset"] : 0;
+  const limit = Object.hasOwn(request, "limit") ? request["limit"] : JSON_READ_PAGE_MAX_CHARS;
+  if (typeof offset !== "number" || !Number.isSafeInteger(offset) || offset < 0
+    || typeof limit !== "number" || !Number.isSafeInteger(limit) || limit < 1 || limit > JSON_READ_PAGE_MAX_CHARS) return null;
+  const result: DesignPageRequest = { goalRef, offset, limit,
+    paged: ["offset", "limit", "contentSha256"].some((key) => Object.hasOwn(request, key)) };
+  if (Object.hasOwn(request, "version")) {
+    const version = request["version"];
+    if (typeof version !== "number" || !Number.isSafeInteger(version) || version < 0) return null;
+    result.version = version;
+  }
+  if (Object.hasOwn(request, "contentSha256")) {
+    const digest = request["contentSha256"];
+    if (result.version === undefined || typeof digest !== "string" || !/^[0-9a-f]{64}$/u.test(digest)) return null;
+    result.contentSha256 = digest;
+  }
+  if (offset > 0 && result.contentSha256 === undefined) return null;
+  return result;
 }
 
 export interface DesignReadQueryRequest {
@@ -114,7 +139,7 @@ export function answerDesignReadQuery(request: DesignReadQueryRequest): Uint8Arr
   if (!access.ok) return bytesOf(access);
   const decoded = decodePayload(request.body);
   if (decoded === null) return queryRefusal();
-  return bytesOf(request.port.read(
+  const answer = request.port.read(
     decoded.version === undefined
       ? { goalRef: decoded.goalRef, projectId: access.principal.projectId }
       : {
@@ -122,5 +147,16 @@ export function answerDesignReadQuery(request: DesignReadQueryRequest): Uint8Arr
         projectId: access.principal.projectId,
         version: decoded.version,
       },
-  ));
+  );
+  if (!answer.ok) return bytesOf(answer);
+  const text = JSON.stringify(answer);
+  const contentSha256 = createHash("sha256").update(text, "utf8").digest("hex");
+  if (decoded.contentSha256 !== undefined && decoded.contentSha256 !== contentSha256) {
+    return bytesOf({ ok: false, code: "DESIGN_READ_REVISION_CHANGED", layer: "DESIGN_READ" });
+  }
+  if (decoded.offset > text.length) return queryRefusal();
+  if (!decoded.paged && encoder.encode(text).length <= JSON_READ_PAGE_MAX_BYTES) return encoder.encode(text);
+  return jsonReadPage(text, decoded.offset, decoded.limit, {
+    ok: true, format: DESIGN_READ_PAGE_FORMAT, version: answer.record.version, contentSha256,
+  }) ?? bytesOf({ ok: false, code: "DESIGN_READ_PAGE_UNAVAILABLE", layer: "DESIGN_READ" });
 }

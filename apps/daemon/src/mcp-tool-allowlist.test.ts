@@ -738,12 +738,14 @@ describe("task-749e585a the probe-interval kind is unreachable over MCP", () => 
     expect(frame["stage"]).toBe("DISPATCH");
     // THE DISCRIMINATOR THAT KEEPS `toBe("DISPATCH")` HONEST: the seam still answers REGISTRY
     // for a kind it genuinely does not serve as a COMMAND, so the assertion above is a statement
-    // about THIS kind rather than about a stage the seam stopped using. `design.read` is the
+    // about THIS kind rather than about a stage the seam stopped using. `budget.propose_raise` is the
     // control because it is a REAL member of RUNTIME_COMMAND_KINDS -- an invented spelling would
     // be refused earlier still, at DECODE, and prove nothing about the registry.
+    expect(RUNTIME_COMMAND_KINDS).toContain("budget.propose_raise");
+    expect(provider.provide().registry.has("budget.propose_raise")).toBe(false);
     const unservedBytes = await port.dispatchCommandBytes(encoder.encode(JSON.stringify({
       commandId: "cmd-probe-interval-control",
-      commandKind: "design.read",
+      commandKind: "budget.propose_raise",
       correlationId: "corr-probe-interval-control",
       expectedVersion: 0,
       payload: {},
