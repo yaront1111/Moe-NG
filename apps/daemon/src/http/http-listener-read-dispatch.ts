@@ -46,6 +46,7 @@ import {
 } from "./deployments-health-read.js";
 import { PREVIEW_READ_PATH, handlePreviewReadRequest } from "./preview-read.js";
 import { RELEASE_READ_PATH, handleReleaseReadRequest } from "./release-read.js";
+import { checkPreviewCaptureHeaders } from "./preview-capture-fence.js";
 import {
   handlePreviewCaptureRequest, isPreviewCapturePath, locatePreviewCapture,
   previewCaptureRequestPathOf,
@@ -526,9 +527,12 @@ function serveReleaseRead(
  * static host's own machinery. It is intercepted BEFORE the roster check so an unhosted daemon
  * (`assets === null`) still serves captures — the two roots are independent.
  *
- * `checkHeaders` runs on it exactly as it does on the JSON surface, so the route sits behind
- * the same Host/Origin/CSRF fence, and `serveAsset` is handed the NARROWED locator so the
- * bytes it will publish are images under the previews root and nothing else.
+ * It sits behind `checkPreviewCaptureHeaders`, NOT the JSON surface's `checkHeaders`: that
+ * fence demands an Origin, which a same-origin GET never carries, and it answered 403 to every
+ * capture the hosted control room asked for (measured). Host, a presented Origin, Sec-Fetch-Site
+ * and the CSRF token are still judged there, and the handler still demands the credential.
+ * `serveAsset` is handed the NARROWED locator so the bytes it will publish are images under
+ * the previews root and nothing else.
  */
 function servePreviewCapture(
   response: ServerResponse,
@@ -566,9 +570,9 @@ export async function serveReadDispatch(
   path: string,
 ): Promise<void> {
   // Before the roster check, because the capture route is matched by PREFIX and lives outside
-  // `JSON_ROUTES`; it carries the same Host/Origin/CSRF fence as the JSON surface.
+  // `JSON_ROUTES`; it carries the GET-shaped fence its own module states.
   if (isPreviewCapturePath(path)) {
-    const captureFault = checkHeaders(request, authority, origin, options.csrfToken);
+    const captureFault = checkPreviewCaptureHeaders(request, authority, origin, options.csrfToken);
     if (captureFault !== null) { refuseRequest(response, captureFault); return; }
     servePreviewCapture(response, request, options, authority, path);
     return;

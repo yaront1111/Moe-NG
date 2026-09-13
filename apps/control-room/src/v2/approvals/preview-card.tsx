@@ -1,8 +1,10 @@
 import { useState } from "react";
 import type { JSX } from "react";
 
+import type { CaptureLoader } from "../../live/live-preview-capture.js";
 import { ARROW_RIGHT } from "../glyphs.js";
 import type { PreviewFacts } from "./needs-you-preview.js";
+import { CaptureImage } from "./preview-capture-image.js";
 import type { PreviewDecision, PreviewFinding } from "./preview-port.js";
 
 /**
@@ -13,9 +15,13 @@ import type { PreviewDecision, PreviewFinding } from "./preview-port.js";
  * it the control-room url for free. The daemon already refuses to SERVE a url that is not
  * http/https and carries no userinfo (preview-read.ts), so what arrives here is safe to click.
  *
- * THE SCREENSHOTS COME FROM THE CAPTURE ROUTE, never from a filesystem path. Each `src` was
+ * THE SCREENSHOTS COME FROM THE CAPTURE ROUTE, never from a filesystem path. Each url was
  * built by `previewCaptureUrl` from the receipt's own project-relative path, so a picture that
- * cannot be placed inside this receipt's own previews directory is simply not offered.
+ * cannot be placed inside this receipt's own previews directory is simply not offered. It is
+ * FETCHED with the session headers and shown through an object URL, never set as a bare
+ * `<img src>`: the route demands the CSRF token and the session credential, which an image
+ * element cannot carry, and the bare load answered 403 for every capture (measured). Without a
+ * loader the card says so instead of showing a broken image.
  *
  * REJECT NAMES A NODE, and the roster is the ACTIVE GRAPH's own nodes from the runs read - not
  * free text. That is what makes DoD 3's "the findings name nodes of the active graph" true in
@@ -40,18 +46,25 @@ export interface PreviewCardProps {
   readonly accepted: boolean;
   readonly busy: boolean;
   readonly facts: PreviewFacts;
+  /** Fetches one capture with the session headers. Absent means no capture can be shown. */
+  readonly loadCapture?: CaptureLoader | undefined;
   readonly onDecide: (decision: PreviewDecision, findings: readonly PreviewFinding[]) => void;
 }
 
 const NO_FINDINGS: readonly PreviewFinding[] = Object.freeze([]);
+/** No session to fetch with: every capture reads as unavailable, and none is linked bare. */
+const NO_LOADER: CaptureLoader = async (): Promise<Blob | null> => null;
 
-function Captures({ facts }: { readonly facts: PreviewFacts }): JSX.Element | null {
+function Captures({ facts, load }: {
+  readonly facts: PreviewFacts;
+  readonly load: CaptureLoader;
+}): JSX.Element | null {
   if (facts.captures.length === 0) return null;
   return (
     <ul className="cr2-preview-shots" data-testid="cr.needsyou.preview.shots">
       {facts.captures.map((capture) => (
         <li className="cr2-preview-shot" key={capture.url}>
-          <img alt={capture.alt} className="cr2-preview-image" src={capture.url} />
+          <CaptureImage alt={capture.alt} load={load} url={capture.url} />
         </li>
       ))}
     </ul>
@@ -84,7 +97,9 @@ function SentFindings({ findings }: {
   );
 }
 
-export function PreviewCard({ accepted, busy, facts, onDecide }: PreviewCardProps): JSX.Element {
+export function PreviewCard({
+  accepted, busy, facts, loadCapture, onDecide,
+}: PreviewCardProps): JSX.Element {
   const [nodeRef, setNodeRef] = useState("");
   const [detail, setDetail] = useState("");
   const [sent, setSent] = useState<readonly PreviewFinding[]>(NO_FINDINGS);
@@ -102,7 +117,7 @@ export function PreviewCard({ accepted, busy, facts, onDecide }: PreviewCardProp
       >
         {`Open your product ${ARROW_RIGHT} ${facts.url}`}
       </a>
-      <Captures facts={facts} />
+      <Captures facts={facts} load={loadCapture ?? NO_LOADER} />
       {accepted && sent.length === 0 ? null : (
         <div className="cr2-preview-reject">
           <label className="cr2-preview-label" htmlFor="cr-preview-node">

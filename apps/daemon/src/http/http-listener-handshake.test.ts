@@ -97,8 +97,9 @@ async function listener(options: {
 
 function expectPolicyHeaders(reply: Reply, cacheControl = "no-cache"): void {
   expect(reply.headers["content-security-policy"])
-    .toBe("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-      + "frame-ancestors 'none'; base-uri 'none'; object-src 'none'");
+    .toBe("default-src 'self'; img-src 'self' blob:; script-src 'self'; "
+      + "style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; "
+      + "object-src 'none'");
   expect(reply.headers["x-frame-options"]).toBe("DENY");
   expect(reply.headers["cross-origin-resource-policy"]).toBe("same-origin");
   expect(reply.headers["referrer-policy"]).toBe("no-referrer");

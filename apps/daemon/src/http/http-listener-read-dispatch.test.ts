@@ -456,9 +456,13 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     expect(intercept).toBeLessThan(rosterCheck);
     expect(JSON_ROUTES).not.toContain("/preview/capture");
     expect(proxiedPaths().has("/preview/capture")).toBe(true);
-    // It is fenced by the same Host/Origin/CSRF check as the JSON surface, not by the
-    // asset host's bare Host check.
-    expect(source).toContain("const captureFault = checkHeaders(request, authority, origin,");
+    // It is fenced by the capture route's OWN check - Host, an Origin only when one is sent,
+    // Sec-Fetch-Site, and the CSRF token - not by the JSON surface's `checkHeaders`, which
+    // demands an Origin no same-origin GET carries, and not by the asset host's bare Host check.
+    expect(source).toContain(
+      "const captureFault = checkPreviewCaptureHeaders(request, authority, origin,",
+    );
+    expect(source).not.toContain("const captureFault = checkHeaders(");
     // And it is served through the NARROWED locator, never the bundle-wide one.
     expect(source).toContain("locatePreviewCapture,");
   });

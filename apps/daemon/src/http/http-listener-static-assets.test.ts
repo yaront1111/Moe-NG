@@ -294,8 +294,9 @@ function expectAssetRefusal(reply: AssetReply, code: string, status: number): vo
 /** Every policy header, by exact value, on one reply. */
 function expectPolicyHeaders(reply: AssetReply): void {
   expect(reply.headers["content-security-policy"])
-    .toBe("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-      + "frame-ancestors 'none'; base-uri 'none'; object-src 'none'");
+    .toBe("default-src 'self'; img-src 'self' blob:; script-src 'self'; "
+      + "style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; "
+      + "object-src 'none'");
   expect(reply.headers["x-frame-options"]).toBe("DENY");
   expect(reply.headers["cross-origin-resource-policy"]).toBe("same-origin");
   expect(reply.headers["referrer-policy"]).toBe("no-referrer");
@@ -357,8 +358,9 @@ it("publishes the policy header set as one frozen record and sends it on EVERY s
   expect(CONTROL_ROOM_ASSET_RESPONSE_HEADERS).toEqual({
     "cache-control": "no-cache",
     "content-security-policy":
-      "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-      + "frame-ancestors 'none'; base-uri 'none'; object-src 'none'",
+      "default-src 'self'; img-src 'self' blob:; script-src 'self'; "
+      + "style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; "
+      + "object-src 'none'",
     "cross-origin-resource-policy": "same-origin",
     "referrer-policy": "no-referrer",
     "x-content-type-options": "nosniff",
@@ -370,6 +372,15 @@ it("publishes the policy header set as one frozen record and sends it on EVERY s
     .toContain("style-src 'self' 'unsafe-inline'");
   expect(CONTROL_ROOM_ASSET_RESPONSE_HEADERS["content-security-policy"])
     .not.toContain("script-src 'self' 'unsafe-inline'");
+  // The preview card fetches each capture with the session headers and shows it through an
+  // object URL, which is a blob: source; without this clause the bundle's own CSP blocks the
+  // image it just fetched. The exception admits IMAGES only: script and default stay 'self'.
+  expect(CONTROL_ROOM_ASSET_RESPONSE_HEADERS["content-security-policy"])
+    .toContain("img-src 'self' blob:");
+  expect(CONTROL_ROOM_ASSET_RESPONSE_HEADERS["content-security-policy"])
+    .toMatch(/^default-src 'self'; /u);
+  expect(CONTROL_ROOM_ASSET_RESPONSE_HEADERS["content-security-policy"])
+    .not.toMatch(/script-src[^;]*blob:/u);
   await withAssetHost(async (listener) => {
     const success = await fetchAsset(listener, "/");
     expect(success.status).toBe(200);

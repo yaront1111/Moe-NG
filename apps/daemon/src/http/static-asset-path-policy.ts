@@ -48,12 +48,19 @@ export const CONTROL_ROOM_ASSET_CONTENT_TYPES = Object.freeze({
 
 export const CONTROL_ROOM_ASSET_MAX_BYTES = 8 * 1024 * 1024;
 
-/** Applied to every static-route reply, including refusals and 304s. */
+/**
+ * Applied to every static-route reply, including refusals and 304s. `img-src` admits `blob:`
+ * because the preview card fetches each capture with the session headers (the capture route is
+ * credential-gated, and an `<img src>` can carry no header) and shows it through an object
+ * URL; under the bare `default-src 'self'` the bundle blocked the image it had just fetched.
+ * Images only: script and default stay 'self'.
+ */
 export const CONTROL_ROOM_ASSET_RESPONSE_HEADERS = Object.freeze({
   "cache-control": "no-cache",
   "content-security-policy":
-    "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-    + "frame-ancestors 'none'; base-uri 'none'; object-src 'none'",
+    "default-src 'self'; img-src 'self' blob:; script-src 'self'; "
+    + "style-src 'self' 'unsafe-inline'; frame-ancestors 'none'; base-uri 'none'; "
+    + "object-src 'none'",
   "cross-origin-resource-policy": "same-origin",
   "referrer-policy": "no-referrer",
   "x-content-type-options": "nosniff",

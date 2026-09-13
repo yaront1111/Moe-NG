@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { JSX } from "react";
 
+import type { CaptureLoader } from "../../live/live-preview-capture.js";
 import { OutcomeNote } from "../components/outcome-note.js";
 import { IncidentCard } from "./incident-card.js";
 import { incidentKeyOf } from "./needs-you-incident.js";
@@ -38,6 +39,8 @@ export type NeedsYouChoice = "REPLAN";
 export interface NeedsYouProps {
   readonly data: NeedsYouData;
   readonly decisionResults?: ReadonlyMap<string, DecisionResult> | undefined;
+  /** Fetches a PREVIEW item's captures with the session headers; absent shows none. */
+  readonly loadCapture?: CaptureLoader | undefined;
   /** Spends the daemon's offer this item carries; absent means no inline decision. */
   readonly onDecide?: ((item: NeedsYouItem, choice?: NeedsYouChoice) => void) | undefined;
   /** Drops an INCIDENT item from THIS queue only; absent means the card cannot be dismissed. */
@@ -116,9 +119,11 @@ function resultLine(decision: InlineDecision, result: DecisionResult | undefined
 }
 
 function DecisionCard({
-  item, onDecide, onDismissIncident, onOpenBoard, onPreviewDecide, onRollback, result,
+  item, loadCapture, onDecide, onDismissIncident, onOpenBoard, onPreviewDecide, onRollback,
+  result,
 }: {
   readonly item: NeedsYouItem;
+  readonly loadCapture: NeedsYouProps["loadCapture"];
   readonly onDecide: NeedsYouProps["onDecide"];
   readonly onDismissIncident: NeedsYouProps["onDismissIncident"];
   readonly onRollback: NeedsYouProps["onRollback"];
@@ -153,6 +158,7 @@ function DecisionCard({
             accepted={done}
             busy={result?.busy === true}
             facts={item.preview}
+            loadCapture={loadCapture}
             onDecide={(decision, findings): void => onPreviewDecide(item, decision, findings)}
           />
         )}
@@ -219,7 +225,8 @@ function DecisionCard({
 }
 
 export function NeedsYou({
-  data, decisionResults, onDecide, onDismissIncident, onOpenBoard, onPreviewDecide, onRollback,
+  data, decisionResults, loadCapture, onDecide, onDismissIncident, onOpenBoard, onPreviewDecide,
+  onRollback,
 }: NeedsYouProps): JSX.Element {
   return (
     <section className="cr2-needs" data-testid="cr.needsyou.root">
@@ -243,6 +250,7 @@ export function NeedsYou({
             <DecisionCard
               item={item}
               key={`${item.kind}:${decisionKeyOf(item)}`}
+              loadCapture={loadCapture}
               onDecide={onDecide}
               onDismissIncident={onDismissIncident}
               onOpenBoard={onOpenBoard}

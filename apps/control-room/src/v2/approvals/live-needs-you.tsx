@@ -8,6 +8,8 @@ import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
 import type { LiveSetup } from "../../live/live-config.js";
 import { readPreview } from "../../live/live-preview.js";
 import type { PreviewReadOutcome } from "../../live/live-preview.js";
+import { createCaptureLoader } from "../../live/live-preview-capture.js";
+import type { CaptureLoader } from "../../live/live-preview-capture.js";
 import { readDeployments } from "../../live/live-deployments.js";
 import { readDeploymentsHealth } from "../../live/live-deployments-health.js";
 import type { DeploymentsHealthOutcome } from "../../live/live-deployments-health.js";
@@ -58,6 +60,8 @@ export interface LiveNeedsYouProps {
   readonly closePort?: GoalClosePort | undefined;
   /** Injectable for tests; the default spends the attached session's own wire. */
   readonly escalationPort?: EscalationPort | undefined;
+  /** Injectable for tests; the default GETs /preview/capture/... with the session headers. */
+  readonly loadCapture?: CaptureLoader | undefined;
   /** Injectable for tests; the default creates the successor goal through the session's wire. */
   readonly successorPort?: ReplanSuccessorPort | undefined;
   readonly onConnection?: ((connection: SurfaceFrame["connection"]) => void) | undefined;
@@ -82,10 +86,10 @@ export interface LiveNeedsYouProps {
 }
 
 export function LiveNeedsYou({
-  closePort, escalationPort, onConnection, onCount, onOpenBoard, previewPort, readCoverage,
-  readDeployments: readDeploymentsProp, readHealth: readHealthProp, readPreview: readPreviewProp,
-  readRelease: readReleaseProp, readRuns: readRunsProp, rollbackPort, setup,
-  successorPort,
+  closePort, escalationPort, loadCapture: loadCaptureProp, onConnection, onCount, onOpenBoard,
+  previewPort, readCoverage, readDeployments: readDeploymentsProp, readHealth: readHealthProp,
+  readPreview: readPreviewProp, readRelease: readReleaseProp, readRuns: readRunsProp,
+  rollbackPort, setup, successorPort,
 }: LiveNeedsYouProps): JSX.Element {
   const [surface, setSurface] = useState<SurfaceFrame | null>(null);
   const [catalog, setCatalog] = useState<GoalCatalogFrame | null>(null);
@@ -95,6 +99,8 @@ export function LiveNeedsYou({
   const [escalate] = useState(() => escalationPort ?? createEscalationPort(setup));
   const [close] = useState(() => closePort ?? createGoalClosePort(setup));
   const [preview] = useState(() => previewPort ?? createPreviewPort(setup));
+  // ONE loader for the session: a fresh function per render would refetch every capture.
+  const [captureLoader] = useState(() => loadCaptureProp ?? createCaptureLoader(setup.headers));
   const [previewReader] = useState(() => readPreviewProp
     ?? ((goalId: string): Promise<PreviewReadOutcome> => readPreview(goalId, setup.headers)));
   const [releaseReader] = useState(() => readReleaseProp
@@ -226,6 +232,7 @@ export function LiveNeedsYou({
     <NeedsYou
       data={data}
       decisionResults={results}
+      loadCapture={captureLoader}
       onDecide={onDecide}
       onDismissIncident={onDismissIncident}
       onOpenBoard={onOpenBoard}

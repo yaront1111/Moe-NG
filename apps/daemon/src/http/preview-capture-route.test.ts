@@ -115,7 +115,12 @@ interface Reply {
 async function fetchCapture(
   listener: ControlRoomListener,
   path: string,
-  init: { readonly credential?: string | null; readonly method?: string } = {},
+  init: {
+    readonly credential?: string | null;
+    /** Exact header overrides; `null` DELETES the header the default bundle would send. */
+    readonly headers?: Readonly<Record<string, string | null>>;
+    readonly method?: string;
+  } = {},
 ): Promise<Reply> {
   const credential = init.credential === undefined ? GOOD_CREDENTIAL : init.credential;
   const headers: Record<string, string> = {
@@ -125,6 +130,10 @@ async function fetchCapture(
     "x-moe-protocol-version": WIRE_PROTOCOL_VERSION,
   };
   if (credential !== null) headers["x-moe-session-credential"] = credential;
+  for (const [name, value] of Object.entries(init.headers ?? {})) {
+    if (value === null) delete headers[name];
+    else headers[name] = value;
+  }
   return await new Promise<Reply>((resolve, reject) => {
     const outbound = httpRequest(
       { headers, host: "127.0.0.1", method: init.method ?? "GET", path, port: listener.port, setHost: false },
@@ -440,6 +449,66 @@ describe("method, authority and composition", () => {
     await withCaptureHost(async (listener) => {
       const reply = await fetchCapture(listener, capture(`${GOAL}/${SHA}/journey-home.png`));
       expect(reply.status).toBe(200);
+    });
+  });
+
+  /**
+   * WHAT A BROWSER CAN SEND. The Fetch standard appends `Origin` to a GET only when the
+   * request is cross-origin; the hosted control room loads a capture from the origin that
+   * served it, so its fetch carries the custom headers and NO Origin. Measured before the
+   * route grew its own fence: that request answered 403 LISTENER_ORIGIN_INVALID, so every
+   * screenshot on every preview card was refused. The same-origin GET below is the request the
+   * control room's `createCaptureLoader` sends, header for header.
+   */
+  it("serves a same-origin GET that carries the session headers and NO Origin", async () => {
+    await withCaptureHost(async (listener) => {
+      const reply = await fetchCapture(listener, capture(`${GOAL}/${SHA}/journey-home.png`), {
+        headers: {
+          accept: "image/png", origin: null, "sec-fetch-dest": "empty",
+          "sec-fetch-mode": "cors", "sec-fetch-site": "same-origin",
+        },
+      });
+      expect(reply.status).toBe(200);
+      expect(reply.contentType).toBe("image/png");
+      expect(reply.body.equals(PNG)).toBe(true);
+    });
+  });
+
+  it("refuses a bare <img src> load, which can carry neither the token nor the credential", async () => {
+    // This is the request the preview card used to make. It is refused, and by the CSRF
+    // clause: Host matched, no Origin was sent (which a same-origin image never does), and the
+    // token is absent. The card therefore fetches the bytes and shows them by object URL.
+    await withCaptureHost(async (listener) => {
+      expectRefusal(await fetchCapture(listener, capture(`${GOAL}/${SHA}/journey-home.png`), {
+        credential: null,
+        headers: {
+          accept: "image/avif,image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5",
+          origin: null, "sec-fetch-dest": "image", "sec-fetch-mode": "no-cors",
+          "sec-fetch-site": "same-origin", "x-moe-csrf": null, "x-moe-protocol-version": null,
+        },
+      }), "LISTENER_CSRF_INVALID", 403);
+    });
+  });
+
+  it("refuses a foreign Origin, and a cross-site fetch that sends none, as LISTENER_ORIGIN_INVALID", async () => {
+    await withCaptureHost(async (listener) => {
+      const path = capture(`${GOAL}/${SHA}/journey-home.png`);
+      // A cross-origin fetch DOES carry Origin, and a wrong one is refused as before.
+      expectRefusal(await fetchCapture(listener, path, {
+        headers: { origin: "http://evil.example:1" },
+      }), "LISTENER_ORIGIN_INVALID", 403);
+      // `Sec-Fetch-Site` is judged when a browser sends it: anything but same-origin is refused
+      // even with every custom header present, so the relaxed Origin clause admits no cross-site
+      // document that somehow attached them.
+      for (const site of ["cross-site", "same-site", "none"]) {
+        expectRefusal(await fetchCapture(listener, path, {
+          headers: { origin: null, "sec-fetch-site": site },
+        }), "LISTENER_ORIGIN_INVALID", 403);
+      }
+      // And the token is still demanded of a same-origin GET that presents no Origin.
+      expectRefusal(await fetchCapture(listener, path, {
+        headers: { origin: null, "sec-fetch-site": "same-origin", "x-moe-csrf": "wrong" },
+      }), "LISTENER_CSRF_INVALID", 403);
     });
   });
 

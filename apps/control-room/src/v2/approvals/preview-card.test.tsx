@@ -1,7 +1,8 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
+import type { CaptureLoader } from "../../live/live-preview-capture.js";
 import { NeedsYou } from "./needs-you.js";
 import type { NeedsYouData, NeedsYouItem } from "./needs-you-model.js";
 import type { PreviewFacts } from "./needs-you-preview.js";
@@ -9,12 +10,24 @@ import type { PreviewDecision, PreviewFinding } from "./preview-port.js";
 
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+  // jsdom mints no object URLs; a stand-in lets the fetched capture's src be asserted by value.
+  Object.defineProperty(URL, "createObjectURL", {
+    configurable: true, value: (): string => "blob:mock/orders",
+  });
+  Object.defineProperty(URL, "revokeObjectURL", { configurable: true, value: (): void => undefined });
+});
+afterAll(() => {
+  Reflect.deleteProperty(URL, "createObjectURL");
+  Reflect.deleteProperty(URL, "revokeObjectURL");
 });
 afterEach(cleanup);
 
+const CAPTURE_URL = "/preview/capture/goal-1/abc/orders.png";
+const PNG = new Blob([Uint8Array.from([0x89, 0x50, 0x4e, 0x47])], { type: "image/png" });
+
 const FACTS: PreviewFacts = {
   affordance: { commandKind: "preview.decide", targetAggregateId: "preview:goal-1" },
-  captures: [{ alt: "Screenshot of Read orders", url: "/preview/capture/goal-1/abc/orders.png" }],
+  captures: [{ alt: "Screenshot of Read orders", url: CAPTURE_URL }],
   nodes: [
     { nodeKey: "api", nodeRef: "node-api", objective: "Serve the orders route" },
     { nodeKey: "ui", nodeRef: "node-ui", objective: "Render the orders page" },
@@ -44,6 +57,7 @@ type PreviewDecideMock = ReturnType<typeof vi.fn<
 const renderCard = (
   over: {
     readonly item?: NeedsYouItem;
+    readonly loadCapture?: CaptureLoader | undefined;
     readonly onPreviewDecide?: PreviewDecideMock | undefined;
     readonly results?: ReadonlyMap<string, { busy: boolean; outcome: unknown }>;
   } = {},
@@ -53,6 +67,7 @@ const renderCard = (
     <NeedsYou
       data={dataWith(over.item ?? previewItem(FACTS))}
       decisionResults={over.results as never}
+      loadCapture={over.loadCapture}
       onDecide={vi.fn()}
       onOpenBoard={vi.fn()}
       onPreviewDecide={onPreviewDecide}
@@ -62,16 +77,39 @@ const renderCard = (
 };
 
 describe("the Gate 2 preview card (DoD 1)", () => {
-  it("shows the loopback url as a link that opens in a NEW TAB, and the captures inline", () => {
-    renderCard();
+  it("shows the loopback url as a link that opens in a NEW TAB, and the captures inline", async () => {
+    const loadCapture = vi.fn(async (_url: string): Promise<Blob | null> => PNG);
+    renderCard({ loadCapture });
 
     const link = screen.getByTestId("cr.needsyou.preview.link");
     expect(link.getAttribute("href")).toBe("http://127.0.0.1:4173/");
     expect(link.getAttribute("target")).toBe("_blank");
     expect(link.getAttribute("rel")).toBe("noreferrer");
 
-    const shot = screen.getByAltText("Screenshot of Read orders");
-    expect(shot.getAttribute("src")).toBe("/preview/capture/goal-1/abc/orders.png");
+    // THE CAPTURE IS FETCHED WITH THE SESSION HEADERS, NOT LINKED. The route demands the CSRF
+    // token and the credential, which an <img src> cannot carry: the bare load this card used
+    // to make answered 403 for every screenshot (measured on the daemon's own listener).
+    expect(loadCapture).toHaveBeenCalledWith(CAPTURE_URL);
+    // The pending placeholder is a span with role img; wait for the element the bytes became.
+    const shot = await waitFor(() => {
+      const image = document.querySelector("img");
+      if (image === null) throw new Error("no <img> yet");
+      return image;
+    });
+    expect(shot.getAttribute("alt")).toBe("Screenshot of Read orders");
+    expect(shot.getAttribute("src")).toBe("blob:mock/orders");
+    expect(document.querySelector(`[src^="/preview/capture"]`)).toBeNull();
+  });
+
+  it("never links the capture route bare: without a loader it says the capture is unavailable", async () => {
+    renderCard();
+
+    expect(document.querySelector(`[src^="/preview/capture"]`)).toBeNull();
+    expect(screen.getByTestId("cr.needsyou.preview.shot").textContent)
+      .toBe("Screenshot of Read orders is loading.");
+    await screen.findByText("Screenshot of Read orders could not be loaded.");
+    expect(document.querySelector("img")).toBeNull();
+    expect(document.querySelector(`[src^="/preview/capture"]`)).toBeNull();
   });
 
   it("offers BOTH answers: approve, and send back with a finding", () => {
