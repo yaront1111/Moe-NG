@@ -172,8 +172,12 @@ describe("probeAgentVersion answers, or answers nothing, but never throws or han
     grandchildren.push(pid);
     await expect(probe).resolves.toBeNull();
     // Signal 0 delivers nothing and only asks; once the probe has answered, the grandchild
-    // must already be gone, not merely orphaned.
-    expect(() => process.kill(pid, 0)).toThrow();
+    // must be gone, not merely orphaned. BOUNDED WAIT, not an instant assertion: on Linux the
+    // killed grandchild is a zombie until its new parent reaps it, and signal 0 still succeeds
+    // on a zombie (the ubuntu gate red here once on 2026-09-13 while the same sha was green on
+    // a second run). What the arm proves is that the tree-kill was delivered, which is the
+    // grandchild vanishing within a reap window rather than at the exact instant of the answer.
+    await vi.waitFor(() => { expect(() => process.kill(pid, 0)).toThrow(); }, { interval: 25, timeout: 2_000 });
   });
 
   it("answers null for a command the SPAWN layer refuses to quote", async () => {
