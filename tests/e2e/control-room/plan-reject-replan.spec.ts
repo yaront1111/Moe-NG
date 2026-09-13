@@ -1,3 +1,4 @@
+import { openProductDefinition, openProductRecord } from "./product-navigation.js";
 import type { ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
@@ -99,17 +100,13 @@ const isRecord = (value: unknown): value is Readonly<Record<string, unknown>> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 /**
- * The plan lives inside the goal page's `<details>` fold, which cordum-app opens BY ITSELF
- * only while the daemon is offering a decision. In the sent-back state it is deliberately
- * closed, so the journey opens it the way a person would - by clicking the summary - rather
- * than reloading, which would drop the in-app route and the pairing with it.
+ * The plan is a product record. Follow its tab without reloading the paired session,
+ * including when a sent-back plan has rebound to a successor run.
  */
 async function openPlanFold(page: Page): Promise<void> {
-  const fold = page.getByTestId("cr.goal.planfold");
-  await expect(fold).toBeAttached({ timeout: 60_000 });
-  if (await fold.evaluate((node) => (node as HTMLDetailsElement).open)) return;
-  // Direct child only: the refusal notes inside the fold are themselves `<details>`.
-  await fold.locator("> summary").click();
+  await openProductRecord(page, "Build plan");
+  const current = page.getByRole("button", { name: "Review current work", exact: true });
+  if (await current.isVisible()) await current.click();
   await expect(page.getByTestId("cr.approve.screen")).toBeVisible({ timeout: 30_000 });
 }
 
@@ -239,6 +236,7 @@ test("the operator sends a plan back in the browser and the gate follows the suc
     children.push(daemon.child);
     if (daemon.child.pid !== undefined) pids.push(daemon.child.pid);
     const origin = await daemon.waitFor(ORIGIN_LINE, DAEMON_READY_MS);
+    expect(origin, `daemon did not start:\n${daemon.transcript().slice(-1200)}`).not.toBeNull();
     expect(origin, `daemon origin:\n${daemon.transcript().slice(-800)}`)
       .toMatch(/^http:\/\/127\.0\.0\.1:\d+$/u);
     if (typeof origin !== "string") return;
@@ -328,6 +326,7 @@ test("the operator sends a plan back in the browser and the gate follows the suc
 
     // 7. The operator approves Gate 1 from the card, so the compiler has a gate to cite.
     await page.getByTestId(`cr.goals.card.${goalId}.open`).click();
+    await openProductDefinition(page);
     const card = page.getByTestId("cr.gate1.card");
     await expect(card, "the Gate 1 card must render for the source-bound goal")
       .toBeVisible({ timeout: 30_000 });
@@ -362,6 +361,11 @@ test("the operator sends a plan back in the browser and the gate follows the suc
     // never offered at all.
     await offerOf(origin, "approval.decide_intent", rejectedRunId);
 
+    // The proposal just approved remains a historical artifact. Open the product's
+    // current work explicitly before inspecting the newly compiled plan.
+    await page.getByTestId("cr.nav.goals").click();
+    await page.getByTestId(`cr.goals.card.${goalId}.open`).click();
+
     // 9. THE OPERATOR SENDS THE PLAN BACK, in the browser, with a reason. NO RELOAD: the
     //    board polls the surface every 2s, so the grant arrives in the page the operator is
     //    already on - which is also the only way to keep the paired session.
@@ -370,6 +374,7 @@ test("the operator sends a plan back in the browser and the gate follows the suc
     await expect(rejectButton).toBeVisible({ timeout: 60_000 });
     // The browser's OWN fence, before any round trip: no reason typed, nothing to send.
     await expect(rejectButton).toBeDisabled();
+    await expect(page.getByTestId("cr.approve.reason.input")).toBeEditable({ timeout: 30_000 });
     await page.getByTestId("cr.approve.reason.input").fill(REJECT_REASON);
     await expect(rejectButton).toBeEnabled();
     await rejectButton.click();

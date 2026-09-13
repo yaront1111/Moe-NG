@@ -38,6 +38,7 @@ export interface ProjectManagerRequestContext {
   readonly authority: string;
   readonly csrfToken: string;
   readonly manager: ProjectManagerPort;
+  readonly operatorChannelAvailable: () => boolean;
   readonly origin: string;
   readonly pairing: PairingApprovalWindow;
   readonly sessionSecret: string;
@@ -138,6 +139,10 @@ async function servePair(
     refusePairing(response, refusePairingApproval("PAIRING_CREATE_REQUEST_INVALID"));
     return;
   }
+  if (!context.operatorChannelAvailable()) {
+    refuseManagerRequest(response, "OPERATOR_CHANNEL_UNAVAILABLE");
+    return;
+  }
   const created = context.pairing.requests.create();
   if (!created.ok) { refusePairing(response, created); return; }
   reply(response, 200, created);
@@ -167,7 +172,12 @@ async function servePairClaim(
     refusePairing(response, refusePairingApproval("PAIRING_CLAIM_REQUEST_INVALID")); return;
   }
   const reserved = context.pairing.requests.reserve(requestId);
-  if (!reserved.ok) { refusePairing(response, reserved); return; }
+  if (!reserved.ok) {
+    if (reserved.code === "PAIRING_APPROVAL_REQUIRED" && !context.operatorChannelAvailable()) {
+      refuseManagerRequest(response, "OPERATOR_CHANNEL_UNAVAILABLE");
+    } else refusePairing(response, reserved);
+    return;
+  }
   try {
     // The credential is handed over ONCE, in this body, and the client then presents it
     // on PROJECT_MANAGER_CREDENTIAL_HEADER. It is deliberately not a cookie: a cookie has

@@ -1,6 +1,8 @@
-import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { landingEnvironment } from "../repository/git-landing-port.js";
 
 /**
  * THE FIXTURE PRODUCT the preview runner is driven against: a real workspace on disk with a
@@ -20,6 +22,8 @@ import { join } from "node:path";
  */
 
 const created: string[] = [];
+const fixtureFiles = new Map<string, readonly string[]>();
+const fixtureCommits = new Map<string, string>();
 
 export interface FixtureWorkspaceInput {
   /** Extra files to write, path relative to the workspace root. */
@@ -37,15 +41,37 @@ export function fixtureWorkspace(input: FixtureWorkspaceInput): string {
     "utf8",
   );
   for (const [path, content] of Object.entries(input.files ?? {})) {
+    mkdirSync(dirname(join(root, path)), { recursive: true });
     writeFileSync(join(root, path), content, "utf8");
   }
+  fixtureFiles.set(root, ["package.json", ...Object.keys(input.files ?? {})]);
   return root;
+}
+
+/** Commit only the fixture's declared source, so admission proves an actual Git object. */
+export function commitFixtureWorkspace(workspace: string): string {
+  const existing = fixtureCommits.get(workspace);
+  if (existing !== undefined) return existing;
+  const paths = fixtureFiles.get(workspace);
+  if (paths === undefined) throw new Error("not a preview fixture workspace");
+  const git = (args: readonly string[]): string => execFileSync("git", [...args], {
+    cwd: workspace, env: landingEnvironment(), encoding: "utf8", windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
+  }).trim();
+  git(["init", "--template=", "."]);
+  git(["-c", "core.autocrlf=false", "add", "--", ...paths]);
+  git(["-c", "user.name=Preview Fixture", "-c", "user.email=preview@example.invalid", "-c", "commit.gpgsign=false",
+    "commit", "-m", "preview fixture source"]);
+  const sha = git(["rev-parse", "HEAD"]);
+  fixtureCommits.set(workspace, sha);
+  return sha;
 }
 
 export function cleanupFixtureWorkspaces(): void {
   while (created.length > 0) {
     const root = created.pop();
     if (root === undefined) continue;
+    fixtureFiles.delete(root);
+    fixtureCommits.delete(root);
     // A child that outlived its arm can still hold a handle here; a failed cleanup must not
     // mask the assertion that actually matters.
     try { rmSync(root, { force: true, recursive: true }); } catch { /* best effort */ }

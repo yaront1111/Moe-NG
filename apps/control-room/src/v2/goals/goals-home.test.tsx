@@ -50,6 +50,38 @@ function catalog(): GoalCatalogFrame {
 }
 
 describe("coming-online fields never render a fabricated number", () => {
+  it("opens a runless catalog product using its unchanged goal identity", async () => {
+    const user = userEvent.setup();
+    const onOpenProduct = vi.fn();
+    const onOpenBoard = vi.fn();
+    const supplied = deriveGoalCatalog(catalog());
+    const data: GoalsData = { ...supplied, goals: supplied.goals
+      .filter((goal) => goal.goalId === "goal-durable-beta")
+      .map((goal) => ({ ...goal, planningRunRef: undefined })) };
+    render(<GoalsHome data={data} onCreateGoal={vi.fn()} onOpenBoard={onOpenBoard} onOpenProduct={onOpenProduct} />);
+
+    await user.click(screen.getByRole("button", { name: "Open product Second durable goal" }));
+    expect(onOpenProduct).toHaveBeenCalledWith("goal-durable-beta", "Second durable goal");
+    expect(onOpenBoard).not.toHaveBeenCalled();
+  });
+
+  it("presents products with one creation entry and keeps project activity folded", async () => {
+    const user = userEvent.setup();
+    render(<GoalsHome data={FIXTURE_GOALS_DATA} onCreateGoal={vi.fn()} onOpenBoard={vi.fn()} />);
+
+    expect(screen.getByRole("region", { name: "Products" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Your products" })).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: "New product" })).toHaveLength(1);
+    expect(screen.getByRole("searchbox", { name: "Search products" })).toBeTruthy();
+    expect(screen.getByTestId("cr.goals.count").textContent).toBe("3 products");
+    expect(screen.getByTestId("cr.goals.triage.approvals").closest("details")?.open).toBe(false);
+
+    await user.click(screen.getByRole("button", { name: "New product" }));
+    expect(screen.getByRole("heading", { name: "New product" })).toBeTruthy();
+    expect(screen.getByLabelText("Product name")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Create product" })).toBeTruthy();
+  });
+
   it("shows a budget placeholder chip, not a spend number, on a live goal", () => {
     const data = deriveGoalCatalog(catalog());
     expect(data.goalCountLabel).toBe("2 goals");
@@ -202,7 +234,7 @@ describe("selecting a PRD from the goals home reaches no route", () => {
     await user.click(screen.getByTestId("cr.goals.new"));
 
     expect(screen.getByTestId("cr.goals.newgoal.prd").textContent).toContain(
-      "It is read in this browser only; nothing is sent until you click Create goal.",
+      "It is read in this browser only; nothing is sent until you click Create product.",
     );
   });
 });
@@ -212,7 +244,7 @@ describe("the fixtures view reproduces the designed goals home", () => {
     render(<GoalsHome data={FIXTURE_GOALS_DATA} onCreateGoal={vi.fn()} onOpenBoard={vi.fn()} />);
     expect(within(screen.getByTestId("cr.goals.list")).getAllByRole("listitem")).toHaveLength(3);
     expect(screen.getByTestId("cr.goals.triage.approvals").textContent).toContain("Approvals waiting on you");
-    expect(screen.getByTestId("cr.goals.count").textContent).toContain("3 GOALS");
+    expect(screen.getByTestId("cr.goals.count").textContent).toBe("3 products");
     // Each fixture goal expands to exactly the 16 supplied facts the design names.
     expect(screen.getByTestId("cr.goals.card.goal-j1.expand").textContent).toContain("16 supplied facts");
   });
@@ -266,6 +298,19 @@ describe("the fixtures view reproduces the designed goals home", () => {
       }],
     };
   }
+
+  it("opens the same product from project activity before planning", async () => {
+    const user = userEvent.setup();
+    const onOpenProduct = vi.fn();
+    const onOpenBoard = vi.fn();
+    render(<GoalsHome data={withTriageTo("goal-j1", FIXTURE_GOALS_DATA)} onCreateGoal={vi.fn()}
+      onOpenBoard={onOpenBoard} onOpenProduct={onOpenProduct} />);
+
+    await user.click(screen.getByText("Project activity"));
+    await user.click(screen.getByTestId("cr.goals.triage.openable"));
+    expect(onOpenProduct).toHaveBeenCalledWith("goal-j1", "Ship the J1 vertical slice");
+    expect(onOpenBoard).not.toHaveBeenCalled();
+  });
 
   it("refuses a triage strip that names a goal with no durable run", async () => {
     const user = userEvent.setup();
@@ -345,6 +390,8 @@ describe("a truth chip on a goal fact opens the proof drawer", () => {
         <GoalsHome data={deriveGoalCatalog(catalog())} onCreateGoal={vi.fn()} onOpenBoard={vi.fn()} />
       </CordumShell>,
     );
+    expect(screen.queryByTestId("cr.goals.pill.goal-durable-alpha.goal")).toBeNull();
+    await user.click(screen.getByTestId("cr.goals.card.goal-durable-alpha.expand"));
     const pill = screen.getByTestId("cr.goals.pill.goal-durable-alpha.goal");
     await user.click(within(pill).getByTestId("cr.chip.daemon_verified"));
     const claim = screen.getByTestId("cr.shell.inspector.claim");

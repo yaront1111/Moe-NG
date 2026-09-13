@@ -25,7 +25,7 @@ import { activeCompiledGraphs } from "../orchestrator/compiled-node-source.js";
 import { recordPreviewReceipt } from "../preview/preview-ledger.js";
 import { previewCaptureDirectory, previewReceiptId } from "../preview/preview-receipt-contracts.js";
 import { runPreview } from "../preview/preview-runner.js";
-import { LISTENING_SERVER, cleanupFixtureWorkspaces, fixtureWorkspace } from "../preview/preview-test-fixtures.js";
+import { LISTENING_SERVER, cleanupFixtureWorkspaces, commitFixtureWorkspace, fixtureWorkspace } from "../preview/preview-test-fixtures.js";
 import type { AuthenticationResult, Authenticator, CommandAdapterDeps } from "./http-contract.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import { CONTROL_ROOM_LISTENER_LAYER } from "./http-listener-guards.js";
@@ -180,7 +180,7 @@ describe("the preview receipt read, against a receipt the real preview path wrot
         projectId: PROJECT_ID,
         store,
       },
-      { goalId: GOAL_ID, sha: SHA, workspace },
+      { goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace },
     );
     if (!run.ok) throw new Error(`expected a start, got ${run.refusal.code}`);
     started.push(run.started.handle);
@@ -194,10 +194,10 @@ describe("the preview receipt read, against a receipt the real preview path wrot
     expect(preview.code).toBeNull();
     expect(preview.url).toBe(run.started.handle.origin);
     expect(preview.goalId).toBe(GOAL_ID);
-    expect(preview.sha).toBe(SHA);
-    expect(preview.receiptId).toBe(previewReceiptId(PROJECT_ID, GOAL_ID, SHA));
+    expect(preview.sha).toBe(commitFixtureWorkspace(workspace));
+    expect(preview.receiptId).toBe(previewReceiptId(PROJECT_ID, GOAL_ID, commitFixtureWorkspace(workspace)));
 
-    const prefix = `${previewCaptureDirectory(GOAL_ID, SHA)}/`;
+    const prefix = `${previewCaptureDirectory(GOAL_ID, commitFixtureWorkspace(workspace))}/`;
     expect(preview.screenshots.map((shot) => shot.path)).toStrictEqual([
       `${prefix}journey-home.png`,
       `${prefix}journey-checkout.png`,
@@ -237,7 +237,7 @@ describe("the preview receipt read, against a receipt the real preview path wrot
         projectId: PROJECT_ID,
         store,
       },
-      { goalId: GOAL_ID, sha: SHA, workspace },
+      { goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace },
     );
     if (!run.ok) throw new Error(`expected a start, got ${run.refusal.code}`);
     started.push(run.started.handle);

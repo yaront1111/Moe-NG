@@ -56,6 +56,8 @@ export interface StartProjectManagerHttpOptions {
   readonly csrfToken: string;
   /** The sole lifecycle authority. The HTTP seam only validates and forwards. */
   readonly manager: ProjectManagerPort;
+  /** Live observation of the foreground approval stream; absence cannot imply a terminal. */
+  readonly operatorChannelAvailable?: () => boolean;
   /** Injected only for deterministic request/label tests. */
   readonly pairingRandomBytes?: PairingRandomBytesSource;
   /** Injected for deterministic tests; production uses the system CSPRNG. */
@@ -146,7 +148,11 @@ export async function startProjectManagerHttp(
     const authority = authorityOf(host, port);
     const origin = originOf(host, port);
     context = Object.freeze({ assets, authority, csrfToken: options.csrfToken,
-      manager: options.manager, origin, pairing, sessionSecret });
+      manager: options.manager, origin, pairing, sessionSecret,
+      operatorChannelAvailable: (): boolean => {
+        try { return options.operatorChannelAvailable?.() === true; }
+        catch { return false; }
+      } });
     return Object.freeze({
       approvePairing: (confirmationLabel: unknown) => pairing.operator.approve(confirmationLabel),
       close: async (): Promise<void> => { context = null; pairing.close(); await closeServer(bound); },

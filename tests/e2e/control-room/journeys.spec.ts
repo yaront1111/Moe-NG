@@ -67,24 +67,20 @@ test("CR-J1-002: production v2 never mounts a graph canvas", async ({ page }) =>
     await expect(driven.getByTestId("cr.shell.navrail")).toBeVisible();
     await expect(driven.getByTestId("cr.nav.goals")).toHaveAttribute("aria-current", "page");
     await expect(driven.locator("[data-testid^='cr.graph.']")).toHaveCount(0);
-    // THE UNBUILT DESTINATION IS "resources", NOT "approvals" (re-aimed by
-    // task-2c952438c41546b3a736623f3956c778). "approvals" entered BUILT_NAV_ROUTES in
-    // 1f7346ac, "feat(control-room): a Needs-you queue of every decision waiting on a
-    // human", which reached this branch through the PR #15 merge AFTER this file last
-    // ran green, so the old example became stale. "resources" is the one NAV_ID that
-    // apps/control-room/src/v2/shell/shell-routes.ts still leaves out of
-    // BUILT_NAV_ROUTES. Both truth classes stay asserted here on purpose: an unbuilt
-    // destination must refuse ACCESSIBLY, and a shipped one must not be fenced.
+    // Technical destinations are discoverable behind their disclosure. Read-only route
+    // availability must not imply that a disconnected session can mutate anything.
     const resources = driven.getByTestId("cr.nav.resources");
-    await expect(resources).toBeDisabled();
-    await expect(resources)
-      .toHaveAccessibleDescription("This destination is not built yet in this release.");
+    await expect(resources).toBeHidden();
+    await driven.getByRole("button", { name: "Technical tools", exact: true }).click();
+    await expect(resources).toBeVisible();
+    await expect(resources).toBeEnabled();
     await expect(driven.getByTestId("cr.nav.approvals")).toBeEnabled();
   }, page);
 });
 
 test("CR-A11Y-001: five truth classes stay distinct without colour", async ({ page }) => {
   await journey(async (driven) => {
+    await driven.getByRole("button", { name: "What these marks mean", exact: true }).click();
     const chips = await driven.locator("[data-testid^='cr.legend.'] [data-truth-class]")
       .evaluateAll((nodes): readonly ChipRecord[] => nodes.map((node) => ({
         border: node.getAttribute("data-border"),

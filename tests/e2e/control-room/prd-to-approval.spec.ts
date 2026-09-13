@@ -1,3 +1,4 @@
+import { openProductRecord } from "./product-navigation.js";
 import type { ChildProcess } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -10,7 +11,7 @@ import { LANE_CSRF_TOKEN, createLaneScratch, daemonEnv, repoRoot, seedEnv } from
 /**
  * The v2 rebuild's PRD-to-approval journey, driven against a REAL daemon that
  * HOSTS THE BUILT BUNDLE and accepts a private foreground approval — the shipped
- * plain-origin path, not the vite proxy the v1 `daemon-board.spec` uses.
+ * plain-origin path, with contextual product records.
  *
  * WHAT THIS PROVES that no unit test can: the runtime credential handshake
  * (GET /bootstrap -> request -> operator approval -> claim) attaches the page
@@ -127,7 +128,8 @@ test("v2: pairs by handshake, reads the sealed plan, and never fabricates approv
     await page.getByRole("button", { name: "I entered this label" }).click();
 
     // Attached: the goals count leaves CONNECTING and names the one real goal.
-    await expect(page.getByTestId("cr.goals.count")).toHaveText(/\d+ GOAL/u, { timeout: 20_000 });
+    await expect(page.getByTestId("cr.goals.count")).toHaveText("1 product", { timeout: 20_000 });
+    await page.getByTestId("cr.goals.card.goal-live-1.expand").click();
     await expect(page.getByText("goal-live-1").first()).toBeVisible();
     expect(daemon.transcript()).not.toContain(confirmationLabel);
 
@@ -136,7 +138,8 @@ test("v2: pairs by handshake, reads the sealed plan, and never fabricates approv
     // daemon-projected proof rows, and Escape restores the invoking chip rather than stranding
     // focus in a drawer that no longer exists.
     const goalCard = page.getByTestId("cr.goals.card.goal-live-1");
-    const goalTruth = goalCard.getByRole("button", { name: /^Goal: Daemon verified/iu });
+    const goalTruth = goalCard.getByTestId("cr.goals.pill.goal-live-1.goal")
+      .getByRole("button", { name: /^Goal: Daemon verified/iu });
     await expect(goalTruth).toHaveAttribute("data-truth-class", "DAEMON_VERIFIED");
     await goalTruth.focus();
     await page.keyboard.press("Enter");
@@ -159,7 +162,8 @@ test("v2: pairs by handshake, reads the sealed plan, and never fabricates approv
     await expect(goalTruth).toBeFocused();
 
     // Open the goal -> plan-review over POST /planning/run/read.
-    await page.getByRole("button", { name: /open the board/iu }).first().click();
+    await page.getByRole("button", { name: /^Open product /u }).first().click();
+    await openProductRecord(page, "Build plan");
     await expect(page.getByTestId("cr.approve.screen")).toBeVisible();
     // The seed COMMITS `approval.decide` for this run (demo-seed-plan.ts:95-101 proposes,
     // finalizes, then approves), so the screen must not offer an approval that has already been
@@ -182,7 +186,8 @@ test("v2: pairs by handshake, reads the sealed plan, and never fabricates approv
       /APPROVAL_AFFORDANCE_ABSENT.*CONTROL_ROOM_PLAN_APPROVAL/iu,
     );
 
-    // The read-only work board renders the daemon's real surface.
+    // Technical detail renders the daemon's real work surface.
+    await openProductRecord(page, "Technical detail");
     await expect(page.getByTestId("cr.board.root")).toBeVisible();
 
     // Self-hosted fonts + same-origin routes: no CSP violation reaches the console.

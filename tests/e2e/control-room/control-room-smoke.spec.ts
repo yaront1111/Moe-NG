@@ -21,7 +21,7 @@ const PRODUCTION_ASSETS_DIR = fileURLToPath(
  * task-667b1085. A smoke check wearing a journey's name would retire an
  * obligation it never discharged, so neither the file nor the test claims one.
  *
- * Development-only `v1` and `fixtures` selectors are deliberately supplied as a
+ * Retired `v1` and development-only `fixtures` selectors are deliberately supplied as a
  * mutation: a production build must ignore them rather than mounting demo data.
  */
 test("production artifacts exclude the legacy shell selector", async () => {
@@ -49,6 +49,8 @@ test("serving the built control-room bundle mounts its shell root element", asyn
     await expect(shellRoot).toHaveCount(1);
     await expect(page.getByTestId("cr.shell.root")).toHaveCount(0);
     await expect(page.getByTestId("cr.banner.fixture")).toHaveCount(0);
+    await expect(page.getByText(/Example product\. These states/u)).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Open product Bicycle shop appointments", exact: true })).toHaveCount(0);
     await expect(page.getByTestId("cr.project.boundary")).toHaveCount(1);
     return await shellRoot.count();
   });

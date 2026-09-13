@@ -294,7 +294,7 @@ describe("CordumApp live path uses the runtime handshake", () => {
     render(<CordumApp search="fixtures=1" />);
 
     // Fixtures render the frozen design view and disable the handshake entirely.
-    expect(screen.getByText("Ship the J1 vertical slice")).toBeTruthy();
+    expect(screen.getByText("Bicycle shop appointments")).toBeTruthy();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -886,7 +886,7 @@ const SURFACE_STEPS: readonly unknown[] = Object.freeze([
 ]);
 
 const SEALED_RUN = Object.freeze({
-  acceptance: null,
+  acceptance: Object.freeze({ criteriaDigest: "criteria-digest-durable", obligations: Object.freeze([]) }),
   authority: null,
   lifecycle: "PLAN_REVIEW",
   outcome: "RUN",
@@ -982,6 +982,7 @@ function renderWiredApp(
   pendingBody: unknown = { outcome: "NONE" },
   plane: "V1" | "V2" = "V1",
   command?: (body: string) => unknown,
+  steps: readonly unknown[] = SURFACE_STEPS,
   planningBody: unknown = SEALED_RUN,
 ): WiredApp {
   bootstrapPlane = plane;
@@ -1012,7 +1013,7 @@ function renderWiredApp(
         planningGoalRefs: {
           [SIBLING.runRef]: SIBLING.goalRef, [DURABLE.runRef]: DURABLE.goalRef,
         },
-        steps: SURFACE_STEPS,
+        steps,
       }));
     }
     if (input === "/goals/read") return Promise.resolve(jsonResponse(DURABLE_CATALOG));
@@ -1069,6 +1070,46 @@ async function openTheDurableBoard(): Promise<void> {
   await userEvent.click(open);
 }
 
+async function openProductRecord(name: string): Promise<void> {
+  await userEvent.click(screen.getByRole("button", { name: "Production record" }));
+  await userEvent.click(screen.getByRole("button", { name }));
+}
+
+describe("the product workspace replaces the ordinary board", () => {
+  it("opens the product canvas without mounting technical boards", async () => {
+    renderWiredApp();
+    await openTheDurableBoard();
+    expect(await screen.findByTestId("cr.product.workspace")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Requirements" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Readiness" })).toBeTruthy();
+    expect(screen.queryByTestId("cr.board.subject")).toBeNull();
+    expect(screen.queryByTestId("cr.goal.detailsfold")).toBeNull();
+    expect(new URLSearchParams(window.location.search).get("product")).toBe(DURABLE.goalRef);
+  });
+
+  it("opens an uncompiled pending definition in the product canvas without depending on coverage", async () => {
+    renderWiredApp([], V1_PENDING_BODY);
+    await openTheDurableBoard();
+    const canvas = await screen.findByRole("region", { name: "Product artifact" });
+    await waitFor(() => expect(within(canvas).getByTestId("cr.gate1.pending")).toBeTruthy());
+    expect(within(canvas).getByTestId("cr.gate1.approve")).toBeTruthy();
+    expect(screen.getByRole("combobox", { name: "Viewed product artifact" }).textContent).toContain("Proposed definition");
+    expect(screen.queryByText("This version cannot be read right now")).toBeNull();
+    expect(screen.queryByTestId("cr.board.subject")).toBeNull();
+  });
+
+  it("keeps the exact approval offer live while technical inspection is closed", async () => {
+    const app = renderWiredApp();
+    await openTheDurableBoard();
+    await screen.findByTestId("cr.product.workspace");
+    await userEvent.click(screen.getByRole("button", { name: "Production record" }));
+    await userEvent.click(screen.getByRole("button", { name: "Build plan" }));
+    await waitFor(() => expect(app.planningReads.length).toBeGreaterThan(0));
+    expect(screen.queryByTestId("cr.board.subject")).toBeNull();
+    expect((screen.getByTestId("cr.approve.button") as HTMLButtonElement).disabled).toBe(false);
+  });
+});
+
 it("mounts deployment on the live board and spends that goal's offer only on confirmation", async () => {
   const sent: string[] = [];
   renderWiredApp([{ ...APPROVAL_OFFER, commandId: "deploy-board", commandKind: "deployment.deploy",
@@ -1076,6 +1117,7 @@ it("mounts deployment on the live board and spends that goal's offer only on con
     sent.push(body); return { ok: true };
   });
   await openTheDurableBoard();
+    await openProductRecord("Delivery");
   const deploy = await screen.findByRole("button", { name: "Deploy this goal to staging" });
   expect((deploy as HTMLButtonElement).disabled).toBe(false);
   expect(sent).toEqual([]);
@@ -1095,6 +1137,17 @@ it("mounts deployment on the live board and spends that goal's offer only on con
  * component compiles; only this proves anybody can get to it.
  */
 describe("the Activate card is reachable on the goals screen", () => {
+  it("retains measured activation when the operator returns to product setup", async () => {
+    renderWiredApp([], { outcome: "NONE" }, "V1", undefined, [...SURFACE_STEPS,
+      { aggregateId: "project-live", kind: "project.activate", missing: [], status: "COMMITTED", version: 1 }]);
+    await waitFor(() => expect(screen.getByTestId("cr.activate.root").textContent).toContain("Project activated"));
+    expect(screen.queryByTestId("cr.activate.button")).toBeNull();
+    await openTheDurableBoard();
+    await userEvent.click(screen.getByTestId("cr.nav.goals"));
+    await waitFor(() => expect(screen.getByTestId("cr.activate.root").textContent).toContain("Project activated"));
+    expect(screen.queryByTestId("cr.activate.button")).toBeNull();
+  });
+
   it("renders the daemon's activation receipts beside the New goal control", async () => {
     const app = renderWiredApp();
 
@@ -1209,11 +1262,12 @@ describe("CordumApp wires the durable run and the daemon's approval grant", () =
     expect((await screen.findByTestId("cr.gate1.requirement.req-1")).textContent)
       .toContain("Users can sign in.");
     expect(screen.queryAllByTestId(/^cr\.gate1\.requirements\.group\./u)).toHaveLength(0);
-    expect(app.pendingReads).toEqual([
+    expect([...new Set(app.pendingReads)]).toEqual([
       `/product-contract/pending/read ${JSON.stringify({ goalRef: DURABLE.goalRef })}`,
     ]);
     const approve = await screen.findByTestId("cr.gate1.approve");
     expect((approve as HTMLButtonElement).disabled).toBe(false);
+    const readsBeforeDecision = app.pendingReads.length;
     await userEvent.click(approve);
 
     // The approval left on the V1 command route, presenting the daemon-minted identity.
@@ -1224,13 +1278,16 @@ describe("CordumApp wires the durable run and the daemon's approval grant", () =
       .toBe(V1_PENDING_BODY.approval.affordance.targetAggregateId);
     expect(screen.queryByTestId("cr.gate1.dispatchrefusal")).toBeNull();
     // It re-read the SAME route after the accepted approval.
-    await waitFor(() => { expect(app.pendingReads).toHaveLength(2); });
-    expect(app.pendingReads[1]).toContain("/product-contract/pending/read ");
+    await waitFor(() => { expect(app.pendingReads.length).toBeGreaterThan(readsBeforeDecision); });
+    expect([...new Set(app.pendingReads)]).toEqual([
+      `/product-contract/pending/read ${JSON.stringify({ goalRef: DURABLE.goalRef })}`,
+    ]);
   });
 
   it("reads the plan for the run the CARD carried, never a build-time run subject", async () => {
     const app = renderWiredApp();
     await openTheDurableBoard();
+    await openProductRecord("Build plan");
 
     await waitFor(() => { expect(app.planningReads.length).toBeGreaterThan(0); });
     // The request body names the fixture's OWN run reference. A production module
@@ -1244,6 +1301,7 @@ describe("CordumApp wires the durable run and the daemon's approval grant", () =
   it("enables Approve only because the daemon OFFERED the intent for this run", async () => {
     renderWiredApp();
     await openTheDurableBoard();
+    await openProductRecord("Build plan");
 
     const button = await screen.findByTestId("cr.approve.button");
     await waitFor(() => { expect((button as HTMLButtonElement).disabled).toBe(false); });
@@ -1254,6 +1312,7 @@ describe("CordumApp wires the durable run and the daemon's approval grant", () =
   it("routes the nav rail through the shell's own route source of truth, back to goals", async () => {
     renderWiredApp();
     await openTheDurableBoard();
+    await openProductRecord("Build plan");
     expect(await screen.findByTestId("cr.approve.screen")).toBeTruthy();
 
     // The destination is read from the ROSTER, so the rail and the entry cannot
@@ -1273,6 +1332,7 @@ describe("CordumApp wires the durable run and the daemon's approval grant", () =
     // is the daemon's grant, so a control that enabled here would be self-authorizing.
     renderWiredApp([]);
     await openTheDurableBoard();
+    await openProductRecord("Build plan");
 
     const button = await screen.findByTestId("cr.approve.button");
     expect((button as HTMLButtonElement).disabled).toBe(true);
@@ -1290,10 +1350,11 @@ describe("CordumApp wires the durable run and the daemon's approval grant", () =
    * The arm above is this one's control: same wiring, only the read's answer differs.
    */
   it("offers no plan decision on a goal whose run the daemon does not know yet", async () => {
-    const app = renderWiredApp([], { outcome: "NONE" }, "V1", undefined, RUN_UNKNOWN_BODY);
+    const app = renderWiredApp([], { outcome: "NONE" }, "V1", undefined, SURFACE_STEPS, RUN_UNKNOWN_BODY);
     await openTheDurableBoard();
+    await openProductRecord("Build plan");
 
-    const fold = await screen.findByTestId("cr.goal.planfold");
+    const fold = await screen.findByTestId("cr.approve.screen");
     expect((await within(fold).findByTestId("cr.approve.no-plan")).textContent)
       .toBe("The plan appears here once the contract is approved and compiled.");
     // The read really was made for this goal's OWN run; the wait line above is rendered on
@@ -1330,6 +1391,7 @@ describe("the opened goal's board is scoped to that goal's own run", () => {
   it("reads the plan by the OPENED card's run, by exact body roster, and never the sibling's", async () => {
     const app = renderWiredApp();
     await openTheDurableBoard();
+    await openProductRecord("Build plan");
 
     await waitFor(() => { expect(app.planningReads.length).toBeGreaterThan(0); });
     for (const body of app.planningReads) {
@@ -1345,6 +1407,7 @@ describe("the opened goal's board is scoped to that goal's own run", () => {
   it("shows the planning card the daemon OFFERED for this run, and no card of the sibling's", async () => {
     renderWiredApp();
     await openTheDurableBoard();
+    await openProductRecord("Technical detail");
 
     // The raw line is the card's own restatement of the frame: `kind @ aggregateId`.
     const raws = async (): Promise<readonly string[]> =>
@@ -1371,6 +1434,7 @@ describe("the opened goal's board is scoped to that goal's own run", () => {
   it("names the opened goal as the board's durable subject, not the seed binding", async () => {
     renderWiredApp();
     await openTheDurableBoard();
+    await openProductRecord("Technical detail");
 
     const subject = await screen.findByTestId("cr.board.subject");
     expect(subject.getAttribute("data-goal")).toBe(DURABLE.goalRef);
@@ -1382,11 +1446,13 @@ describe("the opened goal's board is scoped to that goal's own run", () => {
     // opened, not a second hard-coded subject.
     const app = renderWiredApp();
     await userEvent.click(await screen.findByTestId(`cr.goals.card.${SIBLING.goalRef}.open`));
+    await openProductRecord("Build plan");
 
     await waitFor(() => { expect(app.planningReads.length).toBeGreaterThan(0); });
     for (const body of app.planningReads) {
       expect(JSON.parse(body)).toEqual({ runId: SIBLING.runRef });
     }
+    await userEvent.click(screen.getByRole("button", { name: "Technical detail" }));
     const raws = (await screen.findAllByTestId("cr.board.raw")).map((n) => n.textContent ?? "");
     expect(raws).toContain(`plan.propose @ ${SIBLING.runRef}`);
     for (const line of raws) expect(line).not.toContain(DURABLE.runRef);

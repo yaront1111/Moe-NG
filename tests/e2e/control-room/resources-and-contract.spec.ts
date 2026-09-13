@@ -1,3 +1,5 @@
+import { openProductDefinition } from "./product-navigation.js";
+import { openTechnicalDestination } from "./product-navigation.js";
 import type { ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
@@ -12,10 +14,9 @@ import {
 import { readGoalCatalogOverHttp } from "./prd-boundary-readers.js";
 
 /**
- * REAL-DAEMON journeys for the two screens this row's dependencies shipped:
- * Resources (task-2ee775b3) and the contract dossier (task-1c9587ed). Pairing,
- * spawn and seed follow gate1-v1-approval.spec.ts; this file does not re-approve
- * Gate 1, it only proves those screens are reachable on a live daemon.
+ * Real-daemon navigation to Resources and a product's definition before any
+ * contract revision has been proposed. The source stays readable and no
+ * approval is invented for an empty definition.
  */
 
 const DAEMON_READY_MS = 60_000;
@@ -32,7 +33,7 @@ const awaitExit = (child: ChildProcess, ms: number): Promise<number | null> =>
     child.once("exit", (code) => { clearTimeout(timer); done(code); });
   });
 
-test("Resources and the contract dossier render from a real daemon", async ({ page }) => {
+test("Resources and an unproposed product definition render from a real daemon", async ({ page }) => {
   test.setTimeout(300_000);
   const root = repoRoot();
   expect(root, "repo root (package.json + pnpm-workspace.yaml)").not.toBeNull();
@@ -87,7 +88,7 @@ test("Resources and the contract dossier render from a real daemon", async ({ pa
     await page.getByRole("button", { name: "I entered this label" }).click();
     await expect(page.getByTestId("cr.goals.home")).toBeVisible({ timeout: 60_000 });
 
-    await page.getByTestId("cr.nav.resources").click();
+    await openTechnicalDestination(page, "resources");
     await expect(page.getByTestId("cr.resources.screen")).toBeVisible({ timeout: 20_000 });
     await expect(page.getByTestId("cr.resources.banner")).toBeVisible();
     const measured = page.locator("[data-testid^='cr.resources.value.']");
@@ -119,11 +120,13 @@ test("Resources and the contract dossier render from a real daemon", async ({ pa
     if (goalId === null) return;
 
     await page.getByTestId(`cr.goals.card.${goalId}.open`).click();
-    await expect(page.getByTestId("cr.contract.card")).toBeVisible({ timeout: 20_000 });
-    const none = page.getByTestId("cr.contract.none");
-    const body = page.getByTestId("cr.contract.body");
-    const refusal = page.getByTestId("cr.contract.refusal");
-    await expect(none.or(body).or(refusal)).toBeVisible({ timeout: 20_000 });
+    await openProductDefinition(page);
+    await expect(page.getByRole("heading", { name: "Product definition", exact: true })).toBeVisible();
+    // No revision has been proposed: no approval is invented for this source.
+    await expect(page.getByText("No product definition is recorded yet.", { exact: true }))
+      .toBeVisible({ timeout: 20_000 });
+    await expect(page.getByTestId("cr.gate1.approve")).toHaveCount(0);
+    await expect(page.locator("pre").filter({ hasText: PRD_TEXT })).toBeVisible();
     expect(await page.getByTestId("cr.banner.fixture").count()).toBe(0);
   } finally {
     for (const child of [...children].reverse()) await killTree(child);

@@ -1,3 +1,4 @@
+import { openTechnicalDestination } from "./product-navigation.js";
 import type { ChildProcess } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -92,7 +93,7 @@ test("the browser chooses the agent provider and Seats discloses it from a real 
     await page.getByRole("button", { name: "I entered this label" }).click();
     await expect(page.getByTestId("cr.goals.home")).toBeVisible({ timeout: 60_000 });
 
-    await page.getByTestId("cr.nav.health").click({ timeout: CLICK_BUDGET_MS });
+    await openTechnicalDestination(page, "health");
     await expect(page.getByTestId("cr.sessions.root")).toBeVisible({ timeout: 30_000 });
     // FIXTURES ARE NOT WHAT IS BEING READ. Asserted before anything is believed.
     expect(await page.getByTestId("cr.banner.fixture").count(),

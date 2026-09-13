@@ -23,7 +23,7 @@
  * If the seats delivered nothing the container still starts and still answers health, and the
  * criteria -- which are checked elsewhere, against the modules -- are what would fail.
  */
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import {
@@ -34,23 +34,6 @@ import {
 /** Where the healthcheck script lives in the repository, before the image relocates it. */
 const HEALTHCHECK_SOURCE = "docker/healthcheck.mjs";
 const SERVER = "server.mjs";
-
-/**
- * The manifest, which exists for the PREVIEW rather than for the image.
- *
- * `preview-runner.ts:162` spawns `npm run <script>` and `PREVIEW_SCRIPT_ORDER` prefers
- * `preview` -> `dev` -> `start`. Exactly ONE of the three is declared so which script ran is
- * never ambiguous. The image installs nothing: this application declares no dependencies.
- */
-const MANIFEST = `${JSON.stringify({
-  // THE MIGRATION TOOL IS THE SCAFFOLD'S OWN CHOICE, restored rather than invented: the
-  // controlled profile declares `node-pg-migrate` 9.0.0 (controlled-profile-package-templates.ts)
-  // and this manifest REPLACES the scaffold's, so without these two lines the product's own
-  // deploy-time migration refuses MIGRATION_TOOL_MISSING on a tree that never declared a tool.
-  devDependencies: { "node-pg-migrate": "9.0.0", pg: "8.16.3" },
-  name: "standup", private: true, scripts: { start: "node server.mjs" }, type: "module",
-}, null, 2)}
-`;
 
 const serverSource = (): string => [
   '// The fresh product\'s HTTP surface. It serves the health route the image probes and,',
@@ -113,9 +96,8 @@ const healthcheckSource = (): string => [
 ].join("\n");
 
 const dockerfileSource = (): string => [
-  "# The fresh product's image. Single stage on purpose: this application declares NO",
-  "# dependencies and needs no build, so a build stage would install nothing and compile",
-  "# nothing. The image therefore needs no network at build time.",
+  "# These seat modules and the HTTP surface use Node's standard library and need no build.",
+  "# The generated workspace's development and migration dependencies are used on the host.",
   `FROM ${DEPLOYMENT_NODE_IMAGE} AS runtime`,
   "WORKDIR /app",
   "ENV NODE_ENV=production",
@@ -149,7 +131,13 @@ export const IMAGE_HEALTHCHECK_PATH = DEPLOYMENT_HEALTHCHECK_PATH;
  */
 export function writeDeployableSurface(workspace: string): readonly string[] {
   mkdirSync(join(workspace, "docker"), { recursive: true });
-  writeFileSync(join(workspace, "package.json"), MANIFEST, "utf8");
+  // Preview installs the committed lockfile. Preserve the generated dependency,
+  // package-manager and migration declarations; the fixture adds only its server command.
+  const manifestPath = join(workspace, "package.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { scripts: Record<string, string> };
+  writeFileSync(manifestPath, `${JSON.stringify({ ...manifest,
+    scripts: { ...manifest.scripts, start: "node server.mjs" },
+  }, null, 2)}\n`, "utf8");
   writeFileSync(join(workspace, SERVER), serverSource(), "utf8");
   writeFileSync(join(workspace, HEALTHCHECK_SOURCE), healthcheckSource(), "utf8");
   writeFileSync(join(workspace, "Dockerfile"), dockerfileSource(), "utf8");

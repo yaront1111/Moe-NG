@@ -1,3 +1,4 @@
+import { openProductDefinition, openProductRecord } from "./product-navigation.js";
 /**
  * GATE 1 for the epic-final live proof: the planner's two acts, and the human's two clicks.
  *
@@ -9,6 +10,7 @@
  * kinds `daemon-command-registry.ts:392-394` widens for a paired durable HUMAN, so those clicks
  * are the browser's own acts and not the operator's borrowed authority.
  */
+import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import type { DaemonLane } from "./daemon-ports.js";
@@ -104,6 +106,7 @@ export async function askClarification(lane: DaemonLane, goalId: string, contrac
 /** The human's half: open the goal, answer the question, approve the gate. */
 export async function driveGate1InBrowser(page: Page, lane: DaemonLane, goalId: string): Promise<void> {
   await page.getByTestId(`cr.goals.card.${goalId}.open`).click().catch(() => undefined);
+  await openProductDefinition(page);
   const card = page.getByTestId("cr.gate1.card");
   const visible = await card.isVisible({ timeout: CLICK_MS }).catch(() => false);
   record("gate1-card-visible", visible);
@@ -184,14 +187,11 @@ export async function driveGate1InBrowser(page: Page, lane: DaemonLane, goalId: 
 export async function approvePlanInBrowser(
   page: Page, lane: DaemonLane, goalId: string, runId: string,
 ): Promise<void> {
-  await page.getByTestId(`cr.goals.card.${goalId}.open`).click({ timeout: CLICK_MS })
-    .catch(() => undefined);
-  const fold = page.getByTestId("cr.goal.planfold");
-  if (await fold.count() > 0) {
-    const open = await fold.evaluate((node) => (node as HTMLDetailsElement).open)
-      .catch(() => true);
-    if (!open) await fold.locator("> summary").click({ timeout: CLICK_MS }).catch(() => undefined);
-  }
+  // Compilation followed the definition decision. Reopen the current product explicitly;
+  // the previously viewed proposal may correctly remain a historical observation.
+  await page.getByTestId("cr.nav.goals").click({ timeout: CLICK_MS });
+  await page.getByTestId(`cr.goals.card.${goalId}.open`).click({ timeout: CLICK_MS });
+  await openProductRecord(page, "Build plan");
   record("plan-gate-screen", await page.getByTestId("cr.approve.screen").count());
   const approve = page.getByTestId("cr.approve.button");
   const deadline = Date.now() + APPROVE_BUDGET_MS;
@@ -213,4 +213,8 @@ export async function approvePlanInBrowser(
     attempts,
     refusalText: await refusal.count() > 0 ? (await refusal.innerText()).slice(0, 300) : null,
   });
+  const after = await askDaemon(lane, "/affordances/read", {});
+  expect(offerFor(after.body, "approval.decide_intent", runId),
+    "PLAN_APPROVAL_NOT_COMMITTED: the current run must leave plan approval before real seats start")
+    .toBeNull();
 }

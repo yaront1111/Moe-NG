@@ -81,18 +81,20 @@ interface LiveDesignVersionNoteProps {
   readonly planningRunRef: string;
   readonly headers: Readonly<Record<string, string>>;
   readonly read?: ((goalRef: string, planningRunRef: string) => Promise<DesignOutcome>) | undefined;
+  /** Stable offered ledger version; a draft read refreshes when the same run becomes reviewable. */
+  readonly observationKey?: string | null | undefined;
 }
 
 /** Read on mount and on subject change; an old goal cannot publish a late answer. */
 export function LiveDesignVersionNote(props: LiveDesignVersionNoteProps): JSX.Element {
-  const { goalRef, headers, planningRunRef, read } = props;
+  const { goalRef, headers, planningRunRef, read, observationKey } = props;
   const [answer, setAnswer] = useState<{
     readonly subject: LiveDesignVersionNoteProps; readonly outcome: DesignOutcome;
   } | null>(null);
   useEffect(() => {
     let live = true;
     const publish = (outcome: DesignOutcome): void => {
-      if (live) setAnswer({ subject: { goalRef, headers, planningRunRef, read }, outcome });
+      if (live) setAnswer({ subject: { goalRef, headers, planningRunRef, read, observationKey }, outcome });
     };
     void Promise.resolve()
       .then(() => read === undefined ? readDesign(headers, goalRef, undefined, planningRunRef) : read(goalRef, planningRunRef))
@@ -100,9 +102,9 @@ export function LiveDesignVersionNote(props: LiveDesignVersionNoteProps): JSX.El
         code: "DESIGN_READ_FAILED", layer: "CONTROL_ROOM_GOALS", status: "ERROR",
       }));
     return (): void => { live = false; };
-  }, [goalRef, headers, planningRunRef, read]);
+  }, [goalRef, headers, planningRunRef, read, observationKey]);
   const current = answer !== null && answer.subject.goalRef === goalRef
     && answer.subject.headers === headers && answer.subject.read === read
-    && answer.subject.planningRunRef === planningRunRef;
+    && answer.subject.planningRunRef === planningRunRef && answer.subject.observationKey === observationKey;
   return <DesignVersionNote outcome={current ? answer.outcome : null} />;
 }

@@ -291,6 +291,20 @@ describe("the live Create goal flow sends the operator's actual draft", () => {
 });
 
 describe("only a durable goal read back from the catalog drives goal state", () => {
+  it("forwards catalog product navigation without opening the technical board", async () => {
+    const user = userEvent.setup();
+    const onOpenProduct = vi.fn();
+    const onOpenBoard = vi.fn();
+    const state = wire(acceptedAnswer, [catalogRow(DURABLE_GOAL_ID)]);
+    stubWire(state);
+    render(<LiveGoalsHome onOpenBoard={onOpenBoard} onOpenProduct={onOpenProduct} setup={attachedSetup(state)} />);
+
+    await user.click(await screen.findByRole("button", { name: "Open product Durable title" }));
+    expect(onOpenProduct).toHaveBeenCalledWith(DURABLE_GOAL_ID, "Durable title");
+    expect(onOpenBoard).not.toHaveBeenCalled();
+    expect(state.sent).toEqual([]);
+  });
+
   it("shows and opens the catalog entry the daemon minted for the sent command", async () => {
     const user = userEvent.setup({ delay: null });
     const onOpenBoard = vi.fn();
@@ -608,7 +622,7 @@ describe("only a committed create discards the draft", () => {
 });
 
 describe("the goals list shows the daemon's PRD coverage as each card's progress", () => {
-  it("fills the bar from an injected coverage reader without a second fetch", async () => {
+  it("keeps measured coverage in the facts disclosure without a product completion bar", async () => {
     const state = wire(acceptedAnswer, [catalogRow("goal-cov")]);
     stubWire(state);
     const readCoverage = vi.fn(async (goalId: string) => ({
@@ -623,6 +637,8 @@ describe("the goals list shows the daemon's PRD coverage as each card's progress
       totals: { contracts: 1, criteria: 10, goals: 1, planned: 0, requirements: 7, unattributable: 0, verified: 10 },
     }));
     render(<LiveGoalsHome onOpenBoard={vi.fn()} readCoverage={readCoverage} setup={attachedSetup(state)} />);
+    await userEvent.click(await screen.findByTestId("cr.goals.card.goal-cov.expand"));
+    expect(screen.getByTestId("cr.goals.card.goal-cov").querySelector(".cr2-goal-bar")).toBeNull();
     await waitFor(() => {
       expect(screen.getByTestId("cr.goals.card.goal-cov.progress").textContent)
         .toBe("10 of 10 acceptance criteria verified");
@@ -635,6 +651,7 @@ describe("the goals list shows the daemon's PRD coverage as each card's progress
     const state = wire(acceptedAnswer, [catalogRow("goal-plain")]);
     stubWire(state);
     render(<LiveGoalsHome onOpenBoard={vi.fn()} setup={attachedSetup(state)} />);
+    await userEvent.click(await screen.findByTestId("cr.goals.card.goal-plain.expand"));
     await screen.findByTestId("cr.goals.card.goal-plain.progress");
     expect(screen.getByTestId("cr.goals.card.goal-plain.progress").textContent).toBe("Progress unavailable");
   });

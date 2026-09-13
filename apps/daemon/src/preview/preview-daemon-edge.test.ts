@@ -39,7 +39,7 @@ import { readGoalLandingStatus } from "./preview-goal-landing.js";
 import { recordPreviewReceipt } from "./preview-ledger.js";
 import { previewAggregateId } from "./preview-receipt-contracts.js";
 import {
-  LISTENING_SERVER, awaitPidGone, cleanupFixtureWorkspaces, fixtureWorkspace,
+  LISTENING_SERVER, awaitPidGone, cleanupFixtureWorkspaces, commitFixtureWorkspace, fixtureWorkspace,
 } from "./preview-test-fixtures.js";
 
 type Store = ReturnType<typeof openStore>;
@@ -428,7 +428,7 @@ describe("daemon shutdown", () => {
       store,
     });
 
-    const run = await port.supervisor.start({ goalId: GOAL_ID, sha: SHA, workspace });
+    const run = await port.supervisor.start({ goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace });
     if (!run.ok) throw new Error(`expected a started preview, got ${run.refusal.code}`);
     const pid = run.started.handle.pid;
     // The child is ALIVE before the sweep, so "gone afterwards" measures the sweep and not a

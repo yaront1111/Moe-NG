@@ -3,7 +3,6 @@ import type { CSSProperties, JSX } from "react";
 import "./goal-card.css";
 import { ActionButton, FactRow } from "../components/primitives.js";
 import { TruthChip } from "../components/truth-chip.js";
-import { ARROW_RIGHT } from "../glyphs.js";
 import type { ProofPayload } from "../shell/proof-context.js";
 import type { GoalCardModel, GoalFact, GoalStateLabel, HeadlineTone } from "./goal-model.js";
 
@@ -14,21 +13,7 @@ const STATE_WORDS: Readonly<Record<GoalStateLabel, string>> = Object.freeze({
   DRAFT: "Draft",
 });
 
-/**
- * One goal card (UI-3): the plain headline, a state label, a one-line human
- * status, an acceptance-progress bar, time and budget labels, a row of truth
- * chips, a "Show all N supplied facts" expander, and "Open board".
- *
- * Fields the surface cannot source (time, budget, acceptance progress) render as
- * an honest "coming online" chip rather than a fabricated number - the card is
- * dumb, and reads exactly what its model carries.
- *
- * Those placeholder chips sit UNDER the progress bar, never beside the progress
- * label: the label's column is a 220px basis that shrinks to 180px, and a chip is
- * nowrap and unshrinkable, so a chip in the top row painted over "Open board".
- * `goal-card.css` lets the rows they live in wrap, and leaves the label itself free
- * to wrap too - its noun is a free string from the model.
- */
+/** A project-local product entry. Execution counts remain inspectable facts. */
 
 const TONE_VAR: Readonly<Record<HeadlineTone, string>> = Object.freeze({
   accent: "--cr-accent-text",
@@ -73,19 +58,17 @@ export interface GoalCardProps {
   readonly expanded: boolean;
   readonly onToggleExpand: () => void;
   readonly onOpenBoard: () => void;
+  /** Opens the product's artifacts, including a PRD before a planning run exists. */
+  readonly onOpenProduct?: (() => void) | undefined;
 }
 
-export function GoalCard({ goal, expanded, onToggleExpand, onOpenBoard }: GoalCardProps): JSX.Element {
-  // A card carries TWO doors to the board - the title button and the Open control.
-  // Both are gated on the same fact, because disabling only one relabels the hole.
-  const canOpenBoard = hasDurableRun(goal.planningRunRef);
+export function GoalCard({ goal, expanded, onToggleExpand, onOpenBoard, onOpenProduct }: GoalCardProps): JSX.Element {
+  const canOpenBoard = onOpenProduct !== undefined || hasDurableRun(goal.planningRunRef);
+  const open = onOpenProduct ?? onOpenBoard;
   const dotStyle = { "--dot-tone": `var(${TONE_VAR[goal.headlineTone]})` } as CSSProperties;
-  const progressPct = goal.progress === undefined || goal.progress.total === 0
-    ? 0
-    : Math.round((goal.progress.done / goal.progress.total) * 100);
 
   return (
-    <li className="cr2-goal" data-state={goal.state} data-testid={`cr.goals.card.${goal.goalId}`}>
+    <li className="cr2-goal cr2-product-card" data-state={goal.state} data-testid={`cr.goals.card.${goal.goalId}`}>
       <div className="cr2-goal-head">
         <div className="cr2-goal-lead">
           <div className="cr2-goal-titlerow">
@@ -98,13 +81,15 @@ export function GoalCard({ goal, expanded, onToggleExpand, onOpenBoard }: GoalCa
               data-identifier={goal.titleIsIdentifier ? "true" : undefined}
               data-testid={`cr.goals.card.${goal.goalId}.title`}
               disabled={!canOpenBoard}
-              onClick={canOpenBoard ? onOpenBoard : undefined}
+              onClick={canOpenBoard ? open : undefined}
               title={canOpenBoard ? undefined : NO_DURABLE_RUN_REASON}
               type="button"
             >
               {goal.title}
             </button>
-            <span className="cr2-goal-state" data-state={goal.state}>{STATE_WORDS[goal.state]}</span>
+            <span className="cr2-goal-state" data-state={goal.state}>
+              {goal.needsYou ? "Needs you" : `Work: ${STATE_WORDS[goal.state].toLowerCase()}`}
+            </span>
           </div>
           <div className="cr2-goal-headline">
             <span aria-hidden="true" className="cr2-goal-dot" style={dotStyle} />
@@ -112,56 +97,34 @@ export function GoalCard({ goal, expanded, onToggleExpand, onOpenBoard }: GoalCa
           </div>
         </div>
 
-        <div className="cr2-goal-progress">
-          <div className="cr2-goal-progress-top">
-            <span className="cr2-goal-progress-label" data-testid={`cr.goals.card.${goal.goalId}.progress`}>
-              {goal.progress === undefined
-                ? goal.progressNote ?? "Progress unavailable"
-                : `${String(goal.progress.done)} of ${String(goal.progress.total)} ${goal.progress.noun}`}
-            </span>
-            {goal.lastEventLabel === undefined
-              ? null
-              : <span className="cr2-goal-lastevent">{goal.lastEventLabel}</span>}
-          </div>
-          <div className="cr2-goal-bar" title={goal.progressComingOnline}>
-            <div className="cr2-goal-bar-fill" style={{ width: `${String(progressPct)}%` } as CSSProperties} />
-          </div>
-        </div>
-
         <div className="cr2-goal-open">
           {canOpenBoard ? (
             <ActionButton
-              ariaLabel={`Open the board for ${goal.title}`}
-              onClick={onOpenBoard}
+              ariaLabel={`Open product ${goal.title}`}
+              onClick={open}
               testId={`cr.goals.card.${goal.goalId}.open`}
               variant="secondary"
             >
-              {`Open board ${ARROW_RIGHT}`}
+              Open product
             </ActionButton>
           ) : (
             // No `onClick` at all, not a no-op: a handler on a disabled button is
             // the inert-enabled-button defect one refactor away from returning.
             <ActionButton
-              ariaLabel={`Open board unavailable for ${goal.title}: ${NO_DURABLE_RUN_REASON}`}
+              ariaLabel={`Open product unavailable for ${goal.title}: ${NO_DURABLE_RUN_REASON}`}
               disabled
               testId={`cr.goals.card.${goal.goalId}.open-unavailable`}
               title={NO_DURABLE_RUN_REASON}
               variant="secondary"
             >
-              {`Open board ${ARROW_RIGHT}`}
+              Open product
             </ActionButton>
           )}
         </div>
       </div>
 
-      <div className="cr2-goal-chips">
-        {goal.headlineFacts.map((fact) => (
-          <span className="cr2-goal-pill" data-testid={`cr.goals.pill.${goal.goalId}.${slug(fact.label)}`} key={fact.factId}>
-            <span className="cr2-goal-pill-label">{fact.label}</span>
-            <span className="cr2-goal-pill-value">{fact.value}</span>
-            <TruthChip compact contextLabel={fact.label} proof={payloadOf(goal.goalId, fact)} truthClass={fact.truthClass} />
-          </span>
-        ))}
+      <div className="cr2-product-card-footer">
+        {goal.lastEventLabel === undefined ? null : <span className="cr2-goal-lastevent">{goal.lastEventLabel}</span>}
         <button
           aria-expanded={expanded}
           className="cr2-goal-expand"
@@ -177,6 +140,19 @@ export function GoalCard({ goal, expanded, onToggleExpand, onOpenBoard }: GoalCa
 
       {expanded ? (
         <div className="cr2-goal-facts" data-testid={`cr.goals.card.${goal.goalId}.facts`}>
+          <div className="cr2-goal-progress-top cr2-product-work-facts">
+            <span className="cr2-goal-progress-label" data-testid={`cr.goals.card.${goal.goalId}.progress`}>
+              {goal.progress === undefined ? goal.progressNote ?? "Progress unavailable"
+                : `${String(goal.progress.done)} of ${String(goal.progress.total)} ${goal.progress.noun}`}
+            </span>
+          </div>
+          {goal.headlineFacts.map((fact) => (
+            <span className="cr2-goal-pill" data-testid={`cr.goals.pill.${goal.goalId}.${slug(fact.label)}`} key={`headline.${fact.factId}`}>
+              <span className="cr2-goal-pill-label">{fact.label}</span>
+              <span className="cr2-goal-pill-value">{fact.value}</span>
+              <TruthChip compact contextLabel={fact.label} proof={payloadOf(goal.goalId, fact)} truthClass={fact.truthClass} />
+            </span>
+          ))}
           {goal.facts.map((fact) => (
             <div className="cr2-goal-facts-cell" key={fact.factId}>
               <FactRow

@@ -57,18 +57,16 @@ async function mountEntryPointAt(search: string): Promise<HTMLElement> {
 
 describe("control-room scaffold mounts", () => {
   it("mounts through the production entry point, not just its exported helper", async () => {
-    // The v1 shell is behind ?v1=1 now (v2 Cordum is the default entry); ?fixtures=1
-    // selects v1's frozen fixture board under it.
+    // Old links resolve into the replacement product interface; fixtures remain development-only.
     const container = await mountEntryPointAt("/?v1=1&fixtures=1");
     try {
-      expect(within(container).getByTestId("cr.banner.fixture")).toBeTruthy();
-      expect(within(container).getByTestId("cr.shell.root")).toBeTruthy();
-      expect(within(container).getByTestId("cr.shell.context.title").textContent)
-        .toBe("Ship the J1 vertical slice");
-      expect(within(container).getByTestId("cr.workspace.goal")).toBeTruthy();
+      expect(within(container).getByTestId("cr2.shell.root")).toBeTruthy();
+      expect(within(container).getByTestId("cr.goals.home")).toBeTruthy();
+      expect(within(container).queryByTestId("cr.shell.root")).toBeNull();
       const main = await import("./main.js");
       expect(main.CONTROL_ROOM_ROOT_ELEMENT_ID).toBe("root");
     } finally {
+      await act(async () => { (await import("./main.js")).MOUNTED_CONTROL_ROOM_ROOT.unmount(); });
       container.remove();
     }
   }, FILESYSTEM_IMPORT_TIMEOUT_MS);
@@ -208,18 +206,19 @@ describe("control-room scaffold mounts", () => {
     }
   }, FILESYSTEM_IMPORT_TIMEOUT_MS);
 
-  it("refuses closed at the real entry point when the build carries no credentials", async () => {
-    // DoD 1's fail-closed clause for the v1 entry (now behind ?v1=1), asserted at
-    // the composition root rather than the component: this build has no
-    // VITE_MOE_LIVE_* values, so v1 must produce a NOTICE, not the frozen fixtures.
+  it("refuses closed at the real entry point when runtime bootstrap is unavailable", async () => {
+    const fetchMock = vi.fn(async () => { throw new Error("bootstrap unavailable"); });
+    vi.stubGlobal("fetch", fetchMock);
     const container = await mountEntryPointAt("/?v1=1");
     try {
-      const notice = within(container).getByTestId("cr.config.notice");
-      expect(notice.textContent).toContain("VITE_MOE_LIVE_CREDENTIAL");
-      expect(notice.textContent).toContain("VITE_MOE_LIVE_CSRF");
+      expect((await within(container).findByRole("region", { name: "Live connection refusal" })).textContent)
+        .toContain("LIVE_BOOTSTRAP_UNAVAILABLE");
+      expect(fetchMock).toHaveBeenCalledTimes(1);
       expect(within(container).queryByTestId("cr.shell.root")).toBeNull();
       expect(container.textContent).not.toContain(CONTROL_ROOM_FIXTURE_KIND);
     } finally {
+      await act(async () => { (await import("./main.js")).MOUNTED_CONTROL_ROOM_ROOT.unmount(); });
+      vi.unstubAllGlobals();
       container.remove();
     }
   }, FILESYSTEM_IMPORT_TIMEOUT_MS);

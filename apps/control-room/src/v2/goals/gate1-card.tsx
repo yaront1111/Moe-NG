@@ -33,6 +33,8 @@ export interface Gate1CardProps {
   readonly goalId: string;
   readonly port: Gate1ApprovalPort;
   readonly read: (goalId: string) => Promise<Gate1ReadOutcome>;
+  readonly readOnly?: boolean;
+  readonly readRevision?: number;
 }
 
 type LoadState =
@@ -53,7 +55,7 @@ function idleDispatch(goalId: string, goalGeneration: number): DispatchState {
   return { approvedOnce: false, busy: false, goalGeneration, goalId, refusal: null };
 }
 
-export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element | null {
+export function Gate1Card({ goalId, port, read, readOnly = false, readRevision = 0 }: Gate1CardProps): JSX.Element | null {
   const goalIdentity = useRef({ generation: 0, goalId, port, read });
   if (goalIdentity.current.goalId !== goalId || goalIdentity.current.port !== port
     || goalIdentity.current.read !== read) {
@@ -75,6 +77,10 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
   const shownDispatch = dispatch.goalGeneration === goalGeneration
     ? dispatch : idleDispatch(goalId, goalGeneration);
   const { approvedOnce, busy, refusal } = shownDispatch;
+  // Queue an explicit refresh until the decision settles: rereading now would invalidate its response generation.
+  const heldRevision = useRef(readRevision);
+  if (!busy) heldRevision.current = readRevision;
+  const refreshRevision = heldRevision.current;
 
   useEffect(() => {
     const run = generation.current + 1;
@@ -95,7 +101,7 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
       }
     });
     return (): void => { generation.current += 1; };
-  }, [applied, goalGeneration, goalId, read]);
+  }, [applied, goalGeneration, goalId, read, refreshRevision]);
 
   const onAnswer = useCallback((
     clarification: Gate1ClarificationView, optionId: string,
@@ -176,6 +182,7 @@ export function Gate1Card({ goalId, port, read }: Gate1CardProps): JSX.Element |
         <>
           <Gate1PendingDecision
             busy={busy}
+            readOnly={readOnly}
             onAnswer={onAnswer}
             onApprove={onApprove}
             pending={shownState.outcome}

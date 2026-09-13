@@ -1,4 +1,4 @@
-import { PREVIEW_DECISIONS } from "./preview-contracts.js";
+import { PREVIEW_DECISIONS, previewRefusal } from "./preview-contracts.js";
 import type { PreviewDecision } from "./preview-contracts.js";
 import type { PreviewProcessHandle } from "./preview-process.js";
 import type { PreviewReceiptV1 } from "./preview-receipt-contracts.js";
@@ -97,6 +97,8 @@ export function createPreviewSupervisor(config: PreviewRunnerConfig): PreviewSup
     },
 
     start: async (request: PreviewRunRequest): Promise<PreviewRunResult> => {
+      // Closing ends admission before source extraction, package preparation, or spawning.
+      if (closed) return { ok: false, receipt: null, refusal: previewRefusal("PREVIEW_START_TIMEOUT") };
       // CHECK-THEN-ACT, CLOSED. The receipt id is deterministic, so it is known BEFORE the run
       // and can serialise starts for the same revision. Without this, two concurrent calls both
       // pass the landed gate and both spawn a server; the second cannot bind the port the first

@@ -15,13 +15,15 @@
  * production seams, a real `taskkill /T /F`, and the SHIPPED reconciliation port swept over
  * the bytes the crash actually left.
  *
- * THE WINDOW IS POLLED, NOT TIMED. The attempt is in flight between its RESERVED event and
- * its RECORDED one; the test polls the durable store for exactly that state and kills the
- * daemon the moment it sees it. A wall-clock sleep would be a guess about a machine, and
- * this harness directory is scanned for wall-clock needles anyway.
+ * DISCLOSED TEST PAUSE. An explicit --dependencies fixture delegates production ports and
+ * pauses only after the real workspace preparation. The production reservation therefore
+ * remains readable until the parent kills the child, even if its first read is delayed.
+ * The old 10ms poll sometimes missed the whole RESERVED-to-refusal interval on POSIX.
+ * Controls below prove normal completion and a resumed pause both retain the exact seal
+ * refusal: this crash journey does not configure a provider or claim a successful launch.
  */
 
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -38,7 +40,7 @@ import { PRINCIPAL_ID, PROJECT_ID }
 import { readInFlightFoundationAttempts }
   from "../../../apps/daemon/src/work/in-flight-attempts.js";
 import {
-  CREDENTIAL, FOUNDATION_SEAM_CATALOG_PATH, cleanupSeamHarnesses, dispatchPayload,
+  CREDENTIAL, DISPATCH_AGGREGATE, FOUNDATION_SEAM_CATALOG_PATH, cleanupSeamHarnesses, dispatchPayload,
   seedFoundationStore,
 } from "../../../apps/daemon/src/http/foundation-registry-fixtures.js";
 import { WIRE_PROTOCOL_VERSION } from "../../../apps/daemon/src/http/http-contract.js";
@@ -47,13 +49,7 @@ import { CSRF_TOKEN, killTree, startDaemon } from "./j1-loop-harness.js";
 import type { J1Scratch } from "./j1-loop-harness.js";
 import { pidIsAlive } from "./j1-loop-harness.js";
 import { pidReaped } from "./orphan-reap.js";
-
-/** Poll budget in POLLS, paced by a fixed interval — no clock is READ here, and the
- *  bound is a count so a slow host waits longer rather than failing sooner. */
-const RESERVED_POLLS = 600;
-const POLL_INTERVAL_MS = 10;
-const sleep = (ms: number): Promise<void> =>
-  new Promise((resolve) => { setTimeout(resolve, ms); });
+import { startCrashDaemon } from "./dispatch-crash-harness.js";
 
 const scratchRoots: string[] = [];
 
@@ -97,17 +93,14 @@ function dispatchEnvelope(): Record<string, unknown> {
 
 /** Reads the durable in-flight set: RESERVED attempts with no RECORDED answer yet. */
 function inFlightCount(storePath: string): number {
-  let store: SqliteEventStore | null = null;
+  const store = SqliteEventStore.openForProject(storePath, PROJECT_ID);
   try {
-    store = SqliteEventStore.openForProject(storePath, PROJECT_ID);
     const sweep = readInFlightFoundationAttempts(store, PROJECT_ID);
-    return sweep.ok ? sweep.attempts.length : 0;
-  } catch {
-    // A concurrent writer can hold the file for an instant. An unreadable poll is not
-    // evidence of an empty set, so it counts as "not yet" rather than as zero.
-    return 0;
+    expect(sweep.ok).toBe(true);
+    if (!sweep.ok) throw new Error(`${sweep.code}@${sweep.refusedBy}`);
+    return sweep.attempts.length;
   } finally {
-    store?.close();
+    store.close();
   }
 }
 
@@ -143,7 +136,7 @@ afterAll(() => {
   }
 });
 
-it("leaves a reserved attempt the restart sweep classifies, and no orphan behind", async () => {
+function seededScratch(): J1Scratch & { readonly catalogPath: string } {
   const scratch = dispatchScratch();
   // GENESIS FIRST, on a store with no history at all — `ensureGenesisRecoveryBinding`
   // refuses to install onto a store that already carries history, and a daemon booted
@@ -157,9 +150,31 @@ it("leaves a reserved attempt the restart sweep classifies, and no orphan behind
   } finally {
     installer.close();
   }
-  const daemon = await startDaemon(scratch, {
-    MOE_FOUNDATION_WORKSPACE_CATALOG: FOUNDATION_SEAM_CATALOG_PATH,
+  // Each run uses the real fixture repository but owns its worktree parent. The
+  // crashed run cannot leave a prepared tree at a later control's attempt path.
+  const worktreeParent = join(scratch.root, "worktrees");
+  mkdirSync(worktreeParent);
+  const catalog = JSON.parse(readFileSync(FOUNDATION_SEAM_CATALOG_PATH, "utf8")) as {
+    catalogVersion: string; entries: Array<Record<string, unknown>>;
+  };
+  const catalogPath = join(scratch.root, "catalog.json");
+  writeFileSync(catalogPath, JSON.stringify({ ...catalog,
+    entries: catalog.entries.map(entry => ({ ...entry, worktreeParent })) }));
+  return { ...scratch, catalogPath };
+}
+
+function postDispatch(origin: string): Promise<Response> {
+  return fetch(`${origin}/command`, {
+    body: JSON.stringify(dispatchEnvelope()),
+    headers: { "content-type": "application/json", origin, "x-moe-csrf": CSRF_TOKEN,
+      "x-moe-protocol-version": WIRE_PROTOCOL_VERSION, "x-moe-session-credential": CREDENTIAL },
+    method: "POST",
   });
+}
+
+it("leaves a reserved attempt the restart sweep classifies, and no orphan behind", async () => {
+  const scratch = seededScratch();
+  const daemon = await startCrashDaemon(scratch, scratch.catalogPath);
   const daemonPid = daemon.pid;
   let restarted: Awaited<ReturnType<typeof startDaemon>> | null = null;
   try {
@@ -170,30 +185,14 @@ it("leaves a reserved attempt the restart sweep classifies, and no orphan behind
     // Fired, NOT awaited: awaiting it would let the dispatch finish and leave nothing in
     // flight to reconcile. The rejection is swallowed on purpose — the daemon is about to
     // die under it, and a dead socket is the expected end of this request.
-    const pending = fetch(`${daemon.origin}/command`, {
-      body: JSON.stringify(dispatchEnvelope()),
-      headers: {
-        "content-type": "application/json",
-        origin: daemon.origin,
-        "x-moe-csrf": CSRF_TOKEN,
-        "x-moe-protocol-version": WIRE_PROTOCOL_VERSION,
-        "x-moe-session-credential": CREDENTIAL,
-      },
-      method: "POST",
-    }).then(async (response) => JSON.stringify(await response.json()))
+    const pending = postDispatch(daemon.origin).then(async (response) => JSON.stringify(await response.json()))
       .catch((error: unknown) => `transport ended: ${String(error)}`);
-
-    let reserved = false;
-    for (let poll = 0; poll < RESERVED_POLLS && !reserved; poll += 1) {
-      reserved = inFlightCount(scratch.storePath) > 0;
-      if (!reserved) await sleep(POLL_INTERVAL_MS);
-    }
-    // The window is the whole point: without a reserved-but-unrecorded attempt this case
-    // would sweep an empty set and assert nothing J3 has not already asserted.
-    // The answer is carried into the message so a dispatch that REFUSED instead of
-    // reserving names its own code here rather than reading as a timing miss.
-    const answer = reserved ? "(still in flight)" : await pending;
-    expect(reserved, `answer: ${answer} | daemon: ${daemon.output()}`).toBe(true);
+    const prepared = await daemon.prepared();
+    expect(prepared).toMatchObject({ attemptId: "attempt-1", projectId: PROJECT_ID });
+    // Let the daemon serve another round trip before this first observation. The
+    // reservation is held by the explicit pause, independent of process scheduling.
+    await fetch(`${daemon.origin}/bootstrap`);
+    expect(inFlightCount(scratch.storePath)).toBe(1);
 
     await killTree(daemon.child);
     await pending;
@@ -206,6 +205,8 @@ it("leaves a reserved attempt the restart sweep classifies, and no orphan behind
       if (!sweep.ok) return;
       // EXACTLY one in-flight attempt: the dispatch reserved once and never recorded.
       expect(sweep.attempts.length).toBe(1);
+      expect(sweep.attempts).toMatchObject([{ attemptRef: DISPATCH_AGGREGATE,
+        situation: { attemptId: prepared.attemptId } }]);
     } finally {
       store.close();
     }
@@ -223,7 +224,7 @@ it("leaves a reserved attempt the restart sweep classifies, and no orphan behind
 
     // The daemon comes back on the SAME store after the sweep classified the crash.
     restarted = await startDaemon(scratch, {
-      MOE_FOUNDATION_WORKSPACE_CATALOG: FOUNDATION_SEAM_CATALOG_PATH,
+      MOE_FOUNDATION_WORKSPACE_CATALOG: scratch.catalogPath,
     });
     expect(restarted.origin).toMatch(/^http:\/\//u);
   } finally {
@@ -236,3 +237,43 @@ it("leaves a reserved attempt the restart sweep classifies, and no orphan behind
   expect(await pidReaped(daemonPid)).toBe(true);
   expect(pidIsAlive(process.pid)).toBe(true);
 }, 180_000);
+
+it.each(["production", "paused"] as const)(
+  "%s completion records the real seal refusal instead of an in-flight attempt", async mode => {
+    const scratch = seededScratch();
+    const paused = mode === "paused" ? await startCrashDaemon(scratch, scratch.catalogPath) : null;
+    const daemon = paused ?? await startDaemon(scratch, { MOE_FOUNDATION_WORKSPACE_CATALOG: scratch.catalogPath });
+    let settled = false;
+    const pending = postDispatch(daemon.origin).then(response => { settled = true; return response; });
+    // Preserve rejection for the awaited assertion, while teardown may close the
+    // socket before that assertion is reached on an earlier failure.
+    void pending.catch(() => undefined);
+    try {
+      if (paused !== null) {
+        const prepared = await paused.prepared();
+        paused.resume({ ...prepared, attemptId: "another-attempt" });
+        await fetch(`${daemon.origin}/bootstrap`);
+        expect(settled).toBe(false);
+        expect(inFlightCount(scratch.storePath)).toBe(1);
+        paused.resume(prepared);
+        paused.resume(prepared);
+      }
+      const answer = await pending;
+      expect(answer.status).toBe(422);
+      expect(await answer.json()).toMatchObject({ ok: false, outcome: "PORT_REFUSED", stage: "DISPATCH",
+        refusal: { code: "FOUNDATION_CONTEXT_SEAL_UNCONFIGURED", layer: "FOUNDATION_CONTEXT_SEAL" } });
+      // Deliberately inspect only AFTER completion: the former polling test missed
+      // this interval and incorrectly expected one still-reserved attempt.
+      expect(inFlightCount(scratch.storePath)).toBe(0);
+      const store = SqliteEventStore.openForProject(scratch.storePath, PROJECT_ID);
+      try {
+        expect(store.readEvents(DISPATCH_AGGREGATE).map(event => event.eventType))
+          .toEqual(["FoundationDispatchReserved", "FoundationAttemptRecorded"]);
+      } finally { store.close(); }
+    } finally {
+      await killTree(daemon.child);
+      await pending.catch(() => undefined);
+    }
+    expect(await pidReaped(daemon.pid)).toBe(true);
+  }, 180_000,
+);

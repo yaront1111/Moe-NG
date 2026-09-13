@@ -14,14 +14,15 @@ type ById = (instanceId: string) => Promise<ProjectHomeResult>;
 export interface ProjectHomeProps {
   readonly projects: readonly ProjectHomeProject[];
   readonly onCreateProject: Intake;
-  readonly onRefreshProjects: () => Promise<ProjectHomeResult>;
+  /** Null means a newer read owns the displayed result. */
+  readonly onRefreshProjects: () => Promise<ProjectHomeResult | null>;
   readonly onRegisterProject: Intake;
   readonly onStartProject: ById;
   readonly onStopProject: ById;
   readonly onOpenProject: ById;
 }
 
-type RunOperation = (busyKey: string, reportKey: string, operation: () => Promise<ProjectHomeResult>) => Promise<ProjectHomeResult>;
+type RunOperation = (busyKey: string, reportKey: string, operation: () => Promise<ProjectHomeResult | null>) => Promise<ProjectHomeResult | null>;
 
 /** The sentence is the headline; `CODE @ LAYER` stays verbatim behind Details so
     the daemon's own word is always one click away and never the first thing read. */
@@ -67,11 +68,12 @@ const INTAKE_CHOICES = Object.freeze([
 ]);
 
 interface IntakeFormProps {
+  readonly id: string;
   readonly busyKey: string | null; readonly onCreate: Intake; readonly onRegister: Intake;
   readonly report: ProjectHomeResult | undefined; readonly run: RunOperation;
 }
 
-function IntakeForm({ busyKey, onCreate, onRegister, report, run }: IntakeFormProps): JSX.Element {
+function IntakeForm({ id, busyKey, onCreate, onRegister, report, run }: IntakeFormProps): JSX.Element {
   const titleId = useId(), rootId = useId(), choiceName = useId(), hintId = useId();
   const [kind, setKind] = useState<"create" | "register">("create");
   const [title, setTitle] = useState("");
@@ -85,11 +87,11 @@ function IntakeForm({ busyKey, onCreate, onRegister, report, run }: IntakeFormPr
     const input = { root: root.trim(), title: title.trim() };
     const result = await run(INTAKE_KEY, INTAKE_KEY, () =>
       kind === "create" ? onCreate(input) : onRegister(input));
-    if (result.ok) { setRoot(""); setTitle(""); }
+    if (result?.ok) { setRoot(""); setTitle(""); }
   };
 
   return (
-    <form aria-label="Add a project" className="cr2-project-intake"
+    <form aria-label="Add a project" className="cr2-project-intake" id={id} tabIndex={-1}
       onSubmit={(event) => { void submit(event); }}>
       <div>
         <p className="cr2-project-intake-kicker">ADD A PROJECT</p>
@@ -201,16 +203,20 @@ export function ProjectHome({ projects, onCreateProject, onRefreshProjects, onRe
   onStartProject, onStopProject, onOpenProject }: ProjectHomeProps): JSX.Element {
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [reports, setReports] = useState<ReadonlyMap<string, ProjectHomeResult>>(() => new Map());
-  const busy = useRef(false), hintId = useId();
+  const busy = useRef(false), hintId = useId(), intakeId = useId();
 
   const run: RunOperation = async (key, reportKey, operation) => {
     if (busy.current) return PROJECT_HOME_LOCAL_REFUSAL;
     busy.current = true;
     setBusyKey(key);
-    let result: ProjectHomeResult;
-    try { result = safeResult(await operation()); }
+    let result: ProjectHomeResult | null;
+    try {
+      const answer = await operation();
+      result = key === "refresh" && answer === null ? null : safeResult(answer);
+    }
     catch { result = PROJECT_HOME_LOCAL_REFUSAL; }
     busy.current = false; setBusyKey(null);
+    if (result === null) return null;
     setReports((current) => new Map(current).set(reportKey, result));
     return result;
   };
@@ -221,6 +227,7 @@ export function ProjectHome({ projects, onCreateProject, onRefreshProjects, onRe
         <div><p>ON THIS COMPUTER</p><h2>Projects</h2></div>
         <div className="cr2-project-home-tools">
           <p>A project is a folder on this computer that Moe runs for you. Add one below, then press Start.</p>
+          {projects.length > 0 ? <a className="cr2-project-add-link" href={`#${intakeId}`}>Add project</a> : null}
           <button disabled={busyKey !== null} onClick={() => { void run("refresh", "refresh", onRefreshProjects); }}
             type="button">{busyKey === "refresh" ? "Refreshing" : "Refresh"}</button>
         </div>
@@ -230,8 +237,6 @@ export function ProjectHome({ projects, onCreateProject, onRefreshProjects, onRe
         <p>NOTHING HERE YET</p><h2>Add your first project</h2>
         <span>Moe is not tracking any folder yet. Point it at one below, then press Start to run it.</span>
       </section> : null}
-      <IntakeForm busyKey={busyKey} onCreate={onCreateProject} onRegister={onRegisterProject}
-        report={reports.get(INTAKE_KEY)} run={run} />
       {projects.length > 0 ? <section aria-labelledby="cr2-project-ledger-heading" className="cr2-project-ledger">
         <div className="cr2-project-ledger-heading"><p>ADDED SO FAR</p><h2 id="cr2-project-ledger-heading">Your projects</h2></div>
         <p className="cr2-project-ledger-hint" id={hintId}>
@@ -244,6 +249,8 @@ export function ProjectHome({ projects, onCreateProject, onRefreshProjects, onRe
             report={reports.get(`project:${project.instanceId}`)} run={run} />)}
         </ul>
       </section> : null}
+      <IntakeForm busyKey={busyKey} id={intakeId} onCreate={onCreateProject} onRegister={onRegisterProject}
+        report={reports.get(INTAKE_KEY)} run={run} />
     </main>
   );
 }

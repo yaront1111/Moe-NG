@@ -17,6 +17,15 @@ beforeAll(() => {
 afterEach(cleanup);
 
 describe("ContextBar", () => {
+  it("names the default return destination Products", async () => {
+    const user = userEvent.setup();
+    const onBack = vi.fn();
+    render(<ContextBar eyebrow="Current work" title="Appointments" onBack={onBack}
+      onToggleProof={vi.fn()} proofOpen={false} />);
+    await user.click(screen.getByRole("button", { name: "Products" }));
+    expect(onBack).toHaveBeenCalledTimes(1);
+  });
+
   it("renders the eyebrow, the title and a live Proof toggle, and no card-treatment switch", async () => {
     const user = userEvent.setup();
     const onToggleProof = vi.fn();

@@ -43,6 +43,8 @@ export const BOARD_SUBJECT_ABSENT_NOTE =
   "The daemon has not bound a durable goal to this board yet.";
 
 export interface LiveWorkBoardProps {
+  /** The workspace owns the poll when this property is supplied, including null. */
+  readonly surface?: SurfaceFrame | null;
   /** The durable goal the operator opened; the board renders nothing of any other. */
   readonly goalId: string;
   readonly headers: Readonly<Record<string, string>>;
@@ -123,11 +125,12 @@ function BoardSubject(
 }
 
 export function LiveWorkBoard(
-  { goalId, headers, onConnection, onFrame, runId }: LiveWorkBoardProps,
+  { goalId, headers, onConnection, onFrame, runId, surface }: LiveWorkBoardProps,
 ): JSX.Element {
   const [frame, setFrame] = useState<SurfaceFrame | null>(null);
 
-  const feed = useMemo(() => createBoardFeed({
+  const external = surface !== undefined;
+  const feed = useMemo(() => external ? null : createBoardFeed({
     headers,
     intervalMs: POLL_INTERVAL_MS,
     onFrame: (next) => {
@@ -135,17 +138,18 @@ export function LiveWorkBoard(
       onConnection?.(next.connection);
       onFrame?.(next);
     },
-  }), [headers, onConnection, onFrame]);
+  }), [external, headers, onConnection, onFrame]);
 
   useEffect(() => {
-    feed.start();
-    return (): void => { feed.stop(); };
+    feed?.start();
+    return (): void => { feed?.stop(); };
   }, [feed]);
 
+  const shown = surface === undefined ? frame : surface;
   return (
     <>
-      <BoardSubject frame={frame} goalId={goalId} runId={runId} />
-      <WorkBoard frame={frame === null ? null : scopedFrame(frame, goalId, runId)} />
+      <BoardSubject frame={shown} goalId={goalId} runId={runId} />
+      <WorkBoard frame={shown === null ? null : scopedFrame(shown, goalId, runId)} />
     </>
   );
 }

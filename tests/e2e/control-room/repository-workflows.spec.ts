@@ -1,3 +1,5 @@
+import { openProductRecord } from "./product-navigation.js";
+import { openTechnicalDestination } from "./product-navigation.js";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { lanePids, survivingPids, withDaemonBackedControlRoom } from "./daemon-ports.js";
@@ -22,14 +24,15 @@ test("paired UI displays daemon recovery and criterion evidence without inventin
     page.on("response", (response) => { const path = new URL(response.url()).pathname;
       if (path === "/repository/recovery/read" || path === "/criteria/read") reads.set(path, response.status()); });
     await page.goto(lane.baseUrl, { waitUntil: "domcontentloaded" }); await pair(page, lane);
-    await page.getByTestId("cr.nav.health").click({ timeout: 10000 });
+    await openTechnicalDestination(page, "health");
     const recovery = page.getByTestId("cr.health.recovery");
     await expect(recovery).toContainText("REPOSITORY_IDENTITY_UNKNOWN", { timeout: 30000 });
     await expect(recovery.getByRole("button", { name: "Release unused reservation" })).toHaveCount(0);
     expect(reads.get("/repository/recovery/read")).toBe(200);
     await page.screenshot({ path: testInfo.outputPath("repository-recovery.png"), fullPage: true });
     await page.getByTestId("cr.nav.goals").click({ timeout: 10000 });
-    await page.getByRole("button", { name: /^Open the board for /u }).first().click({ timeout: 30000 });
+    await page.getByRole("button", { name: /^Open product /u }).first().click({ timeout: 30000 });
+    await openProductRecord(page, "Checks");
     const criteria = page.getByTestId("cr.criteria.card");
     await expect(criteria).toBeVisible({ timeout: 30000 });
     await expect(page.getByTestId("cr.criteria.read-refusal")).toContainText("CRITERION_EVIDENCE", { timeout: 30000 });

@@ -1,0 +1,66 @@
+/* The manager shares shell typography and controls, but owns a header and one
+   scrolling content region. It has no workspace navigation rail. */
+.cr2-shell.cr2-manager-root {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.cr2-manager-header {
+  padding: 15px clamp(16px, 3vw, 32px);
+  border-bottom: 1px solid var(--cr-line);
+  background: var(--cr-header-bg);
+}
+
+.cr2-manager-root .cr2-brand {
+  width: min(1120px, 100%);
+  margin-inline: auto;
+  padding: 0;
+  justify-content: flex-start;
+}
+
+.cr2-manager-root .cr2-brand-mark {
+  flex: none;
+}
+
+/* The workspace rail hides these on mobile; the manager's header keeps its name. */
+.cr2-manager-root .cr2-brand-name {
+  position: static;
+  width: auto;
+  height: auto;
+  margin: 0;
+  overflow: visible;
+  clip-path: none;
+  white-space: normal;
+}
+
+.cr2-manager-root .cr2-brand-version {
+  display: block;
+  margin-inline-start: auto;
+}
+
+.cr2-manager-content {
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: clamp(20px, 3vw, 40px) clamp(16px, 3vw, 32px);
+  scroll-padding-block: 20px;
+}
+
+.cr2-manager-body {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  width: min(1120px, 100%);
+  min-width: 0;
+  margin-inline: auto;
+  overflow-wrap: anywhere;
+}
+
+/* The content region supplies page spacing. Keep the complete pairing card in
+   normal flow so its last control remains reachable on a short viewport. */
+.cr2-manager-body > .cr2-pairing {
+  min-height: 0;
+  padding: 0;
+  align-items: start;
+}

@@ -113,11 +113,13 @@ export async function runSingleProjectMain(options: ProjectSingleMainOptions): P
     }),
   });
   let signal!: () => void;
+  const operatorAbort = new AbortController();
   const signalled = new Promise<"SIGNAL">((resolve) => {
     let fired = false;
     signal = (): void => {
       if (fired) return;
       fired = true;
+      operatorAbort.abort();
       resolve("SIGNAL");
     };
   });
@@ -143,8 +145,9 @@ export async function runSingleProjectMain(options: ProjectSingleMainOptions): P
     if (!shutdown.ok) disclose(shutdown, options.log);
     return 1;
   }
+  let operatorConsumption: Promise<void> = Promise.resolve();
   if (options.operatorInput !== undefined) {
-    void consumePairingOperatorLines(options.operatorInput, async (line) => {
+    operatorConsumption = consumePairingOperatorLines(options.operatorInput, async (line) => {
       if (/^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u.test(line)) {
         // Answer the operator, but never echo the label: it is a bearer until consumed.
         // Before this the console stayed silent on both outcomes (measured 2026-09-13).
@@ -152,24 +155,29 @@ export async function runSingleProjectMain(options: ProjectSingleMainOptions): P
         if (result.ok) options.log("moe start: pairing approved");
         else disclose(result, options.log);
       }
-    });
+    }, { signal: operatorAbort.signal });
   }
-  options.log("moe start: project runtime ready");
-  options.log(`moe start: ${opened.origin}`);
-  options.log("moe start: Ctrl-C stops this project runtime");
+  try {
+    options.log("moe start: project runtime ready");
+    options.log(`moe start: ${opened.origin}`);
+    options.log("moe start: Ctrl-C stops this project runtime");
 
-  const outcome = await Promise.race([
-    runtime.wait(instanceId).then((result) => ({ kind: "COMPLETED" as const, result })),
-    signalled.then(() => ({ kind: "SIGNAL" as const })),
-  ]);
-  if (outcome.kind === "SIGNAL") {
-    const shutdown = await runtime.shutdown();
-    if (!shutdown.ok) { disclose(shutdown, options.log); return 1; }
-    return 0;
+    const outcome = await Promise.race([
+      runtime.wait(instanceId).then((result) => ({ kind: "COMPLETED" as const, result })),
+      signalled.then(() => ({ kind: "SIGNAL" as const })),
+    ]);
+    if (outcome.kind === "SIGNAL") {
+      const shutdown = await runtime.shutdown();
+      if (!shutdown.ok) { disclose(shutdown, options.log); return 1; }
+      return 0;
+    }
+    if (!outcome.result.ok) {
+      disclose(outcome.result, options.log);
+      return 1;
+    }
+    return outcome.result.exitCode;
+  } finally {
+    operatorAbort.abort();
+    await operatorConsumption;
   }
-  if (!outcome.result.ok) {
-    disclose(outcome.result, options.log);
-    return 1;
-  }
-  return outcome.result.exitCode;
 }

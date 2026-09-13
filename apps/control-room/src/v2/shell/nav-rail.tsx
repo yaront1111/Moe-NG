@@ -1,4 +1,4 @@
-import { useId, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { JSX } from "react";
 
 import { StatusChip } from "../components/primitives.js";
@@ -12,6 +12,7 @@ import {
 } from "./shell-routes.js";
 import type { CordumRoute, NavDestination, NavUnavailableReason } from "./shell-routes.js";
 import "./nav-rail.css";
+import "../styles/product-home.css";
 
 /**
  * The left navigation rail: the Moe wordmark, the destination list, and - pinned
@@ -50,6 +51,10 @@ export function NavRail({
   initialLegendOpen = false,
 }: NavRailProps): JSX.Element {
   const [legendOpen, setLegendOpen] = useState(initialLegendOpen);
+  const [toolsOpen, setToolsOpen] = useState(activeId !== "goals" && activeId !== "approvals");
+  useEffect(() => {
+    if (activeId !== "goals" && activeId !== "approvals") setToolsOpen(true);
+  }, [activeId]);
   const railId = useId();
   const roster = destinations ?? resolveNavDestinations();
   const reasonNodeId = (reason: NavUnavailableReason): string => `${railId}-${reason}`;
@@ -71,8 +76,21 @@ export function NavRail({
         <span className="cr2-brand-version">v0.1</span>
       </div>
 
-      <ul className="cr2-navlist">
-        {items.map((item) => {
+      {[false, true].map((technical) => (
+        <div className={technical ? "cr2-nav-tools" : undefined} key={String(technical)}>
+          {technical ? (
+            <button aria-expanded={toolsOpen} aria-controls={`${railId}-tools`}
+              className="cr2-nav-tools-toggle" onClick={() => setToolsOpen((open) => !open)} title="Technical tools" type="button">
+              <svg aria-hidden="true" className="cr2-nav-tools-icon" fill="none" viewBox="0 0 24 24">
+                <path d="M4 7h6m4 0h6M4 17h10m4 0h2M10 4v6m4 4v6" stroke="currentColor" strokeLinecap="round" strokeWidth={1.7} />
+              </svg>
+              <span className="cr2-nav-tools-label">Technical tools</span>
+              <span aria-hidden="true" className="cr2-nav-tools-disclosure">{toolsOpen ? "−" : "+"}</span>
+            </button>
+          ) : null}
+          <ul className="cr2-navlist" data-testid={technical ? "cr.nav.technical" : "cr.nav.primary"}
+            hidden={technical && !toolsOpen} id={technical ? `${railId}-tools` : undefined}>
+        {items.filter((item) => (item.id !== "goals" && item.id !== "approvals") === technical).map((item) => {
           const badge = badges?.[item.id];
           const active = item.id === activeId;
           const reason = reasonFor(item.id);
@@ -126,7 +144,9 @@ export function NavRail({
             </li>
           );
         })}
-      </ul>
+          </ul>
+        </div>
+      ))}
 
       {/*
         One sentence per reason actually present on this rail, addressed by

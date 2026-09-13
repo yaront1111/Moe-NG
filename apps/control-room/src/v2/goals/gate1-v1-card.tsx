@@ -32,6 +32,8 @@ export interface Gate1CardV1Props {
   readonly goalId: string;
   readonly port: Gate1ApprovalPortV1;
   readonly read: (goalId: string) => Promise<Gate1ReadOutcomeV1>;
+  readonly readOnly?: boolean;
+  readonly readRevision?: number;
 }
 
 type LoadState =
@@ -40,13 +42,17 @@ type LoadState =
 
 type DispatchRefusal = Extract<Gate1ApprovalOutcomeV1, { ok: false }>;
 
-export function Gate1CardV1({ goalId, port, read }: Gate1CardV1Props): JSX.Element | null {
+export function Gate1CardV1({ goalId, port, read, readOnly = false, readRevision = 0 }: Gate1CardV1Props): JSX.Element | null {
   const [state, setState] = useState<LoadState>({ phase: "LOADING" });
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<DispatchRefusal | null>(null);
   const [approvedOnce, setApprovedOnce] = useState(false);
   const [applied, setApplied] = useState(0);
   const generation = useRef(0);
+  // Keep the pending decision visible; consume a requested reread after its response is recorded.
+  const heldRevision = useRef(readRevision);
+  if (!busy) heldRevision.current = readRevision;
+  const refreshRevision = heldRevision.current;
 
   useEffect(() => {
     const run = generation.current + 1;
@@ -56,7 +62,7 @@ export function Gate1CardV1({ goalId, port, read }: Gate1CardV1Props): JSX.Eleme
       if (generation.current === run) setState({ outcome, phase: "LOADED" });
     });
     return (): void => { generation.current += 1; };
-  }, [applied, goalId, read]);
+  }, [applied, goalId, read, refreshRevision]);
 
   const onAnswer = useCallback((
     clarification: Gate1ClarificationViewV1, optionId: string, contractId: string,
@@ -105,6 +111,7 @@ export function Gate1CardV1({ goalId, port, read }: Gate1CardV1Props): JSX.Eleme
         <p className="cr2-slot-kicker" data-testid="cr.gate1.loading">Reading the contract...</p>
       ) : state.outcome.status === "PENDING" ? (
         <>
+          <fieldset disabled={readOnly} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
           <p className="cr2-approve-banner" data-reviewable="true" data-testid="cr.gate1.banner">
             {state.outcome.approval === null
               ? "The planning agent needs a product decision before this contract can be"
@@ -153,6 +160,7 @@ export function Gate1CardV1({ goalId, port, read }: Gate1CardV1Props): JSX.Eleme
               </ActionButton>
             )}
           </div>
+          </fieldset>
           <Gate1PendingRosters pending={state.outcome} />
         </>
       ) : state.outcome.status === "NONE" ? (

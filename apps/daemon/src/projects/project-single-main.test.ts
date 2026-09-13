@@ -77,6 +77,32 @@ function dependencies(supervisor: ProjectRuntimeSupervisor): Partial<ProjectSing
 }
 
 describe("runSingleProjectMain", () => {
+  it("waits for its operator reader to release during stop", async () => {
+    let release!: (result: IteratorResult<string>) => void;
+    const input = { destroy: vi.fn(), [Symbol.asyncIterator]: () => ({
+      next: () => new Promise<IteratorResult<string>>((settle) => { release = settle; }),
+    }) };
+    let signal: (() => void) | undefined;
+    let finished = false;
+    const supervisor = runtime({ wait: () => new Promise(() => undefined) });
+    const completed = runSingleProjectMain({ dependencies: dependencies(supervisor), env: {},
+      log: () => undefined, onSignal: (handler) => { signal = handler; }, operatorInput: input,
+      platform: "win32", projectRoot: PROJECT.root, root: "D:\\artifact",
+    }).then((code) => { finished = true; return code; });
+    try {
+      await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+      signal!();
+      await vi.waitFor(() => expect(input.destroy).toHaveBeenCalledTimes(1));
+      expect(finished).toBe(false);
+      release({ done: true, value: undefined });
+      expect(await completed).toBe(0);
+    } finally {
+      release?.({ done: true, value: undefined });
+      signal?.();
+      await completed;
+    }
+  });
+
   it("runs legacy start through the same locked project boundary and returns its proven exit", async () => {
     const supervisor = runtime();
     const logs: string[] = [];

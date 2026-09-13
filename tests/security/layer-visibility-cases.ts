@@ -376,8 +376,8 @@ const resolvedLayerLiterals = (): readonly string[] => {
     .filter((value) => declared.has(value));
 };
 
-const EXPECTED_LITERAL_COUNT = 103;
-const EXPECTED_UNRESOLVED_LITERAL_COUNT = 38;
+const EXPECTED_LITERAL_COUNT = 104;
+const EXPECTED_UNRESOLVED_LITERAL_COUNT = 39;
 
 /**
  * The frozen unresolved census. THE ALLOWLIST IS THE DELIVERABLE, NOT A TODO: closing these
@@ -391,6 +391,7 @@ const UNRESOLVED_LAYER_LITERALS: readonly string[] = Object.freeze([
   // grammar. Closed entries retain the scanner's ability to detect any further growth.
   "ACTIVATION_READ", // http/activation-read.ts
   "CONTROL_ROOM_CRITERIA", // v2/goals/criterion-evidence-port.ts and its live reader
+  "CONTROL_ROOM_PRODUCT", // request-scoped product reads and viewed-definition refusal; no command authority
   "CONTROL_ROOM_RECOVERY", // v2/ops/repository-recovery-port.ts and its live reader
   "CRITERION_EVIDENCE", // criterion-evidence/criterion-contracts.ts and command/read edges
   "CRITERION_EXECUTOR", // criterion-evidence/{criterion-approval,criterion-runner,criterion-receipt}.ts

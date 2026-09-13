@@ -40,7 +40,7 @@ import type { LandingFaultPoint }
 import { killTree } from "./daemon-children.js";
 import { readWireProtocolVersion } from "./daemon-ports.js";
 import type { DaemonLane, LaneScratch } from "./daemon-ports.js";
-import { liveProviderSeat, providerExecutable } from "./live-proof-seat.js";
+import { acknowledgeLiveSeatReview, liveProviderSeat, providerExecutable } from "./live-proof-seat.js";
 import { checksFor, modulePath } from "./live-proof-workspace.js";
 import { resolveLaneScratch, startWrapper, WRAPPER_INTERVAL_MS, wrapperEnv } from "./wrapper-lane.js";
 
@@ -463,6 +463,8 @@ export async function landLiveProofNodes(
       const nodeRef = refs[key]!;
       const round = await submitProductRound(lane, scratch, workspace, key, nodeRef);
       if (round !== null) return refuse(round);
+      // Keep the real seat's reservation until its review is accepted by the daemon.
+      acknowledgeLiveSeatReview(scratch.root, key);
       if (armed !== null) {
         // THE FORCED CRASH, MID-WRITE. The knob SIGKILLs the process performing the landing
         // write at the named point; the pass never returns and its terminal line never reaches

@@ -1,3 +1,4 @@
+import { openProductRecord } from "./product-navigation.js";
 /**
  * THE DEPLOY JOURNEY: a bound target, a deploy, and the url read back — driven in the browser
  * against a REAL daemon.
@@ -124,6 +125,7 @@ async function openGoal(page: Page, goalId: string): Promise<void> {
   await page.getByTestId("cr.nav.goals").click();
   await expect(page.getByTestId("cr.goals.home")).toBeVisible({ timeout: CARD_MS });
   await page.getByTestId(`cr.goals.card.${goalId}.open`).click();
+  await openProductRecord(page, "Delivery");
 }
 
 function receiptOf(lane: DaemonLane): ReturnType<typeof readCurrentDeployReceipt> {

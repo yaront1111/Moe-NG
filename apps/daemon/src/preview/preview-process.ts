@@ -85,9 +85,11 @@ export interface StartPreviewInput {
   /** Stated by the contract; when null the port is detected from the child's stdout. */
   readonly port: number | null;
   readonly workspace: string;
+  /** Internal source-lifetime observation, including a start that later refuses. */
+  readonly onSpawn?: (alive: () => boolean) => void;
 }
 
-function runtimeEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+export function runtimeEnvironment(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {};
   for (const [key, value] of Object.entries(source)) {
     if (value !== undefined && RUNTIME_ENVIRONMENT_KEYS.has(key.toUpperCase())) {
@@ -106,7 +108,7 @@ const sleep = (ms: number): Promise<void> =>
  * APPROVE into a thrown error. Liveness is asserted separately, by pid, so a kill that silently
  * failed is caught by the assertion rather than hidden by a resolved promise.
  */
-async function killTree(
+export async function killTree(
   child: ChildProcess, platform: NodeJS.Platform,
   killProcessGroup: (pid: number, signal: NodeJS.Signals) => void,
   spawn: SpawnProcess, systemRoot: string | null, killGraceMs: number,
@@ -209,6 +211,7 @@ export async function startPreviewProcess(
       env: deliverEnvironment(runtimeEnvironment(sourceEnvironment), options.delivered).environment,
       shell: true,
       stdio: ["ignore", "pipe", "pipe"],
+      windowsHide: true,
     });
   } catch {
     return previewRefusal("PREVIEW_START_TIMEOUT");
@@ -220,8 +223,11 @@ export async function startPreviewProcess(
   };
   child.stdout?.on("data", absorb);
   child.stderr?.on("data", absorb);
-  // Contained here so a pipe error after the child dies is never an uncaught throw.
-  child.on("error", () => undefined);
+  // Exit (including code 0 without a listener) and asynchronous spawn failure make readiness
+  // impossible. Keep the OS liveness probe separate: cleanup must still retain a living child.
+  let terminated = child.exitCode != null || child.signalCode != null;
+  child.once("exit", () => { terminated = true; });
+  child.on("error", () => { terminated = true; });
 
   const aliveNow = (): boolean => {
     const pid = child.pid;
@@ -234,6 +240,7 @@ export async function startPreviewProcess(
       return true;
     }
   };
+  input.onSpawn?.(aliveNow);
 
   let stopped: Promise<void> | undefined;
   const stop = (): Promise<void> => {
@@ -251,7 +258,10 @@ export async function startPreviewProcess(
         await sleep(START_POLL_MS);
       }
     })();
-    return stopped;
+    const attempt = stopped;
+    return attempt.finally(() => {
+      if (aliveNow() && stopped === attempt) stopped = undefined;
+    });
   };
 
   const started = Date.now();
@@ -262,6 +272,10 @@ export async function startPreviewProcess(
   // up costs ~1,800 probes instead.
   let pollMs = START_POLL_MS;
   for (;;) {
+    if (terminated) {
+      await stop();
+      return previewRefusal("PREVIEW_START_TIMEOUT");
+    }
     // ANSWERABLE, not merely spawned. A stated port is still only a claim until something
     // accepts on it, and a child that printed an origin can still die before the browser
     // arrives — so both paths end at the same TCP probe, and a product that starts but never
@@ -269,7 +283,7 @@ export async function startPreviewProcess(
     const candidate = input.port === null ? detectPreviewPort(output)?.port ?? null : input.port;
     const pid = child.pid;
     if (candidate !== null && pid !== undefined && aliveNow() && await portAccepts(candidate)
-      && await previewOwnsListener(pid, candidate, platform, sourceEnvironment) && aliveNow()) {
+      && await previewOwnsListener(pid, candidate, platform, sourceEnvironment) && aliveNow() && !terminated) {
       return {
         handle: Object.freeze({
           alive: aliveNow, origin: previewOrigin(candidate), pid, port: candidate, stop,

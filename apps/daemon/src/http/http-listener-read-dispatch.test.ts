@@ -176,11 +176,9 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([]);
  * discipline was copied from it. It is a dead module, so the ingest route has no
  * reachable call site. Named here rather than special-cased; building the ingest
  * control is a screen row, not this proof row (task rail 1).
- * /budget/commitment/read: consumed ONLY by the retired v1 shell, which main.tsx
- * reaches through `await import("./development-legacy-root.js")` inside the
- * `DEVELOPMENT_BUILD` branch that main.tsx:28,47 documents as folded to `false`
- * and eliminated from a production build. Reachable in a dev build, absent from
- * the shipped artifact; the walk below measures the shipped one.
+ * /budget/commitment/read: consumed ONLY by the retired v1 shell. The product
+ * entry no longer imports that shell, including in development, so the route
+ * remains absent from the shipped artifact measured by the walk below.
  *
  * /graph/get was retired from this census by live-graph-get.ts, whose readGraphGet
  * is CALLED from the production entry's graph: cordum-app.tsx composes
@@ -288,13 +286,10 @@ function stripComments(source: string): string {
  * bundle and cannot fetch anything. `import { type X, y }` IS an edge - the module
  * still loads for `y`. Bare side-effect imports are edges.
  *
- * DYNAMIC `import()` IS NOT AN EDGE, and that is a measured choice rather than an
- * oversight: this tree contains exactly ONE (main.tsx's `await import(
- * "./development-legacy-root.js")`), it sits inside the `DEVELOPMENT_BUILD` branch
- * that main.tsx:28,47 documents as folded to `false` and dropped by a production
- * build, and following it certifies `/budget/commitment/read` as consumed by a
- * shell no production artifact contains. The arm below pins that this stays the
- * only one, so a real production dynamic import forces a revisit here.
+ * DYNAMIC `import()` IS NOT AN EDGE. The product entry no longer loads the
+ * development legacy shell, and no reachable module uses a dynamic import.
+ * The arm below pins that absence, so adding a production dynamic import must
+ * extend this walk before its routes can be certified as consumed.
  */
 function importSpecifiers(stripped: string): readonly string[] {
   const specifiers: string[] = [];
@@ -552,15 +547,11 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     expect(scan.modules.has(CLIENT_BARREL)).toBe(true);
     expect([...scan.modules].some((file) => file.includes(".test."))).toBe(false);
 
-    // The single dynamic import this walk deliberately does not follow. If a second
-    // one appears, or this one moves out of the development-only branch, the choice
-    // documented at importSpecifiers has to be re-made rather than silently inherited.
-    expect(scan.dynamicImportSites).toStrictEqual([
-      CONTROL_ROOM_ENTRY.replaceAll("\\", "/"),
-    ]);
-    const entry = readFileSync(CONTROL_ROOM_ENTRY, "utf8");
-    expect(entry).toContain('await import("./development-legacy-root.js")');
-    expect(entry).toContain("const DEVELOPMENT_BUILD: boolean = import.meta.env.DEV;");
+    // Static reachability is sufficient only while the product graph has no
+    // dynamic imports. A new one must update the runtime consumption proof.
+    expect(scan.dynamicImportSites).toStrictEqual([]);
+    expect([...scan.modules].some((file) => file.endsWith("development-legacy-root.tsx")))
+      .toBe(false);
   });
 });
 

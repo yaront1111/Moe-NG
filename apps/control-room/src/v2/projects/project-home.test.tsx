@@ -52,6 +52,37 @@ function props(overrides: Partial<ProjectHomeProps> = {}): ProjectHomeProps {
 }
 
 describe("ProjectHome first-project intake", () => {
+  it("ignores a superseded refresh while a null mutation result still refuses", async () => {
+    const user = userEvent.setup();
+    const refresh = vi.fn().mockResolvedValue(null);
+    const stop = vi.fn().mockResolvedValue(null);
+    render(<ProjectHome {...props({ projects: [project("RUNNING")],
+      onRefreshProjects: refresh, onStopProject: stop })} />);
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Stop RUNNING project" }));
+    expect(screen.getByRole("alert").textContent).toContain("PROJECT_HOME_REQUEST_FAILED @ CONTROL_ROOM_PROJECT_HOME");
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(stop).toHaveBeenCalledTimes(1);
+  });
+
+  it("puts existing projects before the folder setup form", () => {
+    render(<ProjectHome {...props({ projects: [project("RUNNING")] })} />);
+    const list = screen.getByTestId("cr.projects.list");
+    const form = screen.getByRole("form", { name: "Add a project" });
+    expect(list.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+  });
+
+  it("links directly from the project header to the add form", () => {
+    render(<ProjectHome {...props({ projects: [project("RUNNING")] })} />);
+    const link = screen.getByRole("link", { name: "Add project" });
+    const form = screen.getByRole("form", { name: "Add a project" });
+    expect(form.id).not.toBe("");
+    expect(link.getAttribute("href")).toBe(`#${form.id}`);
+    expect(form.getAttribute("tabindex")).toBe("-1");
+  });
+
   it("renders an actionable empty state without inventing a project", () => {
     render(<ProjectHome {...props()} />);
 

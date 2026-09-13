@@ -69,8 +69,8 @@ const WRITE_SETTLE_MS = 2_000;
  * like. This sentence is the transmission-timing PROMISE the arms below hold the
  * store to.
  */
-const PRD_HINT = "Drop a PRD to attach it to this goal. It is read in this browser only; "
-  + "nothing is sent until you click Create goal.";
+const PRD_HINT = "Drop a PRD here or choose a file. It is read in this browser only; "
+  + "nothing is sent until you click Create product.";
 
 /** Over PRD_FILE_PREFLIGHT_MAX_BYTES (128 KiB), so the browser refuses it locally. */
 const OVERSIZE_PRD_TEXT = "x".repeat(130 * 1_024);
@@ -269,6 +269,9 @@ test("task-965cb2d6: a PRD is browser-local until Create, and refusals write not
     ).toHaveText("Error - PRD_FILE_TOO_LARGE @ CONTROL_ROOM_NEWGOAL");
     await page.waitForTimeout(WRITE_SETTLE_MS);
     expectNoDurableWrite(baseline, ledgerSnapshot(scratch), "ARM 4 oversized PRD");
+    await expect(page.getByTestId("cr.goals.newgoal.create"), "an unresolved PRD cannot become a brief-only create").toBeDisabled();
+    await page.getByRole("button", { name: "Remove PRD", exact: true }).click();
+    expectNoDurableWrite(baseline, ledgerSnapshot(scratch), "ARM 4 explicit local removal");
 
     // ARM 5 - A CONTRACT REFUSAL LEAVES THE DRAFT EXACTLY AS TYPED and sends
     // nothing. The title is over the brief contract's 1024-byte bound but under

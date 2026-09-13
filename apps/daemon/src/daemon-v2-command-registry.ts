@@ -67,11 +67,17 @@ export function createDaemonV2CommandPorts(
   const foundationLifecycle = options.foundationLifecycle;
   const operatorPrincipalId = options.operatorPrincipalId;
   const projectId = options.projectId;
+  const preview = options.preview;
+  const previewSupervisor = options.previewSupervisor;
+  const previewWorkspace = options.previewWorkspace;
   const store = options.store;
   const releaseDecide = options.releaseDecide;
   const verificationCatalogSource = options.verificationCatalogSource;
   const shared = createDaemonCommandPorts({
     authorityPlane: "V2", clock, operatorPrincipalId, projectId, store,
+    ...(preview === undefined ? {} : { preview }),
+    ...(previewSupervisor === undefined ? {} : { previewSupervisor }),
+    ...(previewWorkspace === undefined ? {} : { previewWorkspace }),
     ...(releaseDecide === undefined ? {} : { releaseDecide }),
     ...(deploymentDeploy === undefined ? {} : { deploymentDeploy }),
     ...(cutoverActivation === undefined ? {} : { cutoverActivation }),

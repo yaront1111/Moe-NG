@@ -59,7 +59,7 @@ it("disables goal creation with the exact backend prerequisite instead of discar
   const button = screen.getByTestId("cr.goals.new") as HTMLButtonElement;
   expect(button.disabled).toBe(true);
   expect(button.title).toBe(reason);
-  expect(button.textContent).toContain("New goal");
+  expect(button.textContent).toContain("New product");
   await user.click(button);
   expect(screen.queryByTestId("cr.goals.newgoal.form")).toBeNull();
   expect(create).not.toHaveBeenCalled();
@@ -89,7 +89,7 @@ it("refuses goal creation on its own when live bootstrap refused, naming the cod
 
   // Matched on its own text node, so the NOT ATTACHED note in the sibling
   // paragraph cannot satisfy this assertion for it.
-  const explanation = screen.getByText(/^New goal unavailable/u);
+  const explanation = screen.getByText(/^New product unavailable/u);
   expect(explanation.textContent).toContain(REFUSED.code);
   expect(explanation.textContent).toContain(REFUSED.detail);
   // The rendered explanation ends with the very reason the control carries -
@@ -121,7 +121,7 @@ it("leaves goal creation enabled and the reason undefined when the setup is atta
   const button = screen.getByTestId("cr.goals.new") as HTMLButtonElement;
   expect(button.disabled).toBe(false);
   expect(button.title).toBe("");
-  expect(screen.queryByText(/^New goal unavailable/u)).toBeNull();
+  expect(screen.queryByText(/^New product unavailable/u)).toBeNull();
 
   await user.click(button);
   expect(await screen.findByTestId("cr.goals.newgoal.form")).toBeTruthy();

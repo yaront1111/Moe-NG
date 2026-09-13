@@ -34,6 +34,13 @@ describe("project-result-words result contract", () => {
 });
 
 describe("project-result-words", () => {
+  it("gives a concrete recovery when the manager cannot receive approval", () => {
+    expect(resultWords({ code: "OPERATOR_CHANNEL_UNAVAILABLE", ok: false })).toEqual([
+      "Moe Projects cannot receive a pairing label.",
+      "Restart Moe Projects in a terminal, then reload this page.",
+    ]);
+  });
+
   it("says a mapped refusal in words with the daemon's own next step", () => {
     expect(resultWords({ code: "PROJECT_RUNTIME_NOT_RUNNING", ok: false }))
       .toEqual(["That project is not running.", "Press Start first."]);

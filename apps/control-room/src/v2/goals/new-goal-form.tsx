@@ -2,10 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import type { ChangeEvent, DragEvent, JSX } from "react";
 
 import { ActionButton } from "../components/primitives.js";
-import { EMDASH } from "../glyphs.js";
 import type { AdvisoryRiskClass, GoalDraft } from "./goal-model.js";
 import {
-  PLACEHOLDER_OUTCOME,
   RISK_OPTIONS,
   formatBytes,
   prdStatusText,
@@ -98,10 +96,14 @@ export function NewGoalForm({
 
   return (
     <form
-      className="cr2-newgoal"
+      className="cr2-newgoal cr2-newproduct"
       data-testid="cr.goals.newgoal.form"
       onSubmit={(event) => { event.preventDefault(); }}
     >
+      <div className="cr2-newproduct-heading">
+        <h2>New product</h2>
+        <p>Bring the requirements for what you want to make.</p>
+      </div>
       <div
         className="cr2-prd"
         data-dragging={dragging ? "true" : undefined}
@@ -111,7 +113,7 @@ export function NewGoalForm({
         onDrop={onDrop}
       >
         <div className="cr2-prd-lead">
-          <span className="cr2-field-label">Drop a PRD</span>
+          <span className="cr2-field-label">Your product requirements</span>
           <button
             className="cr2-prd-browse"
             onClick={() => inputRef.current?.click()}
@@ -135,8 +137,8 @@ export function NewGoalForm({
         />
         {prd === null ? (
           <p className="cr2-prd-hint">
-            Drop a PRD to attach it to this goal. It is read in this browser only; nothing is
-            sent until you click Create goal.
+            Drop a PRD here or choose a file. It is read in this browser only; nothing is
+            sent until you click Create product.
           </p>
         ) : (
           <p className="cr2-prd-file" data-testid="cr.goals.newgoal.prd.file">
@@ -157,44 +159,35 @@ export function NewGoalForm({
       </div>
 
       <div className="cr2-newgoal-col">
-        <label className="cr2-field-label" htmlFor="cr2-title">Title</label>
+        <label className="cr2-field-label" htmlFor="cr2-title">Product name</label>
         <input
           className="cr2-field-input"
           data-testid="cr.goals.newgoal.title"
           id="cr2-title"
           maxLength={TITLE_INPUT_MAX_LENGTH}
           onChange={(event) => setTitle(event.target.value)}
-          placeholder="Ship the stdio entry point"
+          placeholder="Bicycle shop appointments"
           value={title}
         />
-        <label className="cr2-field-label" htmlFor="cr2-outcome">{`Outcome ${EMDASH} one sentence is enough`}</label>
+        <label className="cr2-field-label" htmlFor="cr2-outcome">What should it do?</label>
         <input
           className="cr2-field-input"
           data-testid="cr.goals.newgoal.outcome"
           id="cr2-outcome"
           maxLength={512}
           onChange={(event) => setOutcome(event.target.value)}
-          placeholder={PLACEHOLDER_OUTCOME}
+          placeholder="Let customers request an appointment and the shop confirm it"
           value={outcome}
-        />
-        <label className="cr2-field-label" htmlFor="cr2-criteria">
-          {`Acceptance criteria ${EMDASH} optional, one per line`}
-        </label>
-        <textarea
-          className="cr2-field-area"
-          data-testid="cr.goals.newgoal.criteria"
-          id="cr2-criteria"
-          maxLength={8_192}
-          onChange={(event) => setCriteria(event.target.value)}
-          placeholder="pnpm test:security exits 0"
-          rows={3}
-          value={criteria}
         />
       </div>
 
       <div className="cr2-newgoal-col">
         <details className="cr2-newgoal-more" data-testid="cr.goals.newgoal.more">
-          <summary>More</summary>
+          <summary>Success criteria and constraints</summary>
+          <label className="cr2-field-label" htmlFor="cr2-criteria">Success criteria, one per line</label>
+          <textarea className="cr2-field-area" data-testid="cr.goals.newgoal.criteria" id="cr2-criteria"
+            maxLength={8_192} onChange={(event) => setCriteria(event.target.value)}
+            placeholder="Customers receive a confirmation for each accepted request" rows={3} value={criteria} />
           <label className="cr2-field-label" htmlFor="cr2-budget">Requested budget</label>
           <input
             className="cr2-field-input"
@@ -235,7 +228,7 @@ export function NewGoalForm({
             testId="cr.goals.newgoal.create"
             variant="primary"
           >
-            Create goal
+            Create product
           </ActionButton>
           <ActionButton disabled={busy} onClick={onCancel} testId="cr.goals.newgoal.cancel" variant="ghost">
             Cancel

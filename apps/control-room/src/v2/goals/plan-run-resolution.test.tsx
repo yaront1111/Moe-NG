@@ -45,7 +45,7 @@ const AFTER_REJECT: SurfaceFrame = frameOfSurface(AFTER_REJECT_FRAME);
 const AFTER_COMPILE: SurfaceFrame = frameOfSurface(AFTER_COMPILE_FRAME);
 
 const SEALED: PlanningRunOutcome = Object.freeze({
-  acceptance: null,
+  acceptance: { criteriaDigest: "criteria-digest", obligations: [] },
   approval: "ABSENT",
   lifecycle: "PLAN_REVIEW",
   plan: {

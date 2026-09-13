@@ -13,8 +13,14 @@ describe("production entry routing", () => {
     expect(gateDevelopmentQuery("v1=1", false)).toBe("");
   });
 
-  it("leaves development queries byte-for-byte unchanged", () => {
-    const search = "?fixtures=1&v1=1&view=board";
+  it("leaves supported development queries byte-for-byte unchanged", () => {
+    const search = "?fixtures=1&product=goal-a&artifact=source%3Aabc";
     expect(gateDevelopmentQuery(search, true)).toBe(search);
+  });
+
+  it("retires the old interface selector in development while retaining product state", () => {
+    expect(gateDevelopmentQuery("?v1=1&fixtures=1&product=goal-a&artifact=source%3Aabc&inspect=requirements", true))
+      .toBe("?fixtures=1&product=goal-a&artifact=source%3Aabc&inspect=requirements");
+    expect(gateDevelopmentQuery("v1=1", true)).toBe("");
   });
 });

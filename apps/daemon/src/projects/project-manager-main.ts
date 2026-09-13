@@ -264,11 +264,13 @@ export async function runProjectManagerMain(options: ProjectManagerMainOptions):
     return 1;
   }
   let listener: StartProjectManagerHttpResult;
+  let operatorChannelAvailable = options.operatorInput !== undefined;
   try {
     listener = await dependencies.startHttp({
       assetRoot,
       csrfToken,
       manager,
+      operatorChannelAvailable: () => operatorChannelAvailable,
       port: PROJECT_MANAGER_PORT,
     });
   } catch {
@@ -282,10 +284,14 @@ export async function runProjectManagerMain(options: ProjectManagerMainOptions):
 
   let settle!: (code: number) => void;
   const completed = new Promise<number>((resolve) => { settle = resolve; });
+  const operatorAbort = new AbortController();
+  let operatorConsumption: Promise<void> = Promise.resolve();
   let stopping = false;
   const stop = (): void => {
     if (stopping) return;
     stopping = true;
+    operatorChannelAvailable = false;
+    operatorAbort.abort();
     void drain(listener, runtime, options.log).then(settle);
   };
   try {
@@ -298,7 +304,7 @@ export async function runProjectManagerMain(options: ProjectManagerMainOptions):
   options.log(`moe projects: ${listener.origin}`);
   options.log("moe projects: Ctrl-C stops the manager and every project runtime");
   if (options.operatorInput !== undefined) {
-    void consumePairingOperatorLines(options.operatorInput, async (line) => {
+    operatorConsumption = consumePairingOperatorLines(options.operatorInput, async (line) => {
       if (/^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u.test(line)) {
         const result = listener.approvePairing(line);
         if (!result.ok) disclose(result, options.log);
@@ -309,7 +315,11 @@ export async function runProjectManagerMain(options: ProjectManagerMainOptions):
         const result = await runtime.approvePairing(project["instanceId"], project["label"]);
         if (!result.ok) disclose(result, options.log);
       }
-    });
+    }, { signal: operatorAbort.signal }).finally(() => { operatorChannelAvailable = false; });
   }
-  return await completed;
+  try { return await completed; }
+  finally {
+    operatorAbort.abort();
+    await operatorConsumption;
+  }
 }

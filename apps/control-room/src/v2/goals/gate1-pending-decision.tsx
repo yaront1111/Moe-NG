@@ -29,17 +29,18 @@ export function revisionTotals(
 
 export interface Gate1PendingDecisionProps {
   readonly busy: boolean;
+  readonly readOnly?: boolean;
   readonly onAnswer: (clarification: Gate1ClarificationView, optionId: string) => void;
   readonly onApprove: (pending: Gate1PendingView) => void;
   readonly pending: Gate1PendingView;
 }
 
 export function Gate1PendingDecision(
-  { busy, onAnswer, onApprove, pending }: Gate1PendingDecisionProps,
+  { busy, readOnly = false, onAnswer, onApprove, pending }: Gate1PendingDecisionProps,
 ): JSX.Element {
   const totals = revisionTotals(pending.revision);
   return (
-    <>
+    <fieldset disabled={readOnly} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
       <p className="cr2-approve-banner" data-reviewable="true" data-testid="cr.gate1.banner">
         {pending.approval === null
           ? pending.clarifications.length > 0
@@ -85,6 +86,6 @@ export function Gate1PendingDecision(
           </ActionButton>
         )}
       </div>
-    </>
+    </fieldset>
   );
 }

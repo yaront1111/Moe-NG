@@ -52,7 +52,7 @@ const DURABLE = Object.freeze({
 });
 
 const SEALED_REVIEWABLE: PlanningRunOutcome = Object.freeze({
-  acceptance: null,
+  acceptance: { criteriaDigest: "criteria-digest", obligations: [] },
   approval: "ABSENT",
   lifecycle: "PLAN_REVIEW",
   plan: {

@@ -61,6 +61,7 @@ async function options(port: ProjectManagerPort): Promise<StartProjectManagerHtt
     csrfToken: CSRF,
     manager: port,
     mintSessionSecret: () => SESSION_SECRET,
+    operatorChannelAvailable: () => true,
     pairingRandomBytes: (size) => new Uint8Array(size).fill(size === 32 ? 0xab : 0xcd),
   };
 }

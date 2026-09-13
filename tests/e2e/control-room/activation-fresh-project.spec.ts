@@ -16,9 +16,8 @@ import type { DaemonLane } from "./daemon-ports.js";
  * `seed: "NONE"` — no seed child, no fixtures — and the spec asserts `lane.seedPid` is null
  * before it touches the page. A journey that cannot prove it ran unseeded proves nothing here.
  *
- * IT DRIVES THE V2 CARD, NOT THE LEGACY DEV BOARD. `main.tsx:101` serves the legacy shell only
- * for `?v1=1`, so the bare `lane.baseUrl` is the product. A journey clicking `cr.liveboard.*`
- * would re-prove the old dev path and leave the shipped surface untested (row rail 3).
+ * It opens Project setup in the shipped product shell and drives the measured activation card.
+ * No legacy route or development selector supplies authority.
  *
  * THE RECORDER IS SEATED BEFORE THE FIRST CLICK, for the reason board-chain.spec.ts:26-33
  * documents: a card's dispatch report lives only until the next surface poll re-keys the card,
@@ -73,6 +72,7 @@ async function fillDraft(page: Page, title: string): Promise<void> {
   await page.getByTestId("cr.goals.newgoal.title").fill(title);
   await page.getByTestId("cr.goals.newgoal.outcome")
     .fill("A goal is created from the browser on a store no script ever seeded.");
+  await page.getByText("Success criteria and constraints", { exact: true }).click();
   await page.getByTestId("cr.goals.newgoal.criteria")
     .fill("The daemon accepts the create and the goal appears in the catalog.");
   // A FILE input, not a text box (new-goal-form.tsx:130 renders `type="file"` visually hidden),
@@ -124,6 +124,7 @@ test("a fresh project goes from empty store to a created goal, in the browser al
     // No `?v1=1`: the bare base URL serves the V2 Cordum shell.
     await page.goto(lane.baseUrl);
     await pairBrowser(page, lane);
+    await page.getByText("Project setup", { exact: true }).click();
 
     // THE CARD. It renders only once `/activation/read` answers with receipts; a daemon that
     // does not wire the port renders `cr.activate.refusal` instead and never mounts a button.

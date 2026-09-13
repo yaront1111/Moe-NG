@@ -1,3 +1,4 @@
+import { openProductRecord } from "./product-navigation.js";
 /**
  * GATE 3 ON THE FRESH PRODUCT: publish the landed sha, then release it FROM THE BROWSER.
  *
@@ -203,6 +204,7 @@ export async function releaseLiveProof(
   // ---- GATE 3, BY CLICK, on the release card. ----
   await page.getByTestId("cr.nav.goals").click({ timeout: CARD_MS });
   await page.getByTestId(`cr.goals.card.${goalId}.open`).click({ timeout: CARD_MS });
+  await openProductRecord(page, "Delivery");
   await expect(page.getByTestId("cr.release.root")).toBeVisible({ timeout: CARD_MS });
   await page.getByTestId("cr.release.base").fill(base);
   const approve = page.getByTestId("cr.release.button");

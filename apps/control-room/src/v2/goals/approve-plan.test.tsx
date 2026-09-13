@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
@@ -342,8 +342,9 @@ function renderApproval(
   reads: readonly PlanningRunOutcome[],
 ): ApprovalHarness {
   const read = vi.fn();
-  for (const answer of reads) read.mockResolvedValueOnce(answer);
-  read.mockResolvedValue(reads[reads.length - 1] ?? SEALED_REVIEWABLE);
+  const answers = reads.map((answer) => answer.status === "RUN" ? { ...answer, runId: DURABLE.runRef } : answer);
+  for (const answer of answers) read.mockResolvedValueOnce(answer);
+  read.mockResolvedValue(answers[answers.length - 1] ?? { ...SEALED_REVIEWABLE, runId: DURABLE.runRef });
   const submit = vi.fn(() => Promise.resolve(outcome));
   render(
     <ApprovePlan
@@ -522,6 +523,15 @@ describe("the decision controls exist only once there is a plan to decide on", (
     expect(screen.queryByTestId("cr.approve.no-plan")).toBeNull();
   });
 
+  it("does not infer an absent plan from the run-unknown code at another layer", async () => {
+    renderApproval(frameWith([]), { code: "UNREACHED", layer: "UNREACHED", ok: false }, [
+      { ...RUN_UNKNOWN, layer: "ANOTHER_READER" },
+    ]);
+    expect((await screen.findByTestId("cr.approve.refusal")).textContent).toContain("ANOTHER_READER");
+    expectNoDecisionControls();
+    expect(screen.queryByTestId("cr.approve.no-plan")).toBeNull();
+  });
+
   it("renders neither the controls nor the wait line before the read answers", () => {
     const pending = vi.fn(() => new Promise<PlanningRunOutcome>(() => { /* never answers */ }));
     render(
@@ -542,10 +552,42 @@ describe("the decision controls exist only once there is a plan to decide on", (
     expect(screen.queryByTestId("cr.approve.no-plan")).toBeNull();
   });
 
+  it("keeps the entered reason and eventual refusal when an in-flight decision loses its offer", async () => {
+    let currentRead: PlanningRunOutcome = { ...SEALED_REVIEWABLE, runId: DURABLE.runRef };
+    const read = vi.fn(async () => currentRead);
+    let settle!: (outcome: PlanApprovalOutcome) => void;
+    const submitted = new Promise<PlanApprovalOutcome>((resolve) => { settle = resolve; });
+    const submit = vi.fn(() => submitted);
+    const view = (frame: SurfaceFrame, readRevision = 0) => <ApprovePlan
+      approval={{ authorization: authorizeApproval(frame, DURABLE.runRef), submit }}
+      goalId="goal-live-1" onBack={vi.fn()} read={read} readRevision={readRevision}
+      runId={DURABLE.runRef} title="Recovery goal" />;
+    const mounted = render(view(frameWith([offerFor(DURABLE.runRef)])));
+    await screen.findByTestId("cr.approve.plan");
+    const reason = screen.getByLabelText("Why are you sending this plan back?") as HTMLInputElement;
+    await userEvent.type(reason, "The recovery step needs another check");
+    await userEvent.click(screen.getByRole("button", { name: "Send the plan back" }));
+    expect(submit).toHaveBeenCalledTimes(1);
+    currentRead = RUN_UNKNOWN;
+    mounted.rerender(view(frameWith([])));
+    await screen.findByTestId("cr.approve.refusal");
+    expect(screen.getByLabelText("Why are you sending this plan back?")).toBe(reason);
+    expect(reason.value).toBe("The recovery step needs another check");
+    expect(reason.disabled).toBe(true);
+    await act(async () => { settle({ ok: false, code: "DECISION_REFUSED", layer: "DAEMON_INGRESS" }); });
+    expect(screen.getByTestId("cr.approve.dispatch-refusal").textContent).toContain("DECISION_REFUSED");
+    mounted.rerender(view(frameWith([]), 1));
+    await screen.findByTestId("cr.approve.refusal");
+    expect(screen.getByTestId("cr.approve.dispatch-refusal").textContent).toContain("DECISION_REFUSED");
+    expect(screen.getByLabelText("Why are you sending this plan back?")).toBe(reason);
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps the controls exactly as before once a plan awaits approval", async () => {
     renderApproval(
       frameWith([offerFor(DURABLE.runRef)]), { commandId: "unreached", ok: true }, [SEALED_REVIEWABLE],
     );
+    await screen.findByTestId("cr.approve.plan");
     const approve = await screen.findByRole("button", { name: "Approve plan" });
     expect((approve as HTMLButtonElement).disabled).toBe(false);
     expectDecisionControls();
@@ -555,11 +597,12 @@ describe("the decision controls exist only once there is a plan to decide on", (
   });
 
   /**
-   * TWO SUFFICIENT SIGNALS, each alone. A sealed plan in the read keeps the controls even
+   * Two signals keep the decision visible. A sealed plan in the read keeps the controls even
    * when the daemon offers nothing (disabled, naming why - the state after an approval binds
    * and the offer is withdrawn); the daemon's own offer keeps them even when the read refused
    * (the daemon says a decision is asked; the read's trouble is reported beside the controls,
-   * not by hiding them).
+   * not by hiding them). Neither signal alone permits dispatch: the exact complete,
+   * reviewable body and the matching grant must both be present.
    */
   it("keeps the controls on a sealed plan the daemon does not offer, and on an offer whose read refused", async () => {
     const cases: readonly {
@@ -571,12 +614,14 @@ describe("the decision controls exist only once there is a plan to decide on", (
     expect(cases.length).toBeGreaterThan(0);
     for (const entry of cases) {
       cleanup();
-      renderApproval(entry.frame, { code: "UNREACHED", layer: "UNREACHED", ok: false }, [entry.read]);
+      const harness = renderApproval(entry.frame, { code: "UNREACHED", layer: "UNREACHED", ok: false }, [entry.read]);
+      await screen.findByTestId(entry.read.status === "RUN" ? "cr.approve.plan" : "cr.approve.refusal");
       const approve = await screen.findByRole("button", { name: "Approve plan" });
-      expect((approve as HTMLButtonElement).disabled).toBe(entry.withheld !== null);
+      expect((approve as HTMLButtonElement).disabled).toBe(true);
       expectDecisionControls();
       if (entry.withheld === null) {
         expect(screen.queryByTestId("cr.approve.reason")).toBeNull();
+        expect(screen.getByTestId("cr.approve.review-unavailable").textContent).toContain("PLAN_REVIEW_BODY_UNAVAILABLE");
       } else {
         expect(screen.getByTestId("cr.approve.reason").textContent).toContain(entry.withheld);
       }
@@ -586,6 +631,8 @@ describe("the decision controls exist only once there is a plan to decide on", (
       if (entry.read.status === "REFUSED") {
         expect(screen.getByTestId("cr.approve.refusal").textContent).toContain(entry.read.code);
       }
+      await userEvent.click(approve);
+      expect(harness.submit).not.toHaveBeenCalled();
     }
   });
 });

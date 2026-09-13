@@ -13,6 +13,8 @@ import { recordPreviewReceipt } from "./preview-ledger.js";
 import { startPreviewProcess } from "./preview-process.js";
 import type { PreviewProcessHandle, PreviewProcessOptions } from "./preview-process.js";
 import type { PreviewReceiptV1, PreviewScreenshot } from "./preview-receipt-contracts.js";
+import { preparePreviewSource, releasePreviewSource } from "./preview-source.js";
+import { preparePreviewRuntime } from "./preview-runtime.js";
 
 /**
  * THE PREVIEW RUNNER: start the product a goal built, capture the journeys an operator is about
@@ -22,7 +24,8 @@ import type { PreviewReceiptV1, PreviewScreenshot } from "./preview-receipt-cont
  * next and each refusal must name the layer that actually answered:
  *   1. PREVIEW_GOAL_NOT_LANDED @ GOAL_AUTHORITY — is there anything built to look at? Asked
  *      first because it needs no process and no browser, and because previewing a goal one node
- *      short would show a product missing exactly that node's work.
+ *      short would show a product missing exactly that node's work. The requested commit must
+ *      also yield a measured source extraction before command selection or process launch.
  *   2. PREVIEW_COMMAND_MISSING @ RUNNER — does anything know how to serve it?
  *   3. PREVIEW_START_TIMEOUT @ RUNNER — did it actually become answerable?
  * A refusal at any gate is RECORDED, not merely returned: "an absent landing is not a false one"
@@ -56,7 +59,7 @@ export interface PreviewRunnerConfig {
   readonly contractFacts?: (goalId: string) => PreviewContractFacts | null;
   readonly process?: PreviewProcessOptions;
   readonly projectId: string;
-  /** INJECTED in tests; production reads `<workspace>/package.json`. */
+  /** INJECTED in tests; production reads the extracted commit's `package.json`. */
   readonly readScripts?: (workspace: string) => Readonly<Record<string, unknown>> | null;
   readonly store: SqliteEventStore;
 }
@@ -65,7 +68,7 @@ export interface PreviewRunRequest {
   readonly goalId: string;
   /** The landed revision being previewed. Part of the receipt id and of the capture path. */
   readonly sha: string;
-  /** Absolute path to the product's workspace. */
+  /** Configured repository root. Source is extracted; captures remain under this root. */
   readonly workspace: string;
 }
 
@@ -157,41 +160,72 @@ export async function runPreview(
     return refuse("PREVIEW_GOAL_NOT_LANDED");
   }
 
-  const facts = config.contractFacts?.(request.goalId) ?? null;
-  const scripts = (config.readScripts ?? workspaceScripts)(request.workspace);
-  const resolved = resolvePreviewCommand(facts, scripts, (name) => `npm run ${name}`);
-  if (isPreviewRefusal(resolved)) return refuse(resolved.code);
-
-  const started = await startPreviewProcess(
-    { command: resolved.plan.command, port: resolved.plan.port, workspace: request.workspace },
-    config.process ?? {},
-  );
-  if (isPreviewRefusal(started)) return refuse(started.code);
-
-  const { handle } = started;
-  let screenshots: readonly PreviewScreenshot[] = [];
+  const source = await preparePreviewSource(request.workspace, request.sha);
+  if (source === null) return refuse("PREVIEW_GOAL_NOT_LANDED");
+  let retained = false;
+  let liveHandle: PreviewProcessHandle | undefined;
+  let sourceAlive = (): boolean => false;
   try {
-    screenshots = await (config.capture ?? capturePreviewJourneys)({
-      directory: request.workspace,
-      goalId: request.goalId,
-      journeys: resolved.plan.journeys,
-      origin: handle.origin,
-      sha: request.sha,
-      workspace: request.workspace,
-    });
-  } catch {
-    // A capture that threw leaves a live server behind unless this path stops it too.
-    await stopPreview(handle);
-    return refuse("PREVIEW_START_TIMEOUT");
-  }
+    const facts = config.contractFacts?.(request.goalId) ?? null;
+    const scripts = (config.readScripts ?? workspaceScripts)(source.directory);
+    const resolved = resolvePreviewCommand(facts, scripts, (name) => `npm run ${name}`);
+    if (isPreviewRefusal(resolved)) return refuse(resolved.code);
+    const preparation = await preparePreviewRuntime(source, resolved.plan, scripts, config.process ?? {},
+      alive => { sourceAlive = alive; });
+    if (preparation !== null) return refuse(preparation.code);
 
-  const receipt = record(config, request, decidedAt, {
-    code: null, pid: handle.pid, screenshots, url: handle.origin,
-  });
-  if (receipt === null) {
-    // Nothing durable says this preview exists, so nothing durable can be asked to stop it.
-    await stopPreview(handle);
-    return { ok: false, receipt: null, refusal: previewRefusal("PREVIEW_START_TIMEOUT") };
+    const started = await startPreviewProcess(
+      { command: resolved.plan.command, port: resolved.plan.port, workspace: source.directory,
+        onSpawn: alive => { sourceAlive = alive; } },
+      config.process ?? {},
+    );
+    if (isPreviewRefusal(started)) return refuse(started.code);
+
+    const process = started.handle;
+    let stopping: Promise<void> | undefined;
+    const handle: PreviewProcessHandle = Object.freeze({ ...process, stop: (): Promise<void> => {
+      stopping ??= (async () => {
+        await process.stop();
+        releasePreviewSource(source, process.alive);
+      })();
+      const attempt = stopping;
+      return attempt.finally(() => {
+        if (process.alive() && stopping === attempt) stopping = undefined;
+      });
+    } });
+    liveHandle = handle;
+    if (!source.verify()) return refuse("PREVIEW_START_TIMEOUT");
+    let screenshots: readonly PreviewScreenshot[] = [];
+    try {
+      screenshots = await (config.capture ?? capturePreviewJourneys)({
+        directory: request.workspace,
+        goalId: request.goalId,
+        journeys: resolved.plan.journeys,
+        origin: handle.origin,
+        sha: request.sha,
+        workspace: source.directory,
+      });
+    } catch {
+      // A capture that threw leaves a live server behind unless this path stops it too.
+      await stopPreview(handle);
+      return refuse("PREVIEW_START_TIMEOUT");
+    }
+    if (!source.verify()) return refuse("PREVIEW_START_TIMEOUT");
+
+    const receipt = record(config, request, decidedAt, {
+      code: null, pid: handle.pid, screenshots, url: handle.origin,
+    });
+    if (receipt === null) {
+      // Nothing durable says this preview exists, so nothing durable can be asked to stop it.
+      await stopPreview(handle);
+      return { ok: false, receipt: null, refusal: previewRefusal("PREVIEW_START_TIMEOUT") };
+    }
+    retained = true;
+    return { ok: true, started: { handle, receipt } };
+  } finally {
+    if (!retained) {
+      if (liveHandle === undefined) releasePreviewSource(source, sourceAlive);
+      else await stopPreview(liveHandle);
+    }
   }
-  return { ok: true, started: { handle, receipt } };
 }
