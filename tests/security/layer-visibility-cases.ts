@@ -161,7 +161,7 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
  * for. See the matching note above `EXPECTED_ROSTER_SIZE` in boundary-roster.security.ts.
  */
 // 80 -> 81 for the read-only completed project-pairing validation boundary.
-const EXPECTED_PRIVATE_COUNT = 83;
+const EXPECTED_PRIVATE_COUNT = 84;
 
 /**
  * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
@@ -201,6 +201,7 @@ const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
   { constant: "CUTOVER_LAYER", file: "packages/core/src/cutover/cutover-reducer.ts" },
   { constant: "CUTOVER_QUIESCE_RECORD_READER_LAYER", file: "apps/daemon/src/cutover/cutover-quiesce-record-reader.ts" },
   { constant: "DURABLE_READ_LAYER", file: "apps/daemon/src/review/reviewer-calibration-record.ts" },
+  { constant: "REVIEW_SUBMISSION_LAYER", file: "apps/daemon/src/review/review-submission-command.ts" },
   { constant: "DURABLE_STORE_LAYER", file: "apps/daemon/src/product-contract/product-contract-gate-1-reader.ts" },
   { constant: "DURABLE_STORE_LAYER", file: "apps/daemon/src/product-contract/product-contract-revision-reader.ts" },
   { constant: "DURABLE_STORE_LAYER", file: "apps/daemon/src/product-contract/product-contract-revision-store.ts" },

@@ -11,6 +11,7 @@ import { type DesignBrief, compilerDesignLines, nodeDesignLines }
 import type { NodeMission } from "./agent-wrapper.js";
 import { agentRoleForWorkspace } from "./agent-role-contract.js";
 import { CONTRACT_READ_MISSION_LINES } from "./agent-mission-contract-read.js";
+import { reviewSubmissionMissionLines } from "./agent-mission-review.js";
 
 /**
  * RE-EXPORTED, not re-declared: `agent-wrapper.ts` and `agent-mission-text.test.ts` both import
@@ -117,8 +118,8 @@ export function codeMission(
     "Then record your submission durably over the moe-next MCP tools:",
     "1) call work_get_context and find the review.submit offer whose targetAggregateId is",
     `"${nodeRef}"; call review_submit with EXACTLY that offer's commandId and`,
-    "expectedVersion, round = expectedVersion + 1, and empty findings if your test run",
-    "was clean.",
+    "expectedVersion.",
+    ...reviewSubmissionMissionLines(nodeRef),
     `2) finish with work_release with payload {"workItemId": "${workItemId}"} and no`,
     "other fields.",
     "Do NOT call integration_accept_output — acceptance is EARNED from the daemon's own",
@@ -129,7 +130,7 @@ export function codeMission(
     RETRY_ON_CONFLICT,
     readFacts(projectId, brief.workspace),
   ];
-  if (hints.submit !== null) {
+  if (!nodeRef.startsWith("node:v1:") && hints.submit !== null) {
     lines.push(`Suggested review.submit payload shape: ${JSON.stringify(hints.submit)}`);
   }
   return lines.join(" ");

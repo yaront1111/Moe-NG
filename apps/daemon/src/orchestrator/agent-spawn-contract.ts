@@ -179,6 +179,8 @@ export interface SpawnReport {
 
 export interface RunOnceReport {
   readonly active: number;
+  /** Repository admission is rechecked automatically after the stated time, without minting seats while waiting. */
+  readonly repositoryWaiting?: readonly import("./repository-admission-backoff.js").RepositoryAdmissionWait[];
   /**
    * The live provider pause, present ONLY on a pass that staffed nothing because of it.
    * Absent on every other pass, so an exact-shape assertion on an ordinary report is

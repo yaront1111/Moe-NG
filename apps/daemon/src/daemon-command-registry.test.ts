@@ -1060,7 +1060,7 @@ describe("production command transport stamps", () => {
       {
         expected: ["NODE_VERIFIER"],
         file: "./orchestrator/node-verifier.ts",
-        pattern: /handleCommandRequest\(config\.deps,\s*\{[\s\S]*?protocolVersion:\s*WIRE_PROTOCOL_VERSION,?\s*\},\s*"([A-Z_]+)"\s*\)/,
+        pattern: /handleAsyncCommandRequest\(config\.deps,\s*\{[\s\S]*?protocolVersion:\s*WIRE_PROTOCOL_VERSION,?\s*\},\s*"([A-Z_]+)"\s*\)/,
       },
     ] as const;
     const served: string[] = [];

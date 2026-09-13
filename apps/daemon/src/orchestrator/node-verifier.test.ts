@@ -13,6 +13,7 @@ import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js
 import { VERIFIER_FAILURE_RULE } from "../http/affordance-read.js";
 import type { AuthenticatedPrincipal, DecisionPortResult } from "../http/http-contract.js";
 import { readReviewLedger } from "../review/review-read-model.js";
+import { verifyStoredPackageItems } from "../review/review-package-restore.js";
 import { runReviewCommand } from "../review/review-services.js";
 import { REVIEWER_CALIBRATION_SLICE_REF } from "../review/reviewer-calibration-record.js";
 import {
@@ -41,6 +42,7 @@ const provider = createStoreDependencies({
   credential: OPERATOR,
   principalId: "operator-local",
   projectId: PROJECT,
+  repositoryWorkspace: directory,
   storePath: join(directory, "store.db"),
 });
 
@@ -59,7 +61,7 @@ const encoder = new TextEncoder();
 const fill = (seed: string): string =>
   (seed.replace(/[^0-9a-f]/gu, "0") + "0".repeat(64)).slice(0, 64);
 
-function seedCleanRound(subjectRef: string = NODE, commandId = "seed-clean-round"): void {
+function seedCleanRound(subjectRef: string = NODE, commandId = "seed-clean-round", items?: typeof AUTHORITY.packageItems): void {
   const outcome = runReviewCommand(store, encoder.encode(JSON.stringify({
     commandId,
     correlationId: "seed",
@@ -68,7 +70,7 @@ function seedCleanRound(subjectRef: string = NODE, commandId = "seed-clean-round
     kind: "review.submit",
     payload: {
       findings: [],
-      packageItems: [
+      packageItems: items ?? [
         { digest: fill("c1"), kind: "CRITERION", locator: "criterion-1" },
         { digest: fill("d1"), kind: "DAEMON_RECEIPT", locator: "receipt-1" },
         { digest: fill("6a"), kind: "GRAPH_HASH", locator: "graph-1" },
@@ -150,6 +152,34 @@ function verifier(
 }
 
 describe("createNodeVerifier", () => {
+  it("preserves the actual approved package when a failed run requests remediation", async () => {
+    const nodeRef = "node-nonfixture-failure";
+    const digest = (bytes: string) => createHash("sha256").update(bytes).digest("hex");
+    const items = AUTHORITY.packageItems.map((item) => ({ ...item,
+      digest: digest(`approved ${item.kind}`), locator: `approved-${item.kind.toLowerCase()}` }));
+    items.push({ kind: "CRITERION", locator: "CRT-SECOND", digest: digest("second approved criterion") });
+    seedCleanRound(nodeRef, "seed-real-package-failure", [...items,
+      { kind: "DAEMON_RECEIPT", locator: "submission-observation", digest: digest("observed submission") }]);
+    const source = readReviewLedger(store, PROJECT, nodeRef).rounds.at(-1)!;
+    const output = "second criterion still fails";
+    let runs = 0;
+    const worker = verifier({ byteCount: output.length, exitCode: 1, output, sha256: digest(output) },
+      { ...AUTHORITY, packageItems: items }, () => { runs += 1; }, nodeRef);
+    expect(await worker.verifyOnce()).toEqual([{ detail: "exit 1", nodeRef, outcome: "FAILED_ROUND_RECORDED" }]);
+    const ledger = readReviewLedger(store, PROJECT, nodeRef);
+    const restored = verifyStoredPackageItems(ledger.rounds.at(-1)!);
+    if (!restored.ok) throw new Error(restored.code);
+    expect(restored.items.filter((item) => item.kind !== "DAEMON_RECEIPT")).toHaveLength(items.length);
+    expect(restored.items).toEqual(expect.arrayContaining(items));
+    expect(restored.items.filter((item) => item.kind === "DAEMON_RECEIPT"))
+      .toEqual([{ kind: "DAEMON_RECEIPT", locator: `verifier:${nodeRef}:round-2`, digest: digest(output) }]);
+    expect(ledger.accepted).toBeUndefined();
+    expect(readVerifierReceipt(store, PROJECT, verifierReceiptId(PROJECT, nodeRef, source.decisionId)))
+      .toEqual({ ok: false, code: "VERIFIER_RECEIPT_NOT_FOUND" });
+    expect(await worker.verifyOnce()).toEqual([]);
+    expect(runs).toBe(1);
+  });
+
   it("withholds the verifier receipt when workspace contents change during the test", async () => {
     const nodeRef = "node-workspace-drift";
     seedCleanRound(nodeRef, "seed-workspace-drift");

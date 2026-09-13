@@ -9,7 +9,7 @@ import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
 import { calibration, envelope, packageItems, policyInput, seedVerifierReceipt, send, submitPayload } from "../review/review-test-fixtures.js";
 import * as gitLandingPort from "../repository/git-landing-port.js";
-import { readLandingReceipt } from "../repository/landing-ledger.js";
+import { readLandingReceipt, readLatestLandingBaseline } from "../repository/landing-ledger.js";
 import { landedWithNoEffect, landingAggregateId, landingReceiptId } from "../repository/landing-receipt-contracts.js";
 import { readReviewLedger, readReviewLedgers } from "../review/review-read-model.js";
 import { NODE_VERIFIER_PRINCIPAL_ID, readVerifierReceipt } from "../review/verifier-receipt-ledger.js";
@@ -67,6 +67,56 @@ function fixture() {
 }
 
 describe("production repository delivery composition", () => {
+  it("refuses a dirty application baseline with actionable guidance and admits a fresh clean checkpoint", async () => {
+    const f = fixture();
+    writeFileSync(join(f.workspace, "operator-note.txt"), "existing operator work\n");
+    const head = git(f.workspace, "rev-parse", "HEAD");
+    const index = readFileSync(join(f.workspace, ".git", "index"));
+    let starts = 0;
+    const spawn: AgentSpawnStart = async () => { starts += 1; return { ok: true, pid: process.pid, exit: Promise.resolve() }; };
+
+    expect(await f.runtime.start(spawn)(f.request("a")))
+      .toMatchObject({ ok: false, code: "REPOSITORY_DELIVERY_BASELINE_UNAVAILABLE" });
+    expect(starts).toBe(0);
+    expect(readLatestLandingBaseline(f.store, f.projectId, "a")).toBeNull();
+    expect(f.logs.join("\n")).toContain("BASELINE_WORKSPACE_DIRTY");
+    expect(f.logs.join("\n")).toContain("git status --short");
+    expect(git(f.workspace, "rev-parse", "HEAD")).toBe(head);
+    expect(readFileSync(join(f.workspace, ".git", "index"))).toEqual(index);
+    expect(createRepositoryExecutionPort().inspect(f.workspace)).toEqual({ ok: true, reservation: null });
+
+    git(f.workspace, "add", "--", "operator-note.txt");
+    git(f.workspace, "-c", "user.name=Operator", "-c", "user.email=operator@example.test", "commit", "--quiet", "-m", "preserve existing note");
+    const next = await f.runtime.start(spawn)(f.request("a"));
+    expect(next.ok).toBe(true);
+    expect(starts).toBe(1);
+    if (next.ok) await next.exit;
+  }, 120_000);
+
+  it("refuses tracked runtime metadata dirt before any seat or baseline write", async () => {
+    const f = fixture();
+    mkdirSync(join(f.workspace, ".moe-next"));
+    writeFileSync(join(f.workspace, ".moe-next", "start.ps1"), "# tracked original\n");
+    git(f.workspace, "add", "--", ".moe-next/start.ps1");
+    git(f.workspace, "-c", "user.name=Operator", "-c", "user.email=operator@example.test", "commit", "--quiet", "-m", "legacy launcher");
+    writeFileSync(join(f.workspace, ".moe-next", "start.ps1"), "# existing operator edit\n");
+    const head = git(f.workspace, "rev-parse", "HEAD");
+    const index = readFileSync(join(f.workspace, ".git", "index"));
+    let starts = 0;
+
+    const result = await f.runtime.start(async () => { starts += 1; return { ok: true, pid: process.pid, exit: Promise.resolve() }; })(f.request("a"));
+
+    expect(result).toMatchObject({ ok: false, code: "REPOSITORY_DELIVERY_BASELINE_UNAVAILABLE" });
+    expect(starts).toBe(0);
+    expect(readLatestLandingBaseline(f.store, f.projectId, "a")).toBeNull();
+    expect(f.logs.join("\n")).toContain("TRACKED_RUNTIME_METADATA_DIRTY");
+    expect(f.logs.join("\n")).toContain(".moe-next/start.ps1");
+    expect(f.logs.join("\n")).toContain("git status --short");
+    expect(git(f.workspace, "rev-parse", "HEAD")).toBe(head);
+    expect(readFileSync(join(f.workspace, ".git", "index"))).toEqual(index);
+    expect(createRepositoryExecutionPort().inspect(f.workspace)).toEqual({ ok: true, reservation: null });
+  }, 120_000);
+
   it("holds existing accepted work without a landing effect when landing is disabled", async () => {
     const f = fixture();
     const started = await f.runtime.start(async () => ({ ok: true, pid: process.pid, exit: Promise.resolve() }))(f.request("a"));

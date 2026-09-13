@@ -19,10 +19,14 @@ export async function checkVerifiedWorkspace(
 
 export async function runBoundVerification(
   brief: NodeMission, runTest: (brief: NodeMission) => Promise<VerifierRunCapture>, port: CapturePort,
+  submitted?: VerifiedWorkspaceBinding,
 ): Promise<{ readonly ok: true; readonly capture: VerifierRunCapture; readonly binding: VerifiedWorkspaceBinding } | VerifiedWorkspaceRefusal> {
   if (port === undefined) return refusal("VERIFIER_WORKSPACE_UNCONFIGURED", "workspace capture port unavailable");
   const before = await port.capture(brief.workspace);
   if (!before.ok) return before;
+  if (submitted !== undefined && !sameVerifiedWorkspace(submitted, before.binding)) {
+    return refusal("VERIFIER_WORKSPACE_CHANGED", "workspace changed after review submission");
+  }
   const capture = await runTest(brief);
   const after = await port.capture(brief.workspace);
   if (!after.ok) return after;

@@ -4,11 +4,11 @@ import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { JsonObject } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 
-import { VERIFIER_FAILURE_RULE } from "../http/affordance-read.js";
-import { handleCommandRequest } from "../http/http-adapter.js";
+import { handleAsyncCommandRequest } from "../http/http-adapter.js";
 import type { CommandAdapterDeps } from "../http/http-contract.js";
 import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import { readReviewLedger } from "../review/review-read-model.js";
+import { readSubmittedReviewWorkspace } from "../review/review-submission-read.js";
 import {
   readVerifierReceipt,
   recordVerifierReceipt,
@@ -17,7 +17,9 @@ import type { VerifierAuthorityFacts } from "../review/verifier-receipt-ledger.j
 import { verifierReceiptId } from "../review/verifier-receipt-contracts.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import type { VerifiedWorkspacePort } from "../repository/verified-workspace-contracts.js";
+import { sameVerifiedWorkspace } from "../repository/verified-workspace-contracts.js";
 import { checkVerifiedWorkspace, runBoundVerification } from "./node-verifier-workspace.js";
+import { verifierFailurePayload } from "./node-verifier-failure.js";
 
 /**
  * The daemon-side verifier: acceptance is EARNED from a test run the daemon
@@ -75,47 +77,13 @@ export interface VerifyReport {
   readonly outcome: "ACCEPTED" | "FAILED_ROUND_RECORDED" | string;
 }
 
-const PACKAGE_ITEM_FILL = (seed: string): string =>
-  (seed.replace(/[^0-9a-f]/gu, "0") + "0".repeat(64)).slice(0, 64);
-
 const encoder = new TextEncoder();
 
-function failureRoundPayload(
-  subjectRef: string, round: number, capture: VerifierRunCapture,
-): JsonObject {
-  // The cut is by UTF-16 code unit, so it can open on the low half of a
-  // surrogate pair. A lone surrogate has no UTF-8 form: the review.submit
-  // decoder refuses the whole envelope (JSON_UNICODE_INVALID), the failure
-  // round never lands, and the node is re-verified on every pass forever.
-  // `toWellFormed` folds the orphan to U+FFFD so the detail stays encodable
-  // wherever the cut falls and whatever the runner handed over.
-  const tail = capture.output.slice(-600).toWellFormed();
-  return {
-    findings: [{
-      detail: `verifier run exited ${String(capture.exitCode)} (output sha256 ${capture.sha256}): ${tail}`,
-      ruleId: VERIFIER_FAILURE_RULE,
-      severity: "MAJOR",
-      subject: { kind: "NODE", locator: subjectRef },
-    }],
-    packageItems: [
-      { digest: PACKAGE_ITEM_FILL("c1"), kind: "CRITERION", locator: "criterion-1" },
-      { digest: capture.sha256, kind: "DAEMON_RECEIPT", locator: `verifier:${subjectRef}:round-${String(round)}` },
-      { digest: PACKAGE_ITEM_FILL("6a"), kind: "GRAPH_HASH", locator: "graph-1" },
-      { digest: PACKAGE_ITEM_FILL("f1"), kind: "INTEGRATED_TREE", locator: "tree-1" },
-      { digest: PACKAGE_ITEM_FILL("b1"), kind: "PLAN_HASH", locator: "plan-1" },
-      { digest: PACKAGE_ITEM_FILL("2b"), kind: "RUBRIC", locator: "rubric-1" },
-      { digest: PACKAGE_ITEM_FILL("5b"), kind: "SUBMITTED_BYTES", locator: "submitted-1" },
-    ],
-    round,
-    subjectRef,
-  };
-}
-
 export function createNodeVerifier(config: NodeVerifierConfig) {
-  const dispatch = (
+  const dispatch = async (
     kind: string, payload: JsonObject, target: string, expectedVersion: number,
     commandId?: string,
-  ): { code: string; ok: boolean } => {
+  ): Promise<{ code: string; ok: boolean }> => {
     const envelope = {
       commandId: commandId ?? `verify-${config.mintId()}`,
       commandKind: kind,
@@ -128,7 +96,7 @@ export function createNodeVerifier(config: NodeVerifierConfig) {
       sessionCredential: config.operatorCredential,
       targetAggregateId: target,
     };
-    const result = handleCommandRequest(config.deps, {
+    const result = await handleAsyncCommandRequest(config.deps, {
       body: encoder.encode(JSON.stringify(envelope)),
       credential: config.operatorCredential,
       protocolVersion: WIRE_PROTOCOL_VERSION,
@@ -151,9 +119,19 @@ export function createNodeVerifier(config: NodeVerifierConfig) {
         reports.push({ detail: "no spec brief", nodeRef, outcome: "NODE_BRIEF_MISSING" });
         continue;
       }
+      const submitted = readSubmittedReviewWorkspace(config.store, config.projectId, nodeRef, latest);
+      if (submitted.status === "INVALID") {
+        reports.push({ detail: "submitted review evidence is unreadable", nodeRef, outcome: "REVIEW_SUBMISSION_EVIDENCE_INVALID" });
+        continue;
+      }
       const receiptId = verifierReceiptId(config.projectId, nodeRef, latest.decisionId);
       const pending = readVerifierReceipt(config.store, config.projectId, receiptId);
       if (pending.ok) {
+        if (submitted.status === "PRESENT" && (pending.receipt.execution.workspaceBinding === undefined
+          || !sameVerifiedWorkspace(submitted.binding, pending.receipt.execution.workspaceBinding))) {
+          reports.push({ detail: "verifier receipt does not bind the submitted workspace", nodeRef, outcome: "VERIFIER_WORKSPACE_CHANGED" });
+          continue;
+        }
         if (pending.decision.currentVersion !== review.version) {
           reports.push({ detail: "stale verifier receipt", nodeRef, outcome: "VERIFIER_RECEIPT_STALE" });
           continue;
@@ -165,7 +143,7 @@ export function createNodeVerifier(config: NodeVerifierConfig) {
           reports.push({ detail: unchanged.detail, nodeRef, outcome: unchanged.code });
           continue;
         }
-        const sent = dispatch(
+        const sent = await dispatch(
           "integration.accept_output",
           { receiptId, subjectRef: nodeRef },
           nodeRef,
@@ -188,7 +166,8 @@ export function createNodeVerifier(config: NodeVerifierConfig) {
         });
         continue;
       }
-      const verified = await runBoundVerification(brief, config.runTest, config.verifiedWorkspace);
+      const verified = await runBoundVerification(brief, config.runTest, config.verifiedWorkspace,
+        submitted.status === "PRESENT" ? submitted.binding : undefined);
       if (!verified.ok) {
         reports.push({ detail: verified.detail, nodeRef, outcome: verified.code });
         continue;
@@ -217,7 +196,7 @@ export function createNodeVerifier(config: NodeVerifierConfig) {
           reports.push({ detail: recorded.code, nodeRef, outcome: recorded.code });
           continue;
         }
-        const sent = dispatch(
+        const sent = await dispatch(
           "integration.accept_output",
           { receiptId: recorded.receipt.receiptId, subjectRef: nodeRef },
           nodeRef,
@@ -230,8 +209,8 @@ export function createNodeVerifier(config: NodeVerifierConfig) {
         });
       } else {
         const round = review.lineage.highestRound + 1;
-        const sent = dispatch(
-          "review.submit", failureRoundPayload(nodeRef, round, capture),
+        const sent = await dispatch(
+          "review.submit", verifierFailurePayload(nodeRef, round, capture, authority.packageItems),
           nodeRef, review.version,
         );
         reports.push({

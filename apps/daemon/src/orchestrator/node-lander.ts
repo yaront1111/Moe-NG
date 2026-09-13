@@ -4,6 +4,7 @@ import { join } from "node:path";
 import type { SqliteEventStore } from "@moe/store";
 
 import type { GitLandingPort } from "../repository/git-landing-port.js";
+import { TRACKED_RUNTIME_METADATA_DIRTY } from "../repository/git-landing-port.js";
 import {
   readEarliestLandingBaseline, readLandingBaseline, readLandingReceipt, readLatestLandingBaseline,
   recordLandingBaseline, recordLandingReceipt,
@@ -191,7 +192,7 @@ export function createNodeLander(config: NodeLanderConfig) {
     }
     const observed = await config.git.observe(brief.workspace);
     if (!observed.ok) {
-      if (observed.code === "NOT_A_REPOSITORY") {
+      if (observed.code === "NOT_A_REPOSITORY" || observed.code === TRACKED_RUNTIME_METADATA_DIRTY) {
         return refuse(nodeRef, brief.workspace, verifierReceiptId, {
           code: observed.code, detail: observed.detail,
         });

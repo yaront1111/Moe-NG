@@ -19,8 +19,8 @@ export type { GitRunResult, GitRunner } from "./git-process-runner.js";
  * scratch repository.
  *
  * Paths are repository-root-relative on both sides, whatever subdirectory the
- * workspace is; Moe's own metadata directories (`.moe-next`, `.moe`) are never
- * part of a landing.
+ * workspace is. Untracked runtime metadata is excluded; tracked runtime metadata
+ * changes refuse observation, since silently omitting them breaks the verified tree.
  */
 
 export interface GitObservation {
@@ -33,7 +33,9 @@ export interface GitObservation {
 
 export type GitObserveResult =
   | Readonly<{ readonly observation: GitObservation; readonly ok: true }>
-  | Readonly<{ readonly code: "NOT_A_REPOSITORY" | "GIT_FAILED"; readonly detail: string; readonly ok: false }>;
+  | Readonly<{ readonly code: "NOT_A_REPOSITORY" | "GIT_FAILED" | typeof TRACKED_RUNTIME_METADATA_DIRTY; readonly detail: string; readonly ok: false }>;
+
+export const TRACKED_RUNTIME_METADATA_DIRTY = "TRACKED_RUNTIME_METADATA_DIRTY" as const;
 
 export interface GitCommitReceipt {
   readonly branch: string;
@@ -72,7 +74,7 @@ export const LANDER_IDENTITY = ["-c", "user.name=Moe", "-c", "user.email=moe@moe
 const tail = (text: string): string => text.slice(-DETAIL_TAIL).toWellFormed();
 
 function isMoeMetadata(path: string): boolean {
-  return path.split("/").some((segment) => MOE_DIRECTORIES.has(segment));
+  return path.split("/").some((segment) => MOE_DIRECTORIES.has(process.platform === "win32" ? segment.toLowerCase() : segment));
 }
 
 /** `git status --porcelain=v1 -z --no-renames`: `XY path\0` records, root-relative. */
@@ -84,7 +86,7 @@ function parseStatus(
     if (record.length < 4) continue;
     const status = record.slice(0, 2);
     const path = record.slice(3);
-    if (path === "" || isMoeMetadata(path)) continue;
+    if (path === "") continue;
     entries.push({ deleted: status.includes("D"), path, untracked: status === "??" });
   }
   return entries;
@@ -142,10 +144,21 @@ export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLanding
     }
     const status = await run(top, [
       "status", "--porcelain=v1", "-z", "--no-renames", "--untracked-files=all",
-      "--", scope === "" ? "." : scope,
+      "--", ".",
     ]);
     if (status.code !== 0) return { code: "GIT_FAILED", detail: tail(status.stderr), ok: false };
-    const dirty = parseStatus(status.stdout);
+    const all = parseStatus(status.stdout);
+    // The verifier captures the whole repository, including tracked metadata outside a
+    // requested subtree. Neither a current baseline nor an older incomplete baseline can
+    // grant authority to silently omit or commit these preexisting runtime files.
+    const metadata = all.filter((entry) => !entry.untracked && isMoeMetadata(entry.path));
+    if (metadata.length > 0) {
+      const paths = JSON.stringify(metadata.slice(0, 4).map((entry) => entry.path.slice(0, 120))).slice(0, 350);
+      return { ok: false, code: TRACKED_RUNTIME_METADATA_DIRTY,
+        detail: `${String(metadata.length)} tracked runtime metadata path(s) changed: ${paths}. Review these existing changes with git status --short before continuing.` };
+    }
+    const dirty = all.filter((entry) => !isMoeMetadata(entry.path)
+      && (scope === "" || entry.path.startsWith(`${scope}/`)));
     const present = dirty.filter((entry) => !entry.deleted).map((entry) => entry.path);
     const blobs = new Map<string, string>();
     if (present.length > 0) {

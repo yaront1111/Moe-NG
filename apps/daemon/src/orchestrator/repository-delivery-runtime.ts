@@ -101,7 +101,9 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
       if (brief === null) return null;
       const observed = await git.observe(brief.workspace);
       if (!observed.ok || observed.observation.entries.length !== 0) {
-        config.log(`[lander] ${nodeRef}: ${observed.ok ? "BASELINE_WORKSPACE_DIRTY" : observed.code}`);
+        config.log(observed.ok
+          ? `[lander] ${nodeRef}: BASELINE_WORKSPACE_DIRTY (${observed.observation.entries.length} changed paths). Review git status --short and checkpoint existing work before execution; Moe rechecks automatically.`
+          : `[lander] ${nodeRef}: ${observed.code} (${observed.detail}); Moe rechecks repository admission automatically.`);
         return null;
       }
       const report = await landerFor(nodeRef, root, null).baseline(nodeRef);

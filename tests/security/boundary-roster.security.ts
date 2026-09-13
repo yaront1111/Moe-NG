@@ -848,8 +848,8 @@ describe("scanner matches the annotated declaration form", () => {
  * is `Math.round`ed by the arm below, so 83/264 = 314.4 pins at 314.
  */
 const EXPECTED_INVISIBLE_NUMERATOR = EXPECTED_PRIVATE_COUNT;
-const EXPECTED_INVISIBLE_DENOMINATOR = 264;
-const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 314;
+const EXPECTED_INVISIBLE_DENOMINATOR = 265;
+const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 317;
 
 describe("TASK-LV module-private layer declarations are bounded", () => {
   it("TASK-LV scans a non-empty module-private population", () => {

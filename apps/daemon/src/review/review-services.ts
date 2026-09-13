@@ -1,4 +1,4 @@
-import { MAX_JSON_BODY_BYTES } from "@moe/contracts";
+import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonValue } from "@moe/contracts";
 import {
   REVIEW_ESCALATION_ROUND_LIMIT,
@@ -26,6 +26,7 @@ import {
 } from "./review-ledger.js";
 import type { CommandHandler, HandlerContext, HandlerTable, ReviewOutcome } from "./review-ledger.js";
 import { boundPackageItems } from "./review-round-items.js";
+import type { PreparedReviewSubmission } from "./review-submission-package.js";
 
 /**
  * The review-flow services and the pipeline every review command runs through (journey J4).
@@ -121,7 +122,8 @@ const submitRound: CommandHandler = (context): ReviewOutcome => {
     return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
   }
   const findings = parseFindings(findingValues);
-  const items = parseItems(itemValues);
+  const prepared = itemValues.length === 0 ? context.preparedSubmission : undefined;
+  const items = prepared?.items ?? parseItems(itemValues);
   if (findings === undefined || items === undefined) {
     return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
   }
@@ -155,6 +157,7 @@ const submitRound: CommandHandler = (context): ReviewOutcome => {
   if (!recorded.ok) return refuseFromKernel(request.kind, recorded.code, recorded.layer);
   const { lineage, routing } = recorded.value;
   const result = {
+    ...(prepared === undefined ? {} : { submissionEvidence: prepared.evidence }),
     lineage,
     // The set the kernel BOUND, never `items` — the caller's raw parsed array would durably
     // record content the digest stored beside it does not attest. Retained on the RESULT and
@@ -165,12 +168,11 @@ const submitRound: CommandHandler = (context): ReviewOutcome => {
     routing,
   } as unknown as JsonValue;
   // The result embeds the FULL lineage every round, so it grows with history while the store
-  // bounds only the blob. Its sole reader decodes through `decodeBoundedJsonBytes`, which
-  // refuses anything past MAX_JSON_BODY_BYTES — so a result committed past that bound would
-  // read back as permanently unreadable and every later command on the subject would refuse.
-  // Measure the EXACT bytes `commitAccepted` will store and fail closed on the write side;
+  // bounds only the blob. Its reader uses `decodeBoundedJsonBytes`, including per-string and
+  // nesting bounds. Reuse that exact decoder on the bytes `commitAccepted` will store, so a
+  // result cannot commit successfully yet make all later commands permanently unreadable;
   // the subject stays readable and a smaller round (or escalation) still proceeds.
-  if (encoder.encode(JSON.stringify(result)).byteLength > MAX_JSON_BODY_BYTES) {
+  if (!decodeBoundedJsonBytes(encoder.encode(JSON.stringify(result))).ok) {
     return refuse(request.kind, "REVIEW_RESULT_TOO_LARGE", "DAEMON_PREREQUISITE");
   }
   return commitAccepted(store, request, {
@@ -209,6 +211,7 @@ export function runReviewCommand(
   store: SqliteEventStore,
   input: unknown,
   handlers: HandlerTable = REVIEW_HANDLERS,
+  preparedSubmission?: PreparedReviewSubmission,
 ): ReviewOutcome {
   const decoded = decodeReviewRequestBytes(input);
   if (!decoded.ok) return refuse(null, decoded.code, "DAEMON_INGRESS");
@@ -228,6 +231,7 @@ export function runReviewCommand(
   }
 
   const ledger = readReviewLedger(store, request.projectId, subjectRef);
-  const context: HandlerContext = { ledger, request, store };
+  const context: HandlerContext = { ledger, request, store,
+    ...(preparedSubmission === undefined ? {} : { preparedSubmission }) };
   return handler(context);
 }

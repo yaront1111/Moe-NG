@@ -17,6 +17,8 @@ import { COMPILER_STEPS, GATE_REFUSALS, HUMAN_ONLY_STEPS } from "./agent-spawn-c
 import type { ProviderPauseFacts, RunOnceReport, SpawnReport } from "./agent-spawn-contract.js";
 import type { AgentWrapperConfig, NodeMission } from "./agent-wrapper-config.js";
 import { createAgentWrapperStaffing } from "./agent-wrapper-staffing.js";
+import { createRepositoryAdmissionBackoff } from "./repository-admission-backoff.js";
+import type { RepositoryAdmissionWait } from "./repository-admission-backoff.js";
 
 // The kind rosters live in the contract file (data, not behaviour); re-exported here so
 // the offer surface's test keeps importing HUMAN_ONLY_STEPS from the wrapper it guards.
@@ -61,6 +63,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
   // exhaust an orphaned item; restart re-arms this advisory counter while the
   // durable staffing gate still fences the live-child race.
   const attempts = new Map<string, number>();
+  const repositoryBackoff = createRepositoryAdmissionBackoff();
   // One lifecycle owns both the process-local active map and durable gate.
   const staffing = createAgentWrapperStaffing(config.staffingFence);
 
@@ -262,6 +265,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       return { active: staffing.activeCount(), spawned: [], surfaceOutcome: surface.code };
     }
     const spawned: SpawnReport[] = [];
+    const repositoryWaiting: RepositoryAdmissionWait[] = [];
     // Leaving READY is movement and re-arms attempts. A held claim or durable
     // gate refusal is not movement and must not create an infinite respawn loop.
     const ready = new Set(surface.steps
@@ -270,6 +274,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     for (const item of [...attempts.keys()]) {
       if (!ready.has(item)) attempts.delete(item);
     }
+    repositoryBackoff.retain(ready);
     const ordered = [...surface.steps].sort(byStaffingRank);
     for (const step of ordered) {
       if (HUMAN_ONLY_STEPS.has(step.kind)) continue;
@@ -279,6 +284,8 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       if (step.kind.startsWith("session.")) continue;
       const workItemId = workItemIdFor(step.kind, step.aggregateId);
       if (staffing.has(workItemId)) continue;
+      const waiting = repositoryBackoff.waiting(workItemId, step.version, config.clock());
+      if (waiting !== null) { repositoryWaiting.push(waiting); continue; }
       const tried = attempts.get(workItemId) ?? 0;
       if (tried >= maxItemAttempts) {
         spawned.push(uncoded(step.kind, "STAFFING_ATTEMPTS_EXHAUSTED", null, workItemId));
@@ -297,6 +304,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       }
       if (seat.pause !== null) { stalled = seat.pause; continue; }
       const report = await staff(step, seat.command);
+      repositoryBackoff.record(report, step.version, config.clock());
       // Charged only for a try that got past the gate: a fence refusal spent
       // nothing and must not exhaust the item while its predecessor lives.
       if (!GATE_REFUSALS.has(report.outcome)) attempts.set(workItemId, tried + 1);
@@ -307,6 +315,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     }
     const idled = stalled !== null && spawned.length === 0;
     return { active: staffing.activeCount(), spawned,
+      ...(repositoryWaiting.length === 0 ? {} : { repositoryWaiting }),
       ...(idled && stalled !== null ? { paused: stalled } : {}),
       surfaceOutcome: staffing.failureOutcome() ?? (idled ? PROVIDER_PAUSED_OUTCOME : "SURFACE") };
   };

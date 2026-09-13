@@ -34,7 +34,8 @@ describe("repository admission refusal through the wrapper", () => {
       } };
       let minted = 0;
       let attempted = 0;
-      const wrapper = createAgentWrapper({ affordances, claimTtlMs: 60_000, clock: () => Date.now(),
+      let now = Date.now();
+      const wrapper = createAgentWrapper({ affordances, claimTtlMs: 60_000, clock: () => now,
         deps: provider.provide(), maxAgents: 1, maxItemAttempts: 1,
         mintSecret: () => `repo-${String(++minted).padStart(6, "0")}${"0".repeat(28)}`,
         nodeMission: () => ({ instructions: "build", test: "pnpm test", title: "Node", workspace: sandbox }),
@@ -55,6 +56,14 @@ describe("repository admission refusal through the wrapper", () => {
         expect(wrapper.activeCount()).toBe(0);
         expect(readWorkClaimLedger(reader, projectId).claims.get(workItemId)?.status).toBe("RELEASED");
         expect(readSessionLedger(reader, projectId).sessions.get(seat.sessionId!)?.status).toBe("CLOSED");
+        const mintsBeforeWaiting = minted;
+        const claimBeforeWaiting = readWorkClaimLedger(reader, projectId).claims.get(workItemId);
+        const waiting = await wrapper.runOnce();
+        expect(waiting.spawned, "a repository refusal must not mint another identity on the next poll").toEqual([]);
+        expect(waiting.repositoryWaiting).toEqual([{ code, retryAt: now + 15_000, workItemId }]);
+        expect(minted).toBe(mintsBeforeWaiting);
+        expect(readWorkClaimLedger(reader, projectId).claims.get(workItemId)).toEqual(claimBeforeWaiting);
+        now += 15_000;
       }
       const accepted = await wrapper.runOnce();
       expect(accepted.spawned[0]).toMatchObject({ outcome: "SPAWNED", workItemId });

@@ -34,6 +34,8 @@ import { runRecoveryCompleteCommand } from "./recovery/recovery-completion.js";
 import { createRecoveryCompletionAuthority }
   from "./recovery/recovery-completion-authority.js";
 import { runReviewCommand } from "./review/review-services.js";
+import { createReviewSubmissionCommandEntry } from "./review/review-submission-command.js";
+import type { ReviewSubmissionWiring } from "./review/review-submission-command.js";
 import { NODE_VERIFIER_PRINCIPAL_ID } from "./review/verifier-receipt-ledger.js";
 import { CRITERION_PRINCIPAL } from "./criterion-evidence/criterion-contracts.js";
 import { runCriterionCommandEdge } from "./criterion-evidence/criterion-command-edge.js";
@@ -118,6 +120,7 @@ export interface CutoverActivationWiring {
 }
 
 export interface DaemonCommandPortOptions {
+  readonly reviewSubmission?: ReviewSubmissionWiring;
   readonly releaseDecide?: ReleaseDecideSeams;
   readonly criterionEvidence?: CriterionCommandPort;
   readonly repositoryRecovery?: RepositoryRecoveryCommandPort;
@@ -319,6 +322,9 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
   });
 
   const asyncEntries: Partial<Record<WiredCommandKind, CommandRegistryEntry>> = {
+    ...(options.reviewSubmission === undefined ? {} : { "review.submit": createReviewSubmissionCommandEntry({
+      store, projectId, clock, wiring: options.reviewSubmission, assertAuthority: commandAuthority.assert,
+    }) }),
     "repository.recover": createRepositoryRecoveryCommandEntry({ store, projectId, operatorPrincipalId,
       port: options.repositoryRecovery, assertAuthority: commandAuthority.assert }),
     "project.activate": activateEntry,

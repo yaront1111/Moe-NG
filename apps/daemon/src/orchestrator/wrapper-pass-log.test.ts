@@ -27,6 +27,33 @@ function logger(): { readonly lines: string[]; readonly log: (report: RunOnceRep
 }
 
 describe("createPassLogger", () => {
+  it("explains a repository retry deadline once without presenting the wait as idle", () => {
+    const { lines, log } = logger();
+    const waiting = { ...pass([], 0), repositoryWaiting: [{ code: "REPOSITORY_DELIVERY_BASELINE_UNAVAILABLE",
+      retryAt: Date.parse("2026-09-13T22:00:15.000Z"), workItemId: "node.deliver@node-1" }] };
+    log(waiting); log(waiting);
+    expect(lines).toEqual(["[wrapper] repository waiting: node.deliver@node-1: REPOSITORY_DELIVERY_BASELINE_UNAVAILABLE; automatic retry after 2026-09-13T22:00:15.000Z (active 0)\n"]);
+    log(pass([entry("node.deliver@node-1", "SPAWNED")]));
+    expect(lines.at(-1)).toBe("[wrapper] node.deliver@node-1: SPAWNED\n");
+  });
+
+  it("keeps an exhausted item visible while an independent repository is waiting", () => {
+    const { lines, log } = logger();
+    log({ ...pass([entry("node.deliver@exhausted", "STAFFING_ATTEMPTS_EXHAUSTED")], 0),
+      repositoryWaiting: [{ code: "REPOSITORY_EXECUTION_BUSY", retryAt: 1_000, workItemId: "node.deliver@waiting" }] });
+    expect(lines.join("")).toContain("repository waiting: node.deliver@waiting");
+    expect(lines.join("")).toContain("staffing exhausted: node.deliver@exhausted");
+  });
+
+  it("reports a waiting repository even when independent work starts on the same pass", () => {
+    const { lines, log } = logger();
+    const report = { ...pass([entry("node.deliver@active", "SPAWNED")], 1),
+      repositoryWaiting: [{ code: "REPOSITORY_EXECUTION_BUSY", retryAt: 1_000, workItemId: "node.deliver@waiting" }] };
+    log(report); log(report);
+    expect(lines.filter((line) => line.includes("repository waiting:"))).toHaveLength(1);
+    expect(lines.filter((line) => line.includes("SPAWNED"))).toHaveLength(2);
+  });
+
   it("prints one line per staffed entry and names the refusing layer when a start was refused", () => {
     const { lines, log } = logger();
     log(pass([

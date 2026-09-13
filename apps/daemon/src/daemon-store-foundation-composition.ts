@@ -273,6 +273,12 @@ export function createStoreDependencies(
     projectId: config.projectId, store,
   });
   const { decisions, registry } = createDaemonCommandPorts({
+    ...(repositoryWorkspace === null || repositoryWorkspace === "" ? {} : {
+      // Deferred until dispatch; the shared authenticator is constructed below before ports
+      // are exposed. Capture rechecks the same durable identity after its asynchronous work.
+      reviewSubmission: { workspace: repositoryWorkspace,
+        authenticate: (credential) => authenticator.authenticate(credential) },
+    }),
     ...(config.deploymentDeploy === undefined ? {} : { deploymentDeploy: config.deploymentDeploy }),
     releaseDecide,
     criterionEvidence: workflows.criterionEvidence, repositoryRecovery: workflows.repositoryRecovery,

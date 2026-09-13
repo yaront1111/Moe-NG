@@ -27,10 +27,17 @@ function activityLine(entry: SpawnReport): string {
 }
 
 function steadyLine(report: RunOnceReport, exhausted: readonly SpawnReport[]): string {
+  let waiting = "";
+  if (report.repositoryWaiting !== undefined && report.repositoryWaiting.length > 0) {
+    const items = report.repositoryWaiting.map((entry) => `${entry.workItemId}: ${entry.code}; automatic retry after ${new Date(entry.retryAt).toISOString()}`)
+      .sort().join(", ");
+    waiting = `[wrapper] repository waiting: ${items} (active ${String(report.active)})\n`;
+  }
   if (exhausted.length > 0) {
     const items = exhausted.map((entry) => entry.workItemId).sort().join(", ");
-    return `[wrapper] staffing exhausted: ${items} (${EXHAUSTED_OUTCOME}, active ${String(report.active)})\n`;
+    return `${waiting}[wrapper] staffing exhausted: ${items} (${EXHAUSTED_OUTCOME}, active ${String(report.active)})\n`;
   }
+  if (waiting !== "") return waiting;
   // Say so: a silent pass reads as a hung wrapper to an operator watching it.
   // A parked fleet is not an idle one: say which provider and until when.
   return report.paused === undefined
@@ -54,7 +61,7 @@ export function createPassLogger(
       write(activityLine(entry));
       activity = true;
     }
-    if (activity && exhausted.length === 0) {
+    if (activity && exhausted.length === 0 && (report.repositoryWaiting?.length ?? 0) === 0) {
       lastSteady = "";
       return;
     }

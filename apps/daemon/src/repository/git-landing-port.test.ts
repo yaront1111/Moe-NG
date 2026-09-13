@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -35,11 +35,72 @@ function scratchRepository(): string {
 }
 
 describe("createGitLandingPort against a real repository", () => {
-  it("observes dirty paths root-relative with blob ids, and never Moe's metadata", async () => {
+  it.skipIf(process.platform !== "win32")("refuses the Windows case alias of tracked runtime metadata", async () => {
+    const root = scratchRepository();
+    git(root, "mv", "--", ".moe-next", "metadata-temporary");
+    git(root, "mv", "--", "metadata-temporary", ".MOE-NEXT");
+    git(root, "commit", "--quiet", "-m", "legacy directory spelling");
+    writeFileSync(join(root, ".MOE-NEXT", "start.ps1"), "# existing operator change\n");
+
+    expect(await createGitLandingPort().observe(root))
+      .toMatchObject({ ok: false, code: "TRACKED_RUNTIME_METADATA_DIRTY" });
+  });
+
+  it("bounds and escapes the tracked metadata path diagnosis onto one log line", async () => {
+    const root = scratchRepository();
+    const records = Array.from({ length: 20 }, (_, index) =>
+      ` M .moe-next/file-${String(index)}\n${"long".repeat(80)}.txt\0`).join("");
+    const port = createGitLandingPort(async (cwd, args, input) => args[0] === "status"
+      ? { code: 0, stderr: "", stdout: records } : nodeGitRunner(cwd, args, input));
+
+    const result = await port.observe(root);
+
+    expect(result).toMatchObject({ ok: false, code: "TRACKED_RUNTIME_METADATA_DIRTY" });
+    if (result.ok) throw new Error("expected tracked metadata refusal");
+    expect(result.detail).toContain("20 tracked runtime metadata path(s)");
+    expect(result.detail).toContain("\\n");
+    expect(result.detail).not.toMatch(/[\r\n]/u);
+    expect(result.detail.length).toBeLessThanOrEqual(600);
+    expect(result.detail).toContain("git status --short");
+  });
+
+  it.each(["modified", "deleted", "staged addition", "renamed out", "renamed in", "outside subtree"] as const)(
+    "refuses tracked runtime metadata changes before hashing or admitting a partial tree (%s)", async (change) => {
+      const root = scratchRepository();
+      const path = ".moe-next/start.ps1";
+      if (change === "deleted") unlinkSync(join(root, path));
+      else if (change === "staged addition") {
+        mkdirSync(join(root, ".moe"));
+        writeFileSync(join(root, ".moe", "operator.ps1"), "# staged operator work\n");
+        git(root, "add", "--", ".moe/operator.ps1");
+      } else if (change === "renamed out") git(root, "mv", "--", path, "operator-start.ps1");
+      else if (change === "renamed in") git(root, "mv", "--", "src/tracked.ts", ".moe-next/tracked.ts");
+      else writeFileSync(join(root, path), "# existing operator work\n");
+      const head = git(root, "rev-parse", "HEAD");
+      const index = readFileSync(join(root, ".git", "index"));
+      let hashes = 0;
+      const port = createGitLandingPort(async (cwd, args, input) => {
+        if (args[0] === "hash-object") hashes += 1;
+        return nodeGitRunner(cwd, args, input);
+      });
+
+      const observed = await port.observe(change === "outside subtree" ? join(root, "src") : root);
+
+      expect(observed).toMatchObject({ ok: false, code: "TRACKED_RUNTIME_METADATA_DIRTY" });
+      expect(!observed.ok && observed.detail).toContain(change === "staged addition" ? ".moe/operator.ps1"
+        : change === "renamed in" ? ".moe-next/tracked.ts" : path);
+      expect(!observed.ok && observed.detail).toContain("git status --short");
+      expect(hashes).toBe(0);
+      expect(git(root, "rev-parse", "HEAD")).toBe(head);
+      expect(readFileSync(join(root, ".git", "index"))).toEqual(index);
+    },
+  );
+
+  it("observes scoped dirty paths root-relative with blob ids while skipping untracked runtime metadata", async () => {
     const root = scratchRepository();
     writeFileSync(join(root, "src", "tracked.ts"), "export const before = 2;\n", "utf8");
     writeFileSync(join(root, "src", "new.ts"), "export const fresh = 1;\n", "utf8");
-    writeFileSync(join(root, ".moe-next", "start.ps1"), "# changed\n", "utf8");
+    writeFileSync(join(root, ".moe-next", "wrapper.log"), "runtime output\n", "utf8");
     unlinkSync(join(root, "src", "doomed.ts"));
     const port = createGitLandingPort();
     const observed = await port.observe(join(root, "src"));
@@ -51,6 +112,8 @@ describe("createGitLandingPort against a real repository", () => {
     expect(observed.observation.entries[2]?.blobId).toBe(git(root, "hash-object", "src/tracked.ts"));
     // The untracked subset, root-relative and sorted: new.ts only (tracked.ts is modified).
     expect(observed.observation.untracked).toEqual(["src/new.ts"]);
+    const rootObservation = await port.observe(root);
+    expect(rootObservation.ok && rootObservation.observation.entries).toEqual(observed.observation.entries);
   });
 
   // MEASURED 2026-09-13 (git 2.54, Node 24.16, Windows): `hash-object --stdin-paths` aborts on the

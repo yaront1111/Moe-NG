@@ -16,6 +16,7 @@ import type {
   ReviewRequest,
 } from "./review-contracts.js";
 import type { ReviewLedger } from "./review-read-model.js";
+import type { PreparedReviewSubmission } from "./review-submission-package.js";
 
 /** Re-exported so a handler imports its whole composition surface from one module. */
 export { readReviewLedger } from "./review-read-model.js";
@@ -62,6 +63,7 @@ export interface ReviewRefused {
 export type ReviewOutcome = ReviewAccepted | ReviewRefused;
 
 export interface HandlerContext {
+  readonly preparedSubmission?: PreparedReviewSubmission;
   readonly ledger: ReviewLedger;
   readonly request: ReviewRequest;
   readonly store: SqliteEventStore;

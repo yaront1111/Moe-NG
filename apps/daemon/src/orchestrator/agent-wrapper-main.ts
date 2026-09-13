@@ -22,10 +22,9 @@ import type { AgentSpawnStart, AgentSpawnStarter } from "./agent-spawner.js";
 import { staffingSurfaceOf } from "./agent-staffing-surface.js";
 import { createAgentWrapper } from "./agent-wrapper.js";
 import { runReclaimPass } from "./agent-wrapper-reclaim.js";
-import { createCompiledNodeSource } from "./compiled-node-source.js";
 import { credentialValues } from "./credential-scrub.js";
 import { createRepositoryDeliveryRuntime } from "./repository-delivery-runtime.js";
-import { createWrapperNodeMissions } from "./wrapper-node-missions.js";
+import { createReviewAwareNodeMissions } from "./wrapper-review-missions.js";
 import { loadPayloadHints } from "./wrapper-payload-hints.js";
 import { createCompilerMissionInputs, createDesignBriefResolver }
   from "./wrapper-mission-inputs.js";
@@ -130,19 +129,9 @@ async function main(): Promise<void> {
     const compiledTestCommand = (process.env["MOE_NODE_TEST_COMMAND"] ?? "") === ""
       ? "pnpm test"
       : process.env["MOE_NODE_TEST_COMMAND"] as string;
-    const compiledSource = (): ReturnType<typeof createCompiledNodeSource> | null => {
-      const laneStore = verifierStore;
-      if (laneStore === undefined) return null;
-      return createCompiledNodeSource({
-        projectId: config.projectId,
-        store: laneStore,
-        testCommand: compiledTestCommand,
-        workspace: compiledWorkspace,
-      });
-    };
-
-    const { nodeMission, listNodes } = createWrapperNodeMissions({
-      compiled: compiledSource, nodeSpecsDir: config.nodeSpecsDir,
+    const { nodeMission, listNodes } = createReviewAwareNodeMissions({
+      projectId: config.projectId, operatorPrincipalId: config.principalId, store: () => verifierStore,
+      workspace: compiledWorkspace, testCommand: compiledTestCommand, nodeSpecsDir: config.nodeSpecsDir,
       log: (line) => { process.stderr.write(`${line}\n`); },
     });
 
