@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { Readable } from "node:stream";
 import { pathToFileURL } from "node:url";
 
@@ -10,6 +10,7 @@ import {
   MAX_PROJECT_STACK_FRAME_BYTES,
   PROJECT_STACK_PROTOCOL_VERSION,
 } from "./project-stack-protocol.js";
+import { WRAPPER_STDIN_STOP_TOKEN } from "../orchestrator/process-runner-lifecycle.js";
 import {
   WRAPPER_LOG_RELATIVE_PATH,
   hostedDaemonStartOptions,
@@ -17,6 +18,7 @@ import {
   projectStackControlLines,
   projectStackWrapperLaunch,
   runProjectStackHostMain,
+  wrapperHandleFor,
 } from "./project-stack-host-main.js";
 import { resolveProjectStackConfig } from "./project-stack-config.js";
 import type { ProjectStackConfigFs } from "./project-stack-config.js";
@@ -231,4 +233,39 @@ describe("hostedDaemonStartOptions", () => {
       expect(options.assetSecrets).toEqual([CREDENTIAL]);
     }
   });
+});
+
+describe("wrapperHandleFor", () => {
+  // The token-honouring wrapper in miniature: exits 0 on the host's stop token and 3 on any
+  // other line. A real child, not a fake: the pin is that the handle's kill reaches a live
+  // stdin and that the child's OWN exit code, not a termination, settles `completed`.
+  const OBEYING_CHILD = [
+    "process.stdin.setEncoding('utf8');",
+    "let pending = '';",
+    "process.stdin.on('data', (chunk) => {",
+    "  pending += chunk;",
+    "  const lines = pending.split(/\\r?\\n/);",
+    "  pending = lines.pop() ?? '';",
+    `  for (const line of lines) process.exit(line === ${JSON.stringify(WRAPPER_STDIN_STOP_TOKEN)} ? 0 : 3);`,
+    "});",
+  ].join("\n");
+
+  it("asks a real child to stop over its stdin and settles on the child's own exit, never its kill", async () => {
+    const child = spawn(process.execPath, ["-e", OBEYING_CHILD], {
+      stdio: ["pipe", "ignore", "ignore"], windowsHide: true,
+    });
+    const terminate = child.kill.bind(child);
+    let kills = 0;
+    child.kill = (): boolean => { kills += 1; return terminate(); };
+    try {
+      const handle = wrapperHandleFor(child);
+      handle.kill();
+      // `kill: () => child.kill()` fails BOTH lines: the child is terminated (code null on
+      // win32, a signal elsewhere) and its own kill is the one that did it.
+      await expect(handle.completed).resolves.toEqual({ code: 0 });
+      expect(kills).toBe(0);
+    } finally {
+      if (child.exitCode === null && child.signalCode === null) terminate();
+    }
+  }, 15_000);
 });

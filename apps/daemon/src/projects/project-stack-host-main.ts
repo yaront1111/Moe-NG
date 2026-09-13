@@ -26,6 +26,7 @@ import {
 } from "./project-stack-protocol.js";
 import { runProjectStackHost } from "./project-stack-host.js";
 import { stopWrapperChild } from "./project-stack-wrapper-stop.js";
+import type { StoppableWrapperChild } from "./project-stack-wrapper-stop.js";
 import type {
   ProjectStackDaemonHandle,
   ProjectStackRefused,
@@ -89,6 +90,34 @@ export function openWrapperLog(projectRoot: string): number | null {
   }
 }
 
+/** The spawned wrapper as its handle needs it: the stop's view, plus the exit code and the spawn error. */
+export interface WrapperChild extends StoppableWrapperChild {
+  once(event: "exit", listener: (code: number | null) => void): unknown;
+  once(event: "error", listener: () => void): unknown;
+}
+
+/**
+ * The host's handle over a spawned wrapper. `kill` is the ask-then-terminate stop of
+ * project-stack-wrapper-stop.ts, never the child's own kill; `completed` settles on the
+ * child's exit, so a wrapper that honours the token settles with its own exit code.
+ */
+export function wrapperHandleFor(child: WrapperChild): ProjectStackWrapperHandle {
+  const completed = new Promise<Readonly<{ readonly code: number | null }>>((resolve) => {
+    let done = false;
+    const settle = (code: number | null): void => {
+      if (done) return;
+      done = true;
+      resolve(Object.freeze({ code }));
+    };
+    child.once("exit", (code) => { settle(code); });
+    child.once("error", () => { settle(null); });
+  });
+  return Object.freeze({
+    completed,
+    kill: (): void => { stopWrapperChild(child); },
+  });
+}
+
 function startNodeWrapper(
   bindings: ProjectStackBindings,
   env: Readonly<Record<string, string | undefined>>,
@@ -107,20 +136,7 @@ function startNodeWrapper(
     child.once("spawn", () => { try { closeSync(sink); } catch { /* already closed */ } });
     child.once("error", () => { try { closeSync(sink); } catch { /* already closed */ } });
   }
-  const completed = new Promise<Readonly<{ readonly code: number | null }>>((resolve) => {
-    let done = false;
-    const settle = (code: number | null): void => {
-      if (done) return;
-      done = true;
-      resolve(Object.freeze({ code }));
-    };
-    child.once("exit", (code) => { settle(code); });
-    child.once("error", () => { settle(null); });
-  });
-  return Object.freeze({
-    completed,
-    kill: (): void => { stopWrapperChild(child); },
-  });
+  return wrapperHandleFor(child);
 }
 
 /** Bounded newline frames over the private broker pipe; no unbounded readline buffer. */
