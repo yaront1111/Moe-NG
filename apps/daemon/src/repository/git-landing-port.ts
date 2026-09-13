@@ -1,4 +1,4 @@
-import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative, sep } from "node:path";
 
@@ -90,22 +90,37 @@ function parseStatus(
   return entries;
 }
 
+/** MEASURED 2026-09-13 (Node 24.16, Windows): a removed directory stats ENOENT. Any other stat
+ *  error proves nothing about the directory, so the caller keeps the answer git gave. */
+function workspaceDirectoryGone(workspace: string): boolean {
+  try {
+    statSync(workspace);
+    return false;
+  } catch (error) {
+    return (error as { code?: unknown }).code === "ENOENT";
+  }
+}
+
 export function createGitLandingPort(run: GitRunner = nodeGitRunner): GitLandingPort & GitPublishPort {
   // The repository root as git states it (a real path); the workspace resolved the same way,
   // so a temp directory reached through a symlink (macOS /var -> /private/var) does not read
   // as a path outside the repository when the two are made relative.
-  // MEASURED 2026-09-13 (git 2.54): outside a repository `rev-parse --show-toplevel` exits 128 and
-  // says `fatal: not a git repository`. Only those words are structural. A spawn error and a
-  // timeout kill both arrive as `code: null`, and any other fatal is also 128: each is a moment
-  // the lander must retry, never a refusal it records against the accepted delivery.
+  // MEASURED 2026-09-13 (git 2.54, Node 24.16, Windows): outside a repository `rev-parse
+  // --show-toplevel` exits 128 and says `fatal: not a git repository`; inside a bare one it exits
+  // 128 and says `fatal: this operation must be run in a work tree`; with a cwd that no longer
+  // exists Node never spawns git and answers `spawn git ENOENT` as `code: null`, the words a missing
+  // binary also gives. Those two fatals and a directory measured gone are configurations git cannot
+  // land into. A spawn failure with the directory present, a timeout kill (also `code: null`) and
+  // any other fatal are moments the lander must retry, never refusals recorded against the delivery.
   const root = async (workspace: string): Promise<
     Readonly<{ top: string }> | Readonly<{ top: null; code: "NOT_A_REPOSITORY" | "GIT_FAILED"; detail: string }>
   > => {
     const top = await run(workspace, ["rev-parse", "--show-toplevel"]);
     if (top.code === 0) return { top: top.stdout.trim() };
-    if (top.code === 128 && /not a git repository/u.test(top.stderr)) {
-      return { code: "NOT_A_REPOSITORY", detail: `${workspace} is not inside a git repository`, top: null };
-    }
+    const refuse = (detail: string) => ({ code: "NOT_A_REPOSITORY" as const, detail, top: null });
+    if (top.code === 128 && /not a git repository/u.test(top.stderr)) return refuse(`${workspace} is not inside a git repository`);
+    if (top.code === 128 && /must be run in a work tree/u.test(top.stderr)) return refuse(`${workspace} is a bare repository (no work tree)`);
+    if (top.code === null && workspaceDirectoryGone(workspace)) return refuse(`workspace directory does not exist: ${workspace}`);
     return { code: "GIT_FAILED", detail: tail(top.stderr), top: null };
   };
   const realWorkspace = (workspace: string): string => {

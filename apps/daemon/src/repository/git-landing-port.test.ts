@@ -90,16 +90,20 @@ describe("createGitLandingPort against a real repository", () => {
   // `code: "ENOENT"`, a string) and a timeout kill (`code: null, killed: true`) both reach the port as
   // `code: null`, and a fatal about something else is also 128. Before the fix every one of them read
   // as NOT_A_REPOSITORY, the one observe code the lander records as a durable REFUSED receipt for the
-  // accepted delivery; the port now says NOT_A_REPOSITORY only for git's own words about it.
+  // accepted delivery; the port now says NOT_A_REPOSITORY only for git's own words about it, or for
+  // a spawn failure whose workspace directory is measured gone. Each arm below runs against a
+  // directory that EXISTS, so the spawn arm is the missing-binary shape and not the missing-workspace one.
   it.each([
-    ["a spawn failure", { code: null, stderr: "Error: spawn git ENOENT", stdout: "" }],
+    ["a spawn failure with the directory present", { code: null, stderr: "Error: spawn git ENOENT", stdout: "" }],
     ["a timeout kill", { code: null, stderr: "", stdout: "" }],
     ["a fatal that is not the missing repository", { code: 128, stderr: "fatal: detected dubious ownership in repository at 'D:/anywhere'\n", stdout: "" }],
   ])("reports %s of rev-parse as a retryable failure, never as the structural refusal", async (_label, answer) => {
+    const present = mkdtempSync(join(tmpdir(), "moe-landing-present-"));
+    roots.push(present);
     const port = createGitLandingPort(async () => answer);
-    expect(await port.observe("D:/anywhere")).toMatchObject({ ok: false, code: "GIT_FAILED" });
-    expect(await port.push("D:/anywhere", "https://example.test/r.git")).toMatchObject({ ok: false, code: "GIT_PUSH_FAILED" });
-    expect(await port.commit("D:/anywhere", ["src/a.ts"], "m\n")).toMatchObject({ ok: false, code: "GIT_COMMIT_FAILED" });
+    expect(await port.observe(present)).toMatchObject({ ok: false, code: "GIT_FAILED" });
+    expect(await port.push(present, "https://example.test/r.git")).toMatchObject({ ok: false, code: "GIT_PUSH_FAILED" });
+    expect(await port.commit(present, ["src/a.ts"], "m\n")).toMatchObject({ ok: false, code: "GIT_COMMIT_FAILED" });
   });
 
   it("keeps NOT_A_REPOSITORY for git's own words about it", async () => {
@@ -108,6 +112,39 @@ describe("createGitLandingPort against a real repository", () => {
     }));
     expect(await port.observe("D:/anywhere")).toMatchObject({ ok: false, code: "NOT_A_REPOSITORY" });
     expect(await port.push("D:/anywhere", "https://example.test/r.git")).toMatchObject({ ok: false, code: "NOT_A_REPOSITORY" });
+  });
+
+  // MEASURED 2026-09-13 (git 2.54, Node 24.16, Windows): with a cwd that no longer exists Node never
+  // spawns git and the runner answers `code: null, stderr: "Error: spawn git ENOENT"` - the same
+  // words as a missing git binary. Base 2d7d5b30 read every null as NOT_A_REPOSITORY; 82b67bc8 read
+  // every null as GIT_FAILED, so a vanished workspace was reported every pass, never recorded, and
+  // its reservation cycled AWAITING_LANDING <-> LANDING forever. The port now stats the directory
+  // behind a spawn failure: a directory that is gone is a configuration, not a moment.
+  it("refuses a workspace directory that no longer exists as NOT_A_REPOSITORY", async () => {
+    const gone = mkdtempSync(join(tmpdir(), "moe-landing-gone-"));
+    rmSync(gone, { force: true, recursive: true });
+    const port = createGitLandingPort();
+    expect(await port.observe(gone)).toMatchObject({
+      ok: false, code: "NOT_A_REPOSITORY", detail: expect.stringContaining("workspace directory does not exist"),
+    });
+    expect(await port.push(gone, "https://example.test/r.git")).toMatchObject({ ok: false, code: "NOT_A_REPOSITORY" });
+    expect(await port.commit(gone, ["src/a.ts"], "m\n")).toMatchObject({
+      ok: false, code: "GIT_COMMIT_FAILED", detail: expect.stringContaining("workspace directory does not exist"),
+    });
+  });
+
+  // MEASURED 2026-09-13 (git 2.54): inside a bare repository `rev-parse --show-toplevel` exits 128 and
+  // says `fatal: this operation must be run in a work tree`. There is no tree to observe or commit
+  // into, so that is a configuration git cannot land into, never a moment to retry.
+  it("refuses a bare repository as NOT_A_REPOSITORY", async () => {
+    const bare = mkdtempSync(join(tmpdir(), "moe-landing-bare-"));
+    roots.push(bare);
+    git(bare, "init", "--bare", "--quiet");
+    const port = createGitLandingPort();
+    expect(await port.observe(bare)).toMatchObject({
+      ok: false, code: "NOT_A_REPOSITORY", detail: expect.stringContaining("work tree"),
+    });
+    expect(await port.push(bare, "https://example.test/r.git")).toMatchObject({ ok: false, code: "NOT_A_REPOSITORY" });
   });
 
   it("commits exactly the named paths as Moe on the current branch, leaving other dirt alone", async () => {
