@@ -19,11 +19,19 @@ import { unknownOutcome, type WindowsProcessUnknown } from "./windows-process-co
  * The ordinary provider boundary keeps its smaller roster unchanged. A stack
  * host needs Moe's own bindings and exactly the provider credentials accepted
  * by `moe start`; script-injection variables remain absent.
+ *
+ * CLAUDE_CONFIG_DIR is the claude sign-in's relocation directory, the analogue
+ * of CODEX_HOME below. Provider-scoped on purpose: the launch snapshot strips it
+ * and re-adds it only from the selected provider's overlay, so a codex launch
+ * never carries a claude directory. Absent from this roster, a relocated
+ * sign-in was refused MOE_UP_ENV_MISSING and a defaulted one never reached the
+ * seats (measured 2026-09-13 through the real boundary opener).
  */
 export const PROJECT_STACK_PROVIDER_CREDENTIAL_KEYS = Object.freeze([
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
   "CLAUDE_CODE_OAUTH_TOKEN",
+  "CLAUDE_CONFIG_DIR",
   "CODEX_ACCESS_TOKEN",
   "CODEX_API_KEY",
   "CODEX_HOME",

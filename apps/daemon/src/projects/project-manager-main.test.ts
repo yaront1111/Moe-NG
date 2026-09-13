@@ -137,6 +137,9 @@ describe("createProjectBoundaryOpener", () => {
       assetRoot: "D:\\artifact\\apps\\control-room\\dist",
       environment: {
         ANTHROPIC_API_KEY: "unrelated-claude-secret",
+        // The claude relocation dir is provider-scoped like CODEX_HOME: a codex launch
+        // must not carry it.
+        CLAUDE_CONFIG_DIR: "C:\\Users\\operator\\.claude",
         CODEX_HOME: "C:\\Users\\operator\\.codex",
         MOE_AGENT_COMMAND: "codex",
         SYSTEMROOT: "C:\\Windows",
@@ -167,6 +170,87 @@ describe("createProjectBoundaryOpener", () => {
       },
     }));
     expect(JSON.stringify(openBoundary.mock.calls)).not.toContain("unrelated-claude-secret");
+    expect(JSON.stringify(openBoundary.mock.calls)).not.toContain("CLAUDE_CONFIG_DIR");
+  });
+
+  describe("claude sign-in directory", () => {
+    // Real directories and the real existsSync: the opener injects no fileExists, so this
+    // is the packaged path. INSTALL.md says `moe start` looks in CLAUDE_CONFIG_DIR, or in
+    // %USERPROFILE%\.claude by default; both were false before the roster carried the
+    // variable (measured 2026-09-13: refused MOE_UP_ENV_MISSING with a relocated sign-in,
+    // and the DEFAULTED CLAUDE_CONFIG_DIR the gate minted never reached openBoundary).
+    const launchFs = {
+      canonicalDirectory: (path: string) => path,
+      canonicalFile: (path: string) => path,
+      readConfig: () => JSON.stringify({
+        credential: CREDENTIAL,
+        projectId: "alpha",
+        schemaVersion: "moe-cli-config/1",
+        storePath: ENTRY.storePath,
+      }),
+    };
+    type OpenBoundary = Parameters<typeof createProjectBoundaryOpener>[0]["openBoundary"];
+    const openerFor = (environment: Readonly<Record<string, string>>, openBoundary: OpenBoundary) =>
+      createProjectBoundaryOpener({
+        assetRoot: "D:\\artifact\\apps\\control-room\\dist",
+        environment,
+        launchFs,
+        nodeExecutable: "C:\\node.exe",
+        openBoundary,
+        root: "D:\\artifact",
+      });
+
+    it("honors a relocated sign-in and hands the seats the same CLAUDE_CONFIG_DIR", async () => {
+      const home = await temporary();
+      const custom = await temporary();
+      await writeFile(join(custom, ".credentials.json"), "{}", "utf8");
+      const openBoundary = vi.fn(() => ({
+        code: "PROCESS_BOUNDARY_TEST", layer: "WINDOWS_PROCESS_TEST", truthClass: "UNKNOWN" as const,
+      }));
+      const result = openerFor({ CLAUDE_CONFIG_DIR: custom, USERPROFILE: home }, openBoundary)(ENTRY);
+      expect(result).toMatchObject({ truthClass: "UNKNOWN", code: "PROCESS_BOUNDARY_TEST" });
+      expect(openBoundary).toHaveBeenCalledTimes(1);
+      expect(openBoundary).toHaveBeenCalledWith(expect.objectContaining({
+        environment: {
+          CLAUDE_CONFIG_DIR: custom,
+          MOE_AGENT_COMMAND: "claude",
+          MOE_DAEMON_CREDENTIAL: CREDENTIAL,
+          MOE_PROJECT_ID: "alpha",
+          USERPROFILE: home,
+        },
+      }));
+    });
+
+    it("hands the seats the DEFAULTED CLAUDE_CONFIG_DIR the gate found under USERPROFILE", async () => {
+      const home = await temporary();
+      await mkdir(join(home, ".claude"), { recursive: true });
+      await writeFile(join(home, ".claude", ".credentials.json"), "{}", "utf8");
+      const openBoundary = vi.fn(() => ({
+        code: "PROCESS_BOUNDARY_TEST", layer: "WINDOWS_PROCESS_TEST", truthClass: "UNKNOWN" as const,
+      }));
+      openerFor({ USERPROFILE: home }, openBoundary)(ENTRY);
+      expect(openBoundary).toHaveBeenCalledWith(expect.objectContaining({
+        environment: expect.objectContaining({
+          CLAUDE_CONFIG_DIR: join(home, ".claude"),
+          MOE_AGENT_COMMAND: "claude",
+        }),
+      }));
+    });
+
+    it("prefers the relocated sign-in when a default one also exists, so the seat is the selected account", async () => {
+      const home = await temporary();
+      const custom = await temporary();
+      await mkdir(join(home, ".claude"), { recursive: true });
+      await writeFile(join(home, ".claude", ".credentials.json"), "{}", "utf8");
+      await writeFile(join(custom, ".credentials.json"), "{}", "utf8");
+      const openBoundary = vi.fn(() => ({
+        code: "PROCESS_BOUNDARY_TEST", layer: "WINDOWS_PROCESS_TEST", truthClass: "UNKNOWN" as const,
+      }));
+      openerFor({ CLAUDE_CONFIG_DIR: custom, USERPROFILE: home }, openBoundary)(ENTRY);
+      expect(openBoundary).toHaveBeenCalledWith(expect.objectContaining({
+        environment: expect.objectContaining({ CLAUDE_CONFIG_DIR: custom }),
+      }));
+    });
   });
 
   it("does not pass known provider credentials to a custom agent command", () => {

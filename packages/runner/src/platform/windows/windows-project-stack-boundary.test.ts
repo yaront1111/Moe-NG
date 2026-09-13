@@ -184,10 +184,14 @@ describe("the curated Windows project-stack request", () => {
     ]);
     expect(PROJECT_STACK_ENVIRONMENT_KEYS).not.toContain("NODE_OPTIONS");
     expect(new Set(PROJECT_STACK_ENVIRONMENT_KEYS).size).toBe(PROJECT_STACK_ENVIRONMENT_KEYS.length);
+    // CLAUDE_CONFIG_DIR is the claude sign-in's relocation directory, the exact analogue of
+    // CODEX_HOME beside it: without it a relocated sign-in was refused MOE_UP_ENV_MISSING
+    // and a defaulted one never reached the seats (measured 2026-09-13).
     expect(PROJECT_STACK_PROVIDER_CREDENTIAL_KEYS).toEqual([
       "ANTHROPIC_API_KEY",
       "ANTHROPIC_AUTH_TOKEN",
       "CLAUDE_CODE_OAUTH_TOKEN",
+      "CLAUDE_CONFIG_DIR",
       "CODEX_ACCESS_TOKEN",
       "CODEX_API_KEY",
       "CODEX_HOME",
