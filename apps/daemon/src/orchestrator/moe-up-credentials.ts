@@ -99,9 +99,10 @@ const CODEX_LOGIN: LoginCredential = Object.freeze({
 
 /**
  * Which roster an agent command has to satisfy. A command in neither row stays
- * ungated: this launcher refuses only the credential it can name.
+ * ungated: this launcher refuses only the credential it can name. Exported READ-ONLY
+ * for `credential-scrub.ts`, which needs every roster at once; nothing else selects from it.
  */
-const CREDENTIAL_PROVIDERS = Object.freeze([
+export const CREDENTIAL_PROVIDERS = Object.freeze([
   Object.freeze({
     hint: CREDENTIAL_HINT,
     leaf: DEFAULT_AGENT_COMMAND,

@@ -25,7 +25,7 @@ import {
 import type {
   ActivationReceiptInput, ActivationReceiptPorts,
 } from "../bootstrap/activation-receipts-measure.js";
-import { providerCredentials, providerFor } from "../orchestrator/moe-up-credentials.js";
+import { credentialValues, scrubSecrets } from "../orchestrator/credential-scrub.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
 import { authenticateHttpRequest } from "./http-command-ingress.js";
 import type { Authenticator, HttpPortRefused, HttpRefused } from "./http-contract.js";
@@ -116,28 +116,17 @@ export function readOnlyActivationPorts(
   });
 }
 
-const REDACTED = "[redacted]";
-
 /**
- * Every credential VALUE this daemon holds for the configured agent. A `reason` is whatever
- * the measurement OBSERVED — a git stderr tail, an OS error string — so a git remote or a
- * host echoing its environment can carry a token into one. This response is rendered onto an
- * operator's screen and into e2e screenshots, so values are scrubbed at the boundary that
- * PUBLISHES rather than trusted never to appear. MEASURED, not hypothetical: a git stderr of
- * `fatal: env ANTHROPIC_AUTH_TOKEN=<token>` reached the wire verbatim before this fence.
+ * A `reason` is whatever the measurement OBSERVED — a git stderr tail, an OS error string — so
+ * a git remote or a host echoing its environment can carry a token into one. This response is
+ * rendered onto an operator's screen and into e2e screenshots, so values are scrubbed at the
+ * boundary that PUBLISHES rather than trusted never to appear. MEASURED, not hypothetical: a
+ * git stderr of `fatal: env ANTHROPIC_AUTH_TOKEN=<token>` reached the wire verbatim before this
+ * fence. The list is EVERY credential value in `ports.env` under EVERY roster, not the one
+ * entry the launcher selects for the configured command: with that first-match list a second
+ * present claude name, the other provider's key, and any value under an off-roster command
+ * reached `reason` verbatim (measured on 2d7d5b30; `credential-scrub.ts` says how).
  */
-function secretValues(
-  input: ActivationReceiptInput, ports: ActivationReceiptPorts,
-): readonly string[] {
-  const provider = providerFor(input.agentCommand);
-  if (provider === undefined) return [];
-  const entries = providerCredentials(provider, ports.env, (path) => ports.fs.exists(path));
-  return (entries ?? []).filter((e) => e.secret && e.value !== "").map((e) => e.value);
-}
-
-const scrub = (text: string, secrets: readonly string[]): string =>
-  secrets.reduce((carry, secret) => carry.replaceAll(secret, REDACTED), text);
-
 const signingRow = (receipts: ActivationReceipts): ActivationSigningRow => Object.freeze({
   measured: false as const, member: "signing" as const, reason: receipts.signing.reason,
   ref: receipts.signing.ref, trustBoundary: false as const,
@@ -156,13 +145,13 @@ function receiptRow(
   if (receipt.measured) {
     return Object.freeze({
       code: null, hash: receipt.hash ?? null, layer: null, measured: true,
-      member: receipt.member, reason: scrub(receipt.detail, secrets),
-      ref: scrub(receipt.ref, secrets),
+      member: receipt.member, reason: scrubSecrets(receipt.detail, secrets),
+      ref: scrubSecrets(receipt.ref, secrets),
     });
   }
   return Object.freeze({
     code: receipt.code, hash: null, layer: receipt.layer, measured: false,
-    member: receipt.member, reason: scrub(receipt.detail, secrets), ref: null,
+    member: receipt.member, reason: scrubSecrets(receipt.detail, secrets), ref: null,
   });
 }
 
@@ -180,7 +169,7 @@ function providerReading(
   const member = receipts.members.find((receipt) => receipt.member === "provider");
   if (reading === null || member === undefined || !member.measured) return null;
   return Object.freeze({
-    command: scrub(reading.command, secrets), version: scrub(reading.version, secrets),
+    command: scrubSecrets(reading.command, secrets), version: scrubSecrets(reading.version, secrets),
   });
 }
 
@@ -217,9 +206,7 @@ export function createActivationReadPort(options: {
 
   const readActivation = async (): Promise<ActivationReadResult> => {
     try {
-      return activationViewOf(
-        await measure(options.input, ports), secretValues(options.input, ports),
-      );
+      return activationViewOf(await measure(options.input, ports), credentialValues(ports.env));
     } catch {
       // A measurement that throws must become a coded refusal, never a 500 with a stack.
       return refused("ACTIVATION_READ_UNREADABLE");

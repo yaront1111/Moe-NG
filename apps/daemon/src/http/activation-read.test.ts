@@ -436,6 +436,64 @@ describe("the activation receipts read states every receipt over HTTP without wr
     expect(reply.text).not.toContain(CANARY_TOKEN);
   });
 
+  /**
+   * THE FIRST-MATCH HOLE. The scrub list used to be `providerCredentials(...)`, which stops at
+   * the FIRST present roster name, so it held one value. Measured on 2d7d5b30 through this same
+   * listener: with two claude names set the second reached `reason` verbatim, a codex command
+   * scrubbed no ANTHROPIC_* value, and an off-roster command scrubbed nothing at all. Each arm
+   * pins the whole reason text, so a scrub that merely dropped the member could not pass.
+   */
+  const SECOND_CANARY = "sk-ant-api-CANARY-second-2222222222";
+  const CODEX_CANARY = "sk-proj-CANARY-codex-4444444444";
+  const echo = (...pairs: readonly (readonly [string, string])[]): GitRunResult =>
+    gitFail(128, `fatal: env ${pairs.map(([name, value]) => `${name}=${value}`).join(" ")}`);
+  const echoing = (agentCommand: string, env: Record<string, string>, ...pairs: readonly (readonly [string, string])[]) =>
+    createActivationReadPort({
+      input: { ...INPUT, agentCommand },
+      ports: { ...healthyPorts().ports, env, git: () => Promise.resolve(echo(...pairs)) },
+    });
+
+  it("scrubs EVERY present claude credential, not only the one the launcher would select", async () => {
+    const listener = await start(echoing("claude",
+      { ANTHROPIC_API_KEY: SECOND_CANARY, CLAUDE_CODE_OAUTH_TOKEN: CANARY_TOKEN },
+      ["CLAUDE_CODE_OAUTH_TOKEN", CANARY_TOKEN], ["ANTHROPIC_API_KEY", SECOND_CANARY]));
+
+    const reply = await post(listener);
+
+    expect(rowOf(viewOf(reply), "repository").reason)
+      .toBe("fatal: env CLAUDE_CODE_OAUTH_TOKEN=[redacted] ANTHROPIC_API_KEY=[redacted]");
+    expect(reply.text).not.toContain(SECOND_CANARY);
+    expect(reply.text).not.toContain(CANARY_TOKEN);
+  });
+
+  it("scrubs the OTHER provider's value under a codex command", async () => {
+    const listener = await start(echoing("codex",
+      { ANTHROPIC_AUTH_TOKEN: CANARY_TOKEN, CODEX_API_KEY: CODEX_CANARY },
+      ["CODEX_API_KEY", CODEX_CANARY], ["ANTHROPIC_AUTH_TOKEN", CANARY_TOKEN]));
+
+    const reply = await post(listener);
+
+    expect(rowOf(viewOf(reply), "repository").reason)
+      .toBe("fatal: env CODEX_API_KEY=[redacted] ANTHROPIC_AUTH_TOKEN=[redacted]");
+    expect(reply.text).not.toContain(CANARY_TOKEN);
+    expect(reply.text).not.toContain(CODEX_CANARY);
+  });
+
+  it("scrubs every roster value under an agent command no provider roster recognises", async () => {
+    // `providerFor("my-agent")` is undefined: the launcher waives its gate, and the old scrub
+    // list was the empty array on exactly that branch.
+    const listener = await start(echoing("my-agent",
+      { ANTHROPIC_AUTH_TOKEN: CANARY_TOKEN, OPENAI_API_KEY: CODEX_CANARY },
+      ["ANTHROPIC_AUTH_TOKEN", CANARY_TOKEN], ["OPENAI_API_KEY", CODEX_CANARY]));
+
+    const reply = await post(listener);
+
+    expect(rowOf(viewOf(reply), "repository").reason)
+      .toBe("fatal: env ANTHROPIC_AUTH_TOKEN=[redacted] OPENAI_API_KEY=[redacted]");
+    expect(reply.text).not.toContain(CANARY_TOKEN);
+    expect(reply.text).not.toContain(CODEX_CANARY);
+  });
+
   it("marks signing NOT a trust boundary and never a measured receipt", async () => {
     const listener = await start(portFor());
 
