@@ -22,6 +22,7 @@ import { staffingSurfaceOf } from "./agent-staffing-surface.js";
 import { createAgentWrapper } from "./agent-wrapper.js";
 import { runReclaimPass } from "./agent-wrapper-reclaim.js";
 import { createCompiledNodeSource } from "./compiled-node-source.js";
+import { credentialValues } from "./credential-scrub.js";
 import { createRepositoryDeliveryRuntime } from "./repository-delivery-runtime.js";
 import { createWrapperNodeMissions } from "./wrapper-node-missions.js";
 import { createCompilerMissionInputs, createDesignBriefResolver }
@@ -245,6 +246,7 @@ async function main(): Promise<void> {
         log: (line) => { process.stdout.write(`${line}\n`); },
         projectId: config.projectId,
         provider: providerFor(process.env["MOE_AGENT_COMMAND"] ?? "claude")?.leaf ?? "claude",
+        secrets: () => credentialValues(process.env),
         store: verifierStore,
       }),
       staffingFence,

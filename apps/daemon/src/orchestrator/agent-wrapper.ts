@@ -319,7 +319,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       // provider refused, the item never got its turn.
       onExit: config.providerPause?.exitObserver(sessionId, workItemId, () => {
         attempts.set(workItemId, Math.max(0, (attempts.get(workItemId) ?? 0) - 1));
-      }, pauseProviderOf(command)),
+      }, pauseProviderOf(command), secret),
       request,
       sessionId,
       spawnAgent: config.spawnAgent,

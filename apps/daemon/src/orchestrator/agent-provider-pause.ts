@@ -1,6 +1,7 @@
 import type { SqliteEventStore } from "@moe/store";
 
 import type { ProviderPauseFacts, SeatExitReading, SeatExitReport } from "./agent-spawn-contract.js";
+import { scrubSecrets } from "./credential-scrub.js";
 import { readProviderPause, recordProviderPause, recordSeatExit } from "./provider-pause-ledger.js";
 import { classifySeatExit } from "./seat-exit-classifier.js";
 
@@ -41,6 +42,15 @@ export interface ProviderPauseGateConfig {
    * claim about the process.
    */
   readonly provider: string;
+  /**
+   * Every credential VALUE the seats' environment holds, read per exit. The last line is
+   * seat-controlled bytes, written durably and published by /sessions/read and /health/read;
+   * a codex seat holds every forwarded ANTHROPIC_/OPENAI_/CODEX_ value and has no subprocess
+   * env scrub, so a seat that echoed its environment wrote the value into the ledger verbatim
+   * (measured on 2d7d5b30: the row, both views and the park log line carried it). Scrubbed
+   * HERE, at the write, so the row that outlives the seat holds nothing secret.
+   */
+  readonly secrets: () => readonly string[];
   readonly store: SqliteEventStore;
 }
 
@@ -48,13 +58,16 @@ export interface ProviderPauseGate {
   /**
    * Reads ONE seat's exit. `refund` is called exactly when the reading is a
    * provider limit — the attempt was charged at spawn and the item never ran.
-   * `provider` is the seat's OWN provider; absent falls back to the config's.
+   * `provider` is the seat's OWN provider; absent falls back to the config's. `credential`
+   * is the seat's OWN minted MCP bearer (`MOE_AGENT_MCP_BEARER` on a codex seat), scrubbed
+   * beside the config's secrets because the config cannot know a per-seat mint.
    */
   readonly exitObserver: (
     sessionId: string,
     workItemId: string,
     refund: () => void,
     provider?: string,
+    credential?: string,
   ) => (report: SeatExitReport) => SeatExitReading;
   /**
    * The live pause on ONE provider at `nowMs`, or null when that provider is free
@@ -160,7 +173,7 @@ export function createProviderPauseGate(config: ProviderPauseGateConfig): Provid
 
   const observe = (
     sessionId: string, workItemId: string, refund: () => void, report: SeatExitReport,
-    provider: string,
+    provider: string, credential: string | undefined,
   ): SeatExitReading => {
     const nowMs = clock();
     const exitAt = new Date(nowMs).toISOString();
@@ -171,19 +184,22 @@ export function createProviderPauseGate(config: ProviderPauseGateConfig): Provid
       signal: report.signal,
       tail: report.tail,
     });
+    // Classified on the RAW tail — the roster and the reset parse need the provider's own
+    // words — and only what is WRITTEN or LOGGED is scrubbed.
+    const lastLine = verdict.lastLine === null ? null : scrubSecrets(verdict.lastLine,
+      [...config.secrets(), ...(credential === undefined ? [] : [credential])]);
     if (verdict.kind !== "PROVIDER_LIMIT") {
       recordExit({
-        exitAt, kind: verdict.kind, lastLine: verdict.lastLine, provider, report,
-        resetAt: verdict.resetAt, sessionId, workItemId,
+        exitAt, kind: verdict.kind, lastLine, provider, report, resetAt: verdict.resetAt,
+        sessionId, workItemId,
       });
       return verdict.kind;
     }
     const { defaulted, resetAt } = resetFor(nowMs, verdict.resetAt, provider);
     recordExit({
-      exitAt, kind: verdict.kind, lastLine: verdict.lastLine, provider, report, resetAt,
-      sessionId, workItemId,
+      exitAt, kind: verdict.kind, lastLine, provider, report, resetAt, sessionId, workItemId,
     });
-    park({ defaulted, exitAt, lastLine: verdict.lastLine, nowMs, provider, resetAt, workItemId });
+    park({ defaulted, exitAt, lastLine, nowMs, provider, resetAt, workItemId });
     // The attempt was charged when the seat spawned; the provider, not the item, refused.
     refund();
     return verdict.kind;
@@ -191,10 +207,10 @@ export function createProviderPauseGate(config: ProviderPauseGateConfig): Provid
 
   const gate: ProviderPauseGate = {
     exitObserver: (sessionId: string, workItemId: string, refund: () => void,
-      provider?: string) =>
+      provider?: string, credential?: string) =>
       (report: SeatExitReport): SeatExitReading => {
         try {
-          return observe(sessionId, workItemId, refund, report, seatOf(provider));
+          return observe(sessionId, workItemId, refund, report, seatOf(provider), credential);
         } catch (error) {
           // Fail CLOSED to today's behaviour: an unreadable exit is an ordinary failure.
           log(`[wrapper] seat exit observer failed: ${messageOf(error)}`);

@@ -40,6 +40,10 @@ const WEEKLY_RESET_AT = "2026-09-08T07:46:00.000Z";
 const EXIT_AT = "2026-09-03T18:04:00.000Z";
 const PARSED_RESET_AT = "2026-09-03T21:10:00.000Z";
 const PROJECT_ID = "proj-pause-gate";
+/** A credential value the wrapper's environment holds, as the composition's `secrets` answers. */
+const ENV_SECRET = "sk-ant-api-CANARY-env-value-1111111111";
+/** A seat's OWN minted MCP bearer: the value `agent-spawner.ts` injects as MOE_AGENT_MCP_BEARER. */
+const SEAT_BEARER = "seatbearer0123456789abcdef0123456789";
 /** A loopback origin `trustedMcpOrigin` admits, for the arms that run the REAL spawner. */
 const SPAWN_ORIGIN = "http://127.0.0.1:39125";
 
@@ -88,6 +92,7 @@ function harness(): Harness {
     log: (line) => { logs.push(line); },
     projectId: PROJECT_ID,
     provider: "claude",
+    secrets: () => [ENV_SECRET],
     store,
   });
   return { gate, logs, setNow: (value) => { now = value; }, store };
@@ -315,6 +320,7 @@ describe("createProviderPauseGate", () => {
       log: (line) => { logs.push(line); },
       projectId: PROJECT_ID,
       provider: "claude",
+      secrets: () => [ENV_SECRET],
       // A concurrent wrapper moved this seat's aggregate between the version read and the
       // commit. The REAL store still decides: it observes the tail, sees the presented
       // version is stale, and rejects — the code below is production's, not the double's.
@@ -342,6 +348,75 @@ describe("createProviderPauseGate", () => {
 
     expect(gate.exitObserver("sess-1", "item-7", vi.fn())(exploding)).toBe("FAILED");
     expect(logs).toEqual(["[wrapper] seat exit observer failed: kaboom"]);
+  });
+
+  /**
+   * THE LAST LINE IS SEAT-CONTROLLED BYTES, written durably and published to every GOAL reader by
+   * /sessions/read. A codex seat's environment holds its own MCP bearer and every forwarded
+   * ANTHROPIC_/OPENAI_/CODEX_ value, and codex has no subprocess env scrub, so a seat whose last
+   * line echoed its environment wrote the secret into the ledger verbatim (measured on 2d7d5b30:
+   * the durable row, the sessions view, the health view and the park log line all carried it).
+   * The scrub runs HERE, at the write, so the row and everything downstream of it are clean.
+   */
+  describe("scrubs credential values out of the last line before it is written", () => {
+    const ECHO = `MOE_AGENT_MCP_BEARER=${SEAT_BEARER} ANTHROPIC_API_KEY=${ENV_SECRET}`;
+
+    it("on a FAILED exit: the seat's own bearer and the environment's values, in one row", () => {
+      const { gate, logs, store } = harness();
+      const refund = vi.fn();
+
+      const reading = gate.exitObserver("sess-codex", "item-7", refund, "codex", SEAT_BEARER)(
+        report({ tail: ["ERROR: env dump follows", ECHO] }),
+      );
+
+      expect(reading).toBe("FAILED");
+      expect(seatExitRecords(store)).toEqual([{
+        kind: "FAILED", lastLine: "MOE_AGENT_MCP_BEARER=[redacted] ANTHROPIC_API_KEY=[redacted]",
+        outputSeen: true, sessionId: "sess-codex", terminatedByWrapper: false,
+      }]);
+      expect(refund).not.toHaveBeenCalled();
+      expect(logs).toEqual([]);
+    });
+
+    it("on a COMPLETED exit too: exit 0 writes the last line just the same", () => {
+      const { gate, store } = harness();
+
+      expect(gate.exitObserver("sess-1", "item-7", vi.fn())(
+        report({ exitCode: 0, tail: [`done ${ENV_SECRET}`] }),
+      )).toBe("COMPLETED");
+
+      expect(seatExitRecords(store)).toEqual([{
+        kind: "COMPLETED", lastLine: "done [redacted]", outputSeen: true, sessionId: "sess-1",
+        terminatedByWrapper: false,
+      }]);
+    });
+
+    it("on a PROVIDER_LIMIT exit: the row, the pause's cause and the park log line, read off the RAW line", () => {
+      const { gate, logs, store } = harness();
+      const refund = vi.fn();
+      const expected = new Date(Date.parse(EXIT_AT) + DEFAULT_PROVIDER_PAUSE_MS).toISOString();
+      const clean = `${DURATION_LIMIT_LINE} [redacted]`;
+
+      const reading = gate.exitObserver("sess-1", "item-7", refund, "claude", SEAT_BEARER)(
+        report({ tail: [`${DURATION_LIMIT_LINE} ${SEAT_BEARER}`] }),
+      );
+
+      // Classified BEFORE the scrub: the roster still matched, and the attempt is refunded.
+      expect(reading).toBe("PROVIDER_LIMIT");
+      expect(refund).toHaveBeenCalledTimes(1);
+      expect(seatExitRecords(store)).toEqual([{
+        kind: "PROVIDER_LIMIT", lastLine: clean, outputSeen: true, sessionId: "sess-1",
+        terminatedByWrapper: false,
+      }]);
+      expect(readProviderPause(store, PROJECT_ID, "claude", EXIT_AT)).toMatchObject({
+        cause: { lastLine: clean, workItemId: "item-7" }, resetAt: expected,
+      });
+      expect(logs).toEqual([
+        `[wrapper] provider limit: claude paused until ${expected}`
+        + ` (DEFAULT_PROVIDER_PAUSE_MS) (${clean})`,
+      ]);
+      expect(JSON.stringify([seatExitRecords(store), logs])).not.toContain(SEAT_BEARER);
+    });
   });
 
   it("names a reading for every kind child 1 can classify", () => {
@@ -554,6 +629,7 @@ describe("createAgentWrapper with a provider pause", () => {
         log: (line) => { logs.push(line); },
         projectId,
         provider: "claude",
+        secrets: () => [],
         store: reader,
       }),
       spawnAgent: options.spawnAgent ?? (async () => {
@@ -654,6 +730,43 @@ describe("createAgentWrapper with a provider pause", () => {
         .toMatchObject({ outcome: "SPAWNED", workItemId: seat.workItemId });
       expect(again.paused).toBeUndefined();
       expect(harness.spawns).toBe(2);
+    } finally {
+      harness.dispose();
+    }
+  });
+
+  it("scrubs the seat's OWN minted credential out of the row: the wrapper hands it to the observer", async () => {
+    // The gate's configured secrets are EMPTY here, so the only way the bearer can be redacted
+    // is agent-wrapper.ts passing the seat's `secret` alongside the observer it builds.
+    const projectId = "proj-pause-wrapper-scrub";
+    const credentials: string[] = [];
+    const exits: ReturnType<typeof deferred>[] = [];
+    const harness = wrapperHarness(projectId, {
+      spawnAgent: async (request) => {
+        credentials.push(request.credential);
+        const exit = deferred();
+        exits.push(exit);
+        return { exit: exit.promise, ok: true as const, pid: CHILD_PID };
+      },
+    });
+    try {
+      const staffed = (await harness.wrapper.runOnce()).spawned[0];
+      expect(staffed).toMatchObject({ outcome: "SPAWNED" });
+      const [credential] = credentials;
+      const [exit] = exits;
+      if (credential === undefined || exit === undefined) throw new Error("nothing staffed");
+      // The REAL mint, as the seat received it - never a value this arm typed.
+      expect(credential).toMatch(/^pause-\d{4}0{28}$/u);
+
+      exit.reject(new AgentProcessFailureError(
+        "EXIT_NONZERO", 1, null, ["env:", `MOE_AGENT_MCP_BEARER=${credential}`],
+      ));
+      await expect(harness.wrapper.settle()).resolves.toBeUndefined();
+
+      expect(seatExitRecordsIn(harness.reader, projectId)).toEqual([{
+        kind: "FAILED", lastLine: "MOE_AGENT_MCP_BEARER=[redacted]", outputSeen: true,
+        sessionId: staffed?.sessionId, terminatedByWrapper: false,
+      }]);
     } finally {
       harness.dispose();
     }

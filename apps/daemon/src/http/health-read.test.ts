@@ -244,6 +244,26 @@ describe("createHealthReadPort agents.paused", () => {
       .toEqual({ ...PAUSED, lastLine: "", workItemId: "node.deliver@node-2" });
   });
 
+  it("scrubs every credential value the daemon holds out of the pause's last line", () => {
+    // The cause is the seat's matched refusal line - seat-controlled bytes the wrapper wrote. A
+    // row an older wrapper wrote still carries them raw, and this read publishes it.
+    const store = openStore();
+    const canary = "sk-proj-CANARY-health-8888888888";
+    const recorded = recordProviderPause(store, {
+      cause: { lastLine: `${CLAUDE_LINE} OPENAI_API_KEY=${canary}`, workItemId: "node.deliver@node-1" },
+      projectId: PROJECT_ID, provider: "claude", resetAt: "2026-09-02T20:30:00.000Z",
+      since: "2026-09-02T20:00:00.000Z",
+    });
+    expect(recorded.ok).toBe(true);
+    const view = health(createHealthReadPort({
+      clock: () => "2026-09-02T20:10:00.000Z", env: { OPENAI_API_KEY: canary }, nodeSpecsDir: null, pid: 7,
+      projectId: PROJECT_ID, readPlane: () => "V1", readVerifier: () => ({ calibration: true, policy: true }),
+      startedAt: "2026-09-02T19:00:00.000Z", store, storePath: ":memory:",
+    }).readHealth());
+    expect(view.agents.paused?.lastLine).toBe(`${CLAUDE_LINE} OPENAI_API_KEY=[redacted]`);
+    expect(JSON.stringify(view)).not.toContain(canary);
+  });
+
   it("refuses the whole read with HEALTH_READ_UNREADABLE when the store cannot be read", () => {
     const store = openStore();
     pause(store, "claude", "2026-09-02T20:30:00.000Z");

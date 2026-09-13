@@ -11,6 +11,7 @@ import type { SqliteEventStore } from "@moe/store";
 
 import { readDurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
+import { credentialValues, scrubSecrets } from "../orchestrator/credential-scrub.js";
 import { readProviderPause } from "../orchestrator/provider-pause-ledger.js";
 import { readVerifierStandingAuthority } from "../review/verifier-authority-provider.js";
 import type { VerifierStandingAuthority } from "../review/verifier-authority-provider.js";
@@ -36,6 +37,7 @@ export const KNOWN_PROVIDERS = Object.freeze(["claude", "codex"] as const);
 
 /** A provider limit the fleet is waiting out, as the browser reads it. */
 export interface ProviderPauseView {
+  /** The seat's matched refusal line, with every credential value the daemon holds redacted. */
   readonly lastLine: string;
   readonly provider: string;
   readonly resetAt: string;
@@ -81,6 +83,12 @@ const refused = (code: string): HealthRefused => Object.freeze({ code, layer: LA
 
 export interface HealthReadOptions {
   readonly clock?: () => string;
+  /**
+   * The daemon's environment, defaulted to the live `process.env`. Every credential VALUE it
+   * holds is redacted from the pause's published last line: the wrapper scrubs at the write,
+   * but a row an older wrapper wrote still carries the raw line, and this read publishes it.
+   */
+  readonly env?: Readonly<Record<string, string | undefined>>;
   readonly nodeSpecsDir: string | null;
   readonly pid?: number;
   readonly projectId: string;
@@ -122,13 +130,13 @@ function repositoryView(read: HealthReadOptions["readRepository"]): RepositoryRe
  * the whole health read. Roster order breaks a tie because the operator sees one banner.
  */
 function pausedAgent(
-  store: SqliteEventStore, projectId: string, now: string,
+  store: SqliteEventStore, projectId: string, now: string, secrets: readonly string[],
 ): ProviderPauseView | null {
   for (const provider of KNOWN_PROVIDERS) {
     const record = readProviderPause(store, projectId, provider, now);
     if (record === null) continue;
     return Object.freeze({
-      lastLine: record.cause?.lastLine ?? "",
+      lastLine: scrubSecrets(record.cause?.lastLine ?? "", secrets),
       provider: record.provider,
       resetAt: record.resetAt,
       since: record.since,
@@ -152,6 +160,7 @@ export function createHealthReadPort(options: HealthReadOptions): HealthReadPort
   const { projectId, store } = options;
   const clock = options.clock ?? ((): string => new Date().toISOString());
   const readVerifier = options.readVerifier ?? readVerifierStandingAuthority;
+  const env = options.env ?? process.env;
   const readHealth = (): HealthReadResult => {
     try {
       const ledger = readDurableLedger(store, projectId);
@@ -159,7 +168,10 @@ export function createHealthReadPort(options: HealthReadOptions): HealthReadPort
       // ONE INSTANT PER READ: the pause window and the stated read time never disagree.
       const now = clock();
       return Object.freeze({
-        agents: Object.freeze({ paused: pausedAgent(store, projectId, now), repository: repositoryView(options.readRepository) }),
+        agents: Object.freeze({
+          paused: pausedAgent(store, projectId, now, credentialValues(env)),
+          repository: repositoryView(options.readRepository),
+        }),
         daemon: Object.freeze({
           commandAuthorityPlane: options.readPlane(),
           nodeSpecsDir: options.nodeSpecsDir,

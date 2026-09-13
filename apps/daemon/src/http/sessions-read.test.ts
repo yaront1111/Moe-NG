@@ -553,6 +553,23 @@ describe("the sessions read discloses when each seat started and how it exited",
     expect(Object.keys(rows.get("sess-closed")?.exit as object).sort()).toEqual(["at", "exitCode", "kind", "lastLine"]);
   });
 
+  it("scrubs every credential value the daemon holds out of a published last line", () => {
+    // The wrapper scrubs at the write since the same fix, but a row an older wrapper wrote still
+    // carries the raw line, and this read is the boundary that PUBLISHES it to every GOAL reader.
+    const store = openStore();
+    const canary = "sk-ant-api-CANARY-sessions-7777777777";
+    expect(recordSeatExit(store, exitInput({
+      lastLine: `fatal: env ANTHROPIC_API_KEY=${canary}`, sessionId: "sess-echo",
+    })).ok).toBe(true);
+    const view = sessions(createSessionsReadPort({
+      clock: () => NOW, configuredAgentLimit: 2, env: { ANTHROPIC_API_KEY: canary }, envAgentCommand: undefined,
+      projectId: PROJECT_ID, readClaims: () => claims([]),
+      readSessions: () => ledgerWith([session("sess-echo", "2026-09-03T12:00:00.000Z", "CLOSED")]), store,
+    }).readSessions());
+    expect(rowsOf(view).get("sess-echo")?.exit?.lastLine).toBe("fatal: env ANTHROPIC_API_KEY=[redacted]");
+    expect(JSON.stringify(view)).not.toContain(canary);
+  });
+
   it("degrades to null when the exit ledger CANNOT be read, not to a refusal", () => {
     // How a seat ended is decoration on a session, never a source of one: the read still answers
     // SESSIONS, with the exit unknown, exactly as it does for an unreadable start ledger.

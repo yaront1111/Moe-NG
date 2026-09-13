@@ -69,8 +69,9 @@ export interface SessionsAgentProvider {
  * Second-hand in the same way the `AtStart` members are: the wrapper observed the child's exit and
  * wrote it down; nothing here observes a process. `exitCode` is null when the seat died on a signal
  * rather than an exit code — the record's documented meaning — and `lastLine` is the last non-empty
- * line the seat printed, clipped at the record's bound, or null. EXACT KEYS: the browser decodes this
- * object by exact arity, so a member added here must be added there in the same change.
+ * line the seat printed, clipped at the record's bound and with every credential value the daemon
+ * holds redacted, or null. EXACT KEYS: the browser decodes this object by exact arity, so a member
+ * added here must be added there in the same change.
  */
 export interface SeatExitView {
   readonly at: string;

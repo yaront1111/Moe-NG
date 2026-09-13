@@ -230,6 +230,9 @@ describe("wrapper binary staffing wiring", () => {
     const block = call.slice(start, call.indexOf("      }),", start));
     expect(block).toContain("store: verifierStore");
     expect(block).toContain("providerFor(process.env[\"MOE_AGENT_COMMAND\"]");
+    // The seat-exit scrub list: every credential value in THIS process's environment - the same
+    // values the spawner forwards to every seat. A `() => []` here would write echoed keys durably.
+    expect(block).toContain("secrets: () => credentialValues(process.env)");
     expect(call).not.toContain("providerPause: undefined");
   });
 

@@ -11,6 +11,7 @@ import { CAPABILITIES } from "../daemon-command-vocabulary.js";
 import { readSessionLedger } from "../identity/session-read-model.js";
 import type { SessionLedger } from "../identity/session-read-model.js";
 import { agentProviderFact, resolveAgentProvider } from "../orchestrator/agent-provider-resolve.js";
+import { credentialValues, scrubSecrets } from "../orchestrator/credential-scrub.js";
 import { providerFor } from "../orchestrator/moe-up-credentials.js";
 import { readSeatExitLedger } from "../orchestrator/seat-exit-ledger-read.js";
 import type { SeatExitLedger } from "../orchestrator/seat-exit-ledger-read.js";
@@ -57,6 +58,13 @@ export interface SessionsReadOptions {
    * without mutating the test runner's own environment.
    */
   readonly envAgentCommand?: string | null | undefined;
+  /**
+   * The daemon's environment, defaulted to the live `process.env` on the same reasoning as
+   * `envAgentCommand`. Every credential VALUE it holds is redacted from each seat's published
+   * last line: the wrapper scrubs at the write, but a row an older wrapper wrote still carries
+   * the raw line, and this read is the boundary that publishes it to every GOAL reader.
+   */
+  readonly env?: Readonly<Record<string, string | undefined>>;
   readonly projectId: string;
   readonly readClaims?: (store: SqliteEventStore, projectId: string) => WorkClaimLedger;
   /**
@@ -118,9 +126,11 @@ export function createSessionsReadPort(options: SessionsReadOptions): SessionsRe
   const readProvider = options.readProvider ?? agentProviderFact;
   const envAgentCommand = "envAgentCommand" in options
     ? options.envAgentCommand : process.env["MOE_AGENT_COMMAND"];
+  const env = options.env ?? process.env;
   const read = (): SessionsReadResult => {
     try {
       const now = clock();
+      const secrets = credentialValues(env);
       const ledger = readSessions(store, projectId);
       const claims = readClaims(store, projectId);
       const seatStarts: SeatStartLedger = decoration(() => readSeatStarts(store, projectId));
@@ -152,7 +162,8 @@ export function createSessionsReadPort(options: SessionsReadOptions): SessionsRe
           agentVersionAtStart: started.agentVersion,
           capabilities: record.capabilities,
           exit: exit === undefined ? null
-            : Object.freeze({ at: exit.at, exitCode: exit.exitCode, kind: exit.kind, lastLine: exit.lastLine }),
+            : Object.freeze({ at: exit.at, exitCode: exit.exitCode, kind: exit.kind,
+              lastLine: exit.lastLine === null ? null : scrubSecrets(exit.lastLine, secrets) }),
           expiresAt: record.expiresAt,
           holding,
           liveness,
