@@ -34,6 +34,17 @@ describe("project-result-words result contract", () => {
 });
 
 describe("project-result-words", () => {
+  it.each([
+    ["PAIRING_REQUEST_EXPIRED", "This pairing request expired before the browser finished pairing."],
+    ["PAIRING_REQUEST_ALREADY_CLAIMED", "This pairing request has already been used."],
+    ["PAIRING_REQUEST_UNKNOWN", "Moe Projects does not recognize this pairing request."],
+  ])("explains %s without claiming the browser is paired", (code, said) => {
+    expect(resultWords({ code, ok: false })).toEqual([
+      said,
+      "Reload this page for a new label, enter it in the terminal, then confirm promptly here.",
+    ]);
+  });
+
   it("gives a concrete recovery when the manager cannot receive approval", () => {
     expect(resultWords({ code: "OPERATOR_CHANNEL_UNAVAILABLE", ok: false })).toEqual([
       "Moe Projects cannot receive a pairing label.",

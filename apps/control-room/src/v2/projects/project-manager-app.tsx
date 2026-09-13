@@ -45,6 +45,14 @@ export interface ProjectManagerAppProps {
 }
 
 function stableRefusal(value: ProjectManagerRefusal): ProjectManagerRefusal {
+  if (value.code === "PAIRING_REQUEST_EXPIRED" || value.code === "PAIRING_REQUEST_ALREADY_CLAIMED"
+    || value.code === "PAIRING_REQUEST_UNKNOWN") {
+    if (value.ok === false && value.layer === "CONTROL_ROOM_PAIRING_APPROVAL"
+      && Object.keys(value).length === 3) {
+      return { code: value.code, layer: value.layer, ok: false };
+    }
+    return { code: "PROJECT_MANAGER_PAIRING_REFUSED", layer: PROJECT_MANAGER_LOCAL_LAYER, ok: false };
+  }
   if (!value.ok && value.code === "OPERATOR_CHANNEL_UNAVAILABLE" && value.layer === "PROJECT_MANAGER_HTTP") {
     return { code: value.code, layer: value.layer, ok: false };
   }

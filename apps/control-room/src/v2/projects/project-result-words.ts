@@ -71,6 +71,9 @@ export function lifecycleWord(lifecycle: string): string {
 export type ResultWords = readonly [said: string, next: string];
 
 export const RESULT_WORDS: Readonly<Record<string, ResultWords>> = Object.freeze({
+  PAIRING_REQUEST_EXPIRED: ["This pairing request expired before the browser finished pairing.", "Reload this page for a new label, enter it in the terminal, then confirm promptly here."],
+  PAIRING_REQUEST_ALREADY_CLAIMED: ["This pairing request has already been used.", "Reload this page for a new label, enter it in the terminal, then confirm promptly here."],
+  PAIRING_REQUEST_UNKNOWN: ["Moe Projects does not recognize this pairing request.", "Reload this page for a new label, enter it in the terminal, then confirm promptly here."],
   OPERATOR_CHANNEL_UNAVAILABLE: ["Moe Projects cannot receive a pairing label.", "Restart Moe Projects in a terminal, then reload this page."],
   MOE_INIT_CONFIG_PRESENT: ["Moe is already set up in that folder.", "Choose \u201cMoe already set this folder up\u201d above and add it again."],
   MOE_INIT_TARGET_NOT_EMPTY: ["That folder already has files in it, so Moe would not set it up.", "Point Moe at a new or empty folder, then copy your files in after it is added."],

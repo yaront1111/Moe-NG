@@ -14,6 +14,7 @@ import type { LiveAttempts } from "./v2/cordum-app.js";
 import { ProjectManagerApp } from "./v2/projects/project-manager-app.js";
 import { connectProjectManager } from "./v2/projects/project-manager-client.js";
 import type { ProjectManagerConnection } from "./v2/projects/project-manager-client.js";
+import { createProjectManagerSession } from "./v2/projects/project-manager-session.js";
 
 /** The element id the served document supplies; nothing else is assumed to exist. */
 export const CONTROL_ROOM_ROOT_ELEMENT_ID = "root";
@@ -49,7 +50,7 @@ export const BROWSER_CLOCK: Clock = Object.freeze({
  * document onto it and no flag can move the manager document off it.
  *
  * No URL flag carries a secret; product credentials arrive via the handshake and
- * the manager uses its own same-origin cookie session.
+ * the manager restores its separately paired credential from this tab's origin-scoped session.
  */
 function chooseRoot(
   search: string,
@@ -69,7 +70,7 @@ function chooseRoot(
  * observe the initial promise; later retries never re-read location after its
  * fragment was scrubbed. Development fixtures and the project manager need no
  * project pairing. Manager mode short-circuits deliberately: it holds its
- * own same-origin session, so an unused one-use project credential is never issued.
+ * own paired session, so an unused one-use project credential is never issued.
  */
 function prepareV2LiveSetup(
   search: string,
@@ -88,13 +89,14 @@ function prepareV2LiveSetup(
 /**
  * Starts the manager's one bootstrap before React can replay a lifecycle, exactly
  * as the v2 handshake is prepared. No manager secret enters React state: the CSRF
- * token stays closed over inside the client this promise resolves to, and the
- * session itself is a same-origin cookie the document never reads.
+ * token stays closed over inside the client this promise resolves to. The paired
+ * credential may survive this tab's reload in manager-origin session storage.
  */
 function prepareProjectManager(managerMode: boolean): Promise<ProjectManagerConnection> | undefined {
   if (!managerMode) return undefined;
   return connectProjectManager({
     fetchImpl: (input, init) => fetch(input, init),
+    session: createProjectManagerSession(globalThis.location?.origin ?? "", () => window.sessionStorage),
   });
 }
 

@@ -1,3 +1,6 @@
+import { validProjectManagerCredential } from "./project-manager-session.js";
+import type { ProjectManagerSession } from "./project-manager-session.js";
+
 export const PROJECT_MANAGER_SCHEMA_VERSION = "moe-project-manager/1" as const;
 export const PROJECT_MANAGER_LOCAL_LAYER = "CONTROL_ROOM_PROJECT_MANAGER" as const;
 const LOCAL_CODE = Object.freeze({
@@ -64,6 +67,10 @@ export type ProjectManagerRefusal = {
 } | {
   readonly code: "OPERATOR_CHANNEL_UNAVAILABLE";
   readonly layer: "PROJECT_MANAGER_HTTP";
+  readonly ok: false;
+} | {
+  readonly code: "PAIRING_REQUEST_EXPIRED" | "PAIRING_REQUEST_ALREADY_CLAIMED" | "PAIRING_REQUEST_UNKNOWN";
+  readonly layer: "CONTROL_ROOM_PAIRING_APPROVAL";
   readonly ok: false;
 };
 export interface ProjectManagerPairingPending {
@@ -133,6 +140,19 @@ function operatorChannelRefusal(answer: BoundedResponse | undefined): ProjectMan
   }
   return undefined;
 }
+function pairingRefusal(answer: BoundedResponse): ProjectManagerRefusal | "pending" | undefined {
+  const decoded = decodeResult(answer.value);
+  if (decoded?.ok !== false || decoded.layer !== "CONTROL_ROOM_PAIRING_APPROVAL") return undefined;
+  const { code, layer } = decoded;
+  if (answer.response.status === 409 && (code === "PAIRING_APPROVAL_REQUIRED" || code === "PAIRING_REQUEST_BUSY")) {
+    return "pending";
+  }
+  if ((answer.response.status === 410 && (code === "PAIRING_REQUEST_EXPIRED" || code === "PAIRING_REQUEST_ALREADY_CLAIMED"))
+    || (answer.response.status === 404 && code === "PAIRING_REQUEST_UNKNOWN")) {
+    return { code, layer, ok: false };
+  }
+  return undefined;
+}
 function decodeProjects(value: unknown): readonly ProjectManagerProject[] | undefined {
   if (!record(value) || !exact(value, ["projects", "schemaVersion"])
     || value["schemaVersion"] !== PROJECT_MANAGER_SCHEMA_VERSION || !Array.isArray(value["projects"])) return undefined;
@@ -155,8 +175,9 @@ function decodeProjects(value: unknown): readonly ProjectManagerProject[] | unde
  * by the browser to every other 127.0.0.2 port, where any same-user process can collect
  * it. The name mirrors the daemon's PROJECT_MANAGER_CREDENTIAL_HEADER; it is spelled out
  * here rather than imported so a rename on either side reds a test instead of silently
- * following. The value lives only in the closure below - never in React state, storage,
- * a URL or a log line.
+ * following. The value stays in the client closure and optional same-tab session
+ * storage - never in React state, a URL or a log line. Reloaded sessions are
+ * validated by the manager before project data is requested.
  */
 const CREDENTIAL_HEADER = "x-moe-manager-session-credential";
 function credentialHeader(credential: string): Readonly<Record<string, string>> {
@@ -250,9 +271,11 @@ function createClient(
 }
 export async function connectProjectManager(input: {
   readonly fetchImpl: ProjectManagerFetch;
+  readonly session?: ProjectManagerSession;
 }): Promise<ProjectManagerConnection> {
+  let credential = input.session?.read() ?? "";
   const bootstrap = await request(input.fetchImpl, "/manager/bootstrap", {
-    method: "GET",
+    headers: credentialHeader(credential), method: "GET",
   }, false);
   if (bootstrap === undefined || !bootstrap.response.ok) return refusal(LOCAL_CODE.bootstrapUnavailable);
   const value = bootstrap.value;
@@ -261,9 +284,12 @@ export async function connectProjectManager(input: {
     || typeof value["schemaVersion"] !== "string") return refusal(LOCAL_CODE.bootstrapMalformed);
   if (value["schemaVersion"] !== PROJECT_MANAGER_SCHEMA_VERSION) return refusal(LOCAL_CODE.protocolMismatch);
   const csrfToken = value["csrfToken"];
-  // Closed over exactly like the CSRF token: the credential is handed to the client's
-  // request builders and never returned, stored or rendered.
-  let credential = "";
+  // A stored credential is a candidate, not evidence of authentication. Only this
+  // fresh manager response can accept it; a restart invalidates the old session.
+  if (!value["authenticated"]) {
+    credential = "";
+    input.session?.clear();
+  }
   const client = createClient(input.fetchImpl, csrfToken, () => credential);
   const ready = async (): Promise<ProjectManagerReady | ProjectManagerRefusal> => {
     const listed = await client.listProjects();
@@ -296,17 +322,17 @@ export async function connectProjectManager(input: {
     if (paired === undefined) return refusal(LOCAL_CODE.pairingRefused);
     const unavailable = operatorChannelRefusal(paired);
     if (unavailable !== undefined) return unavailable;
-    if (paired.response.status === 409 && record(paired.value)
-      && (paired.value["code"] === "PAIRING_APPROVAL_REQUIRED"
-        || paired.value["code"] === "PAIRING_REQUEST_BUSY")) return pending;
+    const denied = pairingRefusal(paired);
+    if (denied !== undefined) return denied === "pending" ? pending : denied;
     const pairedBody = paired.value;
     if (!paired.response.ok || !record(pairedBody)
       || !exact(pairedBody, ["code", "layer", "ok", "sessionCredential"])
       || pairedBody["ok"] !== true || pairedBody["code"] !== "PROJECT_MANAGER_PAIRED"
       || pairedBody["layer"] !== "PROJECT_MANAGER_HTTP"
-      || !text(pairedBody["sessionCredential"], 256)) return refusal(LOCAL_CODE.pairingRefused);
+      || !validProjectManagerCredential(pairedBody["sessionCredential"])) return refusal(LOCAL_CODE.pairingRefused);
     // The one hand-over: from here every request carries it on CREDENTIAL_HEADER.
     credential = pairedBody["sessionCredential"];
+    input.session?.write(credential);
     settled = await ready();
     return settled;
   };

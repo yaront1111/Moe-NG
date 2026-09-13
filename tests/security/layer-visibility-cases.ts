@@ -376,7 +376,10 @@ const resolvedLayerLiterals = (): readonly string[] => {
     .filter((value) => declared.has(value));
 };
 
-const EXPECTED_LITERAL_COUNT = 104;
+// 104 -> 105 on 2026-09-13: ProjectManagerRefusal now names the existing
+// CONTROL_ROOM_PAIRING_APPROVAL value declared by http/pairing-approval-contract.ts.
+// The resolved population grows by one; the unresolved values remain unchanged.
+const EXPECTED_LITERAL_COUNT = 105;
 const EXPECTED_UNRESOLVED_LITERAL_COUNT = 39;
 
 /**
