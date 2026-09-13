@@ -331,6 +331,25 @@ describe("wrapper binary staffing wiring", () => {
       .toMatch(/^\s+affordances: staffingSurfaceOf\(affordances\),\r?$/mu)).toThrow();
   });
 
+  it("contains a rejected staffing pass in loop mode: says so and takes the next interval", () => {
+    // A DurableStoreError STORE_BUSY (a concurrent daemon commit during a ledger walk) rejected
+    // runOnce; uncaught at the loop's own call it reached main().catch, whose finally tree-killed
+    // every live seat and exited 1 (measured 2026-09-13). The wrapper contains its reads by code
+    // now; this is the last line, pinned on the LOOP's call so a catch elsewhere cannot satisfy
+    // it. A single MOE_WRAPPER_ONCE pass still fails loudly.
+    const loop = SOURCE.slice(SOURCE.indexOf("for (;;) {"), SOURCE.indexOf("if (once) {"));
+    expect(loop).toContain("wrapper.runOnce().catch(");
+    expect(loop).toContain("[wrapper] pass failed:");
+    expect(loop).toContain("if (once) throw error;");
+  });
+
+  it("scans a pass-containment slice that can actually fail (positive control)", () => {
+    const bare = SOURCE.replace("wrapper.runOnce().catch(", "wrapper.runOnce().then(");
+    expect(bare).not.toBe(SOURCE);
+    const loop = bare.slice(bare.indexOf("for (;;) {"), bare.indexOf("if (once) {"));
+    expect(() => expect(loop).toContain("wrapper.runOnce().catch(")).toThrow();
+  });
+
   it("tells the operator which provider is paused and until when", () => {
     // The wrapper log is the operator's only view of a paused fleet; a paused pass that
     // printed the ordinary idle line would read as "nothing to do", not "parked".

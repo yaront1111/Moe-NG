@@ -17,9 +17,12 @@ import { classifySeatExit } from "./seat-exit-classifier.js";
  *   2. hands the item's attempt BACK, and
  *   3. parks the provider until its reset, so later passes staff nothing.
  *
- * Every other exit keeps today's behaviour byte for byte. The gate NEVER throws:
- * a wrapper that crashes while reading an exit is strictly worse than one that
- * reads it as an ordinary failure.
+ * Every other exit keeps today's behaviour byte for byte. The EXIT OBSERVER never
+ * throws: a wrapper that crashes while reading an exit is strictly worse than one
+ * that reads it as an ordinary failure. `paused` is a ledger read and raises the
+ * store's own STORE_BUSY under a concurrent writer (it did, uncaught, on 2026-09-13);
+ * the wrapper contains that per step (agent-wrapper.ts) rather than staffing against
+ * a pause it could not read.
  */
 
 /** No instant in the line? Park for half an hour: bounded, and short enough to retry. */

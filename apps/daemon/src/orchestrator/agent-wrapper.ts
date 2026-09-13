@@ -4,7 +4,7 @@ import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { JsonObject } from "@moe/contracts";
 
 import { agentCapabilitiesFor } from "../daemon-store-dependencies.js";
-import type { ChainStep } from "../http/affordance-contract.js";
+import type { AffordanceSurfaceResult, ChainStep } from "../http/affordance-contract.js";
 import { handleCommandRequest } from "../http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import { workItemIdFor } from "../http/affordance-read.js";
@@ -248,7 +248,16 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
     // STEP against that seat's own provider (decideSeatProvider) and PROVIDER_PAUSED is
     // reported only when a pause is why the pass staffed NOTHING. See that module.
     let stalled: ProviderPauseFacts | null = null;
-    const surface = config.affordances.readSurface();
+    let surface: AffordanceSurfaceResult;
+    try {
+      surface = config.affordances.readSurface();
+    } catch {
+      // A ledger read that throws is one unreadable pass, reported by the code every sibling
+      // read already answers (agent-authority-cleanup.ts), never a rejection: a DurableStoreError
+      // STORE_BUSY under a concurrent daemon commit left runOnce this way, reached main() and
+      // tree-killed every live seat (measured 2026-09-13). The next pass reads again.
+      return { active: staffing.activeCount(), spawned: [], surfaceOutcome: "SURFACE_READ_FAILED" };
+    }
     if (surface.outcome !== "SURFACE") {
       return { active: staffing.activeCount(), spawned: [], surfaceOutcome: surface.code };
     }
@@ -275,9 +284,17 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
         spawned.push(uncoded(step.kind, "STAFFING_ATTEMPTS_EXHAUSTED", null, workItemId));
         continue;
       }
-      const seat = decideSeatProvider({ aggregateId: step.aggregateId, kind: step.kind,
-        nowMs: config.clock(), pauseGate: config.providerPause,
-        settingFor: config.agentProvider });
+      let seat: ReturnType<typeof decideSeatProvider>;
+      try {
+        seat = decideSeatProvider({ aggregateId: step.aggregateId, kind: step.kind,
+          nowMs: config.clock(), pauseGate: config.providerPause,
+          settingFor: config.agentProvider });
+      } catch {
+        // The pause ledger raises the same store error. An unreadable pause gains no authority
+        // to staff the step and charges it no attempt: reported by code, read again next pass.
+        spawned.push(uncoded(step.kind, "PROVIDER_PAUSE_UNREADABLE", null, workItemId));
+        continue;
+      }
       if (seat.pause !== null) { stalled = seat.pause; continue; }
       const report = await staff(step, seat.command);
       // Charged only for a try that got past the gate: a fence refusal spent

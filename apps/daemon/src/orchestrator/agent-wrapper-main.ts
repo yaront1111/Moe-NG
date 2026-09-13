@@ -25,6 +25,7 @@ import { createCompiledNodeSource } from "./compiled-node-source.js";
 import { credentialValues } from "./credential-scrub.js";
 import { createRepositoryDeliveryRuntime } from "./repository-delivery-runtime.js";
 import { createWrapperNodeMissions } from "./wrapper-node-missions.js";
+import { loadPayloadHints } from "./wrapper-payload-hints.js";
 import { createCompilerMissionInputs, createDesignBriefResolver }
   from "./wrapper-mission-inputs.js";
 import {
@@ -94,19 +95,8 @@ async function main(): Promise<void> {
     const subscriptions = provider.subscriptions?.();
     if (subscriptions === undefined) throw new Error("provider serves no subscription surface");
 
-    // DEVELOPMENT payload suggestions from the control room's dev table, loaded
-    // leniently: a missing module just means missions carry no hint. The failure
-    // is DISCLOSED, never swallowed — a silent null here cost a live run
-    // 2026-08-20: live-dispatch.ts grew a `.js`-suffixed import with no bridge
-    // file, every mission shipped hintless, and agents guessed payload shapes at
-    // steps whose exact input the hint already knew.
-    const hintModule = await import(
-      new URL("../../../control-room/src/live/live-dispatch.ts", import.meta.url).href
-    ).catch((error: unknown) => {
-      console.error(`[wrapper] payload hints unavailable: ${String(error)}`);
-      return null;
-    }) as
-      { payloadFor?: (kind: string, target: string | null) => object | null } | null;
+    // DEVELOPMENT payload suggestions, loaded leniently and DISCLOSED when absent (see the loader).
+    const hintModule = await loadPayloadHints((line) => { console.error(line); });
     if (stop.requested()) return;
 
     // COMPILED nodes (sealed by an approved compiled plan) are briefed from the
@@ -329,14 +319,23 @@ async function main(): Promise<void> {
       if (stop.requested()) return;
       // Awaits STARTUP ADMISSION only. Every agent's exit stays in flight, so a
       // staffed run never blocks this loop on a child's lifetime.
-      const report = await wrapper.runOnce();
-      for (const entry of report.spawned) {
+      const report = await wrapper.runOnce().catch((error: unknown): null => {
+        // ONE failed pass is not the fleet. A DurableStoreError STORE_BUSY under a concurrent
+        // daemon commit rejected the pass here and, uncaught, reached main().catch, whose finally
+        // tree-killed every live seat and exited 1 (measured 2026-09-13). The wrapper contains
+        // its reads by code now; this is the last line. A single pass still fails loudly.
+        if (once) throw error;
+        const message = error instanceof Error ? error.message : String(error);
+        process.stderr.write(`[wrapper] pass failed: ${message}\n`);
+        return null;
+      });
+      for (const entry of report?.spawned ?? []) {
         // Name the refusing layer: two layers can refuse a start, and the code
         // alone does not say which one answered.
         const refused = entry.refusal === null ? "" : ` (${entry.refusal.layer})`;
         process.stdout.write(`[wrapper] ${entry.workItemId}: ${entry.outcome}${refused}\n`);
       }
-      if (report.spawned.length === 0) {
+      if (report !== null && report.spawned.length === 0) {
         // Say so: a silent pass reads as a hung wrapper to an operator watching it.
         // Once per distinct idle state, not once per interval — the continuous
         // loop would otherwise print the same line every few seconds.
