@@ -19,9 +19,9 @@
  * why — which is the whole reason the dossier renders UNKNOWN and LISTS it rather than dropping
  * the criterion.
  *
- * ABSENT IS NOT A REFUSAL, the same distinction `preview-read.ts` draws. A goal with nothing
- * published answers `ABSENT`; a receipt that will not decode answers `REFUSED` with its code.
- * A card that cannot tell them apart shows an error for the ordinary case.
+ * ABSENT IS NOT A REFUSAL, the same distinction `preview-read.ts` draws. A goal with no approved
+ * scope answers `ABSENT`; a store that will not read, or a receipt that will not decode, answers
+ * `REFUSED` with its code. A card that cannot tell them apart shows one for the other.
  *
  * READ-ONLY. Nothing here commits, records or decides — in particular it never calls
  * `recordReleaseDossier`, which the decide edge does as a side effect of its own facts read.
@@ -39,7 +39,7 @@ import type { CriterionRow } from "../release/release-dossier.js";
 import type {
   AncestryPredicate, DossierPreviewDecision, DossierReviewRound,
 } from "../release/release-dossier-contracts.js";
-import { readReleaseDossierInput } from "../release/release-durable-facts.js";
+import { readReleaseDossierFacts } from "../release/release-durable-facts.js";
 import { readReleaseReceipt } from "../release/release-receipt-ledger.js";
 import {
   RELEASE_RECEIPT_COMMAND_KIND, RELEASE_RECEIPT_PRINCIPAL_ID,
@@ -56,6 +56,8 @@ const LAYER = "RELEASE_READ" as const;
 /** Every refusal this route can answer. Closed, so a consumer can switch exhaustively. */
 export const RELEASE_READ_CODES = Object.freeze([
   "RELEASE_READ_CAPABILITY_DENIED",
+  "RELEASE_READ_FACTS_UNREADABLE",
+  "RELEASE_READ_LEDGER_UNREADABLE",
   "RELEASE_READ_RECEIPT_UNREADABLE",
 ] as const);
 
@@ -191,13 +193,11 @@ function receiptForGoal(
 }
 
 /**
- * THE PRODUCTION READ, keyed by goal.
- *
- * ABSENT means the goal has no approved scope to show — `readReleaseDossierInput` answers null.
- * That function CONFLATES "no approved Product Contract scope yet" with "its facts could not be
- * read", so this module does NOT invent a distinction its source cannot make and answers the
- * ORDINARY one. REFUSED is reserved for what it can genuinely tell apart: a receipt ledger that
- * will not page, and a committed receipt whose bytes will not decode.
+ * THE PRODUCTION READ, keyed by goal. ABSENT means the goal has no approved scope to show, and
+ * ONLY that. A store that throws under the read - the publish-ledger walk, or the event reads
+ * the dossier facts fold - is REFUSED with the code of the read that failed. Measured before
+ * this split: STORE_BUSY from either read answered ABSENT, which the card renders as "no
+ * evidence to cover" for a goal whose evidence is PRESENT, dropping the receipt line it held.
  *
  * AN UNPUBLISHED GOAL STILL ANSWERS PRESENT, with `sha: null`. The release offer is minted as
  * soon as a commit LANDS, which is earlier than publication, so refusing to show evidence
@@ -209,21 +209,20 @@ export function readReleaseForGoal(
   /** The criterion-artifact measurement, forwarded to the facts reader. Test seam only. */
   artifactRead?: (root: string) => IntegratedCriterionArtifact | null,
 ): ReleaseReadAnswer {
-  const absent = Object.freeze({ goalId: input.goalId, kind: "ABSENT" as const });
   let sha: string | null;
-  let facts: ReturnType<typeof readReleaseDossierInput>;
   try {
     const publication = readRunGoalPublication(
       store, input.projectId, readPublishLedger(store, input.projectId).get(input.goalId),
     );
     sha = publication?.outcome === "PUSHED" ? publication.sha : null;
-    facts = artifactRead === undefined
-      ? readReleaseDossierInput(store, input.projectId, input.goalId)
-      : readReleaseDossierInput(store, input.projectId, input.goalId, artifactRead);
   } catch {
-    return absent;
+    return releaseReadRefusal("RELEASE_READ_LEDGER_UNREADABLE");
   }
-  if (facts === null) return absent;
+  const facts = readReleaseDossierFacts(store, input.projectId, input.goalId, artifactRead);
+  if (!facts.ok && facts.code !== "NO_APPROVED_SCOPE") {
+    return releaseReadRefusal("RELEASE_READ_FACTS_UNREADABLE");
+  }
+  if (!facts.ok) return Object.freeze({ goalId: input.goalId, kind: "ABSENT" as const });
   // The receipt is keyed by the sha, so an unpublished goal cannot have one to find.
   const receipt = sha === null ? null : receiptForGoal(store, input, sha);
   if (receipt === "UNREADABLE") return releaseReadRefusal("RELEASE_READ_RECEIPT_UNREADABLE");
@@ -231,12 +230,12 @@ export function readReleaseForGoal(
   return Object.freeze({
     evidence: Object.freeze({
       ancestryMeasured: ancestry !== null,
-      criteria: criterionRows(facts, ancestry ?? UNMEASURED),
+      criteria: criterionRows(facts.input, ancestry ?? UNMEASURED),
       goalId: input.goalId,
-      goalTitle: facts.goalTitle,
-      preview: facts.preview,
+      goalTitle: facts.input.goalTitle,
+      preview: facts.input.preview,
       receipt,
-      reviewRounds: facts.reviewRounds,
+      reviewRounds: facts.input.reviewRounds,
       sha,
     }),
     kind: "PRESENT" as const,

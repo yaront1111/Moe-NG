@@ -116,21 +116,58 @@ function criterionReceiptsOf(
   } catch { return []; }
 }
 
-/** Read approved scope and evidence through their durable validators; never infer a missing receipt. */
+/**
+ * Why there is no input. NO_APPROVED_SCOPE is the ORDINARY state: a foreign project, or a goal
+ * that is absent, unbound, cancelled, or without a sealed plan yet. RELEASE_FACTS_UNREADABLE
+ * is a store that THREW mid-read - STORE_BUSY under a concurrent seat writer, a closed or
+ * poisoned handle - which says nothing about the goal at all. A reader that showed the second
+ * as the first would tell an operator a goal has no evidence while its evidence is present.
+ */
+export type ReleaseDossierFactsCode = "NO_APPROVED_SCOPE" | "RELEASE_FACTS_UNREADABLE";
+
+export type ReleaseDossierFacts =
+  | Readonly<{ readonly input: DossierInput; readonly ok: true }>
+  | Readonly<{ readonly code: ReleaseDossierFactsCode; readonly ok: false }>;
+
+const NO_APPROVED_SCOPE: ReleaseDossierFacts = Object.freeze({ code: "NO_APPROVED_SCOPE", ok: false });
+const FACTS_UNREADABLE: ReleaseDossierFacts = Object.freeze({ code: "RELEASE_FACTS_UNREADABLE", ok: false });
+
+/**
+ * The input, or null for BOTH refusals. The decide edge and the fixtures only need the input;
+ * the release READ must not fold the two, so it calls `readReleaseDossierFacts` directly.
+ */
 export function readReleaseDossierInput(
   store: SqliteEventStore, projectId: string, goalId: string,
   artifactRead: (root: string) => IntegratedCriterionArtifact | null = readCriterionArtifact,
 ): DossierInput | null {
+  const facts = readReleaseDossierFacts(store, projectId, goalId, artifactRead);
+  return facts.ok ? facts.input : null;
+}
+
+/**
+ * Read approved scope and evidence through their durable validators; never infer a missing
+ * receipt. `readCriterionGoal` names one code per goal STATE (absent, unbound, cancelled, scope
+ * mismatch) and keeps CRITERION_CHECK_UNREADABLE for a failure ON an approved plan - its own
+ * store faults included, which it catches rather than throws. Measured: STORE_BUSY from
+ * `store.readEvents` under the planning-run walk reaches this frame as that code and nothing
+ * else, so it is the one refusal here that is a fault and not a fact about the goal.
+ */
+export function readReleaseDossierFacts(
+  store: SqliteEventStore, projectId: string, goalId: string,
+  artifactRead: (root: string) => IntegratedCriterionArtifact | null = readCriterionArtifact,
+): ReleaseDossierFacts {
   try {
-    if (store.getHealth().projectId !== projectId) return null;
+    if (store.getHealth().projectId !== projectId) return NO_APPROVED_SCOPE;
     const goal = readCriterionGoal(store, projectId, goalId);
-    if (!goal.ok) return null;
+    if (!goal.ok) {
+      return goal.code === "CRITERION_CHECK_UNREADABLE" ? FACTS_UNREADABLE : NO_APPROVED_SCOPE;
+    }
     const bearing = new Set(goal.graph.content.snapshot.nodes.filter((node) => node.executionBearing).map((node) => node.nodeKey));
     const definitions = goal.graph.content.nodeAuthority.definitions.filter((node) => bearing.has(node.nodeKey));
     const subjects = new Map(definitions.map((node) => [node.nodeKey, compiledExecutionRef(projectId, goal.graph, node.nodeKey)]));
     const facts = [...subjects.values()].map((subject) => nodeFacts(store, projectId, subject));
     const configuration = readLatestProjectConfiguration(store, { projectId });
-    return Object.freeze({
+    return Object.freeze({ ok: true as const, input: Object.freeze({
       criteria: Object.freeze(goal.criteria.map((criterion) => {
         const owners = definitions.filter((node) => node.criterionBindings.some((binding) => binding.criterionId === criterion.criterionId));
         return Object.freeze({ criterionId: criterion.criterionId, title: criterion.statement,
@@ -142,6 +179,6 @@ export function readReleaseDossierInput(
       policyRevision: configuration.ok ? configuration.manifest.settings.policy.policyRevisionId : null,
       preview: previewDecision(store, projectId, goalId), projectId,
       reviewRounds: Object.freeze(facts.flatMap((fact) => fact.rounds)),
-    });
-  } catch { return null; }
+    }) });
+  } catch { return FACTS_UNREADABLE; }
 }

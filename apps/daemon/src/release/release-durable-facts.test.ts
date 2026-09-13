@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SqliteEventStore } from "@moe/store";
+import { DurableStoreError, SqliteEventStore } from "@moe/store";
 import { PROJECT_CONFIGURATION_LIMIT_KEYS } from "@moe/contracts";
 import { createProjectConfigurationManifest, encodeProjectConfigurationManifest } from "@moe/core";
 import { afterEach, expect, it, vi } from "vitest";
@@ -30,7 +30,7 @@ import { readReviewLedger } from "../review/review-read-model.js";
 import { calibration, envelope, packageItems, policyInput, seedVerifierReceipt, submitPayload } from "../review/review-test-fixtures.js";
 import { NODE_VERIFIER_PRINCIPAL_ID, recordVerifierReceipt } from "../review/verifier-receipt-ledger.js";
 import { runReviewCommand } from "../review/review-services.js";
-import { readReleaseDossierInput } from "./release-durable-facts.js";
+import { readReleaseDossierFacts, readReleaseDossierInput } from "./release-durable-facts.js";
 import { releaseDossierId } from "./release-dossier-contracts.js";
 import { readReleaseDossier, recordReleaseDossier } from "./release-dossier-ledger.js";
 import { releaseDossierGaps, renderReleaseDossier } from "./release-dossier.js";
@@ -91,6 +91,29 @@ it("refuses absent, unapproved, and foreign-project goal scope", () => {
   expect(readReleaseDossierInput(store, PROJECT_ID, GOAL_ID)).toBeNull();
   expect(readReleaseDossierInput(store, PROJECT_ID, "missing-goal")).toBeNull();
   expect(readReleaseDossierInput(world().store, "foreign-project", GOAL_ID)).toBeNull();
+});
+
+it("keeps NO_APPROVED_SCOPE apart from RELEASE_FACTS_UNREADABLE; only the input fold answers null for both", () => {
+  const { store, nodeRef } = world();
+  land(store, nodeRef, accept(store, nodeRef));
+  const noScope = { code: "NO_APPROVED_SCOPE", ok: false };
+  expect(readReleaseDossierFacts(boundWorld(), PROJECT_ID, GOAL_ID)).toEqual(noScope);
+  expect(readReleaseDossierFacts(store, PROJECT_ID, "missing-goal")).toEqual(noScope);
+  expect(readReleaseDossierFacts(store, "foreign-project", GOAL_ID)).toEqual(noScope);
+  // POSITIVE CONTROL: the same store, untouched, folds the input.
+  expect(readReleaseDossierFacts(store, PROJECT_ID, GOAL_ID).ok).toBe(true);
+  // A store that throws STORE_BUSY on the event read the planning-run walk performs is a FAULT
+  // on a goal WITH approved scope; before this split it folded to the same null as no scope.
+  const busy = new Proxy(store, { get(target, key) {
+    if (key === "readEvents") {
+      return (): never => { throw new DurableStoreError("STORE_BUSY", "database is locked"); };
+    }
+    const value: unknown = Reflect.get(target, key, target);
+    return typeof value === "function" ? value.bind(target) : value;
+  } });
+  expect(readReleaseDossierFacts(busy, PROJECT_ID, GOAL_ID))
+    .toEqual({ code: "RELEASE_FACTS_UNREADABLE", ok: false });
+  expect(readReleaseDossierInput(busy, PROJECT_ID, GOAL_ID)).toBeNull();
 });
 
 it("joins approved criteria to the scoped accepted verifier and its exact landing", () => {

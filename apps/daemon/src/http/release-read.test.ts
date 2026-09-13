@@ -13,7 +13,7 @@
  * The mixed world below lands and accepts evidence for ONE of two nodes, so the two counts are
  * non-zero AND different from each other.
  */
-import { SqliteEventStore } from "@moe/store";
+import { DurableStoreError, SqliteEventStore } from "@moe/store";
 import { afterEach, expect, it } from "vitest";
 
 import { closeStores, GOAL_ID, PROJECT_ID, RUN_ID } from "../bootstrap/bootstrap-test-fixtures.js";
@@ -38,7 +38,7 @@ import { releaseDossierAggregateId } from "../release/release-dossier-contracts.
 import { readReleaseReceipt, recordReleaseReceipt } from "../release/release-receipt-ledger.js";
 import { releaseReceiptId } from "../release/release-receipt-contracts.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
-import { readReleaseForGoal } from "./release-evidence-read.js";
+import { RELEASE_READ_CODES, readReleaseForGoal } from "./release-evidence-read.js";
 import type { AncestryFactory, ReleaseReadAnswer } from "./release-evidence-read.js";
 import { handleReleaseReadRequest, releaseReadBodyOf } from "./release-read.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
@@ -348,4 +348,54 @@ it("has no receipt to answer before anything is published", () => {
   const answer = readReleaseForGoal(store, { goalId: GOAL_ID, projectId: PROJECT_ID }, ANCESTOR);
   // Null, not a fabricated pending receipt: the receipt is keyed by the sha, and there is none.
   expect(answer.kind === "PRESENT" && answer.evidence.receipt).toBeNull();
+});
+
+/**
+ * A store whose NAMED reads throw STORE_BUSY - the code `store-runtime.ts` normalises
+ * SQLITE_BUSY to under a concurrent seat writer, and the one `decision-ledger-memo.ts` throws
+ * when the ledger moves during a walk - while every other member passes through, bound to the
+ * real handle so the store's private state is reached through the target and not the proxy.
+ */
+function busyOn(store: SqliteEventStore, methods: readonly string[]): SqliteEventStore {
+  return new Proxy(store, { get(target, key) {
+    if (typeof key === "string" && methods.includes(key)) {
+      return (): never => { throw new DurableStoreError("STORE_BUSY", "database is locked"); };
+    }
+    const value: unknown = Reflect.get(target, key, target);
+    return typeof value === "function" ? value.bind(target) : value;
+  } });
+}
+
+it("REFUSES with a rostered code when the store throws under the read; it never says ABSENT", () => {
+  const { apiRef, store } = twoNodeWorld();
+  land(store, apiRef, accept(store, apiRef));
+  publish(store);
+  const input = { goalId: GOAL_ID, projectId: PROJECT_ID };
+  // POSITIVE CONTROL on the untouched store: the goal HAS approved scope and PRESENT evidence,
+  // so anything but PRESENT below is the throw being answered, not a fixture with nothing in it.
+  const present = readReleaseForGoal(store, input, ANCESTOR);
+  if (present.kind !== "PRESENT") throw new Error(`expected PRESENT, got ${present.kind}`);
+  expect(present.evidence.sha).toBe(RELEASE_SHA);
+  expect(present.evidence.criteria.length).toBe(2);
+
+  // ARM A: the publish-ledger walk throws on its first page. The route defines ABSENT as "no
+  // approved scope to show", and this goal has scope; a card polling through a busy write must
+  // keep the evidence it holds, which it does for REFUSED and drops for ABSENT.
+  expect(readReleaseForGoal(busyOn(store, ["readCommandDecisionsAfter"]), input, ANCESTOR))
+    .toEqual({ code: "RELEASE_READ_LEDGER_UNREADABLE", kind: "REFUSED", layer: "RELEASE_READ" });
+
+  // ARM B: the decision ledger pages, and the EVENT reads the dossier facts fold throw instead.
+  // Measured frame: `store.readEvents` under `currentPlanningRun`, which `readCriterionGoal`
+  // catches into CRITERION_CHECK_UNREADABLE - so this arm also pins that the facts reader keeps
+  // that code apart from the goal-state codes it answers ABSENT for.
+  expect(readReleaseForGoal(busyOn(store, [
+    "readAggregateEvents", "readEvents", "readEventsAfter", "readEventsByTypeAfter",
+  ]), input, ANCESTOR))
+    .toEqual({ code: "RELEASE_READ_FACTS_UNREADABLE", kind: "REFUSED", layer: "RELEASE_READ" });
+
+  // Both codes are on the CLOSED roster a consumer switches over.
+  expect(RELEASE_READ_CODES).toContain("RELEASE_READ_LEDGER_UNREADABLE");
+  expect(RELEASE_READ_CODES).toContain("RELEASE_READ_FACTS_UNREADABLE");
+  // And the ordinary state is untouched: the same store, no throw, still answers PRESENT.
+  expect(readReleaseForGoal(store, input, ANCESTOR).kind).toBe("PRESENT");
 });
