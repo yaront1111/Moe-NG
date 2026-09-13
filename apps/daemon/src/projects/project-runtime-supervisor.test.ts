@@ -227,6 +227,25 @@ describe("project runtime start and identity", () => {
     expect(opens).toBe(2);
   });
 
+  it("carries a one-line boundary refusal message beside its code and drops an unbounded one", async () => {
+    // The credential gate's message (accepted names, the sign-in path it looked for) is the
+    // operator's fix; it used to be re-boxed away here. A message that is not one bounded
+    // printable line is not carried: the code alone is the stable contract.
+    const detail = "MOE_UP_ENV_MISSING: CLAUDE_CODE_OAUTH_TOKEN (set one); no sign-in at C:\\home\\.claude\\.credentials.json";
+    const carried = createProjectRuntimeSupervisor({
+      openBoundary: () => ({ ...unknown("MOE_UP_ENV_MISSING"), message: detail }),
+    });
+    expect(await carried.start(ENTRY)).toEqual({
+      code: "MOE_UP_ENV_MISSING", layer: "WINDOWS_PROCESS_TRANSPORT", message: detail, ok: false,
+    });
+    const dropped = createProjectRuntimeSupervisor({
+      openBoundary: () => ({ ...unknown("MOE_UP_ENV_MISSING"), message: "two\nlines" }),
+    });
+    expect(await dropped.start(ENTRY)).toEqual({
+      code: "MOE_UP_ENV_MISSING", layer: "WINDOWS_PROCESS_TRANSPORT", ok: false,
+    });
+  });
+
   it("reserves a canonical Windows store before awaiting and rejects duplicate active starts", async () => {
     const first = new BoundaryHarness();
     const second = new BoundaryHarness();

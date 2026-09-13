@@ -8,7 +8,8 @@ export { PROJECT_RUNTIME_CONTROL_WRITE_FAILED, PROJECT_RUNTIME_PROTOCOL_VIOLATIO
 export const PROJECT_RUNTIME_LIFECYCLES = Object.freeze([
   "STARTING", "RUNNING", "STOPPING", "STOPPED", "FAILED", "UNKNOWN"] as const);
 export type ProjectRuntimeLifecycle = (typeof PROJECT_RUNTIME_LIFECYCLES)[number];
-export interface ProjectRuntimeBoundaryUnknown { readonly code: string; readonly layer: string; readonly truthClass: "UNKNOWN" }
+/** `message` is operator detail (accepted names, a path); never a secret, never authority. */
+export interface ProjectRuntimeBoundaryUnknown { readonly code: string; readonly layer: string; readonly message?: string; readonly truthClass: "UNKNOWN" }
 export interface ProjectRuntimeBoundaryIdentity { readonly creationTime: bigint; readonly pid: number }
 export interface ProjectRuntimeBoundaryProven { readonly exitCode: number; readonly identity: ProjectRuntimeBoundaryIdentity; readonly truthClass: "PROVEN" }
 export type ProjectRuntimeBoundaryOutcome = ProjectRuntimeBoundaryProven | ProjectRuntimeBoundaryUnknown;
@@ -17,7 +18,7 @@ export interface ProjectRuntimeBoundary {
   readonly providerStdout: Readable; readonly started: Promise<ProjectRuntimeBoundaryIdentity | ProjectRuntimeBoundaryUnknown>;
   cancel(): void; close(): Promise<ProjectRuntimeBoundaryOutcome> }
 export interface ProjectRuntimeView { readonly instanceId: string; readonly lifecycle: ProjectRuntimeLifecycle; readonly projectId: string; readonly root: string; readonly title: string }
-export interface ProjectRuntimeRefused { readonly code: string; readonly layer: string; readonly ok: false }
+export interface ProjectRuntimeRefused { readonly code: string; readonly layer: string; readonly message?: string; readonly ok: false }
 export interface ProjectRuntimeAccepted { readonly code: string; readonly layer: string; readonly ok: true }
 export type ProjectRuntimeActionResult = ProjectRuntimeAccepted | ProjectRuntimeRefused;
 export type ProjectRuntimeCompletionResult = ProjectRuntimeRefused | Readonly<{ readonly code: "PROJECT_RUNTIME_COMPLETED"; readonly exitCode: number; readonly layer: typeof PROJECT_RUNTIME_SUPERVISOR_LAYER; readonly ok: true }>;
@@ -38,13 +39,19 @@ interface RuntimeRecord {
   session: ProjectRuntimeSession | null;
   readonly storeKey: string; stopRequested: boolean; teardownRequested: boolean }
 const STABLE_NAME = /^[A-Z][A-Z0-9_]{0,127}$/u;
+/** One printable line, bounded: what a refusal may carry to the console beside its code. */
+const OPERATOR_DETAIL = /^[^\p{Cc}]{1,1024}$/u;
 const CONFIRMATION_LABEL = /^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u;
 const DEFAULT_TIMEOUT_MS = 10_000;
 const refused = (code: string, layer: string = PROJECT_RUNTIME_SUPERVISOR_LAYER): ProjectRuntimeRefused => Object.freeze({ code, layer, ok: false });
 const accepted = (code: string): ProjectRuntimeAccepted => Object.freeze({ code, layer: PROJECT_RUNTIME_SUPERVISOR_LAYER, ok: true });
+// The credential gate's message (accepted names, the sign-in path looked for) used to be
+// re-boxed away here, leaving `moe start` with the bare code (measured 2026-09-13).
 function boundaryRefusal(value: ProjectRuntimeBoundaryUnknown): ProjectRuntimeRefused {
-  return STABLE_NAME.test(value.code) && STABLE_NAME.test(value.layer)
-    ? refused(value.code, value.layer) : refused("PROJECT_RUNTIME_BOUNDARY_REFUSED"); }
+  if (!STABLE_NAME.test(value.code) || !STABLE_NAME.test(value.layer)) return refused("PROJECT_RUNTIME_BOUNDARY_REFUSED");
+  return typeof value.message === "string" && OPERATOR_DETAIL.test(value.message)
+    ? Object.freeze({ code: value.code, layer: value.layer, message: value.message, ok: false })
+    : refused(value.code, value.layer); }
 function isUnknown(value: unknown): value is ProjectRuntimeBoundaryUnknown {
   return typeof value === "object" && value !== null && Reflect.get(value, "truthClass") === "UNKNOWN"; }
 function validIdentity(value: unknown): value is ProjectRuntimeBoundaryIdentity {

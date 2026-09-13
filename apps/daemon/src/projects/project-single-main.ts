@@ -63,9 +63,13 @@ const DEFAULT_DEPENDENCIES: ProjectSingleMainDependencies = Object.freeze({
 });
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/u;
 
-function disclose(value: Readonly<{ readonly code: string; readonly layer: string }>,
-  log: (line: string) => void): void {
+/** `CODE LAYER` first, so a script's match is stable; the detail, when carried, on its own line. */
+function disclose(
+  value: Readonly<{ readonly code: string; readonly layer: string; readonly message?: string }>,
+  log: (line: string) => void,
+): void {
   log(`${value.code} ${value.layer}`);
+  if (value.message !== undefined) log(value.message);
 }
 
 function refusal(code: string): Readonly<{

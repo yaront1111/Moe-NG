@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   runSingleProjectMain,
@@ -20,6 +24,17 @@ const REGISTERED_WRITTEN = Object.freeze({
   paths: Object.freeze([]),
   root: PROJECT.root,
 });
+const temporaries: string[] = [];
+
+afterEach(async () => {
+  for (const path of temporaries.splice(0)) await rm(path, { force: true, recursive: true });
+});
+
+async function temporary(): Promise<string> {
+  const path = await mkdtemp(join(tmpdir(), "moe-single-main-"));
+  temporaries.push(path);
+  return path;
+}
 
 async function* operatorChunks(...chunks: readonly string[]): AsyncIterable<string> {
   for (const chunk of chunks) yield chunk;
@@ -332,6 +347,40 @@ describe("runSingleProjectMain", () => {
     })).toBe(1);
     expect(logs).toEqual(["PROCESS_BOUNDARY_BROKER_REFUSED WINDOWS_PROCESS_TRANSPORT"]);
     expect(supervisor.open).not.toHaveBeenCalled();
+  });
+
+  it("names the accepted credential variables and the checked sign-in path on the packaged first run", async () => {
+    // The product path: the real supervisor and the real boundary opener, a fresh profile
+    // with no sign-in and no token. INSTALL.md promises MOE_UP_ENV_MISSING "names the three
+    // accepted variables and the sign-in path it checked"; the console printed only
+    // "MOE_UP_ENV_MISSING PROJECT_MANAGER_LAUNCH" (measured 2026-09-13).
+    const home = await temporary();
+    const openBoundary = vi.fn();
+    const logs: string[] = [];
+    const result = await runSingleProjectMain({
+      dependencies: {
+        createFiles: () => ({
+          create: async () => ({ code: "UNUSED", layer: "PROJECT_MANAGER_FILES", ok: false }),
+          discard: async () => undefined,
+          register: async () => ({ ok: true, project: PROJECT, written: REGISTERED_WRITTEN }),
+        }),
+        mintUuid: () => INSTANCE_ID,
+        openBoundary,
+        resolveAssetRoot: () => "D:\\artifact\\control-room",
+      },
+      env: { MOE_AGENT_COMMAND: "claude", USERPROFILE: home },
+      log: (line) => { logs.push(line); },
+      onSignal: vi.fn(),
+      platform: "win32",
+      projectRoot: PROJECT.root,
+      root: "D:\\artifact",
+    });
+    expect(result).toBe(1);
+    expect(openBoundary).not.toHaveBeenCalled();
+    expect(logs[0]).toBe("MOE_UP_ENV_MISSING PROJECT_MANAGER_LAUNCH");
+    expect(logs[1]).toContain("CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_API_KEY");
+    expect(logs[1]).toContain(`no sign-in at ${join(home, ".claude", ".credentials.json")}`);
+    expect(logs).toHaveLength(2);
   });
 
   it("refuses non-Windows and missing bundle authority before reading project files", async () => {

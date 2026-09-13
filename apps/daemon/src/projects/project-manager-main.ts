@@ -121,11 +121,13 @@ function mainRefusal(code: string): Readonly<{
   return Object.freeze({ code, layer: PROJECT_MANAGER_MAIN_LAYER, ok: false });
 }
 
+/** `CODE LAYER` first, so a script's match is stable; the detail, when carried, on its own line. */
 function disclose(
-  value: Readonly<{ readonly code: string; readonly layer: string }>,
+  value: Readonly<{ readonly code: string; readonly layer: string; readonly message?: string }>,
   log: (line: string) => void,
 ): void {
   log(`${value.code} ${value.layer}`);
+  if (value.message !== undefined) log(value.message);
 }
 
 function localWindowsDirectory(value: unknown): value is string {
@@ -154,9 +156,13 @@ export function createProjectBoundaryOpener(
     }
     const provider = resolveLaunchEnv({ env: snapshot, repoRoot: entry.root });
     if (!provider.ok) {
+      // The message is the operator's fix (the accepted names and the sign-in path that
+      // was looked for); dropping it left a bare code on the packaged first run.
+      const refusal = provider.refusals[0];
       return Object.freeze({
-        code: provider.refusals[0]?.code ?? "MOE_UP_ENV_MISSING",
+        code: refusal?.code ?? "MOE_UP_ENV_MISSING",
         layer: "PROJECT_MANAGER_LAUNCH",
+        ...(refusal?.message === undefined ? {} : { message: refusal.message }),
         truthClass: "UNKNOWN",
       });
     }

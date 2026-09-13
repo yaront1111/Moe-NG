@@ -288,6 +288,40 @@ describe("createProjectBoundaryOpener", () => {
     expect(openBoundary).not.toHaveBeenCalled();
   });
 
+  it("carries the credential gate's message with its stable code so the operator sees the fix", async () => {
+    // A fresh profile with no sign-in and no token: the gate refuses by name. The CODE is
+    // what scripts match; the MESSAGE names the three accepted variables and the path that
+    // was looked for, and it was dropped here (measured 2026-09-13: only code+layer left).
+    const home = await temporary();
+    const openBoundary = vi.fn();
+    const result = createProjectBoundaryOpener({
+      assetRoot: "D:\\artifact\\apps\\control-room\\dist",
+      environment: { MOE_AGENT_COMMAND: "claude", USERPROFILE: home },
+      launchFs: {
+        canonicalDirectory: (path) => path,
+        canonicalFile: (path) => path,
+        readConfig: () => JSON.stringify({
+          credential: CREDENTIAL,
+          projectId: "alpha",
+          schemaVersion: "moe-cli-config/1",
+          storePath: ENTRY.storePath,
+        }),
+      },
+      nodeExecutable: "C:\\node.exe",
+      openBoundary,
+      root: "D:\\artifact",
+    })(ENTRY);
+    expect(result).toEqual({
+      code: "MOE_UP_ENV_MISSING",
+      layer: "PROJECT_MANAGER_LAUNCH",
+      message: expect.stringContaining("CLAUDE_CODE_OAUTH_TOKEN, ANTHROPIC_AUTH_TOKEN, ANTHROPIC_API_KEY"),
+      truthClass: "UNKNOWN",
+    });
+    expect((result as { message?: string }).message)
+      .toContain(`no sign-in at ${join(home, ".claude", ".credentials.json")}`);
+    expect(openBoundary).not.toHaveBeenCalled();
+  });
+
   it("returns the exact config refusal before opening a process boundary", () => {
     const openBoundary = vi.fn();
     const result = createProjectBoundaryOpener({
