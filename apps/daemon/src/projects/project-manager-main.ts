@@ -39,6 +39,7 @@ import {
   selectedProviderEnvironment,
   snapshotProjectLaunchEnvironment,
 } from "./project-launch-environment.js";
+import { projectStackLaunchOverlay } from "./project-launch-overlay.js";
 import { createProjectManagerService } from "./project-manager-service.js";
 import type { ProjectManagerCatalogPort } from "./project-manager-service.js";
 import {
@@ -179,7 +180,7 @@ export function createProjectBoundaryOpener(
     }
     const prepared = prepareProjectManagerLaunch(
       entry,
-      selectedProviderEnvironment(snapshot, provider.env),
+      selectedProviderEnvironment(snapshot, projectStackLaunchOverlay(provider.variables)),
       launchFs,
     );
     if (!prepared.ok) {

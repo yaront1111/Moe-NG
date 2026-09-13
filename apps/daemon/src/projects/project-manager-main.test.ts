@@ -118,7 +118,6 @@ describe("createProjectBoundaryOpener", () => {
       environment: {
         ANTHROPIC_API_KEY: "provider-secret",
         MOE_DAEMON_CREDENTIAL: CREDENTIAL,
-        MOE_AGENT_COMMAND: "claude",
         MOE_OPERATOR_CHANNEL: "false",
         MOE_PROJECT_ID: "alpha",
       },
@@ -163,6 +162,44 @@ describe("createProjectBoundaryOpener", () => {
         environment: expect.objectContaining({ MOE_OPERATOR_CHANNEL: String(available) }),
       }));
     }
+  });
+
+  it("does not restate the launcher's DEFAULTED agent command as an operator override", () => {
+    // Measured before the fix: an operator environment with no MOE_AGENT_COMMAND reached the
+    // stack as MOE_AGENT_COMMAND=claude; inside it resolveAgentProvider's first rung read that
+    // as the host's override, so project.set_agent_provider never reached a spawn and
+    // /sessions/read reported envOverride: true on a host where nobody set one.
+    const requests: unknown[] = [];
+    const opener = createProjectBoundaryOpener({
+      assetRoot: "D:\\artifact\\apps\\control-room\\dist",
+      environment: { ANTHROPIC_API_KEY: "provider-secret" },
+      launchFs: {
+        canonicalDirectory: (path) => path,
+        canonicalFile: (path) => path,
+        readConfig: () => JSON.stringify({
+          credential: CREDENTIAL,
+          projectId: "alpha",
+          schemaVersion: "moe-cli-config/1",
+          storePath: ENTRY.storePath,
+        }),
+      },
+      nodeExecutable: "C:\\Program Files\\nodejs\\node.exe",
+      openBoundary: (request) => {
+        requests.push(request);
+        return { code: "PROCESS_BOUNDARY_TEST", layer: "WINDOWS_PROCESS_TEST", truthClass: "UNKNOWN" as const };
+      },
+      operatorChannelAvailable: false,
+      root: "D:\\artifact",
+    });
+    opener(ENTRY);
+    const environment = (requests[0] as { readonly environment: Record<string, string> }).environment;
+    expect(environment).not.toHaveProperty("MOE_AGENT_COMMAND");
+    expect(environment).toEqual({
+      ANTHROPIC_API_KEY: "provider-secret",
+      MOE_DAEMON_CREDENTIAL: CREDENTIAL,
+      MOE_OPERATOR_CHANNEL: "false",
+      MOE_PROJECT_ID: "alpha",
+    });
   });
 
   it("passes only the selected Codex credential into the project stack", () => {
@@ -254,7 +291,6 @@ describe("createProjectBoundaryOpener", () => {
       expect(openBoundary).toHaveBeenCalledWith(expect.objectContaining({
         environment: {
           CLAUDE_CONFIG_DIR: custom,
-          MOE_AGENT_COMMAND: "claude",
           MOE_DAEMON_CREDENTIAL: CREDENTIAL,
           MOE_OPERATOR_CHANNEL: "false",
           MOE_PROJECT_ID: "alpha",
@@ -263,20 +299,23 @@ describe("createProjectBoundaryOpener", () => {
       }));
     });
 
-    it("hands the seats the DEFAULTED CLAUDE_CONFIG_DIR the gate found under USERPROFILE", async () => {
+    it("accepts the DEFAULTED sign-in under USERPROFILE without promoting the gate's default directory to a preset", async () => {
+      // The gate DEFAULTED the directory it searched; a default the seat's own CLI computes for
+      // itself is not a fact the launcher may restate as an override (project-launch-overlay.ts),
+      // so the launch is accepted and the overlay carries neither that path nor a defaulted
+      // MOE_AGENT_COMMAND.
       const home = await temporary();
       await mkdir(join(home, ".claude"), { recursive: true });
       await writeFile(join(home, ".claude", ".credentials.json"), "{}", "utf8");
       const openBoundary = vi.fn(() => ({
         code: "PROCESS_BOUNDARY_TEST", layer: "WINDOWS_PROCESS_TEST", truthClass: "UNKNOWN" as const,
       }));
-      openerFor({ USERPROFILE: home }, openBoundary)(ENTRY);
-      expect(openBoundary).toHaveBeenCalledWith(expect.objectContaining({
-        environment: expect.objectContaining({
-          CLAUDE_CONFIG_DIR: join(home, ".claude"),
-          MOE_AGENT_COMMAND: "claude",
-        }),
-      }));
+      const requests: unknown[] = [];
+      openerFor({ USERPROFILE: home }, (request) => { requests.push(request); return openBoundary(); })(ENTRY);
+      expect(requests).toHaveLength(1);
+      const environment = (requests[0] as { readonly environment: Record<string, string> }).environment;
+      expect(environment).not.toHaveProperty("CLAUDE_CONFIG_DIR");
+      expect(environment).not.toHaveProperty("MOE_AGENT_COMMAND");
     });
 
     it("prefers the relocated sign-in when a default one also exists, so the seat is the selected account", async () => {
