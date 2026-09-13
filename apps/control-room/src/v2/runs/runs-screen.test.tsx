@@ -55,7 +55,7 @@ describe("nodeEvidence", () => {
     }), NOW)).toEqual(["landed on main · 2 files, local only"]);
     expect(nodeEvidence(node({
       landing: { branch: null, code: "LANDING_BASELINE_MISSING", files: [], outcome: "REFUSED", sha: null },
-    }), NOW)).toEqual(["not landed yet"]);
+    }), NOW)).toEqual(["landing refused · LANDING_BASELINE_MISSING"]);
   });
 });
 

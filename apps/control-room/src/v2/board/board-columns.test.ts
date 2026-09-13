@@ -79,12 +79,33 @@ describe("cardLine", () => {
     }), "LANDED", NOW)).toBe("landed on the workspace branch");
     expect(cardLine(node("ACCEPTED", {
       landing: { branch: null, code: "LANDING_BASELINE_MISSING", files: [], outcome: "REFUSED", sha: null },
-    }), "VERIFIED", NOW)).toBe("verified · not landed yet");
+    }), "VERIFIED", NOW)).toBe("verified · landing refused · LANDING_BASELINE_MISSING");
     expect(cardLine(node("ACCEPTED", {
       landing: { branch: "master", code: null, files: ["a.ts"], outcome: "COMMITTED", sha: "4f2a91cdabcdef" },
     }), "PUBLISHED", NOW)).toBe("published");
     expect(cardLine(node("ESCALATION_REQUIRED"), "REVIEW", NOW)).toBe("every review attempt used; needs your decision");
     expect(cardLine(node("REPLANNED"), "PLANNED", NOW)).toBe("replanned into a successor goal");
+  });
+
+  /**
+   * A REFUSED LANDING IS A REFUSAL, NOT A DELAY. The runs read carries `outcome: "REFUSED"` plus
+   * the lander's code on the node; measured before this arm every surface said "not landed yet"
+   * and the code was rendered nowhere, while the stuck card's "finding" was the top REVIEW
+   * finding - a fact about a different gate.
+   */
+  it("names the landing refusal and its code on the stuck VERIFIED card", () => {
+    const refused = node("ACCEPTED", {
+      landing: { branch: null, code: "LANDING_BASELINE_MISSING", files: [], outcome: "REFUSED", sha: null },
+      review: { ...node("ACCEPTED").review, findings: [{ detail: "a review finding", nodeRef: "n", severity: "HIGH" } as never] },
+    });
+    const fold = foldBoard([refused], NOW);
+    expect(fold.stuck).toBe(1);
+    expect(fold.cards.VERIFIED[0]?.finding).toBe("landing refused · LANDING_BASELINE_MISSING");
+    expect(fold.cards.VERIFIED[0]?.line).toBe("verified · landing refused · LANDING_BASELINE_MISSING");
+    // No code on the wire: the refusal is still said, without inventing one.
+    expect(cardLine(node("ACCEPTED", {
+      landing: { branch: null, code: null, files: [], outcome: "REFUSED", sha: null },
+    }), "VERIFIED", NOW)).toBe("verified · landing refused");
   });
 
   it("marks a second attempt on a WORKING card and an expired lease plainly", () => {

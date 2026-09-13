@@ -2,7 +2,7 @@ import type { JSX } from "react";
 
 import type { RunGoalView, RunNodeView, RunsOutcome } from "../../live/live-runs.js";
 import { BoardLanes } from "../board/board-lanes.js";
-import { ROUTE_WORDS, foldBoard, nodesLine, untilWords } from "../board/board-columns.js";
+import { ROUTE_WORDS, foldBoard, landingRefusalWords, nodesLine, untilWords } from "../board/board-columns.js";
 import { MIDDOT } from "../glyphs.js";
 import { seatWords } from "../ops/activity-words.js";
 import { GOAL_WORDS, RUN_WORDS } from "./run-words.js";
@@ -49,7 +49,7 @@ export function nodeEvidence(node: RunNodeView, nowMs: number): readonly string[
   if (node.landing !== null) {
     lines.push(node.landing.outcome === "COMMITTED"
       ? `landed on ${node.landing.branch ?? "the workspace branch"} ${MIDDOT} ${String(node.landing.files.length)} file${node.landing.files.length === 1 ? "" : "s"}, local only`
-      : "not landed yet");
+      : landingRefusalWords(node.landing));
   }
   if (node.review.rounds > 0) {
     const route = node.review.latestRoute === null ? "" : ` ${MIDDOT} last ${ROUTE_WORDS[node.review.latestRoute] ?? node.review.latestRoute}`;

@@ -1,4 +1,4 @@
-import type { RunNodeStatus, RunNodeView } from "../../live/live-runs.js";
+import type { RunNodeLandingView, RunNodeStatus, RunNodeView } from "../../live/live-runs.js";
 import { MIDDOT, TIMES } from "../glyphs.js";
 import { agoWords, seatWords } from "../ops/activity-words.js";
 
@@ -45,6 +45,16 @@ const STOP_WORDS: Readonly<Record<Exclude<RunNodeStatus, "ACCEPTED" | "DELIVERED
     REPLANNED: "replanned into a successor goal",
     UNATTRIBUTABLE: "earlier execution has no scoped identity; attribution is required",
   });
+
+/**
+ * A REFUSED LANDING, SAID AS A REFUSAL. The runs read carries `outcome: "REFUSED"` and the
+ * lander's code on the node (live-runs.ts RunNodeLandingView); measured before this every surface
+ * said "not landed yet" - a delay - and the code was rendered nowhere. The one phrase is shared
+ * by the board card, the card detail and the runs evidence so the three cannot drift.
+ */
+export function landingRefusalWords(landing: RunNodeLandingView): string {
+  return landing.code === null ? "landing refused" : `landing refused ${MIDDOT} ${landing.code}`;
+}
 
 export function isStuck(node: RunNodeView): boolean {
   if (node.status === "READY") return node.review.rounds > 0;
@@ -117,7 +127,8 @@ export function cardLine(node: RunNodeView, column: BoardColumn, nowMs: number):
       return since === null ? "waiting on the verifier" : `delivered ${since} ${MIDDOT} waiting on the verifier`;
     }
     case "VERIFIED":
-      return node.landing?.outcome === "REFUSED" ? "verified · not landed yet" : "verified";
+      return node.landing?.outcome === "REFUSED"
+        ? `verified ${MIDDOT} ${landingRefusalWords(node.landing)}` : "verified";
     case "LANDED":
       return "landed on the workspace branch";
     case "PUBLISHED":
@@ -127,7 +138,8 @@ export function cardLine(node: RunNodeView, column: BoardColumn, nowMs: number):
 
 export interface BoardCard {
   readonly column: BoardColumn;
-  /** The top finding's detail, shown only where "why" is the next question: stuck cards. */
+  /** WHY the card is stuck, shown only there: the landing refusal for an accepted node whose
+   *  landing was refused, else the top review finding's detail. */
   readonly finding: string | null;
   readonly line: string;
   readonly node: RunNodeView;
@@ -153,10 +165,11 @@ export function foldBoard(
     const column = columnOf(node, publishedSha);
     const stuckCard = isStuck(node);
     if (stuckCard) stuck += 1;
-    cards[column].push(Object.freeze({
-      column, finding: stuckCard ? node.review.findings[0]?.detail ?? null : null,
-      line: cardLine(node, column, nowMs), node,
-    }));
+    const finding = !stuckCard ? null
+      : node.status === "ACCEPTED" && node.landing?.outcome === "REFUSED"
+        ? landingRefusalWords(node.landing)
+        : node.review.findings[0]?.detail ?? null;
+    cards[column].push(Object.freeze({ column, finding, line: cardLine(node, column, nowMs), node }));
   }
   const counts = Object.freeze({
     LANDED: cards.LANDED.length, PLANNED: cards.PLANNED.length, PUBLISHED: cards.PUBLISHED.length,

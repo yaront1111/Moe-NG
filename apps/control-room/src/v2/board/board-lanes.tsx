@@ -6,6 +6,7 @@ import { MIDDOT } from "../glyphs.js";
 import { agoWords, seatWords } from "../ops/activity-words.js";
 import { STATUS_WORDS } from "../runs/run-words.js";
 import {
+  landingRefusalWords,
   BOARD_COLUMNS, COLUMN_WORDS, ROUTE_WORDS, isStuck, untilWords,
 } from "./board-columns.js";
 import type { BoardCard, BoardFold } from "./board-columns.js";
@@ -47,7 +48,7 @@ function landingWords(node: RunNodeView): string | null {
     const branch = node.landing.branch === null || node.landing.branch === "" ? "the workspace branch" : node.landing.branch;
     return `landed on ${branch} ${MIDDOT} ${String(node.landing.files.length)} file${node.landing.files.length === 1 ? "" : "s"}, local only`;
   }
-  return "not landed yet";
+  return landingRefusalWords(node.landing);
 }
 
 function claimWords(node: RunNodeView, nowMs: number): string | null {
