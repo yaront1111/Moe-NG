@@ -113,6 +113,25 @@ export function prepareProductContractV2AskWorkflow(
   const contractId = input.identity.contractId;
   const prior = read(store, { contractId, projectId: input.projectId });
   if (!prior.ok && prior.code !== "PRODUCT_CONTRACT_V2_WORKFLOW_ABSENT") return prior;
+  if (prior.ok && !bindingMatches(prior.head, { contractId,
+    goalRef: input.goalRef, projectId: input.projectId })) {
+    return refused("PRODUCT_CONTRACT_V2_WORKFLOW_BINDING_MISMATCH");
+  }
+  // ONE MATERIAL CLARIFICATION AT A TIME. The authority fold carries a single pending
+  // selection, so two clarifications open together could only converge if the human chose
+  // the same successor twice: answered with different options they derived INVALID, the
+  // ANSWER committed INVALID as the head, and from there no transition advanced the contract
+  // (REVISION refused CLARIFICATION_OPEN with nothing open, GATE_1 and ANSWER refused
+  // UNSATISFIED, a further ASK+ANSWER recomputed over the same two rows). A second ask waits
+  // until the open one is answered (OPEN) and its selection is realized by a revision
+  // (ANSWERED_PENDING); an INVALID head is unsatisfied too. The pure successor below stays
+  // unfenced: chains written before this fence carry several open ids and the reader folds them.
+  if (prior.ok && prior.head.clarificationStatus === "OPEN") {
+    return refused("PRODUCT_CONTRACT_V2_WORKFLOW_CLARIFICATION_OPEN");
+  }
+  if (prior.ok && prior.head.clarificationStatus !== "SATISFIED") {
+    return refused("PRODUCT_CONTRACT_V2_WORKFLOW_CLARIFICATION_UNSATISFIED");
+  }
   return advanceProductContractV2AskWorkflow(prior.ok ? prior.head : null, input);
 }
 export function advanceProductContractV2AskWorkflow(
@@ -164,6 +183,12 @@ export function prepareProductContractV2AnswerWorkflow(
   if ((ids.length > 0 && input.clarificationStatus !== "OPEN")
     || (ids.length === 0 && input.clarificationStatus === "OPEN")) {
     return refused("PRODUCT_CONTRACT_V2_WORKFLOW_CLARIFICATION_UNSATISFIED");
+  }
+  // An INVALID authority is never committed as the head: committed once, it was absorbing.
+  // Only a chain written before asks were serialized can still derive it (two open rows
+  // answered with different successors); that answer is refused and the roster stays open.
+  if (input.clarificationStatus === "INVALID") {
+    return refused("PRODUCT_CONTRACT_V2_WORKFLOW_INVALID");
   }
   return accepted(head({ cause: Object.freeze({ clarificationId: input.clarificationId,
     commandId: input.commandId, kind: "ANSWER", revisionRef: null }),

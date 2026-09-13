@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import {
   PRODUCT_CONTRACT_CURRENT_REVISION_SLOT_V2_VERSION,
   PRODUCT_CONTRACT_V2_VERSION,
+  assessProductContractClarificationMaterialityV2,
   createProductContractCurrentRevisionSlotV2,
   createProductContractRevisionV2,
   encodeProductContractCurrentRevisionSlotV2,
@@ -28,6 +29,21 @@ import {
 import { productContractClarificationV2AggregateId,
   runAnswerProductContractClarificationV2, runAskProductContractClarificationV2 }
   from "./product-contract-v2-clarification-service.js";
+import {
+  PRODUCT_CONTRACT_CLARIFICATION_V2_ANSWER_COMMAND_KIND,
+  PRODUCT_CONTRACT_CLARIFICATION_V2_ANSWER_EVENT_TYPE,
+  PRODUCT_CONTRACT_CLARIFICATION_V2_ASK_COMMAND_KIND,
+  PRODUCT_CONTRACT_CLARIFICATION_V2_ASK_EVENT_TYPE,
+  deriveProductContractClarificationV2Id,
+  productContractClarificationV2AnswerRequestBytes,
+  productContractClarificationV2AskRequestBytes,
+} from "./product-contract-v2-clarification-contract.js";
+import { commitProductContractClarificationV2Row }
+  from "./product-contract-v2-clarification-writer.js";
+import { prepareProductContractV2GoalBindingLegs }
+  from "./product-contract-v2-goal-binding-leg.js";
+import { advanceProductContractV2AskWorkflow }
+  from "./product-contract-v2-workflow-transition.js";
 import { PRODUCT_CONTRACT_REVISION_V2_COMMAND_KIND,
   deriveProductContractCurrentRevisionSlotV2AggregateId,
   deriveProductContractRevisionV2AggregateId }
@@ -124,6 +140,90 @@ function input(payload: unknown): ProposeProductContractRevisionV2Input {
     projectId: PROJECT_ID,
     targetAggregateId: GOAL_ID,
   };
+}
+
+/**
+ * The durable shape a chain written BEFORE material asks were serialized carries: a second
+ * clarification opened while the first was pending, answered with a different successor, and
+ * its ANSWER head committed as INVALID. The ask service now refuses that second ask and the
+ * ANSWER transition refuses an INVALID head, so this world is written through the row writer
+ * with the same legs those transitions used to assemble; the reader still folds it.
+ */
+function plantConflictingClarification(store: SqliteEventStore, optionId: string): string {
+  const contractId = "contract-v2-product";
+  const question = "Which candidate is second authority?";
+  const materiality = assessProductContractClarificationMaterialityV2({ options: [
+    { candidateDraft: draft(), label: "Thirty days", optionId: "thirty-days" },
+    { candidateDraft: draft({ budgets: [{ budgetId: "budget-delivery", kind: "TIME",
+      limit: 45, unit: "days" }] }), label: "Forty-five days", optionId: "forty-five-days" },
+  ], question });
+  if (!materiality.ok) throw new Error(`${materiality.code}@${materiality.layer}`);
+  const clarificationId = deriveProductContractClarificationV2Id(
+    GOAL_ID, materiality.sharedIdentity, question, materiality.optionDigests,
+  );
+  const aggregateId = productContractClarificationV2AggregateId(
+    PROJECT_ID, contractId, clarificationId,
+  );
+  const ask = { commandId: "command-conflict-second", correlationId: "correlation-conflict-second",
+    decidedAt: "2026-08-31T13:55:00.000Z", payload: {}, principalId: PRINCIPAL,
+    projectId: PROJECT_ID, targetAggregateId: GOAL_ID };
+  const asked: Parameters<typeof commitProductContractClarificationV2Row>[3]["row"] = Object.freeze({
+    answerDecision: null,
+    askDecision: Object.freeze({ commandId: ask.commandId, correlationId: ask.correlationId,
+      decidedAt: ask.decidedAt, principalId: ask.principalId }),
+    clarificationId, contractId, goalRef: GOAL_ID, optionDigests: materiality.optionDigests,
+    question, schemaVersion: "moe-product-contract-clarification/2",
+    sharedIdentity: materiality.sharedIdentity,
+  });
+  const before = readProductContractV2WorkflowHead(store, { contractId, projectId: PROJECT_ID });
+  if (!before.ok) throw new Error(before.code);
+  const opened = advanceProductContractV2AskWorkflow(before.head, { clarificationId,
+    commandId: ask.commandId, goalRef: GOAL_ID, identity: materiality.sharedIdentity,
+    projectId: PROJECT_ID });
+  if (!opened.ok) throw new Error(opened.code);
+  const binding = prepareProductContractV2GoalBindingLegs(store, {
+    cause: Object.freeze({ commandId: ask.commandId, kind: "CLARIFICATION", ref: clarificationId }),
+    commandId: ask.commandId, contractId, goalRef: GOAL_ID, projectId: PROJECT_ID,
+  });
+  if (!binding.ok) throw new Error(binding.code);
+  const askCommitted = commitProductContractClarificationV2Row(store, ask, aggregateId, {
+    commandId: ask.commandId, commandKind: PRODUCT_CONTRACT_CLARIFICATION_V2_ASK_COMMAND_KIND,
+    eventType: PRODUCT_CONTRACT_CLARIFICATION_V2_ASK_EVENT_TYPE, expectedVersion: 0,
+    requestBytes: productContractClarificationV2AskRequestBytes(asked), row: asked,
+    secondaryLegs: Object.freeze([...binding.legs, opened.leg]),
+  });
+  if (askCommitted !== "DECIDED") throw new Error(JSON.stringify(askCommitted));
+  const option = materiality.optionDigests.find((candidate) => candidate.optionId === optionId);
+  if (option === undefined) throw new Error(`no option ${optionId}`);
+  const answer = { commandId: "command-conflict-answer-second",
+    correlationId: "correlation-conflict-answer-second", decidedAt: "2026-08-31T13:56:00.000Z",
+    payload: {}, principalId: "human-product-owner", projectId: PROJECT_ID,
+    targetAggregateId: aggregateId };
+  const answered = Object.freeze({ ...asked, answerDecision: Object.freeze({
+    answeredAt: answer.decidedAt, commandId: answer.commandId, correlationId: answer.correlationId,
+    optionId: option.optionId, principalId: answer.principalId,
+    projectionDigest: option.projectionDigest, revisionDigest: option.revisionDigest,
+  }) });
+  const invalidHead = Object.freeze({ ...opened.head,
+    cause: Object.freeze({ clarificationId, commandId: answer.commandId,
+      kind: "ANSWER" as const, revisionRef: null }),
+    clarificationGeneration: opened.head.clarificationGeneration + 1,
+    clarificationIds: Object.freeze([]), clarificationStatus: "INVALID" as const,
+    generation: opened.head.generation + 1 });
+  const answerCommitted = commitProductContractClarificationV2Row(store, answer, aggregateId, {
+    commandId: answer.commandId, commandKind: PRODUCT_CONTRACT_CLARIFICATION_V2_ANSWER_COMMAND_KIND,
+    eventType: PRODUCT_CONTRACT_CLARIFICATION_V2_ANSWER_EVENT_TYPE, expectedVersion: 1,
+    requestBytes: productContractClarificationV2AnswerRequestBytes(answered), row: answered,
+    secondaryLegs: Object.freeze([{
+      aggregateId: deriveProductContractV2WorkflowAggregateId(PROJECT_ID, contractId),
+      events: Object.freeze([{ domainSchemaVersion: PRODUCT_CONTRACT_V2_WORKFLOW_VERSION,
+        eventId: `${answer.commandId}-workflow`, eventType: PRODUCT_CONTRACT_V2_WORKFLOW_EVENT_TYPE,
+        payload: encodeProductContractV2WorkflowHead(invalidHead) }]),
+      expectedVersion: invalidHead.generation - 1,
+    }]),
+  });
+  if (answerCommitted !== "DECIDED") throw new Error(JSON.stringify(answerCommitted));
+  return clarificationId;
 }
 
 describe("runProductContractProposeRevisionV2", () => {
@@ -263,31 +363,31 @@ describe("runProductContractProposeRevisionV2", () => {
 
   it("fails closed when durable answers select conflicting outstanding candidates", () => {
     const store = boundWorld();
-    for (const [suffix, optionId] of [["first", "thirty-days"],
-      ["second", "forty-five-days"]] as const) {
-      const asked = runAskProductContractClarificationV2(store, {
-        commandId: `command-conflict-${suffix}`,
-        correlationId: `correlation-conflict-${suffix}`, decidedAt: "2026-08-31T13:55:00.000Z",
-        payload: { contractId: "contract-v2-product", goalRef: GOAL_ID, options: [
-          { candidateDraft: draft(), label: "Thirty days", optionId: "thirty-days" },
-          { candidateDraft: draft({ budgets: [{ budgetId: "budget-delivery", kind: "TIME",
-            limit: 45, unit: "days" }] }), label: "Forty-five days", optionId: "forty-five-days" },
-        ], question: `Which candidate is ${suffix} authority?` },
-        principalId: PRINCIPAL, projectId: PROJECT_ID, targetAggregateId: GOAL_ID,
-      });
-      expect(asked).toMatchObject({ ok: true });
-      if (!asked.ok) throw new Error(`${asked.code}@${asked.layer}`);
-      expect(runAnswerProductContractClarificationV2(store, {
-        commandId: `command-conflict-answer-${suffix}`,
-        correlationId: `correlation-conflict-answer-${suffix}`,
-        decidedAt: "2026-08-31T13:56:00.000Z",
-        payload: { answerOptionId: optionId, clarificationId: asked.clarificationId,
-          contractId: "contract-v2-product" }, principalId: "human-product-owner",
-        projectId: PROJECT_ID, targetAggregateId: productContractClarificationV2AggregateId(
-          PROJECT_ID, "contract-v2-product", asked.clarificationId,
-        ),
-      })).toMatchObject({ ok: true });
-    }
+    const asked = runAskProductContractClarificationV2(store, {
+      commandId: "command-conflict-first",
+      correlationId: "correlation-conflict-first", decidedAt: "2026-08-31T13:55:00.000Z",
+      payload: { contractId: "contract-v2-product", goalRef: GOAL_ID, options: [
+        { candidateDraft: draft(), label: "Thirty days", optionId: "thirty-days" },
+        { candidateDraft: draft({ budgets: [{ budgetId: "budget-delivery", kind: "TIME",
+          limit: 45, unit: "days" }] }), label: "Forty-five days", optionId: "forty-five-days" },
+      ], question: "Which candidate is first authority?" },
+      principalId: PRINCIPAL, projectId: PROJECT_ID, targetAggregateId: GOAL_ID,
+    });
+    expect(asked).toMatchObject({ ok: true });
+    if (!asked.ok) throw new Error(`${asked.code}@${asked.layer}`);
+    expect(runAnswerProductContractClarificationV2(store, {
+      commandId: "command-conflict-answer-first",
+      correlationId: "correlation-conflict-answer-first",
+      decidedAt: "2026-08-31T13:56:00.000Z",
+      payload: { answerOptionId: "thirty-days", clarificationId: asked.clarificationId,
+        contractId: "contract-v2-product" }, principalId: "human-product-owner",
+      projectId: PROJECT_ID, targetAggregateId: productContractClarificationV2AggregateId(
+        PROJECT_ID, "contract-v2-product", asked.clarificationId,
+      ),
+    })).toMatchObject({ ok: true });
+    // The conflicting second clarification is the durable shape a chain written before asks
+    // were serialized carries; the services refuse to write it now, so it is planted.
+    plantConflictingClarification(store, "forty-five-days");
     expect(runProductContractProposeRevisionV2(
       store, input({ draft: draft(), goalRef: GOAL_ID }),
     )).toEqual({ code: "PRODUCT_CONTRACT_V2_PROPOSE_CLARIFICATION_STATE_INVALID",

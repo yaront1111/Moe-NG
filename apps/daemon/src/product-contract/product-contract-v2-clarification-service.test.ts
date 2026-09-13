@@ -26,6 +26,8 @@ import { readProductContractClarificationV2Row }
   from "./product-contract-v2-clarification-row.js";
 import { validateProductContractClarificationV2Provenance }
   from "./product-contract-v2-clarification-provenance.js";
+import { prepareProductContractV2GoalBindingLegs }
+  from "./product-contract-v2-goal-binding-leg.js";
 import { commitProductContractClarificationV2Row }
   from "./product-contract-v2-clarification-writer.js";
 import { runProductContractProposeRevisionV2 }
@@ -295,8 +297,12 @@ describe("Product Contract /2 durable clarification", () => {
 
     const changedRequest = askPayload();
     changedRequest["question"] = "Which different request tries to reuse the durable ASK key?";
+    // A different question is a different clarification, and one is already open: the
+    // serialized-ask fence answers before the store's own key-reuse conflict arm could, and
+    // the durable decision under the reused key is untouched either way.
     expect(ask(store, input(changedRequest))).toEqual({
-      code: "IDEMPOTENCY_CONFLICT", layer: "DURABLE_STORE", ok: false,
+      code: "PRODUCT_CONTRACT_V2_WORKFLOW_CLARIFICATION_OPEN",
+      layer: "PRODUCT_CONTRACT_V2_WORKFLOW", ok: false,
     });
     expect(store.getCommandDecision({ commandId: "command-v2-ask",
       principalId: "agent-product-v2", projectId: PROJECT_ID })).toEqual(original);
@@ -745,5 +751,157 @@ describe("Product Contract /2 durable clarification", () => {
     expect(openReader(store, "another-project").openMaterialClarificationIds(CONTRACT_ID))
       .toEqual([]);
     expect(rowsFor(store, "another-project", CONTRACT_ID)).toEqual([]);
+  });
+});
+
+/**
+ * ONE MATERIAL CLARIFICATION AT A TIME. The authority fold carries a single pending
+ * `selection`, so two clarifications open together on one contract could only converge if
+ * the human chose the same successor twice. Answered with different options they derived
+ * INVALID, the ANSWER transition committed INVALID as the workflow head, and from there no
+ * transition advanced the contract: REVISION refused CLARIFICATION_OPEN with nothing open,
+ * GATE_1 and ANSWER refused UNSATISFIED, and a further ASK+ANSWER recomputed over the same
+ * two conflicting durable rows. Two fences close it: a second ask waits until the open one is
+ * answered and its selection realized, and an INVALID head is never committed.
+ */
+function secondAskPayload(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const budget = (limit: number) => ({ budgets: [{ budgetId: "budget-delivery", kind: "TIME",
+    limit, unit: "days" }], ...overrides });
+  return {
+    contractId: CONTRACT_ID,
+    goalRef: GOAL_ID,
+    options: [
+      { candidateDraft: candidate(budget(60)), label: "Sixty days", optionId: "sixty" },
+      { candidateDraft: candidate(budget(90)), label: "Ninety days", optionId: "ninety" },
+    ],
+    question: "Which delivery budget should the second decision select?",
+  };
+}
+
+/**
+ * A contract with TWO open clarifications, the shape chains written before asks were
+ * serialized still carry. The second row is committed through the row writer with the same
+ * legs the ask service assembles, minus the service's fence; the pure ask successor accepts it
+ * and the reader folds it, so the durable world is one production readers admit.
+ */
+function legacyTwoOpenWorld(): { first: string; second: string; store: SqliteEventStore } {
+  const { clarificationId: first, store } = askedWorld();
+  const payload = secondAskPayload();
+  const question = String(payload["question"]);
+  const materiality = assessProductContractClarificationMaterialityV2({
+    options: payload["options"], question,
+  });
+  if (!materiality.ok) throw new Error(`${materiality.code}@${materiality.layer}`);
+  const second = deriveProductContractClarificationV2Id(
+    GOAL_ID, materiality.sharedIdentity, question, materiality.optionDigests,
+  );
+  const command = input(payload, "agent-product-v2", "ask-b");
+  const row: Parameters<typeof commitProductContractClarificationV2Row>[3]["row"] = Object.freeze({
+    answerDecision: null,
+    askDecision: Object.freeze({ commandId: command.commandId, correlationId: command.correlationId,
+      decidedAt: command.decidedAt, principalId: command.principalId }),
+    clarificationId: second, contractId: CONTRACT_ID, goalRef: GOAL_ID,
+    optionDigests: materiality.optionDigests, question,
+    schemaVersion: "moe-product-contract-clarification/2",
+    sharedIdentity: materiality.sharedIdentity,
+  });
+  const head = readProductContractV2WorkflowHead(store, {
+    contractId: CONTRACT_ID, projectId: PROJECT_ID,
+  });
+  if (!head.ok) throw new Error(head.code);
+  const workflow = advanceProductContractV2AskWorkflow(head.head, {
+    clarificationId: second, commandId: command.commandId, goalRef: GOAL_ID,
+    identity: materiality.sharedIdentity, projectId: PROJECT_ID,
+  });
+  if (!workflow.ok) throw new Error(workflow.code);
+  const binding = prepareProductContractV2GoalBindingLegs(store, {
+    cause: Object.freeze({ commandId: command.commandId, kind: "CLARIFICATION", ref: second }),
+    commandId: command.commandId, contractId: CONTRACT_ID, goalRef: GOAL_ID,
+    projectId: PROJECT_ID,
+  });
+  if (!binding.ok) throw new Error(binding.code);
+  const committed = commitProductContractClarificationV2Row(store, command,
+    productContractClarificationV2AggregateId(PROJECT_ID, CONTRACT_ID, second), {
+      commandId: command.commandId,
+      commandKind: PRODUCT_CONTRACT_CLARIFICATION_V2_ASK_COMMAND_KIND,
+      eventType: PRODUCT_CONTRACT_CLARIFICATION_V2_ASK_EVENT_TYPE, expectedVersion: 0,
+      requestBytes: productContractClarificationV2AskRequestBytes(row), row,
+      secondaryLegs: Object.freeze([...binding.legs, workflow.leg]),
+    });
+  if (committed !== "DECIDED") throw new Error(JSON.stringify(committed));
+  return { first, second, store };
+}
+
+describe("Product Contract /2 clarifications are serialized per contract", () => {
+  const authority = (store: SqliteEventStore) => readProductContractClarificationV2Authority(
+    store, { contractId: CONTRACT_ID, goalRef: GOAL_ID, projectId: PROJECT_ID },
+  );
+
+  it("refuses a second material ask until the open one is answered and realized, then admits it", () => {
+    const { clarificationId, store } = askedWorld();
+    const { ask, answer, rows } = requireFunctions();
+    expect(ask(store, input(secondAskPayload(), "agent-product-v2", "ask-b"))).toEqual({
+      code: "PRODUCT_CONTRACT_V2_WORKFLOW_CLARIFICATION_OPEN",
+      layer: "PRODUCT_CONTRACT_V2_WORKFLOW", ok: false,
+    });
+    expect(rows(store, PROJECT_ID, CONTRACT_ID)).toHaveLength(1);
+    expect(store.getCommandDecision({ commandId: "command-v2-ask-b",
+      principalId: "agent-product-v2", projectId: PROJECT_ID })).toBeNull();
+
+    expect(answer(store, answerInput({ answerOptionId: "Z-option", clarificationId,
+      contractId: CONTRACT_ID }, "human-one", "answer"))).toMatchObject({ ok: true });
+    // Answered but not yet realized by a revision: still one decision at a time.
+    expect(ask(store, input(secondAskPayload(), "agent-product-v2", "ask-b"))).toEqual({
+      code: "PRODUCT_CONTRACT_V2_WORKFLOW_CLARIFICATION_UNSATISFIED",
+      layer: "PRODUCT_CONTRACT_V2_WORKFLOW", ok: false,
+    });
+    expect(rows(store, PROJECT_ID, CONTRACT_ID)).toHaveLength(1);
+
+    const realized = runProductContractProposeRevisionV2(store, {
+      ...input({ draft: candidate(), goalRef: GOAL_ID }),
+      commandId: "command-v2-selected-proposal", principalId: "agent-product-v2",
+    });
+    expect(realized).toMatchObject({ ok: true });
+    if (!realized.ok) return;
+    expect(authority(store)).toEqual({ status: "SATISFIED" });
+
+    // The serialized fence is not a dead end: the next ask, based on the realized revision,
+    // is admitted and opens the roster again.
+    const lineage = { parentRevisionDigest: realized.revision.revisionDigest,
+      parentRevisionId: realized.revision.revisionId };
+    const admitted = ask(store, input(
+      secondAskPayload({ lineage, revisionId: "revision-v2-second" }), "agent-product-v2", "ask-c",
+    ));
+    expect(admitted).toMatchObject({ disposition: "DECIDED", ok: true });
+    expect(authority(store)).toEqual({
+      clarificationIds: [String(admitted["clarificationId"])], status: "OPEN",
+    });
+    expect(rows(store, PROJECT_ID, CONTRACT_ID)).toHaveLength(2);
+  });
+
+  it("never commits an INVALID head: a conflicting second answer on a legacy two-open contract is refused", () => {
+    const { first, second, store } = legacyTwoOpenWorld();
+    const { answer, rows } = requireFunctions();
+    expect(authority(store)).toEqual({ clarificationIds: [first, second].sort(), status: "OPEN" });
+
+    expect(answer(store, answerInput({ answerOptionId: "Z-option", clarificationId: first,
+      contractId: CONTRACT_ID }, "human-one", "answer"))).toMatchObject({ ok: true });
+    expect(readProductContractV2WorkflowHead(store, { contractId: CONTRACT_ID,
+      projectId: PROJECT_ID })).toMatchObject({ head: { clarificationIds: [second],
+      clarificationStatus: "OPEN" }, ok: true });
+
+    // "sixty" projects a successor the first answer did not select: the fold would be INVALID.
+    expect(answer(store, answerInput({ answerOptionId: "sixty", clarificationId: second,
+      contractId: CONTRACT_ID }, "human-one", "answer-b"))).toEqual({
+      code: "PRODUCT_CONTRACT_V2_WORKFLOW_INVALID",
+      layer: "PRODUCT_CONTRACT_V2_WORKFLOW", ok: false,
+    });
+    expect(rows(store, PROJECT_ID, CONTRACT_ID).find((row) => row["clarificationId"] === second)
+      ?.["answerDecision"]).toBeNull();
+    expect(readProductContractV2WorkflowHead(store, { contractId: CONTRACT_ID,
+      projectId: PROJECT_ID })).toMatchObject({ head: { clarificationIds: [second],
+      clarificationStatus: "OPEN" }, ok: true });
+    expect(store.getCommandDecision({ commandId: "command-v2-answer-b",
+      principalId: "human-one", projectId: PROJECT_ID })).toBeNull();
   });
 });
