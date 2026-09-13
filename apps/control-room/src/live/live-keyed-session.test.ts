@@ -106,13 +106,24 @@ function fromHex(value: string): Uint8Array<ArrayBuffer> {
 afterEach(() => { vi.restoreAllMocks(); });
 
 describe("live keyed session claim and signed open", () => {
+  it.each(["credential\nheader", "credential-\u00e9", "x".repeat(257)])(
+    "refuses a credential that cannot be safely retained or sent in a header",
+    async (sessionCredential) => {
+      const port = recordingPost(() => accepted(claimBody({ sessionCredential })));
+      expect(await session(port.post).claimAndOpen()).toEqual({
+        ok: false, code: "LIVE_PAIRING_REFUSED", detail: "session pairing claim refused",
+      });
+      expect(port.calls.map(({ path }) => path)).toEqual(["/session/pair/claim"]);
+    },
+  );
+
   it("posts exact keyed claim and signed open shapes before publishing setup material", async () => {
     const port = recordingPost();
     const result = await session(port.post).claimAndOpen();
 
     expect(Object.keys(claimBody()).toSorted()).toEqual(CLAIM_KEYS);
-    expect(result).toEqual({ ok: true, sessionCredential: CREDENTIAL });
-    expect(Object.keys(result).toSorted()).toEqual(["ok", "sessionCredential"]);
+    expect(result).toMatchObject({ ok: true, sessionCredential: CREDENTIAL });
+    expect(Object.keys(result).toSorted()).toEqual(["binding", "ok", "sessionCredential"]);
     expect(port.calls.map(({ path }) => path)).toEqual([
       "/session/pair/claim", "/session/pair/open",
     ]);
@@ -122,6 +133,11 @@ describe("live keyed session claim and signed open", () => {
     expect(claim["publicKeySpkiHex"]).toMatch(/^[0-9a-f]{88}$/u);
 
     const open = port.calls[1]!.body;
+    expect(result).toEqual({
+      ok: true, sessionCredential: CREDENTIAL,
+      binding: { sessionId: open["sessionId"], credentialId: open["credentialId"],
+        clientKeyId: open["clientKeyId"], generation: 1 },
+    });
     expect(Object.keys(open).toSorted()).toEqual(OPEN_KEYS);
     expect(open["publicKeySpkiHex"]).toBe(claim["publicKeySpkiHex"]);
     expect(open["clientKeyId"]).toMatch(/^[0-9a-f]{64}$/u);
@@ -181,7 +197,7 @@ describe("live keyed session claim and signed open", () => {
       const retry = await keyed.claimAndOpen();
       expect(retry).toEqual({ status: "RETRY_CLAIM" });
       expect(Object.keys(retry)).toEqual(["status"]);
-      expect(await keyed.claimAndOpen()).toEqual({ ok: true, sessionCredential: CREDENTIAL });
+      expect(await keyed.claimAndOpen()).toMatchObject({ ok: true, sessionCredential: CREDENTIAL });
       const claimsSent = port.calls.filter(({ path }) => path === "/session/pair/claim");
       expect(claimsSent).toHaveLength(2);
       expect(claimsSent[1]!.body["publicKeySpkiHex"]).toBe(claimsSent[0]!.body["publicKeySpkiHex"]);

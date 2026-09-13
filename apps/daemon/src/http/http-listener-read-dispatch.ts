@@ -22,6 +22,9 @@ import {
 import {
   SESSION_CHALLENGE_OPERANDS_READ_PATH, handleSessionChallengeOperandsReadRequest,
 } from "./session-challenge-operands-read.js";
+import {
+  PAIRING_SESSION_VALIDATION_PATH, handlePairingSessionValidation,
+} from "./pairing-session-validation.js";
 import { DOCUMENT_COVERAGE_READ_PATH } from "./document-coverage-contract.js";
 import { handleDocumentCoverageReadRequest } from "./document-coverage-route.js";
 import { RUNS_READ_PATH } from "./runs-read-contract.js";
@@ -96,6 +99,7 @@ export const JSON_ROUTES: readonly string[] = Object.freeze([
   PRODUCT_CONTRACT_V2_CURRENT_READ_PATH,
   PRODUCT_CONTRACT_V2_PENDING_READ_PATH,
   SESSION_CHALLENGE_OPERANDS_READ_PATH,
+  PAIRING_SESSION_VALIDATION_PATH,
   V2_COMMAND_PATH,
   RUNS_READ_PATH,
   POLICY_READ_PATH,
@@ -310,6 +314,17 @@ function serveDocumentCoverage(
   }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
   if (result.kind === "LISTENER_REFUSAL") { refuseRequest(response, result.code); return; }
   reply(response, result.httpStatus, result.body);
+}
+
+function servePairingSessionValidation(
+  response: ServerResponse, request: IncomingMessage, options: StartListenerOptions, body: Uint8Array,
+): void {
+  const result = handlePairingSessionValidation({
+    authenticator: options.deps.authenticator,
+    pairingOpenSessions: options.pairingOpenSessions,
+    sessionChallengeOperands: options.sessionChallengeOperands,
+  }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
+  reply(response, result.httpStatus, result.body, { "cache-control": "no-store" });
 }
 
 function serveRuns(
@@ -614,6 +629,11 @@ export async function serveReadDispatch(
     refuseRequest(response, "LISTENER_SESSION_CHALLENGE_OPERANDS_REQUEST_INVALID");
     return;
   }
+  if (path === PAIRING_SESSION_VALIDATION_PATH && request.method !== "POST") {
+    reply(response, 405, { ok: false, code: "PAIRING_SESSION_REQUEST_INVALID",
+      layer: "CONTROL_ROOM_PAIRING_SESSION" }, { "cache-control": "no-store" });
+    return;
+  }
   if (path === ACTIVITY_READ_PATH && request.method !== "POST") {
     refuseRequest(response, "LISTENER_ACTIVITY_REQUEST_INVALID");
     return;
@@ -746,6 +766,8 @@ export async function serveReadDispatch(
     serveProductContractV2Pending(response, request, options, body);
   } else if (path === SESSION_CHALLENGE_OPERANDS_READ_PATH) {
     serveSessionChallengeOperands(response, request, options, body);
+  } else if (path === PAIRING_SESSION_VALIDATION_PATH) {
+    servePairingSessionValidation(response, request, options, body);
   } else if (path === DESIGN_READ_PATH) {
     serveDesign(response, request, options, body);
   } else if (path === DEPLOYMENTS_HEALTH_READ_PATH) {

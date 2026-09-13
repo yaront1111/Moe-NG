@@ -1,6 +1,6 @@
 /**
  * Every project-daemon route the default v2 browser may proxy in development.
- * Manager routes deliberately use a separate origin and cookie authority.
+ * Manager routes deliberately use a separate origin and paired credential.
  */
 export const DEV_PROXY_PATHS = Object.freeze([
   "/activation/read",
@@ -65,6 +65,7 @@ export const DEV_PROXY_PATHS = Object.freeze([
   "/session/pair/claim",
   "/session/pair/open",
   "/session/pair/request",
+  "/session/validate",
   "/sessions/read",
 ] as const);
 

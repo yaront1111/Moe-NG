@@ -1,5 +1,5 @@
 import type {
-  SessionMutationResult,
+  SessionAuthorityRead, SessionMutationResult,
 } from "../identity/session-authority-contracts.js";
 
 /**
@@ -73,9 +73,11 @@ export type PairingOpenResult =
   | PairingOpenRefused
   | SessionMutationResult;
 
-/** The one authority capability this route composes. */
+/** Pairing opens authority; restoration can only read the completed session. */
 export interface PairingOpenSessionPort {
   openSession(input: unknown): SessionMutationResult;
+  /** Optional for old compositions; restoration refuses without the durable read. */
+  readActiveSession?(sessionId: unknown): SessionAuthorityRead;
 }
 
 export interface PairingOpenCompletionPort {

@@ -5,12 +5,14 @@ import type { CommandAuthorityPlane, FetchLike } from "@moe/control-room-client"
 import { LIVE_PROJECTION, LIVE_SUBSCRIBER } from "./live-config.js";
 import type { LiveConfigRefusalCode, LiveRefused, LiveSetupResult } from "./live-config.js";
 import { createLiveKeyedSession } from "./live-keyed-session.js";
+import type { LiveTabSession } from "./live-tab-session.js";
 
-/** Inputs remain caller-owned; no credential or pairing identity is persisted here. */
+/** Only a completed signed pairing may be retained through the optional tab session. */
 export interface HandshakeInput {
   readonly fetchImpl: FetchLike;
   readonly requestTimeoutMs?: number;
   readonly signal?: AbortSignal;
+  readonly session?: LiveTabSession;
 }
 export interface LivePairingPending {
   claim(): Promise<LiveHandshakeResult>;
@@ -225,6 +227,7 @@ function createPending(
     active = keyed.claimAndOpen().then((result) => {
       if ("status" in result) return pending;
       if (!result.ok) return result;
+      input.session?.write(context.projectId, { credential: result.sessionCredential, binding: result.binding });
       settled = makeSetup(context, input, result.sessionCredential);
       return settled;
     }).finally(() => { active = null; });
@@ -267,6 +270,34 @@ function isValidTimeout(value: number): boolean {
   return Number.isInteger(value) && value > 0 && value <= MAX_TIMEOUT_MS;
 }
 
+async function restoreSession(
+  input: HandshakeInput, timeoutMs: number, context: BootstrapContext,
+): Promise<LiveSetup | LiveRefused | undefined> {
+  const saved = input.session?.read(context.projectId);
+  if (saved === undefined) return undefined;
+  let result: JsonResult;
+  try {
+    result = await boundedJson(input, timeoutMs, "/session/validate", {
+      body: JSON.stringify(saved.binding), method: "POST",
+      headers: { ...pairingHeaders(context), "x-moe-session-credential": saved.credential },
+    });
+  } catch { return refused("LIVE_PAIRING_REFUSED", "saved session validation unavailable"); }
+  // An HTTP authentication refusal invalidates this candidate. A missing route,
+  // outage or malformed success is uncertainty, so retain it for a later retry.
+  if (result.response.status === 401) {
+    input.session?.clear();
+    return undefined;
+  }
+  if (result.response.status !== 200 || !isPlainObject(result.body)
+    || !exactKeys(result.body, ["ok", "projectId"]) || result.body["ok"] !== true
+    || result.body["projectId"] !== context.projectId) {
+    return refused("LIVE_PAIRING_REFUSED", statusDetail("saved session validation refused", result));
+  }
+  // The server verified the durable signed open and its current authority. Stored
+  // identifiers select that session; they never supply authority or bootstrap data.
+  return makeSetup(context, input, saved.credential);
+}
+
 export async function resolveLiveSetupFromHandshake(
   input: HandshakeInput,
 ): Promise<LiveHandshakeResult> {
@@ -276,5 +307,7 @@ export async function resolveLiveSetupFromHandshake(
   }
   const context = await readBootstrap(input, timeoutMs);
   if ("ok" in context) return context;
+  const restored = await restoreSession(input, timeoutMs, context);
+  if (restored !== undefined) return restored;
   return requestPairing(input, timeoutMs, context);
 }
