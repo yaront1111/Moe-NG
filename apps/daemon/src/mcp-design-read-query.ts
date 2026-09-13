@@ -50,6 +50,8 @@ export function createDesignReadPort(options: {
  */
 const DESIGN_READ_PAYLOAD_KEYS: readonly string[] = Object.freeze(["goalRef", "version", "offset", "limit", "contentSha256"]);
 export const DESIGN_READ_PAGE_FORMAT = "moe-design-json-page/1";
+/** The paging refusals' layer, declared once so the TASK-LV literal census resolves both sites. */
+const DESIGN_READ_LAYER = "DESIGN_READ" as const;
 
 const encoder = new TextEncoder();
 
@@ -152,11 +154,11 @@ export function answerDesignReadQuery(request: DesignReadQueryRequest): Uint8Arr
   const text = JSON.stringify(answer);
   const contentSha256 = createHash("sha256").update(text, "utf8").digest("hex");
   if (decoded.contentSha256 !== undefined && decoded.contentSha256 !== contentSha256) {
-    return bytesOf({ ok: false, code: "DESIGN_READ_REVISION_CHANGED", layer: "DESIGN_READ" });
+    return bytesOf({ ok: false, code: "DESIGN_READ_REVISION_CHANGED", layer: DESIGN_READ_LAYER });
   }
   if (decoded.offset > text.length) return queryRefusal();
   if (!decoded.paged && encoder.encode(text).length <= JSON_READ_PAGE_MAX_BYTES) return encoder.encode(text);
   return jsonReadPage(text, decoded.offset, decoded.limit, {
     ok: true, format: DESIGN_READ_PAGE_FORMAT, version: answer.record.version, contentSha256,
-  }) ?? bytesOf({ ok: false, code: "DESIGN_READ_PAGE_UNAVAILABLE", layer: "DESIGN_READ" });
+  }) ?? bytesOf({ ok: false, code: "DESIGN_READ_PAGE_UNAVAILABLE", layer: DESIGN_READ_LAYER });
 }

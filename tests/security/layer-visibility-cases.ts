@@ -161,7 +161,7 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
  * for. See the matching note above `EXPECTED_ROSTER_SIZE` in boundary-roster.security.ts.
  */
 // 80 -> 81 for the read-only completed project-pairing validation boundary.
-const EXPECTED_PRIVATE_COUNT = 81;
+const EXPECTED_PRIVATE_COUNT = 82;
 
 /**
  * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
@@ -191,6 +191,7 @@ const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
   { constant: "BOUNDED_JSON_CODEC_LAYER", file: "apps/daemon/src/cutover/cutover-generation-snapshot.ts" },
   { constant: "BUDGET_COMMITMENT_READ_LAYER", file: "apps/daemon/src/http/budget-commitment-read.ts" },
   { constant: "BUILD_LAYER", file: "apps/control-room/src/v2/approvals/offer-wire.ts" },
+  { constant: "DESIGN_READ_LAYER", file: "apps/daemon/src/mcp-design-read-query.ts" },
   { constant: "CODEC_LAYER", file: "apps/daemon/src/provider-profile/provider-profile-codec.ts" },
   { constant: "CODE_LAYERS", file: "apps/control-room/src/approvals/approval-gating.ts" },
   { constant: "CODE_LAYERS", file: "packages/core/src/expansion/expansion-planning-hold.ts" },
@@ -382,7 +383,7 @@ const resolvedLayerLiterals = (): readonly string[] => {
 // CONTROL_ROOM_PAIRING_APPROVAL value declared by http/pairing-approval-contract.ts.
 // The resolved population grows by one; the unresolved values remain unchanged.
 // 105 -> 106 for the validation route's method refusal, resolved by PAIRING_SESSION_LAYER.
-const EXPECTED_LITERAL_COUNT = 106;
+const EXPECTED_LITERAL_COUNT = 107;
 const EXPECTED_UNRESOLVED_LITERAL_COUNT = 39;
 
 /**

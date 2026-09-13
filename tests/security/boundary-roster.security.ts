@@ -844,12 +844,12 @@ describe("scanner matches the annotated declaration form", () => {
  */
 /**
  * The invisible share, stated once so no arm re-derives it. WIDE numerator, WIDE denominator:
- * 81 module-private declarations against those 81 plus the 181 exported ones. The per-mille pin
- * is `Math.round`ed by the arm below, so 81/262 = 309.2 pins at 309.
+ * 82 module-private declarations against those 82 plus the 181 exported ones. The per-mille pin
+ * is `Math.round`ed by the arm below, so 82/263 = 311.8 pins at 312.
  */
 const EXPECTED_INVISIBLE_NUMERATOR = EXPECTED_PRIVATE_COUNT;
-const EXPECTED_INVISIBLE_DENOMINATOR = 262;
-const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 309;
+const EXPECTED_INVISIBLE_DENOMINATOR = 263;
+const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 312;
 
 describe("TASK-LV module-private layer declarations are bounded", () => {
   it("TASK-LV scans a non-empty module-private population", () => {
