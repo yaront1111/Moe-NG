@@ -20,6 +20,11 @@ import type { DeploymentsOutcome } from "../../live/live-deployments.js";
  * A FAILED READ LEAVES THAT ENVIRONMENT ABSENT rather than storing a value, which is the rule
  * `useGoalReads` already states: an absent environment yields no incident item, and a guessed
  * one would put an outage on the screen that no daemon ever reported.
+ *
+ * THE MAP FOLLOWS THE DEPLOYED SET, an empty set included. Measured before this: when the set
+ * collapsed to nothing the effect returned without a tick and the previous answers stayed in
+ * state, so an INCIDENT card and its rollback target kept rendering from a frame no poll would
+ * ever refresh.
  */
 
 export const INCIDENT_HEALTH_POLL_MS = 15_000;
@@ -48,7 +53,10 @@ export function useIncidentHealth(
   // interval on every render.
   const key = environments.join("\n");
   useEffect(() => {
-    if (read === undefined || key === "") return undefined;
+    if (read === undefined || key === "") {
+      setAnswers((previous) => (previous.size === 0 ? previous : new Map()));
+      return undefined;
+    }
     let live = true;
     const names = key.split("\n");
     const tick = (): void => {
