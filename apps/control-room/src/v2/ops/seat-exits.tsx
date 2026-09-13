@@ -14,9 +14,14 @@ import { seatExitLineWords, seatExitReasonWords } from "./seat-lifetime-words.js
  * wrapper RECORDED - kind, exit code, last printed line - and says "reason not recorded" for a
  * seat no exit record speaks for. It never guesses a kind.
  *
- * ORDER: seats with a recorded exit first, latest exit first; then seats without one, in the
- * order the daemon listed them. A seat without an exit record has no exit instant to rank by,
- * and ranking it by its expiry would place it at a moment nothing observed.
+ * ORDER: seats with a recorded exit first, latest exit first. Then seats without one: EXPIRED
+ * seats by expiry, latest lapse first - the lapse is the instant their own row dates itself by -
+ * and CLOSED seats after them, latest lease first. A closed seat with no record carries no close
+ * instant (the daemon folds `session.close` to a status, session-read-model.ts), so it is not
+ * interleaved with the expired seats by a moment nothing observed. This is the order the daemon
+ * already lists past seats in (sessions-read.ts sorts EXPIRED before CLOSED, expiry descending),
+ * ranked HERE because no daemon test pins that sort and the heading's "last N to exit" must not
+ * rest on it.
  */
 export const SEAT_EXITS_SHOWN = 5;
 
@@ -29,17 +34,21 @@ export const SEAT_EXITS_SHOWN = 5;
  */
 const hasExited = (seat: SessionView): boolean => seat.exit !== null || seat.liveness !== "LIVE";
 
-/** An unparseable instant ranks last among the recorded, rather than poisoning the sort with NaN. */
-const exitInstant = (seat: SessionView): number => {
-  const ms = Date.parse(seat.exit?.at ?? "");
+/** An unparseable instant ranks last among its peers, rather than poisoning the sort with NaN. */
+const instant = (iso: string | undefined): number => {
+  const ms = Date.parse(iso ?? "");
   return Number.isNaN(ms) ? 0 : ms;
 };
 
 export function lastExits(seats: readonly SessionView[]): readonly SessionView[] {
   const exited = seats.filter(hasExited);
   const recorded = exited.filter((seat) => seat.exit !== null)
-    .sort((left, right) => exitInstant(right) - exitInstant(left));
-  const unrecorded = exited.filter((seat) => seat.exit === null);
+    .sort((left, right) => instant(right.exit?.at) - instant(left.exit?.at));
+  // Every unrecorded seat here is EXPIRED or CLOSED: `hasExited` keeps no LIVE seat without a record.
+  const unrecorded = exited.filter((seat) => seat.exit === null)
+    .sort((left, right) => (left.liveness === right.liveness
+      ? instant(right.expiresAt) - instant(left.expiresAt)
+      : left.liveness === "EXPIRED" ? -1 : 1));
   return Object.freeze([...recorded, ...unrecorded].slice(0, SEAT_EXITS_SHOWN));
 }
 
