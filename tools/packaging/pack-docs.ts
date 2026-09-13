@@ -27,8 +27,10 @@ because this artifact ships TypeScript sources that Node 24 strips at load.
 2. \`.\\moe.cmd init demo\` — creates \`demo\\\`, mints an operator credential, and
    writes \`demo\\moe.config.json\`. The credential is minted ON YOUR MACHINE and
    is not in this zip. It is written to that config; treat the file as a secret.
-3. \`.\\moe.cmd start demo\` — starts the daemon and the agent wrapper and prints
-   \`moe up: daemon listening on http://127.0.0.1:<port>\`. Ctrl-C stops both.
+3. \`.\\moe.cmd start demo\` — starts one project runtime (the daemon and the
+   agent wrapper, inside a Windows Job) and prints
+   \`moe start: http://127.0.0.1:<port>\` followed by
+   \`moe start: Ctrl-C stops this project runtime\`. Ctrl-C stops both.
 
 \`moe --help\` lists every wired command. \`moe init\` refuses rather than
 overwriting an existing config, so re-running it is safe.
@@ -55,16 +57,18 @@ precedence over the saved sign-in. The launcher supplies
 \`ANTHROPIC_AUTH_TOKEN\` is already set.
 
 If no accepted environment credential or saved sign-in is present,
-\`moe start\` refuses before spawning children. \`MOE_UP_ENV_MISSING\` names
-the three accepted variables and the sign-in path it checked.
+\`moe start\` refuses before spawning children with
+\`MOE_UP_ENV_MISSING PROJECT_MANAGER_LAUNCH\`; the next line names the three
+accepted variables and the sign-in path it checked.
 
 ## Control room
 
 The built control-room bundle is in \`control-room\\\`. \`moe start\` finds it
-there and the daemon hosts it on its own origin, so the line it prints -
-\`moe up: control room -> open http://127.0.0.1:<port>/\` - is the ONE URL to
-open; nothing else needs serving. If that directory is absent the daemon hosts
-nothing and \`moe start\` prints the two-process recipe instead.
+there and the daemon hosts it on its own origin, so the origin it prints -
+\`moe start: http://127.0.0.1:<port>\` - is the ONE URL to open; nothing else
+needs serving. If that directory is absent, \`moe start\` refuses before
+spawning anything with \`PROJECT_SINGLE_ASSET_ROOT_MISSING PROJECT_SINGLE_MAIN\`
+(exit 1): re-extract the zip or restore the directory.
 
 ## What this build is NOT
 

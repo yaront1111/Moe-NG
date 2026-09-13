@@ -15,9 +15,10 @@ import type { InitProbe, MoeConfig } from "./moe-init.js";
 /**
  * `moe`: the installed artifact's front door. It owns `init` — scaffolding a
  * store directory, minting the operator credential, writing the config — and
- * hands `start` straight to the EXISTING `moe up` composer. Process supervision,
- * teardown, and the origin announcement all stay there; this file adds none of
- * it back.
+ * hands `start` to the single-project composer (`runSingleProjectMain`) and
+ * `projects` to the Windows manager. Process supervision, teardown, and the
+ * origin announcement all stay there; this file adds none of it back. (`moe up`
+ * is the repository checkout's dev composer and is not on this path.)
  */
 
 /** `start` was pointed at a directory `init` has never run in. */

@@ -3,9 +3,11 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { MOE_PS1 } from "./pack-docs.js";
+import { runSingleProjectMain } from "../../apps/daemon/src/projects/project-single-main.js";
+import type { ProjectSingleMainOptions } from "../../apps/daemon/src/projects/project-single-main.js";
+import { MOE_PS1, installDoc } from "./pack-docs.js";
 
 /**
  * The launcher this file emits is the FIRST thing an operator runs, and it runs before
@@ -93,6 +95,105 @@ function runLauncher(entries: readonly string[]): Run {
   );
   return { output: `${result.stderr}${result.stdout}`, status: result.status };
 }
+
+/**
+ * INSTALL.md says every claim in it is MEASURED. The `moe start` lines it quotes are
+ * measured HERE, against the composer the packaged launcher actually routes to: it used to
+ * promise `moe up: daemon listening on ...` and a "two-process recipe" when the bundle is
+ * absent, while the shipped `moe start` printed `moe start: <origin>` and refused with
+ * `PROJECT_SINGLE_ASSET_ROOT_MISSING PROJECT_SINGLE_MAIN` (measured 2026-09-13 through the
+ * real front door). An operator or wrapper waiting for the documented line waited forever.
+ */
+const DOC = installDoc({ closureCount: 3, nodeRange: ">=24.16 <25", version: "0.1.0-test" });
+const PROJECT = Object.freeze({
+  configPath: "C:\\work\\demo\\moe.config.json",
+  projectId: "demo",
+  root: "C:\\work\\demo",
+  storePath: "C:\\work\\demo\\store.sqlite",
+});
+const INSTANCE_ID = "11111111-1111-4111-8111-111111111111";
+
+/** Every backticked literal in the doc, so a claim cannot hide from the check by wording. */
+function quoted(doc: string): readonly string[] {
+  return [...doc.matchAll(/`([^`]+)`/gu)].map((match) => match[1] ?? "");
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+}
+
+/** The single-project composer with doubles for everything that spawns or touches disk. */
+async function driveStart(
+  overrides: Partial<ProjectSingleMainOptions> & { readonly assetRoot: string | null },
+): Promise<{ readonly code: number; readonly logs: readonly string[] }> {
+  const logs: string[] = [];
+  const accepted = {
+    code: "ACCEPTED", layer: "PROJECT_RUNTIME_SUPERVISOR" as const, ok: true as const,
+  };
+  const code = await runSingleProjectMain({
+    dependencies: {
+      createFiles: () => ({
+        create: async () => ({ code: "UNUSED", layer: "PROJECT_MANAGER_FILES", ok: false }),
+        discard: async () => undefined,
+        register: async () => ({
+          ok: true, project: PROJECT, written: { createdRoot: false, paths: [], root: PROJECT.root },
+        }),
+      }),
+      createRuntime: () => ({
+        approvePairing: async () => accepted,
+        list: () => [],
+        open: async () => ({ ...accepted, code: "PROJECT_RUNTIME_OPENED", origin: "http://127.0.0.1:49152" }),
+        shutdown: async () => accepted,
+        start: async () => accepted,
+        stop: async () => accepted,
+        wait: async () => ({ ...accepted, code: "PROJECT_RUNTIME_COMPLETED" as const, exitCode: 0 }),
+      }),
+      mintUuid: () => INSTANCE_ID,
+      resolveAssetRoot: () => overrides.assetRoot,
+    },
+    env: { ANTHROPIC_API_KEY: "key" },
+    log: (line) => { logs.push(line); },
+    onSignal: vi.fn(),
+    platform: "win32",
+    projectRoot: PROJECT.root,
+    root: "D:\\artifact",
+  });
+  return { code, logs };
+}
+
+describe("INSTALL.md quotes the lines the packaged moe start prints", () => {
+  it("names no `moe up` line and no two-process recipe: neither exists on the packaged path", () => {
+    expect(DOC).not.toContain("moe up:");
+    expect(DOC).not.toContain("two-process recipe");
+  });
+
+  it("quotes only `moe start:` lines the hosted composer prints, with <port> as the one placeholder", async () => {
+    const hosted = await driveStart({ assetRoot: "D:\\artifact\\control-room" });
+    expect(hosted.code).toBe(0);
+    const promised = quoted(DOC).filter((literal) => literal.startsWith("moe start:"));
+    expect(promised.length).toBeGreaterThan(0);
+    for (const literal of promised) {
+      const shape = new RegExp(`^${escapeRegExp(literal).replace("<port>", "\\d+")}$`, "u");
+      expect(hosted.logs.some((line) => shape.test(line)), literal).toBe(true);
+    }
+  });
+
+  it("names the absent-bundle refusal exactly as moe start prints it, and pins it as a refusal", async () => {
+    const absent = await driveStart({ assetRoot: null });
+    expect(absent.code).toBe(1);
+    expect(absent.logs).toEqual(["PROJECT_SINGLE_ASSET_ROOT_MISSING PROJECT_SINGLE_MAIN"]);
+    expect(quoted(DOC)).toContain("PROJECT_SINGLE_ASSET_ROOT_MISSING PROJECT_SINGLE_MAIN");
+  });
+
+  it("names the missing-credential refusal as the two-line shape moe start prints", () => {
+    // The first line is the stable code+layer the smoke matches; the doc must quote it in
+    // that exact form and describe the detail as the NEXT line, which is where it goes.
+    expect(quoted(DOC)).toContain("MOE_UP_ENV_MISSING PROJECT_MANAGER_LAUNCH");
+    expect(DOC).toMatch(
+      /`MOE_UP_ENV_MISSING PROJECT_MANAGER_LAUNCH`;\s+the next line names the three\s+accepted variables and the sign-in path it checked/u,
+    );
+  });
+});
 
 describe.skipIf(locate("pwsh", PATH_ENTRIES) === null)("moe.ps1 without a runtime", () => {
   it("refuses by name with the host-visible form of 9009 instead of success", () => {
