@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, relative } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -50,5 +50,18 @@ describe("isMainModule", () => {
     const meta = { url: pathToFileURL(join(real, "entry.ts")).href };
     expect(isMainModule(meta, join(link, "entry.ts"))).toBe(true);
     expect(isMainModule(meta, join(link, "other.ts"))).toBe(false);
+  });
+});
+
+describe("moe-cli-main entry guard", () => {
+  // A TEXT pin, on purpose. The guard's only observable difference is on a Node that loads
+  // .ts yet lacks import.meta.main (23.6-23.11, 24.0-24.1), and no such Node runs here: under
+  // vitest the old `meta.main === true` guard and isMainModule both answer false, so no
+  // behavioural test in this suite can tell them apart. Reading the source can.
+  it("decides the entry with isMainModule, and the flag-only guard is gone", () => {
+    const source = readFileSync(join(import.meta.dirname, "moe-cli-main.ts"), "utf8");
+    expect(source).toContain('import { isMainModule } from "./moe-cli-entry.js";');
+    expect(source).toContain("if (isMainModule(import.meta, process.argv[1])) {");
+    expect(source).not.toContain("meta.main === true");
   });
 });
