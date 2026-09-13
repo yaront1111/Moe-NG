@@ -127,7 +127,9 @@ const TEST_SEGMENTS = Object.freeze([
  * listing every importer: all of them are `*.test.ts` files or each other, none
  * is reachable from production. They are named individually rather than by a
  * broader rule because "race", "scenarios" and "drivers" are ordinary words that
- * production code is entitled to use.
+ * production code is entitled to use. `genesis-first-boot-worker` joined on
+ * 2026-09-13: its two importers are genesis-first-boot.test.ts and
+ * genesis-recovery-binding.test.ts, and the Windows pack had shipped it.
  *
  * This list cannot go quietly stale in either direction: `inspectStagedTree`
  * refuses a shipped source whose relative import lost its target, so an entry
@@ -136,6 +138,7 @@ const TEST_SEGMENTS = Object.freeze([
  */
 const TEST_SUPPORT_STEMS = Object.freeze([
   "src/dispatch-conformance",
+  "src/identity/genesis-first-boot-worker",
   "src/planning/planning-invariant-drivers",
   "src/projections/projection-crash-worker",
   "src/supervisor/race-restart-scenarios",

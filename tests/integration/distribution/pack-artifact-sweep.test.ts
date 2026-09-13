@@ -1,4 +1,4 @@
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -52,6 +52,14 @@ function workspaceSources(): readonly string[] {
   });
 }
 
+/**
+ * A test driver whose basename carries no test vocabulary, so the sweep below cannot see
+ * it and the packer names its stem instead. Measured 2026-09-13: its only importers are
+ * genesis-first-boot.test.ts and genesis-recovery-binding.test.ts, and the Windows pack
+ * had shipped it.
+ */
+const NAMED_TEST_DRIVER = "apps/daemon/src/identity/genesis-first-boot-worker.mjs";
+
 const SWEPT = Object.freeze(workspaceSources().filter(
   (path) => !path.split("/").includes(BUILD_OUTPUT) && TEST_VOCABULARY.test(path),
 ));
@@ -88,6 +96,21 @@ describe("isTestArtifact, swept over the real workspace tree", () => {
       expect(SWEPT).toContain(path);
       expect(isTestArtifact(path)).toBe(false);
     }
+  });
+
+  it("prunes the genesis first-boot worker, a test driver the vocabulary sweep cannot see", () => {
+    expect(existsSync(join(REPO_ROOT, NAMED_TEST_DRIVER))).toBe(true);
+    expect(TEST_VOCABULARY.test(NAMED_TEST_DRIVER)).toBe(false);
+    expect(isTestArtifact(NAMED_TEST_DRIVER)).toBe(true);
+    // The stem may not outlive its test-only status: a production importer would turn the
+    // prune into a dangling import, so every importer must itself be a test artifact.
+    const daemonSource = join(REPO_ROOT, "apps", "daemon", "src");
+    const importers = walkFiles(daemonSource)
+      .filter((path) => [".ts", ".mts", ".js", ".mjs"].some((extension) => path.endsWith(extension)))
+      .filter((path) => readFileSync(join(daemonSource, path), "utf8").includes("genesis-first-boot-worker.mjs"))
+      .map((path) => `apps/daemon/src/${path}`);
+    expect(importers.length).toBeGreaterThan(0);
+    expect(importers.filter((path) => !isTestArtifact(path))).toEqual([]);
   });
 
   it("leaves the VENDORED closure alone — pruning it would break the clause beside it", () => {
