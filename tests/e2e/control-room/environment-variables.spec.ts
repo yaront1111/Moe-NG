@@ -1,3 +1,5 @@
+import { pairBrowser } from "./live-proof-arms.js";
+import { openProductRecord } from "./product-navigation.js";
 /**
  * THE ENVIRONMENTS JOURNEY, AGAINST A REAL DAEMON: the required-vs-set table, a set/unset ROUND
  * TRIP, the fingerprint changing on update, and the leak check at the REAL WIRE.
@@ -133,7 +135,7 @@ test("real daemon: the variable table round-trips, the fingerprint moves, no val
   let started: DaemonLane | undefined;
   const wire: WireRecord = { bodies: [], requests: [] };
   try {
-    const result = await withDaemonBackedControlRoom({ liveCredentials: "ATTACHED" }, async (lane) => {
+    const result = await withDaemonBackedControlRoom({ liveCredentials: "ABSENT", operatorChannel: true }, async (lane) => {
       started = lane;
 
       // ---- THE TABLE, FROM A REAL FRAME -------------------------------------------------
@@ -233,16 +235,23 @@ test("real daemon: the variable table round-trips, the fingerprint moves, no val
       page.on("request", (request) => {
         wire.requests.push(`${request.url()} ${request.postData() ?? ""}`);
       });
-      // The bare base URL: main.tsx serves the legacy shell only for `?v1=1`, so a journey that
-      // added one would re-prove the old dev board and leave the shipped surface untested.
+      // Pair the shipped shell before opening the product's environment record.
       await page.goto(lane.baseUrl, { waitUntil: "domcontentloaded", timeout: 60_000 });
-      await page.waitForTimeout(3_000);
+      await pairBrowser(page, lane);
+      await page.getByRole("button", { name: /^Open product /u }).first().click();
+      await openProductRecord(page, "Delivery");
+      await expect(page.getByTestId("cr.env-vars.root").first()).toBeVisible();
 
       // Set one more variable while the page is live, so the recorder is running across a write.
       const live = await command(lane, "environment.set_variable",
         { environment: ENVIRONMENT, name: VARIABLE, value: SENTINEL }, "lane-env-set-live");
       expect(live, JSON.stringify(live)).toMatchObject({ outcome: "ACCEPTED" });
-      await page.waitForTimeout(3_000);
+      // Reopen the product to read the daemon's persisted update.
+      await page.getByTestId("cr.nav.goals").click();
+      await page.getByRole("button", { name: /^Open product /u }).first().click();
+      await openProductRecord(page, "Delivery");
+      await expect(page.getByTestId(`cr.env-vars.fingerprint.${VARIABLE}`).first()).toBeVisible();
+      await expect.poll(() => wire.bodies.join("\n")).toContain(firstFingerprint);
 
       // CONTROL: the recorder actually recorded something, so the three absences below are not
       // three empty arrays.

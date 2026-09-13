@@ -1,10 +1,10 @@
-import { readFileSync } from "node:fs";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { DesignOutcome } from "../../live/live-design.js";
 import { DesignCard, LiveDesign } from "./design-card.js";
 import { LiveDesignVersionNote } from "./design-version-note.js";
+import { ProductArtifact } from "../workspace/product-artifact.js";
 
 beforeAll(() => { (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true; });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
@@ -39,10 +39,16 @@ it("reads the design bound to the approval run instead of the latest goal design
 });
 
 describe("DesignCard", () => {
-  it("is mounted on the opened goal with the attached session", () => {
-    const source = readFileSync("src/v2/cordum-app.tsx", "utf8");
-    expect(source).toContain('import { LiveDesign } from "./goals/design-card.js";');
-    expect(source).toContain('<LiveDesign goalRef={open.goalId} headers={attached.headers} />');
+  it("renders the authored design in the product canvas without inventing a screenshot", () => {
+    render(<ProductArtifact artifact={{ id: `design:2:${DESIGN.record.contractRef.revisionDigest}`,
+      scope: { connectionId: "connection-1", projectId: "project-1", goalId: "goal-1", plane: "V1" },
+      kind: "DESIGN", title: "Design record", contractRef: { ...DESIGN.record.contractRef, plane: "V1" },
+      planningRunRef: null, sha: null, availability: "PRESENT" }}
+      source={null} design={DESIGN} preview={null} release={null} definition={null} />);
+    expect(screen.getByText("Authored design")).toBeTruthy();
+    expect(screen.getByTestId("cr.design.version").textContent).toContain("Version 2");
+    expect(screen.getByTestId("cr.design.body").textContent).toContain("OrderList");
+    expect(screen.queryByRole("img")).toBeNull();
   });
 
   it("shows all five sections, open decisions and the stored version", () => {

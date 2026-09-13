@@ -84,16 +84,53 @@ const criteriaOf = (frame: unknown): readonly Readonly<Record<string, unknown>>[
   isRecord(frame) && Array.isArray(frame["criteria"])
     ? (frame["criteria"] as readonly unknown[]).filter(isRecord) : [];
 
+interface CriterionRunIdentity {
+  readonly goalRef: string; readonly planningRunRef: string;
+  readonly integratedSha: string; readonly runRef: string;
+}
+
+/** Take the run identity only from this command's accepted queue decision. */
+export function criterionQueueIdentity(ready: unknown, response: unknown, commandId: string): CriterionRunIdentity {
+  const decision = isRecord(response) && isRecord(response["decision"]) ? response["decision"] : null;
+  if (!isRecord(response) || response["ok"] !== true || response["outcome"] !== "ACCEPTED"
+    || decision?.["commandId"] !== commandId || decision["resultCode"] !== "CRITERION_CHECK_QUEUED"
+    || !["DECIDED", "REPLAYED"].includes(String(decision["disposition"]))) {
+    throw new Error(`criterion verification not accepted: ${JSON.stringify(isRecord(response) ? response["refusal"] ?? response : response)}`);
+  }
+  if (!isRecord(ready) || typeof ready["goalRef"] !== "string" || typeof ready["planningRunRef"] !== "string"
+    || !isRecord(ready["integratedArtifact"]) || typeof ready["integratedArtifact"]["sha"] !== "string") {
+    throw new Error("criterion queue identity is unreadable");
+  }
+  return { goalRef: ready["goalRef"], planningRunRef: ready["planningRunRef"],
+    integratedSha: ready["integratedArtifact"]["sha"], runRef: commandId };
+}
+
+/** The wrapper may stop only after this accepted run is durably settled. */
+export function criterionEvidenceSettled(frame: unknown, expected: CriterionRunIdentity): boolean {
+  if (isRecord(frame) && frame["outcome"] === "REFUSED") throw new Error(`criterion read refused: ${JSON.stringify(frame)}`);
+  if (isRecord(frame) && isRecord(frame["run"]) && frame["run"]["status"] === "BLOCKED") {
+    throw new Error(`criterion run BLOCKED: ${String(frame["run"]["runRef"])}`);
+  }
+  if (!isRecord(frame) || !isRecord(frame["run"]) || frame["run"]["status"] !== "COMPLETED") return false;
+  if (frame["goalRef"] !== expected.goalRef || frame["planningRunRef"] !== expected.planningRunRef
+    || frame["run"]["runRef"] !== expected.runRef || frame["run"]["integratedSha"] !== expected.integratedSha
+    || !isRecord(frame["integratedArtifact"]) || frame["integratedArtifact"]["sha"] !== expected.integratedSha) return false;
+  const rows = criteriaOf(frame);
+  return rows.length > 0 && rows.every((row) => isRecord(row["evidence"]));
+}
+
 /**
  * Runs the real wrapper until the criterion run reports every criterion, then stops it.
  *
  * A FIXED SLEEP WOULD BE A GUESS. The service advances once per wrapper pass and each check is a
  * real child process, so the exit condition is the daemon's own read answering with evidence for
- * every row -- and a run that never gets there spends the budget and is reported as such rather
+ * every row AND a completed run. The final receipt precedes the completion append; killing
+ * the wrapper between them leaves current coverage unverified. A run that never settles spends
+ * the budget and is reported as such rather
  * than being called done.
  */
 async function tickUntilVerified(
-  lane: DaemonLane, scratch: LaneScratch, workspace: string, goalRef: string,
+  lane: DaemonLane, scratch: LaneScratch, workspace: string, expected: CriterionRunIdentity,
 ): Promise<unknown> {
   const tracked: ChildProcess[] = [];
   startWrapper(lane.repoRoot, {
@@ -103,14 +140,13 @@ async function tickUntilVerified(
   }, tracked);
   try {
     const deadline = Date.now() + VERIFY_BUDGET_MS;
-    let frame = await post(lane, "/criteria/read", { goalRef });
+    let frame = await post(lane, "/criteria/read", { goalRef: expected.goalRef });
     while (Date.now() < deadline) {
-      const rows = criteriaOf(frame);
-      if (rows.length > 0 && rows.every((row) => row["evidence"] !== null)) return frame;
+      if (criterionEvidenceSettled(frame, expected)) return frame;
       await delay(2_000);
-      frame = await post(lane, "/criteria/read", { goalRef });
+      frame = await post(lane, "/criteria/read", { goalRef: expected.goalRef });
     }
-    return frame;
+    throw new Error(`criterion run did not settle: ${JSON.stringify(isRecord(frame) ? frame["run"] : frame)}`);
   } finally {
     for (const child of [...tracked].reverse()) await killTree(child);
   }
@@ -150,6 +186,7 @@ export async function verifyLiveProofCriteria(
   const ready = frame;
   const verifyOffer = isRecord(ready) ? ready["verifyOffer"] : null;
   const artifact = isRecord(ready) ? ready["integratedArtifact"] : null;
+  let queued: CriterionRunIdentity;
   if (isRecord(verifyOffer) && isRecord(artifact)) {
     const verified = await spend(lane, verifyOffer, {
       approvals: criteriaOf(ready).map((row) => ({
@@ -162,13 +199,15 @@ export async function verifyLiveProofCriteria(
       planningRunRef: isRecord(ready) ? ready["planningRunRef"] : null,
     }, "criterion-verify-all", humanCredential);
     dispatched.push({ answer: isRecord(verified) ? (verified["refusal"] ?? verified["outcome"]) : verified, criterionId: "VERIFY_ALL" });
+    queued = criterionQueueIdentity(ready, verified, "live-proof-criterion-verify-all");
   } else {
     dispatched.push({
       criterionId: "VERIFY_ALL",
       integratedArtifact: artifact, verifyOffer: verifyOffer === null ? null : "PRESENT",
     });
+    throw new Error(`criterion verification not offered: ${JSON.stringify(dispatched.at(-1))}`);
   }
-  const settled = await tickUntilVerified(lane, scratch, workspace, goalRef);
+  const settled = await tickUntilVerified(lane, scratch, workspace, queued);
   const coverage = await post(lane, "/documents/coverage/read", { goalRef });
   const rows = criteriaOf(settled).map((row) => ({
     approvalId: isRecord(row["approval"]) ? String(row["approval"]["approvalId"]) : null,

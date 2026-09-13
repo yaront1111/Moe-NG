@@ -1,3 +1,4 @@
+import { openTechnicalDestination } from "./product-navigation.js";
 /**
  * THE CRASH RECOVERY, DRIVEN FROM THE BROWSER BY THE HUMAN (task-161b7e9d, DoD 2).
  *
@@ -69,7 +70,7 @@ const ABORT_LABEL = "Release unused reservation";
  */
 async function openRecovery(page: Page): Promise<Locator> {
   await page.getByTestId("cr.nav.goals").click({ timeout: NAV_MS });
-  await page.getByTestId("cr.nav.health").click({ timeout: NAV_MS });
+  await openTechnicalDestination(page, "health");
   const card = page.getByTestId("cr.health.recovery");
   await expect(card, "the repository recovery card must mount").toBeVisible({ timeout: NAV_MS });
   await expect(card, "the recovery read must answer before the card is read")

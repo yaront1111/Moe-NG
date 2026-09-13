@@ -51,7 +51,8 @@ const PROMPT_LINE
 const NO_TERMINAL_PROMPT_LINE = "A browser wants to pair, but this daemon has no operator terminal."
   + " Stop it and run pnpm start from a terminal window.";
 const NO_TERMINAL_COPY = "Moe was started without a terminal it can listen on."
-  + " Stop it and run pnpm start from a terminal window, then reload this page.";
+  + " Stop it and start it again from a terminal window (moe start <dir> for the packaged build,"
+  + " pnpm start from source), then reload this page.";
 const OPERATOR_CHANNEL_HEADER = "x-moe-operator-channel";
 
 /**

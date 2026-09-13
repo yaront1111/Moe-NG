@@ -311,6 +311,7 @@ export function createStoreDependencies(
       ? {} : { foundationContextSeal: foundation.foundationContextSeal }),
     foundationLifecycle: foundation.foundationLifecycle,
     operatorPrincipalId: config.principalId, projectId: config.projectId, store,
+    preview: previewPort, previewSupervisor: previewPort.supervisor, previewWorkspace: repositoryWorkspace,
     verificationCatalogSource: foundation.verificationCatalogSource,
   });
 

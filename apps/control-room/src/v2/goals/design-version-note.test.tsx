@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
-import { act, cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { mapDesignAnswer } from "../../live/live-design.js";
 import type { DesignOutcome } from "../../live/live-design.js";
@@ -84,6 +84,22 @@ describe("DesignVersionNote", () => {
 });
 
 describe("LiveDesignVersionNote", () => {
+  it("refreshes the same run's initially unavailable pinned design when its observation changes", async () => {
+    let resolve!: (outcome: DesignOutcome) => void;
+    const read = vi.fn().mockResolvedValueOnce({ status: "REFUSED", code: "DESIGN_RECORD_MALFORMED", layer: "LEDGER" })
+      .mockReturnValueOnce(new Promise<DesignOutcome>(done => { resolve = done; }));
+    const headers = {};
+    const view = render(<LiveDesignVersionNote goalRef="goal-1" planningRunRef="run-1" headers={headers} read={read} observationKey={null} />);
+    await waitFor(() => expect(screen.getByTestId(TEST_ID).textContent).toContain("DESIGN_RECORD_MALFORMED"));
+    view.rerender(<LiveDesignVersionNote goalRef="goal-1" planningRunRef="run-1" headers={headers} read={read} observationKey="run-1:7" />);
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId(TEST_ID).textContent).toContain("Reading which design");
+    await act(async () => { resolve(designAt(1)); });
+    expect(screen.getByTestId(TEST_ID).textContent).toContain("Design version 1");
+    view.rerender(<LiveDesignVersionNote goalRef="goal-1" planningRunRef="run-1" headers={headers} read={read} observationKey="run-1:7" />);
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(read.mock.calls).toEqual([["goal-1", "run-1"], ["goal-1", "run-1"]]);
+  });
   it("reads through the injected reader and renders the version it answers", async () => {
     await act(async () => {
       render(<LiveDesignVersionNote
@@ -131,22 +147,22 @@ describe("LiveDesignVersionNote", () => {
   });
 });
 
-describe("the note is mounted on the plan fold", () => {
-  const source = readFileSync("src/v2/cordum-app.tsx", "utf8");
+describe("the note is mounted in the build plan record", () => {
+  const source = readFileSync("src/v2/workspace/live-product-workspace.tsx", "utf8");
 
   it("is imported and rendered with the opened goal and the attached session", () => {
-    expect(source).toContain('import { LiveDesignVersionNote } from "./goals/design-version-note.js";');
+    expect(source).toContain('import { LiveDesignVersionNote } from "../goals/design-version-note.js";');
     expect(source)
-      .toContain("<LiveDesignVersionNote goalRef={open.goalId} planningRunRef={planRunId}"
-        + " headers={attached.headers} />");
+      .toContain("<LiveDesignVersionNote goalRef={route.goalId} planningRunRef={runId}"
+        + " headers={setup.headers} observationKey={planObservationKey} />");
   });
 
-  it("renders INSIDE the plan fold, immediately after the plan card it qualifies", () => {
+  it("renders inside the build plan record, immediately after the plan card it qualifies", () => {
     // Position is the claim: a version note outside the fold would not be part of the
     // approval the human is giving. Assert the order rather than mere presence.
     const plan = source.indexOf("<ApprovePlan");
     const note = source.indexOf("<LiveDesignVersionNote");
-    const foldEnd = source.indexOf("</details>", plan);
+    const foldEnd = source.indexOf("Checks:", plan);
     expect(plan).toBeGreaterThan(-1);
     expect(note).toBeGreaterThan(plan);
     expect(note).toBeLessThan(foldEnd);

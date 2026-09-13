@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { CordumShell } from "../shell/cordum-shell.js";
@@ -124,12 +124,12 @@ describe("the narrow rail keeps every name it stops drawing", () => {
 
   it("targets a label that actually exists, and it is the button's whole name", () => {
     render(<CordumShell onNavigate={() => undefined} title="Goals" />);
-    const goals = screen.getByRole("button", { name: "Goals" });
+    const goals = screen.getByRole("button", { name: "Products" });
     expect(goals).toBe(screen.getByTestId("cr.nav.goals"));
     const label = goals.querySelector(".cr2-navlabel");
-    expect(label?.textContent).toBe("Goals");
+    expect(label?.textContent).toBe("Products");
     expect(goals.getAttribute("aria-label")).toBeNull();
-    expect(goals.textContent).toContain("Goals");
+    expect(goals.textContent).toContain("Products");
   });
 
   it("targets the badge of an item that will not press, which keeps a visible title", () => {
@@ -137,6 +137,7 @@ describe("the narrow rail keeps every name it stops drawing", () => {
     // SOON chip. The chip must be what NAV_BADGE selects, and at 64px the item
     // still has to explain itself by some visible route - its title.
     render(<CordumShell navDestinations={UNBUILT_ROSTER} title="Goals" />);
+    fireEvent.click(screen.getByText("Technical tools"));
     const approvals = screen.getByTestId("cr.nav.resources");
     expect(approvals.hasAttribute("disabled")).toBe(true);
     const badge = approvals.querySelector(".cr2-statuschip");
@@ -153,6 +154,7 @@ describe("the narrow rail keeps every name it stops drawing", () => {
       <CordumShell navBadges={{ resources: { count: "7", tone: "info" } }}
         navDestinations={UNBUILT_ROSTER} onNavigate={() => undefined} title="Goals" />,
     );
+    fireEvent.click(screen.getByText("Technical tools"));
     const approvals = screen.getByTestId("cr.nav.resources");
     const badge = approvals.querySelector(".cr2-statuschip");
     expect([...document.querySelectorAll(NAV_BADGE)]).toContain(badge);

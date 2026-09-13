@@ -1,3 +1,5 @@
+import { openProductRecord } from "./product-navigation.js";
+import { openTechnicalDestination } from "./product-navigation.js";
 /**
  * THE MIGRATION JOURNEY: what a schema did, seen by an operator in the shipped browser.
  *
@@ -192,6 +194,7 @@ async function openGoal(page: Page, goalId: string): Promise<void> {
   await page.getByTestId("cr.nav.goals").click();
   await expect(page.getByTestId("cr.goals.home")).toBeVisible({ timeout: CARD_MS });
   await page.getByTestId(`cr.goals.card.${goalId}.open`).click();
+  await openProductRecord(page, "Delivery");
 }
 
 /** HAND-MIRRORED from deploy-environment.spec.ts: the pairing dialog is the daemon's. */
@@ -376,7 +379,7 @@ test("migration journey: what the schema did, on the card, in the feed, and NOT 
 
         // NOW IN THE SHIPPED BROWSER. Health mounts the project-wide activity list; a goal-scoped
         // feed cannot carry a receipt that has no goalRef, and nothing here attaches one.
-        await page.getByTestId("cr.nav.health").click();
+        await openTechnicalDestination(page, "health");
         await expect(page.getByTestId("cr.activity.root")).toBeVisible({ timeout: CARD_MS });
         const migrationRows = page.getByTestId("cr.activity.list").locator("li")
           .filter({ hasText: MIGRATION_RECEIPT_COMMAND_KIND });

@@ -124,6 +124,7 @@ test("a PRD and a directory become a bound repository and a goal, in the browser
 
     await page.goto(lane.baseUrl);
     await pairBrowser(page, lane);
+    await page.getByText("Project setup", { exact: true }).click();
 
     // 1. THE FORM, FILLED AND SUBMITTED IN THE BROWSER, WITH THE GITHUB FIELDS EMPTY.
     const form = page.getByTestId("cr.newproduct.form");

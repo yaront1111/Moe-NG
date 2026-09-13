@@ -1,3 +1,13 @@
+export { selectProductArtifact } from "./product-workspace/artifact-selection.js";
+export { sameProductScope, sameProductContract } from "./product-workspace/identity.js";
+export { buildProductRequirements } from "./product-workspace/requirement-links.js";
+export type {
+  ProductScope, ProductContractRef, ProductReadAvailability, ProductArtifactKind, ProductArtifact,
+  ProductArtifactSelectionInput, ProductArtifactSelection, ProductCriterion, ProductRequirement,
+  ProductImplementationLink, ProductCheck, ProductRequirementsInput, ProductRequirementState,
+  ProductCriterionModel, ProductRequirementModel, ProductReadiness, ProductRequirementsModel,
+} from "./product-workspace/contracts.js";
+
 export type TruthClass =
   | "OBSERVED"
   | "AGENT_REPORTED"

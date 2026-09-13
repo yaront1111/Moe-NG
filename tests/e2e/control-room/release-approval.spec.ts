@@ -27,9 +27,11 @@ import { resolveLaneScratch, startWrapper, WRAPPER_INTERVAL_MS, wrapperEnv }
 import type { DaemonLane, DaemonLaneOptions, LaneOperatorSeat, LaneScratch }
   from "./daemon-ports.js";
 import { createLaneContractGoal } from "./lane-contract-goal.js";
+import { readReleaseApprovalTarget } from "./release-approval-target.js";
 
 /**
- * GATE 3 IN THE BROWSER, AGAINST A REAL DAEMON: evidence -> card -> approve -> PR link.
+ * DEFAULT: a real daemon refuses the unsupported local publish remote before any release.
+ * OPT-IN GATE 3: evidence -> card -> approve -> PR link against an admitted real remote.
  *
  * WHAT IS REAL, and it is nearly all of it: the daemon process, the affordance surface that
  * mints `release.decide`, the `/release/read` evidence projection, the operator fence, the
@@ -42,7 +44,7 @@ import { createLaneContractGoal } from "./lane-contract-goal.js";
  * effect wearing a test's clothes. The REAL `gh` drive belongs to the live drive (DoD 6) and is
  * reported there, with its own PR url, rather than simulated here.
  *
- * WHAT THIS PROVES: the offer the daemon mints reaches the browser, the card renders the
+ * WHAT THE OPT-IN ARM PROVES: the offer the daemon mints reaches the browser, the card renders the
  * evidence summary WITH the UNKNOWN count kept out of covered, the approve arm spends that
  * offer through `spendOffer`, the daemon asks for the pull request it says it asks for
  * (the recorded argv is the production `ghPrArgv`), and the receipt comes back through the
@@ -65,25 +67,10 @@ const PAIRING_BUDGET_MS = 90_000;
 const PUBLISH_BUDGET_MS = 120_000;
 const PAIRING_LABEL = /^[0-9a-f]{4}(?:-[0-9a-f]{4}){2}$/u;
 /**
- * THE REMOTE IS A REAL GIT REPOSITORY, and it has to be.
- *
- * `release-evidence-read.ts:216` measures the dossier's sha from `publication?.outcome ===
- * "PUSHED" ? publication.sha : null`, and `git-publication-port.ts:66` gets there only by
- * running an actual `git push -- <remoteUrl> <sha>:refs/heads/<branch>`. The
- * `https://github.com/moe-lane/...` placeholder this file used to carry -- the same idiom
- * `deploy-environment.spec.ts:23` records as "this lane's publish has no reachable remote" --
- * therefore CANNOT publish: the push fails, the receipt is REFUSED, the dossier's sha stays
- * null and the card truthfully prints "Nothing is published yet". That is the product being
- * right, so the fix is to give it a remote that exists rather than to relax the card.
- *
- * A BARE REPOSITORY IN THE LANE SCRATCH IS NOT A DOUBLE. The push, the objects, the ref and
- * the `git ls-remote` re-measurement `release-head-proof.ts:15-20` makes before any `gh` spawn
- * are all the production code paths against real git. Only the `gh pr create` SUBPROCESS stays
- * faked, which is this lane's one declared double. Nothing is seeded and no gate is relaxed.
- *
- * FORWARD SLASHES ARE LOAD-BEARING: `admitRemoteUrl` (publish-receipt-contracts.ts:77) matches
- * `D:/path/x.git` through REMOTE_SSH but refuses the backslash form, and refuses `file://` by
- * the name of its scheme -- so `D:\path\x.git` would be PUBLISH_REMOTE_URL_INVALID.
+ * The default local bare repository is an intentional refusal case. Publication admits only
+ * HTTPS, SSH, or scp-style transports, so its approval is rejected before a request or push.
+ * The positive browser arm retains a real push and remote-head recheck, but requires explicit
+ * opt-in plus an admitted reachable remote. Its sole double remains the `gh pr create` spawn.
  */
 function createLaneRemote(root: string): string {
   const remote = join(root, "release-remote.git");
@@ -146,9 +133,7 @@ async function readRelease(lane: DaemonLane, goalId: string): Promise<Record<str
  * The publish below is unchanged and is dispatched on a MINTED operator seat, because a lane
  * credential is not a HUMAN principal. Nothing is seeded and no gate is relaxed.
  */
-async function landAndPublish(
-  lane: DaemonLane,
-): Promise<{ goalId: string; remoteUrl: string; sha: string }> {
+async function preparePublication(lane: DaemonLane, remoteUrl: string) {
   // RESOLVED BEFORE the helper runs, and that ordering is load-bearing: `resolveLaneScratch`
   // keys on `node-specs/node.json`, and `landLaneNode` retires that spec on its way through
   // (lane-contract-goal.ts:159), so afterwards it answers null for a lane that plainly exists.
@@ -170,9 +155,15 @@ async function landAndPublish(
   expect(identity.ok, JSON.stringify(identity)).toBe(true);
   if (!identity.ok) throw new Error("unreachable: the assertion above fails first");
   const goalId = contract.goalRef;
-  const remoteUrl = createLaneRemote(dirname(lane.catalogPath));
-  const approval = { branch: "main", remoteUrl,
+  const branch = execFileSync("git", ["symbolic-ref", "--short", "HEAD"],
+    { cwd: lane.workspace, encoding: "utf8", windowsHide: true }).trim();
+  const approval = { branch, remoteUrl,
     repositoryId: publicationRepositoryId(identity.identity), sha: contract.landedSha };
+  return { approval, goalId, laneScratch, remoteUrl, sha: contract.landedSha, workspace: contract.scratch.workspace };
+}
+
+async function landAndPublish(lane: DaemonLane, remoteUrl: string): Promise<{ goalId: string; remoteUrl: string; sha: string }> {
+  const { approval, goalId, laneScratch, sha, workspace } = await preparePublication(lane, remoteUrl);
   const published = await command(lane, "repository.publish", publishAggregateId(goalId),
     { approval, goalId, remoteUrl }, mintLaneOperatorSeat(lane));
   expect(published, `PUBLISH: ${JSON.stringify(published)}`).toMatchObject({ outcome: "ACCEPTED" });
@@ -181,10 +172,10 @@ async function landAndPublish(
   // outcome above would let an unreachable remote travel 120s downstream and re-surface as
   // "the card is missing a sha", a true sentence about the wrong subject. Assert the receipt,
   // and quote the publisher's OWN refusal when it is not PUSHED.
-  wrapperPids.push(await tickPublisher(lane, laneScratch, contract.scratch.workspace));
+  wrapperPids.push(await tickPublisher(lane, laneScratch, workspace));
   expect(await awaitPublishOutcome(lane, goalId), "the publisher must have pushed the goal's branch")
     .toBe("PUSHED");
-  return { goalId, remoteUrl, sha: contract.landedSha };
+  return { goalId, remoteUrl, sha };
 }
 
 /**
@@ -302,8 +293,48 @@ async function assertStopped(lane: DaemonLane | undefined, why: string): Promise
   expect(existsSync(dirname(lane.catalogPath))).toBe(false);
 }
 
-test("real daemon: the operator reads the evidence, approves the release and gets the PR link",
+test("real daemon: a local publish remote is refused without publication or a release PR", async () => {
+  test.setTimeout(JOURNEY_MS);
+  let started: DaemonLane | undefined;
+  let why = "the lane returned no outcome";
+  wrapperPids.length = 0;
+  try {
+    const result = await withDaemonBackedControlRoom({
+      fakeGh: "SUCCESS", liveCredentials: "ATTACHED", operatorChannel: true,
+    }, async (lane) => {
+      started = lane;
+      const root = dirname(lane.catalogPath);
+      const remoteUrl = createLaneRemote(root);
+      const prepared = await preparePublication(lane, remoteUrl);
+      const response = await command(lane, "repository.publish", publishAggregateId(prepared.goalId),
+        { approval: prepared.approval, goalId: prepared.goalId, remoteUrl }, mintLaneOperatorSeat(lane));
+      expect(response).toMatchObject({ ok: false, outcome: "PORT_REFUSED", stage: "DISPATCH",
+        refusal: { code: "PUBLISH_APPROVAL_REQUIRED", layer: "DAEMON_INGRESS" } });
+      wrapperPids.push(await tickPublisher(lane, prepared.laneScratch, prepared.workspace));
+      const store = SqliteEventStore.openForProject(join(root, "store.sqlite"), lane.projectId);
+      try {
+        const publication = readPublishLedger(store, lane.projectId).get(prepared.goalId);
+        expect(publication?.requests ?? []).toEqual([]);
+        expect([...(publication?.receipts.values() ?? [])]).toEqual([]);
+      } finally { store.close(); }
+      expect(execFileSync("git", ["--git-dir", remoteUrl, "for-each-ref", "--format=%(objectname)"],
+        { encoding: "utf8", windowsHide: true }).trim()).toBe("");
+      expect(readFileSync(join(root, "release-pr-calls.jsonl"), "utf8")).toBe("");
+      expect(await readRelease(lane, prepared.goalId)).toMatchObject({ kind: "PRESENT", evidence: { sha: null, receipt: null } });
+    });
+    why = result.ok ? "ok" : `${result.code}: ${result.detail}`;
+    expect(why).toBe("ok");
+  } catch (error) {
+    why = error instanceof Error ? error.message : String(error);
+    throw error;
+  } finally { await assertStopped(started, why); }
+});
+
+test("real admitted remote (opt-in): the operator reads evidence, approves release and gets the PR link",
   async ({ page }) => {
+    const target = readReleaseApprovalTarget(process.env);
+    test.skip(!target.enabled, "requires MOE_E2E_RELEASE_REMOTE_TEST=1 and MOE_E2E_RELEASE_REMOTE_URL; pushes a real isolated branch");
+    if (!target.enabled) return;
     test.setTimeout(JOURNEY_MS);
     let started: DaemonLane | undefined;
     // Held so a lane that never reached `body` reports the daemon's OWN refusal rather than a
@@ -318,7 +349,9 @@ test("real daemon: the operator reads the evidence, approves the release and get
         started = lane;
         const root = dirname(lane.catalogPath);
         expect(existsSync(join(root, "release-pr-calls.jsonl")), "lane provider selected").toBe(true);
-        const { goalId, remoteUrl, sha } = await landAndPublish(lane);
+        const branch = `moe-release-browser-${lane.projectId}`;
+        execFileSync("git", ["switch", "-c", branch], { cwd: lane.workspace, windowsHide: true });
+        const { goalId, remoteUrl, sha } = await landAndPublish(lane, target.remoteUrl);
 
         // THE EVIDENCE READ IS LIVE. `/release/read` answers through the real listener before a
         // single browser assertion is made, so everything below is about a real daemon.
@@ -338,6 +371,9 @@ test("real daemon: the operator reads the evidence, approves the release and get
         await page.getByTestId("cr.nav.goals").click({ timeout: CARD_MS });
         await expect(page.getByTestId("cr.goals.home")).toBeVisible({ timeout: CARD_MS });
         await page.getByTestId(`cr.goals.card.${goalId}.open`).click({ timeout: CARD_MS });
+        const workspace = page.getByTestId("cr.product.workspace");
+        await workspace.getByRole("button", { name: "Production record", exact: true }).click();
+        await workspace.getByRole("button", { name: "Delivery", exact: true }).click();
 
         // THE CARD IS THERE, because the daemon offers the decision. The covered/UNKNOWN split
         // is asserted in the browser for the same reason it is asserted in the component arms:

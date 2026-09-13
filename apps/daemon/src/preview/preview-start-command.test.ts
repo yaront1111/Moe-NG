@@ -52,7 +52,7 @@ import type { PreviewScreenshot } from "./preview-receipt-contracts.js";
 import type { PreviewCapturePort } from "./preview-runner.js";
 import { createPreviewSupervisor } from "./preview-supervisor.js";
 import type { PreviewSupervisor } from "./preview-supervisor.js";
-import { LISTENING_SERVER, cleanupFixtureWorkspaces, fixtureWorkspace }
+import { LISTENING_SERVER, cleanupFixtureWorkspaces, commitFixtureWorkspace, fixtureWorkspace }
   from "./preview-test-fixtures.js";
 
 type Store = ReturnType<typeof openStore>;
@@ -64,9 +64,9 @@ const AGENT = "agent-preview-start";
 const OPERATOR_CREDENTIAL = "cred-operator";
 const AGENT_CREDENTIAL = "cred-agent";
 const REVIEW = "review.write";
-const SHOT: PreviewScreenshot = {
-  journeyRef: "home", path: `.moe-next/previews/${GOAL_ID}/${SHA}/home.png`,
-};
+function shotFor(sha: string): PreviewScreenshot {
+  return { journeyRef: "home", path: `.moe-next/previews/${GOAL_ID}/${sha}/home.png` };
+}
 
 /**
  * THE INDEPENDENT SIDE of the wrapper-fence comparison: every SERVED kind the wrapper refuses to
@@ -236,8 +236,10 @@ function receiptRows(store: Store, receiptId: string): number {
 describe("preview.start writes and answers from the durable receipt", () => {
   it("(A) records STARTED with url, pid and screenshots, read back through the ledger", async () => {
     const store = landedWorld();
-    const spy = spySupervisor(store, async () => [SHOT]);
-    const deps = edgeFor(store, { supervisor: spy.supervisor, workspace: servingWorkspace() });
+    const spy = spySupervisor(store, async () => [shotFor(SHA)]);
+    const workspace = servingWorkspace();
+    const SHA = commitFixtureWorkspace(workspace);
+    const deps = edgeFor(store, { supervisor: spy.supervisor, workspace });
 
     const answered = await start(deps, "cmd-start-ok", { goalId: GOAL_ID, sha: SHA });
 
@@ -253,7 +255,7 @@ describe("preview.start writes and answers from the durable receipt", () => {
     expect(read.receipt.code).toBeNull();
     expect(read.receipt.goalId).toBe(GOAL_ID);
     expect(read.receipt.sha).toBe(SHA);
-    expect(read.receipt.screenshots).toStrictEqual([SHOT]);
+    expect(read.receipt.screenshots).toStrictEqual([shotFor(SHA)]);
     // VALUES, not merely presence: a live preview has an origin and a pid the operator can act on.
     expect(read.receipt.url).toMatch(/^http:\/\/127\.0\.0\.1:\d+\/?$/u);
     expect(typeof read.receipt.pid).toBe("number");
@@ -264,8 +266,10 @@ describe("preview.start writes and answers from the durable receipt", () => {
 
   it("(D) calls the INJECTED port and leaves exactly ONE ledger row for the revision", async () => {
     const store = landedWorld();
-    const spy = spySupervisor(store, async () => [SHOT]);
-    const deps = edgeFor(store, { supervisor: spy.supervisor, workspace: servingWorkspace() });
+    const spy = spySupervisor(store, async () => [shotFor(SHA)]);
+    const workspace = servingWorkspace();
+    const SHA = commitFixtureWorkspace(workspace);
+    const deps = edgeFor(store, { supervisor: spy.supervisor, workspace });
 
     await start(deps, "cmd-start-once", { goalId: GOAL_ID, sha: SHA });
 
@@ -286,10 +290,9 @@ describe("preview.start writes and answers from the durable receipt", () => {
       const spy = spySupervisor(store, async () => []);
       // Every gate above the runner is PASSABLE: landed goal, operator principal, exact payload,
       // wired supervisor, configured workspace. Only the command resolution fails.
-      const deps = edgeFor(store, {
-        supervisor: spy.supervisor,
-        workspace: fixtureWorkspace({ scripts: { build: "tsc" } }),
-      });
+      const workspace = fixtureWorkspace({ scripts: { build: "tsc" } });
+      const SHA = commitFixtureWorkspace(workspace);
+      const deps = edgeFor(store, { supervisor: spy.supervisor, workspace });
 
       const answered = await start(deps, "cmd-start-nocmd", { goalId: GOAL_ID, sha: SHA });
 
@@ -320,8 +323,10 @@ describe("every refusal preview.start can raise, with the layer that answered it
       // and every other gate is passable — the POSITIVE CONTROL below runs the same world with
       // the same bytes as the operator and is ACCEPTED.
       const store = landedWorld();
-      const spy = spySupervisor(store, async () => [SHOT]);
-      const deps = edgeFor(store, { supervisor: spy.supervisor, workspace: servingWorkspace() });
+      const spy = spySupervisor(store, async () => [shotFor(SHA)]);
+      const workspace = servingWorkspace();
+      const SHA = commitFixtureWorkspace(workspace);
+      const deps = edgeFor(store, { supervisor: spy.supervisor, workspace });
 
       const refused = await start(
         deps, "cmd-start-agent", { goalId: GOAL_ID, sha: SHA }, AGENT_CREDENTIAL,
@@ -347,8 +352,10 @@ describe("every refusal preview.start can raise, with the layer that answered it
 
   it("(C2) PREVIEW_START_PAYLOAD_INVALID @ REQUEST: the decoder, above the runner", async () => {
     const store = landedWorld();
-    const spy = spySupervisor(store, async () => [SHOT]);
-    const deps = edgeFor(store, { supervisor: spy.supervisor, workspace: servingWorkspace() });
+    const spy = spySupervisor(store, async () => [shotFor(SHA)]);
+    const workspace = servingWorkspace();
+    const SHA = commitFixtureWorkspace(workspace);
+    const deps = edgeFor(store, { supervisor: spy.supervisor, workspace });
 
     // Every OTHER gate is passable: operator principal, landed goal, wired supervisor,
     // configured workspace. The keys are the roster's own, so the ingress allow-list admits the
@@ -369,8 +376,10 @@ describe("every refusal preview.start can raise, with the layer that answered it
 
   it("(C3) PREVIEW_START_PAYLOAD_INVALID @ REQUEST for a traversal-shaped sha", async () => {
     const store = landedWorld();
-    const spy = spySupervisor(store, async () => [SHOT]);
-    const deps = edgeFor(store, { supervisor: spy.supervisor, workspace: servingWorkspace() });
+    const spy = spySupervisor(store, async () => [shotFor(SHA)]);
+    const workspace = servingWorkspace();
+    const SHA = commitFixtureWorkspace(workspace);
+    const deps = edgeFor(store, { supervisor: spy.supervisor, workspace });
 
     // The runner has its OWN containment check one layer down, so this arm names WHICH gate
     // answered: the decoder refuses at REQUEST, and the supervisor is never reached at all.
@@ -404,7 +413,7 @@ describe("every refusal preview.start can raise, with the layer that answered it
   it("(C5) PREVIEW_COMMAND_MISSING @ RUNNER when the daemon has NO configured workspace",
     async () => {
       const store = landedWorld();
-      const spy = spySupervisor(store, async () => [SHOT]);
+      const spy = spySupervisor(store, async () => [shotFor(SHA)]);
       // The supervisor IS wired, so this refusal is the unconfigured workspace and nothing else.
       // No workspace is invented and no default is guessed.
       const deps = edgeFor(store, { supervisor: spy.supervisor, workspace: null });
@@ -423,8 +432,10 @@ describe("every refusal preview.start can raise, with the layer that answered it
       // EVERY OTHER GATE PASSABLE — operator principal, exact payload, wired supervisor, a
       // workspace that really serves — so the only thing left to refuse is the landing gate.
       const store = enabledWorld();
-      const spy = spySupervisor(store, async () => [SHOT]);
-      const deps = edgeFor(store, { supervisor: spy.supervisor, workspace: servingWorkspace() });
+      const spy = spySupervisor(store, async () => [shotFor(SHA)]);
+      const workspace = servingWorkspace();
+      const SHA = commitFixtureWorkspace(workspace);
+      const deps = edgeFor(store, { supervisor: spy.supervisor, workspace });
 
       const refused = await start(deps, "cmd-start-unlanded", { goalId: GOAL_ID, sha: SHA });
 
@@ -450,8 +461,10 @@ describe("workspace is not accepted from the payload", () => {
   it("(E1) the INGRESS allow-list refuses it at PAYLOAD_SHAPE, before any handler runs",
     async () => {
       const store = landedWorld();
-      const spy = spySupervisor(store, async () => [SHOT]);
-      const deps = edgeFor(store, { supervisor: spy.supervisor, workspace: servingWorkspace() });
+      const spy = spySupervisor(store, async () => [shotFor(SHA)]);
+      const workspace = servingWorkspace();
+      const SHA = commitFixtureWorkspace(workspace);
+      const deps = edgeFor(store, { supervisor: spy.supervisor, workspace });
 
       const refused = await start(deps, "cmd-start-smuggled", {
         goalId: GOAL_ID, sha: SHA, workspace: "C:/attacker/tree",
@@ -557,7 +570,7 @@ describe("the answer comes from the ledger, never from the writer's own account"
               stop: async () => undefined } as never,
             receipt: {
               code: null, decidedAt: DECIDED_AT, goalId: GOAL_ID, outcome: "STARTED" as const,
-              pid: 4242, projectId: PROJECT_ID, receiptId, screenshots: [SHOT], sha: SHA,
+              pid: 4242, projectId: PROJECT_ID, receiptId, screenshots: [shotFor(SHA)], sha: SHA,
               url: "http://127.0.0.1:1/", version: "moe-preview-receipt/1" as const,
             },
           },
@@ -585,6 +598,7 @@ describe("the answer comes from the ledger, never from the writer's own account"
     // The REAL runner records PREVIEW_COMMAND_MISSING for this workspace. The facade reports a
     // DIFFERENT code, so the two can be told apart: production answers what the ledger holds.
     const workspace = fixtureWorkspace({ scripts: { build: "tsc" } });
+    const SHA = commitFixtureWorkspace(workspace);
     const disagreeing: PreviewSupervisor = Object.freeze({
       active: spy.supervisor.active,
       close: spy.supervisor.close,
@@ -651,8 +665,10 @@ describe("preview.start's command family", () => {
 describe("a repeat start for the same revision", () => {
   it("REPLAYS the existing receipt and spawns NO second server", async () => {
     const store = landedWorld();
-    const spy = spySupervisor(store, async () => [SHOT]);
-    const deps = edgeFor(store, { supervisor: spy.supervisor, workspace: servingWorkspace() });
+    const spy = spySupervisor(store, async () => [shotFor(SHA)]);
+    const workspace = servingWorkspace();
+    const SHA = commitFixtureWorkspace(workspace);
+    const deps = edgeFor(store, { supervisor: spy.supervisor, workspace });
 
     const first = await start(deps, "cmd-repeat-1", { goalId: GOAL_ID, sha: SHA });
     expect(first).toMatchObject({
@@ -677,9 +693,9 @@ describe("a repeat start for the same revision", () => {
     // runner again rather than replay the refusal for ever.
     const store = landedWorld();
     const spy = spySupervisor(store, async () => []);
-    const deps = edgeFor(store, {
-      supervisor: spy.supervisor, workspace: fixtureWorkspace({ scripts: { build: "tsc" } }),
-    });
+    const workspace = fixtureWorkspace({ scripts: { build: "tsc" } });
+    const SHA = commitFixtureWorkspace(workspace);
+    const deps = edgeFor(store, { supervisor: spy.supervisor, workspace });
 
     await start(deps, "cmd-retry-1", { goalId: GOAL_ID, sha: SHA });
     const read = readPreviewReceipt(store, PROJECT_ID, previewReceiptId(PROJECT_ID, GOAL_ID, SHA));

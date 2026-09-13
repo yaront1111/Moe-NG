@@ -19,7 +19,7 @@
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import type { Dirent } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { afterEach, describe, expect, it } from "vitest";
@@ -41,6 +41,7 @@ import {
 } from "./cutover-inventory.js";
 import {
   DEFAULT_EXCLUDED_DIRECTORY_NAMES,
+  DEFAULT_EXCLUDED_DIRECTORY_PATHS,
   MAX_WALK_DEPTH,
   MAX_WALK_ENTRIES,
   captureCutoverManifest,
@@ -541,6 +542,31 @@ describe("TASK-MF: links are manifested and node_modules is excluded on the reco
     expect(admitted.manifest.entryCount).toBe(excluded.manifest.entryCount + memoryCount);
   });
 
+  it("declares the root's host-local agent worktrees without excluding ordinary neighboring content", () => {
+    const { root } = fixture();
+    const paths = [
+      ".claude/worktrees/session/apps/local-copy.ts", ".claude/commands/review.md",
+      ".claude/worktrees-notes/keep.md", "worktrees/source.ts", "src/.claude/worktrees/ordinary.ts",
+    ];
+    for (const path of paths) {
+      mkdirSync(dirname(join(root, path)), { recursive: true });
+      writeFileSync(join(root, path), path);
+    }
+    const captured = captureCutoverManifest(root);
+    assertOk(captured);
+    expect(captured.manifest.excludedDirectories).toContain(".claude/worktrees");
+    expect(captured.manifest.entries.map((entry) => entry.path)).not.toContain(paths[0]);
+    expect(captured.manifest.entries.map((entry) => entry.path)).toEqual(expect.arrayContaining(paths.slice(1)));
+
+    const admitted = captureCutoverManifest(root, { excludedDirectoryPaths: [] });
+    assertOk(admitted);
+    expect(admitted.manifest.entries.map((entry) => entry.path)).toEqual(expect.arrayContaining(paths));
+    expect(admitted.manifest.excludedDirectories).not.toContain(".claude/worktrees");
+    const comparison = compareCutoverManifests(captured.manifest, admitted.manifest);
+    assertRefused(comparison);
+    expect(comparison.code).toBe("CUTOVER_MANIFEST_EXCLUSION_MISMATCH");
+  });
+
   const manifestOf = (
     entries: CutoverManifest["entries"],
     excludedDirectories: readonly string[] = ["node_modules"],
@@ -604,7 +630,9 @@ describe("TASK-MF: links are manifested and node_modules is excluded on the reco
         continue; // an unreadable directory must not take down the diagnostic itself
       }
       for (const entry of dirents) {
-        if (DEFAULT_EXCLUDED_DIRECTORY_NAMES.includes(entry.name)) {
+        const key = relative(root, join(current.absolute, entry.name)).split(sep).join("/");
+        if (entry.isDirectory() && !entry.isSymbolicLink()
+          && (DEFAULT_EXCLUDED_DIRECTORY_NAMES.includes(entry.name) || DEFAULT_EXCLUDED_DIRECTORY_PATHS.includes(key))) {
           continue;
         }
         const top = current.top === "" ? entry.name : current.top;
@@ -642,10 +670,10 @@ describe("TASK-MF: links are manifested and node_modules is excluded on the reco
         throw new Error(
           `${result.code} @ ${result.layer}: ${result.detail} (stopped at ${result.path}). ` +
             `ADMITTED POPULATION by top-level segment, largest first: ${census}. ` +
-            `EXCLUSIONS IN FORCE: ${DEFAULT_EXCLUDED_DIRECTORY_NAMES.join(", ")}. ` +
+            `EXCLUSIONS IN FORCE: names=${DEFAULT_EXCLUDED_DIRECTORY_NAMES.join(", ")}; paths=${DEFAULT_EXCLUDED_DIRECTORY_PATHS.join(", ")}. ` +
             `Read the census before touching MAX_WALK_ENTRIES (${MAX_WALK_ENTRIES}): a segment that ` +
             `is host-local tool state rather than repository content belongs in ` +
-            `DEFAULT_EXCLUDED_DIRECTORY_NAMES, and raising the bound against a population that ` +
+            `the declared directory exclusions, and raising the bound against a population that ` +
             `grows on its own only defers this failure.`,
         );
       }

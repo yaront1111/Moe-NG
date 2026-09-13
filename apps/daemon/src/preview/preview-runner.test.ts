@@ -32,12 +32,11 @@ import type { PreviewScreenshot } from "./preview-receipt-contracts.js";
 import { runPreview } from "./preview-runner.js";
 import type { PreviewCapturePort, PreviewRunnerConfig } from "./preview-runner.js";
 import {
-  LISTENING_SERVER, SILENT_SERVER, cleanupFixtureWorkspaces, fixtureWorkspace,
+  LISTENING_SERVER, SILENT_SERVER, cleanupFixtureWorkspaces, commitFixtureWorkspace, fixtureWorkspace,
 } from "./preview-test-fixtures.js";
 
 type Store = ReturnType<typeof openStore>;
 
-const SHA = "0123456789abcdef0123456789abcdef01234567";
 const DECIDED_AT = "2026-09-05T12:00:00.000Z";
 
 const started: { stop: () => Promise<void> }[] = [];
@@ -98,7 +97,7 @@ describe("PREVIEW_GOAL_NOT_LANDED", () => {
     // workspace with a `preview` script and a contract that names a command.
     const workspace = fixtureWorkspace({ scripts: { preview: "node --version" } });
 
-    const result = await runPreview(config(store), { goalId: GOAL_ID, sha: SHA, workspace });
+    const result = await runPreview(config(store), { goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace });
 
     expect(result.ok).toBe(false);
     if (result.ok) throw new Error("expected a refusal");
@@ -116,7 +115,7 @@ describe("PREVIEW_GOAL_NOT_LANDED", () => {
     expect(ledgerOutcome(store, "node-a")).toBe("REFUSED");
 
     const workspace = fixtureWorkspace({ scripts: { preview: "node --version" } });
-    const result = await runPreview(config(store), { goalId: GOAL_ID, sha: SHA, workspace });
+    const result = await runPreview(config(store), { goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace });
 
     if (result.ok) throw new Error("expected a refusal");
     expect(result.refusal.code).toBe("PREVIEW_GOAL_NOT_LANDED");
@@ -132,7 +131,7 @@ describe("PREVIEW_GOAL_NOT_LANDED", () => {
     expect(ledgerOutcome(store, "node-1")).toBe("COMMITTED");
 
     const workspace = fixtureWorkspace({ scripts: { preview: "node --version" } });
-    const result = await runPreview(config(store), { goalId: GOAL_ID, sha: SHA, workspace });
+    const result = await runPreview(config(store), { goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace });
 
     if (result.ok) throw new Error("expected a refusal");
     expect(result.refusal.code).toBe("PREVIEW_GOAL_NOT_LANDED");
@@ -151,7 +150,7 @@ describe("PREVIEW_GOAL_NOT_LANDED", () => {
 
     // The run now reaches the NEXT gate, which is the proof the landing gate let it through.
     const workspace = fixtureWorkspace({ scripts: { build: "tsc" } });
-    const result = await runPreview(config(store), { goalId: GOAL_ID, sha: SHA, workspace });
+    const result = await runPreview(config(store), { goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace });
     if (result.ok) throw new Error("expected a refusal");
     expect(result.refusal.code).toBe("PREVIEW_COMMAND_MISSING");
   });
@@ -162,7 +161,7 @@ describe("PREVIEW_GOAL_NOT_LANDED", () => {
     const workspace = fixtureWorkspace({ scripts: { preview: "node --version" } });
 
     for (const goalId of ["../escape", "a/b", "a\\b", ".."]) {
-      const result = await runPreview(config(store), { goalId, sha: SHA, workspace });
+      const result = await runPreview(config(store), { goalId, sha: commitFixtureWorkspace(workspace), workspace });
       if (result.ok) throw new Error(`expected a refusal for ${goalId}`);
       expect(result.refusal.code).toBe("PREVIEW_GOAL_NOT_LANDED");
       expect(result.refusal.layer).toBe("GOAL_AUTHORITY");
@@ -178,7 +177,7 @@ describe("PREVIEW_COMMAND_MISSING", () => {
     land(store, "node-a", "COMMITTED");
     const workspace = fixtureWorkspace({ scripts: { build: "tsc", lint: "eslint ." } });
 
-    const result = await runPreview(config(store), { goalId: GOAL_ID, sha: SHA, workspace });
+    const result = await runPreview(config(store), { goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace });
 
     if (result.ok) throw new Error("expected a refusal");
     expect(result.refusal.code).toBe("PREVIEW_COMMAND_MISSING");
@@ -191,9 +190,9 @@ describe("PREVIEW_COMMAND_MISSING", () => {
     land(store, "node-a", "COMMITTED");
     const workspace = fixtureWorkspace({ scripts: { build: "tsc" } });
 
-    await runPreview(config(store), { goalId: GOAL_ID, sha: SHA, workspace });
+    await runPreview(config(store), { goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace });
 
-    const read = readPreviewReceipt(store, PROJECT_ID, previewReceiptId(PROJECT_ID, GOAL_ID, SHA));
+    const read = readPreviewReceipt(store, PROJECT_ID, previewReceiptId(PROJECT_ID, GOAL_ID, commitFixtureWorkspace(workspace)));
     if (!read.ok) throw new Error(read.code);
     expect(read.receipt.outcome).toBe("REFUSED");
     expect(read.receipt.code).toBe("PREVIEW_COMMAND_MISSING");
@@ -222,7 +221,7 @@ describe("PREVIEW_START_TIMEOUT", () => {
         // INJECTED so the arm does not wait the 30-minute production default.
         process: { startTimeoutMs: 900 },
       }),
-      { goalId: GOAL_ID, sha: SHA, workspace },
+      { goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace },
     );
 
     if (result.ok) throw new Error("expected a refusal");
@@ -254,7 +253,7 @@ describe("PREVIEW_START_TIMEOUT", () => {
         }),
         process: { startTimeoutMs: 20_000 },
       }),
-      { goalId: GOAL_ID, sha: SHA, workspace },
+      { goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace },
     );
 
     if (!result.ok) throw new Error(`expected a start, got ${result.refusal.code}`);
@@ -295,23 +294,23 @@ describe("the whole runner, with the REAL browser and the REAL server", () => {
         projectId: PROJECT_ID,
         store,
       },
-      { goalId: GOAL_ID, sha: SHA, workspace },
+      { goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace },
     );
 
     if (!result.ok) throw new Error(`expected a start, got ${result.refusal.code}`);
     started.push(result.started.handle);
 
     // READ THE RECEIPT BACK FROM THE STORE, not from the return value.
-    const read = readPreviewReceipt(store, PROJECT_ID, previewReceiptId(PROJECT_ID, GOAL_ID, SHA));
+    const read = readPreviewReceipt(store, PROJECT_ID, previewReceiptId(PROJECT_ID, GOAL_ID, commitFixtureWorkspace(workspace)));
     if (!read.ok) throw new Error(read.code);
     expect(read.receipt.outcome).toBe("STARTED");
     expect(read.receipt.code).toBeNull();
     expect(read.receipt.url).toBe(result.started.handle.origin);
     expect(read.receipt.pid).toBe(result.started.handle.pid);
     expect(read.receipt.goalId).toBe(GOAL_ID);
-    expect(read.receipt.sha).toBe(SHA);
+    expect(read.receipt.sha).toBe(commitFixtureWorkspace(workspace));
 
-    const prefix = `${previewCaptureDirectory(GOAL_ID, SHA)}/`;
+    const prefix = `${previewCaptureDirectory(GOAL_ID, commitFixtureWorkspace(workspace))}/`;
     expect(read.receipt.screenshots.map((shot) => shot.path)).toStrictEqual([
       `${prefix}journey-home.png`,
       `${prefix}journey-checkout.png`,

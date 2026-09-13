@@ -1,4 +1,7 @@
+import { openTechnicalDestination } from "./product-navigation.js";
 import type { ChildProcess } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
@@ -45,9 +48,6 @@ const HEALTH_BUDGET_MS = 2_000;
 const QUIET_WINDOW_MS = 3_000;
 const RESTAFF_BUDGET_MS = 15_000;
 const PAIRING_BUDGET_MS = 30_000;
-/** Bounds every click, because Playwright's own default for an action is "no bound at all". */
-const CLICK_BUDGET_MS = 10_000;
-
 const SPAWNED_LINE = /\[wrapper\] (node\.deliver@\S+): SPAWNED/u;
 const LIMIT_LOG_LINE = /\[wrapper\] provider limit: claude paused until (\S+)/u;
 
@@ -172,7 +172,7 @@ async function assertBrowserSaysPaused(
   await expect(banner).toHaveText(/^Agents paused: claude limit, resumes .+$/u, { timeout: 30_000 });
   // Locale-free and byte-exact: the seat's own last line rides in the title attribute.
   await expect(banner).toHaveAttribute("title", `Last line from the claude seat: ${LIMIT_LINE}`);
-  await page.getByTestId("cr.nav.health").click({ timeout: CLICK_BUDGET_MS });
+  await openTechnicalDestination(page, "health");
   await expect(page.getByTestId("cr.health.agents"))
     .toHaveText(/^paused: claude limit, resumes .+$/u, { timeout: 30_000 });
   onPhase?.("health-screen-says-it");
@@ -197,8 +197,20 @@ test("a provider limit parks the real wrapper, the browser says so, and clearing
         expect(scratch, "the lane's scratch store must be resolvable").not.toBeNull();
         if (scratch === null) return;
         const item = `node.deliver@${lane.nodeRef}`;
+        const specPath = join(scratch.nodeSpecsDir, "node.json");
+        const spec = JSON.parse(readFileSync(specPath, "utf8")) as Record<string, unknown>;
+        expect(spec["nodeRef"]).toBe(lane.nodeRef);
+        // This lane executes its seeded node, so its spec must name the real Git
+        // workspace. The default read-only browser fixture names a non-Git root.
+        writeFileSync(specPath, JSON.stringify({ ...spec, workspace: lane.workspace }), "utf8");
         const { command } = seatDoubleFiles(scratch.root, LIMIT_LINE);
-        const wrapper = startWrapper(lane.repoRoot, wrapperEnv(scratch, command), tracked);
+        // Node seats require the normal repository delivery path even when this seat exits
+        // at its provider limit before writing. Bind the actual lane repository as other
+        // landing journeys do; disabling landing is a production admission refusal.
+        const wrapper = startWrapper(lane.repoRoot, {
+          ...wrapperEnv(scratch, command, undefined, true),
+          MOE_NODE_WORKSPACE: lane.workspace,
+        }, tracked);
         try {
           // 1. THE REAL WRAPPER STAFFS THE SEEDED ITEM.
           const staffed = await wrapper.waitFor(SPAWNED_LINE, SPAWN_BUDGET_MS);

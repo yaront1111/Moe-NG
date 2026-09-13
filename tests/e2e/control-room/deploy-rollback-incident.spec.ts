@@ -1,3 +1,4 @@
+import { openTechnicalDestination } from "./product-navigation.js";
 /**
  * AN ENVIRONMENT GOES DOWN AND THE OPERATOR ROLLS IT BACK, IN A REAL BROWSER, AGAINST A REAL
  * DAEMON. The journey monitoring/backup/rollback shipped for, driven end to end for the first
@@ -175,7 +176,7 @@ test("real daemon: a bad release goes DOWN, the incident card offers the rollbac
 
         // THE HEALTH SCREEN AGREES, from its own read: `data-status` is the frame's state copied
         // across, so this is the daemon's verdict rendered twice, not a second opinion.
-        await page.getByTestId("cr.nav.health").click();
+        await openTechnicalDestination(page, "health");
         await expect(page.getByTestId(`cr.environments.card.${ENVIRONMENT}`))
           .toHaveAttribute("data-status", "DOWN", { timeout: CARD_MS });
 
@@ -213,7 +214,7 @@ test("real daemon: a bad release goes DOWN, the incident card offers the rollbac
 
         // RECOVERY, OBSERVED BY THE PROBE LOOP AND READ BACK IN THE BROWSER. The card leaves
         // Needs-you because the daemon CLOSED the incident, not because anything dismissed it.
-        await page.getByTestId("cr.nav.health").click();
+        await openTechnicalDestination(page, "health");
         await expect(page.getByTestId(`cr.environments.card.${ENVIRONMENT}`))
           .toHaveAttribute("data-status", "UP", { timeout: CARD_MS });
         await page.getByTestId("cr.nav.approvals").click();

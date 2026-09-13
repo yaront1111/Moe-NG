@@ -1,0 +1,29 @@
+.cr-example-scenarios {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+.cr-example-scenarios > span { margin-right: 8px; color: var(--cr-ink-soft); }
+.cr-example-scenarios > button {
+  border: 1px solid var(--cr-line);
+  background: var(--cr-surface);
+  border-radius: 6px;
+  color: var(--cr-ink);
+  padding: 8px 12px;
+  font: inherit;
+  cursor: pointer;
+}
+.cr-example-scenarios > button[aria-pressed="true"] { border-color: var(--cr-accent); color: var(--cr-accent-text); }
+.cr-example-scenarios > button:focus-visible { outline: 2px solid var(--cr-accent); outline-offset: 3px; }
+.cr-example-output {
+  margin: 24px 0;
+  padding: 20px;
+  border-left: 3px solid var(--cr-accent);
+  background: var(--cr-wash);
+  white-space: pre-wrap;
+  font: inherit;
+  line-height: 1.7;
+}

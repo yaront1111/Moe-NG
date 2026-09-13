@@ -135,6 +135,31 @@ function renderCard(
 }
 
 describe("a goal without a durable planning run has no board-opening door", () => {
+  it("opens an existing product before planning without invoking board navigation", () => {
+    const onOpenProduct = vi.fn();
+    const onOpenBoard = vi.fn();
+    render(<GoalCard expanded={false} goal={liveModel({ planningRunRef: undefined })}
+      onOpenBoard={onOpenBoard} onOpenProduct={onOpenProduct} onToggleExpand={vi.fn()} />);
+
+    const open = screen.getByRole("button", { name: "Open product Ship the J1 vertical slice" });
+    expect((open as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(open);
+    expect(onOpenProduct).toHaveBeenCalledTimes(1);
+    expect(onOpenBoard).not.toHaveBeenCalled();
+  });
+
+  it("opens the product without presenting task progress as product completion", () => {
+    const onOpenBoard = vi.fn();
+    const card = renderCard({ planningRunRef: "run-live-1" }, false, onOpenBoard);
+
+    expect(screen.getByRole("button", { name: "Open product Ship the J1 vertical slice" })).toBeTruthy();
+    expect(card.querySelector(".cr2-goal-bar")).toBeNull();
+    expect(card.querySelector(".cr2-goal-chips")).toBeNull();
+    expect(card.querySelector("img")).toBeNull();
+    fireEvent.click(screen.getByTestId("cr.goals.card.goal-live-1.open"));
+    expect(onOpenBoard).toHaveBeenCalledTimes(1);
+  });
+
   it("renders a disabled Open control with the exact missing-run reason", () => {
     renderCard({ planningRunRef: undefined });
 
@@ -142,7 +167,7 @@ describe("a goal without a durable planning run has no board-opening door", () =
     expect(open.disabled).toBe(true);
     expect(open.title).toBe(NO_DURABLE_RUN_REASON);
     expect(open.getAttribute("aria-label"))
-      .toBe(`Open board unavailable for Ship the J1 vertical slice: ${NO_DURABLE_RUN_REASON}`);
+      .toBe(`Open product unavailable for Ship the J1 vertical slice: ${NO_DURABLE_RUN_REASON}`);
   });
 
   it("does not invoke onOpenBoard when the disabled Open control is clicked", () => {
@@ -278,32 +303,33 @@ describe("a goal without a durable planning run has no board-opening door", () =
     expect(open.getAttributeNames().sort()).toEqual([
       "aria-label", "class", "data-testid", "data-variant", "disabled", "title", "type",
     ]);
-    expect(open.textContent).toBe("Open board \u2192");
+    expect(open.textContent).toBe("Open product");
     expect(open.getAttribute("data-testid")).toBe("cr.goals.card.goal-live-1.open-unavailable");
     expect(open.getAttribute("title")).toBe(NO_DURABLE_RUN_REASON);
   });
 });
 
 describe("goalshome-04: the card carries no placeholder chips", () => {
-  it("renders the progress label alone in its row and no COMING ONLINE chip anywhere", () => {
-    const card = renderCard();
+  it("keeps work counts inside supplied facts without a completion bar", () => {
+    const card = renderCard({}, true);
     expect(card.textContent).not.toContain("COMING ONLINE");
     expect(screen.queryByTestId("cr.goals.card.goal-live-1.lastevent.comingonline")).toBeNull();
     expect(screen.queryByTestId("cr.goals.card.goal-live-1.budget.comingonline")).toBeNull();
     const label = screen.getByTestId("cr.goals.card.goal-live-1.progress");
     expect(label.textContent).toBe("7 of 16 committed");
-    expect(label.parentElement?.className).toBe("cr2-goal-progress-top");
+    expect(label.closest('[data-testid="cr.goals.card.goal-live-1.facts"]')).not.toBeNull();
+    expect(card.querySelector(".cr2-goal-bar")).toBeNull();
     expect(label.parentElement?.children).toHaveLength(1);
   });
 
-  it("keeps a supplied last-event label in the top row and renders no chip", () => {
+  it("keeps a supplied last-event label visible while facts are collapsed", () => {
     const card = renderCard({ lastEventLabel: "42S AGO" });
-    expect(card.querySelector(".cr2-goal-progress-top .cr2-goal-lastevent")?.textContent).toBe("42S AGO");
+    expect(card.querySelector(".cr2-product-card-footer .cr2-goal-lastevent")?.textContent).toBe("42S AGO");
     expect(screen.queryByTestId("cr.goals.card.goal-live-1.lastevent.comingonline")).toBeNull();
   });
 
   it("ships wrap rules that select the rendered rows, and imports the sheet", () => {
-    const card = renderCard();
+    const card = renderCard({}, true);
     const top = card.querySelector(".cr2-goal-progress-top");
     expect(top).not.toBeNull();
 
@@ -315,7 +341,7 @@ describe("goalshome-04: the card carries no placeholder chips", () => {
     // The noun is a free string from the model ("acceptance criteria" passes the
     // column's 220px basis). The column has no overflow rule, so a label pinned to
     // one line would paint over the Open-board cell; nothing in this sheet may pin it.
-    renderCard({ progress: { done: 7, total: 64, noun: "acceptance criteria" } });
+    renderCard({ progress: { done: 7, total: 64, noun: "acceptance criteria" } }, true);
     const label = screen.getByTestId("cr.goals.card.goal-live-1.progress");
     expect(label.textContent).toBe("7 of 64 acceptance criteria");
     for (const [property, wrapping] of Object.entries(WRAPPING_VALUES)) {
@@ -351,11 +377,11 @@ describe("the progress label names the reason when the model carries one", () =>
     const goal: GoalCardModel = {
       ...base, goalId: "goal-note", progress: undefined, progressNote: "No PRD bound to this goal",
     };
-    render(<GoalCard expanded={false} goal={goal} onOpenBoard={vi.fn()} onToggleExpand={vi.fn()} />);
+    render(<GoalCard expanded goal={goal} onOpenBoard={vi.fn()} onToggleExpand={vi.fn()} />);
     expect(screen.getByTestId("cr.goals.card.goal-note.progress").textContent).toBe("No PRD bound to this goal");
     cleanup();
     const plain: GoalCardModel = { ...base, goalId: "goal-plain", progress: undefined };
-    render(<GoalCard expanded={false} goal={plain} onOpenBoard={vi.fn()} onToggleExpand={vi.fn()} />);
+    render(<GoalCard expanded goal={plain} onOpenBoard={vi.fn()} onToggleExpand={vi.fn()} />);
     expect(screen.getByTestId("cr.goals.card.goal-plain.progress").textContent).toBe("Progress unavailable");
   });
 });

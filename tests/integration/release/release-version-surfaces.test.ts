@@ -271,7 +271,15 @@ function trackedFiles(): readonly string[] {
   if (result.status !== 0) {
     throw new Error(`git ls-files failed: ${result.stderr.trim()}`);
   }
-  return result.stdout.split("\0").filter((path) => path.length > 0).sort();
+  // Verify the working tree being delivered, including intentional unstaged removals.
+  // Missing tracked manifests still fail their explicit roster checks below.
+  const deleted = spawnSync("git", ["ls-files", "--deleted", "-z"], {
+    cwd: REPO_ROOT, encoding: "utf8", shell: false,
+  });
+  if (deleted.error !== undefined) throw deleted.error;
+  if (deleted.status !== 0) throw new Error(`git ls-files --deleted failed: ${deleted.stderr.trim()}`);
+  const removed = new Set(deleted.stdout.split("\0"));
+  return result.stdout.split("\0").filter((path) => path.length > 0 && !removed.has(path)).sort();
 }
 
 function trackedFilesNamed(paths: readonly string[], basename: string): readonly string[] {

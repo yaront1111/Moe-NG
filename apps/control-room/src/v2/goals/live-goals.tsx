@@ -59,12 +59,12 @@ export interface LiveGoalsHomeProps {
   /** The shell's measured connection refusal; absent only while mutations are safe to offer. */
   readonly createDisabledReason?: string | undefined;
   readonly onConnection?: ((connection: SurfaceFrame["connection"]) => void) | undefined;
+  readonly onFrame?: ((frame: SurfaceFrame) => void) | undefined;
   readonly onOpenBoard: (goalId: string, planningRunRef: string, title: string) => void;
+  readonly onOpenProduct?: ((goalId: string, title: string) => void) | undefined;
   /**
-   * The PRD coverage read for one goal, when the shell attaches one. Absent, the cards keep
-   * saying progress is coming online; present, each card bar is the daemon verified-criteria
-   * count. Injected rather than derived from `setup` so the wire is the shell choice and a
-   * test can drive it without a second fetch stub.
+   * Measured coverage remains in each card's supplied-facts disclosure. Injected rather
+   * than derived from setup so transport ownership stays with the shell.
    */
   readonly readCoverage?: CoverageReader | undefined;
   /** The number of decisions waiting on a human, for the shell's Needs-you badge. */
@@ -75,7 +75,9 @@ export function LiveGoalsHome({
   setup,
   createDisabledReason,
   onConnection,
+  onFrame,
   onOpenBoard,
+  onOpenProduct,
   readCoverage,
   onNeedsYouCount,
 }: LiveGoalsHomeProps): JSX.Element {
@@ -92,9 +94,10 @@ export function LiveGoalsHome({
         frameRef.current = next;
         setSurface(next);
         onConnection?.(next.connection);
+        onFrame?.(next);
       },
     })
-    : null), [onConnection, setup]);
+    : null), [onConnection, onFrame, setup]);
 
   const catalogFeed = useMemo(() => (setup.ok
     ? createGoalCatalogFeed({
@@ -168,6 +171,7 @@ export function LiveGoalsHome({
         data={data}
         onCreateGoal={onCreateGoal}
         onOpenBoard={onOpenBoard}
+        onOpenProduct={onOpenProduct}
       />
     </>
   );

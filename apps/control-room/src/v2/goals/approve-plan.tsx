@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { JSX } from "react";
 
 import { ActionButton } from "../components/primitives.js";
+import { OutcomeNote } from "../components/outcome-note.js";
 import { ARROW_LEFT, MIDDOT } from "../glyphs.js";
 import { AppliedLine, OutcomeView } from "./approve-plan-body.js";
 import type { ApprovePlanLoadState } from "./approve-plan-body.js";
@@ -10,6 +11,7 @@ import { ApproveGate } from "./approve-plan-gate.js";
 import type { PlanApprovalSurface } from "./approve-plan-gate.js";
 import { PLAN_APPROVAL_LAYER } from "./plan-approval.js";
 import type { ApprovalAuthorization, PlanApprovalOutcome } from "./plan-approval.js";
+import { planReviewObservationKey } from "./plan-review-observation.js";
 
 /**
  * The PLAN-REVIEW screen (UI-6): the run a human reads BEFORE deciding, and the one
@@ -53,14 +55,28 @@ export interface ApprovePlanProps {
   readonly read: (runId: string) => Promise<PlanningRunOutcome>;
   /** The daemon's approval grant for this run plus the wire to spend it, when attached. */
   readonly approval?: PlanApprovalSurface | undefined;
+  /** Explicit refresh retries reads without replacing the decision component. */
+  readonly readRevision?: number;
 }
 
 type DispatchRefusal = Extract<PlanApprovalOutcome, { ok: false }>;
 
-export function ApprovePlan(
-  { runId, title, goalId, onBack, read, approval }: ApprovePlanProps,
+/** A new run or authenticated read/write port gets independent review and dispatch state. */
+export function ApprovePlan(props: ApprovePlanProps): JSX.Element {
+  const serial = useRef(0);
+  const scopeKey = useMemo(() => { serial.current += 1; return serial.current; },
+    [props.goalId, props.runId, props.read, props.approval?.submit]);
+  return <ApprovePlanReview {...props} key={scopeKey} />;
+}
+
+function ApprovePlanReview(
+  { runId, title, goalId, onBack, read, approval, readRevision = 0 }: ApprovePlanProps,
 ): JSX.Element {
-  const [state, setState] = useState<ApprovePlanLoadState>({ phase: "LOADING" });
+  const authorization = approval?.authorization ?? UNREAD_AUTHORIZATION;
+  const observationKey = JSON.stringify([planReviewObservationKey(authorization, runId), readRevision]);
+  const [loaded, setLoaded] = useState<{ key: string | null; state: ApprovePlanLoadState }>({ key: observationKey, state: { phase: "LOADING" } });
+  const state: ApprovePlanLoadState = loaded.key === observationKey ? loaded.state : { phase: "LOADING" };
+  const setState = useCallback((next: ApprovePlanLoadState) => setLoaded({ key: observationKey, state: next }), [observationKey]);
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<DispatchRefusal | null>(null);
   // Bumped ONLY by an accepted write, so the durable re-read happens exactly when
@@ -69,29 +85,55 @@ export function ApprovePlan(
   // Latest-wins: a runId change (or a slow read that resolves after unmount) must
   // not overwrite a newer read. The generation ref is the only writer gate.
   const generation = useRef(0);
+  const mounted = useRef(false);
+  const pending = useRef(false);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => { mounted.current = false; };
+  }, []);
 
   useEffect(() => {
     const run = generation.current + 1;
     generation.current = run;
     setState({ phase: "LOADING" });
-    void read(runId).then((outcome) => {
-      if (generation.current === run) setState({ outcome, phase: "LOADED" });
+    void Promise.resolve().then(() => read(runId)).then((outcome) => {
+      if (generation.current !== run) return;
+      setState({ outcome: outcome.status === "RUN" && outcome.runId !== runId
+        ? { status: "ERROR", code: "PLAN_REVIEW_BODY_SUBJECT_MISMATCH", layer: "CONTROL_ROOM_PLAN_REVIEW" }
+        : outcome, phase: "LOADED" });
+    }, () => {
+      if (generation.current === run) setState({ outcome: {
+        status: "ERROR", code: "PLAN_REVIEW_READ_FAILED", layer: "CONTROL_ROOM_PLAN_REVIEW",
+      }, phase: "LOADED" });
     });
     return (): void => { generation.current += 1; };
-  }, [applied, read, runId]);
+  }, [applied, read, runId, setState]);
 
-  const authorization = approval?.authorization ?? UNREAD_AUTHORIZATION;
+  const reviewReady = state.phase === "LOADED" && state.outcome.status === "RUN"
+    && state.outcome.runId === runId && state.outcome.sealed && state.outcome.reviewable
+    && state.outcome.plan !== null && state.outcome.acceptance !== null && state.outcome.approval === "ABSENT"
+    && authorization.status === "AUTHORIZED" && authorization.grant.runId === runId
+    && authorization.grant.affordance["targetAggregateId"] === runId;
   const decide = (decisionReason: string | null): void => {
-    if (approval === undefined || authorization.status !== "AUTHORIZED" || busy) return;
+    if (approval === undefined || authorization.status !== "AUTHORIZED" || !reviewReady || pending.current) return;
+    pending.current = true;
     setBusy(true);
     setRefusal(null);
-    void approval.submit(authorization.grant, decisionReason).then((outcome) => {
+    void Promise.resolve().then(() => mounted.current ? approval.submit(authorization.grant, decisionReason) : null).then((outcome) => {
+      if (!mounted.current || outcome === null) return;
+      pending.current = false;
       setBusy(false);
       // The daemon decides what the run now IS. On acceptance this only asks for a
       // fresh read; the new state is rendered from that answer, never from here.
-      if (outcome.ok) setApplied((previous) => previous + 1);
+      if (outcome.ok) {
+        setState({ phase: "LOADING" });
+        setApplied((previous) => previous + 1);
+      }
       else setRefusal(outcome);
     }, () => {
+      if (!mounted.current) return;
+      pending.current = false;
       setBusy(false);
       setRefusal({ code: "APPROVAL_DISPATCH_FAILED", layer: PLAN_APPROVAL_LAYER, ok: false });
     });
@@ -107,13 +149,17 @@ export function ApprovePlan(
         <OutcomeView outcome={state.outcome} />
       )}
       {applied === 0 ? null : <AppliedLine state={state} />}
+      {authorization.status === "AUTHORIZED" && !reviewReady && approval?.sentBack !== true ? <OutcomeNote
+        code="PLAN_REVIEW_BODY_UNAVAILABLE" layer="CONTROL_ROOM_PLAN_REVIEW"
+        said="A decision is available when this plan's complete, reviewable version is loaded."
+        testId="cr.approve.review-unavailable" /> : null}
       {/* KEYED ON THE RUN so the gate's reason box cannot outlive the run it was typed
           for. Without this, rejecting run A and then being offered its successor B would
           return the controls with A's reason still in the box and Reject already enabled -
           one stray click away from sending B back for a reason nobody wrote about it. */}
       <ApproveGate
         authorization={authorization}
-        busy={busy}
+        busy={busy || !reviewReady}
         key={runId}
         onApprove={(): void => { decide(null); }}
         onReject={(decisionReason): void => { decide(decisionReason); }}

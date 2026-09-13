@@ -1,3 +1,4 @@
+import { openProductRecord } from "./product-navigation.js";
 import type { ChildProcess } from "node:child_process";
 import { execFileSync } from "node:child_process";
 import { existsSync, writeFileSync } from "node:fs";
@@ -217,6 +218,7 @@ async function openReleaseCard(page: Page, goalId: string): Promise<void> {
   await page.getByTestId("cr.nav.goals").click({ timeout: CARD_MS });
   await expect(page.getByTestId("cr.goals.home")).toBeVisible({ timeout: CARD_MS });
   await page.getByTestId(`cr.goals.card.${goalId}.open`).click({ timeout: CARD_MS });
+  await openProductRecord(page, "Delivery");
   await expect(page.getByTestId("cr.release.root")).toBeVisible({ timeout: CARD_MS });
 }
 

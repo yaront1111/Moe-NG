@@ -24,7 +24,8 @@
  * repository before any seat runs. Nothing tells the provider what to type; it is told what
  * must hold, which is what a coding agent is for.
  */
-import { chmodSync, writeFileSync } from "node:fs";
+import { chmodSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 
 import { CODING_BUILTIN_TOOLS }
@@ -33,6 +34,20 @@ import { landingSeatClaim } from "./lane-landing.js";
 
 /** How long one provider seat is given to read its brief and write one module. */
 export const PROVIDER_SEAT_BUDGET_MS = 600_000;
+const REVIEW_ACKNOWLEDGMENT_BUDGET_MS = 60_000;
+
+/** Called only after the daemon accepts this completed seat's submitted review. */
+export function acknowledgeLiveSeatReview(dir: string, nodeKey: string): void {
+  if (!/^[A-Za-z0-9][A-Za-z0-9_-]*$/u.test(nodeKey)) throw new Error("invalid live seat node key");
+  const marker = JSON.parse(readFileSync(join(dir, `seat-${nodeKey}.end`), "utf8")) as Record<string, unknown>;
+  if (marker["ok"] !== true || typeof marker["reviewHandoffId"] !== "string" || marker["reviewHandoffId"].length === 0) {
+    throw new Error("live seat review has no successful completion identity");
+  }
+  const file = join(dir, `seat-${nodeKey}.reviewed`);
+  const temporary = `${file}.${randomUUID()}.tmp`;
+  writeFileSync(temporary, JSON.stringify({ reviewHandoffId: marker["reviewHandoffId"] }), "utf8");
+  renameSync(temporary, file);
+}
 
 /**
  * The seat's argv, and every flag is here because the SHIPPED spawner passes it.
@@ -149,6 +164,8 @@ export function liveProviderSeat(options: {
   readonly providerMode: "REAL_PROVIDER" | "INJECTED_TEST";
   readonly refs: Readonly<Record<string, string>>;
   readonly rendezvous: readonly string[];
+  /** A shorter bounded handoff wait for injected subprocess tests. */
+  readonly reviewAcknowledgmentBudgetMs?: number;
   readonly workspace: string;
 }): { readonly command: string; readonly executable: string } {
   const claims = options.briefs.map((brief) => ({
@@ -162,6 +179,8 @@ export function liveProviderSeat(options: {
   const jsPath = join(options.dir, "live-proof-provider-seat.js");
   writeFileSync(jsPath, launcherSource({
     budgetMs: PROVIDER_SEAT_BUDGET_MS,
+    reviewAcknowledgmentBudgetMs: options.providerMode === "INJECTED_TEST"
+      ? options.reviewAcknowledgmentBudgetMs ?? REVIEW_ACKNOWLEDGMENT_BUDGET_MS : REVIEW_ACKNOWLEDGMENT_BUDGET_MS,
     claims,
     executable: options.executable,
     providerMode: options.providerMode,
@@ -192,6 +211,7 @@ export function liveProviderSeat(options: {
  */
 function launcherSource(config: {
   readonly budgetMs: number;
+  readonly reviewAcknowledgmentBudgetMs: number;
   readonly claims: readonly unknown[];
   readonly executable: string;
   readonly providerMode: "REAL_PROVIDER" | "INJECTED_TEST";
@@ -202,6 +222,7 @@ function launcherSource(config: {
     'const fs = require("node:fs");',
     'const path = require("node:path");',
     'const { spawnSync } = require("node:child_process");',
+    'const { randomUUID } = require("node:crypto");',
     `const CLAIMS = ${JSON.stringify(config.claims)};`,
     `const MARKS = ${JSON.stringify(config.marks)};`,
     `const WORKSPACE = ${JSON.stringify(config.workspace)};`,
@@ -209,10 +230,11 @@ function launcherSource(config: {
     `const PROVIDER_MODE = ${JSON.stringify(config.providerMode)};`,
     `const ARGV = ${JSON.stringify(SEAT_ARGV)};`,
     `const BUDGET_MS = ${String(config.budgetMs)};`,
+    `const REVIEW_ACKNOWLEDGMENT_BUDGET_MS = ${String(config.reviewAcknowledgmentBudgetMs)};`,
     "const chunks = [];",
     'process.stdin.on("error", function () { process.exit(0); });',
     'process.stdin.on("data", function (chunk) { chunks.push(chunk); });',
-    'process.stdin.on("end", function () {',
+    'process.stdin.on("end", async function () {',
     '  const mission = Buffer.concat(chunks).toString("utf8");',
     "  const mine = CLAIMS.find(function (row) { return mission.indexOf(row.claim) !== -1; });",
     "  if (mine === undefined) process.exit(0);",
@@ -237,12 +259,27 @@ function launcherSource(config: {
     "  const executed = Number.isInteger(run.pid) && run.pid > 0;",
     "  const completed = executed && run.error === undefined && run.status === 0;",
     "  const ok = completed && wrote;",
+    "  const reviewHandoffId = randomUUID();",
     '  mark(".end", { endedAt: Date.now(), moduleBytes: wrote ? fs.statSync(mine.target).size : 0,',
-    "    ok: ok, peerSeen: peerSeen, providerStatus: Number.isInteger(run.status) ? run.status : null,",
+    "    ok: ok, reviewHandoffId: reviewHandoffId, peerSeen: peerSeen, providerStatus: Number.isInteger(run.status) ? run.status : null,",
     '    realProvider: PROVIDER_MODE === "REAL_PROVIDER" && executed, startedAt: startedAt });',
     '  if (!ok) process.stderr.write((completed ? "SEAT_PROVIDER_WROTE_NOTHING" : "SEAT_PROVIDER_FAILED")',
     '    + " node=" + mine.brief.nodeKey + " status=" + String(run.status) + "\\n");',
-    "  process.exit(ok ? 0 : 1);",
+    "  if (!ok) process.exit(1);",
+    // Submission belongs before staffing retirement. The provider has finished, but its
+    // launcher holds the existing seat until the harness acknowledges the accepted review.
+    "  const deadline = Date.now() + REVIEW_ACKNOWLEDGMENT_BUDGET_MS;",
+    "  for (;;) {",
+    "    try {",
+    '      const ack = JSON.parse(fs.readFileSync(path.join(MARKS, "seat-" + mine.brief.nodeKey + ".reviewed"), "utf8"));',
+    "      if (ack.reviewHandoffId === reviewHandoffId) process.exit(0);",
+    "    } catch {}",
+    "    if (Date.now() >= deadline) {",
+    '      process.stderr.write("SEAT_REVIEW_ACKNOWLEDGMENT_TIMEOUT node=" + mine.brief.nodeKey + "\\n");',
+    "      process.exit(1);",
+    "    }",
+    "    await new Promise(function (resolve) { setTimeout(resolve, 25); });",
+    "  }",
     "});",
     "",
   ].join("\n");

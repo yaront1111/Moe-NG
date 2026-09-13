@@ -26,13 +26,14 @@ describe("the Cordum shell renders its frame", () => {
     render(<CordumShell />);
     expect(screen.getByTestId("cr.shell.navrail")).toBeTruthy();
     expect(screen.getByTestId("cr.shell.brand").textContent).toContain("Moe");
+    fireEvent.click(screen.getByText("Technical tools"));
     for (const item of CORDUM_NAV_ITEMS) {
       const button = screen.getByTestId(`cr.nav.${item.id}`);
       expect(button.textContent, item.id).toContain(item.label);
     }
     // The six the design names, in order, and nothing else claimed as a destination.
     expect(CORDUM_NAV_ITEMS.map((item) => item.label)).toEqual([
-      "Goals", "Needs you", "Runs", "Resources", "Health", "Policy",
+      "Products", "Needs you", "Runs", "Resources", "Health", "Policy",
     ]);
   });
 

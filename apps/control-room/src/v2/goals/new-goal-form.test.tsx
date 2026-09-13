@@ -21,6 +21,17 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+it("starts with the PRD and keeps constraints in a disclosure", () => {
+  render(<NewGoalForm onCancel={vi.fn()} onCreate={vi.fn()} />);
+
+  expect(screen.getByRole("heading", { name: "New product" })).toBeTruthy();
+  expect(screen.getByLabelText("Product name")).toBeTruthy();
+  expect(screen.getByLabelText("What should it do?")).toBeTruthy();
+  expect(screen.getByTestId("cr.goals.newgoal.criteria").closest("details")?.open).toBe(false);
+  expect(screen.getByRole("button", { name: "Create product" })).toBeTruthy();
+  expect(screen.getByTestId("cr.goals.newgoal.prd").textContent).toContain("product requirements");
+});
+
 /** sha256 of the exact bytes each fixture file carries, computed out of band. */
 const PRD_MD_SHA256 = "992ddf7be007d0fdfa7737b405c1d5e1c899800b8ed5f4e427d9088be07f41fd";
 const PRD_MD_TEXT = "# PRD\nbuild it";

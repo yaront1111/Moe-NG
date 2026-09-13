@@ -342,8 +342,9 @@ function renderApproval(
   reads: readonly PlanningRunOutcome[],
 ): ApprovalHarness {
   const read = vi.fn();
-  for (const answer of reads) read.mockResolvedValueOnce(answer);
-  read.mockResolvedValue(reads[reads.length - 1] ?? SEALED_REVIEWABLE);
+  const answers = reads.map((answer) => answer.status === "RUN" ? { ...answer, runId: DURABLE.runRef } : answer);
+  for (const answer of answers) read.mockResolvedValueOnce(answer);
+  read.mockResolvedValue(answers[answers.length - 1] ?? { ...SEALED_REVIEWABLE, runId: DURABLE.runRef });
   const submit = vi.fn(() => Promise.resolve(outcome));
   render(
     <ApprovePlan

@@ -1,12 +1,10 @@
 import { defineConfig } from "@playwright/test";
 
 /**
- * Browser lane for the static control-room smoke journey.
- *
- * WHAT THIS LANE IS. The served application renders COMMITTED FIXTURES through
- * ControlRoomScaffold. No daemon is attached and no transport exists in this
- * repository, so a green run here certifies that the bundle mounts — nothing
- * about a connected system.
+ * Browser journeys over the current product workspace: production bundle smoke,
+ * explicit development examples, and real daemon-backed operator workflows.
+ * Each spec states its evidence and any process doubles. Static examples do not
+ * certify live acceptance; daemon journeys retain their own receipt assertions.
  *
  * `testMatch` is the load-bearing line. The root `vitest.config.ts` includes
  * `tests/**\/*.test.ts` under `environment: "node"`, and root `test:e2e` ends in
@@ -18,10 +16,10 @@ import { defineConfig } from "@playwright/test";
  * There is deliberately no `webServer` block. Playwright's built-in serve and
  * readiness handling reports Playwright's messages, and this harness owes the
  * operator its OWN stable reason codes (see `harness.ts`), so the lifecycle is
- * owned in `static-ports.ts` and driven from inside the journey.
+ * owned in `static-ports.ts` or `daemon-ports.ts` and driven inside each journey.
  *
- * ONE browser, one worker, no retries: a smoke gate must be cheap and must not
- * be able to hide a flake behind a retry.
+ * One browser, one worker, no retries: shared bundle builders run serially and
+ * a failure remains visible rather than disappearing behind an automatic retry.
  */
 export default defineConfig({
   testDir: ".",
@@ -35,9 +33,12 @@ export default defineConfig({
   timeout: 180_000,
   retries: 0,
   workers: 1,
+  // A missing or disabled control should identify its own action, not spend a
+  // long provider/landing journey budget before the browser records the failure.
+  use: { actionTimeout: 30_000 },
   reporter: [["list"]],
-  // Generated on failure only; ignored by this directory's .gitignore so no
-  // evidence artifact can reach a commit.
+  // Failure diagnostics and explicitly requested QA screenshots stay in the
+  // directory excluded by this lane's .gitignore.
   outputDir: "./test-results",
   projects: [{ name: "chromium", use: { browserName: "chromium" } }],
 });

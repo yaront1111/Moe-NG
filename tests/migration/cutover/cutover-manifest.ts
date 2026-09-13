@@ -151,6 +151,13 @@ export const DEFAULT_EXCLUDED_DIRECTORY_NAMES: readonly string[] = [
 ];
 
 /**
+ * Agent-created checkout copies are host-local session state, not this root's legacy system.
+ * This exact root-relative path is declared when excluded; other `.claude` content and
+ * directories named `worktrees` remain visible. The entry and depth bounds do not change.
+ */
+export const DEFAULT_EXCLUDED_DIRECTORY_PATHS: readonly string[] = [".claude/worktrees"];
+
+/**
  * The three filesystem reads the walk performs. Real `node:fs` is the default
  * and the only implementation shipped here; the seam exists so the drill can
  * drive the UNREADABLE_ENTRY, UNSUPPORTED_ENTRY and LINK branches of THIS
@@ -170,6 +177,8 @@ export interface CutoverWalkOptions {
   readonly maxEntries?: number;
   /** Directory NAMES never descended into. Defaults to DEFAULT_EXCLUDED_DIRECTORY_NAMES; [] excludes nothing. */
   readonly excludedDirectoryNames?: readonly string[];
+  /** Exact root-relative POSIX directory paths. [] includes the default host-local path. */
+  readonly excludedDirectoryPaths?: readonly string[];
   readonly ports?: CutoverWalkPorts;
 }
 
@@ -238,6 +247,7 @@ interface WalkLimits {
   readonly ports: CutoverWalkPorts;
   readonly maxEntries: number;
   readonly excludedNames: ReadonlySet<string>;
+  readonly excludedPaths: ReadonlySet<string>;
 }
 
 interface DirentLocation {
@@ -283,7 +293,7 @@ const visitDirent = (
     // so an excluded tree is never descended and cannot reach the entry bound.
     // Matched on the NAME: an ordinary file called `node_modules.md` is not a
     // `node_modules` directory, and a path substring would swallow it.
-    if (limits.excludedNames.has(dirent.name)) {
+    if (limits.excludedNames.has(dirent.name) || limits.excludedPaths.has(at.key)) {
       into.excludedDirectories.push(at.key);
       return undefined;
     }
@@ -319,6 +329,7 @@ const walk = (root: string, options: CutoverWalkOptions): WalkProduct | CutoverR
     ports,
     maxEntries: options.maxEntries ?? MAX_WALK_ENTRIES,
     excludedNames: new Set(options.excludedDirectoryNames ?? DEFAULT_EXCLUDED_DIRECTORY_NAMES),
+    excludedPaths: new Set(options.excludedDirectoryPaths ?? DEFAULT_EXCLUDED_DIRECTORY_PATHS),
   };
   const into: WalkAccumulator = {
     entries: [],

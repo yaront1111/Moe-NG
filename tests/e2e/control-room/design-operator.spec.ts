@@ -1,3 +1,4 @@
+import { openProductDefinition, openProductRecord } from "./product-navigation.js";
 import type { ChildProcess } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, rmSync } from "node:fs";
@@ -190,7 +191,7 @@ async function createGoalFromPrd(
   return goalId;
 }
 
-test("the operator reads the design and the plan fold names its version", async ({ page }) => {
+test("the operator reads authored design and the build plan names its pinned version", async ({ page }) => {
   test.setTimeout(480_000);
   const root = repoRoot();
   expect(root, "repo root (package.json + pnpm-workspace.yaml)").not.toBeNull();
@@ -329,6 +330,7 @@ test("the operator reads the design and the plan fold names its version", async 
 
     // 5. The human approves Gate 1 from the card. design.submit refuses without this.
     await page.getByTestId(`cr.goals.card.${designedGoal}.open`).click();
+    await openProductDefinition(page);
     const approve = page.getByTestId("cr.gate1.approve");
     await expect(approve, "the daemon minted an approval, so Approve is offered")
       .toBeEnabled({ timeout: 30_000 });
@@ -373,6 +375,7 @@ test("the operator reads the design and the plan fold names its version", async 
     // exactly how this spec first failed. The Design card re-reads on mount and on
     // subject change, so leaving the goal and re-opening it refetches without a reload.
     await reopenGoal(designedGoal);
+    await page.getByRole("combobox", { name: "Viewed product artifact" }).selectOption({ label: "Design record" }, { timeout: 30_000 });
     const card = page.getByTestId("cr.design.card");
     await expect(card, "the Design card must render for a goal that has a design")
       .toBeVisible({ timeout: 30_000 });
@@ -386,6 +389,7 @@ test("the operator reads the design and the plan fold names its version", async 
     //    resubmit attempted afterwards fails with "no design.submit offer among ...".
     await submitDesign(ENTITY_V2, "ConfirmDialog", "v2");
     await reopenGoal(designedGoal);
+    await page.getByRole("combobox", { name: "Viewed product artifact" }).selectOption({ label: "Design record" }, { timeout: 30_000 });
     await expect(page.getByTestId("cr.design.version")).toHaveText("Version 2", { timeout: 30_000 });
     await expect(page.getByTestId("cr.design.body")).toContainText(ENTITY_V2);
 
@@ -405,13 +409,14 @@ test("the operator reads the design and the plan fold names its version", async 
     // existed by then; asserting the ABSENCE of version 1 is what proves the fold is reading
     // the binding rather than the first design it can find.
     await reopenGoal(designedGoal);
+    await openProductRecord(page, "Build plan");
     const fold = page.getByTestId("cr.approve.design-version");
     await expect(fold).toContainText("Design version 2", { timeout: 30_000 });
     await expect(fold).not.toContainText("Design version 1");
 
     // 9. DoD 3's other half: the OLDER version is still readable, which is the
-    //    operator's real question -- what CHANGED. Asked of the daemon, since the
-    //    surface deliberately ships no version picker.
+    //    operator's real question -- what CHANGED. Asked of the daemon so this proves
+    //    durable older-version access independently of the browser's saved observations.
     const older = await askDaemon(origin, "/design/read", { goalRef: designedGoal, version: 1 });
     expect(older.status, `design read v1:\n${older.text.slice(0, 600)}`).toBe(200);
     const olderRecord = isRecord(older.body) && isRecord(older.body["record"])
@@ -427,15 +432,15 @@ test("the operator reads the design and the plan fold names its version", async 
     // design-version-note.test.tsx decodes with the production decoder. That is what
     // keeps the control-room fixture a real daemon frame rather than a hand-written shape.
 
-    // 10. DoD 4: a goal with NO design says so in words, on both surfaces.
+    // 10. A product with no design retains its PRD and offers no authored design artifact.
     await page.getByTestId("cr.nav.goals").click();
     await expect(page.getByTestId("cr.goals.home")).toBeVisible();
     await page.getByTestId(`cr.goals.card.${bareGoal}.open`).click();
-    await expect(page.getByTestId("cr.design.card")).toBeVisible({ timeout: 30_000 });
-    const none = page.getByTestId("cr.design.none");
-    await expect(none, "a goal with no design must SAY so, never render blank")
-      .toBeVisible({ timeout: 20_000 });
-    expect((await none.textContent())?.trim().length ?? 0).toBeGreaterThan(0);
+    const absentDesign = await askDaemon(origin, "/design/read", { goalRef: bareGoal });
+    expect(absentDesign.text).toContain("DESIGN_REVISION_ABSENT");
+    await expect(page.getByRole("combobox", { name: "Viewed product artifact" })
+      .getByRole("option", { name: "Design record", exact: true })).toHaveCount(0);
+    await expect(page.locator("pre").filter({ hasText: BARE_PRD_TEXT })).toBeVisible();
 
     expect(await page.getByTestId("cr.banner.fixture").count()).toBe(0);
   } finally {

@@ -21,26 +21,27 @@ import { DAEMON_LANE_OWNER } from "./journey-coverage.js";
  *
  * IT IS NO LONGER THE LANE'S ONLY JOURNEY, and `doesNotProve` below is therefore
  * a statement about THIS journey and not about the lane: `board-chain.spec.ts`
- * opens an unseeded lane and clicks the whole bootstrap chain. That journey holds
+ * opens an unseeded lane and activates a project, creates source and checks withheld approval. That journey holds
  * no record here, so nothing pins its title the way this one is pinned - see the
  * note in that file about which regression class it exists to catch.
  */
 export const DAEMON_LANE_RECORD = Object.freeze({
   doesNotProve:
-    "No spec section-12 scenario. The journey only READS the board: it clicks no "
-    + "dispatch control, completes no human action, performs no state transition, "
-    + "kills nothing and restarts nothing. All eighteen UNKNOWN rows in the matrix "
+    "No spec section-12 scenario. After runtime session pairing, the journey only reads "
+    + "product records: it dispatches no product action, performs no product state transition, "
+    + "kills no running product and restarts none. All eighteen UNKNOWN rows in the matrix "
     + "stay UNKNOWN.",
   journeyFile: "tests/e2e/control-room/daemon-board.spec.ts",
-  journeyTitle: "the live board renders the daemon's own seeded step, and says so honestly",
+  journeyTitle: "the product's technical record shows the daemon's own seeded node and observed proof",
   owner: DAEMON_LANE_OWNER,
   proves:
     "A real daemon-main.ts on an ephemeral port, seeded by the shipped demo-seed-main.ts, "
-    + "served through the Vite dev proxy: the board renders the seeded node.deliver step "
-    + "under its per-run aggregate id in the READY column, the ledger checkpoint renders "
-    + "with an OBSERVED truth chip and equals what /events/read answers, the fixture marker "
-    + "is absent (and PRESENT when ?fixtures=1 is asked for), an uncredentialed build "
-    + "refuses with LIVE_CONFIG_MISSING, and teardown leaves no orphan processes.",
+    + "served through the Vite dev proxy and paired through the runtime operator channel: "
+    + "the product's technical record renders the seeded node.deliver under its per-run id "
+    + "in READY, bound to the catalog goal. Its OBSERVED proof repeats the daemon's exact "
+    + "target, status and version. The example marker is absent, then present under explicit "
+    + "development fixtures. Environment credentials cannot bypass a missing operator "
+    + "channel, and teardown leaves no orphan processes.",
 } as const);
 
 /**

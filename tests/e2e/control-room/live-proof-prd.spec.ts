@@ -181,6 +181,7 @@ test("a fresh product reaches a compiled two-node plan and lands both nodes, fro
 
     await page.goto(lane.baseUrl);
     await pairBrowser(page, lane);
+    await page.getByText("Project setup", { exact: true }).click();
 
     // ---- BOOTSTRAP RECEIPT: the browser's own form creates the repository. ----
     await expect(page.getByTestId("cr.newproduct.form"), "the new-product card is mounted")

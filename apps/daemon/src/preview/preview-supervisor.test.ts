@@ -27,7 +27,7 @@ import { spawn as realSpawn } from "node:child_process";
 import { connect } from "node:net";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { probeProcessAlive } from "../orchestrator/process-runner-lifecycle.js";
 import {
@@ -41,12 +41,11 @@ import type { PreviewCapturePort, PreviewRunnerConfig } from "./preview-runner.j
 import { createPreviewSupervisor } from "./preview-supervisor.js";
 import {
   LISTENING_SERVER, SILENT_BOUND_SERVER, awaitFixturePort, awaitPidGone, cleanupFixtureWorkspaces,
-  fixtureWorkspace,
+  commitFixtureWorkspace, fixtureWorkspace,
 } from "./preview-test-fixtures.js";
 
 type Store = ReturnType<typeof openStore>;
 
-const SHA = "0123456789abcdef0123456789abcdef01234567";
 
 afterEach(cleanupFixtureWorkspaces);
 
@@ -117,7 +116,7 @@ function supervisorFor(store: Store, overrides: Partial<PreviewRunnerConfig> = {
 async function startLive(supervisor: ReturnType<typeof supervisorFor>, workspace: string): Promise<{
   pid: number; port: number; receiptId: string;
 }> {
-  const result = await supervisor.start({ goalId: GOAL_ID, sha: SHA, workspace });
+  const result = await supervisor.start({ goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace });
   if (!result.ok) throw new Error(`expected a start, got ${result.refusal.code}`);
   const { handle, receipt } = result.started;
   // The preconditions the arms below are only meaningful against: it really is up.
@@ -220,15 +219,39 @@ describe("the preview process is gone afterwards", () => {
     expect(supervisor.active()).toStrictEqual([]);
   }, 180_000);
 
-  it("refuses to leave a preview running that started after shutdown began", async () => {
+  it("refuses new starts after shutdown before reading source or starting a process", async () => {
+    const contractFacts = vi.fn(() => ({ deploymentStatements: ["preview command: node server.mjs"], journeys: [] }));
+    const supervisor = supervisorFor(landedWorld(), { contractFacts });
+    await supervisor.close();
+    const workspace = serverWorkspace();
+
+    const result = await supervisor.start({ goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace });
+
+    expect(result).toMatchObject({ ok: false, receipt: null, refusal: { code: "PREVIEW_START_TIMEOUT", layer: "RUNNER" } });
+    expect(contractFacts).not.toHaveBeenCalled();
+    expect(supervisor.active()).toStrictEqual([]);
+  }, 120_000);
+
+  it("stops an in-flight preview that completes after shutdown begins", async () => {
     // The race a roster-based sweep would otherwise miss: `close()` has already swept, and a
     // start that was in flight would join an empty roster nobody will sweep again.
-    const supervisor = supervisorFor(landedWorld());
-    await supervisor.close();
-
-    const result = await supervisor.start({
-      goalId: GOAL_ID, sha: SHA, workspace: serverWorkspace(),
+    let captured!: () => void;
+    let release!: () => void;
+    const captureStarted = new Promise<void>((resolve) => { captured = resolve; });
+    const captureReleased = new Promise<void>((resolve) => { release = resolve; });
+    const supervisor = supervisorFor(landedWorld(), { capture: async () => {
+      captured();
+      await captureReleased;
+      return [];
+    } });
+    const workspace = serverWorkspace();
+    const starting = supervisor.start({
+      goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace,
     });
+    await captureStarted;
+    await supervisor.close();
+    release();
+    const result = await starting;
 
     if (!result.ok) throw new Error(`expected a start, got ${result.refusal.code}`);
     expect(supervisor.active()).toStrictEqual([]);
@@ -249,8 +272,8 @@ describe("the preview process is gone afterwards", () => {
     const supervisor = supervisorFor(landedWorld());
     const workspace = serverWorkspace();
     const [first, second] = await Promise.all([
-      supervisor.start({ goalId: GOAL_ID, sha: SHA, workspace }),
-      supervisor.start({ goalId: GOAL_ID, sha: SHA, workspace }),
+      supervisor.start({ goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace }),
+      supervisor.start({ goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace }),
     ]);
 
     if (!first.ok) throw new Error(`first refused ${first.refusal.code}`);

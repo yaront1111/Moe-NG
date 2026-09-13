@@ -1,3 +1,4 @@
+import { openTechnicalDestination } from "./product-navigation.js";
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
@@ -135,7 +136,7 @@ test("the browser reads the project's bound remote from the daemon, and no publi
         await page.goto(lane.baseUrl, { waitUntil: "domcontentloaded" });
         await expect(page.getByTestId("cr2.shell.root")).toHaveCount(1, { timeout: 30_000 });
         await pairBrowser(page, lane);
-        await page.getByTestId("cr.nav.health").click({ timeout: CLICK_BUDGET_MS });
+        await openTechnicalDestination(page, "health");
 
         // THE PROXY PIN, EXECUTED. Reaching this text means the dev server proxied the route to
         // the daemon; unproxied, the decoder would have refused the SPA's HTML instead.
