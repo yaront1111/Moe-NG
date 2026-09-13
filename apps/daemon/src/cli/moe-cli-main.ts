@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { parseCliArgv } from "./moe-cli-argv.js";
 import type { CliInit, CliStart } from "./moe-cli-argv.js";
+import { isMainModule } from "./moe-cli-entry.js";
 import { WORKSPACE_LINK_FILENAME, ensureWorkspaceLinks } from "./moe-cli-links.js";
 import {
   MOE_CONFIG_FILENAME, MOE_INIT_CONFIG_PRESENT, checkNodeVersion, cryptoRandomHex,
@@ -225,8 +226,9 @@ function ownVersion(artifactRoot: string): string {
   }
 }
 
-const meta = import.meta as ImportMeta & { readonly main?: boolean };
-if (meta.main === true) {
+// Not `import.meta.main` alone: the flag is undefined on Node 23.6-23.11 and 24.0-24.1, which
+// already load this file, and the refusal above never ran there (moe-cli-entry.ts).
+if (isMainModule(import.meta, process.argv[1])) {
   const artifactRoot = fileURLToPath(new URL("../../../..", import.meta.url));
   process.exitCode = await runMoeCli({
     artifactRoot,
