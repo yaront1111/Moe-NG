@@ -726,6 +726,7 @@ describe("a node whose review is exhausted waits on a human escalation", () => {
     expect(node).toMatchObject({ aggregateId: "node-code-1", missing: ["escalation"], status: "BLOCKED" });
     const offered = nodeSurface().nextAllowedCommands.filter((entry) => entry.targetAggregateId === "node-code-1");
     expect(offered.map((entry) => entry.commandKind)).toEqual(["escalation.decide"]);
+    expect(offered[0]?.inputSchemaVersion).toBe("moe-review-command/1");
     expect(offered[0]?.expectedVersion).toBe(readReviewLedger(store, PROJECT, "node-code-1").version);
   });
 

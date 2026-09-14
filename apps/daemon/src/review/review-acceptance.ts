@@ -6,6 +6,7 @@ import { commitAccepted, payloadRef, refuse, refuseFromKernel } from "./review-l
 import type { CommandHandler, ReviewOutcome } from "./review-ledger.js";
 import { NODE_VERIFIER_PRINCIPAL_ID, readVerifierReceipt } from "./verifier-receipt-ledger.js";
 import { continuationSourceAttested, reviewContinuationAvailable, reviewContinuationForAcceptance, reviewContinuationSource } from "./review-continuation.js";
+import { implementationGuidanceResult, readReviewGuidanceSource, validImplementationGuidance } from "./review-implementation-guidance.js";
 
 /**
  * Explicit escalation (DoD 4) and the acceptance gate (DoD 6).
@@ -45,6 +46,11 @@ export const decideEscalation: CommandHandler = (context): ReviewOutcome => {
   if (escalationRef === null || subjectRef === null || decision === null) {
     return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
   }
+  const hasGuidance = Object.hasOwn(request.payload, "implementationGuidance");
+  const text = request.payload["implementationGuidance"];
+  if (hasGuidance && (decision !== "ALLOW_MORE_ATTEMPTS" || !validImplementationGuidance(text))) {
+    return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
+  }
   if (ledger.unreadable) {
     return refuse(request.kind, "REVIEW_LINEAGE_UNREADABLE", "DAEMON_PREREQUISITE");
   }
@@ -69,12 +75,17 @@ export const decideEscalation: CommandHandler = (context): ReviewOutcome => {
   if (decision === "ALLOW_MORE_ATTEMPTS" && (!continuationSourceAttested(latest) || latest.routing.route !== "ESCALATE")) {
     return refuse(request.kind, "REVIEW_LINEAGE_UNREADABLE", "DAEMON_PREREQUISITE");
   }
+  const guidanceSource = hasGuidance ? readReviewGuidanceSource(store, request.projectId, subjectRef, latest) : null;
+  if (hasGuidance && guidanceSource === null) {
+    return refuse(request.kind, "REVIEW_LINEAGE_UNREADABLE", "DAEMON_PREREQUISITE");
+  }
   return commitAccepted(store, request, {
     aggregateId: subjectRef,
     eventPayload: { decision, escalationRef, unsuccessfulRounds: ledger.lineage.unsuccessfulRounds },
     eventType: "ReviewEscalated",
     expectedVersion: ledger.version,
     result: {
+      ...(hasGuidance ? { implementationGuidance: implementationGuidanceResult(text as string, guidanceSource!) } : {}),
       ...(decision === "ALLOW_MORE_ATTEMPTS" ? {
         continuationSource: reviewContinuationSource(request.projectId, subjectRef, ledger.version, latest),
       } : {}),

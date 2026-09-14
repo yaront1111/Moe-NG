@@ -1,9 +1,17 @@
 import { MAX_JSON_BODY_BYTES, MAX_JSON_STRING_UTF8_BYTES } from "@moe/contracts";
-import type { JsonObject } from "@moe/contracts";
+import type { JsonObject, JsonValue } from "@moe/contracts";
 
 const encoder = new TextEncoder();
 const PART_CODE_UNITS = 16_384;
 const PART_UTF8_BYTES = 65_536;
+
+/** Canonical renderer for this version's JSON-only host facts; never a graph/plan hash codec. */
+export function canonicalReviewArtifact(value: JsonValue): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalReviewArtifact).join(",")}]`;
+  if (value !== null && typeof value === "object") return `{${Object.keys(value).sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalReviewArtifact((value as JsonObject)[key] as JsonValue)}`).join(",")}}`;
+  return JSON.stringify(value);
+}
 
 /** The digest always covers joined canonical UTF-8 bytes; splitting changes only storage. */
 export function reviewArtifactTextFields(text: string): JsonObject {

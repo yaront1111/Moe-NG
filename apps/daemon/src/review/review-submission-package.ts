@@ -3,19 +3,11 @@ import type { JsonObject, JsonValue } from "@moe/contracts";
 import type { ReviewPackageItemInput } from "@moe/review";
 import type { VerifiedWorkspaceBinding } from "../repository/verified-workspace-contracts.js";
 import type { ReviewSubmissionSource } from "./review-submission-source.js";
-import { reviewArtifactTextFields } from "./review-submission-artifact.js";
+import { canonicalReviewArtifact, reviewArtifactTextFields } from "./review-submission-artifact.js";
 
 export interface PreparedReviewSubmission {
   readonly evidence: JsonObject;
   readonly items: readonly ReviewPackageItemInput[];
-}
-
-/** Canonical renderer for this version's JSON-only host facts; never a graph/plan hash codec. */
-function canonical(value: JsonValue): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  if (value !== null && typeof value === "object") return `{${Object.keys(value).sort()
-    .map((key) => `${JSON.stringify(key)}:${canonical((value as JsonObject)[key] as JsonValue)}`).join(",")}}`;
-  return JSON.stringify(value);
 }
 
 /**
@@ -29,7 +21,7 @@ export function prepareReviewSubmissionPackage(input: {
 }): PreparedReviewSubmission {
   const artifacts: JsonObject[] = [];
   const artifact = (kind: string, value: unknown, locator?: string): ReviewPackageItemInput => {
-    const text = canonical(value as JsonValue);
+    const text = canonicalReviewArtifact(value as JsonValue);
     const digest = createHash("sha256").update(text, "utf8").digest("hex");
     const address = locator ?? `review-submission:sha256:${digest}`;
     artifacts.push(Object.freeze({ digest, locator: address, ...reviewArtifactTextFields(text) }));

@@ -1,4 +1,5 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { admitByWireProtocol, createControlRoomTransport } from "@moe/control-room-client";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { LiveSetup } from "../../live/live-config.js";
@@ -64,7 +65,7 @@ describe("LiveNeedsYou", () => {
     vi.useFakeTimers();
     let version: number | null = 5;
     const offer = (current: number) => ({ commandEnvelopeVersion: "moe-runtime-command/1", commandId: `cmd-${current}`,
-      commandKind: "escalation.decide", expectedVersion: current, inputSchemaVersion: "moe-review-command/1", targetAggregateId: "node-x" });
+      commandKind: "escalation.decide", expectedVersion: current, inputSchemaVersion: "moe-review-escalation-guidance/1", targetAggregateId: "node-x" });
     vi.stubGlobal("fetch", vi.fn(async (path: string): Promise<Response> => {
       if (path === "/affordances/read") return { json: async () => ({ ...SURFACE, nextAllowedCommands: version === null ? [] : [offer(version)] }), status: 200 } as Response;
       if (path === "/goals/read") return { json: async () => CATALOG, status: 200 } as Response;
@@ -84,20 +85,70 @@ describe("LiveNeedsYou", () => {
     const submit = vi.fn().mockImplementationOnce(() => oldResponse).mockResolvedValue({ ok: true, commandId: "cmd-7" });
     render(<LiveNeedsYou escalationPort={{ submit }} onOpenBoard={vi.fn()} readRuns={readRuns} setup={SETUP} />);
     await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Guidance for review 5" } });
     await act(async () => { screen.getByTestId("cr.needsyou.escalate.node-x").click(); });
-    expect(submit).toHaveBeenLastCalledWith(offer(5), "node-x", "ALLOW_MORE_ATTEMPTS");
+    expect(submit).toHaveBeenLastCalledWith(offer(5), "node-x", "ALLOW_MORE_ATTEMPTS", "Guidance for review 5");
     version = null;
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
     expect(screen.queryByTestId("cr.needsyou.escalate.node-x")).toBeNull();
     version = 7;
     await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "New answer for review 7" } });
     await act(async () => { resolveOld({ ok: true, commandId: "cmd-5" }); });
     const button = screen.getByTestId("cr.needsyou.escalate.node-x") as HTMLButtonElement;
-    expect(button.disabled).toBe(false); expect(button.textContent).toBe("Allow one more attempt");
+    expect(button.disabled).toBe(false); expect(button.textContent).toBe("Retry with guidance");
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("New answer for review 7");
     expect(screen.getByText("Question for version 7")).toBeTruthy();
     expect(screen.queryByText("Question for version 5")).toBeNull();
     await act(async () => { button.click(); });
-    expect(submit).toHaveBeenLastCalledWith(offer(7), "node-x", "ALLOW_MORE_ATTEMPTS");
+    expect(submit).toHaveBeenLastCalledWith(offer(7), "node-x", "ALLOW_MORE_ATTEMPTS", "New answer for review 7");
+  });
+
+  it("carries entered guidance through the live callback, real port, generated builder and transport", async () => {
+    const offered = { commandEnvelopeVersion: "moe-runtime-command/1", commandId: "cmd-guided-4", commandKind: "escalation.decide",
+      expectedVersion: 4, inputSchemaVersion: "moe-review-escalation-guidance/1", targetAggregateId: "execution-exact" };
+    vi.stubGlobal("fetch", vi.fn(async (path: string): Promise<Response> => {
+      if (path === "/affordances/read") return new Response(JSON.stringify({ ...SURFACE, nextAllowedCommands: [offered] }));
+      if (path === "/goals/read") return new Response(JSON.stringify(CATALOG));
+      throw new Error(`unexpected fetch path ${path}`);
+    }));
+    const gate = admitByWireProtocol("moe-runtime-command/1+moe-runtime-query/1+moe-runtime-error-registry/1");
+    if (!gate.ok) throw new Error("TEST_COMPAT_GATE_REFUSED");
+    const requests: { path: string; body: Record<string, unknown> }[] = [];
+    const setup: LiveSetup = { ...SETUP, client: gate.client, transport: createControlRoomTransport({
+      csrfToken: "private-test-csrf", origin: "", sessionCredential: SETUP.sessionCredential,
+      wireProtocolVersion: gate.client.wireProtocolVersion, fetch: async (path, init) => {
+        requests.push({ path, body: JSON.parse(String(init.body)) as Record<string, unknown> });
+        return requests.length === 1
+          ? new Response(JSON.stringify({ ok: false, refusal: { code: "VERSION_STALE", layer: "DAEMON" } }), { status: 409 })
+          : new Response(JSON.stringify({ ok: true }));
+      },
+    }) };
+    const readRuns = async (): Promise<RunsOutcome> => ({ status: "RUNS", goals: [{ goalId: "goal-plan", lifecycle: "EXECUTION_ENABLED", nodes: [{
+      accepted: null, claim: null, criterionIds: [], declaredMigrations: null, dependsOn: [], lastActivityAt: null,
+      nodeKey: "node-x", nodeRef: "execution-exact", objective: "o", landing: null, receipt: null,
+      review: { escalated: false, findings: [], latestRoute: "ESCALATE", rounds: 3, unreadable: false, unsuccessfulRounds: 3, version: 4 },
+      sharedKey: false, status: "ESCALATION_REQUIRED" }], publish: null,
+      run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-plan" }, title: "Plan me" }],
+      totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 1, IN_PROGRESS: 0,
+        READY: 0, REPLANNED: 0, UNATTRIBUTABLE: 0, goals: 1, nodes: 1 } });
+    render(<LiveNeedsYou onOpenBoard={vi.fn()} readRuns={readRuns} setup={setup} />);
+    const field = await screen.findByRole("textbox", { name: "Answers or instructions for the next attempt (optional)" }) as HTMLTextAreaElement;
+    const guidance = "  Session cookies; retain every check.\n<img src=x onerror='fail()'>  ";
+    fireEvent.change(field, { target: { value: guidance } });
+    fireEvent.click(screen.getByRole("button", { name: "Retry with guidance on node-x" }));
+    await waitFor(() => { expect(screen.getByTestId("cr.needsyou.result.execution-exact").textContent).toContain("VERSION_STALE"); });
+    expect(requests).toHaveLength(1);
+    expect(requests[0]?.path).toBe("/command");
+    expect(requests[0]?.body).toMatchObject({ commandId: offered.commandId, commandKind: "escalation.decide",
+      expectedVersion: 4, targetAggregateId: "execution-exact", payload: { decision: "ALLOW_MORE_ATTEMPTS",
+        escalationRef: "ui-escalation-execution-exact-v4", subjectRef: "execution-exact", implementationGuidance: guidance } });
+    expect(field.value).toBe(guidance); expect(document.querySelector("img")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Retry with guidance on node-x" }));
+    await screen.findByText("Guidance recorded. One more attempt is approved for this node.");
+    expect(requests).toHaveLength(2);
+    expect(requests[1]?.body["payload"]).toEqual(requests[0]?.body["payload"]);
   });
   it("lists the offered plan approval and the pending contract, and reports the count", async () => {
     stubWire();

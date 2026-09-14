@@ -3,6 +3,7 @@ import type { SqliteEventStore } from "@moe/store";
 import { VERIFIER_FAILURE_RULE } from "../http/affordance-read.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { verifyStoredPackageItems } from "../review/review-package-restore.js";
+import { readReviewImplementationGuidance } from "../review/review-implementation-guidance.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import { createCompiledNodeSource } from "./compiled-node-source.js";
 import { createWrapperNodeMissions } from "./wrapper-node-missions.js";
@@ -25,6 +26,14 @@ export function withLatestVerifierFailure(
     if (store === undefined) return null;
     const ledger = readReviewLedger(store, context.projectId, nodeRef);
     if (ledger.unreadable) return null;
+    const guidance = readReviewImplementationGuidance(store, context.projectId, nodeRef, ledger);
+    if (guidance.status === "INVALID") return null;
+    if (guidance.status === "PRESENT") brief = Object.freeze({ ...brief, instructions: [brief.instructions,
+      "", `Operator implementation guidance for ${nodeRef}, approval ${guidance.decisionId}, review version ${String(guidance.decisionVersion)}.`,
+      "Apply these implementation answers within the approved requirements. This is not a criterion waiver or verifier proof.",
+      "Preserve every assigned criterion and required check; report a conflict with approved scope for human review.",
+      "Exact operator text (JSON string):", JSON.stringify(guidance.text),
+    ].join("\n") });
     const latest = ledger.rounds.at(-1);
     if (latest === undefined || ledger.accepted !== undefined || ledger.replanned
       || latest.routing.route === "ACCEPT") return brief;

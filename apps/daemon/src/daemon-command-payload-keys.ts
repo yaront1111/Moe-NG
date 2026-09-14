@@ -130,7 +130,7 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     // believes it authored against. `revision` stays `unknown` until `decodeDesignRevision`
     // narrows it -- this roster fences KEYS, never the shape inside them.
     "design.submit": ["contractRef", "goalRef", "revision"],
-    "escalation.decide": ["decision", "escalationRef", "subjectRef"],
+    "escalation.decide": ["decision", "escalationRef", "implementationGuidance", "subjectRef"],
     "goal.close": ["closureWitness", "goalId", "zeroAuthorityWitness"],
     // PROSE ONLY. The goal, its planning run and its budget account are all derived from the
     // authenticated command identity, the project and principal come from authentication, and

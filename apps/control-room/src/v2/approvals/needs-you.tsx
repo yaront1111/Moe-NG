@@ -11,6 +11,8 @@ import { writeFailedSaid } from "../outcome-words.js";
 import type { NeedsYouData, NeedsYouItem, NeedsYouKind } from "./needs-you-model.js";
 import { PreviewCard } from "./preview-card.js";
 import { EscalationFindings } from "./needs-you-escalation-findings.js";
+import { EscalationGuidanceInput } from "./escalation-guidance-input.js";
+import { supportsEscalationGuidance, validEscalationGuidance } from "./escalation-port.js";
 import type { PreviewDecision, PreviewFinding } from "./preview-port.js";
 import type { OfferOutcome } from "./offer-wire.js";
 
@@ -29,6 +31,7 @@ export interface DecisionResult {
   readonly busy: boolean;
   /** Which answer this result belongs to; absent means the card's primary decision. */
   readonly choice?: NeedsYouChoice | undefined;
+  readonly guidanceSubmitted?: boolean;
   readonly outcome: OfferOutcome | null;
 }
 
@@ -44,7 +47,7 @@ export interface NeedsYouProps {
   /** Fetches a PREVIEW item's captures with the session headers; absent shows none. */
   readonly loadCapture?: CaptureLoader | undefined;
   /** Spends the daemon's offer this item carries; absent means no inline decision. */
-  readonly onDecide?: ((item: NeedsYouItem, choice?: NeedsYouChoice) => void) | undefined;
+  readonly onDecide?: ((item: NeedsYouItem, choice?: NeedsYouChoice, implementationGuidance?: string) => void) | undefined;
   /** Drops an INCIDENT item from THIS queue only; absent means the card cannot be dismissed. */
   readonly onDismissIncident?: ((item: NeedsYouItem) => void) | undefined;
   /** Spends the INCIDENT item's `deployment.rollback` offer; absent renders it read-only. */
@@ -125,6 +128,9 @@ function resultLine(decision: InlineDecision, result: DecisionResult | undefined
   if (result.busy) return "Recording your decision...";
   if (result.outcome === null) return null;
   if (!result.outcome.ok) return null;
+  if (result.guidanceSubmitted === true && result.choice !== "REPLAN") {
+    return "Guidance recorded. One more attempt is approved for this node.";
+  }
   return result.choice === "REPLAN" ? REPLAN_DONE_LINE : decision.doneLine;
 }
 
@@ -142,6 +148,7 @@ function DecisionCard({
   readonly result: DecisionResult | undefined;
 }): JSX.Element {
   const [armed, setArmed] = useState(false);
+  const [guidance, setGuidance] = useState("");
   const key = decisionKeyOf(item);
   const slug = `${item.kind.toLowerCase().replace(/_/gu, "-")}.${key}`;
   const decision = decisionOf(item);
@@ -149,6 +156,9 @@ function DecisionCard({
   const done = result?.outcome?.ok === true;
   const replan = item.escalation === undefined ? null : item.escalation;
   const reviewUnavailable = replan !== null && replan.findingsState !== "CURRENT";
+  const guidanceSupported = replan !== null && supportsEscalationGuidance(replan.affordance);
+  const guided = replan !== null && guidance.length > 0;
+  const guidanceBlocked = guided && (!guidanceSupported || !validEscalationGuidance(guidance));
   return (
     <li className="cr2-needs-card" data-kind={item.kind} data-testid={`cr.needsyou.item.${slug}`}>
       <div className="cr2-needs-main">
@@ -156,6 +166,9 @@ function DecisionCard({
         <h2 className="cr2-needs-headline">{item.headline}</h2>
         <p className="cr2-needs-detail">{item.detail}</p>
         {item.escalation === undefined ? null : <EscalationFindings facts={item.escalation} />}
+        {replan === null || onDecide === undefined ? null : <EscalationGuidanceInput
+          disabled={result?.busy === true || done || reviewUnavailable} onChange={setGuidance}
+          supported={guidanceSupported} value={guidance} />}
         {item.incident === undefined ? null : (
           <IncidentCard
             busy={result?.busy === true}
@@ -178,16 +191,18 @@ function DecisionCard({
       <div className="cr2-needs-action">
         {decision === null || onDecide === undefined ? null : (
           <ActionButton
-            ariaLabel={decision.ariaLabel}
-            disabled={result?.busy === true || done || reviewUnavailable}
+            ariaLabel={guided ? `Retry with guidance on ${replan!.nodeKey}` : decision.ariaLabel}
+            disabled={result?.busy === true || done || reviewUnavailable || guidanceBlocked}
             onClick={(): void => {
+              if (guidanceBlocked) return;
               if (decision.armLabel !== null && !armed) { setArmed(true); return; }
               setArmed(false);
-              onDecide(item);
+              if (guided) onDecide(item, undefined, guidance);
+              else onDecide(item);
             }}
             testId={decision.testId}
           >
-            {done ? decision.doneLabel : armed && decision.armLabel !== null ? decision.armLabel : decision.buttonLabel}
+            {done ? decision.doneLabel : guided ? "Retry with guidance" : armed && decision.armLabel !== null ? decision.armLabel : decision.buttonLabel}
           </ActionButton>
         )}
         {armed && !done ? (

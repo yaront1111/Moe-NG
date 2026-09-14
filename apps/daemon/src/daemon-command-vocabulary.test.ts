@@ -171,7 +171,7 @@ const ROWS: readonly VocabularyRow[] = [
   { agent: [PLANNING, WORK], capability: PLANNING, family: "DESIGN", kind: "design.submit",
     payloadKeys: ["contractRef", "goalRef", "revision"] },
   { agent: [REVIEW, WORK], capability: REVIEW, family: "REVIEW", kind: "escalation.decide",
-    payloadKeys: ["decision", "escalationRef", "subjectRef"] },
+    payloadKeys: ["decision", "escalationRef", "implementationGuidance", "subjectRef"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.close",
     payloadKeys: ["closureWitness", "goalId", "zeroAuthorityWitness"] },
   { agent: [GOAL, WORK], capability: GOAL, family: "BOOTSTRAP", kind: "goal.create",

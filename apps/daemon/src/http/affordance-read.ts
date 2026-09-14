@@ -17,6 +17,7 @@ import type { GoalCloseReadiness } from "../goals/goal-close-readiness.js";
 import { SESSION_SCHEMA_VERSION } from "../identity/session-contracts.js";
 import { readSessionLedger } from "../identity/session-read-model.js";
 import { REVIEW_SCHEMA_VERSION } from "../review/review-contracts.js";
+import { readReviewGuidanceSource, REVIEW_ESCALATION_GUIDANCE_SCHEMA_VERSION } from "../review/review-implementation-guidance.js";
 import { REVIEW_ESCALATION_ROUND_LIMIT } from "@moe/review";
 import { currentPlanningRun } from "../planning/current-planning-run.js";
 import { createPreviewReceiptReader } from "../preview/preview-daemon-edge.js";
@@ -606,7 +607,9 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
         // Offering review.submit here would staff agents into a refusal loop.
         if (!awaitingVerify && !reviewContinuationAvailable(review)
           && review.lineage.unsuccessfulRounds >= REVIEW_ESCALATION_ROUND_LIMIT) {
-          offers.push(offer("escalation.decide", spec.nodeRef, review.version, REVIEW_SCHEMA_VERSION));
+          const guidanceSource = readReviewGuidanceSource(config.store, config.projectId, spec.nodeRef, review.rounds.at(-1));
+          offers.push(offer("escalation.decide", spec.nodeRef, review.version,
+            guidanceSource === null ? REVIEW_SCHEMA_VERSION : REVIEW_ESCALATION_GUIDANCE_SCHEMA_VERSION));
           steps.push(Object.freeze({
             aggregateId: spec.nodeRef, ...claim, kind: NODE_DELIVER_KIND,
             missing: ["escalation"], status: "BLOCKED" as const, version: review.version,

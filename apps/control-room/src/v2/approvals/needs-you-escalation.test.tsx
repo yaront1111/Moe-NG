@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
@@ -29,6 +29,67 @@ function runs(nodes: readonly RunNodeView[] = [node()]): RunsOutcome {
       READY: 0, REPLANNED: 0, UNATTRIBUTABLE: 0, goals: 1, nodes: nodes.length } };
 }
 function items(read: RunsOutcome | null = runs(), version = 5) { return escalationItems(surface(version), read, CATALOG); }
+function guidedItems(version = 5, nodeRef = "execution-own") {
+  return escalationItems({ ...surface(version), offers: [{ ...offer(version), targetAggregateId: nodeRef,
+    inputSchemaVersion: "moe-review-escalation-guidance/1" }] }, runs([node(version, nodeRef)]), CATALOG);
+}
+
+it("adds guidance to the explicit retry while keeping REPLAN and empty retry independent", async () => {
+  const decide = vi.fn(); const selected = guidedItems();
+  render(<NeedsYou data={{ countLabel: "1", items: selected, note: null }} onDecide={decide} onOpenBoard={vi.fn()} />);
+  const field = screen.getByRole("textbox", { name: "Answers or instructions for the next attempt (optional)" }) as HTMLTextAreaElement;
+  expect(field.maxLength).toBe(4000);
+  const guidance = "Use session cookies. Keep all approved checks.";
+  fireEvent.change(field, { target: { value: guidance } });
+  await userEvent.click(screen.getByRole("button", { name: "Retry with guidance on api" }));
+  expect(decide).toHaveBeenLastCalledWith(selected[0], undefined, guidance);
+  await userEvent.click(screen.getByRole("button", { name: "Replan api from its findings" }));
+  expect(decide).toHaveBeenLastCalledWith(selected[0], "REPLAN");
+  fireEvent.change(field, { target: { value: "" } });
+  await userEvent.click(screen.getByRole("button", { name: "Allow one more attempt on api" }));
+  expect(decide).toHaveBeenLastCalledWith(selected[0]);
+});
+
+it("keeps invalid or unsupported guidance from silently becoming a plain retry", async () => {
+  const decide = vi.fn(); const selected = guidedItems();
+  const { rerender } = render(<NeedsYou data={{ countLabel: "1", items: selected, note: null }} onDecide={decide} onOpenBoard={vi.fn()} />);
+  const field = screen.getByRole("textbox") as HTMLTextAreaElement;
+  fireEvent.change(field, { target: { value: "x".repeat(4001) } });
+  expect((screen.getByTestId("cr.needsyou.escalate.execution-own") as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByTestId("cr.needsyou.replan.execution-own") as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.change(field, { target: { value: "\ud800" } });
+  expect((screen.getByTestId("cr.needsyou.escalate.execution-own") as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(field, { target: { value: "Retain this guidance" } });
+  rerender(<NeedsYou data={{ countLabel: "1", items: items(), note: null }} onDecide={decide} onOpenBoard={vi.fn()} />);
+  expect(screen.getByText("This daemon does not support retry guidance. Refresh after updating Moe." )).toBeTruthy();
+  expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("Retain this guidance");
+  const retry = screen.getByTestId("cr.needsyou.escalate.execution-own") as HTMLButtonElement;
+  expect(retry.disabled).toBe(true); await userEvent.click(retry); expect(decide).not.toHaveBeenCalled();
+});
+
+it("offers no guidance entry for a legacy daemon", () => {
+  render(<NeedsYou data={{ countLabel: "1", items: items(), note: null }} onDecide={vi.fn()} onOpenBoard={vi.fn()} />);
+  expect(screen.queryByRole("textbox")).toBeNull();
+  expect((screen.getByRole("button", { name: "Allow one more attempt on api" }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+it("preserves a refused draft but resets it for another review, node, or unmount", () => {
+  const decide = vi.fn(); const selected = guidedItems(); const item = selected[0]!;
+  const { rerender } = render(<NeedsYou data={{ countLabel: "1", items: selected, note: null }} onDecide={decide} onOpenBoard={vi.fn()} />);
+  fireEvent.change(screen.getByRole("textbox"), { target: { value: "Human's exact answer" } });
+  const refused = new Map([[resultKeyOf(item), { busy: false, outcome: { ok: false as const, code: "VERSION_STALE", layer: "DAEMON" } }]]);
+  rerender(<NeedsYou data={{ countLabel: "1", items: selected, note: null }} decisionResults={refused} onDecide={decide} onOpenBoard={vi.fn()} />);
+  expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("Human's exact answer");
+  expect((screen.getByRole("button", { name: "Retry with guidance on api" }) as HTMLButtonElement).disabled).toBe(false);
+  for (const next of [guidedItems(7), guidedItems(7, "execution-other")]) {
+    rerender(<NeedsYou data={{ countLabel: "1", items: next, note: null }} onDecide={decide} onOpenBoard={vi.fn()} />);
+    expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("");
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Discard on identity change" } });
+  }
+  rerender(<NeedsYou data={{ countLabel: "0", items: [], note: null }} onDecide={decide} onOpenBoard={vi.fn()} />);
+  rerender(<NeedsYou data={{ countLabel: "1", items: selected, note: null }} onDecide={decide} onOpenBoard={vi.fn()} />);
+  expect((screen.getByRole("textbox") as HTMLTextAreaElement).value).toBe("");
+});
 
 it("joins reported findings to the exact offered node and review version", () => {
   const [item] = items(runs([node(5, "execution-other", false, [{ ...FINDING, detail: "FOREIGN" }]), node()]));

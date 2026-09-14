@@ -149,7 +149,7 @@ const ROWS: readonly Row[] = [
     kind: "design.submit", layer: "REQUEST",
     payloadKeys: ["contractRef", "goalRef", "revision"] },
   { agent: [REVIEW, WORK], capability: REVIEW, code: "REVIEW_PAYLOAD_INVALID",
-    kind: "escalation.decide", layer: INGRESS, payloadKeys: ["decision", "escalationRef", "subjectRef"] },
+    kind: "escalation.decide", layer: INGRESS, payloadKeys: ["decision", "escalationRef", "implementationGuidance", "subjectRef"] },
   { agent: null, capability: WORK, code: "EVENT_STREAM_RESUME_INPUT_INVALID",
     kind: "events.resume", layer: "DAEMON_EVENT_STREAM_RESUME",
     payloadKeys: ["presentedCursor", "projection", "subscriberId"] },

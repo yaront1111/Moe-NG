@@ -157,26 +157,30 @@ export function LiveNeedsYou({
   const surfaceRef = useRef<SurfaceFrame | null>(null);
   surfaceRef.current = surface;
   const [successor] = useState(() => successorPort ?? createReplanSuccessorPort(setup, () => surfaceRef.current));
-  const onDecide = useCallback((item: NeedsYouItem, choice?: NeedsYouChoice) => {
+  const onDecide = useCallback((item: NeedsYouItem, choice?: NeedsYouChoice, implementationGuidance?: string) => {
     const key = resultKeyOf(item);
     const escalation = item.escalation;
+    const guidanceResult = escalation !== undefined && choice !== "REPLAN" && implementationGuidance !== undefined
+      ? { guidanceSubmitted: true } : {};
     const spend = escalation !== undefined
       ? (choice === "REPLAN"
         // REPLAN is two durable acts: the decision on the node, then the successor goal that
         // carries the findings. The second runs only once the first was accepted.
         ? escalate.submit(escalation.affordance, escalation.nodeKey, "REPLAN").then(async (outcome) =>
           outcome.ok ? successor.create(item, runs) : outcome)
-        : escalate.submit(escalation.affordance, escalation.nodeKey, "ALLOW_MORE_ATTEMPTS"))
+        : implementationGuidance === undefined
+          ? escalate.submit(escalation.affordance, escalation.nodeKey, "ALLOW_MORE_ATTEMPTS")
+          : escalate.submit(escalation.affordance, escalation.nodeKey, "ALLOW_MORE_ATTEMPTS", implementationGuidance))
       : item.close !== undefined
         ? close.submit(item.close.affordance, item.goalId)
         : null;
     if (spend === null) return;
-    setResults((previous) => new Map(previous).set(key, { busy: true, choice, outcome: null }));
+    setResults((previous) => new Map(previous).set(key, { busy: true, choice, outcome: null, ...guidanceResult }));
     void spend.then((outcome) => {
-      setResults((previous) => new Map(previous).set(key, { busy: false, choice, outcome }));
+      setResults((previous) => new Map(previous).set(key, { busy: false, choice, outcome, ...guidanceResult }));
     }, () => {
       setResults((previous) => new Map(previous).set(key, {
-        busy: false, choice,
+        busy: false, choice, ...guidanceResult,
         outcome: { code: "DECISION_DISPATCH_FAILED", layer: "CONTROL_ROOM_NEEDS_YOU", ok: false },
       }));
     });
