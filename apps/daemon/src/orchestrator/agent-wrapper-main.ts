@@ -129,7 +129,7 @@ async function main(): Promise<void> {
     const compiledTestCommand = (process.env["MOE_NODE_TEST_COMMAND"] ?? "") === ""
       ? "pnpm test"
       : process.env["MOE_NODE_TEST_COMMAND"] as string;
-    const { nodeMission, listNodes } = createReviewAwareNodeMissions({
+    const { nodeMission, listNodes, reviewContinuation } = createReviewAwareNodeMissions({
       projectId: config.projectId, operatorPrincipalId: config.principalId, store: () => verifierStore,
       workspace: compiledWorkspace, testCommand: compiledTestCommand, nodeSpecsDir: config.nodeSpecsDir,
       log: (line) => { process.stderr.write(`${line}\n`); },
@@ -196,6 +196,7 @@ async function main(): Promise<void> {
     let secureSpawn: AgentSpawnStart | null = null;
     wrapper = createAgentWrapper({
       nodeMission,
+      reviewContinuation,
       // Named in every brief: the MCP port does not know the project, and a seat has no
       // read that answers it, so graph_get was uncallable without this (2026-09-05).
       projectId: config.projectId,

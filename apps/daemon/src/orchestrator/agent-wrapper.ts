@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
+import { validReviewContinuationApproval } from "@moe/review";
 import type { JsonObject } from "@moe/contracts";
 
 import { agentCapabilitiesFor } from "../daemon-store-dependencies.js";
@@ -63,6 +64,24 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
   // exhaust an orphaned item; restart re-arms this advisory counter while the
   // durable staffing gate still fences the live-child race.
   const attempts = new Map<string, number>();
+  const appliedContinuations = new Map<string, { decisionId: string; resultSha256: string; version: number }>();
+  const observeContinuation = (step: ChainStep, workItemId: string): void => {
+    if (step.kind !== "node.deliver" || step.aggregateId === null || config.reviewContinuation === undefined) return;
+    try {
+      const approval = config.reviewContinuation(step.aggregateId);
+      if (!validReviewContinuationApproval(approval) || approval.projectId !== config.projectId
+        || approval.projectId !== config.affordances.boundProjectId || approval.subjectRef !== step.aggregateId
+        || approval.decisionVersion !== step.version) return;
+      const prior = appliedContinuations.get(workItemId);
+      if (prior !== undefined && (approval.decisionVersion <= prior.version || approval.decisionId === prior.decisionId
+        || approval.decisionResultSha256 === prior.resultSha256)) return;
+      // A human grant can arrive between polls, hiding the BLOCKED interval. Its immutable
+      // identity re-arms this advisory counter once; it does not create another review grant.
+      appliedContinuations.set(workItemId, { decisionId: approval.decisionId,
+        resultSha256: approval.decisionResultSha256, version: approval.decisionVersion });
+      attempts.delete(workItemId);
+    } catch { /* An unknown grant never re-arms attempts. */ }
+  };
   const repositoryBackoff = createRepositoryAdmissionBackoff();
   // One lifecycle owns both the process-local active map and durable gate.
   const staffing = createAgentWrapperStaffing(config.staffingFence);
@@ -286,6 +305,7 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       if (staffing.has(workItemId)) continue;
       const waiting = repositoryBackoff.waiting(workItemId, step.version, config.clock());
       if (waiting !== null) { repositoryWaiting.push(waiting); continue; }
+      observeContinuation(step, workItemId);
       const tried = attempts.get(workItemId) ?? 0;
       if (tried >= maxItemAttempts) {
         spawned.push(uncoded(step.kind, "STAFFING_ATTEMPTS_EXHAUSTED", null, workItemId));

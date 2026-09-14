@@ -1,9 +1,11 @@
 import { recordReviewRound } from "@moe/review";
+import type { ReviewContinuationApproval } from "@moe/review";
 import type { SqliteEventStore } from "@moe/store";
 import { VERIFIER_FAILURE_RULE } from "../http/affordance-read.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { verifyStoredPackageItems } from "../review/review-package-restore.js";
 import { readReviewImplementationGuidance } from "../review/review-implementation-guidance.js";
+import { reviewContinuationAvailable } from "../review/review-continuation.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import { createCompiledNodeSource } from "./compiled-node-source.js";
 import { createWrapperNodeMissions } from "./wrapper-node-missions.js";
@@ -96,6 +98,14 @@ export function createReviewAwareNodeMissions(config: WrapperReviewMissionsConfi
         projectId: config.projectId, workspace: config.workspace, testCommand: config.testCommand });
     } });
   return Object.freeze({ listNodes: source.listNodes,
+    reviewContinuation: (nodeRef: string): ReviewContinuationApproval | null => {
+      try {
+        const store = config.store();
+        if (store === undefined) return null;
+        const ledger = readReviewLedger(store, config.projectId, nodeRef);
+        return reviewContinuationAvailable(ledger) ? ledger.continuation! : null;
+      } catch { return null; }
+    },
     nodeMission: (nodeRef: string): NodeMission | null =>
       withLatestVerifierFailure(config, nodeRef, source.nodeMission(nodeRef)),
   });

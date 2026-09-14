@@ -71,6 +71,7 @@ export function reviewWorld() {
   const requests: SpawnRequest[] = [];
   let finish: (() => void) | undefined;
   const wrapper = createAgentWrapper({ affordances, deps, nodeMission: missions.nodeMission,
+    reviewContinuation: missions.reviewContinuation,
     operatorCredential: CREDENTIAL, projectId: PROJECT_ID, clock: Date.now, claimTtlMs: 120_000,
     maxAgents: 1, mintSecret: () => randomUUID().replaceAll("-", ""), spawnAgent: async (request) => {
       requests.push(request);

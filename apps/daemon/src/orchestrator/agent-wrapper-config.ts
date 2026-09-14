@@ -7,6 +7,7 @@
  * re-exported from the wrapper so every existing `from "./agent-wrapper.js"` import still holds.
  */
 import type { JsonObject } from "@moe/contracts";
+import type { ReviewContinuationApproval } from "@moe/review";
 
 import type { AffordancePort } from "../http/affordance-contract.js";
 import type { CommandAdapterDeps } from "../http/http-contract.js";
@@ -51,11 +52,13 @@ export interface AgentWrapperConfig {
   readonly clock: () => number;
   readonly deps: CommandAdapterDeps;
   readonly maxAgents: number;
-  /** Stops restaffing one unmoved item; leaving READY re-arms the counter. */
+  /** Stops restaffing one unmoved item; leaving READY or a new proved review grant re-arms it. */
   readonly maxItemAttempts?: number | undefined;
   readonly mintSecret: () => string;
   /** Coding brief per node ref; a node step without one is not staffed. */
   readonly nodeMission?: ((nodeRef: string) => NodeMission | null) | undefined;
+  /** Host read of an exact unconsumed human review grant. Never supplied by mission text or an agent. */
+  readonly reviewContinuation?: ((nodeRef: string) => ReviewContinuationApproval | null) | undefined;
   readonly operatorCredential: string;
   /**
    * Provider-limit pause: reads every seat exit, refunds a limit exit's attempt and
