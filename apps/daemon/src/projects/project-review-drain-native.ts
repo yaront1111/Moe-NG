@@ -68,7 +68,7 @@ public static class MoeReviewDrain {
    Need(count==script+3||(count==script+4&&argv[count-1]=="--operator-stdin"),Identity);
    Need(String.Equals(Path.GetFullPath(argv[0]),node,StringComparison.OrdinalIgnoreCase)
     &&Path.IsPathRooted(argv[script])&&argv[script].Replace('/','\\').EndsWith("\\apps\\daemon\\src\\cli\\moe-cli-main.ts",StringComparison.OrdinalIgnoreCase)
-    &&argv[script+1]=="start"&&Path.IsPathRooted(argv[script+2])
+    &&(argv[script+1]=="start"||argv[script+1]=="recover-review")&&Path.IsPathRooted(argv[script+2])
     &&String.Equals(Path.GetFullPath(argv[script+2]).TrimEnd('\\'),Path.GetFullPath(workspace).TrimEnd('\\'),StringComparison.OrdinalIgnoreCase),Identity);
   } finally { if(args!=IntPtr.Zero) LocalFree(args); Marshal.FreeHGlobal(buffer); }
  }

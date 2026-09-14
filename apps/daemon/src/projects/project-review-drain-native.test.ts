@@ -9,7 +9,7 @@ import { createProjectReviewDrainPort } from "./project-review-drain.js";
 import { drainWithNativeFault } from "./project-review-drain-fault-test-fixtures.js";
 
 describe.skipIf(process.platform !== "win32")("private real Windows project Job drain", () => {
-  it.each(["drain", "operator-stdin", "manager", "different-workspace", "controller-too-new", "extra-argument",
+  it.each(["drain", "operator-stdin", "recover-review", "manager", "different-workspace", "controller-too-new", "extra-argument",
     "access-denied", "query-only", "query-failed", "active-members"] as const)(
     "proves drain or refuses before stopping a private project: %s", async (scenario) => {
     const root = mkdtempSync(join(tmpdir(), "moe-review-drain-"));
@@ -34,7 +34,7 @@ const boundary=openWindowsProjectStackBoundary(${JSON.stringify({ assetRoot: roo
 if('truthClass' in boundary) throw new Error(boundary.code);
 boundary.providerStdout.pipe(process.stdout);boundary.providerStderr.pipe(process.stderr);
 const result=await boundary.completed;process.exit(result.truthClass==='PROVEN'?0:2);\n`);
-    const args = [cli, scenario === "manager" ? "projects" : "start", root];
+    const args = [cli, scenario === "manager" ? "projects" : scenario === "recover-review" ? "recover-review" : "start", root];
     if (scenario === "operator-stdin") args.push("--operator-stdin");
     if (scenario === "extra-argument") args.push("--unapproved");
     const child = spawn(process.execPath, args, { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
@@ -62,7 +62,7 @@ const result=await boundary.completed;process.exit(result.truthClass==='PROVEN'?
         return;
       }
       result = await createDrain().drain(input);
-      if (!["drain", "operator-stdin"].includes(scenario)) {
+      if (!["drain", "operator-stdin", "recover-review"].includes(scenario)) {
         expect(result).toMatchObject({ ok: false, code: "RUNTIME_REVIEW_DRAIN_IDENTITY_MISMATCH" });
         expect(closed).toBe(false);
         for (const pid of [child.pid!, identity.controllerPid, identity.daemonPid]) expect(() => process.kill(pid, 0)).not.toThrow();

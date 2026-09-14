@@ -16,6 +16,50 @@ export async function privateListenerOpen(port: number): Promise<boolean> {
   });
 }
 
+/** Run physical packaged modules in the same default Node runtime as moe.ps1, outside Vitest's resolver. */
+export async function runPackagedReviewRecoveryCli(runtimeRoot: string, projectRoot: string,
+  expected: { readonly owner: unknown; readonly storeId: string; readonly projectId: string;
+    readonly baselineId: string; readonly revision: number }) {
+  const script = `import assert from 'node:assert/strict';import {join} from 'node:path';import {pathToFileURL} from 'node:url';
+const input=await new Promise(resolve=>{let text='';process.stdin.setEncoding('utf8');process.stdin.on('data',part=>text+=part);process.stdin.on('end',()=>resolve(JSON.parse(text)));});
+const {runtimeRoot,projectRoot,expected}=input;
+const load=relative=>import(pathToFileURL(join(runtimeRoot,relative)).href);
+const {runMoeCli}=await load('apps/daemon/src/cli/moe-cli-main.js');
+const events=[],logs=[];let recoveryResult,diagnostic;
+const code=await runMoeCli({artifactRoot:runtimeRoot,argv:['recover-review',projectRoot,'--operator-stdin'],cwd:projectRoot,
+env:{},log:line=>logs.push(line),nodeVersion:process.version,packageVersion:'private-test',randomHex:()=> 'ab'.repeat(32),
+startManager:async()=>{throw new Error('MANAGER_MUST_NOT_START');},
+recoverReview:async request=>{events.push('recover');try {const {runProjectReviewRecovery}=await load('apps/daemon/src/cli/moe-cli-review-recovery.js');
+recoveryResult=await runProjectReviewRecovery(request);return recoveryResult;}catch(error){diagnostic=String(error.stack);throw error;}},
+startStack:async request=>{assert.deepEqual(recoveryResult,{ok:true});assert.equal(request.projectRoot,projectRoot);assert.equal(request.operatorStdin,true);
+const {createRepositoryExecutionPort}=await load('apps/daemon/src/repository/repository-execution-port.js');
+const owned=createRepositoryExecutionPort().readOwned(projectRoot,expected.storeId,expected.projectId);
+assert.equal(owned.ok,true);assert.deepEqual(owned.handle.owner,expected.owner);
+assert.equal(owned.handle.reservation.phase,'RESERVED');assert.equal(owned.handle.reservation.baselineId,expected.baselineId);
+assert.equal(owned.handle.reservation.revision,expected.revision);assert.equal(owned.handle.reservation.sessionId,null);assert.equal(owned.handle.reservation.pid,null);
+events.push('restart');return 17;}});
+process.stdout.write(JSON.stringify({code,events,logs,recoveryResult,diagnostic})+'\\n');process.exitCode=code;`;
+  const child = spawn(process.execPath, ["--input-type=module", "-e", script], {
+    cwd: projectRoot, windowsHide: true, stdio: ["pipe", "pipe", "pipe"],
+  });
+  let output = ""; let errors = "";
+  child.stdout.on("data", (chunk: Buffer) => { output += chunk.toString(); });
+  child.stderr.on("data", (chunk: Buffer) => { errors += chunk.toString(); });
+  const timer = setTimeout(() => { child.kill(); }, 40_000);
+  const completed = new Promise<number | null>((done, reject) => {
+    child.once("error", reject); child.once("close", (code) => { done(code); });
+  });
+  child.stdin.end(JSON.stringify({ runtimeRoot, projectRoot, expected }));
+  try {
+    const exitCode = await completed;
+    if (output.length === 0) throw new Error(`PRIVATE_PACKAGED_RECOVERY_NO_RESULT (${exitCode}): ${errors}`);
+    const result = JSON.parse(output.trim()) as { code: number; events: string[]; logs: string[];
+      recoveryResult?: { ok: boolean; code?: string }; diagnostic?: string };
+    if (result.code !== exitCode) throw new Error("PRIVATE_PACKAGED_RECOVERY_EXIT_MISMATCH");
+    return result;
+  } finally { clearTimeout(timer); }
+}
+
 /** Process scripts stay outside the application's Git workspace and contain no provider. */
 export async function startPrivateReviewRuntime(projectRoot: string, runtimeRoot: string) {
   const fixtureRoot = mkdtempSync(join(tmpdir(), "moe-review-recovery-processes-"));

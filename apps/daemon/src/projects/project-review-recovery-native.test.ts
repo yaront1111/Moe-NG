@@ -1,7 +1,6 @@
 import { mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import type { CliIo, ReviewRecoveryResult } from "../cli/moe-cli-main.js";
 import { runMoeCli } from "../cli/moe-cli-main.js";
@@ -9,7 +8,7 @@ import { runProjectReviewRecovery } from "../cli/moe-cli-review-recovery.js";
 import { createReviewResumeWorld, closeReviewResumeWorlds } from "../repository/repository-review-resume-test-fixtures.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { PROJECT_ID } from "../bootstrap/bootstrap-test-fixtures.js";
-import { privateListenerOpen, startPrivateReviewRuntime } from "./project-review-recovery-test-fixtures.js";
+import { privateListenerOpen, runPackagedReviewRecoveryCli, startPrivateReviewRuntime } from "./project-review-recovery-test-fixtures.js";
 
 afterEach(closeReviewResumeWorlds);
 describe.skipIf(process.platform !== "win32")("private CLI review recovery with the actual Windows Job observer", () => {
@@ -34,33 +33,40 @@ describe.skipIf(process.platform !== "win32")("private CLI review recovery with 
       const originalReview = reviewAuthority();
       expect(await privateListenerOpen(old.port)).toBe(true);
       const events: string[] = []; const logs: string[] = [];
-      const cli: typeof runMoeCli = artifact === undefined ? runMoeCli
-        : (await import(pathToFileURL(join(runtimeRoot, "apps/daemon/src/cli/moe-cli-main.js")).href)).runMoeCli;
       let recoveryResult: ReviewRecoveryResult | undefined;
+      const checkRecovered = async () => {
+        expect(w.port.readOwned(project, w.owner.storeId, w.owner.projectId)).toMatchObject({ ok: true, handle: {
+          owner: w.owner, reservation: { phase: "RESERVED", baselineId: w.baseline.baselineId,
+            sessionId: null, pid: null, revision: w.blocked.reservation.revision + 1 } } });
+        expect(bytes()).toEqual(before);
+        expect(reviewAuthority()).toEqual(originalReview);
+        for (const pid of [old.cliPid, old.brokerPid, old.daemonPid, old.controllerPid]) expect(() => process.kill(pid, 0)).toThrow();
+        expect(await privateListenerOpen(old.port)).toBe(false);
+      };
       const io: CliIo = { artifactRoot: runtimeRoot, argv: ["recover-review", project, "--operator-stdin"], cwd: project,
         env: {}, log: (line) => { logs.push(line); }, nodeVersion: process.version, packageVersion: "private-test", randomHex: () => "ab".repeat(32),
         startManager: async () => { throw new Error("MANAGER_MUST_NOT_START"); },
         recoverReview: async (request) => {
           events.push("recover");
-          // Same lazy load used by the production CLI; packaged workspace links exist by this point.
-          const recover: typeof runProjectReviewRecovery = artifact === undefined ? runProjectReviewRecovery
-            : (await import(pathToFileURL(join(runtimeRoot, "apps/daemon/src/cli/moe-cli-review-recovery.js")).href)).runProjectReviewRecovery;
-          recoveryResult = await recover(request); return recoveryResult;
+          recoveryResult = await runProjectReviewRecovery(request); return recoveryResult;
         },
         startStack: async (request) => {
           expect(recoveryResult).toEqual({ ok: true });
           expect(request).toMatchObject({ projectRoot: project, operatorStdin: true });
-          expect(w.port.readOwned(project, w.owner.storeId, w.owner.projectId)).toMatchObject({ ok: true, handle: {
-            owner: w.owner, reservation: { phase: "RESERVED", baselineId: w.baseline.baselineId,
-              sessionId: null, pid: null, revision: w.blocked.reservation.revision + 1 } } });
-          expect(bytes()).toEqual(before);
-          expect(reviewAuthority()).toEqual(originalReview);
-          for (const pid of [old.cliPid, old.brokerPid, old.daemonPid, old.controllerPid]) expect(() => process.kill(pid, 0)).toThrow();
-          expect(await privateListenerOpen(old.port)).toBe(false);
+          await checkRecovered();
           events.push("restart"); return 17;
         },
       };
-      expect(await cli(io), logs.join("\n")).toBe(17);
+      if (artifact === undefined) expect(await runMoeCli(io), logs.join("\n")).toBe(17);
+      else {
+        const result = await runPackagedReviewRecoveryCli(runtimeRoot, project, { owner: w.owner,
+          storeId: w.owner.storeId, projectId: w.owner.projectId, baselineId: w.baseline.baselineId,
+          revision: w.blocked.reservation.revision + 1 });
+        expect(result.code, [...result.logs, result.diagnostic ?? ""].join("\n")).toBe(17);
+        expect(result.recoveryResult).toEqual({ ok: true });
+        events.push(...result.events); logs.push(...result.logs);
+        await checkRecovered();
+      }
       expect(events).toEqual(["recover", "restart"]);
       expect(logs.join("\n")).not.toContain("ab".repeat(32));
       expect(originalReview.accepted).toBeUndefined();
