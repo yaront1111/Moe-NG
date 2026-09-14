@@ -135,6 +135,7 @@ describe("compiled node missions through the project stack launch", () => {
     }]);
     expect(source.mission(world.nodeRef)).toEqual({
       instructions: [
+        `Compiled goalRef: ${GOAL_ID}`,
         "Land the record read and its page.", "",
         "Acceptance criteria from the approved Product Contract (every one must hold and stay verifiable):",
         "- [crit-api] The API answers a signed request with the record.",

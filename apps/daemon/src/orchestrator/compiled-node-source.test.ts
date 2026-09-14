@@ -28,6 +28,8 @@ import { deriveProductContractRevisionAggregateId }
   from "../product-contract/product-contract-revision-store.js";
 import { createCompiledNodeSource } from "./compiled-node-source.js";
 import { compiledExecutionRef } from "./compiled-execution-ref.js";
+import { codeMission } from "./agent-mission-text.js";
+import type { DesignBrief } from "./agent-mission-text.js";
 
 const PRD = "# Compile me\n\nA PRD whose approved plan must build itself.\n";
 const CONTRACT_ID = "contract-source-1";
@@ -195,6 +197,25 @@ describe("createCompiledNodeSource", () => {
     // No approved revision resolvable in this store: the brief carries the
     // objective alone rather than inventing criterion statements.
     expect(mission?.instructions).not.toContain("Acceptance criteria");
+  });
+
+  it.each([
+    { outcome: "ABSENT" },
+    { outcome: "SKIPPED", reason: "Approved to proceed without a design." },
+  ] satisfies DesignBrief[])("names the resolved goal when the design is $outcome", (design) => {
+    const store = openStore();
+    const goalRef = `goal-compiled-${design.outcome.toLowerCase()}`;
+    const graph = { ...activeGraphFor(goalRef), planningRunRef: `run-${goalRef}` };
+    const nodeRef = compiledExecutionRef(PROJECT_ID, graph, "node-kernel");
+    const brief = sourceFor(store, [graph]).mission(nodeRef);
+    expect(brief).not.toBeNull();
+    // The source must expose its resolved goal independently of any design paragraph.
+    expect(brief?.instructions).toContain(`Compiled goalRef: ${goalRef}`);
+    const text = codeMission(`node.deliver@${nodeRef}`, nodeRef, "2026-08-30T13:00:00.000Z",
+      brief!, { accept: null, submit: null }, PROJECT_ID, design);
+    expect(text).toContain(`Compiled goalRef: ${goalRef}`);
+    expect(text).toContain("moe-product-contract-json-page/1");
+    expect(text).toContain("moe-design-json-page/1");
   });
 
   it("refuses to brief without the host workspace or test command — fail closed", () => {

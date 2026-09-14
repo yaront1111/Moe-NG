@@ -11,6 +11,7 @@ import { type DesignBrief, compilerDesignLines, nodeDesignLines }
 import type { NodeMission } from "./agent-wrapper.js";
 import { agentRoleForWorkspace } from "./agent-role-contract.js";
 import { CONTRACT_READ_MISSION_LINES } from "./agent-mission-contract-read.js";
+import { DESIGN_READ_MISSION_LINES } from "./agent-mission-design-read.js";
 import { reviewSubmissionMissionLines } from "./agent-mission-review.js";
 
 /**
@@ -55,9 +56,21 @@ const RETRY_ON_CONFLICT =
  * seat reported exactly that, 2026-09-05). The placeholder survives only for a caller that
  * did not name one.
  */
-function readFacts(projectId: string | null, workspace: string | null = null): string {
-  return `graph_get takes exactly {"projectId": "${projectId ?? "<your project id>"}"} and `
-    + `nothing else. ${agentRoleForWorkspace(workspace).fileInstructions}`;
+function readFacts(
+  projectId: string | null, workspace: string | null = null, compiledWorkItemId: string | null = null,
+): string {
+  // Coding seats hold REVIEW + WORK, not PLANNING. Their approved compiled node is read from
+  // enabled goals, while graph_get reads a separately activated graph-revision aggregate.
+  const graph = compiledWorkItemId === null
+    ? `graph_get takes exactly {"projectId": "${projectId ?? "<your project id>"}"} and nothing else.`
+    : `Project id: ${projectId ?? "<your project id>"}. Your assigned objective and any listed acceptance `
+      + "criteria come from the daemon's sealed compiled plan and approved Product Contract. "
+      + `Call work_get_context with payload ${JSON.stringify({ workItemId: compiledWorkItemId })} `
+      + "for your current claim and command offers; planningAuthority may be null for a coding step "
+      + "because it is a planning-run field. graph_get requires planning.write, which this coding session does not hold. "
+      + "It reads a separate active graph revision: ACTIVE_GRAPH_ABSENT is expected after ordinary compiled-plan approval "
+      + "and does not invalidate your assigned node. Use the assigned brief; record missing requirement context as a finding.";
+  return `${graph} ${agentRoleForWorkspace(workspace).fileInstructions}`;
 }
 
 /**
@@ -113,6 +126,11 @@ export function codeMission(
     `(work item "${workItemId}") until ${expiresAt}. TASK — ${brief.title}:`,
     brief.instructions,
     ...nodeDesignLines(design),
+    ...(nodeRef.startsWith("node:v1:") ? [
+      "When you need additional approved requirement or design context, use the goalRef named in your brief with these read formats; never guess a goalRef.",
+      ...CONTRACT_READ_MISSION_LINES,
+      ...DESIGN_READ_MISSION_LINES,
+    ] : []),
     `Work in the directory ${brief.workspace} (your working directory). Verify by running:`,
     `${brief.test} — it must exit 0 before you report anything as done.`,
     "Then record your submission durably over the moe-next MCP tools:",
@@ -128,7 +146,7 @@ export function codeMission(
     "Every refusal carries a stable reason code — read it, correct the request, never",
     "work around a refusal, and report what the daemon actually answered.",
     RETRY_ON_CONFLICT,
-    readFacts(projectId, brief.workspace),
+    readFacts(projectId, brief.workspace, nodeRef.startsWith("node:v1:") ? workItemId : null),
   ];
   if (!nodeRef.startsWith("node:v1:") && hints.submit !== null) {
     lines.push(`Suggested review.submit payload shape: ${JSON.stringify(hints.submit)}`);

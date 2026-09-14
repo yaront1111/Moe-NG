@@ -245,6 +245,13 @@ const VERSION_OCCURRENCE_EXCLUSIONS: readonly VersionOccurrenceExclusion[] = Obj
     path: "apps/daemon/src/repository/controlled-profile/controlled-profile-root-templates.ts",
     pattern: /"version": "([0-9]+\.[0-9]+\.[0-9]+)"/u,
   },
+  // The reviewed application's registry release is fixture data, not Moe's version.
+  {
+    expectedCurrentCaptureCount: 2,
+    id: "wrapper-review-application-registry-release-fixtures",
+    path: "apps/daemon/src/orchestrator/wrapper-review-missions.test.ts",
+    pattern: /(?:locator: "|Subject: ARTIFACT )registry\/releases\/([0-9]+\.[0-9]+\.[0-9]+)\/manifest\.json"/u,
+  },
 ]);
 
 type SourceMap = ReadonlyMap<string, string>;
@@ -871,13 +878,13 @@ describe("release version surfaces", () => {
       discovered.map(({ key }) => key),
     );
 
-    expect(VERSION_OCCURRENCE_EXCLUSIONS.length).toBe(14);
+    expect(VERSION_OCCURRENCE_EXCLUSIONS.length).toBe(15);
     for (const exclusion of VERSION_OCCURRENCE_EXCLUSIONS) {
       expect(exclusion.expectedCurrentCaptureCount, `empty exclusion: ${exclusion.id}`)
         .toBeGreaterThan(0);
     }
     expect(surfaces.length).toBe(13);
-    expect(exclusions.length).toBe(19);
+    expect(exclusions.length).toBe(21);
     expect(discovered.length).toBeGreaterThan(0);
     expect(new Set(discovered.map(({ key }) => key)).size).toBe(discovered.length);
     expect(new Set(declared.map(({ key }) => key)).size).toBe(declared.length);

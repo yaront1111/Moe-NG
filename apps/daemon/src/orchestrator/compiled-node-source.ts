@@ -220,6 +220,7 @@ export function createCompiledNodeSource(options: CompiledNodeSourceOptions): Co
       statements = [];
     }
     const instructions = [
+      `Compiled goalRef: ${node.goalRef}`,
       node.objective,
       ...(statements.length === 0 ? [] : [
         "",

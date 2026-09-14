@@ -16,8 +16,46 @@ import { DESIGN_SECTION_KEYS } from "../design/design-contracts.js";
 import type { DesignBrief } from "./agent-mission-text.js";
 import { codeMission, compilerMission, designMission, mission }
   from "./agent-mission-text.js";
+import { agentCapabilitiesFor } from "../daemon-command-vocabulary.js";
 
 const EXPIRES = "2026-08-30T13:00:00.000Z";
+
+describe("compiled coding mission read guidance", () => {
+  const nodeRef = `node:v1:${"a".repeat(64)}`;
+  const workItemId = `node.deliver@${nodeRef}`;
+  const brief = { instructions: "Implement [criterion-1]: persistent notes", test: "pnpm test",
+    title: "Notes", workspace: "/workspace" };
+  const text = codeMission(workItemId, nodeRef, EXPIRES, brief,
+    { accept: null, submit: null }, "project-compiled");
+
+  it("explains the compiled authority instead of prescribing an inaccessible graph read", () => {
+    expect(agentCapabilitiesFor("node.deliver")).toEqual(["review.write", "work.write"]);
+    expect(text).not.toContain("graph_get takes exactly");
+    expect(text).toContain("sealed compiled plan and approved Product Contract");
+    expect(text).toContain("graph_get requires planning.write, which this coding session does not hold");
+    expect(text).toContain("ACTIVE_GRAPH_ABSENT is expected after ordinary compiled-plan approval");
+    expect(text).toContain("does not invalidate your assigned node");
+    expect(text).toContain(brief.instructions);
+  });
+
+  it("names the bounded work context read and preserves the coding and review instructions", () => {
+    expect(text).toContain(`work_get_context with payload ${JSON.stringify({ workItemId })}`);
+    expect(text).toContain("planningAuthority may be null for a coding step");
+    expect(text).toContain("Project id: project-compiled");
+    expect(text).toContain("You may edit files in your assigned workspace and run its tests");
+    expect(text).toContain('"packageItems":[]');
+    expect(text).toContain("work_release");
+  });
+
+  it("provides revision-pinned authority read formats directly to compiled coding seats", () => {
+    expect(text).toContain("moe-product-contract-json-page/1");
+    expect(text).toContain("moe-design-json-page/1");
+    expect(text).toContain('"limit": 4096');
+    expect(text).toContain("contentSha256");
+    expect(text).toContain("PRODUCT_CONTRACT_READ_REVISION_CHANGED");
+    expect(text).toContain("DESIGN_READ_REVISION_CHANGED");
+  });
+});
 
 it("teaches planning and design seats to finish revision-pinned contract pages", () => {
   const briefs = [
