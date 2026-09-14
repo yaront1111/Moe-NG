@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest";
 import { COMPILED_NODE_KEY_MAX_CHARS } from "../planning/compiled-authority-contracts.js";
 import { DESIGN_SECTION_KEYS } from "../design/design-contracts.js";
 import type { DesignBrief } from "./agent-mission-text.js";
-import { codeMission, compilerMission, designMission, mission }
+import { codeMission, compilerMission, designGoalRef, designMission, mission }
   from "./agent-mission-text.js";
 import { agentCapabilitiesFor } from "../daemon-command-vocabulary.js";
 
@@ -366,6 +366,37 @@ describe("the design a coding seat implements against", () => {
  * dropped heading fails an assertion that NAMES it rather than a length check that does not.
  */
 describe("designMission", () => {
+  it.each([
+    ["design:goal-1", "goal-1"], ["design:goal-successor-91", "goal-successor-91"],
+    [null, null], ["design:", null], ["goal-1", null], ["goal-1@v1", null],
+  ])("resolves design aggregate %s to the exact bare goal %s", (ref, expected) => {
+    expect(designGoalRef(ref)).toBe(expected);
+  });
+
+  it.each([null, "design:", "goal-1"])("omits unbound instructions for %s", (ref) => {
+    expect(designMission("work-1", "design.submit", EXPIRES, ref, "project-1", "unbound marker"))
+      .not.toContain("unbound marker");
+  });
+
+  it("carries exact goal instructions as advisory design context without waiving criteria", () => {
+    const instructions = 'REPLAN: move phase validation after contributors.\nLiteral "choice".';
+    const text = designMission("design.submit@design:goal-1", "design.submit", EXPIRES,
+      "design:goal-1", "project-1", instructions);
+    expect(text).toContain(JSON.stringify(instructions));
+    expect(text).toContain("GOAL INSTRUCTIONS (advisory context, JSON string)");
+    expect(text).toContain("do not waive any criterion, required check, or human approval");
+    expect(text).toContain("Resolve open implementation questions using explicit operator choices");
+    expect(text).toContain("APPROVED Gate 1 contract");
+  });
+
+  it("does not invent goal instructions when none were read", () => {
+    const args = ["design.submit@design:goal-1", "design.submit", EXPIRES,
+      "design:goal-1", "project-1"] as const;
+    expect(designMission(...args, null)).toBe(designMission(...args));
+    expect(designMission(...args, "   ")).toBe(designMission(...args));
+    expect(designMission(...args)).not.toContain("GOAL INSTRUCTIONS");
+  });
+
   const DESIGN_ITEM = "design.submit@design:goal-1";
   const brief = (designRef: string | null = "design:goal-1", projectId: string | null = null) =>
     designMission(DESIGN_ITEM, "design.submit", EXPIRES, designRef, projectId);

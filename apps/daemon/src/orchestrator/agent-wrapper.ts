@@ -11,7 +11,7 @@ import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import { workItemIdFor } from "../http/affordance-read.js";
 import { createAgentAuthorityCleanup } from "./agent-authority-cleanup.js";
 import { DESIGN_STEP_KIND, byStaffingRank } from "./agent-staffing-order.js";
-import { codeMission, compilerMission, designMission, mission } from "./agent-mission-text.js";
+import { codeMission, compilerMission, designGoalRef, designMission, mission } from "./agent-mission-text.js";
 import { PROVIDER_PAUSED_OUTCOME } from "./agent-provider-pause.js";
 import { decideSeatProvider, pauseProviderOf } from "./agent-provider-resolve.js";
 import { COMPILER_STEPS, GATE_REFUSALS, HUMAN_ONLY_STEPS } from "./agent-spawn-contract.js";
@@ -46,7 +46,11 @@ export type { AgentWrapperConfig, NodeMission, SpawnRequest } from "./agent-wrap
  */
 
 const encoder = new TextEncoder();
-function setupError(action: string): Error {
+function setupError(action: string, cause?: unknown): Error {
+  // One public context refusal survives; arbitrary reader errors may contain private paths or data.
+  if (action === "mission" && cause instanceof Error && cause.message === "REPLAN_CONTEXT_UNAVAILABLE") {
+    return new Error("REPLAN_CONTEXT_UNAVAILABLE");
+  }
   return new Error(`AGENT_SETUP_FAILED:${action}:UNEXPECTED_ERROR`);
 }
 
@@ -174,8 +178,8 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       workItemId,
     });
 
-    const failSetup = (action: string, releaseClaim: boolean): SpawnReport => {
-      const failure = setupError(action);
+    const failSetup = (action: string, releaseClaim: boolean, cause?: unknown): SpawnReport => {
+      const failure = setupError(action, cause);
       staffing.recordFailures(failure, ...cleanupAuthority(releaseClaim));
       return uncoded(step.kind, failure.message, sessionId, workItemId);
     };
@@ -222,7 +226,8 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
         }, config.projectId ?? null, config.designBrief?.(step.kind, step.aggregateId) ?? null);
       } else if (step.kind === DESIGN_STEP_KIND) {
         missionText = designMission(workItemId, step.kind, expiresAt, step.aggregateId,
-          config.projectId ?? null);
+          config.projectId ?? null,
+          config.compilerInstructions?.(designGoalRef(step.aggregateId)) ?? null);
       } else if (COMPILER_STEPS.has(step.kind)) {
         // The planning lane gets its OWN brief and NO payload hint: the demo
         // `payloadFor` table proposing a hard-coded graph against a real PRD is
@@ -237,8 +242,8 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
         const hint = config.payloadHint?.(step.kind, step.aggregateId) ?? null;
         missionText = mission(workItemId, step.kind, expiresAt, hint, config.projectId ?? null);
       }
-    } catch {
-      return failSetup("mission", true);
+    } catch (cause) {
+      return failSetup("mission", true, cause);
     }
 
     const request = { credential: secret, expiresAt, kind: step.kind, mission: missionText,

@@ -7,7 +7,7 @@ export const REPOSITORY_RECOVERY_PAYLOAD_KEYS = Object.freeze([
 ] as const);
 export const REPOSITORY_RECOVERY_VERSION = "moe-repository-recovery/1" as const;
 export const REPOSITORY_RECOVERY_LAYER = "REPOSITORY_RECOVERY" as const;
-export const REPOSITORY_RECOVERY_ACTIONS = ["ABORT_UNEXECUTED", "RECONCILE_LANDED", "RESUME_REVIEW"] as const;
+export const REPOSITORY_RECOVERY_ACTIONS = ["ABORT_UNEXECUTED", "RECONCILE_LANDED", "RESUME_REVIEW", "RELEASE_REPLANNED"] as const;
 export type RepositoryRecoveryAction = typeof REPOSITORY_RECOVERY_ACTIONS[number];
 export interface RepositoryRecoveryPayload {
   readonly action: RepositoryRecoveryAction;

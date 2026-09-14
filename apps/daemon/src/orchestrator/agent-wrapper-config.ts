@@ -78,7 +78,7 @@ export interface AgentWrapperConfig {
    * wrong answer here buys a refusal, never a compile.
    */
   readonly compilerGateRef?: ((goalId: string | null) => JsonObject | null) | undefined;
-  /** The goal's own operator instructions (a replan's findings live there); null when absent. */
+  /** The goal's own instructions for design and compiler seats; always keyed by the bare goal id. */
   readonly compilerInstructions?: ((goalId: string | null) => string | null) | undefined;
   /** The goal's design outcome for briefs that plan from it. A null answer is STATED as ABSENT
    *  in the brief, never omitted: a seat that cannot tell a skip from a failed read guesses. */

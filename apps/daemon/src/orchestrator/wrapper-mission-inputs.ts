@@ -16,6 +16,7 @@ import { COMPILER_STEPS } from "./agent-spawn-contract.js";
 import { activeCompiledGraphs } from "./compiled-node-source.js";
 import type { ActiveCompiledGraph } from "./compiled-node-source.js";
 import { compiledExecutionRef } from "./compiled-execution-ref.js";
+import { withReplanContext } from "../planning/replan-context.js";
 
 /**
  * THE MISSION INPUTS THE WRAPPER BINARY SUPPLIES — the durable reads a brief needs, factored out
@@ -223,7 +224,7 @@ export function createCompilerMissionInputs(
         );
         const brief = decoded.ok && decoded.entry.goalId === goalId
           ? decoded.entry.brief?.instructions ?? null : null;
-        return composeCompilerInstructions(brief, latestRejectionReason(
+        return composeCompilerInstructions(withReplanContext(laneStore, config.projectId, goalId, brief), latestRejectionReason(
           laneStore, config.projectId, refsOfGoal(goalId).planningRunRef,
         ));
       },

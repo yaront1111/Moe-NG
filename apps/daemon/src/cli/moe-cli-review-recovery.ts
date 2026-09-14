@@ -39,7 +39,7 @@ export async function executeReviewRecovery(service: RecoveryService, operator: 
 }
 
 /** Refuse missing/foreign stores before a writable open can initialize or migrate them. */
-function existingStore(request: ReviewRecoveryRequest): string | null {
+export function existingStore(request: ReviewRecoveryRequest): string | null {
   let database: DatabaseSync | undefined;
   try {
     const path = realpathSync.native(resolve(request.projectRoot, request.config.storePath));

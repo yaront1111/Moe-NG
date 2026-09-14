@@ -246,13 +246,20 @@ export function compilerMission(
   ].join(" ");
 }
 
+/** One design-aggregate join for the durable instruction read and the mission's PRD read. */
+export function designGoalRef(designRef: string | null): string | null {
+  if (designRef === null || !designRef.startsWith(DESIGN_AGGREGATE_PREFIX)) return null;
+  const goalRef = designRef.slice(DESIGN_AGGREGATE_PREFIX.length);
+  return goalRef === "" ? null : goalRef;
+}
+
 /**
  * THE DESIGN SEAT'S BRIEF — the step between Gate 1 and the decomposition.
  *
  * The wrapper hands over the DESIGN AGGREGATE the surface offered (`design:<goalId>`), because
  * that is the only id the offer carries (`affordance-planning-offers.ts:179`). Both reads this
- * seat needs are keyed on the BARE goal ref, so the strip happens here rather than as a second
- * wrapper parameter a caller could pass inconsistently with the first.
+ * seat needs are keyed on the BARE goal ref. The wrapper's goal-instruction reader and this
+ * mission share `designGoalRef`, so neither invents a second aggregate-to-goal convention.
  *
  * EVERY KEY NAME IS INTERPOLATED FROM THE CONTRACT ROSTERS, never retyped. `decodeDesignRevision`
  * compares by EXACT ARITY, so a brief naming a section the roster does not carry would read
@@ -264,18 +271,24 @@ export function compilerMission(
  */
 export function designMission(
   workItemId: string, kind: string, expiresAt: string, designRef: string | null,
-  projectId: string | null = null,
+  projectId: string | null = null, instructions: string | null = null,
 ): string {
   // An id that is not prefixed is NOT mangled — it is simply not a goal ref, and neither is a
   // bare `design:` with nothing after it. Both fall back to the generic phrase rather than
   // sending the seat to page the PRD for the empty goal.
-  const goalRef = designRef !== null && designRef.startsWith(DESIGN_AGGREGATE_PREFIX)
-    ? designRef.slice(DESIGN_AGGREGATE_PREFIX.length)
-    : "";
-  const goal = goalRef === "" ? "the goal your offer targets" : `goal "${goalRef}"`;
+  const goalRef = designGoalRef(designRef);
+  const goal = goalRef === null ? "the goal your offer targets" : `goal "${goalRef}"`;
   const target = designRef === null
     ? "the targetAggregateId your offer names"
     : `targetAggregateId "${designRef}"`;
+  const operator = goalRef === null || instructions === null || instructions.trim() === "" ? [] : [
+    `GOAL INSTRUCTIONS (advisory context, JSON string) for ${goal}: ${JSON.stringify(instructions)}`,
+    "Use replan findings to correct the design and dependency order that caused the earlier failure;",
+    "do not waive any criterion, required check, or human approval because of a finding.",
+    "Resolve open implementation questions using explicit operator choices within the approved contract.",
+    "If that context conflicts with the PRD or approved contract, report the conflict for review;",
+    "do not silently change product scope or treat this context as verification evidence.",
+  ];
   return [
     `You are a moe-next DESIGN agent. You hold the durable claim on work item`,
     `"${workItemId}" (command kind ${kind}) until ${expiresAt}.`,
@@ -285,6 +298,7 @@ export function designMission(
     "Design the product those criteria describe; every criterion must be reachable through",
     "something you draw.",
     ...prdPaging(goal),
+    ...operator,
     `Submit via the offered command with ${target} and payload`,
     "{\"contractRef\": {...}, \"goalRef\": \"...\", \"revision\": {...}} - EXACTLY those three",
     "keys, and never name projectId, principalId, commandId, correlationId, decidedAt or",

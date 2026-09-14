@@ -32,6 +32,9 @@ export interface DecisionResult {
   /** Which answer this result belongs to; absent means the card's primary decision. */
   readonly choice?: NeedsYouChoice | undefined;
   readonly guidanceSubmitted?: boolean;
+  /** REPLAN committed; the retained card may retry successor creation only. */
+  readonly replanCommitted?: boolean;
+  readonly replanPending?: boolean;
   readonly outcome: OfferOutcome | null;
 }
 
@@ -154,6 +157,8 @@ function DecisionCard({
   const decision = decisionOf(item);
   const line = decision === null ? null : resultLine(decision, result);
   const done = result?.outcome?.ok === true;
+  const replanCommitted = result?.replanCommitted === true;
+  const replanPending = replanCommitted || result?.replanPending === true;
   const replan = item.escalation === undefined ? null : item.escalation;
   const reviewUnavailable = replan !== null && replan.findingsState !== "CURRENT";
   const guidanceSupported = replan !== null && supportsEscalationGuidance(replan.affordance);
@@ -163,10 +168,12 @@ function DecisionCard({
     <li className="cr2-needs-card" data-kind={item.kind} data-testid={`cr.needsyou.item.${slug}`}>
       <div className="cr2-needs-main">
         <p className="cr2-slot-kicker">{`${KIND_EYEBROW[item.kind]} ${MIDDOT} ${item.title}`}</p>
-        <h2 className="cr2-needs-headline">{item.headline}</h2>
-        <p className="cr2-needs-detail">{item.detail}</p>
+        <h2 className="cr2-needs-headline">{replanCommitted ? "Replan recorded" : replanPending ? "Replan outcome needs checking" : item.headline}</h2>
+        <p className="cr2-needs-detail">{replanCommitted
+          ? result.busy ? "The replacement goal is being created." : "Replacement creation needs retry. The original node is already retired."
+          : replanPending ? "Resume to check the saved request against the daemon and finish creating its replacement." : item.detail}</p>
         {item.escalation === undefined ? null : <EscalationFindings facts={item.escalation} />}
-        {replan === null || onDecide === undefined ? null : <EscalationGuidanceInput
+        {replan === null || onDecide === undefined || replanPending ? null : <EscalationGuidanceInput
           disabled={result?.busy === true || done || reviewUnavailable} onChange={setGuidance}
           supported={guidanceSupported} value={guidance} />}
         {item.incident === undefined ? null : (
@@ -192,9 +199,9 @@ function DecisionCard({
         {decision === null || onDecide === undefined ? null : (
           <ActionButton
             ariaLabel={guided ? `Retry with guidance on ${replan!.nodeKey}` : decision.ariaLabel}
-            disabled={result?.busy === true || done || reviewUnavailable || guidanceBlocked}
+            disabled={replanPending || result?.busy === true || done || reviewUnavailable || guidanceBlocked}
             onClick={(): void => {
-              if (guidanceBlocked) return;
+              if (guidanceBlocked || replanPending) return;
               if (decision.armLabel !== null && !armed) { setArmed(true); return; }
               setArmed(false);
               if (guided) onDecide(item, undefined, guidance);
@@ -216,13 +223,13 @@ function DecisionCard({
         ) : null}
         {replan === null || onDecide === undefined ? null : (
           <ActionButton
-            ariaLabel={`Replan ${replan.nodeKey} from its findings`}
-            disabled={result?.busy === true || done || reviewUnavailable}
+            ariaLabel={replanCommitted ? `Retry creating the successor for ${replan.nodeKey}` : `Replan ${replan.nodeKey} from its findings`}
+            disabled={result?.busy === true || done || (reviewUnavailable && !replanPending)}
             onClick={(): void => { setArmed(false); onDecide(item, "REPLAN"); }}
             testId={`cr.needsyou.replan.${key}`}
             variant="secondary"
           >
-            Replan from the findings
+            {replanCommitted ? "Retry creating successor" : replanPending ? "Resume replacement creation" : "Replan from the findings"}
           </ActionButton>
         )}
         {item.planningRunRef === "" ? null : (

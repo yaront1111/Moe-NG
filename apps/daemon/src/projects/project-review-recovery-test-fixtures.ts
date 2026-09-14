@@ -61,7 +61,8 @@ process.stdout.write(JSON.stringify({code,events,logs,recoveryResult,diagnostic}
 }
 
 /** Process scripts stay outside the application's Git workspace and contain no provider. */
-export async function startPrivateReviewRuntime(projectRoot: string, runtimeRoot: string) {
+export async function startPrivateReviewRuntime(projectRoot: string, runtimeRoot: string,
+  cliCommand: "start" | "recover-review" | "recover-replan" = "start") {
   const fixtureRoot = mkdtempSync(join(tmpdir(), "moe-review-recovery-processes-"));
   const cli = join(fixtureRoot, "apps", "daemon", "src", "cli", "moe-cli-main.ts");
   const entry = join(fixtureRoot, "project-stack-host-main.ts");
@@ -85,7 +86,7 @@ const boundary=openWindowsProjectStackBoundary(${JSON.stringify({ assetRoot: fix
 if('truthClass' in boundary) throw new Error(boundary.code);
 boundary.providerStdout.pipe(process.stdout);boundary.providerStderr.pipe(process.stderr);
 const result=await boundary.completed;process.exit(result.truthClass==='PROVEN'?0:2);\n`);
-  const child = spawn(process.execPath, [cli, "start", projectRoot, "--operator-stdin"], {
+  const child = spawn(process.execPath, [cli, cliCommand, projectRoot, "--operator-stdin"], {
     windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
   });
   let output = ""; let error = ""; let closed = false;

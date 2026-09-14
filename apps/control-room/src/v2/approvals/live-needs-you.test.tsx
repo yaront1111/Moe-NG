@@ -216,14 +216,17 @@ describe("LiveNeedsYou", () => {
       totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 1, IN_PROGRESS: 0, READY: 0, REPLANNED: 0, UNATTRIBUTABLE: 0, goals: 1, nodes: 1 },
     };
     const submit = vi.fn(async () => ({ commandId: "cmd-esc", ok: true as const }));
-    const create = vi.fn(async () => ({ commandId: "cmd-successor", ok: true as const }));
-    render(<LiveNeedsYou escalationPort={{ submit }} onOpenBoard={vi.fn()} readRuns={async () => runs} setup={SETUP} successorPort={{ create }} />);
+    const prepared = { draft: { acceptanceCriteria: [], budgetEnvelope: "", outcome: "Exact context", title: "Successor" } };
+    const prepare = vi.fn(async () => ({ ok: true as const, prepared }));
+    const createPrepared = vi.fn(async () => ({ commandId: "cmd-successor", ok: true as const }));
+    render(<LiveNeedsYou escalationPort={{ submit }} onOpenBoard={vi.fn()} readRuns={async () => runs} setup={SETUP} successorPort={{ prepare, createPrepared }} />);
     const button = await screen.findByTestId("cr.needsyou.replan.node-x");
     button.click();
     await waitFor(() => { expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("Replanned."); });
     expect(submit).toHaveBeenCalledWith(offer, "node-x", "REPLAN");
-    expect(create).toHaveBeenCalledTimes(1);
-    expect(create).toHaveBeenCalledWith(expect.objectContaining({ goalId: "goal-plan", kind: "ESCALATION" }), runs);
+    expect(prepare).toHaveBeenCalledWith(expect.objectContaining({ goalId: "goal-plan", kind: "ESCALATION" }), runs);
+    expect(createPrepared).toHaveBeenCalledTimes(1);
+    expect(createPrepared).toHaveBeenCalledWith(prepared);
   });
 
   it("closes a goal through the close port when the daemon offers goal.close", async () => {

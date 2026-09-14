@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { prepareRuntimeMetadataExcludes } from "../repository/runtime-metadata-excludes.js";
 import { parseCliArgv } from "./moe-cli-argv.js";
-import type { CliInit, CliRecoverReview, CliStart } from "./moe-cli-argv.js";
+import type { CliInit, CliRecoverReview, CliRecoverReplan, CliStart } from "./moe-cli-argv.js";
 import { isMainModule } from "./moe-cli-entry.js";
 import { WORKSPACE_LINK_FILENAME, ensureWorkspaceLinks } from "./moe-cli-links.js";
 import {
@@ -40,6 +40,7 @@ export interface ManagerStartRequest {
 }
 
 export interface ReviewRecoveryRequest extends StartRequest {
+  readonly automatic?: true;
   readonly config: MoeConfig;
   readonly log: (line: string) => void;
 }
@@ -57,6 +58,7 @@ export interface CliIo {
   readonly nodeVersion: string;
   readonly packageVersion: string;
   readonly randomHex: (bytes: number) => string;
+  readonly recoverReplan?: (request: ReviewRecoveryRequest) => Promise<ReviewRecoveryResult>;
   readonly recoverReview?: (request: ReviewRecoveryRequest) => Promise<ReviewRecoveryResult>;
   readonly startManager: (request: ManagerStartRequest) => Promise<number>;
   readonly startStack: (request: StartRequest) => Promise<number>;
@@ -68,6 +70,7 @@ const USAGE = Object.freeze([
   "  moe init [dir] [--force]   scaffold a store, mint an operator credential, write the config",
   "  moe start [dir] [--operator-stdin]   start one project and print its plain control-room origin",
   "  moe recover-review [dir] [--operator-stdin]   drain a blocked review runtime, recover it, and restart",
+  "  moe recover-replan [dir] [--operator-stdin]   release a retired replan after preserving its reviewed commit, and restart",
   "  moe projects [--operator-stdin]      open the Windows manager at its plain loopback origin",
   "  moe --version              print this build's version",
   "  moe --help                 print this message",
@@ -176,6 +179,17 @@ async function runStart(invocation: CliStart, io: CliIo): Promise<number> {
   const config = readConfig(targetDir, io);
   if (config === null) return 1;
   if (!preparePackagedLinks(io, "start")) return 1;
+  if (io.recoverReplan !== undefined) {
+    let recovered: ReviewRecoveryResult;
+    try { recovered = await io.recoverReplan({ artifactRoot: io.artifactRoot, env: io.env,
+      config, projectRoot: targetDir, log: io.log, automatic: true }); }
+    catch { recovered = { ok: false, code: "MOE_CLI_REPLAN_RECOVERY_UNAVAILABLE" }; }
+    if (!recovered.ok) { io.log(recovered.code); return 1; }
+    const current = readConfig(targetDir, io);
+    if (current === null || JSON.stringify(current) !== JSON.stringify(config)) {
+      io.log("MOE_CLI_REPLAN_RECOVERY_CONFIG_CHANGED"); return 1;
+    }
+  }
   io.log(`moe start: project ${config.projectId} -> ${targetDir}`);
   io.log("moe start: one daemon/store/session; goals, tasks, and board stay inside this project");
   return io.startStack({
@@ -186,17 +200,18 @@ async function runStart(invocation: CliStart, io: CliIo): Promise<number> {
   });
 }
 
-async function runRecoverReview(invocation: CliRecoverReview, io: CliIo): Promise<number> {
+async function runRecoverReview(invocation: CliRecoverReview | CliRecoverReplan, io: CliIo): Promise<number> {
+  const recover = invocation.command === "recover-replan" ? io.recoverReplan : io.recoverReview;
   const projectRoot = resolve(io.cwd, invocation.targetDir);
   const config = readConfig(projectRoot, io);
-  if (config === null || !preparePackagedLinks(io, "recover-review")) return 1;
-  if (io.recoverReview === undefined) {
+  if (config === null || !preparePackagedLinks(io, invocation.command)) return 1;
+  if (recover === undefined) {
     io.log("MOE_CLI_REVIEW_RECOVERY_UNAVAILABLE"); return 1;
   }
-  io.log(`moe recover-review: checking blocked review in ${projectRoot}`);
+  io.log(`moe ${invocation.command}: checking blocked review in ${projectRoot}`);
   let recovered: ReviewRecoveryResult;
   try {
-    recovered = await io.recoverReview({ artifactRoot: io.artifactRoot, env: io.env,
+    recovered = await recover({ artifactRoot: io.artifactRoot, env: io.env,
       config, projectRoot, log: io.log });
   } catch { recovered = { ok: false, code: "MOE_CLI_REVIEW_RECOVERY_UNAVAILABLE" }; }
   if (!recovered.ok) { io.log(recovered.code); return 1; }
@@ -204,11 +219,11 @@ async function runRecoverReview(invocation: CliRecoverReview, io: CliIo): Promis
   if (current === null || JSON.stringify(current) !== JSON.stringify(config)) {
     io.log("MOE_CLI_REVIEW_RECOVERY_CONFIG_CHANGED"); return 1;
   }
-  io.log("moe recover-review: existing work preserved; starting the repaired runtime");
+  io.log(`moe ${invocation.command}: existing work preserved; starting the repaired runtime`);
   return runStart({ ...invocation, command: "start" }, io);
 }
 
-function preparePackagedLinks(io: CliIo, command: "projects" | "recover-review" | "start"): boolean {
+function preparePackagedLinks(io: CliIo, command: "projects" | "recover-review" | "recover-replan" | "start"): boolean {
   const links = ensureWorkspaceLinks(io.artifactRoot, readLinkManifest(io.artifactRoot));
   if (!links.ok) {
     io.log(links.message);
@@ -244,7 +259,7 @@ export async function runMoeCli(io: CliIo): Promise<number> {
     return 1;
   }
   if (invocation.command === "init") return runInit(invocation, io);
-  if (invocation.command === "recover-review") return runRecoverReview(invocation, io);
+  if (invocation.command === "recover-review" || invocation.command === "recover-replan") return runRecoverReview(invocation, io);
   if (invocation.command === "projects") {
     if (!preparePackagedLinks(io, "projects")) return 1;
     return await io.startManager({
@@ -278,6 +293,10 @@ if (isMainModule(import.meta, process.argv[1])) {
     nodeVersion: process.version,
     packageVersion: ownVersion(artifactRoot),
     randomHex: cryptoRandomHex,
+    recoverReplan: async (request) => {
+      const { runProjectReplanRecovery } = await import("./moe-cli-replan-recovery.js");
+      return await runProjectReplanRecovery(request);
+    },
     recoverReview: async (request) => {
       const { runProjectReviewRecovery } = await import("./moe-cli-review-recovery.js");
       return await runProjectReviewRecovery(request);

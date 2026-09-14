@@ -268,7 +268,7 @@ describe("wrapper binary staffing wiring", () => {
     // identical to the one whose plan had just been rejected.
     expect(INPUTS).toContain("compilerInstructions: (goalId) =>");
     // EXACTLY ONCE: two call sites would mean one of them is dead, and a `toContain` cannot tell.
-    expect(INPUTS.split("composeCompilerInstructions(brief, latestRejectionReason(").length - 1)
+    expect(INPUTS.split("composeCompilerInstructions(withReplanContext(laneStore, config.projectId, goalId, brief), latestRejectionReason(").length - 1)
       .toBe(1);
     // Pins the ARGUMENTS, not merely the call: `latestRejectionReason(store, projectId, <the
     // GOAL id>)` would walk an aggregate that has no run history and answer null forever, while
@@ -277,10 +277,10 @@ describe("wrapper binary staffing wiring", () => {
   });
 
   it("scans a compilerInstructions slice that can actually fail (positive control)", () => {
-    const unwired = INPUTS.replace("composeCompilerInstructions(brief, latestRejectionReason(", "");
+    const unwired = INPUTS.replace("composeCompilerInstructions(withReplanContext(laneStore, config.projectId, goalId, brief), latestRejectionReason(", "");
     expect(unwired).not.toBe(INPUTS);
     expect(() => expect(unwired)
-      .toContain("composeCompilerInstructions(brief, latestRejectionReason(")).toThrow();
+      .toContain("composeCompilerInstructions(withReplanContext(laneStore, config.projectId, goalId, brief), latestRejectionReason(")).toThrow();
   });
 
   it("supplies designBrief from the real store, so a seat reads its goal's actual design", () => {

@@ -23,8 +23,9 @@ import { useGoalReads } from "../goals/use-goal-reads.js";
 import type { CoverageReader } from "../goals/use-goal-coverage.js";
 import { createEscalationPort } from "./escalation-port.js";
 import type { EscalationPort } from "./escalation-port.js";
-import { createReplanSuccessorPort } from "./replan-successor-port.js";
+import { createReplanWorkflowPort } from "./replan-successor-workflow.js";
 import type { ReplanSuccessorPort } from "./replan-successor-port.js";
+import { useReplanSuccessor } from "./use-replan-successor.js";
 import type { NeedsYouChoice } from "./needs-you.js";
 import { createPreviewPort } from "./preview-port.js";
 import type { PreviewDecision, PreviewFinding, PreviewPort } from "./preview-port.js";
@@ -156,7 +157,8 @@ export function LiveNeedsYou({
   );
   const surfaceRef = useRef<SurfaceFrame | null>(null);
   surfaceRef.current = surface;
-  const [successor] = useState(() => successorPort ?? createReplanSuccessorPort(setup, () => surfaceRef.current));
+  const [successor] = useState(() => successorPort ?? createReplanWorkflowPort(setup, () => surfaceRef.current));
+  const { pending: pendingReplans, start: startReplan, journalError } = useReplanSuccessor(successor, escalate);
   const onDecide = useCallback((item: NeedsYouItem, choice?: NeedsYouChoice, implementationGuidance?: string) => {
     const key = resultKeyOf(item);
     const escalation = item.escalation;
@@ -164,10 +166,7 @@ export function LiveNeedsYou({
       ? { guidanceSubmitted: true } : {};
     const spend = escalation !== undefined
       ? (choice === "REPLAN"
-        // REPLAN is two durable acts: the decision on the node, then the successor goal that
-        // carries the findings. The second runs only once the first was accepted.
-        ? escalate.submit(escalation.affordance, escalation.nodeKey, "REPLAN").then(async (outcome) =>
-          outcome.ok ? successor.create(item, runs) : outcome)
+        ? startReplan(item, runs)
         : implementationGuidance === undefined
           ? escalate.submit(escalation.affordance, escalation.nodeKey, "ALLOW_MORE_ATTEMPTS")
           : escalate.submit(escalation.affordance, escalation.nodeKey, "ALLOW_MORE_ATTEMPTS", implementationGuidance))
@@ -184,7 +183,7 @@ export function LiveNeedsYou({
         outcome: { code: "DECISION_DISPATCH_FAILED", layer: "CONTROL_ROOM_NEEDS_YOU", ok: false },
       }));
     });
-  }, [close, escalate, runs, successor]);
+  }, [close, escalate, runs, startReplan]);
   // GATE 2. The offer is the daemon's and the port spends it verbatim; the result is kept
   // under THIS card's slot (`resultKeyOf`: kind + goal), so the goal's READY_TO_CLOSE card
   // never reads a preview verdict as its own.
@@ -231,18 +230,33 @@ export function LiveNeedsYou({
       }));
     });
   }, [rollback]);
-  useEffect(() => { onCount?.(data.items.length); }, [data.items.length, onCount]);
+  const retainedData = useMemo(() => {
+    if (pendingReplans.length === 0) return data;
+    const items = [...data.items];
+    for (const pending of pendingReplans) {
+      if (!items.some((item) => resultKeyOf(item) === pending.key)) items.push(pending.item);
+    }
+    const count = items.length;
+    return { ...data, items, countLabel: `${count} decision${count === 1 ? "" : "s"} need${count === 1 ? "s" : ""} you` };
+  }, [data, pendingReplans]);
+  const retainedResults = useMemo(() => {
+    const next = new Map(results);
+    for (const pending of pendingReplans) next.set(pending.key, { busy: pending.busy, choice: "REPLAN",
+      outcome: pending.outcome, replanCommitted: pending.committed, replanPending: true });
+    return next;
+  }, [pendingReplans, results]);
+  useEffect(() => { onCount?.(retainedData.items.length); }, [retainedData.items.length, onCount]);
 
   return (
-    <NeedsYou
-      data={data}
-      decisionResults={results}
+    <>{journalError === null ? null : <p role="alert">Saved replacement requests could not be read: {journalError}</p>}<NeedsYou
+      data={retainedData}
+      decisionResults={retainedResults}
       loadCapture={captureLoader}
       onDecide={onDecide}
       onDismissIncident={onDismissIncident}
       onOpenBoard={onOpenBoard}
       onPreviewDecide={onPreviewDecide}
       onRollback={onRollback}
-    />
+    /></>
   );
 }

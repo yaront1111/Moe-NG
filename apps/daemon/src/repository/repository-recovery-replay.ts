@@ -24,10 +24,22 @@ function validResumeProof(value: unknown, expectedReviewDigest: string | undefin
   const times = dates.map((date) => Date.parse(date as string));
   return times[0]! <= times[1]! && times[1]! <= times[2]!;
 }
+function validReplanProof(value: unknown, digest: string | undefined, version: number | undefined): boolean {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+  const proof = value as Record<string, unknown>;
+  if (Object.keys(proof).sort().join(",") !== "drain,kind,replanDecisionId,replanDigest,replanPrincipalId,reviewDigest,reviewVersion,seatStartDigest,snapshotDigest,sourceDigest"
+    || proof["kind"] !== "RELEASE_REPLANNED" || proof["reviewVersion"] !== version
+    || !Number.isSafeInteger(version) || (version ?? 0) < 2
+    || typeof proof["replanDecisionId"] !== "string" || proof["replanDecisionId"].length === 0
+    || typeof proof["replanPrincipalId"] !== "string" || proof["replanPrincipalId"].length === 0
+    || !["replanDigest", "seatStartDigest", "sourceDigest"].every((key) => typeof proof[key] === "string" && /^[a-f0-9]{64}$/u.test(proof[key]))) return false;
+  return validResumeProof({ kind: "RESUME_REVIEW", reviewDigest: proof["reviewDigest"], drain: proof["drain"], snapshotDigest: proof["snapshotDigest"] }, digest);
+}
 /** Read the receipt committed atomically with release, even when another logical owner is now held. */
 export function readRepositoryRecoveryReplay(identity: RepositoryExecutionIdentity, input: { readonly projectId: string;
   readonly principalId: string; readonly commandId: string; readonly requestSha256: string; readonly ownerDigest: string;
-  readonly expectedRevision: number; readonly action?: string; readonly expectedReviewDigest?: string | undefined }): RepositoryRecoveryResult<{ released: boolean; resumed?: boolean }> {
+  readonly expectedRevision: number; readonly action?: string; readonly expectedReviewDigest?: string | undefined;
+  readonly expectedReviewVersion?: number | undefined }): RepositoryRecoveryResult<{ released: boolean; resumed?: boolean }> {
   let database: DatabaseSync | null = null;
   try {
     const resolved = resolveRepositoryExecutionIdentity(identity.root);
@@ -46,6 +58,7 @@ export function readRepositoryRecoveryReplay(identity: RepositoryExecutionIdenti
     if (typeof row["request_json"] !== "string" || typeof row["result_json"] !== "string") return recoveryRefusal("REPOSITORY_RECOVERY_RECEIPT_UNKNOWN");
     const request = JSON.parse(row["request_json"]) as Record<string, unknown>;
     const resumed = input.action === "RESUME_REVIEW";
+    if (input.action === "RELEASE_REPLANNED" && !validReplanProof(request["proof"], input.expectedReviewDigest, input.expectedReviewVersion)) return recoveryRefusal("REPOSITORY_RECOVERY_RECEIPT_UNKNOWN");
     if (resumed && !validResumeProof(request["proof"], input.expectedReviewDigest)) return recoveryRefusal("REPOSITORY_RECOVERY_RECEIPT_UNKNOWN");
     if (request["owner"] !== input.ownerDigest || request["requestSha256"] !== input.requestSha256
       || request["expectedRevision"] !== input.expectedRevision

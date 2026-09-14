@@ -36,6 +36,15 @@ export interface RepositoryReviewResumeEvidence {
 /** Only a failed, host-prepared compiled review with its original baseline can resume. */
 export function readRepositoryReviewResumeEvidence(store: SqliteEventStore, handle: RepositoryExecutionHandle):
 RepositoryRecoveryResult<{ evidence: RepositoryReviewResumeEvidence }> {
+  if (readReviewLedger(store, handle.owner.projectId, handle.owner.nodeRef).replanned) {
+    return recoveryRefusal("REPOSITORY_REVIEW_EVIDENCE_INVALID");
+  }
+  return readRepositoryFailedReviewEvidence(store, handle);
+}
+
+/** Common source/seat/effect proof; callers separately require their exact review disposition. */
+export function readRepositoryFailedReviewEvidence(store: SqliteEventStore, handle: RepositoryExecutionHandle):
+RepositoryRecoveryResult<{ evidence: RepositoryReviewResumeEvidence }> {
   const invalid = () => recoveryRefusal("REPOSITORY_REVIEW_EVIDENCE_INVALID");
   try {
     const { owner, reservation } = handle;
@@ -43,7 +52,7 @@ RepositoryRecoveryResult<{ evidence: RepositoryReviewResumeEvidence }> {
       || /^(?:publish|criterion):/u.test(owner.nodeRef)) return recoveryRefusal("REPOSITORY_REVIEW_PHASE_UNSUPPORTED");
     const review = readReviewLedger(store, owner.projectId, owner.nodeRef);
     const latest = review.rounds.at(-1);
-    if (review.unreadable || review.replanned || review.accepted !== undefined || latest === undefined
+    if (review.unreadable || review.accepted !== undefined || latest === undefined
       || latest.routing.route === "ACCEPT" || latest.principalId !== reservation.sessionId
       || !verifyStoredPackageItems(latest).ok || !recordReviewRound(latest.lineage, { findings: [], round: latest.round + 1 }).ok) return invalid();
     const source = readReviewSubmissionSource(store, owner.projectId, owner.nodeRef);

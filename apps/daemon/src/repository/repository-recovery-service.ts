@@ -17,6 +17,8 @@ import { isDurableHumanPrincipal } from "../identity/human-approver.js";
 import type { RepositoryReviewDrainPort } from "./repository-review-drain-contracts.js";
 import { readRepositoryReviewResumeEvidence, reviewResumeAuthorityClosed } from "./repository-review-resume-evidence.js";
 import { recoverRepositoryReview } from "./repository-review-resume-service.js";
+import { readRepositoryReplanEvidence, replanAuthorityClosed } from "./repository-replan-recovery-evidence.js";
+import { recoverReplannedRepository } from "./repository-replan-recovery-service.js";
 export interface RepositoryRecoveryServiceOptions {
   readonly store: SqliteEventStore; readonly projectId: string; readonly storeId: string;
   readonly workspaces: () => readonly string[]; readonly clock: () => string; readonly mintId: () => string;
@@ -65,9 +67,10 @@ export function createRepositoryRecoveryService(options: RepositoryRecoveryServi
         const noEffect = landing.ok ? null : readRecoveryNoEffectEvidence(options.store, handle);
         return { nodeRef: handle.owner.nodeRef, phase: handle.reservation.phase, expectedReservationRevision: handle.reservation.revision,
           actions: REPOSITORY_RECOVERY_ACTIONS.map((action) => {
-            const review = action === "RESUME_REVIEW" ? readRepositoryReviewResumeEvidence(options.store, handle) : null;
-            const refusal = action === "RESUME_REVIEW" ? review?.ok !== true ? review?.code ?? "REPOSITORY_REVIEW_EVIDENCE_INVALID"
-              : !reviewResumeAuthorityClosed(options.store, handle, options.clock()) ? "REPOSITORY_REVIEW_AUTHORITY_LIVE"
+            const replan = action === "RELEASE_REPLANNED";
+            const review = replan ? readRepositoryReplanEvidence(options.store, handle) : action === "RESUME_REVIEW" ? readRepositoryReviewResumeEvidence(options.store, handle) : null;
+            const refusal = action === "RESUME_REVIEW" || replan ? review?.ok !== true ? review?.code ?? "REPOSITORY_REVIEW_EVIDENCE_INVALID"
+              : !(replan ? replanAuthorityClosed : reviewResumeAuthorityClosed)(options.store, handle, options.clock()) ? "REPOSITORY_REVIEW_AUTHORITY_LIVE"
               : options.reviewDrain === undefined ? "REPOSITORY_REVIEW_DRAIN_UNAVAILABLE" : null
               : action === "ABORT_UNEXECUTED" ? abortCode(item)
               : landing.ok || noEffect?.ok === true ? null : landing.code;
@@ -91,7 +94,7 @@ export function createRepositoryRecoveryService(options: RepositoryRecoveryServi
         if (prior.approval !== null) {
           const replay = readRepositoryRecoveryReplay(prior.approval.identity, { projectId: options.projectId, principalId: input.principalId,
             commandId: input.commandId, requestSha256, ownerDigest: prior.approval.ownerDigest, expectedRevision: payload.expectedReservationRevision,
-            action: payload.action, expectedReviewDigest: payload.expectedReviewDigest });
+            action: payload.action, expectedReviewDigest: payload.expectedReviewDigest, expectedReviewVersion: payload.expectedReviewVersion });
           if (!replay.ok) return replay;
           if (replay.resumed) return { ok: true, commandId: input.commandId, disposition: "REPLAYED", resultCode: "REPOSITORY_RECOVERY_RESUMED" };
           if (replay.released) return success(input.commandId, true);
@@ -100,6 +103,12 @@ export function createRepositoryRecoveryService(options: RepositoryRecoveryServi
         if (candidates.length !== 1) return recoveryRefusal("REPOSITORY_RECOVERY_RESERVATION_UNAVAILABLE");
         const held = candidates[0]!; const { handle } = held;
         if (handle.reservation.revision !== payload.expectedReservationRevision) return recoveryRefusal("REPOSITORY_RECOVERY_REVISION_CONFLICT");
+        if (payload.action === "RELEASE_REPLANNED") {
+          const result = await recoverReplannedRepository({ store: options.store, projectId: options.projectId, storeId: options.storeId,
+            handle, payload, command: input, priorApproval: prior.approval, requestSha256, clock: options.clock, drain: options.reviewDrain,
+            assertAuthority: options.assertAuthority });
+          return result.ok ? success(input.commandId, result.replayed) : result;
+        }
         if (payload.action === "RESUME_REVIEW") {
           const result = await recoverRepositoryReview({ store: options.store, projectId: options.projectId, storeId: options.storeId,
             handle, payload, command: input, priorApproval: prior.approval, requestSha256, clock: options.clock, drain: options.reviewDrain,
