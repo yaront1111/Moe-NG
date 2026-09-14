@@ -34,7 +34,7 @@ export function escalationItems(
       actionLabel: "Open the goal",
       detail: `${node?.objective === undefined || node.objective === "" ? "This work" : node.objective} failed review ${rounds === null ? "three or more" : String(rounds)} times`
         + (route === null ? "" : ` (last: ${ROUTE_WORDS[route] ?? route})`)
-        + ". Allow more attempts, or replan the work into a successor goal that carries these findings.",
+        + ". Allow one more attempt, or replan the work into a successor goal that carries these findings.",
       escalation: Object.freeze({ affordance: offer, latestRoute: route, nodeKey, unsuccessfulRounds: rounds }),
       goalId: goal?.goalId ?? "",
       headline: "A node's review is exhausted",

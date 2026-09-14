@@ -15,6 +15,16 @@ const frame = { version: "moe-repository-recovery/1", projectId: "project-a", co
 }] };
 afterEach(cleanup);
 describe("repository recovery operator controls", () => {
+  it("explains terminal recovery without offering a browser shutdown button", () => {
+    const body = { ...frame, reservations: [{ ...frame.reservations[0], actions: [
+      { action: "RESUME_REVIEW", available: false, code: "REPOSITORY_REVIEW_DRAIN_UNAVAILABLE", offer: null },
+    ] }] };
+    const submit = vi.fn();
+    render(<RepositoryRecoveryCard outcome={mapRepositoryRecoveryAnswer(200, body)} port={{ submit }} />);
+    expect(screen.getByText(/moe recover-review/)).toBeTruthy();
+    expect(screen.getByText(/Keep the current runtime running/)).toBeTruthy();
+    expect(screen.queryByRole("button")).toBeNull(); expect(submit).not.toHaveBeenCalled();
+  });
   it("requires a reason and submits the exact offered revision once", async () => {
     let finish!: (value: { ok: true; commandId: string }) => void;
     const submit = vi.fn(() => new Promise<{ ok: true; commandId: string }>((resolve) => { finish = resolve; }));

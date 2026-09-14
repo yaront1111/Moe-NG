@@ -250,7 +250,13 @@ export function driveEscalatedRounds(store: SqliteEventStore, throughRound: numb
   ));
   if (!escalated.ok) throw new Error(`escalation setup failed: ${escalated.code}`);
   for (let round = REVIEW_ESCALATION_ROUND_LIMIT + 1; round <= throughRound; round += 1) {
-    const outcome = send(store, envelope("review.submit", round, submitPayload(round, [
+    if (round > REVIEW_ESCALATION_ROUND_LIMIT + 1) {
+      const current = readReviewLedger(store, PROJECT_ID, SUBJECT_REF);
+      const allowed = send(store, envelope("escalation.decide", current.version,
+        escalationPayload(), `cmd-escalate-${round}`));
+      if (!allowed.ok) throw new Error(`continuation ${round} setup failed: ${allowed.code}`);
+    }
+    const outcome = send(store, envelope("review.submit", readReviewLedger(store, PROJECT_ID, SUBJECT_REF).version, submitPayload(round, [
       finding({ ruleId: `rule-${round}`, subject: { kind: "NODE", locator: `node-${round}` } }),
     ]), `cmd-round-${round}`));
     if (!outcome.ok) throw new Error(`round ${round} setup failed: ${outcome.code}`);

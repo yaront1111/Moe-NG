@@ -89,8 +89,8 @@ export const CHAIN_ORDER: readonly string[] = Object.freeze([
  */
 export const MISSING_TOKENS: Readonly<Record<string, string>> = Object.freeze({
   // affordance-read.ts - three review rounds failed; the kernel refuses more until a human
-  // records escalation.decide, which the Needs-you screen offers as "Allow more attempts".
-  escalation: "a human's decision to allow more review attempts (Needs you)",
+  // records escalation.decide, which the Needs-you screen offers as "Allow one more attempt".
+  escalation: "a human's decision to allow one more review attempt (Needs you)",
   // affordance-read.ts - a human answered the exhausted review with REPLAN, so the
   // node takes no further round and its work continues under the successor plan.
   replan: "a human's REPLAN decision, which retires this node into the successor plan",

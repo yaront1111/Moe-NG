@@ -133,7 +133,8 @@ describe("deriveGoalStatus", () => {
       [node("n1", "COMMITTED"), node("n2", "BLOCKED", { missing: ["escalation"] })],
     );
     expect(deriveGoalStatus({ coverage: coverage(), goalId: GOAL, paused: PAUSE, runId: RUN, surface: exhausted }))
-      .toMatchObject({ next: { label: "Decide the escalation" }, stage: "ESCALATION" });
+      .toMatchObject({ next: { detail: "Allow one more attempt from Needs you, or read the findings on the board to see what kept failing.",
+        label: "Decide the escalation" }, stage: "ESCALATION" });
     expect(deriveGoalStatus({ coverage: coverage({ gate1: "PENDING" }), goalId: GOAL, paused: PAUSE, runId: RUN, surface: null }))
       .toMatchObject({ next: { label: "Review the contract" }, stage: "CONTRACT" });
     expect(deriveGoalStatus({ coverage: coverage({ lifecycle: "COMPLETED", verified: 4 }), goalId: GOAL, paused: PAUSE, runId: RUN, surface: null }))

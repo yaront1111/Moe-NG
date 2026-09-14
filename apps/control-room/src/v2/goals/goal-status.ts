@@ -225,7 +225,7 @@ export function deriveGoalStatus(input: {
   }
   if (agents !== null && agents.blocked > 0 && offered(surface, "escalation.decide", null)) {
     return status("ESCALATION", `${String(agents.blocked)} ${agents.blocked === 1 ? "node has" : "nodes have"} used every review attempt.`, {
-      anchor: "needs-you", detail: "Allow more attempts from Needs you, or read the findings on the board to see what kept failing.", label: "Decide the escalation",
+      anchor: "needs-you", detail: "Allow one more attempt from Needs you, or read the findings on the board to see what kept failing.", label: "Decide the escalation",
     }, { agents, progress });
   }
   // BEFORE READY_TO_CLOSE on purpose: a product that is up and waiting for a verdict is what

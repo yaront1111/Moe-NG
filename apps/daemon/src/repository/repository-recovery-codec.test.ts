@@ -4,6 +4,15 @@ import { decodeRepositoryRecoveryPayload } from "./repository-recovery-codec.js"
 const payload = { action: "ABORT_UNEXECUTED", decision: "APPROVE", expectedReservationRevision: 7,
   nodeRef: "graph:node", reason: "The attempt was cancelled before execution." };
 describe("operator repository recovery request", () => {
+  it("requires exact immutable review bindings only for review resumption", () => {
+    const review = { ...payload, action: "RESUME_REVIEW", expectedReviewVersion: 5, expectedReviewDigest: "a".repeat(64) };
+    expect(decodeRepositoryRecoveryPayload(review)).toEqual(review);
+    expect(decodeRepositoryRecoveryPayload({ ...payload, action: "RESUME_REVIEW" })).toBeNull();
+    expect(decodeRepositoryRecoveryPayload({ ...review, expectedReviewVersion: 0 })).toBeNull();
+    expect(decodeRepositoryRecoveryPayload({ ...review, expectedReviewDigest: "unbound" })).toBeNull();
+    expect(decodeRepositoryRecoveryPayload({ ...review, action: "ABORT_UNEXECUTED" })).toBeNull();
+    expect(decodeRepositoryRecoveryPayload({ ...review, drain: { jobEmpty: true } })).toBeNull();
+  });
   it.each(["ABORT_UNEXECUTED", "RECONCILE_LANDED"])("decodes the exact explicit %s decision", (action) => {
     const input = { ...payload, action }; const parsed = decodeRepositoryRecoveryPayload(input);
     expect(parsed).toEqual(input); expect(Object.isFrozen(parsed)).toBe(true);

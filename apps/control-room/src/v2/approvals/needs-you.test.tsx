@@ -37,7 +37,9 @@ describe("the Needs-you queue", () => {
     }));
     render(<NeedsYou data={{ countLabel: "2", items, note: null }} onDecide={vi.fn()} onOpenBoard={vi.fn()}
       decisionResults={new Map([["ESCALATION:execution-a", { busy: false, outcome: { ok: true, commandId: "allowed-a" } }]])} />);
-    const buttons = screen.getAllByRole("button", { name: "Allow more attempts on api" });
+    expect(screen.getByTestId("cr.needsyou.result.execution-a").textContent).toBe("Allowed. One more review attempt is approved for this node.");
+    const buttons = screen.getAllByRole("button", { name: "Allow one more attempt on api" });
+    expect(buttons.map((button) => button.textContent)).toEqual(["Allowed", "Allow one more attempt"]);
     expect((buttons[0] as HTMLButtonElement).disabled).toBe(true);
     expect((buttons[1] as HTMLButtonElement).disabled).toBe(false);
   });

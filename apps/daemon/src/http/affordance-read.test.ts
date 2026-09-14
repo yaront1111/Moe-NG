@@ -748,6 +748,14 @@ describe("a node whose review is exhausted waits on a human escalation", () => {
     expect(nodeSurface().nextAllowedCommands.filter((entry) => entry.targetAggregateId === "node-code-1")
       .map((entry) => entry.commandKind)).toEqual(["review.submit"]);
   });
+
+  it("offers a fresh human escalation when the one approved attempt still has findings", () => {
+    submitFailingRound("continued-still-missing");
+    const node = nodeSurface().steps.find((entry) => entry.kind === "node.deliver");
+    expect(node).toMatchObject({ missing: ["escalation"], status: "BLOCKED" });
+    expect(nodeSurface().nextAllowedCommands.filter((entry) => entry.targetAggregateId === "node-code-1")
+      .map((entry) => entry.commandKind)).toEqual(["escalation.decide"]);
+  });
 });
 
 describe("a REPLAN decision retires the node", () => {

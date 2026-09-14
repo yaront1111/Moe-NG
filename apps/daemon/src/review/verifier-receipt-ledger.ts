@@ -209,6 +209,7 @@ export function recordVerifierReceipt(
   const built = buildReviewPackage(packageItems);
   if (!built.ok) return { code: "VERIFIER_AUTHORITY_REFUSED", ok: false };
   const qualified = qualifyReviewAcceptance({
+    ...(reviewContinuationForAcceptance(ledger) === undefined ? {} : { continuation: reviewContinuationForAcceptance(ledger)! }),
     calibration: input.authority.calibration,
     lineage: ledger.lineage,
     policy: input.authority.policy,
@@ -278,3 +279,4 @@ export function recordVerifierReceipt(
     receipt: persisted.receipt,
   };
 }
+import { reviewContinuationForAcceptance } from "./review-continuation.js";

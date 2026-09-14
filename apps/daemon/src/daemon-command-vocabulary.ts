@@ -380,6 +380,8 @@ export const OPERATOR_PRINCIPAL_KINDS: ReadonlySet<WiredCommandKind> = new Set([
   CRITERION_APPROVE, CRITERION_VERIFY,
   "repository.recover",
   "approval.decide",
+  // Funding another review attempt or choosing a replan is the human's decision.
+  "escalation.decide",
   // The one-way GA activation. ADMIN would fence reach only, and this is the act that makes v2
   // authoritative for good -- exactly the human-only class this set exists for. It is also why
   // the kind is excluded from the MCP roster: `daemon-command-registry.js` records that the

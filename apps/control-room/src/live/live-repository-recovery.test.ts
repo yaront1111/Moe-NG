@@ -9,6 +9,23 @@ export const RECOVERY_FRAME = { version: "moe-repository-recovery/1", projectId:
       { action: "ABORT_UNEXECUTED", available: false, code: "REPOSITORY_RECOVERY_EXECUTION_STARTED", offer: null }] }] };
 
 describe("repository recovery read", () => {
+  it("keeps existing recovery options readable alongside terminal-only review recovery", () => {
+    const body = { ...RECOVERY_FRAME, reservations: [{ ...RECOVERY_FRAME.reservations[0], actions: [
+      ...RECOVERY_FRAME.reservations[0]!.actions,
+      { action: "RESUME_REVIEW", available: false, code: "REPOSITORY_REVIEW_DRAIN_UNAVAILABLE", offer: null,
+        expectedReviewVersion: 7, expectedReviewDigest: "a".repeat(64) },
+    ] }] };
+    const result = mapRepositoryRecoveryAnswer(200, body);
+    expect(result.status).toBe("RECOVERY");
+    if (result.status === "RECOVERY") expect(result.view.reservations[0]?.actions).toHaveLength(3);
+  });
+  it("refuses browser execution authority for terminal-only review recovery", () => {
+    const body = { ...RECOVERY_FRAME, reservations: [{ ...RECOVERY_FRAME.reservations[0], actions: [
+      { action: "RESUME_REVIEW", available: true, code: null, offer: RECOVERY_OFFER,
+        expectedReviewVersion: 7, expectedReviewDigest: "a".repeat(64) },
+    ] }] };
+    expect(mapRepositoryRecoveryAnswer(200, body).status).toBe("ERROR");
+  });
   it("carries the exact reservation revision and daemon action offer", () => {
     expect(mapRepositoryRecoveryAnswer(200, RECOVERY_FRAME)).toEqual({ status: "RECOVERY", view: RECOVERY_FRAME });
   });

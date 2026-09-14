@@ -9,7 +9,8 @@ import { REPOSITORY_RECOVERY_PAYLOAD_KEYS } from "./repository-recovery-contract
 export interface RepositoryRecoveryCommandPort {
   recover(input: { readonly principalId: string; readonly operatorPrincipalId: string; readonly commandId: string;
     readonly correlationId: string; readonly expectedVersion: number; readonly targetAggregateId: string; readonly payload: unknown }):
-    Promise<RepositoryRecoveryResult<{ readonly commandId: string; readonly disposition: "COMMITTED" | "REPLAYED"; readonly resultCode: "REPOSITORY_RECOVERY_RELEASED" }>>;
+    Promise<RepositoryRecoveryResult<{ readonly commandId: string; readonly disposition: "COMMITTED" | "REPLAYED";
+      readonly resultCode: "REPOSITORY_RECOVERY_RELEASED" | "REPOSITORY_RECOVERY_RESUMED" }>>;
 }
 export function createRepositoryRecoveryCommandEntry(options: { readonly store: SqliteEventStore;
   readonly projectId: string; readonly operatorPrincipalId: string; readonly port: RepositoryRecoveryCommandPort | undefined;

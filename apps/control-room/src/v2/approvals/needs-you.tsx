@@ -101,11 +101,11 @@ export function resultKeyOf(item: NeedsYouItem): string {
 function decisionOf(item: NeedsYouItem): InlineDecision | null {
   if (item.escalation !== undefined) {
     return {
-      ariaLabel: `Allow more attempts on ${item.escalation.nodeKey}`,
+      ariaLabel: `Allow one more attempt on ${item.escalation.nodeKey}`,
       armLabel: null,
-      buttonLabel: "Allow more attempts",
+      buttonLabel: "Allow one more attempt",
       doneLabel: "Allowed",
-      doneLine: "Allowed. Agents may submit new review rounds for this node.",
+      doneLine: "Allowed. One more review attempt is approved for this node.",
       testId: `cr.needsyou.escalate.${decisionKeyOf(item)}`,
     };
   }

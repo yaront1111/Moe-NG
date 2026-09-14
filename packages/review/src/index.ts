@@ -69,3 +69,5 @@ export type {
   ReviewerIndependenceAssessment,
   ReviewerIndependenceInput,
 } from "./review-contract.js";
+export { validReviewContinuationApproval } from "./review-continuation.js";
+export type { ReviewContinuationApproval, ReviewContinuationUse } from "./review-continuation.js";

@@ -38,7 +38,10 @@ function ReservationControls({ reservation, port, onRecorded }: {
         disabled={busy} onChange={(event) => setReason(event.target.value)} />
     </label>}
     {reservation.actions.map((action) => <div key={action.action}>
-      {action.available ? <ActionButton variant="secondary" disabled={port === null || busy || reason.trim() === "" || report?.ok === true}
+      {action.action === "RESUME_REVIEW" && action.code === "REPOSITORY_REVIEW_DRAIN_UNAVAILABLE" ? <p className="cr2-needs-note">
+        Run <code>moe recover-review &lt;project directory&gt;</code> from the repaired Moe terminal.
+        Keep the current runtime running until recovery attaches.
+      </p> : action.available ? <ActionButton variant="secondary" disabled={port === null || busy || reason.trim() === "" || report?.ok === true}
         onClick={() => { void submit(action); }}>
         {action.action === "ABORT_UNEXECUTED" ? "Release unused reservation" : "Reconcile completed landing"}
       </ActionButton> : <p className="cr2-approve-mono">{action.code}</p>}

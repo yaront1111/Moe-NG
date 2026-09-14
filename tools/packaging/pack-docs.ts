@@ -35,6 +35,20 @@ because this artifact ships TypeScript sources that Node 24 strips at load.
 \`moe --help\` lists every wired command. \`moe init\` refuses rather than
 overwriting an existing config, so re-running it is safe.
 
+## Recover a blocked review
+
+Keep the original single-project runtime running, then use this repaired artifact:
+
+    .\\moe.ps1 recover-review 'D:\\path\\to\\project'
+
+This verifies and drains the original Windows Job, preserves the existing work and
+repository reservation, and starts the repaired runtime in the same terminal.
+It does not accept the product or grant another review attempt. If Windows returns
+\`RUNTIME_REVIEW_DRAIN_ACCESS_DENIED\`, run the command from PowerShell with the same
+privileges as the original runtime (usually **Run as administrator**). Keep the
+original runtime alive until recovery attaches. A refusal prints its reason code
+and does not start another runtime. Multi-project manager sessions are unsupported.
+
 ## Running real agents
 
 Moe can use your existing Claude sign-in. If you have not signed in, run

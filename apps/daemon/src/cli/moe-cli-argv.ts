@@ -10,7 +10,7 @@ export const MOE_CLI_UNKNOWN_COMMAND = "MOE_CLI_UNKNOWN_COMMAND" as const;
 export const MOE_CLI_UNKNOWN_OPTION = "MOE_CLI_UNKNOWN_OPTION" as const;
 export const MOE_CLI_TOO_MANY_ARGUMENTS = "MOE_CLI_TOO_MANY_ARGUMENTS" as const;
 
-export const KNOWN_COMMANDS = Object.freeze(["init", "start", "projects", "version", "help"] as const);
+export const KNOWN_COMMANDS = Object.freeze(["init", "start", "recover-review", "projects", "version", "help"] as const);
 
 export type CliCommand = (typeof KNOWN_COMMANDS)[number];
 
@@ -41,6 +41,10 @@ export interface CliProjects {
   readonly operatorStdin?: true;
 }
 
+export interface CliRecoverReview extends Omit<CliStart, "command"> {
+  readonly command: "recover-review";
+}
+
 export interface CliHelp {
   readonly command: "help";
   readonly ok: true;
@@ -62,7 +66,7 @@ export interface CliArgvRefused {
   readonly ok: false;
 }
 
-export type CliInvocation = CliArgvRefused | CliHelp | CliInit | CliProjects | CliStart | CliVersion;
+export type CliInvocation = CliArgvRefused | CliHelp | CliInit | CliProjects | CliRecoverReview | CliStart | CliVersion;
 
 const DEFAULT_TARGET_DIR = ".";
 const VERSION_WORDS = Object.freeze(["--version", "-v", "version"]);
@@ -129,13 +133,13 @@ export function parseCliArgv(argv: readonly string[]): CliInvocation {
       command: "init", force: parts.options.includes("--force"), ok: true, targetDir: target,
     });
   }
-  if (head === "start") {
+  if (head === "start" || head === "recover-review") {
     const bad = unknownOption(parts, [OPERATOR_STDIN]);
     if (bad !== null) return bad;
     const target = targetOf(parts);
     if (typeof target !== "string") return target;
     return Object.freeze({
-      command: "start", ok: true,
+      command: head, ok: true,
       ...(parts.options.includes(OPERATOR_STDIN) ? { operatorStdin: true as const } : {}),
       targetDir: target,
     });

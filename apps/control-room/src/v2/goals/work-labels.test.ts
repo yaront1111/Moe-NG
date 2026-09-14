@@ -87,6 +87,7 @@ describe("work-labels mirrors the daemon's emitted command kinds", () => {
   });
 
   it("translates the daemon's own prerequisite tokens, raw for anything else", () => {
+    expect(labelForMissing("escalation")).toBe("a human's decision to allow one more review attempt (Needs you)");
     expect(labelForMissing("verification")).toBe("the daemon's verification");
     expect(labelForMissing("verifier-policy")).toBe(
       "the host verifier policy slice (moe-verifier-policy/1) an operator installs with policy.install",

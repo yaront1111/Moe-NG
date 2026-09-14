@@ -213,6 +213,7 @@ const EXPECTED_EXCLUDED_COMMAND_KINDS: readonly string[] = Object.freeze([
   "criterion_check.approve", "criterion_check.verify", "repository.recover",
   "approval.decide",
   "approval.decide_intent",
+  "escalation.decide",
   "product_contract.answer_clarification",
   "cutover.activate",
   "goal.close",
@@ -249,9 +250,9 @@ describe("task-4c9b1d85 stdio entry excludes every human-only kind", () => {
     const allowed = new Set(advertisedNames());
 
     // The sweep must have GENERATED cases: a zero-case loop passes vacuously.
-    expect(EXCLUSION_CASES.length).toBe(27);
+    expect(EXCLUSION_CASES.length).toBe(28);
     expect(Object.isFrozen(EXCLUSION_CASES)).toBe(true);
-    expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(54);
+    expect(EXCLUSION_CASES.length * MCP_TRANSPORT_ENTRY_COUNT).toBe(56);
     const expected = [...EXPECTED_EXCLUDED_COMMAND_KINDS].sort();
     const production = [...MCP_EXCLUDED_COMMAND_KINDS].sort();
     expect(production).toEqual(expected);

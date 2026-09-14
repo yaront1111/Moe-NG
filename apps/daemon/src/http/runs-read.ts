@@ -53,7 +53,7 @@ const MAX_FINDINGS = 8;
 
 /** The review facts a node's status is derived from; an injectable slice of the ledger. */
 export type NodeReviewFacts = Pick<
-  ReviewLedger, "accepted" | "escalated" | "replanned" | "rounds" | "unreadable" | "version"
+  ReviewLedger, "accepted" | "continuation" | "escalated" | "replanned" | "rounds" | "unreadable" | "version"
 > & { readonly lineage: Pick<ReviewLedger["lineage"], "unsuccessfulRounds"> & Partial<Pick<ReviewLedger["lineage"], "records">> };
 
 export interface NodeReviews {
@@ -140,14 +140,14 @@ function reviewOf(facts: NodeReviewFacts): RunNodeReview {
 
 function statusOf(
   review: RunNodeReview, accepted: boolean, claimActive: boolean, shared: boolean, replanned: boolean,
+  continuationAvailable: boolean,
 ): RunNodeStatus {
   if (shared) return "UNATTRIBUTABLE";
   if (accepted) return "ACCEPTED";
   if (review.unreadable) return "BLOCKED";
   if (replanned) return "REPLANNED";
-  if (review.escalated) return "ESCALATED";
-  if (review.unsuccessfulRounds >= ESCALATION_ROUND_LIMIT) return "ESCALATION_REQUIRED";
   if (review.latestRoute === "ACCEPT") return "DELIVERED";
+  if (review.unsuccessfulRounds >= ESCALATION_ROUND_LIMIT && !continuationAvailable) return "ESCALATION_REQUIRED";
   if (claimActive) return "IN_PROGRESS";
   return "READY";
 }
@@ -260,7 +260,7 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
           }),
           review,
           sharedKey: isShared,
-          status: statusOf(review, facts.accepted !== undefined, active, isShared, facts.replanned),
+          status: statusOf(review, facts.accepted !== undefined, active, isShared, facts.replanned, facts.continuation !== undefined),
         });
       })),
       publish: readRunGoalPublication(store, projectId, publishes.get(goal.goalId)),

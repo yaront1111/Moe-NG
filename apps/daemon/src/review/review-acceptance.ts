@@ -1,10 +1,11 @@
 import type { JsonValue } from "@moe/contracts";
-import { REVIEW_ESCALATION_ROUND_LIMIT, qualifyReviewAcceptance } from "@moe/review";
+import { REVIEW_ESCALATION_ROUND_LIMIT, REVIEW_ROUND_ABSOLUTE_CEILING, qualifyReviewAcceptance } from "@moe/review";
 import type { ReviewerIndependenceInput } from "@moe/review";
 
 import { commitAccepted, payloadRef, refuse, refuseFromKernel } from "./review-ledger.js";
 import type { CommandHandler, ReviewOutcome } from "./review-ledger.js";
 import { NODE_VERIFIER_PRINCIPAL_ID, readVerifierReceipt } from "./verifier-receipt-ledger.js";
+import { continuationSourceAttested, reviewContinuationAvailable, reviewContinuationForAcceptance, reviewContinuationSource } from "./review-continuation.js";
 
 /**
  * Explicit escalation (DoD 4) and the acceptance gate (DoD 6).
@@ -47,11 +48,26 @@ export const decideEscalation: CommandHandler = (context): ReviewOutcome => {
   if (ledger.unreadable) {
     return refuse(request.kind, "REVIEW_LINEAGE_UNREADABLE", "DAEMON_PREREQUISITE");
   }
+  if (ledger.replanned) return refuse(request.kind, "REVIEW_NODE_REPLANNED", "DAEMON_PREREQUISITE");
+  if (ledger.accepted !== undefined) return refuse(request.kind, "REVIEW_ALREADY_ACCEPTED", "DAEMON_PREREQUISITE");
+  if (decision === "ALLOW_MORE_ATTEMPTS" && ledger.rounds.length >= REVIEW_ROUND_ABSOLUTE_CEILING) {
+    return refuse(request.kind, "REVIEW_ROUND_CEILING_REACHED", "DAEMON_PREREQUISITE");
+  }
+  if (decision === "ALLOW_MORE_ATTEMPTS" && reviewContinuationAvailable(ledger)) {
+    return refuse(request.kind, "REVIEW_CONTINUATION_ALREADY_AVAILABLE", "DAEMON_PREREQUISITE");
+  }
   if (ledger.lineage.unsuccessfulRounds < REVIEW_ESCALATION_ROUND_LIMIT) {
     return refuse(request.kind, "REVIEW_ESCALATION_NOT_REACHED", "DAEMON_PREREQUISITE");
   }
   if (request.expectedVersion !== ledger.version) {
     return refuse(request.kind, "REVIEW_EXPECTED_VERSION_STALE", "DAEMON_PREREQUISITE");
+  }
+  const latest = ledger.rounds.at(-1);
+  if (latest === undefined || latest.routing.route === "ACCEPT") {
+    return refuse(request.kind, "REVIEW_ESCALATION_NOT_REACHED", "DAEMON_PREREQUISITE");
+  }
+  if (decision === "ALLOW_MORE_ATTEMPTS" && (!continuationSourceAttested(latest) || latest.routing.route !== "ESCALATE")) {
+    return refuse(request.kind, "REVIEW_LINEAGE_UNREADABLE", "DAEMON_PREREQUISITE");
   }
   return commitAccepted(store, request, {
     aggregateId: subjectRef,
@@ -59,6 +75,9 @@ export const decideEscalation: CommandHandler = (context): ReviewOutcome => {
     eventType: "ReviewEscalated",
     expectedVersion: ledger.version,
     result: {
+      ...(decision === "ALLOW_MORE_ATTEMPTS" ? {
+        continuationSource: reviewContinuationSource(request.projectId, subjectRef, ledger.version, latest),
+      } : {}),
       decision,
       escalationRef,
       unsuccessfulRounds: ledger.lineage.unsuccessfulRounds,
@@ -130,6 +149,7 @@ export const acceptOutput: CommandHandler = (context): ReviewOutcome => {
     return refuse(request.kind, "REVIEW_VERIFIER_RECEIPT_STALE", "DAEMON_PREREQUISITE");
   }
   const qualified = qualifyReviewAcceptance({
+    ...(reviewContinuationForAcceptance(ledger) === undefined ? {} : { continuation: reviewContinuationForAcceptance(ledger)! }),
     calibration: loaded.receipt.calibration,
     lineage: ledger.lineage,
     policy: loaded.receipt.policy,

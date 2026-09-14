@@ -410,6 +410,7 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
         // and editing that roster would silently open the MCP fence too.
         && !((approvalIntent || criterion || kind === "repository.publish"
           || kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND
+          || kind === "escalation.decide"
           || providerByPairedAdmin)
           && isDurableHumanPrincipal(store, principal.principalId))) {
         throw new DomainRefusal(

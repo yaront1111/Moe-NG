@@ -77,7 +77,7 @@ export function decisionWords(commandKind: string, verdict: string | null): stri
   if (commandKind === "review.submit") return VERDICT_ROUTE_WORDS[verdict] ?? `reviewed: ${verdict}`;
   if (commandKind === "escalation.decide") {
     if (verdict === "REPLAN") return "sent the node to be replanned";
-    if (verdict === "ALLOW_MORE_ATTEMPTS") return "allowed more review attempts";
+    if (verdict === "ALLOW_MORE_ATTEMPTS") return "approved another review attempt";
     return `decided the exhausted review: ${verdict}`;
   }
   if (commandKind === "preview.decide") {

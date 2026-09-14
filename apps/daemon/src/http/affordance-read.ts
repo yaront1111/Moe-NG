@@ -604,7 +604,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
         // every further round (REVIEW_ESCALATION_REQUIRED), so the node is BLOCKED on a human
         // and the only command the surface offers for it is the escalation decision itself.
         // Offering review.submit here would staff agents into a refusal loop.
-        if (!review.unreadable && !review.escalated
+        if (!awaitingVerify && !reviewContinuationAvailable(review)
           && review.lineage.unsuccessfulRounds >= REVIEW_ESCALATION_ROUND_LIMIT) {
           offers.push(offer("escalation.decide", spec.nodeRef, review.version, REVIEW_SCHEMA_VERSION));
           steps.push(Object.freeze({
@@ -648,3 +648,4 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
 
   return Object.freeze({ boundProjectId: config.projectId, readSurface });
 }
+import { reviewContinuationAvailable } from "../review/review-continuation.js";

@@ -17,6 +17,10 @@ const DAEMON_CODES = [
   "PREVIEW_START_TIMEOUT",
 ] as const;
 
+it("describes a review continuation as another attempt without promising unlimited retries", () => {
+  expect(decisionWords("escalation.decide", "ALLOW_MORE_ATTEMPTS")).toBe("approved another review attempt");
+});
+
 describe("preview refusal codes, as operator words", () => {
   it("says what happened AND what to do about it, for PREVIEW_COMMAND_MISSING", () => {
     expect(previewCodeWords("PREVIEW_COMMAND_MISSING")).toBe(

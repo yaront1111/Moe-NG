@@ -58,6 +58,7 @@ const encoder = new TextEncoder();
 
 const EXPECTED_DAEMON_CODES = [
   "REVIEW_ALREADY_ACCEPTED",
+  "REVIEW_CONTINUATION_ALREADY_AVAILABLE",
   "REVIEW_COMMAND_BYTES_CONFLICT",
   "REVIEW_COMMAND_ID_REUSED",
   "REVIEW_COMMAND_ID_SPENT",
@@ -115,6 +116,9 @@ function driveDaemonRefusals(): readonly string[] {
   }).ok).toBe(false);
   const cappedStore = openStore();
   driveRounds(cappedStore, 3);
+  const continuedStore = openStore();
+  driveRounds(continuedStore, 3);
+  expect(send(continuedStore, envelope("escalation.decide", 3, escalationPayload(), "cmd-allow-first")).ok).toBe(true);
   // Three failed rounds, then the human answers REPLAN: the node takes no further round.
   const replannedStore = openStore();
   driveRounds(replannedStore, 3);
@@ -187,6 +191,8 @@ function driveDaemonRefusals(): readonly string[] {
   });
 
   return [
+    daemonCode("a second unconsumed continuation", send(continuedStore,
+      envelope("escalation.decide", 4, escalationPayload(), "cmd-allow-duplicate"))),
     daemonCode("undecodable bytes", runReviewCommand(openStore(), encoder.encode("{not json"))),
     daemonCode("wrong schema version", send(openStore(), {
       ...envelope("review.submit", 0, submitPayload(1)),

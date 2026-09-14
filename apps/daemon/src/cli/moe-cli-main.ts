@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { prepareRuntimeMetadataExcludes } from "../repository/runtime-metadata-excludes.js";
 import { parseCliArgv } from "./moe-cli-argv.js";
-import type { CliInit, CliStart } from "./moe-cli-argv.js";
+import type { CliInit, CliRecoverReview, CliStart } from "./moe-cli-argv.js";
 import { isMainModule } from "./moe-cli-entry.js";
 import { WORKSPACE_LINK_FILENAME, ensureWorkspaceLinks } from "./moe-cli-links.js";
 import {
@@ -39,6 +39,12 @@ export interface ManagerStartRequest {
   readonly operatorStdin?: true;
 }
 
+export interface ReviewRecoveryRequest extends StartRequest {
+  readonly config: MoeConfig;
+  readonly log: (line: string) => void;
+}
+export type ReviewRecoveryResult = { readonly ok: true } | { readonly ok: false; readonly code: string };
+
 export interface CliIo {
   /** The extracted artifact root (or the repository root in a checkout). */
   readonly artifactRoot: string;
@@ -51,6 +57,7 @@ export interface CliIo {
   readonly nodeVersion: string;
   readonly packageVersion: string;
   readonly randomHex: (bytes: number) => string;
+  readonly recoverReview?: (request: ReviewRecoveryRequest) => Promise<ReviewRecoveryResult>;
   readonly startManager: (request: ManagerStartRequest) => Promise<number>;
   readonly startStack: (request: StartRequest) => Promise<number>;
 }
@@ -60,6 +67,7 @@ const USAGE = Object.freeze([
   "",
   "  moe init [dir] [--force]   scaffold a store, mint an operator credential, write the config",
   "  moe start [dir] [--operator-stdin]   start one project and print its plain control-room origin",
+  "  moe recover-review [dir] [--operator-stdin]   drain a blocked review runtime, recover it, and restart",
   "  moe projects [--operator-stdin]      open the Windows manager at its plain loopback origin",
   "  moe --version              print this build's version",
   "  moe --help                 print this message",
@@ -178,7 +186,29 @@ async function runStart(invocation: CliStart, io: CliIo): Promise<number> {
   });
 }
 
-function preparePackagedLinks(io: CliIo, command: "projects" | "start"): boolean {
+async function runRecoverReview(invocation: CliRecoverReview, io: CliIo): Promise<number> {
+  const projectRoot = resolve(io.cwd, invocation.targetDir);
+  const config = readConfig(projectRoot, io);
+  if (config === null || !preparePackagedLinks(io, "recover-review")) return 1;
+  if (io.recoverReview === undefined) {
+    io.log("MOE_CLI_REVIEW_RECOVERY_UNAVAILABLE"); return 1;
+  }
+  io.log(`moe recover-review: checking blocked review in ${projectRoot}`);
+  let recovered: ReviewRecoveryResult;
+  try {
+    recovered = await io.recoverReview({ artifactRoot: io.artifactRoot, env: io.env,
+      config, projectRoot, log: io.log });
+  } catch { recovered = { ok: false, code: "MOE_CLI_REVIEW_RECOVERY_UNAVAILABLE" }; }
+  if (!recovered.ok) { io.log(recovered.code); return 1; }
+  const current = readConfig(projectRoot, io);
+  if (current === null || JSON.stringify(current) !== JSON.stringify(config)) {
+    io.log("MOE_CLI_REVIEW_RECOVERY_CONFIG_CHANGED"); return 1;
+  }
+  io.log("moe recover-review: existing work preserved; starting the repaired runtime");
+  return runStart({ ...invocation, command: "start" }, io);
+}
+
+function preparePackagedLinks(io: CliIo, command: "projects" | "recover-review" | "start"): boolean {
   const links = ensureWorkspaceLinks(io.artifactRoot, readLinkManifest(io.artifactRoot));
   if (!links.ok) {
     io.log(links.message);
@@ -214,6 +244,7 @@ export async function runMoeCli(io: CliIo): Promise<number> {
     return 1;
   }
   if (invocation.command === "init") return runInit(invocation, io);
+  if (invocation.command === "recover-review") return runRecoverReview(invocation, io);
   if (invocation.command === "projects") {
     if (!preparePackagedLinks(io, "projects")) return 1;
     return await io.startManager({
@@ -247,6 +278,10 @@ if (isMainModule(import.meta, process.argv[1])) {
     nodeVersion: process.version,
     packageVersion: ownVersion(artifactRoot),
     randomHex: cryptoRandomHex,
+    recoverReview: async (request) => {
+      const { runProjectReviewRecovery } = await import("./moe-cli-review-recovery.js");
+      return await runProjectReviewRecovery(request);
+    },
     startManager: async (request) => {
       const { runProjectManagerMain } = await import("../projects/project-manager-main.js");
       return await runProjectManagerMain({

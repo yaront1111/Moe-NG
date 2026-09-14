@@ -34,6 +34,8 @@ import type {
   ReviewerIndependenceInput,
 } from "./review-contract.js";
 import { qualifyReviewerForAcceptance } from "./reviewer-eligibility.js";
+import { reviewContinuationAccepts, reviewContinuationMatches } from "./review-continuation.js";
+import type { ReviewContinuationUse } from "./review-continuation.js";
 
 export interface ReviewRoundInput {
   readonly findings: readonly ReviewFinding[];
@@ -46,6 +48,7 @@ export interface ReviewRoundOutcome {
 }
 
 export interface ReviewAcceptanceInput {
+  readonly continuation?: ReviewContinuationUse;
   readonly calibration: ReviewerCalibration;
   readonly lineage: ReviewLineage;
   readonly policy: PolicyEvaluationInput;
@@ -150,6 +153,7 @@ function admissibleRound(round: number): boolean {
 export function recordReviewRound(
   lineage: ReviewLineage,
   round: ReviewRoundInput,
+  continuation?: ReviewContinuationUse,
 ): ReviewResult<ReviewRoundOutcome> {
   if (!lineageAttested(lineage)) return refuse("FINDING_LINEAGE_DIGEST_MISMATCH");
   if (!admissibleRound(round.round)) return refuse("FINDING_ROUND_INVALID");
@@ -157,6 +161,9 @@ export function recordReviewRound(
   // a clean round appends no record but still advances it, so an earlier or
   // equal round can never be replayed after an acceptance.
   if (round.round <= lineage.highestRound) return refuse("FINDING_LINEAGE_APPEND_ONLY");
+  if (continuation !== undefined && !reviewContinuationMatches(lineage, round.round, continuation)) {
+    return refuse("REVIEW_CONTINUATION_INVALID");
+  }
   const seen = new Set(lineage.records.map((record) => record.fingerprint));
   const added: readonly ReviewFindingRecord[] = round.findings.map((finding) => {
     const inert = inertFinding(finding);
@@ -170,7 +177,8 @@ export function recordReviewRound(
   const records = [...lineage.records, ...added];
   // The guard above proved round.round > highestRound, so this only ever raises it.
   const highestRound = round.round;
-  const escalated = unsuccessfulRounds >= REVIEW_ESCALATION_ROUND_LIMIT;
+  const escalated = unsuccessfulRounds >= REVIEW_ESCALATION_ROUND_LIMIT
+    && !(clean && continuation !== undefined);
   const route: ReviewRoute = escalated
     ? "ESCALATE"
     : clean ? "ACCEPT" : repeatFingerprints.length > 0 ? "REJECT_PLAN" : "REJECT_IMPLEMENTATION";
@@ -216,7 +224,11 @@ export function qualifyReviewAcceptance(input: ReviewAcceptanceInput): ReviewAcc
   if (!lineageAttested(input.lineage)) {
     return acceptanceRefusal("FINDING_LINEAGE_DIGEST_MISMATCH", "FINDINGS", []);
   }
-  if (input.lineage.unsuccessfulRounds >= REVIEW_ESCALATION_ROUND_LIMIT) {
+  if (input.continuation !== undefined && (input.reviewer.subjectRef !== input.continuation.subjectRef
+    || !reviewContinuationAccepts(input.lineage, input.continuation))) {
+    return acceptanceRefusal("REVIEW_CONTINUATION_INVALID", "FINDINGS", []);
+  }
+  if (input.lineage.unsuccessfulRounds >= REVIEW_ESCALATION_ROUND_LIMIT && input.continuation === undefined) {
     return acceptanceRefusal("REVIEW_ROUND_CAP_REACHED", "FINDINGS", []);
   }
   if (input.proof === "FAILED") return acceptanceRefusal("PROOF_FAILED", "ACCEPTANCE", []);

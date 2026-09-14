@@ -365,7 +365,7 @@ const ROWS: readonly Row[] = [
     layer: STEP_LAYER, payloadKeys: ["attemptAggregateId", "effectId", "label"] },
   { agent: null, capability: ADMIN, code: "REPOSITORY_RECOVERY_INPUT_INVALID", kind: "repository.recover", asyncOnly: true,
     nonOperatorRefusal: { code: "REPOSITORY_RECOVERY_HUMAN_REQUIRED", layer: "REPOSITORY_RECOVERY" },
-    layer: "REPOSITORY_RECOVERY", payloadKeys: ["action", "decision", "expectedReservationRevision", "nodeRef", "reason"] },
+    layer: "REPOSITORY_RECOVERY", payloadKeys: ["action", "decision", "expectedReservationRevision", "nodeRef", "reason", "expectedReviewVersion", "expectedReviewDigest"] },
   { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.claim",
     layer: INGRESS, payloadKeys: ["expiresAt", "workItemId"] },
   { agent: [WORK], capability: WORK, code: "WORK_CLAIM_PAYLOAD_INVALID", kind: "work.release",
@@ -432,7 +432,7 @@ const OPERATOR_ONLY: readonly RuntimeCommandKind[] = [
   // BOTH approval wires. The intent seam derives the activation witness and the record the
   // caller-shaped wire used to accept, so gating one and not the other would leave the derived
   // wire reachable by a non-operator principal -- handing back exactly the authority it removes.
-  "approval.decide", "approval.decide_intent", "goal.close",
+  "approval.decide", "approval.decide_intent", "escalation.decide", "goal.close",
   // Publishing pushes the operator's repository to the remote the operator named.
   "repository.publish",
   "release.decide", "deployment.set_target", "deployment.deploy", "deployment.rollback",
@@ -1385,8 +1385,8 @@ describe("authorization ordering under a real session", () => {
     });
 
     it("gates exactly the transcribed kinds and no others", () => {
-      expect(OPERATOR_ONLY).toHaveLength(28);
-      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(28);
+      expect(OPERATOR_ONLY).toHaveLength(29);
+      expect(ROWS.filter((row) => OPERATOR_ONLY.includes(row.kind))).toHaveLength(29);
     });
 
     it.each(ROWS)("$kind answers the non-operator session from its own layer", async (row) => {

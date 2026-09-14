@@ -18,6 +18,8 @@ import { compiledPlanAuthority } from "../planning/compiled-authority-bodies.js"
 import { baseSnapshot, revisionContentFor } from "../planning/graph-query-test-fixtures.js";
 import type { MigrationDeclarations } from "../planning/graph-query-test-fixtures.js";
 import { seedVerifierReceipt } from "../review/review-test-fixtures.js";
+import { envelope as reviewEnvelope, escalationPayload, finding, send as sendReview, submitPayload } from "../review/review-test-fixtures.js";
+import { readReviewLedger, readReviewLedgers } from "../review/review-read-model.js";
 import type { WorkClaimRecord } from "../work/work-claim-read-model.js";
 import { recordDeployReceipt } from "../deployment/deploy-ledger.js";
 import type { RecordDeployReceiptInput } from "../deployment/deploy-ledger.js";
@@ -33,6 +35,24 @@ const NOW = "2026-09-02T20:00:00.000Z";
 const ref = (key: string): string => compiledExecutionRef(PROJECT_ID, activeGraphFor(GOAL_ID), key);
 
 afterEach(closeStores);
+
+it("projects a real bounded approval as READY, its clean submit as DELIVERED, and verifier acceptance as ACCEPTED", () => {
+  const store = boundWorld(); const subjectRef = ref("node-a");
+  const command = (kind: string, payload: Record<string, unknown>) => sendReview(store, {
+    ...reviewEnvelope(kind, readReviewLedger(store, PROJECT_ID, subjectRef).version, payload, randomUUID()), projectId: PROJECT_ID,
+  });
+  const status = () => runs(portFor(store, { readReviews: readReviewLedgers }).readRuns({})).goals[0]?.nodes[0]?.status;
+  for (const round of [1, 2, 3]) expect(command("review.submit", submitPayload(round,
+    [finding({ ruleId: `missing-${round}` })], { subjectRef })).ok).toBe(true);
+  expect(status()).toBe("ESCALATION_REQUIRED");
+  expect(command("escalation.decide", escalationPayload({ subjectRef })).ok).toBe(true);
+  expect(status()).toBe("READY");
+  expect(command("review.submit", submitPayload(5, [], { subjectRef })).ok).toBe(true);
+  expect(status()).toBe("DELIVERED");
+  const receipt = seedVerifierReceipt(store, subjectRef, PROJECT_ID);
+  expect(command("integration.accept_output", { subjectRef, receiptId: receipt.receiptId }).ok).toBe(true);
+  expect(status()).toBe("ACCEPTED");
+});
 
 function boundWorld(): SqliteEventStore {
   const store = openStore();
@@ -339,7 +359,7 @@ describe("createRunsReadPort", () => {
       readReviews: reviewsOf({ "node-a": exhausted, "node-b": { ...exhausted, escalated: true } }),
     }).readRuns({}));
     expect(view.goals[0]?.nodes.map((node) => [node.nodeKey, node.status, node.review.unsuccessfulRounds])).toEqual([
-      ["node-a", "ESCALATION_REQUIRED", 3], ["node-b", "ESCALATED", 3],
+      ["node-a", "ESCALATION_REQUIRED", 3], ["node-b", "ESCALATION_REQUIRED", 3],
     ]);
     // A REPLAN decision retires the node: its own status, counted in the totals.
     view = runs(portFor(store, {

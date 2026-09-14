@@ -19,7 +19,7 @@ import type { NodeMission } from "./agent-wrapper.js";
 import type { VerifiedWorkspacePort } from "../repository/verified-workspace-contracts.js";
 import { sameVerifiedWorkspace } from "../repository/verified-workspace-contracts.js";
 import { checkVerifiedWorkspace, runBoundVerification } from "./node-verifier-workspace.js";
-import { verifierFailurePayload } from "./node-verifier-failure.js";
+import { recordNodeVerifierFailure } from "./node-verifier-failure-record.js";
 
 /**
  * The daemon-side verifier: acceptance is EARNED from a test run the daemon
@@ -208,11 +208,7 @@ export function createNodeVerifier(config: NodeVerifierConfig) {
           outcome: sent.ok ? "ACCEPTED" : sent.code,
         });
       } else {
-        const round = review.lineage.highestRound + 1;
-        const sent = await dispatch(
-          "review.submit", verifierFailurePayload(nodeRef, round, capture, authority.packageItems),
-          nodeRef, review.version,
-        );
+        const sent = recordNodeVerifierFailure(config, nodeRef, latest, capture, authority);
         reports.push({
           detail: sent.ok ? `exit ${String(capture.exitCode)}` : sent.code, nodeRef,
           outcome: sent.ok ? "FAILED_ROUND_RECORDED" : sent.code,

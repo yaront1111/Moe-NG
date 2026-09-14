@@ -1,7 +1,7 @@
-import { effectCount, effectList, effectOffer, effectRecord, effectRefusal, effectText, readEffect } from "./live-effect-read.js";
+import { effectCount, effectHash, effectList, effectOffer, effectRecord, effectRefusal, effectText, readEffect } from "./live-effect-read.js";
 import type { EffectReadFailure } from "./live-effect-read.js";
 
-export type RepositoryRecoveryAction = "ABORT_UNEXECUTED" | "RECONCILE_LANDED";
+export type RepositoryRecoveryAction = "ABORT_UNEXECUTED" | "RECONCILE_LANDED" | "RESUME_REVIEW";
 export interface RecoveryActionView {
   readonly action: RepositoryRecoveryAction; readonly available: boolean;
   readonly code: string | null; readonly offer: Readonly<Record<string, unknown>> | null;
@@ -19,8 +19,16 @@ const LAYER = "CONTROL_ROOM_RECOVERY";
 const invalid = (): EffectReadFailure => ({ status: "ERROR", code: "REPOSITORY_RECOVERY_RESPONSE_INVALID", layer: LAYER });
 
 function actionOf(value: unknown): RecoveryActionView | null {
-  const row = effectRecord(value, ["action", "available", "code", "offer"]);
-  if (row === null || (row.action !== "ABORT_UNEXECUTED" && row.action !== "RECONCILE_LANDED")) return null;
+  const row = effectRecord(value, ["action", "available", "code", "offer"])
+    ?? effectRecord(value, ["action", "available", "code", "offer", "expectedReviewVersion", "expectedReviewDigest"]);
+  if (row === null) return null;
+  if (row.action === "RESUME_REVIEW") {
+    if (Object.keys(row).length === 6 && (!effectCount(row.expectedReviewVersion) || !effectHash(row.expectedReviewDigest))) return null;
+    // Shutdown must be observed by an external terminal; the hosted daemon cannot drain itself.
+    return row.available === false && effectText(row.code) && row.offer === null
+      ? Object.freeze({ action: row.action, available: false, code: row.code, offer: null }) : null;
+  }
+  if (Object.keys(row).length !== 4 || (row.action !== "ABORT_UNEXECUTED" && row.action !== "RECONCILE_LANDED")) return null;
   if (row.available === false && effectText(row.code) && row.offer === null) {
     return Object.freeze({ action: row.action, available: false, code: row.code, offer: null });
   }
@@ -32,7 +40,7 @@ function reservationOf(value: unknown): RecoveryReservationView | null {
   const row = effectRecord(value, ["nodeRef", "phase", "expectedReservationRevision", "actions"]);
   if (row === null || !effectText(row.nodeRef) || !effectText(row.phase)
     || !effectCount(row.expectedReservationRevision) || row.expectedReservationRevision < 1) return null;
-  const actions = effectList(row.actions, actionOf, 2);
+  const actions = effectList(row.actions, actionOf, 3);
   if (actions === null || new Set(actions.map((action) => action.action)).size !== actions.length) return null;
   return Object.freeze({ nodeRef: row.nodeRef, phase: row.phase, expectedReservationRevision: row.expectedReservationRevision, actions });
 }

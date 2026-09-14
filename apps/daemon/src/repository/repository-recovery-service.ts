@@ -14,16 +14,21 @@ import { readRepositoryRecoveryReplay } from "./repository-recovery-replay.js";
 import { recordLandingReceipt } from "./landing-ledger.js";
 import type { RepositoryExecutionHandle } from "./repository-execution-contracts.js";
 import { isDurableHumanPrincipal } from "../identity/human-approver.js";
+import type { RepositoryReviewDrainPort } from "./repository-review-drain-contracts.js";
+import { readRepositoryReviewResumeEvidence, reviewResumeAuthorityClosed } from "./repository-review-resume-evidence.js";
+import { recoverRepositoryReview } from "./repository-review-resume-service.js";
 export interface RepositoryRecoveryServiceOptions {
   readonly store: SqliteEventStore; readonly projectId: string; readonly storeId: string;
   readonly workspaces: () => readonly string[]; readonly clock: () => string; readonly mintId: () => string;
   readonly git?: RepositoryRecoveryGitPort;
+  readonly reviewDrain?: RepositoryReviewDrainPort;
+  readonly assertAuthority?: () => void;
 }
 export interface RepositoryRecoveryCommand {
   readonly principalId: string; readonly operatorPrincipalId: string; readonly commandId: string;
   readonly correlationId: string; readonly expectedVersion: number; readonly targetAggregateId: string; readonly payload: unknown;
 }
-export interface RepositoryRecoverySuccess { readonly commandId: string; readonly disposition: "COMMITTED" | "REPLAYED"; readonly resultCode: "REPOSITORY_RECOVERY_RELEASED" }
+export interface RepositoryRecoverySuccess { readonly commandId: string; readonly disposition: "COMMITTED" | "REPLAYED"; readonly resultCode: "REPOSITORY_RECOVERY_RELEASED" | "REPOSITORY_RECOVERY_RESUMED" }
 type Held = { handle: RepositoryExecutionHandle; everExecuted: boolean };
 const targetFor = (handle: RepositoryExecutionHandle) => `repository-recovery:${repositoryRecoveryOwnerDigest(handle.owner)}`;
 function abortCode(held: Held): string | null {
@@ -60,9 +65,15 @@ export function createRepositoryRecoveryService(options: RepositoryRecoveryServi
         const noEffect = landing.ok ? null : readRecoveryNoEffectEvidence(options.store, handle);
         return { nodeRef: handle.owner.nodeRef, phase: handle.reservation.phase, expectedReservationRevision: handle.reservation.revision,
           actions: REPOSITORY_RECOVERY_ACTIONS.map((action) => {
-            const refusal = action === "ABORT_UNEXECUTED" ? abortCode(item)
+            const review = action === "RESUME_REVIEW" ? readRepositoryReviewResumeEvidence(options.store, handle) : null;
+            const refusal = action === "RESUME_REVIEW" ? review?.ok !== true ? review?.code ?? "REPOSITORY_REVIEW_EVIDENCE_INVALID"
+              : !reviewResumeAuthorityClosed(options.store, handle, options.clock()) ? "REPOSITORY_REVIEW_AUTHORITY_LIVE"
+              : options.reviewDrain === undefined ? "REPOSITORY_REVIEW_DRAIN_UNAVAILABLE" : null
+              : action === "ABORT_UNEXECUTED" ? abortCode(item)
               : landing.ok || noEffect?.ok === true ? null : landing.code;
-            return { action, available: refusal === null, code: refusal, offer: refusal !== null ? null : {
+            return { action, available: refusal === null, code: refusal,
+              ...(review?.ok === true ? { expectedReviewVersion: review.evidence.reviewVersion, expectedReviewDigest: review.evidence.reviewDigest } : {}),
+              offer: refusal !== null ? null : {
               commandEnvelopeVersion: RUNTIME_COMMAND_ENVELOPE_VERSION, commandId: options.mintId(), commandKind: REPOSITORY_RECOVERY_COMMAND_KIND,
               expectedVersion: options.store.getAggregateVersion(targetAggregateId), inputSchemaVersion: REPOSITORY_RECOVERY_VERSION, targetAggregateId } };
           }) };
@@ -79,13 +90,23 @@ export function createRepositoryRecoveryService(options: RepositoryRecoveryServi
         const prior = readRecoveryApproval(options.store, options.projectId, input, requestSha256); if (!prior.ok) return prior;
         if (prior.approval !== null) {
           const replay = readRepositoryRecoveryReplay(prior.approval.identity, { projectId: options.projectId, principalId: input.principalId,
-            commandId: input.commandId, requestSha256, ownerDigest: prior.approval.ownerDigest, expectedRevision: payload.expectedReservationRevision });
-          if (!replay.ok) return replay; if (replay.released) return success(input.commandId, true);
+            commandId: input.commandId, requestSha256, ownerDigest: prior.approval.ownerDigest, expectedRevision: payload.expectedReservationRevision,
+            action: payload.action, expectedReviewDigest: payload.expectedReviewDigest });
+          if (!replay.ok) return replay;
+          if (replay.resumed) return { ok: true, commandId: input.commandId, disposition: "REPLAYED", resultCode: "REPOSITORY_RECOVERY_RESUMED" };
+          if (replay.released) return success(input.commandId, true);
         }
         const candidates = scan().held.filter((item) => item.handle.owner.nodeRef === payload.nodeRef && targetFor(item.handle) === input.targetAggregateId);
         if (candidates.length !== 1) return recoveryRefusal("REPOSITORY_RECOVERY_RESERVATION_UNAVAILABLE");
         const held = candidates[0]!; const { handle } = held;
         if (handle.reservation.revision !== payload.expectedReservationRevision) return recoveryRefusal("REPOSITORY_RECOVERY_REVISION_CONFLICT");
+        if (payload.action === "RESUME_REVIEW") {
+          const result = await recoverRepositoryReview({ store: options.store, projectId: options.projectId, storeId: options.storeId,
+            handle, payload, command: input, priorApproval: prior.approval, requestSha256, clock: options.clock, drain: options.reviewDrain,
+            assertAuthority: options.assertAuthority });
+          return result.ok ? { ok: true, commandId: input.commandId, disposition: result.replayed ? "REPLAYED" : "COMMITTED",
+            resultCode: "REPOSITORY_RECOVERY_RESUMED" } : result;
+        }
         const abort = abortCode(held);
         const landing = payload.action === "RECONCILE_LANDED" ? readRecoveryLandingEvidence(options.store, handle) : null;
         const noEffect = landing !== null && !landing.ok ? readRecoveryNoEffectEvidence(options.store, handle) : null;

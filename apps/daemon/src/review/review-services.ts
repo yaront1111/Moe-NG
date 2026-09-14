@@ -27,6 +27,9 @@ import {
 import type { CommandHandler, HandlerContext, HandlerTable, ReviewOutcome } from "./review-ledger.js";
 import { boundPackageItems } from "./review-round-items.js";
 import type { PreparedReviewSubmission } from "./review-submission-package.js";
+import { reviewContinuationForSubmission } from "./review-continuation.js";
+import { verifierFailureSourceMatches } from "./review-verifier-failure.js";
+import type { ReviewVerifierFailureSource } from "./review-verifier-failure.js";
 
 /**
  * The review-flow services and the pipeline every review command runs through (journey J4).
@@ -118,6 +121,9 @@ const submitRound: CommandHandler = (context): ReviewOutcome => {
   const itemValues = payloadArray(request.payload, "packageItems");
   const subjectRef = payloadRef(request.payload, "subjectRef");
   const round = positiveInteger(request.payload["round"]);
+  if (Object.keys(request.payload).some((key) => !["findings", "packageItems", "round", "subjectRef"].includes(key))) {
+    return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
+  }
   if (findingValues === null || itemValues === null || subjectRef === null || round === null) {
     return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
   }
@@ -132,31 +138,34 @@ const submitRound: CommandHandler = (context): ReviewOutcome => {
   if (ledger.unreadable) {
     return refuse(request.kind, "REVIEW_LINEAGE_UNREADABLE", "DAEMON_PREREQUISITE");
   }
+  if (ledger.replanned) return refuse(request.kind, "REVIEW_NODE_REPLANNED", "DAEMON_PREREQUISITE");
+  if (ledger.accepted !== undefined) return refuse(request.kind, "REVIEW_ALREADY_ACCEPTED", "DAEMON_PREREQUISITE");
   // Design 15.2: reaching the limit creates a REVIEW_ESCALATION blocker, and a blocker blocks.
   // The kernel is stateless about what happens next — it would happily route a fourth round to
   // ESCALATE again — so the durable consequence is the composition's to enforce.
-  if (ledger.lineage.unsuccessfulRounds >= REVIEW_ESCALATION_ROUND_LIMIT && !ledger.escalated) {
-    return refuse(request.kind, "REVIEW_ESCALATION_REQUIRED", "DAEMON_PREREQUISITE");
+  const continuation = reviewContinuationForSubmission(ledger, request.projectId, subjectRef, round);
+  const verifierFailure = findings.length > 0 && verifierFailureSourceMatches(context.verifierFailureSource, ledger);
+  if (context.verifierFailureSource !== undefined && !verifierFailure) {
+    return refuse(request.kind, "REVIEW_VERIFIER_RECEIPT_STALE", "DAEMON_PREREQUISITE");
   }
-  // A REPLAN decision retires the node: its work continues under a successor plan, and a round
-  // submitted here would be effort against a subject nobody will accept.
-  if (ledger.replanned) {
-    return refuse(request.kind, "REVIEW_NODE_REPLANNED", "DAEMON_PREREQUISITE");
-  }
-  // A recorded escalation admits the human-in-loop fix round; it does not open an unbounded
-  // resubmission channel. Each admitted round re-snapshots the FULL lineage into its result,
-  // so a subject that rounds forever is an unbounded write amplifier. The ceiling counts
-  // COMMITTED rounds — clean ones included — because the amplification does too.
-  if (ledger.rounds.length >= REVIEW_ROUND_ABSOLUTE_CEILING) {
+  // At the final allowed submission the host may append its one terminal diagnostic.
+  // It is part of that submission, never authority for a 25th coding attempt.
+  if (ledger.rounds.length >= REVIEW_ROUND_ABSOLUTE_CEILING
+    && !(verifierFailure && ledger.rounds.length === REVIEW_ROUND_ABSOLUTE_CEILING)) {
     return refuse(request.kind, "REVIEW_ROUND_CEILING_REACHED", "DAEMON_PREREQUISITE");
+  }
+  if (ledger.lineage.unsuccessfulRounds >= REVIEW_ESCALATION_ROUND_LIMIT && continuation === undefined && !verifierFailure) {
+    return refuse(request.kind, "REVIEW_ESCALATION_REQUIRED", "DAEMON_PREREQUISITE");
   }
   if (request.expectedVersion !== ledger.version) {
     return refuse(request.kind, "REVIEW_EXPECTED_VERSION_STALE", "DAEMON_PREREQUISITE");
   }
-  const recorded = recordReviewRound(ledger.lineage, { findings, round });
+  const recorded = recordReviewRound(ledger.lineage, { findings, round }, continuation);
   if (!recorded.ok) return refuseFromKernel(request.kind, recorded.code, recorded.layer);
   const { lineage, routing } = recorded.value;
   const result = {
+    ...(verifierFailure ? { verifierFailureSource: context.verifierFailureSource } : {}),
+    ...(continuation === undefined ? {} : { continuation }),
     ...(prepared === undefined ? {} : { submissionEvidence: prepared.evidence }),
     lineage,
     // The set the kernel BOUND, never `items` — the caller's raw parsed array would durably
@@ -212,6 +221,7 @@ export function runReviewCommand(
   input: unknown,
   handlers: HandlerTable = REVIEW_HANDLERS,
   preparedSubmission?: PreparedReviewSubmission,
+  verifierFailureSource?: ReviewVerifierFailureSource,
 ): ReviewOutcome {
   const decoded = decodeReviewRequestBytes(input);
   if (!decoded.ok) return refuse(null, decoded.code, "DAEMON_INGRESS");
@@ -232,6 +242,7 @@ export function runReviewCommand(
 
   const ledger = readReviewLedger(store, request.projectId, subjectRef);
   const context: HandlerContext = { ledger, request, store,
+    ...(verifierFailureSource === undefined ? {} : { verifierFailureSource }),
     ...(preparedSubmission === undefined ? {} : { preparedSubmission }) };
   return handler(context);
 }

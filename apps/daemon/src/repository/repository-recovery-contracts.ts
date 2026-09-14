@@ -3,11 +3,11 @@ import type { RepositoryExecutionPhase } from "./repository-execution-contracts.
 
 export const REPOSITORY_RECOVERY_COMMAND_KIND = "repository.recover" as const;
 export const REPOSITORY_RECOVERY_PAYLOAD_KEYS = Object.freeze([
-  "action", "decision", "expectedReservationRevision", "nodeRef", "reason",
+  "action", "decision", "expectedReservationRevision", "nodeRef", "reason", "expectedReviewVersion", "expectedReviewDigest",
 ] as const);
 export const REPOSITORY_RECOVERY_VERSION = "moe-repository-recovery/1" as const;
 export const REPOSITORY_RECOVERY_LAYER = "REPOSITORY_RECOVERY" as const;
-export const REPOSITORY_RECOVERY_ACTIONS = ["ABORT_UNEXECUTED", "RECONCILE_LANDED"] as const;
+export const REPOSITORY_RECOVERY_ACTIONS = ["ABORT_UNEXECUTED", "RECONCILE_LANDED", "RESUME_REVIEW"] as const;
 export type RepositoryRecoveryAction = typeof REPOSITORY_RECOVERY_ACTIONS[number];
 export interface RepositoryRecoveryPayload {
   readonly action: RepositoryRecoveryAction;
@@ -15,6 +15,8 @@ export interface RepositoryRecoveryPayload {
   readonly expectedReservationRevision: number;
   readonly nodeRef: string;
   readonly reason: string;
+  readonly expectedReviewVersion?: number;
+  readonly expectedReviewDigest?: string;
 }
 export interface RepositoryRecoveryRefusal {
   readonly ok: false;
@@ -28,6 +30,8 @@ export interface RepositoryRecoveryActionView {
   readonly available: boolean;
   readonly code: string | null;
   readonly offer: NextAllowedCommand | null;
+  readonly expectedReviewVersion?: number;
+  readonly expectedReviewDigest?: string;
 }
 export interface RepositoryRecoveryView {
   readonly version: typeof REPOSITORY_RECOVERY_VERSION;

@@ -53,7 +53,7 @@ const ROWS: readonly VocabularyRow[] = [
   { agent: null, capability: ADMIN, family: "CRITERION", kind: "criterion_check.verify",
     payloadKeys: ["goalRef", "planningRunRef", "contractRef", "integratedSha", "approvals"] },
   { agent: null, capability: ADMIN, family: "REPOSITORY_RECOVERY", kind: "repository.recover",
-    payloadKeys: ["action", "decision", "expectedReservationRevision", "nodeRef", "reason"] },
+    payloadKeys: ["action", "decision", "expectedReservationRevision", "nodeRef", "reason", "expectedReviewVersion", "expectedReviewDigest"] },
   { agent: [PLANNING, WORK], capability: PLANNING, family: "BOOTSTRAP",
     kind: "approval.decide",
     payloadKeys: ["activation", "command", "graphRevisionRef", "record", "runId"] },
@@ -319,7 +319,7 @@ const OPERATOR_ONLY: readonly WiredCommandKind[] = [
   // Both approval wires are human-only: the intent seam derives the authority the caller-shaped
   // wire used to accept, so gating one and not the other would leave the derived wire reachable
   // by a non-operator principal and hand back exactly the authority this seam removes.
-  "approval.decide", "approval.decide_intent", "goal.close",
+  "approval.decide", "approval.decide_intent", "escalation.decide", "goal.close",
   // Publishing pushes the operator's repository to the remote the operator named.
   "repository.publish", "repository.bootstrap",
   "release.decide", "product_contract.sync_env_example",
@@ -459,8 +459,8 @@ describe("command vocabulary", () => {
   });
 
   it("gates exactly the transcribed kinds behind the operator principal", () => {
-    expect(OPERATOR_ONLY).toHaveLength(28);
-    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(28);
+    expect(OPERATOR_ONLY).toHaveLength(29);
+    expect(OPERATOR_PRINCIPAL_KINDS.size).toBe(29);
     // Both directions over every wired kind: a kind added to the set reddens on the
     // remaining kinds that must stay open, one dropped reddens on those that must not.
     for (const row of ROWS) {

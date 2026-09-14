@@ -498,6 +498,27 @@ describe("production repository delivery composition", () => {
       await f.runtime.close();
     }
   }, 600_000);
+  it("requires independent verification of a clean worker round after a human allows more attempts", async () => {
+    const f = fixture();
+    exhaustReview(f);
+    expect(send(f.store, { ...envelope("escalation.decide", 3,
+      escalationPayload({ subjectRef: "a", decision: "ALLOW_MORE_ATTEMPTS" })), projectId: f.projectId }).ok).toBe(true);
+    const started = await f.runtime.start(async () => ({ ok: true, pid: process.pid, exit: Promise.resolve() }))(f.request("a"));
+    if (!started.ok) throw new Error(started.code);
+    await started.exit;
+    f.submit("a");
+    expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a")).toBe("SUBMITTED");
+    expect(readReviewLedger(f.store, f.projectId, "a").accepted).toBeUndefined();
+    expect(f.tests()).toBe(0);
+    f.expectVerified("before\n");
+    f.disableLanding(); f.retire(); await f.runtime.advance();
+    expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a")).toBe("ACCEPTED");
+    expect(f.tests()).toBe(1);
+    const accepted = readReviewLedger(f.store, f.projectId, "a").accepted!;
+    expect(readVerifierReceipt(f.store, f.projectId, accepted.verifierReceiptId).ok).toBe(true);
+    expect(createRepositoryExecutionPort().inspect(f.workspace)).toMatchObject({ reservation: { phase: "AWAITING_LANDING" } });
+  }, 120_000);
+
   // A generated sweep that silently yields no case passes. This names the cases that actually ran.
   it("runs every observe transient subcommand case", () => {
     expect([...executedObserveCases].toSorted()).toEqual([...OBSERVE_TRANSIENT_SUBCOMMANDS].toSorted());

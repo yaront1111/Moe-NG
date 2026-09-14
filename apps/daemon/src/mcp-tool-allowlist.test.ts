@@ -88,7 +88,7 @@ function releaseMcpRequest(body: unknown, sessionId?: string): Request {
   });
 }
 
-it("release.decide is refused by the MCP allowlist before authentication or dispatch", async () => {
+it.each(["release.decide", "escalation.decide"])("%s is refused by the MCP allowlist before authentication or dispatch", async (kind) => {
   const calls: string[] = [];
   const observedPort: HttpDispatchPort = {
     authenticate: (credential, kind) => { calls.push("authenticate"); return port.authenticate(credential, kind); },
@@ -106,8 +106,8 @@ it("release.decide is refused by the MCP allowlist before authentication or disp
     expect(initialized.status).toBe(200);
     const sessionId = initialized.headers.get("mcp-session-id");
     if (sessionId === null) throw new Error("release fixture opened no MCP session");
-    const label = toolLabelForKind("release.decide");
-    expect(STDIO_TOOL_INDEX.get(label)?.kind).toBe("release.decide");
+    const label = toolLabelForKind(kind);
+    expect(STDIO_TOOL_INDEX.get(label)?.kind).toBe(kind);
     expect(wiredMcpToolKinds()).toContain("goal.create");
     const before = decisionsIn();
     const response = await adapter.handleRequest(releaseMcpRequest({ id: 2, jsonrpc: "2.0",
@@ -118,8 +118,8 @@ it("release.decide is refused by the MCP allowlist before authentication or disp
     // RuntimeError has no layer member: zero tool-port calls pins WHICH layer refused.
     expect(calls).toEqual([]);
     expect(decisionsIn()).toEqual(before);
-    expect(MCP_EXCLUDED_COMMAND_KINDS).toContain("release.decide");
-    expect(wiredMcpToolKinds()).not.toContain("release.decide");
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toContain(kind);
+    expect(wiredMcpToolKinds()).not.toContain(kind);
   } finally {
     await adapter.close();
   }
@@ -229,7 +229,7 @@ describe("wiredMcpToolKinds command half", () => {
       "approval.decide", "approval.decide_intent",
       "criterion_check.approve", "criterion_check.verify", "cutover.activate",
       "deployment.deploy", "deployment.migrate_down", "deployment.rollback", "deployment.set_target",
-      "environment.set_variable", "environment.unset_variable", "goal.close",
+      "environment.set_variable", "environment.unset_variable", "escalation.decide", "goal.close",
       "graph.approve", "graph.supersede", "integration.accept_output",
       // task-eb37494e wired the kind for dispatch, and the exclusion followed BY DERIVATION from
       // OPERATOR_PRINCIPAL_KINDS -- precisely the movement the lockstep arm at the foot of this
@@ -247,7 +247,7 @@ describe("wiredMcpToolKinds command half", () => {
     // EXACT, not `> 0`: a ONE-member roster satisfies `length > 0` while silently
     // re-admitting one approval kind to MCP, which is the precise regression this row exists
     // to prevent. Drilled by deletion in step 7 D3.
-    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(27);
+    expect(MCP_EXCLUDED_COMMAND_KINDS.length).toBe(28);
     expect(Object.isFrozen(MCP_EXCLUDED_COMMAND_KINDS)).toBe(true);
     // Every operator-only kind but the operator's own scoped-session mint is off the MCP roster:
     // the exclusion is the vocabulary's human-only class, so a kind that joins it leaves the
@@ -272,7 +272,7 @@ describe("wiredMcpToolKinds command half", () => {
       queries: MCP_SERVED_QUERY_KINDS.length,
       vocabulary: Object.keys(PAYLOAD_KEYS).length,
       wired: wiredMcpToolKinds().length,
-    }).toEqual({ excluded: 27, queries: 7, vocabulary: 64, wired: 44 });
+    }).toEqual({ excluded: 28, queries: 7, vocabulary: 64, wired: 43 });
   });
 
   it("is deterministic and frozen", () => {
