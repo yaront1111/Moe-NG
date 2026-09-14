@@ -224,10 +224,15 @@ function fold(
 ): void {
   acc.version = decision.currentVersion;
   if (decision.commandKind === "escalation.decide") {
-    acc.escalated = true;
     // The decision travels in the committed result; REPLAN closes the node to further rounds.
     const result = decodeResult(decision.resultBytes);
-    if (isPlainJsonObject(result) && result["decision"] === "REPLAN") acc.replanned = true;
+    if (!isPlainJsonObject(result)
+      || (result["decision"] !== "ALLOW_MORE_ATTEMPTS" && result["decision"] !== "REPLAN")) {
+      acc.unreadable = true;
+      return;
+    }
+    acc.escalated = true;
+    if (result["decision"] === "REPLAN") acc.replanned = true;
     return;
   }
   if (decision.commandKind === "integration.accept_output") {

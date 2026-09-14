@@ -61,7 +61,9 @@ export function readRepositoryDeliveryFacts(
       if (landed.receipt.subjectRef !== nodeRef || landed.receipt.verifierReceiptId !== review.accepted.verifierReceiptId) return "UNKNOWN";
       return landed.receipt.outcome === "COMMITTED" && landed.receipt.commit !== null ? "LANDED" : refusedFact(store, handle);
     }
-    if (review.escalated || review.replanned) return "UNKNOWN";
+    // `escalated` records that a human answered, including ALLOW_MORE_ATTEMPTS.
+    // Only REPLAN closes this node; allowed later rounds keep their actual review facts.
+    if (review.replanned) return "UNKNOWN";
     return review.rounds.at(-1)?.routing.route === "ACCEPT" ? "SUBMITTED" : "READY";
   } catch { return "UNKNOWN"; }
 }

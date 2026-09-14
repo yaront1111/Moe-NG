@@ -7,7 +7,7 @@ import { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { installTestRecoveryBinding } from "../identity/session-test-fixtures.js";
-import { calibration, envelope, packageItems, policyInput, seedVerifierReceipt, send, submitPayload } from "../review/review-test-fixtures.js";
+import { calibration, envelope, escalationPayload, finding, packageItems, policyInput, seedVerifierReceipt, send, submitPayload } from "../review/review-test-fixtures.js";
 import * as gitLandingPort from "../repository/git-landing-port.js";
 import { readLandingReceipt, readLatestLandingBaseline } from "../repository/landing-ledger.js";
 import { landedWithNoEffect, landingAggregateId, landingReceiptId } from "../repository/landing-receipt-contracts.js";
@@ -67,6 +67,79 @@ function fixture() {
 }
 
 describe("production repository delivery composition", () => {
+  const exhaustReview = (f: ReturnType<typeof fixture>): void => {
+    for (const round of [1, 2, 3]) {
+      expect(send(f.store, { ...envelope("review.submit", round - 1, submitPayload(round,
+        [finding({ ruleId: `missing-${round}`, subject: { kind: "NODE", locator: "a" } })],
+        { subjectRef: "a" })), projectId: f.projectId }).ok).toBe(true);
+    }
+  };
+
+  it("reserves the same checkout for another incomplete worker attempt after a human allows more rounds", async () => {
+    const f = fixture();
+    exhaustReview(f);
+    expect(send(f.store, { ...envelope("escalation.decide", 3,
+      escalationPayload({ subjectRef: "a", decision: "ALLOW_MORE_ATTEMPTS" })), projectId: f.projectId }).ok).toBe(true);
+    expect(readReviewLedger(f.store, f.projectId, "a")).toMatchObject({ escalated: true, replanned: false, version: 4 });
+    const head = git(f.workspace, "rev-parse", "HEAD");
+    let finish!: () => void;
+    const started = await f.runtime.start(async () => ({ ok: true, pid: process.pid,
+      exit: new Promise<void>((resolve) => { finish = resolve; }) }))(f.request("a"));
+    if (!started.ok) throw new Error(started.code);
+    const first = createRepositoryExecutionPort().readOwned(f.workspace, f.storeId, f.projectId);
+    if (!first.ok || first.handle === null) throw new Error("expected admitted repository owner");
+    expect(send(f.store, { ...envelope("review.submit", 4, submitPayload(4,
+      [finding({ ruleId: "registry-incomplete", subject: { kind: "NODE", locator: "a" } })],
+      { subjectRef: "a" })), projectId: f.projectId }).ok).toBe(true);
+    await f.runtime.advance();
+    expect(createRepositoryExecutionPort().inspect(f.workspace)).toMatchObject({ reservation: { phase: "EXECUTING" } });
+    finish(); await started.exit;
+    await f.runtime.advance();
+    expect(createRepositoryExecutionPort().inspect(f.workspace)).toMatchObject({ reservation: { phase: "EXECUTING" } });
+    f.retire(); await f.runtime.advance();
+    const next = createRepositoryExecutionPort().readOwned(f.workspace, f.storeId, f.projectId);
+    if (!next.ok || next.handle === null) throw new Error("expected retained repository owner");
+    expect({ facts: readRepositoryDeliveryFacts(f.store, f.projectId, "a"), phase: next.handle.reservation.phase })
+      .toEqual({ facts: "READY", phase: "RESERVED" });
+    expect(next.handle.owner).toEqual(first.handle.owner);
+    expect(next.handle.reservation.baselineId).toBe(first.handle.reservation.baselineId);
+    expect(readReviewLedger(f.store, f.projectId, "a").accepted).toBeUndefined();
+    expect(f.tests()).toBe(0);
+    expect(git(f.workspace, "rev-parse", "HEAD")).toBe(head);
+    const retry = await f.runtime.start(async () => ({ ok: true, pid: process.pid, exit: Promise.resolve() }))(f.request("a"));
+    expect(retry.ok).toBe(true);
+    if (retry.ok) await retry.exit;
+  }, 120_000);
+
+  it.each(["REPLAN", "unreadable", "unknown escalation", "missing escalation", "nonobject escalation"])(
+    "keeps %s review authority unknown after exhaustion", (condition) => {
+    const f = fixture();
+    exhaustReview(f);
+    if (condition === "REPLAN") {
+      expect(send(f.store, { ...envelope("escalation.decide", 3,
+        escalationPayload({ subjectRef: "a", decision: "REPLAN" })), projectId: f.projectId }).ok).toBe(true);
+      expect(readReviewLedger(f.store, f.projectId, "a").replanned).toBe(true);
+    } else {
+      const result = condition === "unreadable" ? { lineage: "unreadable" }
+        : condition === "unknown escalation" ? { decision: "BOGUS" }
+          : condition === "missing escalation" ? {} : [];
+      const bytes = new TextEncoder().encode(JSON.stringify(result));
+      const poisoned = f.store.commitExpectedVersionDecision({
+        commandKind: condition === "unreadable" ? "review.submit" : "escalation.decide",
+        targetAggregateId: "a", expectedVersion: 3, correlationId: "corrupt-review-test",
+        key: { projectId: f.projectId, principalId: "reviewer-test", commandId: randomUUID() },
+        decidedAt: new Date().toISOString(), requestBytes: bytes, committedResultBytes: bytes,
+        events: [{ eventId: randomUUID(), eventType: "CorruptFixture", payload: bytes }] });
+      expect(poisoned.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+      expect(readReviewLedger(f.store, f.projectId, "a").unreadable).toBe(true);
+    }
+    expect(readReviewLedgers(f.store, f.projectId, new Set(["a"])).ledgers.get("a"))
+      .toMatchObject({ replanned: condition === "REPLAN", unreadable: condition !== "REPLAN" });
+    expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a")).toBe("UNKNOWN");
+    expect(readReviewLedger(f.store, f.projectId, "a").accepted).toBeUndefined();
+    expect(f.tests()).toBe(0);
+  });
+
   it("refuses a dirty application baseline with actionable guidance and admits a fresh clean checkpoint", async () => {
     const f = fixture();
     writeFileSync(join(f.workspace, "operator-note.txt"), "existing operator work\n");
