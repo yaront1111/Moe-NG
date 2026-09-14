@@ -32,11 +32,11 @@ describe("the Needs-you queue", () => {
     const items = ["a", "b"].map((suffix) => ({
       actionLabel: "Open the goal", detail: "Needs review", goalId: `goal-${suffix}`,
       headline: "Review exhausted", kind: "ESCALATION" as const, planningRunRef: `run-${suffix}`, title: suffix,
-      escalation: { affordance: { commandKind: "escalation.decide", targetAggregateId: `execution-${suffix}` },
-        latestRoute: "REJECT_PLAN", nodeKey: "api", unsuccessfulRounds: 3 },
+      escalation: { affordance: { commandKind: "escalation.decide", targetAggregateId: `execution-${suffix}`, expectedVersion: 4 },
+        findings: [], findingsState: "CURRENT" as const, latestRoute: "REJECT_PLAN", nodeKey: "api", unsuccessfulRounds: 3 },
     }));
     render(<NeedsYou data={{ countLabel: "2", items, note: null }} onDecide={vi.fn()} onOpenBoard={vi.fn()}
-      decisionResults={new Map([["ESCALATION:execution-a", { busy: false, outcome: { ok: true, commandId: "allowed-a" } }]])} />);
+      decisionResults={new Map([[resultKeyOf(items[0]!), { busy: false, outcome: { ok: true, commandId: "allowed-a" } }]])} />);
     expect(screen.getByTestId("cr.needsyou.result.execution-a").textContent).toBe("Allowed. One more review attempt is approved for this node.");
     const buttons = screen.getAllByRole("button", { name: "Allow one more attempt on api" });
     expect(buttons.map((button) => button.textContent)).toEqual(["Allowed", "Allow one more attempt"]);
@@ -104,7 +104,8 @@ describe("the Needs-you queue", () => {
     const onEscalate = vi.fn();
     const item = {
       actionLabel: "Open the goal", detail: "node-x failed review 3 times.",
-      escalation: { affordance: { commandKind: "escalation.decide", targetAggregateId: "node-x" }, latestRoute: "REJECT_PLAN", nodeKey: "node-x", unsuccessfulRounds: 3 },
+      escalation: { affordance: { commandKind: "escalation.decide", targetAggregateId: "node-x", expectedVersion: 4 },
+        findings: [], findingsState: "CURRENT" as const, latestRoute: "REJECT_PLAN", nodeKey: "node-x", unsuccessfulRounds: 3 },
       goalId: "goal-1", headline: "A node's review is exhausted", kind: "ESCALATION" as const, planningRunRef: "run-1", title: "Alpha",
     };
     const data: NeedsYouData = { countLabel: "1 DECISION · NEEDS YOU", items: [item], note: null };
@@ -115,13 +116,13 @@ describe("the Needs-you queue", () => {
     // The second answer: replan the work instead of retrying it.
     await userEvent.click(screen.getByTestId("cr.needsyou.replan.node-x"));
     expect(onEscalate).toHaveBeenLastCalledWith(item, "REPLAN");
-    rerender(<NeedsYou data={data} decisionResults={new Map([["ESCALATION:node-x", { busy: false, choice: "REPLAN", outcome: { commandId: "c", ok: true } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
+    rerender(<NeedsYou data={data} decisionResults={new Map([[resultKeyOf(item), { busy: false, choice: "REPLAN", outcome: { commandId: "c", ok: true } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
     expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("Replanned.");
     expect((screen.getByTestId("cr.needsyou.replan.node-x") as HTMLButtonElement).disabled).toBe(true);
-    rerender(<NeedsYou data={data} decisionResults={new Map([["ESCALATION:node-x", { busy: false, outcome: { commandId: "c", ok: true } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
+    rerender(<NeedsYou data={data} decisionResults={new Map([[resultKeyOf(item), { busy: false, outcome: { commandId: "c", ok: true } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
     expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("Allowed.");
     expect((screen.getByTestId("cr.needsyou.escalate.node-x") as HTMLButtonElement).disabled).toBe(true);
-    rerender(<NeedsYou data={data} decisionResults={new Map([["ESCALATION:node-x", { busy: false, outcome: { code: "REVIEW_ESCALATION_NOT_REACHED", layer: "DAEMON_PREREQUISITE", ok: false } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
+    rerender(<NeedsYou data={data} decisionResults={new Map([[resultKeyOf(item), { busy: false, outcome: { code: "REVIEW_ESCALATION_NOT_REACHED", layer: "DAEMON_PREREQUISITE", ok: false } }]])} onDecide={onEscalate} onOpenBoard={vi.fn()} />);
     expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("That didn't go through.");
     expect(screen.getByTestId("cr.needsyou.result.node-x").textContent).toContain("REVIEW_ESCALATION_NOT_REACHED @ DAEMON_PREREQUISITE");
   });

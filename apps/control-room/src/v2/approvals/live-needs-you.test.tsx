@@ -1,4 +1,4 @@
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { LiveSetup } from "../../live/live-config.js";
@@ -16,7 +16,7 @@ import { LiveNeedsYou } from "./live-needs-you.js";
 beforeAll(() => {
   (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.useRealTimers(); });
 
 const SETUP = {
   client: { commands: {} }, headers: { authorization: "Bearer live" }, ok: true,
@@ -60,6 +60,45 @@ const gatePending: DocumentCoverageOutcome = {
 };
 
 describe("LiveNeedsYou", () => {
+  it("keeps a late approval response attached to the earlier review version", async () => {
+    vi.useFakeTimers();
+    let version: number | null = 5;
+    const offer = (current: number) => ({ commandEnvelopeVersion: "moe-runtime-command/1", commandId: `cmd-${current}`,
+      commandKind: "escalation.decide", expectedVersion: current, inputSchemaVersion: "moe-review-command/1", targetAggregateId: "node-x" });
+    vi.stubGlobal("fetch", vi.fn(async (path: string): Promise<Response> => {
+      if (path === "/affordances/read") return { json: async () => ({ ...SURFACE, nextAllowedCommands: version === null ? [] : [offer(version)] }), status: 200 } as Response;
+      if (path === "/goals/read") return { json: async () => CATALOG, status: 200 } as Response;
+      throw new Error(`unexpected fetch path ${path}`);
+    }));
+    const readRuns = async (): Promise<RunsOutcome> => ({ status: "RUNS", goals: [{ goalId: "goal-plan", lifecycle: "EXECUTION_ENABLED", nodes: [{
+      accepted: null, claim: null, criterionIds: [], declaredMigrations: null, dependsOn: [], lastActivityAt: null,
+      nodeKey: "node-x", nodeRef: "node-x", objective: "o", landing: null, receipt: null,
+      review: { escalated: false, findings: [{ detail: `Question for version ${version}`, ruleId: "question", severity: "MAJOR", subject: "NODE node-x", round: 4 }],
+        latestRoute: "ESCALATE", rounds: 4, unreadable: false, unsuccessfulRounds: 4, version: version ?? 5 },
+      sharedKey: false, status: "ESCALATION_REQUIRED" }], publish: null,
+      run: { approval: "BOUND", lifecycle: "ACTIVATED", reviewable: false, runId: "run-plan" }, title: "Plan me" }],
+      totals: { ACCEPTED: 0, BLOCKED: 0, DELIVERED: 0, ESCALATED: 0, ESCALATION_REQUIRED: 1, IN_PROGRESS: 0,
+        READY: 0, REPLANNED: 0, UNATTRIBUTABLE: 0, goals: 1, nodes: 1 } });
+    let resolveOld!: (value: { ok: true; commandId: string }) => void;
+    const oldResponse = new Promise<{ ok: true; commandId: string }>((resolve) => { resolveOld = resolve; });
+    const submit = vi.fn().mockImplementationOnce(() => oldResponse).mockResolvedValue({ ok: true, commandId: "cmd-7" });
+    render(<LiveNeedsYou escalationPort={{ submit }} onOpenBoard={vi.fn()} readRuns={readRuns} setup={SETUP} />);
+    await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+    await act(async () => { screen.getByTestId("cr.needsyou.escalate.node-x").click(); });
+    expect(submit).toHaveBeenLastCalledWith(offer(5), "node-x", "ALLOW_MORE_ATTEMPTS");
+    version = null;
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    expect(screen.queryByTestId("cr.needsyou.escalate.node-x")).toBeNull();
+    version = 7;
+    await act(async () => { await vi.advanceTimersByTimeAsync(5_000); });
+    await act(async () => { resolveOld({ ok: true, commandId: "cmd-5" }); });
+    const button = screen.getByTestId("cr.needsyou.escalate.node-x") as HTMLButtonElement;
+    expect(button.disabled).toBe(false); expect(button.textContent).toBe("Allow one more attempt");
+    expect(screen.getByText("Question for version 7")).toBeTruthy();
+    expect(screen.queryByText("Question for version 5")).toBeNull();
+    await act(async () => { button.click(); });
+    expect(submit).toHaveBeenLastCalledWith(offer(7), "node-x", "ALLOW_MORE_ATTEMPTS");
+  });
   it("lists the offered plan approval and the pending contract, and reports the count", async () => {
     stubWire();
     const onCount = vi.fn();

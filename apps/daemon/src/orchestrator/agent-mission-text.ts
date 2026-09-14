@@ -127,6 +127,11 @@ export function codeMission(
     brief.instructions,
     ...nodeDesignLines(design),
     ...(nodeRef.startsWith("node:v1:") ? [
+      "Distinguish your assigned node's acceptance from phase or product boundary checks. Every assigned criterion remains mandatory, including a boundary check explicitly assigned to this node.",
+      "Use the read-only sealed-plan map to identify criterion IDs, their owning node keys and dependency edges; it does not prove that another node's work is complete.",
+      "If an assigned acceptance check requires deliverables owned by a descendant, report the exact contradictory criterion IDs, owners and edges as a finding for a reviewed replan. Do not silently expand or redefine the approved assignment.",
+      "Never waive, weaken, move or skip an assigned criterion or required check. Finding text does not change approved scope; only a reviewed successor plan can resolve a contradictory assignment.",
+      "An UNKNOWN or incomplete map is missing context, not evidence of a plan conflict. Preserve the configured checks and the daemon's independent verifier.",
       "When you need additional approved requirement or design context, use the goalRef named in your brief with these read formats; never guess a goalRef.",
       ...CONTRACT_READ_MISSION_LINES,
       ...DESIGN_READ_MISSION_LINES,
@@ -211,6 +216,8 @@ export function compilerMission(
       // so the propose_revision arm above runs at a moment when no design can exist yet and
       // a paragraph about one there would be noise the seat has to discount.
       ...compilerDesignLines(design),
+      "Place phase or product boundary validation after every contributing node using dependsOn edges. Do not make an upstream node's acceptance require work assigned to its descendants.",
+      "Every assigned criterion and required check must remain covered. Bind a boundary criterion to a validation node after its contributors, retaining the criterion and its required checks; do not waive product requirements to make an earlier node pass.",
       "Submit the decomposition STRUCTURE for the Gate-1-approved contract: payload",
       "{\"gateRef\": {contractId, revisionDigest, revisionId}, \"goalRef\": \"...\",",
       "\"structure\": {completionNodeKey, nodes: [{nodeKey, objective, criterionIds,",

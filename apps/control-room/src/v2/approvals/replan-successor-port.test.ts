@@ -14,8 +14,8 @@ const node = (nodeRef: string, detail: string): RunNodeView => ({
 describe("replan scoped source", () => {
   it("carries only the exhausted execution's findings when goals reuse local node names", () => {
     const item: NeedsYouItem = {
-      actionLabel: "Open", detail: "", escalation: { affordance: { targetAggregateId: "execution-own" },
-        latestRoute: "REJECT_PLAN", nodeKey: "api", unsuccessfulRounds: 3 },
+      actionLabel: "Open", detail: "", escalation: { affordance: { targetAggregateId: "execution-own", expectedVersion: 4 },
+        findings: [], findingsState: "CURRENT", latestRoute: "REJECT_PLAN", nodeKey: "api", unsuccessfulRounds: 3 },
       goalId: "goal-own", headline: "Replan", kind: "ESCALATION", planningRunRef: "run-own", title: "Own",
     };
     const runs: RunsOutcome = {

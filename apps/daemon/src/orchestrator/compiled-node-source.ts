@@ -35,6 +35,7 @@ import { currentPlanningRun } from "../planning/current-planning-run.js";
 import { readApprovedRunWitness } from "../planning/planning-authority-reader-witness.js";
 import { legacyCompiledNodeKeys, nodesBlockedByIdentity } from "./compiled-node-identity.js";
 import { compiledExecutionRef } from "./compiled-execution-ref.js";
+import { compiledPlanContext } from "./compiled-plan-context.js";
 import { deriveProductContractRevisionAggregateId }
   from "../product-contract/product-contract-revision-store.js";
 
@@ -127,6 +128,7 @@ export function activeCompiledGraphs(
 }
 
 interface SealedNode {
+  readonly graph: ActiveCompiledGraph;
   readonly criterionIds: readonly string[];
   readonly dependsOn: readonly string[];
   readonly goalRef: string;
@@ -147,6 +149,7 @@ function sealedNodesOf(projectId: string, graphs: readonly ActiveCompiledGraph[]
       if (!bearing.has(definition.nodeKey) || listed.has(nodeRef)) continue;
       listed.add(nodeRef);
       nodes.push(Object.freeze({
+        graph,
         criterionIds: definition.criterionBindings.map((binding) => binding.criterionId),
         // The SAME derivation the runs projection uses (runs-read.ts), read off
         // this node's sealed graph: two spellings of build order are how
@@ -228,6 +231,13 @@ export function createCompiledNodeSource(options: CompiledNodeSourceOptions): Co
           + " (every one must hold and stay verifiable):",
         ...statements,
       ]),
+      "",
+      "Read-only criterion ownership and dependency context from this node's sealed graph.",
+      "COMPLETE describes this graph's map, not implementation or verification success. UNKNOWN means no complete map is available; do not infer missing owners or edges.",
+      "These local node keys are scoped by the named goal, planning run and graph hash; they are not command targets or new authority.",
+      "BEGIN SEALED PLAN CONTEXT",
+      JSON.stringify(compiledPlanContext(node.graph, node.nodeKey)),
+      "END SEALED PLAN CONTEXT",
     ].join("\n");
     return Object.freeze({
       instructions,

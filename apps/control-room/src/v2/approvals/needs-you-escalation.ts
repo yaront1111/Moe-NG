@@ -1,20 +1,20 @@
 import type { GoalCatalogFrame } from "../../live/live-goal-catalog.js";
-import type { RunsOutcome } from "../../live/live-runs.js";
+import type { RunNodeFindingView, RunsOutcome } from "../../live/live-runs.js";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import { ROUTE_WORDS } from "../board/board-columns.js";
 import type { NeedsYouItem } from "./needs-you-model.js";
 
-/**
- * THE EXHAUSTED-REVIEW ITEMS, lifted out of `needs-you-model.ts` verbatim when Gate 3 joined
- * the queue and that file reached its line cap. Nothing here changed: the same offer walk,
- * the same words, the same facts. It sits beside `needs-you-preview.ts` and
- * `needs-you-release.ts`, which is where a kind's own derivation belongs.
- *
- * The `NeedsYouItem` import is TYPE-ONLY and therefore erased: there is no runtime cycle
- * between this module and the model that calls it.
- */
+export interface EscalationFacts {
+  /** The daemon's offer, spent verbatim by the escalation port. */
+  readonly affordance: Readonly<Record<string, unknown>>;
+  readonly findings: readonly RunNodeFindingView[];
+  readonly findingsState: "CURRENT" | "MISSING" | "STALE" | "UNREADABLE";
+  readonly latestRoute: string | null;
+  readonly nodeKey: string;
+  readonly unsuccessfulRounds: number | null;
+}
 
-/** One item per escalation.decide the daemon offers, joined to its goal through the runs read. */
+/** Each daemon offer joins its exact node and review version; unavailable summaries stay explicit. */
 export function escalationItems(
   surface: SurfaceFrame | null, runs: RunsOutcome | null | undefined, catalog: GoalCatalogFrame,
 ): NeedsYouItem[] {
@@ -28,14 +28,19 @@ export function escalationItems(
     const node = goal?.nodes.find((row) => row.nodeRef === nodeRef);
     const nodeKey = node?.nodeKey ?? nodeRef;
     const entry = goal === undefined ? undefined : catalog.goals.find((row) => row.goalId === goal.goalId);
-    const rounds = node?.review.unsuccessfulRounds ?? null;
-    const route = node?.review.latestRoute ?? null;
+    const version = offer["expectedVersion"];
+    const findingsState: EscalationFacts["findingsState"] = runs != null && runs.status !== "RUNS" ? "UNREADABLE"
+      : node === undefined ? "MISSING" : node.review.unreadable ? "UNREADABLE"
+      : typeof version !== "number" || !Number.isSafeInteger(version) || version < 0 || node.review.version !== version ? "STALE" : "CURRENT";
+    const findings = findingsState === "CURRENT" ? Object.freeze([...node!.review.findings]) : Object.freeze([]);
+    const rounds = findingsState === "CURRENT" ? node!.review.unsuccessfulRounds : null;
+    const route = findingsState === "CURRENT" ? node!.review.latestRoute : null;
     items.push(Object.freeze({
       actionLabel: "Open the goal",
       detail: `${node?.objective === undefined || node.objective === "" ? "This work" : node.objective} failed review ${rounds === null ? "three or more" : String(rounds)} times`
         + (route === null ? "" : ` (last: ${ROUTE_WORDS[route] ?? route})`)
         + ". Allow one more attempt, or replan the work into a successor goal that carries these findings.",
-      escalation: Object.freeze({ affordance: offer, latestRoute: route, nodeKey, unsuccessfulRounds: rounds }),
+      escalation: Object.freeze({ affordance: offer, findings, findingsState, latestRoute: route, nodeKey, unsuccessfulRounds: rounds }),
       goalId: goal?.goalId ?? "",
       headline: "A node's review is exhausted",
       kind: "ESCALATION",

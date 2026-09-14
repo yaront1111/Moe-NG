@@ -422,6 +422,7 @@ const ONOPENBOARD_CONSUMERS: readonly string[] = Object.freeze([
   "v2/approvals/incident-dismiss.test.tsx",
   "v2/approvals/live-needs-you.test.tsx",
   "v2/approvals/live-needs-you.tsx",
+  "v2/approvals/needs-you-escalation.test.tsx",
   "v2/approvals/needs-you.test.tsx",
   "v2/approvals/needs-you.tsx",
   "v2/approvals/preview-card.test.tsx",
@@ -463,7 +464,7 @@ describe("the onOpenBoard consumer roster is complete and its arity is pinned", 
     // A sweep that generated nothing would satisfy every assertion below vacuously.
     expect(found.length).toBeGreaterThan(0);
     // EXACT, not `> 0`: a one-member roster satisfies a lower bound.
-    expect(ONOPENBOARD_CONSUMERS).toHaveLength(21);
+    expect(ONOPENBOARD_CONSUMERS).toHaveLength(22);
     expect(Object.isFrozen(ONOPENBOARD_CONSUMERS)).toBe(true);
     // Both directions at once: nothing missing from the roster, nothing stale in it.
     expect(found).toEqual([...ONOPENBOARD_CONSUMERS]);

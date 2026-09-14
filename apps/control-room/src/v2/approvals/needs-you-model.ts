@@ -11,6 +11,8 @@ import { currentRunOf, planSentBack } from "../goals/plan-run-resolution.js";
 import { deployOfferFor } from "./needs-you-deploy.js";
 import type { DeployFacts } from "./needs-you-deploy.js";
 import { escalationItems } from "./needs-you-escalation.js";
+import type { EscalationFacts } from "./needs-you-escalation.js";
+export type { EscalationFacts } from "./needs-you-escalation.js";
 import { incidentItems } from "./needs-you-incident.js";
 import type { IncidentFacts } from "./needs-you-incident.js";
 import { previewOfferFor } from "./needs-you-preview.js";
@@ -62,14 +64,6 @@ export const NEEDS_YOU_KINDS = [
   "GATE_1", "READY_TO_CLOSE",
 ] as const;
 export type NeedsYouKind = (typeof NEEDS_YOU_KINDS)[number];
-
-export interface EscalationFacts {
-  /** The daemon's offer, spent verbatim by the escalation port. */
-  readonly affordance: Readonly<Record<string, unknown>>;
-  readonly latestRoute: string | null;
-  readonly nodeKey: string;
-  readonly unsuccessfulRounds: number | null;
-}
 
 export interface CloseFacts {
   /** The daemon's `goal.close` offer for this goal, spent verbatim by the close port. */

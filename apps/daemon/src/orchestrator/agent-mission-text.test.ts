@@ -55,6 +55,17 @@ describe("compiled coding mission read guidance", () => {
     expect(text).toContain("PRODUCT_CONTRACT_READ_REVISION_CHANGED");
     expect(text).toContain("DESIGN_READ_REVISION_CHANGED");
   });
+
+  it("requires reviewed resolution of phase checks that contradict assigned node ownership", () => {
+    expect(text).toContain("Distinguish your assigned node's acceptance from phase or product boundary checks");
+    expect(text).toContain("criterion IDs, their owning node keys and dependency edges");
+    expect(text).toContain("reviewed replan");
+    expect(text).toContain("Never waive, weaken, move or skip an assigned criterion or required check");
+    expect(text).toContain("Finding text does not change approved scope");
+    expect(text).toContain("independent verifier");
+    expect(text).toContain("moe-product-contract-json-page/1");
+    expect(text).toContain("moe-design-json-page/1");
+  });
 });
 
 it("teaches planning and design seats to finish revision-pinned contract pages", () => {
@@ -75,6 +86,15 @@ it("teaches planning and design seats to finish revision-pinned contract pages",
 });
 
 describe("compilerMission", () => {
+  it("places phase or product validation after all contributing deliverables", () => {
+    const text = compilerMission("planning.submit_decomposition@goal-1", "planning.submit_decomposition", EXPIRES, "goal-1");
+    expect(text).toContain("Place phase or product boundary validation after every contributing node");
+    expect(text).toContain("using dependsOn edges");
+    expect(text).toContain("Do not make an upstream node's acceptance require work assigned to its descendants");
+    expect(text).toContain("Every assigned criterion and required check must remain covered");
+    const contract = compilerMission("product_contract.propose_revision@goal-1", "product_contract.propose_revision", EXPIRES, "goal-1");
+    expect(contract).not.toContain("Place phase or product boundary validation");
+  });
   it("briefs the contract-authoring step: read the PRD, draft, submit, no hints", () => {
     const text = compilerMission(
       "product_contract.propose_revision@goal-1",

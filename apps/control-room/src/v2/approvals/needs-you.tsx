@@ -10,6 +10,7 @@ import { MIDDOT } from "../glyphs.js";
 import { writeFailedSaid } from "../outcome-words.js";
 import type { NeedsYouData, NeedsYouItem, NeedsYouKind } from "./needs-you-model.js";
 import { PreviewCard } from "./preview-card.js";
+import { EscalationFindings } from "./needs-you-escalation-findings.js";
 import type { PreviewDecision, PreviewFinding } from "./preview-port.js";
 import type { OfferOutcome } from "./offer-wire.js";
 
@@ -38,7 +39,7 @@ export type NeedsYouChoice = "REPLAN";
 
 export interface NeedsYouProps {
   readonly data: NeedsYouData;
-  /** Keyed by `resultKeyOf(item)`: the kind AND the decision key, one slot per card. */
+  /** Keyed by `resultKeyOf(item)`, including the offered review version for escalations. */
   readonly decisionResults?: ReadonlyMap<string, DecisionResult> | undefined;
   /** Fetches a PREVIEW item's captures with the session headers; absent shows none. */
   readonly loadCapture?: CaptureLoader | undefined;
@@ -87,15 +88,12 @@ export function decisionKeyOf(item: NeedsYouItem): string {
     ? nodeRef : JSON.stringify([item.goalId, escalation.nodeKey]);
 }
 
-/**
- * THE SLOT A RESULT LIVES IN: the kind AND the decision key. One goal carries several kinds
- * at once - the model pushes PREVIEW, RELEASE, DEPLOY, GATE_1 and READY_TO_CLOSE under the same
- * goalId, and goal-status.ts documents that Gate 2 and ready-to-close coexist. Measured before
- * this: a slot keyed by the goal alone let a PREVIEW verdict render the READY_TO_CLOSE card as
- * "Closed" for a goal.close never sent, and a preview refusal under every card of that goal.
- */
+/** Separate decision kinds and review versions keep earlier responses off a later card. */
 export function resultKeyOf(item: NeedsYouItem): string {
-  return `${item.kind}:${decisionKeyOf(item)}`;
+  const key = `${item.kind}:${decisionKeyOf(item)}`;
+  if (item.escalation === undefined) return key;
+  const version = item.escalation.affordance["expectedVersion"];
+  return `${key}:v${typeof version === "number" && Number.isSafeInteger(version) && version >= 0 ? version : "unknown"}`;
 }
 
 function decisionOf(item: NeedsYouItem): InlineDecision | null {
@@ -150,12 +148,14 @@ function DecisionCard({
   const line = decision === null ? null : resultLine(decision, result);
   const done = result?.outcome?.ok === true;
   const replan = item.escalation === undefined ? null : item.escalation;
+  const reviewUnavailable = replan !== null && replan.findingsState !== "CURRENT";
   return (
     <li className="cr2-needs-card" data-kind={item.kind} data-testid={`cr.needsyou.item.${slug}`}>
       <div className="cr2-needs-main">
         <p className="cr2-slot-kicker">{`${KIND_EYEBROW[item.kind]} ${MIDDOT} ${item.title}`}</p>
         <h2 className="cr2-needs-headline">{item.headline}</h2>
         <p className="cr2-needs-detail">{item.detail}</p>
+        {item.escalation === undefined ? null : <EscalationFindings facts={item.escalation} />}
         {item.incident === undefined ? null : (
           <IncidentCard
             busy={result?.busy === true}
@@ -179,7 +179,7 @@ function DecisionCard({
         {decision === null || onDecide === undefined ? null : (
           <ActionButton
             ariaLabel={decision.ariaLabel}
-            disabled={result?.busy === true || done}
+            disabled={result?.busy === true || done || reviewUnavailable}
             onClick={(): void => {
               if (decision.armLabel !== null && !armed) { setArmed(true); return; }
               setArmed(false);
@@ -202,7 +202,7 @@ function DecisionCard({
         {replan === null || onDecide === undefined ? null : (
           <ActionButton
             ariaLabel={`Replan ${replan.nodeKey} from its findings`}
-            disabled={result?.busy === true || done}
+            disabled={result?.busy === true || done || reviewUnavailable}
             onClick={(): void => { setArmed(false); onDecide(item, "REPLAN"); }}
             testId={`cr.needsyou.replan.${key}`}
             variant="secondary"

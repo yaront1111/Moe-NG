@@ -110,7 +110,7 @@ function sealedWorld() {
   const nodeRef = compiledExecutionRef(PROJECT_ID, {
     content: graph.content, goalRef: GOAL_ID, planningRunRef: sealed.runId,
   }, "node-slice");
-  return { nodeRef, runId: sealed.runId, store };
+  return { graphContentHash: sealed.graphContentHash, nodeRef, runId: sealed.runId, store };
 }
 
 describe("compiled node missions through the project stack launch", () => {
@@ -133,15 +133,23 @@ describe("compiled node missions through the project stack launch", () => {
     expect(source.nodes()).toEqual([{
       dependsOn: [], nodeRef: world.nodeRef, title: "Land the record read and its page.",
     }]);
-    expect(source.mission(world.nodeRef)).toEqual({
-      instructions: [
+    const mission = source.mission(world.nodeRef);
+    expect(mission).not.toBeNull();
+    const { instructions, ...configuration } = mission!;
+    expect(configuration).toEqual({ test: expectedTest, title: "Land the record read and its page.", workspace: ROOT });
+    expect(instructions.split("\n\nRead-only criterion ownership")[0]).toBe([
         `Compiled goalRef: ${GOAL_ID}`,
         "Land the record read and its page.", "",
         "Acceptance criteria from the approved Product Contract (every one must hold and stay verifiable):",
         "- [crit-api] The API answers a signed request with the record.",
         "- [crit-ui] The page renders the record the API answered.",
-      ].join("\n"),
-      test: expectedTest, title: "Land the record read and its page.", workspace: ROOT,
+      ].join("\n"));
+    const map = instructions.split("BEGIN SEALED PLAN CONTEXT\n")[1]?.split("\nEND SEALED PLAN CONTEXT")[0];
+    expect(map).toBeDefined();
+    expect(JSON.parse(map!)).toEqual({ advisoryOnly: true, completeness: "COMPLETE",
+      assignedNodeKey: "node-slice", goalRef: GOAL_ID, planningRunRef: world.runId,
+      graphContentHash: world.graphContentHash,
+      nodes: [{ nodeKey: "node-slice", criterionIds: ["crit-api", "crit-ui"], dependsOn: [] }],
     });
     expect(world.store.readEventHorizon()).toBe(before);
   });
