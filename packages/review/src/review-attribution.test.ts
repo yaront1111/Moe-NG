@@ -158,7 +158,7 @@ describe("an allowed attempt may carry attributed findings and still be accepted
   ) => ReturnType<typeof recordReviewRound>;
   const acceptance = (lineage: ReviewLineage, use: unknown): ReviewAcceptanceInput => ({
     calibration: { corpusRevision: "corpus-1", sentinelPassed: true, staleness: "CURRENT" },
-    continuation: use as ReviewAcceptanceInput["continuation"],
+    continuation: use as NonNullable<ReviewAcceptanceInput["continuation"]>,
     lineage,
     policy: { action: "integration.accept_output", actor: "verifier", approvals: [], context: {} } as unknown as ReviewAcceptanceInput["policy"],
     proof: "PASSED",
