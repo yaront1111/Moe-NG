@@ -25,9 +25,14 @@ describe("describeRepositoryHolder", () => {
       .toBe("held by node uai-r2-evidence-runtime: it waits for your escalation decision in the control room");
   });
 
-  it("names the recovery command for a replanned holder", () => {
+  it("says a replanned holder is released on its own once idle", () => {
     expect(holder("RESERVED", { decisionDue: true, replanned: true }))
-      .toBe("held by node uai-r2-evidence-runtime: it was replanned; run moe recover-replan to release it");
+      .toBe("held by node uai-r2-evidence-runtime: it was replanned; Moe releases it as soon as its seat has closed and its working tree is clean (commit or discard leftover changes)");
+  });
+
+  it("names the recovery command only when a replanned holder's seat shutdown was unproven", () => {
+    expect(holder("BLOCKED", { replanned: true }))
+      .toBe("held by node uai-r2-evidence-runtime: it was replanned while its seat's shutdown was unproven; run moe recover-replan to release it");
   });
 
   it("says why an ordinary holder keeps the repository between attempts", () => {

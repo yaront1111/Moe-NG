@@ -27,9 +27,12 @@ const PHASE_REASONS: Readonly<Partial<Record<RepositoryExecutionPhase, string>>>
  * the operator's own escalation decision; the holder and the action are now named.
  */
 export function describeRepositoryHolder(facts: RepositoryHolderFacts): string {
-  const reason = PHASE_REASONS[facts.phase]
-    ?? (facts.replanned ? "it was replanned; run moe recover-replan to release it"
-      : facts.decisionDue && !facts.continuation ? "it waits for your escalation decision in the control room"
-        : "it keeps uncommitted work between review attempts");
+  // A replanned holder is released on its own once idle; only an unproven seat shutdown needs the command.
+  const reason = facts.replanned && facts.phase === "BLOCKED"
+    ? "it was replanned while its seat's shutdown was unproven; run moe recover-replan to release it"
+    : PHASE_REASONS[facts.phase]
+      ?? (facts.replanned ? "it was replanned; Moe releases it as soon as its seat has closed and its working tree is clean (commit or discard leftover changes)"
+        : facts.decisionDue && !facts.continuation ? "it waits for your escalation decision in the control room"
+          : "it keeps uncommitted work between review attempts");
   return `held by node ${facts.nodeKey}: ${reason}`;
 }

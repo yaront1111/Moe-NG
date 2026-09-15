@@ -5,9 +5,11 @@ import { AgentProcessFailureError } from "./agent-spawn-contract.js";
 import type { AgentSpawnStart, AgentSpawnStartResult } from "./agent-spawn-contract.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 import { deliveryRefusal } from "./repository-delivery-contracts.js";
-import type { RepositoryDeliveryConfig, RepositoryDeliveryRefusal } from "./repository-delivery-contracts.js";
+import type { RepositoryDeliveryConfig, RepositoryDeliveryFacts, RepositoryDeliveryRefusal } from "./repository-delivery-contracts.js";
 
 const PREFIX = "node.deliver@";
+/** A contained holder under these facts keeps nothing live: it is between review attempts, or replanned for good. */
+const idleFacts = (facts: RepositoryDeliveryFacts): boolean => facts === "READY" || facts === "REPLANNED";
 
 /** A checkout owner survives child exit, retries, verification, and wrapper death. */
 export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryConfig) {
@@ -137,10 +139,14 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
    * uncommitted, so no work can be lost. On UnAI an escalated node held the only checkout with a
    * clean tree while the one sibling that could clear its finding waited 283 times. The node
    * re-acquires with a fresh baseline when it is staffed again.
+   *
+   * A replanned holder gives it back on the same proof. On UnAI a human REPLAN left the node
+   * RESERVED with no seat and a clean tree; the replan recovery accepts only BLOCKED and this
+   * yield accepted only READY, so nothing could ever release the only checkout.
    */
   const yieldIdle = async (handle: RepositoryExecutionHandle): Promise<void> => {
     const nodeRef = handle.owner.nodeRef;
-    if (config.clean === undefined || !config.retired(nodeRef) || config.facts(nodeRef, handle) !== "READY") return;
+    if (config.clean === undefined || !config.retired(nodeRef) || !idleFacts(config.facts(nodeRef, handle))) return;
     if (!(await config.clean(handle.reservation.identity.root))) return;
     release(handle, "YIELDED");
   };
@@ -166,19 +172,20 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
       const facts = config.facts(nodeRef, handle);
       // A landing outcome cannot be reached from EXECUTING; every one of them still contains here.
       if (facts === "UNKNOWN" || facts === "REFUSED" || facts === "REFUSED_NO_EFFECT" || facts === "LANDED") { block(handle); return; }
-      const next = change(handle, facts === "READY"
+      // A replanned node's contained seat is done for good: back to RESERVED, where it may yield.
+      const next = change(handle, idleFacts(facts)
         ? { phase: "RESERVED", sessionId: null, pid: null } : { phase: "VERIFYING" });
-      if (!next.ok || facts === "READY") return;
+      if (!next.ok || idleFacts(facts)) return;
       handle = next.handle;
     }
     if (handle.reservation.phase === "VERIFYING") {
       if (config.facts(nodeRef, handle) === "SUBMITTED") await config.verify(nodeRef, handle.reservation.identity.root);
       const facts = config.facts(nodeRef, handle);
       if (facts === "SUBMITTED") return; // missing standing authority can be installed later
-      if (facts !== "ACCEPTED" && facts !== "READY") { block(handle); return; }
-      const next = change(handle, facts === "READY"
+      if (facts !== "ACCEPTED" && !idleFacts(facts)) { block(handle); return; }
+      const next = change(handle, idleFacts(facts)
         ? { phase: "RESERVED", sessionId: null, pid: null } : { phase: "AWAITING_LANDING" });
-      if (!next.ok || facts === "READY") return;
+      if (!next.ok || idleFacts(facts)) return;
       handle = next.handle;
     }
     if (handle.reservation.phase === "AWAITING_LANDING") {

@@ -68,7 +68,7 @@ export function readRepositoryDeliveryFacts(
     }
     // `escalated` records that a human answered, including ALLOW_MORE_ATTEMPTS.
     // Only REPLAN closes this node; allowed later rounds keep their actual review facts.
-    if (review.replanned) return "UNKNOWN";
+    if (review.replanned) return "REPLANNED";
     return review.rounds.at(-1)?.routing.route === "ACCEPT" ? "SUBMITTED" : "READY";
   } catch { return "UNKNOWN"; }
 }
@@ -100,9 +100,12 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
   };
   const coordinator = createRepositoryDeliveryCoordinator({
     closed: () => closed,
+    // A probe that throws reads as "not clean": any throw inside advance blocks the reservation.
     clean: async (root) => {
-      const observed = await git.observe(root);
-      return observed.ok && observed.observation.entries.length === 0;
+      try {
+        const observed = await git.observe(root);
+        return observed.ok && observed.observation.entries.length === 0;
+      } catch { return false; }
     },
     describeHolder,
     controller: { controllerId: randomBytes(32).toString("hex"), controllerPid: process.pid },
