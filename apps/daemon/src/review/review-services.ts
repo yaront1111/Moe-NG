@@ -51,11 +51,6 @@ const SUBJECT_KINDS: ReadonlySet<string> = new Set<string>(REVIEW_FINDING_SUBJEC
 const encoder = new TextEncoder();
 
 /**
- * Shape only, against the KERNEL'S OWN vocabularies rather than a local copy of them. A finding
- * must name a typed subject with a non-empty locator, which is what makes it a link to a
- * required change rather than free prose.
- */
-/**
  * An attribution names another node of the reporter's plan: exactly `nodeKey` and
  * `criterionIds`. Anything else is not an attribution, and silently dropping it would charge the
  * reporter for a finding it said it does not own - so the whole payload refuses instead.
@@ -69,6 +64,11 @@ function parseAttribution(value: JsonValue): ReviewFinding["attributedTo"] | nul
   return { criterionIds: criterionIds as string[], nodeKey };
 }
 
+/**
+ * Shape only, against the KERNEL'S OWN vocabularies rather than a local copy of them. A finding
+ * must name a typed subject with a non-empty locator, which is what makes it a link to a
+ * required change rather than free prose.
+ */
 function parseFinding(value: JsonValue): ReviewFinding | undefined {
   if (!isPlainJsonObject(value)) return undefined;
   const attribution = value["attributedTo"] === undefined ? undefined : parseAttribution(value["attributedTo"]);

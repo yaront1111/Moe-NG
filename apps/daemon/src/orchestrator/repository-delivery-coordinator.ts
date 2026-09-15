@@ -40,11 +40,11 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
     // Each effect family reconciles its own durable process and result evidence.
     // A node controller cannot adopt a stopped publisher or criterion runner.
     if (isRepositoryWorkflowRef(handle.owner.nodeRef)) {
-      return busyBy(handle);
+      return deliveryRefusal("REPOSITORY_EXECUTION_BUSY");
     }
     if (handle.reservation.controllerId === config.controller.controllerId) return read;
     try {
-      if (config.isProcessAlive(handle.reservation.controllerPid)) return busyBy(handle);
+      if (config.isProcessAlive(handle.reservation.controllerPid)) return deliveryRefusal("REPOSITORY_EXECUTION_BUSY");
     } catch { return deliveryRefusal("REPOSITORY_EXECUTION_UNKNOWN"); }
     const claimed = config.port.claimController(workspace, handle.owner, handle.reservation.revision, config.controller);
     if (!claimed.ok) return claimed;

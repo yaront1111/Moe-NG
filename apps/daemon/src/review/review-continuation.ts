@@ -1,8 +1,8 @@
 import { REVIEW_ESCALATION_ROUND_LIMIT, buildReviewPackage, recordReviewRound, validReviewContinuationApproval } from "@moe/review";
-import { roundStalled } from "./review-stall.js";
 import type { ReviewContinuationApproval, ReviewContinuationUse } from "@moe/review";
 import { isDeepStrictEqual } from "node:util";
 import type { ReviewLedger, ReviewRoundRecord } from "./review-read-model.js";
+import { roundStalled } from "./review-stall.js";
 
 // The bounded JSON decoder deliberately builds null-prototype records. Compare JSON data,
 // including every key, without mistaking that ingress hardening for a binding mismatch.
