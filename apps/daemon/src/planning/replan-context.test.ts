@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { rmSync } from "node:fs";
+import { rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -28,6 +28,9 @@ async function failedWorld(reviewFindings = findings) {
   const w = reviewWorld(); worlds.push(w);
   for (let round = 1; round <= 3; round++) {
     expect((await w.wrapper.runOnce()).spawned).toMatchObject([{ outcome: "SPAWNED" }]);
+    // Each attempt changes the workspace: the same findings after real work are a repeat that
+    // exhausts the three-round cap, not a stall that asks for a decision at once (review-stall.ts).
+    writeFileSync(join(w.workspace, `attempt-${String(round)}.txt`), `attempt ${String(round)}`);
     expect(await w.dispatch(w.requests.at(-1)!, "review.submit", { subjectRef: w.nodeRef,
       round, packageItems: [], findings: reviewFindings }, round - 1)).toMatchObject({ ok: true });
     await w.finishSeat();
@@ -144,6 +147,8 @@ it("does not reach past the diagnosed submission to an unrelated older guided ap
   const w = await failedWorld();
   decide(w, "ALLOW_MORE_ATTEMPTS", "OLDER_GUIDANCE_IS_NOT_THE_DIAGNOSED_ATTEMPT");
   expect((await w.wrapper.runOnce()).spawned).toMatchObject([{ outcome: "SPAWNED" }]);
+  // The guided attempt did real work; an unchanged repeat would be a stall needing new guidance.
+  writeFileSync(join(w.workspace, "attempt-5.txt"), "attempt 5");
   expect(await w.dispatch(w.requests.at(-1)!, "review.submit", { subjectRef: w.nodeRef,
     round: 5, packageItems: [], findings }, 4)).toMatchObject({ ok: true });
   await w.finishSeat();
@@ -204,6 +209,7 @@ it("carries a finding's attribution into the successor and tells the planner to 
   ];
   for (let round = 1; round <= 3; round++) {
     expect((await w.wrapper.runOnce()).spawned).toMatchObject([{ outcome: "SPAWNED" }]);
+    writeFileSync(join(w.workspace, `attempt-${String(round)}.txt`), `attempt ${String(round)}`);
     expect(await w.dispatch(w.requests.at(-1)!, "review.submit", { subjectRef: w.nodeRef,
       round, packageItems: [], findings: reported }, round - 1)).toMatchObject({ ok: true });
     await w.finishSeat();

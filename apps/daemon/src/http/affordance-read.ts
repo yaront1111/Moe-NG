@@ -18,7 +18,7 @@ import { SESSION_SCHEMA_VERSION } from "../identity/session-contracts.js";
 import { readSessionLedger } from "../identity/session-read-model.js";
 import { REVIEW_SCHEMA_VERSION } from "../review/review-contracts.js";
 import { readReviewGuidanceSource, REVIEW_ESCALATION_GUIDANCE_SCHEMA_VERSION } from "../review/review-implementation-guidance.js";
-import { REVIEW_ESCALATION_ROUND_LIMIT } from "@moe/review";
+import { reviewDecisionRequired } from "../review/review-stall.js";
 import { currentPlanningRun } from "../planning/current-planning-run.js";
 import { createPreviewReceiptReader } from "../preview/preview-daemon-edge.js";
 import { isDesignSkip } from "../design/design-contracts.js";
@@ -606,7 +606,7 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
         // and the only command the surface offers for it is the escalation decision itself.
         // Offering review.submit here would staff agents into a refusal loop.
         if (!awaitingVerify && !reviewContinuationAvailable(review)
-          && review.lineage.unsuccessfulRounds >= REVIEW_ESCALATION_ROUND_LIMIT) {
+          && reviewDecisionRequired(review)) {
           const guidanceSource = readReviewGuidanceSource(config.store, config.projectId, spec.nodeRef, review.rounds.at(-1));
           offers.push(offer("escalation.decide", spec.nodeRef, review.version,
             guidanceSource === null ? REVIEW_SCHEMA_VERSION : REVIEW_ESCALATION_GUIDANCE_SCHEMA_VERSION));

@@ -1,5 +1,5 @@
 import type { JsonValue } from "@moe/contracts";
-import { REVIEW_ESCALATION_ROUND_LIMIT, REVIEW_ROUND_ABSOLUTE_CEILING, qualifyReviewAcceptance } from "@moe/review";
+import { REVIEW_ROUND_ABSOLUTE_CEILING, qualifyReviewAcceptance } from "@moe/review";
 import type { ReviewerIndependenceInput } from "@moe/review";
 
 import { commitAccepted, payloadRef, refuse, refuseFromKernel } from "./review-ledger.js";
@@ -7,6 +7,7 @@ import type { CommandHandler, ReviewOutcome } from "./review-ledger.js";
 import { NODE_VERIFIER_PRINCIPAL_ID, readVerifierReceipt } from "./verifier-receipt-ledger.js";
 import { continuationSourceAttested, reviewContinuationAvailable, reviewContinuationForAcceptance, reviewContinuationSource } from "./review-continuation.js";
 import { implementationGuidanceResult, readReviewGuidanceSource, validImplementationGuidance } from "./review-implementation-guidance.js";
+import { reviewDecisionRequired, reviewStall } from "./review-stall.js";
 
 /**
  * Explicit escalation (DoD 4) and the acceptance gate (DoD 6).
@@ -62,7 +63,7 @@ export const decideEscalation: CommandHandler = (context): ReviewOutcome => {
   if (decision === "ALLOW_MORE_ATTEMPTS" && reviewContinuationAvailable(ledger)) {
     return refuse(request.kind, "REVIEW_CONTINUATION_ALREADY_AVAILABLE", "DAEMON_PREREQUISITE");
   }
-  if (ledger.lineage.unsuccessfulRounds < REVIEW_ESCALATION_ROUND_LIMIT) {
+  if (!reviewDecisionRequired(ledger)) {
     return refuse(request.kind, "REVIEW_ESCALATION_NOT_REACHED", "DAEMON_PREREQUISITE");
   }
   if (request.expectedVersion !== ledger.version) {
@@ -72,12 +73,20 @@ export const decideEscalation: CommandHandler = (context): ReviewOutcome => {
   if (latest === undefined || latest.routing.route === "ACCEPT") {
     return refuse(request.kind, "REVIEW_ESCALATION_NOT_REACHED", "DAEMON_PREREQUISITE");
   }
-  if (decision === "ALLOW_MORE_ATTEMPTS" && (!continuationSourceAttested(latest) || latest.routing.route !== "ESCALATE")) {
+  const stalled = reviewStall(ledger.rounds).length > 0;
+  if (decision === "ALLOW_MORE_ATTEMPTS" && (!continuationSourceAttested(latest)
+    || (latest.routing.route !== "ESCALATE" && !stalled))) {
     return refuse(request.kind, "REVIEW_LINEAGE_UNREADABLE", "DAEMON_PREREQUISITE");
   }
   const guidanceSource = hasGuidance ? readReviewGuidanceSource(store, request.projectId, subjectRef, latest) : null;
   if (hasGuidance && guidanceSource === null) {
     return refuse(request.kind, "REVIEW_LINEAGE_UNREADABLE", "DAEMON_PREREQUISITE");
+  }
+  // A stall repeats unless something changes. Where the node can take instructions, one more
+  // attempt must carry them; a bare retry would buy exactly one more identical round.
+  if (decision === "ALLOW_MORE_ATTEMPTS" && stalled && !hasGuidance
+    && readReviewGuidanceSource(store, request.projectId, subjectRef, latest) !== null) {
+    return refuse(request.kind, "REVIEW_STALL_GUIDANCE_REQUIRED", "DAEMON_PREREQUISITE");
   }
   return commitAccepted(store, request, {
     aggregateId: subjectRef,

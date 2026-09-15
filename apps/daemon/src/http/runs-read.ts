@@ -29,6 +29,7 @@ import { readPublishLedger } from "../repository/publish-ledger.js";
 import type { GoalPublishState } from "../repository/publish-ledger.js";
 import { readRunGoalPublication } from "./run-goal-publication.js";
 import { readReviewLedgers } from "../review/review-read-model.js";
+import { reviewStall } from "../review/review-stall.js";
 import type { ReviewLedger, ReviewLedgers } from "../review/review-read-model.js";
 import { readWorkClaimLedger } from "../work/work-claim-read-model.js";
 import type { WorkClaimRecord } from "../work/work-claim-read-model.js";
@@ -140,14 +141,14 @@ function reviewOf(facts: NodeReviewFacts): RunNodeReview {
 
 function statusOf(
   review: RunNodeReview, accepted: boolean, claimActive: boolean, shared: boolean, replanned: boolean,
-  continuationAvailable: boolean,
+  continuationAvailable: boolean, stalled = false,
 ): RunNodeStatus {
   if (shared) return "UNATTRIBUTABLE";
   if (accepted) return "ACCEPTED";
   if (review.unreadable) return "BLOCKED";
   if (replanned) return "REPLANNED";
   if (review.latestRoute === "ACCEPT") return "DELIVERED";
-  if (review.unsuccessfulRounds >= ESCALATION_ROUND_LIMIT && !continuationAvailable) return "ESCALATION_REQUIRED";
+  if ((review.unsuccessfulRounds >= ESCALATION_ROUND_LIMIT || stalled) && !continuationAvailable) return "ESCALATION_REQUIRED";
   if (claimActive) return "IN_PROGRESS";
   return "READY";
 }
@@ -260,7 +261,8 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
           }),
           review,
           sharedKey: isShared,
-          status: statusOf(review, facts.accepted !== undefined, active, isShared, facts.replanned, facts.continuation !== undefined),
+          status: statusOf(review, facts.accepted !== undefined, active, isShared, facts.replanned,
+            facts.continuation !== undefined, reviewStall(facts.rounds).length > 0),
         });
       })),
       publish: readRunGoalPublication(store, projectId, publishes.get(goal.goalId)),

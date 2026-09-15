@@ -33,16 +33,17 @@ describe("attribution against the approved plan", () => {
     expect(latest.lineage.records[0]?.finding.attributedTo).toEqual({ criterionIds: ["crit-worker"], nodeKey: "worker" });
   });
 
-  it("unblocks the live shape: an exhausted node is accepted on its own evidence after one allowed attempt", () => {
+  it("unblocks the live shape: a stalled node is accepted on its own evidence after one allowed attempt", () => {
     const world = plan();
-    for (const id of ["r1", "r2", "r3"]) expect(codeOf(world.round([REGISTRY_CHECK], id))).toBe("EFFECTS_COMMITTED");
-    expect(world.ledger().rounds.at(-1)?.routing.route).toBe("ESCALATE");
+    for (const id of ["r1", "r2"]) expect(codeOf(world.round([REGISTRY_CHECK], id))).toBe("EFFECTS_COMMITTED");
+    // The second identical round on an unchanged input stalls: the decision is due now.
+    expect(codeOf(world.round([REGISTRY_CHECK], "r3"))).toBe("DAEMON_PREREQUISITE:REVIEW_ESCALATION_REQUIRED");
     expect(codeOf(world.send("escalation.decide", escalationPayload({ subjectRef: world.api }), "cmd-allow"))).toBe("EFFECTS_COMMITTED");
 
     expect(codeOf(world.round([attributed("worker", ["crit-worker"])], "r-attributed"))).toBe("EFFECTS_COMMITTED");
 
     expect(world.ledger().rounds.at(-1)?.routing.route).toBe("ACCEPT");
-    expect(world.ledger().lineage.unsuccessfulRounds).toBe(3);
+    expect(world.ledger().lineage.unsuccessfulRounds).toBe(2);
   });
 
   it("still charges the reporter's own gap beside an attributed one", () => {

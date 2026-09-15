@@ -1,7 +1,6 @@
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonValue } from "@moe/contracts";
 import {
-  REVIEW_ESCALATION_ROUND_LIMIT,
   REVIEW_FINDING_SEVERITIES,
   REVIEW_FINDING_SUBJECT_KINDS,
   REVIEW_ROUND_ABSOLUTE_CEILING,
@@ -16,6 +15,7 @@ import { decodeReviewRequestBytes, isPlainJsonObject } from "./review-contracts.
 import type { ReviewRequest } from "./review-contracts.js";
 import { classifyReplanDelta } from "./review-delta.js";
 import { findingAttributionsValid } from "./review-finding-attribution.js";
+import { reviewDecisionRequired } from "./review-stall.js";
 import {
   commitAccepted,
   payloadArray,
@@ -176,7 +176,8 @@ const submitRound: CommandHandler = (context): ReviewOutcome => {
     && !(verifierFailure && ledger.rounds.length === REVIEW_ROUND_ABSOLUTE_CEILING)) {
     return refuse(request.kind, "REVIEW_ROUND_CEILING_REACHED", "DAEMON_PREREQUISITE");
   }
-  if (ledger.lineage.unsuccessfulRounds >= REVIEW_ESCALATION_ROUND_LIMIT && continuation === undefined && !verifierFailure) {
+  // A stalled review is due the same decision as an exhausted one (review-stall.ts).
+  if (reviewDecisionRequired(ledger) && continuation === undefined && !verifierFailure) {
     return refuse(request.kind, "REVIEW_ESCALATION_REQUIRED", "DAEMON_PREREQUISITE");
   }
   if (request.expectedVersion !== ledger.version) {

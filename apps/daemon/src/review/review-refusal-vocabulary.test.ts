@@ -8,6 +8,8 @@ import {
 import { commitAccepted } from "./review-ledger.js";
 import type { ReviewOutcome } from "./review-ledger.js";
 import { runReviewCommand } from "./review-services.js";
+import { attributionPlan } from "./review-attribution-test-fixtures.js";
+import { closeStores as closeCompiledStores } from "../bootstrap/bootstrap-test-fixtures.js";
 import {
   closeStores,
   commitRaw,
@@ -79,12 +81,13 @@ const EXPECTED_DAEMON_CODES = [
   "REVIEW_REQUEST_INVALID",
   "REVIEW_RESULT_TOO_LARGE",
   "REVIEW_ROUND_CEILING_REACHED",
+  "REVIEW_STALL_GUIDANCE_REQUIRED",
   "REVIEW_VERIFIER_RECEIPT_INVALID",
   "REVIEW_VERIFIER_RECEIPT_NOT_FOUND",
   "REVIEW_VERIFIER_RECEIPT_STALE",
 ] as const;
 
-afterEach(closeStores);
+afterEach(() => { closeStores(); closeCompiledStores(); });
 
 /** Fails loudly on a case that stopped refusing, rather than quietly contributing nothing. */
 function daemonCode(label: string, outcome: ReviewOutcome): string {
@@ -139,6 +142,11 @@ function driveDaemonRefusals(): readonly string[] {
   }).ok).toBe(true);
   const oversizeStore = openStore();
   seedLineageNearReadBound(oversizeStore);
+  // A compiled node that takes instructions, stalled: two identical rounds on one prepared input.
+  const stalled = attributionPlan();
+  const gap = [finding({ subject: { kind: "NODE", locator: stalled.api } })];
+  expect(stalled.preparedRound(gap, "cmd-stall-1").ok).toBe(true);
+  expect(stalled.preparedRound(gap, "cmd-stall-2").ok).toBe(true);
   const ceilingStore = openStore();
   driveEscalatedRounds(ceilingStore, 24);
   const missingReceiptStore = openStore();
@@ -208,6 +216,8 @@ function driveDaemonRefusals(): readonly string[] {
       round: 1,
       subjectRef: "node-run-1",
     }))),
+    daemonCode("a bare retry on a stalled review that takes instructions", stalled.send("escalation.decide",
+      escalationPayload({ subjectRef: stalled.api }), "cmd-stall-allow")),
     daemonCode("an attribution on a subject no sealed plan owns", send(openStore(), envelope("review.submit", 0,
       submitPayload(1, [{ ...finding(), attributedTo: { criterionIds: ["criterion-1"], nodeKey: "node-beta" } }])))),
     daemonCode("replan with caller-supplied carry evidence", send(

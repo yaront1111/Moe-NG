@@ -133,7 +133,7 @@ function fold(
     acc.continuation = undefined;
     if (result["decision"] === "ALLOW_MORE_ATTEMPTS" && result["continuationSource"] !== undefined) {
       const approval = readReviewContinuationApproval(result["continuationSource"], decision.key.projectId,
-        decision.targetAggregateId, priorVersion, acc.rounds.at(-1), decision);
+        decision.targetAggregateId, priorVersion, acc.rounds.at(-1), decision, acc.rounds.at(-2));
       if (approval === undefined || acc.replanned || acc.accepted !== undefined) acc.unreadable = true;
       else acc.continuation = approval;
     }

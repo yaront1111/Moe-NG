@@ -35,7 +35,8 @@ async function exhaustedWorld(packageMismatch?: string) {
       ? restored.items.map(({ kind, locator, digest }) => ({ kind, locator,
         digest: kind === packageMismatch ? "a".repeat(64) : digest })) : [];
     expect(await w.dispatch(w.requests.at(-1)!, "review.submit", { subjectRef: w.nodeRef,
-      round, packageItems, findings: [{ ruleId: "implementation-answer-required",
+      // Distinct findings per round: this arm exhausts the three-round cap, not a stall (review-stall.ts).
+      round, packageItems, findings: [{ ruleId: `implementation-answer-required-${String(round)}`,
         detail: "Choose the approved implementation without waiving criteria", severity: "MAJOR",
         subject: { kind: "NODE", locator: w.nodeRef } }] }, round - 1)).toMatchObject({ ok: true });
     await w.finishSeat();

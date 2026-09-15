@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { readFileSync, rmSync } from "node:fs";
+import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, expect, it } from "vitest";
@@ -23,6 +23,8 @@ async function approvedBetweenPolls() {
   const w = reviewWorld(); worlds.push(w);
   for (let round = 1; round <= 3; round += 1) {
     expect((await w.wrapper.runOnce()).spawned).toMatchObject([{ outcome: "SPAWNED" }]);
+    // Each attempt changes the workspace: an exhausted cap, not a stall (review-stall.ts).
+    writeFileSync(join(w.workspace, `attempt-${String(round)}.txt`), `attempt ${String(round)}`);
     expect(await w.dispatch(w.requests.at(-1)!, "review.submit", { subjectRef: w.nodeRef,
       round, packageItems: [], findings: [{ ruleId: "missing-implementation", detail: "Keep the assigned checks",
         severity: "MAJOR", subject: { kind: "NODE", locator: w.nodeRef } }] }, round - 1)).toMatchObject({ ok: true });

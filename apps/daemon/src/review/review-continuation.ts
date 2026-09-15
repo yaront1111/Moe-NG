@@ -1,4 +1,5 @@
 import { REVIEW_ESCALATION_ROUND_LIMIT, buildReviewPackage, recordReviewRound, validReviewContinuationApproval } from "@moe/review";
+import { roundStalled } from "./review-stall.js";
 import type { ReviewContinuationApproval, ReviewContinuationUse } from "@moe/review";
 import { isDeepStrictEqual } from "node:util";
 import type { ReviewLedger, ReviewRoundRecord } from "./review-read-model.js";
@@ -32,9 +33,12 @@ export function readReviewContinuationApproval(
   value: unknown, projectId: string, subjectRef: string, reviewVersion: number,
   latest: ReviewRoundRecord | undefined,
   decision: Readonly<{ decisionId: string; currentVersion: number; resultSha256: string }>,
+  previous?: ReviewRoundRecord,
 ): ReviewContinuationApproval | undefined {
-  if (latest === undefined || latest.routing.route !== "ESCALATE" || !continuationSourceAttested(latest)
-    || latest.lineage.unsuccessfulRounds < REVIEW_ESCALATION_ROUND_LIMIT
+  // Exhausted (design 15.2) or stalled (review-stall.ts): the two reviews a human may extend.
+  const due = latest !== undefined && ((latest.routing.route === "ESCALATE"
+    && latest.lineage.unsuccessfulRounds >= REVIEW_ESCALATION_ROUND_LIMIT) || roundStalled(previous, latest));
+  if (latest === undefined || !due || !continuationSourceAttested(latest)
     || decision.currentVersion !== reviewVersion + 1
     || !sameJson(value, reviewContinuationSource(projectId, subjectRef, reviewVersion, latest))) return undefined;
   const approval = { version: "moe-review-continuation/1" as const, projectId, subjectRef,
