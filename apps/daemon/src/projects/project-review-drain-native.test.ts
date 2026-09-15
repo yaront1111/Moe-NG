@@ -86,5 +86,7 @@ const result=await boundary.completed;process.exit(result.truthClass==='PROVEN'?
       if (!resolve(root).startsWith(resolve(tmpdir(), "moe-review-drain-"))) throw new Error("PRIVATE_WORKSPACE_IDENTITY_INVALID");
       rmSync(root, { recursive: true, force: true });
     }
-  }, 45_000);
+  // Measured on windows-latest: starting Windows PowerShell and compiling the observer took 10 s
+  // to over 35 s under the daemon suite's load; the port now gives that start its own budget.
+  }, 180_000);
 });

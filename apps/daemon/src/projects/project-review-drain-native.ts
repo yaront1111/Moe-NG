@@ -9,8 +9,10 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 public sealed class MoeDrainFailure : Exception {
- public readonly string Code;
- public MoeDrainFailure(string code) { Code=code; }
+ public readonly string Code,Reason;
+ public MoeDrainFailure(string code) : this(code,null) {}
+ // Reason names the one proof that failed; it is words for the operator, never authority.
+ public MoeDrainFailure(string code,string reason) { Code=code; Reason=reason; }
 }
 public sealed class MoeDrainEvidence {
  public uint controllerPid,brokerPid,cliPid,daemonPid;
@@ -155,16 +157,18 @@ public static class MoeReviewDrain {
   // exit the broker before it drains; a retained Job handle delays kill-on-close.
   Win(TerminateProcess(cli,1));
   Win(TerminateJobObject(job,1));
-  DateTime until=DateTime.UtcNow.AddSeconds(20);
+  DateTime until=DateTime.UtcNow.AddSeconds(20); string reason="JOB_ACTIVE";
   while(DateTime.UtcNow<until) {
-   Need(!closeRequest.IsCompleted,Unknown);
+   if(closeRequest.IsCompleted) throw new MoeDrainFailure(Unknown,"INPUT_CLOSED");
    uint active=calls.Active(job);
-   if(active==0&&Closed(cli)&&Closed(broker)&&Closed(daemon)&&Closed(controller))
+   bool cliClosed=Closed(cli),brokerClosed=Closed(broker),daemonClosed=Closed(daemon),controllerClosed=Closed(controller);
+   if(active==0&&cliClosed&&brokerClosed&&daemonClosed&&controllerClosed)
     return new MoeDrainEvidence {controllerPid=controllerPid,controllerStartedAt=Stamp(controllerBorn),brokerPid=brokerPid,
      brokerStartedAt=Stamp(brokerBorn),cliPid=cliPid,daemonPid=daemonPid,observedAt=DateTime.UtcNow.ToString("yyyy-MM-ddTHH:mm:ss.fffZ",CultureInfo.InvariantCulture)};
+   reason=active!=0?"JOB_ACTIVE":!cliClosed?"CLI_ALIVE":!brokerClosed?"BROKER_ALIVE":!daemonClosed?"DAEMON_ALIVE":"CONTROLLER_ALIVE";
    Thread.Sleep(25);
   }
-  throw new MoeDrainFailure(Unknown);
+  throw new MoeDrainFailure(Unknown,reason);
  }
  public static bool Hold() { return closeRequest.GetAwaiter().GetResult()=="CLOSE"; }
  public static void Close() {

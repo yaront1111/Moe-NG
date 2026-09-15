@@ -36,15 +36,20 @@ export async function drainWithNativeFault(input: { controllerPid: number; notSt
     "[MoeReviewDrain]::DrainUsing([uint32]$request.controllerPid,[string]$request.notStartedAfter,[string]$request.workspace,[MoeDrainFaultCalls]::new([string]$wire.fault))");
   const child = spawn(win32.join(process.env["SystemRoot"]!, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
     ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")], { windowsHide: true, stdio: "pipe" });
-  let output = "";
-  child.stdout.on("data", (chunk: Buffer) => { output += chunk.toString(); });
+  let output = ""; let drainSent = false;
+  // The observer compiles first and stops nothing until it is told DRAIN (the production protocol).
+  child.stdout.on("data", (chunk: Buffer) => {
+    output += chunk.toString();
+    if (!drainSent && output.split("\n").some((line) => line.trim() === '{"ready":true}')) { drainSent = true; child.stdin.write("DRAIN\n"); }
+  });
   child.stderr.on("data", () => {});
   child.stdin.on("error", () => {});
   const closed = new Promise<void>((done) => { child.once("close", () => { done(); }); });
-  const timer = setTimeout(() => { child.stdin.end("CLOSE\n"); child.kill(); }, 30_000);
+  const timer = setTimeout(() => { child.stdin.end("CLOSE\n"); child.kill(); }, 150_000);
   try {
     child.stdin.write(`${JSON.stringify({ input, fault, nativeSource: `${PROJECT_REVIEW_DRAIN_NATIVE}\n${FAULT_CALLS}` })}\n`);
     await closed;
-    return decodeProjectReviewDrainFrame(JSON.parse(output.trim()), input);
+    const frames = output.split("\n").map((line) => line.trim()).filter((line) => line !== "" && line !== '{"ready":true}');
+    return decodeProjectReviewDrainFrame(JSON.parse(frames.at(-1) ?? "null"), input);
   } finally { clearTimeout(timer); if (child.exitCode === null) child.kill(); }
 }
