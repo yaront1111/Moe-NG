@@ -1,7 +1,8 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { copyFileSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -28,8 +29,8 @@ describe("loadPayloadHints", () => {
   };
 
   it("states an absent module as absent, by path, and never imports it", async () => {
-    // The installed artifact's designed state: no control-room source is staged, so the
-    // table's path does not exist. Before this module that read as ERR_MODULE_NOT_FOUND.
+    // A checkout or pack that lost the table: its path does not exist. Before this module
+    // that read as ERR_MODULE_NOT_FOUND.
     const root = scratch("absent");
     const moduleUrl = pathToFileURL(join(root, "control-room", "src", "live", "live-dispatch.ts"));
     const lines: string[] = [];
@@ -103,5 +104,30 @@ describe("loadPayloadHints", () => {
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain(PAYLOAD_HINTS_UNAVAILABLE);
     expect(lines[0]).toContain("exports no payloadFor function");
+  });
+});
+
+/**
+ * The installed wrapper loads the real table on its own (addendum 2026-09-15). The pack stages
+ * only `live-dispatch-payloads.ts`, so it must load with nothing beside it: its imports are
+ * type-only, which Node strips. Run under plain Node, as the artifact runs it, not vite.
+ */
+describe("the payload-hint table the pack ships", () => {
+  const roots: string[] = [];
+  afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { force: true, maxRetries: 5, recursive: true }); });
+
+  it("loads standalone under plain Node and answers payloadFor", () => {
+    const root = mkdtempSync(join(tmpdir(), "moe-payload-table-")); roots.push(root);
+    const source = fileURLToPath(new URL("../../../control-room/src/live/live-dispatch-payloads.ts", import.meta.url));
+    copyFileSync(source, join(root, "live-dispatch-payloads.ts"));
+    writeFileSync(join(root, "package.json"), '{"type":"module"}\n', "utf8");
+    const probe = `const table = await import(${JSON.stringify(pathToFileURL(join(root, "live-dispatch-payloads.ts")).href)});`
+      + " process.stdout.write(typeof table.payloadFor);";
+
+    const answer = execFileSync(process.execPath,
+      ["--experimental-transform-types", "--no-warnings", "--input-type=module", "-e", probe],
+      { cwd: root, encoding: "utf8", windowsHide: true });
+
+    expect(answer).toBe("function");
   });
 });

@@ -114,7 +114,7 @@ async function main(): Promise<void> {
     // swallowed, and missions then carry no hint. The module's header says why both matter.
     const hintModule = await loadPayloadHints({
       log: (line) => { console.error(line); },
-      moduleUrl: new URL("../../../control-room/src/live/live-dispatch.ts", import.meta.url),
+      moduleUrl: new URL("../../../control-room/src/live/live-dispatch-payloads.ts", import.meta.url),
     });
     if (stop.requested()) return;
 

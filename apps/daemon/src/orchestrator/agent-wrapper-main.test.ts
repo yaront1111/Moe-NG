@@ -411,16 +411,16 @@ describe("wrapper binary staffing wiring", () => {
   );
 
   it("loads the payload-hint table through the loader that tells absence from failure", () => {
-    // The installed artifact stages no control-room source (tools/packaging/pack-windows.ts),
-    // so a bare dynamic import here opened every artifact wrapper.log with an
-    // ERR_MODULE_NOT_FOUND line for a designed absence. The loader's behaviour is proven in
-    // wrapper-payload-hints.test.ts; this arm proves the binary calls it, on the dev table's
-    // path, disclosing on stderr.
+    // A bare dynamic import here once opened every artifact wrapper.log with an
+    // ERR_MODULE_NOT_FOUND line. The loader's behaviour is proven in
+    // wrapper-payload-hints.test.ts; this arm proves the binary calls it, on the payload
+    // table's own module (type-only imports, staged by tools/packaging/pack-windows.ts),
+    // disclosing on stderr.
     const start = SOURCE.indexOf("const hintModule = await loadPayloadHints({");
     expect(start).toBeGreaterThan(-1);
     const call = SOURCE.slice(start, SOURCE.indexOf("    });", start));
     expect(call).toContain(
-      'moduleUrl: new URL("../../../control-room/src/live/live-dispatch.ts", import.meta.url),',
+      'moduleUrl: new URL("../../../control-room/src/live/live-dispatch-payloads.ts", import.meta.url),',
     );
     expect(call).toContain("log: (line) => { console.error(line); },");
     // No second loader: a bare import beside it would mint the very line the loader retired.
