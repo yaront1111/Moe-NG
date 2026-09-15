@@ -33,7 +33,11 @@ function fixture() {
   const storage = { getItem: (key: string) => values.get(key) ?? null,
     setItem: (key: string, value: string) => { values.set(key, value); }, removeItem: (key: string) => { values.delete(key); } };
   let runs = structuredClone(RUNS), loseDecision = true, loseCreate = false, commitDecision = true;
-  let source: GoalSourceOutcome = SOURCE, offered = true;
+  let source: GoalSourceOutcome = SOURCE, offered = true, reminted: number | null = null, mints = 0;
+  // The production daemon mints a fresh commandId on every surface read (randomUUID per offer).
+  const surfaceOffers = () => reminted === null ? [ESCALATE, CREATE] : [
+    { ...ESCALATE, commandId: `replan-remint-${String(++mints)}`, expectedVersion: reminted },
+    { ...CREATE, commandId: `create-remint-${String(mints)}` }];
   let catalog: GoalCatalogFrame = { connection: "CONNECTED", detail: "", outcome: "GOALS", goals: [{ goalId: "goal-own",
     planningRunRef: "run-own", truthClass: "DAEMON_VERIFIED", brief: { instructions: "PRD", title: "Own" },
     binding: { byteLength: 5, contentSha256: SOURCE.contentSha256, sourceAggregateId: "source-own", sourceRef: "source-own" } }] };
@@ -58,10 +62,11 @@ function fixture() {
   () => ({ connection: "CONNECTED", detail: "", outcome: "SURFACE", steps: [], offers: [ESCALATE, CREATE] }),
   { origin: "http://localhost:1234", getStorage: () => storage, readSource: async () => source,
     readRuns: async () => runs, readCatalog: async () => catalog,
-    readSurface: async () => ({ connection: "CONNECTED", detail: "", outcome: "SURFACE", steps: [], offers: offered ? [ESCALATE, CREATE] : [] }) });
+    readSurface: async () => ({ connection: "CONNECTED", detail: "", outcome: "SURFACE", steps: [], offers: offered ? surfaceOffers() : [] }) });
   return { create, values, sent, sendCommand, runs: () => runs, setRuns: (next: RunsOutcome) => { runs = next; },
     setCatalog: (next: GoalCatalogFrame) => { catalog = next; }, catalog: () => catalog,
     setSource: (next: GoalSourceOutcome) => { source = next; }, setOffered: (value: boolean) => { offered = value; },
+    remint: (expectedVersion: number) => { reminted = expectedVersion; },
     loseDecision: (value: boolean) => { loseDecision = value; }, loseCreate: (value: boolean) => { loseCreate = value; },
     commitDecision: (value: boolean) => { commitDecision = value; } };
 }
@@ -91,6 +96,28 @@ describe("replan reload recovery", () => {
     expect((await next.resume!(next.restore!().records[0]!.prepared)).outcome.ok).toBe(true);
     expect(f.sent).toHaveLength(3);
     expect(f.sent[1]).toEqual(f.sent[0]);
+  });
+
+  it("still finds the escalation offered when every surface read re-mints its commandId", async () => {
+    // Measured on UnAI 2026-09-15: the saved offer was compared byte for byte, commandId included,
+    // with a fresh read, so every REPLAN refused REPLAN_CURRENT_OFFER_UNAVAILABLE before sending.
+    const f = fixture(); f.loseDecision(false); f.remint(ESCALATE.expectedVersion);
+    const port = f.create(), prepared = await port.prepare(ITEM, RUNS);
+    if (!prepared.ok) throw new Error(prepared.code);
+    port.remember!(prepared.prepared);
+    expect((await port.resume!(prepared.prepared)).outcome).toEqual({ ok: true, commandId: CREATE.commandId });
+    // The captured decision identity is what goes out, so a lost reply stays replayable.
+    expect(f.sent.map((entry) => [entry.commandKind, entry.commandId])).toEqual([
+      ["escalation.decide", ESCALATE.commandId], ["goal.create_with_source", CREATE.commandId]]);
+  });
+
+  it("refuses a re-minted offer for a different review version without sending", async () => {
+    const f = fixture(); f.remint(ESCALATE.expectedVersion + 1);
+    const port = f.create(), prepared = await port.prepare(ITEM, RUNS);
+    if (!prepared.ok) throw new Error(prepared.code);
+    port.remember!(prepared.prepared);
+    expect((await port.resume!(prepared.prepared)).outcome).toMatchObject({ ok: false, code: "REPLAN_CURRENT_OFFER_UNAVAILABLE" });
+    expect(f.sendCommand).not.toHaveBeenCalled();
   });
 
   it("keeps exact create bytes and identity across a reload after uncertain creation", async () => {

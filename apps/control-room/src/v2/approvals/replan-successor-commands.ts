@@ -15,6 +15,16 @@ export function replanEqual(left: unknown, right: unknown): boolean {
       .map(([key, child]) => [key, normalized(child)])) : value;
   return JSON.stringify(normalized(left)) === JSON.stringify(normalized(right));
 }
+/** Every field an offer binds except `commandId`, which the daemon mints afresh on each surface read. */
+const OFFER_SLOT = ["commandEnvelopeVersion", "commandKind", "expectedVersion", "inputSchemaVersion", "targetAggregateId"] as const;
+/**
+ * Whether a fresh offer names the same decision slot as a saved one. Byte equality cannot work:
+ * the id differs on every read (measured on UnAI 2026-09-15: every REPLAN refused before sending).
+ * The saved id is still the one sent, so an uncertain first attempt stays replayable.
+ */
+export function sameReplanOfferSlot(left: unknown, right: unknown): boolean {
+  return record(left) && record(right) && OFFER_SLOT.every((key) => left[key] !== undefined && replanEqual(left[key], right[key]));
+}
 export async function replanDigest(value: string): Promise<string> {
   return [...new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)))]
     .map((byte) => byte.toString(16).padStart(2, "0")).join("");

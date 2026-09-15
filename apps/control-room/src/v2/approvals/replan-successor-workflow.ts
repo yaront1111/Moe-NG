@@ -12,7 +12,7 @@ import { createReplanSuccessorPort } from "./replan-successor-port.js";
 import type { PreparedReplanSuccessor, ReplanProgress, ReplanSuccessorPort } from "./replan-successor-port.js";
 import { createReplanSuccessorJournal, replanIntentKey } from "./replan-successor-journal.js";
 import type { ReplanIntent } from "./replan-successor-journal.js";
-import { replanEnvelope, replanEqual, replanRefused, sendReplanCommand } from "./replan-successor-commands.js";
+import { replanEnvelope, replanEqual, replanRefused, sameReplanOfferSlot, sendReplanCommand } from "./replan-successor-commands.js";
 import { replanEvidence, replanItem } from "./replan-successor-evidence.js";
 
 export interface ReplanWorkflowEffects {
@@ -55,7 +55,7 @@ export function createReplanWorkflowPort(setup: LiveSetup, getFrame: () => Surfa
       if (!committed) {
         const surface = await (effects.readSurface ?? (() => readSurfaceOnce(setup.headers)))();
         if (surface.connection !== "CONNECTED" || surface.outcome !== "SURFACE"
-          || !surface.offers.some((offer) => replanEqual(offer, current.escalationOffer))) {
+          || !surface.offers.some((offer) => sameReplanOfferSlot(offer, current.escalationOffer))) {
           return { committed, outcome: replanRefused("REPLAN_CURRENT_OFFER_UNAVAILABLE") };
         }
         const envelope = await replanEnvelope(setup, current, "decision");
