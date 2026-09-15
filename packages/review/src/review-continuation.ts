@@ -54,11 +54,17 @@ export function reviewContinuationMatches(
     && lineage.unsuccessfulRounds === approval.unsuccessfulRounds;
 }
 
-/** Acceptance may spend only the clean result of that append, never a subsequent attempt. */
+/**
+ * Acceptance may spend only the clean result of that append, never a subsequent attempt. The
+ * clean append may carry findings attributed to OTHER nodes - they never charge this one - so
+ * only an unattributed record past the approved round disqualifies it.
+ */
 export function reviewContinuationAccepts(lineage: ReviewLineage, use: ReviewContinuationUse): boolean {
   if (!validReviewContinuationApproval(use?.approval) || lineage.highestRound !== use.round
-    || lineage.records.some((record) => record.round > use.approval.sourceRound)) return false;
-  const source = { ...lineage, highestRound: use.approval.sourceRound };
+    || lineage.records.some((record) => record.round > use.approval.sourceRound
+      && record.finding.attributedTo === undefined)) return false;
+  const source = { ...lineage, highestRound: use.approval.sourceRound,
+    records: lineage.records.filter((record) => record.round <= use.approval.sourceRound) };
   const sourceDigest = canonicalDigest({ highestRound: source.highestRound,
     records: source.records, unsuccessfulRounds: source.unsuccessfulRounds });
   return reviewContinuationMatches({ ...source, digest: sourceDigest }, use.round, use);

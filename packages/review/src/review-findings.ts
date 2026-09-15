@@ -16,12 +16,13 @@
 import { evaluatePolicy } from "@moe/core";
 import type { PolicyEvaluationInput, PolicyOutcome, PolicyReasonCode } from "@moe/core";
 
-import { canonicalDigest, deepFreeze } from "./canonical.js";
-import { REVIEW_ESCALATION_ROUND_LIMIT } from "./review-contract.js";
+import { canonicalDigest, deepFreeze, isPlainRecord } from "./canonical.js";
+import { REVIEW_ESCALATION_ROUND_LIMIT, REVIEW_FINDING_ATTRIBUTION_LIMITS } from "./review-contract.js";
 import type {
   ReviewAccepted,
   ReviewDecisionLayer,
   ReviewFinding,
+  ReviewFindingAttribution,
   ReviewFindingRecord,
   ReviewLineage,
   ReviewProofState,
@@ -116,16 +117,44 @@ function lineageAttested(lineage: ReviewLineage): boolean {
     === lineageDigest(lineage.records, lineage.unsuccessfulRounds, lineage.highestRound);
 }
 
+const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/u;
+
+function attributionRef(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0
+    && value.length <= REVIEW_FINDING_ATTRIBUTION_LIMITS.refLength && !CONTROL_CHARACTER.test(value);
+}
+
+/**
+ * Reads `attributedTo` exactly once into inert data: `undefined` when the finding is the
+ * reporter's own, `null` when a present attribution is not the closed shape. A malformed one
+ * refuses the whole round rather than being dropped - dropping it would charge the reporter for
+ * a finding it said another node owns, and keeping it would put an unadmitted shape into the
+ * lineage digest. Criteria are stored in one canonical order so caller order cannot move it.
+ */
+function inertAttribution(finding: ReviewFinding): ReviewFindingAttribution | null | undefined {
+  const value: unknown = finding.attributedTo;
+  if (value === undefined) return undefined;
+  if (!isPlainRecord(value) || Object.keys(value).length !== 2) return null;
+  const nodeKey = value["nodeKey"];
+  const listed = value["criterionIds"];
+  if (!attributionRef(nodeKey) || !Array.isArray(listed) || listed.length === 0
+    || listed.length > REVIEW_FINDING_ATTRIBUTION_LIMITS.criteria) return null;
+  const criterionIds: unknown[] = [...listed];
+  if (!criterionIds.every(attributionRef) || new Set(criterionIds).size !== criterionIds.length) return null;
+  return { criterionIds: (criterionIds as string[]).sort(), nodeKey };
+}
+
 /**
  * Copies a caller's finding into inert data, reading each field exactly once. An accessor that
  * answered differently on a later read would otherwise let a stored record drift away from the
  * fingerprint that was computed from it, which is why the fingerprint is taken from this copy
  * and never from the caller's object. `subject` is read once too, so its kind and locator
- * always come from the same reading.
+ * always come from the same reading; the attribution arrives already read by the caller.
  */
-function inertFinding(finding: ReviewFinding): ReviewFinding {
+function inertFinding(finding: ReviewFinding, attributedTo: ReviewFindingAttribution | undefined): ReviewFinding {
   const subject = finding.subject;
   return {
+    ...(attributedTo === undefined ? {} : { attributedTo }),
     detail: finding.detail,
     ruleId: finding.ruleId,
     severity: finding.severity,
@@ -149,6 +178,10 @@ function admissibleRound(round: number): boolean {
  * Records one review round and routes it. Design 15.2: the same finding fingerprint twice
  * escalates to re-plan, so a repeat routes `REJECT_PLAN` while fresh findings route
  * `REJECT_IMPLEMENTATION`. Every routing names the `FINDINGS` layer that decided it.
+ *
+ * Only the reporter's OWN findings charge its review. A finding attributed to another node is
+ * recorded and attested like any other, but it names that node's missing work: counting it here
+ * escalated an honest node forever (UnAI 2026-09-14/15, no round of either plan ever accepted).
  */
 export function recordReviewRound(
   lineage: ReviewLineage,
@@ -164,15 +197,20 @@ export function recordReviewRound(
   if (continuation !== undefined && !reviewContinuationMatches(lineage, round.round, continuation)) {
     return refuse("REVIEW_CONTINUATION_INVALID");
   }
-  const seen = new Set(lineage.records.map((record) => record.fingerprint));
-  const added: readonly ReviewFindingRecord[] = round.findings.map((finding) => {
-    const inert = inertFinding(finding);
-    return { finding: inert, fingerprint: findingFingerprint(inert), round: round.round };
-  });
+  const added: ReviewFindingRecord[] = [];
+  for (const finding of round.findings) {
+    const attributedTo = inertAttribution(finding);
+    if (attributedTo === null) return refuse("FINDING_ATTRIBUTION_INVALID");
+    const inert = inertFinding(finding, attributedTo);
+    added.push({ finding: inert, fingerprint: findingFingerprint(inert), round: round.round });
+  }
+  const owned = (record: ReviewFindingRecord): boolean => record.finding.attributedTo === undefined;
+  const own = added.filter(owned);
+  const seen = new Set(lineage.records.filter(owned).map((record) => record.fingerprint));
   const repeatFingerprints = [
-    ...new Set(added.map((record) => record.fingerprint).filter((entry) => seen.has(entry))),
+    ...new Set(own.map((record) => record.fingerprint).filter((entry) => seen.has(entry))),
   ].sort();
-  const clean = added.length === 0;
+  const clean = own.length === 0;
   const unsuccessfulRounds = lineage.unsuccessfulRounds + (clean ? 0 : 1);
   const records = [...lineage.records, ...added];
   // The guard above proved round.round > highestRound, so this only ever raises it.

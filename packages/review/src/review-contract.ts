@@ -73,6 +73,7 @@ export const REVIEW_PACKAGE_VERSION = "moe-review-package/1" as const;
 export const REVIEW_REASON_CODES = Object.freeze([
   "ACCEPTANCE_APPROVAL_NOT_CURRENT",
   "ACCEPTANCE_POLICY_REFUSED",
+  "FINDING_ATTRIBUTION_INVALID",
   "FINDING_LINEAGE_APPEND_ONLY",
   "FINDING_LINEAGE_DIGEST_MISMATCH",
   "FINDING_ROUND_INVALID",
@@ -226,11 +227,28 @@ export interface ReviewFindingSubject {
   readonly locator: string;
 }
 
+/** Shape bounds on an attribution. Pinned literals: moving one is a conscious act. */
+export const REVIEW_FINDING_ATTRIBUTION_LIMITS = Object.freeze({ criteria: 32, refLength: 256 } as const);
+
+/**
+ * Names the node of the SAME sealed plan that owns what a finding is about (addendum
+ * 2026-09-15). A reporter cannot deliver another node's work and must not waive a check that
+ * needs it; attributing the finding records it for its owner without charging the reporter's
+ * review. Whether the named node and criteria really own it is the daemon's question - it holds
+ * the sealed plan - so this kernel admits the shape only.
+ */
+export interface ReviewFindingAttribution {
+  readonly criterionIds: readonly string[];
+  readonly nodeKey: string;
+}
+
 /**
  * A structured finding. Its identity is `subject` + `ruleId`; `detail` and `severity` are
  * reported but carry no identity, so rewording a finding cannot evade repeat detection.
+ * `attributedTo` carries no identity either: it decides whom the finding charges, not what it is.
  */
 export interface ReviewFinding {
+  readonly attributedTo?: ReviewFindingAttribution;
   readonly detail: string;
   readonly ruleId: string;
   readonly severity: ReviewFindingSeverity;
