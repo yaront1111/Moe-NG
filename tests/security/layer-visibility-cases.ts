@@ -385,7 +385,10 @@ const resolvedLayerLiterals = (): readonly string[] => {
 // CONTROL_ROOM_PAIRING_APPROVAL value declared by http/pairing-approval-contract.ts.
 // The resolved population grows by one; the unresolved values remain unchanged.
 // 105 -> 106 for the validation route's method refusal, resolved by PAIRING_SESSION_LAYER.
-const EXPECTED_LITERAL_COUNT = 107;
+// 107 -> 108 for 9db2f27c's replan successor refusals (replan-successor-commands.ts and
+// use-replan-successor.ts), resolved by REPLAN_LAYER in replan-successor-port.ts. Measured by
+// diffing this scan at 3d9614fa and 9db2f27c: CONTROL_ROOM_REPLAN is the only new value.
+const EXPECTED_LITERAL_COUNT = 108;
 const EXPECTED_UNRESOLVED_LITERAL_COUNT = 39;
 
 /**
