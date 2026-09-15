@@ -9,6 +9,7 @@ import { reviewContinuationAvailable } from "../review/review-continuation.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import { createCompiledNodeSource } from "./compiled-node-source.js";
 import { createWrapperNodeMissions } from "./wrapper-node-missions.js";
+import { withAttributedFindings } from "./wrapper-attributed-findings.js";
 
 export interface WrapperReviewContext {
   readonly operatorPrincipalId: string;
@@ -106,7 +107,7 @@ export function createReviewAwareNodeMissions(config: WrapperReviewMissionsConfi
         return reviewContinuationAvailable(ledger) ? ledger.continuation! : null;
       } catch { return null; }
     },
-    nodeMission: (nodeRef: string): NodeMission | null =>
-      withLatestVerifierFailure(config, nodeRef, source.nodeMission(nodeRef)),
+    nodeMission: (nodeRef: string): NodeMission | null => withAttributedFindings(config, nodeRef,
+      withLatestVerifierFailure(config, nodeRef, source.nodeMission(nodeRef))),
   });
 }

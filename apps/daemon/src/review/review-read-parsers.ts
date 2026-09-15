@@ -15,12 +15,22 @@ function isStringArray(value: JsonValue | undefined): value is readonly string[]
   return Array.isArray(value) && value.every((entry) => typeof entry === "string");
 }
 
+/** A stored attribution is the kernel's inert copy: a node key and a non-empty criterion list. */
+function validAttribution(value: JsonValue | undefined): boolean {
+  if (value === undefined) return true;
+  if (!isPlainJsonObject(value)) return false;
+  const criterionIds = value["criterionIds"];
+  return isRef(value["nodeKey"]) && Array.isArray(criterionIds) && criterionIds.length > 0
+    && criterionIds.every((entry) => isRef(entry));
+}
+
 function validRecord(value: JsonValue): boolean {
   if (!isPlainJsonObject(value)) return false;
   const finding = value["finding"];
   if (!isPlainJsonObject(finding)) return false;
   const subject = finding["subject"];
   return (
+    validAttribution(finding["attributedTo"]) &&
     isRef(value["fingerprint"])
     && typeof value["round"] === "number"
     && isRef(finding["ruleId"])

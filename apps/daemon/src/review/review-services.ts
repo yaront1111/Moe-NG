@@ -15,6 +15,7 @@ import { acceptOutput, decideEscalation } from "./review-acceptance.js";
 import { decodeReviewRequestBytes, isPlainJsonObject } from "./review-contracts.js";
 import type { ReviewRequest } from "./review-contracts.js";
 import { classifyReplanDelta } from "./review-delta.js";
+import { findingAttributionsValid } from "./review-finding-attribution.js";
 import {
   commitAccepted,
   payloadArray,
@@ -54,8 +55,24 @@ const encoder = new TextEncoder();
  * must name a typed subject with a non-empty locator, which is what makes it a link to a
  * required change rather than free prose.
  */
+/**
+ * An attribution names another node of the reporter's plan: exactly `nodeKey` and
+ * `criterionIds`. Anything else is not an attribution, and silently dropping it would charge the
+ * reporter for a finding it said it does not own - so the whole payload refuses instead.
+ */
+function parseAttribution(value: JsonValue): ReviewFinding["attributedTo"] | null {
+  if (!isPlainJsonObject(value)) return null;
+  const nodeKey = value["nodeKey"];
+  const criterionIds = value["criterionIds"];
+  if (Object.keys(value).length !== 2 || typeof nodeKey !== "string" || !Array.isArray(criterionIds)
+    || !criterionIds.every((entry) => typeof entry === "string")) return null;
+  return { criterionIds: criterionIds as string[], nodeKey };
+}
+
 function parseFinding(value: JsonValue): ReviewFinding | undefined {
   if (!isPlainJsonObject(value)) return undefined;
+  const attribution = value["attributedTo"] === undefined ? undefined : parseAttribution(value["attributedTo"]);
+  if (attribution === null) return undefined;
   const subject = value["subject"];
   const detail = value["detail"];
   const ruleId = value["ruleId"];
@@ -70,6 +87,7 @@ function parseFinding(value: JsonValue): ReviewFinding | undefined {
   if (typeof kind !== "string" || !SUBJECT_KINDS.has(kind)) return undefined;
   if (typeof locator !== "string" || locator.length === 0) return undefined;
   return {
+    ...(attribution === undefined ? {} : { attributedTo: attribution }),
     detail,
     ruleId,
     severity,
@@ -132,6 +150,10 @@ const submitRound: CommandHandler = (context): ReviewOutcome => {
   const items = prepared?.items ?? parseItems(itemValues);
   if (findings === undefined || items === undefined) {
     return refuse(request.kind, "REVIEW_PAYLOAD_INVALID", "DAEMON_INGRESS");
+  }
+  // Before package preparation, so the submission admission refuses without capturing Git.
+  if (!findingAttributionsValid(store, request.projectId, subjectRef, findings)) {
+    return refuse(request.kind, "REVIEW_FINDING_ATTRIBUTION_INVALID", "DAEMON_PREREQUISITE");
   }
   const built = buildReviewPackage(items);
   if (!built.ok) return refuseFromKernel(request.kind, built.code, built.layer);
