@@ -327,6 +327,46 @@ describe("an idle holder yields the repository", () => {
     expect(f.releases).toEqual([]);
   }, 120_000);
 
+  /**
+   * UnAI 2026-09-15: the human's REPLAN left the node RESERVED with no seat and a clean tree. The
+   * replan recovery accepts only BLOCKED and this yield accepted only READY, so the only checkout
+   * could never be released while the sibling was told to run a recovery command that refused.
+   */
+  it("releases a replanned holder's clean reservation", async () => {
+    const f = await reservedBetweenRounds({ clean: async () => true });
+    f.setFacts("REPLANNED");
+
+    await f.coordinator.advance();
+
+    expect(f.releases).toEqual(["YIELDED"]);
+    const next = await f.coordinator.start(request(f.workspace, "node-b"), f.spawn);
+    expect({ ok: next.ok, code: next.ok ? null : next.code }).toEqual({ ok: true, code: null });
+  }, 120_000);
+
+  it("keeps a replanned holder whose tree holds uncommitted work", async () => {
+    const f = await reservedBetweenRounds({ clean: async () => false });
+    f.setFacts("REPLANNED");
+
+    await f.coordinator.advance();
+
+    expect(f.releases).toEqual([]);
+    expect(f.port.inspect(f.workspace)).toMatchObject({ reservation: { phase: "RESERVED", nodeRef: "node-a" } });
+  }, 120_000);
+
+  it("returns a replanned node's contained seat to RESERVED instead of blocking, then yields", async () => {
+    const f = fixture(undefined, undefined, undefined, undefined, { clean: async () => true });
+    const started = await f.coordinator.start(request(f.workspace), f.spawn);
+    if (!started.ok) throw new Error(started.code);
+    f.setFacts("REPLANNED");
+    f.finish(); await f.exit; f.retire();
+
+    await f.coordinator.advance();
+    expect(f.port.inspect(f.workspace)).toMatchObject({ reservation: { phase: "RESERVED", nodeRef: "node-a" } });
+    await f.coordinator.advance();
+
+    expect(f.releases).toEqual(["YIELDED"]);
+  }, 120_000);
+
   it("tells a waiter who holds the repository before it claims anything, without writing", async () => {
     const f = fixture(undefined, undefined, undefined, undefined, { describeHolder });
     const started = await f.coordinator.start(request(f.workspace), f.spawn);

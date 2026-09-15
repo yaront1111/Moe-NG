@@ -1,4 +1,5 @@
 import type { RepositoryExecutionCode, RepositoryExecutionController, RepositoryExecutionHandle, RepositoryExecutionPhase, RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
+import type { RepositoryContainmentLedger } from "./repository-containment-witness.js";
 
 export const REPOSITORY_DELIVERY_LAYER = "REPOSITORY_DELIVERY" as const;
 export const REPOSITORY_DELIVERY_REFUSAL_CODES = Object.freeze([
@@ -17,12 +18,16 @@ export type RepositoryDeliveryRefusal = Readonly<{ ok: false; layer: typeof REPO
  * REFUSED_NO_EFFECT is a refusal decided BEFORE any landing intent was journaled: HEAD was never
  * touched and nothing is owed on the checkout, so ownership can be given back. REFUSED keeps its
  * meaning — a refusal that may have left a partial effect behind — and still contains the root.
+ * REPLANNED is a human REPLAN: the node's review never resumes, so once its seat is contained it
+ * holds the checkout for nothing and gives it back on the same proof as a holder between attempts.
  */
-export type RepositoryDeliveryFacts = "READY" | "SUBMITTED" | "ACCEPTED" | "LANDED" | "REFUSED" | "REFUSED_NO_EFFECT" | "UNKNOWN";
+export type RepositoryDeliveryFacts = "READY" | "SUBMITTED" | "ACCEPTED" | "LANDED" | "REFUSED" | "REFUSED_NO_EFFECT" | "REPLANNED" | "UNKNOWN";
 export interface RepositoryDeliveryConfig {
   readonly baseline: (nodeRef: string, reservedRoot: string) => Promise<string | null>;
   /** Whether the checkout holds nothing uncommitted. Absent = an idle holder never yields. */
   readonly clean?: ((reservedRoot: string) => Promise<boolean>) | undefined;
+  /** The controller's own proofs that a seat or a verifier closed, kept durably; absent = memory only. */
+  readonly containment?: RepositoryContainmentLedger | undefined;
   /** The operator's words for who holds the repository; absent = the bare code. */
   readonly describeHolder?: ((nodeRef: string, phase: RepositoryExecutionPhase) => string) | undefined;
   /** Whether the owning runtime has begun closing; re-read after the awaited baseline. */

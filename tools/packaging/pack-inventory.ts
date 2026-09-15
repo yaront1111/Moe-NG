@@ -89,6 +89,7 @@ export const REQUIRED_STAGED_PATHS = Object.freeze([
   "INSTALL.md",
   "LICENSE",
   "MANIFEST-CLOSURE.txt",
+  "apps/control-room/src/live/live-dispatch-payloads.ts",
   "apps/daemon/package.json",
   "apps/daemon/src/cli/moe-cli-main.ts",
   "apps/daemon/src/daemon-main.ts",

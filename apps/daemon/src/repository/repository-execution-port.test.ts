@@ -168,7 +168,7 @@ describe("physical repository execution reservation", () => {
     expect(change(port, root, restored.handle, { phase: "VERIFYING" })).toMatchObject({ ok: true });
   });
 
-  it("keeps BLOCKED terminal and rejects illegal transitions or execution without baseline/session", () => {
+  it("lets BLOCKED resume only its review states and rejects illegal transitions or execution without baseline/session", () => {
     const root = repository(); const port = createRepositoryExecutionPort(); const handle = held(port, root);
     expect(change(port, root, handle, { phase: "EXECUTING" }))
       .toMatchObject({ ok: false, code: "REPOSITORY_EXECUTION_TRANSITION_INVALID" });
@@ -176,10 +176,16 @@ describe("physical repository execution reservation", () => {
       .toMatchObject({ ok: false, code: "REPOSITORY_EXECUTION_TRANSITION_INVALID" });
     const blocked = change(port, root, handle, { phase: "BLOCKED" });
     expect(blocked.ok).toBe(true); if (!blocked.ok) throw new Error(blocked.code);
-    expect(change(port, root, blocked.handle, { phase: "RESERVED" }))
+    for (const phase of ["EXECUTING", "AWAITING_LANDING", "LANDING", "PUBLISHING", "CRITERION_VERIFYING"] as const) {
+      expect(change(port, root, blocked.handle, { phase }))
+        .toMatchObject({ ok: false, code: "REPOSITORY_EXECUTION_TRANSITION_INVALID" });
+    }
+    // Owner decision 2026-09-16: BLOCKED may resume RESERVED or VERIFYING; VERIFYING still needs baseline and session.
+    expect(change(port, root, blocked.handle, { phase: "VERIFYING" }))
       .toMatchObject({ ok: false, code: "REPOSITORY_EXECUTION_TRANSITION_INVALID" });
     expect(port.release(root, owner, blocked.handle.reservation.revision, "ABORTED_BEFORE_EXECUTION", controller.controllerId))
       .toMatchObject({ ok: false, code: "REPOSITORY_EXECUTION_TRANSITION_INVALID" });
+    expect(change(port, root, blocked.handle, { phase: "RESERVED", sessionId: null, pid: null })).toMatchObject({ ok: true });
   });
 
   it("fails closed for a nonrepository and corrupted persisted reservation", () => {
