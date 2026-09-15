@@ -35,9 +35,13 @@ export async function createReplanRecoveryWorld(options: ReviewResumeWorldOption
     expiresAt: future }, 0, sessionId, WORK_CLAIM_SCHEMA_VERSION))).ok).toBe(true);
   const fence = createAgentSessionFence({ store: w.store, projectId: PROJECT_ID, isProcessAlive: () => false });
   expect(fence.recordLiveChild({ sessionId, workItemId, childPid: w.blocked.reservation.pid!, claimAggregateVersion: 0 })).toEqual([]);
+  // Each round names a distinct gap: three unsuccessful rounds exhaust the cap. Repeating one
+  // finding on the same prepared input would be a stall that asks for the decision at round 2.
+  const findings = (round: number) => (w.request.payload.findings as readonly Record<string, unknown>[])
+    .map((finding) => ({ ...finding, ruleId: `${String(finding["ruleId"])}-${String(round)}` }));
   for (const round of [2, 3]) {
     expect(runReviewCommand(w.store, bytes({ ...w.request, commandId: randomUUID(), expectedVersion: round - 1,
-      payload: { ...w.request.payload, round } }), undefined, w.prepared).ok).toBe(true);
+      payload: { ...w.request.payload, findings: findings(round), round } }), undefined, w.prepared).ok).toBe(true);
   }
   const now = Date.parse(w.options.clock());
   const human = createOperatorSessionHandshakePort({ store: w.store, projectId: PROJECT_ID,
