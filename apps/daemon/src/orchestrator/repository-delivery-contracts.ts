@@ -1,4 +1,5 @@
 import type { RepositoryExecutionCode, RepositoryExecutionController, RepositoryExecutionHandle, RepositoryExecutionPhase, RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
+import type { RepositoryContainmentLedger } from "./repository-containment-witness.js";
 
 export const REPOSITORY_DELIVERY_LAYER = "REPOSITORY_DELIVERY" as const;
 export const REPOSITORY_DELIVERY_REFUSAL_CODES = Object.freeze([
@@ -25,6 +26,8 @@ export interface RepositoryDeliveryConfig {
   readonly baseline: (nodeRef: string, reservedRoot: string) => Promise<string | null>;
   /** Whether the checkout holds nothing uncommitted. Absent = an idle holder never yields. */
   readonly clean?: ((reservedRoot: string) => Promise<boolean>) | undefined;
+  /** The controller's own proofs that a seat or a verifier closed, kept durably; absent = memory only. */
+  readonly containment?: RepositoryContainmentLedger | undefined;
   /** The operator's words for who holds the repository; absent = the bare code. */
   readonly describeHolder?: ((nodeRef: string, phase: RepositoryExecutionPhase) => string) | undefined;
   /** Whether the owning runtime has begun closing; re-read after the awaited baseline. */

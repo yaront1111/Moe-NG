@@ -16,6 +16,7 @@ import { reviewDecisionRequired } from "../review/review-stall.js";
 import { readReviewSubmissionSource } from "../review/review-submission-source.js";
 import type { RepositoryExecutionPhase } from "../repository/repository-execution-contracts.js";
 import { describeRepositoryHolder } from "./repository-holder-words.js";
+import { createRepositoryContainmentLedger } from "./repository-containment-witness.js";
 import type { AgentSessionFence } from "./agent-session-fence.js";
 import type { AgentSpawnStart } from "./agent-spawn-contract.js";
 import { createNodeLander } from "./node-lander.js";
@@ -100,6 +101,7 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
   };
   const coordinator = createRepositoryDeliveryCoordinator({
     closed: () => closed,
+    containment: createRepositoryContainmentLedger(store),
     // A probe that throws reads as "not clean": any throw inside advance blocks the reservation.
     clean: async (root) => {
       try {
