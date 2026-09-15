@@ -173,6 +173,13 @@ const VERSION_OCCURRENCE_EXCLUSIONS: readonly VersionOccurrenceExclusion[] = Obj
     pattern: /packageVersion: "([0-9]+\.[0-9]+\.[0-9]+)"/u,
   },
   {
+    // 9db2f27c's replan recovery CLI arm injects the package version the same way.
+    expectedCurrentCaptureCount: 1,
+    id: "cli-replan-recovery-injected-version-fixture",
+    path: "apps/daemon/src/cli/moe-cli-replan-recovery.test.ts",
+    pattern: /packageVersion: "([0-9]+\.[0-9]+\.[0-9]+)"/u,
+  },
+  {
     expectedCurrentCaptureCount: 4,
     id: "cli-main-injected-version-fixtures",
     path: "apps/daemon/src/cli/moe-cli-main.test.ts",
@@ -878,13 +885,13 @@ describe("release version surfaces", () => {
       discovered.map(({ key }) => key),
     );
 
-    expect(VERSION_OCCURRENCE_EXCLUSIONS.length).toBe(15);
+    expect(VERSION_OCCURRENCE_EXCLUSIONS.length).toBe(16);
     for (const exclusion of VERSION_OCCURRENCE_EXCLUSIONS) {
       expect(exclusion.expectedCurrentCaptureCount, `empty exclusion: ${exclusion.id}`)
         .toBeGreaterThan(0);
     }
     expect(surfaces.length).toBe(13);
-    expect(exclusions.length).toBe(21);
+    expect(exclusions.length).toBe(22);
     expect(discovered.length).toBeGreaterThan(0);
     expect(new Set(discovered.map(({ key }) => key)).size).toBe(discovered.length);
     expect(new Set(declared.map(({ key }) => key)).size).toBe(declared.length);
