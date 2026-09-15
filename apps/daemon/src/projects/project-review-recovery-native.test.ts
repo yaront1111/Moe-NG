@@ -76,5 +76,7 @@ describe.skipIf(process.platform !== "win32")("private CLI review recovery with 
       if (!resolve(project).startsWith(resolve(tmpdir(), "moe-review-recovery-journey-"))) throw new Error("PRIVATE_PROJECT_ROOT_INVALID");
       rmSync(project, { recursive: true, force: true });
     }
-  }, 60_000);
+  // Measured on windows-latest: starting Windows PowerShell and compiling the observer took 10 s
+  // to over 35 s under the daemon suite's load; the port now gives that start its own budget.
+  }, 180_000);
 });
