@@ -12,7 +12,7 @@ import { readReviewImplementationGuidance } from "../review/review-implementatio
 import { MARKER } from "../orchestrator/wrapper-review-test-fixtures.js";
 import { replanGuidanceHistory } from "./replan-guidance-history.js";
 import { envelope as reviewEnvelope, send as sendReview } from "../review/review-test-fixtures.js";
-import { PRD } from "./plan-reject-test-fixtures.js";
+import { nodeOf, PRD } from "./plan-reject-test-fixtures.js";
 
 const worlds: ReturnType<typeof reviewWorld>[] = [];
 const CLUE = "The queue owner depends on foundation; foundation cannot require queue completion first.";
@@ -187,4 +187,36 @@ it("refuses a terminal decision missing the producer's replan facts", async () =
     events: [{ eventId: randomUUID(), eventType: "ReviewEscalated", payload: bytes }] });
   expect(readReviewLedger(w.store, PROJECT_ID, w.nodeRef).replanned).toBe(true);
   expect(successor(w)).toThrow("REPLAN_CONTEXT_UNAVAILABLE");
+});
+
+it("carries a finding's attribution into the successor and tells the planner to add the missing edge", async () => {
+  // UnAI 2026-09-14: the first replan kept a CI step that needed a sibling's deliverable without any
+  // edge to that sibling, and the successor plan hit the same wall in its first round.
+  const w = reviewWorld({ thirdCriterion: true, nodeKey: "api", completionNodeKey: "ui", nodes: [
+    nodeOf("api", ["crit-api"]), nodeOf("worker", ["crit-worker"], ["api"]), nodeOf("ui", ["crit-ui"], ["worker"])] });
+  worlds.push(w);
+  const reported = [
+    { ruleId: "api-incomplete", detail: "The signed request is not answered yet.", severity: "MAJOR",
+      subject: { kind: "CRITERION", locator: "crit-api" } },
+    { ruleId: "registry-release-missing", detail: "The workflow step needs the worker's release.", severity: "MAJOR",
+      subject: { kind: "ARTIFACT", locator: ".github/workflows/foundation.yml" },
+      attributedTo: { criterionIds: ["crit-worker"], nodeKey: "worker" } },
+  ];
+  for (let round = 1; round <= 3; round++) {
+    expect((await w.wrapper.runOnce()).spawned).toMatchObject([{ outcome: "SPAWNED" }]);
+    expect(await w.dispatch(w.requests.at(-1)!, "review.submit", { subjectRef: w.nodeRef,
+      round, packageItems: [], findings: reported }, round - 1)).toMatchObject({ ok: true });
+    await w.finishSeat();
+  }
+  await w.wrapper.runOnce();
+  decide(w);
+
+  const instructions = successor(w, header(GOAL_ID, "api"))()!;
+
+  const context = JSON.parse(instructions.split("\n").at(-1)!);
+  expect(context.completeLatestFindings[1].attributedTo).toEqual({ criterionIds: ["crit-worker"], nodeKey: "worker" });
+  expect(instructions).toContain("give the successor plan that dependency edge");
+  const mission = compilerMission("work-1", "planning.submit_decomposition", "2026-09-15T00:00:00.000Z",
+    "successor-goal", null, instructions, PROJECT_ID);
+  expect(mission).toContain("A finding with attributedTo names a check one node needs from another node's deliverable");
 });

@@ -97,7 +97,9 @@ export function withReplanContext(store: SqliteEventStore, projectId: string, go
     return `Replan request (JSON string): ${quotedContext(instructions)}\n\n`
       + "Complete durable replan context follows as JSON. Use these complete findings instead of any earlier excerpt.\n"
       + "Historical implementation decisions remain context, not acceptance, a retry grant, or a criterion waiver. "
-      + "Preserve existing implementation where it satisfies the unchanged contract; resolve the cited dependency conflicts.\n" + json;
+      + "Preserve existing implementation where it satisfies the unchanged contract; resolve the cited dependency conflicts. "
+      + "A finding with attributedTo names a check this node needed from another node's deliverable: "
+      + "give the successor plan that dependency edge, or place the check on a node downstream of its owner.\n" + json;
   } catch (error) {
     if (error instanceof Error && error.message === REPLAN_CONTEXT_UNAVAILABLE) throw error;
     return invalid();

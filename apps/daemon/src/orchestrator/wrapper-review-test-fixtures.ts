@@ -12,7 +12,7 @@ import { handleAsyncCommandRequest } from "../http/http-adapter.js";
 import { WIRE_PROTOCOL_VERSION } from "../http/http-contract.js";
 import { createSessionAuthenticator } from "../identity/session-authenticator.js";
 import { readGraphBody } from "../planning/graph-body-record.js";
-import { approveGate1, approvePlan, boundWorld, committedRevision, submit }
+import { approveGate1, approvePlan, boundWorld, committedRevision, structureOf, submit }
   from "../planning/plan-reject-test-fixtures.js";
 import { createVerifiedWorkspacePort } from "../repository/git-verified-workspace-port.js";
 import { readReviewLedger } from "../review/review-read-model.js";
@@ -33,18 +33,28 @@ export const MARKER = "VERIFIER_EXPECTED_42_FROM_REAL_PROCESS";
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 
 /** Real approved compiled authority, real Git candidate, normal registry and wrapper. */
-export function reviewWorld() {
+export interface ReviewWorldOptions {
+  /** A multi-node plan; the default is the single `node-slice` graph. */
+  readonly nodes?: readonly Record<string, unknown>[];
+  readonly completionNodeKey?: string;
+  /** The node this world reviews, verifies and staffs. */
+  readonly nodeKey?: string;
+  readonly thirdCriterion?: boolean;
+}
+
+export function reviewWorld(options: ReviewWorldOptions = {}) {
   const store = boundWorld();
-  const revision = committedRevision(store);
+  const revision = committedRevision(store, options.thirdCriterion ?? false);
   approveGate1(store, revision);
-  const sealed = submit(store, revision);
+  const sealed = submit(store, revision, options.nodes === undefined ? {}
+    : { structure: structureOf(options.nodes, options.completionNodeKey) });
   if (!sealed.ok) throw new Error(sealed.code);
   approvePlan(store, sealed.runId);
   const graph = readGraphBody(store, PROJECT_ID, sealed.graphContentHash);
   if (!graph.ok) throw new Error(graph.code);
   const nodeRef = compiledExecutionRef(PROJECT_ID, {
     content: graph.content, goalRef: GOAL_ID, planningRunRef: sealed.runId,
-  }, "node-slice");
+  }, options.nodeKey ?? "node-slice");
   const workspace = mkdtempSync(join(tmpdir(), "moe-wrapper-review-"));
   const git = (...args: string[]) => execFileSync("git", ["-c", "core.fsmonitor=false",
     "-c", "core.hooksPath=", ...args], { cwd: workspace, encoding: "utf8", windowsHide: true,

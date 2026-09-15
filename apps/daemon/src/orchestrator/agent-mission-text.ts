@@ -243,6 +243,7 @@ export function compilerMission(
     "The operator's own instructions for this goal follow between the markers; honor them.",
     "When they describe a REPLAN, they carry the findings that exhausted the previous attempt:",
     "plan a DIFFERENT decomposition that addresses those findings, under NEW node keys.",
+    "A finding with attributedTo names a check one node needs from another node's deliverable: give the successor that dependency edge, or place the check on a node downstream of its owner.",
     `<<<OPERATOR INSTRUCTIONS\n${instructions.trim()}\nOPERATOR INSTRUCTIONS>>>`,
   ];
   return [
