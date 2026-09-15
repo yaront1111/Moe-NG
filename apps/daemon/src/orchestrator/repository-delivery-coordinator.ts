@@ -5,7 +5,7 @@ import { AgentProcessFailureError } from "./agent-spawn-contract.js";
 import type { AgentSpawnStart, AgentSpawnStartResult } from "./agent-spawn-contract.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 import { deliveryRefusal } from "./repository-delivery-contracts.js";
-import type { RepositoryDeliveryConfig } from "./repository-delivery-contracts.js";
+import type { RepositoryDeliveryConfig, RepositoryDeliveryRefusal } from "./repository-delivery-contracts.js";
 
 const PREFIX = "node.deliver@";
 
@@ -26,9 +26,12 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
     if (current.ok && current.handle?.reservation.controllerId === config.controller.controllerId
       && current.handle.owner.ownershipToken === handle.owner.ownershipToken) block(current.handle);
   };
-  const release = (handle: RepositoryExecutionHandle, reason: "LANDED" | "LANDED_NOTHING" | "ABORTED_BEFORE_EXECUTION") =>
+  const release = (handle: RepositoryExecutionHandle, reason: "LANDED" | "LANDED_NOTHING" | "ABORTED_BEFORE_EXECUTION" | "YIELDED") =>
     config.port.release(handle.reservation.identity.root, handle.owner, handle.reservation.revision,
       reason, config.controller.controllerId);
+  // A waiter is told WHO holds the repository and why (addendum 2026-09-15), never just BUSY.
+  const busyBy = (handle: RepositoryExecutionHandle): RepositoryDeliveryRefusal => deliveryRefusal(
+    "REPOSITORY_EXECUTION_BUSY", config.describeHolder?.(handle.owner.nodeRef, handle.reservation.phase));
 
   const owned = (workspace: string) => {
     const read = config.port.readOwned(workspace, config.storeId, config.projectId);
@@ -37,11 +40,11 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
     // Each effect family reconciles its own durable process and result evidence.
     // A node controller cannot adopt a stopped publisher or criterion runner.
     if (isRepositoryWorkflowRef(handle.owner.nodeRef)) {
-      return deliveryRefusal("REPOSITORY_EXECUTION_BUSY");
+      return busyBy(handle);
     }
     if (handle.reservation.controllerId === config.controller.controllerId) return read;
     try {
-      if (config.isProcessAlive(handle.reservation.controllerPid)) return deliveryRefusal("REPOSITORY_EXECUTION_BUSY");
+      if (config.isProcessAlive(handle.reservation.controllerPid)) return busyBy(handle);
     } catch { return deliveryRefusal("REPOSITORY_EXECUTION_UNKNOWN"); }
     const claimed = config.port.claimController(workspace, handle.owner, handle.reservation.revision, config.controller);
     if (!claimed.ok) return claimed;
@@ -68,7 +71,7 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
     const nodeRef = request.workItemId.slice(PREFIX.length);
     knownWorkspaces.add(workspace);
     const read = owned(workspace);
-    if (!read.ok) return deliveryRefusal(read.code);
+    if (!read.ok) return "layer" in read ? read : deliveryRefusal(read.code);
     let handle = read.handle;
     if (handle === null) {
       const acquired = config.port.acquire(workspace, { projectId: config.projectId, nodeRef,
@@ -77,7 +80,8 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
       handle = acquired.handle;
     }
     const root = handle.reservation.identity.root;
-    if (handle.owner.nodeRef !== nodeRef || handle.reservation.phase !== "RESERVED" || busy.has(root)) {
+    if (handle.owner.nodeRef !== nodeRef) return busyBy(handle);
+    if (handle.reservation.phase !== "RESERVED" || busy.has(root)) {
       return deliveryRefusal("REPOSITORY_EXECUTION_BUSY");
     }
     busy.add(root);
@@ -127,10 +131,25 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
     finally { busy.delete(root); }
   };
 
+  /**
+   * An idle holder gives the repository back (addendum 2026-09-15): its claim and staffing are
+   * retired, so no seat is live; its review is between attempts; and the tree holds nothing
+   * uncommitted, so no work can be lost. On UnAI an escalated node held the only checkout with a
+   * clean tree while the one sibling that could clear its finding waited 283 times. The node
+   * re-acquires with a fresh baseline when it is staffed again.
+   */
+  const yieldIdle = async (handle: RepositoryExecutionHandle): Promise<void> => {
+    const nodeRef = handle.owner.nodeRef;
+    if (config.clean === undefined || !config.retired(nodeRef) || config.facts(nodeRef, handle) !== "READY") return;
+    if (!(await config.clean(handle.reservation.identity.root))) return;
+    release(handle, "YIELDED");
+  };
+
   const advanceOne = async (initial: RepositoryExecutionHandle): Promise<void> => {
     let handle = initial;
     const nodeRef = handle.owner.nodeRef;
-    if (["BLOCKED", "RESERVED"].includes(handle.reservation.phase)) return;
+    if (handle.reservation.phase === "BLOCKED") return;
+    if (handle.reservation.phase === "RESERVED") { await yieldIdle(handle); return; }
     if (handle.reservation.phase === "EXECUTING") {
       const closed = exits.get(handle.owner.ownershipToken);
       if (closed === "RUNNING") return;
@@ -208,5 +227,14 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
       }
     } finally { advancing = false; }
   };
-  return Object.freeze({ start, advance });
+  /**
+   * Read-only admission, asked before the wrapper opens a session or claims a node: a busy
+   * repository used to cost a session, a claim and a staffing record per retry.
+   */
+  const admission = (workspace: string, nodeRef: string): RepositoryDeliveryRefusal | null => {
+    const read = config.port.readOwned(workspace, config.storeId, config.projectId);
+    if (!read.ok) return deliveryRefusal(read.code);
+    return read.handle === null || read.handle.owner.nodeRef === nodeRef ? null : busyBy(read.handle);
+  };
+  return Object.freeze({ start, advance, admission });
 }

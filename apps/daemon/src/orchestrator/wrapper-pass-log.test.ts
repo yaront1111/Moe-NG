@@ -145,3 +145,22 @@ describe("createPassLogger", () => {
       .toContain(`"${EXHAUSTED}"`);
   });
 });
+
+describe("naming the repository holder (addendum 2026-09-15)", () => {
+  it("says who holds the repository and why while a node waits", () => {
+    const { lines, log } = logger();
+    log({ ...pass([], 0), repositoryWaiting: [{ code: "REPOSITORY_EXECUTION_BUSY",
+      detail: "held by node uai-r2-evidence-runtime: it waits for your escalation decision in the control room",
+      retryAt: Date.parse("2026-09-15T18:00:00.000Z"), workItemId: "node.deliver@node-2" }] });
+    expect(lines).toEqual(["[wrapper] repository waiting: node.deliver@node-2: REPOSITORY_EXECUTION_BUSY"
+      + " (held by node uai-r2-evidence-runtime: it waits for your escalation decision in the control room);"
+      + " automatic retry after 2026-09-15T18:00:00.000Z (active 0)\n"]);
+  });
+
+  it("puts the holder on the refusal line too", () => {
+    const { lines, log } = logger();
+    log(pass([{ ...entry("node.deliver@node-2", "REPOSITORY_EXECUTION_BUSY"), refusal: { ok: false,
+      code: "REPOSITORY_EXECUTION_BUSY", layer: "REPOSITORY_DELIVERY", detail: "held by node api: a coding seat is running" } as never }]));
+    expect(lines[0]).toBe("[wrapper] node.deliver@node-2: REPOSITORY_EXECUTION_BUSY (REPOSITORY_DELIVERY): held by node api: a coding seat is running\n");
+  });
+});

@@ -98,6 +98,7 @@ export function createRepositoryExecutionPort(): RepositoryExecutionPort {
         const allowed = reason === "LANDED" || reason === "LANDED_NOTHING" ? prior.state.phase === "LANDING"
           : reason === "PUBLISHED" ? prior.state.phase === "PUBLISHING"
           : reason === "CRITERIA_COMPLETED" ? prior.state.phase === "CRITERION_VERIFYING"
+          : reason === "YIELDED" ? prior.state.phase === "RESERVED"
           : reason === "ABORTED_BEFORE_EXECUTION" && prior.state.phase === "RESERVED" && !prior.everExecuted;
         if (!allowed) return repositoryExecutionFailure("REPOSITORY_EXECUTION_TRANSITION_INVALID");
         return { ok: true, record: null, value: true as const };

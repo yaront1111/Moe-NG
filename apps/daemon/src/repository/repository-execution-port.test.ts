@@ -207,3 +207,16 @@ describe("physical repository execution reservation", () => {
     expect(port.inspect(fresh)).toMatchObject({ ok: false, code: "REPOSITORY_EXECUTION_UNKNOWN" });
   });
 });
+
+it("yields a reservation only from RESERVED, whatever it executed before (addendum 2026-09-15)", () => {
+  const root = repository(); const port = createRepositoryExecutionPort(); const handle = executing(port, root);
+  expect(port.release(root, owner, handle.reservation.revision, "YIELDED", controller.controllerId))
+    .toMatchObject({ ok: false, code: "REPOSITORY_EXECUTION_TRANSITION_INVALID" });
+  const reserved = change(port, root, handle, { phase: "RESERVED", sessionId: null, pid: null });
+  if (!reserved.ok) throw new Error(reserved.code);
+  expect(port.release(root, owner, reserved.handle.reservation.revision, "YIELDED", "another-controller"))
+    .toMatchObject({ ok: false, code: "REPOSITORY_EXECUTION_CONTROLLER_MISMATCH" });
+  expect(port.release(root, owner, reserved.handle.reservation.revision, "YIELDED", controller.controllerId))
+    .toEqual({ ok: true, released: true });
+  expect(port.acquire(root, { ...owner, nodeRef: "next-node" }, controller)).toMatchObject({ ok: true });
+});

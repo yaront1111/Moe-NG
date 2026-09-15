@@ -21,7 +21,12 @@ function request(workspace: string, nodeRef = "node-a"): SpawnRequest {
   return { credential: "secret", expiresAt: "2026-09-06T00:00:00.000Z", kind: "node.deliver",
     mission: "implement", sessionId: `session-${nodeRef}`, workItemId: `node.deliver@${nodeRef}`, workspace };
 }
-function fixture(workspace = repository(), controllerId = "controller-a", controllerPid = 101, closed?: () => boolean) {
+interface FixtureExtras {
+  readonly clean?: (root: string) => Promise<boolean>;
+  readonly describeHolder?: (nodeRef: string, phase: string) => string;
+}
+function fixture(workspace = repository(), controllerId = "controller-a", controllerPid = 101, closed?: () => boolean,
+  extras: FixtureExtras = {}) {
   const port = createRepositoryExecutionPort();
   // The real port does the work; the wrapper only records the REASON, which the port does not keep.
   const releases: RepositoryExecutionReleaseReason[] = [];
@@ -35,7 +40,7 @@ function fixture(workspace = repository(), controllerId = "controller-a", contro
   const verify = vi.fn(async () => { facts = "ACCEPTED"; });
   const land = vi.fn(async () => { facts = "LANDED"; });
   const coordinator = createRepositoryDeliveryCoordinator({ baseline, controller: { controllerId, controllerPid },
-    ...(closed === undefined ? {} : { closed }),
+    ...(closed === undefined ? {} : { closed }), ...extras,
     facts: () => facts, isProcessAlive: (pid: number) => live.has(pid), land, port: recording, projectId: "project-a",
     retired: () => retired, storeId: "store-a", verify, workspaces: () => [workspace] });
   let finish!: () => void;
@@ -252,5 +257,86 @@ describe("repository delivery lifetime", () => {
       .toMatchObject({ ok: false, code: "REPOSITORY_DELIVERY_BASELINE_UNAVAILABLE" });
     expect(f.spawn).not.toHaveBeenCalled();
     expect(f.port.inspect(f.workspace)).toEqual({ ok: true, reservation: null });
+  }, 120_000);
+});
+
+/**
+ * UnAI 2026-09-14/15: an escalated node kept the only repository reservation while it waited for a
+ * human, with a clean tree, so the one sibling whose work would have cleared its finding was
+ * claimed and released 283 times on REPOSITORY_EXECUTION_BUSY and never ran.
+ */
+describe("an idle holder yields the repository", () => {
+  const describeHolder = (nodeRef: string, phase: string) => `held by ${nodeRef} (${phase})`;
+  async function reservedBetweenRounds(extras: FixtureExtras) {
+    const f = fixture(undefined, undefined, undefined, undefined, extras);
+    const started = await f.coordinator.start(request(f.workspace), f.spawn);
+    if (!started.ok) throw new Error(started.code);
+    f.finish(); await f.exit; f.retire();
+    await f.coordinator.advance();
+    expect(f.port.inspect(f.workspace)).toMatchObject({ reservation: { phase: "RESERVED", nodeRef: "node-a" } });
+    return f;
+  }
+
+  it("releases a clean reservation between rounds so a sibling can start", async () => {
+    const f = await reservedBetweenRounds({ clean: async () => true });
+
+    await f.coordinator.advance();
+
+    expect(f.releases).toEqual(["YIELDED"]);
+    const next = await f.coordinator.start(request(f.workspace, "node-b"), f.spawn);
+    expect({ ok: next.ok, code: next.ok ? null : next.code }).toEqual({ ok: true, code: null });
+  }, 120_000);
+
+  it("keeps a reservation whose tree holds uncommitted work and names its holder to a waiter", async () => {
+    const f = await reservedBetweenRounds({ clean: async () => false, describeHolder });
+
+    await f.coordinator.advance();
+
+    expect(f.releases).toEqual([]);
+    expect(await f.coordinator.start(request(f.workspace, "node-b"), f.spawn))
+      .toMatchObject({ ok: false, code: "REPOSITORY_EXECUTION_BUSY", detail: "held by node-a (RESERVED)" });
+  }, 120_000);
+
+  it.each(["SUBMITTED", "ACCEPTED", "UNKNOWN", "REFUSED"] as const)("never yields while the holder's facts read %s", async (facts) => {
+    const f = await reservedBetweenRounds({ clean: async () => true });
+    f.setFacts(facts);
+
+    await f.coordinator.advance();
+
+    expect(f.releases).toEqual([]);
+  }, 120_000);
+
+  it("waits for the holder's claim to be retired before yielding", async () => {
+    const f = fixture(undefined, undefined, undefined, undefined, { clean: async () => true });
+    f.spawn.mockResolvedValueOnce({ ok: false, code: "AGENT_SPAWN_FAILED", layer: "AGENT_SPAWNER" } as never);
+    await f.coordinator.start(request(f.workspace), f.spawn);
+    expect(f.port.inspect(f.workspace)).toMatchObject({ reservation: { phase: "RESERVED" } });
+
+    await f.coordinator.advance();
+    expect(f.releases).toEqual([]);
+    f.retire();
+    await f.coordinator.advance();
+    expect(f.releases).toEqual(["YIELDED"]);
+  }, 120_000);
+
+  it("keeps the old behaviour when no clean probe is wired", async () => {
+    const f = await reservedBetweenRounds({});
+
+    await f.coordinator.advance();
+
+    expect(f.releases).toEqual([]);
+  }, 120_000);
+
+  it("tells a waiter who holds the repository before it claims anything, without writing", async () => {
+    const f = fixture(undefined, undefined, undefined, undefined, { describeHolder });
+    const started = await f.coordinator.start(request(f.workspace), f.spawn);
+    if (!started.ok) throw new Error(started.code);
+    const before = f.port.inspect(f.workspace);
+
+    expect(f.coordinator.admission(f.workspace, "node-b"))
+      .toMatchObject({ ok: false, code: "REPOSITORY_EXECUTION_BUSY", layer: "REPOSITORY_DELIVERY", detail: "held by node-a (EXECUTING)" });
+    expect(f.coordinator.admission(f.workspace, "node-a")).toBeNull();
+    expect(f.port.inspect(f.workspace)).toEqual(before);
+    f.finish();
   }, 120_000);
 });

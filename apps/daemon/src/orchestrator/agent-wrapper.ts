@@ -137,6 +137,10 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
         return uncoded(step.kind, failure.message, null, workItemId);
       }
       if (brief === null) return uncoded(step.kind, "NODE_BRIEF_MISSING", null, workItemId);
+      // Who holds the repository is read BEFORE any durable step (addendum 2026-09-15): a busy
+      // repository used to cost a session, a claim and a staffing record on every retry.
+      const held = config.repositoryAdmission?.(step.aggregateId ?? "", brief.workspace) ?? null;
+      if (held !== null) return { kind: step.kind, outcome: held.code, refusal: held, sessionId: null, workItemId };
     }
 
     // THE DURABLE STAFFING GATE, before any identity or claim is minted.

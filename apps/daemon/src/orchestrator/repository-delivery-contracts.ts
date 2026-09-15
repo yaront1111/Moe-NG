@@ -1,4 +1,4 @@
-import type { RepositoryExecutionCode, RepositoryExecutionController, RepositoryExecutionHandle, RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
+import type { RepositoryExecutionCode, RepositoryExecutionController, RepositoryExecutionHandle, RepositoryExecutionPhase, RepositoryExecutionPort } from "../repository/repository-execution-contracts.js";
 
 export const REPOSITORY_DELIVERY_LAYER = "REPOSITORY_DELIVERY" as const;
 export const REPOSITORY_DELIVERY_REFUSAL_CODES = Object.freeze([
@@ -10,7 +10,9 @@ export const REPOSITORY_DELIVERY_REFUSAL_CODES = Object.freeze([
   "REPOSITORY_DELIVERY_CLOSED",
 ] as const);
 export type RepositoryDeliveryRefusal = Readonly<{ ok: false; layer: typeof REPOSITORY_DELIVERY_LAYER;
-  code: RepositoryExecutionCode | typeof REPOSITORY_DELIVERY_REFUSAL_CODES[number] }>;
+  code: RepositoryExecutionCode | typeof REPOSITORY_DELIVERY_REFUSAL_CODES[number];
+  /** Who holds the repository and why, for the operator; never authority. */
+  detail?: string }>;
 /**
  * REFUSED_NO_EFFECT is a refusal decided BEFORE any landing intent was journaled: HEAD was never
  * touched and nothing is owed on the checkout, so ownership can be given back. REFUSED keeps its
@@ -19,6 +21,10 @@ export type RepositoryDeliveryRefusal = Readonly<{ ok: false; layer: typeof REPO
 export type RepositoryDeliveryFacts = "READY" | "SUBMITTED" | "ACCEPTED" | "LANDED" | "REFUSED" | "REFUSED_NO_EFFECT" | "UNKNOWN";
 export interface RepositoryDeliveryConfig {
   readonly baseline: (nodeRef: string, reservedRoot: string) => Promise<string | null>;
+  /** Whether the checkout holds nothing uncommitted. Absent = an idle holder never yields. */
+  readonly clean?: ((reservedRoot: string) => Promise<boolean>) | undefined;
+  /** The operator's words for who holds the repository; absent = the bare code. */
+  readonly describeHolder?: ((nodeRef: string, phase: RepositoryExecutionPhase) => string) | undefined;
   /** Whether the owning runtime has begun closing; re-read after the awaited baseline. */
   readonly closed?: (() => boolean) | undefined;
   readonly controller: RepositoryExecutionController;
@@ -35,6 +41,7 @@ export interface RepositoryDeliveryConfig {
   readonly verify: (nodeRef: string, reservedRoot: string) => Promise<void>;
   readonly workspaces: () => readonly string[];
 }
-export function deliveryRefusal(code: RepositoryDeliveryRefusal["code"]): RepositoryDeliveryRefusal {
-  return { ok: false, code, layer: REPOSITORY_DELIVERY_LAYER };
+export function deliveryRefusal(code: RepositoryDeliveryRefusal["code"], detail?: string): RepositoryDeliveryRefusal {
+  return detail === undefined ? { ok: false, code, layer: REPOSITORY_DELIVERY_LAYER }
+    : { ok: false, code, layer: REPOSITORY_DELIVERY_LAYER, detail };
 }

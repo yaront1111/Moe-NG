@@ -3,6 +3,8 @@ import { REPOSITORY_DELIVERY_LAYER } from "./repository-delivery-contracts.js";
 
 export interface RepositoryAdmissionWait {
   readonly code: string;
+  /** Who holds the repository and why, when the refusal named it. */
+  readonly detail?: string;
   readonly retryAt: number;
   readonly workItemId: string;
 }
@@ -24,7 +26,8 @@ export function createRepositoryAdmissionBackoff() {
       if (entry === undefined) return null;
       if (entry.version !== version || now < entry.observedAt) { pending.delete(workItemId); return null; }
       pending.set(workItemId, { ...entry, observedAt: now });
-      return now < entry.retryAt ? { code: entry.code, retryAt: entry.retryAt, workItemId } : null;
+      return now < entry.retryAt ? { code: entry.code, ...(entry.detail === undefined ? {} : { detail: entry.detail }),
+        retryAt: entry.retryAt, workItemId } : null;
     },
     record(report: SpawnReport, version: number | null, now: number): void {
       const { workItemId, refusal } = report;
@@ -32,7 +35,9 @@ export function createRepositoryAdmissionBackoff() {
       const prior = pending.get(workItemId);
       const delayMs = prior?.code === refusal.code && prior.version === version
         ? Math.min(prior.delayMs * 2, 60_000) : 15_000;
-      pending.set(workItemId, { code: refusal.code, delayMs, observedAt: now, retryAt: now + delayMs, version, workItemId });
+      const detail = "detail" in refusal && typeof refusal.detail === "string" ? refusal.detail : undefined;
+      pending.set(workItemId, { code: refusal.code, ...(detail === undefined ? {} : { detail }),
+        delayMs, observedAt: now, retryAt: now + delayMs, version, workItemId });
     },
   };
 }

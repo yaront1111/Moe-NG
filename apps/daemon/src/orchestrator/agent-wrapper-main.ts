@@ -232,6 +232,7 @@ async function main(): Promise<void> {
       // dies between deciding to staff and getting a child must not leave a note claiming a seat
       // ran; `started.ok` is the first instant a child exists. Fire-and-forget on purpose: the
       // write never rejects, and a spawn must not wait on a ledger commit to return.
+      repositoryAdmission: delivery.admission,
       spawnAgent: delivery.start(async (request) => {
         if (secureSpawn === null) throw new Error("MCP_HTTP_HOST_NOT_STARTED");
         const started = await secureSpawn(request);

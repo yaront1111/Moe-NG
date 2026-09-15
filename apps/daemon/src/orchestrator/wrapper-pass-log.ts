@@ -23,13 +23,16 @@ function activityLine(entry: SpawnReport): string {
   // Name the refusing layer: two layers can refuse a start, and the code
   // alone does not say which one answered.
   const refused = entry.refusal === null ? "" : ` (${entry.refusal.layer})`;
-  return `[wrapper] ${entry.workItemId}: ${entry.outcome}${refused}\n`;
+  const detail = entry.refusal !== null && "detail" in entry.refusal && typeof entry.refusal.detail === "string"
+    ? `: ${entry.refusal.detail}` : "";
+  return `[wrapper] ${entry.workItemId}: ${entry.outcome}${refused}${detail}\n`;
 }
 
 function steadyLine(report: RunOnceReport, exhausted: readonly SpawnReport[]): string {
   let waiting = "";
   if (report.repositoryWaiting !== undefined && report.repositoryWaiting.length > 0) {
-    const items = report.repositoryWaiting.map((entry) => `${entry.workItemId}: ${entry.code}; automatic retry after ${new Date(entry.retryAt).toISOString()}`)
+    const items = report.repositoryWaiting.map((entry) => `${entry.workItemId}: ${entry.code}`
+      + `${entry.detail === undefined ? "" : ` (${entry.detail})`}; automatic retry after ${new Date(entry.retryAt).toISOString()}`)
       .sort().join(", ");
     waiting = `[wrapper] repository waiting: ${items} (active ${String(report.active)})\n`;
   }

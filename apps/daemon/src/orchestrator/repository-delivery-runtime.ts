@@ -11,6 +11,11 @@ import { readLandingReceipt } from "../repository/landing-ledger.js";
 import { readRepositoryLandingEvidence } from "../repository/repository-landing-intent.js";
 import { landingReceiptId } from "../repository/landing-receipt-contracts.js";
 import { readReviewLedger } from "../review/review-read-model.js";
+import { reviewContinuationAvailable } from "../review/review-continuation.js";
+import { reviewDecisionRequired } from "../review/review-stall.js";
+import { readReviewSubmissionSource } from "../review/review-submission-source.js";
+import type { RepositoryExecutionPhase } from "../repository/repository-execution-contracts.js";
+import { describeRepositoryHolder } from "./repository-holder-words.js";
 import type { AgentSessionFence } from "./agent-session-fence.js";
 import type { AgentSpawnStart } from "./agent-spawn-contract.js";
 import { createNodeLander } from "./node-lander.js";
@@ -85,8 +90,21 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
     ...(reservationHandle === undefined ? {} : { reservationHandle }),
   });
   let closed = false;
+  const describeHolder = (nodeRef: string, phase: RepositoryExecutionPhase): string => {
+    try {
+      const review = readReviewLedger(store, projectId, nodeRef);
+      return describeRepositoryHolder({ continuation: reviewContinuationAvailable(review),
+        decisionDue: !review.unreadable && reviewDecisionRequired(review),
+        nodeKey: readReviewSubmissionSource(store, projectId, nodeRef)?.nodeKey ?? nodeRef, phase, replanned: review.replanned });
+    } catch { return `held by ${nodeRef}`; }
+  };
   const coordinator = createRepositoryDeliveryCoordinator({
     closed: () => closed,
+    clean: async (root) => {
+      const observed = await git.observe(root);
+      return observed.ok && observed.observation.entries.length === 0;
+    },
+    describeHolder,
     controller: { controllerId: randomBytes(32).toString("hex"), controllerPid: process.pid },
     facts: (nodeRef, handle) => readRepositoryDeliveryFacts(store, projectId, nodeRef, handle),
     isProcessAlive: probeProcessAlive, port: repository, projectId,
@@ -155,5 +173,6 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
     if (closed || config.compiledWorkspace === null) return;
     for (const report of await publisher.publishOnce()) config.log(`[publisher] ${report.goalId}: ${report.outcome} (${report.detail})`);
   };
-  return Object.freeze({ start, advance, close });
+  const admission = (nodeRef: string, workspace: string) => closed ? null : coordinator.admission(workspace, nodeRef);
+  return Object.freeze({ start, advance, close, admission });
 }

@@ -14,7 +14,7 @@ import type { CommandAdapterDeps } from "../http/http-contract.js";
 import type { DesignBrief } from "./agent-mission-text.js";
 import type { ProviderPauseGate } from "./agent-provider-pause.js";
 import type { AgentSessionFence } from "./agent-session-fence.js";
-import type { AgentSpawnStart } from "./agent-spawn-contract.js";
+import type { AgentSpawnStart, SpawnStartRefusal } from "./agent-spawn-contract.js";
 
 export interface SpawnRequest {
   /** The agent's bearer credential. Hand it to the process environment only. */
@@ -99,6 +99,11 @@ export interface AgentWrapperConfig {
    * refusal, or an accepted start whose `exit` is the child's separate lifetime.
    * Injectable for tests.
    */
+  /**
+   * Read-only repository admission for `node.deliver`, asked before any session, claim or staffing
+   * record is written. A refusal names who holds the repository; absent = the spawner alone decides.
+   */
+  readonly repositoryAdmission?: ((nodeRef: string, workspace: string) => SpawnStartRefusal | null) | undefined;
   readonly spawnAgent: AgentSpawnStart;
   /** Durable pre-identity gate. The lifecycle retains its in-process active map;
    * this injected port survives restarts and expired claims over live children. */

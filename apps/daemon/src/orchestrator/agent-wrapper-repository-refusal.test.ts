@@ -77,3 +77,56 @@ describe("repository admission refusal through the wrapper", () => {
     }
   });
 });
+
+describe("repository admission before any durable step (addendum 2026-09-15)", () => {
+  it("asks who holds the repository before opening a session or a claim", async () => {
+    // UnAI: every retry while a sibling held the repository opened a session, claimed the node,
+    // admitted staffing, then released and closed it again - 283 times, six events each.
+    const sandbox = mkdtempSync(join(tmpdir(), "moe-wrapper-admission-"));
+    const projectId = "project-repository-admission";
+    const credential = "repository-admission-operator";
+    const storePath = join(sandbox, "store.db");
+    const provider = createStoreDependencies({ credential, principalId: "operator-local", projectId, storePath });
+    const reader = SqliteEventStore.openForProject(storePath, projectId);
+    try {
+      const live = provider.affordances?.();
+      if (live === undefined) throw new Error("affordances unavailable");
+      const nodeRef = "node:v1:" + "c".repeat(64);
+      const workItemId = `node.deliver@${nodeRef}`;
+      const affordances: AffordancePort = { boundProjectId: projectId, readSurface: () => {
+        const surface = live.readSurface();
+        if (surface.outcome !== "SURFACE") return surface;
+        const node: ChainStep = { aggregateId: nodeRef, claim: null, claimAggregateVersion: 0, kind: "node.deliver",
+          missing: [], status: "READY", version: 1 };
+        return { ...surface, steps: [node, ...surface.steps.filter((step) => step.kind.startsWith("session."))] };
+      } };
+      let minted = 0;
+      let spawned = 0;
+      const now = Date.now();
+      const holder = "held by node uai-r2-evidence-runtime: it waits for your escalation decision in the control room";
+      const wrapper = createAgentWrapper({ affordances, claimTtlMs: 60_000, clock: () => now,
+        deps: provider.provide(), maxAgents: 1, maxItemAttempts: 1,
+        mintSecret: () => `adm-${String(++minted).padStart(6, "0")}${"0".repeat(28)}`,
+        nodeMission: () => ({ instructions: "build", test: "pnpm test", title: "Node", workspace: sandbox }),
+        operatorCredential: credential,
+        repositoryAdmission: (candidate, workspace) => candidate === nodeRef && workspace === sandbox
+          ? deliveryRefusal("REPOSITORY_EXECUTION_BUSY", holder) : null,
+        spawnAgent: async () => { spawned += 1; return { ok: true, pid: 909_091, exit: Promise.resolve() }; },
+      });
+
+      const report = await wrapper.runOnce();
+
+      expect(report.spawned).toEqual([{ kind: "node.deliver", outcome: "REPOSITORY_EXECUTION_BUSY", sessionId: null, workItemId,
+        refusal: { ok: false, code: "REPOSITORY_EXECUTION_BUSY", layer: "REPOSITORY_DELIVERY", detail: holder } }]);
+      expect(minted).toBe(0);
+      expect(spawned).toBe(0);
+      expect(readWorkClaimLedger(reader, projectId).claims.get(workItemId)).toBeUndefined();
+      expect([...readSessionLedger(reader, projectId).sessions.values()]).toEqual([]);
+      const waiting = await wrapper.runOnce();
+      expect(waiting.repositoryWaiting).toEqual([{ code: "REPOSITORY_EXECUTION_BUSY", detail: holder, retryAt: now + 15_000, workItemId }]);
+    } finally {
+      reader.close(); provider.close();
+      rmSync(sandbox, { recursive: true, force: true });
+    }
+  });
+});

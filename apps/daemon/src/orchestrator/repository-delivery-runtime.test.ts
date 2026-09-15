@@ -468,7 +468,9 @@ describe("production repository delivery composition", () => {
         expect(f.tests()).toBe(1);
         // HELD, not free: an independent node is refused by the delivery layer while a retry is owed.
         const busy = await f.runtime.start(async () => ({ ok: true, pid: process.pid, exit: Promise.resolve() }))(f.request("b"));
-        expect(busy).toEqual({ code: "REPOSITORY_EXECUTION_BUSY", layer: "REPOSITORY_DELIVERY", ok: false });
+        // The waiter is told who holds the repository and why (addendum 2026-09-15).
+        expect(busy).toEqual({ code: "REPOSITORY_EXECUTION_BUSY", detail: "held by node a: its accepted work is landing",
+          layer: "REPOSITORY_DELIVERY", ok: false });
       }
       armed = false;
       await f.runtime.advance();
