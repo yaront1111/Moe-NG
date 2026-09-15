@@ -66,6 +66,20 @@ describe("compiled coding mission read guidance", () => {
     expect(text).toContain("moe-product-contract-json-page/1");
     expect(text).toContain("moe-design-json-page/1");
   });
+
+  it("names the node's exact acceptance gate and teaches attribution of another node's gap", () => {
+    // UnAI 2026-09-14/15: "preserve the configured checks" with no named gate made an honest seat
+    // treat a CI step only a sibling could turn green as its own failure, every round.
+    expect(text).toContain("Your node's acceptance gate is exactly");
+    expect(text).toContain("`pnpm test`");
+    expect(text).toContain("Nothing else is a required check for this node");
+    expect(text).toContain("CI workflow steps");
+    expect(text).toContain('attributedTo {"nodeKey"');
+    expect(text).toContain("does not count against your node");
+    expect(text).toContain("the daemon refuses an attribution naming your node, citing your criteria");
+    expect(text).toContain("With an UNKNOWN map, report the failure as your own finding");
+    expect(text).toContain("Submit no unattributed findings only after");
+  });
 });
 
 it("teaches planning and design seats to finish revision-pinned contract pages", () => {
@@ -575,4 +589,11 @@ describe("every mission carries the seat-facing recovery and read facts", () => 
       expect(text).not.toMatch(/(record|store|save|persist) (a |the |your )?(durable )?memor/i);
     });
   }
+});
+
+it("teaches attribution only to compiled nodes, whose sealed plan can validate it", () => {
+  const plain = codeMission("review.submit@node-1", "node-1", EXPIRES, { instructions: "Do it", test: "pnpm test",
+    title: "Plain", workspace: "/workspace" }, { accept: null, submit: null });
+  expect(plain).not.toContain("attributedTo");
+  expect(plain).not.toContain("acceptance gate is exactly");
 });
