@@ -15,7 +15,7 @@ import { codeMission, compilerMission, designGoalRef, designMission, mission } f
 import { PROVIDER_PAUSED_OUTCOME } from "./agent-provider-pause.js";
 import { decideSeatProvider, pauseProviderOf } from "./agent-provider-resolve.js";
 import { COMPILER_STEPS, GATE_REFUSALS, HUMAN_ONLY_STEPS } from "./agent-spawn-contract.js";
-import type { ProviderPauseFacts, RunOnceReport, SpawnReport } from "./agent-spawn-contract.js";
+import type { ProviderPauseFacts, RunOnceReport, SpawnReport, SpawnStartRefusal } from "./agent-spawn-contract.js";
 import type { AgentWrapperConfig, NodeMission } from "./agent-wrapper-config.js";
 import { createAgentWrapperStaffing } from "./agent-wrapper-staffing.js";
 import { createRepositoryAdmissionBackoff } from "./repository-admission-backoff.js";
@@ -139,7 +139,9 @@ export function createAgentWrapper(config: AgentWrapperConfig) {
       if (brief === null) return uncoded(step.kind, "NODE_BRIEF_MISSING", null, workItemId);
       // Who holds the repository is read BEFORE any durable step (addendum 2026-09-15): a busy
       // repository used to cost a session, a claim and a staffing record on every retry.
-      const held = config.repositoryAdmission?.(step.aggregateId ?? "", brief.workspace) ?? null;
+      // An unreadable admission is no answer: the spawner's own repository gate still decides.
+      let held: SpawnStartRefusal | null = null;
+      try { held = config.repositoryAdmission?.(step.aggregateId ?? "", brief.workspace) ?? null; } catch { held = null; }
       if (held !== null) return { kind: step.kind, outcome: held.code, refusal: held, sessionId: null, workItemId };
     }
 
