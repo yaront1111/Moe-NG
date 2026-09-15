@@ -68,9 +68,13 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
     } catch { return deliveryRefusal("REPOSITORY_EXECUTION_UNKNOWN"); }
     // The dead controller's kept proof stands in for the memory it lost, but only for the exact
     // state it proved; read before the claim, because the claim moves the revision.
-    const provedSeat = handle.reservation.phase === "EXECUTING" && config.containment?.proved("SEAT", handle) === true;
+    // With no kept proof, every runtime that ran a process for it being gone proves it too
+    // (owner decision 2026-09-16): a gone broker closed its Job, which killed every process in it.
+    const gone = (): boolean => config.containment?.runtimesGone(handle, config.isProcessAlive) === true;
+    const provedSeat = handle.reservation.phase === "EXECUTING"
+      && (config.containment?.proved("SEAT", handle) === true || gone());
     const provedVerification = handle.reservation.phase === "VERIFYING"
-      && config.containment?.proved("VERIFICATION", handle) === true;
+      && (config.containment?.proved("VERIFICATION", handle) === true || gone());
     const claimed = config.port.claimController(workspace, handle.owner, handle.reservation.revision, config.controller);
     if (!claimed.ok) return claimed;
     if (provedSeat) exits.set(handle.owner.ownershipToken, "CONTAINED");
@@ -130,6 +134,9 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
       const executing = change(handle, { phase: "EXECUTING", sessionId: request.sessionId, pid: null });
       if (!executing.ok) return deliveryRefusal(executing.code);
       handle = executing.handle;
+      // Which runtime runs this seat, kept before it can start (owner decision 2026-09-16). A seat
+      // with no record only means no later controller may infer its closure from its runtime.
+      config.containment?.recordRuntime("SEAT", handle);
       exits.delete(handle.owner.ownershipToken);
       const started = await spawn(request);
       if (!started.ok) {
@@ -179,10 +186,22 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
     release(handle, "YIELDED");
   };
 
+  /**
+   * A BLOCKED hold resumes on its own once every runtime that ran a process for it is gone
+   * (owner decision 2026-09-16): a gone broker closed its Job, which killed every process in it.
+   * Only review states come back; a landing whose Git effect is unknown stays for a human.
+   */
+  const resumeGone = (handle: RepositoryExecutionHandle): void => {
+    if (config.containment?.runtimesGone(handle, config.isProcessAlive) !== true) return;
+    const facts = config.facts(handle.owner.nodeRef, handle);
+    if (idleFacts(facts)) change(handle, { phase: "RESERVED", sessionId: null, pid: null });
+    else if (facts === "SUBMITTED") change(handle, { phase: "VERIFYING" });
+  };
+
   const advanceOne = async (initial: RepositoryExecutionHandle): Promise<void> => {
     let handle = initial;
     const nodeRef = handle.owner.nodeRef;
-    if (handle.reservation.phase === "BLOCKED") return;
+    if (handle.reservation.phase === "BLOCKED") { resumeGone(handle); return; }
     if (handle.reservation.phase === "RESERVED") { await yieldIdle(handle); return; }
     if (handle.reservation.phase === "EXECUTING") {
       const closed = exits.get(handle.owner.ownershipToken);
@@ -192,9 +211,10 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
         if (handle.reservation.pid !== null) {
           try { if (config.isProcessAlive(handle.reservation.pid)) return; } catch { return; }
         }
-        // A dead direct PID or retired credential does not prove descendants
-        // closed. A restarted controller has no local containment witness.
-        block(handle); return;
+        // A dead direct PID or retired credential does not prove descendants closed, and a
+        // restarted controller has no local witness; a gone runtime does (owner decision 2026-09-16).
+        if (config.containment?.runtimesGone(handle, config.isProcessAlive) !== true) { block(handle); return; }
+        exits.set(handle.owner.ownershipToken, "CONTAINED");
       }
       if (!config.retired(nodeRef)) return;
       const facts = config.facts(nodeRef, handle);
@@ -208,6 +228,8 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
     }
     if (handle.reservation.phase === "VERIFYING") {
       if (config.facts(nodeRef, handle) === "SUBMITTED") {
+        // A verifier from an unrecorded runtime would let a later controller infer too much.
+        if (config.containment !== undefined && !config.containment.recordRuntime("VERIFICATION", handle)) return;
         try { await config.verify(nodeRef, handle.reservation.identity.root); }
         catch (error) {
           // A cancelled verifier settled only after its tree kill was confirmed: keep the proof, stay VERIFYING.

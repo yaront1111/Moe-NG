@@ -2,6 +2,8 @@ import type { RepositoryExecutionPhase } from "../repository/repository-executio
 
 /** What the waiter is told about the node that holds its repository, and why it still holds it. */
 export interface RepositoryHolderFacts {
+  /** The holder's work was accepted, so a BLOCKED holder was stopped inside its landing. */
+  readonly accepted: boolean;
   /** A human-approved attempt is available, so the holder will be staffed again on its own. */
   readonly continuation: boolean;
   /** The holder's review is exhausted or stalled and waits for a human decision. */
@@ -13,7 +15,7 @@ export interface RepositoryHolderFacts {
 
 const PHASE_REASONS: Readonly<Partial<Record<RepositoryExecutionPhase, string>>> = Object.freeze({
   AWAITING_LANDING: "its accepted work is landing",
-  BLOCKED: "it is blocked until an operator recovers the repository (moe recover-review)",
+  BLOCKED: "its seat's shutdown is unproven; Moe resumes it once the runtime that ran it has stopped (a restart does that)",
   CRITERION_VERIFYING: "criterion verification is running",
   EXECUTING: "a coding seat is running",
   LANDING: "its accepted work is landing",
@@ -27,10 +29,13 @@ const PHASE_REASONS: Readonly<Partial<Record<RepositoryExecutionPhase, string>>>
  * the operator's own escalation decision; the holder and the action are now named.
  */
 export function describeRepositoryHolder(facts: RepositoryHolderFacts): string {
-  // A replanned holder is released on its own once idle; only an unproven seat shutdown needs the command.
-  const reason = facts.replanned && facts.phase === "BLOCKED"
-    ? "it was replanned while its seat's shutdown was unproven; run moe recover-replan to release it"
-    : PHASE_REASONS[facts.phase]
+  // A BLOCKED holder resumes once its runtime is gone (owner decision 2026-09-16); only a landing
+  // whose Git effect is unknown still needs a person.
+  const reason = facts.phase === "BLOCKED" && facts.accepted
+    ? "its landing was interrupted and its Git effect is unknown; an operator must reconcile it"
+    : facts.replanned && facts.phase === "BLOCKED"
+      ? "it was replanned while its seat's shutdown was unproven; Moe releases it once the runtime that ran it has stopped (a restart does that)"
+      : PHASE_REASONS[facts.phase]
       ?? (facts.replanned ? "it was replanned; Moe releases it as soon as its seat has closed and its working tree is clean (commit or discard leftover changes)"
         : facts.decisionDue && !facts.continuation ? "it waits for your escalation decision in the control room"
           : "it keeps uncommitted work between review attempts");

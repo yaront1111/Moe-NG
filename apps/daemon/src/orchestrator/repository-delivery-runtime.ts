@@ -32,6 +32,8 @@ import { probeProcessAlive } from "./process-runner-lifecycle.js";
 
 interface RepositoryDeliveryRuntimeConfig {
   readonly publisher?: ReleasePublisher;
+  /** The Windows Job broker that owns this runtime's Job; null or absent = unnamed, never inferred from. */
+  readonly runtimeBrokerPid?: number | null;
   readonly compiledWorkspace: string | null;
   readonly fence: AgentSessionFence;
   readonly landingOn: boolean;
@@ -94,14 +96,14 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
   const describeHolder = (nodeRef: string, phase: RepositoryExecutionPhase): string => {
     try {
       const review = readReviewLedger(store, projectId, nodeRef);
-      return describeRepositoryHolder({ continuation: reviewContinuationAvailable(review),
+      return describeRepositoryHolder({ accepted: review.accepted !== undefined, continuation: reviewContinuationAvailable(review),
         decisionDue: !review.unreadable && reviewDecisionRequired(review),
         nodeKey: readReviewSubmissionSource(store, projectId, nodeRef)?.nodeKey ?? nodeRef, phase, replanned: review.replanned });
     } catch { return `held by ${nodeRef}`; }
   };
   const coordinator = createRepositoryDeliveryCoordinator({
     closed: () => closed,
-    containment: createRepositoryContainmentLedger(store),
+    containment: createRepositoryContainmentLedger(store, config.runtimeBrokerPid ?? null),
     // A probe that throws reads as "not clean": any throw inside advance blocks the reservation.
     clean: async (root) => {
       try {

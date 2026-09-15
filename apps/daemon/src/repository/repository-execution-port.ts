@@ -9,7 +9,10 @@ const NEXT: Readonly<Record<RepositoryExecutionPhase, readonly RepositoryExecuti
   RESERVED: ["RESERVED", "EXECUTING", "PUBLISHING", "CRITERION_VERIFYING", "BLOCKED"],
   EXECUTING: ["EXECUTING", "RESERVED", "VERIFYING", "BLOCKED"],
   VERIFYING: ["RESERVED", "AWAITING_LANDING", "BLOCKED"],
-  AWAITING_LANDING: ["LANDING", "BLOCKED"], LANDING: ["AWAITING_LANDING", "BLOCKED"], BLOCKED: [],
+  AWAITING_LANDING: ["LANDING", "BLOCKED"], LANDING: ["AWAITING_LANDING", "BLOCKED"],
+  // Owner decision 2026-09-16: a hold whose every runtime is gone resumes its review state. The
+  // delivery coordinator takes these exits only on that proof; a landing never leaves BLOCKED here.
+  BLOCKED: ["RESERVED", "VERIFYING"],
   PUBLISHING: ["PUBLISHING", "BLOCKED"], CRITERION_VERIFYING: ["CRITERION_VERIFYING", "BLOCKED"],
 };
 function checkOwner(record: RepositoryExecutionRecord | null, owner: RepositoryExecutionOwner, revision: number) {

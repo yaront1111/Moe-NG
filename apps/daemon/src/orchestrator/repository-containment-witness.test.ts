@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -75,5 +76,58 @@ describe("kept repository containment proofs", () => {
 
     expect(broken.record("SEAT", handle())).toBe(false);
     expect(broken.proved("SEAT", handle())).toBe(false);
+  });
+});
+
+/** Which runtime ran a hold's processes, and whether all of them are gone (owner decision 2026-09-16). */
+describe("runtimes that ran a hold's processes", () => {
+  function shared() {
+    const root = mkdtempSync(join(tmpdir(), "moe-containment-runtimes-")); roots.push(root);
+    const store = SqliteEventStore.openForProject(join(root, "store.sqlite"), "project-a"); stores.push(store);
+    return { store, on: (brokerPid: number | null) => createRepositoryContainmentLedger(store, brokerPid) };
+  }
+  const aliveOnly = (...pids: number[]) => (pid: number): boolean => pids.includes(pid);
+
+  it("infers only when every recorded runtime's broker is gone", () => {
+    const { on } = shared();
+    on(501).recordRuntime("SEAT", handle());
+    on(502).recordRuntime("VERIFICATION", handle({ phase: "VERIFYING" }));
+
+    expect(on(503).runtimesGone(handle(), aliveOnly())).toBe(true);
+    expect(on(503).runtimesGone(handle(), aliveOnly(501))).toBe(false);
+    expect(on(503).runtimesGone(handle(), aliveOnly(502))).toBe(false);
+  });
+
+  it("needs the hold's current seat on record", () => {
+    const { on } = shared();
+    on(501).recordRuntime("SEAT", handle({ sessionId: "session-b" }));
+
+    expect(on(502).runtimesGone(handle(), aliveOnly())).toBe(false);
+    expect(on(502).runtimesGone(handle({ sessionId: "session-b" }), aliveOnly())).toBe(true);
+  });
+
+  it("never infers from an unnamed runtime, an empty record, or a probe that throws", () => {
+    const unnamed = shared();
+    unnamed.on(null).recordRuntime("SEAT", handle());
+    expect(unnamed.on(502).runtimesGone(handle(), aliveOnly())).toBe(false);
+
+    expect(shared().on(502).runtimesGone(handle(), aliveOnly())).toBe(false);
+
+    const named = shared();
+    named.on(501).recordRuntime("SEAT", handle());
+    expect(named.on(502).runtimesGone(handle(), () => { throw new Error("probe failed"); })).toBe(false);
+  });
+
+  it("records one run once and lets a later run void an earlier proof", () => {
+    const { store, on } = shared();
+    const kept = on(501);
+    kept.recordRuntime("VERIFICATION", handle({ phase: "VERIFYING" }));
+    kept.recordRuntime("VERIFICATION", handle({ phase: "VERIFYING" }));
+    const runs = store.readEvents(`repository-containment/${createHash("sha256").update("a".repeat(64), "utf8").digest("hex")}`);
+    expect(runs).toHaveLength(1);
+
+    kept.record("VERIFICATION", handle({ phase: "VERIFYING" }));
+    kept.recordRuntime("VERIFICATION", handle({ phase: "VERIFYING", revision: 8 }));
+    expect(kept.proved("VERIFICATION", handle({ phase: "VERIFYING" }))).toBe(false);
   });
 });
