@@ -305,3 +305,31 @@ it("decodes actual daemon-served deployment keys bidirectionally without droppin
   expectSameKeys(recordOf(frame)["goals"], answer.goals);
   expect(answer.goals).toStrictEqual(recordOf(frame)["goals"]);
 }, 35_000);
+
+describe("review facts added 2026-09-15", () => {
+  const attributedFinding = { ...NODE.review.findings[0]!, attributedTo: { criterionIds: ["crit-9"], nodeKey: "node-b" } };
+  const frame = (review: Record<string, unknown>) => ({ ...RUNS, goals: [{ ...GOAL, nodes: [{ ...NODE, review }] }] });
+
+  it("reads stalled rounds and a finding's owning node", () => {
+    const parsed = mapRunsAnswer(200, frame({ ...NODE.review, stalledRounds: [2, 3], findings: [attributedFinding] }));
+    if (parsed.status !== "RUNS") throw new Error(parsed.status);
+    expect(parsed.goals[0]?.nodes[0]?.review.stalledRounds).toEqual([2, 3]);
+    expect(parsed.goals[0]?.nodes[0]?.review.findings[0]?.attributedTo).toEqual({ criterionIds: ["crit-9"], nodeKey: "node-b" });
+  });
+
+  it("still reads an older daemon's exact frame and a null owner", () => {
+    expect(mapRunsAnswer(200, RUNS).status).toBe("RUNS");
+    const parsed = mapRunsAnswer(200, frame({ ...NODE.review, stalledRounds: [],
+      findings: [{ ...NODE.review.findings[0]!, attributedTo: null }] }));
+    if (parsed.status !== "RUNS") throw new Error(parsed.status);
+    expect(parsed.goals[0]?.nodes[0]?.review.findings[0]?.attributedTo).toBeNull();
+  });
+
+  it.each([
+    ["stalled rounds that are not counts", { ...NODE.review, stalledRounds: ["2"] }],
+    ["an owner without criteria", { ...NODE.review, findings: [{ ...attributedFinding, attributedTo: { criterionIds: [], nodeKey: "node-b" } }] }],
+    ["an owner with an extra key", { ...NODE.review, findings: [{ ...attributedFinding, attributedTo: { ...attributedFinding.attributedTo, why: "x" } }] }],
+  ])("refuses %s instead of showing a partial review", (_label, review) => {
+    expect(mapRunsAnswer(200, frame(review)).status).not.toBe("RUNS");
+  });
+});

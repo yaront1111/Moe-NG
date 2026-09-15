@@ -351,7 +351,7 @@ describe("createRunsReadPort", () => {
       ["node-b", "READY", null, "REJECT_IMPLEMENTATION"],
     ]);
     // Only the latest round's findings travel, in the reviewer's words.
-    expect(view.goals[0]?.nodes[1]?.review.findings).toEqual([{
+    expect(view.goals[0]?.nodes[1]?.review.findings).toEqual([{ attributedTo: null,
       detail: "Tests fail on empty input.", round: 1, ruleId: "verifier-test-failed", severity: "MAJOR", subject: "NODE node-b",
     }]);
     const exhausted: NodeReviewFacts = { ...quiet, lineage: { unsuccessfulRounds: 3 }, rounds: [round("REJECT_PLAN"), round("REJECT_PLAN"), round("ESCALATE")], version: 3 };

@@ -19,11 +19,21 @@ export function EscalationFindings({ facts }: { readonly facts: EscalationFacts 
       ) : (
         <>
           <p className="cr2-needs-note">Review summary: up to 8 findings.</p>
+          {(facts.stalledRounds?.length ?? 0) === 0 ? null : (
+            <p className="cr2-needs-note" data-testid="cr.needsyou.stall" role="note">
+              {`Rounds ${facts.stalledRounds!.join(", ")} reported the same findings on an unchanged workspace.`}
+            </p>
+          )}
           <ul>
             {facts.findings.map((finding, index) => (
               <li key={index}>
                 <p><strong>{`${finding.severity} · ${finding.ruleId}`}</strong></p>
                 <p className="cr2-needs-note">{finding.subject}</p>
+                {finding.attributedTo === undefined || finding.attributedTo === null ? null : (
+                  <p className="cr2-needs-note" data-testid="cr.needsyou.finding.owner">
+                    {`Owned by node ${finding.attributedTo.nodeKey} (criteria ${finding.attributedTo.criterionIds.join(", ")}); it does not count against this node.`}
+                  </p>
+                )}
                 <p className="cr2-needs-detail" style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere" }}>{finding.detail}</p>
               </li>
             ))}

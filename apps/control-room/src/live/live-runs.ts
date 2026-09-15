@@ -24,6 +24,8 @@ export interface RunNodeClaimView {
   readonly status: "OPEN" | "RELEASED";
 }
 export interface RunNodeFindingView {
+  /** The node of the same plan that owns this finding (it does not charge this node); absent from older daemons. */
+  readonly attributedTo?: { readonly criterionIds: readonly string[]; readonly nodeKey: string } | null;
   readonly detail: string;
   readonly round: number;
   readonly ruleId: string;
@@ -43,6 +45,8 @@ export interface RunNodeReviewView {
   readonly findings: readonly RunNodeFindingView[];
   readonly latestRoute: string | null;
   readonly rounds: number;
+  /** Rounds that repeated the same own findings on an unchanged review input; absent from older daemons. */
+  readonly stalledRounds?: readonly number[];
   readonly unreadable: boolean;
   readonly unsuccessfulRounds: number;
   readonly version: number;
@@ -196,11 +200,27 @@ function claimOf(value: unknown): RunNodeClaimView | null {
   return Object.freeze({ active: record.active, claimedBy: record.claimedBy, expiresAt: record.expiresAt, status: record.status });
 }
 
+const FINDING_KEYS = ["detail", "round", "ruleId", "severity", "subject"] as const;
+
+/** `undefined` is a malformed attribution: the frame is refused rather than shown without its owner. */
+function attributionOf(value: unknown): RunNodeFindingView["attributedTo"] | undefined {
+  if (value === null) return null;
+  const record = exactDataRecord(value, ["criterionIds", "nodeKey"]);
+  const criterionIds = record === null ? null : stringList(record.criterionIds);
+  if (record === null || !nonEmptyString(record.nodeKey) || criterionIds === null || criterionIds.length === 0) return undefined;
+  return Object.freeze({ criterionIds, nodeKey: record.nodeKey });
+}
+
 function findingOf(value: unknown): RunNodeFindingView | null {
-  const record = exactDataRecord(value, ["detail", "round", "ruleId", "severity", "subject"]);
+  // Daemons from 2026-09-15 add `attributedTo`; an older daemon's exact shape still reads.
+  const attributed = exactDataRecord(value, [...FINDING_KEYS, "attributedTo"]);
+  const record = attributed ?? exactDataRecord(value, FINDING_KEYS);
   if (record === null || typeof record.detail !== "string" || !count(record.round) || !nonEmptyString(record.ruleId)
     || !nonEmptyString(record.severity) || typeof record.subject !== "string") return null;
-  return Object.freeze({ detail: record.detail, round: record.round, ruleId: record.ruleId, severity: record.severity, subject: record.subject });
+  const attributedTo = attributed === null ? undefined : attributionOf(attributed.attributedTo);
+  if (attributed !== null && attributedTo === undefined) return null;
+  return Object.freeze({ ...(attributedTo === undefined ? {} : { attributedTo }),
+    detail: record.detail, round: record.round, ruleId: record.ruleId, severity: record.severity, subject: record.subject });
 }
 
 function receiptOf(value: unknown): RunNodeReceiptView | null {
@@ -221,15 +241,25 @@ function landingOf(value: unknown): RunNodeLandingView | null {
   return Object.freeze({ branch: record.branch, code: record.code, files, outcome: record.outcome, sha: record.sha });
 }
 
+const REVIEW_KEYS = ["escalated", "findings", "latestRoute", "rounds", "unreadable", "unsuccessfulRounds", "version"] as const;
+
+function countList(value: unknown): readonly number[] | undefined {
+  return Array.isArray(value) && value.every((entry) => count(entry)) ? Object.freeze([...value as number[]]) : undefined;
+}
+
 function reviewOf(value: unknown): RunNodeReviewView | null {
-  const record = exactDataRecord(value, ["escalated", "findings", "latestRoute", "rounds", "unreadable", "unsuccessfulRounds", "version"]);
+  // Daemons from 2026-09-15 add `stalledRounds`; an older daemon's exact shape still reads.
+  const staller = exactDataRecord(value, [...REVIEW_KEYS, "stalledRounds"]);
+  const record = staller ?? exactDataRecord(value, REVIEW_KEYS);
   if (record === null || typeof record.escalated !== "boolean" || !nullableString(record.latestRoute)
     || !count(record.rounds) || typeof record.unreadable !== "boolean" || !count(record.unsuccessfulRounds)
     || !count(record.version)) return null;
   const findings = listOf(record.findings, findingOf);
-  if (findings === null) return null;
+  const stalledRounds = staller === null ? undefined : countList(staller.stalledRounds);
+  if (findings === null || (staller !== null && stalledRounds === undefined)) return null;
   return Object.freeze({
     escalated: record.escalated, findings, latestRoute: record.latestRoute, rounds: record.rounds,
+    ...(stalledRounds === undefined ? {} : { stalledRounds }),
     unreadable: record.unreadable, unsuccessfulRounds: record.unsuccessfulRounds, version: record.version,
   });
 }

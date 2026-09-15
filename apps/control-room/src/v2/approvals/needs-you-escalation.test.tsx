@@ -155,3 +155,41 @@ it("does not reuse an earlier successful decision for a later review", () => {
   expect(button.textContent).toBe("Allow one more attempt"); expect(button.disabled).toBe(false);
   expect(screen.queryByText("Allowed. One more review attempt is approved for this node.")).toBeNull();
 });
+
+function stalledNode(findings: readonly RunNodeFindingView[] = [FINDING]): RunNodeView {
+  const base = node(5, "execution-own", false, findings);
+  return { ...base, review: { ...base.review, stalledRounds: [3, 4] } };
+}
+const guidedOffer = () => ({ ...surface(), offers: [{ ...offer(), inputSchemaVersion: "moe-review-escalation-guidance/1" }] });
+
+it("says a stalled review cannot change without new instructions and makes replan the primary answer", async () => {
+  // UnAI 2026-09-15: "Allow one more attempt" was the primary button while rounds 5, 7, 9 and 11
+  // repeated one finding on an unchanged workspace; each click bought one more identical round.
+  const decide = vi.fn(); const selected = escalationItems(guidedOffer(), runs([stalledNode()]), CATALOG);
+  expect(selected[0]?.detail).toContain("Rounds 3, 4 repeated the same findings on an unchanged workspace");
+  expect(selected[0]?.escalation?.stalledRounds).toEqual([3, 4]);
+  render(<NeedsYou data={{ countLabel: "1", items: selected, note: null }} onDecide={decide} onOpenBoard={vi.fn()} />);
+  const allow = screen.getByRole("button", { name: "Allow one more attempt on api" }) as HTMLButtonElement;
+  expect(allow.disabled).toBe(true);
+  expect(allow.dataset["variant"]).toBe("secondary");
+  expect((screen.getByRole("button", { name: "Replan api from its findings" }) as HTMLButtonElement).dataset["variant"]).toBe("primary");
+  expect(screen.getByTestId("cr.needsyou.stall").textContent).toContain("Rounds 3, 4");
+  fireEvent.change(screen.getByRole("textbox", { name: "Answers or instructions for the next attempt (optional)" }),
+    { target: { value: "Use the approved server-session design." } });
+  await userEvent.click(screen.getByRole("button", { name: "Retry with guidance on api" }));
+  expect(decide).toHaveBeenLastCalledWith(selected[0], undefined, "Use the approved server-session design.");
+});
+
+it("keeps the plain retry for a stalled review that cannot take instructions", () => {
+  const selected = escalationItems(surface(), runs([stalledNode()]), CATALOG);
+  render(<NeedsYou data={{ countLabel: "1", items: selected, note: null }} onDecide={vi.fn()} onOpenBoard={vi.fn()} />);
+  expect((screen.getByRole("button", { name: "Allow one more attempt on api" }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+it("names the owning node of an attributed finding", () => {
+  const owned: RunNodeFindingView = { ...FINDING, attributedTo: { criterionIds: ["CRT-REG-01-A"], nodeKey: "registry" } };
+  const selected = items(runs([node(5, "execution-own", false, [owned])]));
+  render(<NeedsYou data={{ countLabel: "1", items: selected, note: null }} onDecide={vi.fn()} onOpenBoard={vi.fn()} />);
+  expect(screen.getByTestId("cr.needsyou.finding.owner").textContent)
+    .toContain("Owned by node registry (criteria CRT-REG-01-A); it does not count against this node.");
+});

@@ -11,6 +11,8 @@ export interface EscalationFacts {
   readonly findingsState: "CURRENT" | "MISSING" | "STALE" | "UNREADABLE";
   readonly latestRoute: string | null;
   readonly nodeKey: string;
+  /** Rounds that repeated the same findings on an unchanged workspace; empty or absent when not stalled. */
+  readonly stalledRounds?: readonly number[];
   readonly unsuccessfulRounds: number | null;
 }
 
@@ -35,12 +37,17 @@ export function escalationItems(
     const findings = findingsState === "CURRENT" ? Object.freeze([...node!.review.findings]) : Object.freeze([]);
     const rounds = findingsState === "CURRENT" ? node!.review.unsuccessfulRounds : null;
     const route = findingsState === "CURRENT" ? node!.review.latestRoute : null;
+    const stalled = findingsState === "CURRENT" ? Object.freeze([...(node!.review.stalledRounds ?? [])]) : Object.freeze([]);
     items.push(Object.freeze({
       actionLabel: "Open the goal",
       detail: `${node?.objective === undefined || node.objective === "" ? "This work" : node.objective} failed review ${rounds === null ? "three or more" : String(rounds)} times`
         + (route === null ? "" : ` (last: ${ROUTE_WORDS[route] ?? route})`)
-        + ". Allow one more attempt, or replan the work into a successor goal that carries these findings.",
-      escalation: Object.freeze({ affordance: offer, findings, findingsState, latestRoute: route, nodeKey, unsuccessfulRounds: rounds }),
+        + (stalled.length > 0
+          ? `. Rounds ${stalled.join(", ")} repeated the same findings on an unchanged workspace, so another attempt without new`
+            + " instructions would repeat them. Replan the work into a successor goal, or write guidance for one more attempt."
+          : ". Allow one more attempt, or replan the work into a successor goal that carries these findings."),
+      escalation: Object.freeze({ affordance: offer, findings, findingsState, latestRoute: route, nodeKey,
+        stalledRounds: stalled, unsuccessfulRounds: rounds }),
       goalId: goal?.goalId ?? "",
       headline: "A node's review is exhausted",
       kind: "ESCALATION",

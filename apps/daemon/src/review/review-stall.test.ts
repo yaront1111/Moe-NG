@@ -133,6 +133,7 @@ describe("a stalled compiled node", () => {
     if (!("goals" in view)) throw new Error("runs read refused");
     const node = view.goals.flatMap((goal) => goal.nodes).find((row) => row.nodeRef === w.nodeRef);
     expect(node?.status).toBe("ESCALATION_REQUIRED");
+    expect(node?.review.stalledRounds).toEqual([1, 2]);
   });
 
   it("needs new instructions before one more attempt", async () => {

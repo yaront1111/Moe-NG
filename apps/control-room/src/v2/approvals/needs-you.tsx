@@ -164,6 +164,10 @@ function DecisionCard({
   const guidanceSupported = replan !== null && supportsEscalationGuidance(replan.affordance);
   const guided = replan !== null && guidance.length > 0;
   const guidanceBlocked = guided && (!guidanceSupported || !validEscalationGuidance(guidance));
+  // A stalled review repeats unless something changes: where the node takes instructions, the
+  // bare retry waits for them and replanning becomes the primary answer.
+  const stalled = (replan?.stalledRounds?.length ?? 0) > 0;
+  const allowNeedsGuidance = stalled && guidanceSupported && !guided;
   return (
     <li className="cr2-needs-card" data-kind={item.kind} data-testid={`cr.needsyou.item.${slug}`}>
       <div className="cr2-needs-main">
@@ -176,6 +180,11 @@ function DecisionCard({
         {replan === null || onDecide === undefined || replanPending ? null : <EscalationGuidanceInput
           disabled={result?.busy === true || done || reviewUnavailable} onChange={setGuidance}
           supported={guidanceSupported} value={guidance} />}
+        {!allowNeedsGuidance || replanPending || done ? null : (
+          <p className="cr2-needs-note" data-testid={`cr.needsyou.stall-guidance.${key}`}>
+            One more attempt needs new instructions, because nothing changed since the last rounds. Write guidance above, or replan.
+          </p>
+        )}
         {item.incident === undefined ? null : (
           <IncidentCard
             busy={result?.busy === true}
@@ -199,15 +208,16 @@ function DecisionCard({
         {decision === null || onDecide === undefined ? null : (
           <ActionButton
             ariaLabel={guided ? `Retry with guidance on ${replan!.nodeKey}` : decision.ariaLabel}
-            disabled={replanPending || result?.busy === true || done || reviewUnavailable || guidanceBlocked}
+            disabled={replanPending || result?.busy === true || done || reviewUnavailable || guidanceBlocked || allowNeedsGuidance}
             onClick={(): void => {
-              if (guidanceBlocked || replanPending) return;
+              if (guidanceBlocked || replanPending || allowNeedsGuidance) return;
               if (decision.armLabel !== null && !armed) { setArmed(true); return; }
               setArmed(false);
               if (guided) onDecide(item, undefined, guidance);
               else onDecide(item);
             }}
             testId={decision.testId}
+            variant={stalled ? "secondary" : "primary"}
           >
             {done ? decision.doneLabel : guided ? "Retry with guidance" : armed && decision.armLabel !== null ? decision.armLabel : decision.buttonLabel}
           </ActionButton>
@@ -227,7 +237,7 @@ function DecisionCard({
             disabled={result?.busy === true || done || (reviewUnavailable && !replanPending)}
             onClick={(): void => { setArmed(false); onDecide(item, "REPLAN"); }}
             testId={`cr.needsyou.replan.${key}`}
-            variant="secondary"
+            variant={stalled ? "primary" : "secondary"}
           >
             {replanCommitted ? "Retry creating successor" : replanPending ? "Resume replacement creation" : "Replan from the findings"}
           </ActionButton>

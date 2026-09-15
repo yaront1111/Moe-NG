@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from "vitest";
 
-import { closeStores } from "../bootstrap/bootstrap-test-fixtures.js";
+import { closeStores, PROJECT_ID } from "../bootstrap/bootstrap-test-fixtures.js";
+import { createRunsReadPort } from "../http/runs-read.js";
 import { attributed, attributionPlan as plan, REGISTRY_CHECK } from "./review-attribution-test-fixtures.js";
 import type { ReviewOutcome } from "./review-ledger.js";
 import { escalationPayload } from "./review-test-fixtures.js";
@@ -94,4 +95,16 @@ describe("attribution against the approved plan", () => {
 
     expect(codeOf(outcome)).toBe("DAEMON_INGRESS:REVIEW_PAYLOAD_INVALID");
   });
+});
+
+it("shows the operator which node owns an attributed finding", () => {
+  const world = plan();
+  expect(world.round([attributed("worker", ["crit-worker"])], "cmd-shown").ok).toBe(true);
+
+  const view = createRunsReadPort({ projectId: PROJECT_ID, store: world.store }).readRuns({});
+  if (!("goals" in view)) throw new Error("runs read refused");
+  const reporter = view.goals.flatMap((goal) => goal.nodes).find((node) => node.nodeRef === world.api);
+
+  expect(reporter?.review.findings[0]?.attributedTo).toEqual({ criterionIds: ["crit-worker"], nodeKey: "worker" });
+  expect(reporter?.review.stalledRounds).toEqual([]);
 });

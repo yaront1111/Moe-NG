@@ -39,6 +39,8 @@ export interface RunNodeClaim {
   readonly status: "OPEN" | "RELEASED";
 }
 export interface RunNodeFinding {
+  /** The node of the same plan this finding names as owner (it does not charge this node), or null. */
+  readonly attributedTo: { readonly criterionIds: readonly string[]; readonly nodeKey: string } | null;
   readonly detail: string;
   readonly round: number;
   readonly ruleId: string;
@@ -60,6 +62,8 @@ export interface RunNodeReview {
   /** The latest round's routing route (ACCEPT, REJECT_IMPLEMENTATION, ...), or null. */
   readonly latestRoute: string | null;
   readonly rounds: number;
+  /** Consecutive rounds that repeated the same own findings on an unchanged review input, oldest first. */
+  readonly stalledRounds: readonly number[];
   readonly unreadable: boolean;
   readonly unsuccessfulRounds: number;
   /** The review aggregate version, the expectedVersion any review command must carry. */

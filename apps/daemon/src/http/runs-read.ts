@@ -125,6 +125,8 @@ function reviewOf(facts: NodeReviewFacts): RunNodeReview {
     .filter((record) => record.round === latest.round)
     .slice(0, MAX_FINDINGS)
     .map((record) => Object.freeze({
+      attributedTo: record.finding.attributedTo === undefined ? null : Object.freeze({
+        criterionIds: Object.freeze([...record.finding.attributedTo.criterionIds]), nodeKey: record.finding.attributedTo.nodeKey }),
       detail: record.finding.detail, round: record.round, ruleId: record.finding.ruleId,
       severity: record.finding.severity, subject: `${record.finding.subject.kind} ${record.finding.subject.locator}`,
     }));
@@ -133,6 +135,7 @@ function reviewOf(facts: NodeReviewFacts): RunNodeReview {
     findings: Object.freeze(findings),
     latestRoute: latest === undefined ? null : latest.routing.route,
     rounds: facts.rounds.length,
+    stalledRounds: reviewStall(facts.rounds),
     unreadable: facts.unreadable,
     unsuccessfulRounds: facts.lineage.unsuccessfulRounds,
     version: facts.version,
@@ -262,7 +265,7 @@ export function createRunsReadPort(options: RunsReadOptions): RunsReadPort {
           review,
           sharedKey: isShared,
           status: statusOf(review, facts.accepted !== undefined, active, isShared, facts.replanned,
-            facts.continuation !== undefined, reviewStall(facts.rounds).length > 0),
+            facts.continuation !== undefined, review.stalledRounds.length > 0),
         });
       })),
       publish: readRunGoalPublication(store, projectId, publishes.get(goal.goalId)),

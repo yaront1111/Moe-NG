@@ -20,6 +20,8 @@ const CODE_WORDS: Readonly<Record<string, string>> = Object.freeze({
   LISTENER_RUNS_UNAVAILABLE: "The daemon is not serving the runs read",
   READ_REFUSED: "The daemon refused the read",
   REVIEW_ESCALATION_NOT_REACHED: "This node has not used every review attempt yet",
+  REVIEW_FINDING_ATTRIBUTION_INVALID: "The finding names a node or criteria outside this node's plan",
+  REVIEW_STALL_GUIDANCE_REQUIRED: "Nothing changed since the last attempts: add guidance for one more attempt, or replan",
   RUNS_READ_FAILED: "The nodes could not be read",
   RUNS_READ_GOAL_UNKNOWN: "The daemon does not know this goal",
   TRANSPORT_REQUEST_FAILED: "The daemon did not answer",
