@@ -170,6 +170,31 @@ it("spends the bound only on what it decided, never on an answer the PRD already
   expect(records.spentOn(world.nodeRef)).toBe(0);
 }, 180_000);
 
+it("stops deciding once a later round accepted, however many failed before it", async () => {
+  // Measured on UnAI 2026-09-16: round 11 routed ACCEPT while the lineage still carried 5
+  // unsuccessful rounds. The round counter never goes down, so `reviewDecisionRequired` kept
+  // answering "due" and governance re-decided the node on EVERY pass — a governor call spent
+  // each time, and every commit refused REVIEW_ESCALATION_NOT_REACHED by the daemon.
+  const world = await exhausted();
+  expect(decideGovernanceEscalation(depsFor(world, answers), world.nodeRef).kind).toBe("ALLOWED");
+
+  // The funded attempt passes: a clean round routes ACCEPT, and the failed count stays put.
+  expect((await world.wrapper.runOnce()).spawned).toMatchObject([{ outcome: "SPAWNED" }]);
+  const version = readReviewLedger(world.store, PROJECT_ID, world.nodeRef).version;
+  expect(await world.dispatch(world.requests.at(-1)!, "review.submit", {
+    findings: [], packageItems: [], round: version + 1, subjectRef: world.nodeRef,
+  }, version)).toMatchObject({ ok: true });
+  await world.finishSeat();
+
+  let asked = 0;
+  const counting: GovernanceAdvisor = (brief) => { asked += 1; return answers(brief); };
+
+  expect(decideGovernanceEscalation(depsFor(world, counting), world.nodeRef))
+    .toEqual({ kind: "NOT_DUE" });
+  // Not merely the right answer: it must cost nothing to reach, or the waste survives the fix.
+  expect(asked).toBe(0);
+}, 180_000);
+
 it("leaves an already funded attempt alone", async () => {
   const world = await exhausted();
   expect(decideGovernanceEscalation(depsFor(world, answers), world.nodeRef).kind).toBe("ALLOWED");

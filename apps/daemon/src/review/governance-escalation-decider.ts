@@ -166,6 +166,14 @@ export function decideGovernanceEscalation(
   }
   if (reviewContinuationAvailable(ledger)) return { kind: "ALREADY_FUNDED" };
   if (!reviewDecisionRequired(ledger)) return { kind: "NOT_DUE" };
+  // The daemon ALSO refuses an escalation whose latest round accepted, or which has no round at
+  // all (review-acceptance.ts). Mirroring that here is not defensive duplication: the round
+  // counter never goes down, so a node that failed its way past the limit and then passed still
+  // reads as "due" for ever. Measured on UnAI 2026-09-16 — round 11 ACCEPT with 5 unsuccessful
+  // rounds — governance re-decided it on every pass, spending a governor call each time and
+  // having every commit refused REVIEW_ESCALATION_NOT_REACHED.
+  const latest = ledger.rounds.at(-1);
+  if (latest === undefined || latest.routing.route === "ACCEPT") return { kind: "NOT_DUE" };
 
   const records = createGovernanceDecisionLedger(deps.store, deps.projectId);
   const version = ledger.version;
@@ -179,10 +187,15 @@ export function decideGovernanceEscalation(
   }
 
   const questions = openQuestionsOf(ledger);
+  // Nothing of this node's own is open. Governance has no question to answer, and replanning a
+  // node it cannot even name a finding for would retire work on no evidence — a far worse
+  // outcome than leaving it to the human. Not the same case as an advisor that had questions
+  // and could not answer them, which replans below.
+  if (questions.length === 0) return { kind: "NOT_DUE" };
   let answer: GovernanceAnswer | null = null;
   // An advisor that throws is an advisor that did not answer. It must not leave the node parked.
   try {
-    answer = questions.length === 0 ? null : deps.advisor({ questions, reviewVersion: version, subjectRef });
+    answer = deps.advisor({ questions, reviewVersion: version, subjectRef });
   } catch { answer = null; }
   if (answer === null || answer.guidance.trim().length === 0) {
     const replanned = decide(deps, subjectRef, version, "REPLAN", null);
