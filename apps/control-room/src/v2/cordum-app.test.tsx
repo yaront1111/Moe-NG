@@ -555,7 +555,9 @@ describe("CordumApp feed projection roster", () => {
 
       render(<CordumApp liveSetup={attempts} search="" />);
 
-      await waitFor(() => { expect(connection()).toBe(expected); });
+      // A loaded windows-latest runner needs more than waitFor default before the first
+      // projection lands; the default read OFFLINE and failed the delivered-refusal arm (2026-09-16).
+      await waitFor(() => { expect(connection()).toBe(expected); }, { timeout: 15_000 });
     },
   );
 });

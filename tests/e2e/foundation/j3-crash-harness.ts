@@ -106,8 +106,11 @@ export function withFreshId(command: SeedCommand, commandId: string): SeedComman
  * Bounded by an ATTEMPT COUNT rather than a deadline: this module is scanned for wall-clock
  * needles, and a count is the honest bound anyway — the arm wants "the agent is up", not
  * "some number of milliseconds elapsed".
+ *
+ * The count was raised 2026-09-16: three arms failed "the agent never wrote its pid file" on the
+ * windows-latest gate, where a real seat under a loaded runner needs more attempts than 400.
  */
-export async function waitForAgentPid(scratch: J1Scratch, attempts = 400): Promise<number> {
+export async function waitForAgentPid(scratch: J1Scratch, attempts = 1200): Promise<number> {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     if (existsSync(scratch.agentPidFile)) {
       const raw = readFileSync(scratch.agentPidFile, "utf8").trim();

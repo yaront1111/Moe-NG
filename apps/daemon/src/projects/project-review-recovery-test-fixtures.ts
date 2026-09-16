@@ -90,6 +90,8 @@ const result=await boundary.completed;process.exit(result.truthClass==='PROVEN'?
     windowsHide: true, stdio: ["ignore", "pipe", "pipe"],
   });
   let output = ""; let error = ""; let closed = false;
+  let runtime: { readonly controllerPid: number; readonly daemonPid: number; readonly brokerPid: number; readonly port: number } | null = null;
+  const dead = (pid: number): boolean => { try { process.kill(pid, 0); return false; } catch { return true; } };
   child.stdout.on("data", (chunk: Buffer) => { output += chunk.toString(); });
   child.stderr.on("data", (chunk: Buffer) => { error += chunk.toString(); });
   child.on("close", () => { closed = true; });
@@ -98,6 +100,15 @@ const result=await boundary.completed;process.exit(result.truthClass==='PROVEN'?
     const until = Date.now() + 8_000;
     while (!closed && Date.now() < until) await delay(25);
     if (!closed) throw new Error("PRIVATE_REVIEW_CLI_NOT_CLOSED");
+    // Its Job closes with the broker's last handle, which kills the rest asynchronously.
+    if (runtime !== null) {
+      const gone = Date.now() + 30_000;
+      while (Date.now() < gone) {
+        if ([runtime.controllerPid, runtime.daemonPid, runtime.brokerPid].every(dead)
+          && !(await privateListenerOpen(runtime.port))) break;
+        await delay(50);
+      }
+    }
     if (!resolve(fixtureRoot).startsWith(resolve(tmpdir(), "moe-review-recovery-processes-"))) throw new Error("PRIVATE_PROCESS_ROOT_INVALID");
     rmSync(fixtureRoot, { recursive: true, force: true });
   };
@@ -106,6 +117,8 @@ const result=await boundary.completed;process.exit(result.truthClass==='PROVEN'?
     while (!output.includes("\n") && !closed && Date.now() < until) await delay(25);
     if (!output.includes("\n")) throw new Error(`PRIVATE_REVIEW_RUNTIME_NOT_READY: ${error}`);
     const identity = JSON.parse(output.trim()) as { controllerPid: number; daemonPid: number; brokerPid: number; port: number; workerPid: number; startedAt: string };
+    runtime = { brokerPid: identity.brokerPid, controllerPid: identity.controllerPid,
+      daemonPid: identity.daemonPid, port: identity.port };
     return { ...identity, cliPid: child.pid!, close, closed: () => closed };
   } catch (cause) { await close(); throw cause; }
 }

@@ -95,17 +95,24 @@ export async function capturePreviewJourneys(
     try {
       for (const journey of wanted) {
         const file = `${journey.journeyRef}.png`;
-        const page = await context.newPage();
-        try {
-          await page.goto(`${input.origin}${journey.path}`, {
-            timeout: navigationTimeout, waitUntil: "load",
-          });
-          await page.screenshot({ path: join(absoluteDirectory, file), type: "png" });
-          written.push({ journeyRef: journey.journeyRef, path: `${relativeDirectory}/${file}` });
-        } catch {
-          // One journey that would not paint must not cost the operator the others.
-        } finally {
-          await page.close().catch(() => undefined);
+        // Two attempts: a page that failed once on a loaded runner cost a real journey its
+        // screenshot on the windows gate (2026-09-16). A journey that cannot paint is still dropped.
+        for (let attempt = 0; attempt < 2; attempt += 1) {
+          const page = await context.newPage();
+          let painted = false;
+          try {
+            await page.goto(`${input.origin}${journey.path}`, {
+              timeout: navigationTimeout, waitUntil: "load",
+            });
+            await page.screenshot({ path: join(absoluteDirectory, file), type: "png" });
+            written.push({ journeyRef: journey.journeyRef, path: `${relativeDirectory}/${file}` });
+            painted = true;
+          } catch {
+            // One journey that would not paint must not cost the operator the others.
+          } finally {
+            await page.close().catch(() => undefined);
+          }
+          if (painted) break;
         }
       }
     } finally {
