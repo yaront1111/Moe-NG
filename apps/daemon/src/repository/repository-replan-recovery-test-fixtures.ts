@@ -15,10 +15,14 @@ import { createAgentSessionFence } from "../orchestrator/agent-session-fence.js"
 import { recordSeatExit } from "../orchestrator/provider-pause-ledger.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { runReviewCommand } from "../review/review-services.js";
+import { GOVERNANCE_PRINCIPAL_ID } from "../review/governance-policy-settings.js";
 import { createReviewResumeWorld } from "./repository-review-resume-test-fixtures.js";
 import type { ReviewResumeWorldOptions } from "./repository-review-resume-test-fixtures.js";
 
-export async function createReplanRecoveryWorld(options: ReviewResumeWorldOptions = {}) {
+export async function createReplanRecoveryWorld(
+  options: ReviewResumeWorldOptions = {},
+  replanAs: "human" | "governance" = "human",
+) {
   const w = await createReviewResumeWorld(options);
   const sessionId = w.blocked.reservation.sessionId!;
   const workItemId = `node.deliver@${w.owner.nodeRef}`;
@@ -62,7 +66,20 @@ export async function createReplanRecoveryWorld(options: ReviewResumeWorldOption
       credential: human.credential, protocolVersion: WIRE_PROTOCOL_VERSION,
     }, "HTTP_LISTENER");
   };
-  expect(await replan()).toMatchObject({ ok: true });
+  /**
+   * The same REPLAN, committed by the reserved governance seat instead of the human — the shape
+   * governance actually produced on UnAI 2026-09-16, straight through `runReviewCommand` as
+   * `governance-escalation-decider.ts` did. It retires the node identically, and the release
+   * gate then refuses it for ever, which is what left two checkouts unfreeable by any command.
+   */
+  const replanAsGovernance = () => runReviewCommand(w.store, bytes({
+    commandId: randomUUID(), correlationId: "replan-recovery-fixture", decidedAt: stamp,
+    expectedVersion: 3, kind: "escalation.decide",
+    payload: { decision: "REPLAN", escalationRef: `gov-escalation-${w.owner.nodeRef}-v3`, subjectRef: w.owner.nodeRef },
+    principalId: GOVERNANCE_PRINCIPAL_ID, projectId: PROJECT_ID, schemaVersion: w.request.schemaVersion,
+  }));
+  if (replanAs === "governance") expect(replanAsGovernance()).toMatchObject({ ok: true });
+  else expect(await replan()).toMatchObject({ ok: true });
   const closeAuthority = () => {
     expect(runWorkClaimCommand(w.store, bytes(command("work.release", { workItemId }, 1, sessionId, WORK_CLAIM_SCHEMA_VERSION))).ok).toBe(true);
     expect(runSessionCommand(w.store, bytes(command("session.close", { sessionId }, 1, "operator", SESSION_SCHEMA_VERSION))).ok).toBe(true);

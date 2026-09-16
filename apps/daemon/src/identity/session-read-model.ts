@@ -1,6 +1,6 @@
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonValue } from "@moe/contracts";
-import type { SqliteEventStore } from "@moe/store";
+import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
 import {
   SESSION_COMMAND_KINDS,
@@ -105,6 +105,50 @@ function parseOpened(value: JsonValue): OpenedFacts | undefined {
   };
 }
 
+interface FoldedSessionLedger {
+  readonly ledger: SessionLedger;
+  readonly marker: string;
+}
+
+/** The folded ledger per handle and project, kept only while the decision log has not moved. */
+const folds = new WeakMap<SqliteEventStore, Map<string, FoldedSessionLedger>>();
+
+/**
+ * The session ledger, folded at most once per change to the decision log.
+ *
+ * WHY THIS EXISTS. `authenticate()` runs on EVERY request this daemon and its wrapper serve, and
+ * each call re-folded the whole decision log. The PAGING was already memoised
+ * (`decision-ledger-memo.ts`); the FOLD was not, and it is the expensive half once a project has
+ * months of decisions. Measured on UnAI 2026-09-16: an unauthenticated `/mcp` request — one that
+ * does nothing but fail a credential check — took 11 to 40 SECONDS, while the same process
+ * answered an unauthenticated `/` in 7 ms, and the daemon held ~46% of a core for as long as a
+ * control-room tab stayed open. `session-authenticator.ts` predicted this and named this exact
+ * function as the one to wrap "when the log grows". It has grown.
+ *
+ * WHAT THE KEY MUST BE, and the trap to avoid. A stale fold admits a credential that was
+ * revoked or a session that was closed, so the key has to move on EVERY committed decision.
+ * `readCommandDecisionCacheVersion` looks like that key and is not: `decisionsOf` stays correct
+ * while using it only as a coarse external-change signal, because it ALSO walks for new pages on
+ * every call. Keyed on that token alone, this cache served a fold taken before a `session.renew`
+ * and broke 22 identity tests — read-after-write, in authentication code.
+ *
+ * The decision log is append-only, so its LENGTH and its LAST POSITION identify its contents
+ * exactly, and both come free from the walk that has to happen anyway. Appending anything moves
+ * the marker; nothing can change earlier entries without the store rejecting it.
+ */
+export function readSessionLedger(store: SqliteEventStore, projectId: string): SessionLedger {
+  // The walk is already memoised per handle; the FOLD below is what this avoids repeating.
+  const decisions = decisionsOf(store, LEDGER_PAGE_SIZE);
+  const marker = `${String(decisions.length)}:${String(decisions.at(-1)?.decisionPosition ?? 0n)}`;
+  const byProject = folds.get(store) ?? new Map<string, FoldedSessionLedger>();
+  const held = byProject.get(projectId);
+  if (held !== undefined && held.marker === marker) return held.ledger;
+  const ledger = foldSessionLedger(decisions, projectId);
+  byProject.set(projectId, { ledger, marker });
+  folds.set(store, byProject);
+  return ledger;
+}
+
 /**
  * Folds every committed session decision for this project into per-session state.
  *
@@ -114,11 +158,13 @@ function parseOpened(value: JsonValue): OpenedFacts | undefined {
  * unreadable rather than being dropped — the handlers refuse those before commit, so their
  * presence in the log means the bytes cannot be trusted.
  */
-export function readSessionLedger(store: SqliteEventStore, projectId: string): SessionLedger {
+function foldSessionLedger(
+  decisions: readonly CommandDecisionRecord[], projectId: string,
+): SessionLedger {
   const sessions = new Map<string, SessionRecord>();
   let decisionCount = 0;
   let unreadable = false;
-  for (const decision of decisionsOf(store, LEDGER_PAGE_SIZE)) {
+  for (const decision of decisions) {
     if (decision.key.projectId !== projectId) continue;
     if (!KIND_SET.has(decision.commandKind)) continue;
     decisionCount += 1;

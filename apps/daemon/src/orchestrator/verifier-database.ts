@@ -18,10 +18,20 @@ export interface VerifierDatabaseOptions extends VerifierProcessRunnerOptions {
 }
 
 class DatabaseRefusal extends Error {
-  constructor(code: "MIGRATION_DB_UNAVAILABLE" | "MIGRATION_FAILED", fields: Record<string, string | null>) {
+  constructor(
+    code: "MIGRATION_DB_UNAVAILABLE" | "MIGRATION_FAILED" | "MIGRATION_DID_NOT_START",
+    fields: Record<string, string | null>,
+  ) {
     super(JSON.stringify({ code, refusedBy: "DAEMON_INGRESS", ...fields }));
   }
 }
+
+/**
+ * The database variable this runner defines for the migration step. Reported BY NAME in a
+ * `MIGRATION_DID_NOT_START` refusal, never by value: the name is what a product whose migration
+ * reads different variables needs to see, and the value carries a password.
+ */
+const DELIVERED_DATABASE_VARIABLE = "DATABASE_URL";
 
 const unavailable = (reason: string): DatabaseRefusal => new DatabaseRefusal("MIGRATION_DB_UNAVAILABLE", { reason });
 function safeCapture(output: string, exitCode: number | null): VerifierRunCapture {
@@ -45,17 +55,38 @@ function declaresMigration(workspace: string): boolean {
   return true;
 }
 
-function failedFile(workspace: string, output: string, secrets: readonly string[]): string | null {
+/**
+ * Where the migration step got to, which is NOT the same question as which file to print.
+ *
+ * `named` is whether the output mentions a migration at all; `file` is the safe basename to
+ * report. Keeping them apart is the whole point: a null `file` used to mean two unrelated
+ * things — no migration ever ran, or one ran and failed but its name could not be printed
+ * safely — and the operator could not tell which. Measured on UnAI 2026-09-16, where a product
+ * whose migration CLI reads its own variables threw at import, nothing ran, and the refusal
+ * still said `MIGRATION_FAILED` with a null file, promising a filename it could never supply.
+ */
+interface MigrationFailurePoint {
+  /** The migration the output names, safe or not; null when the output names none. */
+  readonly named: string | null;
+  /** The basename safe to report: it exists in `migrations/` and carries no secret. */
+  readonly file: string | null;
+}
+
+function failedFile(
+  workspace: string, output: string, secrets: readonly string[],
+): MigrationFailurePoint {
   // Only emit an actual migration basename, never a raw error/SQL/URL. Missing evidence is null.
   // node-pg-migrate emits its banner AFTER running the JS builder: a thrown builder has
   // a stack frame instead, which must outrank an earlier migration's successful banner.
   const frame = /\bat [^\r\n]*[/\\]migrations[/\\]([\w.-]+):\d+:\d+/u.exec(output)?.[1];
   const last = frame ?? [...output.matchAll(/### MIGRATION (.+?) \((?:UP|DOWN)\) ###/gu)].at(-1)?.[1];
+  const named = last ?? null;
   try {
-    return readdirSync(join(workspace, "migrations")).find((name) =>
+    const file = readdirSync(join(workspace, "migrations")).find((name) =>
       /^[\w.-]+$/u.test(name) && !secrets.some((value) => value !== "" && name.includes(value))
       && (name === last || parse(name).name === last)) ?? null;
-  } catch { return null; }
+    return { file, named };
+  } catch { return { file: null, named }; }
 }
 
 /**
@@ -146,7 +177,13 @@ class DisposableDatabase {
       const migration = await this.runner({ ...this.brief, test: "pnpm db:migrate" });
       if (migration.exitCode !== 0) {
         const secrets = [this.password, ...Object.values(this.options.delivered ?? {})];
-        throw new DatabaseRefusal("MIGRATION_FAILED", { file: failedFile(this.brief.workspace, migration.output, secrets) });
+        const point = failedFile(this.brief.workspace, migration.output, secrets);
+        // Nothing the output names means no migration ever started: the script itself failed,
+        // and the actionable fact is which database variable this runner defined — a product
+        // that reads its own is refused before its first migration and can say so no other way.
+        throw point.named === null
+          ? new DatabaseRefusal("MIGRATION_DID_NOT_START", { delivered: DELIVERED_DATABASE_VARIABLE })
+          : new DatabaseRefusal("MIGRATION_FAILED", { file: point.file });
       }
       this.checkCancellation();
       const result = await this.runner(this.brief);

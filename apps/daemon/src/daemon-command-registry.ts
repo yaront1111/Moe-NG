@@ -37,6 +37,9 @@ import { runReviewCommand } from "./review/review-services.js";
 import { createReviewSubmissionCommandEntry } from "./review/review-submission-command.js";
 import type { ReviewSubmissionWiring } from "./review/review-submission-command.js";
 import { NODE_VERIFIER_PRINCIPAL_ID } from "./review/verifier-receipt-ledger.js";
+import { GOVERNANCE_PRINCIPAL_ID, governanceOpen }
+  from "./review/governance-policy-settings.js";
+import type { GovernancePolicy } from "./review/governance-policy-settings.js";
 import { CRITERION_PRINCIPAL } from "./criterion-evidence/criterion-contracts.js";
 import { runCriterionCommandEdge } from "./criterion-evidence/criterion-command-edge.js";
 import type { CriterionCommandPort } from "./criterion-evidence/criterion-command-edge.js";
@@ -146,6 +149,10 @@ export interface DaemonCommandPortOptions {
   readonly foundationCatalogSource?: () => unknown;
   readonly foundationContextSeal?: FoundationContextSealPort;
   readonly foundationLifecycle?: FoundationCaptureLifecycle;
+  /** Whether the daemon may answer an exhausted review itself, and how often per node.
+   *  ABSENT is a CLOSED seat, not a skipped check: `governanceOpen` answers undefined false,
+   *  so a composition that never wires this keeps today's human-only behaviour exactly. */
+  readonly governance?: GovernancePolicy;
   /** The operator principal id: a session id may not collide with it. */
   readonly operatorPrincipalId: string;
   /** The daemon's ONE preview supervisor, as the decide edge and the shutdown sweep see it.
@@ -220,7 +227,8 @@ function cutoverDecisionOf(result: CutoverActivateResult): DurableDecision {
 export function createDaemonCommandPorts(options: DaemonCommandPortOptions): DaemonCommandPorts {
   const { clock, operatorPrincipalId, projectId, store } = options;
   const commandAuthority = createCommandAuthorityGate(store, projectId, options.authorityPlane);
-  if (operatorPrincipalId === NODE_VERIFIER_PRINCIPAL_ID || operatorPrincipalId === CRITERION_PRINCIPAL) {
+  if (operatorPrincipalId === NODE_VERIFIER_PRINCIPAL_ID || operatorPrincipalId === CRITERION_PRINCIPAL
+    || operatorPrincipalId === GOVERNANCE_PRINCIPAL_ID) {
     throw new Error("OPERATOR_PRINCIPAL_RESERVED");
   }
   const authorityClock = (): number => Date.parse(clock());
@@ -396,8 +404,21 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       // KIND ONLY (task-136cbab2, governor comment-b0d0a809, 2026-09-07 13:16Z).
       const providerByPairedAdmin = kind === AGENT_PROVIDER_COMMAND_KIND
         && principal.capabilities.includes(CAPABILITIES.ADMIN);
+      // GOVERNANCE answers an exhausted review in the human's place when, and only when, the
+      // owner has stated a bounded governance policy (MOE_GOVERNANCE_MODE + its decision
+      // bound; absent or malformed is a closed seat). It is deliberately NOT folded into the
+      // paired-human disjunct below: that group ends in `isDurableHumanPrincipal`, and
+      // governance is not a human. It is its own, narrower widening -- ONE kind, from ONE
+      // reserved id that no minted session can hold (the same reservation `daemon:node-verifier`
+      // and `daemon:criterion-verifier` carry, enforced above and on the session mint). That
+      // reservation is what keeps "an agent cannot grant ITSELF another attempt" true while the
+      // seat is open, which is the invariant review-escalation-authority.test.ts pins.
+      const byGovernance = kind === "escalation.decide"
+        && principal.principalId === GOVERNANCE_PRINCIPAL_ID
+        && governanceOpen(options.governance);
       if (OPERATOR_PRINCIPAL_KINDS.has(kind)
         && principal.principalId !== operatorPrincipalId
+        && !byGovernance
         // The widening is by KIND and never by seat: a session the operator approved
         // at pairing (durable HUMAN principal, minted under the id it
         // authenticates as) may dispatch the intent wire, ANSWER a material
@@ -631,7 +652,8 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
           store,
           bytes,
           undefined,
-          [operatorPrincipalId, NODE_VERIFIER_PRINCIPAL_ID, CRITERION_PRINCIPAL],
+          [operatorPrincipalId, NODE_VERIFIER_PRINCIPAL_ID, CRITERION_PRINCIPAL,
+            GOVERNANCE_PRINCIPAL_ID],
         ));
       }
       if (work) return decisionOf(runWorkClaimCommand(store, bytes));

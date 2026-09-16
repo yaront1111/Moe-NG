@@ -45,6 +45,29 @@ it.each(["ordinary", "--skip-worktree", "--assume-unchanged"])("retains dirty wo
   expect(w.port.readOwned(w.workspace, w.owner.storeId, PROJECT_ID)).toMatchObject({ ok: true, handle: w.blocked });
 });
 
+/**
+ * THE TRAP THIS PINS, measured on UnAI 2026-09-16. Governance retired two nodes by committing
+ * `escalation.decide` REPLAN as `daemon:governor`. The retirement took effect — the nodes can
+ * never pass review again — but this gate demands `isDurableHumanPrincipal`, so it refuses to
+ * offer RELEASE_REPLANNED, and BOTH checkouts became unfreeable by any command. A second human
+ * REPLAN cannot repair it either: `review-acceptance.ts` refuses an escalation on an already
+ * replanned node.
+ *
+ * Governance no longer replans at all (it stops and asks), so this cannot recur — but the
+ * combination is silent and permanent, so anyone re-enabling a non-human replan should meet
+ * this assertion rather than discover it from two locked checkouts.
+ */
+it("refuses to release a REPLAN that no human authored, leaving the reservation held", async () => {
+  const w = await createReplanRecoveryWorld({}, "governance");
+
+  expect(readReviewLedger(w.store, PROJECT_ID, w.owner.nodeRef)).toMatchObject({ replanned: true });
+  expect(await w.service.recover(w.input))
+    .toMatchObject({ ok: false, code: "REPOSITORY_REPLAN_EVIDENCE_INVALID" });
+  // Retired AND still holding: the node cannot progress and cannot let go.
+  expect(w.port.readOwned(w.workspace, w.owner.storeId, PROJECT_ID)).toMatchObject({ ok: true, handle: w.blocked });
+  expect(w.drains()).toBe(0);
+});
+
 it("requires a durable REPLAN before any drain", async () => {
   const w = await createReviewResumeWorld();
   expect(await w.service.recover({ ...w.input, payload: { ...w.input.payload, action: "RELEASE_REPLANNED" } }))

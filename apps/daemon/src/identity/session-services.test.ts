@@ -51,6 +51,31 @@ describe("session command vocabulary", () => {
   });
 });
 
+describe("the folded session ledger", () => {
+  it("reuses its fold until a decision is committed, then re-folds at once", () => {
+    // `authenticate()` runs on every request and re-folded the whole decision log each time:
+    // measured on UnAI 2026-09-16, an unauthenticated /mcp request took 11-40 SECONDS while the
+    // same process answered an unauthenticated / in 7 ms. Caching the fold is the fix — and the
+    // trap is the key. Keyed on `readCommandDecisionCacheVersion`, which does NOT move per
+    // commit, this served a fold taken before a session.renew and broke 22 tests in this
+    // directory: read-after-write, in authentication code, where a stale fold admits a
+    // credential that was revoked. Both halves are pinned here for that reason.
+    const store = openStore();
+    openDefaultSession(store);
+
+    const first = readSessionLedger(store, PROJECT_ID);
+    expect(first.sessions.get(SESSION_ID)?.status).toBe("OPEN");
+    // Identity, not deep equality: a "cache" that never caches would satisfy equality.
+    expect(readSessionLedger(store, PROJECT_ID)).toBe(first);
+
+    expect(send(store, envelope("session.close", 1, { sessionId: SESSION_ID })).ok).toBe(true);
+
+    const second = readSessionLedger(store, PROJECT_ID);
+    expect(second).not.toBe(first);
+    expect(second.sessions.get(SESSION_ID)?.status).toBe("CLOSED");
+  });
+});
+
 describe("session.open", () => {
   it("commits one durable decision and folds an OPEN record holding only the hash", () => {
     const store = openStore();

@@ -40,6 +40,9 @@ import type { VerifierProcessRunner } from "./verifier-process-runner.js";
 import { providerFor } from "./moe-up-credentials.js";
 import { createSeatStartRecorder } from "./seat-start-recorder.js";
 import { readWrapperKnobs } from "./wrapper-knobs.js";
+import { readGovernancePolicySettings } from "../review/governance-policy-settings.js";
+import { createGovernorSeat, createProviderGovernorRunner } from "./governor-seat.js";
+import { createGovernancePass } from "./wrapper-governance-pass.js";
 import { createPassLogger } from "./wrapper-pass-log.js";
 
 export {
@@ -70,10 +73,19 @@ import { resolveRuntimeBrokerPid } from "./runtime-broker-identity.js";
  * one agent process, from which the agent's bearer TTL is derived. The trusted
  * wrapper hosts MCP on loopback; each agent receives only its scoped bearer,
  * never the operator credential or store path.
+ *
+ * MOE_GOVERNANCE_MODE=AI_GOVERNOR with MOE_GOVERNANCE_MAX_DECISIONS=<n> lets the daemon answer
+ * an exhausted review itself instead of parking the node on a human. BOTH are required: the
+ * policy cannot be constructed without its decision bound, and an absent or malformed setting
+ * leaves the seat closed, which is the shipped default. See review/governance-policy-settings.ts.
  */
 async function main(): Promise<void> {
   // Knobs first: a malformed knob is refused by name before any store is opened.
   const knobs = readWrapperKnobs(process.env);
+  // Read beside the knobs and for the same reason: a malformed governance setting is refused by
+  // name before any store is opened. An absent or malformed one is a CLOSED seat, so a daemon
+  // that states nothing keeps today's behaviour exactly.
+  const governance = readGovernancePolicySettings(process.env);
   const config = readStoreDependencyEnv(process.env);
   const provider = createStoreDependencies(config);
   let verifierStore: SqliteEventStore | undefined;
@@ -147,6 +159,32 @@ async function main(): Promise<void> {
     // fail every ONCE pass at its staffing commit.
     verifierStore = SqliteEventStore.openForProject(config.storePath, config.projectId);
     enrollDecisionLedgerMemo(verifierStore);
+
+    // THE GOVERNOR SEAT. One-shot, in the project's own workspace, so it can consult the product
+    // record the questions name — the PRD, the ADRs, the approved contract — and cite it rather
+    // than decide. It is the same agent command the project staffs its seats with, and it holds
+    // nothing: no claim, no session credential, no repository hold, and no command it could
+    // commit on its own. Its only output is the answer it prints, and any answer that is not
+    // well formed and fully sourced is discarded, which REPLANS the node instead of retrying it.
+    //
+    // With no workspace configured the seat runs where the wrapper does; it can still answer
+    // from the findings, it just has no record to cite.
+    const governorSeat = createGovernorSeat({
+      log: (line) => { process.stdout.write(`${line}\n`); },
+      run: createProviderGovernorRunner({
+        command: process.env["MOE_AGENT_COMMAND"] ?? "claude",
+        cwd: compiledWorkspace ?? process.cwd(),
+      }),
+    });
+    const governancePass = createGovernancePass({
+      advisor: governorSeat,
+      clock: () => new Date().toISOString(),
+      log: (line) => { process.stdout.write(`${line}\n`); },
+      nodes: listNodes,
+      policy: governance,
+      projectId: config.projectId,
+      store: () => verifierStore,
+    });
 
     // Disabling landing also disables new coding admission: ownership cannot be
     // safely released on acceptance alone.
@@ -337,6 +375,10 @@ async function main(): Promise<void> {
       if (stop.requested()) return;
       // Awaits STARTUP ADMISSION only. Every agent's exit stays in flight, so a
       // staffed run never blocks this loop on a child's lifetime.
+      // Governance answers the nodes this loop cannot otherwise move, BEFORE the pass that would
+      // find them unstaffable: a node funded here is staffed in the same pass rather than the
+      // next one. It is a no-op unless the owner stated a policy.
+      governancePass();
       const report = await wrapper.runOnce().catch((error: unknown): null => {
         // ONE failed pass is not the fleet. A DurableStoreError STORE_BUSY under a concurrent
         // daemon commit rejected the pass here and, uncaught, reached main().catch, whose finally

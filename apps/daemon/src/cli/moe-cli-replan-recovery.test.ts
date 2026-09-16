@@ -1,17 +1,79 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it, vi } from "vitest";
 import { parseCliArgv } from "./moe-cli-argv.js";
 import { runMoeCli } from "./moe-cli-main.js";
 import { MOE_CONFIG_SCHEMA_VERSION } from "./moe-init.js";
-import { executeReplanRecovery } from "./moe-cli-replan-recovery.js";
+import { executeReplanRecovery, reservationWorkspaces } from "./moe-cli-replan-recovery.js";
 import { createReplanRecoveryWorld } from "../repository/repository-replan-recovery-test-fixtures.js";
 import { createReviewResumeWorld, closeReviewResumeWorlds } from "../repository/repository-review-resume-test-fixtures.js";
 
 const roots: string[] = [];
 afterEach(closeReviewResumeWorlds);
 afterEach(() => { for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true }); });
+/**
+ * A node briefed into its own tree holds its reservation under `<main>/.git/worktrees/<name>/`,
+ * not under the project root. This path scanned the project root alone, so a replanned node
+ * holding its own tree could not be released by any CLI command — measured on UnAI 2026-09-16,
+ * where the checkout stayed held with nothing able to free it. (The daemon's own recovery service
+ * already saw node trees: `daemon-repository-workflow-wiring.ts` derives them from node missions.
+ * The CLI runs before any stack exists, so it reads Git's worktree registry instead.)
+ */
+it("names the project root and only the node trees that actually hold a reservation", () => {
+  const root = mkdtempSync(join(tmpdir(), "moe-replan-trees-")); roots.push(root);
+  const held = join(root, ".git", "worktrees", "node-held");
+  const idle = join(root, ".git", "worktrees", "node-idle");
+  const heldTree = join(root, ".moe-next", "trees", "node-held");
+  mkdirSync(held, { recursive: true });
+  mkdirSync(idle, { recursive: true });
+  mkdirSync(heldTree, { recursive: true });
+  writeFileSync(join(held, "gitdir"), `${join(heldTree, ".git")}\n`);
+  writeFileSync(join(held, "moe-repository-execution.sqlite"), "");
+  // No reservation database: this tree holds nothing and must not be named. The bound matters —
+  // `scan` refuses above 32 workspaces and a real project had 70 trees, so naming them all would
+  // break recovery for everyone.
+  writeFileSync(join(idle, "gitdir"), `${join(root, ".moe-next", "trees", "node-idle", ".git")}\n`);
+
+  expect(reservationWorkspaces(root)).toEqual([root, heldTree]);
+});
+
+it("still names the project root when the repository has no linked worktrees at all", () => {
+  const root = mkdtempSync(join(tmpdir(), "moe-replan-notrees-")); roots.push(root);
+
+  expect(reservationWorkspaces(root)).toEqual([root]);
+});
+
+it("releases every replanned owner, not just the first", async () => {
+  // Governance retired two nodes 22 ms apart on UnAI 2026-09-16 — one holding the project's own
+  // checkout, one holding its node tree. Refusing on sight of the second left BOTH held.
+  const recovered: string[] = [];
+  const reservationFor = (nodeRef: string) => ({
+    actions: [{
+      action: "RELEASE_REPLANNED" as const, available: true, code: null,
+      expectedReviewDigest: "d".repeat(64), expectedReviewVersion: 3,
+      offer: { commandId: `cmd-${nodeRef}`, expectedVersion: 3, targetAggregateId: nodeRef },
+    }],
+    expectedReservationRevision: 1,
+    nodeRef,
+    phase: "RESERVED" as const,
+  });
+  const service = {
+    readRecovery: () => ({
+      code: null, projectId: "project-1",
+      reservations: [reservationFor("node-a"), reservationFor("node-b")],
+      version: "moe-repository-recovery/1",
+    }),
+    recover: (command: { readonly payload: { readonly nodeRef: string } }) => {
+      recovered.push(command.payload.nodeRef);
+      return Promise.resolve({ ok: true as const, resultCode: "REPOSITORY_RECOVERY_RELEASED" });
+    },
+  };
+
+  expect(await executeReplanRecovery(service as never, "operator", () => {})).toEqual({ ok: true });
+  expect(recovered).toEqual(["node-a", "node-b"]);
+});
+
 it("parses recover-replan with exact single-project arguments", () => {
   expect(parseCliArgv(["recover-replan", "D:/project path", "--operator-stdin"]))
     .toEqual({ ok: true, command: "recover-replan", targetDir: "D:/project path", operatorStdin: true });

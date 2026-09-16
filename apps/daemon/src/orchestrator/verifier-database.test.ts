@@ -186,6 +186,30 @@ describe("verifier disposable database", () => {
     await runner.close();
   });
 
+  it("says no migration started when the step fails before any migration runs", async () => {
+    // Measured on UnAI 2026-09-16. The product's migration CLI reads its OWN variables
+    // (UNAI_MIGRATION_DATABASE_URL plus a CA path, deliberately TLS-only) and threw at import,
+    // so nothing ran. The refusal still said MIGRATION_FAILED with a null file — a code that
+    // promises a filename it could never supply, indistinguishable from the redacted-name case
+    // below, and the operator had no way to tell which had happened. It must say that nothing
+    // started, and name the variable this runner defined, because that names the mismatch.
+    const host = new DockerHost();
+    host.migrationFails = true;
+    host.migrationOutput
+      = "Error: MIGRATION_TLS_CONFIGURATION_REQUIRED\n    at file:///workspace/packages/postgres/src/migrate-cli.ts:6:28";
+    const runner = host.runner();
+    try {
+      const result = await runner(workspace());
+      expect(JSON.parse(result.output)).toEqual({
+        code: "MIGRATION_DID_NOT_START", delivered: "DATABASE_URL", refusedBy: "DAEMON_INGRESS",
+      });
+      expect(result.exitCode).toBe(1);
+      // It reached the migration step and tore the database down: this is not a start failure.
+      expect(host.events).toEqual(["migration"]);
+      host.assertGone();
+    } finally { await runner.close(); }
+  });
+
   it.each(["sql", "javascript"])("names the actual failed migration without exposing raw %s output", async (kind) => {
     const host = new DockerHost();
     host.migrationFails = true;
