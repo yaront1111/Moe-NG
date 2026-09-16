@@ -1,4 +1,5 @@
-import { spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 import { GOVERNANCE_TEXT_MAX_LENGTH, validGovernanceDecision }
   from "../review/governance-decision-ledger.js";
@@ -21,6 +22,13 @@ import type { GovernanceAdvisor, GovernanceBrief, GovernanceAnswer }
  * A one-shot process that prints its answer needs none of that: no claim, no credential, no
  * repository hold, and nothing it can commit on its own.
  *
+ * IT NEVER BLOCKS THE WRAPPER. The seat is awaited, not waited on. This ran on `spawnSync`, which
+ * held the wrapper's event loop for the entire model call — up to the 300 s timeout, per node —
+ * and the MCP host every live seat calls runs in that same loop. So governance answering ONE
+ * exhausted node would stop every other seat in the project from making a tool call, which is the
+ * same starvation the per-pass ledger walk was fixed for. Awaiting costs nothing that mattered:
+ * the pass is still ordered before staffing, so a node funded here is staffed in the same pass.
+ *
  * IT CANNOT INVENT ITS WAY PAST THE GATE. Every path that does not produce a well-formed,
  * fully-sourced answer returns null, and null means the node is handed to the human with its
  * work untouched — never retried on a guess, and never retired. A dead
@@ -41,6 +49,7 @@ const MAX_QUESTIONS = 8;
 const MAX_DETAIL_CHARS = 2_000;
 const MAX_OUTPUT_CHARS = 200_000;
 const DEFAULT_TIMEOUT_MS = 300_000;
+const execFileAsync = promisify(execFile);
 
 export interface GovernorRunResult {
   readonly output: string;
@@ -48,7 +57,7 @@ export interface GovernorRunResult {
 }
 
 /** Runs one prompt and returns what it printed. Injected so tests never spawn a model. */
-export type GovernorRunner = (prompt: string) => GovernorRunResult;
+export type GovernorRunner = (prompt: string) => Promise<GovernorRunResult>;
 
 export interface GovernorSeatConfig {
   /**
@@ -69,6 +78,10 @@ export function governorPrompt(brief: GovernanceBrief, documents: string): strin
   const questions = brief.questions.slice(0, MAX_QUESTIONS).map((question, index) =>
     [
       `${String(index + 1)}. [${question.severity}] ${question.findingId}`,
+      // The SUBJECT is shown because the rule id alone does not identify the question: one rule
+      // fires against many subjects, and two of them are two different questions with two
+      // different answers. A seat shown only the rule would answer them as one.
+      `   Subject: ${question.subject}`,
       question.criterionId === null ? null : `   Criterion: ${question.criterionId}`,
       `   ${question.detail.slice(0, MAX_DETAIL_CHARS)}`,
     ].filter((line) => line !== null).join("\n")).join("\n\n");
@@ -141,6 +154,7 @@ function decisionOf(
     citation: basis === "PRD_CITED" ? text(citation) : null,
     criterionId: asked.criterionId,
     findingId: asked.findingId,
+    findingSubject: asked.subject,
     question: asked.detail.slice(0, MAX_DETAIL_CHARS),
     rationale: basis === "PRD_CITED" ? text(reported["rationale"]) : text(reported["rationale"]),
     reviewVersion: brief.reviewVersion,
@@ -173,12 +187,12 @@ export function readGovernorAnswer(
 }
 
 export function createGovernorSeat(config: GovernorSeatConfig): GovernanceAdvisor {
-  return function governorSeat(brief: GovernanceBrief): GovernanceAnswer | null {
+  return async function governorSeat(brief: GovernanceBrief): Promise<GovernanceAnswer | null> {
     let documents = "";
     try { documents = config.documents?.(brief) ?? ""; } catch { documents = ""; }
     let result: GovernorRunResult;
     try {
-      result = config.run(governorPrompt(brief, documents));
+      result = await config.run(governorPrompt(brief, documents));
     } catch {
       config.log(`[governance] ${brief.subjectRef}: the governor seat could not be run; no answer`);
       return null;
@@ -199,9 +213,24 @@ export function createGovernorSeat(config: GovernorSeatConfig): GovernanceAdviso
 }
 
 /**
+ * The print-mode arguments for a provider command. `claude -p` and `codex exec` are the two this
+ * repository already launches.
+ *
+ * It reads the command's LEAF and never the path that led to it. Matching `codex` against the
+ * whole string matched any directory on the way to the binary, so a project whose agent lived
+ * under `D:/codex-tools/claude.exe` was launched as `claude exec <prompt>` — not a print mode, so
+ * it prints nothing parsable, the answer is discarded and the node goes to the human for no
+ * reason at all. The leaf is taken by regex rather than `basename` because a Windows path reaching
+ * a POSIX runner keeps its backslashes, and `basename` would return the whole string there.
+ */
+export function governorRunnerArgs(command: string, prompt: string): readonly string[] {
+  const leaf = (/[^\\/]*$/u.exec(command)?.[0] ?? command).toLowerCase();
+  return leaf.includes("codex") ? ["exec", prompt] : ["-p", prompt];
+}
+
+/**
  * The default runner: the project's own agent command, one-shot, reading nothing back but what
- * it prints. `claude -p` and `codex exec` are the two print modes this repository already
- * launches; anything else is passed the prompt as its single argument.
+ * it prints.
  */
 export function createProviderGovernorRunner(options: {
   readonly command: string;
@@ -209,27 +238,28 @@ export function createProviderGovernorRunner(options: {
   readonly environment?: NodeJS.ProcessEnv;
   readonly timeoutMs?: number;
 }): GovernorRunner {
-  const leaf = options.command.toLowerCase();
-  const args = (prompt: string): readonly string[] =>
-    leaf.includes("codex") ? ["exec", prompt] : ["-p", prompt];
-  return function run(prompt: string): GovernorRunResult {
-    // Synchronous on purpose: the wrapper pass is synchronous, and a governor that answered
-    // later would race the very pass that is deciding whether to staff the node.
-    //
+  return async function run(prompt: string): Promise<GovernorRunResult> {
     // `shell: false` is not a detail. The prompt carries a node's own review findings — text
     // this process did not author — and handing that to a shell would make a finding's contents
     // executable. The timeout and the buffer cap bound the other two ways a seat can fail to
     // return: never finishing, and printing without end.
-    const result = spawnSync(options.command, [...args(prompt)], {
-      cwd: options.cwd,
-      encoding: "utf8",
-      env: options.environment ?? process.env,
-      maxBuffer: 8 * 1_024 * 1_024,
-      shell: false,
-      timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
-      windowsHide: true,
-    });
-    const output = `${result.stdout ?? ""}${result.stderr ?? ""}`;
-    return { ok: result.error === undefined && result.status === 0, output };
+    try {
+      const { stdout, stderr } = await execFileAsync(options.command, [...governorRunnerArgs(options.command, prompt)], {
+        cwd: options.cwd,
+        encoding: "utf8",
+        env: options.environment ?? process.env,
+        maxBuffer: 8 * 1_024 * 1_024,
+        shell: false,
+        timeout: options.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+        windowsHide: true,
+      });
+      return { ok: true, output: `${stdout}${stderr}` };
+    } catch (error) {
+      // A nonzero exit, a timeout kill and a command that cannot be launched at all arrive here
+      // identically, and all three mean the same thing to the caller: no answer. Whatever the
+      // process printed before it failed is still handed back, because that is what the log needs.
+      const failure = error as { readonly stdout?: string; readonly stderr?: string };
+      return { ok: false, output: `${failure.stdout ?? ""}${failure.stderr ?? ""}` };
+    }
   };
 }

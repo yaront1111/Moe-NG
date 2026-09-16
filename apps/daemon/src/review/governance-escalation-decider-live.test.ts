@@ -34,13 +34,14 @@ const OPEN: GovernancePolicy = Object.freeze({ kind: "AI_GOVERNOR", maxDecisions
 const clock = (): string => "2026-09-16T00:00:00.000Z";
 const GUIDANCE = "REGISTRY REVIEW - RECORDED DECISION. description is SET; record it in ADR 0011.";
 
-const answers: GovernanceAdvisor = (brief) => ({
+const answers: GovernanceAdvisor = (brief) => Promise.resolve({
   decisions: brief.questions.map((question) => ({
     answer: "shared.obligation.description is SET.",
     basis: "GOVERNANCE_DECIDED" as const,
     citation: null,
     criterionId: question.criterionId,
     findingId: question.findingId,
+    findingSubject: question.subject,
     question: question.detail,
     rationale: "The product record is silent, and SET is the lossless choice.",
     reviewVersion: brief.reviewVersion,
@@ -51,13 +52,14 @@ const answers: GovernanceAdvisor = (brief) => ({
 });
 
 /** The preferred outcome: the answer was already in the approved product record. */
-const cites: GovernanceAdvisor = (brief) => ({
+const cites: GovernanceAdvisor = (brief) => Promise.resolve({
   decisions: brief.questions.map((question) => ({
     answer: "shared.obligation.description is SET.",
     basis: "PRD_CITED" as const,
     citation: "PRD 26.1",
     criterionId: question.criterionId,
     findingId: question.findingId,
+    findingSubject: question.subject,
     question: question.detail,
     rationale: "",
     reviewVersion: brief.reviewVersion,
@@ -111,7 +113,7 @@ afterEach(async () => {
 it("funds one more attempt and its guidance reaches the next seat, as a human's would", async () => {
   const world = await exhausted();
 
-  const outcome = decideGovernanceEscalation(depsFor(world, answers), world.nodeRef);
+  const outcome = await decideGovernanceEscalation(depsFor(world, answers), world.nodeRef);
 
   expect(outcome.kind).toBe("ALLOWED");
   expect(reviewContinuationAvailable(readReviewLedger(world.store, PROJECT_ID, world.nodeRef)))
@@ -130,11 +132,15 @@ it("decides from the reserved governor seat, never from the node under review", 
   const world = await exhausted();
   const version = readReviewLedger(world.store, PROJECT_ID, world.nodeRef).version;
 
-  expect(decideGovernanceEscalation(depsFor(world, answers), world.nodeRef).kind).toBe("ALLOWED");
+  expect((await decideGovernanceEscalation(depsFor(world, answers), world.nodeRef)).kind)
+    .toBe("ALLOWED");
 
   const decision = world.store.getCommandDecision({
+    // The empty `findingSubject` is what the escalation command id carries: it names the node and
+    // its review version, not any one finding.
     commandId: `gov-${governanceDecisionId({
-      findingId: "ALLOW_MORE_ATTEMPTS", reviewVersion: version, subjectRef: world.nodeRef,
+      findingId: "ALLOW_MORE_ATTEMPTS", findingSubject: "",
+      reviewVersion: version, subjectRef: world.nodeRef,
     })}`,
     principalId: GOVERNANCE_PRINCIPAL_ID,
     projectId: PROJECT_ID,
@@ -147,7 +153,7 @@ it("decides from the reserved governor seat, never from the node under review", 
 it("writes the decision where a later round and the owner can both read it", async () => {
   const world = await exhausted();
 
-  decideGovernanceEscalation(depsFor(world, answers), world.nodeRef);
+  await decideGovernanceEscalation(depsFor(world, answers), world.nodeRef);
 
   const kept = createGovernanceDecisionLedger(world.store, PROJECT_ID).forSubject(world.nodeRef);
   expect(kept.length).toBeGreaterThan(0);
@@ -158,16 +164,19 @@ it("writes the decision where a later round and the owner can both read it", asy
   });
 }, 180_000);
 
-it("spends the bound only on what it decided, never on an answer the PRD already gave", async () => {
-  // Locating the answer in the approved product record costs the project no new authority, so
-  // it must not consume the one decision the owner's policy allowed.
+it("spends the bound on the attempt it funded, even when the PRD gave the answer", async () => {
+  // Locating the answer in the approved product record costs the project no new AUTHORITY — and
+  // that is the only sense in which it is free. The attempt it funds costs exactly what every
+  // other attempt costs, so it counts against the bound. Counting only `GOVERNANCE_DECIDED` rows
+  // let a governor that cited the PRD each round fund attempts without limit at `maxDecisions: 1`.
   const world = await exhausted();
 
-  expect(decideGovernanceEscalation(depsFor(world, cites), world.nodeRef).kind).toBe("ALLOWED");
+  expect((await decideGovernanceEscalation(depsFor(world, cites), world.nodeRef)).kind)
+    .toBe("ALLOWED");
 
   const records = createGovernanceDecisionLedger(world.store, PROJECT_ID);
   expect(records.forSubject(world.nodeRef).length).toBeGreaterThan(0);
-  expect(records.spentOn(world.nodeRef)).toBe(0);
+  expect(records.fundedOn(world.nodeRef)).toBe(1);
 }, 180_000);
 
 it("stops deciding once a later round accepted, however many failed before it", async () => {
@@ -176,7 +185,8 @@ it("stops deciding once a later round accepted, however many failed before it", 
   // answering "due" and governance re-decided the node on EVERY pass — a governor call spent
   // each time, and every commit refused REVIEW_ESCALATION_NOT_REACHED by the daemon.
   const world = await exhausted();
-  expect(decideGovernanceEscalation(depsFor(world, answers), world.nodeRef).kind).toBe("ALLOWED");
+  expect((await decideGovernanceEscalation(depsFor(world, answers), world.nodeRef)).kind)
+    .toBe("ALLOWED");
 
   // The funded attempt passes: a clean round routes ACCEPT, and the failed count stays put.
   expect((await world.wrapper.runOnce()).spawned).toMatchObject([{ outcome: "SPAWNED" }]);
@@ -189,7 +199,7 @@ it("stops deciding once a later round accepted, however many failed before it", 
   let asked = 0;
   const counting: GovernanceAdvisor = (brief) => { asked += 1; return answers(brief); };
 
-  expect(decideGovernanceEscalation(depsFor(world, counting), world.nodeRef))
+  expect(await decideGovernanceEscalation(depsFor(world, counting), world.nodeRef))
     .toEqual({ kind: "NOT_DUE" });
   // Not merely the right answer: it must cost nothing to reach, or the waste survives the fix.
   expect(asked).toBe(0);
@@ -197,9 +207,10 @@ it("stops deciding once a later round accepted, however many failed before it", 
 
 it("leaves an already funded attempt alone", async () => {
   const world = await exhausted();
-  expect(decideGovernanceEscalation(depsFor(world, answers), world.nodeRef).kind).toBe("ALLOWED");
+  expect((await decideGovernanceEscalation(depsFor(world, answers), world.nodeRef)).kind)
+    .toBe("ALLOWED");
 
   // A second pass over the same node must not fund a second attempt on one decision.
-  expect(decideGovernanceEscalation(depsFor(world, answers), world.nodeRef))
+  expect(await decideGovernanceEscalation(depsFor(world, answers), world.nodeRef))
     .toEqual({ kind: "ALREADY_FUNDED" });
 }, 180_000);

@@ -37,6 +37,7 @@ const decided = (over: Partial<GovernanceDecisionInput> = {}): GovernanceDecisio
   citation: null,
   criterionId: "CRT-REG-03-A",
   findingId: "registry-review-obligation-description-cardinality",
+  findingSubject: "CRITERION:CRT-REG-03-A",
   question: "Should shared.obligation.description be FUNCTIONAL or SET?",
   rationale: "Paraphrases from different sources would otherwise read as conflicting values.",
   reviewVersion: 4,
@@ -78,7 +79,7 @@ describe("a governance decision record", () => {
 
     const [kept] = ledger.all();
     expect(Object.keys(kept ?? {}).sort()).toEqual([
-      "answer", "basis", "citation", "criterionId", "decisionId", "findingId",
+      "answer", "basis", "citation", "criterionId", "decisionId", "findingId", "findingSubject",
       "question", "rationale", "reviewVersion", "subjectRef", "supersedes", "version",
     ]);
     for (const key of ["status", "state", "pending", "approved", "awaiting"]) {
@@ -100,18 +101,39 @@ describe("a governance decision record", () => {
       .not.toBe(governanceDecisionId(decided({ reviewVersion: 5 })));
   });
 
-  it("counts only what governance actually decided, because a PRD citation is free", () => {
-    // The policy bound exists to stop governance funding attempt after attempt. Finding the
-    // answer already written in the product record is not that, and must not spend the bound.
+  it("counts the attempts it funded, not the opinions it authored", () => {
+    // The bound exists to stop governance funding attempt after attempt, so it counts ATTEMPTS.
+    // Counting `GOVERNANCE_DECIDED` rows instead let a governor that cited the PRD fund attempts
+    // for free at `maxDecisions: 1` — free of new authority, but not of the tokens and repository
+    // work every attempt spends, which is the whole thing the bound protects.
     const ledger = createGovernanceDecisionLedger(openStore(), PROJECT);
 
+    // One attempt answering two questions from the record is ONE attempt: not zero, not two.
     ledger.record(cited());
     ledger.record(cited({ findingId: "registry-release-tag-not-created" }));
-    expect(ledger.spentOn(NODE)).toBe(0);
+    expect(ledger.fundedOn(NODE)).toBe(1);
 
-    ledger.record(decided({ findingId: "a-question-the-prd-does-not-answer" }));
-    expect(ledger.spentOn(NODE)).toBe(1);
+    // The next attempt is a new review version, and that is the thing being counted.
+    ledger.record(decided({ findingId: "a-question-the-prd-does-not-answer", reviewVersion: 5 }));
+    expect(ledger.fundedOn(NODE)).toBe(2);
     expect(ledger.all()).toHaveLength(3);
+  });
+
+  it("is a different block for the same rule raised against a different subject", () => {
+    // A rule id names the CHECK, not the thing checked. Two contracts failing one cardinality
+    // rule are two questions with two answers; collapsing them into one block records a single
+    // judgement and silently drops the one never made about the other subject.
+    const ledger = createGovernanceDecisionLedger(openStore(), PROJECT);
+    const elsewhere = { findingSubject: "CRITERION:CRT-REG-09-B" };
+
+    expect(ledger.record(decided())).toBe(true);
+    expect(ledger.record(decided({
+      answer: "billing.obligation.description is FUNCTIONAL.", ...elsewhere,
+    }))).toBe(true);
+
+    expect(ledger.all()).toHaveLength(2);
+    expect(governanceDecisionId(decided()))
+      .not.toBe(governanceDecisionId(decided(elsewhere)));
   });
 
   it("keeps one node's decisions out of another's", () => {
@@ -120,7 +142,7 @@ describe("a governance decision record", () => {
     ledger.record(decided({ subjectRef: "node:v1:other" }));
 
     expect(ledger.forSubject(NODE)).toHaveLength(1);
-    expect(ledger.spentOn("node:v1:other")).toBe(1);
+    expect(ledger.fundedOn("node:v1:other")).toBe(1);
   });
 
   it("shows nothing rather than a short history when a row cannot be read", () => {
@@ -145,7 +167,7 @@ describe("a governance decision record", () => {
     });
 
     expect(ledger.all()).toEqual([]);
-    expect(ledger.spentOn(NODE)).toBe(0);
+    expect(ledger.fundedOn(NODE)).toBe(0);
   });
 });
 
@@ -174,12 +196,13 @@ describe("what a decision has to carry", () => {
       [{ question: " " }, "no question"],
       [{ subjectRef: "" }, "no subject"],
       [{ findingId: "" }, "no finding"],
+      [{ findingSubject: "  " }, "no subject the finding was raised against"],
       [{ reviewVersion: -1 }, "review version negative"],
       [{ reviewVersion: 1.5 }, "review version non-integer"],
       [{ answer: "x".repeat(4001) }, "answer beyond the storable bound"],
       [{ basis: "SOMETHING_ELSE" as GovernanceDecisionInput["basis"] }, "unknown basis"],
     ];
-    expect(missing.length).toBe(8);
+    expect(missing.length).toBe(9);
 
     for (const [over, why] of missing) {
       expect(validGovernanceDecision(decided(over)), why).toBe(false);
