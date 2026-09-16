@@ -25,6 +25,8 @@ function project(): string {
 }
 const brief = (workspace: string): NodeMission =>
   ({ instructions: "build it", test: "pnpm test", title: "a node", workspace });
+/** No node holds the project checkout unless a case says so. */
+const unheld = () => null;
 
 /** The one place a node's workspace is chosen (owner decision 2026-09-16). */
 describe("briefing a node into its own tree", () => {
@@ -32,7 +34,7 @@ describe("briefing a node into its own tree", () => {
     const root = project();
     const lines: string[] = [];
 
-    const moved = createNodeTreeMissions((line) => lines.push(line))(brief(root), "node:v1:alpha");
+    const moved = createNodeTreeMissions((line) => lines.push(line), unheld)(brief(root), "node:v1:alpha");
 
     expect(moved).toMatchObject({ instructions: "build it", test: "pnpm test", title: "a node" });
     expect(moved?.workspace).toBe(join(root, NODE_TREES_DIRECTORY, nodeTreeName("node:v1:alpha")!));
@@ -41,7 +43,7 @@ describe("briefing a node into its own tree", () => {
 
   it("gives two nodes two different trees", () => {
     const root = project();
-    const withTree = createNodeTreeMissions(() => {});
+    const withTree = createNodeTreeMissions(() => {}, unheld);
 
     const first = withTree(brief(root), "node:v1:one");
     const second = withTree(brief(root), "node:v1:two");
@@ -53,7 +55,7 @@ describe("briefing a node into its own tree", () => {
   it("leaves the mission on the project's workspace when no tree can be made, saying so once", () => {
     const outside = realpathSync(mkdtempSync(join(tmpdir(), "moe-tree-missions-bare-"))); roots.push(outside);
     const lines: string[] = [];
-    const withTree = createNodeTreeMissions((line) => lines.push(line));
+    const withTree = createNodeTreeMissions((line) => lines.push(line), unheld);
 
     expect(withTree(brief(outside), "node:v1:bare")?.workspace).toBe(outside);
     expect(withTree(brief(outside), "node:v1:bare")?.workspace).toBe(outside);
@@ -63,7 +65,22 @@ describe("briefing a node into its own tree", () => {
     expect(lines[0]).toContain(outside);
   }, 120_000);
 
+  it("leaves a node that already holds the project checkout where it is, saying so once", () => {
+    const root = project();
+    const lines: string[] = [];
+    const withTree = createNodeTreeMissions((line) => lines.push(line), () => "node:v1:holding");
+
+    // Its verifier and lander look at the checkout it holds; moving it now would strand that work.
+    expect(withTree(brief(root), "node:v1:holding")?.workspace).toBe(root);
+    expect(withTree(brief(root), "node:v1:holding")?.workspace).toBe(root);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain("the checkout it already holds");
+
+    // A different node is not holding anything of its own: it takes its tree now.
+    expect(withTree(brief(root), "node:v1:other")?.workspace).not.toBe(root);
+  }, 120_000);
+
   it("has no mission to move when the node has none", () => {
-    expect(createNodeTreeMissions(() => {})(null, "node:v1:absent")).toBeNull();
+    expect(createNodeTreeMissions(() => {}, unheld)(null, "node:v1:absent")).toBeNull();
   });
 });
