@@ -4,7 +4,9 @@ import type { SqliteEventStore } from "@moe/store";
 import { createCriterionEvidenceService } from "./criterion-evidence/criterion-service.js";
 import type { RepositoryWorkflowReadPort } from "./http/repository-workflow-read.js";
 import { createWrapperNodeMissions } from "./orchestrator/wrapper-node-missions.js";
+import { landedNodeBranches } from "./orchestrator/node-landed-branches.js";
 import { createPublicationCandidateReader } from "./repository/publication-candidate.js";
+import { readRepositoryIntegration } from "./repository/repository-integration-read.js";
 import { createRepositoryRecoveryService } from "./repository/repository-recovery-service.js";
 import { readBootstrapReceipt } from "./repository/repository-bootstrap-read.js";
 import { readGoalDeployments } from "./http/goal-deployment-read.js";
@@ -23,6 +25,8 @@ export function createRepositoryWorkflowWiring(options: { readonly store: Sqlite
   const repositoryWorkflows = (): RepositoryWorkflowReadPort => Object.freeze({ boundProjectId: options.projectId,
     readCriteria: criterionEvidence.read, readRecovery: repositoryRecovery.readRecovery,
     readDeployments: (goalRef: string) => readGoalDeployments(options.store, options.projectId, goalRef),
+    readIntegration: () => readRepositoryIntegration(options.store, options.projectId,
+      landedNodeBranches(options.store, options.projectId, missions.listNodes())),
     readBootstrap: () => readBootstrapReceipt(options.store, options.projectId) });
   return Object.freeze({ criterionEvidence, repositoryRecovery, repositoryWorkflows,
     readPublicationCandidate: createPublicationCandidateReader(options.workspace) });

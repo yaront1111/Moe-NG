@@ -10,6 +10,8 @@ import type { NodeMission } from "./agent-wrapper.js";
 import { createCompiledNodeSource } from "./compiled-node-source.js";
 import { createWrapperNodeMissions } from "./wrapper-node-missions.js";
 import { withAttributedFindings } from "./wrapper-attributed-findings.js";
+import { withIntegrationConflict } from "./wrapper-integration-conflict.js";
+import { createNodeTreeMissions } from "./wrapper-node-trees.js";
 
 export interface WrapperReviewContext {
   readonly operatorPrincipalId: string;
@@ -85,6 +87,8 @@ export function withLatestVerifierFailure(
 
 interface WrapperReviewMissionsConfig extends WrapperReviewContext {
   readonly log: (line: string) => void;
+  /** Brief each node into its own Git working tree, so nodes hold their own checkouts. */
+  readonly nodeTrees?: boolean | undefined;
   readonly nodeSpecsDir?: string | undefined;
   readonly testCommand: string | null;
   readonly workspace: string | null;
@@ -98,6 +102,9 @@ export function createReviewAwareNodeMissions(config: WrapperReviewMissionsConfi
       return store === undefined ? null : createCompiledNodeSource({ store,
         projectId: config.projectId, workspace: config.workspace, testCommand: config.testCommand });
     } });
+  // The node's workspace is chosen once, here, and everything downstream follows it: the
+  // reservation's identity, the baseline, the verifier, the review binding and the landing commit.
+  const intoTree = config.nodeTrees === true ? createNodeTreeMissions(config.log) : null;
   return Object.freeze({ listNodes: source.listNodes,
     reviewContinuation: (nodeRef: string): ReviewContinuationApproval | null => {
       try {
@@ -107,7 +114,12 @@ export function createReviewAwareNodeMissions(config: WrapperReviewMissionsConfi
         return reviewContinuationAvailable(ledger) ? ledger.continuation! : null;
       } catch { return null; }
     },
-    nodeMission: (nodeRef: string): NodeMission | null => withAttributedFindings(config, nodeRef,
-      withLatestVerifierFailure(config, nodeRef, source.nodeMission(nodeRef))),
+    nodeMission: (nodeRef: string): NodeMission | null => {
+      const brief = source.nodeMission(nodeRef);
+      const placed = intoTree === null ? brief : intoTree(brief, nodeRef);
+      // A merge the integrator could not take is the owning node's next piece of work.
+      return withIntegrationConflict(config, nodeRef,
+        withAttributedFindings(config, nodeRef, withLatestVerifierFailure(config, nodeRef, placed)));
+    },
   });
 }

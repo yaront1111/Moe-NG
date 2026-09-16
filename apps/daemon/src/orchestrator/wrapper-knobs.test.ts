@@ -9,6 +9,7 @@ const DEFAULTS = Object.freeze({
   intervalMs: 15_000,
   maxAgents: 2,
   maxItemAttempts: 3,
+  nodeTrees: false,
   once: false,
   sessionTtlMs: THIRTY_MINUTES_MS + 60_000,
 });
@@ -25,8 +26,8 @@ describe("readWrapperKnobs", () => {
   it("reads explicit values", () => {
     expect(readWrapperKnobs({
       MOE_WRAPPER_INTERVAL_MS: "10000", MOE_WRAPPER_MAX_AGENTS: "1",
-      MOE_WRAPPER_MAX_ITEM_ATTEMPTS: "5", MOE_WRAPPER_ONCE: "1",
-    })).toEqual({ ...DEFAULTS, intervalMs: 10_000, maxAgents: 1, maxItemAttempts: 5, once: true });
+      MOE_WRAPPER_MAX_ITEM_ATTEMPTS: "5", MOE_WRAPPER_ONCE: "1", MOE_NODE_TREES: "1",
+    })).toEqual({ ...DEFAULTS, intervalMs: 10_000, maxAgents: 1, maxItemAttempts: 5, nodeTrees: true, once: true });
   });
 
   it("derives the bearer TTL from the agent lifetime so the session outlives the process", () => {

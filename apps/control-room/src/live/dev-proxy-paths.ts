@@ -52,6 +52,8 @@ export const DEV_PROXY_PATHS = Object.freeze([
   "/criteria/read",
   "/repository/recovery/read",
   "/repository/bootstrap/read",
+  // What became of each node branch; its consumer is the Integration section (2026-09-16).
+  "/repository/integration/read",
   // The release evidence read. Its consumer is the Release card
   // (task-817d893fa1254a4d82d2888af1f87a47); without the pin the dev lane cannot reach the
   // route and the card renders against Vite instead of against a daemon.

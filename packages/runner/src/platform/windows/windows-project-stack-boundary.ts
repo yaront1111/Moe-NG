@@ -48,6 +48,8 @@ export const PROJECT_STACK_ENVIRONMENT_KEYS = Object.freeze([
   "MOE_FOUNDATION_WORKSPACE_CATALOG",
   "MOE_NODE_SPECS_DIR",
   "MOE_NODE_TEST_COMMAND",
+  // Each node in its own Git working tree (owner decision 2026-09-16); the wrapper reads it.
+  "MOE_NODE_TREES",
   // Bound by the project launcher to the selected project's canonical root.
   "MOE_NODE_WORKSPACE",
   // The parent CLI's MEASURED fact of an attached operator console, "true" or "false";

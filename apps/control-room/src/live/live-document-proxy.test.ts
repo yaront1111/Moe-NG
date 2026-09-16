@@ -38,6 +38,7 @@ it("proxies the complete project-daemon v2 surface without manager authority", (
     "/criteria/read",
     "/repository/recovery/read",
     "/repository/bootstrap/read",
+    "/repository/integration/read",
     "/release/read",
     "/runs/read",
     "/session/challenge-operands/read",

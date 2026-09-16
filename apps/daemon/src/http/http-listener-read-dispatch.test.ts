@@ -369,7 +369,8 @@ describe("the read-route roster and the surface it advertises agree in BOTH dire
     // (404-by-fallthrough) and a branch with no roster entry (never reached at all).
     const served = new Set([...branches, UNCONDITIONAL_ELSE_MEMBER]);
     expect(sorted(served)).toStrictEqual(sorted(roster));
-    expect(roster.size).toBe(37);
+    // 38 since the integration read joined the roster (owner decision 2026-09-16).
+    expect(roster.size).toBe(38);
     // The else really is unconditional. If it becomes `else if`, the union above would be a
     // lie and this line is what catches it.
     expect(source).toContain("} else serveDocumentDossier(response, request, options, body);");
