@@ -132,7 +132,7 @@ async function main(): Promise<void> {
       : process.env["MOE_NODE_TEST_COMMAND"] as string;
     const { nodeMission, listNodes, reviewContinuation } = createReviewAwareNodeMissions({
       projectId: config.projectId, operatorPrincipalId: config.principalId, store: () => verifierStore,
-      workspace: compiledWorkspace, testCommand: compiledTestCommand, nodeSpecsDir: config.nodeSpecsDir,
+      workspace: compiledWorkspace, testCommand: compiledTestCommand, nodeSpecsDir: config.nodeSpecsDir, nodeTrees: knobs.nodeTrees,
       log: (line) => { process.stderr.write(`${line}\n`); },
     });
 

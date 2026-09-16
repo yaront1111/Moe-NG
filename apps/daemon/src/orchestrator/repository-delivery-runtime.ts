@@ -21,6 +21,8 @@ import type { AgentSessionFence } from "./agent-session-fence.js";
 import type { AgentSpawnStart } from "./agent-spawn-contract.js";
 import { createNodeLander } from "./node-lander.js";
 import { landingVerificationClass } from "./node-lander-verification.js";
+import { createNodeIntegration } from "./node-integration.js";
+import { landedNodeBranches } from "./node-landed-branches.js";
 import { createNodePublisher } from "./node-publisher.js";
 import type { ReleasePublisher } from "../release/release-decide-service.js";
 import { createNodeVerifier } from "./node-verifier.js";
@@ -166,6 +168,14 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
     projectId, store, workspace: config.compiledWorkspace });
   const criteria = createCriterionEvidenceService({ store, projectId, storeId,
     workspace: config.compiledWorkspace, clock: () => new Date().toISOString() });
+  // Where the nodes' own branches meet the project's own branch (owner decision 2026-09-16). It
+  // has nothing to do until a node lands on a branch of its own, so a project whose nodes share
+  // the project's checkout never sees it act.
+  const integration = createNodeIntegration({
+    candidates: () => landedNodeBranches(store, projectId, config.nodes()),
+    clock: () => new Date().toISOString(),
+    controller: { controllerId: randomBytes(32).toString("hex"), controllerPid: process.pid },
+    projectId, repository, store, storeId, workspace: config.compiledWorkspace });
   const close = (): Promise<void> => { closed = true; return criteria.close(); };
   const start: (spawn: AgentSpawnStart) => AgentSpawnStart = (spawn) => async (request) => {
     if (closed) return deliveryRefusal("REPOSITORY_DELIVERY_CLOSED");
@@ -178,6 +188,10 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
     if (closed) return;
     await criteria.advance();
     if (closed || config.compiledWorkspace === null) return;
+    for (const report of await integration.integrateOnce()) {
+      config.log(`[integration] ${report.nodeRef}: ${report.outcome} (${report.detail})`);
+    }
+    if (closed) return;
     for (const report of await publisher.publishOnce()) config.log(`[publisher] ${report.goalId}: ${report.outcome} (${report.detail})`);
   };
   const admission = (nodeRef: string, workspace: string) => closed ? null : coordinator.admission(workspace, nodeRef);

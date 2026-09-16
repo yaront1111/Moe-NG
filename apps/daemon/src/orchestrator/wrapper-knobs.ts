@@ -15,6 +15,8 @@ export interface WrapperKnobs {
   readonly maxAgents: number;
   /** Consecutive staffings of ONE unmoved item before the wrapper stops respawning it. */
   readonly maxItemAttempts: number;
+  /** MOE_NODE_TREES=1 briefs each node into its own Git working tree, so nodes code in parallel. */
+  readonly nodeTrees: boolean;
   readonly once: boolean;
   /**
    * session.open lifetime per staffing. Derived, never set directly: the bearer
@@ -72,6 +74,7 @@ export function readWrapperKnobs(
     maxAgents: integer(env, "MOE_WRAPPER_MAX_AGENTS", DEFAULT_MAX_AGENTS, 1),
     maxItemAttempts:
       integer(env, "MOE_WRAPPER_MAX_ITEM_ATTEMPTS", DEFAULT_MAX_ITEM_ATTEMPTS, 1),
+    nodeTrees: env["MOE_NODE_TREES"] === "1",
     once: env["MOE_WRAPPER_ONCE"] === "1",
     sessionTtlMs: Math.max(CLAIM_TTL_MS, agentTimeoutMs) + SESSION_EXIT_GRACE_MS,
   });
