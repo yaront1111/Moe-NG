@@ -99,6 +99,38 @@ describe("the governance pass", () => {
     expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).replanned).toBe(true);
   });
 
+  it("walks the decision ledger once for the whole pass, not once per node", () => {
+    // Measured on UnAI 2026-09-16. Reading each node's ledger singly folded the durable decision
+    // log once PER NODE: 70 nodes against a 20 MB log every 15 seconds held the wrapper's event
+    // loop at ~90% of a core for 54 minutes, during which it logged nothing and the MCP host the
+    // seats call stopped answering. `readReviewLedgers` exists for precisely this shape.
+    const store = openStore();
+    driveRounds(store, 1);
+    let reads = 0;
+    const counting = new Proxy(store, {
+      get(target, property): unknown {
+        const value = Reflect.get(target, property, target) as unknown;
+        if (typeof value !== "function") return value;
+        if (typeof property === "string" && property.startsWith("read")) reads += 1;
+        return (value as (...args: readonly unknown[]) => unknown).bind(target);
+      },
+    });
+    let asked = 0;
+    const counted: GovernanceAdvisor = () => { asked += 1; return null; };
+    // One real node and many that have no ledger at all: the per-node shape pays for every one.
+    const nodes = [
+      { nodeRef: SUBJECT_REF },
+      ...Array.from({ length: 24 }, (_, index) => ({ nodeRef: `node-absent-${String(index)}` })),
+    ];
+
+    passOver(counting, OPEN, counted, nodes).pass();
+
+    // Nothing here is due, so the prefilter alone answers for all 25 — and the advisor, which
+    // costs a model call in production, is never reached.
+    expect(asked).toBe(0);
+    expect(reads).toBeLessThan(6);
+  });
+
   it("does nothing before the store is open", () => {
     // The wrapper's handle is undefined until well into startup, and a pass that ran then would
     // decide on behalf of a project whose durable state it could not read.
