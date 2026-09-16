@@ -232,6 +232,11 @@ export function packWindows(options: PackOptions): number {
     const staged = reshapeDeploy(deployDir, staging);
     rmSync(deployDir, { force: true, recursive: true });
     stageBroker(staging);
+    // The wrapper's payload-hint table (addendum 2026-09-15). Its imports are type-only, so it runs
+    // as staged; without it every installed mission shipped with no payload hint.
+    const hintTable = join("apps", "control-room", "src", "live", "live-dispatch-payloads.ts");
+    mkdirSync(join(staging, dirname(hintTable)), { recursive: true });
+    cpSync(join(sourceRoot, hintTable), join(staging, hintTable));
 
     const closureCount = writeArtifactFiles(staging, sourceRoot, staged, options);
     const pruned = pruneTestArtifacts(staging);

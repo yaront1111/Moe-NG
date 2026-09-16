@@ -247,7 +247,8 @@ afterEach(() => {
 describe.skipIf(process.platform !== "win32")("task-0ed20856 Windows pack sentinel", () => {
   it("ships the tracked roster and never the ignored secret", () => {
     const fixture = createSentinelRepository("moe-sentinel-happy-", false);
-    expect(fixture.trackedRoster).toHaveLength(14);
+    // 15 since the payload-hint table became a required staged path (addendum 2026-09-15).
+    expect(fixture.trackedRoster).toHaveLength(15);
     expect(fixture.trackedRoster).not.toContain(SECRET_PATH);
     const outputRoot = temporaryRoot("moe-sentinel-public-");
     const observed = observation();

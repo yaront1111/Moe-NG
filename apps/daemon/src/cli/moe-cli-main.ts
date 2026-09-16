@@ -184,7 +184,11 @@ async function runStart(invocation: CliStart, io: CliIo): Promise<number> {
     try { recovered = await io.recoverReplan({ artifactRoot: io.artifactRoot, env: io.env,
       config, projectRoot: targetDir, log: io.log, automatic: true }); }
     catch { recovered = { ok: false, code: "MOE_CLI_REPLAN_RECOVERY_UNAVAILABLE" }; }
-    if (!recovered.ok) { io.log(recovered.code); return 1; }
+    // A startup release that cannot be proved keeps every reservation exactly as it was. Refusing
+    // to start never made one provable: it left the whole project unstartable (addendum 2026-09-15).
+    if (!recovered.ok) {
+      io.log(`moe start: ${recovered.code}: the startup replan release was not proved; every repository reservation is kept as it was and the project starts`);
+    }
     const current = readConfig(targetDir, io);
     if (current === null || JSON.stringify(current) !== JSON.stringify(config)) {
       io.log("MOE_CLI_REPLAN_RECOVERY_CONFIG_CHANGED"); return 1;

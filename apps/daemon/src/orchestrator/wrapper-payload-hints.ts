@@ -10,14 +10,13 @@ import { fileURLToPath } from "node:url";
  * hint already knew.
  *
  * Three outcomes, each said by name, because they are different facts:
- *  - ABSENT: the module file is not there. That is the installed artifact's DESIGNED state,
- *    not a fault: the pack stages the daemon's `pnpm deploy` output and the built control-room
- *    bundle (tools/packaging/pack-windows.ts), never `apps/control-room/src`, so the wrapper's
- *    `../../../control-room/src/live/live-dispatch.ts` resolves to a path that exists only in
- *    a repository checkout. Before this module every artifact wrapper.log opened with
- *    `[wrapper] payload hints unavailable: Error [ERR_MODULE_NOT_FOUND]: ...`, a designed
- *    absence reported as a load failure. Decided by an existence check BEFORE any import, so
- *    no module-not-found error is minted for a file nobody expected to be there.
+ *  - ABSENT: the module file is not there. The installed artifact used to be built that way
+ *    on purpose: the pack staged the daemon and the built control-room bundle but no
+ *    `apps/control-room/src`, so every installed mission shipped hintless, the very state the
+ *    2026-08-20 fix existed to end. The wrapper now loads the table's own module
+ *    (`live-dispatch-payloads.ts`, type-only imports), which the pack stages and requires
+ *    (addendum 2026-09-15), so ABSENT now means a checkout or pack that lost it. Decided by an
+ *    existence check BEFORE any import, so no module-not-found error is minted for it.
  *  - UNAVAILABLE: the file is present and does not load, or loads without a `payloadFor`
  *    function. That is the 2026-08-20 shape, and it is disclosed with the loader's own error.
  *  - LOADED: `payloadFor` is returned as the table.

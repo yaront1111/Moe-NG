@@ -112,7 +112,7 @@ describe("production repository delivery composition", () => {
   }, 120_000);
 
   it.each(["REPLAN", "unreadable", "unknown escalation", "missing escalation", "nonobject escalation"])(
-    "keeps %s review authority unknown after exhaustion", (condition) => {
+    "never reads %s review authority as ready or accepted after exhaustion", (condition) => {
     const f = fixture();
     exhaustReview(f);
     if (condition === "REPLAN") {
@@ -135,7 +135,8 @@ describe("production repository delivery composition", () => {
     }
     expect(readReviewLedgers(f.store, f.projectId, new Set(["a"])).ledgers.get("a"))
       .toMatchObject({ replanned: condition === "REPLAN", unreadable: condition !== "REPLAN" });
-    expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a")).toBe("UNKNOWN");
+    // A human REPLAN closes the node for good; everything else unreadable stays unknown.
+    expect(readRepositoryDeliveryFacts(f.store, f.projectId, "a")).toBe(condition === "REPLAN" ? "REPLANNED" : "UNKNOWN");
     expect(readReviewLedger(f.store, f.projectId, "a").accepted).toBeUndefined();
     expect(f.tests()).toBe(0);
   });

@@ -4,10 +4,14 @@ import type { RepositoryExecutionHandle, RepositoryExecutionState } from "../rep
 import { AgentProcessFailureError } from "./agent-spawn-contract.js";
 import type { AgentSpawnStart, AgentSpawnStartResult } from "./agent-spawn-contract.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
+import { VerifierProcessCancelledError } from "./process-runner-lifecycle.js";
+import type { RepositoryContainmentWitness } from "./repository-containment-witness.js";
 import { deliveryRefusal } from "./repository-delivery-contracts.js";
-import type { RepositoryDeliveryConfig, RepositoryDeliveryRefusal } from "./repository-delivery-contracts.js";
+import type { RepositoryDeliveryConfig, RepositoryDeliveryFacts, RepositoryDeliveryRefusal } from "./repository-delivery-contracts.js";
 
 const PREFIX = "node.deliver@";
+/** A contained holder under these facts keeps nothing live: it is between review attempts, or replanned for good. */
+const idleFacts = (facts: RepositoryDeliveryFacts): boolean => facts === "READY" || facts === "REPLANNED";
 
 /** A checkout owner survives child exit, retries, verification, and wrapper death. */
 export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryConfig) {
@@ -32,6 +36,22 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
   // A waiter is told WHO holds the repository and why (addendum 2026-09-15), never just BUSY.
   const busyBy = (handle: RepositoryExecutionHandle): RepositoryDeliveryRefusal => deliveryRefusal(
     "REPOSITORY_EXECUTION_BUSY", config.describeHolder?.(handle.owner.nodeRef, handle.reservation.phase));
+  /**
+   * Keeps what this controller just proved closed, for exactly the state it proved it in
+   * (addendum 2026-09-15). A restarted controller relies on it only while that state is untouched.
+   */
+  const recordProof = (witness: RepositoryContainmentWitness, proved: RepositoryExecutionHandle): void => {
+    if (config.containment === undefined) return;
+    try {
+      const current = config.port.readOwned(proved.reservation.identity.root, config.storeId, config.projectId);
+      if (!current.ok || current.handle === null) return;
+      const { owner, reservation } = current.handle;
+      if (owner.ownershipToken !== proved.owner.ownershipToken || reservation.controllerId !== config.controller.controllerId
+        || reservation.phase !== (witness === "SEAT" ? "EXECUTING" : "VERIFYING")
+        || reservation.sessionId !== proved.reservation.sessionId || reservation.pid !== proved.reservation.pid) return;
+      config.containment.record(witness, current.handle);
+    } catch { /* an unkept proof only costs a restart its shortcut */ }
+  };
 
   const owned = (workspace: string) => {
     const read = config.port.readOwned(workspace, config.storeId, config.projectId);
@@ -46,8 +66,18 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
     try {
       if (config.isProcessAlive(handle.reservation.controllerPid)) return deliveryRefusal("REPOSITORY_EXECUTION_BUSY");
     } catch { return deliveryRefusal("REPOSITORY_EXECUTION_UNKNOWN"); }
+    // The dead controller's kept proof stands in for the memory it lost, but only for the exact
+    // state it proved; read before the claim, because the claim moves the revision.
+    // With no kept proof, every runtime that ran a process for it being gone proves it too
+    // (owner decision 2026-09-16): a gone broker closed its Job, which killed every process in it.
+    const gone = (): boolean => config.containment?.runtimesGone(handle, config.isProcessAlive) === true;
+    const provedSeat = handle.reservation.phase === "EXECUTING"
+      && (config.containment?.proved("SEAT", handle) === true || gone());
+    const provedVerification = handle.reservation.phase === "VERIFYING"
+      && (config.containment?.proved("VERIFICATION", handle) === true || gone());
     const claimed = config.port.claimController(workspace, handle.owner, handle.reservation.revision, config.controller);
     if (!claimed.ok) return claimed;
+    if (provedSeat) exits.set(handle.owner.ownershipToken, "CONTAINED");
     // An orphan verifier or interrupted Git effect has no proved close witness. Only a durable
     // landing outcome reconciles a crash in that phase: a recorded committed landing, or a refusal
     // that journaled no intent and therefore wrote nothing at all.
@@ -57,7 +87,9 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
       const done = release(claimed.handle, landing === "LANDED" ? "LANDED" : "LANDED_NOTHING");
       return done.ok ? { ok: true as const, handle: null } : done;
     }
-    if (["VERIFYING", "LANDING"].includes(claimed.handle.reservation.phase)) {
+    // A verification its own controller proved cancelled is simply run again.
+    if (claimed.handle.reservation.phase === "LANDING"
+      || (claimed.handle.reservation.phase === "VERIFYING" && !provedVerification)) {
       const blocked = change(claimed.handle, { phase: "BLOCKED" });
       return blocked;
     }
@@ -102,6 +134,9 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
       const executing = change(handle, { phase: "EXECUTING", sessionId: request.sessionId, pid: null });
       if (!executing.ok) return deliveryRefusal(executing.code);
       handle = executing.handle;
+      // Which runtime runs this seat, kept before it can start (owner decision 2026-09-16). A seat
+      // with no record only means no later controller may infer its closure from its runtime.
+      config.containment?.recordRuntime("SEAT", handle);
       exits.delete(handle.owner.ownershipToken);
       const started = await spawn(request);
       if (!started.ok) {
@@ -119,11 +154,13 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
       const exit = started.exit.then((report) => {
         exits.set(token, bindingError === null ? "CONTAINED" : "UNKNOWN");
         if (bindingError !== null) { blockCurrent(lifetimeHandle); throw bindingError; }
+        recordProof("SEAT", lifetimeHandle);
         return report;
       }, (error: unknown) => {
         const containment = bindingError === null && error instanceof AgentProcessFailureError ? "CONTAINED" : "UNKNOWN";
         exits.set(token, containment);
         if (containment === "UNKNOWN") blockCurrent(lifetimeHandle);
+        else recordProof("SEAT", lifetimeHandle);
         throw bindingError ?? error;
       });
       return { ...started, exit };
@@ -137,18 +174,34 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
    * uncommitted, so no work can be lost. On UnAI an escalated node held the only checkout with a
    * clean tree while the one sibling that could clear its finding waited 283 times. The node
    * re-acquires with a fresh baseline when it is staffed again.
+   *
+   * A replanned holder gives it back on the same proof. On UnAI a human REPLAN left the node
+   * RESERVED with no seat and a clean tree; the replan recovery accepts only BLOCKED and this
+   * yield accepted only READY, so nothing could ever release the only checkout.
    */
   const yieldIdle = async (handle: RepositoryExecutionHandle): Promise<void> => {
     const nodeRef = handle.owner.nodeRef;
-    if (config.clean === undefined || !config.retired(nodeRef) || config.facts(nodeRef, handle) !== "READY") return;
+    if (config.clean === undefined || !config.retired(nodeRef) || !idleFacts(config.facts(nodeRef, handle))) return;
     if (!(await config.clean(handle.reservation.identity.root))) return;
     release(handle, "YIELDED");
+  };
+
+  /**
+   * A BLOCKED hold resumes on its own once every runtime that ran a process for it is gone
+   * (owner decision 2026-09-16): a gone broker closed its Job, which killed every process in it.
+   * Only review states come back; a landing whose Git effect is unknown stays for a human.
+   */
+  const resumeGone = (handle: RepositoryExecutionHandle): void => {
+    if (config.containment?.runtimesGone(handle, config.isProcessAlive) !== true) return;
+    const facts = config.facts(handle.owner.nodeRef, handle);
+    if (idleFacts(facts)) change(handle, { phase: "RESERVED", sessionId: null, pid: null });
+    else if (facts === "SUBMITTED") change(handle, { phase: "VERIFYING" });
   };
 
   const advanceOne = async (initial: RepositoryExecutionHandle): Promise<void> => {
     let handle = initial;
     const nodeRef = handle.owner.nodeRef;
-    if (handle.reservation.phase === "BLOCKED") return;
+    if (handle.reservation.phase === "BLOCKED") { resumeGone(handle); return; }
     if (handle.reservation.phase === "RESERVED") { await yieldIdle(handle); return; }
     if (handle.reservation.phase === "EXECUTING") {
       const closed = exits.get(handle.owner.ownershipToken);
@@ -158,27 +211,38 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
         if (handle.reservation.pid !== null) {
           try { if (config.isProcessAlive(handle.reservation.pid)) return; } catch { return; }
         }
-        // A dead direct PID or retired credential does not prove descendants
-        // closed. A restarted controller has no local containment witness.
-        block(handle); return;
+        // A dead direct PID or retired credential does not prove descendants closed, and a
+        // restarted controller has no local witness; a gone runtime does (owner decision 2026-09-16).
+        if (config.containment?.runtimesGone(handle, config.isProcessAlive) !== true) { block(handle); return; }
+        exits.set(handle.owner.ownershipToken, "CONTAINED");
       }
       if (!config.retired(nodeRef)) return;
       const facts = config.facts(nodeRef, handle);
       // A landing outcome cannot be reached from EXECUTING; every one of them still contains here.
       if (facts === "UNKNOWN" || facts === "REFUSED" || facts === "REFUSED_NO_EFFECT" || facts === "LANDED") { block(handle); return; }
-      const next = change(handle, facts === "READY"
+      // A replanned node's contained seat is done for good: back to RESERVED, where it may yield.
+      const next = change(handle, idleFacts(facts)
         ? { phase: "RESERVED", sessionId: null, pid: null } : { phase: "VERIFYING" });
-      if (!next.ok || facts === "READY") return;
+      if (!next.ok || idleFacts(facts)) return;
       handle = next.handle;
     }
     if (handle.reservation.phase === "VERIFYING") {
-      if (config.facts(nodeRef, handle) === "SUBMITTED") await config.verify(nodeRef, handle.reservation.identity.root);
+      if (config.facts(nodeRef, handle) === "SUBMITTED") {
+        // A verifier from an unrecorded runtime would let a later controller infer too much.
+        if (config.containment !== undefined && !config.containment.recordRuntime("VERIFICATION", handle)) return;
+        try { await config.verify(nodeRef, handle.reservation.identity.root); }
+        catch (error) {
+          // A cancelled verifier settled only after its tree kill was confirmed: keep the proof, stay VERIFYING.
+          if (error instanceof VerifierProcessCancelledError) recordProof("VERIFICATION", handle);
+          throw error;
+        }
+      }
       const facts = config.facts(nodeRef, handle);
       if (facts === "SUBMITTED") return; // missing standing authority can be installed later
-      if (facts !== "ACCEPTED" && facts !== "READY") { block(handle); return; }
-      const next = change(handle, facts === "READY"
+      if (facts !== "ACCEPTED" && !idleFacts(facts)) { block(handle); return; }
+      const next = change(handle, idleFacts(facts)
         ? { phase: "RESERVED", sessionId: null, pid: null } : { phase: "AWAITING_LANDING" });
-      if (!next.ok || facts === "READY") return;
+      if (!next.ok || idleFacts(facts)) return;
       handle = next.handle;
     }
     if (handle.reservation.phase === "AWAITING_LANDING") {
@@ -221,7 +285,8 @@ export function createRepositoryDeliveryCoordinator(config: RepositoryDeliveryCo
         visited.add(root); busy.add(root);
         try { await advanceOne(handle); }
         catch (error) {
-          blockCurrent(handle);
+          // A cancelled verification is contained and proved; any other throw leaves containment unknown.
+          if (!(error instanceof VerifierProcessCancelledError)) blockCurrent(handle);
           throw error;
         } finally { busy.delete(root); }
       }

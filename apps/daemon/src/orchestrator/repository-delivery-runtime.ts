@@ -16,6 +16,7 @@ import { reviewDecisionRequired } from "../review/review-stall.js";
 import { readReviewSubmissionSource } from "../review/review-submission-source.js";
 import type { RepositoryExecutionPhase } from "../repository/repository-execution-contracts.js";
 import { describeRepositoryHolder } from "./repository-holder-words.js";
+import { createRepositoryContainmentLedger } from "./repository-containment-witness.js";
 import type { AgentSessionFence } from "./agent-session-fence.js";
 import type { AgentSpawnStart } from "./agent-spawn-contract.js";
 import { createNodeLander } from "./node-lander.js";
@@ -31,6 +32,8 @@ import { probeProcessAlive } from "./process-runner-lifecycle.js";
 
 interface RepositoryDeliveryRuntimeConfig {
   readonly publisher?: ReleasePublisher;
+  /** The Windows Job broker that owns this runtime's Job; null or absent = unnamed, never inferred from. */
+  readonly runtimeBrokerPid?: number | null;
   readonly compiledWorkspace: string | null;
   readonly fence: AgentSessionFence;
   readonly landingOn: boolean;
@@ -68,7 +71,7 @@ export function readRepositoryDeliveryFacts(
     }
     // `escalated` records that a human answered, including ALLOW_MORE_ATTEMPTS.
     // Only REPLAN closes this node; allowed later rounds keep their actual review facts.
-    if (review.replanned) return "UNKNOWN";
+    if (review.replanned) return "REPLANNED";
     return review.rounds.at(-1)?.routing.route === "ACCEPT" ? "SUBMITTED" : "READY";
   } catch { return "UNKNOWN"; }
 }
@@ -93,16 +96,20 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
   const describeHolder = (nodeRef: string, phase: RepositoryExecutionPhase): string => {
     try {
       const review = readReviewLedger(store, projectId, nodeRef);
-      return describeRepositoryHolder({ continuation: reviewContinuationAvailable(review),
+      return describeRepositoryHolder({ accepted: review.accepted !== undefined, continuation: reviewContinuationAvailable(review),
         decisionDue: !review.unreadable && reviewDecisionRequired(review),
         nodeKey: readReviewSubmissionSource(store, projectId, nodeRef)?.nodeKey ?? nodeRef, phase, replanned: review.replanned });
     } catch { return `held by ${nodeRef}`; }
   };
   const coordinator = createRepositoryDeliveryCoordinator({
     closed: () => closed,
+    containment: createRepositoryContainmentLedger(store, config.runtimeBrokerPid ?? null),
+    // A probe that throws reads as "not clean": any throw inside advance blocks the reservation.
     clean: async (root) => {
-      const observed = await git.observe(root);
-      return observed.ok && observed.observation.entries.length === 0;
+      try {
+        const observed = await git.observe(root);
+        return observed.ok && observed.observation.entries.length === 0;
+      } catch { return false; }
     },
     describeHolder,
     controller: { controllerId: randomBytes(32).toString("hex"), controllerPid: process.pid },

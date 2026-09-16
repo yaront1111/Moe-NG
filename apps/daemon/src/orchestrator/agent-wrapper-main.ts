@@ -53,6 +53,7 @@ export type {
   WrapperStopSignal,
 } from "./process-runner-lifecycle.js";
 import { enrollDecisionLedgerMemo } from "../decision-ledger-memo.js";
+import { resolveRuntimeBrokerPid } from "./runtime-broker-identity.js";
 
 /**
  * The process wrapper: `node src/orchestrator/agent-wrapper-main.ts` staffs the
@@ -114,7 +115,7 @@ async function main(): Promise<void> {
     // swallowed, and missions then carry no hint. The module's header says why both matter.
     const hintModule = await loadPayloadHints({
       log: (line) => { console.error(line); },
-      moduleUrl: new URL("../../../control-room/src/live/live-dispatch.ts", import.meta.url),
+      moduleUrl: new URL("../../../control-room/src/live/live-dispatch-payloads.ts", import.meta.url),
     });
     if (stop.requested()) return;
 
@@ -174,7 +175,7 @@ async function main(): Promise<void> {
       onFatalContainment: () => { stop.request(); },
     });
     delivery = createRepositoryDeliveryRuntime({
-      publisher: provider.releasePublisher(),
+      publisher: provider.releasePublisher(), runtimeBrokerPid: await resolveRuntimeBrokerPid(process.ppid),
       compiledWorkspace, fence: staffingFence, landingOn,
       log: (line) => { process.stdout.write(`${line}\n`); },
       nodes: listNodes, storePath: config.storePath,

@@ -210,7 +210,11 @@ describe("capturing a preview journey", () => {
     }, { launch: () => diagnosticBrowser(failures), navigationTimeoutMs: 2_000 });
 
     expect(written).toStrictEqual([]);
-    expect(failures).toStrictEqual([{ operation: "NAVIGATION", category: "NETWORK_ERROR" }]);
+    // Both attempts of the retry added 2026-09-16, and still nothing advertised.
+    expect(failures).toStrictEqual([
+      { operation: "NAVIGATION", category: "NETWORK_ERROR" },
+      { operation: "NAVIGATION", category: "NETWORK_ERROR" },
+    ]);
     expect(existsSync(join(workspace, ...previewCaptureDirectory(GOAL, SHA).split("/"), "journey-home.png")))
       .toBe(false);
   }, 120_000);

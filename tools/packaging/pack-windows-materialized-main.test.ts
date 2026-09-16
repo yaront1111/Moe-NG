@@ -50,6 +50,9 @@ describe("materialized Windows broker prerequisite", () => {
     const fixtureVersion = "9.8.7";
     writeFileSync(join(test.sourceRoot, "package.json"), JSON.stringify({ version: fixtureVersion }));
     writeFileSync(join(test.sourceRoot, "LICENSE"), "synthetic fixture license");
+    const hints = join(test.sourceRoot, "apps", "control-room", "src", "live");
+    mkdirSync(hints, { recursive: true });
+    writeFileSync(join(hints, "live-dispatch-payloads.ts"), "export function payloadFor() { return null; }\n");
     const bytes = "synthetic built broker for archive snapshot";
     let targetRoot = "";
     const runStep: PackStepRunner = (tool, args) => {
