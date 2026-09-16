@@ -199,7 +199,12 @@ describe("the curated Windows project-stack request", () => {
       ...ALLOWED_ENVIRONMENT_KEYS,
       ...PROJECT_STACK_PROVIDER_CREDENTIAL_KEYS,
       "MOE_AGENT_COMMAND", "MOE_AGENT_TIMEOUT_MS", "MOE_DAEMON_CREDENTIAL",
-      "MOE_FOUNDATION_WORKSPACE_CATALOG", "MOE_NODE_SPECS_DIR", "MOE_NODE_TEST_COMMAND",
+      "MOE_FOUNDATION_WORKSPACE_CATALOG",
+      // Whether the daemon may answer an exhausted review itself, and how often per node. The
+      // wrapper reads both at startup, so off this roster the owner could state the policy and
+      // nothing would reach the process that enforces it.
+      "MOE_GOVERNANCE_MAX_DECISIONS", "MOE_GOVERNANCE_MODE",
+      "MOE_NODE_SPECS_DIR", "MOE_NODE_TEST_COMMAND",
       "MOE_NODE_TREES", "MOE_NODE_WORKSPACE", "MOE_OPERATOR_CHANNEL",
       "MOE_PRINCIPAL_ID",
       "MOE_PROJECT_CONFIGURATION_DIGEST", "MOE_PROJECT_ID", "MOE_PROJECT_INSTANCE_ID",

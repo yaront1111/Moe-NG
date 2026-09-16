@@ -1,0 +1,64 @@
+import type { SqliteEventStore } from "@moe/store";
+
+import { decideGovernanceEscalation } from "../review/governance-escalation-decider.js";
+import type { GovernanceAdvisor } from "../review/governance-escalation-decider.js";
+import { governanceOpen } from "../review/governance-policy-settings.js";
+import type { GovernancePolicy } from "../review/governance-policy-settings.js";
+
+/**
+ * Governance, run once per wrapper pass over every node the project knows.
+ *
+ * WHERE IT SITS. The pass loop already walks `delivery.advance()` and `wrapper.runOnce()` each
+ * interval. A node whose review is exhausted is invisible to both: the affordance surface offers
+ * it nothing but `escalation.decide` and marks its step BLOCKED, precisely so the wrapper does
+ * NOT staff agents into a refusal loop. So the node sits there until a human answers — which is
+ * the behaviour this pass exists to end.
+ *
+ * IT IS INERT UNTIL THE OWNER SAYS OTHERWISE. With no stated policy `governanceOpen` is false
+ * and this returns before reading anything, so an unconfigured daemon behaves exactly as it does
+ * today, down to the store reads it does not make.
+ *
+ * ONE NODE'S ANSWER IS NEVER ANOTHER'S PROBLEM. Each node is decided independently and a refusal
+ * is logged and stepped over, because a single unreadable ledger must not stop governance
+ * answering every other node in the project.
+ *
+ * IT SAYS WHAT IT DID, AND ONLY WHEN IT DID SOMETHING. The quiet outcomes — closed, not due,
+ * already funded — are the overwhelming majority on every pass and say nothing worth a line.
+ * Acting outcomes are always logged, because a decision taken on the owner's behalf that left no
+ * trace in the log would be exactly the thing they could not audit afterwards.
+ */
+export interface GovernancePassConfig {
+  readonly advisor: GovernanceAdvisor;
+  readonly clock: () => string;
+  readonly log: (line: string) => void;
+  readonly nodes: () => readonly { readonly nodeRef: string }[];
+  readonly policy: GovernancePolicy | undefined;
+  readonly projectId: string;
+  /** The wrapper's own handle, which is undefined before the store is opened. */
+  readonly store: () => SqliteEventStore | undefined;
+}
+
+export function createGovernancePass(config: GovernancePassConfig): () => void {
+  return function governancePass(): void {
+    if (!governanceOpen(config.policy)) return;
+    const store = config.store();
+    if (store === undefined) return;
+    let nodes: readonly { readonly nodeRef: string }[];
+    try { nodes = config.nodes(); } catch { return; }
+    for (const { nodeRef } of nodes) {
+      const outcome = decideGovernanceEscalation({
+        advisor: config.advisor, clock: config.clock, policy: config.policy,
+        projectId: config.projectId, store,
+      }, nodeRef);
+      if (outcome.kind === "ALLOWED") {
+        config.log(`[governance] ${nodeRef}: answered its exhausted review and funded one more attempt (${String(outcome.decisionIds.length)} decision(s) recorded)`);
+      } else if (outcome.kind === "REPLANNED") {
+        config.log(outcome.why === "BOUND_SPENT"
+          ? `[governance] ${nodeRef}: its governance decision bound is spent; replanned into a successor instead of funding another attempt`
+          : `[governance] ${nodeRef}: no answer could be produced; replanned into a successor carrying its findings`);
+      } else if (outcome.kind === "REFUSED") {
+        config.log(`[governance] ${nodeRef}: the daemon refused the decision (${outcome.code}); it stays exactly as it was`);
+      }
+    }
+  };
+}

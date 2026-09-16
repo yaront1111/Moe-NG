@@ -46,6 +46,12 @@ export const PROJECT_STACK_ENVIRONMENT_KEYS = Object.freeze([
   "MOE_DAEMON_CREDENTIAL",
   // R3-4: Foundation daemon inputs are admitted only to the project stack host.
   "MOE_FOUNDATION_WORKSPACE_CATALOG",
+  // Whether the daemon may answer an exhausted review itself, and how many times per node
+  // (owner decision 2026-09-16). Both are read by the wrapper at startup, so without them on
+  // this roster the owner could state the policy and nothing would ever reach the process that
+  // enforces it — the exact silent failure MOE_NODE_TREES hit before it was listed.
+  "MOE_GOVERNANCE_MAX_DECISIONS",
+  "MOE_GOVERNANCE_MODE",
   "MOE_NODE_SPECS_DIR",
   "MOE_NODE_TEST_COMMAND",
   // Each node in its own Git working tree (owner decision 2026-09-16); the wrapper reads it.
