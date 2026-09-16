@@ -42,16 +42,18 @@ function passOver(
 afterEach(closeStores);
 
 describe("the governance pass", () => {
-  it("decides the exhausted node the rest of the loop cannot move", () => {
+  it("surfaces the exhausted node the rest of the loop cannot move", () => {
     const store = openStore();
     driveRounds(store, 3);
     const { lines, pass } = passOver(store, OPEN);
 
     pass();
 
-    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).replanned).toBe(true);
+    // It stops and says so. Retiring the node here would destroy work nothing replaces:
+    // successor creation lives in the control room's two-phase workflow, not in the daemon.
     expect(lines).toHaveLength(1);
-    expect(lines[0]).toContain("replanned into a successor");
+    expect(lines[0]).toContain("needs your decision in the control room");
+    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).replanned).toBe(false);
   });
 
   it("is inert with no policy stated, and reads nothing on the way to doing nothing", () => {
@@ -93,10 +95,10 @@ describe("the governance pass", () => {
 
     pass();
 
-    // The unknown node is simply not due; the real one is still decided.
+    // The unknown node is simply not due; the real one is still reached and reported.
     expect(lines).toHaveLength(1);
     expect(lines[0]).toContain(SUBJECT_REF);
-    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).replanned).toBe(true);
+    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).replanned).toBe(false);
   });
 
   it("walks the decision ledger once for the whole pass, not once per node", () => {

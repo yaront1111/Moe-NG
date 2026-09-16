@@ -80,10 +80,10 @@ export function createGovernancePass(config: GovernancePassConfig): () => void {
       }, nodeRef);
       if (outcome.kind === "ALLOWED") {
         config.log(`[governance] ${nodeRef}: answered its exhausted review and funded one more attempt (${String(outcome.decisionIds.length)} decision(s) recorded)`);
-      } else if (outcome.kind === "REPLANNED") {
+      } else if (outcome.kind === "HUMAN_NEEDED") {
         config.log(outcome.why === "BOUND_SPENT"
-          ? `[governance] ${nodeRef}: its governance decision bound is spent; replanned into a successor instead of funding another attempt`
-          : `[governance] ${nodeRef}: no answer could be produced; replanned into a successor carrying its findings`);
+          ? `[governance] ${nodeRef}: its governance decision bound is spent; it needs your decision in the control room, and its work is untouched`
+          : `[governance] ${nodeRef}: no answer could be produced; it needs your decision in the control room, and its work is untouched`);
       } else if (outcome.kind === "REFUSED") {
         config.log(`[governance] ${nodeRef}: the daemon refused the decision (${outcome.code}); it stays exactly as it was`);
       }

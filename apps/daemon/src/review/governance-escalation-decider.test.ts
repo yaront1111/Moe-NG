@@ -93,33 +93,37 @@ describe("when governance is not the one to answer", () => {
   });
 });
 
-describe("governance replanning rather than parking a node", () => {
-  it("replans when it has no answer", () => {
+describe("governance stopping rather than retiring a node's work", () => {
+  // Measured on UnAI 2026-09-16: these arms used to commit a REPLAN, which retires the node —
+  // while successor CREATION lives in the control room, so nothing replaced it. Two nodes were
+  // retired 22 ms apart, no successors appeared, and the failure being replanned was
+  // environmental, so every successor would have hit the same wall. The `replanned` assertions
+  // below are the pin: governance may stop, but it may not destroy work it cannot replace.
+  it("stops when it has no answer, leaving the node for the human", () => {
     const store = exhausted();
 
     expect(decideGovernanceEscalation(depsFor(store, silent, OPEN), SUBJECT_REF))
-      .toEqual({ kind: "REPLANNED", why: "NO_ANSWER" });
-    // REPLAN is progress: the node closes to rounds and its findings go to a successor.
-    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).replanned).toBe(true);
+      .toEqual({ kind: "HUMAN_NEEDED", why: "NO_ANSWER" });
+    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).replanned).toBe(false);
   });
 
-  it("replans when the advisor throws, because a dead advisor must not park the node", () => {
+  it("stops when the advisor throws, without retiring the node on a dead advisor", () => {
     const store = exhausted();
 
     expect(decideGovernanceEscalation(depsFor(store, throws, OPEN), SUBJECT_REF))
-      .toEqual({ kind: "REPLANNED", why: "NO_ANSWER" });
-    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).replanned).toBe(true);
+      .toEqual({ kind: "HUMAN_NEEDED", why: "NO_ANSWER" });
+    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).replanned).toBe(false);
   });
 
-  it("replans once its bound is spent instead of funding attempts without end", () => {
+  it("stops once its bound is spent instead of funding attempts without end", () => {
     // The bound is the safety the policy cannot be constructed without. At zero, governance may
-    // only ever replan — a stated, meaningful stance, and the cheapest proof the arm is live.
+    // never fund an attempt at all — a stated stance, and the cheapest proof the arm is live.
     const store = exhausted();
     const bounded: GovernancePolicy = { kind: "AI_GOVERNOR", maxDecisions: 0 };
 
     expect(decideGovernanceEscalation(depsFor(store, answers, bounded), SUBJECT_REF))
-      .toEqual({ kind: "REPLANNED", why: "BOUND_SPENT" });
-    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).replanned).toBe(true);
+      .toEqual({ kind: "HUMAN_NEEDED", why: "BOUND_SPENT" });
+    expect(readReviewLedger(store, PROJECT_ID, SUBJECT_REF).replanned).toBe(false);
   });
 
   it("does not ask the advisor at all once the bound is spent", () => {

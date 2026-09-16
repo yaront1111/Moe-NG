@@ -22,7 +22,8 @@ import type { GovernanceAdvisor, GovernanceBrief, GovernanceAnswer }
  * repository hold, and nothing it can commit on its own.
  *
  * IT CANNOT INVENT ITS WAY PAST THE GATE. Every path that does not produce a well-formed,
- * fully-sourced answer returns null, and null means the node is REPLANNED, not retried. A dead
+ * fully-sourced answer returns null, and null means the node is handed to the human with its
+ * work untouched — never retried on a guess, and never retired. A dead
  * process, a timeout, a missing fence, unparsable JSON, a citation naming nothing or a decision
  * reasoning nothing all land in the same place. Governance answering wrongly is a worse failure
  * than governance not answering, so every ambiguity resolves to not answering.

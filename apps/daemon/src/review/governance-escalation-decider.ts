@@ -27,10 +27,20 @@ import { reviewDecisionRequired } from "./review-stall.js";
  * human's own press, without minting a credential for a reserved id.
  *
  * THE BOUND IS THE SAFETY, NOT THE JUDGEMENT. Governance may answer at most `maxDecisions`
- * questions per node. Past that it replans, and it replans whenever it cannot produce an answer
- * at all. Both arms exist so this can never do what it was built to stop: spend round after
- * round on a question nothing is resolving. A REPLAN is progress — the work is re-planned into
- * a successor carrying the findings — so the node is never left parked either way.
+ * questions per node. Past that, and whenever it cannot produce an answer at all, it STOPS and
+ * hands the node back to the human. Both arms exist so this can never do what it was built to
+ * stop: spend round after round on a question nothing is resolving.
+ *
+ * IT USED TO REPLAN THERE, AND THAT DESTROYED WORK. This module previously committed a REPLAN,
+ * documented as "progress — the work is re-planned into a successor carrying the findings".
+ * Half of that is untrue in the daemon: the REPLAN retires the node, but successor CREATION
+ * lives in the control room's two-phase workflow and nothing daemon-side dispatches
+ * `goal.create_with_source`. Measured on UnAI 2026-09-16: two nodes were retired 22 ms apart,
+ * no successors appeared, and one of them held a node-tree reservation that `moe recover-replan`
+ * cannot even see. Worse, the failure being replanned was environmental — the verifier could not
+ * migrate ANY node — so each successor would have inherited the same wall and burned its own
+ * bound. Parking a node is bad; retiring its work with no replacement is worse, and unlike
+ * parking it cannot be undone by answering the question.
  *
  * THE PRD DECIDES FIRST. The advisor is asked to locate the answer in the approved product
  * record before choosing one; a located answer records as `PRD_CITED` and costs the bound
@@ -80,8 +90,8 @@ export type GovernanceOutcome =
   | { readonly kind: "ALREADY_FUNDED" }
   /** Governance answered and funded one more attempt. */
   | { readonly kind: "ALLOWED"; readonly decisionIds: readonly string[] }
-  /** Governance closed the node to rounds: the bound is spent, or it had no answer. */
-  | { readonly kind: "REPLANNED"; readonly why: "BOUND_SPENT" | "NO_ANSWER" }
+  /** Governance stopped and left the node for the human. It commits NOTHING on this arm. */
+  | { readonly kind: "HUMAN_NEEDED"; readonly why: "BOUND_SPENT" | "NO_ANSWER" }
   /** The durable decision refused; the node stays exactly as it was. */
   | { readonly kind: "REFUSED"; readonly code: string };
 
@@ -98,8 +108,8 @@ const escalationRefOf = (subjectRef: string, version: number): string =>
   `gov-escalation-${subjectRef}-v${String(version)}`;
 
 /**
- * The command id binds the subject, the version and the decision word, so a REPLAN after a
- * refused ALLOW is a new command rather than a spent id (`REVIEW_COMMAND_ID_SPENT`).
+ * The command id binds the subject, the version and the decision word, so a later decision at
+ * the same version is a new command rather than a spent id (`REVIEW_COMMAND_ID_SPENT`).
  */
 const commandIdOf = (subjectRef: string, version: number, decision: string): string =>
   `gov-${governanceDecisionId({ findingId: decision, reviewVersion: version, subjectRef })}`;
@@ -126,7 +136,7 @@ function decide(
   deps: GovernanceDeciderDeps,
   subjectRef: string,
   version: number,
-  decision: "ALLOW_MORE_ATTEMPTS" | "REPLAN",
+  decision: "ALLOW_MORE_ATTEMPTS",
   guidance: string | null,
 ): { readonly code: string; readonly ok: boolean } {
   const outcome = runReviewCommand(deps.store, encoder.encode(JSON.stringify({
@@ -180,17 +190,12 @@ export function decideGovernanceEscalation(
   // The bound is checked BEFORE the advisor is asked: past it, no answer would be spent anyway,
   // and asking would cost a model call to reach a conclusion already fixed.
   if (records.spentOn(subjectRef) >= deps.policy.maxDecisions) {
-    const replanned = decide(deps, subjectRef, version, "REPLAN", null);
-    return replanned.ok
-      ? { kind: "REPLANNED", why: "BOUND_SPENT" }
-      : { code: replanned.code, kind: "REFUSED" };
+    return { kind: "HUMAN_NEEDED", why: "BOUND_SPENT" };
   }
 
   const questions = openQuestionsOf(ledger);
-  // Nothing of this node's own is open. Governance has no question to answer, and replanning a
-  // node it cannot even name a finding for would retire work on no evidence — a far worse
-  // outcome than leaving it to the human. Not the same case as an advisor that had questions
-  // and could not answer them, which replans below.
+  // Nothing of this node's own is open, so governance has no question to answer. Not the same
+  // case as an advisor that HAD questions and could not answer them, which stops below.
   if (questions.length === 0) return { kind: "NOT_DUE" };
   let answer: GovernanceAnswer | null = null;
   // An advisor that throws is an advisor that did not answer. It must not leave the node parked.
@@ -198,10 +203,7 @@ export function decideGovernanceEscalation(
     answer = deps.advisor({ questions, reviewVersion: version, subjectRef });
   } catch { answer = null; }
   if (answer === null || answer.guidance.trim().length === 0) {
-    const replanned = decide(deps, subjectRef, version, "REPLAN", null);
-    return replanned.ok
-      ? { kind: "REPLANNED", why: "NO_ANSWER" }
-      : { code: replanned.code, kind: "REFUSED" };
+    return { kind: "HUMAN_NEEDED", why: "NO_ANSWER" };
   }
 
   const allowed = decide(deps, subjectRef, version, "ALLOW_MORE_ATTEMPTS", answer.guidance);
