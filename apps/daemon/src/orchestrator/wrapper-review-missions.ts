@@ -10,6 +10,7 @@ import type { NodeMission } from "./agent-wrapper.js";
 import { createCompiledNodeSource } from "./compiled-node-source.js";
 import { createWrapperNodeMissions } from "./wrapper-node-missions.js";
 import { withAttributedFindings } from "./wrapper-attributed-findings.js";
+import { withIntegrationConflict } from "./wrapper-integration-conflict.js";
 import { createNodeTreeMissions } from "./wrapper-node-trees.js";
 
 export interface WrapperReviewContext {
@@ -116,7 +117,9 @@ export function createReviewAwareNodeMissions(config: WrapperReviewMissionsConfi
     nodeMission: (nodeRef: string): NodeMission | null => {
       const brief = source.nodeMission(nodeRef);
       const placed = intoTree === null ? brief : intoTree(brief, nodeRef);
-      return withAttributedFindings(config, nodeRef, withLatestVerifierFailure(config, nodeRef, placed));
+      // A merge the integrator could not take is the owning node's next piece of work.
+      return withIntegrationConflict(config, nodeRef,
+        withAttributedFindings(config, nodeRef, withLatestVerifierFailure(config, nodeRef, placed)));
     },
   });
 }
