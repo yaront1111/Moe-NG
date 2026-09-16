@@ -1,5 +1,6 @@
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { CriterionEvidenceRead } from "../criterion-evidence/criterion-contracts.js";
+import type { RepositoryIntegrationView } from "../repository/repository-integration-read.js";
 import type { RepositoryRecoveryView } from "../repository/repository-recovery-contracts.js";
 import type { BootstrapReadView } from "../repository/repository-bootstrap-read.js";
 import type { GoalDeploymentRead } from "./goal-deployment-read.js";
@@ -10,17 +11,20 @@ export const CRITERIA_READ_PATH = "/criteria/read" as const;
 export const REPOSITORY_RECOVERY_READ_PATH = "/repository/recovery/read" as const;
 export const REPOSITORY_BOOTSTRAP_READ_PATH = "/repository/bootstrap/read" as const;
 export const DEPLOYMENTS_READ_PATH = "/deployments/read" as const;
+/** What became of each node's own branch, for the operator's integration section (2026-09-16). */
+export const REPOSITORY_INTEGRATION_READ_PATH = "/repository/integration/read" as const;
 export interface RepositoryWorkflowReadPort {
   readonly boundProjectId: string;
   readCriteria(goalRef: string): CriterionEvidenceRead;
   readRecovery(): RepositoryRecoveryView;
   readBootstrap?(): BootstrapReadView;
+  readIntegration?(): RepositoryIntegrationView;
   readDeployments?(goalRef: string): GoalDeploymentRead;
 }
-type Workflow = "BOOTSTRAP" | "CRITERIA" | "RECOVERY" | "DEPLOYMENTS";
+type Workflow = "BOOTSTRAP" | "CRITERIA" | "RECOVERY" | "DEPLOYMENTS" | "INTEGRATION";
 type Refusal = { readonly outcome: "REFUSED"; readonly code: string; readonly layer: string };
 export type RepositoryWorkflowReadDispatch =
-  | { readonly kind: "REPLY"; readonly httpStatus: number; readonly body: BootstrapReadView | CriterionEvidenceRead | RepositoryRecoveryView | GoalDeploymentRead | Refusal | HttpPortRefused | HttpRefused }
+  | { readonly kind: "REPLY"; readonly httpStatus: number; readonly body: BootstrapReadView | CriterionEvidenceRead | RepositoryRecoveryView | GoalDeploymentRead | RepositoryIntegrationView | Refusal | HttpPortRefused | HttpRefused }
   | { readonly kind: "LISTENER_REFUSAL"; readonly code: "LISTENER_CRITERIA_REQUEST_INVALID" | "LISTENER_CRITERIA_UNAVAILABLE" | "LISTENER_REPOSITORY_RECOVERY_REQUEST_INVALID" | "LISTENER_REPOSITORY_RECOVERY_UNAVAILABLE" };
 const refused = (code: string): RepositoryWorkflowReadDispatch => ({ kind: "REPLY", httpStatus: 200,
   body: { outcome: "REFUSED", code, layer: "REPOSITORY_WORKFLOW_READ" } });
@@ -33,6 +37,7 @@ export function handleRepositoryWorkflowReadRequest(workflow: Workflow,
   if (!access.principal.capabilities.includes(CAPABILITIES.GOAL)) return refused("REPOSITORY_WORKFLOW_READ_CAPABILITY_DENIED");
   const port = dependencies.repositoryWorkflows;
   if (workflow === "DEPLOYMENTS" && typeof port?.readDeployments !== "function") return refused("DEPLOYMENTS_READ_UNAVAILABLE");
+  if (workflow === "INTEGRATION" && typeof port?.readIntegration !== "function") return refused("REPOSITORY_INTEGRATION_READ_UNAVAILABLE");
   // Bootstrap uses workflow refusals; preserve the existing criteria/recovery listener codes.
   if (workflow === "BOOTSTRAP" && (port === undefined || typeof port.readBootstrap !== "function"))
     return refused("REPOSITORY_BOOTSTRAP_READ_UNAVAILABLE");
@@ -45,9 +50,11 @@ export function handleRepositoryWorkflowReadRequest(workflow: Workflow,
       && object["goalRef"].length <= 4096 && object["goalRef"].normalize("NFC") === object["goalRef"] && !object["goalRef"].includes("\0"));
   if (!valid && workflow === "BOOTSTRAP") return refused("REPOSITORY_BOOTSTRAP_READ_REQUEST_INVALID");
   if (!valid && workflow === "DEPLOYMENTS") return refused("DEPLOYMENTS_READ_REQUEST_INVALID");
+  if (!valid && workflow === "INTEGRATION") return refused("REPOSITORY_INTEGRATION_READ_REQUEST_INVALID");
   if (!valid) return { kind: "LISTENER_REFUSAL", code: workflow === "CRITERIA" ? "LISTENER_CRITERIA_REQUEST_INVALID" : "LISTENER_REPOSITORY_RECOVERY_REQUEST_INVALID" };
   try { return { kind: "REPLY", httpStatus: 200, body: workflow === "BOOTSTRAP" ? port.readBootstrap!()
     : workflow === "DEPLOYMENTS" ? port.readDeployments!(object!["goalRef"] as string)
+    : workflow === "INTEGRATION" ? port.readIntegration!()
     : workflow === "RECOVERY" ? port.readRecovery() : port.readCriteria(object!["goalRef"] as string) }; }
   catch { return refused("REPOSITORY_WORKFLOW_READ_UNREADABLE"); }
 }

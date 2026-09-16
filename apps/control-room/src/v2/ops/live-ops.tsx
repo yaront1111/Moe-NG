@@ -22,6 +22,7 @@ import type { PolicyInstallState } from "./ops-screens.js";
 import { createPolicyInstallPort, installStandardPolicy, readSurfaceOnce } from "./policy-install-port.js";
 import type { PolicyInstallPort } from "./policy-install-port.js";
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
+import { LiveIntegration } from "./live-integration.js";
 import { LiveRepositoryRecovery } from "./live-repository-recovery.js";
 
 /**
@@ -140,6 +141,7 @@ export function LiveHealth({ headers, onConnection, pollMs, read, readRemote, se
     <>
       <HealthScreen nowMs={nowMs} outcome={outcome} remote={remote} />
       <LiveEnvironments headers={headers} pollMs={pollMs} />
+      {setup !== undefined && <LiveIntegration setup={setup} />}
       {setup !== undefined && <LiveRepositoryRecovery setup={setup} />}
       <LiveSessions headers={headers} pollMs={pollMs} setup={setup} />
       <LiveActivity goalRef={null} headers={headers} pollMs={pollMs} scopeLabel="THIS PROJECT" />

@@ -35,7 +35,7 @@ import { HEALTH_READ_PATH, handleHealthReadRequest } from "./health-read.js";
 import { ACTIVITY_READ_PATH, handleActivityReadRequest } from "./activity-read.js";
 import { SESSIONS_READ_PATH, handleSessionsReadRequest } from "./sessions-read.js";
 import { REPOSITORY_REMOTE_READ_PATH, handleRepositoryRemoteReadRequest } from "./repository-remote-read.js";
-import { CRITERIA_READ_PATH, REPOSITORY_RECOVERY_READ_PATH, REPOSITORY_BOOTSTRAP_READ_PATH, DEPLOYMENTS_READ_PATH, handleRepositoryWorkflowReadRequest } from "./repository-workflow-read.js";
+import { CRITERIA_READ_PATH, REPOSITORY_RECOVERY_READ_PATH, REPOSITORY_BOOTSTRAP_READ_PATH, DEPLOYMENTS_READ_PATH, REPOSITORY_INTEGRATION_READ_PATH, handleRepositoryWorkflowReadRequest } from "./repository-workflow-read.js";
 import { GOAL_SOURCE_READ_PATH, handleGoalSourceReadRequest } from "./goal-source-read.js";
 import { DESIGN_READ_PATH, handleDesignReadRequest } from "./design-read.js";
 import {
@@ -112,6 +112,7 @@ export const JSON_ROUTES: readonly string[] = Object.freeze([
   CRITERIA_READ_PATH,
   REPOSITORY_RECOVERY_READ_PATH,
   REPOSITORY_BOOTSTRAP_READ_PATH,
+  REPOSITORY_INTEGRATION_READ_PATH,
   DEPLOYMENTS_READ_PATH,
   GOAL_SOURCE_READ_PATH,
   DESIGN_READ_PATH,
@@ -143,7 +144,7 @@ function serveDocumentDossier(
 }
 
 function serveRepositoryWorkflow(response: ServerResponse, request: IncomingMessage, options: StartListenerOptions,
-  body: Uint8Array, workflow: "BOOTSTRAP" | "CRITERIA" | "RECOVERY" | "DEPLOYMENTS"): void {
+  body: Uint8Array, workflow: "BOOTSTRAP" | "CRITERIA" | "RECOVERY" | "DEPLOYMENTS" | "INTEGRATION"): void {
   const result = handleRepositoryWorkflowReadRequest(workflow, {
     authenticator: options.deps.authenticator, repositoryWorkflows: options.repositoryWorkflows,
   }, { body, credential: credentialOf(request), protocolVersion: protocolVersionOf(request) });
@@ -660,6 +661,10 @@ export async function serveReadDispatch(
     reply(response, 200, { outcome: "REFUSED", code: "REPOSITORY_BOOTSTRAP_READ_REQUEST_INVALID",
       layer: "REPOSITORY_WORKFLOW_READ" }); return;
   }
+  if (path === REPOSITORY_INTEGRATION_READ_PATH && request.method !== "POST") {
+    reply(response, 200, { outcome: "REFUSED", code: "REPOSITORY_INTEGRATION_READ_REQUEST_INVALID",
+      layer: "REPOSITORY_WORKFLOW_READ" }); return;
+  }
   if (path === DEPLOYMENTS_READ_PATH && request.method !== "POST") {
     reply(response, 200, { outcome: "REFUSED", code: "DEPLOYMENTS_READ_REQUEST_INVALID",
       layer: "REPOSITORY_WORKFLOW_READ" }); return;
@@ -750,6 +755,8 @@ export async function serveReadDispatch(
     serveRepositoryWorkflow(response, request, options, body, "BOOTSTRAP");
   } else if (path === DEPLOYMENTS_READ_PATH) {
     serveRepositoryWorkflow(response, request, options, body, "DEPLOYMENTS");
+  } else if (path === REPOSITORY_INTEGRATION_READ_PATH) {
+    serveRepositoryWorkflow(response, request, options, body, "INTEGRATION");
   } else if (path === GOAL_SOURCE_READ_PATH) {
     serveGoalSource(response, request, options, body);
   } else if (path === POLICY_READ_PATH) {
