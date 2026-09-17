@@ -297,6 +297,10 @@ export async function runProjectManagerMain(options: ProjectManagerMainOptions):
       operatorChannelAvailable: () => operatorChannelAvailable,
       root: options.root,
     }),
+    // The same channel `moe start` discarded, and the manager hosts SEVERAL projects on one
+    // console, so the project is named: without it the hosts' stderr would interleave into one
+    // stream no operator could attribute.
+    observeHostStderr: (entry, line) => { options.log(`[host ${entry.projectId}] ${line}`); },
   });
   const manager = createProjectManagerService({
     catalog: loaded.catalog,

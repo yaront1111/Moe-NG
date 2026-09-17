@@ -131,6 +131,12 @@ export async function runSingleProjectMain(options: ProjectSingleMainOptions): P
       operatorChannelAvailable: () => options.operatorInput !== undefined,
       root: options.root,
     }),
+    // THE HOST'S OWN VOICE, which `moe start` used to discard whole. Its stderr carries the
+    // stack host's config refusals, its uncaught exceptions and stack traces, and
+    // `STORE_DEPENDENCIES_ENV_MISSING: <the exact variables>`. Without this the operator saw two
+    // banner lines and, ten seconds later, a bare PROJECT_RUNTIME_START_TIMEOUT. Tagged by
+    // project so a manager hosting several does not produce one indistinguishable stream.
+    observeHostStderr: (entry, line) => { options.log(`[host ${entry.projectId}] ${line}`); },
   });
   let signal!: () => void;
   const signalled = new Promise<"SIGNAL">((resolve) => {
