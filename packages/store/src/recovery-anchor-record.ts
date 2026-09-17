@@ -7,6 +7,7 @@
  */
 import { digestBytes } from "./recovery-anchor-fs.js";
 import {
+  RECOVERY_ANCHOR_BYTES_MALFORMED,
   RECOVERY_ANCHOR_CODEC_VERSION,
   RECOVERY_ANCHOR_CODEC_VERSION_UNSUPPORTED,
   RECOVERY_ANCHOR_DIGEST_MISMATCH,
@@ -221,11 +222,19 @@ export function encodeAnchorRecord(record: RecoveryAnchorRecord): Uint8Array {
 export function decodeAnchorRecord(bytes: Uint8Array): RecoveryAnchorRecord | RecoveryAnchorRefused {
   let parsed: unknown;
   try {
-    parsed = JSON.parse(new TextDecoder().decode(bytes));
+    // A zero-byte anchor (a crash between open-truncate and write), an anchor cut short by
+    // ENOSPC, and bytes that are not valid UTF-8 all land here. None of them is an ALTERED
+    // record, and answering DIGEST_MISMATCH told the operator it was — a corruption or security
+    // incident rather than a torn write the next atomic publish repairs.
+    parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
   } catch {
-    return RECOVERY_ANCHOR_DIGEST_MISMATCH;
+    return RECOVERY_ANCHOR_BYTES_MALFORMED;
   }
-  if (parsed === null || typeof parsed !== "object") return RECOVERY_ANCHOR_DIGEST_MISMATCH;
+  // Arrays pass `typeof === "object"`, so without this an array read as a MISSING CODEC VERSION
+  // and was refused as an unsupported codec — a third unrelated answer for malformed bytes.
+  if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+    return RECOVERY_ANCHOR_BYTES_MALFORMED;
+  }
   const candidate = parsed as RecoveryAnchorRecord;
   if (candidate.anchorCodecVersion !== RECOVERY_ANCHOR_CODEC_VERSION) {
     return RECOVERY_ANCHOR_CODEC_VERSION_UNSUPPORTED;

@@ -58,6 +58,7 @@ export const RECOVERY_ANCHOR_REASON_CODES = Object.freeze([
   "RECOVERY_ANCHOR_REQUEST_INVALID",
   "RECOVERY_ANCHOR_UNREADABLE",
   "RECOVERY_ANCHOR_CODEC_VERSION_UNSUPPORTED",
+  "RECOVERY_ANCHOR_BYTES_MALFORMED",
   "RECOVERY_ANCHOR_DIGEST_MISMATCH",
   "RECOVERY_ANCHOR_COMMAND_MISMATCH",
   "RECOVERY_ANCHOR_INCARNATION_REUSED",
@@ -209,6 +210,17 @@ export const RECOVERY_ANCHOR_UNREADABLE = refusal(
 export const RECOVERY_ANCHOR_CODEC_VERSION_UNSUPPORTED = refusal(
   "RECOVERY_ANCHOR_CODEC_VERSION_UNSUPPORTED",
   "The stored recovery anchor names a codec version this store cannot read.",
+);
+/**
+ * The bytes were READ but are not a record: empty, cut short, not valid UTF-8, or well-formed
+ * JSON that is not an object. Distinct from DIGEST_MISMATCH on the same reasoning that keeps
+ * UNREADABLE apart from absence above. A digest mismatch says the contents were ALTERED, and an
+ * operator reads that as a corruption or security incident and stops trusting the slot; a torn
+ * write is what the next atomic publish fixes. The two demand nothing in common.
+ */
+export const RECOVERY_ANCHOR_BYTES_MALFORMED = refusal(
+  "RECOVERY_ANCHOR_BYTES_MALFORMED",
+  "The stored recovery anchor is not a decodable record; its selection is unknown.",
 );
 export const RECOVERY_ANCHOR_DIGEST_MISMATCH = refusal(
   "RECOVERY_ANCHOR_DIGEST_MISMATCH",
