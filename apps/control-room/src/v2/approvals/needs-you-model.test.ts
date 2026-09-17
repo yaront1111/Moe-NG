@@ -70,7 +70,7 @@ const cancelOffer = (goalId: string): Record<string, unknown> => ({
 });
 function coverage(
   goalId: string, verified: number, criteria: number,
-  gate1: "APPROVED" | "PENDING", lifecycle: string,
+  gate1: "APPROVED" | "PENDING", lifecycle: string, lastActivityAt: string | null = null,
 ): DocumentCoverageOutcome {
   return {
     contracts: [{
@@ -85,7 +85,7 @@ function coverage(
       revisionDigest: "d".repeat(64), revisionId: "rev-1",
     }],
     document: { byteLength: 10, contentSha256: "b".repeat(64), displayPath: "PRD.md" },
-    goals: [{ goalId, lastActivityAt: null, lifecycle, planningRunRef: `run-${goalId}`, title: "t" }],
+    goals: [{ goalId, lastActivityAt, lifecycle, planningRunRef: `run-${goalId}`, title: "t" }],
     sections: null,
     status: "COVERAGE",
     totals: { contracts: 1, criteria, goals: 1, planned: criteria - verified, requirements: 1, unattributable: 0, verified },
@@ -143,13 +143,21 @@ describe("deriveNeedsYou", () => {
     expect(data.countLabel).toBe("2 decisions need you");
   });
 
-  it("raises an ABANDON card for a stuck product: active, past Gate 1, zero verified", () => {
+  // A fixed clock so staleness is deterministic. STALE is 60 min old (> ABANDON_STALE_MS 45 min);
+  // FRESH is 10 min old, the shape of a goal that just sealed a node or was just enabled.
+  const NOW = Date.parse("2026-09-17T21:00:00.000Z");
+  const STALE = "2026-09-17T20:00:00.000Z";
+  const FRESH = "2026-09-17T20:50:00.000Z";
+
+  it("raises an ABANDON card for a stuck product: active, past Gate 1, zero verified, and STALE", () => {
     // The exact state three UnAI products sat in on 2026-09-17 — approved, EXECUTION_ENABLED,
-    // 0 of N verified — which close cannot clear because it demands completion.
+    // 0 of N verified, and not moving for days — which close cannot clear because it demands
+    // completion. Staleness is what separates this from a healthy just-started goal.
     const offer = cancelOffer("goal-stuck");
     const data = deriveNeedsYou({
       catalog: catalog([entry("goal-stuck", "Stuck")]),
-      coverage: new Map([["goal-stuck", coverage("goal-stuck", 0, 150, "APPROVED", "EXECUTION_ENABLED")]]),
+      coverage: new Map([["goal-stuck", coverage("goal-stuck", 0, 150, "APPROVED", "EXECUTION_ENABLED", STALE)]]),
+      nowMs: NOW,
       surface: surface([offer]),
     });
     expect(data.items.map((item) => [item.kind, item.goalId])).toEqual([["ABANDON", "goal-stuck"]]);
@@ -158,12 +166,37 @@ describe("deriveNeedsYou", () => {
     expect(data.items[0]?.detail).toContain("None of the 150 acceptance criteria are verified");
   });
 
+  it("does NOT raise ABANDON for a healthy just-started goal: zero verified but activity FRESH", () => {
+    // THE REGRESSION FENCE (measured 2026-09-17: goal-b2cc3b54 was mislabelled "stuck" 7 min into a
+    // healthy build). Same shape as the stuck card — EXECUTION_ENABLED, 0 of 150 verified, cancel
+    // offered — but the goal is actively moving (fresh lastActivityAt), so no abandon invite.
+    const data = deriveNeedsYou({
+      catalog: catalog([entry("goal-fresh", "Fresh")]),
+      coverage: new Map([["goal-fresh", coverage("goal-fresh", 0, 150, "APPROVED", "EXECUTION_ENABLED", FRESH)]]),
+      nowMs: NOW,
+      surface: surface([cancelOffer("goal-fresh")]),
+    });
+    expect(data.items.map((item) => item.kind)).toEqual([]);
+  });
+
+  it("does NOT raise ABANDON when the goal has no activity timestamp to age", () => {
+    // A null lastActivityAt cannot be proven stale, so the destructive card must not fire on it.
+    const data = deriveNeedsYou({
+      catalog: catalog([entry("goal-null", "NoActivity")]),
+      coverage: new Map([["goal-null", coverage("goal-null", 0, 150, "APPROVED", "EXECUTION_ENABLED", null)]]),
+      nowMs: NOW,
+      surface: surface([cancelOffer("goal-null")]),
+    });
+    expect(data.items.map((item) => item.kind)).toEqual([]);
+  });
+
   it("does not raise ABANDON for a healthy goal that has verified some criteria", () => {
     // The gate is verified === 0, never merely "incomplete": a goal mid-verification is working,
-    // not stuck, and must not draw an abandon card.
+    // not stuck, and must not draw an abandon card. (Stale here too, to isolate the verified gate.)
     const data = deriveNeedsYou({
       catalog: catalog([entry("goal-live", "Live")]),
-      coverage: new Map([["goal-live", coverage("goal-live", 4, 150, "APPROVED", "EXECUTION_ENABLED")]]),
+      coverage: new Map([["goal-live", coverage("goal-live", 4, 150, "APPROVED", "EXECUTION_ENABLED", STALE)]]),
+      nowMs: NOW,
       surface: surface([cancelOffer("goal-live")]),
     });
     expect(data.items.map((item) => item.kind)).toEqual([]);
@@ -173,7 +206,8 @@ describe("deriveNeedsYou", () => {
     // The offer is the daemon's own statement that cancel is available; the card never invents it.
     const data = deriveNeedsYou({
       catalog: catalog([entry("goal-stuck", "Stuck")]),
-      coverage: new Map([["goal-stuck", coverage("goal-stuck", 0, 150, "APPROVED", "EXECUTION_ENABLED")]]),
+      coverage: new Map([["goal-stuck", coverage("goal-stuck", 0, 150, "APPROVED", "EXECUTION_ENABLED", STALE)]]),
+      nowMs: NOW,
       surface: surface([cancelOffer("some-other-goal")]),
     });
     expect(data.items.map((item) => item.kind)).toEqual([]);

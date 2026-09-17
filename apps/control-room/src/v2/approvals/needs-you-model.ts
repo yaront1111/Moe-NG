@@ -108,6 +108,8 @@ export interface NeedsYouData {
 
 export interface NeedsYouInput {
   readonly catalog: GoalCatalogFrame | null;
+  /** Wall clock for the ABANDON card's staleness fence. Injectable for tests; defaults to Date.now(). */
+  readonly nowMs?: number | undefined;
   readonly coverage: ReadonlyMap<string, DocumentCoverageOutcome>;
   /** One deployment read per goal, keyed by goalId; absent means it has not answered. */
   readonly deployments?: ReadonlyMap<string, DeploymentsOutcome> | undefined;
@@ -133,6 +135,21 @@ const KIND_ORDER: Readonly<Record<NeedsYouKind, number>> = Object.freeze({
 });
 const OPEN_LIFECYCLES: readonly string[] = Object.freeze(["EXECUTION_ENABLED", "CLOSING"]);
 
+// The ABANDON card's staleness fence. `lastActivityAt` is the latest committed decision on the
+// goal, its run or one of its nodes, so it jumps forward every time a node seals (~10-20 min of
+// work each). A goal that is genuinely wedged stops moving; a healthy one that just started, or is
+// mid-node, is well inside this window. 45 min is comfortably longer than a node's work cycle, so a
+// brand-new EXECUTION_ENABLED goal with 0 verified is NOT called stuck while it is still building.
+const ABANDON_STALE_MS = 45 * 60_000;
+
+/** Whether a goal's last durable activity is old enough to call it stuck. A null timestamp (no
+ *  activity read at all) is treated as NOT stale: the card must not fire on a value it cannot age. */
+function abandonStale(lastActivityAt: string | null, nowMs: number): boolean {
+  if (lastActivityAt === null) return false;
+  const at = Date.parse(lastActivityAt);
+  return Number.isFinite(at) && nowMs - at > ABANDON_STALE_MS;
+}
+
 function offerFor(
   surface: SurfaceFrame | null, commandKind: string, target: string,
 ): Readonly<Record<string, unknown>> | undefined {
@@ -147,6 +164,7 @@ function itemsFor(
   surface: SurfaceFrame | null,
   previews: NeedsYouInput["previews"], releases: NeedsYouInput["releases"],
   runs: RunsOutcome | null | undefined, deployments: DeploymentsOutcome | undefined,
+  nowMs: number,
 ): NeedsYouItem[] {
   const title = entry.brief?.title ?? entry.goalId;
   const base = { goalId: entry.goalId, planningRunRef: entry.planningRunRef, title };
@@ -229,22 +247,28 @@ function itemsFor(
         kind: "READY_TO_CLOSE",
       }));
     }
-    // A STUCK PRODUCT: past Gate 1, active, and NOT ONE criterion verified. That is the shape of a
-    // dead or replanned goal — the exact state three UnAI products sat in on 2026-09-17, with no
-    // operator action able to clear them because close demands completion. It is deliberately
-    // narrow (verified === 0, never merely "incomplete") so a healthy goal mid-verification does
-    // not draw an abandon card; a brief window on a brand-new goal is the accepted cost, and the
-    // action arms-to-confirm because it is destructive. Shown only while the daemon offers cancel.
+    // A STUCK PRODUCT: past Gate 1, active, NOT ONE criterion verified, AND not moving. That is the
+    // shape of a dead or replanned goal — the exact state three UnAI products sat in on 2026-09-17,
+    // with no operator action able to clear them because close demands completion. It is
+    // deliberately narrow: verified === 0 (never merely "incomplete") AND `lastActivityAt` stale by
+    // ABANDON_STALE_MS. The staleness fence is what stops a HEALTHY just-started goal from being
+    // labelled stuck — a brand-new EXECUTION_ENABLED goal building its first of N nodes has 0
+    // verified for a long while, but its activity is fresh, so it must not draw a destructive
+    // "abandon" invite (measured 2026-09-17: goal-b2cc3b54 was mislabelled stuck 7 min into a
+    // healthy build). The action arms-to-confirm because it is destructive. Shown only while the
+    // daemon offers cancel.
     const cancelOffer = offerFor(surface, "goal.cancel", entry.goalId);
     if (cancelOffer !== undefined && goal !== undefined && !complete
       && OPEN_LIFECYCLES.includes(goal.lifecycle ?? "")
-      && criteria > 0 && verified === 0 && pending.length === 0 && coverage.contracts.length > 0) {
+      && criteria > 0 && verified === 0 && pending.length === 0 && coverage.contracts.length > 0
+      && abandonStale(goal.lastActivityAt, nowMs)) {
       items.push(Object.freeze({
         ...base,
         actionLabel: "Open the goal",
         cancel: Object.freeze({ affordance: cancelOffer }),
-        detail: `None of the ${String(criteria)} acceptance criteria are verified.`
-          + " If this product is stuck and will not be finished, you can abandon it.",
+        detail: `None of the ${String(criteria)} acceptance criteria are verified, and it has not`
+          + " made progress in a while. If this product is stuck and will not be finished, you can"
+          + " abandon it.",
         headline: "This product has made no verified progress",
         kind: "ABANDON",
       }));
@@ -268,10 +292,11 @@ export function deriveNeedsYou(input: NeedsYouInput): NeedsYouData {
       note: `The goal catalog answered ${catalog.outcome}: ${catalog.detail}.`,
     });
   }
+  const nowMs = input.nowMs ?? Date.now();
   const items = [
     ...catalog.goals.flatMap((entry) =>
       itemsFor(entry, coverage.get(entry.goalId), surface, previews, releases, runs,
-        deployments?.get(entry.goalId))),
+        deployments?.get(entry.goalId), nowMs)),
     ...escalationItems(surface, runs, catalog),
     ...incidentItems({ dismissed: dismissedIncidents, health, surface }),
   ].sort((left, right) => KIND_ORDER[left.kind] - KIND_ORDER[right.kind]
