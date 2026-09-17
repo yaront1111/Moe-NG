@@ -671,4 +671,37 @@ describe("goal cancel abandons a goal close would refuse", () => {
 
     expect(outcome.ok).toBe(false);
   });
+
+  /**
+   * DoD 5 FOR THE ABANDON PATH, and the only exact-replay proof this kind has: cancel is the
+   * terminal `goal.close` is not, so the shared `bootstrapSequence()` cannot carry both and the
+   * replay sweeps in `j1-command-path.test.ts` and `bootstrap-durability.test.ts` each exclude
+   * the kind, naming this arm. The clock advances between the two sends for the reason the
+   * create replay advances it (task-9d86234a): a writer that deduplicated on the decided-at
+   * reading rather than on the command bytes would otherwise pass.
+   */
+  it("replays a byte-identical cancel without a second write when the clock advances", () => {
+    const store = openStore();
+    const version = stageGoalLifecycle(store, "EXECUTION_ENABLED");
+    const request = envelope("goal.cancel", version, { goalId: GOAL_ID });
+    const first = send(store, request);
+    expect(first.ok, first.ok ? "" : first.code).toBe(true);
+    if (!first.ok) throw new Error("expected a cancel");
+    const cancelled = closeSnapshot(store);
+    expect(cancelled.goal?.lifecycle).toBe("CANCELLED");
+
+    const retried = send(store, { ...request, decidedAt: "2026-08-09T12:34:56.789Z" });
+
+    expect(retried.ok, retried.ok ? "" : retried.code).toBe(true);
+    if (!retried.ok) throw new Error("expected a replay");
+    expect(retried.disposition).toBe("REPLAYED");
+    expect(retried.authority).toBe("DURABLE_DECISION");
+    expect(retried.decision.decisionId).toBe(first.decision.decisionId);
+    expect(retried.decision.resultSha256).toBe(first.decision.resultSha256);
+    // The FIRST decision came back, not a re-decided one carrying the advanced reading.
+    expect(retried.decision.decidedAt).toBe(request.decidedAt);
+    // NO SECOND WRITE: the durable decision and goal event rows, not the return value, are the
+    // evidence -- "it did not throw the second time" is also what a double write looks like.
+    expectNoCloseMutation(store, cancelled);
+  });
 });

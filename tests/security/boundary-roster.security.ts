@@ -22,7 +22,7 @@
  * OVER EXPORTED DECLARATIONS ONLY. `DECLARATION_PATTERN` is anchored `^export const`, so three
  * populations sit outside every arm above, and this paragraph carries its own falsifier for
  * each — the file's convention is that a prose claim names the assertion that reds if it rots.
- *   MODULE-PRIVATE DECLARATIONS, 81 at the wide `[A-Z0-9_]+` width — a column-0 `const *_LAYER`
+ *   MODULE-PRIVATE DECLARATIONS, 82 at the wide `[A-Z0-9_]+` width — a column-0 `const *_LAYER`
  *   no `^export const` anchor can ever reach. Reddened by "TASK-LV allowlists every scanned
  *   module-private declaration (scan minus allowlist is empty)" when one appears, by "TASK-LV
  *   has no allowlist entry absent from source" when one vanishes, and by "TASK-LV counts
@@ -40,7 +40,7 @@
  * because the roster would then be compared against the same narrowed scan that produced it.
  *
  * ALWAYS STATE THE PATTERN WIDTH WHEN QUOTING THESE. On 2026-09-17 the invisible share is
- * 81 of 261 (31.0%) with a WIDE numerator over a WIDE denominator; a narrow-width census
+ * 82 of 262 (31.3%) with a WIDE numerator over a WIDE denominator; a narrow-width census
  * must use its own denominator. Two seats argued 45 versus 46 across two rounds as though
  * it were a factual dispute; it was a units mismatch. Pinned by "TASK-LV pins the invisible
  * share at the wide pattern width, numerator and denominator both named".
@@ -836,7 +836,7 @@ describe("scanner matches the annotated declaration form", () => {
  *
  * Every arm before this one measures EXPORTED declarations, because `DECLARATION_PATTERN` is
  * anchored `^export const`. A column-0 `const FOO_LAYER` is structurally unreachable by that
- * anchor no matter how wide its character class gets; the current scan finds 81 declarations.
+ * anchor no matter how wide its character class gets; the current scan finds 82 declarations.
  * These four arms make that population a DECLARED NUMBER instead of an unmeasured remainder.
  *
  * SET EQUALITY IN BOTH DIRECTIONS, and the reason is the defect this closes. An arm that walks
@@ -848,14 +848,17 @@ describe("scanner matches the annotated declaration form", () => {
  */
 /**
  * The invisible share, stated once so no arm re-derives it. WIDE numerator, WIDE denominator:
- * 81 module-private declarations against those 81 plus the 180 exported ones. The per-mille pin
- * is `Math.round`ed by the arm below, so 81/261 = 310.3 pins at 310.
+ * 82 module-private declarations against those 82 plus the 180 exported ones. The per-mille pin
+ * is `Math.round`ed by the arm below, so 82/262 = 313.0 pins at 313.
  * 265/317 -> 261/310 on 2026-09-17: the v1 control-room UI removal took three module-private
  * declarations and one exported one (see EXPECTED_PRIVATE_COUNT and EXPECTED_ROSTER_SIZE).
+ * 261/310 -> 262/313 on 2026-09-17: the Abandon control's GOAL_CANCEL_LAYER joined the
+ * module-private population (see EXPECTED_PRIVATE_COUNT). The numerator moved and the
+ * denominator with it; EXPECTED_ROSTER_SIZE did not, so no layer was exported to buy this.
  */
 const EXPECTED_INVISIBLE_NUMERATOR = EXPECTED_PRIVATE_COUNT;
-const EXPECTED_INVISIBLE_DENOMINATOR = 261;
-const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 310;
+const EXPECTED_INVISIBLE_DENOMINATOR = 262;
+const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 313;
 
 describe("TASK-LV module-private layer declarations are bounded", () => {
   it("TASK-LV scans a non-empty module-private population", () => {

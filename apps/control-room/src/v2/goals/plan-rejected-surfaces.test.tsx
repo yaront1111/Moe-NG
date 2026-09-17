@@ -53,11 +53,19 @@ describe("the Needs-you queue after a plan is sent back", () => {
    * BIDIRECTIONAL on the roster, not just membership: PLAN_REJECTED is advertised AND
    * every advertised kind is a distinct string in the declared order. A kind added to
    * the constant without a producing branch would advertise an item nothing can reach.
+   *
+   * ABANDON APPENDED on 2026-09-17 for the daemon's new `goal.cancel` command (0b53ccc5,
+   * ec009a08): a tenth kind with its own producing branch in `needs-you-model.ts` (past
+   * Gate 1, open lifecycle, ZERO criteria verified, and the daemon offering cancel). It
+   * joins the queue BESIDE the others at the tail, where `KIND_ORDER` sorts it last - it
+   * displaces nothing, and PLAN_REJECTED still stands directly after PLAN_APPROVAL, which
+   * is the claim this arm's name makes. Pinned in the declared order rather than matched
+   * loosely, so the next kind reds here too.
    */
   it("advertises PLAN_REJECTED once, beside PLAN_APPROVAL", () => {
     expect([...NEEDS_YOU_KINDS]).toEqual([
       "INCIDENT", "PLAN_APPROVAL", "PLAN_REJECTED", "PREVIEW", "RELEASE", "DEPLOY", "ESCALATION",
-      "GATE_1", "READY_TO_CLOSE",
+      "GATE_1", "READY_TO_CLOSE", "ABANDON",
     ]);
     expect(new Set(NEEDS_YOU_KINDS).size).toBe(NEEDS_YOU_KINDS.length);
   });

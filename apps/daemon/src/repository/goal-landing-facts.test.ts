@@ -257,28 +257,44 @@ describe("a goal has a landed commit", () => {
  * THE SURFACE, over a real store through the shipped composition root. These read
  * `/affordances/read`'s own answer rather than the fact in isolation, so they also pin that the
  * fact is actually WIRED — a gate no one composed would leave every arm above green.
+ *
+ * `goal.cancel@<goalId>` RIDES EVERY ARM BELOW, and joined them 2026-09-17 with the kind itself
+ * (0b53ccc5). Abandoning a product is gated on NOTHING — not on close readiness, not on a
+ * landed commit — because the goal that most needs the action is exactly the one that landed
+ * nothing and will never verify. So it sits BESIDE `goal.close` and `repository.publish` in
+ * every world this describe stages rather than displacing either, and it sorts first. It is
+ * spelled into each pin rather than filtered out of `goalOffers`, because this suite narrows by
+ * TARGET and never by kind: an offer that wrongly appeared for this goal must still land inside
+ * the assertion.
  */
 describe("the publish offer on /affordances/read", () => {
   it("is ABSENT for an enabled goal with no landing receipt", () => {
     // The live defect, at the surface: a PUBLISH card over "No node of this goal is landed as a
     // commit yet". goal.close stays — 8145137c's NO_CONTRACT rule is untouched for the seed
     // world — so the arm shows the publish offer alone went away.
-    expect(goalOffers(enabledWorld())).toEqual([`goal.close@${GOAL_ID}`]);
+    expect(goalOffers(enabledWorld())).toEqual([
+      `goal.cancel@${GOAL_ID}`, `goal.close@${GOAL_ID}`,
+    ]);
   });
 
   it("APPEARS targeting publish:<goalId> once a commit lands, and goes again on a fresh world", () => {
     // ABSENT -> PRESENT over one store, read off the surface both times.
     const store = enabledWorld();
-    expect(goalOffers(store)).toEqual([`goal.close@${GOAL_ID}`]);
+    expect(goalOffers(store)).toEqual([
+      `goal.cancel@${GOAL_ID}`, `goal.close@${GOAL_ID}`,
+    ]);
 
     land(store, "node-a", "COMMITTED");
 
     expect(goalOffers(store)).toEqual([
-      `goal.close@${GOAL_ID}`, `repository.publish@publish:${GOAL_ID}`,
+      `goal.cancel@${GOAL_ID}`, `goal.close@${GOAL_ID}`,
+      `repository.publish@publish:${GOAL_ID}`,
     ]);
 
     // ...and PRESENT -> ABSENT across worlds: the same goal, landed nothing, is unoffered.
-    expect(goalOffers(enabledWorld())).toEqual([`goal.close@${GOAL_ID}`]);
+    expect(goalOffers(enabledWorld())).toEqual([
+      `goal.cancel@${GOAL_ID}`, `goal.close@${GOAL_ID}`,
+    ]);
   });
 
   it("APPEARS when the goal's only landing provably had nothing to commit", () => {
@@ -291,7 +307,8 @@ describe("the publish offer on /affordances/read", () => {
 
     expect(nodeLanded(store, "node-a")).toBe("REFUSED");
     expect(goalOffers(store)).toEqual([
-      `goal.close@${GOAL_ID}`, `repository.publish@publish:${GOAL_ID}`,
+      `goal.cancel@${GOAL_ID}`, `goal.close@${GOAL_ID}`,
+      `repository.publish@publish:${GOAL_ID}`,
     ]);
   });
 
@@ -301,7 +318,9 @@ describe("the publish offer on /affordances/read", () => {
     land(store, "node-a", { refusalCode: "GIT_COMMIT_FAILED" });
 
     expect(nodeLanded(store, "node-a")).toBe("REFUSED");
-    expect(goalOffers(store)).toEqual([`goal.close@${GOAL_ID}`]);
+    expect(goalOffers(store)).toEqual([
+      `goal.cancel@${GOAL_ID}`, `goal.close@${GOAL_ID}`,
+    ]);
   });
 
   it("stays ABSENT when a no-effect refusal already JOURNALED a landing intent", () => {
@@ -313,7 +332,9 @@ describe("the publish offer on /affordances/read", () => {
     journalIntent(store, "node-a");
 
     expect(nodeLanded(store, "node-a")).toBe("REFUSED");
-    expect(goalOffers(store)).toEqual([`goal.close@${GOAL_ID}`]);
+    expect(goalOffers(store)).toEqual([
+      `goal.cancel@${GOAL_ID}`, `goal.close@${GOAL_ID}`,
+    ]);
   });
 
   it("stays ABSENT for a commit landed on a node outside the goal's graph", () => {
@@ -322,7 +343,9 @@ describe("the publish offer on /affordances/read", () => {
     land(store, "node-1", "COMMITTED");
 
     expect(nodeLanded(store, "node-1")).toBe("COMMITTED");
-    expect(goalOffers(store)).toEqual([`goal.close@${GOAL_ID}`]);
+    expect(goalOffers(store)).toEqual([
+      `goal.cancel@${GOAL_ID}`, `goal.close@${GOAL_ID}`,
+    ]);
   });
 
   it("saves a whole durable fold when the caller supplies the ledger it already read", () => {

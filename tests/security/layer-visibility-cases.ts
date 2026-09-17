@@ -149,7 +149,7 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
 }
 
 /**
- * Stated at the WIDE pattern width (`[A-Z0-9_]+`): 81 declarations on 2026-09-13.
+ * Stated at the WIDE pattern width (`[A-Z0-9_]+`): 82 declarations on 2026-09-17.
  * The TWO wide-only names are PRODUCT_CONTRACT_GATE_1_READ_LAYER and
  * LIVE_GATE_1_LAYER, each hidden twice over — module-private AND digit-bearing. Quoting a
  * private count against an exported count of a DIFFERENT width is the recurring error in this
@@ -165,7 +165,13 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
 // 84 -> 81 on 2026-09-17: the v1 control-room UI was removed, taking CODE_LAYERS
 // (approvals/approval-gating.ts) and both LIVE_DOCUMENT_LAYER sites
 // (live/live-document-dossier.ts, live/live-document-ingest.ts) with it.
-const EXPECTED_PRIVATE_COUNT = 81;
+// 81 -> 82 on 2026-09-17 for GOAL_CANCEL_LAYER: the daemon's new `goal.cancel` command
+// (0b53ccc5) gained an Abandon control (ec009a08), and its port stamps the browser's answer
+// exactly as the sibling GOAL_CLOSE_LAYER does one file over. Module-private for the same
+// reason as that sibling — the stamp never leaves the browser, so rostering it would advertise
+// a channel that does not exist. Enrolled here, not in LAYER_ROSTER: EXPECTED_ROSTER_SIZE is
+// unedited, which is the arithmetic that confirms the route.
+const EXPECTED_PRIVATE_COUNT = 82;
 
 /**
  * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
@@ -214,6 +220,7 @@ const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
   { constant: "FOUNDATION_INPUT_HYDRATOR_LAYER", file: "apps/daemon/src/work/foundation-input-hydrator.ts" },
   { constant: "FOUNDATION_RECEIPTS_LAYER", file: "apps/daemon/src/host/foundation-receipts.ts" },
   { constant: "GATE_LAYER", file: "packages/core/src/planning/approval-authority.ts" },
+  { constant: "GOAL_CANCEL_LAYER", file: "apps/control-room/src/v2/approvals/goal-cancel-port.ts" },
   { constant: "GOAL_CATALOG_READ_LAYER", file: "apps/daemon/src/http/goal-catalog-read.ts" },
   { constant: "GOAL_CLOSE_LAYER", file: "apps/control-room/src/v2/approvals/goal-close-port.ts" },
   { constant: "REPLAN_LAYER", file: "apps/control-room/src/v2/approvals/replan-successor-port.ts" },
