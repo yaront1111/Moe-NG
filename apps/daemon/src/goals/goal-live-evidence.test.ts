@@ -7,7 +7,7 @@ import { GOAL_ID, PROJECT_ID, decisionCount, openStore } from "../bootstrap/boot
 import { readReviewLedger } from "../review/review-ledger.js";
 import type { AcceptanceRecord } from "../review/review-read-model.js";
 import {
-  deltaNode, envelope as reviewEnvelope, replanPayload, send as reviewSend,
+  deltaNode, envelope as reviewEnvelope, finding, replanPayload, send as reviewSend, submitPayload,
 } from "../review/review-test-fixtures.js";
 import {
   cleanupGoalClosureFixtures,
@@ -113,6 +113,18 @@ function replan(store: SqliteEventStore, nodeRef: string): void {
   if (!outcome.ok) throw new Error(`replan fixture refused: ${outcome.code}`);
 }
 
+/** One unsuccessful review round on the node, through the shipped `review.submit` handler. */
+function rejectedRound(store: SqliteEventStore, nodeRef: string, number: number): void {
+  const version = readReviewLedger(store, PROJECT_ID, nodeRef).version;
+  const outcome = reviewSend(store, {
+    ...reviewEnvelope("review.submit", version,
+      submitPayload(number, [finding({ ruleId: `rule-${String(number)}` })], { subjectRef: nodeRef }),
+      `cmd-round-${nodeRef}-${String(number)}`),
+    projectId: PROJECT_ID,
+  });
+  if (!outcome.ok) throw new Error(`round ${String(number)} fixture refused: ${outcome.code}`);
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   cleanupGoalClosureFixtures();
@@ -212,6 +224,30 @@ describe("the live leg closes on acceptance, verifier receipt and landing", () =
 
     expectRefusedExactly(outcome, "GOAL_CLOSE_REVIEW_PACKAGE_STALE",
       "a durable re-plan supersedes the accepted review package");
+    expectUnmoved(store, before);
+  });
+
+  /**
+   * A re-plan the node ALREADY ANSWERED is not a supersession. The fold never clears `delta`, so
+   * a re-plan committed before the rounds that were later verified and accepted made this goal
+   * impossible to close for ever, on the ordinary path agents are told to take after a rejection.
+   */
+  it("qualifies when the durable re-plan precedes the rounds that were accepted", () => {
+    const { store, nodeRefs } = createScopedGoalWorld();
+    const nodeRef = nodeRefs[0]!;
+    rejectedRound(store, nodeRef, 1);
+    replan(store, nodeRef);
+    // The acceptance's own clean round, verifier receipt and acceptance all follow the re-plan.
+    seedReviewAcceptance(store, nodeRef);
+    seedLandingReceipt(store, nodeRef, "COMMITTED");
+    expect(readReviewLedger(store, PROJECT_ID, nodeRef).delta).toBeDefined();
+    const before = snapshot(store);
+
+    const qualified = qualifyGoalClosure(store, PROJECT_ID, GOAL_ID);
+
+    expect(qualified.ok, qualified.ok ? "" : `${qualified.code}: ${qualified.message}`).toBe(true);
+    if (!qualified.ok) return;
+    expect(qualified.legs).toEqual({ [nodeRef]: "LIVE" });
     expectUnmoved(store, before);
   });
 

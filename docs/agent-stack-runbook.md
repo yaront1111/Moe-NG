@@ -1054,7 +1054,7 @@ All of these refuse at layer `DAEMON_PREREQUISITE`:
 | `GOAL_CLOSE_VERIFICATION_RECEIPT_UNREADABLE` | the receipt exists but will not read back |
 | `GOAL_CLOSE_VERIFICATION_NOT_PASSED` | the durable verification or landing evidence does not say the work passed |
 | `GOAL_CLOSE_RESULT_DIGEST_MISMATCH` | the accepted result's digest does not match what was verified |
-| `GOAL_CLOSE_REVIEW_PACKAGE_STALE` | a later review round or a re-plan supersedes the acceptance being relied on |
+| `GOAL_CLOSE_REVIEW_PACKAGE_STALE` | a later review round, or a re-plan committed after the round the acceptance attests, supersedes it — an earlier re-plan the node then answered with the rounds that were accepted does not |
 | `GOAL_CLOSE_AUTHORITY_REMAINS` | an activation still holds authority over a node of this goal |
 
 ONE EARLIER GATE, WITH A GENERIC CODE. `goal.close` is a bootstrap-family

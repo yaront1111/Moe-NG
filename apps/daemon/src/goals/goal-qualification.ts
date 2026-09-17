@@ -25,14 +25,16 @@
  *    (grepped: it survives only as a test literal), so `completionNodeAcceptedRef` binds the
  *    WHOLE ordered approved node set. That proves more than a single designated node, not less.
  *  - `noCurrentPreparationGeneration` has no durable source at all and is declared, not derived.
- *    `noPendingDraftOrSupersession` DOES have one — a recorded re-plan — and this module refuses
- *    rather than asserting it away.
+ *    `noPendingDraftOrSupersession` DOES have one — a re-plan recorded AFTER the round the
+ *    acceptance attests — and this module refuses rather than asserting it away.
  */
 
 import type { SqliteEventStore } from "@moe/store";
 
+import { decisionsOf } from "../decision-ledger-memo.js";
 import { readReviewLedger } from "../review/review-ledger.js";
 import type { AcceptanceRecord } from "../review/review-read-model.js";
+import { replanSupersedesLatestRound } from "../review/review-replan-position.js";
 import { readVerifierReceipt } from "../review/verifier-receipt-ledger.js";
 import {
   GOAL_CLOSE_AUTHORITY_REMAINS,
@@ -63,6 +65,9 @@ export type {
   GoalClosureQualification, GoalClosureQualified, GoalClosureRefused,
 } from "./goal-live-evidence.js";
 
+/** The page size every review-ledger walk in this daemon asks the decision ledger for. */
+const DECISION_PAGE_SIZE = 200;
+
 /** The review half: the acceptance, the receipt it names, and the round that receipt attests. */
 function reviewClosure(
   store: SqliteEventStore, projectId: string, nodeRef: string,
@@ -72,10 +77,6 @@ function reviewClosure(
   if (review.unreadable || accepted === undefined) {
     return refuse(GOAL_CLOSE_REVIEW_ACCEPTANCE_REQUIRED,
       "no durable review acceptance names this approved node");
-  }
-  if (review.delta !== undefined) {
-    return refuse(GOAL_CLOSE_REVIEW_PACKAGE_STALE,
-      "a durable re-plan supersedes the accepted review package");
   }
   const verifier = readVerifierReceipt(store, projectId, accepted.verifierReceiptId);
   if (!verifier.ok) {
@@ -95,6 +96,14 @@ function reviewClosure(
     || source.decisionId !== latest.decisionId || source.resultSha256 !== latest.resultSha256) {
     return refuse(GOAL_CLOSE_REVIEW_PACKAGE_STALE,
       "the accepted verifier receipt no longer attests the latest review round");
+  }
+  // ...and, with that round now proved to be the one the acceptance attests, no re-plan may
+  // follow it. The mere PRESENCE of a delta is not a supersession — the fold never clears it, so
+  // a re-plan the node already answered with these very rounds would close this goal for ever.
+  const decisions = decisionsOf(store, DECISION_PAGE_SIZE);
+  if (replanSupersedesLatestRound(decisions, projectId, nodeRef, review)) {
+    return refuse(GOAL_CLOSE_REVIEW_PACKAGE_STALE,
+      "a durable re-plan supersedes the accepted review package");
   }
   return accepted;
 }
