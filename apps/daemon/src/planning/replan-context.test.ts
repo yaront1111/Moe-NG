@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { closeStores, GOAL_ID, PROJECT_ID, envelope, send } from "../bootstrap/bootstrap-test-fixtures.js";
 import { reviewWorld } from "../orchestrator/wrapper-review-test-fixtures.js";
 import { createCompilerMissionInputs } from "../orchestrator/wrapper-mission-inputs.js";
@@ -12,6 +12,16 @@ import { readReviewImplementationGuidance } from "../review/review-implementatio
 import { MARKER } from "../orchestrator/wrapper-review-test-fixtures.js";
 import { replanGuidanceHistory } from "./replan-guidance-history.js";
 import { envelope as reviewEnvelope, send as sendReview } from "../review/review-test-fixtures.js";
+
+/**
+ * Every arm here builds a REAL durable world — a store, a review ledger, a terminal verifier
+ * failure — and the two heaviest take 2.4 s and 2.9 s on an idle machine. Against Vitest's 5 s
+ * default that is not a margin, and under the full daemon run's parallelism both crossed it and
+ * reported as timeouts, which reads as a hang in the code under test rather than as a budget.
+ * The same 30 s the other world-building suites here use (foundation-registry,
+ * foundation-attempt-service).
+ */
+vi.setConfig({ testTimeout: 30_000 });
 import { nodeOf, PRD } from "./plan-reject-test-fixtures.js";
 import { decisionsOf } from "../decision-ledger-memo.js";
 
