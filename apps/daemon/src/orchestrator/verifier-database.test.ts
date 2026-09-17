@@ -9,6 +9,7 @@ import { PassThrough } from "node:stream";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createVerifierDatabaseRunner } from "./verifier-database.js";
+import type { VerifierDatabaseProvisioning } from "./verifier-database-provisioning.js";
 import { createNodeVerifier, type VerifierRunCapture } from "./node-verifier.js";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { SqliteEventStore } from "@moe/store";
@@ -565,3 +566,156 @@ it.runIf(process.env.MOE_VERIFIER_DATABASE === "1")("real PostgreSQL: ACCEPT, RE
     for (const name of names) spawnSync("docker", ["rm", "--force", "--volumes", name], { shell: false, timeout: 30_000 });
   }
 }, 900_000);
+
+/**
+ * THE OPERATOR SEAM: image, delivered variable names and TLS (UnAI, 2026-09-17). A product
+ * whose `db:migrate` needs pgvector, a TLS server and its own variables could never verify
+ * against the hard-coded plain postgres + DATABASE_URL, so every DB-backed node looped to the
+ * review ceiling. The arms below pin the docker commands and the delivered variables exactly,
+ * and pin that the unconfigured path is byte-identical to before.
+ */
+const PEM = "-----BEGIN CERTIFICATE-----\nMIIBszCCAVmgAwIBAgIUZ+abc=\n-----END CERTIFICATE-----\n";
+class TlsDockerHost extends DockerHost {
+  mintFails = false;
+  enableFails = false;
+  override docker(args: readonly string[]): { code: number; output: string } {
+    if (args[0] === "exec" && args.includes("sh") && args.some((arg) => arg.includes("openssl req"))) {
+      this.dockerCalls.push([...args]);
+      return { code: this.mintFails ? 1 : 0, output: "" };
+    }
+    if (args[0] === "exec" && args.includes("psql")) {
+      this.dockerCalls.push([...args]);
+      return { code: this.enableFails ? 1 : 0, output: "" };
+    }
+    if (args[0] === "exec" && args.includes("cat")) {
+      this.dockerCalls.push([...args]);
+      return { code: 0, output: PEM };
+    }
+    return super.docker(args);
+  }
+}
+function runnerWith(host: DockerHost, database: VerifierDatabaseProvisioning | undefined) {
+  return createVerifierDatabaseRunner({
+    spawn: host.spawn, platform: "linux", killProcessGroup: host.killGroup,
+    environment: { PATH: "/runtime", LANG: "C", DATABASE_URL: "ambient-must-not-win" },
+    readyTimeoutMs: 10, pollMs: 1, timeoutMs: 1000, killGraceMs: 50,
+    ...(database === undefined ? {} : { database }),
+  });
+}
+const runImage = (host: DockerHost): string => host.dockerCalls.find((args) => args[0] === "run")!.at(-1)!;
+const execs = (host: DockerHost): string[] => host.dockerCalls.filter((args) => args[0] === "exec").map((args) => args.join(" "));
+
+describe("verifier database provisioning seam", () => {
+  it("unconfigured is byte-identical to before: plain image, DATABASE_URL only, no TLS execs", async () => {
+    const host = new TlsDockerHost();
+    const runner = runnerWith(host, undefined);
+    try {
+      await runner(workspace());
+      expect(runImage(host)).toBe("postgres:17-alpine");
+      const env = host.recipeEnvironments[0]!;
+      expect(new URL(env.DATABASE_URL!).hostname).toBe("127.0.0.1");
+      expect(Object.keys(env).filter((key) => /UNAI|CA_PATH/u.test(key))).toEqual([]);
+      // Only readiness probes reach exec: no mint, no ALTER SYSTEM, no cert extraction.
+      expect(execs(host).every((line) => line.includes("pg_isready"))).toBe(true);
+      host.assertGone();
+    } finally { await runner.close(); }
+  });
+
+  it("delivers the generated URL under EVERY configured name from the configured image", async () => {
+    const host = new TlsDockerHost();
+    const runner = runnerWith(host, {
+      image: "pgvector/pgvector:pg17", urlVariables: ["DATABASE_URL", "UNAI_MIGRATION_DATABASE_URL"],
+    });
+    try {
+      const capture = await runner(workspace());
+      expect(capture.exitCode).toBe(0);
+      expect(runImage(host)).toBe("pgvector/pgvector:pg17");
+      const env = host.recipeEnvironments[0]!;
+      expect(env.UNAI_MIGRATION_DATABASE_URL).toBe(env.DATABASE_URL);
+      expect(new URL(env.UNAI_MIGRATION_DATABASE_URL!).password).toHaveLength(64);
+      expect(env.UNAI_DATABASE_CA_PATH).toBeUndefined();
+      expect(execs(host).every((line) => line.includes("pg_isready"))).toBe(true);
+      host.assertGone();
+    } finally { await runner.close(); }
+  });
+
+  it("with TLS: mints the cert as root, enables ssl by reload, extracts the public cert, delivers its host path", async () => {
+    const host = new TlsDockerHost();
+    let caAtRecipeTime: string | null = null;
+    let caPath = "";
+    host.recipeStarted = () => {
+      caPath = host.recipeEnvironments.at(-1)!.UNAI_DATABASE_CA_PATH!;
+      caAtRecipeTime = readFileSync(caPath, "utf8");
+    };
+    const runner = runnerWith(host, {
+      caPathVariable: "UNAI_DATABASE_CA_PATH", image: "pgvector/pgvector:pg17", tls: true,
+      urlVariables: ["UNAI_MIGRATION_DATABASE_URL"],
+    });
+    try {
+      const capture = await runner(workspace());
+      expect(capture.exitCode).toBe(0);
+      expect(host.events).toEqual(["migration", "recipe-after-migration"]);
+      const lines = execs(host);
+      const mint = lines.find((line) => line.includes("openssl req"))!;
+      expect(mint).toContain("--user root");
+      expect(mint).toContain("subjectAltName=IP:127.0.0.1");
+      expect(mint).toContain("basicConstraints=critical,CA:TRUE");
+      expect(mint).toContain("chmod 600 server.key");
+      const enable = lines.find((line) => line.includes("psql"))!;
+      expect(enable).toContain("ALTER SYSTEM SET ssl = 'on'");
+      expect(enable).toContain("pg_reload_conf()");
+      expect(lines.some((line) => line.endsWith("cat /var/lib/postgresql/data/server.crt"))).toBe(true);
+      // Order: readiness first, then mint -> enable -> extract.
+      const order = ["pg_isready", "openssl req", "psql", "cat "].map((needle) => lines.findIndex((line) => line.includes(needle)));
+      expect(order).toEqual([...order].sort((a, b) => a - b));
+      // The client's CA is the exact minted certificate, present while the recipe ran, gone after.
+      expect(caAtRecipeTime).toBe(PEM);
+      expect(existsSync(caPath)).toBe(false);
+      const env = host.recipeEnvironments[0]!;
+      expect(env.DATABASE_URL).toBeUndefined(); // only the configured names are delivered
+      expect(new URL(env.UNAI_MIGRATION_DATABASE_URL!).hostname).toBe("127.0.0.1");
+      // The key never leaves the container and no secret reaches the capture.
+      expect(lines.join("\n")).not.toContain("cat /var/lib/postgresql/data/server.key");
+      expect(capture.output).not.toContain(new URL(env.UNAI_MIGRATION_DATABASE_URL!).password);
+      host.assertGone();
+    } finally { await runner.close(); }
+  });
+
+  it.each([
+    ["mintFails", "TLS_CERTIFICATE_MINT_FAILED"],
+    ["enableFails", "TLS_ENABLE_FAILED"],
+  ] as const)("a failed TLS step (%s) is MIGRATION_DB_UNAVAILABLE %s, runs nothing, and removes the container", async (flag, reason) => {
+    const host = new TlsDockerHost();
+    host[flag] = true;
+    const runner = runnerWith(host, { caPathVariable: "X_CA", tls: true });
+    try {
+      const capture = await runner(workspace());
+      expect(capture.exitCode).toBe(1);
+      expect(JSON.parse(capture.output)).toEqual({ code: "MIGRATION_DB_UNAVAILABLE", reason, refusedBy: "DAEMON_INGRESS" });
+      expect(host.events).toEqual([]);
+      host.assertGone();
+    } finally { await runner.close(); }
+  });
+
+  it("refuses an invalid extracted certificate rather than delivering a path the client cannot pin", async () => {
+    const host = new TlsDockerHost();
+    const original = host.docker.bind(host);
+    host.docker = (args) => args[0] === "exec" && args.includes("cat")
+      ? (host.dockerCalls.push([...args]), { code: 0, output: "not a certificate" })
+      : original(args);
+    const runner = runnerWith(host, { caPathVariable: "X_CA", tls: true });
+    try {
+      const capture = await runner(workspace());
+      expect(JSON.parse(capture.output)).toMatchObject({ code: "MIGRATION_DB_UNAVAILABLE", reason: "TLS_CERTIFICATE_INVALID" });
+      expect(host.events).toEqual([]);
+      host.assertGone();
+    } finally { await runner.close(); }
+  });
+
+  it("wires the operator's environment through the production wrapper seam", () => {
+    const source = readFileSync(new URL("./agent-wrapper-main.ts", import.meta.url), "utf8");
+    expect(source).toContain('from "./verifier-database-provisioning.js"');
+    expect(source).toContain("verifierDatabaseProvisioningFromEnvironment(process.env)");
+    expect(source).toContain("{ database: verifierDatabase }");
+  });
+});

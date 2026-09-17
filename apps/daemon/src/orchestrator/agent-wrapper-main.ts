@@ -36,6 +36,7 @@ import {
 import type { WrapperStopSignal } from "./process-runner-lifecycle.js";
 import { VerifierProcessCancelledError } from "./verifier-process-runner.js";
 import { createVerifierDatabaseRunner } from "./verifier-database.js";
+import { verifierDatabaseProvisioningFromEnvironment } from "./verifier-database-provisioning.js";
 import type { VerifierProcessRunner } from "./verifier-process-runner.js";
 import { providerFor } from "./moe-up-credentials.js";
 import { createSeatStartRecorder } from "./seat-start-recorder.js";
@@ -223,8 +224,12 @@ async function main(): Promise<void> {
     // `production`, and CODING_SEAT resolves to a delivery whose value type is `never`. An
     // `undefined` here (no credential, or no `verify` variables) spawns byte-identically to
     // before. Collisions stay environment-delivery.ts's call: the allowlisted runtime wins.
+    // The disposable database's image/variables/TLS are the OPERATOR's to declare (MOE_VERIFIER_DB_*):
+    // a product needing pgvector or TLS could never verify against the hard-coded shape. Unset = byte-identical.
+    const verifierDatabase = verifierDatabaseProvisioningFromEnvironment(process.env);
     verifierRunner = createVerifierDatabaseRunner({
       ...(verifierDelivered === undefined ? {} : { delivered: verifierDelivered }),
+      ...(verifierDatabase === undefined ? {} : { database: verifierDatabase }),
       // Same drop as the spawner's handler below, for the verifier's own child.
       onFatalContainment: (error: { readonly reason?: string }) => {
         process.stderr.write("[verifier] fatal containment failure: "

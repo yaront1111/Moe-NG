@@ -1,11 +1,16 @@
 import { spawn as nodeSpawn } from "node:child_process";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
-import { readFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join, parse } from "node:path";
 import type { DockerRunner } from "../deployment/deploy-ports.js";
 import { classifyDockerProbe } from "../repository/deployment/deployment-docker-probe.js";
 import type { NodeMission } from "./agent-wrapper.js";
 import type { VerifierRunCapture } from "./node-verifier.js";
+import {
+  isPemCertificate, resolveVerifierDatabaseProvisioning, tlsCertificateCommand, tlsEnableCommand,
+  tlsExtractCommand, type ResolvedVerifierDatabaseProvisioning, type VerifierDatabaseProvisioning,
+} from "./verifier-database-provisioning.js";
 import {
   createVerifierProcessRunner, VerifierProcessCancelledError, VerifierProcessContainmentError,
   type VerifierProcessRunner, type VerifierProcessRunnerOptions,
@@ -15,6 +20,8 @@ export interface VerifierDatabaseOptions extends VerifierProcessRunnerOptions {
   readonly dockerTimeoutMs?: number;
   readonly readyTimeoutMs?: number;
   readonly pollMs?: number;
+  /** Image, delivered variable names and TLS — the operator's spelling; absent = the old shape. */
+  readonly database?: VerifierDatabaseProvisioning | undefined;
 }
 
 class DatabaseRefusal extends Error {
@@ -25,13 +32,6 @@ class DatabaseRefusal extends Error {
     super(JSON.stringify({ code, refusedBy: "DAEMON_INGRESS", ...fields }));
   }
 }
-
-/**
- * The database variable this runner defines for the migration step. Reported BY NAME in a
- * `MIGRATION_DID_NOT_START` refusal, never by value: the name is what a product whose migration
- * reads different variables needs to see, and the value carries a password.
- */
-const DELIVERED_DATABASE_VARIABLE = "DATABASE_URL";
 
 /**
  * How the operator's shell reaches its Docker daemon, forwarded BY NAME into every docker CLI
@@ -116,10 +116,16 @@ class DisposableDatabase {
   private attempted = false;
   private cancelled = false;
   private disposal: Promise<void> | undefined;
+  /** Host directory holding the CA certificate the client pins; removed with the container. */
+  private caDirectory: string | undefined;
   private readonly brief: NodeMission;
   private readonly options: VerifierDatabaseOptions;
+  private readonly provisioning: ResolvedVerifierDatabaseProvisioning;
 
-  constructor(brief: NodeMission, options: VerifierDatabaseOptions) { this.brief = brief; this.options = options; }
+  constructor(brief: NodeMission, options: VerifierDatabaseOptions) {
+    this.brief = brief; this.options = options;
+    this.provisioning = resolveVerifierDatabaseProvisioning(options.database);
+  }
 
   cancel(): Promise<void> {
     this.cancelled = true;
@@ -158,9 +164,10 @@ class DisposableDatabase {
     this.attempted = true;
     const started = await this.docker(["run", "--detach", "--name", this.name,
       "--publish", "127.0.0.1:0:5432", "--env", "POSTGRES_PASSWORD",
-      "--env", "POSTGRES_USER=app", "--env", "POSTGRES_DB=app", "postgres:17-alpine"]);
+      "--env", "POSTGRES_USER=app", "--env", "POSTGRES_DB=app", this.provisioning.image]);
     if (started.code !== 0) throw unavailable("IMAGE_PULL_OR_START_FAILED");
     await this.waitReady();
+    if (this.provisioning.tls) await this.provisionTls();
     const port = await this.docker(["port", this.name, "5432/tcp"]);
     const binding = port.stdout.trim();
     const match = /^127\.0\.0\.1:(\d+)$/u.exec(binding);
@@ -168,6 +175,34 @@ class DisposableDatabase {
       throw unavailable("PORT_UNAVAILABLE");
     }
     return `postgres://app:${this.password}@${binding}/app`;
+  }
+
+  /**
+   * Mint the server certificate in-container, switch the server to TLS by reload, and bring
+   * the PUBLIC certificate out to a host file the client pins as its CA. The key stays behind.
+   * Each step is one bounded docker exec on the container this run already owns, so failure
+   * cleanup is the ordinary container removal — nothing new to leak.
+   */
+  private async provisionTls(): Promise<void> {
+    this.checkCancellation();
+    const minted = await this.docker(tlsCertificateCommand(this.name));
+    if (minted.code !== 0) throw unavailable("TLS_CERTIFICATE_MINT_FAILED");
+    const enabled = await this.docker(tlsEnableCommand(this.name, "app", "app"));
+    if (enabled.code !== 0) throw unavailable("TLS_ENABLE_FAILED");
+    const extracted = await this.docker(tlsExtractCommand(this.name));
+    if (extracted.code !== 0 || !isPemCertificate(extracted.stdout)) throw unavailable("TLS_CERTIFICATE_INVALID");
+    this.caDirectory = mkdtempSync(join(tmpdir(), "moe-verifier-ca-"));
+    writeFileSync(join(this.caDirectory, "ca.crt"), `${extracted.stdout.trim()}\n`, { mode: 0o600 });
+  }
+
+  /** The variables the recipe and migration see: the URL under every configured name, plus the CA path. */
+  private deliveredVariables(url: string): Record<string, string> {
+    const delivered: Record<string, string> = { ...this.options.delivered };
+    for (const name of this.provisioning.urlVariables) delivered[name] = url;
+    if (this.provisioning.caPathVariable !== null && this.caDirectory !== undefined) {
+      delivered[this.provisioning.caPathVariable] = join(this.caDirectory, "ca.crt");
+    }
+    return delivered;
   }
 
   private async waitReady(): Promise<void> {
@@ -185,7 +220,7 @@ class DisposableDatabase {
     try {
       const url = await this.start();
       this.checkCancellation();
-      this.runner = createVerifierProcessRunner({ ...this.options, delivered: { ...this.options.delivered, DATABASE_URL: url } });
+      this.runner = createVerifierProcessRunner({ ...this.options, delivered: this.deliveredVariables(url) });
       const migration = await this.runner({ ...this.brief, test: "pnpm db:migrate" });
       if (migration.exitCode !== 0) {
         const secrets = [this.password, ...Object.values(this.options.delivered ?? {})];
@@ -199,7 +234,7 @@ class DisposableDatabase {
         // reads its own is refused before its first migration and can say so no other way.
         throw migration.exitCode === null
           ? new DatabaseRefusal("MIGRATION_DID_NOT_EXIT", {})
-          : new DatabaseRefusal("MIGRATION_DID_NOT_START", { delivered: DELIVERED_DATABASE_VARIABLE });
+          : new DatabaseRefusal("MIGRATION_DID_NOT_START", { delivered: this.provisioning.urlVariables.join(",") });
       }
       this.checkCancellation();
       const result = await this.runner(this.brief);
@@ -215,6 +250,11 @@ class DisposableDatabase {
   private async cleanup(): Promise<void> {
     try { await this.runner?.close(); }
     finally {
+      // The CA file is public material, but it is this run's and must not outlive it.
+      if (this.caDirectory !== undefined) {
+        try { rmSync(this.caDirectory, { force: true, recursive: true }); } catch { /* best effort; not a leak of authority */ }
+        this.caDirectory = undefined;
+      }
       if (this.attempted) {
         // A failed rm is not proof of a leak OR absence. Ask Docker, retry, then fail closed.
         let absent = false;
