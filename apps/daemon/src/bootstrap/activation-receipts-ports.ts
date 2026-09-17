@@ -33,10 +33,19 @@ export interface ActivationReceiptFs {
   /** Recursive; throws when a plain file already occupies the path. */
   mkdir(path: string): void;
   readBytes(path: string): Uint8Array | null;
-  /** Removes one file; throws when it cannot. */
+  /**
+   * Removes one file; throws when it cannot. A file that was ALREADY GONE throws with
+   * `code: "ENOENT"`, node's own errno shape passed through untouched, so a caller can tell
+   * "someone else removed it first" from "it could not be removed" (`isAlreadyGone`).
+   */
   remove(path: string): void;
   stat(path: string): { readonly size: number } | null;
 }
+
+/** The one removal failure that is not one: the file was gone before the unlink ran. */
+export const isAlreadyGone = (error: unknown): boolean =>
+  typeof error === "object" && error !== null
+  && (error as { readonly code?: unknown }).code === "ENOENT";
 
 export type ActivationBackupOutcome =
   | { readonly byteLength: number; readonly ok: true; readonly sha256: string }
