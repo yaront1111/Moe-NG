@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { RUNTIME_COMMAND_ENVELOPE_VERSION } from "@moe/contracts";
 import type { ReviewContinuationApproval } from "@moe/review";
 import { closeStores, PROJECT_ID } from "../bootstrap/bootstrap-test-fixtures.js";
@@ -17,6 +17,15 @@ import { readWorkClaimLedger } from "../work/work-claim-services.js";
 import { OPERATOR, reviewWorld } from "./wrapper-review-test-fixtures.js";
 import { createAgentWrapper } from "./agent-wrapper.js";
 import { staffingSurfaceOf } from "./agent-staffing-surface.js";
+
+/**
+ * Every arm here builds a REAL durable world, and the heaviest takes about 2.2 s on an idle
+ * machine. Against Vitest's 5 s default that is not a margin: under the full daemon run's
+ * parallelism these arms crossed it and reported as TIMEOUTS, which reads as a hang in the code
+ * under test rather than as a budget, and cost real time to attribute twice. The same 30 s the
+ * other world-building suites here already set.
+ */
+vi.setConfig({ testTimeout: 30_000 });
 
 const worlds: ReturnType<typeof reviewWorld>[] = [];
 async function approvedBetweenPolls() {

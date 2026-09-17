@@ -1,12 +1,21 @@
 import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { closeStores, PROJECT_ID } from "../bootstrap/bootstrap-test-fixtures.js";
 import { readReviewLedger } from "../review/review-read-model.js";
 import { verifyStoredPackageItems } from "../review/review-package-restore.js";
 import { VERIFIER_FAILURE_RULE } from "../http/affordance-read.js";
 import { MARKER, OPERATOR, reviewWorld } from "./wrapper-review-test-fixtures.js";
 import { withLatestVerifierFailure } from "./wrapper-review-missions.js";
+
+/**
+ * Every arm here builds a REAL durable world, and the heaviest takes about 2.1 s on an idle
+ * machine. Against Vitest's 5 s default that is not a margin: under the full daemon run's
+ * parallelism these arms crossed it and reported as TIMEOUTS, which reads as a hang in the code
+ * under test rather than as a budget, and cost real time to attribute twice. The same 30 s the
+ * other world-building suites here already set.
+ */
+vi.setConfig({ testTimeout: 30_000 });
 
 const worlds: ReturnType<typeof reviewWorld>[] = [];
 const world = () => { const result = reviewWorld(); worlds.push(result); return result; };

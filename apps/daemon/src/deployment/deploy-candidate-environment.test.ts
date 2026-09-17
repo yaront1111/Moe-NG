@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { afterEach, describe, expect, expectTypeOf, it } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import * as double from "./deploy-docker-double.js";
 import * as ports from "./deploy-ports.js";
@@ -22,6 +22,15 @@ import {
 } from "./deploy-candidate-environment.js";
 import { encodeCandidateArchive } from "./deploy-candidate-archive.js";
 import { candidateContainerName, createDeployService } from "./deploy-service.js";
+
+/**
+ * Every arm here builds a REAL durable world, and the heaviest takes about 2.3 s on an idle
+ * machine. Against Vitest's 5 s default that is not a margin: under the full daemon run's
+ * parallelism these arms crossed it and reported as TIMEOUTS, which reads as a hang in the code
+ * under test rather than as a budget, and cost real time to attribute twice. The same 30 s the
+ * other world-building suites here already set.
+ */
+vi.setConfig({ testTimeout: 30_000 });
 
 /**
  * THE DELIVERY THAT MAY NOT TRAVEL IN THE ARGV.
