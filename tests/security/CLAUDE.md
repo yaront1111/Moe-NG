@@ -44,22 +44,24 @@ RACE case. Collecting this lane confers no security PASS of any kind.
   `maxConcurrency: 1`, `retry: 0`, `allowOnly: false`. `SecurityLaneSequencer` orders by
   UTF-16 code unit on a separator-normalised module id (never `localeCompare`) and forces
   `completeness.security.ts` last so it can read every earlier slice's receipt.
-- **The roster is hand-written and source-compared.** `BOUNDARY_ROSTER` is 180 entries;
-  `EXPECTED_ROSTER_SIZE = 180`, `EXPECTED_DISTRIBUTION` splits them per area
-  (`apps/daemon: 90`, `packages/runner: 23`, …). The scan is `DECLARATION_PATTERN`
+- **The roster is hand-written and source-compared.** `BOUNDARY_ROSTER` is 181 entries;
+  `EXPECTED_ROSTER_SIZE = 181`, `EXPECTED_DISTRIBUTION` splits them per area
+  (`apps/daemon: 90`, `packages/runner: 23`, `apps/control-room: 15`, …). The scan is
+  `DECLARATION_PATTERN`
   `/^export const ([A-Z0-9_]+(?:LAYERS|LAYER|BOUNDARIES))\s*(?::[^=]+)?=/u` over `SCAN_ROOTS`
-  `["apps", "packages", "adapters"]`, filtered by `isProductionModule` (drops `.test.ts`,
-  `.spec.ts`, `.test-fixtures.ts`, `-fixtures.ts`, `packages/testkit/`), rooted by searching
-  upward for `pnpm-workspace.yaml`. Cardinality and distribution are asserted *separately* from
-  set equality, because equality passes vacuously against a silently narrowed scan.
+  `["apps", "packages", "adapters"]`, filtered by `isProductionModule` (accepts `.ts` AND
+  `.tsx`; drops `.test.ts`, `.spec.ts`, `.test-fixtures.ts`, `-fixtures.ts`,
+  `packages/testkit/`), rooted by searching upward for `pnpm-workspace.yaml`. Cardinality and
+  distribution are asserted *separately* from set equality, because equality passes vacuously
+  against a silently narrowed scan.
 - **Each entry is tagged with one of five axes by SUBJECT, not directory**: `transport`,
   `integrity`, `durable-store`, `runtime-provider`, `scheduler-activation`. Where the two
   disagree the subject wins (four `apps/daemon/src/recovery/` constants are `integrity`).
 - **`layer-visibility-cases.ts` measures what the roster cannot see**: `EXPECTED_PRIVATE_COUNT =
-  82` column-0 `const *_LAYER` declarations no `^export const` anchor reaches,
-  `EXPECTED_LITERAL_COUNT = 106` bare literals at refusal sites of which
-  `EXPECTED_UNRESOLVED_LITERAL_COUNT = 37` resolve to no declaration, and the invisible share
-  pinned as 82/262 = 313 per mille. Its arms are named `TASK-LV …` and live in the roster file.
+  83` column-0 `const *_LAYER` declarations no `^export const` anchor reaches,
+  `EXPECTED_LITERAL_COUNT = 119` bare literals at refusal sites of which
+  `EXPECTED_UNRESOLVED_LITERAL_COUNT = 45` resolve to no declaration, and the invisible share
+  pinned as 83/264 = 314 per mille. Its arms are named `TASK-LV …` and live in the roster file.
 - **The ratchet enumerates tables, never constants.** `completeness.security.ts` imports the
   sibling case tables, normalises four different shapes (`arm` on transport/integrity/scheduler
   rows, `phase` on durable-store, no field at all on the scheduler race tables), reads the
@@ -93,14 +95,14 @@ RACE case. Collecting this lane confers no security PASS of any kind.
 ## Gotchas
 
 - **`durable-store-boundaries.security.ts` imports `BOUNDARY_ROSTER` directly**, so the roster
-  module's suites re-register inside that fork: the roster alone reports 55 tests, the
-  durable-store slice reports 206 and 55 of them are the roster's. Every other slice parses the
-  roster's committed bytes with a regex precisely to avoid this — and several of their headers
-  still claim "`BOUNDARY_ROSTER` is not exported", which stopped being true.
+  module's suites re-register inside that fork: the roster's suites are counted twice in one
+  run. Every other slice parses the roster's committed bytes with a regex precisely to avoid
+  this; their headers used to claim "`BOUNDARY_ROSTER` is not exported" and now say it is
+  exported and parsed by choice.
 - **Prose counts in this folder rot, and the roster header says so itself.** The roster tags 33
-  `runtime-provider` entries and `RUNTIME_PROVIDER_PARTITION` has five groups summing to 33, but
-  the runtime slice headers still say "thirty-one entries" and "the four runtime-provider
-  slices". Trust the assertion that owns a number, never a comment quoting it.
+  `runtime-provider` entries and `RUNTIME_PROVIDER_PARTITION` has five groups summing to 33; the
+  runtime slice headers said "thirty-one entries" and "the four runtime-provider slices" for
+  weeks. Trust the assertion that owns a number, never a comment quoting it.
 - **`completeness.security.ts` cannot be run alone.** It reads the receipts directory at module
   scope and expects one receipt per `runtime-provider-*.security.ts` file found on disk; with no
   sibling slices executed it reds on `SECURITY_COVERAGE_MISSING_SLICE_RECEIPT`.
@@ -111,9 +113,10 @@ RACE case. Collecting this lane confers no security PASS of any kind.
   is only safe because every scan stays inside a function body; a module-scope
   `const X = scanPrivateLayerDeclarations()` hits the temporal dead zone on `findRepoRoot`.
 - **Adding or renaming a production layer constant reds this folder.** A new column-0
-  `export const *_LAYER(S|BOUNDARIES)` needs a roster row, a bump to `EXPECTED_ROSTER_SIZE`, its
-  `EXPECTED_DISTRIBUTION` key, an axis tag and three hostile arms; keeping it module-private
-  instead moves `EXPECTED_PRIVATE_COUNT` and the invisible-share pin.
+  `export const *_LAYER(S|BOUNDARIES)` in a `.ts` or `.tsx` module needs a roster row, a bump
+  to `EXPECTED_ROSTER_SIZE`, its `EXPECTED_DISTRIBUTION` key, an axis tag and three hostile
+  arms; keeping it module-private instead moves `EXPECTED_PRIVATE_COUNT` and the
+  invisible-share pin.
 - **A gate renamed out of the `.security.ts` suffix keeps typechecking and stops running.** The
   roster's last describe exists only to assert `completeness.security.ts` exists, ends in
   `.security.ts`, resolves every axis and names the roster file.

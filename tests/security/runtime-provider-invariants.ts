@@ -1,5 +1,5 @@
 /**
- * PARTITION AND SLICE INVARIANTS for the four runtime-provider slices.
+ * PARTITION AND SLICE INVARIANTS for the five runtime-provider slices.
  *
  * NOT a `*.security.ts` file, deliberately: the lane collects that suffix, so this would
  * register as a suite with no cases and `passWithNoTests: false` would fail on its emptiness.
@@ -11,9 +11,9 @@
  * invariant, and message hygiene. Nothing here touches a production surface.
  *
  * WHY THE PARTITION LIVES IN ONE FILE. The lane runs `pool: "forks"` with `isolate: true`, so
- * no module state is shared between test files — four copies of the partition would drift
+ * no module state is shared between test files — five copies of the partition would drift
  * silently and a boundary could fall between two of them, owned by neither. One frozen table,
- * read by all four, makes the union checkable in ONE place.
+ * read by all five, makes the union checkable in ONE place.
  *
  * IT HOLDS NO AUTHORITY. It re-reads the roster's committed bytes; it never derives an expected
  * code or layer, and never judges an individual refusal.
@@ -27,7 +27,7 @@ import { describe, expect, it } from "vitest";
 import type { Ledger } from "./runtime-provider-ledger.js";
 
 /**
- * The four slices, and which roster entry each owns. HAND-WRITTEN: no part of this is
+ * The five slices, and which roster entry each owns. HAND-WRITTEN: no part of this is
  * emitted by the scan it is checked against. `assertRosterPartition` proves the union equals
  * the roster's `runtime-provider` tag in BOTH directions, so a boundary added to the roster
  * and forgotten here reddens, and a name invented here that the roster does not carry reddens
@@ -130,7 +130,7 @@ export function assertPositiveCounts(ledger: Ledger, owned: readonly string[]): 
 /**
  * THE WHOLE-SLICE INVARIANT, in two clauses: nothing was admitted, and no truth class was
  * upgraded to PROVEN. One assertion over every outcome the file collected, rather than one per
- * case, so a case added later cannot escape it. `isolate: true` means the four files cannot
+ * case, so a case added later cannot escape it. `isolate: true` means the five files cannot
  * share one array, so this runs once per file over that file's entire ledger.
  *
  * BOTH clauses read fields DERIVED from the production value at the ledger's writers. An
@@ -213,7 +213,7 @@ export function assertMessagesEchoNothing(
 /**
  * The four checks EVERY slice owes, registered as one block so a slice cannot ship without
  * them and cannot spell them differently. One implementation, four invocations: `isolate:
- * true` means the four files cannot share one array, so each runs these over its own whole
+ * true` means the five files cannot share one array, so each runs these over its own whole
  * ledger rather than per case.
  */
 export function describeSliceInvariants(

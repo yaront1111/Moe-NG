@@ -10,8 +10,10 @@
  * directions — ACTIVATION_LEDGER_LAYER arrived from the durable-store list and the
  * expansion/supersession/goal/graph family from the integrity list. Reconciling the two
  * lists would produce a gap and an overlap at once, so only the roster counts, and it is
- * PARSED from its committed bytes rather than imported: `BOUNDARY_ROSTER` is not exported,
- * and parsing reddens if the roster re-tags a member instead of drifting silently.
+ * PARSED from its committed bytes rather than imported. `BOUNDARY_ROSTER` IS exported, and
+ * importing it is what `durable-store-boundaries.security.ts` does — at the cost of
+ * re-registering the roster's own suites inside that fork. Parsing avoids that and reddens if
+ * the roster re-tags a member instead of drifting silently.
  *
  * ONE SUITE MODULE, deliberately. The lane runs `isolate: true`, so two suite modules can
  * never share collected outcomes — and the whole-slice invariant plus the roster-set

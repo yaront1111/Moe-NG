@@ -22,12 +22,12 @@
  * OVER EXPORTED DECLARATIONS ONLY. `DECLARATION_PATTERN` is anchored `^export const`, so three
  * populations sit outside every arm above, and this paragraph carries its own falsifier for
  * each — the file's convention is that a prose claim names the assertion that reds if it rots.
- *   MODULE-PRIVATE DECLARATIONS, 82 at the wide `[A-Z0-9_]+` width — a column-0 `const *_LAYER`
+ *   MODULE-PRIVATE DECLARATIONS, 83 at the wide `[A-Z0-9_]+` width — a column-0 `const *_LAYER`
  *   no `^export const` anchor can ever reach. Reddened by "TASK-LV allowlists every scanned
  *   module-private declaration (scan minus allowlist is empty)" when one appears, by "TASK-LV
  *   has no allowlist entry absent from source" when one vanishes, and by "TASK-LV counts
  *   exactly EXPECTED_PRIVATE_COUNT module-private declarations at the wide pattern width".
- *   BARE LITERALS AT REFUSAL SITES, 106 distinct values of which 37 resolve to NO declared
+ *   BARE LITERALS AT REFUSAL SITES, 119 distinct values of which 45 resolve to NO declared
  *   constant — a layer that is never a declaration, so no pattern width reaches it. Reddened by
  *   "TASK-LV allowlists every unresolved literal (scan minus allowlist is empty)", its
  *   allowlist-minus-scan twin, and "TASK-LV counts exactly
@@ -39,8 +39,8 @@
  * and every other arm in this file stays green while sixteen live boundaries leave the scan,
  * because the roster would then be compared against the same narrowed scan that produced it.
  *
- * ALWAYS STATE THE PATTERN WIDTH WHEN QUOTING THESE. On 2026-09-17 the invisible share is
- * 82 of 262 (31.3%) with a WIDE numerator over a WIDE denominator; a narrow-width census
+ * ALWAYS STATE THE PATTERN WIDTH WHEN QUOTING THESE. On 2026-09-18 the invisible share is
+ * 83 of 264 (31.4%) with a WIDE numerator over a WIDE denominator; a narrow-width census
  * must use its own denominator. Two seats argued 45 versus 46 across two rounds as though
  * it were a factual dispute; it was a units mismatch. Pinned by "TASK-LV pins the invisible
  * share at the wide pattern width, numerator and denominator both named".
@@ -223,6 +223,13 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   // SUBJECT: it grants no project authority and owns no runtime; it validates the loopback
   // request/response seam before handing a client to the UI.
   { constant: "PROJECT_MANAGER_LOCAL_LAYER", file: "apps/control-room/src/v2/projects/project-manager-client.ts", axis: "transport" },
+  // The New Product card's browser half: it reads the affordance surface and spends the
+  // `repository.bootstrap` offer, stamping this layer on the two refusals it raises itself
+  // (BOOTSTRAP_SURFACE_UNREADABLE, BOOTSTRAP_NOT_OFFERED) and handing it to `spendOffer` as
+  // the caller layer. `transport` by SUBJECT — it carries a command across the process seam
+  // and grants no authority of its own. It is the FIRST `.tsx` row in this table: the scanner
+  // accepted `.ts` only until task LANE-3, so this constant was exported, live and invisible.
+  { constant: "NEW_PRODUCT_LAYER", file: "apps/control-room/src/v2/products/live-new-product.tsx", axis: "transport" },
   { constant: "ACTIVATION_BUDGET_LAYER", file: "apps/daemon/src/activation/activation-ingress-contracts.ts", axis: "scheduler-activation" },
   { constant: "ACTIVATION_INGRESS_LAYER", file: "apps/daemon/src/activation/activation-ingress-contracts.ts", axis: "scheduler-activation" },
   { constant: "ACTIVATION_SLOT_LAYER", file: "apps/daemon/src/activation/activation-ingress-contracts.ts", axis: "scheduler-activation" },
@@ -610,8 +617,16 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * Its declaring module apps/control-room/src/timeline/timeline-contract.ts and the pager it
  * served were deleted (nothing reachable from main.tsx imported them), and the three
  * timeline transport arms in transport-hostile-cases.ts went with them.
+ *
+ * 180 -> 181 on 2026-09-18 for NEW_PRODUCT_LAYER, and no layer was added to buy it: the
+ * constant had been exported and live since the New Product card landed, while
+ * `isProductionModule` accepted `.ts` only and never opened its declaring `.tsx`. Widening the
+ * extension check is what made it visible; the same widening moved EXPECTED_PRIVATE_COUNT
+ * (82 -> 83), EXPECTED_LITERAL_COUNT (106 -> 119) and EXPECTED_UNRESOLVED_LITERAL_COUNT
+ * (37 -> 45) one file set over. `transport` by SUBJECT; three arms in
+ * recent-workflow-transport-hostile-cases.ts.
  */
-const EXPECTED_ROSTER_SIZE = 180;
+const EXPECTED_ROSTER_SIZE = 181;
 
 /**
  * The per-area split. A scanner that silently matched only one directory
@@ -625,7 +640,7 @@ const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
   "packages/core": 22,
   "packages/scheduler": 10,
   "packages/store": 5,
-  "apps/control-room": 14,
+  "apps/control-room": 15,
   "packages/contracts": 3,
   "adapters/ide-contract": 2,
   "packages/review": 1,
@@ -675,19 +690,31 @@ function existsAsFile(candidate: string): boolean {
   }
 }
 
-/** The exclusion rule, encoded as one predicate so a future loosening reddens here. */
+/**
+ * The exclusion rule, encoded as one predicate so a future loosening reddens here.
+ *
+ * `.tsx` IS PRODUCTION. An extension check that accepted `.ts` alone made every layer constant
+ * declared in a React module structurally invisible to this lane — not excluded by a rule
+ * anyone wrote down, just unreachable, which is the same defect the `.test-fixtures.ts` case
+ * above documents one shape over. `gates-roster-coherence.test.ts` had already had to walk
+ * `.tsx` explicitly for this reason. The exclusion suffixes are matched against the path with
+ * `.tsx` normalised to `.ts` so one rule covers both, rather than eight `endsWith` arms that
+ * can drift apart.
+ */
 function isProductionModule(relativePath: string): boolean {
-  if (!relativePath.endsWith(".ts")) {
+  const isReactModule = relativePath.endsWith(".tsx");
+  if (!isReactModule && !relativePath.endsWith(".ts")) {
     return false;
   }
   if (relativePath.startsWith("packages/testkit/")) {
     return false;
   }
+  const module = isReactModule ? `${relativePath.slice(0, -".tsx".length)}.ts` : relativePath;
   return !(
-    relativePath.endsWith(".test.ts") ||
-    relativePath.endsWith(".spec.ts") ||
-    relativePath.endsWith(".test-fixtures.ts") ||
-    relativePath.endsWith("-fixtures.ts")
+    module.endsWith(".test.ts") ||
+    module.endsWith(".spec.ts") ||
+    module.endsWith(".test-fixtures.ts") ||
+    module.endsWith("-fixtures.ts")
   );
 }
 
@@ -809,6 +836,19 @@ describe("scanner exclusion rule", () => {
     expect(isProductionModule("packages/core/src/x.spec.ts")).toBe(false);
     expect(isProductionModule("packages/core/src/goal/goal-results.ts")).toBe(true);
   });
+
+  it("classifies a React module as production and its test twin as excluded", () => {
+    // The blind spot this pair closes: `NEW_PRODUCT_LAYER` stamps a live browser refusal from a
+    // `.tsx` module, and a `.ts`-only extension check left it outside every census in this lane
+    // while the roster, the distribution and the private population all stayed green.
+    expect(isProductionModule("apps/control-room/src/v2/products/live-new-product.tsx")).toBe(true);
+    expect(isProductionModule("apps/control-room/src/v2/products/live-new-product.test.tsx")).toBe(
+      false,
+    );
+    expect(isProductionModule("apps/control-room/src/v2/approvals/incident-frames-fixtures.tsx")).toBe(
+      false,
+    );
+  });
 });
 
 describe("scanner matches the annotated declaration form", () => {
@@ -836,7 +876,7 @@ describe("scanner matches the annotated declaration form", () => {
  *
  * Every arm before this one measures EXPORTED declarations, because `DECLARATION_PATTERN` is
  * anchored `^export const`. A column-0 `const FOO_LAYER` is structurally unreachable by that
- * anchor no matter how wide its character class gets; the current scan finds 82 declarations.
+ * anchor no matter how wide its character class gets; the current scan finds 83 declarations.
  * These four arms make that population a DECLARED NUMBER instead of an unmeasured remainder.
  *
  * SET EQUALITY IN BOTH DIRECTIONS, and the reason is the defect this closes. An arm that walks
@@ -848,17 +888,21 @@ describe("scanner matches the annotated declaration form", () => {
  */
 /**
  * The invisible share, stated once so no arm re-derives it. WIDE numerator, WIDE denominator:
- * 82 module-private declarations against those 82 plus the 180 exported ones. The per-mille pin
- * is `Math.round`ed by the arm below, so 82/262 = 313.0 pins at 313.
+ * 83 module-private declarations against those 83 plus the 181 exported ones. The per-mille pin
+ * is `Math.round`ed by the arm below, so 83/264 = 314.4 pins at 314.
  * 265/317 -> 261/310 on 2026-09-17: the v1 control-room UI removal took three module-private
  * declarations and one exported one (see EXPECTED_PRIVATE_COUNT and EXPECTED_ROSTER_SIZE).
  * 261/310 -> 262/313 on 2026-09-17: the Abandon control's GOAL_CANCEL_LAYER joined the
  * module-private population (see EXPECTED_PRIVATE_COUNT). The numerator moved and the
  * denominator with it; EXPECTED_ROSTER_SIZE did not, so no layer was exported to buy this.
+ * 262/313 -> 264/314 on 2026-09-18: `isProductionModule` started accepting `.tsx`, and BOTH
+ * populations grew by one previously unreachable declaration — ABSENT_LAYER (private) and
+ * NEW_PRODUCT_LAYER (exported). Nothing was exported or un-exported to move this ratio; the
+ * census simply stopped being blind to an extension.
  */
 const EXPECTED_INVISIBLE_NUMERATOR = EXPECTED_PRIVATE_COUNT;
-const EXPECTED_INVISIBLE_DENOMINATOR = 262;
-const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 313;
+const EXPECTED_INVISIBLE_DENOMINATOR = 264;
+const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 314;
 
 describe("TASK-LV module-private layer declarations are bounded", () => {
   it("TASK-LV scans a non-empty module-private population", () => {

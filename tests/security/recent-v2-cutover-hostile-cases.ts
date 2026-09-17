@@ -140,8 +140,15 @@ function integrityArms(subject: IntegritySubject): readonly IntegrityCase[] {
 const COMMAND_UNKNOWN: RefusalExpectation = Object.freeze({
   code: "CUTOVER_V2_COMMAND_UNKNOWN", layer: CUTOVER_V2_AUTHORITY_LAYER,
 });
-const NOT_ACTIVE: RefusalExpectation = Object.freeze({
-  code: "CUTOVER_V2_NOT_ACTIVE", layer: CUTOVER_V2_AUTHORITY_LAYER,
+/**
+ * AN UNREADABLE MARKER STORE ANSWERS `CUTOVER_V2_STATUS_UNKNOWN`, NOT `CUTOVER_V2_NOT_ACTIVE`.
+ * Commit 09501463 ("an unprovable marker no longer claims the project never cut over") split the
+ * two: `notActive` states a fact about the project, `statusUnknown` grants exactly as little and
+ * says the store could not be read. This pin followed the old code and was left behind; it is
+ * moved rather than widened, because the codes are the whole distinction being asserted.
+ */
+const STATUS_UNKNOWN: RefusalExpectation = Object.freeze({
+  code: "CUTOVER_V2_STATUS_UNKNOWN", layer: CUTOVER_V2_AUTHORITY_LAYER,
 });
 /** A command the v2 roster does own, so the marker read is what answers. */
 const ROSTERED_COMMAND: string = V2_MUTATION_COMMAND_KINDS[0];
@@ -155,9 +162,9 @@ const markerUnreadable = async (): Promise<unknown> => admitV2AuthoritativeComma
 
 const cutoverAuthorityArms = integrityArms({
   constant: "CUTOVER_V2_AUTHORITY_LAYER",
-  downstream: { expect: NOT_ACTIVE, run: markerUnreadable },
+  downstream: { expect: STATUS_UNKNOWN, run: markerUnreadable },
   names: {
-    after: "a rostered command over an unreadable marker store is not active after the roster admitted it",
+    after: "a rostered command over an unreadable marker store is not v2-authoritative after the roster admitted it",
     before: "a command off the v2 roster is refused before the marker store is read",
     race: "an off-roster command races an unreadable marker; neither is v2-authoritative",
   },
