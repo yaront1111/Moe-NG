@@ -8,6 +8,10 @@ import type { RepositoryExecutionRecord } from "./repository-execution-record.js
 
 type Mutation<T> = (record: RepositoryExecutionRecord | null, nextRevision: number) => RepositoryExecutionResult<{ record: RepositoryExecutionRecord | null; value: T }>;
 const unknown = () => repositoryExecutionFailure("REPOSITORY_EXECUTION_UNKNOWN");
+/** No reservation exists yet: the mutation observes null at the revision a creator would take. */
+function absent<T>(action: Mutation<T>): RepositoryExecutionResult<{ value: T }> {
+  const result = action(null, 1); return result.ok ? { ok: true, value: result.value } : result;
+}
 export interface RepositoryExecutionAudit<T> {
   readonly key: string;
   readonly requestJson: string;
@@ -19,9 +23,7 @@ export function accessRepositoryExecution<T>(identity: RepositoryExecutionIdenti
   action: Mutation<T>, audit?: RepositoryExecutionAudit<T>): RepositoryExecutionResult<{ value: T; replayed?: true }> {
   const path = join(identity.gitDirectory, "moe-repository-execution.sqlite");
   const existed = existsSync(path);
-  if (!existed && mode === "READ") {
-    const result = action(null, 1); return result.ok ? { ok: true, value: result.value } : result;
-  }
+  if (!existed && mode === "READ") return absent(action);
   if (!existed && mode !== "CREATE") return unknown();
   let database: DatabaseSync | null = null;
   let transaction = false;
@@ -33,8 +35,13 @@ export function accessRepositoryExecution<T>(identity: RepositoryExecutionIdenti
     if (mode !== "READ") database.exec("PRAGMA synchronous = FULL");
     database.exec(mode === "READ" ? "BEGIN" : "BEGIN IMMEDIATE"); transaction = true;
     const version = database.prepare("PRAGMA user_version").get()?.["user_version"];
-    if (version === 0 && !existed && mode === "CREATE") {
+    if (version === 0) {
+      // Freshness is decided inside the transaction, not by the existsSync above: a first writer
+      // killed before COMMIT, or a creator that lost the race to open, leaves an empty file that
+      // still holds no reservation. Any table at version 0 is foreign and stays untouched.
       if (database.prepare("SELECT name FROM sqlite_master WHERE type = 'table'").all().length !== 0) return unknown();
+      if (mode === "READ") return absent(action);
+      if (mode !== "CREATE") return unknown();
       database.exec("CREATE TABLE binding (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), identity_json TEXT NOT NULL, revision INTEGER NOT NULL)");
       database.exec("CREATE TABLE reservation (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), owner_json TEXT NOT NULL, state_json TEXT NOT NULL, revision INTEGER NOT NULL, ever_executed INTEGER NOT NULL)");
       database.prepare("INSERT INTO binding VALUES (1, ?, 0)").run(JSON.stringify(identity));

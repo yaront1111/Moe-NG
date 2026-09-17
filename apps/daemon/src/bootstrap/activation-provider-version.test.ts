@@ -125,10 +125,10 @@ describe("readProviderVersion", () => {
   }, 120_000);
 
   /**
-   * The `catch` arm, driven by a REAL child. `execFile` rejects on a non-zero exit just as it
-   * does on a failure to spawn, and the two must not be conflated: this CLI RAN, said a
-   * version, and exited 3. Dropping its stdout would turn a readable answer into UNKNOWN, and
-   * dropping its exit code would refuse the whole activation against a CLI that is installed.
+   * A non-zero exit, driven by a REAL child. A run that failed and a failure to run must not be
+   * conflated: this CLI RAN, said a version, and exited 3. Dropping its stdout would turn a
+   * readable answer into UNKNOWN, and dropping its exit code would refuse the whole activation
+   * against a CLI that is installed.
    */
   it("keeps the exit code AND the output of a CLI that ran and failed", async () => {
     const directory = realpathSync(mkdtempSync(join(tmpdir(), "moe-agent-exit-")));
@@ -144,6 +144,39 @@ describe("readProviderVersion", () => {
       const run = await readProviderVersion(script);
       expect(run.code).toBe(3);
       expect(run.stdout).toContain("9.9.9");
+    } finally {
+      rmSync(directory, { force: true, maxRetries: 5, recursive: true });
+    }
+  }, 120_000);
+
+  /**
+   * A CLI that says its version on line one and then KEEPS TALKING past the reader's output
+   * bound. MEASURED 2026-09-17 on Node 24.16: `execFile` answers that overrun by killing the
+   * child and rejecting with `code: "ERR_CHILD_PROCESS_STDIO_MAXBUFFER"` and no exit code — so
+   * a reader built on it reported `code: null`, the measurer's "never ran", and refused the
+   * whole activation against a CLI that was installed, ran, and answered. The child here is
+   * real, so is its exit code, and the bound is proven by the length of what came back.
+   */
+  it("keeps the first bound of a CLI that overran the reader, and its REAL exit code", async () => {
+    const directory = realpathSync(mkdtempSync(join(tmpdir(), "moe-agent-spill-")));
+    try {
+      const win32 = process.platform === "win32";
+      const spill = join(directory, "spill.js");
+      // 80 KB, well past the 64 KiB the reader keeps; the version is the first line of it.
+      writeFileSync(spill, 'process.stdout.write("9.9.9\\n" + "x\\n".repeat(40_000));\n');
+      const script = join(directory, win32 ? "agent.cmd" : "agent.sh");
+      writeFileSync(
+        script,
+        win32
+          ? `@echo off\r\n"${process.execPath}" "${spill}"\r\nexit /b 3\r\n`
+          : `#!/bin/sh\n"${process.execPath}" "${spill}"\nexit 3\n`,
+        win32 ? {} : { mode: 0o755 },
+      );
+
+      const run = await readProviderVersion(script);
+      expect(run.code).toBe(3);
+      expect(run.stdout.startsWith("9.9.9\n")).toBe(true);
+      expect(run.stdout.length).toBeLessThanOrEqual(64 * 1024);
     } finally {
       rmSync(directory, { force: true, maxRetries: 5, recursive: true });
     }

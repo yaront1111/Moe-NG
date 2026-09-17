@@ -81,10 +81,10 @@ describe("runProjectStackHostMain", () => {
     const code = await runProjectStackHostMain([
       `--config=${CONFIG_PATH}`, `--asset-root=${ASSET_ROOT}`,
     ], {
-      controls: stopControl(),
       env,
       fs: configFs(),
       incarnationId: () => INCARNATION_ID,
+      input: Readable.from(stopControl()),
       log: () => undefined,
       prepareRepository: async (bindings) => {
         preparedBindings = bindings;
@@ -128,10 +128,10 @@ describe("runProjectStackHostMain", () => {
     const code = await runProjectStackHostMain([
       `--config=${CONFIG_PATH}`, `--asset-root=${ASSET_ROOT}`, "--shell=cmd.exe",
     ], {
-      controls: stopControl(),
       env,
       fs: configFs(),
       incarnationId: () => INCARNATION_ID,
+      input: Readable.from(stopControl()),
       log: (line) => logs.push(line),
       prepareRepository: async () => { preparations += 1; return { ok: true }; },
       startDaemon: async () => { starts += 1; throw new Error("must not start"); },
@@ -153,7 +153,7 @@ describe("runProjectStackHostMain", () => {
       const code = await runProjectStackHostMain([
         `--config=${CONFIG_PATH}`, `--asset-root=${ASSET_ROOT}`,
       ], {
-        controls: stopControl(), env, fs: configFs(), incarnationId: () => INCARNATION_ID,
+        env, fs: configFs(), incarnationId: () => INCARNATION_ID, input: Readable.from(stopControl()),
         log: (line) => logs.push(line),
         prepareRepository: async () => {
           if (failure === "thrown") throw new Error(`private credential ${CREDENTIAL}`);

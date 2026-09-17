@@ -26,7 +26,9 @@ import type { SqliteEventStore } from "@moe/store";
 
 import { dispatchCompiledPlanning as dispatch } from "./compiled-planning-dispatch.js";
 import { COMPILED_CONTRACT_BINDING_VERSION, readCompiledContractBinding } from "./compiled-contract-binding.js";
+import { designRefusal } from "../design/design-contracts.js";
 import { readDesignRevision } from "../design/design-store.js";
+import { dataRecord as record } from "../json-record-shape.js";
 import { resolveProductContractGate1 } from "../product-contract/product-contract-gate-1-resolver.js";
 import { readProductContractRevision } from "../product-contract/product-contract-revision-reader.js";
 import { validateRevisionProvenance } from "../product-contract/product-contract-provenance.js";
@@ -40,14 +42,6 @@ const hex = (digit: string, width = 64): string => digit.repeat(width);
 
 export const SUBMIT_DECOMPOSITION_PAYLOAD_KEYS = Object.freeze([
   "gateRef", "goalRef", "structure",
-] as const);
-
-export const SUBMIT_DECOMPOSITION_CODES = Object.freeze([
-  "SUBMIT_DECOMPOSITION_MALFORMED",
-  "SUBMIT_DECOMPOSITION_GATE_DIGEST_MISMATCH",
-  "SUBMIT_DECOMPOSITION_ALREADY_FINALIZED",
-  "SUBMIT_DECOMPOSITION_RUN_UNREADABLE",
-  "SUBMIT_DECOMPOSITION_SUBMISSION_CONFLICT",
 ] as const);
 
 export interface SubmitDecompositionInput {
@@ -92,12 +86,6 @@ function refused(
 function detailOf(value: object): string | undefined {
   const detail = (value as { readonly detail?: unknown }).detail;
   return typeof detail === "string" && detail.length > 0 ? detail : undefined;
-}
-
-function record(value: unknown): Readonly<Record<string, unknown>> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Readonly<Record<string, unknown>>
-    : null;
 }
 
 /**
@@ -284,9 +272,15 @@ export function runSubmitDecomposition(
     // Capture the design once, with the proposal. A finalize/replay preserves that choice.
     const design = readDesignRevision(store, { projectId: input.projectId, goalRef });
     if (!design.ok && design.code !== "DESIGN_REVISION_ABSENT") return refused(design.code, design.layer);
+    // A design drawn against ANOTHER approved revision is the contract authority's refusal, not
+    // this seam's: the code and layer are the design slice's own, minted by its helper so the
+    // pair every (code, layer) consumer reads — design-contracts.ts DESIGN_CODE_LAYERS — holds.
     if (design.ok && (design.record.contractRef.contractId !== ref.contractId
       || design.record.contractRef.revisionId !== ref.revisionId
-      || design.record.contractRef.revisionDigest !== ref.revisionDigest)) return refused("DESIGN_CONTRACT_NOT_APPROVED");
+      || design.record.contractRef.revisionDigest !== ref.revisionDigest)) {
+      const mismatch = designRefusal("DESIGN_CONTRACT_NOT_APPROVED");
+      return refused(mismatch.code, mismatch.layer);
+    }
     const contractBinding = Object.freeze({ version: COMPILED_CONTRACT_BINDING_VERSION,
       projectId: input.projectId, goalRef, planningRunRef: runId, contractRef: ref,
       designVersion: design.ok ? design.record.version : null,

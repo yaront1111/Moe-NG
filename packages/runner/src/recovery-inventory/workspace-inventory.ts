@@ -130,6 +130,12 @@ function sealResult(
   return built.ok ? built.manifest : null;
 }
 
+/**
+ * The ref and the entry path meet at a colon, never a slash. A sealed entry path
+ * is canonical and so carries no colon, which makes the last one an unambiguous
+ * boundary; a slash is not, because refs carry slashes too, and `ws/a` + `b/c.txt`
+ * would spell the same identity as `ws/a/b` + `c.txt`.
+ */
 function inputItem(
   source: WorkspaceInventorySource,
   entry: WorkspaceInputEntry,
@@ -140,7 +146,7 @@ function inputItem(
   return {
     class: CLASS,
     projectTag: context.projectTag,
-    identity: { kind: "PATH", path: `${source.workspaceRef}/${entry.path}` },
+    identity: { kind: "PATH", path: `${source.workspaceRef}:${entry.path}` },
     observedAt,
     facts: {
       origin: "INPUT",

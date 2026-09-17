@@ -1,6 +1,6 @@
 import { constants } from "node:fs";
 import {
-  access, mkdir, readFile, readdir, realpath, rmdir, stat, unlink, writeFile,
+  access, mkdir, open, readFile, readdir, realpath, rmdir, stat, unlink,
 } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, win32 } from "node:path";
 
@@ -26,7 +26,8 @@ export interface ManagedProjectFiles {
 }
 
 export interface WrittenProjectFiles {
-  readonly createdRoot: boolean;
+  /** Every directory this call made, leaf first; empty when the root already existed. */
+  readonly createdDirectories: readonly string[];
   readonly paths: readonly string[];
   readonly root: string;
 }
@@ -67,9 +68,9 @@ function fsErrorCode(error: unknown): string | undefined {
   }
 }
 
-async function rootMissing(root: string): Promise<boolean> {
+async function pathMissing(path: string): Promise<boolean> {
   try {
-    await stat(root);
+    await stat(path);
     return false;
   } catch (error) {
     if (fsErrorCode(error) === "ENOENT") return true;
@@ -77,12 +78,30 @@ async function rootMissing(root: string): Promise<boolean> {
   }
 }
 
+/**
+ * The directories `mkdir(root, { recursive: true })` is about to make, leaf
+ * first. Measured before the call: mkdir reports only the topmost one it made,
+ * and on Windows in `\\?\` form, so its answer cannot be matched back to `root`.
+ */
+async function missingDirectories(root: string): Promise<readonly string[]> {
+  const missing: string[] = [];
+  for (let path = root; await pathMissing(path); path = dirname(path)) {
+    missing.push(path);
+    if (dirname(path) === path) break;
+  }
+  return Object.freeze(missing);
+}
+
 function written(
   root: string,
-  createdRoot: boolean,
+  createdDirectories: readonly string[],
   paths: readonly string[],
 ): WrittenProjectFiles {
-  return Object.freeze({ createdRoot, paths: Object.freeze([...paths]), root });
+  return Object.freeze({
+    createdDirectories: Object.freeze([...createdDirectories]),
+    paths: Object.freeze([...paths]),
+    root,
+  });
 }
 
 async function discardWrittenFiles(receipt: WrittenProjectFiles): Promise<void> {
@@ -93,11 +112,23 @@ async function discardWrittenFiles(receipt: WrittenProjectFiles): Promise<void> 
       if (fsErrorCode(error) !== "ENOENT") throw error;
     }
   }
-  if (!receipt.createdRoot) return;
+  // Leaf first: an ancestor can only empty once the directory below it is gone,
+  // and one that is not empty keeps every ancestor above it.
+  for (const directory of receipt.createdDirectories) {
+    try {
+      await rmdir(directory);
+    } catch (error) {
+      if (fsErrorCode(error) === "ENOTEMPTY") return;
+      if (fsErrorCode(error) !== "ENOENT") throw error;
+    }
+  }
+}
+
+async function discardQuietly(receipt: WrittenProjectFiles): Promise<void> {
   try {
-    await rmdir(receipt.root);
-  } catch (error) {
-    if (!["ENOENT", "ENOTEMPTY"].includes(fsErrorCode(error) ?? "")) throw error;
+    await discardWrittenFiles(receipt);
+  } catch {
+    // Best effort: the refusal that triggered the rollback stays authoritative.
   }
 }
 
@@ -171,10 +202,61 @@ async function registerExisting(root: string): Promise<ManagedProjectFilesResult
     return Object.freeze({
       ok: true,
       project: await canonicalProject(canonicalRoot, config.projectId, configPath, config.storePath),
-      written: written(root, false, []),
+      written: written(root, [], []),
     });
   } catch {
     return refuse(PROJECT_MANAGER_CONFIG_INVALID);
+  }
+}
+
+/**
+ * The receipt grows as the call makes things, and every non-ok exit, refusal
+ * or throw, discards exactly that receipt: the tree is left as the call found
+ * it, so a retry never meets this call's own leftovers as a foreign config.
+ */
+async function createFresh(
+  root: string,
+  randomHex: (bytes: number) => string,
+): Promise<ManagedProjectFilesResult> {
+  if (!localAbsoluteRoot(root)) return refuse(PROJECT_MANAGER_ROOT_INVALID);
+  let made = written(root, [], []);
+  try {
+    const missing = await missingDirectories(root);
+    const createdPath = await mkdir(root, { recursive: true });
+    made = written(root, createdPath === undefined ? [] : missing, []);
+    await access(root, constants.W_OK);
+    const resolution = planInit({
+      force: false,
+      probe: { entries: await readdir(root), writable: true },
+      randomHex,
+      targetDir: root,
+    });
+    if (!resolution.ok) {
+      await discardQuietly(made);
+      return refuse(resolution.refusals[0]?.code ?? PROJECT_MANAGER_CONFIG_WRITE_FAILED);
+    }
+    for (const file of resolution.files) {
+      // The receipt takes the path the moment `wx` creates it, not once the
+      // bytes land: a write that fails after open still gets discarded, and a
+      // foreign file that made open throw EEXIST is never named, so never removed.
+      const handle = await open(file.path, "wx", 0o600);
+      made = written(root, made.createdDirectories, [...made.paths, file.path]);
+      try {
+        await handle.writeFile(file.contents, "utf8");
+      } finally {
+        await handle.close();
+      }
+    }
+    return Object.freeze({
+      ok: true,
+      project: await canonicalProject(
+        root, resolution.projectId, resolution.configPath, resolution.storePath,
+      ),
+      written: made,
+    });
+  } catch {
+    await discardQuietly(made);
+    return refuse(PROJECT_MANAGER_CONFIG_WRITE_FAILED);
   }
 }
 
@@ -182,34 +264,7 @@ export function createNodeProjectManagerFiles(
   options: NodeProjectManagerFilesOptions = {},
 ): ProjectManagerFilesPort {
   return Object.freeze({
-    create: async (root: string): Promise<ManagedProjectFilesResult> => {
-      if (!localAbsoluteRoot(root)) return refuse(PROJECT_MANAGER_ROOT_INVALID);
-      try {
-        const missingBefore = await rootMissing(root);
-        const createdPath = await mkdir(root, { recursive: true });
-        const createdRoot = missingBefore && createdPath !== undefined;
-        await access(root, constants.W_OK);
-        const resolution = planInit({
-          force: false,
-          probe: { entries: await readdir(root), writable: true },
-          randomHex: options.randomHex ?? cryptoRandomHex,
-          targetDir: root,
-        });
-        if (!resolution.ok) return refuse(resolution.refusals[0]?.code ?? PROJECT_MANAGER_CONFIG_WRITE_FAILED);
-        for (const file of resolution.files) {
-          await writeFile(file.path, file.contents, { encoding: "utf8", flag: "wx", mode: 0o600 });
-        }
-        return Object.freeze({
-          ok: true,
-          project: await canonicalProject(
-            root, resolution.projectId, resolution.configPath, resolution.storePath,
-          ),
-          written: written(root, createdRoot, resolution.files.map((file) => file.path)),
-        });
-      } catch {
-        return refuse(PROJECT_MANAGER_CONFIG_WRITE_FAILED);
-      }
-    },
+    create: (root: string) => createFresh(root, options.randomHex ?? cryptoRandomHex),
     discard: discardWrittenFiles,
     register: registerExisting,
   });

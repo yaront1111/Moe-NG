@@ -1009,10 +1009,10 @@ describe("Windows Claude launcher", () => {
   it("keeps the lifecycle delay authoritative over the boundary's internal timer", async () => {
     // A BrokerSession arms its own timer from the openBoundary options at
     // construction and, when it fires, tears the provider channels down; the
-    // lifecycle delay is armed only after `started` and registration. Handed
-    // the SAME duration the session's timer always wins that race, and the
-    // premature stream close is misreported as CLAUDE_LAUNCH_STREAM_ERROR at
-    // OUTPUT. This boundary reproduces that session shape — internal timer
+    // lifecycle delay used to be armed only after `started` and registration.
+    // Handed the SAME duration the session's timer always won that race, and
+    // the premature stream close was misreported as CLAUDE_LAUNCH_STREAM_ERROR
+    // at OUTPUT. This boundary reproduces that session shape — internal timer
     // live, streams open, provider hanging — with the REAL delay port, so the
     // deadline must be named by the arm that owns it: CLAUDE_LAUNCH_TIMEOUT
     // at LAUNCHER, with the boundary's timer padded into a pure backstop.
@@ -1287,8 +1287,10 @@ describe("Windows Claude launcher", () => {
             return mode === "thenable" ? thenable(PROVEN) : rejected();
           }) } };
         } },
+      // Consulted at open, so an unusable deadline never reaches the provider:
+      // no context is delivered and no post-start registration is written.
       { name: "delay", code: "CLAUDE_LAUNCH_BOUNDARY_THROWN", layer: "LAUNCHER",
-        trace: () => [...OPENED, "register", "cancel", "close", "observe", "unlock"],
+        trace: () => [...OPENED, "cancel", "close", "unlock"],
         build: (log, mode) => {
           const harness = tracedHarness(log, { completed: new Promise(() => undefined) });
           return { harness, deps: { ...dependencies(harness, log),

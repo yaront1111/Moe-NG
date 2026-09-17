@@ -184,10 +184,18 @@ export function hostedDaemonStartOptions(bindings: ProjectStackBindings): Daemon
 }
 
 export interface ProjectStackHostMainOptions {
-  readonly controls: AsyncIterable<string | Uint8Array>;
   readonly env: Readonly<Record<string, string | undefined>>;
   readonly fs: ProjectStackConfigFs;
   readonly incarnationId: () => string;
+  /**
+   * The broker's control pipe, read as bounded frames and released by the host itself once
+   * the run is over. The parent ends its write end only when the boundary closes, which is
+   * AFTER it has seen the host exit (closeProviderChannels), so a read left armed on the
+   * pipe kept the host alive past its own TERMINAL frame: every clean stop ran into the
+   * supervisor's 10 s budget and ended as a timed-out kill (measured 2026-09-17, Node
+   * v24.16.0: a real host child still alive 5 s after TERMINAL with stdin held open).
+   */
+  readonly input: Readable;
   readonly log: (line: string) => void;
   readonly prepareRepository: (
     bindings: ProjectStackBindings,
@@ -223,41 +231,49 @@ export async function runProjectStackHostMain(
     return 1;
   }
   const bindings = resolved.bindings;
-  return await runProjectStackHost({
-    controls: options.controls,
-    incarnationId,
-    instanceId: bindings.instanceId,
-    log: options.log,
-    projectId: bindings.projectId,
-    startDaemon: async () => {
-      let prepared: Readonly<{ ok: true }> | ProjectStackRefused;
-      const fallback: ProjectStackRefused = {
-        ok: false, code: "PROJECT_RUNTIME_METADATA_PREPARATION_FAILED", layer: PROJECT_STACK_HOST_LAYER,
-      };
-      try { prepared = await options.prepareRepository(bindings); }
-      catch { prepared = fallback; }
-      if (!prepared.ok) {
-        const safe = /^[A-Z][A-Z0-9_]{0,127}$/u;
-        const refusal = safe.test(prepared.code) && safe.test(prepared.layer) ? prepared : fallback;
-        options.log(`${refusal.code} ${refusal.layer}`);
-        return refusal;
-      }
-      return await options.startDaemon(bindings);
-    },
-    startWrapper: () => options.startWrapper(bindings),
-    storePath: bindings.storePath,
-    write: options.write,
-  });
+  try {
+    return await runProjectStackHost({
+      controls: projectStackControlLines(options.input),
+      incarnationId,
+      instanceId: bindings.instanceId,
+      log: options.log,
+      projectId: bindings.projectId,
+      startDaemon: async () => {
+        let prepared: Readonly<{ ok: true }> | ProjectStackRefused;
+        const fallback: ProjectStackRefused = {
+          ok: false, code: "PROJECT_RUNTIME_METADATA_PREPARATION_FAILED", layer: PROJECT_STACK_HOST_LAYER,
+        };
+        try { prepared = await options.prepareRepository(bindings); }
+        catch { prepared = fallback; }
+        if (!prepared.ok) {
+          const safe = /^[A-Z][A-Z0-9_]{0,127}$/u;
+          const refusal = safe.test(prepared.code) && safe.test(prepared.layer) ? prepared : fallback;
+          options.log(`${refusal.code} ${refusal.layer}`);
+          return refusal;
+        }
+        return await options.startDaemon(bindings);
+      },
+      startWrapper: () => options.startWrapper(bindings),
+      storePath: bindings.storePath,
+      write: options.write,
+    });
+  } finally {
+    // The control pipe is released on EVERY path out of the host loop, a STOP (the read
+    // parked at its yield) and a wrapper death (a read still pending) alike: nobody else
+    // closes it before the host is gone, and an armed read is a live handle. The TERMINAL
+    // frame is already written; a pending stdout write still drains before the exit.
+    options.input.destroy();
+  }
 }
 
 const meta = import.meta as ImportMeta & { readonly main?: boolean };
 if (meta.main === true) {
   const wrapperEntry = fileURLToPath(new URL("../orchestrator/agent-wrapper-main.ts", import.meta.url));
   process.exitCode = await runProjectStackHostMain(process.argv.slice(2), {
-    controls: projectStackControlLines(process.stdin),
     env: process.env,
     fs: createNodeProjectStackConfigFs(),
     incarnationId: randomUUID,
+    input: process.stdin,
     log: (line) => process.stderr.write(`${line}\n`),
     prepareRepository: prepareRuntimeMetadataExcludes,
     startDaemon: async (bindings) => startDaemon(hostedDaemonStartOptions(bindings)),

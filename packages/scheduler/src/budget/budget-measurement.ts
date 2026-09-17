@@ -18,9 +18,9 @@
  */
 import {
   validateUsageMeasurement, type BudgetIssueCode, type BudgetMeasurementSource,
-  type BudgetTruthClass, type UsageMeasurementRecord,
+  type BudgetPolicyRiskTier, type BudgetTruthClass, type UsageMeasurementRecord,
 } from "./budget-contract.js";
-import { hasOnlyOwnStringKeys, isPlainRecord, readOwnDataProperty } from "../runtime-shape.js";
+import { compareStrings, deepFreeze, exactRecord, isSafeCount } from "../kernel-primitives.js";
 
 export const MEASUREMENT_ISSUE_CODES = Object.freeze([
   "BUDGET_OBSERVATION_MALFORMED", "BUDGET_OBSERVATION_SOURCE_COVERAGE_MISMATCH",
@@ -58,7 +58,7 @@ export interface NormalizedMeasurement {
 /** Structural mirror of PolicyFactInput. Exactly three fields, or it stops being compatible. */
 export interface PolicyFactInputCompatible {
   readonly factId: string;
-  readonly tier: "R0" | "R1" | "R2" | "R3" | null;
+  readonly tier: BudgetPolicyRiskTier | null;
   readonly truthClass: BudgetTruthClass;
 }
 
@@ -78,17 +78,6 @@ const SOURCE_TRUTH_CLASSES: Readonly<Record<BudgetMeasurementSource, BudgetTruth
   ACTUAL_BILLED: "OBSERVED", UNKNOWN: "UNKNOWN",
 });
 
-function deepFreeze<T>(value: T): T {
-  if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value as Record<string, unknown>)) {
-    deepFreeze((value as Record<string, unknown>)[key]);
-  }
-  return value;
-}
-function compareStrings(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
 function sortIssues(issues: readonly LayeredIssue[]): LayeredIssue[] {
   return [...issues].sort((a, b) => compareStrings(JSON.stringify(a), JSON.stringify(b)));
 }
@@ -98,36 +87,28 @@ function fail<T>(issues: readonly LayeredIssue[]): MeasurementResult<T> {
 function isRef(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= MAX_REF_LENGTH;
 }
-function isCount(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && !Object.is(value, -0);
-}
-function readRecord(value: unknown, allowed: readonly string[]): Record<string, unknown> | null {
-  if (!isPlainRecord(value) || !hasOnlyOwnStringKeys(value, allowed)) return null;
-  const output: Record<string, unknown> = {};
-  for (const key of allowed) {
-    const read = readOwnDataProperty(value, key);
-    if (!read.ok || !read.present) return null;
-    output[key] = read.value;
-  }
-  return output;
-}
 
 interface Observation {
   readonly measurement: unknown; readonly pricebookBinding: unknown; readonly truncated: boolean;
 }
-/** Envelope guard. A hostile envelope refuses here; a hostile measurement refuses one layer down. */
+/**
+ * Envelope guard. A hostile envelope refuses here; a hostile measurement refuses one layer down.
+ * Only `null` says "no binding": an own `pricebookBinding` holding `undefined` is a missing field,
+ * and refusing it here keeps a non-derived source from being accused of a foreign billing claim.
+ */
 function readObservation(input: unknown): Observation | null {
-  const item = readRecord(input, OBSERVATION_KEYS);
+  const item = exactRecord(input, OBSERVATION_KEYS);
   if (item === null || typeof item.truncated !== "boolean") return null;
+  if (item.pricebookBinding === undefined) return null;
   return {
     measurement: item.measurement, pricebookBinding: item.pricebookBinding,
     truncated: item.truncated,
   };
 }
 function readPricebookBinding(value: unknown): PricebookBinding | null {
-  const item = readRecord(value, BINDING_KEYS);
+  const item = exactRecord(value, BINDING_KEYS);
   if (item === null || !isRef(item.pricebookRevisionRef) || !isRef(item.pricedAtRef)) return null;
-  if (!isCount(item.unitPriceMicros)) return null;
+  if (!isSafeCount(item.unitPriceMicros)) return null;
   return {
     pricebookRevisionRef: item.pricebookRevisionRef, unitPriceMicros: item.unitPriceMicros,
     pricedAtRef: item.pricedAtRef,

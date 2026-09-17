@@ -202,8 +202,8 @@ describe("workspace enumeration over real filesystem bytes", () => {
       expect(item.observedAt).toBe(OBSERVED_AT);
       expect(item.sourceProofDigest).toMatch(/^[0-9a-f]{64}$/u);
     }
-    const alpha = factsOf(report, "ws/alpha/alpha.txt");
-    const beta = factsOf(report, "ws/alpha/nested/beta.txt");
+    const alpha = factsOf(report, "ws/alpha:alpha.txt");
+    const beta = factsOf(report, "ws/alpha:nested/beta.txt");
     expect(alpha["byteLength"]).toBe(5);
     expect(beta["byteLength"]).toBe(4);
     expect(alpha["sha256"]).not.toBe(beta["sha256"]);
@@ -267,6 +267,27 @@ describe("two entries claiming one external identity", () => {
       layer: LAYER,
     });
     expect(report.items).toHaveLength(0);
+  });
+});
+
+describe("two workspaces whose refs nest", () => {
+  it("keeps one file per workspace apart when one ref is a prefix of the other", async () => {
+    // "ws/a" + "b/c.txt" and "ws/a/b" + "c.txt" are two files in two workspaces,
+    // both fully read and sealed; a slash-joined identity would spell them alike.
+    write("outer/b/c.txt", "outer");
+    write("inner/c.txt", "in");
+    const report = await collect({
+      workspaces: [
+        source({ workspaceRef: "ws/a", rootPath: join(root, "outer") }),
+        source({ workspaceRef: "ws/a/b", rootPath: join(root, "inner") }),
+      ],
+    });
+    expect(summary(proofFor(report))).toEqual(COMPLETE_PROOF);
+    expect(report.coverage).toBe("COMPLETE");
+    expect(report.items).toHaveLength(2);
+    expect(new Set(report.items.map((item) => identityKey(item.identity))).size).toBe(2);
+    expect(factsOf(report, "ws/a:b/c.txt")["byteLength"]).toBe(5);
+    expect(factsOf(report, "ws/a/b:c.txt")["byteLength"]).toBe(2);
   });
 });
 
@@ -468,7 +489,7 @@ describe("the registration seam for both classes", () => {
 
 describe("coverage sweep", () => {
   it("generated a coverage case for both classes on every arm above", () => {
-    expect(GENERATED.filter((entry) => entry === CLASS)).toHaveLength(15);
+    expect(GENERATED.filter((entry) => entry === CLASS)).toHaveLength(16);
     expect(GENERATED.filter((entry) => entry === "PROVIDER_PROCESS_LAUNCH_LOCK")).toHaveLength(4);
     expect(GENERATED.length).toBeGreaterThan(0);
   });

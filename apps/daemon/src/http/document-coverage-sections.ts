@@ -38,20 +38,34 @@ export const MAX_SECTION_HEADINGS = 512;
 const HEADING = /^#{1,6}\s+(.+?)\s*$/u;
 const HEADING_NUMBER = /^(\d+(?:\.\d+)*)\.?(?:\s|$)/u;
 const CITATION = /§\s*(\d+(?:\.\d+)*)/gu;
-const FENCE = /^\s*(```|~~~)/u;
+const FENCE = /^\s*(`{3,}|~{3,})(.*)$/u;
 
 interface Heading {
   readonly heading: string;
   readonly number: string | null;
 }
 
+/**
+ * CommonMark closes a fenced block only on its opening character, at least as long, with nothing
+ * else on the line: a `~~~` line inside a backtick block is content, and so is a three-backtick
+ * line inside a four-backtick block. A run of the same character is a prefix of any longer run.
+ */
+function closesFence(opening: string, line: string): boolean {
+  const match = FENCE.exec(line);
+  return match !== null && (match[1] as string).startsWith(opening) && (match[2] as string).trim() === "";
+}
+
 /** Numbered and unnumbered headings in document order, outside fenced code. */
 export function documentHeadings(text: string): readonly Heading[] {
   const headings: Heading[] = [];
-  let fenced = false;
+  let fence: string | null = null;
   for (const line of text.split(/\r?\n/u)) {
-    if (FENCE.test(line)) { fenced = !fenced; continue; }
-    if (fenced) continue;
+    if (fence !== null) {
+      if (closesFence(fence, line)) fence = null;
+      continue;
+    }
+    const opening = FENCE.exec(line);
+    if (opening !== null) { fence = opening[1] as string; continue; }
     const match = HEADING.exec(line);
     if (match === null) continue;
     const heading = match[1] as string;

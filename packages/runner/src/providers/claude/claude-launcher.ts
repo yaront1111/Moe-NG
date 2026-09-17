@@ -86,15 +86,15 @@ const REQUEST_MALFORMED = "launch request is not bounded plain data";
  * `ports.delay(limits.timeoutMs)` is the authoritative deadline — it is the
  * arm that names a late run CLAUDE_LAUNCH_TIMEOUT at LAUNCHER — while the
  * boundary's own timer exists only as the crash-safety backstop for a
- * lifecycle that never gets to act. Armed with the SAME duration the two race
- * and the boundary's always wins: it is armed at open, the delay only after
- * `started` and registration, so it fires first, tears the provider channels
- * down, and the fault arm misreports the deadline as
- * CLAUDE_LAUNCH_STREAM_ERROR at OUTPUT. Merely arming the delay earlier would
- * leave two same-duration timers racing microtasks apart; the backstop must
- * TRAIL the deadline by the grace the boundary itself grants a cancelled
- * broker to settle, so it can only fire once the deadline demonstrably never
- * did.
+ * lifecycle that never gets to act. Both are armed at open: the lifecycle arms
+ * its deadline once, ahead of the start wait, sealed-context delivery and the
+ * run itself, so no pre-run phase can push the deadline behind the backstop.
+ * Armed with the SAME duration the two would still race microtasks apart, and
+ * a backstop that wins tears the provider channels down so the fault arm
+ * misreports the deadline as CLAUDE_LAUNCH_STREAM_ERROR at OUTPUT; the
+ * backstop must TRAIL the deadline by the grace the boundary itself grants a
+ * cancelled broker to settle, so it can only fire once the deadline
+ * demonstrably never did.
  */
 export const BOUNDARY_TIMEOUT_SLACK_MS = CANCEL_GRACE_MS;
 const PHASE = Object.freeze({

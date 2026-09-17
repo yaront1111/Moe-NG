@@ -6,6 +6,8 @@
  * echoed. The approval-exclusion row is committed straight through the store
  * because the port's contract there is exactly "what the ledger folds".
  */
+import { readFileSync } from "node:fs";
+
 import { SqliteEventStore } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -65,11 +67,14 @@ function boundWorld(): { sha: string; store: SqliteEventStore } {
   return { sha: read.contentSha256, store };
 }
 
-function commitRevision(store: SqliteEventStore, sha: string) {
+function commitRevision(
+  store: SqliteEventStore, sha: string,
+  ids: { contractId?: string; revisionId?: string } = {},
+) {
   const committed = commitProductContractRevision(store, {
     correlationId: "corr-pending-revision",
     decidedAt: "2026-08-31T12:00:00.000Z",
-    draft: { ...productContractDraft(), sourceDocumentDigests: [sha] },
+    draft: { ...productContractDraft(), sourceDocumentDigests: [sha], ...ids },
     principalId: "principal-writer",
     projectId: PROJECT_ID,
   });
@@ -174,5 +179,31 @@ describe("createProductContractPendingReadPort", () => {
     const { store } = boundWorld();
     commitRevision(store, "f".repeat(64));
     expect(portFor(store).readPending(GOAL_ID)).toEqual({ outcome: "NONE" });
+  });
+
+  it("keys the approved/pending join on the one byte core refuses inside an id", () => {
+    // A printable separator is an ADMITTED id byte (core's `readText` refuses
+    // only NUL), so `a x` + `y` and `a` + `x y` would fold to ONE key under a
+    // space, and an approval on the first would silence the second's card.
+    const { sha, store } = boundWorld();
+    approveRow(store, "product-contract-a x", "y");
+    commitRevision(store, sha, { contractId: "product-contract-a", revisionId: "x y" });
+    const answer = portFor(store).readPending(GOAL_ID);
+    if (answer.outcome !== "PENDING") throw new Error(`expected PENDING, got ${answer.outcome}`);
+    expect(answer.ref.contractId).toBe("product-contract-a");
+    expect(answer.ref.revisionId).toBe("x y");
+  });
+
+  it("spells that separator as an escape, never a raw byte, so the module stays text", () => {
+    // A raw NUL makes the file "binary" to rg, grep and `git grep -I`: every
+    // grep-driven gate (text-scan rosters, the security lane's layer scan)
+    // skips it silently, and an editor that renders the byte as a space can
+    // rewrite ONE site and split the approved keys from the pending ones.
+    const source = readFileSync(
+      new URL("./product-contract-pending-read.ts", import.meta.url), "utf8",
+    );
+    expect(source.split("\0").length - 1).toBe(0);
+    // Positive control: the separator is still the forbidden byte, written visibly.
+    expect(source).toContain("\\0");
   });
 });

@@ -22,6 +22,7 @@ import type {
   ProjectCatalogPorts,
   RegisterCatalogProjectInput,
 } from "./project-catalog.js";
+import { PROJECT_CATALOG_ENV_KEY } from "./project-catalog-registrar.js";
 import { createNodeProjectManagerFiles } from "./project-manager-files.js";
 import {
   startProjectManagerHttp,
@@ -84,6 +85,12 @@ type ProjectBoundaryOpener = (
 
 export interface CreateProjectBoundaryOpenerOptions {
   readonly assetRoot: string;
+  /**
+   * The catalog the manager loads and saves, bound as MOE_PROJECT_CATALOG so the hosted daemon's
+   * repository bootstrap registers into it. Unbound, the registrar fell back to
+   * ~/.moe-next/projects.json: a second catalog on the same host the manager never reads.
+   */
+  readonly catalogPath?: string;
   readonly environment: Readonly<Record<string, string | undefined>>;
   readonly launchFs?: ProjectManagerLaunchFs;
   readonly nodeExecutable: string;
@@ -93,8 +100,11 @@ export interface CreateProjectBoundaryOpenerOptions {
    * attached its console (or `--operator-stdin`) or it did not. The hosted daemon cannot
    * observe that and used to assert `true`, so under piped stdio the control room told
    * the operator to type a label nobody read (measured 2026-09-13, `isTTY` undefined).
+   * Read at EVERY launch, never at construction: a console that hit EOF takes no typed
+   * label, and a boolean snapshot restated the dead channel to each project started
+   * from the manager UI after it. A read that throws is no evidence of a console.
    */
-  readonly operatorChannelAvailable: boolean;
+  readonly operatorChannelAvailable: () => boolean;
   readonly root: string;
 }
 
@@ -148,6 +158,11 @@ function localWindowsDirectory(value: unknown): value is string {
     && /^[A-Za-z]:[\\/]/u.test(value) && win32.isAbsolute(value);
 }
 
+/** The live channel at this launch; fail closed, exactly as the manager's pairing route does. */
+function operatorChannelAtLaunch(read: () => boolean): boolean {
+  try { return read() === true; } catch { return false; }
+}
+
 /** The only composition edge allowed to open a per-project native Job. */
 export function createProjectBoundaryOpener(
   options: CreateProjectBoundaryOpenerOptions,
@@ -191,10 +206,12 @@ export function createProjectBoundaryOpener(
       configPath: entry.configPath,
       cwd: entry.root,
       entryPath,
-      // Server-owned: prepareProjectManagerLaunch dropped any caller value of this name.
+      // Server-owned: prepareProjectManagerLaunch dropped any caller value of these names.
       environment: Object.freeze({
         ...prepared.environment,
-        MOE_OPERATOR_CHANNEL: String(options.operatorChannelAvailable),
+        MOE_OPERATOR_CHANNEL: String(operatorChannelAtLaunch(options.operatorChannelAvailable)),
+        ...(options.catalogPath === undefined
+          ? {} : { [PROJECT_CATALOG_ENV_KEY]: options.catalogPath }),
       }),
       instanceId: entry.instanceId,
       nodeExecutable: options.nodeExecutable,
@@ -266,13 +283,18 @@ export async function runProjectManagerMain(options: ProjectManagerMainOptions):
     fs: catalogFs,
     mintUuid: dependencies.mintUuid,
   });
+  // One flag for the pairing route AND every project launch: the opener used to bake a
+  // snapshot taken here, so a project started after the console's EOF was told the
+  // channel this route had already stopped reporting.
+  let operatorChannelAvailable = options.operatorInput !== undefined;
   const runtime = dependencies.createRuntime({
     openBoundary: createProjectBoundaryOpener({
       assetRoot,
+      catalogPath,
       environment: options.env,
       nodeExecutable: process.execPath,
       openBoundary: dependencies.openBoundary,
-      operatorChannelAvailable: options.operatorInput !== undefined,
+      operatorChannelAvailable: () => operatorChannelAvailable,
       root: options.root,
     }),
   });
@@ -294,7 +316,6 @@ export async function runProjectManagerMain(options: ProjectManagerMainOptions):
     return 1;
   }
   let listener: StartProjectManagerHttpResult;
-  let operatorChannelAvailable = options.operatorInput !== undefined;
   try {
     listener = await dependencies.startHttp({
       assetRoot,

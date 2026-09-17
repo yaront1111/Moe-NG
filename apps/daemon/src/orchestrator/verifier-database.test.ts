@@ -35,6 +35,7 @@ class DockerHost {
   readonly containers = new Map<string, number>();
   readonly events: string[] = [];
   readonly recipeEnvironments: NodeJS.ProcessEnv[] = [];
+  readonly dockerEnvironments: NodeJS.ProcessEnv[] = [];
   readonly children = new Map<number, EventEmitter>();
   readonly dockerCalls: string[][] = [];
   available = true;
@@ -64,6 +65,7 @@ class DockerHost {
       if (file === "docker") {
         expect(options.shell).toBe(false);
         expect(args.join(" ").includes(options.env?.POSTGRES_PASSWORD ?? "<unset>")).toBe(false);
+        this.dockerEnvironments.push(options.env ?? {});
         const result = this.docker(args);
         child.stdout.write(result.output);
         child.emit("close", result.code);
@@ -115,10 +117,10 @@ class DockerHost {
     throw new Error(`unexpected docker operation ${args[0]}`);
   }
 
-  runner(timeoutMs = 1000) {
+  runner(timeoutMs = 1000, operatorEnvironment: NodeJS.ProcessEnv = {}) {
     return createVerifierDatabaseRunner({
       spawn: this.spawn, platform: "linux", killProcessGroup: this.killGroup,
-      environment: { PATH: "/runtime", LANG: "C", DATABASE_URL: "ambient-must-not-win" },
+      environment: { PATH: "/runtime", LANG: "C", DATABASE_URL: "ambient-must-not-win", ...operatorEnvironment },
       readyTimeoutMs: 10, pollMs: 1, timeoutMs, killGraceMs: 50,
     });
   }
@@ -184,6 +186,45 @@ describe("verifier disposable database", () => {
     expect(result.exitCode).toBe(1);
     expect(host.events).toEqual([]);
     await runner.close();
+  });
+
+  it("reaches the daemon the operator's shell names through DOCKER_HOST, and keeps it out of the recipe", async () => {
+    // Rootless Docker, Colima and Podman answer on a socket only DOCKER_HOST (or a context)
+    // names. The recipe allowlist strips every DOCKER_* variable, so the `docker version` probe
+    // fell back to /var/run/docker.sock and refused DOCKER_UNAVAILABLE while `docker` worked in
+    // the operator's own shell. The route belongs to the CLI spawns alone, never to the recipe.
+    const host = new DockerHost();
+    const route = {
+      DOCKER_HOST: "unix:///run/user/1000/docker.sock", DOCKER_CONTEXT: "colima",
+      DOCKER_TLS_VERIFY: "1", DOCKER_CERT_PATH: "/home/operator/.docker/certs",
+    };
+    const runner = host.runner(1000, route);
+    try {
+      expect((await runner(workspace())).exitCode).toBe(0);
+      expect(host.dockerEnvironments.length).toBeGreaterThan(0);
+      for (const env of host.dockerEnvironments) expect(env).toMatchObject(route);
+      expect(host.recipeEnvironments).toEqual([expect.not.objectContaining({ DOCKER_HOST: expect.anything() })]);
+      host.assertGone();
+    } finally { await runner.close(); }
+  });
+
+  it("says the step never exited when the deadline cuts a silent migration, not that no migration started", async () => {
+    // `pnpm db:migrate` reads DATABASE_URL, connects, then blocks (an advisory lock, a slow
+    // network call) and prints nothing before the runner's deadline. The capture is a null exit
+    // with empty output, which used to be refused as MIGRATION_DID_NOT_START naming DATABASE_URL:
+    // the variable the step had already read, pointing the operator at the wrong cause.
+    const host = new DockerHost();
+    host.hangMigration = true;
+    host.migrationFails = true;
+    host.migrationOutput = "";
+    const runner = host.runner(20);
+    try {
+      const result = await runner(workspace());
+      expect(result.exitCode).toBe(1);
+      expect(JSON.parse(result.output)).toEqual({ code: "MIGRATION_DID_NOT_EXIT", refusedBy: "DAEMON_INGRESS" });
+      expect(host.events).toEqual(["migration"]);
+      host.assertGone();
+    } finally { await runner.close(); }
   });
 
   it("says no migration started when the step fails before any migration runs", async () => {

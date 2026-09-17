@@ -201,8 +201,21 @@ function removePackTemporaryOwner(owner: PackTemporaryOwner): void {
 /** Shares the same exclusive, marker-validated lifetime with native build scratch. */
 export function withPackTemporaryOwner<T>(run: (root: string) => T): T {
   const owner = createPackTemporaryOwner();
-  try { return run(owner.root); }
-  finally { removePackTemporaryOwner(owner); }
+  let answer!: T;
+  let failed = false;
+  let primary: unknown;
+  try {
+    answer = run(owner.root);
+  } catch (error) {
+    failed = true;
+    primary = error;
+  }
+  // The callback's failure is the operator's report; a cleanup refusal never replaces it.
+  let cleanup: unknown;
+  try { removePackTemporaryOwner(owner); } catch (error) { cleanup = error; }
+  if (failed) throw primary;
+  if (cleanup !== undefined) throw cleanup;
+  return answer;
 }
 
 export function packWindows(options: PackOptions): number {

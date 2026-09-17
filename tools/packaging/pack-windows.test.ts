@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import {
-  cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync, writeFileSync,
+  cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, realpathSync, rmSync,
+  symlinkSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
@@ -13,6 +14,7 @@ import { captureNativePackTool } from "./pack-command.js";
 import {
   invalidateWindowsArtifact,
   publishWindowsArchive,
+  withPackTemporaryOwner,
 } from "./pack-windows.js";
 
 const roots: string[] = [];
@@ -354,4 +356,32 @@ describe("Windows artifact publication safety", () => {
     30_000,
   );
 
+});
+
+/** A junction (a symlink off Windows) is what makes the owner tree unsafe to remove. */
+function holdPackOwnerTree(root: string): void {
+  roots.push(root);
+  symlinkSync(temporaryRoot(), join(root, "held"), "junction");
+}
+
+describe("Windows pack temporary owner lifetime", () => {
+  it("reports the callback's failure, not the cleanup refusal, when both fail", () => {
+    const primary = new Error("PACK_STEP_FAILED: cargo build --locked --release");
+    let caught: unknown;
+
+    try {
+      withPackTemporaryOwner((root) => { holdPackOwnerTree(root); throw primary; });
+    } catch (error) {
+      caught = error;
+    }
+
+    expect(caught).toBe(primary);
+  });
+
+  it("still refuses an unsafe owner tree after a callback that succeeded", () => {
+    expect(() => withPackTemporaryOwner((root) => { holdPackOwnerTree(root); return 0; }))
+      .toThrow(expect.objectContaining({
+        code: "PACK_OUTPUT_PATH_UNSAFE", layer: "PACKAGING_OUTPUT",
+      }));
+  });
 });
