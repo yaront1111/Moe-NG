@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { realpathSync } from "node:fs";
-import { createGitLandingPort } from "../repository/git-landing-port.js";
+import { createGitLandingPort, TRACKED_RUNTIME_METADATA_DIRTY } from "../repository/git-landing-port.js";
 import { createGitPublicationPort } from "../repository/git-publication-port.js";
 import { createCriterionEvidenceService } from "../criterion-evidence/criterion-service.js";
 import type { RepositoryExecutionHandle } from "../repository/repository-execution-contracts.js";
@@ -28,6 +28,7 @@ import type { ReleasePublisher } from "../release/release-decide-service.js";
 import { createNodeVerifier } from "./node-verifier.js";
 import type { NodeVerifierConfig } from "./node-verifier.js";
 import { createRepositoryDeliveryCoordinator } from "./repository-delivery-coordinator.js";
+import { checkpointRuntimeMetadata } from "./runtime-metadata-checkpoint.js";
 import { deliveryRefusal } from "./repository-delivery-contracts.js";
 import type { RepositoryDeliveryFacts } from "./repository-delivery-contracts.js";
 import { probeProcessAlive } from "./process-runner-lifecycle.js";
@@ -95,6 +96,24 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
     ...(reservationHandle === undefined ? {} : { reservationHandle }),
   });
   let closed = false;
+  // `baseline` is retried on the wrapper's timer, so one checkpoint is attempted per node per
+  // UNCHANGED dirty set: re-running a failing commit against the operator's repository every few
+  // seconds would turn one bug into a write storm. The key is the dirty set itself, so the attempt
+  // re-arms as soon as that set changes. The prior outcome is kept so every later pass still shows
+  // the operator the DISTINCT actionable code instead of an opaque repeating refusal.
+  const metadataCheckpoints = new Map<string, { attempt: string; outcome: string }>();
+  const checkpointMetadata = async (nodeRef: string, workspace: string, paths: readonly string[]): Promise<boolean> => {
+    const attempt = paths.join("\0");
+    const prior = metadataCheckpoints.get(nodeRef);
+    if (prior?.attempt === attempt) {
+      config.log(`[lander] ${nodeRef}: ${prior.outcome} (already attempted for this unchanged set of ${String(paths.length)} runtime metadata path(s); not retried. Resolve or checkpoint them by hand.)`);
+      return false;
+    }
+    const report = await checkpointRuntimeMetadata({ git, nodeRef, paths, workspace });
+    metadataCheckpoints.set(nodeRef, { attempt, outcome: report.outcome });
+    config.log(`[lander] ${nodeRef}: ${report.outcome} (${report.detail})`);
+    return report.ok;
+  };
   const describeHolder = (nodeRef: string, phase: RepositoryExecutionPhase): string => {
     try {
       const review = readReviewLedger(store, projectId, nodeRef);
@@ -128,7 +147,14 @@ export function createRepositoryDeliveryRuntime(config: RepositoryDeliveryRuntim
     baseline: async (nodeRef, root) => {
       const brief = missionIn(root)(nodeRef);
       if (brief === null) return null;
-      const observed = await git.observe(brief.workspace);
+      let observed = await git.observe(brief.workspace);
+      // GATE A ONLY. Tracked runtime metadata (`.moe/`, `.moe-next/`) that was already dirty when
+      // the node was staffed is checkpointed by Moe so execution can proceed; the checkpoint module
+      // fences the paths itself. Gate B below is untouched: ordinary PRODUCT dirt still refuses.
+      const dirtyMetadata = !observed.ok && observed.code === TRACKED_RUNTIME_METADATA_DIRTY ? observed.paths ?? [] : [];
+      if (dirtyMetadata.length > 0 && await checkpointMetadata(nodeRef, brief.workspace, dirtyMetadata)) {
+        observed = await git.observe(brief.workspace);
+      }
       if (!observed.ok || observed.observation.entries.length !== 0) {
         config.log(observed.ok
           ? `[lander] ${nodeRef}: BASELINE_WORKSPACE_DIRTY (${observed.observation.entries.length} changed paths). Review git status --short and checkpoint existing work before execution; Moe rechecks automatically.`

@@ -62,6 +62,23 @@ describe("createGitLandingPort against a real repository", () => {
     expect(result.detail).not.toMatch(/[\r\n]/u);
     expect(result.detail.length).toBeLessThanOrEqual(600);
     expect(result.detail).toContain("git status --short");
+    // `detail` is truncated to four entries for the log line; `paths` is the machine-readable
+    // set a self-heal acts on, so the truncation must not reach it.
+    expect(result.paths).toHaveLength(20);
+  });
+
+  it("carries the full sorted dirty tracked metadata path set for a self-heal to act on", async () => {
+    const root = scratchRepository();
+    // Deliberately out of order, so a missing sort is visible rather than accidentally satisfied.
+    const records = [" M .moe-next/start.ps1\0", "A  .moe/operator.ps1\0", " D .moe-next/README.md\0"].join("");
+    const port = createGitLandingPort(async (cwd, args, input) => args[0] === "status"
+      ? { code: 0, stderr: "", stdout: records } : nodeGitRunner(cwd, args, input));
+
+    const result = await port.observe(root);
+
+    if (result.ok) throw new Error("expected tracked metadata refusal");
+    expect(result.code).toBe("TRACKED_RUNTIME_METADATA_DIRTY");
+    expect(result.paths).toEqual([".moe-next/README.md", ".moe-next/start.ps1", ".moe/operator.ps1"]);
   });
 
   it.each(["modified", "deleted", "staged addition", "renamed out", "renamed in", "outside subtree"] as const)(
@@ -86,9 +103,13 @@ describe("createGitLandingPort against a real repository", () => {
 
       const observed = await port.observe(change === "outside subtree" ? join(root, "src") : root);
 
+      const dirtyMetadata = change === "staged addition" ? ".moe/operator.ps1"
+        : change === "renamed in" ? ".moe-next/tracked.ts" : path;
       expect(observed).toMatchObject({ ok: false, code: "TRACKED_RUNTIME_METADATA_DIRTY" });
-      expect(!observed.ok && observed.detail).toContain(change === "staged addition" ? ".moe/operator.ps1"
-        : change === "renamed in" ? ".moe-next/tracked.ts" : path);
+      expect(!observed.ok && observed.detail).toContain(dirtyMetadata);
+      // Against real git, not a status fake: exactly the metadata path, and nothing else the
+      // self-heal would then be handed permission to commit.
+      expect(!observed.ok && observed.paths).toEqual([dirtyMetadata]);
       expect(!observed.ok && observed.detail).toContain("git status --short");
       expect(hashes).toBe(0);
       expect(git(root, "rev-parse", "HEAD")).toBe(head);

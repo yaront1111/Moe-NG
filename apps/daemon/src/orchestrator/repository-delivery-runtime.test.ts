@@ -155,6 +155,8 @@ describe("production repository delivery composition", () => {
     expect(readLatestLandingBaseline(f.store, f.projectId, "a")).toBeNull();
     expect(f.logs.join("\n")).toContain("BASELINE_WORKSPACE_DIRTY");
     expect(f.logs.join("\n")).toContain("git status --short");
+    // Product dirt is never checkpointed: the runtime-metadata self-heal must not reach this path.
+    expect(f.logs.join("\n")).not.toContain("RUNTIME_METADATA_CHECKPOINTED");
     expect(git(f.workspace, "rev-parse", "HEAD")).toBe(head);
     expect(readFileSync(join(f.workspace, ".git", "index"))).toEqual(index);
     expect(createRepositoryExecutionPort().inspect(f.workspace)).toEqual({ ok: true, reservation: null });
@@ -167,15 +169,52 @@ describe("production repository delivery composition", () => {
     if (next.ok) await next.exit;
   }, 120_000);
 
-  it("refuses tracked runtime metadata dirt before any seat or baseline write", async () => {
-    const f = fixture();
+  /** Commit a tracked `.moe-next/start.ps1` under the operator's identity, then dirty it — the
+   *  exact live repro measured 2026-09-17, where an operator edit wedged every node. */
+  const dirtyTrackedMetadata = (f: ReturnType<typeof fixture>): void => {
     mkdirSync(join(f.workspace, ".moe-next"));
     writeFileSync(join(f.workspace, ".moe-next", "start.ps1"), "# tracked original\n");
     git(f.workspace, "add", "--", ".moe-next/start.ps1");
     git(f.workspace, "-c", "user.name=Operator", "-c", "user.email=operator@example.test", "commit", "--quiet", "-m", "legacy launcher");
     writeFileSync(join(f.workspace, ".moe-next", "start.ps1"), "# existing operator edit\n");
+  };
+
+  // RECORDED DECISION, not a weakened gate. Until 2026-09-17 this case asserted the opposite:
+  // BASELINE_UNAVAILABLE, starts === 0, HEAD unchanged, `.git/index` byte-identical. Those
+  // assertions encoded "Moe never writes the operator's history unasked". Measured live that day,
+  // that rule meant one edited `.moe-next/start.ps1` made node.deliver refuse
+  // BASELINE_UNAVAILABLE for ~5 minutes while the wrapper retried on a timer, and it only cleared
+  // when a human committed the path by hand — every node wedged behind an operator. The owner's
+  // direction the same day narrowed the rule to "except for runtime metadata", so Moe now
+  // checkpoints that ONE class itself. The two arms below hold the rest of the old rule in place:
+  // product dirt is still never written, including when it sits beside metadata dirt.
+  it("checkpoints tracked runtime metadata dirt and proceeds to staff the node", async () => {
+    const f = fixture();
+    dirtyTrackedMetadata(f);
     const head = git(f.workspace, "rev-parse", "HEAD");
-    const index = readFileSync(join(f.workspace, ".git", "index"));
+    let starts = 0;
+
+    const result = await f.runtime.start(async () => { starts += 1; return { ok: true, pid: process.pid, exit: Promise.resolve() }; })(f.request("a"));
+
+    expect(result.ok).toBe(true);
+    expect(starts).toBe(1);
+    expect(readLatestLandingBaseline(f.store, f.projectId, "a")).not.toBeNull();
+    expect(f.logs.join("\n")).toContain("RUNTIME_METADATA_CHECKPOINTED");
+    expect(f.logs.join("\n")).toContain("BASELINE_RECORDED");
+    expect(git(f.workspace, "rev-parse", "HEAD")).not.toBe(head);
+    // The committed path list, not merely that a commit happened: the checkpoint carried the one
+    // metadata path and nothing else, and it is Moe's identity on it, not the operator's.
+    expect(git(f.workspace, "show", "--name-only", "--format=", "HEAD")).toBe(".moe-next/start.ps1");
+    expect(git(f.workspace, "log", "-1", "--format=%an <%ae>")).toBe("Moe <moe@moe.local>");
+    if (result.ok) await result.exit;
+  }, 120_000);
+
+  it("refuses a dirty product path that sits beside checkpointed metadata, leaving it dirty", async () => {
+    const f = fixture();
+    dirtyTrackedMetadata(f);
+    // Tracked PRODUCT dirt in the same tree. The case a naive fix gets wrong: it must checkpoint
+    // the metadata and still refuse, rather than sweeping the operator's real work in with it.
+    writeFileSync(join(f.workspace, "keep.txt"), "operator work in progress\n");
     let starts = 0;
 
     const result = await f.runtime.start(async () => { starts += 1; return { ok: true, pid: process.pid, exit: Promise.resolve() }; })(f.request("a"));
@@ -183,12 +222,50 @@ describe("production repository delivery composition", () => {
     expect(result).toMatchObject({ ok: false, code: "REPOSITORY_DELIVERY_BASELINE_UNAVAILABLE" });
     expect(starts).toBe(0);
     expect(readLatestLandingBaseline(f.store, f.projectId, "a")).toBeNull();
-    expect(f.logs.join("\n")).toContain("TRACKED_RUNTIME_METADATA_DIRTY");
-    expect(f.logs.join("\n")).toContain(".moe-next/start.ps1");
-    expect(f.logs.join("\n")).toContain("git status --short");
-    expect(git(f.workspace, "rev-parse", "HEAD")).toBe(head);
-    expect(readFileSync(join(f.workspace, ".git", "index"))).toEqual(index);
+    expect(f.logs.join("\n")).toContain("RUNTIME_METADATA_CHECKPOINTED");
+    expect(f.logs.join("\n")).toContain("BASELINE_WORKSPACE_DIRTY");
+    // The metadata was checkpointed alone; the product file is untouched and still dirty.
+    expect(git(f.workspace, "show", "--name-only", "--format=", "HEAD")).toBe(".moe-next/start.ps1");
+    expect(git(f.workspace, "status", "--porcelain", "--", "keep.txt")).toBe("M keep.txt");
+    expect(readFileSync(join(f.workspace, "keep.txt"), "utf8")).toBe("operator work in progress\n");
     expect(createRepositoryExecutionPort().inspect(f.workspace)).toEqual({ ok: true, reservation: null });
+  }, 120_000);
+
+  it("attempts one checkpoint commit per unchanged dirty set and re-arms when that set changes", async () => {
+    // The REAL factory over a runner that faults only `commit`: the wrapper re-enters baseline()
+    // on a timer, and a failing checkpoint that retried every pass would be a write storm against
+    // the operator's repository. Nothing else is stubbed.
+    const createPort = gitLandingPort.createGitLandingPort;
+    let commits = 0;
+    const spy = vi.spyOn(gitLandingPort, "createGitLandingPort").mockImplementation((runner) =>
+      createPort(async (cwd, args, stdin) => {
+        if (args.includes("commit")) { commits += 1; return { code: 1, stderr: "CHECKPOINT_COMMIT_TEST", stdout: "" }; }
+        return (runner ?? gitLandingPort.nodeGitRunner)(cwd, args, stdin);
+      }));
+    const f = fixture();
+    try {
+      dirtyTrackedMetadata(f);
+      const spawn: AgentSpawnStart = async () => ({ ok: true, pid: process.pid, exit: Promise.resolve() });
+
+      expect(await f.runtime.start(spawn)(f.request("a")))
+        .toMatchObject({ ok: false, code: "REPOSITORY_DELIVERY_BASELINE_UNAVAILABLE" });
+      expect(f.logs.join("\n")).toContain("RUNTIME_METADATA_CHECKPOINT_FAILED");
+      expect(f.logs.join("\n")).toContain("CHECKPOINT_COMMIT_TEST");
+      expect(commits).toBe(1);
+
+      // Same node, same dirty set: refused again, and NO second commit against the repository.
+      expect(await f.runtime.start(spawn)(f.request("a")))
+        .toMatchObject({ ok: false, code: "REPOSITORY_DELIVERY_BASELINE_UNAVAILABLE" });
+      expect(commits).toBe(1);
+      expect(f.logs.join("\n")).toContain("already attempted for this unchanged set");
+
+      // The dirty set CHANGES, so the guard re-arms rather than latching forever.
+      writeFileSync(join(f.workspace, ".moe-next", "seed.ps1"), "# a second runtime file\n");
+      git(f.workspace, "add", "--", ".moe-next/seed.ps1");
+      expect(await f.runtime.start(spawn)(f.request("a")))
+        .toMatchObject({ ok: false, code: "REPOSITORY_DELIVERY_BASELINE_UNAVAILABLE" });
+      expect(commits).toBe(2);
+    } finally { spy.mockRestore(); }
   }, 120_000);
 
   it("holds existing accepted work without a landing effect when landing is disabled", async () => {
