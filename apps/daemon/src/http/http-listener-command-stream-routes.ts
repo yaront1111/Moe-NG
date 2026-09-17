@@ -6,6 +6,7 @@ import {
   readAffordanceRequest,
 } from "./affordance-contract.js";
 import { acknowledgeEventPage, readEventPage } from "./event-stream.js";
+import { tagRefusal } from "./http-refusal-tag.js";
 import {
   eventStreamAccessUnavailable, eventStreamSubscriberMismatch,
 } from "./event-stream-access.js";
@@ -78,6 +79,10 @@ export function reply(
 export function refuseRequest(
   response: ServerResponse, code: ListenerRefusalCode, headers: ReplyHeaders = {},
 ): void {
+  // THE ONE FUNNEL every listener refusal passes through. The code is stamped on the response
+  // so the request's completion can name it; the bytes below are untouched, and the tag is a
+  // Symbol that no body, no header and no key enumeration can reach.
+  tagRefusal(response, code);
   reply(response, statusFor(code), { code, layer: CONTROL_ROOM_LISTENER_LAYER }, headers);
 }
 
@@ -85,6 +90,9 @@ export function replyEventStreamAccessRefusal(
   response: ServerResponse,
   refusal: Exclude<EventStreamAccessDecision, { readonly ok: true }>,
 ): void {
+  // The stream surface refuses on its own terms rather than through `refuseRequest`, so it is
+  // tagged here too: a seat whose event stream is refused is otherwise as silent as the rest.
+  tagRefusal(response, refusal.code);
   reply(response, refusal.httpStatus, {
     code: refusal.code,
     layer: refusal.layer,

@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 
 import { describeBindFailure } from "./bind-failure-detail.js";
+import { refusalTagOf } from "./http-refusal-tag.js";
 import type { AffordancePort } from "./affordance-contract.js";
 import type { DocumentDossierReadPort } from "./document-dossier-read.js";
 import type { DocumentIngestPort } from "./document-ingest-route.js";
@@ -328,7 +329,23 @@ export async function startControlRoomListener(
         request, response, requestOptions, authority, origin, assets, pairingApproval,
         pairingCompletion,
       );
-      void served.catch((error: unknown) => {
+      // THE RESPONSE SIDE OF THE ONE PER-REQUEST LINE. The line above `serve` is written before
+      // dispatch and carries method and path only, so no refusal the listener made was recorded
+      // anywhere: a control room whose CSRF token drifted got 403 on every call while the
+      // daemon's output read as an ordinary list of paths. Only REFUSED requests add a line —
+      // a served request logs exactly what it did before, and a thrown one is still reported by
+      // the catch below and carries no tag.
+      void served.then(() => {
+        const refusal = refusalTagOf(response);
+        if (refusal === null) return;
+        try {
+          const path = (request.url ?? "?").split("?")[0] ?? "";
+          requestOptions.log?.(`LISTENER_REFUSED ${request.method ?? "?"} ${path} ${refusal}`
+            + ` ${String(response.statusCode)}`);
+        } catch {
+          // A failed diagnostic sink must not turn an answered refusal into a failure.
+        }
+      }, (error: unknown) => {
         // A throw from the handler must still answer and must still leave the
         // listener closable; it may never surface as a hung socket. The cause is
         // logged host-side (never sent to the client) so a 500 stays diagnosable.
