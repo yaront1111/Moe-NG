@@ -68,7 +68,7 @@
   /* Truth-class chip fills (white glyph rides on each). Identical in dark.
    * The design's amber (#c58a1c) and blue (#3b82f6) carried that 9.5px white
    * glyph at 2.99:1 and 3.68:1. These are the same two hues one step down - and
-   * the same values v1's own AA-certified palette settled on (styles/tokens.css),
+   * the same values the retired v1 palette had settled on before its removal,
    * so the product now has ONE amber and ONE blue. 5.08:1 and 5.24:1. */
   --cr-chip-ink: #ffffff;                 /* glyph + short label on a chip fill */
   --cr-chip-edge: rgba(255, 255, 255, 0.55);

@@ -55,8 +55,6 @@ export const PRODUCT_CONTRACT_GATE_1_READ_CODES = Object.freeze([
 
 export type ProductContractGate1ReadCode = (typeof PRODUCT_CONTRACT_GATE_1_READ_CODES)[number];
 
-export type ProductContractGate1ReadLayer = typeof PRODUCT_CONTRACT_GATE_1_READ_LAYER;
-
 export interface ProductContractGate1View {
   readonly gate: Extract<ProductContractGate1Result, { readonly ok: true }>;
   readonly outcome: "GATE";

@@ -57,12 +57,11 @@ import type { NodeBriefDeps } from "./node-mission-producer.js";
 export { PROJECT_ID, closeStores } from "../bootstrap/bootstrap-test-fixtures.js";
 
 /**
- * The node the shipped journey seals, and the durable objective/capability it carries. Spelled
+ * The node the shipped journey seals, and the durable capability it carries. Spelled
  * here so an assertion can name the EXPECTED text; every arm still reads the value back through
  * the production closure reader rather than trusting these.
  */
 export const NODE_KEY = "node-a";
-export const NODE_OBJECTIVE = "Land node-a.";
 export const NODE_CAPABILITY = "capability-implement";
 export const ABSENT_NODE_KEY = "node-zeta";
 

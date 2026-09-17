@@ -223,13 +223,17 @@ export function createSeatStartRecorder(options: SeatStartRecorderOptions): Seat
     const command = seat.provider ?? "";
     const provider = command.trim().length === 0 ? null : providerName(command.trim());
     if (provider === null) return;
+    // SAMPLED BEFORE THE PROBE, not after it. The first seat of a provider waits on a `--version`
+    // that can take the whole bound plus the kill grace to answer, and every seat sharing the
+    // memoised promise waits with it. The row says when the seat STARTED, not when it was written.
+    const startedAt = clock();
     try {
       const result = recordSeatStart(options.store, {
         agentVersion: await versionOf(command.trim()),
         projectId: options.projectId,
         provider,
         sessionId: seat.sessionId,
-        startedAt: clock(),
+        startedAt,
       });
       if (!result.ok) log(`[wrapper] seat start not recorded: ${result.code}`);
     } catch (error) {

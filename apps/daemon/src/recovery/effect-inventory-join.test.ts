@@ -6,10 +6,14 @@ import {
   type RecoveryInventoryItem,
   type RecoveryInventoryReport,
 } from "@moe/runner";
-import { adapterFail, reserveAll } from "@moe/scheduler";
+import { adapterFail, reserveAll, type ResourceRow } from "@moe/scheduler";
 import { describe, expect, it } from "vitest";
 
-import { durableResourceObservation } from "./durable-recovery-inventory-shape.js";
+import type { DurableIntegrationObservation } from "./durable-recovery-inventory-contract.js";
+import {
+  durableObservationIdentity,
+  durableResourceObservation,
+} from "./durable-recovery-inventory-shape.js";
 import {
   RECOVERY_PROOF_CLASSES,
   type RecoveryProofClass,
@@ -128,6 +132,43 @@ function joined(result: ReturnType<typeof joinEffectInventoryItems>) {
   return result;
 }
 
+/** One scheduler-produced reservation row for `resource-a` under `requestId`. */
+function reservedRow(requestId: string): ResourceRow {
+  const reserved = reserveAll({
+    callerObservation: "obs-join",
+    capacitySnapshot: { "resource-a": 1 },
+    continuouslyEligibleSinceRef: "since-join",
+    declaredResources: [{ capacityUnits: 1, external: true, fenceable: true, resourceId: "resource-a" }],
+    eligibilityEventSequenceRef: "sequence-join",
+    epoch: 7,
+    requestId,
+  });
+  if (!reserved.ok || reserved.value.outcome !== "RESERVED") throw new Error("reserveAll refused");
+  const row = reserved.value.rows[0];
+  if (row === undefined) throw new Error("reserveAll emitted no row");
+  return row;
+}
+
+const integrationItem = (attemptRef: string, targetRef = "target-a"): DurableIntegrationObservation => ({
+  attemptRef,
+  class: "INTEGRATION_TARGET",
+  effectIntentRef: "intent-a",
+  intentDigest: HEX("da"),
+  observedPosition: "000000000000000000070",
+  sourceProofDigest: HEX("b9"),
+  targetRef,
+});
+
+/** Every proof class COMPLETE, so record truth follows the items alone. */
+const proofsFor = (join: ReturnType<typeof joined>) =>
+  RECOVERY_PROOF_CLASSES.map((proofClass) => ({
+    class: proofClass,
+    sourceProofDigest: join.subjects.find((entry) => entry.class === proofClass)?.sourceProofDigest
+      ?? HEX(`d${RECOVERY_PROOF_CLASSES.indexOf(proofClass)}`),
+    truth: "COMPLETE" as const,
+    upstream: null,
+  }));
+
 describe("effect inventory join dispositions", () => {
   it("adopts only an exact restored intent under the current incarnation", async () => {
     const result = joined(joinEffectInventoryItems(
@@ -196,20 +237,13 @@ describe("effect inventory join dispositions", () => {
       quarantineRef: null,
       upstream: { code: "RECOVERY_BINDING_UNAVAILABLE", layer: "INVENTORY_ADAPTER" },
     });
-    const proofs = RECOVERY_PROOF_CLASSES.map((proofClass) => ({
-      class: proofClass,
-      sourceProofDigest: join.subjects.find((entry) => entry.class === proofClass)?.sourceProofDigest
-        ?? HEX(`d${RECOVERY_PROOF_CLASSES.indexOf(proofClass)}`),
-      truth: "COMPLETE" as const,
-      upstream: null,
-    }));
     const record = buildRecoveryReconciliationRecord({
       backupCursor: "cursor-42",
       backupGenerationDigest: HEX("ef"),
       configuredClasses: [...RECOVERY_PROOF_CLASSES],
       projectId: "proj-join",
       projectTag: PROJECT_TAG,
-      proofs,
+      proofs: proofsFor(join),
       selected: CURRENT,
       subjects: join.subjects,
     });
@@ -224,17 +258,7 @@ describe("effect inventory join dispositions", () => {
   });
 
   it("classifies a scheduler-produced released resource as proven absent", async () => {
-    const reserved = reserveAll({
-      callerObservation: "obs-join",
-      capacitySnapshot: { "resource-a": 1 },
-      continuouslyEligibleSinceRef: "since-join",
-      declaredResources: [{ capacityUnits: 1, external: true, fenceable: true, resourceId: "resource-a" }],
-      eligibilityEventSequenceRef: "sequence-join",
-      epoch: 7,
-      requestId: "request-join",
-    });
-    if (!reserved.ok || reserved.value.outcome !== "RESERVED") throw new Error("reserveAll refused");
-    const failed = adapterFail(reserved.value.rows, "resource-a", 7, "FAILED");
+    const failed = adapterFail([reservedRow("request-join")], "resource-a", 7, "FAILED");
     if (!failed.ok) throw new Error("adapterFail refused");
     const released = failed.value.rows.find((row) => row.state === "RELEASED");
     if (released === undefined) throw new Error("scheduler did not emit RELEASED");
@@ -245,6 +269,56 @@ describe("effect inventory join dispositions", () => {
       disposition: "ABSENT",
       terminalProofDigest: HEX("a8"),
     });
+  });
+});
+
+describe("effect inventory join durable identity", () => {
+  it("keeps several durable rows on one target or resource as distinct subjects", async () => {
+    // The durable inventory keys a row by (attemptRef, targetRef, effectIntentRef)
+    // or (resourceId, effectIntentRef), so one sealed window legitimately holds
+    // two attempts onto one target and one resource under two request ids.
+    const attempts = [integrationItem("attempt-1"), integrationItem("attempt-2")] as const;
+    const holds = [
+      durableResourceObservation(reservedRow("request-confirm"), HEX("a8"), "000000000000000000043"),
+      durableResourceObservation(reservedRow("request-hold"), HEX("a8"), "000000000000000000044"),
+    ] as const;
+    const restored: RestoredEffectIntent = {
+      class: "INTEGRATION_TARGET",
+      externalIdentity: durableObservationIdentity(attempts[1]),
+      population: "INTEGRATION_TARGET",
+      proof: {
+        status: "VERIFIED",
+        incarnationRef: CURRENT.incarnationRef,
+        intentDigest: HEX("da"),
+        intentRef: "intent-a",
+        keyEpochRef: CURRENT.keyEpochRef,
+      },
+    };
+    const result = joinEffectInventoryItems(await request([], [restored], [...attempts, ...holds]));
+    expect(result.ok ? null : result.upstream.code).toBeNull();
+    const join = joined(result);
+    expect(join.items.map((item) => [item.class, item.identity, item.disposition])).toEqual([
+      ["RESOURCE", durableObservationIdentity(holds[0]), "QUARANTINED"],
+      ["RESOURCE", durableObservationIdentity(holds[1]), "QUARANTINED"],
+      ["INTEGRATION_TARGET", durableObservationIdentity(attempts[0]), "QUARANTINED"],
+      ["INTEGRATION_TARGET", durableObservationIdentity(attempts[1]), "ADOPTED"],
+    ]);
+    expect(join.items[3]).toMatchObject({ restoredIntentRef: "intent-a", upstream: null });
+    expect(new Set(join.items.map((item) => item.quarantineRef)).size).toBe(4);
+    const record = buildRecoveryReconciliationRecord({
+      backupCursor: "cursor-42",
+      backupGenerationDigest: HEX("ef"),
+      configuredClasses: [...RECOVERY_PROOF_CLASSES],
+      projectId: "proj-join",
+      projectTag: PROJECT_TAG,
+      proofs: proofsFor(join),
+      selected: CURRENT,
+      subjects: join.subjects,
+    });
+    expect(record.ok ? null : record.upstream.code).toBeNull();
+    if (!record.ok) throw new Error(`record refused: ${record.upstream.code}`);
+    expect(record.record.truth).toBe("COMPLETE");
+    expect(record.record.items).toHaveLength(4);
   });
 });
 

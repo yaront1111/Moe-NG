@@ -16,15 +16,6 @@ export const DOCUMENT_COVERAGE_READ_PATH = "/documents/coverage/read" as const;
  *  `*_LAYER` declarations, and a route-local refusal layer is not a new boundary. */
 const LAYER = "DOCUMENT_COVERAGE_READ" as const;
 
-export const DOCUMENT_COVERAGE_READ_CODES = Object.freeze([
-  "DOCUMENT_COVERAGE_READ_CAPABILITY_DENIED",
-  "DOCUMENT_COVERAGE_READ_GOAL_UNBOUND",
-  "DOCUMENT_COVERAGE_READ_MALFORMED",
-  "DOCUMENT_COVERAGE_READ_PROJECT_MISMATCH",
-  "DOCUMENT_COVERAGE_READ_UNREADABLE",
-] as const);
-export type DocumentCoverageReadCode = (typeof DOCUMENT_COVERAGE_READ_CODES)[number];
-
 export const CRITERION_COVERAGE_STATUSES = Object.freeze([
   "EVIDENCE_REQUIRED", "PLANNED", "UNATTRIBUTABLE", "UNPLANNED", "VERIFIED",
 ] as const);

@@ -1,5 +1,3 @@
-import { decodeBoundedJsonBytes } from "@moe/contracts";
-
 /**
  * The exact external contract for a DESIGN REVISION: what an agent seat may submit for one goal
  * between the Gate 1 product-contract approval and the decomposition run, and the closed refusal
@@ -161,11 +159,6 @@ export function designRefusal(
   });
 }
 
-export function isDesignRefusal(value: unknown): value is DesignRefusal {
-  return typeof value === "object" && value !== null && "ok" in value
-    && (value as { readonly ok: unknown }).ok === false;
-}
-
 /** One aggregate per goal. The prefix is structural, so another family's id is unreachable. */
 export function designAggregateId(goalId: string): string {
   return `${DESIGN_AGGREGATE_PREFIX}${goalId}`;
@@ -308,12 +301,4 @@ export function decodeDesignRevision(value: unknown): DesignRevisionResult {
       apiSurface, componentList, dataModel, nonFunctional: decisions, openDecisions, screens,
     }),
   });
-}
-
-/** Durable bytes back to a revision. Refuses anything this module did not write. */
-export function decodeDesignRevisionBytes(bytes: unknown): DesignRevisionResult {
-  const json = decodeBoundedJsonBytes(bytes);
-  if (!json.ok) return designRefusal("DESIGN_RECORD_MALFORMED", json.code, "BOUNDED_JSON");
-  const decoded = decodeDesignRevision(json.value);
-  return decoded.ok ? decoded : designRefusal("DESIGN_RECORD_MALFORMED");
 }

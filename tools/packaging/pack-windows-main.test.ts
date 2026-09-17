@@ -23,7 +23,6 @@ import {
 import {
   PACK_TOOLCHAIN_SCHEMA, resolveProtectedWindowsPackExecutable,
 } from "./pack-command.js";
-import { withPrivateWindowsCandidate } from "./pack-windows-candidate.js";
 import { captureNativePackTool } from "./pack-tool-identity.js";
 import { canonicalWindowsReleaseValue } from "../../scripts/release/windows-pack-observation-contract.mjs";
 import {
@@ -258,17 +257,6 @@ describe("the production Windows pack source composition", () => {
       if (priorPath === undefined) delete process.env["PATH"];
       else process.env["PATH"] = priorPath;
     }
-  });
-
-  it("preserves even an undefined synchronous consumer failure", () => {
-    let caught = false;
-    try {
-      withPrivateWindowsCandidate(() => { throw undefined; });
-    } catch (error) {
-      caught = true;
-      expect(error).toBeUndefined();
-    }
-    expect(caught).toBe(true);
   });
 
   it("routes the real package script through the exact-commit entrypoint", () => {

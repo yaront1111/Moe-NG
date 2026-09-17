@@ -18,6 +18,7 @@ import { readDurableLedger, stateOf, versionOf } from "../bootstrap/bootstrap-le
 import { installedSlices } from "../bootstrap/bootstrap-policy-services.js";
 import { policyAggregateId } from "../bootstrap/bootstrap-sequence.js";
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
+import { dataRecord } from "../json-record-shape.js";
 import { reviewerCalibrationSlice, validatablePolicySlice, verifierPolicySlice } from "../orchestrator/demo-seed-policy.js";
 import { readVerifierStandingAuthority } from "../review/verifier-authority-provider.js";
 import type { VerifierStandingAuthority } from "../review/verifier-authority-provider.js";
@@ -30,10 +31,6 @@ const VERIFIER_POLICY_SLICE_REF = "moe-verifier-policy/1";
 const REVIEWER_CALIBRATION_SLICE_REF = "moe-reviewer-calibration/1";
 const LOWER_HEX_64 = /^[0-9a-f]{64}$/u;
 const MAX_EVALUATIONS = 20;
-
-export const POLICY_READ_CODES = Object.freeze([
-  "POLICY_READ_CAPABILITY_DENIED", "POLICY_READ_PROJECT_MISMATCH", "POLICY_READ_UNREADABLE",
-] as const);
 
 export type PolicySliceKind = "ARTIFACT" | "EVALUATION" | "REVIEWER_CALIBRATION" | "VERIFIER_POLICY";
 export interface PolicySliceView {
@@ -82,9 +79,6 @@ export interface PolicyReadPort {
 }
 
 const refused = (code: string): PolicyRefused => Object.freeze({ code, layer: LAYER, outcome: "REFUSED" as const });
-const dataRecord = (value: unknown): Readonly<Record<string, unknown>> | null =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Readonly<Record<string, unknown>> : null;
 const countOf = (value: unknown): number | null => (Array.isArray(value) ? value.length : null);
 
 export function sliceKindOf(sliceRef: string, slice: unknown): PolicySliceKind {

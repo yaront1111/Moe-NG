@@ -682,7 +682,7 @@ describe("plan.propose admits either creation kind (task-e87cfddf)", () => {
    * narrower roster would reject a legitimate widening. The guard's own rationale survives
    * intact: a kind NO dispatch anywhere serves still could never appear in a committed set, and
    * `RUNTIME_COMMAND_KINDS` is exactly the roster of kinds that can. `BOOTSTRAP_COMMAND_KINDS` is
-   * declared `as const satisfies readonly RuntimeCommandKind[]` (bootstrap-contracts.ts:43), so
+   * declared `as const satisfies readonly RuntimeCommandKind[]` (bootstrap-contracts.ts:59), so
    * bootstrap kinds stay a strict subset and nothing that passed before starts failing.
    */
   it("names only real command kinds on both sides of the alternatives table", () => {
@@ -1013,7 +1013,7 @@ describe("close and publish admit either approval kind (task-ebbcbdb4)", () => {
   /**
    * THE ASYMMETRY THE WIDENING INTRODUCES, MEASURED RATHER THAN ASSUMED.
    *
-   * `approval.decide` has no REJECT branch at all (PLANNING_HANDLERS, planning-services.ts:341),
+   * `approval.decide` has no REJECT branch at all (PLANNING_HANDLERS, planning-services.ts:312),
    * but `approval.decide_intent` does, and a rejection "is a human decision, not an error path"
    * that "commits through the same one-decision seam" (approval-intent-rejection.ts:18-24). So a
    * REJECTED browser approval DOES put `approval.decide_intent` in the committed set and DOES

@@ -23,10 +23,10 @@
  */
 
 import {
-  consumeActivationGrant, createClaudeLauncher, parseEffectClaim, supervisorFailure, withLeg,
+  consumeActivationGrant, parseEffectClaim, supervisorFailure, withLeg,
 } from "@moe/runner";
 import type {
-  ClaudeLaunchOptions, ClaudeLaunchResult, ClaudeLauncherAuthority, ClaudeRegistrationCommit,
+  ClaudeLauncherAuthority, ClaudeRegistrationCommit,
   SupervisorErrorCode, SupervisorFailure, SupervisorLayer,
 } from "@moe/runner";
 import type {
@@ -278,17 +278,4 @@ export function createFoundationLauncherAuthority(
   }
 
   return Object.freeze({ commitProcessRegistration, consumeGrantDurably });
-}
-
-/**
- * The composed launcher task-6cbff01023b14b26a78fc5e3eb1dd8a9 consumes.
- *
- * It exists so the downstream dispatcher takes c819's published seam WITH this
- * daemon's durable ports already bound, rather than reconstructing the overlay
- * and re-deciding which of the ten launcher dependencies it may replace.
- */
-export function createFoundationClaudeLauncher(
-  options: FoundationLauncherOptions,
-): (value: unknown, launchOptions?: ClaudeLaunchOptions) => Promise<ClaudeLaunchResult> {
-  return createClaudeLauncher(createFoundationLauncherAuthority(options));
 }

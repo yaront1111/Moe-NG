@@ -1,14 +1,18 @@
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import { SQLITE_APPLICATION_ID } from "@moe/store";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { nodeActivationReceiptPorts } from "../bootstrap/activation-receipts-measure.js";
+import {
+  BACKUP_DIRECTORY, BACKUP_LEAF, BACKUP_RETENTION, SCHEDULED_BACKUP_LEAF, nodeActivationReceiptPorts,
+} from "../bootstrap/activation-receipts-measure.js";
+import type { ActivationReceiptFs } from "../bootstrap/activation-receipts-ports.js";
 import { nodeBackupPorts } from "./backup-ports.js";
+import type { BackupPorts } from "./backup-ports.js";
 import { createBackupRestoreProofStore } from "./backup-restore-proof.js";
 import { runScheduledBackup } from "./scheduled-backup.js";
 
@@ -99,4 +103,54 @@ describe("scheduled backup restore-proof ownership", () => {
       ok: true, value: [{ checkedAt: now.toISOString(), restoreProof: "FAILED", sha256: writtenHash }],
     });
   });
+});
+
+/**
+ * THE RUN'S OUTCOME IS NOT THE RESTORE CHECK'S VERDICT. Retention and the lock release both run
+ * AFTER the restore check has proved the artifact, and either failing turns the run's `status`
+ * FAILED - the run did not finish clean - while the artifact on disk is exactly the one proven.
+ * The record answers only the second question, so it must read PROVEN: an operator reaching for
+ * the newest backup during an incident skips a "proven NOT restorable" row, and this is the good
+ * one. Each arm below is a real post-check failure, not a stubbed status.
+ */
+describe("a failure after the restore check keeps the artifact's proof", () => {
+  type Seams = { readonly fs: ActivationReceiptFs; readonly ports: BackupPorts };
+  type Arrange = (input: ReturnType<typeof fixture>["input"], seams: Seams) => Seams;
+  const storeDirectory = (input: { readonly projectRoot: string }): string =>
+    join(input.projectRoot, BACKUP_DIRECTORY, BACKUP_LEAF, SCHEDULED_BACKUP_LEAF, "store");
+  const retentionCannotUnlink: Arrange = (input, seams) => {
+    // More dumps than retention keeps, and the oldest cannot be unlinked: the EPERM another
+    // process holding a file open produces on Windows.
+    mkdirSync(storeDirectory(input), { recursive: true });
+    for (let i = 1; i <= BACKUP_RETENTION + 1; i++) {
+      writeFileSync(join(storeDirectory(input), `${String(i).padStart(17, "0")}.sqlite`), "old dump");
+    }
+    const remove = (): never => { throw Object.assign(new Error("EPERM"), { code: "EPERM" }); };
+    return { fs: { ...seams.fs, remove }, ports: seams.ports };
+  };
+  const lockCannotRelease: Arrange = (input, seams) => ({
+    fs: seams.fs, ports: { ...seams.ports, restoreStore: async (path) => {
+      const proof = await seams.ports.restoreStore(path);
+      // Something lands inside the lock between the check and its release, so the release fails.
+      writeFileSync(join(storeDirectory(input), ".backup.lock", "junk"), "");
+      return proof;
+    } },
+  });
+
+  it.each([["PRUNE", retentionCannotUnlink], ["CLEANUP", lockCannotRelease]] as const)(
+    "records PROVEN when the run fails at %s after the artifact was proven", async (stage, arrange) => {
+      const { input, proofs } = fixture();
+      const seams = arrange(input, { fs: nodeActivationReceiptPorts().fs, ports: nodeBackupPorts() });
+      const receipt = await runScheduledBackup(input, seams.ports, seams.fs, proofs);
+      const backup = receipt.backups[0]!;
+      // The RUN did not finish clean, and the receipt says so at the stage that failed...
+      expect(backup).toMatchObject({ failure, stage, status: "FAILED" });
+      // ...while the artifact is the one the restore check proved, untouched and still on disk.
+      expect(backup.proof).toEqual({ restoredSha256: backup.sha256, sha256: backup.sha256 });
+      expect(fileHash(backup.ref)).toBe(backup.sha256);
+      expect(proofs.read()).toMatchObject({ ok: true, value: [{
+        checkedAt: now.toISOString(), ref: basename(backup.ref), restoreProof: "PROVEN", sha256: backup.sha256,
+      }] });
+    },
+  );
 });

@@ -196,14 +196,20 @@ export function compareRangePin(
   return Object.freeze({ pin, declared, observed, verdict: satisfied ? "SATISFIED" : "MISMATCHED" });
 }
 
-/** `pnpm@11.0.8` is a name AND a version; the pin compares only the version half. */
+/**
+ * `pnpm@11.0.8` is a name AND a version; the pin compares only the version half.
+ * `corepack use` writes `pnpm@11.0.8+sha512.<hash>`: the `+` suffix is semver build
+ * metadata, which carries no precedence, so it is dropped too — kept, a correct
+ * `pnpm --version` reads MISMATCHED forever. A half that is ONLY a suffix is refused.
+ */
 export function packageManagerVersion(declared: ObservedValue): ObservedValue {
   if (!declared.known) return declared;
   const at = declared.value.lastIndexOf("@");
-  if (at <= 0 || at === declared.value.length - 1) {
+  const version = at <= 0 ? "" : declared.value.slice(at + 1).replace(/\+.*$/, "");
+  if (version === "") {
     return unknown("DOCTOR_DECLARED_PIN_UNREADABLE", "DOCTOR_VERSION");
   }
-  return known(declared.value.slice(at + 1));
+  return known(version);
 }
 
 export interface DoctorVersionReportInput {

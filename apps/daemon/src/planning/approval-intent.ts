@@ -1,6 +1,6 @@
 import type { JsonObject, JsonValue } from "@moe/contracts";
 import {
-  decideApprovalAuthority, grantHumanAuthority, type ApprovalDependencyChanges,
+  decideApprovalAuthority, type ApprovalDependencyChanges,
   validateApprovalDependencyChanges,
 } from "@moe/core";
 import type { SqliteEventStore } from "@moe/store";
@@ -17,6 +17,7 @@ import { APPROVAL_REJECT_REASON_REQUIRED, commitIntentRejection, rejectionReason
 import { observeApprovalIntentSourceFences }
   from "./approval-intent-source-fences.js";
 import { readApprovalIntentSources } from "./approval-intent-sources.js";
+import { operatorReviewAuthority } from "./operator-review-authority.js";
 
 export { readApprovalIntentSources } from "./approval-intent-sources.js";
 export type {
@@ -27,8 +28,8 @@ export type {
  * `approval.decide_intent` — the DAEMON-OWNED approval seam (task-6646f888).
  *
  * WHAT IT REPLACES AND WHY. The shipped `approval.decide` path reads the ACTIVATION WITNESS and
- * the APPROVAL RECORD off the caller's payload (`daemon-command-graph-approve.ts:94-98`,
- * `planning-services.ts:230-234`), so the caller authors the very bytes that assert a human
+ * the APPROVAL RECORD off the caller's payload (`daemon-command-graph-approve.ts:71-75`,
+ * `planning-services.ts:233-235`), so the caller authors the very bytes that assert a human
  * approved: `truthClass: "HUMAN_APPROVED"`, the risk tier, the step-up reference, every hash.
  * The PRINCIPAL is honest — the grant is minted server-side from a `HumanReviewWitness` — but the
  * RECORD is caller-shaped, and task rail 1 says human authority is not delegable. Here the caller
@@ -62,8 +63,6 @@ export type {
  * hostile BEFORE/AFTER/RACE trio. The same discipline `resource-reconcile-command.ts:50` follows.
  */
 const LAYER = "DAEMON_APPROVAL_INTENT" as const;
-
-export type ApprovalIntentLayer = typeof LAYER;
 
 export {
   APPROVAL_DECIDE_INTENT_COMMAND_KIND, APPROVAL_INTENT_PAYLOAD_KEYS,
@@ -137,24 +136,6 @@ export function readApprovalIntent(payload: JsonValue): ApprovalIntent | null {
   if (runId === null || typeof decision !== "string" || !DECISIONS.includes(decision)) return null;
   if (reason !== null && (typeof reason !== "string" || reason.length === 0)) return null;
   return Object.freeze({ decision, decisionReason: reason, dependencyChanges, runId });
-}
-
-/**
- * The operator's own dispatch IS the human review the policy waits for — the SAME composition
- * `daemon-command-graph-approve.ts:68-79` and `planning-services.ts:190-202` already perform,
- * reused rather than reimplemented. A second human-authority path would be a competing authority.
- */
-function operatorReviewAuthority(
-  witness: HumanReviewWitness, runId: string, decidedAt: string,
-  policy: ReturnType<typeof readApprovalPolicySettings>,
-): ReturnType<typeof decideApprovalAuthority> {
-  const granted = grantHumanAuthority(
-    { gateId: `approval-review:${runId}`, grant: null, workRef: runId },
-    { kind: "HUMAN", principalId: witness.principalId },
-    Date.parse(decidedAt),
-  );
-  if (!granted.ok) return granted;
-  return decideApprovalAuthority({ gate: granted.gate, policy });
 }
 
 export interface ApprovalIntentInput {

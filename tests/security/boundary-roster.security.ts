@@ -27,7 +27,7 @@
  *   module-private declaration (scan minus allowlist is empty)" when one appears, by "TASK-LV
  *   has no allowlist entry absent from source" when one vanishes, and by "TASK-LV counts
  *   exactly EXPECTED_PRIVATE_COUNT module-private declarations at the wide pattern width".
- *   BARE LITERALS AT REFUSAL SITES, 103 distinct values of which 38 resolve to NO declared
+ *   BARE LITERALS AT REFUSAL SITES, 106 distinct values of which 37 resolve to NO declared
  *   constant — a layer that is never a declaration, so no pattern width reaches it. Reddened by
  *   "TASK-LV allowlists every unresolved literal (scan minus allowlist is empty)", its
  *   allowlist-minus-scan twin, and "TASK-LV counts exactly
@@ -39,7 +39,7 @@
  * and every other arm in this file stays green while sixteen live boundaries leave the scan,
  * because the roster would then be compared against the same narrowed scan that produced it.
  *
- * ALWAYS STATE THE PATTERN WIDTH WHEN QUOTING THESE. On 2026-09-13 the invisible share is
+ * ALWAYS STATE THE PATTERN WIDTH WHEN QUOTING THESE. On 2026-09-17 the invisible share is
  * 81 of 261 (31.0%) with a WIDE numerator over a WIDE denominator; a narrow-width census
  * must use its own denominator. Two seats argued 45 versus 46 across two rounds as though
  * it were a factual dispute; it was a units mismatch. Pinned by "TASK-LV pins the invisible
@@ -148,8 +148,8 @@ interface ScannedBoundary {
  * splits across two axes, declaring a runner-workspace and a scheduler-graph layer.
  *
  * AXIS TOTALS FOR THE SIBLING SLICES, and this paragraph carries its own falsifier because
- * the previous one did not: transport 30, integrity 47, durable-store 22, runtime-provider
- * 33, scheduler-activation 48 — sums to 180, which must equal `EXPECTED_ROSTER_SIZE` below.
+ * the previous one did not: transport 29, integrity 47, durable-store 22, runtime-provider
+ * 33, scheduler-activation 49 — sums to 180, which must equal `EXPECTED_ROSTER_SIZE` below.
  * These tags, NOT the subset counts in the siblings' own descriptions, are the authority.
  *
  * WHICH NAMED ASSERTIONS RED IF THESE NUMBERS ROT. The five-way sum is asserted by "partitions
@@ -206,7 +206,6 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
   { constant: "EFFORT_ADMISSION_LAYER", file: "apps/control-room/src/performance/effort-records.ts", axis: "transport" },
   { constant: "EFFORT_COLLECTOR_LAYER", file: "apps/control-room/src/performance/effort-records.ts", axis: "transport" },
   { constant: "EFFORT_LAYERS", file: "apps/control-room/src/performance/effort-records.ts", axis: "transport" },
-  { constant: "TIMELINE_REFUSAL_LAYERS", file: "apps/control-room/src/timeline/timeline-contract.ts", axis: "transport" },
   // The Environments screen's WRITE port: it carries an operator-typed variable value from the
   // browser to `environment.set_variable`/`unset_variable`. `transport` by SUBJECT — the port
   // moves a command across the process seam and stamps the layer on the undelivered refusal; the
@@ -606,8 +605,13 @@ const BOUNDARY_ROSTER: readonly RosterEntry[] = Object.freeze([
  * returned this scan to 180 with THIS CONSTANT UNEDITED — the arithmetic that confirms the route.
  * Same lesson as the entry above, one lane over: the declaring row's `pnpm --filter @moe/daemon
  * test` and `pnpm typecheck` were both EXIT 0 while this lane was red.
+ *
+ * 181 -> 180 on 2026-09-17: TIMELINE_REFUSAL_LAYERS retired with the v1 control-room UI.
+ * Its declaring module apps/control-room/src/timeline/timeline-contract.ts and the pager it
+ * served were deleted (nothing reachable from main.tsx imported them), and the three
+ * timeline transport arms in transport-hostile-cases.ts went with them.
  */
-const EXPECTED_ROSTER_SIZE = 181;
+const EXPECTED_ROSTER_SIZE = 180;
 
 /**
  * The per-area split. A scanner that silently matched only one directory
@@ -621,7 +625,7 @@ const EXPECTED_DISTRIBUTION: Readonly<Record<string, number>> = Object.freeze({
   "packages/core": 22,
   "packages/scheduler": 10,
   "packages/store": 5,
-  "apps/control-room": 15,
+  "apps/control-room": 14,
   "packages/contracts": 3,
   "adapters/ide-contract": 2,
   "packages/review": 1,
@@ -844,12 +848,14 @@ describe("scanner matches the annotated declaration form", () => {
  */
 /**
  * The invisible share, stated once so no arm re-derives it. WIDE numerator, WIDE denominator:
- * 83 module-private declarations against those 83 plus the 181 exported ones. The per-mille pin
- * is `Math.round`ed by the arm below, so 83/264 = 314.4 pins at 314.
+ * 81 module-private declarations against those 81 plus the 180 exported ones. The per-mille pin
+ * is `Math.round`ed by the arm below, so 81/261 = 310.3 pins at 310.
+ * 265/317 -> 261/310 on 2026-09-17: the v1 control-room UI removal took three module-private
+ * declarations and one exported one (see EXPECTED_PRIVATE_COUNT and EXPECTED_ROSTER_SIZE).
  */
 const EXPECTED_INVISIBLE_NUMERATOR = EXPECTED_PRIVATE_COUNT;
-const EXPECTED_INVISIBLE_DENOMINATOR = 265;
-const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 317;
+const EXPECTED_INVISIBLE_DENOMINATOR = 261;
+const EXPECTED_INVISIBLE_SHARE_PER_MILLE = 310;
 
 describe("TASK-LV module-private layer declarations are bounded", () => {
   it("TASK-LV scans a non-empty module-private population", () => {

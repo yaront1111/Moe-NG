@@ -7,7 +7,6 @@ import {
   recoveryInventoryRefusal,
 } from "./recovery-inventory-contract.js";
 import type {
-  RecoveryInventoryRefusal,
   RecoveryInventoryTruth,
   RecoveryInventoryUpstream,
 } from "./recovery-inventory-contract.js";
@@ -198,7 +197,6 @@ export const DURABLE_INVENTORY_REFUSALS = Object.freeze({
     "This window already holds its bounded row count and cannot cover another observation.",
   ),
 });
-export type DurableInventoryRefusal = RecoveryInventoryRefusal;
 
 /**
  * Every code above must already exist in the daemon's closed vocabulary. A typo

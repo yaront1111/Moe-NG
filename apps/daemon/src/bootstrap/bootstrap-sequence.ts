@@ -1,5 +1,5 @@
 import type { JsonObject } from "@moe/contracts";
-
+import { payloadRef } from "../json-record-shape.js";
 import type { BootstrapCommandKind, BootstrapRequest } from "./bootstrap-contracts.js";
 
 /**
@@ -184,10 +184,7 @@ export function aggregateIdFor(request: BootstrapRequest, subject: string | null
   }
 }
 
-export function payloadRef(payload: JsonObject, key: string): string | null {
-  const value = payload[key];
-  return typeof value === "string" && value.length > 0 ? value : null;
-}
+export { payloadRef } from "../json-record-shape.js";
 
 export function payloadObject(payload: JsonObject, key: string): JsonObject | null {
   const value = payload[key];

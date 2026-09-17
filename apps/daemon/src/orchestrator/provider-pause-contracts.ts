@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonObject, JsonValue } from "@moe/contracts";
 
+import { exact, isObject, ref } from "../json-record-shape.js";
 import { SEAT_EXIT_KINDS } from "./seat-exit-classifier.js";
 
 /**
@@ -102,16 +103,6 @@ export function providerPauseRecordId(projectId: string, provider: string, since
   return `provider-pause-${digest([projectId, provider, since])}`;
 }
 
-function isObject(value: JsonValue | undefined): value is JsonObject {
-  return value !== null && value !== undefined && typeof value === "object"
-    && !Array.isArray(value) && Object.getPrototypeOf(value) === null;
-}
-
-function exact(value: JsonObject, keys: readonly string[]): boolean {
-  const actual = Object.keys(value);
-  return actual.length === keys.length && actual.every((key) => keys.includes(key));
-}
-
 /** Every required key present, and no key outside required plus optional. */
 function within(
   value: JsonObject, required: readonly string[], optional: readonly string[],
@@ -119,10 +110,6 @@ function within(
   const actual = Object.keys(value);
   return required.every((key) => actual.includes(key))
     && actual.every((key) => required.includes(key) || optional.includes(key));
-}
-
-function ref(value: JsonValue | undefined): value is string {
-  return typeof value === "string" && value.length > 0;
 }
 
 /** An optional boolean member: absent (an older row), null (not measured), or a boolean. */

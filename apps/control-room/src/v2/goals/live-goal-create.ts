@@ -8,6 +8,7 @@ import type {
 
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
 import type { LiveSetup } from "../../live/live-config.js";
+import { isRecord, sha256Hex } from "../../live/live-wire-primitives.js";
 import { readSurfaceOnce } from "../ops/policy-install-port.js";
 import type { GoalCreateResult, GoalDraft } from "./goal-model.js";
 import { policyTierForRiskClass } from "./goal-risk-tier.js";
@@ -104,15 +105,6 @@ export function goalCreateRefusal(
   }
   return `${kind} is not offered by this daemon (step ${step?.status ?? "ABSENT"}).`
     + ` Next step: restart the daemon from a build that offers ${kind} on every read.`;
-}
-
-async function sha256Hex(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** The daemon's own words for a refusal: its code at its layer, never rewritten. */

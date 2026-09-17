@@ -1,10 +1,9 @@
 import type { JSX } from "react";
 
-import type { RunGoalView, RunNodeView, RunsOutcome } from "../../live/live-runs.js";
+import type { RunGoalView, RunsOutcome } from "../../live/live-runs.js";
 import { BoardLanes } from "../board/board-lanes.js";
-import { ROUTE_WORDS, foldBoard, landingRefusalWords, nodesLine, untilWords } from "../board/board-columns.js";
+import { foldBoard, nodesLine } from "../board/board-columns.js";
 import { MIDDOT } from "../glyphs.js";
-import { seatWords } from "../ops/activity-words.js";
 import { GOAL_WORDS, RUN_WORDS } from "./run-words.js";
 
 export { STATUS_WORDS } from "./run-words.js";
@@ -23,57 +22,6 @@ export interface RunsScreenProps {
   readonly outcome: RunsOutcome | null;
 }
 
-function ago(iso: string | null, nowMs: number): string | null {
-  if (iso === null) return null;
-  const at = Date.parse(iso);
-  if (Number.isNaN(at)) return null;
-  const minutes = Math.max(0, Math.round((nowMs - at) / 60_000));
-  if (minutes < 1) return "just now";
-  if (minutes < 60) return `${String(minutes)} min ago`;
-  const hours = Math.round(minutes / 60);
-  return hours < 24 ? `${String(hours)} h ago` : `${String(Math.round(hours / 24))} d ago`;
-}
-
-/** The evidence line under a node: only facts the daemon stated, in a person's words. */
-export function nodeEvidence(node: RunNodeView, nowMs: number): readonly string[] {
-  const lines: string[] = [];
-  if (node.sharedKey) {
-    lines.push("earlier execution has no scoped identity, so its evidence cannot be attributed to this goal");
-  }
-  if (node.accepted !== null) lines.push("accepted by the daemon");
-  if (node.receipt !== null) {
-    lines.push(`verifier ran ${node.receipt.test}, exit ${String(node.receipt.exitCode)}`);
-    lines.push(node.receipt.testedTreeSha === null ? "tested Git tree not recorded"
-      : `tested Git tree ${node.receipt.testedTreeSha.slice(0, 12)}`);
-  }
-  if (node.landing !== null) {
-    lines.push(node.landing.outcome === "COMMITTED"
-      ? `landed on ${node.landing.branch ?? "the workspace branch"} ${MIDDOT} ${String(node.landing.files.length)} file${node.landing.files.length === 1 ? "" : "s"}, local only`
-      : landingRefusalWords(node.landing));
-  }
-  if (node.review.rounds > 0) {
-    const route = node.review.latestRoute === null ? "" : ` ${MIDDOT} last ${ROUTE_WORDS[node.review.latestRoute] ?? node.review.latestRoute}`;
-    lines.push(`${String(node.review.rounds)} review round${node.review.rounds === 1 ? "" : "s"}${route}`);
-  }
-  if (node.review.unsuccessfulRounds > 0) {
-    lines.push(`${String(node.review.unsuccessfulRounds)} unsuccessful`
-      + (node.status === "ESCALATION_REQUIRED" ? ": needs your decision before more rounds" : ""));
-  }
-  if (node.claim !== null) {
-    const who = seatWords(node.claim.claimedBy);
-    if (node.claim.active) {
-      const left = untilWords(node.claim.expiresAt, nowMs);
-      lines.push(left === null ? `${who} ${MIDDOT} lease expired` : `${who} ${MIDDOT} lease ends ${left}`);
-    } else {
-      lines.push(`${who} (${node.claim.status === "RELEASED" ? "released" : "expired"})`);
-    }
-  }
-  if (node.dependsOn.length > 0) lines.push("waiting on other work");
-  const when = ago(node.lastActivityAt, nowMs);
-  if (when !== null) lines.push(`last activity ${when}`);
-  return lines;
-}
-
 function runLine(goal: RunGoalView): string {
   if (goal.run === null) return "No plan has been run for this goal yet.";
   const approval = goal.run.approval === "BOUND" ? "approved"
@@ -81,36 +29,32 @@ function runLine(goal: RunGoalView): string {
   return `${RUN_WORDS[goal.run.lifecycle] ?? goal.run.lifecycle} ${MIDDOT} ${approval}`;
 }
 
-/** One goal as a board. `embedded` (the opened goal's own page) drops the title link and kicker. */
-export function GoalSection({ embedded = false, goal, nowMs, onOpenBoard }: {
-  readonly embedded?: boolean; readonly goal: RunGoalView; readonly nowMs: number; readonly onOpenBoard: RunsScreenProps["onOpenBoard"];
+/** One goal as a board. */
+export function GoalSection({ goal, nowMs, onOpenBoard }: {
+  readonly goal: RunGoalView; readonly nowMs: number; readonly onOpenBoard: RunsScreenProps["onOpenBoard"];
 }): JSX.Element {
   const title = goal.title ?? goal.goalId;
   const runRef = goal.run?.runId ?? "";
   const fold = goal.nodes.length === 0
     ? null : foldBoard(goal.nodes, nowMs, goal.publish?.outcome === "PUSHED" ? goal.publish.sha : null);
   return (
-    <section className="cr2-run-goal" data-embedded={embedded ? "true" : undefined} data-testid={`cr.runs.goal.${goal.goalId}`}>
+    <section className="cr2-run-goal" data-testid={`cr.runs.goal.${goal.goalId}`}>
       <div className="cr2-run-goal-head">
         <div>
-          {embedded ? null : (
-            <p className="cr2-slot-kicker">
-              {goal.lifecycle === null ? "Goal" : GOAL_WORDS[goal.lifecycle] ?? goal.lifecycle}
-            </p>
-          )}
-          {embedded ? null : (
-            <h2 className="cr2-run-goal-title">
-              <button
-                className="cr2-goal-titlebutton"
-                data-testid={`cr.runs.goal.${goal.goalId}.open`}
-                disabled={runRef === ""}
-                onClick={(): void => onOpenBoard(goal.goalId, runRef, title)}
-                type="button"
-              >
-                {title}
-              </button>
-            </h2>
-          )}
+          <p className="cr2-slot-kicker">
+            {goal.lifecycle === null ? "Goal" : GOAL_WORDS[goal.lifecycle] ?? goal.lifecycle}
+          </p>
+          <h2 className="cr2-run-goal-title">
+            <button
+              className="cr2-goal-titlebutton"
+              data-testid={`cr.runs.goal.${goal.goalId}.open`}
+              disabled={runRef === ""}
+              onClick={(): void => onOpenBoard(goal.goalId, runRef, title)}
+              type="button"
+            >
+              {title}
+            </button>
+          </h2>
           <p className="cr2-run-goal-run" data-testid={`cr.runs.goal.${goal.goalId}.run`}>{runLine(goal)}</p>
         </div>
       </div>

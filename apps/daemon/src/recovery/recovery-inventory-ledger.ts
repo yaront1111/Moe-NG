@@ -191,6 +191,8 @@ export function recordRecoveryReconciliation(
 
   const record = built.record;
   const bytes = encodeRecoveryReconciliationRecord(record);
+  const filed = replayedRecord(store, projectId, record, bytes);
+  if (filed !== null) return filed;
   const commandId = commandIdFor(record.recordDigest);
   const response = store.commitExpectedVersionDecision({
     commandKind: RECOVERY_RECONCILIATION_COMMAND_KIND,
@@ -210,11 +212,47 @@ export function recordRecoveryReconciliation(
     requestBytes: bytes,
     targetAggregateId: recoveryReconciliationAggregateId(record.recordDigest),
   });
-  if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") return REFUSALS.CONFLICT;
+  // A rejected commit says only that the aggregate already moved, not that its
+  // contents disagree: a writer that lost the race to this same record is
+  // answered from what landed, and CONFLICT is kept for evidence that differs.
+  if (response.decision.effectDisposition !== "EFFECTS_COMMITTED") {
+    return replayedRecord(store, projectId, record, bytes) ?? REFUSALS.CONFLICT;
+  }
 
   return Object.freeze({
     authority: "NONE" as const,
     disposition: response.disposition,
+    ok: true as const,
+    outcome: "RECORDED" as const,
+    record,
+    recordDigest: record.recordDigest,
+  });
+}
+
+/**
+ * The record already filed under this digest, byte-identical to the one about
+ * to be written, or null when the digest holds nothing that verifies as it.
+ *
+ * The store keys its replay on the PRINCIPAL, but the record is addressed by
+ * its CONTENT: a second principal re-recording the same facts would reach the
+ * store as a fresh command at version 0 on an aggregate already at version 1,
+ * be rejected, and leave a decision row behind for a record that is stored and
+ * readable. Answering from the durable read first makes that a replay and
+ * writes nothing. A read that refuses for any reason answers null, so a real
+ * store fault still surfaces from the commit that follows, never from here.
+ */
+function replayedRecord(
+  store: SqliteEventStore,
+  projectId: string,
+  record: RecoveryReconciliationRecord,
+  bytes: Uint8Array,
+): RecoveryReconciliationRecorded | null {
+  const stored = readRecoveryReconciliation(store, projectId, record.recordDigest);
+  if (!stored.ok) return null;
+  if (!sameBytes(encodeRecoveryReconciliationRecord(stored.record), bytes)) return null;
+  return Object.freeze({
+    authority: "NONE" as const,
+    disposition: "REPLAYED" as const,
     ok: true as const,
     outcome: "RECORDED" as const,
     record,

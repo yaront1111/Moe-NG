@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, isAbsolute, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -340,4 +340,25 @@ it("does not attribute the running URL to a refused deployment candidate", async
     if (!read.ok) throw new Error(read.code);
     expect(read.value.some((probe) => probe.sha === candidateSha && probe.status === "SUCCESS")).toBe(false);
   } finally { store.close(); rmSync(root, { force: true, recursive: true }); }
+});
+
+/** The open inside access() creates the sidecar as a 0-byte file; the schema lands only at COMMIT.
+ *  A first-ever append killed, starved (SQLITE_BUSY) or disk-full between the two leaves exactly that
+ *  residue, which is a valid EMPTY SQLite database. The next append must initialize it: classifying
+ *  it as a foreign store refuses every later tick, and read/incidents refuse too, until an operator
+ *  deletes the file by hand. */
+it("initializes the 0-byte residue of a first append that never reached COMMIT", async () => {
+  const { createHealthProbeRing } = await subject();
+  const root = directory();
+  try {
+    const path = join(root, "health.sqlite");
+    new DatabaseSync(path).close();
+    expect(statSync(path).size).toBe(0);
+    const ring = createHealthProbeRing(path, "project-health");
+    // Reads never initialize; before the append the residue is still an unreadable store.
+    expect(ring.read("preview")).toEqual({ ok: false, code: "PROBE_STORE_UNAVAILABLE", layer: "DAEMON_INGRESS" });
+    expect(ring.append(observation(1))).toEqual({ ok: true, value: [observation(1)] });
+    expect(ring.read("preview")).toEqual({ ok: true, value: [observation(1)] });
+    expect(ring.incidents("preview")).toEqual({ ok: true, value: [] });
+  } finally { rmSync(root, { force: true, recursive: true }); }
 });

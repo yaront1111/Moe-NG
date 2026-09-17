@@ -92,7 +92,7 @@ afterAll(() => {
  *
  * The markers are the boundaries' own positive vocabularies — `ok: true` (listener, entry),
  * `delivered: true` (client transport), `known: true` (effort, seam), and an `outcome` that is
- * neither REFUSED nor UNKNOWN (ide adapter, timeline, affordance, coordination, import). A
+ * neither REFUSED nor UNKNOWN (ide adapter, affordance, coordination, import). A
  * value that is not an object at all counts as an admission, because every refusal on this
  * axis is a structured one.
  */
@@ -155,7 +155,9 @@ describe("transport axis — completeness against the roster and the no-admissio
     // Three new browser receipt/activation/resource boundaries, each with all three arms.
     // 29 -> 30 on 2026-09-07 for ENVIRONMENT_WRITE_LAYER, the Environments screen's write port
     // (task-ba83b202); its three arms are in recent-workflow-transport-hostile-cases.ts.
-    expect(ROSTER_TRANSPORT).toHaveLength(30);
+    // 30 -> 29 on 2026-09-17: TIMELINE_REFUSAL_LAYERS retired with the v1 control-room UI; its
+    // declaring module and its three arms in transport-hostile-cases.ts were deleted together.
+    expect(ROSTER_TRANSPORT).toHaveLength(29);
     expect(new Set(ROSTER_TRANSPORT).size).toBe(ROSTER_TRANSPORT.length);
   });
 

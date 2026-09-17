@@ -178,7 +178,19 @@ describe("packageManagerVersion separates the tool name from its version", () =>
     expect(packageManagerVersion(known("pnpm@11.0.8"))).toEqual({ known: true, value: "11.0.8" });
   });
 
-  it.each([["pnpm"], ["pnpm@"], ["@11.0.8"]])(
+  /**
+   * `corepack use` writes `pnpm@11.0.8+sha512.<hash>`. The `+` suffix is semver
+   * build metadata, which carries no precedence, so a correct `pnpm --version`
+   * of 11.0.8 satisfies the pin. Kept on the declared side, it would read
+   * MISMATCHED forever against a host that is right.
+   */
+  it("drops a corepack integrity suffix from the version half", () => {
+    const declared = packageManagerVersion(known("pnpm@11.0.8+sha512.abc123def456"));
+    expect(declared).toEqual({ known: true, value: "11.0.8" });
+    expect(comparePin("PNPM_TOOL", declared, known("11.0.8")).verdict).toBe("SATISFIED");
+  });
+
+  it.each([["pnpm"], ["pnpm@"], ["@11.0.8"], ["pnpm@+sha512.abc123"]])(
     "refuses %s as an unreadable declared pin under DOCTOR_VERSION",
     (raw) => {
       expect(packageManagerVersion(known(raw))).toEqual({

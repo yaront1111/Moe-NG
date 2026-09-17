@@ -151,10 +151,10 @@ function Column({
   return (
     <section className="cr2-board-column" data-testid={`cr.board.column.${column.key}`}>
       {/*
-        These three ids must NOT start with "cr.board.column." - the v1 stylesheets
-        in this same bundle (styles/preview-board.css:27, board/board-layout.css:21)
-        style every element under that prefix as a lane box (min-block-size: 18rem),
-        which turns a one-line heading into a 288px box. Pinned by test.
+        These three ids must NOT start with "cr.board.column." - the prefix means
+        "a lane box" to any stylesheet keyed on it (v1's did, at min-block-size
+        18rem, which turned a one-line heading into a 288px box before the v1 UI
+        was removed). Pinned by test.
       */}
       <h3 className="cr2-board-column-head" data-testid={`cr.board.colhead.${column.key}`}>
         {`${column.title} ${MIDDOT} ${String(own.length)}`}

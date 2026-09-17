@@ -46,6 +46,8 @@ describe("prepareProjectManagerLaunch", () => {
       // Server-owned like the four above: the opener measures whether an operator
       // channel exists; a caller's value must not assert one.
       MOE_OPERATOR_CHANNEL: "true",
+      // Server-owned too: the opener binds the manager's own catalog, never a caller's.
+      MOE_PROJECT_CATALOG: "C:\\foreign\\projects.json",
       MOE_PROJECT_ID: "foreign",
       MOE_PROJECT_INSTANCE_ID: "foreign-instance",
       MOE_STORE_PATH: "C:\\foreign.sqlite",

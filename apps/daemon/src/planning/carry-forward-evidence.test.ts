@@ -3,10 +3,7 @@ import type { GraphRevisionContent } from "@moe/scheduler";
 import { describe, expect, expectTypeOf, it } from "vitest";
 
 import * as evidenceModule from "./carry-forward-evidence.js";
-import {
-  deriveSupersessionDispositions,
-  diagnoseCarryUnavailability,
-} from "./graph-supersede-dispositions.js";
+import { deriveSupersessionDispositions } from "./graph-supersede-dispositions.js";
 
 type Authorities = GraphRevisionContent["nodeAuthority"]["authorities"];
 type Outcome = ReturnType<typeof evidenceModule.assembleCarryForwardEvidence>;
@@ -157,14 +154,5 @@ describe("assembleCarryForwardEvidence", () => {
       targetHash: TARGET_HASH,
     });
     expect(result.missingFacts).toHaveLength(5);
-  });
-
-  it("exposes the refusal roster through the graph diagnostic consumer", () => {
-    const missingFacts = diagnoseCarryUnavailability(
-      authorities(SOURCE_HASH), authorities(TARGET_HASH), NODE_KEY, [CANONICAL_JSON_VERSION],
-    );
-
-    expect([...missingFacts].sort()).toEqual([...MISSING_DURABLE_FACTS]);
-    expect(missingFacts).toHaveLength(4);
   });
 });

@@ -12,12 +12,12 @@ beforeAll(() => {
 afterEach(cleanup);
 
 /** The daemon's wire frame, decoded afresh each call: a NEW object with the SAME content. */
-/** The dossier's surface, as contract-dossier.tsx declares it: module-level, one identity. */
+/** The dossier's surface: module-level, one identity. */
 const DOSSIER: CoverageSurface = {
   readFailed: { code: "CONTRACT_DOSSIER_COVERAGE_READ_FAILED", layer: "CONTROL_ROOM_GOALS" },
   same: sameDossier,
 };
-/** PrdCoverage's surface, as prd-coverage.tsx declares it. */
+/** A surface that renders the whole answer. */
 const WHOLE: CoverageSurface = {
   readFailed: { code: "COVERAGE_READ_FAILED", layer: "CONTROL_ROOM_COVERAGE" },
   same: sameAnswer,

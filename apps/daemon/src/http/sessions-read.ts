@@ -4,7 +4,6 @@
  * is live at the daemon's clock, joined to the work items its claims hold. Nothing here
  * mints or reads a credential: the credential digest stays out of the view on purpose.
  */
-import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { SqliteEventStore } from "@moe/store";
 
 import { CAPABILITIES } from "../daemon-command-vocabulary.js";
@@ -20,6 +19,7 @@ import type { SeatStartLedger } from "../orchestrator/seat-start-ledger.js";
 import { readWorkClaimLedger } from "../work/work-claim-read-model.js";
 import type { WorkClaimLedger } from "../work/work-claim-read-model.js";
 import { activeClaim } from "../work/work-claim-services.js";
+import { emptyBody } from "./empty-read-body.js";
 import { authenticateHttpRequest } from "./http-command-ingress.js";
 import type { Authenticator, HttpPortRefused, HttpRefused } from "./http-contract.js";
 import type {
@@ -34,10 +34,6 @@ export type {
   SeatExitView, SessionLiveness, SessionView, SessionsAgentProvider, SessionsConcurrency, SessionsReadPort,
   SessionsReadResult, SessionsRefused, SessionsView,
 } from "./sessions-read-contracts.js";
-
-export const SESSIONS_READ_CODES = Object.freeze([
-  "SESSIONS_READ_CAPABILITY_DENIED", "SESSIONS_READ_PROJECT_MISMATCH", "SESSIONS_READ_UNREADABLE",
-] as const);
 
 const refused = (code: string): SessionsRefused => Object.freeze({ code, layer: LAYER, outcome: "REFUSED" as const });
 
@@ -193,13 +189,6 @@ export function createSessionsReadPort(options: SessionsReadOptions): SessionsRe
 export type SessionsReadDispatch =
   | { readonly body: SessionsReadResult | HttpPortRefused | HttpRefused; readonly httpStatus: number; readonly kind: "REPLY" }
   | { readonly code: "LISTENER_SESSIONS_REQUEST_INVALID" | "LISTENER_SESSIONS_UNAVAILABLE"; readonly kind: "LISTENER_REFUSAL" };
-
-function emptyBody(body: unknown): boolean {
-  if (body instanceof Uint8Array && body.length === 0) return true;
-  const decoded = decodeBoundedJsonBytes(body);
-  return decoded.ok && typeof decoded.value === "object" && decoded.value !== null
-    && !Array.isArray(decoded.value) && Object.keys(decoded.value).length === 0;
-}
 
 export function handleSessionsReadRequest(
   dependencies: { readonly authenticator: Authenticator; readonly sessions?: SessionsReadPort | undefined },

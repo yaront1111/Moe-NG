@@ -8,7 +8,11 @@ import type { CommandHandler, HandlerContext } from "../bootstrap/bootstrap-ledg
 import { runBootstrapCommand } from "../bootstrap/bootstrap-services.js";
 import { closeStores, driveThrough, openStore, PROJECT_ID } from "../bootstrap/bootstrap-test-fixtures.js";
 import { GOAL_HANDLERS } from "../goals/goal-services.js";
-import { decodeDeployTarget, deployTargetAggregateId } from "./deploy-target-contracts.js";
+import { PAYLOAD_KEYS } from "../daemon-command-vocabulary.js";
+import {
+  DEPLOYMENT_SET_TARGET_COMMAND_KIND, DEPLOYMENT_SET_TARGET_PAYLOAD_KEYS, decodeDeployTarget,
+  deployTargetAggregateId,
+} from "./deploy-target-contracts.js";
 
 const modulePath = "./deploy-target-command.js";
 const candidate: unknown = await import(/* @vite-ignore */ modulePath).catch(() => null);
@@ -162,5 +166,10 @@ describe("deployment target admission", () => {
 describe("deployment target registration", () => {
   it("registers the same synchronous handler in the production GOAL table", () => {
     expect(GOAL_HANDLERS[KIND]).toBe(handler());
+  });
+
+  it("admits at ingress exactly the slice's own payload roster, not a retyped copy", () => {
+    expect(DEPLOYMENT_SET_TARGET_COMMAND_KIND).toBe(KIND);
+    expect(PAYLOAD_KEYS[DEPLOYMENT_SET_TARGET_COMMAND_KIND]).toBe(DEPLOYMENT_SET_TARGET_PAYLOAD_KEYS);
   });
 });

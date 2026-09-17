@@ -28,12 +28,6 @@ import { inspectSources, pathShapeRejection, snapshotSourceCandidates,
  * Consumers: task-75ee4a84bdd14d06b672abb18ed48cba (pin-request hydration) and
  * ultimately task-6cbff01023b14b26a78fc5e3eb1dd8a9.
  */
-export interface InstalledClaudeRuntimeInput {
-  readonly installedRoot: string;
-  readonly executablePath: string;
-  readonly versionTimeoutMs?: number;
-}
-
 export interface ObservedInstalledClaudeRuntime {
   readonly ok: true;
   readonly observation: ProviderRuntimeObservation;

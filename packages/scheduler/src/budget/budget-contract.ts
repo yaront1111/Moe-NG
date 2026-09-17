@@ -21,14 +21,13 @@
  * or token accounting. Design 11.3: UNKNOWN is never converted to zero, so an unknown
  * quantity is `null` and a measured zero stays a different, knowable fact.
  *
- * The local makeIssue/sortIssues/deepFreeze clones repeat the dependencies, authority, and
- * admission subtrees; consolidation stays blocked because graph-internal's GraphIssueCode is
- * a closed union that cannot admit BUDGET_* codes.
+ * The local makeIssue/sortIssues clones repeat the dependencies, authority, and admission
+ * subtrees; consolidation stays blocked because graph-internal's GraphIssueCode is a closed
+ * union that cannot admit BUDGET_* codes. The code-free primitives come from kernel-primitives.
  */
 import {
-  hasExactDenseArrayShape, hasOnlyOwnStringKeys, isPlainArray, isPlainRecord,
-  readOwnArrayElement, readOwnDataProperty, readPlainArrayLength,
-} from "../runtime-shape.js";
+  compareStrings, deepFreeze, exactRecord, isSafeCount, oneOf,
+} from "../kernel-primitives.js";
 
 export const BUDGET_ACCOUNT_STATES = Object.freeze([
   "OPEN", "SETTLING", "CLOSED", "CLOSED_WITH_UNKNOWN_LIABILITY", "OVERDRAWN"] as const);
@@ -53,7 +52,6 @@ export const BUDGET_ISSUE_CODES = Object.freeze([
   "BUDGET_RESERVE_MALFORMED", "BUDGET_RESERVE_FIELD_INVALID"] as const);
 
 export type BudgetAccountState = (typeof BUDGET_ACCOUNT_STATES)[number];
-export type BudgetBucket = (typeof BUDGET_BUCKETS)[number];
 export type BudgetMeasurementCoverage = (typeof BUDGET_MEASUREMENT_COVERAGES)[number];
 export type BudgetMeasurementSource = (typeof BUDGET_MEASUREMENT_SOURCES)[number];
 export type BudgetReservePurpose = (typeof BUDGET_RESERVE_PURPOSES)[number];
@@ -80,8 +78,6 @@ export interface UsageMeasurementRecord {
   readonly sequence: number; readonly rawReceiptDigest: string;
   readonly observedInterval: ObservedIntervalRefs;
 }
-export interface ReserveDeclarationRecord {
-  readonly purpose: BudgetReservePurpose; readonly meter: string; readonly quantity: number }
 export interface BudgetIssue { readonly code: BudgetIssueCode; readonly message: string }
 export type BudgetValidationResult<T> =
   | { readonly ok: true; readonly record: T }
@@ -90,21 +86,9 @@ export type BudgetValidationResult<T> =
 export const MAX_BUDGET_METERS = 64;
 const MAX_REF_LENGTH = 512;
 const HEX_64 = /^[0-9a-f]{64}$/u;
-const ACCOUNT_KEYS = ["accountId", "ownerRef", "parentRef", "graphRevisionRef", "version",
-  "state", "meters"] as const;
-const BUCKET_KEYS = ["meter", "available", "reserved", "quarantined", "committed"] as const;
 const MEASUREMENT_KEYS = ["meter", "quantity", "coverage", "source", "providerRunRef",
   "sourceParserVersion", "sequence", "rawReceiptDigest", "observedInterval"] as const;
-const RESERVE_KEYS = ["purpose", "meter", "quantity"] as const;
-const AMOUNT_KEYS = ["available", "reserved", "quarantined", "committed"] as const;
 
-function deepFreeze<T>(value: T): T {
-  if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value as Record<string, unknown>)) deepFreeze((value as Record<string, unknown>)[key]);
-  return value;
-}
-function compareStrings(left: string, right: string): number { return left < right ? -1 : left > right ? 1 : 0; }
 function makeIssue(code: BudgetIssueCode, message: string): BudgetIssue { return deepFreeze({ code, message }); }
 function sortIssues(issues: readonly BudgetIssue[]): BudgetIssue[] {
   return [...issues].sort((a, b) => compareStrings(JSON.stringify(a), JSON.stringify(b)));
@@ -113,105 +97,29 @@ function fail<T>(...issues: readonly BudgetIssue[]): BudgetValidationResult<T> {
   return deepFreeze({ ok: false, issues: sortIssues(issues) });
 }
 function accept<T>(record: T): BudgetValidationResult<T> { return deepFreeze({ ok: true, record }); }
-function oneOf<T extends string>(value: unknown, values: readonly T[]): value is T {
-  return typeof value === "string" && (values as readonly string[]).includes(value);
-}
 function isRef(value: unknown): value is string {
   return typeof value === "string" && value.length > 0 && value.length <= MAX_REF_LENGTH;
 }
-/** Safe nonnegative integer. Rejects NaN, Infinity, fractions, -0, and unsafe magnitudes. */
-function isCount(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && !Object.is(value, -0);
-}
 function isDigest(value: unknown): value is string { return typeof value === "string" && HEX_64.test(value); }
-function readRecord(value: unknown, allowed: readonly string[]): Record<string, unknown> | null {
-  if (!isPlainRecord(value) || !hasOnlyOwnStringKeys(value, allowed)) return null;
-  const output: Record<string, unknown> = {};
-  for (const key of allowed) {
-    const read = readOwnDataProperty(value, key);
-    if (!read.ok || !read.present) return null;
-    output[key] = read.value;
-  }
-  return output;
-}
-/** Applies the length ceiling BEFORE any element read, so an oversized list refuses cheaply. */
-function readDenseArray(value: unknown, maximum: number): unknown[] | null {
-  if (!isPlainArray(value)) return null;
-  const length = readPlainArrayLength(value);
-  if (length === null || length > maximum || !hasExactDenseArrayShape(value, length)) return null;
-  const output: unknown[] = [];
-  for (let index = 0; index < length; index += 1) {
-    const read = readOwnArrayElement(value, index);
-    if (!read.ok || !read.present) return null;
-    output.push(read.value);
-  }
-  return output;
-}
-function readMeters(value: unknown): BudgetMeterBuckets[] | null {
-  const entries = readDenseArray(value, MAX_BUDGET_METERS);
-  if (entries === null) return null;
-  const output: BudgetMeterBuckets[] = [];
-  const seen = new Set<string>();
-  for (const entry of entries) {
-    const item = readRecord(entry, BUCKET_KEYS);
-    if (item === null || !isRef(item.meter) || seen.has(item.meter)) return null;
-    if (!AMOUNT_KEYS.every((key) => isCount(item[key]))) return null;
-    seen.add(item.meter);
-    output.push({
-      meter: item.meter, available: item.available as number, reserved: item.reserved as number,
-      quarantined: item.quarantined as number, committed: item.committed as number,
-    });
-  }
-  return output.sort((a, b) => compareStrings(a.meter, b.meter));
-}
-
-/** Zero-authority shape validation. Accepting an account moves no units and funds nothing. */
-export function validateBudgetAccount(input: unknown): BudgetValidationResult<BudgetAccountRecord> {
-  const item = readRecord(input, ACCOUNT_KEYS);
-  if (item === null) {
-    return fail(makeIssue("BUDGET_ACCOUNT_MALFORMED", "budget account record is malformed"));
-  }
-  const issues: BudgetIssue[] = [];
-  const field = (message: string): number => issues.push(makeIssue("BUDGET_ACCOUNT_FIELD_INVALID", message));
-  if (!isRef(item.accountId)) field("budget account accountId must be a bounded non-empty ref");
-  if (!isRef(item.ownerRef)) field("budget account ownerRef must be a bounded non-empty ref");
-  if (item.parentRef !== null && !isRef(item.parentRef)) {
-    field("budget account parentRef must be null or a bounded non-empty ref");
-  }
-  if (!isRef(item.graphRevisionRef)) field("budget account graphRevisionRef must be a bounded non-empty ref");
-  if (!isCount(item.version)) field("budget account version must be a safe nonnegative integer");
-  if (!oneOf(item.state, BUDGET_ACCOUNT_STATES)) field("budget account state is not a known account state");
-  const meters = readMeters(item.meters);
-  if (meters === null) {
-    issues.push(makeIssue("BUDGET_METER_BUCKETS_MALFORMED",
-      "budget account meters must be a bounded list of uniquely metered integer bucket quadruples"));
-  }
-  if (issues.length > 0 || meters === null) return fail(...issues);
-  return accept<BudgetAccountRecord>({
-    accountId: item.accountId as string, ownerRef: item.ownerRef as string,
-    parentRef: item.parentRef as string | null, graphRevisionRef: item.graphRevisionRef as string,
-    version: item.version as number, state: item.state as BudgetAccountState, meters,
-  });
-}
 
 /** Zero-authority shape validation. Accepting a measurement commits no spend. */
 export function validateUsageMeasurement(input: unknown): BudgetValidationResult<UsageMeasurementRecord> {
-  const item = readRecord(input, MEASUREMENT_KEYS);
-  const interval = item === null ? null : readRecord(item.observedInterval, ["startRef", "endRef"]);
+  const item = exactRecord(input, MEASUREMENT_KEYS);
+  const interval = item === null ? null : exactRecord(item.observedInterval, ["startRef", "endRef"]);
   if (item === null || interval === null) {
     return fail(makeIssue("BUDGET_MEASUREMENT_MALFORMED", "usage measurement record is malformed"));
   }
   const issues: BudgetIssue[] = [];
   const field = (message: string): number => issues.push(makeIssue("BUDGET_MEASUREMENT_FIELD_INVALID", message));
   if (!isRef(item.meter)) field("usage measurement meter must be a bounded non-empty ref");
-  if (item.quantity !== null && !isCount(item.quantity)) {
+  if (item.quantity !== null && !isSafeCount(item.quantity)) {
     field("usage measurement quantity must be null or a safe nonnegative integer");
   }
   if (!oneOf(item.coverage, BUDGET_MEASUREMENT_COVERAGES)) field("usage measurement coverage is not a known coverage");
   if (!oneOf(item.source, BUDGET_MEASUREMENT_SOURCES)) field("usage measurement source is not a known source");
   if (!isRef(item.providerRunRef)) field("usage measurement providerRunRef must be a bounded non-empty ref");
-  if (!isCount(item.sourceParserVersion)) field("usage measurement sourceParserVersion must be a safe nonnegative integer");
-  if (!isCount(item.sequence)) field("usage measurement sequence must be a safe nonnegative integer");
+  if (!isSafeCount(item.sourceParserVersion)) field("usage measurement sourceParserVersion must be a safe nonnegative integer");
+  if (!isSafeCount(item.sequence)) field("usage measurement sequence must be a safe nonnegative integer");
   if (!isDigest(item.rawReceiptDigest)) field("usage measurement rawReceiptDigest must be a lowercase 64-character hex digest");
   if (!isRef(interval.startRef) || !isRef(interval.endRef)) {
     field("usage measurement observedInterval must carry bounded non-empty start and end refs");
@@ -228,23 +136,5 @@ export function validateUsageMeasurement(input: unknown): BudgetValidationResult
     providerRunRef: item.providerRunRef as string, sourceParserVersion: item.sourceParserVersion as number,
     sequence: item.sequence as number, rawReceiptDigest: item.rawReceiptDigest as string,
     observedInterval: { startRef: interval.startRef as string, endRef: interval.endRef as string },
-  });
-}
-
-/** Zero-authority shape validation. A declaration is a request shape, never a held reservation. */
-export function validateReserveDeclaration(input: unknown): BudgetValidationResult<ReserveDeclarationRecord> {
-  const item = readRecord(input, RESERVE_KEYS);
-  if (item === null) {
-    return fail(makeIssue("BUDGET_RESERVE_MALFORMED", "reserve declaration record is malformed"));
-  }
-  const issues: BudgetIssue[] = [];
-  const field = (message: string): number => issues.push(makeIssue("BUDGET_RESERVE_FIELD_INVALID", message));
-  if (!oneOf(item.purpose, BUDGET_RESERVE_PURPOSES)) field("reserve declaration purpose is not a known purpose");
-  if (!isRef(item.meter)) field("reserve declaration meter must be a bounded non-empty ref");
-  if (!isCount(item.quantity)) field("reserve declaration quantity must be a safe nonnegative integer");
-  if (issues.length > 0) return fail(...issues);
-  return accept<ReserveDeclarationRecord>({
-    purpose: item.purpose as BudgetReservePurpose, meter: item.meter as string,
-    quantity: item.quantity as number,
   });
 }

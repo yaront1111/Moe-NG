@@ -25,7 +25,6 @@ export const MAX_SELECTED_INPUTS = 4096;
 export const MAX_MATERIALIZATION_WITNESSES = 128;
 export const MAX_MATERIALIZATION_CONTRACTS = 128;
 export const MAX_ENVIRONMENT_REQUIREMENTS = 128;
-export const MAX_MATERIALIZATION_TEXT_CHARS = 400;
 
 /**
  * Which gate refused. Recorded on every failure because more than one layer can
@@ -118,10 +117,6 @@ export function materializationFailure(
   detail: string | null = null,
 ): MaterializationFailure {
   return Object.freeze({ ok: false as const, code, layer, message, detail });
-}
-
-export function isMaterializationFailure(value: object): value is MaterializationFailure {
-  return "ok" in value && (value as { readonly ok: unknown }).ok === false;
 }
 
 /**

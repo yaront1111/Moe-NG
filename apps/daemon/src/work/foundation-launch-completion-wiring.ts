@@ -58,9 +58,6 @@ export const FOUNDATION_LAUNCH_COMPLETION_CODES = Object.freeze([
 /** Module-private by design; exported boundary rosters key off column-zero layer constants. */
 const COMPLETION_LAYER = "FOUNDATION_LAUNCH_COMPLETION";
 
-export type FoundationLaunchCompletionCode = (typeof FOUNDATION_LAUNCH_COMPLETION_CODES)[number];
-export type FoundationLaunchCompletionLayer = typeof COMPLETION_LAYER;
-
 export interface FoundationLaunchCompletionConfig {
   /** Host-scoped daemon-process configuration, forwarded RAW. Absent means unconfigured, and
    *  the runtime producer refuses it under its own code rather than acquiring a default. */

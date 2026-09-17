@@ -16,6 +16,7 @@
 import { createHash } from "node:crypto";
 
 import { SUPERVISOR_ACTIVATION_VERSION } from "@moe/runner";
+import { isRecord } from "../value-primitives.js";
 import {
   ACTIVATION_LEDGER_RECORD_KEYS,
   ACTIVATION_LEDGER_RECORD_VERSION,
@@ -42,10 +43,6 @@ export function activationLedgerDigest(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 function isCount(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
@@ -57,7 +54,7 @@ function isCount(value: unknown): value is number {
  */
 function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
-  if (isPlainObject(value)) {
+  if (isRecord(value)) {
     const entries = Object.keys(value)
       .sort()
       .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key])}`);
@@ -67,7 +64,7 @@ function canonicalJson(value: unknown): string {
 }
 
 function hasExactKeys(value: unknown): value is Record<string, unknown> {
-  if (!isPlainObject(value)) return false;
+  if (!isRecord(value)) return false;
   const keys = Object.keys(value);
   if (keys.length !== ACTIVATION_LEDGER_RECORD_KEYS.length) return false;
   return keys.every((key) => (ACTIVATION_LEDGER_RECORD_KEYS as readonly string[]).includes(key));
@@ -89,7 +86,7 @@ function validate(value: Record<string, unknown>): ActivationLedgerRecord | "VER
     return "FIELD";
   }
   const nested = ["attempt", "budgetReservation", "budgetView", "effectIntent", "grant", "lease", "providerSlot"];
-  if (!nested.every((key) => isPlainObject(value[key]))) return "FIELD";
+  if (!nested.every((key) => isRecord(value[key]))) return "FIELD";
   const intent = value["effectIntent"] as Record<string, unknown>;
   const attempt = value["attempt"] as Record<string, unknown>;
   const grant = value["grant"] as Record<string, unknown>;

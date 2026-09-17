@@ -164,7 +164,7 @@ const CODE_FACES: Readonly<Record<ExpansionPreparationCode, Face>> = {
   EXPANSION_PREPARATION_RESOURCES_NOT_HELD: { ...LOCAL, layer: "RESOURCE" },
 };
 
-export function refuseExpansionPreparation(
+function refuseExpansionPreparation(
   code: ExpansionPreparationCode,
 ): ExpansionPreparationRefusal {
   return deepFreeze({ code, ...CODE_FACES[code], ok: false as const });
@@ -275,7 +275,7 @@ export function canonicalBytes(value: unknown): string {
 const IDENTITY_DOMAIN = "@moe/core.expansion.preparation/v1";
 const POLICY_INPUT_DOMAIN = "@moe/core.expansion.policy-input/v1";
 
-export function expansionIdentityOf(bound: ExpansionPreparedFacts): string {
+function expansionIdentityOf(bound: ExpansionPreparedFacts): string {
   return createHash("sha256").update(IDENTITY_DOMAIN, "utf8").update(" ", "utf8")
     .update(canonicalBytes(bound), "utf8").digest("hex");
 }

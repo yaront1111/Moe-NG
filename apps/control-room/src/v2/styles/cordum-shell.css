@@ -20,12 +20,18 @@ body:has(.cr2-shell) {
   grid-template-columns: 218px minmax(0, 1fr);
   /* One row, and it may shrink below its content. Without it the implicit row is
    * `auto`: a long goal list grows the panel past 100dvh, and since the shell
-   * (and body, base.css:19) hide their overflow, the status strip and the bottom
-   * of the list leave the screen with nothing left to scroll. */
+   * hides its own overflow, the status strip and the bottom of the list leave
+   * the screen with nothing left to scroll. (The shell alone: nothing in the
+   * served page hides the body's overflow. v1's base.css did, but that sheet was
+   * unreachable from main.tsx - outside the served bundle - from the v2 cutover
+   * until it was deleted on 2026-09-17.) */
   grid-template-rows: minmax(0, 1fr);
-  /* #root is a flex container (base.css); without claiming the row the shell
-   * shrinks to its content and the rail collapses. Fill it, and let the 1fr
-   * track shrink past its content via min-width:0. */
+  /* Nothing styles #root in the served page, and nothing has since the v2 cutover:
+   * v1's base.css made it a 100dvh flex column, but that sheet was already outside
+   * the served bundle (unreachable from main.tsx) before it was deleted on
+   * 2026-09-17. The width/height below size the shell by themselves; `flex` stays
+   * so a flex-container root can never collapse the rail, and the 1fr track
+   * shrinks past its content via min-width:0. */
   flex: 1 1 auto;
   width: 100%;
   min-width: 0;
@@ -272,29 +278,31 @@ body:has(.cr2-shell) {
 /* ------------------------------------------------- v1 shell CSS firewall ---- *
  * The v2 shell keeps the v1 data-testid contract (cr.shell.navrail, .contextbar,
  * .context.title, .main, .inspector, .statusstrip, .help) so the shared unit
- * tests keep passing - and main.tsx still statically imports the v1 shell mode,
- * so styles/shell.css, chrome.css, workspace.css, inspector.css and
- * shell/shell-layout.css ride in the SAME bundle asset. Every v1 rule written
- * against one of those testids therefore matches a live v2 node.
+ * tests keep passing. v1's shell, chrome, workspace, inspector and shell-layout
+ * sheets were written against those same testids. They never rode in the served
+ * bundle beside this shell: they were unreachable from main.tsx from the v2
+ * cutover on, and were deleted on 2026-09-17. The fence stays because the
+ * testids did not go - any sheet keyed on them would repaint a live v2 node.
  *
- * It is not only the grid: v1's shell-layout.css pins each testid into its own
- * named grid area (`grid-area: nav`), which resolves against a NON-EXISTENT line
- * name here and invents implicit tracks. v1 also PAINTS them - the rail's dark
+ * It was not only the grid: v1's shell layout pinned each testid into its own
+ * named grid area (`grid-area: nav`), which resolved against a NON-EXISTENT line
+ * name here and invented implicit tracks. v1 also PAINTED them - the rail's dark
  * ink (which the "Moe" wordmark inherited onto cream at ~1.1:1), the workspace's
  * grey striped canvas behind main, the strip's 9px uppercase, the help card's
  * 34rem corner box, and an unowned 240ms entrance animation on every main child.
  *
  * The fence is therefore not a block of resets but a rule: EVERY element that
  * carries a v1 `cr.shell.*` testid is authored one level deep, `.cr2-shell ...`,
- * and states each property v1 states. (0,2,0) beats v1's single-attribute
- * (0,1,0) whichever order the two sheets load in - so the fence does not rest on
- * main.tsx's import order. cordum-shell-firewall.test.tsx measures exactly that:
- * it renders the shell, then loads the v1 testid rules underneath and above, and
- * fails if any computed value on any node moves. Undoing a declaration here, or
- * dropping a `.cr2-shell` prefix, reds it. */
+ * and states each property v1 stated. (0,2,0) beats any single-attribute
+ * (0,1,0) rule whichever order two sheets load in - so no stylesheet keyed on
+ * those testids can repaint the shell again, whatever the import order.
+ * cordum-shell-paint.test.tsx pins the v2-only paint: it renders the shell over
+ * cordum-tokens.css + cordum-shell.css alone and fails if any of its six measured
+ * values moves. Undoing a declaration here, or dropping a `.cr2-shell` prefix,
+ * reds it. */
 
 .cr2-shell .cr2-main > * {
-  /* chrome.css:259 animates every main child on mount. v2 owns its own motion. */
+  /* v1's chrome sheet animated every main child on mount. v2 owns its own motion. */
   animation: none;
 }
 
@@ -393,7 +401,7 @@ body:has(.cr2-shell) {
   color: var(--cr-accent-deep);
 }
 
-/* v1 (chrome.css:25) clamps this title to one ellipsised line. A goal's name is
+/* v1's chrome sheet clamped this title to one ellipsised line. A goal's name is
  * the one thing the owner is looking at: it wraps here instead. */
 .cr2-shell .cr2-context-title {
   display: block;
@@ -517,7 +525,7 @@ body:has(.cr2-shell) {
   overflow: hidden;
 }
 
-/* `background: transparent` is load-bearing: v1's workspace.css paints an opaque
+/* `background: transparent` is load-bearing: v1's workspace sheet painted an opaque
  * grey canvas with 3.25rem vertical rules here, which hid the cream ground the
  * whole design is built on. */
 .cr2-shell .cr2-main {
@@ -695,7 +703,7 @@ body:has(.cr2-shell) {
 
 /* ------------------------------------------------------------- status strip - */
 
-/* v1's chrome.css turns this strip into a 9px uppercase four-column grid on a
+/* v1's chrome sheet turned this strip into a 9px uppercase four-column grid on a
  * dark rail; the type roles below are stated so the owner reads a sentence, not
  * a legacy caption. */
 .cr2-shell .cr2-statusstrip {
@@ -810,7 +818,7 @@ body:has(.cr2-shell) {
 
 /* ------------------------------------------------------------ help overlay --- */
 
-/* v1 (chrome.css:177 + shell-layout.css:76) treats this testid as the CARD, not
+/* v1's chrome and shell-layout sheets treated this testid as the CARD, not
  * the scrim: a 34rem x 38rem rounded box pinned by inset/transform with a
  * 100vmax ring for a backdrop. Every one of those is answered here, or the
  * overlay lands as a panel in the top-left corner. */

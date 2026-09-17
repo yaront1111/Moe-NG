@@ -27,8 +27,6 @@ export const CONVERGENCE_BREAKER_CODES = Object.freeze([
   "SAME_BUG_HOLD_ACTIVE",
 ] as const);
 
-export type ConvergenceBreakerCode = (typeof CONVERGENCE_BREAKER_CODES)[number];
-
 /**
  * Ceiling on simultaneously tracked holds. A hold is otherwise permanent state
  * inserted on any novel fingerprint — and fingerprints span the recipe, base

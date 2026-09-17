@@ -5,7 +5,7 @@
  * an approval and imports nothing that dispatches, because the daemon is the only
  * author of state and the control room authors none of its own.
  *
- * Discipline copied from live-document-ingest.ts:
+ * Discipline copied from the v1 document-ingest client (retired with the v1 UI, 2026-09-17):
  *  - exactDataRecord: an own-enumerable EXACT-key snapshot. A daemon frame is
  *    accepted only when its key set is precisely the one this reader vouches for,
  *    so an extra or renamed field is a shape miss, never a silent pass.
@@ -26,6 +26,8 @@
  * plan stays null (sealed:false); a PRESENT plan that fails its shape guard is an
  * ERROR, because a half-rendered plan is worse than an honest failure.
  */
+
+import { exactDataRecord } from "./live-wire-primitives.js";
 
 const LIVE_PLANNING_LAYER = "CONTROL_ROOM_LIVE_PLANNING";
 const INVALID_RESPONSE_CODE = "PLANNING_RUN_RESPONSE_INVALID";
@@ -105,38 +107,6 @@ function errored(code: string, layer: string): PlanningRunOutcome {
 
 function invalidResponse(): PlanningRunOutcome {
   return errored(INVALID_RESPONSE_CODE, LIVE_PLANNING_LAYER);
-}
-
-/**
- * An own-enumerable EXACT-key snapshot: the value must be a plain object whose
- * key set is precisely `expectedKeys`, every one an own, enumerable data
- * property. Anything else - a prototype, an array, a missing or extra key, an
- * accessor - returns null so the caller never reads a field this reader has not
- * vouched for. (Copied verbatim from live-document-ingest.ts.)
- */
-function exactDataRecord(
-  value: unknown,
-  expectedKeys: readonly string[],
-): Readonly<Record<string, unknown>> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  try {
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return null;
-    const keys = Reflect.ownKeys(value);
-    if (keys.length !== expectedKeys.length
-      || keys.some((key) => typeof key !== "string" || !expectedKeys.includes(key))) return null;
-    const snapshot: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
-    for (const key of expectedKeys) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
-        return null;
-      }
-      snapshot[key] = descriptor.value;
-    }
-    return Object.freeze(snapshot);
-  } catch {
-    return null;
-  }
 }
 
 /**

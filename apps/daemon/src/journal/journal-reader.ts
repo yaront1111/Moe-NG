@@ -22,8 +22,8 @@ import { decodeJournalEntries } from "./journal-entry-codec.js";
  * THE READER NEVER RECONSTRUCTS. Every disagreement returns authority "NONE"
  * with an exact code and this layer's name, and no branch answers from the fields
  * that happened to parse. An unverifiable journal never becomes a handoff input,
- * which matters because `journalDigest` is a REQUIRED 64-hex reference in both
- * @moe/context's `createReleaseHandoff` and @moe/scheduler's `ReleaseHandoff`.
+ * which matters because `journalDigest` is a REQUIRED 64-hex reference in
+ * @moe/scheduler's `ReleaseHandoff`.
  *
  * THE DIGEST IS RE-DERIVED, NOT TRUSTED. `createDeadEndJournal` is run again over
  * the stored entries and its answer must equal the stored `journalDigest` AND

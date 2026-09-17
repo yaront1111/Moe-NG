@@ -5,7 +5,7 @@ import {
   readSync, readdirSync, realpathSync, rmSync, writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, sep } from "node:path";
+import { basename, dirname, join } from "node:path";
 
 import {
   PackOutputError, packOutputPathPresent, prepareWindowsArtifactOutput,
@@ -13,6 +13,7 @@ import {
 import {
   assertPackToolIdentity, capturePackFileIdentity, type PackToolLaunch,
 } from "./pack-command.js";
+import { pathInside } from "./pack-tool-identity.js";
 import {
   captureWindowsLeaseDirectory, leaseDirectoryAncestors, leaseEntriesForFiles,
   mergeWindowsLeaseEntries, type WindowsLeaseEntry,
@@ -68,11 +69,6 @@ export function observeWindowsCandidateOutputRoot(
     if (error instanceof PackOutputError) throw error;
     throw new PackOutputError("PACK_OUTPUT_SNAPSHOT_DRIFT");
   }
-}
-
-function inside(root: string, candidate: string): boolean {
-  const path = relative(root, candidate);
-  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
 }
 
 function ownedCandidateRoot(candidate: PrivateWindowsCandidate): string {
@@ -144,7 +140,7 @@ export function privateWindowsCandidateProcessBoundary(
 function regularContained(path: string, root: string): boolean {
   try {
     const stat = lstatSync(path);
-    return stat.isFile() && !stat.isSymbolicLink() && inside(root, realpathSync(path));
+    return stat.isFile() && !stat.isSymbolicLink() && pathInside(root, realpathSync(path));
   } catch {
     return false;
   }
@@ -173,7 +169,7 @@ function fileObservation(path: string, root: string): WindowsCandidateObservatio
       || !afterPath.isFile() || afterPath.isSymbolicLink()
       || (opened.ino !== 0 && afterPath.ino !== 0 && opened.ino !== afterPath.ino)
       || opened.dev !== afterPath.dev || beforePath.size !== opened.size
-      || !inside(root, realpathSync(path))) throw new Error();
+      || !pathInside(root, realpathSync(path))) throw new Error();
     return Object.freeze({ sha256: hash.digest("hex"), size: opened.size });
   } catch (error) {
     if (error instanceof PackOutputError) throw error;
@@ -321,28 +317,4 @@ export function removePrivateWindowsCandidate(candidate: PrivateWindowsCandidate
   } catch {
     throw new PackOutputError("PACK_OUTPUT_PATH_UNSAFE");
   }
-}
-
-export function withPrivateWindowsCandidate<T>(
-  consume: (candidate: PrivateWindowsCandidate) => T,
-): T {
-  const candidate = createPrivateWindowsCandidate();
-  let answer!: T;
-  let failed = false;
-  let primary: unknown;
-  try {
-    answer = consume(candidate);
-  } catch (error) {
-    failed = true;
-    primary = error;
-  }
-  let cleanup: unknown;
-  try {
-    removePrivateWindowsCandidate(candidate);
-  } catch (error) {
-    cleanup = error;
-  }
-  if (failed) throw primary;
-  if (cleanup !== undefined) throw cleanup;
-  return answer;
 }

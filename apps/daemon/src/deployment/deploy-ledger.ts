@@ -134,23 +134,6 @@ export function readDeployLedger(
   return states;
 }
 
-/**
- * THE ROLLBACK TARGET, published as its own call.
- *
- * `readPreviousDeployReceipt(store, projectId, environment): DeployReceiptV1 | null`
- *
- * A thin read over `readDeployLedger` so a caller that only wants the receipt
- * to roll back to does not have to understand the ledger's shape. Answers null
- * when the environment has never deployed or has deployed exactly once — in
- * both cases there is nothing to roll back TO, and null says so rather than
- * handing back the current receipt.
- */
-export function readPreviousDeployReceipt(
-  store: SqliteEventStore, projectId: string, environment: string,
-): DeployReceiptV1 | null {
-  return readDeployLedger(store, projectId).get(environment)?.previous ?? null;
-}
-
 /** The environment's most recent receipt, or null while it has never deployed. */
 export function readCurrentDeployReceipt(
   store: SqliteEventStore, projectId: string, environment: string,

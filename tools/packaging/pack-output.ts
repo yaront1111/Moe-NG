@@ -3,7 +3,9 @@ import {
   closeSync, fstatSync, lstatSync, mkdirSync, openSync, readSync,
   opendirSync, realpathSync,
 } from "node:fs";
-import { isAbsolute, join, relative, sep } from "node:path";
+import { isAbsolute, join } from "node:path";
+
+import { pathInside } from "./pack-tool-identity.js";
 
 export const PACKAGING_OUTPUT_LAYER = "PACKAGING_OUTPUT" as const;
 export const PACK_OUTPUT_CODES = Object.freeze([
@@ -26,11 +28,6 @@ export class PackOutputError extends Error {
   }
 }
 
-function inside(root: string, candidate: string): boolean {
-  const path = relative(root, candidate);
-  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
-}
-
 export interface WindowsArtifactOutput {
   readonly dist: string;
   readonly outputRoot: string;
@@ -40,7 +37,7 @@ export interface WindowsArtifactOutput {
 function regularContainedFile(path: string, root: string): boolean {
   try {
     const stat = lstatSync(path);
-    return stat.isFile() && !stat.isSymbolicLink() && inside(root, realpathSync(path));
+    return stat.isFile() && !stat.isSymbolicLink() && pathInside(root, realpathSync(path));
   } catch {
     return false;
   }
@@ -64,7 +61,7 @@ export function prepareWindowsArtifactOutput(outputRoot: string): WindowsArtifac
     const distStat = lstatSync(dist);
     if (!distStat.isDirectory() || distStat.isSymbolicLink()) throw new Error();
     const canonicalDist = realpathSync(dist);
-    if (!inside(canonicalRoot, canonicalDist)) throw new Error();
+    if (!pathInside(canonicalRoot, canonicalDist)) throw new Error();
     const zip = join(canonicalDist, "moe-windows.zip");
     if (packOutputPathPresent(zip) && !regularContainedFile(zip, canonicalDist)) throw new Error();
     return Object.freeze({ dist: canonicalDist, outputRoot: canonicalRoot, zip });

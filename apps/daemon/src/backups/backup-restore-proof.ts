@@ -153,11 +153,18 @@ function recordOf(value: unknown): BackupRestoreProofRecord | null {
   });
 }
 
-function initialize(database: DatabaseSync, create: boolean): void {
+/**
+ * True when this call wrote the schema: only an EMPTY database is created, and only by a write.
+ * Emptiness is measured on the DATABASE, never on whether the file existed before the open: the
+ * open itself creates the file, so a first initialization that never reached COMMIT leaves one
+ * that exists and is empty - a sidecar to establish now, not a foreign one to refuse forever.
+ */
+function initialize(database: DatabaseSync, create: boolean): boolean {
   const app = database.prepare("PRAGMA application_id").get()?.["application_id"];
   const version = database.prepare("PRAGMA user_version").get()?.["user_version"];
   const empty = database.prepare("SELECT name FROM sqlite_master").all().length === 0;
-  if (create && app === 0 && version === 0 && empty) {
+  const created = create && app === 0 && version === 0 && empty;
+  if (created) {
     // Identity is a NAMED UNIQUE INDEX rather than a table-level composite PRIMARY KEY: sqlite
     // materialises the latter as an `sqlite_autoindex_...` entry, and the name check below
     // compares the whole of `sqlite_master`, so an implicit name would make the guard depend on
@@ -173,6 +180,7 @@ function initialize(database: DatabaseSync, create: boolean): void {
   const names = database.prepare("SELECT name FROM sqlite_master ORDER BY name").all()
     .map((row) => row["name"]);
   if (names.join("\n") !== TABLES.join("\n")) throw new Error("BACKUP_PROOF_STORE_UNAVAILABLE");
+  return created;
 }
 
 function access<T>(
@@ -182,13 +190,13 @@ function access<T>(
   let transaction = false;
   try {
     if (!isAbsolute(path)) return refusal("BACKUP_PROOF_STORE_UNAVAILABLE");
-    const existed = existsSync(path);
-    if (!existed && !create) return refusal("BACKUP_PROOF_STORE_UNAVAILABLE");
+    if (!create && !existsSync(path)) return refusal("BACKUP_PROOF_STORE_UNAVAILABLE");
     database = new DatabaseSync(path);
     database.exec("PRAGMA busy_timeout = 1000; PRAGMA synchronous = FULL; BEGIN IMMEDIATE");
     transaction = true;
-    initialize(database, create && !existed);
-    if (!existed) chmodSync(path, 0o600);
+    // The open above already created the file; a first write that died before COMMIT leaves it
+    // an EMPTY database to initialize now, not a foreign one to refuse on every call from then on.
+    if (initialize(database, create)) chmodSync(path, 0o600);
     const value = operation(database);
     database.exec("COMMIT"); transaction = false;
     return Object.freeze({ ok: true as const, value });

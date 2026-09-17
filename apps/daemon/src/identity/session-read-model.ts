@@ -1,7 +1,7 @@
-import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonValue } from "@moe/contracts";
 import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
+import { decodeJsonOrNull as decodeResult, ref as isRef } from "../json-record-shape.js";
 import {
   SESSION_COMMAND_KINDS,
   isCredentialSha256,
@@ -53,15 +53,6 @@ export interface SessionLedger {
 
 const LEDGER_PAGE_SIZE = 200;
 const KIND_SET: ReadonlySet<string> = new Set<string>(SESSION_COMMAND_KINDS);
-
-function decodeResult(bytes: Uint8Array): JsonValue {
-  const decoded = decodeBoundedJsonBytes(bytes);
-  return decoded.ok ? decoded.value : null;
-}
-
-function isRef(value: JsonValue | undefined): value is string {
-  return typeof value === "string" && value.length > 0;
-}
 
 function parseCapabilities(value: JsonValue | undefined): readonly string[] | undefined {
   if (!Array.isArray(value)) return undefined;

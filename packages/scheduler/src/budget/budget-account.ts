@@ -7,10 +7,10 @@
  *
  * Local issue codes rather than the contract's: BUDGET_ISSUE_CODES is a closed frozen union of
  * eight SHAPE codes and this task may not edit that file, so transition failures cannot be
- * spelled with it; only the {code, message} shape is reused. deepFreeze and isCount are
- * module-private there and are cloned here for the same reason. Reservations, measurement,
+ * spelled with it; only the {code, message} shape is reused. Reservations, measurement,
  * settlement and quarantine are out of scope, and nothing here raises the authorized amount.
  */
+import { deepFreeze, isRef, isSafeCount } from "../kernel-primitives.js";
 import { MAX_BUDGET_METERS, type BudgetAccountRecord, type BudgetAccountState, type BudgetMeterBuckets } from "./budget-contract.js";
 export const BUDGET_ACCOUNT_ISSUE_CODES = Object.freeze([
   "BUDGET_ACCOUNT_COMMAND_MALFORMED", "BUDGET_ACCOUNT_COUNTER_EXHAUSTED",
@@ -49,16 +49,6 @@ export type BudgetLedgerResult =
 /** Mirrors authority-kernel.ts: a record at the ceiling is readable but may not be mutated. */
 export const MAX_BUDGET_VERSION = Number.MAX_SAFE_INTEGER - 1_000_000;
 const EMPTY: BudgetLedgerState = { rootAccountId: "", authorized: [], overrun: [], accounts: [], entries: [] };
-function deepFreeze<T>(value: T): T {
-  if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value as Record<string, unknown>)) deepFreeze((value as Record<string, unknown>)[key]);
-  return value;
-}
-function isCount(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && !Object.is(value, -0);
-}
-const isRef = (value: unknown): value is string => typeof value === "string" && value.length > 0;
 const fail = (state: BudgetLedgerState, code: BudgetAccountIssueCode, message: string): BudgetLedgerResult =>
   deepFreeze({ ok: false, state, issues: [{ code, message }] });
 /** Internal replay refusal seam; deliberately not curated on the package surface. */
@@ -91,7 +81,7 @@ export function openBudgetRoot(authorization: BudgetAuthorization): BudgetLedger
     return fail(EMPTY, "BUDGET_ACCOUNT_COMMAND_MALFORMED", "root authorization is malformed");
   }
   if (amounts.length === 0 || amounts.length > MAX_BUDGET_METERS
-    || amounts.some((entry) => !isRef(entry.meter) || !isCount(entry.amount))
+    || amounts.some((entry) => !isRef(entry.meter) || !isSafeCount(entry.amount))
     || new Set(amounts.map((entry) => entry.meter)).size !== amounts.length) {
     return fail(EMPTY, "BUDGET_ACCOUNT_COMMAND_MALFORMED", "authorized amounts are malformed or duplicated");
   }
@@ -122,9 +112,9 @@ function applyMovement(
 ): BudgetLedgerResult {
   const { parentAccountId: pid, childAccountId: cid, expectedChildVersion: cv, amounts } = command;
   if (!isRef(pid) || !isRef(cid) || !isRef(command.childOwnerRef) || amounts.length === 0
-    || amounts.length > MAX_BUDGET_METERS || !isCount(command.expectedParentVersion)
-    || (cv !== null && !isCount(cv))
-    || amounts.some((e) => !isRef(e.meter) || !isCount(e.amount) || e.amount === 0)) {
+    || amounts.length > MAX_BUDGET_METERS || !isSafeCount(command.expectedParentVersion)
+    || (cv !== null && !isSafeCount(cv))
+    || amounts.some((e) => !isRef(e.meter) || !isSafeCount(e.amount) || e.amount === 0)) {
     return fail(state, "BUDGET_ACCOUNT_COMMAND_MALFORMED", "movement command is malformed");
   }
   const existing = find(state, cid);
@@ -203,7 +193,7 @@ export const returnToParent = (state: BudgetLedgerState, command: BudgetMovement
  * its committed units keep counting toward the derived total. Closing a parent whose child is
  * still open would strand a funded subtree, so it is refused. */
 export function closeBudgetAccount(state: BudgetLedgerState, command: BudgetCloseCommand): BudgetLedgerResult {
-  if (!isRef(command.accountId) || !isCount(command.expectedVersion)) {
+  if (!isRef(command.accountId) || !isSafeCount(command.expectedVersion)) {
     return fail(state, "BUDGET_ACCOUNT_COMMAND_MALFORMED", "close command is malformed");
   }
   const record = find(state, command.accountId);

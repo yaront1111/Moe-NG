@@ -41,10 +41,10 @@ import { withPolicyRiskLeg } from "./policy-risk-leg.js";
  *
  * THE GRAPH-REVISION COMMANDS OWN THAT TRANSITION. `graph.approve` routes to
  * `activateApprovedGraph` (`daemon-command-graph-edges.ts:26`, called at
- * `daemon-command-graph-approve.ts:168`), and on that surface the revision leg is unconditional —
+ * `daemon-command-graph-approve.ts:147`), and on that surface the revision leg is unconditional —
  * "an activation that activates no graph is not a state this surface can express"
  * (`graph-activation-service.ts:240`). `graph.supersede` then moves the projection forward
- * (`graph-supersede-legs.ts:214-228`), and only ever from a predecessor it requires to be ACTIVE
+ * (`graph-supersede-legs.ts:206-220`), and only ever from a predecessor it requires to be ACTIVE
  * already (`graph-supersede-facts.ts:204`). Both are commands ON THE GRAPH, and between them the
  * projection has exactly one lifecycle with one entry point.
  *
@@ -88,7 +88,7 @@ export interface ActivationInput {
  * therefore cannot present an activation that names some other approval: the only approval an
  * activation can cite is the one this very command just decided.
  *
- * THREE KEYS AND EXACTLY THREE. `validActivation` (goal-validation.ts:154) is
+ * THREE KEYS AND EXACTLY THREE. `validActivation` (goal-validation.ts:128) is
  * `exact(value, ACTIVATION_KEYS)`, so a fourth key here is not additive — it makes the whole
  * command `illegal` at the core. That is why the run binding rides the DURABLE copy below
  * instead, and why the two witnesses are separate functions rather than one shape with an

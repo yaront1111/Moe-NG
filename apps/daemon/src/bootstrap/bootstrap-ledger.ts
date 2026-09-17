@@ -1,4 +1,3 @@
-import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonValue, RuntimeError } from "@moe/contracts";
 import { identifyReplayRequest } from "@moe/store";
 import type {
@@ -9,7 +8,7 @@ import type {
   SqliteEventStore,
 } from "@moe/store";
 
-import { BOOTSTRAP_COMMAND_KINDS } from "./bootstrap-contracts.js";
+import { decodeJsonOrNull as decodeResult } from "../json-record-shape.js";
 import { conflictError } from "./bootstrap-conflict-error.js";
 import { unmetPrerequisites } from "./bootstrap-sequence.js";
 import type { BootstrapCommandKind, BootstrapRequest } from "./bootstrap-contracts.js";
@@ -80,11 +79,6 @@ export function decisionKey(request: BootstrapRequest): CommandDecisionKey {
  */
 function requestBytesOf(request: BootstrapRequest): Uint8Array {
   return encoder.encode(JSON.stringify({ kind: request.kind, payload: request.payload }));
-}
-
-function decodeResult(bytes: Uint8Array): JsonValue {
-  const decoded = decodeBoundedJsonBytes(bytes);
-  return decoded.ok ? decoded.value : null;
 }
 
 /**
@@ -298,5 +292,3 @@ export function replayOf(
     ok: true as const,
   });
 }
-
-export const BOOTSTRAP_KIND_COUNT = BOOTSTRAP_COMMAND_KINDS.length;

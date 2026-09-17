@@ -12,7 +12,6 @@ import { readPreviewReceipt, recordPreviewReceipt } from "./preview-ledger.js";
 import {
   PREVIEW_RECEIPT_COMMAND_KIND, PREVIEW_RECEIPT_VERSION, PREVIEW_RUNNER_PRINCIPAL_ID,
   decodePreviewReceiptBytes, previewAggregateId, previewCaptureDirectory, previewReceiptId,
-  previewReceiptLayer,
 } from "./preview-receipt-contracts.js";
 import type { PreviewReceiptV1 } from "./preview-receipt-contracts.js";
 
@@ -91,13 +90,6 @@ describe("a STARTED preview receipt", () => {
     expect(store.getAggregateVersion(GOAL)).toBe(0);
     expect(store.getAggregateVersion(previewAggregateId(GOAL))).toBe(1);
   });
-
-  it("carries no layer, because nothing refused", () => {
-    const store = openStore();
-    const recorded = recordPreviewReceipt(store, startedInput());
-    if (!recorded.ok) throw new Error(recorded.code);
-    expect(previewReceiptLayer(recorded.receipt)).toBeNull();
-  });
 });
 
 describe("a REFUSED preview receipt", () => {
@@ -113,8 +105,6 @@ describe("a REFUSED preview receipt", () => {
     expect(read.receipt.url).toBeNull();
     expect(read.receipt.pid).toBeNull();
     expect(read.receipt.screenshots).toStrictEqual([]);
-    // The LAYER is re-derived from the vocabulary's closed map, never stored beside the code.
-    expect(previewReceiptLayer(read.receipt)).toBe("RUNNER");
   });
 
   it("is a RECORD, not an absence: the refusal is durable and readable", () => {

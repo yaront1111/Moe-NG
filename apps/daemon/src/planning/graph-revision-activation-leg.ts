@@ -8,7 +8,7 @@ import type {
 } from "@moe/core";
 import type { ExpectedVersionDecisionLeg, SqliteEventStore } from "@moe/store";
 
-import { graphRevisionAggregateId } from "./active-graph-projection.js";
+import { graphRevisionAggregateId, readGraphRevisionHistory } from "./active-graph-projection.js";
 
 /**
  * The initial active-graph transition, as ONE decision leg on the graph-revision aggregate.
@@ -30,7 +30,7 @@ import { graphRevisionAggregateId } from "./active-graph-projection.js";
  * WHAT IT DOES NOT MEAN, stated precisely because "activates a revision" is ambiguous.
  * `graph.approve` is the only command that performs the INITIAL activation — this leg. One other
  * command moves the projection afterwards: `graph.supersede` builds a successor revision leg at
- * `predecessor.graphEpoch + 1` (`graph-supersede-legs.ts:214-228`), and it can never stand in for
+ * `predecessor.graphEpoch + 1` (`graph-supersede-legs.ts:206-220`), and it can never stand in for
  * this one, because it replays a predecessor it requires to be ACTIVE already
  * (`graph-supersede-facts.ts:204`). Both writers live in this graph-revision family.
  *
@@ -114,7 +114,6 @@ export interface GraphRevisionActivationInput {
 }
 
 const encoder = new TextEncoder();
-const decoder = new TextDecoder("utf-8", { fatal: false });
 
 /** Exactly 1 for an initial activation — `validActivationEpoch` accepts no other value. */
 const INITIAL_GRAPH_EPOCH = 1;
@@ -128,16 +127,6 @@ const refused = (code: GraphRevisionActivationCode): GraphRevisionActivationRefu
  */
 function truthClassFor(actorKind: unknown): "DAEMON_VERIFIED" | "HUMAN_APPROVED" {
   return actorKind === "HUMAN" ? "HUMAN_APPROVED" : "DAEMON_VERIFIED";
-}
-
-function historyOf(store: SqliteEventStore, aggregateId: string): readonly unknown[] {
-  return store.readEvents(aggregateId).map((event) => {
-    try {
-      return JSON.parse(decoder.decode(event.payload)) as unknown;
-    } catch {
-      return null;
-    }
-  });
 }
 
 /**
@@ -159,7 +148,7 @@ function projectHasActive(
 ): GraphRevisionActivationRefusal | null {
   const prefix = graphRevisionAggregateId(projectId, "");
   for (const aggregateId of store.enumerateAggregateIdsByPrefix(prefix)) {
-    const replayed = replayGraphRevisionEvents(historyOf(store, aggregateId));
+    const replayed = replayGraphRevisionEvents(readGraphRevisionHistory(store, aggregateId));
     if (!replayed.ok) return refused("GRAPH_REVISION_SIBLING_UNREADABLE");
     if (replayed.state.lifecycle === "ACTIVE") return refused("GRAPH_REVISION_PROJECT_HAS_ACTIVE");
   }

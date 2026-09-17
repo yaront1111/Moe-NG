@@ -12,10 +12,14 @@ import type {
 } from "../dependencies/dependency-contract.js";
 import type { GraphIssueCode, GraphKey, StructuralDiagnostic } from "../graph-model.js";
 import type { HardEdgeCounterfactualAnalysis } from "../hard-edge-counterfactual-model.js";
+import { deepFreeze } from "../kernel-primitives.js";
 import {
   hasExactDenseArrayShape, hasOnlyOwnStringKeys, isPlainArray, isPlainRecord,
   readOwnArrayElement, readOwnDataProperty, readPlainArrayLength,
 } from "../runtime-shape.js";
+
+/** The admission and readiness modules reach the shared primitives through this seam. */
+export { deepFreeze, isRef, isSafeCount as isVersion, oneOf } from "../kernel-primitives.js";
 
 /** Closed admission-local code union. Disjoint from GRAPH_*, FRONTIER_*, DEPENDENCY_*. */
 export type AdmissionIssueCode =
@@ -140,15 +144,6 @@ export type AdmissionResult =
 export const MAX_ADMISSION_ITEMS = 256;
 const HEX_64 = /^[0-9a-f]{64}$/u;
 
-export function deepFreeze<T>(value: T): T {
-  if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value as Record<string, unknown>)) {
-    deepFreeze((value as Record<string, unknown>)[key]);
-  }
-  return value;
-}
-
 export function makeIssue(
   code: AdmissionIssueCode,
   message: string,
@@ -158,7 +153,7 @@ export function makeIssue(
   return deepFreeze({ code, message, nodeKeys: [...nodeKeys], edgeKeys: [...edgeKeys] });
 }
 
-export function sortIssues(issues: readonly AdmissionIssue[]): AdmissionIssue[] {
+function sortIssues(issues: readonly AdmissionIssue[]): AdmissionIssue[] {
   return [...issues].sort((left, right) => {
     const a = JSON.stringify(left);
     const b = JSON.stringify(right);
@@ -170,20 +165,8 @@ export function refuse(issues: readonly AdmissionIssue[]): AdmissionResult {
   return deepFreeze({ ok: false, issues: sortIssues(issues) });
 }
 
-export function isRef(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
 export function isDigest(value: unknown): value is string {
   return typeof value === "string" && HEX_64.test(value);
-}
-
-export function isVersion(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && !Object.is(value, -0);
-}
-
-export function oneOf<T extends string>(value: unknown, values: readonly T[]): value is T {
-  return typeof value === "string" && (values as readonly string[]).includes(value);
 }
 
 /**

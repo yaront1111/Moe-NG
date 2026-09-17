@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 
+import { sha256Hex } from "../../live/live-wire-primitives.js";
 import type { GoalDraftPrd } from "./goal-model.js";
 import { PRD_LOCAL_LAYER } from "./new-goal-form-model.js";
 import type { PrdReadState } from "./new-goal-form-model.js";
@@ -73,11 +74,6 @@ interface GoalPrdState {
 
 function localError(code: PrdFileReadRefusalCode): PrdFileReadRefusal {
   return Object.freeze({ code, layer: PRD_LOCAL_LAYER, status: "ERROR" as const });
-}
-
-async function sha256Hex(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export async function readGoalPrdFile(file: File): Promise<PrdFileReadResult> {

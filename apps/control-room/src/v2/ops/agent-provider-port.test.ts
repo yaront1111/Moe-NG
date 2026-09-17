@@ -4,8 +4,7 @@ import { describe, expect, it } from "vitest";
 
 import { DEV_PAYLOADS, payloadFor } from "../../live/live-dispatch.js";
 import {
-  AGENT_PROVIDER_COMMAND_KIND, AGENT_PROVIDER_PAYLOAD_ABSENT, KNOWN_PROVIDERS,
-  createAgentProviderPort, isKnownProvider,
+  AGENT_PROVIDER_COMMAND_KIND, AGENT_PROVIDER_PAYLOAD_ABSENT, KNOWN_PROVIDERS, createAgentProviderPort,
 } from "./agent-provider-port.js";
 import type { AgentProviderWire } from "./agent-provider-port.js";
 
@@ -45,13 +44,6 @@ describe("the browser's provider roster is the daemon's", () => {
     const declared = [...body.matchAll(/"(?<name>[a-z0-9-]+)"/gu)].map((match) => match.groups?.["name"]);
     expect(declared.length).toBeGreaterThan(0);
     expect(declared).toEqual([...KNOWN_PROVIDERS]);
-  });
-
-  it("admits exactly the declared providers", () => {
-    for (const provider of KNOWN_PROVIDERS) expect(isKnownProvider(provider)).toBe(true);
-    for (const other of ["", "CLAUDE", "gpt", "claude ", "codex-cli"]) {
-      expect(isKnownProvider(other)).toBe(false);
-    }
   });
 });
 

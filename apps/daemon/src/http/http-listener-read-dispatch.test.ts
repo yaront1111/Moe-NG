@@ -170,15 +170,17 @@ const UNPROXIED_SERVED_PATHS: readonly string[] = Object.freeze([]);
  * both. `/preview/capture` moves to the permitted-non-JSON list below rather than here: it is
  * consumed and served, but it answers image bytes outside JSON_ROUTES.
  *
- * /documents/ingest: apps/control-room/src/live/live-document-ingest.ts declares
- * the route and decodes its three answers, but NOTHING IMPORTS THAT MODULE - the
- * only two hits for its name are prose in live-planning-run.ts:8,115 saying the
- * discipline was copied from it. It is a dead module, so the ingest route has no
- * reachable call site. Named here rather than special-cased; building the ingest
- * control is a screen row, not this proof row (task rail 1).
- * /budget/commitment/read: consumed ONLY by the retired v1 shell. The product
- * entry no longer imports that shell, including in development, so the route
- * remains absent from the shipped artifact measured by the walk below.
+ * /documents/ingest: the browser-side ingest client (live-document-ingest.ts) that
+ * declared the route and decoded its three answers was a dead module - nothing
+ * imported it - and it was deleted with the v1 control-room UI on 2026-09-17. Today
+ * only live/dev-proxy-paths.ts spells the path, and no module reachable from
+ * main.tsx fetches it, so the ingest route has no reachable call site. Named here
+ * rather than special-cased; building the ingest control is a screen row, not this
+ * proof row (task rail 1).
+ * /budget/commitment/read: live/live-budget-commitment.ts still declares the path,
+ * but its only consumer reachable from the product entry was the v1 shell, deleted
+ * with the v1 UI on 2026-09-17. No module reachable from main.tsx fetches it, so the
+ * route remains absent from the shipped artifact measured by the walk below.
  *
  * /graph/get was retired from this census by live-graph-get.ts, whose readGraphGet
  * is CALLED from the production entry's graph: cordum-app.tsx composes

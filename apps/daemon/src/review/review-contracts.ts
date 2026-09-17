@@ -6,6 +6,11 @@ import type {
   RuntimeCommandKind,
 } from "@moe/contracts";
 
+import { isObject as isPlainJsonObject, ref as isRef } from "../json-record-shape.js";
+
+/** Re-exported under its ingress name: only the bounded decoder yields a null prototype. */
+export { isObject as isPlainJsonObject } from "../json-record-shape.js";
+
 /**
  * Byte ingress for the review-flow command surface (design 15.2, journey J4).
  *
@@ -194,24 +199,6 @@ const COMMAND_UNKNOWN: ReviewRequestRefused = Object.freeze({
 
 const KIND_SET: ReadonlySet<string> = new Set<string>(REVIEW_COMMAND_KINDS);
 const KEY_SET: ReadonlySet<string> = new Set<string>(REVIEW_REQUEST_KEYS);
-
-/**
- * `decodeBoundedJsonBytes` yields null-prototype objects, so any other prototype means the value
- * did not come from the bounded decoder and is not trusted here.
- */
-export function isPlainJsonObject(value: JsonValue | undefined): value is JsonObject {
-  return (
-    value !== null
-    && value !== undefined
-    && typeof value === "object"
-    && !Array.isArray(value)
-    && Object.getPrototypeOf(value) === null
-  );
-}
-
-function isRef(value: JsonValue | undefined): value is string {
-  return typeof value === "string" && value.length > 0;
-}
 
 function hasExactKeys(request: JsonObject): boolean {
   const keys = Object.keys(request);

@@ -29,6 +29,7 @@ import {
   keyEpochAggregateId,
   readKeyEpochPointer,
 } from "./recovery-key-epoch-store.js";
+import type { RecoveryKeyEpochPointer } from "./recovery-key-epoch-store.js";
 import { createRecoveryKeyProvider } from "./recovery-key-provider.js";
 import { readSuccessionChain } from "./recovery-succession.js";
 
@@ -379,27 +380,32 @@ const seedUnreadablePointer = (store: SqliteEventStore): void => {
   });
 };
 
-const seedDanglingPointer = (store: SqliteEventStore): void => {
-  const bytes = encodeKeyEpochPointer({
+/** A well-formed pointer row written at ITS generation, so a seed can follow a real advance. */
+const seedPointer = (store: SqliteEventStore, pointer: RecoveryKeyEpochPointer): void => {
+  const bytes = encodeKeyEpochPointer(pointer);
+  const aggregateId = keyEpochAggregateId(PROJECT_ID, RESTORE_COMMAND_ID);
+  const commandId = `${aggregateId}:${String(pointer.generation)}`;
+  store.commitExpectedVersionDecision({
+    commandKind: RECOVERY_KEY_EPOCH_COMMAND_KIND,
+    committedResultBytes: bytes,
+    correlationId: CORRELATION_ID,
+    decidedAt: AT,
+    events: [{ eventId: `${commandId}:advanced`, eventType: "RecoveryKeyEpochAdvanced", payload: bytes }],
+    expectedVersion: pointer.generation,
+    key: { commandId, principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
+    requestBytes: bytes,
+    targetAggregateId: aggregateId,
+  });
+};
+
+const seedDanglingPointer = (store: SqliteEventStore): void =>
+  seedPointer(store, {
     generation: 0,
     headIncarnationRef: UNANCHORED_REF,
     originIncarnationRef: UNANCHORED_REF,
     restoreCommandId: RESTORE_COMMAND_ID,
     schemaVersion: RECOVERY_KEY_EPOCH_SCHEMA_VERSION,
   });
-  const aggregateId = keyEpochAggregateId(PROJECT_ID, RESTORE_COMMAND_ID);
-  store.commitExpectedVersionDecision({
-    commandKind: RECOVERY_KEY_EPOCH_COMMAND_KIND,
-    committedResultBytes: bytes,
-    correlationId: CORRELATION_ID,
-    decidedAt: AT,
-    events: [{ eventId: `${aggregateId}:0:advanced`, eventType: "RecoveryKeyEpochAdvanced", payload: bytes }],
-    expectedVersion: 0,
-    key: { commandId: `${aggregateId}:0`, principalId: PRINCIPAL_ID, projectId: PROJECT_ID },
-    requestBytes: bytes,
-    targetAggregateId: aggregateId,
-  });
-};
 
 /** Establishes a real epoch, then crosses the connection boundary a restart crosses. */
 const coldStartThenRestart = async (state: Harness): Promise<void> => {
@@ -547,5 +553,51 @@ describe("no private key material reaches anything durable", () => {
     const lengths = [...durable.matchAll(HEX_RUN)].map((match) => match[0].length / 2);
     expect(lengths.length).toBeGreaterThan(0);
     expect([...new Set(lengths)].sort((left, right) => left - right)).toEqual([32, 44, 64]);
+  });
+});
+
+/**
+ * A pointer whose origin is not the one its chain resolves to — a damaged or
+ * tampered row. That it is refused is pinned above; this pins WHEN. A refusal
+ * that first anchors a successor, records a succession and advances the pointer
+ * grows the store on every daemon start, copies the drift into the new pointer
+ * and never opens, so nothing ever heals. The chain is readable from the head
+ * before anything is minted, which is where the drift has to be refused.
+ */
+describe("a pointer whose origin disagrees with its succession chain", () => {
+  it("is refused before any write, and every restart finds the store as it was", async () => {
+    const state = harness();
+    const first = opened(await open(state.store));
+    seedPointer(state.store, {
+      generation: 1,
+      headIncarnationRef: first.incarnationRef,
+      originIncarnationRef: UNANCHORED_REF,
+      restoreCommandId: RESTORE_COMMAND_ID,
+      schemaVersion: RECOVERY_KEY_EPOCH_SCHEMA_VERSION,
+    });
+    const drifted = readKeyEpochPointer(state.store, PROJECT_ID, RESTORE_COMMAND_ID);
+    expect(drifted).toMatchObject({
+      pointer: { generation: 1, originIncarnationRef: UNANCHORED_REF },
+      state: "PRESENT",
+    });
+
+    // Two starts, not one: the second is the restart the drift would otherwise
+    // grow under, and it must read exactly what the first left behind.
+    for (const restart of [1, 2]) {
+      const store = state.reopen();
+      const before = decisionCount(store);
+      const destroyed: RecoveryIncarnationKeyHandle[] = [];
+      const refused = await open(store, {}, fakePort(), observedCrypto(destroyed));
+      expect(answerOf(refused)).toBe("RECOVERY_KEY_PROVIDER/RECOVERY_KEY_EPOCH_POINTER_UNREADABLE");
+      // No anchor, no succession row, no advance: the pointer still names the
+      // first incarnation at generation 1 and its chain is still empty.
+      expect(decisionCount(store), `restart ${String(restart)}`).toBe(before);
+      expect(readKeyEpochPointer(store, PROJECT_ID, RESTORE_COMMAND_ID)).toEqual(drifted);
+      const chain = readSuccessionChain(store, PROJECT_ID, first.incarnationRef);
+      if (!chain.ok) throw new Error(`expected a chain, got ${chain.code}`);
+      expect(chain.links).toHaveLength(0);
+      // Nothing was minted, so there was no key to destroy.
+      expect(destroyed).toHaveLength(0);
+    }
   });
 });

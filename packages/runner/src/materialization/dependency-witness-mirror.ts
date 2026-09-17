@@ -212,7 +212,7 @@ export function parseMonotonicRegistry(value: unknown): MirroredMonotonicProof[]
     if (item === null || !isRef(item["predicateRef"]) || !isRef(item["schemaId"])) return null;
     if (!isCount(item["schemaVersion"])) return null;
     if (!oneOf(item["sourceOperationClass"], MIRRORED_SOURCE_OPERATION_CLASSES)) return null;
-    // The authority dedupes on exactly this key (dependency-contract.ts:189).
+    // The authority dedupes on exactly this key (dependency-contract.ts:176).
     // Without it, two proofs for one predicate would resolve by list order and
     // this mirror would accept a registry the scheduler refuses.
     const key = JSON.stringify([item["predicateRef"], item["schemaId"], item["schemaVersion"]]);

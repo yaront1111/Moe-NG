@@ -128,7 +128,7 @@ export async function runSingleProjectMain(options: ProjectSingleMainOptions): P
       openBoundary: dependencies.openBoundary,
       // Measured, like daemon-main.ts: the hosted daemon can only report what THIS
       // process consumes, and it used to assert a channel whatever the console was.
-      operatorChannelAvailable: options.operatorInput !== undefined,
+      operatorChannelAvailable: () => options.operatorInput !== undefined,
       root: options.root,
     }),
   });

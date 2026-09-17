@@ -3,11 +3,14 @@ import { createHash, generateKeyPairSync, sign } from "node:crypto";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  DurableStoreError,
+  ExpectedVersionConflictError,
+  IdempotencyConflictError,
   MAX_EVENTS_PER_COMMIT,
   RECOVERY_BINDING_CODEC_VERSION,
   verifyBackupGeneration,
 } from "@moe/store";
-import type { SqliteEventStore } from "@moe/store";
+import type { DurableStoreErrorCode, SqliteEventStore } from "@moe/store";
 
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import {
@@ -793,6 +796,25 @@ function appendReplayPadding(scene: Scenario): number {
   return generated;
 }
 
+/**
+ * The REAL store with ONE seam widened: the completion's own commit throws the
+ * store's error. Every other method, including every evidence read, stays
+ * bound to the real store, so the refusal is judged on the fault alone. The
+ * session authority holds its own reference to the real store, so the proof
+ * burn at (E) is untouched. Borrowed from budget-settlement-application.test.ts.
+ */
+function refuseCompletionCommit(store: SqliteEventStore, fault: Error): SqliteEventStore {
+  return new Proxy(store, {
+    get(target, property): unknown {
+      const held: unknown = Reflect.get(target, property, target);
+      if (typeof held !== "function") return held;
+      const method = held as (...args: unknown[]) => unknown;
+      if (property !== "commitExpectedVersionDecision") return method.bind(target);
+      return (): unknown => { throw fault; };
+    },
+  });
+}
+
 /** No refusal may leave a decision, an event, or a cleared quiesce behind. */
 function expectNothingWritten(scene: Scenario, commandId = "recovery-complete-1"): void {
   expect(scene.store.getCommandDecision({
@@ -1175,6 +1197,55 @@ describe("recovery.complete durable command", () => {
     expect(outcome.code).toBe("RECOVERY_COMPLETION_STALE");
     expect(outcome.refusedBy).toBe("RECOVERY_COMPLETION");
     expectNothingWritten(scene);
+  });
+
+  it("calls only the store's own CAS loss stale when the commit throws", async () => {
+    // A thrown IDEMPOTENCY_CONFLICT is a second writer binding this command
+    // identity to other bytes between the replay lookup and the commit: the
+    // same benign refusal the replay path names, never a store to repair. A
+    // thrown OUTCOME_UNKNOWN is the poisoned store saying the decision MAY
+    // have landed; BUSY, UNAVAILABLE and CORRUPT are faults the operator
+    // repairs. None of them is "the project moved": that answer sends the
+    // operator to re-observe a version that never changed, or to retry a
+    // completion that may already have cleared QUIESCED.
+    const scene = await scenario();
+    const faults: readonly (readonly [DurableStoreErrorCode, string])[] = [
+      ["EXPECTED_VERSION_CONFLICT", "RECOVERY_COMPLETION_STALE"],
+      ["IDEMPOTENCY_CONFLICT", "RECOVERY_COMPLETION_IDEMPOTENCY_CONFLICT"],
+      ["OUTCOME_UNKNOWN", "RECOVERY_COMPLETION_STORE_UNAVAILABLE"],
+      ["STORE_BUSY", "RECOVERY_COMPLETION_STORE_UNAVAILABLE"],
+      ["STORE_UNAVAILABLE", "RECOVERY_COMPLETION_STORE_UNAVAILABLE"],
+      ["STORE_CORRUPT", "RECOVERY_COMPLETION_STORE_UNAVAILABLE"],
+    ];
+    for (const [index, [upstreamCode, code]] of faults.entries()) {
+      const commandId = `recovery-complete-fault-${index}`;
+      const fault = upstreamCode === "EXPECTED_VERSION_CONFLICT"
+        ? new ExpectedVersionConflictError(PROJECT_ID, scene.version, scene.version + 1)
+        : upstreamCode === "IDEMPOTENCY_CONFLICT"
+          ? new IdempotencyConflictError({
+            commandId, principalId: PRINCIPAL_ID, projectId: PROJECT_ID,
+          })
+          : new DurableStoreError(upstreamCode, "the completion commit threw");
+      // A fresh nonce per fault: the proof burn at (E) rides the real store.
+      const outcome = runRecoveryCompleteCommand(
+        refuseCompletionCommit(scene.store, fault),
+        requestBytes(scene, { commandId, nonce: `6${index}`.repeat(16) }),
+        scene.authority,
+      );
+      expect(outcome.ok, upstreamCode).toBe(false);
+      if (outcome.ok) throw new Error("unreachable");
+      expect(outcome.code, upstreamCode).toBe(code);
+      expect(outcome.refusedBy, upstreamCode).toBe("RECOVERY_COMPLETION");
+      expect(outcome.upstream, upstreamCode).toStrictEqual({
+        code: upstreamCode, layer: "DURABLE_STORE",
+      });
+      // Its own not-proven result: neither "the project moved" nor "a read failed".
+      if (upstreamCode === "OUTCOME_UNKNOWN") {
+        expect(outcome.reason).toMatch(/prove/u);
+        expect(outcome.reason).not.toMatch(/moved|read/u);
+      }
+      expectNothingWritten(scene, commandId);
+    }
   });
 
   it("refuses a second completion on an already-recovered project", async () => {

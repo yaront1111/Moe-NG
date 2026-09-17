@@ -1,8 +1,9 @@
 import { afterEach, expect, it } from "vitest";
 import { readDesignRevision, submitDesignRevision } from "../design/design-store.js";
 import { designRevisionFixture, secondDesignRevisionFixture } from "../design/design-test-fixtures.js";
-import { approveGate1, boundWorld, closeStores, committedRevision, GOAL_ID, PROJECT_ID, submit }
-  from "./plan-reject-test-fixtures.js";
+import {
+  approveGate1, boundWorld, closeStores, committedRevision, GOAL_ID, PROJECT_ID, RUN_ID, submit,
+} from "./plan-reject-test-fixtures.js";
 import { decodeCompiledContractBinding, readCompiledContractBinding } from "./compiled-contract-binding.js";
 
 afterEach(closeStores);
@@ -51,6 +52,23 @@ it("retains the design revision sealed with the plan after a new design is submi
     ok: true, binding: { designVersion: 1 },
   });
   expect(submit(store, ref)).toMatchObject({ ok: true, disposition: "REPLAYED" });
+});
+
+it("refuses a design drawn against ANOTHER approved revision at the contract authority's layer", () => {
+  const store = boundWorld(); const first = committedRevision(store); approveGate1(store, first);
+  expect(submitDesignRevision(store, { commandId: "design-r1", correlationId: "design-r1",
+    decidedAt: "2026-09-05T09:00:00.000Z", expectedVersion: 0, goalRef: GOAL_ID,
+    projectId: PROJECT_ID, principalId: "designer-agent", contractRef: first,
+    revision: designRevisionFixture() }).ok).toBe(true);
+  const second = committedRevision(store, false, "revision-0002");
+  approveGate1(store, second, "cmd-gate1-approve-2");
+  // Code AND layer: DESIGN_CONTRACT_NOT_APPROVED is the design slice's code, and every consumer
+  // keyed on (code, layer) — design-contracts.ts:72, daemon-command-design.ts:19 — reads it at
+  // CONTRACT_AUTHORITY. Answering it under this dispatcher's own layer misattributes the refusal.
+  expect(submit(store, second)).toEqual({
+    code: "DESIGN_CONTRACT_NOT_APPROVED", layer: "CONTRACT_AUTHORITY", ok: false,
+  });
+  expect(store.getAggregateVersion(RUN_ID)).toBe(0);
 });
 
 it("keeps a plan compiled without design absent after a design is added", () => {

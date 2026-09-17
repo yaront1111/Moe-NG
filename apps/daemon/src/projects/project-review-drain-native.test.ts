@@ -1,12 +1,29 @@
-import { spawn } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, win32 } from "node:path";
 import { pathToFileURL } from "node:url";
+import { promisify } from "node:util";
 import { randomUUID } from "node:crypto";
 import { describe, expect, it } from "vitest";
 import { createProjectReviewDrainPort } from "./project-review-drain.js";
 import { drainWithNativeFault } from "./project-review-drain-fault-test-fixtures.js";
+
+/**
+ * The controller's birth as the kernel stamps it, truncated to the millisecond the drain wire carries
+ * (windows-latest, 2026-09-17). A cutoff stamped from Date.now() right after the identity line raced
+ * that clock: V8 interpolates Date.now() from a coarse system-time sample and trails the kernel's
+ * process-creation clock by up to one 15.625 ms timer tick, so the stamp could precede the birth and
+ * the observer refused IDENTITY_MISMATCH before a scenario's own fault was ever reached.
+ */
+async function bornMillisecond(pid: number): Promise<string> {
+  expect(Number.isInteger(pid) && pid > 0).toBe(true);
+  const { stdout } = await promisify(execFile)(win32.join(process.env["SystemRoot"]!, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+    ["-NoProfile", "-NonInteractive", "-Command", `[System.Diagnostics.Process]::GetProcessById(${String(pid)}).StartTime.ToUniversalTime()`
+      + ".ToString('yyyy-MM-ddTHH:mm:ss.fffZ',[System.Globalization.CultureInfo]::InvariantCulture)"], { windowsHide: true });
+  expect(stdout.trim()).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u);
+  return stdout.trim();
+}
 
 describe.skipIf(process.platform !== "win32")("private real Windows project Job drain", () => {
   it.each(["drain", "operator-stdin", "recover-review", "manager", "different-workspace", "controller-too-new", "extra-argument",
@@ -48,8 +65,10 @@ const result=await boundary.completed;process.exit(result.truthClass==='PROVEN'?
       while (!output.includes("\n") && !closed && Date.now() < deadline) await new Promise((done) => setTimeout(done, 50));
       expect(output, errors).toContain("\n");
       const identity = JSON.parse(output.trim()) as { controllerPid: number; daemonPid: number };
+      const born = await bornMillisecond(identity.controllerPid);
+      // The cutoff's own grain: the controller's birth millisecond is not newer than it; the one before is.
       const input = { controllerPid: identity.controllerPid,
-        notStartedAfter: scenario === "controller-too-new" ? "1970-01-01T00:00:00.000Z" : new Date().toISOString(),
+        notStartedAfter: scenario === "controller-too-new" ? new Date(Date.parse(born) - 1).toISOString() : born,
         workspace: scenario === "different-workspace" ? join(root, "different") : root };
       if (["access-denied", "query-only", "query-failed", "active-members"].includes(scenario)) {
         const failure = await drainWithNativeFault(input, scenario);

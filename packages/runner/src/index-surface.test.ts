@@ -1024,10 +1024,10 @@ it("withholds every runtime capability the pin-request factory mints", () => {
   const withheld = [
     "createNodeClaudeRuntimeFs", "RUNTIME_PIN_CHUNK_BYTES", "observeInstalledClaudeRuntime",
     "probeClaudeRuntime", "ClaudeRuntimeObservationRefused", "prepareClaudeRuntimePin",
-    "CLAUDE_LAUNCHER_DEFAULTS", "discoverSources", "resolveSources", "readQuote",
+    "CLAUDE_LAUNCHER_DEFAULTS", "resolveSources", "readQuote",
     "inspectSources", "snapshotSourceCandidates", "aggregateClosureDigest", "authorityDigest",
   ];
-  expect(withheld.length).toBe(14);
+  expect(withheld.length).toBe(13);
   // Read off the imported NAMESPACE, never the barrel's text: the root re-exports
   // with `export *`, which a grep cannot see through.
   expect(withheld.filter((name) => name in surface)).toEqual([]);

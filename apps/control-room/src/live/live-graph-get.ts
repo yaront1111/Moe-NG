@@ -10,6 +10,8 @@
  * does not name is an ERROR, never a silently truncated graph.
  */
 
+import { exactDataRecord, listOf } from "./live-wire-primitives.js";
+
 const LIVE_GRAPH_GET_LAYER = "CONTROL_ROOM_LIVE_GRAPH_GET";
 const INVALID_RESPONSE_CODE = "GRAPH_GET_RESPONSE_INVALID";
 const TRANSPORT_FAILED_CODE = "TRANSPORT_REQUEST_FAILED";
@@ -64,26 +66,6 @@ const errored = (code: string, layer: string): GraphGetOutcome =>
   Object.freeze({ code, layer, status: "ERROR" as const });
 const invalidResponse = (): GraphGetOutcome => errored(INVALID_RESPONSE_CODE, LIVE_GRAPH_GET_LAYER);
 
-function exactDataRecord(value: unknown, expectedKeys: readonly string[]): Readonly<Record<string, unknown>> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  try {
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return null;
-    const keys = Reflect.ownKeys(value);
-    if (keys.length !== expectedKeys.length
-      || keys.some((key) => typeof key !== "string" || !expectedKeys.includes(key))) return null;
-    const snapshot: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
-    for (const key of expectedKeys) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) return null;
-      snapshot[key] = descriptor.value;
-    }
-    return Object.freeze(snapshot);
-  } catch {
-    return null;
-  }
-}
-
 function refusalFrom(response: unknown): GraphGetOutcome | null {
   const listener = exactDataRecord(response, ["code", "layer"]);
   if (listener !== null && typeof listener.code === "string" && typeof listener.layer === "string") {
@@ -130,17 +112,6 @@ function edgeOf(value: unknown): GraphGetEdgeView | null {
     consumerNodeKey: record.consumerNodeKey, edgeKey: record.edgeKey,
     kind: record.kind, producerNodeKey: record.producerNodeKey,
   });
-}
-
-function listOf<T>(value: unknown, map: (item: unknown) => T | null): readonly T[] | null {
-  if (!Array.isArray(value)) return null;
-  const items: T[] = [];
-  for (const item of value) {
-    const mapped = map(item);
-    if (mapped === null) return null;
-    items.push(mapped);
-  }
-  return Object.freeze(items);
 }
 
 function snapshotOf(value: unknown): GraphGetSnapshotView | null {

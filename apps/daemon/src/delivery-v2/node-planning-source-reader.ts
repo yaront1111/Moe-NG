@@ -1,11 +1,9 @@
 import { NODE_AUTHORITY_LIMITS } from "@moe/scheduler";
 import { DurableStoreError, type SqliteEventStore } from "@moe/store";
 
-import {
-  DELIVERY_V2_READER_LAYER,
-  type DeliveryV2Refusal,
-} from "./contracts.js";
+import type { DeliveryV2Refusal } from "./contracts.js";
 import { captureDeliveryV2SingleEventPage } from "./event-read-snapshot.js";
+import { refuseDeliveryV2InertRead as refuse } from "./inert-record-admission.js";
 import { admitDeliveryV2MaterialPublisherPrincipalId }
   from "./material-publisher-admission.js";
 import {
@@ -38,10 +36,6 @@ export type DeliveryV2NodePlanningSourceReadResult =
 
 const REF_KEYS = Object.freeze(["nodeKey", "projectId", "revisionDigest", "sourceDigest"]);
 const NODE_PLANNING_SOURCE_EVENT_READ_MAX_BYTES = NODE_AUTHORITY_LIMITS.maxBytes + 65_536;
-const refuse = (
-  code: DeliveryV2Refusal["code"],
-  layer: DeliveryV2Refusal["layer"] = DELIVERY_V2_READER_LAYER,
-): DeliveryV2Refusal => Object.freeze({ code, layer, ok: false as const });
 const storageRefusal = (error: unknown): DeliveryV2Refusal => error instanceof DurableStoreError
   ? refuse(error.code, "DURABLE_STORE") : refuse("STORAGE_DEGRADED");
 

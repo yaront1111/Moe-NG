@@ -1441,8 +1441,8 @@ describe("the live daemon composition arms the reconciler across a restart", () 
     let provider: ReturnType<typeof boot> | null = null;
     try {
       provider = boot();
-      // The health sweep and this reconciler, both armed by their own registrations.
-      expect(timers.size).toBe(2);
+      // The health sweep, the scheduled backup and this reconciler, each armed by its own registration.
+      expect(timers.size).toBe(3);
       await tickAll();
       expect(fallbackCalls).toEqual([]);
       // POSITIVE CONTROL: an id the composition does NOT reserve is delegated, so the host resolver
@@ -1455,7 +1455,7 @@ describe("the live daemon composition arms the reconciler across a restart", () 
       expect(timers.size).toBe(0);
 
       provider = boot();
-      expect(timers.size).toBe(3);
+      expect(timers.size).toBe(4);
       expect(provider.schedules().refusals()).toEqual([]);
       await tickAll();
       expect(fallbackCalls.filter((id) => id === "unrelated-host-job")).toHaveLength(1);

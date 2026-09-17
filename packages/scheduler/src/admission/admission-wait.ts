@@ -1,7 +1,6 @@
 /**
- * Intentional-wait and bounded blocker-challenge REPRESENTATION plus
- * admission-time validation. Nothing in this module schedules, enqueues, or
- * transitions anything.
+ * Intentional-wait REPRESENTATION plus admission-time validation. Nothing in
+ * this module schedules, enqueues, or transitions anything.
  *
  * CONSUMED BY, and deliberately not the other way round: the supersession carry
  * of wait/blocker projections is LANDED in
@@ -23,10 +22,6 @@ import {
   DEPENDENCY_GATES, type DependencyGate,
 } from "../dependencies/dependency-contract.js";
 import { isWithinHorizon } from "../dependencies/dependency-witness.js";
-import {
-  validateDependencyChallenge,
-  type DependencyAnalysisIssue, type DependencyChallenge,
-} from "../dependencies/dependency-analysis.js";
 import { isGraphKey } from "../graph-key.js";
 import type { GraphKey } from "../graph-model.js";
 import {
@@ -59,16 +54,6 @@ export interface IntentionalWait {
 export type AdmissionWaitResult =
   | { readonly ok: true; readonly wait: IntentionalWait }
   | { readonly ok: false; readonly issues: readonly AdmissionIssue[] };
-
-/** A validated challenge PROPOSAL. Approved supersession stays the only mutation path. */
-export interface AdmissionChallengeRecord {
-  readonly challenge: DependencyChallenge;
-  readonly reviewOnly: true;
-}
-
-export type AdmissionChallengeResult =
-  | { readonly ok: true; readonly record: AdmissionChallengeRecord }
-  | { readonly ok: false; readonly issues: readonly DependencyAnalysisIssue[] };
 
 const WAIT_KEYS = ["waitRef", "ownerNodeKey", "reason", "predicate", "affectedScope",
   "recheckAtGate", "deadlineGate", "escalation", "binding"] as const;
@@ -133,31 +118,4 @@ export function validateIntentionalWait(input: unknown): AdmissionWaitResult {
       binding: { graphIdentity: binding.graphIdentity, sourceFactVersions: facts },
     },
   });
-}
-
-/**
- * Admit a bounded blocker challenge. Delegates entirely to the landed
- * `validateDependencyChallenge` — dedup identity, the SEMANTIC_PREREQUISITE
- * current-contract reference, foreign holds and mutual holds are its rules, and
- * its `DEPENDENCY_CHALLENGE_*` codes pass through unchanged rather than being
- * re-coded with an admission-local synonym.
- */
-export function admitDependencyChallenge(challenge: unknown, context: unknown): AdmissionChallengeResult {
-  const validated = validateDependencyChallenge(challenge, context);
-  return validated.ok
-    ? deepFreeze({ ok: true, record: { challenge: validated.challenge, reviewOnly: true } })
-    : deepFreeze({ ok: false, issues: validated.issues });
-}
-
-/**
- * Pure predicate over caller-supplied facts: a TIME-ONLY challenge is suppressed
- * only while the wait is still inside its declared deadline AND no new evidence
- * has arrived. New evidence always wins (design 415), and any non-boolean
- * evidence flag or unvalidated wait fails open — never silently suppressing.
- */
-export function isTimeChallengeSuppressed(wait: unknown, currentGate: unknown, hasNewEvidence: unknown): boolean {
-  if (hasNewEvidence !== false) return false;
-  const validated = validateIntentionalWait(wait);
-  if (!validated.ok || !oneOf(currentGate, DEPENDENCY_GATES)) return false;
-  return isWithinHorizon(currentGate, validated.wait.deadlineGate);
 }

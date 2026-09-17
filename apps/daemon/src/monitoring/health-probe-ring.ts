@@ -30,10 +30,13 @@ function probeOf(value: unknown): HealthProbe | null {
   return Object.freeze({ version, environment: environment as string, sha: sha as string, status, latencyMs, at });
 }
 
-function initialize(database: DatabaseSync, create: boolean): void {
+/** True when this call wrote the schema: only an EMPTY store is created, and only by an append. */
+function initialize(database: DatabaseSync, create: boolean): boolean {
   const app = database.prepare("PRAGMA application_id").get()?.application_id;
   const version = database.prepare("PRAGMA user_version").get()?.user_version;
-  if (create && app === 0 && version === 0 && database.prepare("SELECT name FROM sqlite_master").all().length === 0) {
+  const created = create && app === 0 && version === 0
+    && database.prepare("SELECT name FROM sqlite_master").all().length === 0;
+  if (created) {
     database.exec(`CREATE TABLE health_probes (
       sequence INTEGER PRIMARY KEY, project_id TEXT NOT NULL, environment TEXT NOT NULL,
       version TEXT NOT NULL, sha TEXT NOT NULL, status TEXT NOT NULL, latencyMs INTEGER NOT NULL, at TEXT NOT NULL
@@ -45,6 +48,7 @@ function initialize(database: DatabaseSync, create: boolean): void {
   if (names.join("\n") !== ["health_incidents", "health_incidents_one_open", "health_probe_scope", "health_probes"].join("\n")) {
     throw new Error("PROBE_STORE_UNAVAILABLE");
   }
+  return created;
 }
 
 function access<T>(path: string, operation: (database: DatabaseSync) => T, create = false): HealthProbeResult<T> {
@@ -52,13 +56,13 @@ function access<T>(path: string, operation: (database: DatabaseSync) => T, creat
   let transaction = false;
   try {
     if (!isAbsolute(path)) return refusal("PROBE_STORE_UNAVAILABLE");
-    const existed = existsSync(path);
-    if (!existed && !create) return refusal("PROBE_STORE_UNAVAILABLE");
+    if (!create && !existsSync(path)) return refusal("PROBE_STORE_UNAVAILABLE");
     database = new DatabaseSync(path);
     database.exec("PRAGMA busy_timeout = 1000; PRAGMA synchronous = FULL; BEGIN IMMEDIATE");
     transaction = true;
-    initialize(database, create && !existed);
-    if (!existed) chmodSync(path, 0o600);
+    // The open above already created the file; a first append that died before COMMIT leaves it
+    // 0 bytes, an EMPTY store to initialize now rather than a foreign one to refuse on every tick.
+    if (initialize(database, create)) chmodSync(path, 0o600);
     const value = operation(database);
     database.exec("COMMIT"); transaction = false;
     return Object.freeze({ ok: true, value });

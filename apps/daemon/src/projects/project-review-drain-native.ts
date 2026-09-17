@@ -38,6 +38,8 @@ public static class MoeReviewDrain {
  [DllImport("shell32.dll",SetLastError=true,CharSet=CharSet.Unicode)] static extern IntPtr CommandLineToArgvW(string command,out int count);
  [DllImport("kernel32.dll")] static extern IntPtr LocalFree(IntPtr handle);
  const string Identity="RUNTIME_REVIEW_DRAIN_IDENTITY_MISMATCH",Unknown="RUNTIME_REVIEW_DRAIN_UNPROVEN";
+ // FILETIME counts 100 ns; the cutoff on the wire carries milliseconds.
+ const long Millisecond=10000;
  static readonly List<IntPtr> held=new List<IntPtr>();
  static IntPtr job=IntPtr.Zero;
  static Task<string> closeRequest;
@@ -137,7 +139,10 @@ public static class MoeReviewDrain {
   Need(IntPtr.Size==8,Unknown);
   long cutoff=DateTimeOffset.Parse(notStartedAfter,CultureInfo.InvariantCulture,DateTimeStyles.RoundtripKind).UtcDateTime.ToFileTimeUtc();
   IntPtr controller=Open(controllerPid,0); long controllerBorn=Born(controller);
-  Need(controllerBorn<=cutoff,Identity);
+  // Compare at the cutoff's own grain, and no wider (addendum 2026-09-17): the decoder and validDrain
+  // compare the stamped millisecond, so a controller born inside the cutoff's millisecond is not proven
+  // newer than it, while the millisecond before the cutoff still refuses.
+  Need(controllerBorn/Millisecond<=cutoff/Millisecond,Identity);
   uint daemonPid=Parent(controller); IntPtr daemon=Open(daemonPid,0); long daemonBorn=Born(daemon);
   uint brokerPid=Parent(daemon); IntPtr broker=Open(brokerPid,0x440); long brokerBorn=Born(broker);
   uint cliPid=Parent(broker); IntPtr cli=Open(cliPid,1); long cliBorn=Born(cli);

@@ -106,7 +106,7 @@ describe("createProjectBoundaryOpener", () => {
       },
       nodeExecutable: "C:\\Program Files\\nodejs\\node.exe",
       openBoundary,
-      operatorChannelAvailable: false,
+      operatorChannelAvailable: () => false,
       root: "D:\\artifact",
     });
     expect(opener(ENTRY)).toMatchObject({ truthClass: "UNKNOWN" });
@@ -156,7 +156,7 @@ describe("createProjectBoundaryOpener", () => {
         launchFs,
         nodeExecutable: "C:\\node.exe",
         openBoundary,
-        operatorChannelAvailable: available,
+        operatorChannelAvailable: () => available,
         root: "D:\\artifact",
       })(ENTRY);
       expect(openBoundary, String(available)).toHaveBeenCalledWith(expect.objectContaining({
@@ -189,7 +189,7 @@ describe("createProjectBoundaryOpener", () => {
         requests.push(request);
         return { code: "PROCESS_BOUNDARY_TEST", layer: "WINDOWS_PROCESS_TEST", truthClass: "UNKNOWN" as const };
       },
-      operatorChannelAvailable: false,
+      operatorChannelAvailable: () => false,
       root: "D:\\artifact",
     });
     opener(ENTRY);
@@ -233,7 +233,7 @@ describe("createProjectBoundaryOpener", () => {
       },
       nodeExecutable: "C:\\Program Files\\nodejs\\node.exe",
       openBoundary,
-      operatorChannelAvailable: false,
+      operatorChannelAvailable: () => false,
       root: "D:\\artifact",
     });
 
@@ -277,7 +277,7 @@ describe("createProjectBoundaryOpener", () => {
         launchFs,
         nodeExecutable: "C:\\node.exe",
         openBoundary,
-        operatorChannelAvailable: false,
+        operatorChannelAvailable: () => false,
         root: "D:\\artifact",
       });
 
@@ -363,7 +363,7 @@ describe("createProjectBoundaryOpener", () => {
       },
       nodeExecutable: "C:\\Program Files\\nodejs\\node.exe",
       openBoundary,
-      operatorChannelAvailable: false,
+      operatorChannelAvailable: () => false,
       root: "D:\\artifact",
     });
 
@@ -406,7 +406,7 @@ describe("createProjectBoundaryOpener", () => {
       },
       nodeExecutable: "C:\\Program Files\\nodejs\\node.exe",
       openBoundary,
-      operatorChannelAvailable: false,
+      operatorChannelAvailable: () => false,
       root: "D:\\artifact",
     });
 
@@ -451,7 +451,7 @@ describe("createProjectBoundaryOpener", () => {
       },
       nodeExecutable: "C:\\Program Files\\nodejs\\node.exe",
       openBoundary,
-      operatorChannelAvailable: false,
+      operatorChannelAvailable: () => false,
       root: "D:\\artifact",
     })(ENTRY);
 
@@ -485,7 +485,7 @@ describe("createProjectBoundaryOpener", () => {
       },
       nodeExecutable: "C:\\node.exe",
       openBoundary,
-      operatorChannelAvailable: false,
+      operatorChannelAvailable: () => false,
       root: "D:\\artifact",
     })(ENTRY);
     expect(result).toEqual({
@@ -511,7 +511,7 @@ describe("createProjectBoundaryOpener", () => {
       },
       nodeExecutable: "C:\\node.exe",
       openBoundary,
-      operatorChannelAvailable: false,
+      operatorChannelAvailable: () => false,
       root: "D:\\artifact",
     })(ENTRY);
     expect(result).toEqual({

@@ -1,5 +1,8 @@
 import { RUNTIME_LIFECYCLES } from "@moe/contracts";
 
+import {
+  exact, isRecord, strongTruth, validExpectedVersion,
+} from "../planning/planning-snapshot.js";
 import type {
   ProjectActivationWitness,
   ProjectCommand,
@@ -10,6 +13,8 @@ import type {
   RepositoryObservation,
   RestoreQuiesceWitness,
 } from "./project-contract.js";
+
+export { validExpectedVersion };
 
 export const PROJECT_COMMAND_KINDS = Object.freeze([
   "project.register", "project.bind_repository", "project.activate",
@@ -31,14 +36,6 @@ const RECOVERY_KEYS = [
 const STATE_KEYS = [
   "lifecycle", "owner", "projectId", "recoveryRequired", "repositoryObservations", "version",
 ];
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  try {
-    return value !== null && typeof value === "object" && !Array.isArray(value);
-  } catch {
-    return false;
-  }
-}
 
 type DataSnapshot = { readonly ok: true; readonly value: unknown } | { readonly ok: false };
 const SNAPSHOT_FAILURE = Object.freeze({ ok: false as const });
@@ -94,20 +91,6 @@ function snapshotData(value: unknown, seen = new WeakSet<object>()): DataSnapsho
     seen.delete(source);
   }
 }
-function exact(
-  value: unknown,
-  keys: readonly string[],
-): value is Readonly<Record<string, unknown>> {
-  if (!isRecord(value)) return false;
-  try {
-    return Reflect.ownKeys(value).length === keys.length && keys.every((key) => {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      return descriptor !== undefined && descriptor.enumerable && "value" in descriptor;
-    });
-  } catch {
-    return false;
-  }
-}
 
 export function snapshotProjectCommand(value: unknown): ProjectCommand | undefined {
   if (!isRecord(value)) return undefined;
@@ -135,10 +118,6 @@ export function validProjectRef(value: unknown): value is string {
 
 function validHash(value: unknown): value is string {
   return typeof value === "string" && HASH_64.test(value);
-}
-
-function strongTruth(value: unknown): boolean {
-  return value === "DAEMON_VERIFIED" || value === "HUMAN_APPROVED";
 }
 
 function validLifecycle(value: unknown): value is ProjectLifecycle {
@@ -174,10 +153,6 @@ export function validRecovery(value: unknown): value is RecoveryCompletionWitnes
     && validProjectRef(value["recoveryDecisionRef"])
     && validProjectRef(value["recoveryIncarnationRef"])
     && value["truthClass"] === "HUMAN_APPROVED";
-}
-
-export function validExpectedVersion(value: unknown): value is number {
-  return Number.isSafeInteger(value) && (value as number) >= 0;
 }
 
 export function validProjectState(value: unknown): value is ProjectState {

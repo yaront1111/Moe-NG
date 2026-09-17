@@ -5,6 +5,7 @@ import { readClientClock, shapeWireObservation, shapeWireValue }
 import type { TimingReading, WireObservationRow, WireReading }
   from "../performance/wire-timing.js";
 import type { Clock } from "../performance/timing.js";
+import { isRecord } from "./live-wire-primitives.js";
 
 /**
  * Polls the daemon's committed event-page seam and reports what it actually said.
@@ -14,7 +15,7 @@ import type { Clock } from "../performance/timing.js";
  * its refusal IS the answer) carrying the daemon's code verbatim; a malformed
  * body is LIVE_FRAME_UNREADABLE. Event rows copy the wire fields and add nothing;
  * in particular no truth class is invented — the wire frame does not carry one,
- * so the presentation kernel renders these rows UNKNOWN with an ABSENT note.
+ * so the v2 truth chip (v2/components/truth-chip.tsx) renders these rows UNKNOWN.
  *
  * The acknowledgement's answer follows the same rule. Every control room shares one
  * durable subscriber id, so a rival instance can consume this one's cursor, and the
@@ -83,10 +84,6 @@ export interface LiveFeed {
 }
 
 const MAX_ROWS = 250;
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function text(value: unknown): string {
   return typeof value === "string" ? value : "";

@@ -3,7 +3,7 @@
  *
  * A REJECT mints a SUCCESSOR run (`commitIntentRejection`, approval-intent-rejection.ts) as a
  * SECONDARY leg of the rejection's decision. `readDurableLedger` keys its aggregates by
- * `decision.targetAggregateId` (bootstrap-ledger.ts:96-117), so no decision names the successor
+ * `decision.targetAggregateId` (bootstrap-ledger.ts:90-111), so no decision names the successor
  * and `versionOf` answers 0 for it FOREVER while the store observes 1. Before this row that made
  * the successor uncompilable: the dispatcher resolved the goal's ORIGINAL run, whose head is 3
  * after propose+finalize+reject, tripped the `>= 2` replay guard and handed the caller back the

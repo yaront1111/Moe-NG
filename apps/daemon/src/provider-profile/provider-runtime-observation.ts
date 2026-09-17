@@ -19,7 +19,8 @@ import { decodeBoundedJsonBytes } from "@moe/contracts";
 import { CLAUDE_RUNTIME_OBSERVATION_VERSION, observationDigestInput } from "@moe/runner";
 import type { ProviderRuntimeObservation } from "@moe/runner";
 
-import { canonicalJson, hasExactKeys, isRecord } from "./provider-profile-fields.js";
+import { isRecord } from "../value-primitives.js";
+import { canonicalJson, hasExactKeys } from "./provider-profile-fields.js";
 import {
   MAX_OBSERVATION_BYTES,
   OBSERVATION_BODY_KEYS,

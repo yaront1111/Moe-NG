@@ -1,4 +1,4 @@
-import type { ProductContractRevisionV2, ProductContractV2BudgetKind } from "@moe/core";
+import type { ProductContractV2BudgetKind } from "@moe/core";
 import type { GraphContent, GraphRevisionContent } from "@moe/scheduler";
 import type { PlannerAdmissionProfileBinding } from "./planner-admission-profile-contract.js";
 
@@ -70,13 +70,6 @@ export interface V2CompilerNodeIntent {
     builderCapabilityId: string;
     catalogRevisionDigest: string;
   }>;
-}
-
-export interface V2CompilerInput {
-  readonly completionNodeKey: string;
-  readonly contract: ProductContractRevisionV2;
-  readonly graphId: string;
-  readonly nodes: readonly V2CompilerNodeIntent[];
 }
 
 export interface V2CompiledRecipeBinding {

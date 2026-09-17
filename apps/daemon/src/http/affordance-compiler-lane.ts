@@ -25,6 +25,7 @@ import type { SqliteEventStore } from "@moe/store";
 import { stateOf } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { createGoalSourceReadPort } from "../documents/document-source-full-read.js";
+import { dataRecord } from "../json-record-shape.js";
 import { deriveProductContractRevisionAggregateId }
   from "../product-contract/product-contract-revision-store.js";
 
@@ -65,12 +66,6 @@ export type CompilerLaneFacts =
 
 export interface CompilerLanePort {
   factsFor(goalId: string): CompilerLaneFacts;
-}
-
-function dataRecord(value: unknown): Readonly<Record<string, unknown>> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Readonly<Record<string, unknown>>
-    : null;
 }
 
 function gateRefOf(value: unknown): CompilerGateRef | null {

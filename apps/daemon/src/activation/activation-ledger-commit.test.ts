@@ -112,11 +112,10 @@ function spyOn(store: SqliteEventStore, throwOnCommit?: Error): StoreSpy {
  * current version.
  *
  * This is how the multi-event aggregate is CONSTRUCTED rather than waited for.
- * The Foundation launch tail is the obvious real producer, but its only
- * composition point (`createFoundationClaudeLauncher`) has no caller yet, so a
- * test that waited for a live launch to append the tail would exercise nothing
- * and pass vacuously. The event TYPE below is the real Foundation transition
- * type, not an invented one.
+ * The Foundation launch tail's real producer is `createFoundationLauncherAuthority`,
+ * composed by `foundation-attempt-service` around a physical provider launch, so
+ * a test here cannot drive that producer without one. The event TYPE below is
+ * the real Foundation transition type, not an invented one.
  */
 function appendToAggregate(
   store: SqliteEventStore,

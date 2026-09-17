@@ -173,9 +173,10 @@ const VERSION_OCCURRENCE_EXCLUSIONS: readonly VersionOccurrenceExclusion[] = Obj
     pattern: /packageVersion: "([0-9]+\.[0-9]+\.[0-9]+)"/u,
   },
   {
-    // 9db2f27c's replan recovery CLI arm injects the package version the same way, and the
-    // 2026-09-16 arm for a start whose replan release is unproved injects a second one.
-    expectedCurrentCaptureCount: 2,
+    // 9db2f27c's replan recovery CLI arm injects the package version the same way, the
+    // 2026-09-16 arm for a start whose replan release is unproved injects a second one, and
+    // 5f641399's arm for a refusal that reports how many owners it already freed a third.
+    expectedCurrentCaptureCount: 3,
     id: "cli-replan-recovery-injected-version-fixture",
     path: "apps/daemon/src/cli/moe-cli-replan-recovery.test.ts",
     pattern: /packageVersion: "([0-9]+\.[0-9]+\.[0-9]+)"/u,
@@ -892,8 +893,9 @@ describe("release version surfaces", () => {
         .toBeGreaterThan(0);
     }
     expect(surfaces.length).toBe(13);
-    // 23 since the 2026-09-16 start-refusal arm injected a second replan recovery version.
-    expect(exclusions.length).toBe(23);
+    // 23 since the 2026-09-16 start-refusal arm injected a second replan recovery version;
+    // 24 since 5f641399's released-owners refusal arm injected a third.
+    expect(exclusions.length).toBe(24);
     expect(discovered.length).toBeGreaterThan(0);
     expect(new Set(discovered.map(({ key }) => key)).size).toBe(discovered.length);
     expect(new Set(declared.map(({ key }) => key)).size).toBe(declared.length);

@@ -31,6 +31,8 @@ import { enumerateLiveChildren, runReclaimPass } from "./agent-wrapper-reclaim.j
 
 const OPERATOR = "reclaim-operator-credential";
 const CHILD_PID = 424242;
+/** The boot every helper here records and reads under, so no case depends on the host's own. */
+const BOOT_ID = "0x45";
 const NOW = Date.now();
 const ITEM = "policy.install@reclaim-item";
 const SEAT = "sess-wrap-dead";
@@ -153,7 +155,8 @@ function writeClaim(
  */
 function recordChild(harness: Harness, childPid: number | null, workItemId = ITEM): void {
   const failures = createAgentSessionFence({
-    isProcessAlive: () => false, projectId: harness.projectId, store: harness.store,
+    hostBootId: () => BOOT_ID, isProcessAlive: () => false,
+    projectId: harness.projectId, store: harness.store,
   }).recordLiveChild({
     childPid: childPid ?? undefined, claimAggregateVersion: 1,
     sessionId: SEAT, workItemId,
@@ -174,6 +177,7 @@ function passFor(
   return runReclaimPass({
     clock: () => NOW,
     deps,
+    hostBootId: () => BOOT_ID,
     isProcessAlive,
     log: (line: string) => { harness.logged.push(line); },
     mintSecret: () => "reclaimtestnonce",
@@ -253,6 +257,88 @@ describe("runReclaimPass", () => {
       work: eventTypes(harness, `work/${ITEM}`).length,
     }).toEqual(before);
     expect(harness.logged).toEqual([`[wrapper] kept ${ITEM}: child alive`]);
+  });
+
+  it("reclaims an alive-reading pid once the host has rebooted since the record", () => {
+    // The pid-reuse escape: after a reboot the recorded pid belongs to a stranger — on Windows,
+    // routinely a system process alive for the whole boot — so `kill(pid, 0)` keeps answering
+    // "alive" and KEPT_ALIVE left the item unstaffable until the next reboot. The row carries the
+    // host uptime it was written at; a host up for less than that has rebooted, and no probe runs.
+    const harness = harnessFor("rebooted");
+    openSeat(harness, SEAT, new Date(NOW + 1_800_000).toISOString());
+    writeClaim(harness, "work.claim", SEAT, 0, "cmd-seed-claim");
+    expect(createAgentSessionFence({
+      hostBootId: () => BOOT_ID, hostUptimeMs: () => 5 * 3_600_000, isProcessAlive: () => true,
+      projectId: harness.projectId, store: harness.store,
+    }).recordLiveChild({
+      childPid: CHILD_PID, claimAggregateVersion: 1, sessionId: SEAT, workItemId: ITEM,
+    })).toEqual([]);
+    let probes = 0;
+
+    const reports = runReclaimPass({
+      clock: () => NOW,
+      deps: harness.deps,
+      hostBootId: () => BOOT_ID,
+      hostUptimeMs: () => 600_000,
+      isProcessAlive: () => { probes += 1; return true; },
+      log: (line: string) => { harness.logged.push(line); },
+      mintSecret: () => "reclaimtestnonce",
+      operatorCredential: OPERATOR,
+      projectId: harness.projectId,
+      store: harness.store,
+    });
+
+    expect(reports).toEqual([{
+      code: null, outcome: "RECLAIMED", sessionId: SEAT, workItemId: ITEM,
+    }]);
+    expect(probes).toBe(0);
+    expect(readSessionLedger(harness.store, harness.projectId).sessions.get(SEAT))
+      .toMatchObject({ status: "CLOSED" });
+    expect(eventTypes(harness, `work/${ITEM}`)).toEqual(["WorkClaimed", "WorkReleased"]);
+    expect(eventTypes(harness, staffingAggregateId(ITEM)))
+      .toEqual(["AgentStaffingAdmitted", "AgentStaffingRetired"]);
+    expect(harness.logged).toEqual([`[wrapper] reclaimed ${ITEM} from ${SEAT}`]);
+  });
+
+  it("reclaims an alive-reading pid once the boot identity changed under a longer uptime", () => {
+    // The reboot the uptime cannot see: a Windows Shutdown with Fast Startup resumes the kernel
+    // session, so the host reads UP LONGER than when the row was written, while every user
+    // process was killed and the pid reissued. The boot identity is a different one, and that
+    // alone reclaims — no probe, and no wall clock, which this pass never consults.
+    const harness = harnessFor("rebooted-identity");
+    openSeat(harness, SEAT, new Date(NOW + 1_800_000).toISOString());
+    writeClaim(harness, "work.claim", SEAT, 0, "cmd-seed-claim");
+    expect(createAgentSessionFence({
+      hostBootId: () => BOOT_ID, hostUptimeMs: () => 1_800_000, isProcessAlive: () => true,
+      projectId: harness.projectId, store: harness.store,
+    }).recordLiveChild({
+      childPid: CHILD_PID, claimAggregateVersion: 1, sessionId: SEAT, workItemId: ITEM,
+    })).toEqual([]);
+    let probes = 0;
+
+    const reports = runReclaimPass({
+      clock: () => NOW,
+      deps: harness.deps,
+      hostBootId: () => "0x46",
+      hostUptimeMs: () => 7_200_000,
+      isProcessAlive: () => { probes += 1; return true; },
+      log: (line: string) => { harness.logged.push(line); },
+      mintSecret: () => "reclaimtestnonce",
+      operatorCredential: OPERATOR,
+      projectId: harness.projectId,
+      store: harness.store,
+    });
+
+    expect(reports).toEqual([{
+      code: null, outcome: "RECLAIMED", sessionId: SEAT, workItemId: ITEM,
+    }]);
+    expect(probes).toBe(0);
+    expect(readSessionLedger(harness.store, harness.projectId).sessions.get(SEAT))
+      .toMatchObject({ status: "CLOSED" });
+    expect(eventTypes(harness, `work/${ITEM}`)).toEqual(["WorkClaimed", "WorkReleased"]);
+    expect(eventTypes(harness, staffingAggregateId(ITEM)))
+      .toEqual(["AgentStaffingAdmitted", "AgentStaffingRetired"]);
+    expect(harness.logged).toEqual([`[wrapper] reclaimed ${ITEM} from ${SEAT}`]);
   });
 
   it("keeps a record whose child pid was never recorded", () => {
@@ -455,7 +541,9 @@ describe("enumerateLiveChildren", () => {
     seedDeadSeat(harness);
 
     expect(enumerateLiveChildren(harness.store)).toEqual([{
-      childPid: CHILD_PID, claimAggregateVersion: 1, sessionId: SEAT, workItemId: ITEM,
+      childPid: CHILD_PID, claimAggregateVersion: 1,
+      hostBoot: { hostBootId: BOOT_ID, hostUptimeMs: expect.any(Number) },
+      sessionId: SEAT, workItemId: ITEM,
     }]);
 
     const fence = createAgentSessionFence({
@@ -470,7 +558,9 @@ describe("enumerateLiveChildren", () => {
     seedDeadSeat(harness, null);
 
     expect(enumerateLiveChildren(harness.store)).toEqual([{
-      childPid: null, claimAggregateVersion: 1, sessionId: SEAT, workItemId: ITEM,
+      childPid: null, claimAggregateVersion: 1,
+      hostBoot: { hostBootId: BOOT_ID, hostUptimeMs: expect.any(Number) },
+      sessionId: SEAT, workItemId: ITEM,
     }]);
   });
 
@@ -548,6 +638,7 @@ describe("the first staffing pass after a reclaim", () => {
         return { exit: new Promise<void>(() => undefined), ok: true, pid: CHILD_PID };
       },
       staffingFence: createAgentSessionFence({
+        hostBootId: () => BOOT_ID,
         isProcessAlive: () => childAlive,
         projectId: harness.projectId,
         store: harness.store,

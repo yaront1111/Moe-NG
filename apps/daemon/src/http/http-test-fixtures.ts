@@ -21,7 +21,6 @@ import type {
  */
 
 export const GOOD_CREDENTIAL = "sess-good";
-export const UNKNOWN_CREDENTIAL = "sess-unknown";
 export const DIGEST = "a".repeat(64);
 export const OTHER_DIGEST = "b".repeat(64);
 export const CAPABILITY = "goal.write";

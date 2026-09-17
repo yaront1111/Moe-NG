@@ -11,6 +11,7 @@ import {
 import type { SessionKeyGenerated } from "@moe/control-room-client";
 import { validLiveTabCredential } from "./live-tab-session.js";
 import type { LiveTabSessionBinding } from "./live-tab-session.js";
+import { isRecord } from "./live-wire-primitives.js";
 
 export type LiveKeyedPostPath = "/session/pair/claim" | "/session/pair/open";
 export interface LiveKeyedPostResult {
@@ -72,10 +73,6 @@ const RETRY: LiveKeyedRetry = Object.freeze({ status: "RETRY_CLAIM" as const });
 
 function refuse(detail: string): LiveKeyedRefused {
   return Object.freeze({ code: "LIVE_PAIRING_REFUSED" as const, detail, ok: false as const });
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function exactKeys(record: Readonly<Record<string, unknown>>, keys: readonly string[]): boolean {

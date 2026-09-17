@@ -249,13 +249,59 @@ describe("the preview process is gone afterwards", () => {
       goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace,
     });
     await captureStarted;
-    await supervisor.close();
+    // Shutdown begins while the start is in flight. `close()` does not resolve until that start
+    // has landed (the arm below), and the landing waits on `release()` — so awaiting close()
+    // BEFORE releasing would wait forever. Release first, then await both.
+    const closing = supervisor.close();
     release();
     const result = await starting;
+    await closing;
 
     if (!result.ok) throw new Error(`expected a start, got ${result.refusal.code}`);
     expect(supervisor.active()).toStrictEqual([]);
     expect(await awaitPidGone(result.started.handle.pid, alive)).toBe(true);
+    expect(await awaitPortFree(result.started.handle.port)).toBe(true);
+  }, 120_000);
+
+  it("close() does not resolve while a start is still in flight", async () => {
+    // The daemon awaits `close()` and then EXITS (daemon-entry.ts `sweepPreviews`). A close that
+    // resolved with a start mid-flight would leave that start to stop its own child later — in
+    // a process that is already gone — so the detached child keeps the port, and the next
+    // daemon's preview of the same revision refuses PREVIEW_START_TIMEOUT for no visible cause.
+    let captured!: () => void;
+    let release!: () => void;
+    const captureStarted = new Promise<void>((resolve) => { captured = resolve; });
+    const captureReleased = new Promise<void>((resolve) => { release = resolve; });
+    const supervisor = supervisorFor(landedWorld(), { capture: async () => {
+      captured();
+      await captureReleased;
+      return [];
+    } });
+    const workspace = serverWorkspace();
+    let landed = false;
+    const starting = supervisor.start({
+      goalId: GOAL_ID, sha: commitFixtureWorkspace(workspace), workspace,
+    }).then((result) => { landed = true; return result; });
+    await captureStarted;
+
+    let closeResolved = false;
+    const closing = supervisor.close().then(() => { closeResolved = true; });
+    try {
+      // A macrotask, so every microtask a premature close could resolve through has run.
+      await new Promise((resolve) => { setTimeout(resolve, 50); });
+      expect(closeResolved).toBe(false);
+    } finally {
+      release();
+    }
+    await closing;
+
+    // Once close() has resolved the start has landed AND its child has been stopped — nothing
+    // is left for a daemon that no longer exists to stop.
+    expect(landed).toBe(true);
+    const result = await starting;
+    if (!result.ok) throw new Error(`expected a start, got ${result.refusal.code}`);
+    expect(supervisor.active()).toStrictEqual([]);
+    expect(alive(result.started.handle.pid)).toBe(false);
     expect(await awaitPortFree(result.started.handle.port)).toBe(true);
   }, 120_000);
 

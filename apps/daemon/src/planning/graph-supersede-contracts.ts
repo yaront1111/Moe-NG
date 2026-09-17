@@ -23,12 +23,11 @@
 import type { RuntimeError } from "@moe/contracts";
 
 /**
- * MODULE-PRIVATE on purpose; only the TYPE is exported. A column-zero `export const *_LAYER`
+ * MODULE-PRIVATE on purpose. A column-zero `export const *_LAYER`
  * enrols the constant in `tests/security/boundary-roster.security.ts` and owes it a hostile trio,
  * which a pure vocabulary earns no more than the preparation family's layer did.
  */
 const LAYER = "GRAPH_SUPERSEDE" as const;
-export type GraphSupersedeLayer = typeof LAYER;
 
 export const GRAPH_SUPERSEDE_CODES = Object.freeze([
   "GRAPH_SUPERSEDE_REQUEST_INVALID", "GRAPH_SUPERSEDE_TARGET_FOREIGN",

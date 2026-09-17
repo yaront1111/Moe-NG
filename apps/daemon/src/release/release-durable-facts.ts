@@ -71,22 +71,26 @@ function goalTitle(store: SqliteEventStore, projectId: string, goalId: string): 
   return goalId;
 }
 
+/**
+ * The goal's preview verdict, or null when NONE WAS TAKEN. Unlike `nodeFacts`, this reader does
+ * not catch: no gap code names a preview, so a store fault folded to null here would render as
+ * the durable fact "There is no preview decision for this goal" inside evidence, with every other
+ * fact present. The throw reaches `readReleaseDossierFacts`, which answers RELEASE_FACTS_UNREADABLE.
+ */
 function previewDecision(store: SqliteEventStore, projectId: string, goalId: string): DossierPreviewDecision | null {
   let preview: DossierPreviewDecision | null = null;
-  try {
-    for (const decision of decisionsOf(store, 256)) {
-      if (decision.key.projectId !== projectId || decision.commandKind !== PREVIEW_DECIDE_COMMAND_KIND
-        || decision.effectDisposition !== "EFFECTS_COMMITTED" || decision.targetAggregateId !== previewAggregateId(goalId)) continue;
-      // A newer unreadable verdict must not make an older approval look current.
-      preview = null;
-      const record = readPreviewDecision(store, projectId, decision.key.principalId, decision.key.commandId);
-      if (record === null || record.goalId !== goalId) continue;
-      const receipt = readPreviewReceipt(store, projectId, record.previewRef);
-      preview = { decidedAt: record.decidedAt, decisionId: decision.decisionId, outcome: record.decision,
-        url: receipt.ok && receipt.receipt.goalId === goalId && receipt.receipt.sha === record.sha ? receipt.receipt.url : null };
-    }
-    return preview;
-  } catch { return null; }
+  for (const decision of decisionsOf(store, 256)) {
+    if (decision.key.projectId !== projectId || decision.commandKind !== PREVIEW_DECIDE_COMMAND_KIND
+      || decision.effectDisposition !== "EFFECTS_COMMITTED" || decision.targetAggregateId !== previewAggregateId(goalId)) continue;
+    // A newer unreadable verdict must not make an older approval look current.
+    preview = null;
+    const record = readPreviewDecision(store, projectId, decision.key.principalId, decision.key.commandId);
+    if (record === null || record.goalId !== goalId) continue;
+    const receipt = readPreviewReceipt(store, projectId, record.previewRef);
+    preview = { decidedAt: record.decidedAt, decisionId: decision.decisionId, outcome: record.decision,
+      url: receipt.ok && receipt.receipt.goalId === goalId && receipt.receipt.sha === record.sha ? receipt.receipt.url : null };
+  }
+  return preview;
 }
 
 /**

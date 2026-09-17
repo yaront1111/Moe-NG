@@ -33,6 +33,33 @@ describe("documentHeadings", () => {
     const many = Array.from({ length: MAX_SECTION_HEADINGS + 5 }, (_, i) => `## ${i + 1}. H`).join("\n");
     expect(documentHeadings(many)).toHaveLength(MAX_SECTION_HEADINGS);
   });
+
+  it("closes a fence only on its own character, at least as long as the opener", () => {
+    // CommonMark: a `~~~` line inside a backtick block is content, and so is a 3-backtick
+    // line inside a 4-backtick block. A single toggle would flip out of the block early and
+    // list the fenced "heading" while skipping the genuine one after the real closer.
+    const nested = [
+      "## 1. Before",
+      "```",
+      "~~~ a tilde line inside a backtick block",
+      "## 98. still fenced",
+      "```",
+      "## 2. After the backtick block",
+      "~~~",
+      "``` a backtick line inside a tilde block",
+      "## 97. still fenced",
+      "~~~",
+      "## 3. After the tilde block",
+      "````",
+      "```",
+      "## 96. still fenced",
+      "````",
+      "## 4. After the four-backtick block",
+    ].join("\n");
+    expect(documentHeadings(nested).map((entry) => entry.number)).toEqual(["1", "2", "3", "4"]);
+    const rows = sectionCoverage(nested, [{ criteria: [], statement: "Cites §2 and §4." }]);
+    expect(rows.filter((row) => row.cited === 1).map((row) => row.number)).toEqual(["2", "4"]);
+  });
 });
 
 describe("citedSections", () => {

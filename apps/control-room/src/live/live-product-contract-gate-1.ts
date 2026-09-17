@@ -16,6 +16,8 @@
  * is exactly the mechanism that would stop detecting a stale daemon.
  */
 
+import { exactDataRecord } from "./live-wire-primitives.js";
+
 const LIVE_GATE_1_LAYER = "CONTROL_ROOM_LIVE_PRODUCT_CONTRACT";
 const INVALID_RESPONSE_CODE = "PRODUCT_CONTRACT_GATE_1_RESPONSE_INVALID";
 const TRANSPORT_FAILED_CODE = "TRANSPORT_REQUEST_FAILED";
@@ -51,31 +53,6 @@ function errored(code: string, layer: string): ProductContractGate1Outcome {
 }
 function invalidResponse(): ProductContractGate1Outcome {
   return errored(INVALID_RESPONSE_CODE, LIVE_GATE_1_LAYER);
-}
-
-/** An own-enumerable EXACT-key snapshot (copied verbatim from live-document-coverage.ts). */
-function exactDataRecord(
-  value: unknown, expectedKeys: readonly string[],
-): Readonly<Record<string, unknown>> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  try {
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return null;
-    const keys = Reflect.ownKeys(value);
-    if (keys.length !== expectedKeys.length
-      || keys.some((key) => typeof key !== "string" || !expectedKeys.includes(key))) return null;
-    const snapshot: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
-    for (const key of expectedKeys) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
-        return null;
-      }
-      snapshot[key] = descriptor.value;
-    }
-    return Object.freeze(snapshot);
-  } catch {
-    return null;
-  }
 }
 
 /**

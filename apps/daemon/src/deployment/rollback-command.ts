@@ -30,7 +30,6 @@ export type RollbackCommandOptions = Omit<DeployCommandOptions, "buildContext"> 
    *  database the environment means, through the shared deploy-migration resolver. */
   readonly migrationWorkspace?: string;
 };
-export const DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE = "DEPLOY_ROLLBACK_DATABASE_RESTORE_UNAVAILABLE" as const;
 const KIND = "deployment.rollback" as const;
 const INTENT_KIND = "internal.deployment.rollback_requested";
 const INTENT_PRINCIPAL = "daemon:rollback-command";

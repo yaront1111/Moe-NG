@@ -235,6 +235,27 @@ describe("createSeatStartRecorder writes what the seat was started with", () => 
       .toEqual({ agentVersion: "2.1.263 (Claude Code)", provider: "claude", startedAt: AT });
   });
 
+  it("stamps startedAt at the SPAWN, not after the probe has answered", async () => {
+    // The first seat of a provider waits on a `--version` that can take the whole bound plus
+    // the kill grace to answer null, and every seat sharing the memoised promise waits with
+    // it. The ledger says when the seat STARTED: a clock read after the probe would skew that
+    // by the probe, and every staleness read of the seat with it.
+    const store = storeAt(databasePath());
+    const LATER = "2026-09-03T09:30:15.000Z";
+    let now = AT;
+    let answer: (stdout: string | null) => void = () => undefined;
+    const seats = createSeatStartRecorder({
+      clock: () => now, probe: () => new Promise((resolve) => { answer = resolve; }),
+      projectId: PROJECT, store,
+    });
+    const pending = seats.record({ provider: "claude", sessionId: "sess-slow" });
+    // The wall clock moves on while the probe hangs; only then does the probe give up.
+    now = LATER;
+    answer(null);
+    await pending;
+    expect(readSeatStartLedger(store, PROJECT).get("sess-slow")?.startedAt).toBe(AT);
+  });
+
   it("names a KNOWN provider by its roster leaf when the command is a path", async () => {
     // The same rule `/sessions/read` uses for its project-scoped disclosure, so the per-seat
     // member and the frame member can never disagree about what to call one command.

@@ -15,6 +15,7 @@ import { DurableStoreError, identifyReplayRequest, type CommandDecisionKey,
   type DurableStoreErrorCode, type SqliteEventStore }
   from "@moe/store";
 
+import { sameBytes } from "../byte-equality.js";
 import {
   deriveProductContractCurrentRevisionSlotV2AggregateId,
   deriveProductContractRevisionV2AggregateId,
@@ -89,10 +90,6 @@ function sameCurrent(
     && slot.currentRevision.revisionId === revision.revisionId
     && slot.currentRevision.revisionDigest === revision.revisionDigest
     && slot.currentRevision.version === revision.version;
-}
-
-function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
 }
 
 /** Replays the immutable command result, not a slot re-derived from newer live state. */

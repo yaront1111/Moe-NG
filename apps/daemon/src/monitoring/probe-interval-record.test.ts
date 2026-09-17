@@ -1,7 +1,8 @@
+import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { SqliteEventStore } from "@moe/store";
+import { MAX_EVENTS_PER_COMMIT, MAX_PAGE_SIZE, SqliteEventStore } from "@moe/store";
 import { expect, it } from "vitest";
 import {
   DEFAULT_PROBE_INTERVAL_MS, MAX_PROBE_INTERVAL_MS, MIN_PROBE_INTERVAL_MS, createProbeIntervalRecord,
@@ -99,7 +100,10 @@ it("refuses with its store code when the append fails, without inventing a value
   await withRecord((_record, store) => {
     const failing = createProbeIntervalRecord({
       projectId: PROJECT,
-      store: { commit: () => { throw new Error("not disclosed"); }, readEvents: (id) => store.readEvents(id) },
+      store: {
+        commit: () => { throw new Error("not disclosed"); },
+        readAggregateEvents: (id, after, limit) => store.readAggregateEvents(id, after, limit),
+      },
     });
     expect(failing.write("staging", 30_000)).toEqual(refusal("PROBE_INTERVAL_STORE_FAILED"));
     expect(failing.read("staging")).toEqual({ ok: true, value: DEFAULT_PROBE_INTERVAL_MS });
@@ -118,5 +122,46 @@ it("falls back to the default when a durable record no longer admits", async () 
     // Fail CLOSED means the safe rate, never the unbounded one that was smuggled into the log.
     expect(record.read("staging")).toEqual({ ok: true, value: DEFAULT_PROBE_INTERVAL_MS });
     expect(record.stored()).toEqual({ ok: true, value: new Map() });
+  });
+});
+
+/**
+ * Every accepted write is one more durable event and nothing compacts the ledger, so a project
+ * whose operators have set an interval MAX_PAGE_SIZE times over its life holds an aggregate
+ * that no single bounded page can carry. The record must keep answering past that point: a
+ * setting that bricks itself after N uses, with no operator recovery short of deleting ledger
+ * rows, is not a durable setting. The seed goes through the store's own commit path, in
+ * MAX_EVENTS_PER_COMMIT-bounded batches, so the ledger is exactly what N real writes leave.
+ */
+it("keeps reading, listing and writing once the ledger outgrows a single bounded page", async () => {
+  await withRecord((record, store) => {
+    const batch = MAX_EVENTS_PER_COMMIT - 1;
+    let seeded = 0;
+    let last = 0;
+    while (seeded < MAX_PAGE_SIZE) {
+      const count = Math.min(batch, MAX_PAGE_SIZE - seeded);
+      const events = Array.from({ length: count }, (_, i) => {
+        // Cycles through DISTINCT admitted values, so a replay that dropped or reordered a page
+        // would resolve to the wrong one rather than coincidentally to the right one.
+        last = MIN_PROBE_INTERVAL_MS + ((seeded + i) % 10) * 1_000;
+        const payload = new TextEncoder().encode(JSON.stringify({ environment: "staging", intervalMs: last }));
+        return { eventId: randomUUID(), eventType: "moe.probe-interval.set", payload };
+      });
+      store.commit({
+        aggregateId: AGGREGATE, commandId: randomUUID(), commandBytes: events[0]!.payload,
+        committedAt: new Date(0).toISOString(), expectedVersion: store.getAggregateVersion(AGGREGATE), events,
+      });
+      seeded += count;
+    }
+    expect(store.getAggregateVersion(AGGREGATE)).toBe(MAX_PAGE_SIZE);
+    // The write that takes the ledger PAST one page: the replay before it still fits, the next does not.
+    expect(record.write("production", 30_000)).toEqual({ ok: true, value: 30_000 });
+    expect(store.getAggregateVersion(AGGREGATE)).toBe(MAX_PAGE_SIZE + 1);
+    expect(record.read("staging")).toEqual({ ok: true, value: last });
+    expect(record.read("production")).toEqual({ ok: true, value: 30_000 });
+    expect(record.stored()).toEqual({ ok: true, value: new Map([["staging", last], ["production", 30_000]]) });
+    // And the record is still WRITABLE, resolving the newest value over the whole history.
+    expect(record.write("staging", 45_000)).toEqual({ ok: true, value: 45_000 });
+    expect(record.read("staging")).toEqual({ ok: true, value: 45_000 });
   });
 });

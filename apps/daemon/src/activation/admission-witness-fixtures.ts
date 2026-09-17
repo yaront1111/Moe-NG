@@ -176,24 +176,6 @@ export function seedNonAllowingPolicyDecision(
 }
 
 /**
- * A LATER `PolicyInstalled` on the policy aggregate, so the newest event on that stream is NOT
- * the decision.
- *
- * The resolver selects `PolicyEvaluated` BY TYPE; a by-index pick would take this event instead
- * and resolve nothing. Without this world that selection has no witness on the policy side —
- * `policy.install` then `policy.validate` leaves the decision last by accident, so an
- * index-based resolver would still pass every other arm. Measured: it did.
- */
-export function seedTrailingPolicyInstall(
-  store: SqliteEventStore, subject: PolicyWitnessSubject,
-): void {
-  const installed = send(store, envelope("policy.install", policyVersion(store), {
-    slice: allowingSlice(hex64("7011a1"), subject),
-  }, "cmd-witness-policy.install-trailing"));
-  if (!installed.ok) throw new Error(`witness fixture trailing install refused: ${installed.code}`);
-}
-
-/**
  * The approved+activated goal whose `GoalExecutionEnabled` carries the human approval record,
  * with `approvedNodeScope` naming exactly the nodes asked for.
  *

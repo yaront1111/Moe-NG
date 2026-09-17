@@ -5,11 +5,7 @@ import { describe, expect, it } from "vitest";
 import { createProductContractRevisionV2 } from "@moe/core";
 import type { ProductContractRevisionV2 } from "@moe/core";
 
-import type { EnvironmentVariableRead } from "./environment-contracts.js";
-import {
-  requiredVariableNames,
-  unsetVariableNames,
-} from "./environment-required-variables.js";
+import { requiredVariableNames } from "./environment-required-variables.js";
 
 /**
  * DERIVED off the revision rather than imported by name: `ProductContractV2DeploymentRequirement`
@@ -128,14 +124,6 @@ function revision(
   return result.revision;
 }
 
-/** What the store reports for a variable that IS set. No value, by construction. */
-const setVariable = (name: string): EnvironmentVariableRead => ({
-  fingerprintSha256: "b".repeat(64),
-  isSet: true,
-  name,
-  updatedAt: "2026-09-06T00:00:00.000Z",
-});
-
 describe("the required variable names of an approved contract", () => {
   it("reads the names off the contract's deployment requirements", () => {
     const contract = revision([deployment("deployment-runtime", ["DATABASE_URL", "SESSION_KEY"])]);
@@ -147,7 +135,6 @@ describe("the required variable names of an approved contract", () => {
     const contract = revision([deployment("deployment-runtime")]);
 
     expect(requiredVariableNames(contract)).toEqual([]);
-    expect(unsetVariableNames(requiredVariableNames(contract), [])).toEqual([]);
   });
 
   it("does not collect names a NON-deployment requirement carries", () => {
@@ -199,48 +186,11 @@ describe("the required variable names of an approved contract", () => {
   it("keeps a leading-underscore name, which the contract admits and the store cannot hold", () => {
     // The two grammars disagree: the contract admits /^[A-Z_][A-Z0-9_]*$/ while the environment
     // store's `isEnvironmentVariableName` requires /^[A-Z][A-Z0-9_]*$/. Filtering with the
-    // STORE's narrower pattern would make a required variable vanish from the report and from
-    // `.env.example`, so the operator would never learn it was required. It is reported, and it
-    // reports as permanently unset - which is the truth.
+    // STORE's narrower pattern would make a required variable vanish from `.env.example`, so the
+    // operator would never learn it was required. It is reported, and the control room shows it
+    // as permanently unset - which is the truth.
     const contract = revision([deployment("deployment-runtime", ["_INTERNAL_TOKEN"])]);
 
     expect(requiredVariableNames(contract)).toEqual(["_INTERNAL_TOKEN"]);
-  });
-});
-
-describe("the unset variable report for an environment", () => {
-  it("reports exactly the required names the environment does not hold", () => {
-    const contract = revision([deployment("deployment-runtime", ["DATABASE_URL", "SESSION_KEY"])]);
-    const required = requiredVariableNames(contract);
-
-    const unset = unsetVariableNames(required, [setVariable("SESSION_KEY")]);
-
-    // Set equality, not toContain: a report that echoed the requirement list would pass a
-    // containment check while telling the operator to set a variable they already set.
-    expect([...unset].sort()).toEqual(["DATABASE_URL"]);
-    expect(unset).not.toContain("SESSION_KEY");
-  });
-
-  it("reports every required name when the environment holds nothing", () => {
-    const contract = revision([deployment("deployment-runtime", ["DATABASE_URL", "SESSION_KEY"])]);
-
-    expect(unsetVariableNames(requiredVariableNames(contract), []))
-      .toEqual(["DATABASE_URL", "SESSION_KEY"]);
-  });
-
-  it("ignores a set variable the contract does not require", () => {
-    const contract = revision([deployment("deployment-runtime", ["DATABASE_URL"])]);
-
-    const unset = unsetVariableNames(
-      requiredVariableNames(contract),
-      [setVariable("LEFTOVER"), setVariable("DATABASE_URL")],
-    );
-
-    expect(unset).toEqual([]);
-  });
-
-  it("returns a sorted, deduped report regardless of the order it is given", () => {
-    expect(unsetVariableNames(["SESSION_KEY", "DATABASE_URL", "SESSION_KEY"], []))
-      .toEqual(["DATABASE_URL", "SESSION_KEY"]);
   });
 });

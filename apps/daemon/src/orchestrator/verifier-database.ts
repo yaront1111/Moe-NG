@@ -19,7 +19,7 @@ export interface VerifierDatabaseOptions extends VerifierProcessRunnerOptions {
 
 class DatabaseRefusal extends Error {
   constructor(
-    code: "MIGRATION_DB_UNAVAILABLE" | "MIGRATION_FAILED" | "MIGRATION_DID_NOT_START",
+    code: "MIGRATION_DB_UNAVAILABLE" | "MIGRATION_FAILED" | "MIGRATION_DID_NOT_START" | "MIGRATION_DID_NOT_EXIT",
     fields: Record<string, string | null>,
   ) {
     super(JSON.stringify({ code, refusedBy: "DAEMON_INGRESS", ...fields }));
@@ -32,6 +32,18 @@ class DatabaseRefusal extends Error {
  * reads different variables needs to see, and the value carries a password.
  */
 const DELIVERED_DATABASE_VARIABLE = "DATABASE_URL";
+
+/**
+ * How the operator's shell reaches its Docker daemon, forwarded BY NAME into every docker CLI
+ * spawn. The recipe allowlist strips every DOCKER_* variable, and a rootless, Colima, Podman or
+ * remote daemon that only DOCKER_HOST or a context names would otherwise be probed at
+ * /var/run/docker.sock and refused as unavailable while `docker` works in that same shell.
+ */
+const DOCKER_CLIENT_VARIABLES = [
+  "DOCKER_HOST", "DOCKER_CONTEXT", "DOCKER_TLS_VERIFY", "DOCKER_CERT_PATH", "DOCKER_CONFIG",
+] as const;
+const dockerClientRoute = (source: NodeJS.ProcessEnv): NodeJS.ProcessEnv =>
+  Object.fromEntries(DOCKER_CLIENT_VARIABLES.map((name) => [name, source[name]]));
 
 const unavailable = (reason: string): DatabaseRefusal => new DatabaseRefusal("MIGRATION_DB_UNAVAILABLE", { reason });
 function safeCapture(output: string, exitCode: number | null): VerifierRunCapture {
@@ -128,7 +140,7 @@ class DisposableDatabase {
       spawn: (file, argv, options) => options.shell === true
         ? spawn("docker", [...args], { ...options, shell: false, windowsHide: true, env: {
           ...options.env, HOME: environment.HOME, USERPROFILE: environment.USERPROFILE,
-          DOCKER_CONFIG: environment.DOCKER_CONFIG, POSTGRES_PASSWORD: this.password,
+          ...dockerClientRoute(environment), POSTGRES_PASSWORD: this.password,
         } }) : spawn(file, argv, options),
     });
     try {
@@ -178,12 +190,16 @@ class DisposableDatabase {
       if (migration.exitCode !== 0) {
         const secrets = [this.password, ...Object.values(this.options.delivered ?? {})];
         const point = failedFile(this.brief.workspace, migration.output, secrets);
-        // Nothing the output names means no migration ever started: the script itself failed,
-        // and the actionable fact is which database variable this runner defined — a product
-        // that reads its own is refused before its first migration and can say so no other way.
-        throw point.named === null
-          ? new DatabaseRefusal("MIGRATION_DID_NOT_START", { delivered: DELIVERED_DATABASE_VARIABLE })
-          : new DatabaseRefusal("MIGRATION_FAILED", { file: point.file });
+        if (point.named !== null) throw new DatabaseRefusal("MIGRATION_FAILED", { file: point.file });
+        // Nothing the output names means no migration ever started. A null exit is the runner's
+        // deadline or a signal cutting the step, which may have read its variables, connected and
+        // then hung: the exit status is the fact, and it says nothing about what the product
+        // reads. Only a script that EXITED before its first migration failed on its own, and the
+        // actionable fact is then which database variable this runner defined — a product that
+        // reads its own is refused before its first migration and can say so no other way.
+        throw migration.exitCode === null
+          ? new DatabaseRefusal("MIGRATION_DID_NOT_EXIT", {})
+          : new DatabaseRefusal("MIGRATION_DID_NOT_START", { delivered: DELIVERED_DATABASE_VARIABLE });
       }
       this.checkCancellation();
       const result = await this.runner(this.brief);

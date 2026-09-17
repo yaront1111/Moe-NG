@@ -87,7 +87,6 @@ export const FOUNDATION_CONTEXT_LEDGER_CODES = Object.freeze([
   ...WRITER_CODES, ...FOUNDATION_CONTEXT_READER_CODES,
 ] as const);
 
-export type FoundationContextLedgerCode = (typeof FOUNDATION_CONTEXT_LEDGER_CODES)[number];
 type WriterCode = (typeof WRITER_CODES)[number];
 type Sealed = FoundationContextManifestRecord;
 

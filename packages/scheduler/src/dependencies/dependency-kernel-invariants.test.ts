@@ -2,18 +2,11 @@ import { describe, expect, it } from "vitest";
 import { analyzeGraphStructure } from "../analyze-graph.js";
 import { validateGraphSnapshot } from "../validate-graph.js";
 import { assessContractRedundancy, validateDependencyChallenge } from "./dependency-analysis.js";
-import { DEPENDENCY_GATES, type DependencyContract, type DependencyTruthClass,
-  type MonotonicPredicateRegistryEntry } from "./dependency-contract.js";
-import { evaluateDependencyInvalidation, isWithinHorizon,
-  validateDependencyWitness } from "./dependency-witness.js";
+import { DEPENDENCY_GATES, type DependencyContract } from "./dependency-contract.js";
+import { isWithinHorizon } from "./dependency-witness.js";
 const A = "a".repeat(64);
 const B = "b".repeat(64);
-const registry: MonotonicPredicateRegistryEntry[] = [{
-  predicateRef: "predicate:sealed", schemaId: "moe.predicate.sealed", schemaVersion: 1,
-  parameterSchema: { kind: "JSON_SCHEMA", digest: A }, sourceOperationClass: "ARTIFACT_SEAL",
-  proofRationale: "sealed artifact identities cannot regress",
-}];
-function contract(stability: "MONOTONIC" | "REVOCABLE" = "REVOCABLE"): DependencyContract {
+function contract(): DependencyContract {
   return {
     producerNodeKey: "producer-a", consumerNodeKey: "consumer-b", edgeKind: "ARTIFACT_CONSUMPTION",
     graphBindingDigest: A,
@@ -21,7 +14,7 @@ function contract(stability: "MONOTONIC" | "REVOCABLE" = "REVOCABLE"): Dependenc
     consumer: { kind: "PRECONDITION", criterionRef: "criterion:x", contractHash: A },
     minimumQualifyingMilestone: "RESULT_SEALED",
     satisfactionPredicate: { predicateRef: "predicate:sealed", schemaId: "moe.predicate.sealed", schemaVersion: 1, parametersDigest: B },
-    stability,
+    stability: "REVOCABLE",
     satisfactionWitnesses: [{ witnessRef: "witness:x", witnessVersion: 2, witnessDigest: A, sourceOperationClass: "ARTIFACT_SEAL" }],
     consumptionHorizon: "RESULT_SEAL",
     necessity: { failedConsumerCriterionRef: "criterion:x", failureKind: "MISSING_ARTIFACT", truthClass: "DAEMON_VERIFIED" },
@@ -29,18 +22,6 @@ function contract(stability: "MONOTONIC" | "REVOCABLE" = "REVOCABLE"): Dependenc
     alternateProducers: ["producer-backup"], truthClass: "DAEMON_VERIFIED",
     invalidationFacts: [{ sourceFactRef: "fact:x", sourceFactVersion: 2, sourceFactDigest: A }],
     recheckPredicateRef: "predicate:sealed",
-  };
-}
-function witness(truthClass: DependencyTruthClass = "DAEMON_VERIFIED"): Record<string, unknown> {
-  return { witnessRef: "witness:x", witnessVersion: 2, witnessDigest: A,
-    sourceOperationClass: "ARTIFACT_SEAL", truthClass };
-}
-function invalidation(gate: string): Record<string, unknown> {
-  return {
-    witnessRef: "witness:x",
-    sourceFactVersions: [{ sourceFactRef: "fact:x", version: 3 }],
-    flippedAt: { gate, contextRef: "attempt:7", contextVersion: 1 },
-    truthClass: "DAEMON_VERIFIED",
   };
 }
 function codesOf(result: unknown): readonly string[] {
@@ -59,97 +40,6 @@ describe("dependency consumption horizons", () => {
     }
     expect(isWithinHorizon("UNKNOWN_GATE", "GOAL_COMPLETION")).toBe(false);
     expect(isWithinHorizon("MATERIALIZATION_SEAL", "UNKNOWN_GATE")).toBe(false);
-  });
-});
-describe("dependency witness provenance", () => {
-  it("accepts exact bindings for every local truth class and freezes fresh copies", () => {
-    // Scheduler-local literals remain string-identical to the canonical five-value truth vocabulary.
-    const truths: DependencyTruthClass[] = ["OBSERVED", "AGENT_REPORTED", "DAEMON_VERIFIED", "HUMAN_APPROVED", "UNKNOWN"];
-    for (const truth of truths) {
-      const input = witness(truth);
-      const result = validateDependencyWitness(input, contract(), []);
-      expect(result).toEqual({ ok: true, outcome: "WITNESS_VALIDATED", stability: "REVOCABLE", witness: input });
-      expect(Object.isFrozen(result)).toBe(true);
-      if (result.ok) expect(Object.isFrozen(result.witness)).toBe(true);
-      expect(Object.isFrozen(input)).toBe(false);
-    }
-  });
-  it("keeps MONOTONIC only for exact registered schema and source-operation proof", () => {
-    expect(validateDependencyWitness(witness(), contract("MONOTONIC"), registry)).toMatchObject({
-      ok: true, stability: "MONOTONIC",
-    });
-    expect(validateDependencyWitness(witness(), contract("MONOTONIC"), [])).toMatchObject({
-      ok: true, stability: "REVOCABLE",
-    });
-    const mismatched = [{ ...registry[0]!, sourceOperationClass: "SCOPE_OBSERVATION" }];
-    expect(codesOf(validateDependencyWitness(witness(), contract("MONOTONIC"), mismatched))).toEqual([
-      "DEPENDENCY_WITNESS_MONOTONIC_PROOF_INVALID",
-    ]);
-  });
-  it("refuses malformed and mismatched witness values fail closed", () => {
-    const malformed = [
-      { ...witness(), witnessVersion: -1 }, { ...witness(), witnessVersion: -0 },
-      { ...witness(), witnessVersion: 1.5 }, { ...witness(), witnessDigest: "A".repeat(64) },
-      { ...witness(), truthClass: "TRUSTED" }, { ...witness(), extra: true },
-    ];
-    for (const input of malformed) {
-      expect(codesOf(validateDependencyWitness(input, contract(), []))).toEqual(["DEPENDENCY_WITNESS_MALFORMED"]);
-    }
-    expect(codesOf(validateDependencyWitness({ ...witness(), witnessVersion: 9 }, contract(), []))).toEqual([
-      "DEPENDENCY_WITNESS_BINDING_MISMATCH",
-    ]);
-  });
-  it("does not invoke accessors or proxy traps", () => {
-    let calls = 0;
-    const accessor = Object.defineProperty({}, "witnessRef", { get: () => { calls += 1; return "witness:x"; } });
-    const revoked = Proxy.revocable(witness(), {}); revoked.revoke();
-    for (const input of [accessor, revoked.proxy]) {
-      expect(() => validateDependencyWitness(input, contract(), [])).not.toThrow();
-      expect(codesOf(validateDependencyWitness(input, contract(), []))).toEqual(["DEPENDENCY_WITNESS_MALFORMED"]);
-    }
-    expect(calls).toBe(0);
-  });
-});
-describe("dependency invalidation records", () => {
-  it("records flips through and including the exact horizon", () => {
-    for (const gate of ["CANDIDATE_SEAL", "RESULT_SEAL"] as const) {
-      const result = evaluateDependencyInvalidation(invalidation(gate), "witness:x", "RESULT_SEAL", "REVOCABLE");
-      expect(result).toMatchObject({ ok: true, outcome: "INVALIDATION_RECORDED" });
-      expect(Object.isFrozen(result)).toBe(true);
-      if (result.ok) {
-        expect(Object.isFrozen(result.event)).toBe(true);
-        expect(Object.isFrozen(result.event.sourceFactVersions)).toBe(true);
-      }
-    }
-  });
-  it("returns an immutable typed no-op after the horizon without event/history output", () => {
-    const result = evaluateDependencyInvalidation(invalidation("EVIDENCE_SEAL"), "witness:x", "RESULT_SEAL", "REVOCABLE");
-    expect(result).toEqual({
-      ok: false, outcome: "NO_OP_AFTER_HORIZON", code: "DEPENDENCY_INVALIDATION_AFTER_HORIZON",
-    });
-    expect(Object.isFrozen(result)).toBe(true);
-    expect(result).not.toHaveProperty("event");
-    expect(result).not.toHaveProperty("history");
-    expect(codesOf(evaluateDependencyInvalidation(invalidation("RESULT_SEAL"), "witness:x", "RESULT_SEAL", "MONOTONIC"))).toEqual([
-      "DEPENDENCY_INVALIDATION_MONOTONIC_FORBIDDEN",
-    ]);
-  });
-  it("refuses malformed, duplicate, and wrong-witness flips", () => {
-    const duplicate = invalidation("RESULT_SEAL");
-    duplicate.sourceFactVersions = [
-      { sourceFactRef: "fact:x", version: 3 }, { sourceFactRef: "fact:x", version: 4 },
-    ];
-    for (const input of [
-      invalidation("UNKNOWN_GATE"), duplicate,
-      { ...invalidation("RESULT_SEAL"), truthClass: "TRUSTED" },
-    ]) {
-      expect(codesOf(evaluateDependencyInvalidation(input, "witness:x", "RESULT_SEAL", "REVOCABLE"))).toEqual([
-        "DEPENDENCY_INVALIDATION_MALFORMED",
-      ]);
-    }
-    expect(codesOf(evaluateDependencyInvalidation(invalidation("RESULT_SEAL"), "witness:y", "RESULT_SEAL", "REVOCABLE"))).toEqual([
-      "DEPENDENCY_INVALIDATION_WITNESS_MISMATCH",
-    ]);
   });
 });
 function structuralCandidate() {
@@ -267,31 +157,13 @@ describe("dependency challenge bindings", () => {
     expect(() => validateDependencyChallenge(revoked.proxy, challengeContext())).not.toThrow();
   });
 });
-function xorshift32(seed: number): () => number {
-  let state = seed >>> 0;
-  return () => { state ^= state << 13; state ^= state >>> 17; state ^= state << 5; return state >>> 0; };
-}
-describe("seeded dependency invariants", () => {
-  it("never launders uncertainty, removal authority, or post-horizon history", () => {
-    const next = xorshift32(0x5eed1234); let uncertaintyCases = 0; let postHorizonCases = 0;
+describe("repeated dependency invariants", () => {
+  it("never launders removal authority across fresh assessments", () => {
     for (let index = 0; index < 96; index += 1) {
-      const mode = next() % 3;
-      const proof = mode === 0 ? registry : mode === 1 ? [] : [{ ...registry[0]!, sourceOperationClass: "SCOPE_OBSERVATION" }];
-      const witnessed = validateDependencyWitness(witness(), contract("MONOTONIC"), proof);
-      if (mode !== 0) {
-        uncertaintyCases += 1;
-        expect(!witnessed.ok || witnessed.stability).not.toBe("MONOTONIC");
-      }
-      const horizon = next() % (DEPENDENCY_GATES.length - 1);
-      const later = evaluateDependencyInvalidation(invalidation(DEPENDENCY_GATES[horizon + 1]!), "witness:x", DEPENDENCY_GATES[horizon]!, "REVOCABLE");
-      postHorizonCases += 1;
-      expect(later).toEqual({ ok: false, outcome: "NO_OP_AFTER_HORIZON", code: "DEPENDENCY_INVALIDATION_AFTER_HORIZON" });
       const assessment = assessContractRedundancy(assessmentInput());
       expect(assessment.ok && assessment.assessment.requiresSemanticProof).toBe(true);
       expect(Object.isFrozen(assessment)).toBe(true);
     }
-    expect(uncertaintyCases).toBeGreaterThan(0);
-    expect(postHorizonCases).toBe(96);
     const input = challenge(discovery);
     expect(JSON.stringify(validateDependencyChallenge(input, challengeContext()))).toBe(
       JSON.stringify(validateDependencyChallenge(input, challengeContext())),

@@ -1,6 +1,10 @@
 import {
-  decodeDesignRevision, decodeDesignRevisionBytes,
+  DESIGN_PROFILE, DESIGN_REVISION_VERSION, decodeDesignRevision,
 } from "../../apps/daemon/src/design/design-contracts.js";
+import {
+  decodeDesignRecordBytes, encodeDesignRecord,
+} from "../../apps/daemon/src/design/design-records.js";
+import type { DesignRecord } from "../../apps/daemon/src/design/design-records.js";
 import {
   readEnvironmentVariables, unsetEnvironmentVariable,
 } from "../../apps/daemon/src/environment/environment-store.js";
@@ -14,7 +18,12 @@ import type { HostileCase } from "./integrity-hostile-cases.js";
 
 const bound = { label: "workflow-integrity", timeoutMs: 2_000 };
 const bytes = (value: unknown): Uint8Array => new TextEncoder().encode(JSON.stringify(value));
-const skip = { skipped: true, reason: "No visual surface in this design" };
+const skip = { skipped: true, reason: "No visual surface in this design" } as const;
+const record: DesignRecord = {
+  contractRef: { contractId: "contract-1", revisionDigest: "digest-1", revisionId: "revision-1" },
+  goalRef: "goal-1", profile: DESIGN_PROFILE, projectId: "security-project", revision: skip,
+  schemaVersion: DESIGN_REVISION_VERSION, submittedAt: "2026-09-06T00:00:00Z", version: 1,
+};
 // Missing sealing authority is explicit. Neither malformed input nor a read may reach storage.
 const environment: EnvironmentStoreConfig = {
   credential: () => null, projectId: "security-project", now: () => "2026-09-06T00:00:00Z",
@@ -35,8 +44,8 @@ const specs: readonly Spec[] = [
     hostile: () => decodeDesignRevision({ ...skip, unexpected: true }),
     observe: () => decodeDesignRevision(skip) },
   { constant: "DESIGN_CODE_LAYERS", expected: { code: "DESIGN_RECORD_MALFORMED", layer: "LEDGER" },
-    hostile: () => decodeDesignRevisionBytes(bytes({ ...skip, unexpected: true })),
-    observe: () => decodeDesignRevisionBytes(bytes(skip)) },
+    hostile: () => decodeDesignRecordBytes(bytes({ ...record, unexpected: true })),
+    observe: () => decodeDesignRecordBytes(encodeDesignRecord(record)) },
   { constant: "ENVIRONMENT_LAYERS", expected: { code: "ENV_ENVIRONMENT_UNKNOWN", layer: "SCOPE" },
     hostile: () => unsetEnvironmentVariable(environment, { environment: "unrecognised", name: "PUBLIC_FLAG" }),
     observe: () => readEnvironmentVariables(environment, "preview") },

@@ -20,15 +20,7 @@ import type {
   BudgetAvailableView, LeaseRecord, ProviderSlotReservation, ReservationRecord,
 } from "@moe/scheduler";
 
-/** Cloned per the repo convention: no package root exports `deepFreeze`. */
-export function deepFreeze<T>(value: T): T {
-  if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value as Record<string, unknown>)) {
-    deepFreeze((value as Record<string, unknown>)[key]);
-  }
-  return value;
-}
+import { deepFreeze } from "../value-primitives.js";
 
 export const WORK_SCHEMA_VERSION = "moe-work-request/1";
 

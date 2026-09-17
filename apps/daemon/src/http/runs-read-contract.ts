@@ -161,5 +161,5 @@ export interface RunsReadPort {
   readRuns(selector: RunsSelector): RunsReadResult;
 }
 
-export const runsRefused = (code: string, layer: string = LAYER): RunsRefused =>
+export const runsRefused = (code: RunsReadCode, layer: string = LAYER): RunsRefused =>
   Object.freeze({ code, layer, outcome: "REFUSED" as const });

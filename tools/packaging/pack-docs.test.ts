@@ -136,7 +136,7 @@ async function driveStart(
         create: async () => ({ code: "UNUSED", layer: "PROJECT_MANAGER_FILES", ok: false }),
         discard: async () => undefined,
         register: async () => ({
-          ok: true, project: PROJECT, written: { createdRoot: false, paths: [], root: PROJECT.root },
+          ok: true, project: PROJECT, written: { createdDirectories: [], paths: [], root: PROJECT.root },
         }),
       }),
       createRuntime: () => ({

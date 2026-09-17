@@ -3,7 +3,8 @@ import { type ActivationGrant } from "../../supervisor/effect-kernel.js";
 import { type LaunchLockRegistration } from "../../supervisor/launch-lock.js";
 import { adaptBoundaryOpen, captureStream, normalizeObservation, normalizeOutcome,
   normalizeStart, type BoundaryAdaptation, type BoundaryCleanup, type CapturedStream,
-  type NormalizedOutcome, type SafeBoundary } from "./claude-launcher-boundary-results.js";
+  type NormalizedOutcome, type NormalizedStart,
+  type SafeBoundary } from "./claude-launcher-boundary-results.js";
 import { decodeRegistration, isSafeNativePromise, type Capability,
   type DecodedRuntime } from "./claude-launcher-port-results.js";
 import { CLAUDE_LAUNCHER_VERSION, startedProcessIdentity, type ClaudeLaunchErrorCode,
@@ -32,6 +33,9 @@ type Terminal =
   | { readonly kind: "COMPLETED"; readonly outcome: NormalizedOutcome }
   | { readonly kind: "TIMEOUT" } | { readonly kind: "CANCELLED" }
   | { readonly kind: "STREAM_ERROR" } | { readonly kind: "THROWN" };
+/** What the deadline can answer; `Delivery` and `Terminal` both carry it verbatim. */
+type Expiry = Extract<Terminal, { readonly kind: "TIMEOUT" | "THROWN" }>;
+interface Deadline { readonly expired: Promise<Expiry>; dispose(): void }
 interface Started {
   readonly registration: LaunchLockRegistration | null; readonly startedAt: string;
   readonly deliveredByteLength: number | null;
@@ -62,50 +66,44 @@ function startContextWrite(boundary: SafeBoundary, bytes: Buffer): PendingDelive
   let resolve!: (result: Delivery) => void;
   let answered = false;
   const promise = new Promise<Delivery>((done) => { resolve = done; });
-  let failed = (): void => undefined;
-  const detach = (): boolean => {
-    try { boundary.stdin.off("error", failed); return true; } catch { return false; }
-  };
-  const finish = (result: Delivery): void => {
-    if (answered) return;
-    answered = true;
-    resolve(detach() ? result : { kind: "FAILED" });
-  };
-  failed = () => finish({ kind: "FAILED" });
+  const finish = (result: Delivery): void => { if (answered) return; answered = true; resolve(result); };
+  const failed = (): void => finish({ kind: "FAILED" });
   try {
-    boundary.stdin.once("error", failed);
+    // Never detached: Node runs a write or end callback BEFORE it emits 'error' for
+    // the same failure, and a write that outlived a timeout fails after the delivery
+    // settled. An 'error' nobody listens to is an uncaught exception, child and lock held.
+    boundary.stdin.on("error", failed);
     boundary.stdin.write(bytes, (error) => {
       if (answered) return;
       if (error != null) failed();
       else {
-        try { boundary.stdin.end(() => finish({ kind: "DELIVERED", byteLength: bytes.byteLength })); }
-        catch { failed(); }
+        try {
+          boundary.stdin.end((ended?: Error | null) => ended == null
+            ? finish({ kind: "DELIVERED", byteLength: bytes.byteLength }) : failed());
+        } catch { failed(); }
       }
     });
   } catch { failed(); }
-  return { promise, dispose: () => finish({ kind: "FAILED" }) };
+  return { promise, dispose: failed };
 }
-async function deliverContext(input: LaunchLifecycleInput, boundary: SafeBoundary): Promise<Delivery> {
+async function deliverContext(input: LaunchLifecycleInput, boundary: SafeBoundary,
+  expired: Promise<Expiry>): Promise<Delivery> {
   const isCancelled = (): boolean => input.signal?.aborted === true;
   if (isCancelled()) return { kind: "CANCELLED" };
-  let timer: ReturnType<typeof setTimeout> | null = null;
   let cancelled: ReturnType<typeof cancellation> | null = null;
   let pending: PendingDelivery | null = null;
   try {
     cancelled = cancellation(input.signal);
     if (isCancelled()) return { kind: "CANCELLED" };
     pending = startContextWrite(boundary, Buffer.from(input.request.renderedContext, "utf8"));
-    const timed = new Promise<Delivery>((resolve) => {
-      timer = setTimeout(() => resolve({ kind: "TIMEOUT" }), input.request.limits.timeoutMs);
-      timer.unref();
-    });
+    // The launch deadline, not a budget of this phase's own: one that began at
+    // `started` let the run's wall clock approach twice the limit.
     return await Promise.race<Delivery>([
       pending.promise,
-      timed,
+      expired,
       cancelled.promise.then(() => ({ kind: "CANCELLED" }) as const),
     ]);
   } catch { return { kind: "THROWN" }; } finally {
-    if (timer !== null) clearTimeout(timer);
     try { cancelled?.dispose(); } catch { /* cancellation cleanup is best effort */ }
     pending?.dispose();
   }
@@ -125,38 +123,58 @@ function terminalReason(terminal: Terminal): Reason | null {
   if (terminal.kind === "THROWN") return ["CLAUDE_LAUNCH_BOUNDARY_THROWN", "LAUNCHER"];
   return terminal.outcome.kind === "UNKNOWN" ? [terminal.outcome.code, terminal.outcome.layer] : null;
 }
-async function waitForTerminal(input: LaunchLifecycleInput, boundary: SafeBoundary,
-  stdout: Promise<CapturedStream>, stderr: Promise<CapturedStream>): Promise<Terminal> {
-  let cancelled: ReturnType<typeof cancellation> | null = null;
+/**
+ * THE ONE LAUNCH DEADLINE, armed in the same turn as the open. The boundary arms
+ * its padded backstop at that instant, so the start wait, sealed-context
+ * delivery and the run itself are all measured from it too. Armed only once
+ * `started`, delivery and registration were behind it, the deadline trailed
+ * the backstop by however long they took; past the padding the backstop fired
+ * first, tore the provider channels down, and a plain timeout was renamed a
+ * stream fault. A port answer that is not a native promise is refused before
+ * anything is awaited, and a rejection is folded into THROWN here, because a
+ * promise shared across phases can settle while no phase is racing on it.
+ */
+function armDeadline(input: LaunchLifecycleInput): Deadline | null {
   const timer = new AbortController();
+  let delayed: unknown;
+  try { delayed = input.ports.delay(input.request.limits.timeoutMs, timer.signal); } catch { return null; }
+  if (!isSafeNativePromise(delayed)) return null;
+  return { expired: delayed.then(() => ({ kind: "TIMEOUT" }) as const, () => ({ kind: "THROWN" }) as const),
+    dispose: () => timer.abort() };
+}
+async function waitForTerminal(input: LaunchLifecycleInput, boundary: SafeBoundary,
+  stdout: Promise<CapturedStream>, stderr: Promise<CapturedStream>,
+  expired: Promise<Expiry>): Promise<Terminal> {
+  let cancelled: ReturnType<typeof cancellation> | null = null;
   try {
     cancelled = cancellation(input.signal);
     const fault = (capture: Promise<CapturedStream>): Promise<Terminal> => capture.then((result) =>
       result.failed ? Promise.resolve<Terminal>({ kind: "STREAM_ERROR" }) : new Promise(() => undefined));
-    const delayed = input.ports.delay(input.request.limits.timeoutMs, timer.signal);
-    if (!isSafeNativePromise(delayed)) return { kind: "THROWN" };
     return await Promise.race<Terminal>([
       boundary.completed.then((value) => ({ kind: "COMPLETED", outcome: normalizeOutcome(value) })),
-      delayed.then(() => ({ kind: "TIMEOUT" }) as const),
-      cancelled.promise, Promise.race([fault(stdout), fault(stderr)]),
+      expired, cancelled.promise, Promise.race([fault(stdout), fault(stderr)]),
     ]);
   } catch { return { kind: "THROWN" }; } finally {
-    timer.abort();
     try { cancelled?.dispose(); } catch { /* cancellation cleanup is best effort */ }
   }
 }
-async function startAndRegister(input: LaunchLifecycleInput, boundary: SafeBoundary): Promise<Started> {
+async function startAndRegister(input: LaunchLifecycleInput, boundary: SafeBoundary,
+  expired: Promise<Expiry>): Promise<Started> {
   const no = (failure: ClaudeLaunchFailure): Started =>
     ({ registration: null, startedAt: "", deliveredByteLength: null, failure });
   const lockUnknown = (message: string): ClaudeLaunchFailure =>
     directFailure("CLAUDE_LAUNCH_LOCK_UNKNOWN", "LAUNCH_LOCK", message);
-  let start;
-  try { start = normalizeStart(await boundary.started); }
+  let start: NormalizedStart | Expiry;
+  try { start = await Promise.race([boundary.started.then(normalizeStart), expired]); }
   catch { return no(boundaryThrown("the process lifecycle threw")); }
+  if (start.kind === "TIMEOUT") {
+    return no(directFailure("CLAUDE_LAUNCH_TIMEOUT", "LAUNCHER", "the provider start timed out"));
+  }
+  if (start.kind === "THROWN") return no(boundaryThrown("the launch deadline threw"));
   if (start.kind === "MALFORMED") return no(boundaryThrown("the start observation is not usable"));
   if (start.kind === "UNKNOWN") return no(directFailure(start.code, start.layer, "start refused"));
   // START is proven here; completion is not observed until waitForTerminal below.
-  const delivery = await deliverContext(input, boundary);
+  const delivery = await deliverContext(input, boundary, expired);
   if (delivery.kind === "FAILED") {
     return no(directFailure("CLAUDE_LAUNCH_CONTEXT_DELIVERY_FAILED", "LAUNCHER",
       "sealed context delivery failed"));
@@ -187,16 +205,19 @@ async function driveBoundary(input: LaunchLifecycleInput, boundary: SafeBoundary
   const { limits } = input.request;
   const stdout = captureStream(boundary.stdout, limits.stdoutBytes, limits.tailBytes);
   const stderr = captureStream(boundary.stderr, limits.stderrBytes, limits.tailBytes);
-  const started = await startAndRegister(input, boundary);
-  if (started.failure !== null) {
-    return { stdout, stderr, registration: null, startedAt: "", deliveredByteLength: null,
-      terminal: null, failure: started.failure };
-  }
-  const terminal = await waitForTerminal(input, boundary, stdout, stderr);
-  return { stdout, stderr, registration: started.registration, startedAt: started.startedAt,
-    deliveredByteLength: started.deliveredByteLength, terminal,
-    failure: terminal.kind === "COMPLETED" && terminal.outcome.kind === "MALFORMED"
-      ? boundaryThrown("the completion outcome is not usable") : null };
+  const unstarted = (failure: ClaudeLaunchFailure): Drive => ({ stdout, stderr, registration: null,
+    startedAt: "", deliveredByteLength: null, terminal: null, failure });
+  const deadline = armDeadline(input);
+  if (deadline === null) return unstarted(boundaryThrown("the launch deadline is unusable"));
+  try {
+    const started = await startAndRegister(input, boundary, deadline.expired);
+    if (started.failure !== null) return unstarted(started.failure);
+    const terminal = await waitForTerminal(input, boundary, stdout, stderr, deadline.expired);
+    return { stdout, stderr, registration: started.registration, startedAt: started.startedAt,
+      deliveredByteLength: started.deliveredByteLength, terminal,
+      failure: terminal.kind === "COMPLETED" && terminal.outcome.kind === "MALFORMED"
+        ? boundaryThrown("the completion outcome is not usable") : null };
+  } finally { deadline.dispose(); }
 }
 /** Cancel unless the run is PROVEN over; an unobserved end is not an ended process. */
 function provenComplete(drive: Drive | null): boolean {

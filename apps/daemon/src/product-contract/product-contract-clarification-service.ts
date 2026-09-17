@@ -26,20 +26,13 @@ import { assessClarificationMateriality } from "@moe/core";
 import type { SqliteEventStore } from "@moe/store";
 
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
+import { dataRecord } from "../json-record-shape.js";
 
 const LAYER = "PRODUCT_CONTRACT_CLARIFICATION" as const;
 const ADDRESS_DOMAIN = "moe/product-contract/clarification/v1";
 const AGGREGATE_PREFIX = "product-contract-clarification:";
 const EVENT_TYPE = "ProductContractClarificationRecorded" as const;
 const SCHEMA_VERSION = "moe-product-contract-clarification/1" as const;
-
-export const PRODUCT_CONTRACT_CLARIFICATION_SERVICE_CODES = Object.freeze([
-  "PRODUCT_CONTRACT_CLARIFICATION_MALFORMED",
-  "PRODUCT_CONTRACT_CLARIFICATION_UNKNOWN",
-  "PRODUCT_CONTRACT_CLARIFICATION_ALREADY_ANSWERED",
-  "PRODUCT_CONTRACT_CLARIFICATION_ANSWER_UNKNOWN_OPTION",
-  "PRODUCT_CONTRACT_CLARIFICATION_STORE_REFUSED",
-] as const);
 
 export interface ClarificationCommandInput {
   readonly correlationId: string;
@@ -79,12 +72,6 @@ export interface ClarificationRow {
 
 function refused(code: string, layer: string = LAYER): ClarificationRefused {
   return Object.freeze({ code, layer, ok: false });
-}
-
-function dataRecord(value: unknown): Readonly<Record<string, unknown>> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Readonly<Record<string, unknown>>
-    : null;
 }
 
 const boundedText = (value: unknown): value is string =>

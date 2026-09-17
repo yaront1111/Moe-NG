@@ -14,8 +14,9 @@
  *   MODULE-PRIVATE DECLARATIONS — a column-0 `const *_LAYER`. Structurally unreachable by an
  *   `^export const` anchor, and not dead code: ADMISSION_GATE_LAYER, GOAL_CATALOG_READ_LAYER,
  *   CUTOVER_ACTIVATION_MARKER_LAYER, PLANNING_RUN_READ_LAYER, DURABLE_STORE_LAYER (three
- *   product-contract sites) and the ten `apps/control-room/src/live/*` layers all stamp live
- *   refusals. Measured 60 at HEAD 6d0ce466.
+ *   product-contract sites) and the `apps/control-room/src/live/*` layers (ten at that HEAD;
+ *   twelve on 2026-09-17, after the v1 UI removal took the two LIVE_DOCUMENT_LAYER sites) all
+ *   stamp live refusals. Measured 60 at HEAD 6d0ce466.
  *
  *   BARE LITERALS AT THE REFUSAL SITE — a layer that is never a declaration at all, so no
  *   declaration pattern of any width can reach it. Bounded further down this module.
@@ -161,7 +162,10 @@ function scanPrivateLayerDeclarations(): readonly LayerDeclaration[] {
  * for. See the matching note above `EXPECTED_ROSTER_SIZE` in boundary-roster.security.ts.
  */
 // 80 -> 81 for the read-only completed project-pairing validation boundary.
-const EXPECTED_PRIVATE_COUNT = 84;
+// 84 -> 81 on 2026-09-17: the v1 control-room UI was removed, taking CODE_LAYERS
+// (approvals/approval-gating.ts) and both LIVE_DOCUMENT_LAYER sites
+// (live/live-document-dossier.ts, live/live-document-ingest.ts) with it.
+const EXPECTED_PRIVATE_COUNT = 81;
 
 /**
  * The frozen census, measured at HEAD 6d0ce466 through `isProductionModule` + `SCAN_ROOTS`,
@@ -193,7 +197,6 @@ const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
   { constant: "BUILD_LAYER", file: "apps/control-room/src/v2/approvals/offer-wire.ts" },
   { constant: "DESIGN_READ_LAYER", file: "apps/daemon/src/mcp-design-read-query.ts" },
   { constant: "CODEC_LAYER", file: "apps/daemon/src/provider-profile/provider-profile-codec.ts" },
-  { constant: "CODE_LAYERS", file: "apps/control-room/src/approvals/approval-gating.ts" },
   { constant: "CODE_LAYERS", file: "packages/core/src/expansion/expansion-planning-hold.ts" },
   { constant: "COMPLETION_LAYER", file: "apps/daemon/src/work/foundation-launch-completion-wiring.ts" },
   { constant: "COVERAGE_LAYER", file: "apps/daemon/src/budget/budget-coverage-reader.ts" },
@@ -222,8 +225,6 @@ const UNSCANNED_PRIVATE_LAYERS: readonly LayerDeclaration[] = Object.freeze([
   { constant: "LEDGER_LAYER", file: "apps/daemon/src/work/effect-terminal-contracts.ts" },
   { constant: "LIVE_ACTIVITY_LAYER", file: "apps/control-room/src/live/live-activity.ts" },
   { constant: "LIVE_COVERAGE_LAYER", file: "apps/control-room/src/live/live-document-coverage.ts" },
-  { constant: "LIVE_DOCUMENT_LAYER", file: "apps/control-room/src/live/live-document-dossier.ts" },
-  { constant: "LIVE_DOCUMENT_LAYER", file: "apps/control-room/src/live/live-document-ingest.ts" },
   { constant: "LIVE_GOAL_SOURCE_LAYER", file: "apps/control-room/src/live/live-goal-source.ts" },
   { constant: "LIVE_OPS_LAYER", file: "apps/control-room/src/live/live-ops.ts" },
   { constant: "LIVE_PLANNING_LAYER", file: "apps/control-room/src/live/live-planning-run.ts" },
@@ -388,8 +389,16 @@ const resolvedLayerLiterals = (): readonly string[] => {
 // 107 -> 108 for 9db2f27c's replan successor refusals (replan-successor-commands.ts and
 // use-replan-successor.ts), resolved by REPLAN_LAYER in replan-successor-port.ts. Measured by
 // diffing this scan at 3d9614fa and 9db2f27c: CONTROL_ROOM_REPLAN is the only new value.
-const EXPECTED_LITERAL_COUNT = 108;
-const EXPECTED_UNRESOLVED_LITERAL_COUNT = 39;
+// 108 -> 107 and 39 -> 38 on 2026-09-17: @moe/context's release-handoff.ts, the only site of the
+// unresolved RELEASE_HANDOFF literal, was deleted as dead code (no importer outside its own test).
+// 107 -> 106 and 38 -> 37 on 2026-09-17: the v1 control-room UI was removed, and with it
+// preview/document-dossier-state.ts, the only site of the unresolved CONTROL_ROOM_PRESENTATION
+// literal. No literal became newly unresolved: the deleted declarations' values
+// (CONTROL_ROOM_LIVE_DOCUMENTS, HUMAN_AUTHORITY_GATE, and timeline-contract.ts's
+// INPUT/PAGING/RENDER) are spelled at no surviving `layer:` site. Re-measured by running the
+// TASK-LV arms over the tree with the dead set removed.
+const EXPECTED_LITERAL_COUNT = 106;
+const EXPECTED_UNRESOLVED_LITERAL_COUNT = 37;
 
 /**
  * The frozen unresolved census. THE ALLOWLIST IS THE DELIVERABLE, NOT A TODO: closing these
@@ -415,7 +424,6 @@ const UNRESOLVED_LAYER_LITERALS: readonly string[] = Object.freeze([
   "CONFIRMATORY_FREEZE_MANIFEST_CONTRACT",
   "CONTEXT_SELECTION",
   "CONTINUATION",
-  "CONTROL_ROOM_PRESENTATION",
   "CONTROL_ROOM_PROJECT_HOME",
   "DAEMON",
   "DAEMON_APPROVAL_INTENT",
@@ -441,7 +449,6 @@ const UNRESOLVED_LAYER_LITERALS: readonly string[] = Object.freeze([
   // no entry and appears here instead. Registered by
   // task-4a6e7bdbef9a4344829a7ce49c6fb378 when it landed the routes.
   "PREVIEW_READ",
-  "RELEASE_HANDOFF",
   "RETRY_PREDICATE",
   "REVIEW_KERNEL",
   "RUN_POLICY",

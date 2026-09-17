@@ -181,6 +181,10 @@ type OpenAttempt = "OPENED" | "TIMED_OUT" | { readonly failure: unknown };
  * and this one cannot be cancelled — so its promise always keeps a handler,
  * otherwise abandoning it at the bound resurfaces later as an unhandled
  * rejection with no owner.
+ *
+ * A plain opener that vets its target throws BEFORE it has a promise to reject.
+ * Caught here, that throw is the same refusal; escaped, it rejects this port
+ * with the raw message — path included — and leaves the timer armed.
  */
 const openWithin = (
   opener: BrowserOpener,
@@ -189,16 +193,18 @@ const openWithin = (
 ): Promise<OpenAttempt> =>
   new Promise((resolve) => {
     const timer = setTimeout(() => resolve("TIMED_OUT"), timeoutMs);
-    void opener(assetPath).then(
-      () => {
+    const refused = (failure: unknown): void => {
+      clearTimeout(timer);
+      resolve({ failure });
+    };
+    try {
+      void opener(assetPath).then(() => {
         clearTimeout(timer);
         resolve("OPENED");
-      },
-      (failure: unknown) => {
-        clearTimeout(timer);
-        resolve({ failure });
-      },
-    );
+      }, refused);
+    } catch (failure) {
+      refused(failure);
+    }
   });
 
 /**

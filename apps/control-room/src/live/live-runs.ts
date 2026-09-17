@@ -4,7 +4,8 @@
  * level; malformed project deployment observations drop only that environment.
  */
 
-import { claimOf, count, exactDataRecord, landingOf, listOf, nonEmptyString, nullableString, receiptOf, reviewOf, stringList } from "./live-runs-node-parts.js";
+import { claimOf, count, landingOf, nonEmptyString, nullableString, receiptOf, reviewOf, stringList } from "./live-runs-node-parts.js";
+import { exactDataRecord, listOf } from "./live-wire-primitives.js";
 
 const LIVE_RUNS_LAYER = "CONTROL_ROOM_LIVE_RUNS";
 const INVALID_RESPONSE_CODE = "RUNS_RESPONSE_INVALID";

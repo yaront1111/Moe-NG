@@ -19,20 +19,20 @@ import {
   DESIGN_CODE_LAYERS,
   DESIGN_LAYERS,
   DESIGN_NON_FUNCTIONAL_KEYS,
+  DESIGN_PROFILE,
   DESIGN_REVISION_KEYS,
+  DESIGN_REVISION_VERSION,
   DESIGN_SECTION_KEYS,
   DESIGN_SKIP_KEYS,
   MAX_DESIGN_TEXT,
   decodeDesignRevision,
-  decodeDesignRevisionBytes,
   designAggregateId,
   designRefusal,
   isDesignSkip,
   type DesignCode,
 } from "./design-contracts.js";
+import { decodeDesignRecordBytes, encodeDesignRecord } from "./design-records.js";
 import { designRevisionFixture, designSkipFixture } from "./design-test-fixtures.js";
-
-const encoder = new TextEncoder();
 
 /** One revision with exactly one member replaced, built from the good fixture every time. */
 function revisionWith(overrides: Readonly<Record<string, unknown>>): Record<string, unknown> {
@@ -256,15 +256,22 @@ describe("decodeDesignRevision on a declared skip", () => {
   });
 
   it("survives the DURABLE round trip as a skip, not as a malformed record", () => {
-    // `decodeDesignRevisionBytes` maps ANY decode failure to DESIGN_RECORD_MALFORMED, so a skip
+    // `decodeDesignRecordBytes` maps ANY decode failure to DESIGN_RECORD_MALFORMED, so a skip
     // that decoded on submit but not on read would be stored and then unreadable — a one-way door.
-    const decoded = decodeDesignRevisionBytes(
-      encoder.encode(JSON.stringify(designSkipFixture())),
-    );
+    const decoded = decodeDesignRecordBytes(encodeDesignRecord({
+      contractRef: { contractId: "contract-1", revisionDigest: "digest-1", revisionId: "rev-1" },
+      goalRef: "goal-7",
+      profile: DESIGN_PROFILE,
+      projectId: "project-1",
+      revision: designSkipFixture(),
+      schemaVersion: DESIGN_REVISION_VERSION,
+      submittedAt: "2026-09-05T09:00:00.000Z",
+      version: 1,
+    }));
     expect(decoded.ok).toBe(true);
     if (!decoded.ok) throw new Error(`an encoded skip must decode: ${decoded.code}`);
-    expect(isDesignSkip(decoded.revision)).toBe(true);
-    expect(decoded.revision).toEqual(designSkipFixture());
+    expect(isDesignSkip(decoded.record.revision)).toBe(true);
+    expect(decoded.record.revision).toEqual(designSkipFixture());
   });
 
   it("adds no refusal code: the skip reuses the closed map's DESIGN_SHAPE_INVALID", () => {
@@ -276,35 +283,6 @@ describe("decodeDesignRevision on a declared skip", () => {
     expect(DESIGN_CODE_LAYERS[refused.code]).toBe(refused.layer);
     expect(DESIGN_CODES.filter((code) => code.includes("SKIP"))).toEqual([]);
     expect([...DESIGN_SKIP_KEYS]).toEqual([...DESIGN_SKIP_KEYS].sort());
-  });
-});
-
-describe("decodeDesignRevisionBytes", () => {
-  it("round trips the fixture through JSON bytes", () => {
-    const decoded = decodeDesignRevisionBytes(
-      encoder.encode(JSON.stringify(designRevisionFixture())),
-    );
-    expect(decoded.ok).toBe(true);
-    if (!decoded.ok) throw new Error("encoded fixture must decode");
-    expect(decoded.revision).toEqual(designRevisionFixture());
-  });
-
-  it("refuses DESIGN_RECORD_MALFORMED at LEDGER for bytes it did not write", () => {
-    const decoded = decodeDesignRevisionBytes(encoder.encode(JSON.stringify({ screens: [] })));
-    expect(decoded.ok).toBe(false);
-    if (decoded.ok) throw new Error("foreign bytes must be refused");
-    expect(decoded.code).toBe("DESIGN_RECORD_MALFORMED");
-    expect(decoded.layer).toBe("LEDGER");
-  });
-
-  it("carries the bounded-json code verbatim when the bytes are not JSON", () => {
-    const decoded = decodeDesignRevisionBytes(encoder.encode("{not json"));
-    expect(decoded.ok).toBe(false);
-    if (decoded.ok) throw new Error("non-JSON bytes must be refused");
-    expect(decoded.code).toBe("DESIGN_RECORD_MALFORMED");
-    expect(decoded.layer).toBe("LEDGER");
-    expect(decoded.sourceCode).toBe("JSON_SYNTAX_INVALID");
-    expect(decoded.sourceLayer).toBe("BOUNDED_JSON");
   });
 });
 

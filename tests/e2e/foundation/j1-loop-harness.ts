@@ -22,7 +22,7 @@ import { fileURLToPath } from "node:url";
 
 import type { AgentCredential } from "./agent-credential.js";
 import { SEEDED_LOW_RISK_TASK } from "./foundation-fixtures.js";
-import { initializeJ1Repository } from "./j1-repository-fixture.js";
+import { initializeJ1Repository, initializeProjectRoot } from "./j1-repository-fixture.js";
 
 /** Exactly what `stdio: ["ignore", "pipe", "pipe"]` produces: no stdin, both readers piped. */
 export type PipedChild = ChildProcessByStdio<null, Readable, Readable>;
@@ -207,6 +207,48 @@ export function readyDaemonOrigin(output: string): string | null {
   return ready ? match[1] : null;
 }
 
+export interface DaemonLaunch {
+  readonly args: readonly string[];
+  readonly env: NodeJS.ProcessEnv;
+}
+
+/**
+ * What `startDaemon` decides before it spawns, so `e2e-harness.test.ts` can grade it without a
+ * daemon.
+ *
+ * THE SCRATCH ROOT IS THE DAEMON'S PROJECT ROOT. `activationReceiptInput` reads
+ * `MOE_PROJECT_ROOT ?? process.cwd()`, nothing else reads the variable, and the cwd below is the
+ * checkout - so every daemon this roster spawned used to measure its activation backup into ONE
+ * `<checkout>/.moe-next/backups/`, where concurrent files pruned each other's stamps and were
+ * refused ACTIVATION_BACKUP_FAILED (1 lane run in 3, once on CI). The same root feeds the
+ * repository and distribution members, which is why `initializeProjectRoot` gives it a HEAD first.
+ */
+export function prepareDaemonLaunch(
+  scratch: J1Scratch, extraEnvironment: Record<string, string> = {},
+): DaemonLaunch {
+  initializeProjectRoot(scratch.root);
+  return {
+    args: [
+      TRANSFORM_TYPES,
+      join(REPOSITORY_ROOT, DAEMON_MAIN),
+      `--dependencies=${join(REPOSITORY_ROOT, DAEMON_DEPENDENCIES)}`,
+      "--port=0",
+      `--csrf-token=${CSRF_TOKEN}`,
+    ],
+    env: {
+      ...process.env,
+      ...storeEnvironment(scratch),
+      // Scripted journeys measure their own executable, never an incidental host CLI.
+      // A live canary supplies its real command through extraEnvironment instead.
+      MOE_AGENT_COMMAND: writeAgentShim(scratch, "complete"),
+      MOE_APPROVAL_MODE: "SPEED",
+      MOE_PROJECT_ROOT: scratch.root,
+      MOE_SPEED_MODE_DELAY_MS: "0",
+      ...extraEnvironment,
+    },
+  };
+}
+
 /**
  * Starts the REAL daemon on an EPHEMERAL port and returns only after its durable READY receipt.
  * A guessed port would silently address another daemon on a developer's machine, while the
@@ -215,24 +257,10 @@ export function readyDaemonOrigin(output: string): string | null {
 export async function startDaemon(
   scratch: J1Scratch, extraEnvironment: Record<string, string> = {},
 ): Promise<DaemonHandle> {
-  const child = spawn(process.execPath, [
-    TRANSFORM_TYPES,
-    join(REPOSITORY_ROOT, DAEMON_MAIN),
-    `--dependencies=${join(REPOSITORY_ROOT, DAEMON_DEPENDENCIES)}`,
-    "--port=0",
-    `--csrf-token=${CSRF_TOKEN}`,
-  ], {
+  const launch = prepareDaemonLaunch(scratch, extraEnvironment);
+  const child = spawn(process.execPath, [...launch.args], {
     cwd: REPOSITORY_ROOT,
-    env: {
-      ...process.env,
-      ...storeEnvironment(scratch),
-      // Scripted journeys measure their own executable, never an incidental host CLI.
-      // A live canary supplies its real command through extraEnvironment instead.
-      MOE_AGENT_COMMAND: writeAgentShim(scratch, "complete"),
-      MOE_APPROVAL_MODE: "SPEED",
-      MOE_SPEED_MODE_DELAY_MS: "0",
-      ...extraEnvironment,
-    },
+    env: launch.env,
     stdio: ["ignore", "pipe", "pipe"],
   });
   const sink = { text: "" };

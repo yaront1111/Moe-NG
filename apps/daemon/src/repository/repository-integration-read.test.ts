@@ -1,4 +1,5 @@
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -20,7 +21,7 @@ afterEach(() => {
 const git = (cwd: string, ...args: string[]): string =>
   execFileSync("git", args, { cwd, encoding: "utf8", windowsHide: true }).trim();
 
-/** The real integrator writes the records this read folds; nothing here is hand-written. */
+/** The real integrator writes the records this read folds; only a merge's name is ever hand-written, to pin how it is served. */
 function world() {
   const workspace = realpathSync(mkdtempSync(join(tmpdir(), "moe-integration-read-"))); roots.push(workspace);
   git(workspace, "init", "--quiet");
@@ -49,7 +50,17 @@ function world() {
     landed.push(entry);
     return entry;
   };
-  return { integration, landed, landedNode, store, workspace };
+  /** A NodeBranchMerged record in the integrator's own shape, naming the merge as it is told to. */
+  const recordedMerge = (entry: LandedBranch, mergeSha: string | null): void => {
+    const aggregateId = `repository-integration/${createHash("sha256").update("project-a", "utf8").digest("hex")}`;
+    const version = store.getAggregateVersion(aggregateId);
+    const commandId = `rin-fixture-${String(version)}`;
+    const facts = { at: "2026-09-16T10:00:00.000Z", branch: entry.branch, mergeSha, nodeRef: entry.nodeRef, projectId: "project-a", sha: entry.sha, version: "moe-repository-integration/1" };
+    store.commit({ aggregateId, commandBytes: new TextEncoder().encode(JSON.stringify({ eventType: "NodeBranchMerged" })), commandId,
+      committedAt: "2026-09-16T10:00:00.000Z", expectedVersion: version,
+      events: [{ eventId: `${commandId}-e1`, eventType: "NodeBranchMerged", payload: new TextEncoder().encode(JSON.stringify(facts)) }] });
+  };
+  return { integration, landed, landedNode, recordedMerge, store, workspace };
 }
 
 /** What became of each node's branch (owner decision 2026-09-16). */
@@ -76,6 +87,24 @@ describe("reading the integration of the nodes' branches", () => {
     expect(view.branches[0]).toMatchObject({ conflictPaths: [], nodeRef: first.nodeRef, sha: first.sha });
     expect(view.branches[0]?.mergeSha).toBe(git(w.workspace, "rev-parse", "HEAD"));
     expect(view.branches[1]).toMatchObject({ conflictPaths: ["shared.txt"], mergeSha: null, nodeRef: second.nodeRef, sha: second.sha });
+  }, 120_000);
+
+  it("serves no merged row without the name of its merge, which the surface holds every merge to", () => {
+    const w = world();
+    const named = w.landedNode("node:v1:alpha", "alpha.txt", "alpha\n");
+    const unnamed = w.landedNode("node:v1:beta", "beta.txt", "beta\n");
+    const blank = w.landedNode("node:v1:gamma", "gamma.txt", "gamma\n");
+    const waiting = w.landedNode("node:v1:delta", "delta.txt", "delta\n");
+    w.recordedMerge(named, "a".repeat(40));
+    // A merge the integrator could not name, and one a daemon before this fix left with an empty name.
+    w.recordedMerge(unnamed, null);
+    w.recordedMerge(blank, "");
+
+    // Served as MERGED with no name, one row would cost the operator's surface the whole read.
+    expect(readRepositoryIntegration(w.store, "project-a", w.landed).branches).toEqual([
+      { branch: named.branch, conflictPaths: [], mergeSha: "a".repeat(40), nodeRef: named.nodeRef, sha: named.sha, state: "MERGED" },
+      { branch: waiting.branch, conflictPaths: [], mergeSha: null, nodeRef: waiting.nodeRef, sha: waiting.sha, state: "WAITING" },
+    ]);
   }, 120_000);
 
   it("reads nothing for a project whose nodes landed nothing", () => {

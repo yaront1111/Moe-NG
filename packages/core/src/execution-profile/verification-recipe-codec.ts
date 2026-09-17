@@ -9,7 +9,7 @@ import {
   VERIFICATION_RECIPE_DIGEST_DOMAIN,
   VERIFICATION_RECIPE_LIMITS,
   VERIFICATION_RECIPE_VERSION,
-  verificationRecipeRefusal,
+  verificationRecipeRefusal as refusal,
   type VerificationRecipeEncodeResult,
   type VerificationRecipeProfileAdmission,
   type VerificationRecipeRefusal,
@@ -54,10 +54,6 @@ export type {
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const DIGEST_PLACEHOLDER = "0".repeat(64);
-const refusal = (
-  code: Parameters<typeof verificationRecipeRefusal>[0],
-  layer: Parameters<typeof verificationRecipeRefusal>[1],
-): VerificationRecipeRefusal => verificationRecipeRefusal(code, layer);
 
 function canonicalText(value: unknown): string {
   if (value === null) return "null";

@@ -40,12 +40,12 @@ const PROJECT = Object.freeze({
 });
 const INSTANCE_ID = "11111111-1111-4111-8111-111111111111";
 const CREATED_WRITTEN = Object.freeze({
-  createdRoot: true,
+  createdDirectories: Object.freeze([PROJECT.root]),
   paths: Object.freeze([PROJECT.configPath]),
   root: PROJECT.root,
 });
 const REGISTERED_WRITTEN = Object.freeze({
-  createdRoot: false,
+  createdDirectories: Object.freeze([]),
   paths: Object.freeze([]),
   root: PROJECT.root,
 });

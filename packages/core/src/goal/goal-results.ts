@@ -4,6 +4,7 @@
  */
 import { createRuntimeError } from "@moe/contracts";
 
+import { deepFreeze } from "../planning/planning-snapshot.js";
 import type {
   GoalCommandKind,
   GoalEvent,
@@ -11,17 +12,9 @@ import type {
   GoalState,
 } from "./goal-contract.js";
 
-export const GOAL_LAYER = "GOAL" as const;
+export { deepFreeze };
 
-export function deepFreeze<T>(value: T): T {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const key of Reflect.ownKeys(value)) {
-      deepFreeze((value as Record<PropertyKey, unknown>)[key]);
-    }
-    Object.freeze(value);
-  }
-  return value;
-}
+export const GOAL_LAYER = "GOAL" as const;
 
 /** Every refusal names its layer here once, because `RuntimeError` cannot carry the source. */
 export function rejected(error: ReturnType<typeof createRuntimeError>): GoalReducerResult {

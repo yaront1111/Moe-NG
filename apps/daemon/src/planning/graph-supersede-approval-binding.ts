@@ -13,7 +13,7 @@ import type { SqliteEventStore } from "@moe/store";
 
 import { budgetCommitmentDigest, budgetCommitmentMaterialForActiveGraph }
   from "../budget/budget-commitment.js";
-import { graphRevisionAggregateId } from "./active-graph-projection.js";
+import { graphRevisionAggregateId, readGraphRevisionHistory } from "./active-graph-projection.js";
 import { refuseSupersede } from "./graph-supersede-contracts.js";
 import type {
   GraphSupersedeRefusal, GraphSupersedeRequest,
@@ -21,18 +21,6 @@ import type {
 import type { SupersedeFacts } from "./graph-supersede-facts.js";
 import { readApprovedCriteria } from "./planning-authority-reader.js";
 import { readSupersessionPolicyDecision } from "./supersession-policy-decision.js";
-
-const decoder = new TextDecoder("utf-8", { fatal: false });
-
-function historyOf(store: SqliteEventStore, aggregateId: string): readonly unknown[] {
-  return store.readEvents(aggregateId).map((event) => {
-    try {
-      return JSON.parse(decoder.decode(event.payload)) as unknown;
-    } catch {
-      return null;
-    }
-  });
-}
 
 const uniqueSorted = (values: readonly string[]): readonly string[] =>
   [...new Set(values)].sort((left, right) => left.localeCompare(right));
@@ -48,7 +36,7 @@ function predecessorState(
   store: SqliteEventStore, request: GraphSupersedeRequest, facts: SupersedeFacts,
 ): GraphRevisionState | GraphSupersedeRefusal {
   const aggregateId = graphRevisionAggregateId(request.projectId, facts.active.revisionId);
-  const replayed = replayGraphRevisionEvents(historyOf(store, aggregateId));
+  const replayed = replayGraphRevisionEvents(readGraphRevisionHistory(store, aggregateId));
   if (!replayed.ok || replayed.state.boundHashes === null) {
     return refuseSupersede("GRAPH_SUPERSEDE_PREDECESSOR_MISMATCH");
   }

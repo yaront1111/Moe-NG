@@ -3,11 +3,7 @@ import type {
   GraphKey,
   ValidatedGraph,
 } from "./graph-model.js";
-
-/** Length-frame a variable token so no value can forge a field boundary. */
-function frame(token: string): string {
-  return `${token.length}:${token}`;
-}
+import { frame } from "./kernel-primitives.js";
 
 function appendKeyList(
   parts: string[],

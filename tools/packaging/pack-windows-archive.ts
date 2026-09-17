@@ -3,7 +3,7 @@ import {
   closeSync, constants, copyFileSync, fstatSync, lstatSync, mkdirSync,
   openSync, readFileSync, readSync, realpathSync, renameSync, statSync, unlinkSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, relative, sep } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
   PACK_STEP_FAILED, runPackStep, type PackToolLaunch,
@@ -12,6 +12,7 @@ import {
   PackOutputError, assertPackSnapshotsEqual, prepareWindowsArtifactOutput,
   packOutputPathPresent, snapshotPackTree, type PackTreeSnapshot,
 } from "./pack-output.js";
+import { pathInside } from "./pack-tool-identity.js";
 
 export interface ArchiveRosterEntry {
   readonly mode: number;
@@ -105,11 +106,6 @@ function inspectWindowsArchive(
   }
 }
 
-function inside(root: string, candidate: string): boolean {
-  const path = relative(root, candidate);
-  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path));
-}
-
 function verifiedTemporaryRoot(temporaryRoot: string, outputRoot: string, staging: string): string {
   try {
     const rootStat = lstatSync(temporaryRoot);
@@ -117,7 +113,7 @@ function verifiedTemporaryRoot(temporaryRoot: string, outputRoot: string, stagin
     const canonical = realpathSync(temporaryRoot);
     const canonicalOutput = realpathSync(outputRoot);
     const canonicalStaging = realpathSync(staging);
-    if (inside(canonicalOutput, canonical) || !inside(canonical, canonicalStaging)) throw new Error();
+    if (pathInside(canonicalOutput, canonical) || !pathInside(canonical, canonicalStaging)) throw new Error();
     return canonical;
   } catch {
     throw new PackOutputError("PACK_OUTPUT_PATH_UNSAFE");
@@ -127,7 +123,7 @@ function verifiedTemporaryRoot(temporaryRoot: string, outputRoot: string, stagin
 function regularContained(path: string, root: string): boolean {
   try {
     const stat = lstatSync(path);
-    return stat.isFile() && !stat.isSymbolicLink() && inside(root, realpathSync(path));
+    return stat.isFile() && !stat.isSymbolicLink() && pathInside(root, realpathSync(path));
   } catch {
     return false;
   }
@@ -159,7 +155,7 @@ function archiveIdentity(path: string, root: string): ArchiveIdentity {
     if (!after.isFile() || after.size !== before.size || consumed !== before.size
       || !pathAfter.isFile() || pathAfter.isSymbolicLink()
       || (before.ino !== 0 && pathAfter.ino !== 0 && before.ino !== pathAfter.ino)
-      || before.dev !== pathAfter.dev || !inside(root, realpathSync(path))) throw new Error();
+      || before.dev !== pathAfter.dev || !pathInside(root, realpathSync(path))) throw new Error();
     return Object.freeze({ sha256: hash.digest("hex"), size: before.size });
   } catch {
     throw new PackOutputError("PACK_OUTPUT_SNAPSHOT_DRIFT");

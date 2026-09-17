@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { join } from "node:path";
 import { CSRF_TOKEN, REPOSITORY_ROOT, killTree, readyDaemonOrigin } from "./j1-loop-harness.js";
 import type { DaemonHandle, J1Scratch, PipedChild } from "./j1-loop-harness.js";
+import { initializeProjectRoot } from "./j1-repository-fixture.js";
 
 export interface PreparedBoundary {
   readonly attemptId: string;
@@ -17,13 +18,15 @@ export interface CrashDaemonHandle extends DaemonHandle {
 export async function startCrashDaemon(
   scratch: J1Scratch, catalogPath: string,
 ): Promise<CrashDaemonHandle> {
+  // Its own project root as well (`prepareDaemonLaunch` says why): never the checkout's backups.
+  initializeProjectRoot(scratch.root);
   const child = spawn(process.execPath, [
     "--experimental-transform-types", join(REPOSITORY_ROOT, "apps/daemon/src/daemon-main.ts"),
     `--dependencies=${join(REPOSITORY_ROOT, "tests/e2e/foundation/dispatch-crash-dependencies.ts")}`,
     "--port=0", `--csrf-token=${CSRF_TOKEN}`,
   ], {
     cwd: REPOSITORY_ROOT,
-    env: { ...process.env, MOE_DAEMON_CREDENTIAL: scratch.credential,
+    env: { ...process.env, MOE_DAEMON_CREDENTIAL: scratch.credential, MOE_PROJECT_ROOT: scratch.root,
       MOE_PROJECT_ID: scratch.projectId, MOE_STORE_PATH: scratch.storePath,
       MOE_NODE_SPECS_DIR: scratch.specsDir, MOE_FOUNDATION_WORKSPACE_CATALOG: catalogPath,
       MOE_PROJECT_CONFIGURATION_DIGEST: undefined, MOE_VERIFICATION_CATALOG: undefined },

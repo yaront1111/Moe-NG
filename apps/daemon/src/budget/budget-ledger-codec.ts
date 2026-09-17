@@ -18,6 +18,7 @@
 
 import { createHash } from "node:crypto";
 
+import { deepFreeze, isRecord } from "../value-primitives.js";
 import {
   BUDGET_LEDGER_RECORD_KEYS,
   BUDGET_LEDGER_RECORD_VERSION,
@@ -44,19 +45,6 @@ export function budgetLedgerDigest(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-function deepFreeze<T>(value: T): T {
-  if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value as Record<string, unknown>)) {
-    deepFreeze((value as Record<string, unknown>)[key]);
-  }
-  return value;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 function isCount(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
@@ -69,7 +57,7 @@ function isCount(value: unknown): value is number {
  */
 export function canonicalBudgetJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalBudgetJson).join(",")}]`;
-  if (isPlainObject(value)) {
+  if (isRecord(value)) {
     const entries = Object.keys(value).sort()
       .map((key) => `${JSON.stringify(key)}:${canonicalBudgetJson(value[key])}`);
     return `{${entries.join(",")}}`;
@@ -78,7 +66,7 @@ export function canonicalBudgetJson(value: unknown): string {
 }
 
 function hasExactKeys(value: unknown): value is Record<string, unknown> {
-  if (!isPlainObject(value)) return false;
+  if (!isRecord(value)) return false;
   const keys = Object.keys(value);
   if (keys.length !== BUDGET_LEDGER_RECORD_KEYS.length) return false;
   return keys.every((key) => (BUDGET_LEDGER_RECORD_KEYS as readonly string[]).includes(key));
@@ -95,7 +83,7 @@ function validSettledMeters(value: unknown): boolean {
   if (!Array.isArray(value)) return false;
   let previous = "";
   for (const entry of value) {
-    if (!isPlainObject(entry)) return false;
+    if (!isRecord(entry)) return false;
     const keys = Object.keys(entry);
     if (keys.length !== 2 || !("measuredLineCount" in entry) || !("meter" in entry)) return false;
     const meter = entry["meter"];
@@ -116,7 +104,7 @@ function validate(value: Record<string, unknown>): BudgetLedgerRecord | "VERSION
   const lists = ["accounts", "appended", "reservations", "settlements", "views"];
   if (!lists.every((key) => Array.isArray(value[key]))) return "FIELD";
   if (!validSettledMeters(value["settledMeters"])) return "FIELD";
-  if (!isPlainObject(value["authorization"]) || !isPlainObject(value["binding"])) return "FIELD";
+  if (!isRecord(value["authorization"]) || !isRecord(value["binding"])) return "FIELD";
   const binding = value["binding"] as Record<string, unknown>;
   const refs = ["budgetAccountRef", "goalRef", "graphRevisionRef", "ownerRef", "projectId"];
   if (!refs.every((key) => typeof binding[key] === "string" && (binding[key] as string).length > 0)) {

@@ -25,6 +25,7 @@ import type {
   SqliteEventStore,
 } from "@moe/store";
 
+import { isRecord } from "../value-primitives.js";
 import { canonicalBudgetJson, decodeBudgetLedgerRecord, encodeBudgetLedgerRecord } from "./budget-ledger-codec.js";
 import {
   BUDGET_LEDGER_COMMAND_KIND,
@@ -58,10 +59,6 @@ export const budgetDecisionKey = (
 ): CommandDecisionKey =>
   ({ commandId: context.commandId, principalId: context.principalId, projectId });
 
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
 /**
  * Exact-record admission. An UNEXPECTED key is reported before a missing one, so a request that
  * smuggles caller-held budget authority is named as exactly that rather than as generic
@@ -74,7 +71,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 export function admitBudgetInput(
   value: unknown, keys: readonly string[], shapes: BudgetInputShape = BUDGET_NO_LIST_SHAPE,
 ): BudgetLedgerRefusal | null {
-  if (!isPlainObject(value)) return budgetLedgerRefusal("REFUSED", "BUDGET_LEDGER_INPUT_MALFORMED");
+  if (!isRecord(value)) return budgetLedgerRefusal("REFUSED", "BUDGET_LEDGER_INPUT_MALFORMED");
   const present = Object.keys(value);
   if (present.some((key) => !keys.includes(key))) {
     return budgetLedgerRefusal("REFUSED", "BUDGET_LEDGER_INPUT_UNEXPECTED_KEY");
@@ -83,7 +80,7 @@ export function admitBudgetInput(
     return budgetLedgerRefusal("REFUSED", "BUDGET_LEDGER_INPUT_MALFORMED");
   }
   const context = value["context"];
-  if (!isPlainObject(context)) return budgetLedgerRefusal("REFUSED", "BUDGET_LEDGER_INPUT_MALFORMED");
+  if (!isRecord(context)) return budgetLedgerRefusal("REFUSED", "BUDGET_LEDGER_INPUT_MALFORMED");
   const contextKeys = Object.keys(context);
   if (contextKeys.length !== BUDGET_COMMIT_CONTEXT_KEYS.length
     || contextKeys.some((key) => !(BUDGET_COMMIT_CONTEXT_KEYS as readonly string[]).includes(key))

@@ -235,16 +235,3 @@ export async function applyResolvedRestore(
   // `databaseUrl` is deliberately dropped here: what leaves this module is the path alone.
   return Object.freeze({ dump: resolved.dump, ok: true as const });
 }
-
-/**
- * Resolves the destination and the dump, then applies ONE to the OTHER — in that order, so every
- * refusal above happens while the database is still untouched. KEPT AS THE COMPOSITION for callers
- * with no admission to interleave, and for the arms that exercise both halves through one entry.
- */
-export async function applyRollbackRestore(
-  config: RollbackRestoreConfig, environment: string, ports: Pick<BackupPorts, "restoreDatabaseInto">,
-): Promise<RollbackRestoreResult> {
-  const resolved = await resolveRollbackRestore(config, environment);
-  if (!resolved.ok) return resolved;
-  return applyResolvedRestore(resolved, ports);
-}

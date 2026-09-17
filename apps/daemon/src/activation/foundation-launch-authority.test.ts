@@ -41,7 +41,7 @@ import {
   FOUNDATION_ACTIVATION_BINDING_LAYER, FOUNDATION_TRANSITION_EVENT_TYPES,
   decodeFoundationTransition, encodeFoundationTransition,
 } from "./foundation-activation-transition.js";
-import { createFoundationClaudeLauncher, createFoundationLauncherAuthority } from "./foundation-launch-authority.js";
+import { createFoundationLauncherAuthority } from "./foundation-launch-authority.js";
 
 const PROJECT_ID = "foundation-project";
 const WRAPPER = "wrapper-1";
@@ -596,21 +596,6 @@ describe("foundation durable launch registration", () => {
     });
   });
 
-  it("publishes a composed launcher rather than a bare port bag", () => {
-    withDirectory("compose", (directory) => {
-      const databasePath = join(directory, "store.sqlite");
-      withStore(databasePath, (store) => {
-        seedActivation(store);
-        const launcher = createFoundationClaudeLauncher({
-          aggregateId: DERIVED, correlationId: "launch-correlation",
-          key: { commandId: "launch-command", principalId: "principal-1", projectId: PROJECT_ID },
-          projectId: PROJECT_ID, store,
-        });
-        expect(typeof launcher).toBe("function");
-        expect(Object.isFrozen(authorityOver(store))).toBe(true);
-      });
-    });
-  });
 });
 
 describe("foundation activation history fold", () => {

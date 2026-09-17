@@ -22,6 +22,13 @@ export const MIN_PROBE_INTERVAL_MS = 5_000;
 export const MAX_PROBE_INTERVAL_MS = 3_600_000;
 
 const EVENT = "moe.probe-interval.set";
+/**
+ * The ledger is read one bounded page at a time. Every accepted write appends one event and
+ * nothing compacts, so a project whose operators have set an interval more than `MAX_PAGE_SIZE`
+ * times holds an aggregate the single-page `readEvents` refuses outright, and a setting that
+ * bricks itself after N uses is not a durable setting. Paging keeps it answering for life.
+ */
+const PAGE_LIMIT = 100;
 
 /** This module's own faults. The scheduler's `ScheduleCode` is about scheduling and stays closed. */
 export type ProbeIntervalCode =
@@ -40,14 +47,14 @@ export type ProbeIntervalResult<T> = Readonly<{ readonly ok: true; readonly valu
 export interface ProbeIntervalRecord {
   /** The EFFECTIVE interval: the stored one when set, `DEFAULT_PROBE_INTERVAL_MS` when unset. */
   read(environment: string): ProbeIntervalResult<number>;
-  /** Replaces any prior value for the environment. Never accumulates. */
+  /** Replaces any prior value for the environment in the RESOLVED set. The ledger keeps every write. */
   write(environment: string, intervalMs: number): ProbeIntervalResult<number>;
   /** Only the environments that carry a STORED value. An unset environment is absent, not 60000. */
   stored(): ProbeIntervalResult<ReadonlyMap<string, number>>;
 }
 
 export interface ProbeIntervalConfig {
-  readonly store: Pick<SqliteEventStore, "commit" | "readEvents">;
+  readonly store: Pick<SqliteEventStore, "commit" | "readAggregateEvents">;
   readonly projectId: string;
   readonly now?: () => number;
 }
@@ -67,23 +74,28 @@ export function createProbeIntervalRecord(config: ProbeIntervalConfig): ProbeInt
   let version = 0;
 
   const replay = (): ReadonlyMap<string, number> => {
-    const events = config.store.readEvents(aggregateId);
-    version = events.at(-1)?.aggregateSequence ?? 0;
     const current = new Map<string, number>();
-    for (const event of events) {
-      let record: unknown;
-      try { record = JSON.parse(new TextDecoder().decode(event.payload)); } catch { record = null; }
-      const value = record !== null && typeof record === "object" && !Array.isArray(record)
-        ? record as Record<string, unknown> : {};
-      const environment = admitEnvironmentName(value["environment"]);
-      if (environment === null) continue;
-      const intervalMs = admitProbeInterval(value["intervalMs"]);
-      // A record that no longer admits is dropped, so the environment falls back to the DEFAULT.
-      // Failing closed here means the safe rate, never an unbounded or unparsed one.
-      if (event.eventType !== EVENT || intervalMs === null) current.delete(environment);
-      else current.set(environment, intervalMs);
+    version = 0;
+    let after = 0;
+    for (;;) {
+      const page = config.store.readAggregateEvents(aggregateId, after, PAGE_LIMIT);
+      for (const event of page.items) {
+        version = event.aggregateSequence;
+        let record: unknown;
+        try { record = JSON.parse(new TextDecoder().decode(event.payload)); } catch { record = null; }
+        const value = record !== null && typeof record === "object" && !Array.isArray(record)
+          ? record as Record<string, unknown> : {};
+        const environment = admitEnvironmentName(value["environment"]);
+        if (environment === null) continue;
+        const intervalMs = admitProbeInterval(value["intervalMs"]);
+        // A record that no longer admits is dropped, so the environment falls back to the DEFAULT.
+        // Failing closed here means the safe rate, never an unbounded or unparsed one.
+        if (event.eventType !== EVENT || intervalMs === null) current.delete(environment);
+        else current.set(environment, intervalMs);
+      }
+      if (!page.hasMore || page.nextCursor === null) return current;
+      after = page.nextCursor;
     }
-    return current;
   };
 
   const stored = (): ProbeIntervalResult<ReadonlyMap<string, number>> => {

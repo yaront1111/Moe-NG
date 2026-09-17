@@ -25,12 +25,6 @@ import {
   deepFreeze, isDigest, isRef, makeIssue, oneOf, record, type AdmissionIssue,
 } from "./admission-model.js";
 
-export type AdmissionNecessityOutcomeCode =
-  | "ADMISSION_NECESSITY_ADMISSIBLE"
-  | "ADMISSION_HELD_FOR_HUMAN_DECISION"
-  | "ADMISSION_NECESSITY_REFUSED"
-  | "ADMISSION_NECESSITY_DOWNGRADED_ADVISORY";
-
 /** Digest-bound fixture references, matched to one edge. Evidence shape only. */
 export interface AdmissionCounterexample {
   readonly edgeKey: GraphKey;

@@ -12,7 +12,7 @@ import {
   EXECUTION_ISOLATION_PROFILE_PLANES,
   EXECUTION_ISOLATION_PROFILE_PURPOSES,
   EXECUTION_ISOLATION_PROFILE_VERSION,
-  executionIsolationProfileRefusal,
+  executionIsolationProfileRefusal as refusal,
   type ExecutionIsolationCredentialBrokerRef,
   type ExecutionIsolationPlane,
   type ExecutionIsolationProfileRefusal,
@@ -45,10 +45,6 @@ const DRAFT_KEYS = Object.freeze([
   "revisionId", "sourceSnapshotDigest", "tools",
 ]);
 const FULL_KEYS = Object.freeze([...DRAFT_KEYS, "revisionDigest", "version"]);
-const refusal = (
-  code: Parameters<typeof executionIsolationProfileRefusal>[0],
-  layer: Parameters<typeof executionIsolationProfileRefusal>[1],
-): ExecutionIsolationProfileRefusal => executionIsolationProfileRefusal(code, layer);
 const malformed = (): ExecutionIsolationProfileRefusal => refusal(
   "EXECUTION_ISOLATION_PROFILE_MALFORMED", "EXECUTION_ISOLATION_PROFILE_ADMISSION",
 );

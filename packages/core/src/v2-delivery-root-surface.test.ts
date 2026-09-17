@@ -21,7 +21,6 @@ import {
   decodeExecutionIsolationProfileRevisionBytes,
   decodeVerificationRecipeRevisionBytes,
   deliveryProfileFamilyDefinition,
-  deriveCapabilityCatalogRevisionDigest,
   encodeDeliveryProfileQualification,
   encodeCapabilityCatalogRevision,
   encodeDeliveryProfileRevision,
@@ -88,11 +87,10 @@ describe("v2 delivery authority on the @moe/core root", () => {
       admitVerificationRecipeForExecutionProfile,
       validateProductContractGate1V2,
       createCapabilityCatalogRevision,
-      deriveCapabilityCatalogRevisionDigest,
       encodeCapabilityCatalogRevision,
       decodeCapabilityCatalogRevisionBytes,
       resolveCapabilityCatalogEntry,
       validateProductAcceptanceBindingV2,
-    ].map((value) => typeof value)).toEqual(Array(21).fill("function"));
+    ].map((value) => typeof value)).toEqual(Array(20).fill("function"));
   });
 });

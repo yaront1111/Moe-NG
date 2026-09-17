@@ -207,6 +207,8 @@ function envelopeLeg(
  * the SEALED graph the fold just produced, evaluates it through core against the installed
  * policy, and REFUSES when the result is untierable — which refuses the seal, because they are
  * one decision. There is no branch in which a run reaches PLAN_REVIEW carrying no evaluation.
+ * Its no-event fence pins the policy head that tier was computed under, so a `policy.install`
+ * landing between evaluation and commit refuses the seal with EXPECTED_VERSION_CONFLICT.
  */
 export function commitFinalizedSubmission(
   context: HandlerContext, runId: string, prior: JsonValue | undefined, folded: FinalizedFold,
@@ -236,7 +238,7 @@ export function commitFinalizedSubmission(
   };
   const legs = [
     ...(envelope.kind === "LEG" ? [envelope.leg] : []),
-    ...(risk.kind === "LEG" ? [risk.leg] : []),
+    ...(risk.kind === "LEG" ? [risk.leg, risk.fence] : []),
   ];
   return legs.length > 0
     ? commitAcceptedLegs(store, request, plan, legs)

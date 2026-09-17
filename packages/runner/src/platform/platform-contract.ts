@@ -152,28 +152,6 @@ export function platformBoundaryRejection(boundary: unknown, layer: PlatformLaye
 }
 
 /**
- * Shape only. Deliberately does not know what any particular `os` value means —
- * deciding that "linux" is this host's operating system is an adapter's
- * judgement, and putting it here would make the shared contract answer for one
- * OS on behalf of every other.
- */
-export function platformHostRejection(
-  host: unknown,
-  layer: PlatformLayer,
-  boundary: PlatformBoundary | null = null,
-): PlatformFailure | null {
-  if (readHostIdentity(host) === null) {
-    return platformFailure(
-      "PLATFORM_FACT_MALFORMED",
-      layer,
-      boundary,
-      "host identity is not a record of bounded normalized os, arch and osVersion",
-    );
-  }
-  return null;
-}
-
-/**
  * Returns the host as a frozen copy rather than a boolean, so a caller compares
  * the bytes the gate validated. Re-reading the original is what lets a hostile
  * record pass validation and then be recorded as something else.

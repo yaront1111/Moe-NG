@@ -4,6 +4,7 @@ import { join, resolve } from "node:path";
 
 import { SqliteEventStore } from "@moe/store";
 
+import { flag } from "../argv-flag.js";
 import {
   V2_READINESS_EVIDENCE_FILENAMES,
   V2_READINESS_EVIDENCE_KINDS,
@@ -24,12 +25,6 @@ import type { V2ReadinessEvidenceBytes, V2ReadinessEvidenceKind } from "./v2-rea
  * be that checkout's HEAD: the manifest may not claim a commit the release was
  * not built from.
  */
-
-function flag(argv: readonly string[], name: string): string | null {
-  const prefix = `--${name}=`;
-  const found = argv.find((entry) => entry.startsWith(prefix));
-  return found === undefined ? null : found.slice(prefix.length);
-}
 
 function print(value: unknown, exitCode: number): never {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`);

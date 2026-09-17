@@ -14,7 +14,6 @@ import {
   policyWaiverAggregateIdFor,
   policyWaiverRefusal,
   policyWaiverTupleKeyFor,
-  samePolicyWaiverTuple,
   type PolicyWaiverGrantInput,
   type PolicyWaiverRevokeInput,
 } from "./policy-waiver-record.js";
@@ -275,10 +274,6 @@ describe("immutable policy-waiver record", () => {
 
   it("keys and compares the exact obligation and canonical-scope tuple", () => {
     const granted = grantOf().record;
-    expect(samePolicyWaiverTuple(granted, granted)).toBe(true);
-    expect(samePolicyWaiverTuple(granted, {
-      ...granted, namedObligationId: "soft.other",
-    })).toBe(false);
     expect(policyWaiverTupleKeyFor(granted)).toBe(policyWaiverTupleKeyFor({ ...granted }));
     expect(policyWaiverTupleKeyFor(granted)).not.toBe(policyWaiverTupleKeyFor({
       ...granted, scope: Object.freeze(["graph.read"]),

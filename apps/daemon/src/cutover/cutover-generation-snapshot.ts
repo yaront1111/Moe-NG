@@ -5,6 +5,7 @@ import { deriveLiveQuiesceEvidenceDigest } from "@moe/core";
 
 import { readDurableImportGeneration } from "../projections/import-generation-reader.js";
 import type { ImportGenerationStorePort } from "../projections/import-generation-reader.js";
+import { isRecord } from "../value-primitives.js";
 
 import { readCutoverQuiesceRecordBytes } from "./cutover-quiesce-record-reader.js";
 
@@ -146,10 +147,6 @@ function refuse(
     ok: false as const,
     upstream,
   });
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /**

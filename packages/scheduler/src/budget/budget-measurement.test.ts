@@ -7,12 +7,14 @@
  * coverage. _IDENTITY_CONFLICT: same identity, different bytes. _SEQUENCE_GAP / _SEQUENCE_REGRESSION:
  * the monotonic guards. _STREAM_MISMATCH: a foreign providerRunRef. CONTRACT codes: contract layer.
  */
-import { describe, expect, it } from "vitest";
-import { BUDGET_ISSUE_CODES, BUDGET_MEASUREMENT_SOURCES } from "./budget-contract.js";
+import { describe, expect, expectTypeOf, it } from "vitest";
+import {
+  BUDGET_ISSUE_CODES, BUDGET_MEASUREMENT_SOURCES, BUDGET_POLICY_RISK_TIERS,
+} from "./budget-contract.js";
 import {
   MEASUREMENT_ISSUE_CODES, SUPPORTED_SOURCE_PARSER_VERSIONS, normalizeUsageMeasurement,
   projectBudgetFact, type MeasurementIssueLayer, type MeasurementResult,
-  type NormalizedMeasurement,
+  type NormalizedMeasurement, type PolicyFactInputCompatible,
 } from "./budget-measurement.js";
 
 type Bag = Record<string, unknown>;
@@ -70,6 +72,18 @@ describe("measurement issue layering", () => {
       Object.defineProperty(observation(), "truncated", { get: () => false, configurable: true }),
     ]) refusal(normalizeUsageMeasurement(hostile), "MEASUREMENT", "BUDGET_OBSERVATION_MALFORMED");
   });
+  it("refuses an undefined pricebookBinding as a malformed envelope, not a billing claim", () => {
+    // An own key holding `undefined` is present to exactRecord, but it is no binding: the envelope
+    // guard refuses it before checkStandalone can accuse a provider source of a foreign claim.
+    const inputs = [observation({ pricebookBinding: undefined }), derived({ pricebookBinding: undefined })];
+    for (const input of inputs) {
+      const result = normalizeUsageMeasurement(input);
+      expect(result.ok).toBe(false);
+      if (result.ok) return;
+      expect(result.issues.map((issue) => `${issue.layer}:${issue.code}`))
+        .toStrictEqual(["MEASUREMENT:BUDGET_OBSERVATION_MALFORMED"]);
+    }
+  });
 });
 
 describe("measurement acceptance and fact projection", () => {
@@ -104,6 +118,13 @@ describe("measurement acceptance and fact projection", () => {
       tier: null, truthClass: "AGENT_REPORTED",
     });
     expect(Object.isFrozen(fact)).toBe(true);
+  });
+  it("derives the projected fact's tier from the mirrored risk-tier roster, not a local literal", () => {
+    // TYPE-LEVEL, enforced by `pnpm --filter @moe/scheduler typecheck`: vitest runs without
+    // `--typecheck`, so `expectTypeOf` is a runtime no-op. Growing the contract roster must grow
+    // the fact's tier with it, so the one re-diffed mirror stays the only spelling.
+    expectTypeOf<PolicyFactInputCompatible["tier"]>()
+      .toEqualTypeOf<(typeof BUDGET_POLICY_RISK_TIERS)[number] | null>();
   });
 });
 

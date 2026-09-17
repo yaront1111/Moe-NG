@@ -1,6 +1,6 @@
 /**
  * Shared goal-source admission vocabulary. The daemon declarations at
- * apps/daemon/src/documents/document-source-contract.ts:31-42 are authoritative for the
+ * apps/daemon/src/documents/document-source-contract.ts:26-37 are authoritative for the
  * media roster and byte bound; apps/control-room/src/v2/goals/use-goal-prd.ts:28 is the
  * existing browser peer. The focused parity test binds all three declarations, so this
  * module does not establish an independent third limit.

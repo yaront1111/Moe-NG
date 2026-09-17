@@ -9,6 +9,7 @@ import {
 } from "@moe/contracts";
 import type { RuntimeCommandKind } from "@moe/contracts";
 
+import { sameBytes } from "../byte-equality.js";
 import {
   PLANNING_SUBMIT_DECOMPOSITION_COMMAND_KIND,
   PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND,
@@ -17,6 +18,7 @@ import {
 } from "../product-contract/product-contract-command-contracts.js";
 import { PRODUCT_CONTRACT_GATE_1_COMMAND_KIND } from
   "../product-contract/product-contract-gate-1-contract.js";
+import { exactKeys } from "./cutover-shape.js";
 
 export const V2_SURFACE_MANIFEST_SCHEMA_VERSION = "moe-v2-surface-manifest/1" as const;
 export const V2_SURFACE_MANIFEST_LAYER = "DAEMON_V2_SURFACE_MANIFEST" as const;
@@ -74,15 +76,6 @@ function refuse(code: V2SurfaceManifestCode): V2SurfaceManifestRefused {
   return Object.freeze({ code, layer: V2_SURFACE_MANIFEST_LAYER, ok: false as const });
 }
 
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function exactKeys(value: unknown, keys: readonly string[]): value is Readonly<Record<string, unknown>> {
-  return isRecord(value) && Object.keys(value).length === keys.length
-    && keys.every((key) => Object.hasOwn(value, key));
-}
-
 const GLOBAL_COMMANDS: ReadonlySet<string> = new Set(RUNTIME_COMMAND_KINDS);
 
 function exactV2Roster(value: unknown): value is readonly V2MutationCommandKind[] {
@@ -112,10 +105,6 @@ export function encodeV2SurfaceManifest(manifest: V2SurfaceManifest): Uint8Array
     queryEnvelopeVersion: manifest.queryEnvelopeVersion,
     schemaVersion: manifest.schemaVersion,
   }));
-}
-
-function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
 }
 
 export function decodeV2SurfaceManifest(bytes: unknown): V2SurfaceManifestResult {

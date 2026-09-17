@@ -1,9 +1,7 @@
 import type { RuntimeCommandEnvelope } from "@moe/contracts";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
-import { userEvent } from "@testing-library/user-event";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
-import { LiveControlRoom } from "./live-app.js";
+import { frameOfSurface } from "./live-board-feed.js";
 import type { LiveSetup } from "./live-config.js";
 import { dispatchAffordance } from "./live-dispatch.js";
 import type { DispatchReport } from "./live-dispatch.js";
@@ -12,33 +10,22 @@ import {
   liveEffortObservations,
   liveEffortRefusals,
 } from "./live-effort-edge.js";
-import { ClockProvider } from "../performance/command-latency.js";
 
 /**
- * DoD 3 and DoD 5, and — as in `live-timing-path.test.tsx` — its SHAPE is the point.
+ * DoD 3 and DoD 5, and its SHAPE is the point.
  *
  * It does NOT call `createEffortCollector`, hand it a decision and assert the record
  * back. The effort-admission and effort-collector specs already do exactly that, they
  * passed for the entire time production had ZERO callers, and that is precisely why the
- * gap stayed invisible. Instead it drives `dispatchAffordance` — the production seam the
- * board's click handler calls — and reads the observation production recorded on the way
- * through. The APPROVE arms additionally render the live application and click the board's
- * own Dispatch button, which is what keeps the click-to-seam edge proven; the board is
- * driven through one representative click here; the per-kind dispatch sweep lives in live-board-dispatch.test.tsx.
+ * gap stayed invisible. Instead it drives `dispatchAffordance` — the production seam every
+ * dispatch goes through — with the exact offer the daemon's surface put on the wire, read
+ * back through the surface reader production uses, and reads the observation production
+ * recorded on the way through.
  *
  * Nothing below hands the surface a record, a decision kind, a source or a reason code.
  * Every asserted value is one production produced from the command kind and the
- * daemon-minted command identity the board actually dispatched.
+ * daemon-minted command identity that was dispatched.
  */
-
-beforeAll(() => {
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-});
-
-afterEach(() => {
-  cleanup();
-  vi.unstubAllGlobals();
-});
 
 interface Card {
   readonly aggregateId: string;
@@ -53,10 +40,10 @@ function card(kind: string, commandId: string, aggregateId: string): Card {
 
 /**
  * The daemon's per-run planning authority, with its exact seven keys
- * (apps/daemon/src/http/affordance-planning-authorities.ts). The board renders an
- * `approval.decide` control only for a run the surface bound to a goal AND handed material
- * for, so the surface this file answers with now states both — VALID wire facts, added
- * because the render fence moved; no expectation below is weakened for them.
+ * (apps/daemon/src/http/affordance-planning-authorities.ts). `dispatchAffordance` authors
+ * an `approval.decide` only for a run the surface bound to a goal AND handed material for,
+ * so the surface this file answers with states both — VALID wire facts; no expectation
+ * below is weakened for them.
  */
 function materialFor(runId: string, goalRef: string): Record<string, unknown> {
   const graphRevisionRef = `${runId}-graph-revision`;
@@ -112,6 +99,7 @@ function planningFactsFor(cards: readonly Card[]): {
   return { authorities, refs };
 }
 
+/** The daemon's affordance surface, byte-for-byte as the board feed would receive it. */
 function surfaceBody(cards: readonly Card[]): string {
   const { authorities, refs } = planningFactsFor(cards);
   return JSON.stringify({
@@ -134,10 +122,8 @@ function surfaceBody(cards: readonly Card[]): string {
   });
 }
 
-/** The daemon's affordance surface, answered through the board feed's own fetch seam. */
-function stubSurfaceFetch(cards: readonly Card[]): void {
-  vi.stubGlobal("fetch", async () => new Response(surfaceBody(cards), { status: 200 }));
-}
+/** The decide-time budget commitment an approval carries; read off the daemon, never minted. */
+const COMMITMENT_REF = "4d".repeat(32);
 
 function setupWith(cards: readonly Card[]): LiveSetup {
   const commands: Record<string, unknown> = {};
@@ -181,61 +167,41 @@ function setupWith(cards: readonly Card[]): LiveSetup {
   } as unknown as LiveSetup;
 }
 
-function reportOf(entry: Card): HTMLElement {
-  return screen.getByTestId(`cr.liveboard.report.${entry.kind}@${entry.aggregateId}`);
-}
-
 /**
- * TWO DRIVERS, and the split is forced rather than chosen.
+ * ONE DRIVER, the production seam.
  *
- * The rendered application is clicked for `approval.decide` as the
- * representative kind. Every other kind is driven
- * through `dispatchAffordance` — the SAME production function the board's own
- * click handler calls, with the same affordance record the surface carries — so
- * no assertion below is weakened: what is lost is the click, not the production
- * path, and the arm that still clicks proves the click reaches that path.
+ * Every arm drives `dispatchAffordance`, the one function every control-room dispatch
+ * goes through. The v1 board's click handler used to be exercised here as a second driver
+ * for `approval.decide`; that board went with the v1 control room, and there is no v2
+ * board click to retarget at: v2's work board is read-only by contract
+ * (`v2/goals/work-board.test.tsx` pins that `work-board.tsx` never names
+ * `dispatchAffordance`), and v2 dispatch reaches this seam through the `v2/approvals/*`
+ * ports. What is lost is the click, not the production path.
+ *
+ * The offer handed over is not spelled here: the surface body is read back through
+ * `frameOfSurface`, the reader the board feed uses, so the seam receives the exact frozen
+ * offer record — with the daemon's planning material bound to it — that a live surface
+ * would have handed the click.
  */
-
-/** Renders the real application over the surface and clicks the board's own buttons. */
-async function dispatchThroughBoard(
-  cards: readonly Card[], clicks: readonly Card[],
-): Promise<void> {
-  stubSurfaceFetch(cards);
-  render(
-    <ClockProvider clock={{ now: () => 1_000 }}>
-      <LiveControlRoom setup={setupWith(cards)} />
-    </ClockProvider>,
-  );
-  for (const entry of clicks) {
-    // This driver renders and clicks the approval card only; a caller asking
-    // for another kind wants the seam driver below, and should hear so
-    // rather than time out.
-    expect(entry.kind, "this driver clicks only the approval card")
-      .toBe("approval.decide");
-    await userEvent.click(await screen.findByTestId(`cr.liveboard.dispatch.${entry.kind}`));
-    await waitFor(() => {
-      expect(reportOf(entry).textContent).not.toContain("dispatching");
-    });
-  }
-}
-
-/** The seam the board's click handler calls, driven directly for the un-clicked kinds. */
 async function dispatchThroughSeam(
   cards: readonly Card[], dispatched: readonly Card[],
 ): Promise<readonly DispatchReport[]> {
   const setup = setupWith(cards);
+  const frame = frameOfSurface(JSON.parse(surfaceBody(cards)));
+  // A surface the reader refuses would hand every arm below an empty offer list and let
+  // the seam refuse for the wrong reason, so the decode is asserted, not assumed.
+  expect(frame.outcome).toBe("SURFACE");
   const reports: DispatchReport[] = [];
   for (const entry of dispatched) {
+    const affordance = frame.offers.find((offer) => offer["commandId"] === entry.commandId);
+    expect(affordance, `the surface offered ${entry.kind}@${entry.aggregateId}`).toBeDefined();
     reports.push(await dispatchAffordance({
-      // Byte-for-byte the offer `surfaceBody` puts on the wire for this card,
-      // which is what the board would have handed over.
-      affordance: {
-        commandId: entry.commandId, commandKind: entry.kind,
-        expectedVersion: 0, targetAggregateId: entry.aggregateId,
-      },
+      affordance: affordance ?? {},
       aggregateId: entry.aggregateId,
       client: setup.client,
       kind: entry.kind,
+      planningGoalRefs: frame.planningGoalRefs,
+      readBudgetCommitment: () => Promise.resolve({ ref: COMMITMENT_REF, status: "COMMITMENT" }),
       sessionCredential: setup.sessionCredential,
       transport: setup.transport,
     }));
@@ -251,7 +217,7 @@ function refusalsFor(commandId: string): readonly { refusal: { code: string; lay
   return liveEffortRefusals().filter((entry) => entry.commandId === commandId);
 }
 
-describe("the live board records the decision it demanded of the operator", () => {
+describe("the live dispatch records the decision it demanded of the operator", () => {
   it("attributes the demanded CREATE to the daemon's own command identity", async () => {
     const goal = card("goal.create", "afford-create-1", "goal-a");
     const [report] = await dispatchThroughSeam([goal], [goal]);
@@ -277,12 +243,14 @@ describe("the live board records the decision it demanded of the operator", () =
     const approve = card("approval.decide", "afford-sweep-approve", "approval-b");
     const accept = card("integration.accept_output", "afford-sweep-accept", "node-b");
     const cards = [create, approve, accept];
-    // APPROVE goes through the rendered board; the remaining kinds go through the
-    // seam that board click calls. Same order the single-driver version used.
+    // Same order the two-driver version used, so the ADDITIONAL arm still lands on CREATE.
     await dispatchThroughSeam(cards, [create]);
-    await dispatchThroughBoard(cards, [approve]);
+    const [approved] = await dispatchThroughSeam(cards, [approve]);
     await dispatchThroughSeam(cards, [accept, create]);
 
+    // The approval was AUTHORED, not merely observed: the offer carried the daemon's
+    // planning material and the commitment read, exactly as the live surface hands it.
+    expect(approved?.stage).toBe("ANSWERED");
     const swept = ["afford-sweep-create", "afford-sweep-approve", "afford-sweep-accept"]
       .flatMap((commandId) => decisionsFor(commandId).map((d) => d.decisionKind));
     expect(swept).toHaveLength(4);
@@ -320,10 +288,10 @@ describe("the live board records the decision it demanded of the operator", () =
   it("records the attention switch between the two card surfaces it observed", async () => {
     const first = card("goal.create", "afford-switch-1", "goal-d");
     const second = card("approval.decide", "afford-switch-2", "approval-d");
-    // The switch crosses drivers, which is exactly what makes it a switch: the
-    // surface identity comes from the dispatch seam, not from the DOM element.
+    // Two dispatches, two surface identities: the identity comes from the offer the seam
+    // was handed, never from a DOM element, so the switch is production's observation.
     await dispatchThroughSeam([first, second], [first]);
-    await dispatchThroughBoard([first, second], [second]);
+    await dispatchThroughSeam([first, second], [second]);
 
     const switched = liveEffortObservations().filter(
       (observed) => observed.type === "ATTENTION_SWITCH"

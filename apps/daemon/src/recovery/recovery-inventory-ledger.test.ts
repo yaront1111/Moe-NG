@@ -217,6 +217,86 @@ describe("durable reconciliation record", () => {
       .toBe(RECOVERY_RECONCILIATION_COMMAND_KIND);
   });
 
+  it("replays identical facts recorded under a different principal", async () => {
+    // The record is addressed by its content, but the store keys replay on the
+    // principal: a second operator re-recording the same facts must be handed
+    // the one durable record back, not told the evidence is inconsistent while
+    // the digest reads back FOUND.
+    const { binding, store } = await prepare();
+    const first = recordRecoveryReconciliation(
+      store,
+      writeRequest,
+      facts(binding.backupGenerationDigest),
+    );
+    if (!first.ok) throw new Error("first write must succeed");
+    const other = { ...writeRequest, correlationId: "corr-2", principalId: "principal-2" };
+    const second = recordRecoveryReconciliation(
+      store,
+      other,
+      facts(binding.backupGenerationDigest),
+    );
+    expect(second.ok ? second.outcome : second.upstream.code).toBe("RECORDED");
+    if (!second.ok) throw new Error("unreachable");
+    expect(second.disposition).toBe("REPLAYED");
+    expect(second.recordDigest).toBe(first.recordDigest);
+    expect(second.record).toEqual(first.record);
+    const read = readRecoveryReconciliation(store, PROJECT_ID, first.recordDigest);
+    expect(read.ok).toBe(true);
+    // The replay is answered from the evidence already filed: no second event
+    // and no rejected decision are written under the other principal's key.
+    const events = store.readAggregateEvents(
+      recoveryReconciliationAggregateId(first.recordDigest),
+    );
+    expect(events.items).toHaveLength(1);
+    expect(store.getCommandDecision({
+      commandId: `recovery-reconcile:${first.recordDigest}`,
+      principalId: other.principalId,
+      projectId: PROJECT_ID,
+    })).toBeNull();
+  });
+
+  it("still refuses another principal when the stored evidence really differs", async () => {
+    const { binding, store } = await prepare();
+    const first = recordRecoveryReconciliation(
+      store,
+      writeRequest,
+      facts(binding.backupGenerationDigest),
+    );
+    if (!first.ok) throw new Error("first write must succeed");
+    const aggregateId = recoveryReconciliationAggregateId(first.recordDigest);
+    const extra = store.commitExpectedVersionDecision({
+      commandKind: RECOVERY_RECONCILIATION_COMMAND_KIND,
+      committedResultBytes: encoder.encode("{}"),
+      correlationId: writeRequest.correlationId,
+      decidedAt: AT,
+      events: [
+        { eventId: "extra-event", eventType: RECOVERY_RECONCILIATION_EVENT_TYPE, payload: encoder.encode("{}") },
+      ],
+      expectedVersion: 1,
+      key: {
+        commandId: `recovery-reconcile-extra:${first.recordDigest}`,
+        principalId: writeRequest.principalId,
+        projectId: PROJECT_ID,
+      },
+      requestBytes: encoder.encode("{}"),
+      targetAggregateId: aggregateId,
+    });
+    expect(extra.decision.effectDisposition).toBe("EFFECTS_COMMITTED");
+
+    const second = recordRecoveryReconciliation(
+      store,
+      { ...writeRequest, correlationId: "corr-2", principalId: "principal-2" },
+      facts(binding.backupGenerationDigest),
+    );
+    expect(second.ok).toBe(false);
+    if (second.ok) throw new Error("unreachable");
+    expect(second.upstream).toEqual({
+      code: "RECORD_CONFLICT",
+      layer: "RECOVERY_INVENTORY_LEDGER",
+    });
+    expect(store.readAggregateEvents(aggregateId).items).toHaveLength(2);
+  });
+
   it("survives close and reopen and is visible to a second handle", async () => {
     const { binding, path, store } = await prepare();
     const written = recordRecoveryReconciliation(

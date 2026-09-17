@@ -249,15 +249,14 @@ it("generates one expectation per published root export", () => {
  * Hand-written, never derived from the namespace under test. Each name is a measurement or budget
  * symbol its own module exports but the root deliberately withholds: the bare validator and the
  * budget-policy projection would let a consumer accept a record normalizeUsageMeasurement refuses,
- * and the account/reserve validators belong to a different seam entirely.
+ * and the meter ceiling belongs to a different seam entirely.
  */
 const WITHHELD_BUDGET_NAMES: readonly string[] = [
-  "projectBudgetFact", "validateUsageMeasurement", "MEASUREMENT_FACT_TIER",
-  "validateBudgetAccount", "validateReserveDeclaration", "MAX_BUDGET_METERS",
+  "projectBudgetFact", "validateUsageMeasurement", "MEASUREMENT_FACT_TIER", "MAX_BUDGET_METERS",
 ];
 
 it("withholds the budget symbols a consumer could use to bypass the measurement authority", () => {
-  expect(WITHHELD_BUDGET_NAMES.length).toBe(6);
+  expect(WITHHELD_BUDGET_NAMES.length).toBe(4);
   const published = new Set(Object.keys(scheduler));
   const leaked = WITHHELD_BUDGET_NAMES.filter((name) => published.has(name));
   expect(leaked).toStrictEqual([]);

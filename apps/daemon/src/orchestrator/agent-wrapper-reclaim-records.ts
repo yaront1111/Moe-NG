@@ -1,5 +1,8 @@
 import type { StoredEvent } from "@moe/store";
 
+import { recordedHostBootOf } from "./agent-staffing-host-boot.js";
+import type { RecordedHostBoot } from "./agent-staffing-host-boot.js";
+
 /**
  * The READ half of the staffing log, kept beside the reclaim pass rather than
  * inside `agent-session-fence.ts` — that module owns ADMISSION and is already at
@@ -17,6 +20,8 @@ export interface LiveChildRecord {
   /** `null` when the admission recorded no probeable pid; never a guessed value. */
   readonly childPid: number | null;
   readonly claimAggregateVersion: number;
+  /** The host-boot witness written beside the pid; null for a row written without it. */
+  readonly hostBoot: RecordedHostBoot | null;
   readonly sessionId: string;
   readonly workItemId: string;
 }
@@ -37,8 +42,8 @@ function parsed(payload: Uint8Array): Record<string, unknown> | null {
     : null;
 }
 
-function admittedRecord(payload: Uint8Array): LiveChildRecord | "UNREADABLE" {
-  const facts = parsed(payload);
+function admittedRecord(event: StoredEvent): LiveChildRecord | "UNREADABLE" {
+  const facts = parsed(event.payload);
   if (facts === null) return "UNREADABLE";
   const sessionId = facts["sessionId"];
   const workItemId = facts["workItemId"];
@@ -50,7 +55,10 @@ function admittedRecord(payload: Uint8Array): LiveChildRecord | "UNREADABLE" {
   // Integer and positive, exactly as the fence writes it: 0 and negatives address
   // process GROUPS, and a fractional pid can never identify a process.
   const childPid = typeof pid === "number" && Number.isInteger(pid) && pid > 0 ? pid : null;
-  return { childPid, claimAggregateVersion: version, sessionId, workItemId };
+  return {
+    childPid, claimAggregateVersion: version, hostBoot: recordedHostBootOf(facts),
+    sessionId, workItemId,
+  };
 }
 
 /**
@@ -64,7 +72,7 @@ export function liveChildOf(
   const ordered = [...events].sort((a, b) => a.aggregateSequence - b.aggregateSequence);
   for (const event of ordered) {
     if (event.eventType === ADMITTED) {
-      live = admittedRecord(event.payload);
+      live = admittedRecord(event);
       continue;
     }
     // A RETIRE clears even an unreadable admission, so one bad payload cannot

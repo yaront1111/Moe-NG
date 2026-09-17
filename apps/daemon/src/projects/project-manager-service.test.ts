@@ -35,12 +35,12 @@ const PROJECT = {
   storePath: "C:\\work\\alpha\\store.sqlite",
 } as const;
 const CREATED_WRITTEN: WrittenProjectFiles = Object.freeze({
-  createdRoot: true,
+  createdDirectories: Object.freeze([PROJECT.root]),
   paths: Object.freeze([PROJECT.configPath]),
   root: PROJECT.root,
 });
 const REGISTERED_WRITTEN: WrittenProjectFiles = Object.freeze({
-  createdRoot: false,
+  createdDirectories: Object.freeze([]),
   paths: Object.freeze([]),
   root: PROJECT.root,
 });
@@ -285,7 +285,7 @@ describe("catalog refusal compensation", () => {
     });
     expect(await readFile(keepPath, "utf8")).toBe("KEEP");
     expect(await readdir(root)).toEqual(["keep.txt"]);
-    expect(existsSync(root)).toBe(true); // createdRoot is true; ENOTEMPTY preserves it.
+    expect(existsSync(root)).toBe(true); // this call made the root; ENOTEMPTY preserves it.
   });
 
   it("keeps an empty root that this call did not create", async () => {

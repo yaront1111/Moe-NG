@@ -40,6 +40,3 @@ export const PRODUCT_CONTRACT_ASK_CLARIFICATION_PAYLOAD_KEYS = Object.freeze([
 export const PRODUCT_CONTRACT_ANSWER_CLARIFICATION_PAYLOAD_KEYS = Object.freeze([
   "answerProjectionDigest", "clarificationId", "contractId",
 ] as const);
-
-export const PRODUCT_CONTRACT_CLARIFICATION_UNBUILT_CODE =
-  "PRODUCT_CONTRACT_CLARIFICATION_UNBUILT" as const;

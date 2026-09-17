@@ -24,7 +24,6 @@ import type {
 } from "../../adapters/ide-contract/src/index.js";
 import { shapeEffortObservation } from "../../apps/control-room/src/performance/effort-admission.js";
 import { createEffortCollector } from "../../apps/control-room/src/performance/effort-collector.js";
-import { walkTimeline } from "../../apps/control-room/src/timeline/timeline-page.js";
 import { startDaemon } from "../../apps/daemon/src/daemon-entry.js";
 import { observation } from "../../apps/daemon/src/http/event-stream-observation.js";
 import {
@@ -35,17 +34,17 @@ import { probeAfter, probeBefore, probeRacing } from "./hostile-harness.js";
 import type { RaceOutcome, RefusalExpectation } from "./hostile-harness.js";
 import {
   ADMISSION_CONTRADICTORY, ASSETS_MISSING, AUTHENTICATION_FAILED, AUTHORITY, BOUND,
-  COLLECTOR_CONTRADICTORY, CSRF_INVALID, CURSOR_NOT_ADVANCING, DISCOVERY_REFUSED,
+  COLLECTOR_CONTRADICTORY, CSRF_INVALID, DISCOVERY_REFUSED,
   ENDPOINT_MISSING, EVIDENCE_MALFORMED, FORBIDDEN_FIELD, FREE_INTERACTION, HOST_INVALID,
   IDENTITY_ABSENT, INGEST_OPERATOR_PRINCIPAL_REQUIRED, INGEST_PROJECT_MISMATCH,
-  INGRESS_MALFORMED, INTERVAL_OPEN_AWAY, LEDGER_UNREADABLE, LIMIT_INVALID,
+  INGRESS_MALFORMED, INTERVAL_OPEN_AWAY, LEDGER_UNREADABLE,
   NO_PROVIDER, ORIGIN, PAGE_REQUEST, PROVIDER_THREW, READING_NOT_PROVIDED, RECIPIENT_UNKNOWN,
   RELEASE_FAILED, REQUEST_FAILED, RESPONSE_UNREADABLE, RESUME_INPUT_INVALID,
   RESUME_SESSION_MISMATCH, SOURCE_ABSENT, START_REFUSED,
-  STREAM_INVALID, UNCANONICAL, UNPARSEABLE, decodeCompletion, decodedRecord, drained, encode,
+  STREAM_INVALID, UNCANONICAL, UNPARSEABLE, decodeCompletion, decodedRecord, encode,
   attemptResume, forgedBinding, garbled, grantedBinding, hostile, jsonBytes, orphanClose, request,
   resumePayload,
-  revokedProvider, sendVia, severed, stalling, sweepHeldSessions, verdictFor,
+  revokedProvider, sendVia, severed, sweepHeldSessions, verdictFor,
   withHostileDocumentIngest, withPoisonedSurface,
   APPROVAL_BUILD_REFUSED, APPROVAL_TRANSPORT_FAILED, APPROVAL_TRANSPORT_UNREADABLE,
   BUDGET_RESPONSE_INVALID, BUDGET_TRANSPORT_FAILED, PAIRING_BODY_TOO_LARGE,
@@ -202,28 +201,6 @@ export const TRANSPORT_HOSTILE_CASES: readonly HostileCase[] = Object.freeze([
           commandId: "cmd-1", intervalKind: "AWAY", observedAt: 3,
           source: "CONTROL_ROOM_DOM", type: "INTERVAL_CLOSE" }));
     } },
-
-  { arm: "BEFORE", boundary: "TIMELINE_REFUSAL_LAYERS", expected: LIMIT_INVALID,
-    name: "a forged row bound is refused at INPUT before any page is fetched",
-    run: async () => (await probeBefore(BOUND,
-      async () => walkTimeline({ filter: null, maxRows: 0, source: stalling, startCursor: null }),
-      async () => walkTimeline({
-        filter: null, maxRows: Number.NaN, source: stalling, startCursor: null }))).probe },
-
-  { arm: "AFTER", boundary: "TIMELINE_REFUSAL_LAYERS", expected: CURSOR_NOT_ADVANCING,
-    name: "a source still claiming more once the cursor stopped advancing is refused",
-    run: async () => (await probeAfter(BOUND,
-      async () => walkTimeline({ filter: null, maxRows: 5, source: drained, startCursor: null }),
-      async () => walkTimeline({
-        filter: null, maxRows: 5, source: stalling, startCursor: 42 }))).probe },
-
-  { arm: "RACE", boundary: "TIMELINE_REFUSAL_LAYERS",
-    expected: both(LIMIT_INVALID, CURSOR_NOT_ADVANCING),
-    name: "a forged bound and a stalling source contend; neither walks a row",
-    run: async () => await probeRacing(BOUND,
-      async () => walkTimeline({
-        filter: null, maxRows: Number.NaN, source: stalling, startCursor: null }),
-      async () => walkTimeline({ filter: null, maxRows: 3, source: stalling, startCursor: 7 })) },
 
   { arm: "BEFORE", boundary: "DAEMON_ENTRY_LAYER", expected: NO_PROVIDER,
     name: "a start with no dependency provider refuses before any socket is bound",
