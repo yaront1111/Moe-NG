@@ -5,10 +5,12 @@ import type { SqliteEventStore } from "@moe/store";
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { decisionsOf } from "../decision-ledger-memo.js";
-import { readGraphBody } from "../planning/graph-body-record.js";
+import { graphBodyAggregateId, readGraphBody } from "../planning/graph-body-record.js";
 import { readWorkClaimLedger } from "../work/work-claim-read-model.js";
 import { landingAggregateId } from "../repository/landing-receipt-contracts.js";
 import type { ActiveCompiledGraph } from "./compiled-node-source.js";
+import { durableWalkMemoisable, memoisedDurableWalk } from "./durable-walk-memo.js";
+import type { DurableWalkMemos } from "./durable-walk-memo.js";
 
 /** Historical authority and legacy execution must be readable before new work is staffed. */
 export const COMPILED_NODE_IDENTITY_UNREADABLE = "COMPILED_NODE_IDENTITY_UNREADABLE";
@@ -24,9 +26,31 @@ interface HistoricalGraph extends ActiveCompiledGraph {
   readonly planningRunRef: string;
 }
 
+/**
+ * WHY THIS WALK IS MEMOISED. It decodes EVERY committed decision of the project and parses each
+ * historical graph body from its bytes, and `legacyCompiledNodeKeys` runs it for its refusal
+ * alone — the result is discarded. Called once per node per delivery pass. Measured on UnAI
+ * 2026-09-17, after the active-graphs walk was memoised: 34.5% of the live wrapper's CPU under
+ * this one function, passes still taking minutes. Everything it reads is decisions (the ledger
+ * marker) plus graph bodies (events on their own aggregates, recorded by version); the freshness
+ * proof lives in `durable-walk-memo.ts`. A walk that throws is not remembered.
+ */
+const historyMemos: DurableWalkMemos<readonly HistoricalGraph[]> = new WeakMap();
+
+function historicalGraphsOf(
+  store: SqliteEventStore, projectId: string, folded: DurableLedger | undefined,
+): readonly HistoricalGraph[] {
+  if (folded !== undefined || !durableWalkMemoisable(store)) {
+    return historicalGraphs(store, projectId, folded ?? readDurableLedger(store, projectId), () => undefined);
+  }
+  return memoisedDurableWalk(store, historyMemos, projectId, (touch) =>
+    historicalGraphs(store, projectId, readDurableLedger(store, projectId), touch));
+}
+
 /** A terminal goal or a successor run must never erase an earlier execution owner. */
 function historicalGraphs(
   store: SqliteEventStore, projectId: string, ledger: DurableLedger,
+  touch: (aggregateId: string) => void,
 ): readonly HistoricalGraph[] {
   const history = new Map<string, HistoricalGraph>();
   for (const decision of decisionsOf(store, 200)) {
@@ -47,11 +71,12 @@ function historicalGraphs(
       || typeof graphContentHash !== "string" || !/^[0-9a-f]{64}$/u.test(graphContentHash)) {
       throw new Error(COMPILED_NODE_IDENTITY_UNREADABLE);
     }
+    touch(graphBodyAggregateId(projectId, graphContentHash));
     const body = readGraphBody(store, projectId, graphContentHash);
     if (!body.ok) throw new Error(COMPILED_NODE_IDENTITY_UNREADABLE);
     history.set(owner, { content: body.content, goalRef: decision.targetAggregateId, graphContentHash, planningRunRef });
   }
-  return [...history.values()];
+  return Object.freeze([...history.values()]);
 }
 
 /**
@@ -63,7 +88,7 @@ function historicalGraphs(
 export function legacyCompiledNodeKeys(
   store: SqliteEventStore, projectId: string, current: readonly ActiveCompiledGraph[], folded?: DurableLedger,
 ): ReadonlySet<string> {
-  historicalGraphs(store, projectId, folded ?? readDurableLedger(store, projectId));
+  historicalGraphsOf(store, projectId, folded);
   const claims = readWorkClaimLedger(store, projectId);
   if (claims.unreadable) throw new Error(COMPILED_NODE_IDENTITY_UNREADABLE);
   const keys = new Set(current.flatMap((graph) => graph.content.snapshot.nodes.map((node) => node.nodeKey)));

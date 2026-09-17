@@ -28,7 +28,6 @@ import type { SqliteEventStore } from "@moe/store";
 
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
-import { decisionsOf, isDecisionLedgerMemoized } from "../decision-ledger-memo.js";
 import { createCompilerLanePort } from "../http/affordance-compiler-lane.js";
 import type { NodeSpec } from "../http/affordance-contract.js";
 import { graphBodyAggregateId, readGraphBody } from "../planning/graph-body-record.js";
@@ -37,6 +36,8 @@ import { readApprovedRunWitness } from "../planning/planning-authority-reader-wi
 import { legacyCompiledNodeKeys, nodesBlockedByIdentity } from "./compiled-node-identity.js";
 import { compiledExecutionRef } from "./compiled-execution-ref.js";
 import { compiledPlanContext } from "./compiled-plan-context.js";
+import { durableWalkMemoisable, memoisedDurableWalk } from "./durable-walk-memo.js";
+import type { DurableWalkMemos } from "./durable-walk-memo.js";
 import { deriveProductContractRevisionAggregateId }
   from "../product-contract/product-contract-revision-store.js";
 
@@ -83,62 +84,21 @@ function dataRecord(value: unknown): Readonly<Record<string, unknown>> | null {
 
 const HEX_64 = /^[0-9a-f]{64}$/u;
 const ENABLED_LIFECYCLES = new Set(["EXECUTION_ENABLED", "CLOSING"]);
-const LEDGER_PAGE_SIZE = 200;
 
 /**
- * What one walk of the active graphs depended on, so the next call can prove the answer is
- * still current without repeating the walk.
- *
- * WHY THIS EXISTS. `activeCompiledGraphs` folds the whole decision ledger and then parses every
- * sealed graph body out of its JSON bytes — and it is called once PER NODE: the wrapper's
- * delivery pass asks each node for its mission, each mission builds a fresh compiled source,
- * and each source walks everything. Measured on UnAI 2026-09-17 with a 15 s CPU profile of the
- * live wrapper: 63% on-CPU with nothing to staff, 60% of it under this walk (the ledger fold,
- * `decodeBoundedJsonBytes` and `decodeGraphContent`), one delivery pass running for 25 minutes
- * with ~70 node trees, and not one log line in that time — so nothing was staffed and
- * governance never ran.
- *
- * WHY THE KEY IS NOT JUST THE DECISION LEDGER. The goal and run STATES come from decisions, but
- * the run chain, the activation witness and the graph body are read from EVENTS on their own
- * aggregates, and a graph body is content-addressed and written without a decision row. A key
- * on the ledger position alone would serve a graph whose chain moved or whose body only just
- * landed. So the walk records every aggregate it reads — goals, runs, bodies, present or absent
- * — with the version it saw BEFORE reading it, and a hit requires every one of them unchanged.
- * Reading the version first means a commit racing the walk can only make the next check fail,
- * never pass on stale bytes.
- *
- * ENROLLED HANDLES ONLY. `decisionsOf` walks from zero on a handle nobody enrolled, so the marker
- * alone would cost a full walk there; the wrapper and the stack host enroll at start, and a
- * one-shot CLI or a test handle keeps exactly the read pattern it had.
+ * WHY THIS WALK IS MEMOISED. `activeCompiledGraphs` folds the whole decision ledger and then
+ * parses every sealed graph body out of its JSON bytes — and it is called once PER NODE: the
+ * wrapper's delivery pass asks each node for its mission, each mission builds a fresh compiled
+ * source, and each source walks everything. Measured on UnAI 2026-09-17 with a 15 s CPU profile
+ * of the live wrapper: 63% on-CPU with nothing to staff, 60% of it under this walk (the ledger
+ * fold, `decodeBoundedJsonBytes` and `decodeGraphContent`), one delivery pass running for 25
+ * minutes with ~70 node trees, and not one log line in that time — so nothing was staffed and
+ * governance never ran. The freshness proof lives in `durable-walk-memo.ts`.
  */
-interface ActiveGraphsMemo {
-  readonly graphs: readonly ActiveCompiledGraph[];
-  readonly marker: string;
-  readonly versions: ReadonlyMap<string, number>;
-}
-
-const activeGraphMemos = new WeakMap<SqliteEventStore, Map<string, ActiveGraphsMemo>>();
-
-/** A version that tells absent from present and never throws: an absent aggregate is a fact too. */
-function aggregateVersionOf(store: SqliteEventStore, aggregateId: string): number {
-  try { return store.getAggregateVersion(aggregateId); } catch { return -1; }
-}
+const activeGraphMemos: DurableWalkMemos<readonly ActiveCompiledGraph[]> = new WeakMap();
 
 function memoKeyOf(projectId: string, lifecycles: ReadonlySet<string>): string {
   return `${projectId}|${[...lifecycles].sort().join(",")}`;
-}
-
-function ledgerMarkerOf(store: SqliteEventStore): string {
-  const decisions = decisionsOf(store, LEDGER_PAGE_SIZE);
-  return `${String(decisions.length)}:${String(decisions.at(-1)?.decisionPosition ?? 0n)}`;
-}
-
-function memoStillCurrent(store: SqliteEventStore, memo: ActiveGraphsMemo, marker: string): boolean {
-  if (memo.marker !== marker) return false;
-  for (const [aggregateId, version] of memo.versions) {
-    if (aggregateVersionOf(store, aggregateId) !== version) return false;
-  }
-  return true;
 }
 
 /**
@@ -196,22 +156,11 @@ export function activeCompiledGraphs(
   /** A ledger the caller already folded; absent, this walk folds its own. */
   folded?: DurableLedger,
 ): readonly ActiveCompiledGraph[] {
-  if (folded !== undefined || !isDecisionLedgerMemoized(store)) {
+  if (folded !== undefined || !durableWalkMemoisable(store)) {
     return walkActiveGraphs(store, projectId, lifecycles, folded ?? readDurableLedger(store, projectId), () => undefined);
   }
-  const key = memoKeyOf(projectId, lifecycles);
-  const marker = ledgerMarkerOf(store);
-  const byKey = activeGraphMemos.get(store) ?? new Map<string, ActiveGraphsMemo>();
-  const held = byKey.get(key);
-  if (held !== undefined && memoStillCurrent(store, held, marker)) return held.graphs;
-  const versions = new Map<string, number>();
-  const touch = (aggregateId: string): void => {
-    if (!versions.has(aggregateId)) versions.set(aggregateId, aggregateVersionOf(store, aggregateId));
-  };
-  const graphs = walkActiveGraphs(store, projectId, lifecycles, readDurableLedger(store, projectId), touch);
-  byKey.set(key, { graphs, marker, versions });
-  activeGraphMemos.set(store, byKey);
-  return graphs;
+  return memoisedDurableWalk(store, activeGraphMemos, memoKeyOf(projectId, lifecycles), (touch) =>
+    walkActiveGraphs(store, projectId, lifecycles, readDurableLedger(store, projectId), touch));
 }
 
 interface SealedNode {
