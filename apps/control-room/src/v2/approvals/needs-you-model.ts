@@ -61,7 +61,7 @@ import type { ReleaseFacts } from "./needs-you-release.js";
 
 export const NEEDS_YOU_KINDS = [
   "INCIDENT", "PLAN_APPROVAL", "PLAN_REJECTED", "PREVIEW", "RELEASE", "DEPLOY", "ESCALATION",
-  "GATE_1", "READY_TO_CLOSE",
+  "GATE_1", "READY_TO_CLOSE", "ABANDON",
 ] as const;
 export type NeedsYouKind = (typeof NEEDS_YOU_KINDS)[number];
 
@@ -70,8 +70,15 @@ export interface CloseFacts {
   readonly affordance: Readonly<Record<string, unknown>>;
 }
 
+export interface CancelFacts {
+  /** The daemon's `goal.cancel` offer for this goal, spent verbatim by the cancel port. */
+  readonly affordance: Readonly<Record<string, unknown>>;
+}
+
 export interface NeedsYouItem {
   readonly actionLabel: string;
+  /** Present only for an ABANDON item the daemon offers goal.cancel for. */
+  readonly cancel?: CancelFacts | undefined;
   /** Present only for a READY_TO_CLOSE item the daemon offers goal.close for. */
   readonly close?: CloseFacts | undefined;
   readonly detail: string;
@@ -122,7 +129,7 @@ export interface NeedsYouInput {
 // is how one gets read late. The eight below keep their order relative to one another.
 const KIND_ORDER: Readonly<Record<NeedsYouKind, number>> = Object.freeze({
   INCIDENT: 0, PLAN_APPROVAL: 1, PLAN_REJECTED: 2, PREVIEW: 3, RELEASE: 4, DEPLOY: 5,
-  ESCALATION: 6, GATE_1: 7, READY_TO_CLOSE: 8,
+  ESCALATION: 6, GATE_1: 7, READY_TO_CLOSE: 8, ABANDON: 9,
 });
 const OPEN_LIFECYCLES: readonly string[] = Object.freeze(["EXECUTION_ENABLED", "CLOSING"]);
 
@@ -220,6 +227,26 @@ function itemsFor(
             : " Close the goal when you are satisfied with the evidence."),
         headline: "Everything the contract states is verified",
         kind: "READY_TO_CLOSE",
+      }));
+    }
+    // A STUCK PRODUCT: past Gate 1, active, and NOT ONE criterion verified. That is the shape of a
+    // dead or replanned goal — the exact state three UnAI products sat in on 2026-09-17, with no
+    // operator action able to clear them because close demands completion. It is deliberately
+    // narrow (verified === 0, never merely "incomplete") so a healthy goal mid-verification does
+    // not draw an abandon card; a brief window on a brand-new goal is the accepted cost, and the
+    // action arms-to-confirm because it is destructive. Shown only while the daemon offers cancel.
+    const cancelOffer = offerFor(surface, "goal.cancel", entry.goalId);
+    if (cancelOffer !== undefined && goal !== undefined && !complete
+      && OPEN_LIFECYCLES.includes(goal.lifecycle ?? "")
+      && criteria > 0 && verified === 0 && pending.length === 0 && coverage.contracts.length > 0) {
+      items.push(Object.freeze({
+        ...base,
+        actionLabel: "Open the goal",
+        cancel: Object.freeze({ affordance: cancelOffer }),
+        detail: `None of the ${String(criteria)} acceptance criteria are verified.`
+          + " If this product is stuck and will not be finished, you can abandon it.",
+        headline: "This product has made no verified progress",
+        kind: "ABANDON",
       }));
     }
   }

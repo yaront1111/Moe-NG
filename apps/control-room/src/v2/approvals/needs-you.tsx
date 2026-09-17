@@ -63,6 +63,7 @@ export interface NeedsYouProps {
 }
 
 const KIND_EYEBROW: Readonly<Record<NeedsYouKind, string>> = Object.freeze({
+  ABANDON: "Stuck product",
   DEPLOY: "Deploy",
   ESCALATION: "Review exhausted",
   GATE_1: "Product contract",
@@ -121,6 +122,16 @@ function decisionOf(item: NeedsYouItem): InlineDecision | null {
       doneLabel: "Closed",
       doneLine: "Closed. The goal is complete and its verified work stays on record.",
       testId: `cr.needsyou.close.${item.goalId}`,
+    };
+  }
+  if (item.cancel !== undefined) {
+    return {
+      ariaLabel: `Abandon the product ${item.title}`,
+      armLabel: "Confirm: abandon this product",
+      buttonLabel: "Abandon the product",
+      doneLabel: "Abandoned",
+      doneLine: "Abandoned. The product is cancelled; its unverified work is left where it is.",
+      testId: `cr.needsyou.cancel.${item.goalId}`,
     };
   }
   return null;

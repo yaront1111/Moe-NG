@@ -59,6 +59,15 @@ const closeOffer = (goalId: string): Record<string, unknown> => ({
   inputSchemaVersion: "moe-bootstrap-command/1",
   targetAggregateId: goalId,
 });
+
+const cancelOffer = (goalId: string): Record<string, unknown> => ({
+  commandEnvelopeVersion: "moe-runtime-command/1",
+  commandId: "a1b2c3d4-e5f6-4788-9900-aabbccddeeff",
+  commandKind: "goal.cancel",
+  expectedVersion: 2,
+  inputSchemaVersion: "moe-bootstrap-command/1",
+  targetAggregateId: goalId,
+});
 function coverage(
   goalId: string, verified: number, criteria: number,
   gate1: "APPROVED" | "PENDING", lifecycle: string,
@@ -132,6 +141,42 @@ describe("deriveNeedsYou", () => {
     expect(data.items[1]?.detail).toContain("not offering to close it yet");
     expect(data.items[1]?.close).toBeUndefined();
     expect(data.countLabel).toBe("2 decisions need you");
+  });
+
+  it("raises an ABANDON card for a stuck product: active, past Gate 1, zero verified", () => {
+    // The exact state three UnAI products sat in on 2026-09-17 — approved, EXECUTION_ENABLED,
+    // 0 of N verified — which close cannot clear because it demands completion.
+    const offer = cancelOffer("goal-stuck");
+    const data = deriveNeedsYou({
+      catalog: catalog([entry("goal-stuck", "Stuck")]),
+      coverage: new Map([["goal-stuck", coverage("goal-stuck", 0, 150, "APPROVED", "EXECUTION_ENABLED")]]),
+      surface: surface([offer]),
+    });
+    expect(data.items.map((item) => [item.kind, item.goalId])).toEqual([["ABANDON", "goal-stuck"]]);
+    expect(data.items[0]).toMatchObject({ cancel: { affordance: offer }, kind: "ABANDON" });
+    expect(data.items[0]?.cancel?.affordance).toBe(offer);
+    expect(data.items[0]?.detail).toContain("None of the 150 acceptance criteria are verified");
+  });
+
+  it("does not raise ABANDON for a healthy goal that has verified some criteria", () => {
+    // The gate is verified === 0, never merely "incomplete": a goal mid-verification is working,
+    // not stuck, and must not draw an abandon card.
+    const data = deriveNeedsYou({
+      catalog: catalog([entry("goal-live", "Live")]),
+      coverage: new Map([["goal-live", coverage("goal-live", 4, 150, "APPROVED", "EXECUTION_ENABLED")]]),
+      surface: surface([cancelOffer("goal-live")]),
+    });
+    expect(data.items.map((item) => item.kind)).toEqual([]);
+  });
+
+  it("does not raise ABANDON when the daemon is not offering goal.cancel", () => {
+    // The offer is the daemon's own statement that cancel is available; the card never invents it.
+    const data = deriveNeedsYou({
+      catalog: catalog([entry("goal-stuck", "Stuck")]),
+      coverage: new Map([["goal-stuck", coverage("goal-stuck", 0, 150, "APPROVED", "EXECUTION_ENABLED")]]),
+      surface: surface([cancelOffer("some-other-goal")]),
+    });
+    expect(data.items.map((item) => item.kind)).toEqual([]);
   });
 
   it("carries the close decision only when the daemon offers goal.close for that goal", () => {

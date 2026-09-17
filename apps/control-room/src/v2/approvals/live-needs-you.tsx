@@ -33,6 +33,8 @@ import { createRollbackPort } from "./rollback-port.js";
 import type { RollbackPort } from "./rollback-port.js";
 import { deployedEnvironmentsOf, useIncidentHealth } from "./use-incident-health.js";
 import { incidentKeyOf } from "./needs-you-incident.js";
+import { createGoalCancelPort } from "./goal-cancel-port.js";
+import type { GoalCancelPort } from "./goal-cancel-port.js";
 import { createGoalClosePort } from "./goal-close-port.js";
 import type { GoalClosePort } from "./goal-close-port.js";
 import { NeedsYou, resultKeyOf } from "./needs-you.js";
@@ -57,6 +59,8 @@ const POLL_INTERVAL_MS = 2_000;
 const RUNS_POLL_MS = 5_000;
 
 export interface LiveNeedsYouProps {
+  /** Injectable for tests; the default spends the attached session's own wire. */
+  readonly cancelPort?: GoalCancelPort | undefined;
   /** Injectable for tests; the default spends the attached session's own wire. */
   readonly closePort?: GoalClosePort | undefined;
   /** Injectable for tests; the default spends the attached session's own wire. */
@@ -87,7 +91,7 @@ export interface LiveNeedsYouProps {
 }
 
 export function LiveNeedsYou({
-  closePort, escalationPort, loadCapture: loadCaptureProp, onConnection, onCount, onOpenBoard,
+  cancelPort, closePort, escalationPort, loadCapture: loadCaptureProp, onConnection, onCount, onOpenBoard,
   previewPort, readCoverage, readDeployments: readDeploymentsProp, readHealth: readHealthProp,
   readPreview: readPreviewProp, readRelease: readReleaseProp, readRuns: readRunsProp,
   rollbackPort, setup, successorPort,
@@ -99,6 +103,7 @@ export function LiveNeedsYou({
   const [runsReader] = useState(() => readRunsProp ?? ((): Promise<RunsOutcome> => readRuns(setup.headers)));
   const [escalate] = useState(() => escalationPort ?? createEscalationPort(setup));
   const [close] = useState(() => closePort ?? createGoalClosePort(setup));
+  const [cancel] = useState(() => cancelPort ?? createGoalCancelPort(setup));
   const [preview] = useState(() => previewPort ?? createPreviewPort(setup));
   // ONE loader for the session: a fresh function per render would refetch every capture.
   const [captureLoader] = useState(() => loadCaptureProp ?? createCaptureLoader(setup.headers));
@@ -172,7 +177,9 @@ export function LiveNeedsYou({
           : escalate.submit(escalation.affordance, escalation.nodeKey, "ALLOW_MORE_ATTEMPTS", implementationGuidance))
       : item.close !== undefined
         ? close.submit(item.close.affordance, item.goalId)
-        : null;
+        : item.cancel !== undefined
+          ? cancel.submit(item.cancel.affordance, item.goalId)
+          : null;
     if (spend === null) return;
     setResults((previous) => new Map(previous).set(key, { busy: true, choice, outcome: null, ...guidanceResult }));
     void spend.then((outcome) => {
