@@ -36,7 +36,7 @@ describe("createHealthReadPort", () => {
     driveThrough(store, "goal.create");
     const view = health(createHealthReadPort({
       clock: () => "2026-09-02T20:00:00.000Z", nodeSpecsDir: "D:/specs", pid: 4242, projectId: PROJECT_ID,
-      readPlane: () => "V1", readVerifier: () => ({ calibration: true, policy: true }),
+      readPlane: () => "V1", readVerifier: () => ({ calibration: true, policy: true, readable: true }),
       startedAt: "2026-09-02T19:00:00.000Z", store, storePath: "D:/store.sqlite",
     }).readHealth());
     expect(view.daemon).toEqual({
@@ -49,14 +49,14 @@ describe("createHealthReadPort", () => {
     expect(view.ledger.goals).toBe(0);
     expect(view.ledger.lastDecidedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/u);
     expect(view.readAt).toBe("2026-09-02T20:00:00.000Z");
-    expect(view.verifier).toEqual({ calibration: true, policy: true });
+    expect(view.verifier).toEqual({ calibration: true, policy: true, readable: true });
   });
 
   it("answers an empty ledger honestly and defaults the pid to the process", () => {
     const store = openStore();
     const view = health(createHealthReadPort({
       nodeSpecsDir: null, projectId: PROJECT_ID, readPlane: () => "V2",
-      readVerifier: () => ({ calibration: false, policy: false }),
+      readVerifier: () => ({ calibration: false, policy: false, readable: true }),
       startedAt: "2026-09-02T19:00:00.000Z", store, storePath: ":memory:",
     }).readHealth());
     expect(view.ledger).toEqual({ aggregates: 0, commandKinds: 0, decisionCount: 0, goals: 0, lastDecidedAt: null });
@@ -76,7 +76,7 @@ describe("createHealthReadPort repository reservation", () => {
     return health(createHealthReadPort({
       nodeSpecsDir: null, projectId: PROJECT_ID, readPlane: () => "V1",
       readRepository,
-      readVerifier: () => ({ calibration: true, policy: true }),
+      readVerifier: () => ({ calibration: true, policy: true, readable: true }),
       startedAt: "2026-09-02T19:00:00.000Z", store: openStore(), storePath: ":memory:",
     }).readHealth());
   }
@@ -192,7 +192,7 @@ const PAUSED = Object.freeze({
 function readAt(store: SqliteEventStore, at: string): HealthView {
   return health(createHealthReadPort({
     clock: () => at, nodeSpecsDir: null, pid: 7, projectId: PROJECT_ID, readPlane: () => "V1",
-    readVerifier: () => ({ calibration: true, policy: true }),
+    readVerifier: () => ({ calibration: true, policy: true, readable: true }),
     startedAt: "2026-09-02T19:00:00.000Z", store, storePath: ":memory:",
   }).readHealth());
 }
@@ -266,7 +266,7 @@ describe("createHealthReadPort agents.paused", () => {
     expect(recorded.ok).toBe(true);
     const view = health(createHealthReadPort({
       clock: () => "2026-09-02T20:10:00.000Z", env: { OPENAI_API_KEY: canary }, nodeSpecsDir: null, pid: 7,
-      projectId: PROJECT_ID, readPlane: () => "V1", readVerifier: () => ({ calibration: true, policy: true }),
+      projectId: PROJECT_ID, readPlane: () => "V1", readVerifier: () => ({ calibration: true, policy: true, readable: true }),
       startedAt: "2026-09-02T19:00:00.000Z", store, storePath: ":memory:",
     }).readHealth());
     expect(view.agents.paused?.lastLine).toBe(`${CLAUDE_LINE} OPENAI_API_KEY=[redacted]`);
@@ -279,7 +279,7 @@ describe("createHealthReadPort agents.paused", () => {
     store.close();
     const result = createHealthReadPort({
       clock: () => "2026-09-02T20:10:00.000Z", nodeSpecsDir: null, projectId: PROJECT_ID,
-      readPlane: () => "V1", readVerifier: () => ({ calibration: true, policy: true }),
+      readPlane: () => "V1", readVerifier: () => ({ calibration: true, policy: true, readable: true }),
       startedAt: "2026-09-02T19:00:00.000Z", store, storePath: ":memory:",
     }).readHealth();
     expect(result).toEqual({

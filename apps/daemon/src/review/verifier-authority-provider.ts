@@ -183,6 +183,13 @@ export interface VerifierStandingAuthority {
   readonly calibration: boolean;
   /** `moe-verifier-policy/1` is installed and evaluates to ALLOW for the verifier's acceptance. */
   readonly policy: boolean;
+  /**
+   * The two facts above were actually ESTABLISHED. False means the store could not be read, in
+   * which case both read `false` while proving nothing — and `false` here is byte for byte the
+   * shape that means NOT INSTALLED, which is the one claim this reader exists to make. Without
+   * this flag a store fault sent the operator to install slices that were already there.
+   */
+  readonly readable: boolean;
 }
 
 /**
@@ -199,8 +206,10 @@ export function readVerifierStandingAuthority(
     return Object.freeze({
       calibration: readReviewerCalibration(store, projectId).ok,
       policy: readVerifierPolicy(store, projectId) !== null,
+      readable: true,
     });
   } catch {
-    return Object.freeze({ calibration: false, policy: false });
+    // Both false and NEITHER established. The pair alone cannot carry that difference.
+    return Object.freeze({ calibration: false, policy: false, readable: false });
   }
 }

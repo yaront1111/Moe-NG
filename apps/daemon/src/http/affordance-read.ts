@@ -556,11 +556,16 @@ export function createAffordancePort(config: AffordancePortConfig): AffordancePo
       const missingForVerification = (): readonly string[] => {
         if (verificationMissing === null) {
           const standing = readVerifierStandingAuthority(config.store, config.projectId);
-          verificationMissing = Object.freeze([
-            "verification",
-            ...(standing.policy ? [] : ["verifier-policy"]),
-            ...(standing.calibration ? [] : ["verifier-calibration"]),
-          ]);
+          // An unreadable answer names ITSELF. Listing the two slices here would tell the
+          // operator to install what may well already be installed, and the re-install cannot
+          // clear the stall because the READ is what is failing.
+          verificationMissing = Object.freeze(standing.readable
+            ? [
+              "verification",
+              ...(standing.policy ? [] : ["verifier-policy"]),
+              ...(standing.calibration ? [] : ["verifier-calibration"]),
+            ]
+            : ["verification", "verifier-authority-unreadable"]);
         }
         return verificationMissing;
       };

@@ -25,8 +25,8 @@ describe("createPolicyReadPort", () => {
   it("answers an empty policy for a project nothing has been installed on", () => {
     const store = openStore();
     driveThrough(store, "policy.install");
-    const view = policy(createPolicyReadPort({ projectId: PROJECT_ID, store, readVerifier: () => ({ calibration: false, policy: false }) }).readPolicy());
-    expect(view).toMatchObject({ aggregateVersion: 0, evaluations: [], slices: [], verifier: { calibration: false, policy: false } });
+    const view = policy(createPolicyReadPort({ projectId: PROJECT_ID, store, readVerifier: () => ({ calibration: false, policy: false, readable: true }) }).readPolicy());
+    expect(view).toMatchObject({ aggregateVersion: 0, evaluations: [], slices: [], verifier: { calibration: false, policy: false, readable: true } });
     expect(view.waivers.supported).toBe(false);
     // The three standard slices, none installed, each carrying the body the seed would install.
     expect(view.standard.map((row) => [row.kind, row.sliceRef, row.installed])).toEqual([
@@ -42,7 +42,7 @@ describe("createPolicyReadPort", () => {
   it("lists the installed slices with their kind, digest check and counts, and the evaluations latest first", () => {
     const store = openStore();
     driveThrough(store, "project.activate");
-    const view = policy(createPolicyReadPort({ projectId: PROJECT_ID, store, readVerifier: () => ({ calibration: true, policy: false }) }).readPolicy());
+    const view = policy(createPolicyReadPort({ projectId: PROJECT_ID, store, readVerifier: () => ({ calibration: true, policy: false, readable: true }) }).readPolicy());
     expect(view.aggregateVersion).toBe(3);
     expect(view.slices).toHaveLength(2);
     // Two evaluation slices at their own digests satisfy the standard EVALUATION row; the
@@ -61,7 +61,7 @@ describe("createPolicyReadPort", () => {
     expect(view.slices.map((slice) => slice.sliceRef)).toContain(view.evaluations[0]?.policyRef);
     expect(view.evaluations[0]?.decidedAt).toMatch(/^\d{4}-/u);
     expect(view.evaluations[0]?.principalId).toBeTypeOf("string");
-    expect(view.verifier).toEqual({ calibration: true, policy: false });
+    expect(view.verifier).toEqual({ calibration: true, policy: false, readable: true });
   });
 
   it("names each installed ref by what it is: the seed artifacts, an evaluation slice, or an artifact", () => {
