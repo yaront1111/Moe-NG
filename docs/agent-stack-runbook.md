@@ -751,42 +751,71 @@ the packaged bundle, and no Vite server is involved.
 
 ### Development Vite proxy
 
-The development board's DEFAULT view is the live daemon. There is no flag to
-turn live on.
+The development board's DEFAULT view is the live daemon, attached the same way
+the packaged bundle attaches: through the runtime handshake. There is no flag to
+turn live on, and nothing secret is configured for the dev server.
 
 ```
 MOE_DAEMON_ORIGIN=http://127.0.0.1:39123 \
-VITE_MOE_LIVE_CSRF=<dev-token> \
-VITE_MOE_LIVE_CREDENTIAL=$MOE_DAEMON_CREDENTIAL \
   pnpm --filter @moe/control-room dev
 ```
 
-Then open `http://localhost:5173/`. Three arms, and which one you get is decided
-by `apps/control-room/src/shell-mode.ts`:
+Then open `http://localhost:5173/`. `apps/control-room/index.html` loads
+`src/main.tsx`, whose `mountControlRoom` takes the route decision once, before
+React renders anything:
 
-| URL | Requires | What renders |
+1. `gateDevelopmentQuery` (`src/entry-route.ts`) drops the retired `v1` selector
+   on every build, and drops `fixtures` as well unless the bundler reports a
+   development build (`import.meta.env.DEV`). Other query state passes through.
+2. `resolveProjectManagerMode` (`src/entry-project-manager.ts`) selects the
+   project manager when the page is served on the fixed manager host
+   `127.0.0.2`, or — development builds only — when the query carries
+   `projects=1`.
+3. `chooseRoot` mounts `ProjectManagerApp` (`src/v2/projects/project-manager-app.tsx`)
+   in manager mode and `CordumApp` (`src/v2/cordum-app.tsx`) for everything else.
+
+| URL | Build | What renders |
 | --- | --- | --- |
-| `/` | both `VITE_MOE_LIVE_*` values | the live board — the operating surface: every READY step with a dev payload dispatches from its card |
-| `/?fixtures=1` | nothing | frozen fixtures under a persistent `DEVELOPMENT_ONLY/NOT_CONFIRMATORY` banner |
-| `/` with either value unset | — | a notice naming both variables; **never** fixtures standing in for live data |
+| `/` | any | `CordumApp` attached to the daemon: `GET /bootstrap`, then a session saved in this tab revalidated with `/session/validate`, or a new pairing |
+| `/?fixtures=1` | development | `CordumApp` over the example catalog in `src/v2/workspace/fixtures/`; no handshake starts, and the status strip's SIMULATE controls are credited as simulated, never as the daemon |
+| `/?fixtures=1` | production | the parameter is stripped, so this is `/` — fixtures **never** stand in for live data in a shipped bundle |
+| `/?projects=1` | development | `ProjectManagerApp`, which pairs its own manager session; manager mode wins over `fixtures=1` |
+| any URL on `127.0.0.2` | any | `ProjectManagerApp`, as above |
 
-`/?live=1` still resolves to the live board, so older links keep working. An
-explicit `?fixtures=1` wins if both appear in the same URL.
+A new pairing renders the one-time pairing card with a confirmation label: type
+it in lowercase into the foreground terminal that launched the daemon, press
+Enter, then confirm in the page. A daemon with no terminal to listen on answers
+`x-moe-operator-channel: false`, and the page renders a restart instruction
+instead of a label it could never accept (`src/live/live-handshake.ts`,
+`src/v2/cordum-handshake.tsx`). A failed handshake renders its stable code and
+detail — `LIVE_BOOTSTRAP_UNAVAILABLE`, `LIVE_COMPAT_REFUSED`,
+`LIVE_PAIRING_REFUSED` — beside a Retry connection button.
 
-The two `VITE_MOE_LIVE_*` values are read at BUILD time, not at page load: change
-either and the dev server must be restarted (`pnpm build`, for a preview build).
-`VITE_MOE_LIVE_CREDENTIAL` must be a credential the daemon already accepts —
-rotate the daemon's and a stale build surfaces the daemon's own auth refusal on
-the board rather than an empty one.
+`VITE_MOE_LIVE_CREDENTIAL` and `VITE_MOE_LIVE_CSRF` are inert: no production
+module calls the build-time `resolveLiveSetup` in `src/live/live-config.ts` (only
+`src/live/live-event-feed.test.ts` does), so setting them for a dev server or a
+build attaches nothing and bakes nothing into the bundle. The daemon's static
+asset host keeps a backstop regardless: it refuses, with
+`LISTENER_ASSET_ROOT_LEAKS_SECRET`, an asset root whose served files contain a
+`VITE_MOE_LIVE_CREDENTIAL:` or `VITE_MOE_LIVE_CSRF:` env entry or any secret the
+daemon holds (`apps/daemon/src/http/static-asset-host.ts`).
 
 **Development topology and its limit.** In this path the browser talks to Vite. Vite
-proxies `/command`, `/events/read`, `/events/ack`, `/affordances/read` and
-`/documents/dossier/read` to `MOE_DAEMON_ORIGIN` (default `127.0.0.1:39123`) and
-REWRITES the `Origin` header to that target — `apps/control-room/vite.config.ts`.
-That rewrite is load-bearing: the daemon's listener guards refuse a non-loopback
-`Origin` with `LISTENER_ORIGIN_INVALID`, so serving the built bundle from any
-origin the daemon does not recognise fails closed rather than degrading. Opening
-`dist/index.html` from the filesystem fails the same way.
+proxies every project-daemon route listed in
+`apps/control-room/src/live/dev-proxy-paths.ts` — `/bootstrap`, the `/session/*`
+pairing routes, `/command`, `/v2/command`, `/events/*`, `/affordances/read` and the
+read route behind each screen — to `MOE_DAEMON_ORIGIN` (default `127.0.0.1:39123`)
+and REWRITES the `Origin` header to that target — `buildDevProxy`, consumed by
+`apps/control-room/vite.config.ts`. That rewrite is load-bearing: the daemon's
+listener guards refuse a non-loopback `Origin` with `LISTENER_ORIGIN_INVALID`, so
+serving the built bundle from any origin the daemon does not recognise fails
+closed rather than degrading. Opening `dist/index.html` from the filesystem fails
+the same way.
+
+A route missing from that proxy list is answered by Vite itself rather than
+refused, so a new read route needs its entry there. The `/manager/*` routes are
+deliberately absent: under Vite, `?projects=1` renders the manager surface with
+no manager behind it, so exercise the real manager through `moe projects`.
 
 This proxy is for a trusted source workspace and one operator. It is not the
 packaged topology described above and must not stand in for the pairing/session
