@@ -24,7 +24,8 @@ import type { DaemonLane } from "./daemon-ports.js";
  * so a watcher sampling on its own schedule can watch a dispatch succeed and see nothing.
  *
  * RECEIPTS ARE ASSERTED AS MEASURED, NOT MERELY PRESENT. The repository row must carry the
- * lane's own HEAD sha, read from git rather than derived from anything the page said, and no
+ * HEAD sha of the daemon's own project root (`lane.projectRoot`, its MOE_PROJECT_ROOT - never the
+ * checkout), read from git rather than derived from anything the page said, and no
  * row may read as a `<projectId>-*` literal — that shape is what a placeholder looks like.
  */
 
@@ -90,9 +91,9 @@ async function fillDraft(page: Page, title: string): Promise<void> {
   await expect(page.getByTestId("cr.goals.newgoal.prd.status")).toContainText(PRD_SHA256);
 }
 
-/** The lane's actual HEAD, from git. Transcribed into the assertion, never derived from the DOM. */
-function headSha(repoRoot: string): string {
-  return execFileSync("git", ["rev-parse", "HEAD"], { cwd: repoRoot, encoding: "utf8" }).trim();
+/** The daemon project root's actual HEAD, from git. Transcribed into the assertion, never derived from the DOM. */
+function headSha(projectRoot: string): string {
+  return execFileSync("git", ["rev-parse", "HEAD"], { cwd: projectRoot, encoding: "utf8" }).trim();
 }
 
 test("a fresh project goes from empty store to a created goal, in the browser alone", async ({ page }) => {
@@ -118,7 +119,7 @@ test("a fresh project goes from empty store to a created goal, in the browser al
     // that the store the browser is about to drive was never populated by a script.
     expect(lane.seedPid, "seed child pid (null proves the lane ran unseeded)").toBeNull();
 
-    const expectedSha = headSha(lane.repoRoot);
+    const expectedSha = headSha(lane.projectRoot);
     expect(expectedSha, "lane HEAD sha").toMatch(SHA);
 
     // No `?v1=1`: the bare base URL serves the V2 Cordum shell.

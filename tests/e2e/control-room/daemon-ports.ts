@@ -117,6 +117,11 @@ export interface LaneScratch {
   /** The aggregate id the seeded `node.deliver` step carries. Unique per run. */
   readonly nodeRef: string;
   readonly projectId: string;
+  /**
+   * The DAEMON'S project root, handed over as MOE_PROJECT_ROOT: an empty one-commit repository
+   * of its own at `laneProjectRoot(root)`. See `createLaneProjectRoot` for why.
+   */
+  readonly projectRoot: string;
   readonly root: string;
   readonly storePath: string;
   /** The random suffix every identity above is derived from. */
@@ -135,6 +140,7 @@ export function createLaneScratch(landing = false): LaneScratch {
   const nodeSpecsDir = join(root, "node-specs");
   mkdirSync(nodeSpecsDir);
   const workspace = createLaneWorkspace(root);
+  const projectRoot = createLaneProjectRoot(root);
   const nodeRef = `node-e2e-${tag}`;
   writeFileSync(join(nodeSpecsDir, "node.json"), JSON.stringify({
     instructions: "The browser lane never runs this node; it only reads its step.",
@@ -152,7 +158,7 @@ export function createLaneScratch(landing = false): LaneScratch {
   }), "utf8");
   return Object.freeze({
     catalogPath: join(root, "projects.json"), nodeRef, nodeSpecsDir,
-    projectId: `e2e-proj-${tag}`, root, storePath: join(root, "store.sqlite"), tag,
+    projectId: `e2e-proj-${tag}`, projectRoot, root, storePath: join(root, "store.sqlite"), tag,
     workspace: workspace.path, workspaceSha: workspace.sha,
   });
 }
@@ -198,6 +204,34 @@ function createLaneWorkspace(root: string): LaneWorkspace {
   laneGit(path, ["add", "--", "product.txt"]);
   laneGit(path, [...LANE_LANDER_IDENTITY, "commit", "--quiet", "--message", "Lane workspace baseline"]);
   return Object.freeze({ path, sha: laneGit(path, ["rev-parse", "--verify", "HEAD^{commit}"]) });
+}
+
+/** Where a scratch keeps its daemon's project root; `resolveLaneScratch` rebuilds it from here. */
+export const laneProjectRoot = (root: string): string => join(root, "project");
+
+/**
+ * Builds the daemon's OWN project root: an empty repository with one empty commit.
+ *
+ * WHY THE LANE NEEDS ONE. `activationReceiptInput` reads `MOE_PROJECT_ROOT ?? process.cwd()`, and
+ * every lane daemon is spawned with the CHECKOUT as its cwd - so every daemon this directory
+ * started measured its activation backup into ONE `<checkout>/.moe-next/backups/`, where
+ * concurrent runs pruned each other's stamps and were refused ACTIVATION_BACKUP_FAILED. The
+ * foundation roster fixed the same race the same way (`prepareDaemonLaunch`).
+ *
+ * WHY A REPOSITORY. The same root feeds `git rev-parse` for the repository and distribution
+ * members, so a plain directory would trade that refusal for ACTIVATION_REPOSITORY_UNMEASURED.
+ *
+ * WHY NOT THE SCRATCH ROOT ITSELF. A non-landing node spec points at the scratch root precisely
+ * because it is NOT a repository (see `createLaneScratch`); initialising it would move what
+ * delivery does on every such lane. A sibling of the workspace moves nothing a spec reads.
+ * Local rather than `initializeProjectRoot`, which would pull the foundation harness into here.
+ */
+function createLaneProjectRoot(root: string): string {
+  const path = laneProjectRoot(root);
+  mkdirSync(path);
+  laneGit(path, ["init", "-b", "main", "--quiet"]);
+  laneGit(path, [...LANE_LANDER_IDENTITY, "commit", "--quiet", "--allow-empty", "--message", "Lane project root"]);
+  return path;
 }
 
 /** The workspace path and its real head sha. Both are read, never assumed. */
@@ -320,6 +354,8 @@ export function daemonEnv(
     // Scratch-scoped, never the host default: see LaneScratch.catalogPath.
     MOE_PROJECT_CATALOG: scratch.catalogPath,
     MOE_PROJECT_ID: scratch.projectId,
+    // Never the spawn cwd (the checkout), which every lane daemon shares: see createLaneProjectRoot.
+    MOE_PROJECT_ROOT: scratch.projectRoot,
     MOE_SPEED_MODE_DELAY_MS: speed ? "0" : undefined,
     MOE_STORE_PATH: scratch.storePath,
   });
@@ -414,6 +450,8 @@ export interface DaemonLane {
   /** The aggregate id the seeded `node.deliver` step carries. Unique per run. */
   readonly nodeRef: string;
   readonly projectId: string;
+  /** The daemon's own project root (MOE_PROJECT_ROOT): what activation measures, never `repoRoot`. */
+  readonly projectRoot: string;
   readonly repoRoot: string;
   /**
    * The seed child's pid, for the run's evidence line ONLY. It has already exited
@@ -664,6 +702,7 @@ async function openLane<T>(
       daemonPid: daemon.pid,
       nodeRef: scratch.nodeRef,
       projectId: scratch.projectId,
+      projectRoot: scratch.projectRoot,
       workspace: scratch.workspace,
       workspaceSha: scratch.workspaceSha,
       repoRoot: root,

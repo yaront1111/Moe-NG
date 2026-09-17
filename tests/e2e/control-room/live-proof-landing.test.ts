@@ -125,7 +125,7 @@ async function refusedSeat(mark: Readonly<Record<string, unknown>>) {
   mkdirSync(nodeSpecsDir);
   const scratch: LaneScratch = {
     catalogPath: join(root, "catalog.json"), nodeRef: A, nodeSpecsDir, projectId: "project-test",
-    root, storePath: join(root, "store.sqlite"), tag: "test", workspace: root, workspaceSha: "",
+    projectRoot: root, root, storePath: join(root, "store.sqlite"), tag: "test", workspace: root, workspaceSha: "",
   };
   const lane: DaemonLane = {
     ...scratch, approvePairing: null, baseUrl: "", credential: "", csrfToken: "",

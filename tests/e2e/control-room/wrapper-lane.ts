@@ -34,7 +34,7 @@ import type {
 } from "../../../apps/daemon/src/orchestrator/provider-pause-ledger.js";
 import { spawnNode } from "./daemon-children.js";
 import type { Watched } from "./daemon-children.js";
-import { daemonEnv, laneWorkspaceIdentity } from "./daemon-ports.js";
+import { daemonEnv, laneProjectRoot, laneWorkspaceIdentity } from "./daemon-ports.js";
 import type { DaemonLane, LaneScratch } from "./daemon-ports.js";
 
 /** Where `LIMIT_LINE`'s bytes were copied from, cited so a reader can re-check them. */
@@ -211,7 +211,7 @@ export function resolveLaneScratch(lane: DaemonLane): LaneScratch | null {
     const workspace = laneWorkspaceIdentity(root); if (workspace === null) continue;
     return Object.freeze({
       catalogPath: join(root, "projects.json"), nodeRef: lane.nodeRef, nodeSpecsDir,
-      projectId: lane.projectId, root, storePath, tag,
+      projectId: lane.projectId, projectRoot: laneProjectRoot(root), root, storePath, tag,
       workspace: workspace.path, workspaceSha: workspace.sha,
     });
   }
