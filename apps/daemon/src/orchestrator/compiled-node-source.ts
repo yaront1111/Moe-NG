@@ -269,16 +269,30 @@ export function criterionStatements(
     .map((entry) => `- [${entry.criterionId}] ${entry.statement}`);
 }
 
+/**
+ * A mission refused because the durable graph could not be READ — never because the node has no
+ * brief. The wrapper already separates a mission that throws (AGENT_SETUP_FAILED:node.mission)
+ * from one that answers null (NODE_BRIEF_MISSING), so this reaches an operator as a store fault
+ * rather than as an accusation that a perfectly good node was never compiled.
+ */
+export const COMPILED_NODE_SOURCE_UNREADABLE = "COMPILED_NODE_SOURCE_UNREADABLE";
+
 export function createCompiledNodeSource(options: CompiledNodeSourceOptions): CompiledNodeSource {
   const readActive = options.readActive ?? activeCompiledGraphs;
+  /** Set when the last walk failed, so an empty list is not mistaken for an empty graph. */
+  let degraded = false;
   const sealed = (): readonly SealedNode[] => {
     try {
       const graphs = readActive(options.store, options.projectId);
       const ambiguous = legacyCompiledNodeKeys(options.store, options.projectId, graphs);
       const blocked = nodesBlockedByIdentity(graphs, ambiguous);
+      degraded = false;
       return sealedNodesOf(options.projectId, graphs).filter((node) => !blocked.has(node.nodeKey));
     } catch {
-      // A degraded read lists nothing rather than throwing the surface down.
+      // A degraded read lists nothing rather than throwing the ROSTER surface down — that part
+      // is deliberate and unchanged. What it must not do is let the empty list read as a fact:
+      // `mission` below refuses by name instead of reporting every brief as missing.
+      degraded = true;
       return [];
     }
   };
@@ -288,6 +302,9 @@ export function createCompiledNodeSource(options: CompiledNodeSourceOptions): Co
   const mission = (nodeRef: string): CompiledNodeMission | null => {
     if (options.workspace === null || options.testCommand === null) return null;
     const node = sealed().find((candidate) => candidate.nodeRef === nodeRef);
+    // "Not found in a graph I could not read" is not "not compiled". Thrown rather than
+    // returned, because null is already spoken for by a genuinely absent brief.
+    if (node === undefined && degraded) throw new Error(COMPILED_NODE_SOURCE_UNREADABLE);
     if (node === undefined) return null;
     let statements: readonly string[];
     try {
