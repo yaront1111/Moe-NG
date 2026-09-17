@@ -441,7 +441,11 @@ describe("wrapper binary staffing wiring", () => {
   });
 
   it("routes every pass report through the extracted logger, over the real stdout", () => {
-    expect(SOURCE).toContain("const logPass = createPassLogger((line) => { process.stdout.write(line); });");
+    // The logger is now TEED into the diagnostic plane, so the pass account survives a scrolled
+    // terminal. The three things this arm has always guaranteed are unchanged and asserted
+    // apart: one logger, writing the same bytes to the REAL stdout, with no second printer.
+    expect(SOURCE).toContain("const logPass = createPassLogger(teeDiagnosticLine({");
+    expect(SOURCE).toContain("write: (line) => { process.stdout.write(line); },");
     expect(SOURCE.split("logPass(report);").length - 1).toBe(1);
     // The loop's own copy is gone: a second printer beside the logger would double every line.
     expect(SOURCE).not.toContain("for (const entry of report.spawned)");

@@ -44,6 +44,9 @@ import { readGovernancePolicySettings } from "../review/governance-policy-settin
 import { createGovernorSeat, createProviderGovernorRunner } from "./governor-seat.js";
 import { createGovernancePass } from "./wrapper-governance-pass.js";
 import { createPassLogger } from "./wrapper-pass-log.js";
+import { createDiagnosticRuntime } from "../diagnostics/diagnostic-runtime.js";
+import { diagnosticProjectRoot } from "../diagnostics/diagnostic-project-root.js";
+import { teeDiagnosticLine } from "../diagnostics/diagnostic-line-tee.js";
 
 export {
   createWrapperStopSignal,
@@ -87,6 +90,18 @@ async function main(): Promise<void> {
   // that states nothing keeps today's behaviour exactly.
   const governance = readGovernancePolicySettings(process.env);
   const config = readStoreDependencyEnv(process.env);
+  // THE DIAGNOSTIC PLANE, built beside the knobs and for the same reason: a malformed MOE_LOG_*
+  // is refused by name before any store is opened. Everything below still writes to the console
+  // exactly as it did; the plane adds a durable copy under the project's own .moe/logs, so an
+  // account of what a seat did survives a scrolled terminal and a supervisor that discards
+  // stdout. Every credential this environment holds is scrubbed from both planes.
+  const diagnostics = createDiagnosticRuntime({
+    env: process.env,
+    projectRoot: diagnosticProjectRoot(config.storePath, process.cwd()),
+    secrets: credentialValues(process.env),
+  });
+  const seatDiagnostics = diagnostics.emitterFor("seat");
+  const passDiagnostics = diagnostics.emitterFor("wrapper");
   const provider = createStoreDependencies(config);
   let verifierStore: SqliteEventStore | undefined;
   let verifierRunner: VerifierProcessRunner | undefined;
@@ -360,6 +375,13 @@ async function main(): Promise<void> {
           + " stopping the fleet\n");
         stop.request();
       },
+      // The seat's own lines — spawn refusals, the quiet notice, the exit facts — went to stdout
+      // and nowhere else. This is the account an operator needs AFTER a seat has gone wrong.
+      log: teeDiagnosticLine({
+        emitter: seatDiagnostics,
+        event: "SEAT_LINE",
+        write: (line) => { process.stdout.write(`${line}\n`); },
+      }),
       timeoutMs: knobs.agentTimeoutMs,
     });
     secureSpawn = agentSpawner;
@@ -380,7 +402,12 @@ async function main(): Promise<void> {
     const { intervalMs, once } = knobs;
     // The per-pass lines live in ./wrapper-pass-log.ts: this file stood at the 400-line split
     // rail, and the command-plane wiring above could not land until the loop's log moved out.
-    const logPass = createPassLogger((line) => { process.stdout.write(line); });
+    const logPass = createPassLogger(teeDiagnosticLine({
+      emitter: passDiagnostics,
+      event: "WRAPPER_PASS_LINE",
+      // The pass logger already frames whole lines, newline included; passed through untouched.
+      write: (line) => { process.stdout.write(line); },
+    }));
     for (;;) {
       if (stop.requested()) return;
       // Repository ownership gates every effect, including submissions made by
@@ -451,6 +478,7 @@ async function main(): Promise<void> {
         stopAuthorityHost: mcpHost?.stop,
       });
     } finally {
+      diagnostics.close();
       stop.close();
     }
   }
