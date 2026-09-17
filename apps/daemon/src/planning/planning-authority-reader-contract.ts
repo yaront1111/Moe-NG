@@ -11,6 +11,11 @@
  */
 export const PLANNING_AUTHORITY_READER_CODES = Object.freeze([
   "PLANNING_AUTHORITY_READER_APPROVAL_ABSENT",
+  // A durable read that THREW. Never folded into an ABSENT: a store fault reported as "this goal
+  // was never activated" or "this run's authority was never sealed" sends the operator to
+  // re-approve a goal that is fine, and the refusal survives the re-approval because the READ is
+  // what is failing.
+  "PLANNING_AUTHORITY_READER_EVIDENCE_UNREADABLE",
   "PLANNING_AUTHORITY_READER_APPROVAL_AMBIGUOUS",
   "PLANNING_AUTHORITY_READER_APPROVAL_MALFORMED",
   "PLANNING_AUTHORITY_READER_LEGACY_UNBOUND",

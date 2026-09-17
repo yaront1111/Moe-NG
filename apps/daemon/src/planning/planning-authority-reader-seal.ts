@@ -77,7 +77,11 @@ const sha256 = (bytes: Uint8Array): string => createHash("sha256").update(bytes)
 function sealedPayloads(
   store: SqliteEventStore, authorityRef: string,
 ): SealedPayloads | PlanningAuthorityReaderRefusal {
-  const events: readonly StoredEvent[] = readAggregate(store, authorityRef);
+  const read = readAggregate(store, authorityRef);
+  if (typeof read === "symbol") {
+    return readerRefusal("PLANNING_AUTHORITY_READER_EVIDENCE_UNREADABLE", "authority");
+  }
+  const events: readonly StoredEvent[] = read;
   const selected: Record<string, JsonRecord> = {};
   for (const [side, eventType] of [
     ["bodies", BODIES_EVENT_TYPE], ["envelope", PLANNING_AUTHORITY_ENVELOPE_EVENT_TYPE],

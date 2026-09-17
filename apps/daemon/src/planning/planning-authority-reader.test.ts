@@ -152,6 +152,19 @@ const REFUSAL_ARMS: readonly RefusalArm[] = [
     world: unapprovedStore,
   },
   {
+    // The opposite fact from the arm above, and it used to answer the same code: a store that
+    // cannot be read said "this goal was never activated", so the operator re-approved a goal
+    // that was fine and the refusal survived it, because the READ is what was failing.
+    code: "PLANNING_AUTHORITY_READER_EVIDENCE_UNREADABLE",
+    detail: "goal",
+    name: "EVIDENCE_UNREADABLE when the goal aggregate cannot be read at all",
+    world: () => ({
+      readEvents: (): never => {
+        throw Object.assign(new Error("database is locked"), { code: "SQLITE_BUSY" });
+      },
+    }) as unknown as SqliteEventStore,
+  },
+  {
     code: "PLANNING_AUTHORITY_READER_APPROVAL_ABSENT",
     detail: "not-current",
     name: "APPROVAL_ABSENT when the durable approval is not a CURRENT approve decision",
@@ -321,7 +334,7 @@ describe("the reader refuses with the code that names WHICH check answered", () 
   it("exercises every code in the reader's closed roster, and no other", () => {
     // The sweep above is only worth its green if it actually generated cases, and only worth its
     // coverage claim if the roster cannot grow a code that no world reaches.
-    expect(REFUSAL_ARMS.length).toBe(19);
+    expect(REFUSAL_ARMS.length).toBe(20);
     expect([...new Set(REFUSAL_ARMS.map((arm) => arm.code))].sort())
       .toStrictEqual([...PLANNING_AUTHORITY_READER_CODES].sort());
   });

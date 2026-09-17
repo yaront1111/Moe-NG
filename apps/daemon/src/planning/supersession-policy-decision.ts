@@ -18,6 +18,10 @@ export interface SupersessionPolicyDecision {
 
 type SupersessionPolicyDecisionCode =
   | "SUPERSESSION_POLICY_DECISION_ABSENT"
+  // The policy aggregate could not be READ. Never folded into ABSENT: that code states as fact
+  // that no policy decision was ever evaluated for this project, and the operator's re-install
+  // cannot clear it because the READ is what is failing.
+  | "SUPERSESSION_POLICY_DECISION_UNREADABLE"
   | "SUPERSESSION_POLICY_DECISION_POLICY_REUSED"
   | "SUPERSESSION_POLICY_DECISION_SUBJECT_MISMATCH";
 
@@ -45,12 +49,17 @@ function payloadOf(event: StoredEvent): JsonObject | null {
     || Array.isArray(value) ? null : value as JsonObject;
 }
 
-function policyEvents(store: SqliteEventStore, projectId: string): readonly StoredEvent[] {
+/** The read THREW. An empty list cannot carry this fact: the tail refuses ABSENT on one. */
+const UNREADABLE = Symbol("SUPERSESSION_POLICY_DECISION_UNREADABLE");
+
+function policyEvents(
+  store: SqliteEventStore, projectId: string,
+): readonly StoredEvent[] | typeof UNREADABLE {
   const aggregateId = policyAggregateId(projectId);
   try {
     return store.readEvents(aggregateId).filter((event) => event.aggregateId === aggregateId);
   } catch {
-    return [];
+    return UNREADABLE;
   }
 }
 
@@ -79,6 +88,8 @@ export function readSupersessionPolicyDecision(
   successorRevisionRef: string,
 ): SupersessionPolicyDecisionResult {
   const events = policyEvents(store, projectId);
+  // Fails closed exactly as ABSENT does, and says which of the two it is.
+  if (typeof events === "symbol") return refused("SUPERSESSION_POLICY_DECISION_UNREADABLE");
   let sawVerifiedForeignSubject = false;
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];

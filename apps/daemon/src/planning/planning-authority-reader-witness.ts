@@ -56,13 +56,18 @@ export const eventsOfType = (
  * folds only `decision.targetAggregateId`, and the authority leg is a SECONDARY leg, so a ledger
  * read reports it empty forever.
  */
+/** The read THREW. Distinct from an empty aggregate, which is a real and different fact. */
+export const PLANNING_AUTHORITY_UNREADABLE = Symbol("PLANNING_AUTHORITY_UNREADABLE");
+
 export function readAggregate(
   store: SqliteEventStore, aggregateId: string,
-): readonly StoredEvent[] {
+): readonly StoredEvent[] | typeof PLANNING_AUTHORITY_UNREADABLE {
   try {
     return store.readEvents(aggregateId);
   } catch {
-    return [];
+    // An empty list here walks into the ABSENT arms below, which state as FACT that no approval
+    // and no seal were ever written. That is the opposite of what a store fault proves.
+    return PLANNING_AUTHORITY_UNREADABLE;
   }
 }
 
@@ -100,8 +105,12 @@ function bindingOf(activation: JsonRecord): ApprovedRunBinding | PlanningAuthori
 export function readApprovedRunWitness(
   store: SqliteEventStore, goalId: string,
 ): ApprovedRunBinding | PlanningAuthorityReaderRefusal {
+  const read = readAggregate(store, goalId);
+  if (typeof read === "symbol") {
+    return readerRefusal("PLANNING_AUTHORITY_READER_EVIDENCE_UNREADABLE", "goal");
+  }
   const events = eventsOfType(
-    readAggregate(store, goalId).filter((event) => event.aggregateId === goalId),
+    read.filter((event) => event.aggregateId === goalId),
     ACTIVATION_EVENT_TYPE,
   );
   if (events.length === 0) {
