@@ -681,7 +681,7 @@ describe("project runtime completion wait", () => {
       dependencies: {
         createFiles: () => ({ create: async () => ({ code: "UNUSED", layer: "PROJECT_MANAGER_FILES", ok: false }),
           discard: async () => undefined, register: async () => ({ ok: true, project: ENTRY,
-            written: { root: ENTRY.root, createdRoot: false, paths: [] } }) }),
+            written: { root: ENTRY.root, createdDirectories: [], paths: [] } }) }),
         createRuntime: () => runtime, mintUuid: () => INSTANCE_ID,
         resolveAssetRoot: () => "D:\\artifact\\control-room",
       },

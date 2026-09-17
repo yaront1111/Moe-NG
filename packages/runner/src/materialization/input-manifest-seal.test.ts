@@ -365,6 +365,21 @@ describe("staleness revalidation of a sealed manifest", () => {
     );
   });
 
+  it("refuses a fact feed naming one witness twice instead of resolving it by order", () => {
+    // A feed that appends without replacing carries the moved fact AND the
+    // sealed one. Keyed by ref, whichever came last would decide the verdict,
+    // so the same facts would dispatch in one order and refuse in the other.
+    // The seal-time recheck refuses this list outright; so must this gate.
+    const moved = currentFact({ witnessVersion: 4, witnessDigest: digest("c") });
+    for (const facts of [[moved, currentFact()], [currentFact(), moved]]) {
+      expect(refusal({ ok: false, ...check({ currentWitnessFacts: facts }) })).toEqual({
+        code: "RUNNER_MATERIALIZATION_WITNESS_FACTS_MALFORMED",
+        layer: "STALENESS",
+        detail: null,
+      });
+    }
+  });
+
   it("refuses a changed predecessor digest", () => {
     const moved = [
       { artifactIdentity: "art:one", sha256: digest("d"), producerAdoptionRef: "adoption:alpha" },
@@ -391,6 +406,22 @@ describe("staleness revalidation of a sealed manifest", () => {
     expect(refusal({ ok: false, ...check({ currentPredecessors: [] }) }).code).toBe(
       "RUNNER_MATERIALIZATION_PREDECESSOR_STALE",
     );
+  });
+
+  it("refuses a predecessor feed naming one artifact twice instead of resolving it by order", () => {
+    // Same shape as the witness case: a re-adopted producer listed beside its
+    // superseded fact. Every other list parser in this area refuses a repeated
+    // identity; resolving it by position here would dispatch against whichever
+    // fact the feed happened to list last.
+    const sealed = { artifactIdentity: "art:one", sha256: digest("a"), producerAdoptionRef: "adoption:alpha" };
+    const readopted = { artifactIdentity: "art:one", sha256: digest("b"), producerAdoptionRef: "adoption:beta" };
+    for (const facts of [[readopted, sealed], [sealed, readopted]]) {
+      expect(refusal({ ok: false, ...check({ currentPredecessors: facts }) })).toEqual({
+        code: "RUNNER_MATERIALIZATION_CANDIDATE_MALFORMED",
+        layer: "STALENESS",
+        detail: null,
+      });
+    }
   });
 
   it("refuses a moved graph epoch", () => {

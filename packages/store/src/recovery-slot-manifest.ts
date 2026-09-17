@@ -60,14 +60,6 @@ export interface DigestBearingLegacyRecoverySlotManifest {
   readonly slotManifestVersion: typeof LEGACY_RECOVERY_SLOT_MANIFEST_VERSION;
 }
 
-export interface RecoverySlotManifestV2Input {
-  readonly databaseDigest: string;
-  readonly generationDigest: string;
-  readonly incarnationRef: string;
-  readonly keyEpochRef: string;
-  readonly payloadDigests: Readonly<Record<string, string>>;
-}
-
 export interface RecoverySlotManifestRefused {
   readonly code: "RECOVERY_SLOT_MANIFEST_INVALID";
   readonly layer: typeof LAYER;

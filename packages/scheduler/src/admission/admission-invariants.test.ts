@@ -7,9 +7,7 @@ import {
 import { REJECTED_NECESSITY_WITNESS_KINDS, admitGraph } from "./admission-pass.js";
 import { evaluateNecessityClaim } from "./admission-necessity.js";
 import type { AdmissionNecessityOutcome, AdmissionNecessityResult } from "./admission-necessity.js";
-import {
-  admitDependencyChallenge, isTimeChallengeSuppressed, validateIntentionalWait,
-} from "./admission-wait.js";
+import { validateIntentionalWait } from "./admission-wait.js";
 
 const EDGE = "dev-edge-ab";
 const COUNTEREXAMPLE = {
@@ -172,22 +170,6 @@ function waitRecord(overrides: Record<string, unknown> = {}): Record<string, unk
   };
 }
 
-function challengeRecord(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return {
-    challengeRef: "challenge:1",
-    subject: { kind: "EXISTING_EDGE_NECESSITY", edgeKey: "dev-edge-ab", contractHash: HASH_A, blockerKind: "SEMANTIC_PREREQUISITE" },
-    binding: { graphEpoch: 1, sourceFactVersions: [{ sourceFactRef: "fact:dev-node-a", version: 1 }] },
-    status: { kind: "OPEN" }, successorPlanningRunRef: "run:1", successorPlanningRunVersion: 1,
-    ...overrides,
-  };
-}
-
-const CHALLENGE_CONTEXT = {
-  callerLease: { nodeKey: "dev-node-b", leaseRef: "lease:1", leaseVersion: 1 },
-  currentHardContracts: [{ edgeKey: "dev-edge-ab", contractHash: HASH_A }],
-  openChallenges: [],
-};
-
 describe("admission intentional waits", () => {
   it("validates an intentional wait and keeps every declared field", () => {
     const result = validateIntentionalWait(waitRecord());
@@ -211,38 +193,6 @@ describe("admission intentional waits", () => {
     ["an unknown gate", { deadlineGate: "NOT_A_GATE" }],
   ])("refuses a wait with %s", (_label, overrides) => {
     expect(issueCodes(validateIntentionalWait(waitRecord(overrides)))).toEqual(["ADMISSION_WAIT_MALFORMED"]);
-  });
-
-  it("suppresses a time-only challenge inside the deadline but never against new evidence", () => {
-    const validated = validateIntentionalWait(waitRecord());
-    const wait = validated.ok ? validated.wait : null;
-    expect(isTimeChallengeSuppressed(wait, "RESULT_SEAL", false)).toBe(true);
-    expect(isTimeChallengeSuppressed(wait, "RESULT_SEAL", true)).toBe(false);
-    expect(isTimeChallengeSuppressed(wait, "GOAL_COMPLETION", false)).toBe(false);
-    expect(isTimeChallengeSuppressed(wait, "RESULT_SEAL", "maybe")).toBe(false);
-    expect(isTimeChallengeSuppressed({ deadlineGate: "RESULT_SEAL" }, "RESULT_SEAL", false)).toBe(false);
-  });
-});
-
-describe("admission bounded blocker challenges", () => {
-  it("admits a semantic-prerequisite challenge against a current hard contract", () => {
-    const result = admitDependencyChallenge(challengeRecord(), CHALLENGE_CONTEXT);
-    expect(result.ok).toBe(true);
-    expect(result.ok ? result.record.reviewOnly : null).toBe(true);
-    expect(result.ok ? result.record.challenge.dedupKey.length : 0).toBeGreaterThan(0);
-  });
-
-  it("passes the kernel challenge codes through instead of re-coding them", () => {
-    expect(issueCodes(admitDependencyChallenge(challengeRecord(), { ...CHALLENGE_CONTEXT, currentHardContracts: [] })))
-      .toEqual(["DEPENDENCY_CHALLENGE_CONTRACT_NOT_CURRENT"]);
-    const foreign = challengeRecord({
-      subject: {
-        kind: "MISSING_EDGE_DISCOVERY", producerNodeKey: "dev-node-a", consumerNodeKey: "dev-node-c",
-        holdNodeKey: "dev-node-c", edgeHash: HASH_A, truthClass: "AGENT_REPORTED",
-        callerLeaseRef: "lease:1", callerLeaseVersion: 1,
-      },
-    });
-    expect(issueCodes(admitDependencyChallenge(foreign, CHALLENGE_CONTEXT))).toEqual(["DEPENDENCY_CHALLENGE_FOREIGN_HOLD"]);
   });
 });
 

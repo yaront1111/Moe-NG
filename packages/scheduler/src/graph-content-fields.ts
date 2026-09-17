@@ -20,10 +20,10 @@ import { createHash } from "node:crypto";
 import { isGraphKey } from "./graph-key.js";
 import { ABSOLUTE_MAX_GRAPH_NODES } from "./graph-policy.js";
 import { canonicalNodeAuthorityJson, canonicalSnapshotJson } from "./graph-content-format.js";
-import { canonicalText } from "./node-authority/node-authority-contract.js";
+import { frame } from "./kernel-primitives.js";
+import { canonicalText, type NodeDefinition } from "./node-authority/node-authority-contract.js";
 import { hasOnlyOwnStringKeys, isPlainRecord, readOwnDataProperty } from "./runtime-shape.js";
 import type { GraphKey, GraphSnapshot, ValidatedGraph } from "./graph-model.js";
-import type { NodeDefinition } from "./node-authority/node-authority-contract.js";
 
 /**
  * Separate from the wire tag and the snapshot-identity domain on purpose: a digest
@@ -218,10 +218,6 @@ function preimageParts(
     // ordering serialized, so order independence is inherited.
     ["snapshot", "g", canonicalSnapshotJson(graph)],
   ];
-}
-
-function frame(token: string): string {
-  return `${token.length}:${token}`;
 }
 
 /**

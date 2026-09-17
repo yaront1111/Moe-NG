@@ -1,8 +1,9 @@
-import type { JsonObject, JsonValue } from "@moe/contracts";
+import type { JsonObject } from "@moe/contracts";
 
 import { DomainRefusal, domainRefusalOf } from "../daemon-command-dispatch.js";
 import type { AsyncCommandHandler } from "../http/http-async-contract.js";
 import type { CommandHandlerInput, DurableDecision } from "../http/http-contract.js";
+import { ref } from "../json-record-shape.js";
 import { readPublishLedger, readProjectRemote } from "../repository/publish-ledger.js";
 import { releaseRefusal } from "./release-decide-contracts.js";
 import type { ReleaseDecideCode } from "./release-decide-contracts.js";
@@ -61,10 +62,6 @@ interface ReleaseIntent {
 }
 
 const INTENT_KEYS = ["base", "decision", "goalId", "sha"] as const;
-
-function ref(value: JsonValue | undefined): value is string {
-  return typeof value === "string" && value.length > 0;
-}
 
 function decodeIntent(payload: JsonObject): ReleaseIntent {
   const keys = Object.keys(payload);

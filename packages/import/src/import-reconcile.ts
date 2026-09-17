@@ -1,8 +1,8 @@
 import { byCodeUnit } from "./canonical-bytes.js";
 import { canonicalPayload } from "./import-canonical.js";
 import type { LegacySourceRecord } from "./import-canonical.js";
-import { AMBIGUITY_OUTCOME, DETERMINISTIC_TIME_SENTINEL } from "./import-contract.js";
-import type { AmbiguityClass, ImportProvenance, ReconciliationFinding } from "./import-contract.js";
+import { DETERMINISTIC_TIME_SENTINEL, reconciliationFinding } from "./import-contract.js";
+import type { ImportProvenance, ReconciliationFinding } from "./import-contract.js";
 import { duplicateIdentityFindings } from "./import-duplicate-identity.js";
 import { graphFindings } from "./import-reconcile-graph.js";
 import { SKILL_PAYLOAD_KEY, classifySkillAsset, readSkillIdentity } from "./import-skill-assets.js";
@@ -37,14 +37,6 @@ export interface ReconcileReport {
   readonly findings: readonly ReconciliationFinding[];
 }
 
-function finding(
-  ambiguityClass: AmbiguityClass,
-  provenance: ImportProvenance,
-  detail: string,
-): ReconciliationFinding {
-  return Object.freeze({ ambiguityClass, detail, outcome: AMBIGUITY_OUTCOME, provenance });
-}
-
 /**
  * Skill payloads carry their descriptor under `skill`, which is not a task field. Adding
  * it to the allowed set for that kind keeps the check honest rather than exempting skill
@@ -59,7 +51,7 @@ function unknownFieldFindings(entry: ReconcileEntry, known: readonly string[]): 
   return Object.keys(entry.record.payload)
     .filter((field) => !allowed.includes(field))
     .sort(byCodeUnit)
-    .map((field) => finding(
+    .map((field) => reconciliationFinding(
       "UNKNOWN_FIELD",
       entry.provenance,
       `record ${entry.record.legacyId} carries unknown field ${field}`,
@@ -69,7 +61,7 @@ function unknownFieldFindings(entry: ReconcileEntry, known: readonly string[]): 
 function corruptByteFindings(entry: ReconcileEntry): readonly ReconciliationFinding[] {
   const canonical = canonicalPayload(entry.record);
   if (typeof canonical === "string") return [];
-  return [finding("CORRUPT_BYTES", entry.provenance, canonical.detail)];
+  return [reconciliationFinding("CORRUPT_BYTES", entry.provenance, canonical.detail)];
 }
 
 /** Two paths that differ only by case cannot coexist on NTFS; one would overwrite the other. */
@@ -83,7 +75,7 @@ function casePathFindings(
     const folded = path.toLowerCase();
     const first = seen.get(folded);
     if (first !== undefined && first !== path) {
-      found.push(finding(
+      found.push(reconciliationFinding(
         "CASE_PATH_CONFLICT",
         provenance,
         `${first} and ${path} differ only by case and cannot coexist on a case-insensitive filesystem`,
@@ -111,7 +103,7 @@ function splitOwnershipFindings(entries: readonly ReconcileEntry[]): readonly Re
     const names = [...byOwner.keys()].sort(byCodeUnit);
     const provenance = byOwner.get(names[0] ?? "");
     if (provenance === undefined) continue;
-    found.push(finding(
+    found.push(reconciliationFinding(
       "SPLIT_OWNERSHIP",
       provenance,
       `record ${legacyId} is claimed by ${names.join(" and ")}`,
@@ -132,7 +124,7 @@ function skillAmbiguityFindings(entries: readonly ReconcileEntry[]): readonly Re
       seen.set(key, entry.provenance);
       continue;
     }
-    found.push(finding(
+    found.push(reconciliationFinding(
       "SKILL_AMBIGUOUS",
       entry.provenance,
       `skill ${key} is declared by both ${first.sourcePath} and ${entry.provenance.sourcePath}`,
@@ -160,7 +152,7 @@ function countFindings(input: ReconcileInput): readonly ReconciliationFinding[] 
   if (declaredRecordCount === null || declaredRecordCount === entries.length) return [];
   // Zero entries is the TOTAL-LOSS mismatch — every declared record dropped upstream —
   // which is the one count mismatch that must never be swallowed for lack of an entry.
-  return [finding(
+  return [reconciliationFinding(
     "COUNT_MISMATCH",
     entries[0]?.provenance ?? NO_RECORDS_PROVENANCE,
     `source declared ${String(declaredRecordCount)} records; ${String(entries.length)} were read`,

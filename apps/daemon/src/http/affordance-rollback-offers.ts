@@ -68,7 +68,7 @@ function withheld(refused: string | null): RollbackOfferResult {
  * AT MOST ONE OFFER, and only when SOME environment holds a receipt the handler would admit.
  *
  * ONE `readDeployLedger` call answers every environment — the walk pages the whole decision
- * ledger, so a per-environment `readPreviousDeployReceipt` would re-walk it once per environment
+ * ledger, so a per-environment ledger read would re-walk it once per environment
  * on every affordance poll. The admission test is the shared resolver, not a second reading of
  * the rule, so the control this offers and the receipt the health frame names can never disagree.
  *

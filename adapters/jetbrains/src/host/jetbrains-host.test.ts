@@ -33,6 +33,7 @@ import {
   readInstalledDistributions,
   startDaemon,
 } from "./jetbrains-host-ports.js";
+import type { BrowserOpener } from "./jetbrains-host-ports.js";
 
 /**
  * Hand-transcribed. Every evidence arm the four ports can produce, one case
@@ -48,6 +49,7 @@ const COVERED_ARMS = [
   "control-room:assets-absent",
   "control-room:browser-opened",
   "control-room:browser-refused",
+  "control-room:browser-refused-before-promise",
   "control-room:browser-undetermined",
   "discovery:listening-200",
   "discovery:listening-401",
@@ -388,6 +390,31 @@ it("reports an opener that throws as a browser REFUSED, not as an escaped except
   record("control-room:browser-refused");
 });
 
+it("reports an opener that throws BEFORE returning a promise as REFUSED, with no path in the detail", async () => {
+  // A plain (non-async) opener that vets its target throws synchronously. Left
+  // to the Promise executor, that throw would reject the port outright, and the
+  // adapter would then publish the raw message — which quotes the asset path —
+  // at its own layer instead of the sanitized REFUSED arm the port owes.
+  const root = tempRoot();
+  const asset = join(root, "index.html");
+  writeFileSync(asset, "<!doctype html>", "utf8");
+  const opener: BrowserOpener = (target) => {
+    throw new Error(`cannot open ${target}`);
+  };
+  const evidence = await openControlRoom(asset, opener, OPEN_MS);
+  expect(evidence).toEqual({
+    assets: "PRESENT",
+    browser: { detail: "the browser refused to open (UNKNOWN)", status: "REFUSED" },
+    embedded: "UNAVAILABLE",
+  });
+  expect(verdict(decideControlRoomOpen(evidence))).toEqual({
+    code: "CONTROL_ROOM_BROWSER_REFUSED",
+    layer: "CONTROL_ROOM_OPEN_PORT",
+    outcome: "REFUSED",
+  });
+  record("control-room:browser-refused-before-promise");
+});
+
 it("keeps the host off Node's process-wide handles: no port module opens a socket at import", () => {
   // Importing a port module must not listen, spawn or connect. Proven out of
   // process, because an in-process import would be indistinguishable from the
@@ -584,6 +611,6 @@ it("ran every arm it claims to cover, and only those", () => {
   // A sweep that silently produces zero cases passes while testing nothing. This
   // compares what actually EXECUTED against the hand-written list above, so a
   // case that stops running is a failure rather than a quiet reduction in scope.
-  expect(COVERED_ARMS.length).toBe(21);
+  expect(COVERED_ARMS.length).toBe(22);
   expect([...recorded].sort()).toEqual([...COVERED_ARMS]);
 });

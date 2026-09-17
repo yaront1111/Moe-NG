@@ -109,54 +109,6 @@ export interface ReplayReceipt {
   readonly replayDigest: string;
 }
 
-export interface CreatePrincipalInput {
-  readonly commandId: string;
-  readonly correlationId: string;
-  readonly principalId: string;
-  readonly kind: Principal["kind"];
-  readonly profileRevisionId: string;
-}
-
-export interface OpenSessionInput {
-  readonly commandId: string;
-  readonly correlationId: string;
-  readonly principalId: string;
-  readonly sessionId: string;
-  readonly credentialId: string;
-  readonly clientKeyId: string;
-  readonly publicKeySpkiHex: string;
-  readonly transportId: string;
-  readonly transportIds: readonly string[];
-  readonly requestDigest: string;
-  readonly proof: SessionProof;
-}
-
-export interface AuthenticateSessionInput {
-  readonly principalId: string;
-  readonly projectId: string;
-  readonly sessionId: string;
-  readonly credentialId: string;
-  readonly generation: number;
-  readonly clientKeyId: string;
-  readonly transportId: string;
-  readonly requestId: string;
-  readonly requestDigest: string;
-  readonly proof: SessionProof;
-}
-
-export interface AuthenticatedMutationInput {
-  readonly commandId: string;
-  readonly correlationId: string;
-  readonly authentication: AuthenticateSessionInput;
-}
-
-export interface RotateCredentialInput extends AuthenticatedMutationInput {
-  readonly nextCredentialId: string;
-  readonly nextClientKeyId: string;
-  readonly nextPublicKeySpkiHex: string;
-  readonly nextSignatureHex: string;
-}
-
 export interface SessionAuthorityRefusal {
   readonly ok: false;
   readonly code: SessionAuthorityCode;

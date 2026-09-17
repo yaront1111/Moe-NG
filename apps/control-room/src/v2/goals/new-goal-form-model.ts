@@ -1,8 +1,6 @@
 /** Small pure presentation helpers kept out of the form component. */
 
 export const RISK_OPTIONS = Object.freeze(["STANDARD", "ELEVATED", "RESTRICTED"] as const);
-export const PLACEHOLDER_OUTCOME =
-  "Ship the scoped MCP stdio entry behind per-agent bearer credentials";
 /** The layer every refusal on this path carries: the browser refused, no route was reached. */
 export const PRD_LOCAL_LAYER = "CONTROL_ROOM_NEWGOAL";
 

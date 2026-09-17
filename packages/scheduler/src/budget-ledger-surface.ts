@@ -28,10 +28,9 @@
  * rediscovering the constant. `replayBudgetLedger` folds a recorded entry stream through the
  * SAME transition core as live application, so a durable rebuild cannot diverge from it.
  *
- * WITHHELD from the contract module beside these: `validateBudgetAccount`,
- * `validateReserveDeclaration` and `MAX_BUDGET_METERS` are the contract-validator seam. They
- * gate caller-shaped input, not a ledger transition, and a consumer holding one could accept a
- * record the transitions themselves refuse.
+ * WITHHELD from the contract module beside these: `MAX_BUDGET_METERS` is the contract-validator
+ * seam. It gates caller-shaped input, not a ledger transition, and a consumer holding it could
+ * accept a record the transitions themselves refuse.
  */
 export {
   BUDGET_ACCOUNT_ISSUE_CODES,

@@ -18,6 +18,7 @@
  */
 import type { SqliteEventStore } from "@moe/store";
 
+import { dataRecord as record } from "../json-record-shape.js";
 import { commitProductContractRevision } from "./product-contract-revision-store.js";
 import type { ProductContractRevisionCommitResult } from "./product-contract-revision-store.js";
 import { validateRevisionProvenance } from "./product-contract-provenance.js";
@@ -112,12 +113,6 @@ function canonicalDraftOrder(
     }
   }
   return Object.freeze(canonical);
-}
-
-function record(value: unknown): Readonly<Record<string, unknown>> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Readonly<Record<string, unknown>>
-    : null;
 }
 
 export function runProductContractProposeRevision(

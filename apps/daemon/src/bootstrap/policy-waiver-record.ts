@@ -245,6 +245,3 @@ export function policyWaiverTupleKeyFor(input: PolicyWaiverTuple): string {
   return JSON.stringify([input.projectId, input.approvedBy, input.actionKind,
     input.policyRevisionRef, input.namedObligationId, input.scope]);
 }
-export function samePolicyWaiverTuple(left: PolicyWaiverTuple, right: PolicyWaiverTuple): boolean {
-  return policyWaiverTupleKeyFor(left) === policyWaiverTupleKeyFor(right);
-}

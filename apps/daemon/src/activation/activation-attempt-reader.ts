@@ -23,6 +23,7 @@ import type {
   DurableStoreErrorCode, StoreHealth, StoredEvent,
 } from "@moe/store";
 
+import { sameBinaryBytes } from "../byte-equality.js";
 import {
   ACTIVATION_LEDGER_COMMAND_KIND, ACTIVATION_LEDGER_EVENT_TYPE,
 } from "./activation-ledger-contracts.js";
@@ -85,18 +86,12 @@ const unreadable = (error: unknown): FoundationAttemptUnknown =>
 interface Verified {
   readonly epoch: number; readonly ownerSessionRef: string; readonly record: ActivationLedgerRecord;
 }
-/** The `instanceof` pair is load-bearing: two non-binary payloads both report an
- *  `undefined` byteLength, so without it a contract-breaking store would reach
- *  `.every` and CRASH where this reader has to refuse. */
-const sameBytes = (left: Uint8Array, right: Uint8Array): boolean =>
-  left instanceof Uint8Array && right instanceof Uint8Array &&
-  left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
 /** The aggregate's head must BE the indexed row, not merely resemble it. */
 const sameEvent = (held: StoredEvent, indexed: StoredEvent): boolean =>
   held.eventId === indexed.eventId && held.aggregateId === indexed.aggregateId &&
   held.aggregateSequence === 1 && held.eventType === indexed.eventType &&
   held.commandId === indexed.commandId && held.requestSha256 === indexed.requestSha256 &&
-  sameBytes(held.payload, indexed.payload);
+  sameBinaryBytes(held.payload, indexed.payload);
 /** A filtered scan has no positional contiguity, so the pager's contract is the
  *  completeness proof and its shape is re-checked here before it is trusted. */
 function wellShaped(page: unknown): page is CursorPage<StoredEvent, bigint> {
@@ -118,7 +113,7 @@ const decisionAgrees = (
   decision.key.projectId === projectId && decision.targetAggregateId === event.aggregateId &&
   decision.businessEventIds.length === 1 && decision.businessEventIds[0] === event.eventId &&
   decision.outboxMessageIds.length === 0 && decision.requestSha256 === trace.requestSha256 &&
-  sameBytes(decision.resultBytes, event.payload);
+  sameBinaryBytes(decision.resultBytes, event.payload);
 /** The effect half; its `requestSha256` is the EFFECT digest, a DIFFERENT domain,
  *  compared to the event's and never to the trace's. */
 const receiptAgrees = (receipt: CommandReceipt, event: StoredEvent, effect: string): boolean =>

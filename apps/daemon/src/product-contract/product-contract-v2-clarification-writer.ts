@@ -2,6 +2,7 @@ import { COMMAND_EFFECT_IDENTITY_VERSION, DurableStoreError, identifyReplayReque
   type ExpectedVersionDecisionLeg,
   type SqliteEventStore } from "@moe/store";
 
+import { sameBytes } from "../byte-equality.js";
 import { encodeProductContractClarificationV2Value }
   from "./product-contract-v2-clarification-canonical.js";
 import {
@@ -124,11 +125,6 @@ export function isExactProductContractClarificationV2Replay(
       ? error.code : "STORAGE_DEGRADED", kind: "UNREADABLE" as const,
     layer: "DURABLE_STORE" as const });
   }
-}
-
-function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return left.byteLength === right.byteLength
-    && left.every((byte, index) => byte === right[index]);
 }
 
 export interface ProductContractClarificationV2RowCommit {

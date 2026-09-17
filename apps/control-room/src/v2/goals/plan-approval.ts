@@ -4,6 +4,7 @@ import type {
 } from "@moe/control-room-client";
 
 import type { SurfaceFrame } from "../../live/live-board-feed.js";
+import { isRecord, sha256Hex } from "../../live/live-wire-primitives.js";
 
 /**
  * PLAN APPROVAL: the affordance gate, then the daemon's own approval wire.
@@ -144,15 +145,6 @@ export interface PlanApprovalWire {
   readonly client: Pick<ControlRoomClientSurface, "commands">;
   readonly sessionCredential: string;
   readonly transport: Pick<ControlRoomTransport, "sendCommand">;
-}
-
-async function sha256Hex(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 /** The refusing authority's OWN code and layer, never rewritten and never summarised. */

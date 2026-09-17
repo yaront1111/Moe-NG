@@ -32,7 +32,6 @@ export const CONTINUATION_BINDING_SCHEMA_VERSION = "moe-recovery-continuation-bi
 export const CONTINUATION_COMMAND_KINDS = Object.freeze([
   "work.resume",
 ] as const satisfies readonly RuntimeCommandKind[]);
-export type ContinuationCommandKind = (typeof CONTINUATION_COMMAND_KINDS)[number];
 
 /**
  * This module's OWN refusals, all raised at the CONTINUATION layer. Boundary

@@ -1,8 +1,6 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 
-import { decodeBoundedJsonBytes } from "@moe/contracts";
-
 import { HTTP_INPUT_BOUNDS } from "./http-contract.js";
 
 /**
@@ -336,20 +334,6 @@ export async function readBoundedBody(
   return Uint8Array.from(Buffer.concat(chunks));
 }
 
-/** Exact approval-body shape; authority is intentionally absent from the body. */
-export function readPairingApproveRequest(body: unknown): string | null {
-  const decoded = decodeBoundedJsonBytes(body);
-  if (!decoded.ok || !isRecord(decoded.value)) return null;
-  const keys = Object.keys(decoded.value);
-  if (keys.length !== 1 || keys[0] !== "confirmationLabel") return null;
-  const confirmationLabel = decoded.value["confirmationLabel"];
-  return typeof confirmationLabel === "string" ? confirmationLabel : null;
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 /** The credential the CALLER presented, so one listener can serve many principals. */
 export function credentialOf(request: IncomingMessage): string | null {
   const value = request.headers[CREDENTIAL_HEADER];
@@ -422,39 +406,6 @@ export function readEventAcknowledgeRequest(body: Uint8Array): {
   }
   return {
     presentedCursor: { generation: fields["generation"], position: fields["position"] },
-    subscriberId: draft["subscriberId"],
-  };
-}
-
-/**
- * The resume body: the acknowledge shape PLUS the projection, because
- * `resumeFromSnapshot` probes the port with `{projection, subscriberId}` before it
- * compares the presented cursor. Structural only, exactly like the two guards above:
- * the seam owns which cursor may actually resume.
- */
-export function readEventResumeRequest(body: Uint8Array): {
-  readonly presentedCursor: { readonly generation: number; readonly position: string };
-  readonly projection: string;
-  readonly subscriberId: string;
-} | null {
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(new TextDecoder().decode(body)) as unknown;
-  } catch {
-    return null;
-  }
-  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return null;
-  const draft = parsed as Record<string, unknown>;
-  const cursor = draft["presentedCursor"];
-  if (typeof draft["projection"] !== "string" || typeof draft["subscriberId"] !== "string"
-    || typeof cursor !== "object" || cursor === null || Array.isArray(cursor)) return null;
-  const fields = cursor as Record<string, unknown>;
-  if (typeof fields["generation"] !== "number" || typeof fields["position"] !== "string") {
-    return null;
-  }
-  return {
-    presentedCursor: { generation: fields["generation"], position: fields["position"] },
-    projection: draft["projection"],
     subscriberId: draft["subscriberId"],
   };
 }

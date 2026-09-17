@@ -96,9 +96,6 @@ export const FOUNDATION_ATTEMPT_INPUT_KEYS = Object.freeze(["baseIdentity", "ent
 export const FOUNDATION_ATTEMPT_TEMPLATE_KEYS = Object.freeze([
   "argv", "bootstrapCredentialDigest", "cwd", "environment", "launchSelection", "limits", "runtime",
 ] as const);
-export const FOUNDATION_ATTEMPT_RUNTIME_KEYS = Object.freeze([
-  "installedRoot", "pinRoot", "quotedObservation",
-] as const);
 export interface FoundationAttemptBinding {
   readonly attemptAggregateId: string; readonly nodeKey: string; readonly sessionId: string;
 }

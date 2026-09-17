@@ -5,6 +5,7 @@ import type { SqliteEventStore } from "@moe/store";
 import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { decisionsOf } from "../decision-ledger-memo.js";
+import { dataRecord as record } from "../json-record-shape.js";
 import { readGraphBody } from "../planning/graph-body-record.js";
 import { readWorkClaimLedger } from "../work/work-claim-read-model.js";
 import { landingAggregateId } from "../repository/landing-receipt-contracts.js";
@@ -13,11 +14,6 @@ import type { ActiveCompiledGraph } from "./compiled-node-source.js";
 /** Historical authority and legacy execution must be readable before new work is staffed. */
 export const COMPILED_NODE_IDENTITY_UNREADABLE = "COMPILED_NODE_IDENTITY_UNREADABLE";
 const EXECUTED = new Set(["EXECUTION_ENABLED", "CLOSING", "COMPLETED"]);
-
-function record(value: unknown): Readonly<Record<string, unknown>> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Readonly<Record<string, unknown>> : null;
-}
 
 interface HistoricalGraph extends ActiveCompiledGraph {
   readonly graphContentHash: string;

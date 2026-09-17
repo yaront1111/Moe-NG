@@ -1488,7 +1488,7 @@ describe("server-injected request fields", () => {
    * A caller told only "EXPECTED_VERSION_CONFLICT" has nothing to retry AT, so the wire detail
    * must name the version the store observed. `work.release` is the kind driven here because
    * every BOOTSTRAP reducer fences `expectedVersion` itself and answers under `CORE_REDUCER`
-   * before the store is reached (bootstrap-ledger.ts:258-260) — a bootstrap kind cannot produce
+   * before the store is reached (bootstrap-ledger.ts:252-254) — a bootstrap kind cannot produce
    * a DURABLE_STORE conflict through this adapter without a store double, and this arm is about
    * the real adapter over the real store.
    */

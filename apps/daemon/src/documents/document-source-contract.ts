@@ -22,11 +22,6 @@ export const DOCUMENT_SOURCE_EVENT_TYPE = "DocumentSourceTextRecorded" as const;
  *  DOCUMENT_WORK_RECORD_COMMAND_KIND is not one. The store's decision key for the text leg. */
 export const DOCUMENT_SOURCE_RECORD_COMMAND_KIND = "document-source.record" as const;
 
-/** The operator command kind an ingest arrives under. Reserved here so the daemon vocabulary
- *  and registry can bind it once the runtime command vocabulary admits the kind; see the
- *  service module's ingest handler for the wire-ready form. */
-export const DOCUMENT_WORK_INGEST_COMMAND_KIND = "document-work.ingest" as const;
-
 /** The two source media the ingest admits. A closed roster: an unlisted media type refuses. */
 export const DOCUMENT_INGEST_MEDIA_TYPES = Object.freeze([
   "text/markdown", "text/plain",
@@ -50,11 +45,6 @@ export const DOCUMENT_INGEST_REQUIRED_KEYS = Object.freeze([
   "displayPath", "mediaType", "text",
 ] as const);
 export const DOCUMENT_INGEST_OPTIONAL_KEYS = Object.freeze(["objective"] as const);
-
-/** The whole payload key set the daemon command vocabulary must allow-list for the kind. */
-export const DOCUMENT_INGEST_PAYLOAD_KEYS = Object.freeze([
-  ...DOCUMENT_INGEST_REQUIRED_KEYS, ...DOCUMENT_INGEST_OPTIONAL_KEYS,
-] as const);
 
 /** The durable text record's shape. `displayPath` is display evidence only; it must never be
  *  passed to a filesystem operation. */

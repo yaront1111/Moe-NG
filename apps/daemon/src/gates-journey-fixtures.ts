@@ -267,9 +267,6 @@ function seatSession(deps: CommandAdapterDeps, kind: string, sessionId: string):
   return secret;
 }
 
-/** The OPERATOR's own session: the configured operator principal, holding operator capabilities. */
-export function operatorSession(): string { return CREDENTIAL; }
-
 export interface GateOutcome {
   readonly answer: unknown;
   readonly commandId: string;

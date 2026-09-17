@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 
 import { decodeBoundedJsonBytes } from "@moe/contracts";
-import type { JsonObject, JsonValue } from "@moe/contracts";
+import type { JsonValue } from "@moe/contracts";
+
+import { exact, freezeDeep, isObject, ref } from "../json-record-shape.js";
 
 /**
  * The durable shapes of DEPLOYING: a deploy names an environment and a landed
@@ -84,30 +86,6 @@ const RECEIPT_KEYS = [
   "refusal", "releaseDecision", "sha", "url", "version",
 ] as const;
 const REFUSAL_KEYS = ["code", "detail", "layer"] as const;
-
-function isObject(value: JsonValue | undefined): value is JsonObject {
-  return value !== null && value !== undefined && typeof value === "object"
-    && !Array.isArray(value) && Object.getPrototypeOf(value) === null;
-}
-
-function exact(value: JsonObject, keys: readonly string[]): boolean {
-  const actual = Object.keys(value);
-  return actual.length === keys.length && actual.every((key) => keys.includes(key));
-}
-
-function ref(value: JsonValue | undefined): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
-function freezeDeep<T>(value: T): T {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const key of Reflect.ownKeys(value)) {
-      freezeDeep((value as Record<PropertyKey, unknown>)[key]);
-    }
-    Object.freeze(value);
-  }
-  return value;
-}
 
 /** A deploy fact lands beside the environment, never on it. */
 export function deployAggregateId(projectId: string, environment: string): string {

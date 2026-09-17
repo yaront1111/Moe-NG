@@ -13,8 +13,6 @@ import type { Authenticator, HttpPortRefused, HttpRefused } from "./http-contrac
 export const DESIGN_READ_PATH = "/design/read" as const;
 const LAYER = "DESIGN_READ" as const;
 
-export const DESIGN_READ_CODES = Object.freeze(["DESIGN_READ_CAPABILITY_DENIED"] as const);
-
 export interface DesignReadRefused {
   readonly code: string;
   readonly layer: string;

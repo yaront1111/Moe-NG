@@ -25,9 +25,6 @@
 import type { SupersessionDisposition } from "@moe/core";
 import type { GraphRevisionContent } from "@moe/scheduler";
 
-import { assembleCarryForwardEvidence } from "./carry-forward-evidence.js";
-import type { CarryForwardEvidenceFact } from "./carry-forward-evidence.js";
-
 type Authorities = GraphRevisionContent["nodeAuthority"]["authorities"];
 
 /** The kernel's own ceiling (`structuralInput` rejects more than 128 entries). */
@@ -101,17 +98,4 @@ export function deriveCoveredSupersessionDispositions(
   if (counts.size !== dispositions.length) return null;
   for (const lineage of fenced) if (counts.get(lineage) !== 1) return null;
   return dispositions;
-}
-
-/** Diagnostic-only composition point; it does not participate in the supersession decision. */
-export function diagnoseCarryUnavailability(
-  predecessor: Authorities,
-  successor: Authorities,
-  nodeKey: string,
-  supportedCanonicalizerVersions: readonly string[],
-): readonly CarryForwardEvidenceFact[] {
-  const outcome = assembleCarryForwardEvidence(
-    predecessor, successor, nodeKey, supportedCanonicalizerVersions,
-  );
-  return outcome.ok ? Object.freeze([]) : outcome.missingFacts;
 }

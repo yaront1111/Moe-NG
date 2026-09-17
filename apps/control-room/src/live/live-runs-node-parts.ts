@@ -4,46 +4,13 @@
  * Exact-key snapshots, verbatim; nothing here reads the network.
  */
 import type { RunNodeClaimView, RunNodeFindingView, RunNodeLandingView, RunNodeReceiptView, RunNodeReviewView } from "./live-runs.js";
-
-/** An own-enumerable EXACT-key snapshot (copied verbatim from live-planning-run.ts). */
-export function exactDataRecord(
-  value: unknown, expectedKeys: readonly string[],
-): Readonly<Record<string, unknown>> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  try {
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return null;
-    const keys = Reflect.ownKeys(value);
-    if (keys.length !== expectedKeys.length
-      || keys.some((key) => typeof key !== "string" || !expectedKeys.includes(key))) return null;
-    const snapshot: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
-    for (const key of expectedKeys) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) return null;
-      snapshot[key] = descriptor.value;
-    }
-    return Object.freeze(snapshot);
-  } catch {
-    return null;
-  }
-}
+import { exactDataRecord, listOf } from "./live-wire-primitives.js";
 
 export const nonEmptyString = (value: unknown): value is string => typeof value === "string" && value.length > 0;
 export const nullableString = (value: unknown): value is string | null => value === null || typeof value === "string";
 export const count = (value: unknown): value is number => typeof value === "number" && Number.isInteger(value) && value >= 0;
 export const stringList = (value: unknown): readonly string[] | null =>
   Array.isArray(value) && value.every((entry) => typeof entry === "string") ? Object.freeze([...(value as string[])]) : null;
-
-export function listOf<T>(value: unknown, itemOf: (item: unknown) => T | null): readonly T[] | null {
-  if (!Array.isArray(value)) return null;
-  const items: T[] = [];
-  for (const raw of value) {
-    const item = itemOf(raw);
-    if (item === null) return null;
-    items.push(item);
-  }
-  return Object.freeze(items);
-}
 
 export function claimOf(value: unknown): RunNodeClaimView | null {
   const record = exactDataRecord(value, ["active", "claimedBy", "expiresAt", "status"]);

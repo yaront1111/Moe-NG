@@ -24,7 +24,6 @@ import type {
 import {
   exact,
   humanApproved,
-  snapshotData,
   strongTruth,
   validHex64,
   validRef,
@@ -242,9 +241,4 @@ export function validPlanningRunState(value: unknown): value is PlanningRunState
     && optionalHashes(value["sealedHashes"]) && optionalHashes(value["approvedHashes"])
     && (value["graphRevisionRef"] === null || validRef(value["graphRevisionRef"]))
     && validContentPlacement(value, lifecycle);
-}
-
-export function snapshotPlanningRunState(value: unknown): PlanningRunState | undefined {
-  const snapshot = snapshotData(value);
-  return snapshot.ok && validPlanningRunState(snapshot.value) ? snapshot.value : undefined;
 }

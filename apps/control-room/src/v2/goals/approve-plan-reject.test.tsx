@@ -29,7 +29,7 @@ import type { ApprovalGrant, PlanApprovalOutcome, PlanApprovalWire } from "./pla
  *  - THIS BROWSER disables the control, so nothing is dispatched at all. Asserted by
  *    the submit spy never being called, not merely by the button being disabled.
  *  - THE DAEMON refuses `APPROVAL_REJECT_REASON_REQUIRED` at its own layer
- *    (approval-intent-rejection.ts:40/:182, approval-intent.ts:199). Asserted as the
+ *    (approval-intent-rejection.ts:40/:182, approval-intent.ts:180). Asserted as the
  *    LITERAL code rendered verbatim, because a paraphrase is how an operator loses
  *    the daemon's actual reason.
  * An arm that only asserted "the reject did not go through" could not tell the two

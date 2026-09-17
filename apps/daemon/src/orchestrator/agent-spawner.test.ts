@@ -7,7 +7,6 @@ import { PassThrough } from "node:stream";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
 import * as spawnerModule from "./agent-spawner.js";
-import { claudeSpawner } from "./agent-spawner.js";
 import type { AgentSpawnerOptions } from "./agent-spawner.js";
 import type { SpawnRequest } from "./agent-wrapper.js";
 
@@ -23,11 +22,16 @@ type AgentSpawnStartResult =
   // mirror stays deliberately loose so a shape change is caught by an arm, not by tsc.
   | { readonly ok: true; readonly exit: Promise<unknown> };
 type AgentSpawnStart = (request: SpawnRequest) => Promise<AgentSpawnStartResult>;
+/** The start plus the ownership every production starter carries. */
+type OwnedStart = AgentSpawnStart & {
+  readonly activeCount: () => number;
+  readonly close: () => Promise<void>;
+};
 
-function claudeSpawnStarter(origin: string, options: AgentSpawnerOptions): AgentSpawnStart {
+function claudeSpawnStarter(origin: string, options: AgentSpawnerOptions): OwnedStart {
   const exported = (spawnerModule as unknown as Record<string, unknown>)["claudeSpawnStarter"];
   expect(typeof exported, "production claudeSpawnStarter export is absent").toBe("function");
-  return (exported as (o: string, p: AgentSpawnerOptions) => AgentSpawnStart)(origin, options);
+  return (exported as (o: string, p: AgentSpawnerOptions) => OwnedStart)(origin, options);
 }
 
 /** Every character cmd.exe reinterprets even inside quotes, per agent-spawn-invocation. */
@@ -112,7 +116,7 @@ afterAll(() => {
 
 /**
  * Builds a spawner whose config directory can be READ BACK exactly rather than
- * guessed: `claudeSpawner` mints it with `mkdtempSync(join(tmpdir(), ...))` at
+ * guessed: `claudeSpawnStarter` mints it with `mkdtempSync(join(tmpdir(), ...))` at
  * construction time and never exposes it, so tmpdir() is pointed at a private
  * sandbox for the duration of the construction call. Node resolves tmpdir()
  * from TMPDIR/TMP/TEMP, so all three move together and are restored after.
@@ -145,28 +149,38 @@ function inSandbox<Made>(
   return { configDir: join(sandbox, only), made };
 }
 
-function spawnerInSandbox(options: AgentSpawnerOptions): {
-  configDir: string;
-  spawner: (request: SpawnRequest) => Promise<void>;
-} {
-  const { configDir, made } = inSandbox(claudeSpawner, options);
-  return { configDir, spawner: made };
+/**
+ * A seat's LIFETIME, read through the starter production holds. The runtime these cases pin (argv,
+ * env scrub, config file, kill, timeouts) resolves a start on the child's `spawn` event, which a
+ * fake never emits on its own, so this starts `req`, admits the child that start appended to
+ * `spawned`, and hands back that child's exit. A refused start throws rather than awaiting nothing.
+ */
+function lifetime(
+  start: AgentSpawnStart, spawned: readonly FakeChild[], req: SpawnRequest = request(),
+): Promise<unknown> {
+  const index = spawned.length;
+  const pending = start(req);
+  spawned[index]?.emitter.emit("spawn");
+  return pending.then((started) => {
+    if (!started.ok) throw new Error(`expected an accepted start, got ${started.code}`);
+    return started.exit;
+  });
 }
 
-describe("claudeSpawner", () => {
+describe("seat process runtime", () => {
   it.each([
     "https://127.0.0.1:39124",
     "http://example.test:39124",
     "http://operator:secret@127.0.0.1:39124",
     "http://127.0.0.1:39124/untrusted-path",
   ])("refuses a non-loopback or authority-bearing MCP origin: %s", (origin) => {
-    expect(() => claudeSpawner(origin)).toThrowError("MCP_HTTP_ORIGIN_INVALID");
+    expect(() => claudeSpawnStarter(origin, {})).toThrowError("MCP_HTTP_ORIGIN_INVALID");
   });
 
   it("hands only the scoped credential to loopback MCP, never the operator store authority", async () => {
     const { calls, spawn } = fakeSpawn();
     const logs: string[] = [];
-    const spawner = claudeSpawner(MCP_ORIGIN, {
+    const spawner = claudeSpawnStarter(MCP_ORIGIN, {
       command: "claude",
       environment: {
         ANTHROPIC_API_KEY: "provider-key-is-preserved",
@@ -185,7 +199,7 @@ describe("claudeSpawner", () => {
       spawn,
     });
     const req = request();
-    const done = spawner(req);
+    const done = lifetime(spawner, calls, req);
     const child = calls[0];
     if (child === undefined) throw new Error("nothing spawned");
 
@@ -253,10 +267,10 @@ describe("claudeSpawner", () => {
     // POSIX argv semantics are what this case asserts: on win32 the whole argv
     // collapses into ONE shell line and `child.args` is empty, so without an
     // explicit platform these assertions are unreachable on a Windows runner.
-    const spawner = claudeSpawner(MCP_ORIGIN, {
+    const spawner = claudeSpawnStarter(MCP_ORIGIN, {
       command: "claude", log: () => undefined, platform: "linux", spawn,
     });
-    const done = spawner(request({ workspace: "D:/ws/node-1" }));
+    const done = lifetime(spawner, calls, request({ workspace: "D:/ws/node-1" }));
     const child = calls[0];
     if (child === undefined) throw new Error("nothing spawned");
     expect(child.options.cwd).toBe("D:/ws/node-1");
@@ -271,10 +285,10 @@ describe("claudeSpawner", () => {
 
   it("gives a CODEX seat the exec invocation, env-borne bearer and NO config file", async () => {
     const { calls, spawn } = fakeSpawn();
-    const { configDir, made: spawner } = inSandbox(claudeSpawner, {
+    const { configDir, made: spawner } = inSandbox(claudeSpawnStarter, {
       command: "codex", log: () => undefined, platform: "linux", spawn,
     });
-    const done = spawner(request({ workspace: "D:/ws/node-1" }));
+    const done = lifetime(spawner, calls, request({ workspace: "D:/ws/node-1" }));
     const child = calls[0];
     if (child === undefined) throw new Error("nothing spawned");
     // The measured codex-cli 0.153.4 surface (2026-09-07, host Yaron-PC; an earlier
@@ -312,10 +326,10 @@ describe("claudeSpawner", () => {
 
   it("keeps a chain-step CODEX seat read-only sandboxed", async () => {
     const { calls, spawn } = fakeSpawn();
-    const { made: spawner } = inSandbox(claudeSpawner, {
+    const { made: spawner } = inSandbox(claudeSpawnStarter, {
       command: "codex", log: () => undefined, platform: "linux", spawn,
     });
-    const done = spawner(request());
+    const done = lifetime(spawner, calls);
     const child = calls[0];
     if (child === undefined) throw new Error("nothing spawned");
     expect(child.args.slice(child.args.indexOf("--sandbox"), child.args.indexOf("--sandbox") + 2))
@@ -344,10 +358,10 @@ describe("claudeSpawner", () => {
 
     it("spawns codex for a codex request with MOE_AGENT_COMMAND unset", async () => {
       const { calls, spawn } = fakeSpawn();
-      const { configDir, made: spawner } = withoutEnvCommand(() => inSandbox(claudeSpawner, {
+      const { configDir, made: spawner } = withoutEnvCommand(() => inSandbox(claudeSpawnStarter, {
         log: () => undefined, platform: "linux", spawn,
       }));
-      const done = spawner(request({ provider: "codex", workspace: "D:/ws/node-1" }));
+      const done = lifetime(spawner, calls, request({ provider: "codex", workspace: "D:/ws/node-1" }));
       const child = calls[0];
       if (child === undefined) throw new Error("nothing spawned");
       expect(child.file).toBe("codex");
@@ -362,10 +376,10 @@ describe("claudeSpawner", () => {
 
     it("spawns claude for a claude request with MOE_AGENT_COMMAND unset", async () => {
       const { calls, spawn } = fakeSpawn();
-      const { made: spawner } = withoutEnvCommand(() => inSandbox(claudeSpawner, {
+      const { made: spawner } = withoutEnvCommand(() => inSandbox(claudeSpawnStarter, {
         log: () => undefined, platform: "linux", spawn,
       }));
-      const done = spawner(request({ provider: "claude" }));
+      const done = lifetime(spawner, calls, request({ provider: "claude" }));
       const child = calls[0];
       if (child === undefined) throw new Error("nothing spawned");
       expect(child.file).toBe("claude");
@@ -378,11 +392,11 @@ describe("claudeSpawner", () => {
 
     it("spawns each request's own command from ONE spawner, codex then claude", async () => {
       const { calls, spawn } = fakeSpawn();
-      const { made: spawner } = withoutEnvCommand(() => inSandbox(claudeSpawner, {
+      const { made: spawner } = withoutEnvCommand(() => inSandbox(claudeSpawnStarter, {
         log: () => undefined, platform: "linux", spawn,
       }));
-      const first = spawner(request({ provider: "codex", sessionId: "sess-wrap-000a" }));
-      const second = spawner(request({ provider: "claude", sessionId: "sess-wrap-000b" }));
+      const first = lifetime(spawner, calls, request({ provider: "codex", sessionId: "sess-wrap-000a" }));
+      const second = lifetime(spawner, calls, request({ provider: "claude", sessionId: "sess-wrap-000b" }));
       expect(calls.map((child) => child.file)).toEqual(["codex", "claude"]);
       expect(calls[0]?.options.env?.["MOE_AGENT_MCP_BEARER"]).toBe("agent-secret-0001");
       expect(calls[1]?.options.env?.["MOE_AGENT_MCP_BEARER"]).toBeUndefined();
@@ -399,10 +413,10 @@ describe("claudeSpawner", () => {
         const before = process.env["MOE_AGENT_COMMAND"];
         process.env["MOE_AGENT_COMMAND"] = "codex";
         try {
-          const { made: spawner } = inSandbox(claudeSpawner, {
+          const { made: spawner } = inSandbox(claudeSpawnStarter, {
             command: "claude", log: () => undefined, platform: "linux", spawn,
           });
-          const done = spawner(request());
+          const done = lifetime(spawner, calls);
           const child = calls[0];
           if (child === undefined) throw new Error("nothing spawned");
           expect(child.file).toBe("claude");
@@ -421,10 +435,10 @@ describe("claudeSpawner", () => {
         const before = process.env["MOE_AGENT_COMMAND"];
         process.env["MOE_AGENT_COMMAND"] = "codex";
         try {
-          const { made: spawner } = inSandbox(claudeSpawner, {
+          const { made: spawner } = inSandbox(claudeSpawnStarter, {
             log: () => undefined, platform: "linux", spawn,
           });
-          const done = spawner(request());
+          const done = lifetime(spawner, calls);
           const child = calls[0];
           if (child === undefined) throw new Error("nothing spawned");
           expect(child.file).toBe("codex");
@@ -440,10 +454,10 @@ describe("claudeSpawner", () => {
     it("falls back to claude when the request, the option and the host env are all absent",
       async () => {
         const { calls, spawn } = fakeSpawn();
-        const { made: spawner } = withoutEnvCommand(() => inSandbox(claudeSpawner, {
+        const { made: spawner } = withoutEnvCommand(() => inSandbox(claudeSpawnStarter, {
           log: () => undefined, platform: "linux", spawn,
         }));
-        const done = spawner(request());
+        const done = lifetime(spawner, calls);
         const child = calls[0];
         if (child === undefined) throw new Error("nothing spawned");
         expect(child.file).toBe("claude");
@@ -454,7 +468,7 @@ describe("claudeSpawner", () => {
 
   it("preserves an enterprise proxy while forcing loopback MCP to bypass it", async () => {
     const { calls, spawn } = fakeSpawn();
-    const spawner = claudeSpawner(MCP_ORIGIN, {
+    const spawner = claudeSpawnStarter(MCP_ORIGIN, {
       command: "claude",
       environment: {
         HTTPS_PROXY: "http://proxy.example.test:8080",
@@ -464,7 +478,7 @@ describe("claudeSpawner", () => {
       log: () => undefined,
       spawn,
     });
-    const done = spawner(request());
+    const done = lifetime(spawner, calls);
     const child = calls[0];
     if (child === undefined) throw new Error("nothing spawned");
 
@@ -482,7 +496,7 @@ describe("claudeSpawner", () => {
     const { calls, spawn } = fakeSpawn(4321);
     const killed: string[] = [];
     const groupKills: { pid: number; signal: NodeJS.Signals }[] = [];
-    const spawner = claudeSpawner(MCP_ORIGIN, {
+    const spawner = claudeSpawnStarter(MCP_ORIGIN, {
       command: "claude",
       killProcessGroup: (pid, signal) => { groupKills.push({ pid, signal }); },
       killGraceMs: 30,
@@ -491,7 +505,7 @@ describe("claudeSpawner", () => {
       platform: "linux", timeoutMs: 20,
     });
     try {
-      const done = spawner(request());
+      const done = lifetime(spawner, calls);
       const child = calls[0];
       if (child === undefined) throw new Error("nothing spawned");
       const configPath = configPathOf(child);
@@ -518,7 +532,7 @@ describe("claudeSpawner", () => {
     vi.useFakeTimers();
     const { calls, spawn } = fakeSpawn(4321);
     const groupKills: number[] = [];
-    const spawner = claudeSpawner(MCP_ORIGIN, {
+    const spawner = claudeSpawnStarter(MCP_ORIGIN, {
       command: "claude",
       killGraceMs: 30,
       killProcessGroup: (pid) => { groupKills.push(pid); },
@@ -528,7 +542,7 @@ describe("claudeSpawner", () => {
       timeoutMs: 20,
     });
     try {
-      const done = spawner(request());
+      const done = lifetime(spawner, calls);
       const child = calls[0];
       if (child === undefined) throw new Error("nothing spawned");
       let settled = false;
@@ -564,13 +578,13 @@ describe("claudeSpawner", () => {
       calls.push(call);
       return child;
     };
-    const spawner = claudeSpawner(MCP_ORIGIN, {
+    const spawner = claudeSpawnStarter(MCP_ORIGIN, {
       command: "claude", killGraceMs: 30, log: () => undefined,
       environment: { SYSTEMROOT: "C:\\Windows" },
       platform: "win32", spawn, timeoutMs: 20,
     });
     try {
-      const done = spawner(request());
+      const done = lifetime(spawner, calls);
       const configPath = configPathOf(agent.calls[0] as FakeChild);
       let resolved = false;
       void done.then(() => { resolved = true; }, () => undefined);
@@ -612,13 +626,13 @@ describe("claudeSpawner", () => {
       if (selected === undefined) throw new Error("unexpected extra spawn");
       return selected.spawn(file, args, options);
     };
-    const spawner = claudeSpawner(MCP_ORIGIN, {
+    const spawner = claudeSpawnStarter(MCP_ORIGIN, {
       command: "claude", killGraceMs: 30, log: () => undefined,
       environment: { SYSTEMROOT: "C:\\Windows" },
       platform: "win32", spawn, timeoutMs: 20,
     });
     try {
-      const done = spawner(request());
+      const done = lifetime(spawner, agent.calls);
       await vi.advanceTimersByTimeAsync(20);
 
       // The agent exits naturally in the same instant the killer lands, so
@@ -627,12 +641,12 @@ describe("claudeSpawner", () => {
       // for, not a containment failure.
       agent.calls[0]?.emitter.emit("close", 0, null);
       killer.calls[0]?.emitter.emit("close", 128, null);
-      await expect(done).resolves.toBeUndefined();
+      await expect(done).resolves.toMatchObject({ exitCode: 0, terminatedByWrapper: true });
 
       // The spawner stayed open: the next spawn is admitted, not refused closed.
-      const later = spawner(request({ sessionId: "sess-wrap-0002" }));
+      const later = lifetime(spawner, followUp.calls, request({ sessionId: "sess-wrap-0002" }));
       followUp.calls[0]?.emitter.emit("close", 0, null);
-      await expect(later).resolves.toBeUndefined();
+      await expect(later).resolves.toMatchObject({ exitCode: 0, terminatedByWrapper: false });
     } finally {
       vi.useRealTimers();
     }
@@ -649,13 +663,13 @@ describe("claudeSpawner", () => {
       if (selected === undefined) throw new Error("unexpected extra spawn");
       return selected.spawn(file, args, options);
     };
-    const spawner = claudeSpawner(MCP_ORIGIN, {
+    const spawner = claudeSpawnStarter(MCP_ORIGIN, {
       command: "claude", killGraceMs: 30, log: () => undefined,
       environment: { SYSTEMROOT: "C:\\Windows" },
       platform: "win32", spawn, timeoutMs: 20,
     });
     try {
-      const done = spawner(request());
+      const done = lifetime(spawner, agent.calls);
       await vi.advanceTimersByTimeAsync(20);
 
       // Not the 128 arm: taskkill reports a garden-variety failure, but the
@@ -663,12 +677,12 @@ describe("claudeSpawner", () => {
       // already-dead tree. Only a LIVE child turns a failed killer fatal.
       agent.calls[0]?.emitter.emit("close", 0, null);
       killer.calls[0]?.emitter.emit("close", 1, null);
-      await expect(done).resolves.toBeUndefined();
+      await expect(done).resolves.toMatchObject({ exitCode: 0, terminatedByWrapper: true });
 
       // The spawner stayed open: the next spawn is admitted, not refused closed.
-      const later = spawner(request({ sessionId: "sess-wrap-0002" }));
+      const later = lifetime(spawner, followUp.calls, request({ sessionId: "sess-wrap-0002" }));
       followUp.calls[0]?.emitter.emit("close", 0, null);
-      await expect(later).resolves.toBeUndefined();
+      await expect(later).resolves.toMatchObject({ exitCode: 0, terminatedByWrapper: false });
     } finally {
       vi.useRealTimers();
     }
@@ -677,7 +691,7 @@ describe("claudeSpawner", () => {
   it("surfaces a POSIX group-kill failure even when the direct child closes", async () => {
     vi.useFakeTimers();
     const { calls, spawn } = fakeSpawn(4321);
-    const spawner = claudeSpawner(MCP_ORIGIN, {
+    const spawner = claudeSpawnStarter(MCP_ORIGIN, {
       command: "claude",
       killGraceMs: 30,
       killProcessGroup: () => { throw new Error("EPERM"); },
@@ -687,7 +701,7 @@ describe("claudeSpawner", () => {
       timeoutMs: 20,
     });
     try {
-      const done = spawner(request());
+      const done = lifetime(spawner, calls);
       const rejected = done.catch((error: unknown) => error);
       await vi.advanceTimersByTimeAsync(20);
       calls[0]?.emitter.emit("close", null, "SIGKILL");
@@ -703,7 +717,7 @@ describe("claudeSpawner", () => {
   it("treats an ESRCH group kill as an already-dead tree, not a tree-kill failure", async () => {
     vi.useFakeTimers();
     const { calls, spawn } = fakeSpawn(4321);
-    const spawner = claudeSpawner(MCP_ORIGIN, {
+    const spawner = claudeSpawnStarter(MCP_ORIGIN, {
       command: "claude",
       killGraceMs: 30,
       // The group leader exited before the signal landed: the kernel reports
@@ -717,15 +731,15 @@ describe("claudeSpawner", () => {
       timeoutMs: 20,
     });
     try {
-      const done = spawner(request());
+      const done = lifetime(spawner, calls);
       await vi.advanceTimersByTimeAsync(20);
       calls[0]?.emitter.emit("close", null, "SIGKILL");
-      await expect(done).resolves.toBeUndefined();
+      await expect(done).resolves.toMatchObject({ signal: "SIGKILL", terminatedByWrapper: true });
 
       // The spawner stayed open: the next spawn is admitted, not refused closed.
-      const later = spawner(request({ sessionId: "sess-wrap-0002" }));
+      const later = lifetime(spawner, calls, request({ sessionId: "sess-wrap-0002" }));
       calls[1]?.emitter.emit("close", 0, null);
-      await expect(later).resolves.toBeUndefined();
+      await expect(later).resolves.toMatchObject({ exitCode: 0, terminatedByWrapper: false });
     } finally {
       vi.useRealTimers();
     }
@@ -733,8 +747,8 @@ describe("claudeSpawner", () => {
 
   it("keeps the containment rejection authoritative when a fatal observer throws", async () => {
     vi.useFakeTimers();
-    const { spawn } = fakeSpawn(4321);
-    const spawner = claudeSpawner(MCP_ORIGIN, {
+    const { calls, spawn } = fakeSpawn(4321);
+    const spawner = claudeSpawnStarter(MCP_ORIGIN, {
       command: "claude",
       killProcessGroup: () => { throw new Error("EPERM"); },
       log: () => undefined,
@@ -744,7 +758,7 @@ describe("claudeSpawner", () => {
       timeoutMs: 20,
     });
     try {
-      const done = spawner(request());
+      const done = lifetime(spawner, calls);
       const rejected = done.catch((error: unknown) => error);
       await vi.advanceTimersByTimeAsync(20);
       expect(await rejected).toMatchObject({
@@ -760,7 +774,7 @@ describe("claudeSpawner", () => {
     vi.useFakeTimers();
     const { calls, spawn } = fakeSpawn(4321);
     const groupKills: number[] = [];
-    const spawner = claudeSpawner(MCP_ORIGIN, {
+    const spawner = claudeSpawnStarter(MCP_ORIGIN, {
       command: "claude",
       killGraceMs: 30,
       killProcessGroup: (pid) => { groupKills.push(pid); },
@@ -770,18 +784,19 @@ describe("claudeSpawner", () => {
       timeoutMs: 10_000,
     });
     try {
-      const running = spawner(request());
+      const running = lifetime(spawner, calls);
       let closed = false;
       const closing = spawner.close();
       void closing.then(() => { closed = true; });
 
       expect(groupKills).toEqual([-4321]);
       expect(closed).toBe(false);
-      await expect(spawner(request({ sessionId: "sess-late" })))
-        .rejects.toThrowError("AGENT_SPAWNER_CLOSED");
+      await expect(spawner(request({ sessionId: "sess-late" }))).resolves.toStrictEqual({
+        code: "AGENT_SPAWNER_CLOSED", layer: "agent-spawner", ok: false,
+      });
 
       calls[0]?.emitter.emit("close", null, "SIGKILL");
-      await expect(running).resolves.toBeUndefined();
+      await expect(running).resolves.toMatchObject({ signal: "SIGKILL", terminatedByWrapper: true });
       await expect(closing).resolves.toBeUndefined();
       expect(closed).toBe(true);
       expect(spawner.activeCount()).toBe(0);
@@ -792,10 +807,10 @@ describe("claudeSpawner", () => {
 
   it("does not kill an agent that exits before its lifetime bound", async () => {
     const { calls, spawn } = fakeSpawn();
-    const spawner = claudeSpawner(MCP_ORIGIN, {
+    const spawner = claudeSpawnStarter(MCP_ORIGIN, {
       command: "claude", log: () => undefined, spawn, platform: "linux", timeoutMs: 10_000,
     });
-    const done = spawner(request());
+    const done = lifetime(spawner, calls);
     const child = calls[0];
     if (child === undefined) throw new Error("nothing spawned");
     let killCalls = 0;
@@ -807,10 +822,10 @@ describe("claudeSpawner", () => {
 
   it("rejects a natural nonzero child exit with a stable process failure", async () => {
     const { calls, spawn } = fakeSpawn(4321);
-    const spawner = claudeSpawner(MCP_ORIGIN, {
+    const spawner = claudeSpawnStarter(MCP_ORIGIN, {
       command: "claude", log: () => undefined, spawn,
     });
-    const done = spawner(request());
+    const done = lifetime(spawner, calls);
     const child = calls[0];
     if (child === undefined) throw new Error("nothing spawned");
     const configPath = configPathOf(child);
@@ -830,10 +845,10 @@ describe("claudeSpawner", () => {
 
   it("rejects a spawn error without a pid and removes the config file", async () => {
     const { calls, spawn } = fakeSpawn();
-    const spawner = claudeSpawner(MCP_ORIGIN, {
+    const spawner = claudeSpawnStarter(MCP_ORIGIN, {
       command: "claude", log: () => undefined, spawn,
     });
-    const done = spawner(request());
+    const done = lifetime(spawner, calls);
     const child = calls[0];
     if (child === undefined) throw new Error("nothing spawned");
     const configPath = configPathOf(child);
@@ -850,21 +865,11 @@ describe("claudeSpawner", () => {
     expect(existsSync(configPath)).toBe(false);
   });
 
-  it("removes the credentialed config when process creation throws", async () => {
-    const { configDir, spawner } = spawnerInSandbox({
-      command: "claude",
-      spawn: () => { throw new Error("spawn refused"); },
-    });
-
-    await expect(spawner(request())).rejects.toThrowError("spawn refused");
-    expect(readdirSync(configDir)).toEqual([]);
-  });
-
   it("contains a fast-exiting agent's EPIPE instead of crashing the wrapper", async () => {
     vi.useFakeTimers();
     const { calls, spawn } = fakeSpawn(4321);
     const groupKills: number[] = [];
-    const spawner = claudeSpawner(MCP_ORIGIN, {
+    const spawner = claudeSpawnStarter(MCP_ORIGIN, {
       command: "claude",
       killGraceMs: 30,
       killProcessGroup: (pid) => { groupKills.push(pid); },
@@ -875,7 +880,7 @@ describe("claudeSpawner", () => {
       spawn,
     });
     try {
-      const done = spawner(request());
+      const done = lifetime(spawner, calls);
       const child = calls[0];
       if (child === undefined) throw new Error("nothing spawned");
       const configPath = configPathOf(child);
@@ -899,37 +904,6 @@ describe("claudeSpawner", () => {
     }
   });
 
-  it("refuses an unquotable command line without ever writing the credential to disk", async () => {
-    const { calls, spawn } = fakeSpawn();
-    // `"` cannot be quoted for cmd.exe, and the command is the FIRST piece of
-    // the line, so building the invocation refuses before anything else. The
-    // real-world trigger needs no hostile input: an ordinary Windows account
-    // name carrying & ^ % < > | or " puts tmpdir() itself beyond quoting.
-    // `platform` is explicit because agentSpawnInvocation returns early for
-    // every non-win32 platform — without it this case would reach no guard at
-    // all on a Linux or macOS runner and pass while testing nothing.
-    const { configDir, spawner } = spawnerInSandbox({
-      command: 'claude"evil', log: () => undefined, platform: "win32", spawn,
-    });
-    const req = request();
-
-    // The refusal must arrive as a REJECTION. The wrapper observes the returned
-    // promise without awaiting inside the poll tick, so a synchronous throw
-    // would escape that tick entirely.
-    let returned: Promise<void> | undefined;
-    expect(() => { returned = spawner(req); }).not.toThrow();
-    await expect(returned).rejects.toMatchObject({
-      code: "SPAWN_ARGUMENT_UNQUOTABLE",
-      layer: "agent-spawn-invocation",
-    });
-
-    expect(calls).toEqual([]);
-    // The credential never reached disk: the whole config directory is empty,
-    // not merely the one named path removed.
-    expect(existsSync(join(configDir, `${req.sessionId}.json`))).toBe(false);
-    expect(readdirSync(configDir)).toEqual([]);
-  });
-
   it("converts the daemon module URL to a filesystem path for the default cwd", async () => {
     const decodedDaemonDirectory = "/tmp/moe daemon/שלום";
     vi.resetModules();
@@ -939,10 +913,10 @@ describe("claudeSpawner", () => {
     try {
       const dynamicallyLoaded = await import("./agent-spawner.js");
       const { calls, spawn } = fakeSpawn();
-      const spawner = dynamicallyLoaded.claudeSpawner(MCP_ORIGIN, {
+      const start = dynamicallyLoaded.claudeSpawnStarter(MCP_ORIGIN, {
         command: "claude", log: () => undefined, spawn,
       });
-      const done = spawner(request());
+      const done = lifetime(start, calls);
       const child = calls[0];
       if (child === undefined) throw new Error("nothing spawned");
 
@@ -1472,10 +1446,10 @@ const argvFor = async (
   overrides: Partial<SpawnRequest>, command: string,
 ): Promise<readonly string[]> => {
   const { calls, spawn } = fakeSpawn();
-  const { made: spawner } = inSandbox(claudeSpawner, {
+  const { made: spawner } = inSandbox(claudeSpawnStarter, {
     command, log: () => undefined, platform: "linux", spawn,
   });
-  const done = spawner(request(overrides));
+  const done = lifetime(spawner, calls, request(overrides));
   const child = calls[0];
   if (child === undefined) throw new Error("nothing spawned");
   child.emitter.emit("close", 0, null);
@@ -1573,10 +1547,10 @@ describe("grants a codex seat the same tool roster as a claude seat", () => {
 describe("hands a codex seat the same mission as a claude seat", () => {
   const missionOf = async (command: string): Promise<string> => {
     const { calls, spawn } = fakeSpawn();
-    const { made: spawner } = inSandbox(claudeSpawner, {
+    const { made: spawner } = inSandbox(claudeSpawnStarter, {
       command, log: () => undefined, platform: "linux", spawn,
     });
-    const done = spawner(request({ workspace: "D:/ws/node-1" }));
+    const done = lifetime(spawner, calls, request({ workspace: "D:/ws/node-1" }));
     const child = calls[0];
     if (child === undefined) throw new Error("nothing spawned");
     const text = new Promise<string>((resolve) => {
@@ -1621,10 +1595,10 @@ describe("keeps the codex spawn surface intact", () => {
 
   it("names the bearer's VARIABLE on argv and puts the credential only in the child env", async () => {
     const { calls, spawn } = fakeSpawn();
-    const { configDir, made: spawner } = inSandbox(claudeSpawner, {
+    const { configDir, made: spawner } = inSandbox(claudeSpawnStarter, {
       command: "codex", log: () => undefined, platform: "linux", spawn,
     });
-    const done = spawner(request({ workspace: "D:/ws/node-1" }));
+    const done = lifetime(spawner, calls, request({ workspace: "D:/ws/node-1" }));
     const child = calls[0];
     if (child === undefined) throw new Error("nothing spawned");
     // Half one: the argv names the variable...
@@ -1640,11 +1614,11 @@ describe("keeps the codex spawn surface intact", () => {
 
   it("keeps the provider env allowlist closed", async () => {
     const { calls, spawn } = fakeSpawn();
-    const { made: spawner } = inSandbox(claudeSpawner, {
+    const { made: spawner } = inSandbox(claudeSpawnStarter, {
       command: "codex", log: () => undefined, platform: "linux", spawn,
       environment: { CODEX_HOME: "C:\codex", OPENAI_API_KEY: "sk-test", TOTALLY_UNRELATED: "no" },
     });
-    const done = spawner(request({ workspace: "D:/ws/node-1" }));
+    const done = lifetime(spawner, calls, request({ workspace: "D:/ws/node-1" }));
     const child = calls[0];
     if (child === undefined) throw new Error("nothing spawned");
     // Both directions: the CODEX_/OPENAI_ names arrive, and a name outside the roster does not.

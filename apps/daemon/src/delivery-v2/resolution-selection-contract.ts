@@ -71,15 +71,6 @@ export interface DeliveryV2ResolutionSelection {
   readonly version: typeof DELIVERY_V2_RESOLUTION_SELECTION_VERSION;
 }
 
-export interface DeliveryV2ResolutionSelectionDraft {
-  readonly contractId: string;
-  readonly generation: number;
-  readonly materialRefs: DeliveryV2ResolutionMaterialRefs;
-  readonly productContract: DeliveryV2ResolutionSelectionProductContract;
-  readonly projectId: string;
-  readonly qualificationStatus: DeliveryV2ResolutionSelectionQualificationStatus;
-}
-
 export interface DeliveryV2ResolutionSelectionConfig {
   readonly authorityPrincipals: DeliveryV2AuthorityPrincipalBindings;
   readonly configuredOperatorPrincipalId: string;

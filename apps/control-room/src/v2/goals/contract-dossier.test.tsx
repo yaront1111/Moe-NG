@@ -10,7 +10,7 @@
  *    component. If the daemon's coverage shape drifts, the exact-key decoder refuses and
  *    these arms go red instead of rendering a hand-shaped object the daemon never sent.
  */
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { userEvent } from "@testing-library/user-event";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -21,7 +21,7 @@ import type { ProductContractGate1Outcome } from "../../live/live-product-contra
 import {
   REAL_GATE_1_FRAME, REAL_GATE_1_REF, REAL_GATE_1_REVISION_DIGEST,
 } from "../../live/product-contract-gate-1-frame.fixture.js";
-import { ContractDossier, LiveContractDossier } from "./contract-dossier.js";
+import { ContractDossier } from "./contract-dossier.js";
 import { contractGateKey } from "./contract-gates.js";
 
 beforeAll(() => {
@@ -203,55 +203,6 @@ describe("ContractDossier with a 300-statement contract", () => {
   });
 });
 
-describe("LiveContractDossier", () => {
-  it("refreshes an undecided gate after approval without changing the revision", async () => {
-    let approved = false;
-    let gateReads = 0;
-    render(<LiveContractDossier goalId="goal-sign-in" pollMs={10}
-      readCoverage={async () => decodedCoverage()}
-      readGate={async () => {
-        gateReads += 1;
-        return approved ? decodedGate() : {
-          status: "REFUSED", code: "PRODUCT_CONTRACT_GATE_1_APPROVAL_ABSENT", layer: "PRODUCT_CONTRACT_GATE_1_READER",
-        };
-      }} />);
-    await waitFor(() => expect(screen.queryByTestId(
-      `cr.contract.gate1.${REAL_GATE_1_REF.contractId}.undecided`,
-    )).not.toBeNull());
-    approved = true;
-    await waitFor(() => expect(screen.queryByTestId(
-      `cr.contract.gate1.${REAL_GATE_1_REF.contractId}`,
-    )).not.toBeNull());
-    expect(gateReads).toBeGreaterThan(1);
-    expect(screen.queryByTestId(`cr.contract.gate1.${REAL_GATE_1_REF.contractId}.undecided`)).toBeNull();
-  });
-
-  it("reads coverage on the goal and one Gate 1 verdict per cited revision", async () => {
-    const asked: unknown[] = [];
-    render(
-      <LiveContractDossier
-        goalId="goal-sign-in"
-        pollMs={60_000}
-        readCoverage={async () => decodedCoverage()}
-        readGate={async (ref) => {
-          asked.push(ref);
-          return mapProductContractGate1Answer(200, REAL_GATE_1_FRAME);
-        }}
-      />,
-    );
-    await waitFor(() => {
-      expect(screen.getByTestId(`cr.contract.gate1.${REAL_GATE_1_REF.contractId}`)).toBeTruthy();
-    });
-    expect(asked).toEqual([{
-      contractId: REAL_GATE_1_REF.contractId,
-      revisionDigest: REAL_GATE_1_REF.revisionDigest,
-      revisionId: REAL_GATE_1_REF.revisionId,
-    }]);
-    expect(screen.getByTestId("cr.contract.criterion.crit-sso-1").getAttribute("data-status"))
-      .toBe("EVIDENCE_REQUIRED");
-  });
-});
-
 /**
  * REFUSALS RENDER, ABSENCE IS WORDS, AND THE TWO READS ARE INDEPENDENT.
  *
@@ -335,22 +286,6 @@ describe("ContractDossier refusals and absence", () => {
     expect(screen.getByTestId("cr.contract.loading")).toBeTruthy();
     expect(screen.queryByTestId("cr.contract.body")).toBeNull();
     expect(screen.queryByTestId("cr.contract.none")).toBeNull();
-  });
-
-  it("turns a thrown coverage read into a visible ERROR, never a silent empty dossier", async () => {
-    render(
-      <LiveContractDossier
-        goalId="goal-sign-in"
-        pollMs={60_000}
-        readCoverage={async () => { throw new Error("offline"); }}
-        readGate={undefined}
-      />,
-    );
-    await waitFor(() => {
-      expect(screen.getByTestId("cr.contract.refusal").textContent)
-        .toContain("CONTRACT_DOSSIER_COVERAGE_READ_FAILED @ CONTROL_ROOM_GOALS");
-    });
-    expect(screen.queryByTestId("cr.contract.body")).toBeNull();
   });
 });
 

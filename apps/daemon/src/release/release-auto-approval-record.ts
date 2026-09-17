@@ -4,6 +4,7 @@ import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonObject, JsonValue } from "@moe/contracts";
 import type { CommandDecisionRecord, EventDraft, SqliteEventStore } from "@moe/store";
 
+import { ref } from "../json-record-shape.js";
 import type { ReleaseAutoOptIn } from "./release-auto-approval.js";
 
 /**
@@ -80,10 +81,6 @@ function exactObject(value: JsonValue | undefined, keys: readonly string[]): Jso
   return actual.length === keys.length && actual.every((key) => keys.includes(key))
     ? value as JsonObject
     : null;
-}
-
-function ref(value: JsonValue | undefined): value is string {
-  return typeof value === "string" && value.length > 0;
 }
 
 function persistedOptIn(value: JsonValue | undefined): ReleaseAutoOptIn | null {

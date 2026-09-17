@@ -84,7 +84,7 @@ export function refuseTerminal(
 }
 
 /** Deterministic: keys sorted at every depth, arrays keep their order because that is data. */
-export function canonicalJson(value: unknown): string {
+function canonicalJson(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
   if (typeof value === "object" && value !== null) {
     const entries = Object.keys(value as Record<string, unknown>)

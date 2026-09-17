@@ -6,7 +6,7 @@ import {
   EXECUTION_ISOLATION_NETWORK_PLANE_IDENTITIES,
   EXECUTION_ISOLATION_PROFILE_FORBIDDEN_HOST_INPUTS,
   EXECUTION_ISOLATION_PROFILE_LIMITS,
-  executionIsolationProfileRefusal,
+  executionIsolationProfileRefusal as refusal,
   type ExecutionIsolationEndpointPolicyRef,
   type ExecutionIsolationMount,
   type ExecutionIsolationNetwork,
@@ -28,10 +28,6 @@ const ENDPOINT_POLICY_KEYS = Object.freeze([
 ]);
 const POLICY_REF = /^network-policy:[a-z0-9][a-z0-9._-]{0,255}$/u;
 
-const refusal = (
-  code: Parameters<typeof executionIsolationProfileRefusal>[0],
-  layer: Parameters<typeof executionIsolationProfileRefusal>[1],
-): ExecutionIsolationProfileRefusal => executionIsolationProfileRefusal(code, layer);
 const malformed = (): ExecutionIsolationProfileRefusal => refusal(
   "EXECUTION_ISOLATION_PROFILE_MALFORMED", "EXECUTION_ISOLATION_PROFILE_ADMISSION",
 );

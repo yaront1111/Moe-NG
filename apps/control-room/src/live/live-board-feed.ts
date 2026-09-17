@@ -1,4 +1,5 @@
 import { bindPlanningAuthorities } from "./live-planning-authorities.js";
+import { isRecord } from "./live-wire-primitives.js";
 
 /**
  * Polls the daemon's affordance surface and shapes what it says — verbatim.
@@ -92,10 +93,6 @@ const DEFAULT_TIMEOUT_MS = 15_000;
 const MAX_TIMEOUT_MS = 2_147_483_647;
 /** A daemon code or layer this surface will repeat: bounded, and a token only. */
 const SAFE_TOKEN = /^[A-Z][A-Z0-9_]{0,63}$/u;
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 function text(value: unknown): string {
   return typeof value === "string" ? value : "";

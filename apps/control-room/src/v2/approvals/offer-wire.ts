@@ -1,6 +1,8 @@
 import type { RuntimeCommandEnvelope } from "@moe/contracts";
 import type { ControlRoomClientSurface, ControlRoomTransport } from "@moe/control-room-client";
 
+import { isRecord, sha256Hex } from "../../live/live-wire-primitives.js";
+
 /**
  * SPENDING A DAEMON OFFER: the one way a Needs-you card acts. The affordance is the daemon's
  * (kind, target, expected version, schema), the browser supplies only the payload fields
@@ -52,10 +54,6 @@ type Builder = (
   },
 ) => BuildResult;
 
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function refusalOf(value: unknown): OfferOutcome | null {
   if (!isRecord(value)) return null;
   const code = value["code"];
@@ -79,11 +77,6 @@ function answerOf(response: unknown, commandId: string, layer: string): OfferOut
   if (response["ok"] === true) return { commandId, ok: true };
   return refusalOf(response["refusal"]) ?? refusalOf(response["error"])
     ?? { code: "OFFER_REFUSED", layer: "DAEMON", ok: false };
-}
-
-async function sha256Hex(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 export async function spendOffer(

@@ -5,7 +5,7 @@ import {
   VERIFICATION_RECIPE_LIMITS,
   VERIFICATION_RECIPE_NETWORK_ACCESS_MODES,
   VERIFICATION_RECIPE_NETWORK_PLANE_IDENTITIES,
-  verificationRecipeRefusal,
+  verificationRecipeRefusal as refusal,
   type VerificationRecipeEvidenceParserRevision,
   type VerificationRecipeNetworkPolicy,
   type VerificationRecipeRefusal,
@@ -31,10 +31,6 @@ const SAFE_ENVIRONMENT_NAMES = new Set<string>([
   ...VERIFICATION_RECIPE_FRESH_VERIFIER_SAFE_ENVIRONMENT_NAMES,
 ]);
 
-const refusal = (
-  code: Parameters<typeof verificationRecipeRefusal>[0],
-  layer: Parameters<typeof verificationRecipeRefusal>[1],
-): VerificationRecipeRefusal => verificationRecipeRefusal(code, layer);
 const success = <T>(value: T): Readonly<{ ok: true; value: T }> =>
   Object.freeze({ ok: true as const, value });
 

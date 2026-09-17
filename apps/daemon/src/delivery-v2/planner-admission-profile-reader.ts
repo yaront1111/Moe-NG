@@ -11,11 +11,9 @@ import {
   plannerAdmissionProfileHex64,
   plannerAdmissionProfileText,
 } from "../planning/v2-compiler/planner-admission-profile-fields.js";
-import {
-  DELIVERY_V2_READER_LAYER,
-  type DeliveryV2Refusal,
-} from "./contracts.js";
+import type { DeliveryV2Refusal } from "./contracts.js";
 import { captureDeliveryV2SingleEventPage } from "./event-read-snapshot.js";
+import { refuseDeliveryV2InertRead as refuse } from "./inert-record-admission.js";
 import { admitDeliveryV2MaterialPublisherPrincipalId } from
   "./material-publisher-admission.js";
 import {
@@ -42,10 +40,6 @@ export type DeliveryV2PlannerAdmissionProfileRevisionReadResult =
   | PlannerAdmissionProfileRefusal;
 
 const REF_KEYS = Object.freeze(["profileId", "projectId", "revisionDigest", "revisionId"]);
-const refuse = (
-  code: DeliveryV2Refusal["code"],
-  layer: DeliveryV2Refusal["layer"] = DELIVERY_V2_READER_LAYER,
-): DeliveryV2Refusal => Object.freeze({ code, layer, ok: false as const });
 
 const storageRefusal = (error: unknown): DeliveryV2Refusal => error instanceof DurableStoreError
   ? refuse(error.code, "DURABLE_STORE")

@@ -9,7 +9,8 @@
  * registry — a replay is fenced by the caller-supplied prior plus the version fence, so the store, not this module,
  * enforces at-most-one. SETTLING is a ledger lifecycle, and close can only judge the settlement records it is handed.
  */
-import { hasOnlyOwnStringKeys, isPlainArray, isPlainRecord, readOwnDataProperty } from "../runtime-shape.js";
+import { deepFreeze, exactRecord, isSafeCount, oneOf } from "../kernel-primitives.js";
+import { hasOnlyOwnStringKeys, isPlainArray, isPlainRecord } from "../runtime-shape.js";
 import { MAX_BUDGET_VERSION } from "./budget-account.js";
 import { BUDGET_ACCOUNT_STATES, BUDGET_MEASUREMENT_COVERAGES, type BudgetAccountState, type BudgetMeterBuckets } from "./budget-contract.js";
 import { deriveReservationId, type BudgetAvailableView, type ReservationRecord } from "./budget-reservation.js";
@@ -59,12 +60,7 @@ const LINE_KEYS = [...LINE_AMOUNTS, "meter", "disposition", "identity", "sequenc
 /** A line is resolved only when nothing about it is still unmeasured; anything else stays quarantined. */
 const RESOLVED: readonly LineDisposition[] = ["EXACT", "CONSERVATIVE_WRITE_OFF", "NEVER_STARTED_REFUND"];
 
-function deepFreeze<T>(value: T): T {
-  if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
-  Object.freeze(value); for (const k of Object.keys(value as Record<string, unknown>)) deepFreeze((value as Record<string, unknown>)[k]); return value; }
-const isCount = (value: unknown): value is number => typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && !Object.is(value, -0);
 const isRef = (value: unknown): value is string => typeof value === "string" && value.length > 0 && value.length <= MAX_REF_LENGTH;
-const oneOf = <T extends string>(value: unknown, values: readonly T[]): value is T => typeof value === "string" && (values as readonly string[]).includes(value);
 /** The CODE is the contract; the message restates it so no prose can drift away from the code. */
 const issue = (code: BudgetSettlementIssueCode): BudgetSettlementIssue => ({ code, message: code.slice("BUDGET_SETTLEMENT_".length).toLowerCase().split("_").join(" ") });
 const fail = (view: BudgetAvailableView, settlement: SettlementRecord | null, code: BudgetSettlementIssueCode): BudgetSettlementResult =>
@@ -76,34 +72,28 @@ const bucketOf = (view: BudgetAvailableView, meter: string): BudgetMeterBuckets 
 /** The compare-and-swap seam every unit-moving operation shares; the store enforces at-most-one. */
 const fence = (view: BudgetAvailableView, version: number, expectedView: number, expected: number): readonly Check[] =>
   [[view.version >= MAX_BUDGET_VERSION, "BUDGET_SETTLEMENT_COUNTER_EXHAUSTED"], [view.version !== expectedView || version !== expected, "BUDGET_SETTLEMENT_STALE_VERSION"]];
-/** Own data properties only: an accessor, proxy, prototype-carried key, or extra key refuses. */
-function readRecord(value: unknown, allowed: readonly string[]): Record<string, unknown> | null {
-  if (!isPlainRecord(value) || !hasOnlyOwnStringKeys(value, allowed)) return null;
-  const output: Record<string, unknown> = {};
-  for (const key of allowed) { const read = readOwnDataProperty(value, key); if (!read.ok || !read.present) return null; output[key] = read.value; }
-  return output; }
 const isView = (value: unknown): value is BudgetAvailableView => isPlainRecord(value) && isRef(value.accountId)
-  && isCount(value.version) && oneOf(value.state, BUDGET_ACCOUNT_STATES) && isPlainArray(value.meters) && value.meters.length > 0
-  && value.meters.length <= MAX_LINES && value.meters.every((e) => isPlainRecord(e) && isRef(e.meter) && AMOUNTS.every((k) => isCount(e[k])));
+  && isSafeCount(value.version) && oneOf(value.state, BUDGET_ACCOUNT_STATES) && isPlainArray(value.meters) && value.meters.length > 0
+  && value.meters.length <= MAX_LINES && value.meters.every((e) => isPlainRecord(e) && isRef(e.meter) && AMOUNTS.every((k) => isSafeCount(e[k])));
 /** The reservation length prefix keeps the join injective, so no two reservations can collide. */
 export const deriveSettlementId = (reservationId: string): string => `settlement:${reservationId.length}:${reservationId}`;
 /** Sums the admitted hold per meter; the purposes themselves were already gated at admission. */
 function readHolds(value: unknown): Map<string, number> | null {
   if (!isPlainArray(value) || value.length === 0 || value.length > MAX_LINES) return null;
   const totals = new Map<string, number>();
-  for (const entry of value) { const item = readRecord(entry, HOLD_KEYS);
-    if (item === null || !isRef(item.meter) || !isCount(item.quantity)) return null; totals.set(item.meter, (totals.get(item.meter) ?? 0) + item.quantity); }
+  for (const entry of value) { const item = exactRecord(entry, HOLD_KEYS);
+    if (item === null || !isRef(item.meter) || !isSafeCount(item.quantity)) return null; totals.set(item.meter, (totals.get(item.meter) ?? 0) + item.quantity); }
   return totals; }
 const isLine = (v: unknown): v is SettlementLine => isPlainRecord(v) && hasOnlyOwnStringKeys(v, LINE_KEYS)
-  && isRef(v.meter) && oneOf(v.disposition, LINE_DISPOSITIONS) && LINE_AMOUNTS.every((k) => isCount(v[k]))
-  && (v.identity === null || isRef(v.identity)) && (v.sequence === null || isCount(v.sequence));
+  && isRef(v.meter) && oneOf(v.disposition, LINE_DISPOSITIONS) && LINE_AMOUNTS.every((k) => isSafeCount(v[k]))
+  && (v.identity === null || isRef(v.identity)) && (v.sequence === null || isSafeCount(v.sequence));
 /** Re-reads a settlement field by field and re-derives its identity, so a forgery cannot transition. Honest records
  * carry at most one line per meter, so a duplicate-meter record is a forgery: per-line sufficiency checks and the
  * per-meter movement map would otherwise let one line's units answer for another's. */
 function readSettlement(value: unknown): SettlementRecord | null {
-  const item = readRecord(value, SETTLEMENT_KEYS);
+  const item = exactRecord(value, SETTLEMENT_KEYS);
   if (item === null || !isRef(item.reservationId) || !isRef(item.accountId) || !isRef(item.attemptRef)
-    || !isCount(item.version) || !oneOf(item.state, SETTLEMENT_STATES) || !isPlainArray(item.lines)
+    || !isSafeCount(item.version) || !oneOf(item.state, SETTLEMENT_STATES) || !isPlainArray(item.lines)
     || !isPlainArray(item.overrun) || typeof item.unknownExternalLiability !== "boolean"
     || item.settlementId !== deriveSettlementId(item.reservationId)
     || item.lines.length > MAX_LINES || !item.lines.every(isLine)
@@ -113,12 +103,12 @@ interface Reading { readonly meter: string; readonly quantity: number; readonly 
   readonly known: boolean; readonly run: string; readonly sequence: number; readonly identity: string }
 /** Re-reads a normalized measurement defensively: this module trusts no caller-shaped envelope. */
 function readMeasurement(value: unknown): Reading | null {
-  const item = readRecord(value, OBSERVATION_KEYS);
-  const inner = item === null ? null : readRecord(item.measurement, MEASUREMENT_KEYS);
+  const item = exactRecord(value, OBSERVATION_KEYS);
+  const inner = item === null ? null : exactRecord(item.measurement, MEASUREMENT_KEYS);
   if (item === null || inner === null || !isRef(item.identity) || !isRef(inner.meter) || !isRef(inner.providerRunRef)
-    || !isCount(inner.sequence) || !oneOf(inner.coverage, BUDGET_MEASUREMENT_COVERAGES)) return null;
+    || !isSafeCount(inner.sequence) || !oneOf(inner.coverage, BUDGET_MEASUREMENT_COVERAGES)) return null;
   const known = inner.coverage !== "UNKNOWN";
-  if (known ? !isCount(inner.quantity) : inner.quantity !== null) return null;
+  if (known ? !isSafeCount(inner.quantity) : inner.quantity !== null) return null;
   return { meter: inner.meter, quantity: known ? (inner.quantity as number) : 0, known, identity: item.identity,
     complete: inner.coverage === "COMPLETE", run: inner.providerRunRef, sequence: inner.sequence }; }
 function readReadings(value: unknown): Reading[] | null {
@@ -150,13 +140,13 @@ function dispose(meter: string, hold: number, credited: number, from: "reserved"
  * return THAT record by reference and move nothing, any other prior refuses, so a replay can never double-commit. */
 export function settleReservation(view: BudgetAvailableView, reservation: ReservationRecord,
   evidence: SettleEvidence, command: SettleCommand): BudgetSettlementResult {
-  const cmd = readRecord(command, SETTLE_KEYS), record = readRecord(reservation, RESERVATION_KEYS);
-  const held = record === null ? null : readHolds(record.lines), arm = readRecord(evidence, ["measurements"]);
+  const cmd = exactRecord(command, SETTLE_KEYS), record = exactRecord(reservation, RESERVATION_KEYS);
+  const held = record === null ? null : readHolds(record.lines), arm = exactRecord(evidence, ["measurements"]);
   const readings = arm === null ? null : readReadings(arm.measurements);
   if (!isView(view) || cmd === null || record === null || held === null || readings === null
-    || !isCount(cmd.expectedViewVersion) || !isCount(cmd.expectedReservationVersion)
+    || !isSafeCount(cmd.expectedViewVersion) || !isSafeCount(cmd.expectedReservationVersion)
     || (cmd.prior !== null && !isPlainRecord(cmd.prior)) || !isRef(record.reservationId) || !isRef(record.accountId)
-    || !isRef(record.admissionRef) || !isCount(record.version)) return fail(view, null, "BUDGET_SETTLEMENT_MALFORMED");
+    || !isRef(record.admissionRef) || !isSafeCount(record.version)) return fail(view, null, "BUDGET_SETTLEMENT_MALFORMED");
   const code = firstOf([
     [record.accountId !== view.accountId || record.reservationId !== deriveReservationId(record.accountId, record.admissionRef),
       "BUDGET_SETTLEMENT_IDENTITY_MISMATCH"],
@@ -203,8 +193,8 @@ type Opened = { readonly code: BudgetSettlementIssueCode } | { readonly record: 
 function openQuarantine(view: BudgetAvailableView, settlement: unknown, cmd: Record<string, unknown> | null,
   extra: (record: SettlementRecord) => readonly Check[]): Opened {
   const record = readSettlement(settlement);
-  if (!isView(view) || cmd === null || record === null || !isCount(cmd.expectedViewVersion)
-    || !isCount(cmd.expectedSettlementVersion)) return { code: "BUDGET_SETTLEMENT_MALFORMED" };
+  if (!isView(view) || cmd === null || record === null || !isSafeCount(cmd.expectedViewVersion)
+    || !isSafeCount(cmd.expectedSettlementVersion)) return { code: "BUDGET_SETTLEMENT_MALFORMED" };
   const code = firstOf([
     [record.accountId !== view.accountId
       || !record.reservationId.startsWith(`reservation:${record.accountId.length}:${record.accountId}:`),
@@ -220,13 +210,13 @@ function openQuarantine(view: BudgetAvailableView, settlement: unknown, cmd: Rec
  * already committed still holds an unresolved upper bound, so a later COMPLETE receipt must be able to land on it. */
 export function reconcileSettlement(view: BudgetAvailableView, settlement: SettlementRecord,
   evidence: ReconcileEvidence, command: SettlementCommand): BudgetSettlementResult {
-  const arm = readRecord(evidence, ARM_KEYS), proof = arm === null ? null : arm.neverStartedProofRef;
+  const arm = exactRecord(evidence, ARM_KEYS), proof = arm === null ? null : arm.neverStartedProofRef;
   const parsed = arm === null || arm.measurements === null ? null : readReadings(arm.measurements);
   if (arm === null || (arm.measurements !== null && parsed === null) || (proof !== null && !isRef(proof)))
     return fail(view, settlement, "BUDGET_SETTLEMENT_MALFORMED");
   const some = (f: (r: Reading) => boolean): boolean => readings !== null && readings.some(f);
   const readings = parsed !== null && parsed.length > 0 ? parsed : null, at = (r: SettlementRecord, m: string): SettlementLine | undefined => r.lines.find((l) => l.meter === m);
-  const opened = openQuarantine(view, settlement, readRecord(command, FENCE_KEYS), (r) => [
+  const opened = openQuarantine(view, settlement, exactRecord(command, FENCE_KEYS), (r) => [
     [(readings === null) === (proof === null), "BUDGET_SETTLEMENT_EVIDENCE_AMBIGUOUS"],
     [some((x) => decodeProviderRunRefAttempt(x.run) !== r.attemptRef), "BUDGET_SETTLEMENT_UNCORRELATED_MEASUREMENT"],
     [readings !== null && new Set(readings.map((x) => x.meter)).size !== readings.length, "BUDGET_SETTLEMENT_DUPLICATE_METER"],
@@ -254,7 +244,7 @@ export function reconcileSettlement(view: BudgetAvailableView, settlement: Settl
 /** Design exits 3 and 4. Recovery matrix 1039 requires human acknowledgement PLUS a bound classification, so both are
  * one evidence requirement; the whole hold commits, nothing refunds, and an unenforceable bound mints liability. */
 export function conservativeSettle(view: BudgetAvailableView, settlement: SettlementRecord, command: ConservativeCommand): BudgetSettlementResult {
-  const cmd = readRecord(command, ACK_KEYS);
+  const cmd = exactRecord(command, ACK_KEYS);
   const opened = openQuarantine(view, settlement, cmd, () => cmd === null ? [] : [[!isRef(cmd.acknowledgementRef)
     || typeof cmd.enforceableUpperBound !== "boolean", "BUDGET_SETTLEMENT_ACKNOWLEDGEMENT_MISSING"]]);
   if ("code" in opened) return fail(view, settlement, opened.code);
@@ -269,9 +259,9 @@ export function conservativeSettle(view: BudgetAvailableView, settlement: Settle
 /** Design 664: no account closes with RESERVED or QUARANTINED units and AVAILABLE must already have gone back to the
  * parent; OVERDRAWN has no exit. Terminal state is structural: a supplied settlement with liability closes path 4. */
 export function closeSettledView(view: BudgetAvailableView, settlements: readonly SettlementRecord[], command: CloseCommand): BudgetSettlementResult {
-  const cmd = readRecord(command, ["expectedVersion"]);
+  const cmd = exactRecord(command, ["expectedVersion"]);
   const records = isPlainArray(settlements) && settlements.length <= MAX_LINES ? settlements.map(readSettlement) : null;
-  if (!isView(view) || cmd === null || records === null || !isCount(cmd.expectedVersion)
+  if (!isView(view) || cmd === null || records === null || !isSafeCount(cmd.expectedVersion)
     || records.some((r) => r === null)) return fail(view, null, "BUDGET_SETTLEMENT_MALFORMED");
   const code = firstOf([
     [records.some((r) => r !== null && r.accountId !== view.accountId), "BUDGET_SETTLEMENT_IDENTITY_MISMATCH"],

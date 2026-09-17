@@ -18,6 +18,7 @@ import {
   validateDeliveryV2DecisionDisposition,
   validateDeliveryV2EventProvenance,
 } from "./provenance.js";
+import { validDeliveryV2InertAppendContext as validContext } from "./inert-record-admission.js";
 import { admitDeliveryV2MaterialPublisherPrincipalId } from
   "./material-publisher-admission.js";
 import { snapshotDeliveryV2AppendContext } from "./snapshot.js";
@@ -46,22 +47,10 @@ export type DeliveryV2SourceSnapshotAppendResult =
   | DeliveryV2Refusal
   | SourceSnapshotRefusal;
 
-const CANONICAL_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u;
 const refusal = (
   code: DeliveryV2Refusal["code"],
   layer: DeliveryV2Refusal["layer"] = DELIVERY_V2_PERSISTENCE_LAYER,
 ): DeliveryV2Refusal => Object.freeze({ code, layer, ok: false as const });
-
-function validContext(value: DeliveryV2AppendContext): boolean {
-  const identifiers = [value.commandId, value.correlationId, value.principalId, value.projectId];
-  return value.expectedVersion === 0 && !Object.is(value.expectedVersion, -0)
-    && identifiers.every((identifier) =>
-      admitDeliveryV2MaterialPublisherPrincipalId(identifier) !== undefined
-      && identifier.isWellFormed() && !identifier.includes("\0"))
-    && CANONICAL_TIMESTAMP.test(value.decidedAt)
-    && !Number.isNaN(Date.parse(value.decidedAt))
-    && new Date(value.decidedAt).toISOString() === value.decidedAt;
-}
 
 export function deriveDeliveryV2SourceSnapshotAggregateId(
   projectId: string,

@@ -26,7 +26,7 @@ import type { ProofPayload } from "./proof-context.js";
  * `[role='dialog'][aria-modal='true']` contract a11y/keyboard-map.ts already
  * special-cases by this component's testid - and backs it: while it is that
  * dialog, Tab and Shift+Tab cycle between its own controls instead of walking
- * into the column under the scrim, the way src/shell/inspector-sheet.tsx does.
+ * into the column under the scrim.
  */
 
 const EMPTY_COPY = "Select any truth chip to read the receipt, decision, report, "

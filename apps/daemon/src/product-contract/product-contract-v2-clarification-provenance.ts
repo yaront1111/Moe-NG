@@ -11,6 +11,7 @@ import {
   type StoredEvent,
 } from "@moe/store";
 
+import { sameBytes } from "../byte-equality.js";
 import {
   encodeProductContractClarificationV2Value,
   productContractClarificationV2AnswerRequestBytes,
@@ -26,10 +27,6 @@ import {
 } from "./product-contract-v2-clarification-contract.js";
 import { readProductContractClarificationV2Row }
   from "./product-contract-v2-clarification-row.js";
-
-function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
-}
 
 function sameRow(
   left: ProductContractClarificationV2Row,

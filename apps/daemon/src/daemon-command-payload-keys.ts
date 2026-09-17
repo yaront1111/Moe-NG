@@ -59,6 +59,10 @@ import { AGENT_PROVIDER_COMMAND_KIND, AGENT_PROVIDER_PAYLOAD_KEYS }
   from "./orchestrator/agent-provider-command.js";
 import { REPOSITORY_RECOVERY_PAYLOAD_KEYS } from "./repository/repository-recovery-contracts.js";
 import { ENV_EXAMPLE_SYNC_COMMAND_KIND } from "./repository/env-example-sync-contracts.js";
+import {
+  DEPLOYMENT_DEPLOY_COMMAND_KIND, DEPLOYMENT_DEPLOY_PAYLOAD_KEYS,
+  DEPLOYMENT_SET_TARGET_COMMAND_KIND, DEPLOYMENT_SET_TARGET_PAYLOAD_KEYS,
+} from "./deployment/deploy-target-contracts.js";
 
 /**
  * WHICH EXACT PAYLOAD KEYS each wired kind admits, and nothing else about a kind.
@@ -182,8 +186,8 @@ export const PAYLOAD_KEYS: Readonly<Record<WiredCommandKind, readonly string[]>>
     // The docker build CONTEXT is deliberately absent from the deploy: it is host-scoped daemon
     // configuration, and a caller-supplied path would let any operator-authenticated request
     // build an arbitrary directory on the daemon's host. Both lists are the slice's own.
-    "deployment.set_target": ["environment", "network", "sshTarget", "url"],
-    "deployment.deploy": ["environment", "sha"],
+    [DEPLOYMENT_SET_TARGET_COMMAND_KIND]: DEPLOYMENT_SET_TARGET_PAYLOAD_KEYS,
+    [DEPLOYMENT_DEPLOY_COMMAND_KIND]: DEPLOYMENT_DEPLOY_PAYLOAD_KEYS,
     "deployment.rollback": ["environment", "toReceiptRef", "restoreDatabase"],
     // The batch to undo is named by the APPLIED migration receipt that created it, so the
     // command can never mean "undo an unknown number of migrations". `projectId` is absent by

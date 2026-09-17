@@ -1,5 +1,8 @@
 import { RUNTIME_LIFECYCLES } from "@moe/contracts";
 
+import {
+  exact, isRecord, strongTruth, validExpectedVersion, validRef,
+} from "../planning/planning-snapshot.js";
 import type {
   AcceptanceClosureWitness,
   CancellationAuthorizationWitness,
@@ -14,6 +17,8 @@ import type {
   ReopenAuthorizationWitness,
   ZeroAuthorityWitness,
 } from "./goal-contract.js";
+
+export { validExpectedVersion, validRef };
 
 export const GOAL_COMMAND_KINDS = Object.freeze([
   "goal.create", "goal.activate_initial_graph", "goal.advance_graph_epoch", "goal.close",
@@ -39,14 +44,6 @@ const STATE_KEYS = [
   "lifecycle", "planningRunRef", "predecessorGoalRef", "projectId", "recoveryFacets",
   "schedulingControl", "version",
 ] as const;
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  try {
-    return value !== null && typeof value === "object" && !Array.isArray(value);
-  } catch {
-    return false;
-  }
-}
 
 type DataSnapshot = { readonly ok: true; readonly value: unknown } | { readonly ok: false };
 const SNAPSHOT_FAILURE = Object.freeze({ ok: false as const });
@@ -103,21 +100,6 @@ function snapshotData(value: unknown, seen = new WeakSet<object>()): DataSnapsho
   }
 }
 
-function exact(
-  value: unknown,
-  keys: readonly string[],
-): value is Readonly<Record<string, unknown>> {
-  if (!isRecord(value)) return false;
-  try {
-    return Reflect.ownKeys(value).length === keys.length && keys.every((key) => {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      return descriptor !== undefined && descriptor.enumerable && "value" in descriptor;
-    });
-  } catch {
-    return false;
-  }
-}
-
 export function snapshotGoalCommand(value: unknown): GoalCommand | undefined {
   if (!isRecord(value)) return undefined;
   try {
@@ -136,14 +118,6 @@ export function snapshotGoalCommand(value: unknown): GoalCommand | undefined {
   } catch {
     return undefined;
   }
-}
-
-export function validRef(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
-function strongTruth(value: unknown): boolean {
-  return value === "DAEMON_VERIFIED" || value === "HUMAN_APPROVED";
 }
 
 export function validProjectReady(value: unknown): value is ProjectReadyWitness {
@@ -187,10 +161,6 @@ export function validReopen(value: unknown): value is ReopenAuthorizationWitness
 
 export function validPause(value: unknown): value is Exclude<GoalSchedulingControl, "RUNNING"> {
   return value === "PAUSE_AFTER_CURRENT_STEP" || value === "DRAIN_AND_PAUSE";
-}
-
-export function validExpectedVersion(value: unknown): value is number {
-  return Number.isSafeInteger(value) && (value as number) >= 0;
 }
 
 function validLifecycle(value: unknown): value is GoalLifecycle {

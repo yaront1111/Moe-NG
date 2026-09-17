@@ -17,6 +17,7 @@
  */
 import { RUNTIME_LIFECYCLES, createRuntimeError } from "@moe/contracts";
 
+import { deepFreeze } from "../planning/planning-snapshot.js";
 import {
   CUTOVER_COMMAND_KINDS,
   CUTOVER_TARGET_STATES,
@@ -56,16 +57,6 @@ const STATE_KEYS: readonly string[] = [
   "activateApprovalRef", "attemptId", "importHeadRef", "lifecycle", "quiesceApprovalRef",
   "sourceManifestRef", "version",
 ];
-
-export function deepFreeze<T>(value: T): T {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const key of Reflect.ownKeys(value)) {
-      deepFreeze((value as Record<PropertyKey, unknown>)[key]);
-    }
-    Object.freeze(value);
-  }
-  return value;
-}
 
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
   return value !== null && typeof value === "object" && !Array.isArray(value);

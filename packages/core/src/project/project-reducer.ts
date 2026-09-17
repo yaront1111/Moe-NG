@@ -1,5 +1,6 @@
 import { createRuntimeError } from "@moe/contracts";
 
+import { deepFreeze } from "../planning/planning-snapshot.js";
 import type {
   ProjectActivateCommand,
   ProjectBindRepositoryCommand,
@@ -35,16 +36,6 @@ export const PROJECT_TRANSITIONS = Object.freeze({
   "recovery.restore_quiesce": Object.freeze(["BOOTSTRAPPING", "READY"]),
   "recovery.complete": Object.freeze(["QUIESCED"]),
 } as const satisfies Readonly<Record<ProjectCommandKind, readonly ProjectLifecycle[]>>);
-
-function deepFreeze<T>(value: T): T {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const key of Reflect.ownKeys(value)) {
-      deepFreeze((value as Record<PropertyKey, unknown>)[key]);
-    }
-    Object.freeze(value);
-  }
-  return value;
-}
 
 function rejected(error: ReturnType<typeof createRuntimeError>): ProjectReducerResult {
   return Object.freeze({ error, ok: false });

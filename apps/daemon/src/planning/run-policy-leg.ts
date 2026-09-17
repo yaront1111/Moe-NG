@@ -50,18 +50,18 @@ export type RunPolicyLegResult =
     readonly layer: RunPolicyLayer;
   }
   | {
-    readonly kind: "LEG"; readonly leg: ExpectedVersionDecisionLeg;
-    readonly riskTier: string;
+    readonly fence: ExpectedVersionDecisionLeg; readonly kind: "LEG";
+    readonly leg: ExpectedVersionDecisionLeg; readonly riskTier: string;
   };
 
 /** The no-event leg that keeps a compiled evaluation bound to its captured policy head. */
 export function buildRunPolicySelectionFence(
-  selection: StableRunPolicySelection,
+  fence: StableRunPolicySelection["fence"],
 ): ExpectedVersionDecisionLeg {
   return Object.freeze({
-    aggregateId: selection.fence.aggregateId,
+    aggregateId: fence.aggregateId,
     events: Object.freeze([]),
-    expectedVersion: selection.fence.expectedVersion,
+    expectedVersion: fence.expectedVersion,
   });
 }
 
@@ -93,6 +93,9 @@ export function buildRunPolicyLeg(input: RunPolicyLegInput): RunPolicyLegResult 
     return Object.freeze({ code: evaluated.code, kind: "REFUSED" as const, layer: evaluated.layer });
   }
   return Object.freeze({
+    // A policy write landing after the capture refuses the whole seal instead of sealing a row
+    // that cites a superseded slice.
+    fence: buildRunPolicySelectionFence(evaluated.policyFence),
     kind: "LEG" as const,
     leg: Object.freeze({
       aggregateId: evaluated.aggregateId,

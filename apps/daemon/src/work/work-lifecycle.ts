@@ -1,7 +1,8 @@
 import { applyEffectCommand } from "@moe/runner";
 
-import { applied, contextView, deepFreeze, refused, workFailure } from "./work-kernel.js";
-import { fenceWorkLease, isRecord } from "./work-lease.js";
+import { deepFreeze, isRecord } from "../value-primitives.js";
+import { applied, contextView, refused, workFailure } from "./work-kernel.js";
+import { fenceWorkLease } from "./work-lease.js";
 import type { WorkAuthorityLabel, WorkResult } from "./work-kernel.js";
 
 /**

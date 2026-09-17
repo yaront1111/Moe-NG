@@ -1,8 +1,8 @@
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 
 import type { DesignOutcome } from "../../live/live-design.js";
-import { DesignCard, LiveDesign } from "./design-card.js";
+import { DesignCard } from "./design-card.js";
 import { LiveDesignVersionNote } from "./design-version-note.js";
 import { ProductArtifact } from "../workspace/product-artifact.js";
 
@@ -89,36 +89,5 @@ describe("DesignCard", () => {
     expect(screen.getAllByText("None recorded.")).toHaveLength(5);
     expect(screen.getByTestId("cr.design.body").textContent).toContain("<script>text only</script>");
     expect(document.querySelector("script")).toBeNull();
-  });
-});
-
-describe("LiveDesign", () => {
-  it("reads once per goal and ignores a late answer for the previous goal", async () => {
-    let settle: (outcome: DesignOutcome) => void = () => { throw new Error("not started"); };
-    const read = vi.fn((goal: string): Promise<DesignOutcome> => goal === "old"
-      ? new Promise((resolve) => { settle = resolve; }) : Promise.resolve(DESIGN));
-    const headers = {};
-    const { rerender } = render(<LiveDesign goalRef="old" headers={headers} read={read} />);
-    expect(screen.getByTestId("cr.design.loading").textContent).toBe("Reading the design...");
-    rerender(<LiveDesign goalRef="goal-1" headers={headers} read={read} />);
-    await screen.findByTestId("cr.design.body");
-    await act(async () => settle({ status: "REFUSED", code: "DESIGN_REVISION_ABSENT", layer: "LEDGER" }));
-    expect(screen.getByTestId("cr.design.body").textContent).toContain("Order");
-    expect(read.mock.calls).toStrictEqual([["old"], ["goal-1"]]);
-  });
-
-  it("makes thrown reads visible and uses current headers for its default reader", async () => {
-    const { unmount } = render(<LiveDesign goalRef="goal-1" headers={{}} read={async () => { throw new Error("offline"); }} />);
-    expect((await screen.findByTestId("cr.design.refusal")).textContent).toContain("DESIGN_READ_FAILED @ CONTROL_ROOM_GOALS");
-    unmount();
-    const fetcher = vi.fn(async () => new Response(JSON.stringify({ code: "DESIGN_REVISION_ABSENT", layer: "LEDGER" })));
-    vi.stubGlobal("fetch", fetcher);
-    const { rerender } = render(<LiveDesign goalRef="goal-1" headers={{ "x-session": "first" }} />);
-    await screen.findByTestId("cr.design.none");
-    rerender(<LiveDesign goalRef="goal-2" headers={{ "x-session": "second" }} />);
-    await screen.findByTestId("cr.design.none");
-    expect(fetcher).toHaveBeenLastCalledWith("/design/read", expect.objectContaining({
-      body: JSON.stringify({ goalRef: "goal-2" }), headers: { "x-session": "second" },
-    }));
   });
 });

@@ -21,7 +21,7 @@
  *
  * THE BOUNDARY THIS MODULE DOES NOT CROSS (task rail 1). It answers WHICH durable record
  * witnesses this node. Whether that witness ALLOWS is `checkGate`'s call in `@moe/scheduler`
- * (`budget-reservation.ts:151-157`) and a second opinion here could disagree with it. So the
+ * (`budget-reservation.ts:140-145`) and a second opinion here could disagree with it. So the
  * approval's `decision` and `validity` are forwarded VERBATIM and are deliberately NOT filtered
  * the way `readApprovedNodeScope` filters them: filtering would make
  * `BUDGET_RESERVATION_APPROVAL_NOT_CURRENT` unreachable and would be this module deciding

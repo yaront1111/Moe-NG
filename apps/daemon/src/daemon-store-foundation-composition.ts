@@ -121,6 +121,9 @@ import type { DeploymentsHealthReadPort } from "./http/deployments-health-read.j
 import {
   BACKUP_RESTORE_PROOF_SIDECAR_SUFFIX, createBackupRestoreProofStore,
 } from "./backups/backup-restore-proof.js";
+import {
+  SCHEDULED_BACKUP_INTERVAL_MS, SCHEDULED_BACKUP_JOB_ID, createScheduledBackupJob,
+} from "./backups/scheduled-backup-job.js";
 import type { BackupsReadPort } from "./http/backups-read.js";
 
 export interface StoreDependencyConfig {
@@ -802,6 +805,12 @@ export function createStoreDependencies(
         : records.read(),
     });
   };
+  /** The WRITER `backupReads` serves: the same store, project and sidecar, rooted at the same
+   * bound workspace the preview uses, with the same "unconfigured means nothing" rule. */
+  const scheduledBackup = createScheduledBackupJob({
+    clock, credential: () => config.credential, projectId: config.projectId,
+    projectRoot: repositoryWorkspace, store,
+  });
   const schedules = createDurableSchedule({ ...config.schedule, store, projectId: config.projectId, now: epochClock,
     // Reserved probe IDs never fall through to an external resolver that could re-arm retirement.
     // `release/auto-decide` is RESERVED TO NULL here, never delegated: the constructor rebuild runs
@@ -812,9 +821,11 @@ export function createStoreDependencies(
     // reconciler would never run while the release schedule fired someone else's code. Reserving
     // makes rebuild drop the arm; the transient SCHEDULE_TARGET_UNRESOLVED notice is cleared by
     // `register`, which then owns the callback outright.
+    // The backup id is reserved the same way, but resolvable: its callback needs no late deps.
     resolve: (id) => id === HEALTH_PROBE_JOB_ID || healthProbeJobEnvironment(id) !== null
       ? resolveProbe(id)
-      : id === RELEASE_AUTO_DECIDE_JOB_ID ? null : config.schedule?.resolve?.(id) ?? null });
+      : id === SCHEDULED_BACKUP_JOB_ID ? scheduledBackup
+        : id === RELEASE_AUTO_DECIDE_JOB_ID ? null : config.schedule?.resolve?.(id) ?? null });
   const close = (): void => { schedules.release(); subscriptionDatabase?.close(); store.close(); };
   /**
    * ORDER IS LOAD-BEARING, and getting it wrong is the defect DoD 3 names. The stored intervals are
@@ -828,6 +839,8 @@ export function createStoreDependencies(
    */
   const sweep = schedules.register(HEALTH_PROBE_JOB_ID, healthProbe, DEFAULT_PROBE_INTERVAL_MS);
   if (!sweep.ok) { close(); throw new Error(`${sweep.code}@${sweep.layer}`); }
+  const backups = schedules.register(SCHEDULED_BACKUP_JOB_ID, scheduledBackup, SCHEDULED_BACKUP_INTERVAL_MS);
+  if (!backups.ok) { close(); throw new Error(`${backups.code}@${backups.layer}`); }
   // GATE 3 UNATTENDED. The SAME registry and the SAME dossier facts the release command holds, and
   // the SAME operator id boot reconciliation acts under -- a `daemon:*` id is refused 403 by the
   // release fence, so only this one passes. `MOE_RELEASE_BASE` is host config passed RAW; absent,

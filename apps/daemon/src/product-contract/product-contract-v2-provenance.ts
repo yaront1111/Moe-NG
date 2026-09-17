@@ -10,6 +10,7 @@ import {
   type StoredEvent,
 } from "@moe/store";
 
+import { sameBytes } from "../byte-equality.js";
 import {
   PRODUCT_CONTRACT_REVISION_V2_COMMAND_KIND,
 } from "./product-contract-v2-address.js";
@@ -42,9 +43,6 @@ function storeFailure(error: unknown): ProductContractV2ProvenanceResult {
       ? "DURABLE_STORE" : PRODUCT_CONTRACT_V2_REVISION_READER_LAYER,
     ok: false,
   });
-}
-function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
 }
 function traceOf(event: StoredEvent): DecisionTrace | null {
   const trace = event.decisionTrace;

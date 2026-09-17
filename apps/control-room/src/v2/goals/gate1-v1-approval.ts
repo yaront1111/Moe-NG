@@ -3,6 +3,7 @@ import type {
   ControlRoomClientSurface, ControlRoomTransport,
 } from "@moe/control-room-client";
 
+import { isRecord, sha256Hex } from "../../live/live-wire-primitives.js";
 import { GATE1_ANSWER_COMMAND_KIND, GATE1_COMMAND_KIND } from "./gate1-daemon-submission.js";
 import { GATE1_LAYER } from "./gate1-pending-contract.js";
 
@@ -75,10 +76,6 @@ export type Gate1ReadOutcomeV1 =
   | Gate1PendingViewV1
   | { readonly status: "NONE" }
   | { readonly code: string; readonly layer: string; readonly status: "ERROR" | "REFUSED" };
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 const nonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.length > 0;
@@ -243,11 +240,6 @@ export interface Gate1ApprovalPortV1 {
     clarification: Gate1ClarificationViewV1, optionId: string, contractId: string,
   ) => Promise<Gate1ApprovalOutcomeV1>;
   readonly submit: (pending: Gate1PendingViewV1) => Promise<Gate1ApprovalOutcomeV1>;
-}
-
-async function sha256Hex(text: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
 function refusalOf(value: unknown): Gate1ApprovalOutcomeV1 | null {

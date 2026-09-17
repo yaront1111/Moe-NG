@@ -10,7 +10,7 @@
  */
 import { createHash } from "node:crypto";
 import { open, mkdir, readFile, rename, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 
 import { RECOVERY_ANCHOR_LAYER } from "./recovery-anchor-contracts.js";
 
@@ -193,8 +193,4 @@ export async function clearDirectory(path: string): Promise<void> {
 /** Remove a slot outright, leaving no empty directory behind to look staged. */
 export async function removeDirectory(path: string): Promise<void> {
   await rm(path, { force: true, recursive: true });
-}
-
-export function slotPath(root: string, slotsDirName: string, slot: string): string {
-  return join(root, slotsDirName, slot);
 }

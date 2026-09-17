@@ -87,8 +87,10 @@ export const THIRD_CRITERION = Object.freeze({
   }),
 });
 
+/** `revisionId` names a SECOND revision of the same contract: the writer keys its aggregate on
+ *  (project, contract, revision), so "revision-0002" lands beside 0001 rather than fencing on it. */
 export function committedRevision(
-  store: SqliteEventStore, thirdCriterion = false,
+  store: SqliteEventStore, thirdCriterion = false, revisionId = "revision-0001",
 ): ProductContractRevisionRef {
   const committed = runProductContractProposeRevision(store, {
     correlationId: "corr-dispatch-writer",
@@ -126,7 +128,7 @@ export function committedRevision(
         ],
         retiredCriterionIds: [],
         retiredRequirementIds: [],
-        revisionId: "revision-0001",
+        revisionId,
         sourceDocumentDigests: [PRD_SHA],
       },
       goalRef: GOAL_ID,
@@ -141,7 +143,9 @@ export function committedRevision(
 /** Gate 1 through the PRODUCTION command: a real paired session approves over the
  *  BEARER arm, which the transport-origin fence now admits from MCP transports only
  *  (the browser journey signs instead - task-ffa05408 family). */
-export function approveGate1(store: SqliteEventStore, ref: ProductContractRevisionRef): void {
+export function approveGate1(
+  store: SqliteEventStore, ref: ProductContractRevisionRef, commandId = "cmd-gate1-approve",
+): void {
   const minted = createOperatorSessionHandshakePort({
     capabilities: OPERATOR_CAPABILITIES,
     clock: () => NOW_MS,
@@ -157,7 +161,6 @@ export function approveGate1(store: SqliteEventStore, ref: ProductContractRevisi
     store,
   });
   const gate = productContractGate1Authority(ref);
-  const commandId = "cmd-gate1-approve";
   const requestDigest = productContractGate1SubjectDigest({
     commandId, projectId: PROJECT_ID, workRef: gate.workRef,
   });

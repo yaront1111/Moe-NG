@@ -3,6 +3,7 @@ import { RECOVERY_OUTCOME_KINDS, admitResume, admitSuccessorOverlap } from "@moe
 import type { RecoveryOutcomeKind } from "@moe/runner";
 import type { SqliteEventStore } from "@moe/store";
 
+import { sameBytes } from "../byte-equality.js";
 import {
   BINDING_CONFLICT,
   CONTINUATION_BINDING_SCHEMA_VERSION,
@@ -113,10 +114,6 @@ function appendBinding(
   // as bound, since the bytes on disk would not be the bytes just described.
   if (!sameBytes(response.decision.resultBytes, bytes)) return BINDING_CONFLICT;
   return Object.freeze({ appendsOnly: true as const, binding, ok: true as const, outcome: "BOUND" as const });
-}
-
-function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return left.length === right.length && left.every((byte, index) => byte === right[index]);
 }
 
 /**

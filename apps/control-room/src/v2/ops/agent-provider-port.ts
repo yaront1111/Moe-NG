@@ -33,11 +33,6 @@ const AGENT_PROVIDER_LAYER = "CONTROL_ROOM_AGENT_PROVIDER" as const;
 export const KNOWN_PROVIDERS = Object.freeze(["claude", "codex"] as const);
 export type KnownProvider = (typeof KNOWN_PROVIDERS)[number];
 
-/** The daemon refuses any other value with AGENT_PROVIDER_UNKNOWN; the browser offers none. */
-export function isKnownProvider(value: string): value is KnownProvider {
-  return (KNOWN_PROVIDERS as readonly string[]).includes(value);
-}
-
 /** The board answers itself when the payload roster carries no body for this kind. */
 export const AGENT_PROVIDER_PAYLOAD_ABSENT = "AGENT_PROVIDER_PAYLOAD_ABSENT";
 

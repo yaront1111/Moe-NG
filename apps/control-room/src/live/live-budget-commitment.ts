@@ -20,6 +20,8 @@
  * Both are facts about this client, never about authority.
  */
 
+import { exactDataRecord } from "./live-wire-primitives.js";
+
 const LIVE_BUDGET_COMMITMENT_LAYER_VALUE = "CONTROL_ROOM_LIVE_BUDGET_COMMITMENT";
 
 export const LIVE_BUDGET_COMMITMENT_LAYER = LIVE_BUDGET_COMMITMENT_LAYER_VALUE;
@@ -54,38 +56,6 @@ function errored(code: string, layer: string): BudgetCommitmentOutcome {
 
 function invalidResponse(): BudgetCommitmentOutcome {
   return errored(BUDGET_COMMITMENT_INVALID_RESPONSE_CODE, LIVE_BUDGET_COMMITMENT_LAYER_VALUE);
-}
-
-/**
- * An own-enumerable EXACT-key snapshot: the value must be a plain object whose
- * key set is precisely `expectedKeys`, every one an own, enumerable data
- * property. Anything else — a prototype, an array, a missing or extra key, an
- * accessor — returns null, so the caller never reads a field this reader has not
- * vouched for. (Copied verbatim from live-planning-run.ts.)
- */
-function exactDataRecord(
-  value: unknown,
-  expectedKeys: readonly string[],
-): Readonly<Record<string, unknown>> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  try {
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return null;
-    const keys = Reflect.ownKeys(value);
-    if (keys.length !== expectedKeys.length
-      || keys.some((key) => typeof key !== "string" || !expectedKeys.includes(key))) return null;
-    const snapshot: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
-    for (const key of expectedKeys) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) {
-        return null;
-      }
-      snapshot[key] = descriptor.value;
-    }
-    return Object.freeze(snapshot);
-  } catch {
-    return null;
-  }
 }
 
 /**

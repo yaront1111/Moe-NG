@@ -29,8 +29,6 @@ import {
 
 export const PRODUCT_CONTRACT_PROPOSE_REVISION_V2_COMMAND_KIND =
   "product_contract.propose_revision" as const;
-export const PRODUCT_CONTRACT_PROPOSE_REVISION_V2_SCHEMA_VERSION =
-  "moe-product-contract-propose/2" as const;
 export const PRODUCT_CONTRACT_PROPOSE_REVISION_V2_PAYLOAD_KEYS = Object.freeze([
   "draft", "goalRef",
 ] as const);

@@ -143,18 +143,14 @@ const PREVIEW_CODE_WORDS: Readonly<Record<string, string>> = Object.freeze({
 });
 
 /**
- * The sentence for a refusal code; an unrostered code renders VERBATIM, never blank.
+ * The words AND the code, in that order, so a person can read it and still search for it; an
+ * unrostered code renders VERBATIM, never blank.
  *
  * `Object.hasOwn` AND NOT a bare index: a plain-object map answers `toString` and
  * `constructor` from Object.prototype, so `PREVIEW_CODE_WORDS[code] ?? code` would render
  * `[Function toString]` to an operator for a code spelled that way. A refusal code arrives
  * from the wire, so "no daemon would send that" is not a guarantee this function may rely on.
  */
-export function previewCodeWords(code: string): string {
-  return Object.hasOwn(PREVIEW_CODE_WORDS, code) ? PREVIEW_CODE_WORDS[code] ?? code : code;
-}
-
-/** The words AND the code, in that order, so a person can read it and still search for it. */
 export function previewCodeSaid(code: string): string {
   const words = Object.hasOwn(PREVIEW_CODE_WORDS, code) ? PREVIEW_CODE_WORDS[code] : undefined;
   return words === undefined ? code : `${words} (${code})`;

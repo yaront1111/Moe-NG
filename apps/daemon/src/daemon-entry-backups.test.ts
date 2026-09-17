@@ -31,11 +31,11 @@ import { expect, it } from "vitest";
 import {
   BACKUP_RESTORE_PROOF_SIDECAR_SUFFIX, createBackupRestoreProofStore,
 } from "./backups/backup-restore-proof.js";
-import { nodeActivationReceiptPorts } from "./bootstrap/activation-receipts-measure.js";
-import { nodeBackupPorts } from "./backups/backup-ports.js";
-import { runScheduledBackup } from "./backups/scheduled-backup.js";
+import { backupFileHash } from "./backups/backup-ports.js";
+import { SCHEDULED_BACKUP_INTERVAL_MS } from "./backups/scheduled-backup-job.js";
 import { CAPABILITIES } from "./daemon-command-vocabulary.js";
 import { createStoreDependencies } from "./daemon-store-dependencies.js";
+import type { StoreDependencyConfig } from "./daemon-store-dependencies.js";
 import { fixtureDependencies } from "./daemon-entry-fixtures.js";
 import { startDaemon } from "./daemon-entry.js";
 import { resolveOptionalDaemonPorts } from "./daemon-entry-port-resolution.js";
@@ -110,12 +110,14 @@ interface World {
  * store is composed FIRST and the records are written after - which is also the real order of
  * events: a daemon boots, then backups happen.
  */
-function world(name: string): World {
+function world(
+  name: string, extra: (directory: string) => Partial<StoreDependencyConfig> = () => ({}),
+): World {
   const directory = mkdtempSync(join(tmpdir(), `moe-entry-${name}-`));
   const storePath = join(directory, "store.db");
   const composed = createStoreDependencies({
     credential: "backups-credential", principalId: "operator-local",
-    projectId: PROJECT, storePath,
+    projectId: PROJECT, storePath, ...extra(directory),
   });
   return { composed, directory, storePath };
 }
@@ -244,25 +246,42 @@ it("never serves a backup nobody has checked as PROVEN through the composed list
 }, 60_000);
 
 /**
- * THE WRITE EDGE AND THE READ EDGE, JOINED. A real scheduled backup run persists through the
- * production writer, and its record comes back off the socket - so the fact that was computed
- * and reached nothing before this row now reaches an operator.
+ * THE WRITE EDGE AND THE READ EDGE, JOINED BY THE DAEMON'S OWN SCHEDULE. Nothing here calls the
+ * backup run: the composition's registered job is fired off its own arm and its record comes back
+ * off the socket. A run the test invoked itself would pass with no production caller at all,
+ * which is the producer-with-no-consumer gap this file's header names.
  */
-it("serves a record that a real scheduled backup run persisted", async () => {
-  const open = world("backups-run");
+it("serves a record that the composition's scheduled backup job persisted", async () => {
+  const timers = new Map<() => void, number>();
+  const open = world("backups-run", (directory) => ({
+    clock: () => CHECKED_AT, repositoryWorkspace: directory,
+    schedule: { timer: {
+      clear: (handle: unknown) => { timers.delete(handle as () => void); },
+      set: (tick: () => void, intervalMs: number) => { timers.set(tick, intervalMs); return tick; },
+    } },
+  }));
   try {
-    const receipt = await runScheduledBackup(
-      { environments: [], now: new Date(CHECKED_AT), projectRoot: open.directory, storePath: open.storePath },
-      nodeBackupPorts(), nodeActivationReceiptPorts().fs, seed(open),
-    );
-    expect(receipt.backups[0]?.status).toBe("VERIFIED");
+    const fire = [...timers].find(([, intervalMs]) => intervalMs === SCHEDULED_BACKUP_INTERVAL_MS)?.[0];
+    if (fire === undefined) throw new Error("composition armed no scheduled backup job");
     const started = await boot(open);
     try {
-      const served = entries((await post(started, PATH, {})).body);
+      const listed = async (): Promise<readonly Record<string, unknown>[]> =>
+        ((await post(started, PATH, {})).body as { backups?: Record<string, unknown>[] }).backups ?? [];
+      // The negative control: before the arm fires there is no record to serve.
+      expect(await listed()).toEqual([]);
+      fire();
+      let served = await listed();
+      for (let waited = 0; served.length === 0 && waited < 30_000; waited += 50) {
+        await new Promise((done) => setTimeout(done, 50));
+        served = await listed();
+      }
       expect(served).toHaveLength(1);
       expect(served[0]?.["environment"]).toBe("store");
       expect(served[0]?.["restoreProof"]).toBe("PROVEN");
-      expect(served[0]?.["sha256"]).toBe(receipt.backups[0]?.sha256);
+      // Rooted at the bound workspace, stamped by the composition clock.
+      expect(served[0]?.["sha256"]).toBe(await backupFileHash(
+        join(open.directory, ".moe-next", "backups", "scheduled", "store", "20260907120000000.sqlite"),
+      ));
       // The BASENAME only. The absolute path the run worked with never reaches the wire.
       expect(served[0]?.["ref"]).toBe("20260907120000000.sqlite");
       expect(String(served[0]?.["ref"])).not.toContain(open.directory);

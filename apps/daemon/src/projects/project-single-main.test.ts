@@ -21,7 +21,7 @@ const PROJECT = Object.freeze({
   storePath: "C:\\work\\alpha\\store.sqlite",
 });
 const REGISTERED_WRITTEN = Object.freeze({
-  createdRoot: false,
+  createdDirectories: Object.freeze([]),
   paths: Object.freeze([]),
   root: PROJECT.root,
 });

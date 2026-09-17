@@ -1,5 +1,6 @@
 import type { CommandDecisionRecord, SqliteEventStore } from "@moe/store";
 
+import { sameBytes } from "../byte-equality.js";
 import { decodeBinding, encodeBinding } from "./recovery-incarnation-binding-codec.js";
 import type {
   GenesisIncarnationBinding,
@@ -131,10 +132,6 @@ export function readAnchoredGenesisIncarnation(
 ): GenesisIncarnationBinding | null {
   const binding = readAnchoredBindingOfOrigin(store, projectId, incarnationRef, "GENESIS");
   return binding !== null && binding.origin === "GENESIS" ? binding : null;
-}
-
-function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return left.length === right.length && left.every((byte, index) => byte === right[index]);
 }
 
 /**

@@ -17,8 +17,6 @@
 
 import { type BrokerRefusal } from "./windows-process-broker-contract.js";
 
-export const WINDOWS_PROCESS_BOUNDARY_VERSION = "moe-windows-process-boundary/1" as const;
-
 /**
  * Which layer refused. The first three are THIS side of the pipe; the last
  * four mirror the broker's `RefusalLayer` (native/broker/src/refusal.rs:39) so
@@ -49,7 +47,6 @@ export type WindowsProcessLayer = (typeof WINDOWS_PROCESS_LAYERS)[number];
 
 /** UNKNOWN is the default and the floor; nothing in this area may raise it. */
 export const WINDOWS_PROCESS_TRUTH_CLASSES = Object.freeze(["PROVEN", "UNKNOWN"] as const);
-export type WindowsProcessTruthClass = (typeof WINDOWS_PROCESS_TRUTH_CLASSES)[number];
 
 /**
  * Closed, hand-written, no catch-all. A refusal names a category; it never
@@ -217,12 +214,4 @@ export function provenRun(
     identity: processIdentity(identity.pid, identity.creationTime),
     exitCode,
   });
-}
-
-export function isWindowsProcessCode(value: unknown): value is WindowsProcessCode {
-  return typeof value === "string" && (WINDOWS_PROCESS_CODES as readonly string[]).includes(value);
-}
-
-export function isWindowsProcessLayer(value: unknown): value is WindowsProcessLayer {
-  return typeof value === "string" && (WINDOWS_PROCESS_LAYERS as readonly string[]).includes(value);
 }

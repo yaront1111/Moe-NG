@@ -23,6 +23,7 @@ import type { ProjectConfigurationLimitKey, ProjectConfigurationSelection } from
 import { CLAUDE_MODEL_EVIDENCE_KINDS, CLAUDE_REASONING_EFFORTS } from "@moe/runner";
 import type { ClaudeModelEvidenceKind, ClaudeReasoningEffort } from "@moe/runner";
 
+import { isRecord } from "../value-primitives.js";
 import {
   PROFILE_HEX64,
   admittedContextLimit,
@@ -31,7 +32,6 @@ import {
   boundedText,
   canonicalJson,
   hasExactKeys,
-  isRecord,
   member,
   positiveCount,
 } from "./provider-profile-fields.js";

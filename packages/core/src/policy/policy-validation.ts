@@ -1,8 +1,8 @@
 /**
- * Hostile-input boundary for the policy area. Cloned from `planning-snapshot.ts` rather than
- * imported: `packages/core/src` has no cross-area imports, and goal -> planning was already a
- * documented clone. Accessors, proxies, symbols, cycles, and exotic prototypes are snapshotted
- * into inert data once, and every later check reads only the snapshot.
+ * Hostile-input boundary for the policy area. Accessors, proxies, symbols, cycles, and exotic
+ * prototypes are snapshotted into inert data once, and every later check reads only the
+ * snapshot. The shape-free primitives (`deepFreeze`, `validRef`, `strongTruth`) are the shared
+ * `planning-snapshot.ts` ones, re-exported here for the policy, supersession and expansion callers.
  *
  * Nothing in this validation module computes an identity. `validHex64` checks the SHAPE of a
  * supplied digest; policy content hashing lives in the sibling digest module.
@@ -10,6 +10,7 @@
 import { RUNTIME_LIFECYCLES } from "@moe/contracts";
 import type { RuntimeTruthClass } from "@moe/contracts";
 
+import { deepFreeze, strongTruth, validRef } from "../planning/planning-snapshot.js";
 import { POLICY_OBLIGATION_KINDS, POLICY_RISK_TIERS, POLICY_RULE_EFFECTS } from
   "./policy-contract.js";
 import type {
@@ -22,6 +23,8 @@ import type {
   PolicySlice,
   PolicyWaiver,
 } from "./policy-contract.js";
+
+export { deepFreeze, strongTruth, validRef };
 
 type Snapshot = { readonly ok: true; readonly value: unknown } | { readonly ok: false };
 const FAILURE = Object.freeze({ ok: false as const });
@@ -92,26 +95,9 @@ export function exact(
   }
 }
 
-export function deepFreeze<T>(value: T): T {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const key of Reflect.ownKeys(value)) {
-      deepFreeze((value as Record<PropertyKey, unknown>)[key]);
-    }
-    Object.freeze(value);
-  }
-  return value;
-}
-
 const HEX64 = /^[0-9a-f]{64}$/;
-export function validRef(value: unknown): value is string {
-  return typeof value === "string" && value.length > 0;
-}
 export function validHex64(value: unknown): value is string {
   return typeof value === "string" && HEX64.test(value);
-}
-/** Design truth floor: only a daemon-verified or human-approved fact can ground a risk tier. */
-export function strongTruth(value: unknown): boolean {
-  return value === "DAEMON_VERIFIED" || value === "HUMAN_APPROVED";
 }
 export function validTruthClass(value: unknown): value is RuntimeTruthClass {
   return typeof value === "string"

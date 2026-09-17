@@ -32,7 +32,6 @@ export const DUPLICATE_DELIVERY_KINDS = Object.freeze([
   "EXIT_BEFORE_LAUNCH",
   "SUSPECT",
 ] as const);
-export type DuplicateDeliveryKind = (typeof DUPLICATE_DELIVERY_KINDS)[number];
 
 /**
  * ADOPTED deliberately carries the three identities adoption needs and NOT the

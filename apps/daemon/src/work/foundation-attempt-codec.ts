@@ -187,8 +187,15 @@ export function decodeFoundationPayload(bytes: unknown): FoundationDecodedPayloa
 
 export const sha256Hex = (bytes: Uint8Array): string =>
   createHash("sha256").update(bytes).digest("hex");
-export const sameBytes = (left: Uint8Array, right: Uint8Array): boolean =>
-  left.byteLength === right.byteLength && left.every((byte, index) => right[index] === byte);
+/**
+ * Byte equality, re-exported rather than declared. The implementation lives in the daemon-wide
+ * `byte-equality.ts` — this module's copy was byte-for-byte the same function (same signature,
+ * same length check, same element walk; only the comparator's operand order differed), and two
+ * live copies is exactly the drift the shared home exists to end. The name stays published HERE
+ * so every existing importer — activation/, evidence/, journal/, documents/, work/ — keeps its
+ * specifier, and a new caller can reach for either door and get the one function.
+ */
+export { sameBytes } from "../byte-equality.js";
 export function deriveDispatchAggregateId(attemptAggregateId: string): string {
   const framed = `${FOUNDATION_ATTEMPT_SCHEMA_VERSION}\n${attemptAggregateId.length}\n${attemptAggregateId}`;
   return `foundation-dispatch-${sha256Hex(encoder.encode(framed))}`;

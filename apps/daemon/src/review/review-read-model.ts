@@ -1,6 +1,4 @@
 import { parseAcceptance, parseDelta, parseRound } from "./review-read-parsers.js";
-import { decodeBoundedJsonBytes } from "@moe/contracts";
-import type { JsonValue } from "@moe/contracts";
 import { EMPTY_REVIEW_LINEAGE } from "@moe/review";
 import type { ReviewLineage, ReviewRouting } from "@moe/review";
 import type { ReviewContinuationApproval, ReviewContinuationUse } from "@moe/review";
@@ -8,6 +6,7 @@ import { readReviewContinuationApproval, readReviewContinuationUse } from "./rev
 import { storedVerifierFailureSourceMatches } from "./review-verifier-failure.js";
 import type { SqliteEventStore } from "@moe/store";
 
+import { decodeJsonOrNull as decodeResult } from "../json-record-shape.js";
 import { isPlainJsonObject } from "./review-contracts.js";
 import type { DeltaNodeClassification } from "./review-contracts.js";
 import type { StoredPackageItems } from "./review-round-items.js";
@@ -79,11 +78,6 @@ export interface ReviewLedger {
 }
 
 const LEDGER_PAGE_SIZE = 200;
-
-function decodeResult(bytes: Uint8Array): JsonValue {
-  const decoded = decodeBoundedJsonBytes(bytes);
-  return decoded.ok ? decoded.value : null;
-}
 
 /**
  * Only `EFFECTS_COMMITTED` decisions fold into state: the store's `NO_BUSINESS_EFFECT` audit rows

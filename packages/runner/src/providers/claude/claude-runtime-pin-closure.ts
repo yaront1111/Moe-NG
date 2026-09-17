@@ -151,37 +151,9 @@ function wrap(failure: SourceInspectionFailure): ClaudeRuntimePinFailure {
 }
 
 /**
- * The narrow internal discovery surface: caller-named candidates in, validated
- * streamed entries out. No expected digest is declared, so nothing here can be
- * "confirmed" against a caller's claim — the bytes are simply measured.
- *
- * Internal to @moe/runner by construction: it is not re-exported from the
- * package root. Consuming task: task-32eddfd3c9644558b7218778e1f07e92.
- */
-export async function discoverSources(
-  fs: ClaudeRuntimeFsPort,
-  candidates: readonly RuntimeSourceCandidate[],
-  realRoot: string,
-): Promise<readonly SourceEntry[] | ClaudeRuntimePinFailure> {
-  const snapshot = snapshotSourceCandidates(candidates);
-  if (!Array.isArray(snapshot)) return wrap(snapshot as SourceInspectionFailure);
-  const inspected = await inspectSources(
-    fs,
-    (snapshot as readonly RuntimeSourceCandidate[]).map((candidate) => ({
-      ...candidate,
-      expectedSha256: null,
-    })),
-    realRoot,
-  );
-  return Array.isArray(inspected)
-    ? (inspected as readonly SourceEntry[])
-    : wrap(inspected as SourceInspectionFailure);
-}
-
-/**
- * The quote path. Identical inspection to `discoverSources`, plus the quote's
- * declared digest attached to each candidate; the comparison is the inspector's
- * last act, so a drifting path is never reported as a mere digest mismatch.
+ * The quote path. The shared inspector, with the quote's declared digest attached
+ * to each candidate; the comparison is the inspector's last act, so a drifting
+ * path is never reported as a mere digest mismatch.
  */
 export async function resolveSources(
   fs: ClaudeRuntimeFsPort,

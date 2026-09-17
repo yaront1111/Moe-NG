@@ -205,6 +205,18 @@ export interface ReconciliationFinding {
   readonly provenance: ImportProvenance;
 }
 
+/**
+ * The one factory every detector reports through. It lives here, beside the vocabulary it
+ * assembles, so a detector module never has to value-import its caller to share it.
+ */
+export function reconciliationFinding(
+  ambiguityClass: AmbiguityClass,
+  provenance: ImportProvenance,
+  detail: string,
+): ReconciliationFinding {
+  return Object.freeze({ ambiguityClass, detail, outcome: AMBIGUITY_OUTCOME, provenance });
+}
+
 /** §21.6's "report exact counts". Every number is a safe integer. */
 export interface ImportCounts {
   readonly claims: number;

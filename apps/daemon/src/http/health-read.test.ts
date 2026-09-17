@@ -16,8 +16,8 @@ import { CAPABILITIES } from "../daemon-command-vocabulary.js";
 import { createStoreDependencies } from "../daemon-store-dependencies.js";
 import { recordProviderPause } from "../orchestrator/provider-pause-ledger.js";
 import { createRepositoryExecutionPort } from "../repository/repository-execution-port.js";
-import { createHealthReadPort, handleHealthReadRequest } from "./health-read.js";
-import type { HealthReadPort, HealthView } from "./health-read.js";
+import { HEALTH_READ_CODES, createHealthReadPort, handleHealthReadRequest } from "./health-read.js";
+import type { HealthReadPort, HealthRefused, HealthView } from "./health-read.js";
 import { WIRE_PROTOCOL_VERSION } from "./http-contract.js";
 import { GOOD_CREDENTIAL, authenticator } from "./http-test-fixtures.js";
 
@@ -164,6 +164,15 @@ describe("handleHealthReadRequest", () => {
       .toEqual({ code: "LISTENER_HEALTH_REQUEST_INVALID", kind: "LISTENER_REFUSAL" });
     expect(handleHealthReadRequest({ authenticator: authenticator([CAPABILITIES.GOAL]), health: port }, request(new Uint8Array())))
       .toEqual({ body: { code: "HEALTH_READ_UNREADABLE", layer: "HEALTH_READ", outcome: "REFUSED" }, httpStatus: 200, kind: "REPLY" });
+  });
+
+  it("types every refusal from its closed roster, so a drifted code reds the typecheck", () => {
+    expect([...HEALTH_READ_CODES]).toStrictEqual([
+      "HEALTH_READ_CAPABILITY_DENIED", "HEALTH_READ_PROJECT_MISMATCH", "HEALTH_READ_UNREADABLE",
+    ]);
+    // @ts-expect-error a code absent from HEALTH_READ_CODES is not a HealthRefused.
+    const drifted: HealthRefused = { code: "HEALTH_READ_DRIFTED", layer: "HEALTH_READ", outcome: "REFUSED" };
+    expect(HEALTH_READ_CODES).not.toContain(drifted.code);
   });
 });
 

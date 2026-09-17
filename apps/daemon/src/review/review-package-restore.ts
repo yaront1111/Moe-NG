@@ -1,8 +1,6 @@
 import { buildReviewPackage } from "@moe/review";
 import type { ReviewDecisionLayer, ReviewPackageBoundItem } from "@moe/review";
-import type { SqliteEventStore } from "@moe/store";
 
-import { readReviewLedger } from "./review-read-model.js";
 import type { ReviewRoundRecord } from "./review-read-model.js";
 
 /**
@@ -31,8 +29,6 @@ import type { ReviewRoundRecord } from "./review-read-model.js";
 export const REVIEW_PACKAGE_RESTORE_CODES = Object.freeze([
   "REVIEW_PACKAGE_DIGEST_MISMATCH",
   "REVIEW_PACKAGE_ITEMS_ABSENT",
-  "REVIEW_PACKAGE_ROUND_NOT_FOUND",
-  "REVIEW_PACKAGE_ROUND_UNREADABLE",
 ] as const);
 
 export type ReviewPackageRestoreCode = (typeof REVIEW_PACKAGE_RESTORE_CODES)[number];
@@ -97,24 +93,4 @@ export function verifyStoredPackageItems(
     reviewInputDigest: record.reviewInputDigest,
     round: record.round,
   });
-}
-
-/**
- * Restores one subject's round by number.
- *
- * An unreadable ledger refuses BEFORE the round lookup: `readReviewLedger` drops a round it
- * cannot parse, so a wanted round could silently read as "not found" when what actually happened
- * is that its bytes were rejected. Two different facts must not share one code.
- */
-export function restoreReviewPackage(
-  store: SqliteEventStore,
-  projectId: string,
-  subjectRef: string,
-  round: number,
-): ReviewPackageRestoreResult {
-  const ledger = readReviewLedger(store, projectId, subjectRef);
-  if (ledger.unreadable) return refuse("REVIEW_PACKAGE_ROUND_UNREADABLE");
-  const record = ledger.rounds.find((entry) => entry.round === round);
-  if (record === undefined) return refuse("REVIEW_PACKAGE_ROUND_NOT_FOUND");
-  return verifyStoredPackageItems(record);
 }

@@ -27,50 +27,58 @@ const SRC_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
  */
 const MINIMUM_STYLESHEETS = 13;
 const REQUIRED_STYLESHEETS = Object.freeze([
-  "shell/shell-layout.css",
-  "styles/chrome.css",
-  "styles/control-room.css",
-  "styles/responsive.css",
-  "styles/shell.css",
-  "styles/surfaces.css",
+  "v2/styles/cordum-shell.css",
+  "v2/styles/cordum-tokens.css",
+  "v2/styles/cordum-goals.css",
+  "v2/styles/cordum-board.css",
+  "v2/styles/product-home.css",
+  "v2/projects/project-home.css",
 ]);
 
 const REDUCED_MOTION = "@media (prefers-reduced-motion: reduce)";
-const IMPORT_ROOT = "styles/control-room.css";
-const GLOBAL_RESET = "styles/responsive.css";
-
-/** The universal reset wins on `!important`, so an imported sheet needs no block of its own. */
-const GLOBAL_RESET_DECLARATIONS = Object.freeze([
-  "animation-duration: 0.01ms !important",
-  "animation-iteration-count: 1 !important",
-  "scroll-behavior: auto !important",
-  "transition-duration: 0.01ms !important",
-]);
 
 /**
- * Pinned to what each block ACTUALLY declares. `approval-layout.css` carries no
- * `scroll-behavior` and says why in its own comment ("Motion only: animation and
- * transition. Deliberately NOT scroll-snap"); pinning a line it does not have would
- * make this guard red against correct production code.
+ * The shell-wide gate: `cordum-shell.css` neutralises every animation and transition under
+ * `.cr2-shell`, and every screen renders inside that frame. It is loaded by the shell
+ * component itself, which is what the "rather than dead code" arm below pins.
+ */
+const SHELL_GATE = "v2/styles/cordum-shell.css";
+const SHELL_COMPONENT = "v2/shell/cordum-shell.tsx";
+const SHELL_GATE_IMPORT = 'import "../styles/cordum-shell.css"';
+
+/**
+ * Pinned to what each block ACTUALLY declares. v2 has no `@import` aggregator: every
+ * motion-bearing sheet carries its own block, and each is pinned to the lines it has, not
+ * to a common template — pinning a line a sheet does not declare would make this guard red
+ * against correct production code.
  */
 const SAME_FILE_BLOCKS = Object.freeze([
   Object.freeze({
+    declarations: Object.freeze([
+      "animation: none !important", "transition-duration: 1ms !important",
+    ]),
+    stylesheet: "v2/styles/cordum-shell.css",
+  }),
+  Object.freeze({
+    declarations: Object.freeze(["transition: none"]),
+    stylesheet: "v2/styles/cordum-board.css",
+  }),
+  Object.freeze({
     declarations: Object.freeze(["animation: none", "transition: none"]),
-    stylesheet: "approvals/approval-layout.css",
+    stylesheet: "v2/styles/cordum-goals.css",
   }),
   Object.freeze({
-    declarations: Object.freeze(["scroll-behavior: auto", "animation: none", "transition: none"]),
-    stylesheet: "board/board-layout.css",
+    declarations: Object.freeze(["transition: none"]),
+    stylesheet: "v2/styles/product-home.css",
   }),
   Object.freeze({
-    declarations: Object.freeze(["animation: none", "scroll-behavior: auto", "transition: none"]),
-    stylesheet: "shell/shell-layout.css",
+    declarations: Object.freeze(["transition: none"]),
+    stylesheet: "v2/projects/project-home.css",
   }),
 ]);
 
 const MOTION_DECLARATION = /(?:^|[;{\s])(?:transition|animation)\s*:\s*([^;}]+)/gu;
 const KEYFRAMES = /@keyframes\s+[\w-]+/gu;
-const UNIVERSAL_SELECTOR = /\*,\s*\*::before,\s*\*::after/u;
 
 /**
  * The half the CSS reset provably CANNOT reach: overriding `animation-duration` and
@@ -88,7 +96,7 @@ const JS_MOTION_TOKENS = Object.freeze([
   "requestAnimationFrame",
 ]);
 
-/** 63 production sources measured; a floor well under that catches a broken scan root. */
+/** Well over a hundred production sources remain after the v1 removal; a floor well under that catches a broken scan root. */
 const MINIMUM_SOURCES = 40;
 
 interface MotionViolation {
@@ -148,20 +156,6 @@ function reducedMotionBlock(css: string): string {
   return "";
 }
 
-/**
- * An imported sheet inherits the universal reset; a component-side sheet does not. Both
- * halves are checked: being imported into `control-room.css` only reaches the reset while
- * `control-room.css` itself still imports it. Checking only the first half would leave
- * this arm green after the reset import was deleted — measured, not assumed.
- */
-function reachesGlobalReset(relativePath: string): boolean {
-  const prefix = "styles/";
-  if (!relativePath.startsWith(prefix)) return false;
-  const root = read(IMPORT_ROOT);
-  if (!root.includes(`@import "./${GLOBAL_RESET.slice(prefix.length)}"`)) return false;
-  return root.includes(`@import "./${relativePath.slice(prefix.length)}"`);
-}
-
 function motionBearing(): readonly string[] {
   return stylesheets().filter((sheet) => motionDeclarations(read(sheet)).length > 0);
 }
@@ -191,14 +185,13 @@ describe("motion inventory is gated rather than banned", () => {
     expect(motionBearing().length).toBeGreaterThan(0);
   });
 
-  it("gates every motion-bearing stylesheet by its own block or the global reset", () => {
+  it("gates every motion-bearing stylesheet by its own block", () => {
     const bearing = motionBearing();
     // Self-guarding: without this the loop below passes by never meeting a stylesheet.
     expect(bearing.length).toBeGreaterThan(0);
     const violations: MotionViolation[] = [];
     for (const sheet of bearing) {
-      const gated = read(sheet).includes(REDUCED_MOTION) || reachesGlobalReset(sheet);
-      if (!gated) violations.push(Object.freeze({
+      if (!read(sheet).includes(REDUCED_MOTION)) violations.push(Object.freeze({
         code: "MOTION_WITHOUT_REDUCED_MOTION_GATE",
         stylesheet: sheet,
       }));
@@ -206,22 +199,18 @@ describe("motion inventory is gated rather than banned", () => {
     expect(violations).toEqual([]);
   });
 
-  it("pins the global reset that neutralises every imported stylesheet", () => {
-    const reset = reducedMotionBlock(read(GLOBAL_RESET));
-    expect(reset).not.toBe("");
-    expect(reset).toMatch(UNIVERSAL_SELECTOR);
-    for (const declaration of GLOBAL_RESET_DECLARATIONS) expect(reset).toContain(declaration);
-  });
-
-  it("proves the global reset is loaded rather than dead code", () => {
-    expect(read(IMPORT_ROOT)).toContain('@import "./responsive.css"');
+  it("proves the shell-wide gate is loaded rather than dead code", () => {
+    expect(reducedMotionBlock(read(SHELL_GATE))).toContain(".cr2-shell *");
+    expect(read(SHELL_COMPONENT)).toContain(SHELL_GATE_IMPORT);
   });
 
   it("pins each same-file block so it cannot be hollowed out silently", () => {
     for (const pinned of SAME_FILE_BLOCKS) {
       const block = reducedMotionBlock(read(pinned.stylesheet));
-      expect(block).not.toBe("");
-      for (const declaration of pinned.declarations) expect(block).toContain(declaration);
+      expect(block, pinned.stylesheet).not.toBe("");
+      for (const declaration of pinned.declarations) {
+        expect(block, `${pinned.stylesheet}: ${declaration}`).toContain(declaration);
+      }
     }
   });
 
@@ -253,37 +242,24 @@ describe("motion inventory is gated rather than banned", () => {
     expect(JS_MOTION_TOKENS).not.toContain("setTimeout");
     expect(JS_MOTION_TOKENS).not.toContain("setInterval");
   });
-
-  it("leaves scroll-snap alone, which section 4.16 column behaviour depends on", () => {
-    // Asserted positively: a future guard that banned scroll-snap as "motion" would
-    // fight the narrow-mode board and fails here instead of shipping.
-    const board = read("board/board-layout.css");
-    expect(board).toContain("scroll-snap-type");
-    expect(board).toContain("scroll-snap-align");
-  });
 });
 
 /*
  * NOT APPLICABLE, recorded with the measured reason. None of these is written as a
  * passing assertion over zero cases, and none is an `it.skip` — a skipped test reads as
- * green while proving nothing. The one arm below exists so the record cannot rot.
+ * green while proving nothing. The arms below exist so the record cannot rot.
  *
- * (a) WCAG AA CONTRAST — not "no colour exists to measure". 65 colour literals were
- *     measured across exactly six stylesheets (tokens.css 39, chrome.css 8, shell.css 6,
- *     surfaces.css 5, inspector.css 4, responsive.css 1). It is ALREADY COVERED: styles/
- *     design-system.test.ts asserts contrast(...) >= 4.5 over the primary text pairs and
- *     over every filled tone. Duplicating it here would be a second opinion with no
- *     second authority, and styles/ is not an owned path so it is not edited either.
+ * (a) WCAG AA CONTRAST — not "no colour exists to measure". It is ALREADY COVERED:
+ *     v2/styles/cordum-contrast.test.ts resolves every token in cordum-tokens.css and
+ *     asserts contrast >= AA_SMALL_TEXT (4.5) over the text pairs and every filled tone.
+ *     Duplicating it here would be a second opinion with no second authority.
  *
  * (b) THE GRAPH HALF of section 11.1 bullet 1 (edges carry pattern + arrowheads, the
  *     critical path carries weight + pattern) — genuinely not applicable: no graph
- *     surface exists, and CR-J1-002 forbids mounting one. criticalPath is not colour-only
- *     today regardless: board/board-card.tsx renders it as the text-labelled CARD_FACTS
- *     entry ["criticalpath", "Critical path", ...] through FactRow.
+ *     surface exists, and CR-J1-002 forbids mounting one.
  *
  * (c) cr.banner.revision and cr.graph.refusal DO NOT EXIST, and no placeholder may be
- *     created to give a sweep something to find. cr.banner.circuitbreaker, which the task
- *     description also called absent, DOES exist and is covered by banner-politeness.test.tsx.
+ *     created to give a sweep something to find.
  */
 describe("the not-applicable record cannot quietly become false", () => {
   it("still finds zero cr.banner.revision and zero cr.graph.refusal in production", () => {
@@ -299,8 +275,8 @@ describe("the not-applicable record cannot quietly become false", () => {
   });
 
   it("still finds the contrast coverage that (a) defers to", () => {
-    const designSystem = read("styles/design-system.test.ts");
-    expect(designSystem).toContain("toBeGreaterThanOrEqual(4.5)");
-    expect(designSystem).toContain('contrast("#ffffff"');
+    const contrast = read("v2/styles/cordum-contrast.test.ts");
+    expect(contrast).toContain("AA_SMALL_TEXT = 4.5");
+    expect(contrast).toContain("toBeGreaterThanOrEqual(AA_SMALL_TEXT)");
   });
 });

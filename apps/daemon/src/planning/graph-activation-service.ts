@@ -90,7 +90,7 @@ export interface GraphActivationInput {
 }
 
 /**
- * The core's activation witness is EXACTLY THREE KEYS (`goal-validation.ts:154` is
+ * The core's activation witness is EXACTLY THREE KEYS (`goal-validation.ts:128` is
  * `exact(value, ACTIVATION_KEYS)`), so a fourth here does not extend the command — it makes the
  * whole thing illegal at the reducer. `graphApprovalRef` is the core's OWN decided `approvalRef`,
  * so an activation cannot cite an approval this command did not just take.

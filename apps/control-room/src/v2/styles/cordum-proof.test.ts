@@ -7,8 +7,8 @@ import { describe, expect, it } from "vitest";
  * SOURCE-TEXT PIN, deliberately. jsdom 30 evaluates no media queries and Vitest
  * stubs the CSS import outright (`document.styleSheets.length` is 0), so no
  * assertion here can be driven by a computed style. Every arm reads the sheet from
- * disk, the way `shell/shell-narrow.test.tsx` and `a11y/motion-inventory.test.ts`
- * already do for the rules jsdom cannot reach.
+ * disk, the way `a11y/motion-inventory.test.ts` already does for the rules jsdom
+ * cannot reach.
  *
  * The property under test is that the open proof drawer REFLOWS the stage instead
  * of floating over it. As first shipped, `.cr2-proof` was

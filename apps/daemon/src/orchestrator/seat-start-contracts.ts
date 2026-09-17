@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
 
 import { decodeBoundedJsonBytes } from "@moe/contracts";
-import type { JsonObject, JsonValue } from "@moe/contracts";
 
+import { exact, isObject, ref } from "../json-record-shape.js";
 import { instant } from "./provider-pause-contracts.js";
 
 /**
@@ -96,20 +96,6 @@ export function shapeAgentVersion(stdout: string | null): string {
     return SEAT_FACT_UNMEASURED;
   }
   return VERSION_SHAPE.test(only) && DOTTED_NUMBER.test(only) ? only : SEAT_FACT_UNMEASURED;
-}
-
-function isObject(value: JsonValue | undefined): value is JsonObject {
-  return value !== null && value !== undefined && typeof value === "object"
-    && !Array.isArray(value) && Object.getPrototypeOf(value) === null;
-}
-
-function exact(value: JsonObject, keys: readonly string[]): boolean {
-  const actual = Object.keys(value);
-  return actual.length === keys.length && actual.every((key) => keys.includes(key));
-}
-
-function ref(value: JsonValue | undefined): value is string {
-  return typeof value === "string" && value.length > 0;
 }
 
 export type SeatStartDecodeResult =

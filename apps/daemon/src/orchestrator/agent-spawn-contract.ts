@@ -1,6 +1,6 @@
 /**
  * The spawner's public contract: what a caller may configure, what a failed
- * agent process reports, and the two shapes a spawn boundary can hand back.
+ * agent process reports, and the admission-shaped spawn boundary.
  *
  * Split out of `agent-spawner.ts` so the contract stays readable next to the
  * lifecycle that implements it, and so that file stays under the per-file line
@@ -76,13 +76,6 @@ export class AgentProcessFailureError extends Error {
       : signal !== null ? `:${signal}` : ""}`);
     this.name = "AgentProcessFailureError";
   }
-}
-
-/** Callable spawn boundary plus explicit ownership of every process it starts. */
-export interface AgentSpawner {
-  (request: SpawnRequest): Promise<void>;
-  readonly activeCount: () => number;
-  readonly close: () => Promise<void>;
 }
 
 /**

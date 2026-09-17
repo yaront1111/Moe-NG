@@ -511,8 +511,8 @@ describe("effect.activate — the RESERVED -> ACTIVATED budget binding", () => {
     // A FRESH store, not the arm above's: two settles on one store cannot measure this. The
     // helper's commandId is fixed, so a second call replays into BUDGET_LEDGER_IDEMPOTENCY_CONFLICT
     // at the daemon's ledger; and even under a distinct commandId the reservation is SETTLED by
-    // then, and NOT_ACTIVATED is decided BEFORE the correlation gate (budget-settlement.ts:163
-    // precedes :165). Either way the gate this arm is about is never reached.
+    // then, and NOT_ACTIVATED is decided BEFORE the correlation gate (budget-settlement.ts:153
+    // precedes :155). Either way the gate this arm is about is never reached.
     const store = readyStore("bare-fails-closed");
     runEffectActivateCommand(store, activateBytes());
 

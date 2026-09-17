@@ -117,8 +117,8 @@ export type VerificationCatalogCapabilitiesResult =
   | { readonly capabilities: readonly string[]; readonly ok: true }
   | VerificationCatalogRefused;
 
-export const CATALOG_KEYS = Object.freeze(["catalogVersion", "entries"] as const);
-export const ENTRY_KEYS = Object.freeze([
+const CATALOG_KEYS = Object.freeze(["catalogVersion", "entries"] as const);
+const ENTRY_KEYS = Object.freeze([
   "argv", "capability", "profileRevisionId", "projectId",
 ] as const);
 

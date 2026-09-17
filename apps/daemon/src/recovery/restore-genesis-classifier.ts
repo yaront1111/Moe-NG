@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 
+import { sameBytes } from "../byte-equality.js";
 import { readAnchoredGenesisIncarnation } from "./recovery-incarnation-anchor.js";
 import type { AnchorDecisionReader } from "./recovery-incarnation-anchor.js";
 import { decodeBinding, encodeBinding } from "./recovery-incarnation-binding-codec.js";
@@ -62,10 +63,6 @@ export type GenesisFenceVerdict =
 
 const reject = (reason: GenesisFenceRejection): GenesisFenceVerdict =>
   Object.freeze({ reason, verified: false as const });
-
-function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return left.length === right.length && left.every((byte, index) => byte === right[index]);
-}
 
 /**
  * Verified through the PUBLISHED SPKI, exactly as the mint verified it before

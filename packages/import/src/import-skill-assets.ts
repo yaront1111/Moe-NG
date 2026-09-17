@@ -1,6 +1,6 @@
 import { isPlainRecord } from "./canonical-bytes.js";
-import { AMBIGUITY_OUTCOME } from "./import-contract.js";
-import type { AmbiguityClass, ImportProvenance, ReconciliationFinding } from "./import-contract.js";
+import { reconciliationFinding } from "./import-contract.js";
+import type { ImportProvenance, ReconciliationFinding } from "./import-contract.js";
 import type { LegacySourceRecord } from "./import-canonical.js";
 
 /**
@@ -21,14 +21,6 @@ export const SKILL_PAYLOAD_KEY = "skill" as const;
 export interface SkillIdentity {
   readonly legacyId: string;
   readonly version: string;
-}
-
-function finding(
-  ambiguityClass: AmbiguityClass,
-  provenance: ImportProvenance,
-  detail: string,
-): ReconciliationFinding {
-  return Object.freeze({ ambiguityClass, detail, outcome: AMBIGUITY_OUTCOME, provenance });
 }
 
 /**
@@ -71,7 +63,7 @@ export function classifySkillAsset(
   if (!(SKILL_PAYLOAD_KEY in record.payload)) return [];
   const descriptor = readSkillDescriptor(record);
   if (descriptor === null) {
-    return [finding(
+    return [reconciliationFinding(
       "SKILL_MALFORMED",
       provenance,
       `skill asset ${record.legacyId} does not carry a structured descriptor`,
@@ -79,14 +71,14 @@ export function classifySkillAsset(
   }
   const found: ReconciliationFinding[] = [];
   if (typeof descriptor["license"] !== "string") {
-    found.push(finding(
+    found.push(reconciliationFinding(
       "SKILL_MISSING_LICENSE",
       provenance,
       `skill asset ${record.legacyId} declares no license`,
     ));
   }
   if (descriptor["script"] !== undefined) {
-    found.push(finding(
+    found.push(reconciliationFinding(
       "SKILL_UNSUPPORTED_SCRIPT",
       provenance,
       `skill asset ${record.legacyId} declares script ${String(descriptor["script"])}, `
@@ -97,7 +89,7 @@ export function classifySkillAsset(
   if (Array.isArray(assets)) {
     for (const asset of assets) {
       if (typeof asset === "string" && escapesSkillDirectory(asset)) {
-        found.push(finding(
+        found.push(reconciliationFinding(
           "SKILL_ESCAPING_ASSET",
           provenance,
           `skill asset ${record.legacyId} references ${asset} outside its directory`,

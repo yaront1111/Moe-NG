@@ -58,10 +58,6 @@ export const ENV_EXAMPLE_SYNC_CODE_LAYER_MAP = Object.freeze({
 /** The closed code set, read off the map rather than restated beside it. */
 export type EnvExampleSyncCode = keyof typeof ENV_EXAMPLE_SYNC_CODE_LAYER_MAP;
 
-/** The closed layer set, likewise derived — no layer exists that the map does not name. */
-export type EnvExampleSyncLayer =
-  (typeof ENV_EXAMPLE_SYNC_CODE_LAYER_MAP)[EnvExampleSyncCode];
-
 /** Derived, never restated: the roster IS the layer map's key set, sorted for a stable order. */
 export const ENV_EXAMPLE_SYNC_CODES: readonly EnvExampleSyncCode[] = Object.freeze(
   (Object.keys(ENV_EXAMPLE_SYNC_CODE_LAYER_MAP) as EnvExampleSyncCode[]).sort(),
@@ -73,7 +69,7 @@ export const ENV_EXAMPLE_SYNC_CODES: readonly EnvExampleSyncCode[] = Object.free
  * distributed mapped type so that a hand-built literal bypassing `envExampleSyncRefusal` cannot
  * express a disagreeing pair either: `{code: "ENV_EXAMPLE_COMMIT_FAILED", layer:
  * "PROJECT_REDUCER"}` is a compile error, not merely bad practice. A plain
- * `{code: EnvExampleSyncCode; layer: EnvExampleSyncLayer}` interface would admit it, which
+ * `{code: EnvExampleSyncCode; layer: string}` interface would admit it, which
  * would leave the factory as the only thing standing between a caller and a wrong layer.
  */
 export type EnvExampleSyncRefusalFor<C extends EnvExampleSyncCode> = {
@@ -102,23 +98,4 @@ export function envExampleSyncRefusal<C extends EnvExampleSyncCode>(
     layer: ENV_EXAMPLE_SYNC_CODE_LAYER_MAP[code],
     ok: false as const,
   });
-}
-
-/**
- * Narrow an unknown value to a sync refusal. Two things are deliberate here.
- *
- * First, the CODE is checked against the closed roster rather than trusting `ok === false`
- * alone: a refusal minted by another vocabulary must not be admitted as one of ours.
- *
- * Second, `ok` and `code` are required as OWN properties. A plain property read walks the
- * prototype chain, so `Object.create({code: "ENV_EXAMPLE_COMMIT_FAILED"})` with `ok = false`
- * set on the instance would otherwise be admitted as a refusal it never carried.
- */
-export function isEnvExampleSyncRefusal(value: unknown): value is EnvExampleSyncRefusal {
-  if (typeof value !== "object" || value === null) return false;
-  if (!Object.hasOwn(value, "ok") || !Object.hasOwn(value, "code")) return false;
-  const candidate = value as { readonly code?: unknown; readonly ok?: unknown };
-  if (candidate.ok !== false) return false;
-  return typeof candidate.code === "string"
-    && Object.hasOwn(ENV_EXAMPLE_SYNC_CODE_LAYER_MAP, candidate.code);
 }

@@ -3,7 +3,7 @@ import { Writable } from "node:stream";
 import { describe, expect, it, vi } from "vitest";
 
 import { type WindowsProcessBoundary } from "../../platform/windows/windows-boundary.js";
-import { launchClaude } from "./claude-launcher.js";
+import { CLAUDE_LAUNCHER_DEFAULTS, launchClaude } from "./claude-launcher.js";
 import {
   PROCESS,
   PROVEN,
@@ -17,6 +17,7 @@ function dependenciesWithStdin(
   harness: ReturnType<typeof boundaryHarness>,
   portsLog: string[],
   stdin: Writable,
+  closeStdin: (stream: Writable) => void = (stream) => stream.destroy(),
 ): ReturnType<typeof dependencies> {
   const base = dependencies(harness, portsLog);
   return {
@@ -27,7 +28,7 @@ function dependenciesWithStdin(
         ...opened,
         providerStdin: stdin,
         close: async () => {
-          stdin.destroy();
+          closeStdin(stdin);
           return await opened.close();
         },
       };
@@ -35,7 +36,28 @@ function dependenciesWithStdin(
   };
 }
 
-const HOSTILE_STDIN_METHODS = Object.freeze(["once", "write", "end", "off"] as const);
+/**
+ * Records every 'error' the stream emits while NOBODY listens. That is the
+ * exact condition under which Node throws the error as an uncaught exception,
+ * observed here instead of letting it take the test worker down.
+ */
+function unhandledErrorsOf(stdin: Writable): string[] {
+  const unhandled: string[] = [];
+  const emit = stdin.emit.bind(stdin);
+  Object.defineProperty(stdin, "emit", {
+    configurable: true,
+    value: (event: string | symbol, ...args: unknown[]): boolean => {
+      if (event === "error" && stdin.listenerCount("error") === 0) {
+        unhandled.push(String(args[0]));
+        return false;
+      }
+      return emit(event, ...args);
+    },
+  });
+  return unhandled;
+}
+
+const HOSTILE_STDIN_METHODS = Object.freeze(["on", "write", "end"] as const);
 
 describe("Claude sealed-context delivery", () => {
   it("writes the exact UTF-8 bytes once after start and before completion, then ends stdin", async () => {
@@ -106,8 +128,8 @@ describe("Claude sealed-context delivery", () => {
     expect(portsLog).not.toContain("observe");
   });
 
-  it("generates exactly four hostile provider stdin method arms", () => {
-    expect(HOSTILE_STDIN_METHODS).toHaveLength(4);
+  it("generates exactly three hostile provider stdin method arms", () => {
+    expect(HOSTILE_STDIN_METHODS).toHaveLength(3);
     expect(new Set(HOSTILE_STDIN_METHODS).size).toBe(HOSTILE_STDIN_METHODS.length);
   });
 
@@ -177,11 +199,12 @@ describe("Claude sealed-context delivery", () => {
     const write = vi.spyOn(stalledStdin, "write");
     const harness = boundaryHarness();
     const portsLog: string[] = [];
+    // The one launch deadline bounds delivery, so the REAL delay port has to fire.
     const launched = launchClaude(request({
       limits: { stdoutBytes: 64, stderrBytes: 64, tailBytes: 4, timeoutMs: 10 },
     }), {
       platform: "win32",
-      deps: dependenciesWithStdin(harness, portsLog, stalledStdin),
+      deps: { ...dependenciesWithStdin(harness, portsLog, stalledStdin), delay: CLAUDE_LAUNCHER_DEFAULTS.delay },
     });
     await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(1));
 
@@ -196,6 +219,89 @@ describe("Claude sealed-context delivery", () => {
     }
     expect(failureOf(result)).toEqual({ code: "CLAUDE_LAUNCH_TIMEOUT", layer: "LAUNCHER" });
     expect(harness.log).toEqual(["cancel", "close"]);
+    expect(portsLog.filter((event) => event === "unlock")).toHaveLength(1);
+  });
+
+  // Node runs a write or end callback BEFORE it emits 'error' for the same
+  // failure (a pipe the provider closed early fails with EPIPE this way), and a
+  // write that outlived a timeout can still fail after the launch settled. A
+  // listener removed on settle leaves that emission unhandled: an uncaught
+  // exception, with the child and the lock still held.
+  it("refuses, with the provider stdin 'error' still handled, when the write fails with EPIPE", async () => {
+    const brokenStdin = new Writable({
+      write(_chunk, _encoding, callback) { callback(new Error("EPIPE")); },
+    });
+    const unhandled = unhandledErrorsOf(brokenStdin);
+    const harness = boundaryHarness();
+    const portsLog: string[] = [];
+
+    const result = await launchClaude(request(), {
+      platform: "win32",
+      deps: dependenciesWithStdin(harness, portsLog, brokenStdin),
+    });
+    await new Promise<void>((resolve) => { setImmediate(resolve); });
+
+    expect(unhandled).toEqual([]);
+    expect(failureOf(result)).toEqual({
+      code: "CLAUDE_LAUNCH_CONTEXT_DELIVERY_FAILED",
+      layer: "LAUNCHER",
+    });
+    expect(harness.log).toEqual(["cancel", "close"]);
+    expect(portsLog).not.toContain("observe");
+    expect(portsLog.filter((event) => event === "unlock")).toHaveLength(1);
+  });
+
+  it("refuses, with the provider stdin 'error' still handled, when ending stdin fails", async () => {
+    const brokenStdin = new Writable({
+      write(_chunk, _encoding, callback) { callback(); },
+      // A pipe shutdown reports asynchronously; Node then runs the end
+      // callback with the error BEFORE it emits 'error'.
+      final(callback) { setImmediate(() => callback(new Error("EPIPE"))); },
+    });
+    const unhandled = unhandledErrorsOf(brokenStdin);
+    const harness = boundaryHarness();
+    const portsLog: string[] = [];
+
+    const result = await launchClaude(request(), {
+      platform: "win32",
+      deps: dependenciesWithStdin(harness, portsLog, brokenStdin),
+    });
+    await new Promise<void>((resolve) => { setImmediate(resolve); });
+
+    expect(result.kind).toBe("REFUSED");
+    expect(unhandled).toEqual([]);
+    expect(failureOf(result)).toEqual({
+      code: "CLAUDE_LAUNCH_CONTEXT_DELIVERY_FAILED",
+      layer: "LAUNCHER",
+    });
+    expect("observation" in result).toBe(false);
+    expect(portsLog).not.toContain("observe");
+    expect(portsLog.filter((event) => event === "unlock")).toHaveLength(1);
+  });
+
+  it("keeps the provider stdin 'error' handled when a timed-out write fails after the launch settled", async () => {
+    let acknowledge!: (error?: Error | null) => void;
+    const stalledStdin = new Writable({
+      write(_chunk, _encoding, callback) { acknowledge = callback; },
+    });
+    const unhandled = unhandledErrorsOf(stalledStdin);
+    const write = vi.spyOn(stalledStdin, "write");
+    const harness = boundaryHarness();
+    const portsLog: string[] = [];
+    // The broker ends the provider pipe on close; it never destroys it.
+    const deps = { ...dependenciesWithStdin(harness, portsLog, stalledStdin, (stream) => stream.end()),
+      delay: CLAUDE_LAUNCHER_DEFAULTS.delay };
+    const launched = launchClaude(request({
+      limits: { stdoutBytes: 64, stderrBytes: 64, tailBytes: 4, timeoutMs: 10 },
+    }), { platform: "win32", deps });
+    await vi.waitFor(() => expect(write).toHaveBeenCalledTimes(1));
+
+    const result = await launched;
+    expect(failureOf(result)).toEqual({ code: "CLAUDE_LAUNCH_TIMEOUT", layer: "LAUNCHER" });
+    acknowledge(new Error("EPIPE"));
+    await new Promise<void>((resolve) => { setImmediate(resolve); });
+
+    expect(unhandled).toEqual([]);
     expect(portsLog.filter((event) => event === "unlock")).toHaveLength(1);
   });
 });

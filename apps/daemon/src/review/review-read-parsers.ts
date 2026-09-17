@@ -1,15 +1,12 @@
 import type { JsonValue } from "@moe/contracts";
 import type { ReviewLineage, ReviewRouting } from "@moe/review";
+import { ref as isRef } from "../json-record-shape.js";
 import { DELTA_CLASSIFICATIONS, isPlainJsonObject } from "./review-contracts.js";
 import type { DeltaNodeClassification } from "./review-contracts.js";
 import { parseStoredPackageItems } from "./review-round-items.js";
 import type { AcceptanceRecord, DeltaRecord, ReviewRoundRecord } from "./review-read-model.js";
 
 const CLASSIFICATION_SET: ReadonlySet<string> = new Set<string>(DELTA_CLASSIFICATIONS);
-
-function isRef(value: JsonValue | undefined): value is string {
-  return typeof value === "string" && value.length > 0;
-}
 
 function isStringArray(value: JsonValue | undefined): value is readonly string[] {
   return Array.isArray(value) && value.every((entry) => typeof entry === "string");

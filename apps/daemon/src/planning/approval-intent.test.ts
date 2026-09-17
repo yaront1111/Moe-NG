@@ -19,8 +19,8 @@ import { runApprovalIntentEdge } from "../daemon-command-edges.js";
 import { readPlanningRun } from "../http/planning-run-read.js";
 import { isSessionDigest } from "../identity/session-authority-protocol.js";
 import { buildReplayMarkerDecisionLeg } from "../identity/session-authority-replay-marker.js";
-import { replayAggregateId } from "../identity/session-authority-store.js";
-import { burnStepUpAuthRef, deriveStepUpAuthRef } from "./approval-step-up.js";
+import { observeReplayMarker, replayAggregateId } from "../identity/session-authority-store.js";
+import { deriveStepUpAuthRef } from "./approval-step-up.js";
 import {
   GRAPH_REVISION_REF,
   BUDGET_ACCOUNT_REF,
@@ -65,8 +65,8 @@ import { runPolicyAggregateId } from "./run-policy-record.js";
  * `approval.decide_intent` — the daemon-owned approval seam (task-6646f888).
  *
  * WHAT THIS SUITE IS THE OPERAND OF. The shipped `approval.decide` path takes the ACTIVATION
- * WITNESS and the APPROVAL RECORD off the caller's payload (`daemon-command-graph-approve.ts:94-98`,
- * `planning-services.ts:230-234`), so the caller authors the very bytes that say a human approved.
+ * WITNESS and the APPROVAL RECORD off the caller's payload (`daemon-command-graph-approve.ts:71-75`,
+ * `planning-services.ts:233-235`), so the caller authors the very bytes that say a human approved.
  * Task rail 1 — "human authority is not delegable" — makes that an inversion, and this seam is
  * where it is closed: the caller supplies INTENT ONLY and the daemon derives the rest from the
  * durable PLAN_REVIEW run and the authenticated operator session.
@@ -1142,15 +1142,15 @@ describe("the human grant comes from the authenticated session, never from the p
   });
 });
 
-describe("the step-up reference is server-derived and burns exactly once", () => {
+describe("the step-up reference is server-derived", () => {
   /**
-   * DoD-3 (derivation) and DoD-4 (one-shot), against `approval-step-up.ts`.
+   * DoD-3 (derivation), against `approval-step-up.ts`. DoD-4 (one-shot) is proven where the burn
+   * actually happens: the replay leg inside the seam's own activation decision, below.
    *
    * WHY THE ARMS LIVE IN THIS FILE. The module is the seam's own derivation half; splitting it
    * into a sibling suite would put the plan over its distinct-file cap while proving nothing the
    * shared `reviewableStore()` harness does not already reach.
    */
-  const BURN = BURN_FACTS;
   const mint = (commandId: string) => humanReviewWitness(OPERATOR, commandId);
 
   const derivedRef = (commandId: string, runId: string = RUN_ID): string => {
@@ -1180,7 +1180,7 @@ describe("the step-up reference is server-derived and burns exactly once", () =>
 
     // `isSessionDigest` is the guard `observeReplayMarker` itself applies before burning, so
     // this asserts the production fence rather than a regex reimplementing one. Core's own
-    // `validRef` (policy-validation.ts:106 -- `typeof value === "string" && value.length > 0`)
+    // `validRef` (planning-snapshot.ts:209 -- `typeof value === "string" && value.length > 0`)
     // is satisfied a fortiori and is NOT importable here: it is not on the core barrel, and a
     // deep import fails TS6059.
     expect(isSessionDigest(reference)).toBe(true);
@@ -1199,53 +1199,6 @@ describe("the step-up reference is server-derived and burns exactly once", () =>
     if (!otherSession.ok) throw new Error("expected a derivation for a different session");
 
     expect(new Set([base, otherCommand, otherRun, otherSession.stepUpAuthRef]).size).toBe(4);
-  });
-
-  /**
-   * THE ONE-SHOT (DoD-4). DIVERGENCE: only the burn can answer `SESSION_REPLAYED` -- nothing
-   * else in the module or the seam emits that code, so deleting the burn call reddens exactly
-   * this arm and leaves every other arm in this file green.
-   */
-  it("admits the first burn and refuses the second with the ledger's own code AND layer", () => {
-    const store = reviewableStore();
-    const stepUpAuthRef = derivedRef("cmd-one-shot");
-
-    const first = burnStepUpAuthRef(store, { ...BURN, stepUpAuthRef });
-    const second = burnStepUpAuthRef(store, { ...BURN, stepUpAuthRef });
-
-    expect(first).toMatchObject({ ok: true });
-    expect(second).toEqual({ code: "SESSION_REPLAYED", layer: "REPLAY", ok: false });
-  });
-
-  it("holds EXACTLY ONE replay observation for the digest after two attempts", () => {
-    const store = reviewableStore();
-    const stepUpAuthRef = derivedRef("cmd-count-once");
-
-    burnStepUpAuthRef(store, { ...BURN, stepUpAuthRef });
-    burnStepUpAuthRef(store, { ...BURN, stepUpAuthRef });
-
-    const first = burnStepUpAuthRef(store, { ...BURN, stepUpAuthRef });
-    if (first.ok) throw new Error("expected the third attempt to be refused too");
-    const observed = store
-      .readEvents(replayAggregateId(stepUpAuthRef))
-      .filter((event) => event.eventType === "SessionAuthorityReplayObserved");
-
-    // The denominator matters: a fixture that produced zero events would satisfy "no duplicate".
-    expect(observed).toHaveLength(1);
-  });
-
-  it("admits a FRESH request identity, so an honest second approval is not locked out", () => {
-    const store = reviewableStore();
-
-    expect(burnStepUpAuthRef(store, { ...BURN, stepUpAuthRef: derivedRef("cmd-fresh-a") }))
-      .toMatchObject({ ok: true });
-    expect(burnStepUpAuthRef(store, { ...BURN, stepUpAuthRef: derivedRef("cmd-fresh-b") }))
-      .toMatchObject({ ok: true });
-  });
-
-  it("refuses a malformed reference under the evidence pair rather than reaching the store", () => {
-    expect(burnStepUpAuthRef(reviewableStore(), { ...BURN, stepUpAuthRef: "not-a-digest" }))
-      .toEqual({ code: "AUTHENTICATION_FAILED", layer: "REPLAY", ok: false });
   });
 });
 
@@ -1360,8 +1313,9 @@ describe("a missing derived fact is REFUSED, never defaulted", () => {
     });
     expect(durableApprovalRecords(store)).toHaveLength(1);
     expect(store.readEvents(replayAggregateId(derived.stepUpAuthRef))).toHaveLength(1);
-    expect(burnStepUpAuthRef(store, { ...BURN_FACTS, stepUpAuthRef: derived.stepUpAuthRef }))
-      .toEqual({ code: "SESSION_REPLAYED", layer: "REPLAY", ok: false });
+    expect(observeReplayMarker(store, {
+      ...BURN_FACTS, replayDigest: derived.stepUpAuthRef,
+    }).outcome).toBe("REPLAYED");
   });
 
   it("names one code per missing fact, over a nonzero roster", () => {
@@ -1675,7 +1629,7 @@ describe("one approval intent decision activates, records, and burns atomically"
   /**
    * THE CARRIED RECORD MUST STILL DECODE. The rejection's result is now the run's whole record —
    * the sealed facts, the reduced state and the reason together — and `readDurableLedger` folds
-   * it back through `decodeBoundedJsonBytes` (`bootstrap-ledger.ts:84`). A reason AT the ingress
+   * it back through `decodeBoundedJsonBytes` (`json-record-shape.ts:45`). A reason AT the ingress
    * bound is therefore the worst case for the read-back: if carrying the record pushed the
    * result past the decode edge, `stateOf` would answer null and the rejected run would vanish
    * from every ledger reader while the commit still reported ok.
@@ -2022,7 +1976,7 @@ describe("one approval intent decision activates, records, and burns atomically"
   /**
    * WHICH LAYER ANSWERS IS PART OF THE ANSWER. An EMPTY-STRING reason never reaches the reject
    * fence: `readApprovalIntent` already refuses a zero-length `decisionReason` as a shape defect
-   * (approval-intent.ts:136), so the row below pins SHAPE_INVALID for it and the two rows after
+   * (approval-intent.ts:135), so the row below pins SHAPE_INVALID for it and the two rows after
    * it pin the reject fence's own code for the cases that do reach it - absent and whitespace.
    */
   it.each([
@@ -2131,8 +2085,7 @@ describe("one approval intent decision activates, records, and burns atomically"
     expect(faulted.calls()).toBe(1);
     expect(store.readEvents(replayAggregateId(replayDigest))).toHaveLength(0);
     expect(durableApprovalRecords(store)).toHaveLength(0);
-    expect(burnStepUpAuthRef(store, { ...BURN_FACTS, stepUpAuthRef: replayDigest }))
-      .toMatchObject({ ok: true });
+    expect(observeReplayMarker(store, { ...BURN_FACTS, replayDigest }).outcome).toBe("FRESH");
     expect(reviewedDispatch(store, "cmd-intent-goal-conflict-retry").ok).toBe(true);
   });
 
@@ -2149,8 +2102,8 @@ describe("one approval intent decision activates, records, and burns atomically"
     expect(readDurableLedger(store, PROJECT_ID).decisionCount).toBe(before);
     expect(durableApprovalRecords(store)).toHaveLength(1);
     expect(store.readEvents(replayAggregateId(secondRef))).toHaveLength(0);
-    expect(burnStepUpAuthRef(store, { ...BURN_FACTS, stepUpAuthRef: secondRef }))
-      .toMatchObject({ ok: true });
+    expect(observeReplayMarker(store, { ...BURN_FACTS, replayDigest: secondRef }).outcome)
+      .toBe("FRESH");
   });
 
   it("replays the identical command without a second decision, record, or marker", () => {

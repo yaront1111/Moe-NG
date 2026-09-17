@@ -5,6 +5,7 @@ import type { PolicyAutoApprovalTier } from "@moe/core";
 import { decodeBoundedJsonBytes } from "@moe/contracts";
 import type { JsonObject, JsonValue } from "@moe/contracts";
 
+import { freezeDeep, hash, isObject, ref } from "../json-record-shape.js";
 import { RELEASE_DECIDE_CODES } from "./release-decide-contracts.js";
 import type { ReleaseDecideCode } from "./release-decide-contracts.js";
 
@@ -76,11 +77,6 @@ const RECEIPT_KEYS = [
 const PROVENANCE_KEY = "provenance";
 const PROVENANCE_KEYS = ["action", "tier"] as const;
 
-function isObject(value: JsonValue | undefined): value is JsonObject {
-  return value !== null && value !== undefined && typeof value === "object"
-    && !Array.isArray(value) && Object.getPrototypeOf(value) === null;
-}
-
 /**
  * The roster check, still CLOSED: exactly the nine required keys, optionally plus `provenance`.
  * An extra key that is not `provenance` is refused exactly as it always was, and a body carrying
@@ -118,24 +114,6 @@ function exactProvenance(value: JsonObject): boolean {
   const actual = Object.keys(value);
   return actual.length === PROVENANCE_KEYS.length
     && actual.every((key) => (PROVENANCE_KEYS as readonly string[]).includes(key));
-}
-
-function ref(value: JsonValue | undefined): value is string {
-  return typeof value === "string" && value.length > 0;
-}
-
-function hash(parts: readonly JsonValue[]): string {
-  return createHash("sha256").update(JSON.stringify(parts), "utf8").digest("hex");
-}
-
-function freezeDeep<T>(value: T): T {
-  if (value !== null && typeof value === "object" && !Object.isFrozen(value)) {
-    for (const key of Reflect.ownKeys(value)) {
-      freezeDeep((value as Record<PropertyKey, unknown>)[key]);
-    }
-    Object.freeze(value);
-  }
-  return value;
 }
 
 /** The sha256 of the dossier markdown, over the SAME utf8 bytes the PR body carries. */

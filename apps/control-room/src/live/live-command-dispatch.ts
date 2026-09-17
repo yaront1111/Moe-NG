@@ -1,7 +1,7 @@
 import type { ControlRoomClientSurface, ControlRoomTransport } from "@moe/control-room-client";
 import type { JsonObject } from "@moe/contracts";
 
-import { recordDispatchEffort } from "./live-effort-edge.js";
+import { exactDataRecord, isRecord, sha256Hex } from "./live-wire-primitives.js";
 
 /** Result of one generated-builder command round trip. */
 export interface DispatchReport {
@@ -23,43 +23,6 @@ export interface DispatchInput {
   readonly sessionCredential: string;
   readonly transport: Pick<ControlRoomTransport, "sendCommand">;
   readonly version?: number | null | undefined;
-}
-
-export interface DispatchPayloadInput extends DispatchInput {
-  /** Operator-authored command data; command identity still comes from the offer. */
-  readonly payload: JsonObject;
-}
-
-async function sha256Hex(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value));
-  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
-}
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function exactDataRecord(
-  value: unknown,
-  expectedKeys: readonly string[],
-): Readonly<Record<string, unknown>> | null {
-  if (!isRecord(value)) return null;
-  try {
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return null;
-    const keys = Reflect.ownKeys(value);
-    if (keys.length !== expectedKeys.length
-      || keys.some((key) => typeof key !== "string" || !expectedKeys.includes(key))) return null;
-    const snapshot: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
-    for (const key of expectedKeys) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) return null;
-      snapshot[key] = descriptor.value;
-    }
-    return Object.freeze(snapshot);
-  } catch {
-    return null;
-  }
 }
 
 function nonEmptyString(value: unknown): value is string {
@@ -169,14 +132,4 @@ export async function dispatchPreparedPayload(
   const stage = answer.kind === "ACCEPTED" ? "ANSWERED"
     : answer.kind === "REFUSED" ? "ANSWER_REFUSED" : "ANSWER_UNREADABLE";
   return { detail: answer.detail, ok: answer.ok, stage };
-}
-
-/** Dispatch an explicit production payload through a daemon-minted affordance. */
-export async function dispatchAffordancePayload(
-  input: DispatchPayloadInput,
-): Promise<DispatchReport> {
-  recordDispatchEffort({
-    affordance: input.affordance, aggregateId: input.aggregateId, commandKind: input.kind,
-  });
-  return await dispatchPreparedPayload(input, input.payload);
 }

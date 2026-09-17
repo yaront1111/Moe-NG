@@ -62,6 +62,10 @@ export const PROJECT_STACK_ENVIRONMENT_KEYS = Object.freeze([
   // server-owned at the launch edge, so a caller's environment cannot assert it.
   "MOE_OPERATOR_CHANNEL",
   "MOE_PRINCIPAL_ID",
+  // The manager catalog the hosted daemon's repository bootstrap registers into. Server-owned at
+  // the launch edge: off this roster the host fell back to ~/.moe-next/projects.json, a second
+  // catalog on the same host that the manager (%LOCALAPPDATA%\Moe\projects.json) never reads.
+  "MOE_PROJECT_CATALOG",
   "MOE_PROJECT_CONFIGURATION_DIGEST",
   "MOE_PROJECT_ID",
   "MOE_PROJECT_INSTANCE_ID",

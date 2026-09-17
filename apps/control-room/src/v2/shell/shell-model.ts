@@ -1,7 +1,6 @@
 /**
- * The shell's pure data model: the connection states the status strip renders, the
- * nav destinations, and the board card treatments. Kept free of JSX so every arm
- * can be asserted by value.
+ * The shell's pure data model: the connection states the status strip renders and
+ * the nav destinations. Kept free of JSX so every arm can be asserted by value.
  */
 
 /* -------------------------------------------------------------- Connection ---- */
@@ -119,9 +118,3 @@ export const NAV_BADGE_TONE_VAR: Readonly<Record<NavBadgeTone, string>> = Object
   info: "--cr-truth-human-deep",
   danger: "--cr-danger",
 });
-
-/* ---------------------------------------------------------------- Treatment --- */
-
-export const CARD_TREATMENTS = Object.freeze(["Compact", "Instrument", "Ledger"] as const);
-
-export type CardTreatment = (typeof CARD_TREATMENTS)[number];

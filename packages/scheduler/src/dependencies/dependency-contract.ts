@@ -1,4 +1,5 @@
 import { isGraphKey } from "../graph-key.js";
+import { compareStrings, deepFreeze, isRef, isSafeCount, oneOf } from "../kernel-primitives.js";
 import {
   hasExactDenseArrayShape,
   hasOnlyOwnStringKeys,
@@ -86,13 +87,6 @@ const MAX_ITEMS = 128;
 const MILESTONES = ["CANDIDATE_SEALED", "RESULT_SEALED", "EVIDENCE_SEALED", "INTEGRATION_SEALED", "REVIEW_QUALIFIED", "ACCEPTED"] as const;
 const TRUTH_CLASSES = ["OBSERVED", "AGENT_REPORTED", "DAEMON_VERIFIED", "HUMAN_APPROVED", "UNKNOWN"] as const;
 const OPERATIONS = ["ARTIFACT_SEAL", "DAEMON_FACT_OBSERVATION", "SCOPE_OBSERVATION", "POLICY_RULE_EVALUATION"] as const;
-function deepFreeze<T>(value: T): T {
-  if (value === null || typeof value !== "object" || Object.isFrozen(value)) return value;
-  Object.freeze(value);
-  for (const key of Object.keys(value as Record<string, unknown>)) deepFreeze((value as Record<string, unknown>)[key]);
-  return value;
-}
-function compareStrings(left: string, right: string): number { return left < right ? -1 : left > right ? 1 : 0; }
 function makeIssue(code: DependencyIssueCode, message: string, nodeKeys: readonly string[] = []): DependencyIssue {
   return deepFreeze({ code, message, nodeKeys: [...nodeKeys], edgeKeys: [] });
 }
@@ -102,14 +96,7 @@ function sortIssues(issues: readonly DependencyIssue[]): DependencyIssue[] {
 function fail(...issues: readonly DependencyIssue[]): DependencyContractValidationResult {
   return deepFreeze({ ok: false, issues: sortIssues(issues) });
 }
-function oneOf<T extends string>(value: unknown, values: readonly T[]): value is T {
-  return typeof value === "string" && (values as readonly string[]).includes(value);
-}
-function isRef(value: unknown): value is string { return typeof value === "string" && value.length > 0; }
 function isDigest(value: unknown): value is string { return typeof value === "string" && HEX_64.test(value); }
-function isVersion(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && !Object.is(value, -0);
-}
 function record(value: unknown, allowed: readonly string[], required = allowed): Record<string, unknown> | null {
   if (!isPlainRecord(value) || !hasOnlyOwnStringKeys(value, allowed)) return null;
   const output: Record<string, unknown> = {};
@@ -159,7 +146,7 @@ function parseWitnesses(value: unknown): DependencyWitnessBinding[] | null {
   const output: DependencyWitnessBinding[] = []; const seen = new Set<string>();
   for (const entry of entries) {
     const item = record(entry, ["witnessRef", "witnessVersion", "witnessDigest", "sourceOperationClass"]);
-    if (item === null || !isRef(item.witnessRef) || seen.has(item.witnessRef) || !isVersion(item.witnessVersion) ||
+    if (item === null || !isRef(item.witnessRef) || seen.has(item.witnessRef) || !isSafeCount(item.witnessVersion) ||
       !isDigest(item.witnessDigest) || !oneOf(item.sourceOperationClass, OPERATIONS)) return null;
     seen.add(item.witnessRef);
     output.push(item as unknown as DependencyWitnessBinding);
@@ -172,7 +159,7 @@ function parseFacts(value: unknown): DependencyFactBinding[] | null {
   for (const entry of entries) {
     const item = record(entry, ["sourceFactRef", "sourceFactVersion", "sourceFactDigest"]);
     if (item === null || !isRef(item.sourceFactRef) || seen.has(item.sourceFactRef) ||
-      !isVersion(item.sourceFactVersion) || !isDigest(item.sourceFactDigest)) return null;
+      !isSafeCount(item.sourceFactVersion) || !isDigest(item.sourceFactDigest)) return null;
     seen.add(item.sourceFactRef); output.push(item as unknown as DependencyFactBinding);
   }
   return output.sort((a, b) => compareStrings(a.sourceFactRef, b.sourceFactRef));
@@ -184,7 +171,7 @@ function parseRegistry(value: unknown): MonotonicPredicateRegistryEntry[] | null
     const item = record(entry, ["predicateRef", "schemaId", "schemaVersion", "parameterSchema", "sourceOperationClass", "proofRationale"]);
     const schema = item === null ? null : record(item.parameterSchema, ["kind", "digest"]);
     if (item === null || schema === null || schema.kind !== "JSON_SCHEMA" || !isDigest(schema.digest) ||
-      !isRef(item.predicateRef) || !isRef(item.schemaId) || !isVersion(item.schemaVersion) ||
+      !isRef(item.predicateRef) || !isRef(item.schemaId) || !isSafeCount(item.schemaVersion) ||
       !oneOf(item.sourceOperationClass, OPERATIONS) || !isRef(item.proofRationale)) return null;
     const key = JSON.stringify([item.predicateRef, item.schemaId, item.schemaVersion]);
     if (seen.has(key)) return null; seen.add(key);
@@ -204,7 +191,7 @@ function parseContract(value: unknown): DependencyContract | null {
   if (!isGraphKey(item.producerNodeKey) || !isGraphKey(item.consumerNodeKey) || !oneOf(item.edgeKind, HARD_DEPENDENCY_KINDS) ||
     !isDigest(item.graphBindingDigest) || producer === null || consumer === null || consumer.kind !== "PRECONDITION" ||
     !isRef(consumer.criterionRef) || !isDigest(consumer.contractHash) || !oneOf(item.minimumQualifyingMilestone, MILESTONES) ||
-    predicate === null || !isRef(predicate.predicateRef) || !isRef(predicate.schemaId) || !isVersion(predicate.schemaVersion) || !isDigest(predicate.parametersDigest) ||
+    predicate === null || !isRef(predicate.predicateRef) || !isRef(predicate.schemaId) || !isSafeCount(predicate.schemaVersion) || !isDigest(predicate.parametersDigest) ||
     !oneOf(item.stability, ["MONOTONIC", "REVOCABLE"] as const) || witnesses === null || !oneOf(item.consumptionHorizon, DEPENDENCY_GATES) ||
     necessity === null || !isRef(necessity.failedConsumerCriterionRef) || !oneOf(necessity.failureKind, ["MISSING_ARTIFACT", "PRECONDITION_FALSE", "SCOPE_CONFLICT", "POLICY_VIOLATION"] as const) ||
     !oneOf(necessity.truthClass, TRUTH_CLASSES) || alternative === null || alternates === null || !alternates.every(isGraphKey) ||

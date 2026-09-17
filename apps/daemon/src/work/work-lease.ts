@@ -1,5 +1,6 @@
 import { fenceAuthority } from "@moe/scheduler";
 
+import { isRecord } from "../value-primitives.js";
 import { refused, workFailure } from "./work-kernel.js";
 import type { WorkFailure, WorkResult } from "./work-kernel.js";
 
@@ -13,10 +14,6 @@ import type { WorkFailure, WorkResult } from "./work-kernel.js";
  * requires stale-token and stale-epoch to be separately assertable. The
  * upstream code is preserved verbatim on every failure.
  */
-
-export function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 export function classifyLeaseRejection(
   issues: readonly { readonly code: string; readonly message: string }[],

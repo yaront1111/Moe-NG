@@ -138,7 +138,7 @@ interface RejectionFacts {
  * THE RUN'S NEW RECORD, not merely the decision's five facts.
  *
  * An aggregate's durable record IS the last committed decision result that targets it
- * (`bootstrap-ledger.ts:97-116`, `stateOf` at :149-153) — there is no separate state projection.
+ * (`bootstrap-ledger.ts:91-110`, `stateOf` at :141-145) — there is no separate state projection.
  * The rejection's primary leg targets the RUN, so committing the decision facts ALONE would
  * REPLACE the sealed run record with a stateless one: `readApprovalIntentSources`,
  * `verifyApprovedRunBinding`, `readPlanningRun` and `planReviewable` would all see a run with no

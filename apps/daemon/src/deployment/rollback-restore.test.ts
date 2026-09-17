@@ -19,8 +19,7 @@ import { deployReceiptId } from "./deploy-receipt-contracts.js";
 import { DEPLOY_MIGRATION_DATABASE_VARIABLE } from "./deploy-migration-context.js";
 import { MIGRATION_RECEIPT_VERSION, migrationReceiptId } from "../repository/migrations/migration-receipt.js";
 import {
-  ROLLBACK_RESTORE_DETAILS, ROLLBACK_RESTORE_STAMP, applyResolvedRestore, applyRollbackRestore,
-  resolveRollbackRestore,
+  ROLLBACK_RESTORE_DETAILS, ROLLBACK_RESTORE_STAMP, applyResolvedRestore, resolveRollbackRestore,
 } from "./rollback-restore.js";
 import type { RollbackRestoreConfig, RollbackRestoreResult } from "./rollback-restore.js";
 
@@ -186,6 +185,14 @@ function refusalOf(result: RollbackRestoreResult): { code: string; detail: strin
   return { code: result.code, detail: result.detail, layer: result.layer };
 }
 
+/** Both halves through one entry, resolve THEN apply, so every refusal lands before the port moves. */
+async function applyRollbackRestore(
+  config: RollbackRestoreConfig, environment: string, ports: RecordingPorts,
+): Promise<RollbackRestoreResult> {
+  const resolved = await resolveRollbackRestore(config, environment);
+  return resolved.ok ? applyResolvedRestore(resolved, ports) : resolved;
+}
+
 describe("applyRollbackRestore", () => {
   it("(a) applies the CURRENT deploy's pre-migration dump, never the kept receipt's own", async () => {
     const f = await fixture();
@@ -320,8 +327,8 @@ describe("applyRollbackRestore", () => {
     }
 
     // DURABLE, SURVIVES THE COMMIT: the module has no `process.env` read to be tricked into, and
-    // no request payload reaches it — `applyRollbackRestore` takes an ALREADY-ADMITTED environment
-    // NAME and a port, and there is no third place a caller-supplied URL could enter.
+    // no request payload reaches it — its two halves take an ALREADY-ADMITTED environment NAME
+    // and a port, and there is no third place a caller-supplied URL could enter.
     const source = readFileSync(fileURLToPath(new URL("./rollback-restore.ts", import.meta.url)), "utf8");
     // CODE-SHAPED, NOT PROSE-SHAPED. The module's own header names `process.env` and "request
     // payload" as the two sources it refuses to use, so a bare identifier match would red on the
@@ -437,8 +444,8 @@ CREATE TABLE ${deploy.name.slice(0, 1)}();
  * The reason these are their own arms rather than a refactor covered by the composition's: the
  * command now calls the halves at two different points in its lifecycle, with a durable commit in
  * between. "The read half moves nothing" and "the effect half moves it once" are the two facts
- * that ordering depends on, and neither is observable through `applyRollbackRestore`, which always
- * does both.
+ * that ordering depends on, and neither is observable through this file's `applyRollbackRestore`
+ * helper, which always does both.
  */
 describe("resolveRollbackRestore / applyResolvedRestore", () => {
   it("(g) resolves destination AND dump with a WIRED port in hand, and calls it ZERO times", async () => {

@@ -63,7 +63,6 @@ export const NODE_BRIEF_PRODUCER_CODES = Object.freeze([
   "NODE_MISSION_OBJECTIVE_UNUSABLE",
   "NODE_MISSION_REQUEST_MALFORMED",
   "NODE_MISSION_TEST_UNAVAILABLE",
-  "NODE_MISSION_WORKSPACE_DISAGREEMENT",
   "NODE_MISSION_WORKSPACE_UNAVAILABLE",
 ] as const);
 export type NodeBriefProducerCode = (typeof NODE_BRIEF_PRODUCER_CODES)[number];
@@ -105,11 +104,6 @@ export interface NodeBriefAccepted {
   readonly revisionId: string;
 }
 export type NodeBriefResult = NodeBriefAccepted | NodeBriefRefusal;
-export interface NodeBriefWorkspaceAdmitted {
-  readonly ok: true;
-  readonly workspace: string;
-}
-export type NodeBriefWorkspaceResult = NodeBriefWorkspaceAdmitted | NodeBriefRefusal;
 export interface NodeBriefDeps {
   /** Host-scoped process configuration. Only ITS reader opens a path; this module never does. */
   readonly catalog: VerificationCatalogReader;
@@ -224,27 +218,4 @@ export function produceNodeBrief(
     ok: true as const,
     revisionId: closure.revisionId,
   });
-}
-
-/**
- * The brief's `workspace` MAY ONLY REFUSE, NEVER SELECT (the workspace ruling's condition 2).
- *
- * At produce time `workspace` is the PROPOSAL the repository-scope authority supplied. The
- * AUTHORITATIVE physical root is the committed capture assignment's, overlaid exactly as the
- * sibling field `cwd` already is in production — so this seam returns the ASSIGNMENT'S value on
- * every accepted path and the proposal's on none. Its only power is to refuse, and a proposal
- * nothing checks is a field asserting nothing, so disagreement is a stable code, not a discard.
- */
-export function admitBriefWorkspace(
-  proposal: string,
-  assignmentRoot: string,
-): NodeBriefWorkspaceResult {
-  if (!isRef(proposal) || !isRef(assignmentRoot)) {
-    return refuse("NODE_MISSION_WORKSPACE_UNAVAILABLE", "a workspace needs both roots named");
-  }
-  if (proposal !== assignmentRoot) {
-    return refuse("NODE_MISSION_WORKSPACE_DISAGREEMENT",
-      "the proposed workspace is not the committed assignment root");
-  }
-  return Object.freeze({ ok: true as const, workspace: assignmentRoot });
 }

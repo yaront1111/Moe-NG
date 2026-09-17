@@ -11,6 +11,7 @@ import { readDurableLedger, stateOf } from "../bootstrap/bootstrap-ledger.js";
 import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { GOAL_CREATED_EVENT_TYPE, decodeGoalCatalogEntry } from "./goal-catalog-entry.js";
 import { decisionsOf } from "../decision-ledger-memo.js";
+import { dataRecord } from "../json-record-shape.js";
 
 const MAX_GOAL_PAGES = 16;
 const GOAL_PAGE_SIZE = 256;
@@ -23,10 +24,6 @@ export interface BoundGoalRow {
   readonly sha: string;
   readonly title: string | null;
 }
-
-const dataRecord = (value: unknown): Readonly<Record<string, unknown>> | null =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
-    ? value as Readonly<Record<string, unknown>> : null;
 
 /**
  * Every source-bound goal in the catalog, or null when a GoalCreated row does not decode or

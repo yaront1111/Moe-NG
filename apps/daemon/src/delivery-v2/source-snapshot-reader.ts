@@ -10,10 +10,8 @@ import {
 } from "@moe/core";
 import { DurableStoreError, identifyCorrelation, type SqliteEventStore } from "@moe/store";
 
-import {
-  DELIVERY_V2_READER_LAYER,
-  type DeliveryV2Refusal,
-} from "./contracts.js";
+import type { DeliveryV2Refusal } from "./contracts.js";
+import { refuseDeliveryV2InertRead as refuse } from "./inert-record-admission.js";
 import { admitDeliveryV2MaterialPublisherPrincipalId } from
   "./material-publisher-admission.js";
 import {
@@ -38,11 +36,6 @@ export type DeliveryV2SourceSnapshotReadResult =
   | DeliveryV2SourceSnapshotReadAccepted
   | DeliveryV2Refusal
   | SourceSnapshotRefusal;
-
-const refuse = (
-  code: DeliveryV2Refusal["code"],
-  layer: DeliveryV2Refusal["layer"] = DELIVERY_V2_READER_LAYER,
-): DeliveryV2Refusal => Object.freeze({ code, layer, ok: false as const });
 
 const storageRefusal = (error: unknown): DeliveryV2Refusal => error instanceof DurableStoreError
   ? refuse(error.code, "DURABLE_STORE")

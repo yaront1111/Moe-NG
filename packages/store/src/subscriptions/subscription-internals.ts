@@ -139,27 +139,6 @@ export function inTransactionOrExisting<Result>(
     : inTransaction(database, run);
 }
 
-/**
- * Every read that feeds one decision must come from ONE snapshot. Two plain SELECTs can
- * straddle a concurrent advanceGeneration and show a generation from after it beside a
- * baseline from before it, which would look exactly like durable corruption. Reuses the
- * caller's transaction when there already is one, so this never nests.
- */
-export function inReadSnapshot<Result>(database: DatabaseSync, run: () => Result): Result {
-  if (database.isTransaction) {
-    return run();
-  }
-  database.exec("BEGIN DEFERRED");
-  try {
-    const result = run();
-    database.exec("COMMIT");
-    return result;
-  } catch (error) {
-    rollback(database, error);
-    throw error;
-  }
-}
-
 export function currentGeneration(database: DatabaseSync): number | null {
   const value = database
     .prepare("SELECT MAX(generation) AS generation FROM cursor_generations").get()?.["generation"];

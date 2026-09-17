@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { canonicalDigest } from "../canonical.js";
 import { upgradeDisposition } from "./drain-disposition.js";
-import { admitPostActivationMutation } from "./drain-fence.js";
 import { resolveDrainRow } from "./drain-reconciliation.js";
 import { resolveDuplicateDelivery } from "./duplicate-delivery.js";
 import { activateEffect } from "./effect-activation.js";
@@ -132,7 +131,6 @@ function runtimeRefusals(): ReadonlyArray<readonly [string, unknown]> {
         "GOAL_CANCEL",
       ),
     ],
-    ["DRAIN_POST_ACTIVATION_MUTATION_REFUSED", admitPostActivationMutation("DRAINING", "step.start")],
     ["RESTART_RECORDS_INCOHERENT", reconstructAfterRestart({})],
     [
       "RESTART_PREMATURE_TERMINAL",

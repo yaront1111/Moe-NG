@@ -6,6 +6,7 @@
 
 import { repositoryReservationOf } from "./live-repository-reservation.js";
 import type { RepositoryReservationView } from "./live-repository-reservation.js";
+import { exactDataRecord, listOf } from "./live-wire-primitives.js";
 
 const LIVE_OPS_LAYER = "CONTROL_ROOM_LIVE_OPS";
 const INVALID_RESPONSE_CODE = "OPS_RESPONSE_INVALID";
@@ -92,29 +93,6 @@ const refused = (code: string, layer: string): Refusal => Object.freeze({ code, 
 const errored = (code: string, layer: string): Failure => Object.freeze({ code, layer, status: "ERROR" as const });
 const invalidResponse = (): Failure => errored(INVALID_RESPONSE_CODE, LIVE_OPS_LAYER);
 
-/** An own-enumerable EXACT-key snapshot (copied verbatim from live-planning-run.ts). */
-function exactDataRecord(
-  value: unknown, expectedKeys: readonly string[],
-): Readonly<Record<string, unknown>> | null {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return null;
-  try {
-    const prototype = Object.getPrototypeOf(value);
-    if (prototype !== Object.prototype && prototype !== null) return null;
-    const keys = Reflect.ownKeys(value);
-    if (keys.length !== expectedKeys.length
-      || keys.some((key) => typeof key !== "string" || !expectedKeys.includes(key))) return null;
-    const snapshot: Record<string, unknown> = Object.create(null) as Record<string, unknown>;
-    for (const key of expectedKeys) {
-      const descriptor = Object.getOwnPropertyDescriptor(value, key);
-      if (descriptor === undefined || !descriptor.enumerable || !("value" in descriptor)) return null;
-      snapshot[key] = descriptor.value;
-    }
-    return Object.freeze(snapshot);
-  } catch {
-    return null;
-  }
-}
-
 function refusalFrom(response: unknown): Refusal | null {
   const listener = exactDataRecord(response, ["code", "layer"]);
   if (listener !== null && typeof listener.code === "string" && typeof listener.layer === "string") {
@@ -185,17 +163,6 @@ function evaluationOf(value: unknown): PolicyEvaluationView | null {
   return Object.freeze({
     decidedAt: record.decidedAt, decision: record.decision, policyRef: record.policyRef, principalId: record.principalId,
   });
-}
-
-function listOf<T>(value: unknown, itemOf: (item: unknown) => T | null): readonly T[] | null {
-  if (!Array.isArray(value)) return null;
-  const items: T[] = [];
-  for (const raw of value) {
-    const item = itemOf(raw);
-    if (item === null) return null;
-    items.push(item);
-  }
-  return Object.freeze(items);
 }
 
 export function mapPolicyAnswer(status: number, response: unknown): PolicyOutcome {

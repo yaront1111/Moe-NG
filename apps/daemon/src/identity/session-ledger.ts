@@ -1,4 +1,4 @@
-import type { JsonObject, JsonValue, RuntimeError } from "@moe/contracts";
+import type { JsonValue, RuntimeError } from "@moe/contracts";
 import { identifyReplayRequest } from "@moe/store";
 import type {
   CommandDecisionKey,
@@ -17,6 +17,7 @@ import type {
 import type { SessionLedger } from "./session-read-model.js";
 
 /** Re-exported so a handler imports its whole composition surface from one module. */
+export { payloadRef } from "../json-record-shape.js";
 export { readSessionLedger } from "./session-read-model.js";
 export type { SessionLedger, SessionRecord } from "./session-read-model.js";
 
@@ -209,9 +210,4 @@ export function replayOf(store: SqliteEventStore, request: SessionRequest): Sess
     kind: request.kind,
     ok: true as const,
   });
-}
-
-export function payloadRef(payload: JsonObject, key: string): string | null {
-  const value = payload[key];
-  return typeof value === "string" && value.length > 0 ? value : null;
 }

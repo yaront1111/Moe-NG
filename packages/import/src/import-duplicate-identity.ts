@@ -1,6 +1,6 @@
 import { canonicalJson } from "./canonical-bytes.js";
 import { canonicalPayload } from "./import-canonical.js";
-import { AMBIGUITY_OUTCOME } from "./import-contract.js";
+import { reconciliationFinding } from "./import-contract.js";
 import type { ReconciliationFinding } from "./import-contract.js";
 import type { ReconcileEntry } from "./import-reconcile.js";
 
@@ -48,13 +48,12 @@ export function duplicateIdentityFindings(
     // imported id, so repeating the identical finding would add noise, not information.
     if (first === canonical || reported.has(key)) continue;
     reported.add(key);
-    found.push(Object.freeze({
-      ambiguityClass: "DUPLICATE_IDENTITY" as const,
-      detail: `record ${entry.record.legacyId} appears more than once in `
+    found.push(reconciliationFinding(
+      "DUPLICATE_IDENTITY",
+      entry.provenance,
+      `record ${entry.record.legacyId} appears more than once in `
         + `${entry.record.sourcePath} with conflicting payloads; all would import onto one id`,
-      outcome: AMBIGUITY_OUTCOME,
-      provenance: entry.provenance,
-    }));
+    ));
   }
   return found;
 }

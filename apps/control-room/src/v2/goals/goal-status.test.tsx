@@ -1,17 +1,9 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import type { SurfaceFrame, SurfaceStep } from "../../live/live-board-feed.js";
 import type { DocumentCoverageOutcome } from "../../live/live-document-coverage.js";
-import { ProviderPauseProvider } from "../shell/pause-context.js";
 import type { ProviderPause } from "../shell/pause-context.js";
 import { deriveGoalStatus } from "./goal-status.js";
-import { GoalStatusStrip, LiveGoalStatus } from "./goal-status-strip.js";
-
-beforeAll(() => {
-  (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
-});
-afterEach(cleanup);
 
 const GOAL = "goal-1";
 const RUN = "run-1";
@@ -297,67 +289,5 @@ describe("deriveGoalStatus", () => {
     const both = surface([{ commandKind: "approval.decide_intent", targetAggregateId: RUN }], [node("n1", "READY")]);
     expect(deriveGoalStatus({ coverage: coverage({ gate1: "PENDING" }), goalId: GOAL, runId: RUN, surface: both }).stage).toBe("CONTRACT");
     expect(deriveGoalStatus({ coverage: coverage(), goalId: GOAL, runId: RUN, surface: both }).stage).toBe("PLAN");
-  });
-});
-
-describe("GoalStatusStrip", () => {
-  it("shows the stage, the headline, the facts and a link to the next step's section", () => {
-    const working = surface([], [node("n1", "COMMITTED"), node("n2", "READY")]);
-    render(<GoalStatusStrip status={deriveGoalStatus({ coverage: coverage(), goalId: GOAL, runId: RUN, surface: working })} />);
-    expect(screen.getByTestId("cr.goalstatus.stage").textContent).toBe("Agents working");
-    expect(screen.getByTestId("cr.goalstatus.facts").textContent).toBe("2 of 4 criteria verified · 1 of 2 nodes accepted");
-    expect(screen.getByTestId("cr.goalstatus.next").getAttribute("href")).toBe("#cr-goal-board");
-    expect(screen.getByTestId("cr.goalstatus.root").getAttribute("data-stage")).toBe("WORKING");
-  });
-
-  it("renders the build-order sentence in the detail an operator reads, and no live region announces it", () => {
-    const queued = surface([], [
-      node("n1", "COMMITTED"), node("n2", "BLOCKED", { missing: ["depends:n1"] }), node("n3", "BLOCKED", { missing: ["depends:n2"] }),
-    ]);
-    const { container } = render(
-      <GoalStatusStrip status={deriveGoalStatus({ coverage: coverage({ nodeKeys: THREE }), goalId: GOAL, runId: RUN, surface: queued })} />,
-    );
-    expect(screen.getByTestId("cr.goalstatus.detail").textContent)
-      .toBe("2 nodes are waiting for n1 and n2 to be accepted first; 0 nodes are claimed right now. Nothing needs you until a review is exhausted.");
-    expect(screen.getByTestId("cr.goalstatus.headline").textContent).toBe("Agents are working: 1 of 3 nodes accepted.");
-    expect(screen.getByTestId("cr.goalstatus.facts").textContent).toBe("2 of 4 criteria verified · 1 of 3 nodes accepted");
-    // The strip re-derives on every 5s poll, so an aria-live region here would announce the same
-    // sentence forever (the finding PR #26's review raised). The counter stays static text.
-    expect(container.querySelectorAll("[aria-live]")).toHaveLength(0);
-  });
-
-  it("renders no fact line at all when there is no coverage and no nodes", () => {
-    render(<GoalStatusStrip status={deriveGoalStatus({ coverage: null, goalId: GOAL, runId: RUN, surface: null })} />);
-    expect(screen.queryByTestId("cr.goalstatus.facts")).toBeNull();
-    expect(screen.getByTestId("cr.goalstatus.stage").textContent).toBe("Reading");
-    expect(screen.getByTestId("cr.goalstatus.detail").textContent).toBe("The coverage and the board are still being read.");
-  });
-});
-
-describe("LiveGoalStatus", () => {
-  it("reads the opened goal's coverage through the page's reader and derives from the shared surface", async () => {
-    const read = vi.fn(async (_goalId: string) => coverage({ gate1: "PENDING" }));
-    render(<LiveGoalStatus goalId={GOAL} pollMs={60_000} read={read} runId={RUN} surface={null} />);
-    expect((await screen.findByTestId("cr.goalstatus.stage")).textContent).toBe("Contract at Gate 1");
-    expect(read).toHaveBeenCalledWith(GOAL);
-  });
-
-  it("takes the pause from the shell's context and derives the waiting next step from it", async () => {
-    const read = async (): Promise<DocumentCoverageOutcome> => coverage();
-    const working = surface([], WORKING_STEPS);
-    render(
-      <ProviderPauseProvider value={PAUSE}>
-        <LiveGoalStatus goalId={GOAL} pollMs={60_000} read={read} runId={RUN} surface={working} />
-      </ProviderPauseProvider>,
-    );
-    // findByTEXT, not findByTestId: the element exists from the first paint holding the
-    // UNKNOWN stage's "Wait", so a testid lookup would settle before the coverage lands.
-    await screen.findByText(WAITING);
-    expect(screen.getByTestId("cr.goalstatus.next").textContent).toBe(WAITING);
-    cleanup();
-    // No provider above it: the strip says what it says today.
-    render(<LiveGoalStatus goalId={GOAL} pollMs={60_000} read={read} runId={RUN} surface={working} />);
-    await screen.findByText("Watch the board");
-    expect(screen.getByTestId("cr.goalstatus.next").textContent).toBe("Watch the board");
   });
 });

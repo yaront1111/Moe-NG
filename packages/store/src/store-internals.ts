@@ -2,7 +2,6 @@ import type {
   COMMAND_EFFECT_IDENTITY_VERSION,
   CommandDecisionKey,
   CommandDecisionRecord,
-  CommitExpectedVersionDecisionInput,
 } from "./store-contracts.js";
 
 export const SCHEMA_VERSION = 7;
@@ -139,5 +138,3 @@ export interface RejectionAuditPayloadInput {
   readonly requestSha256: string;
   readonly targetAggregateId: string;
 }
-
-export type ExpectedVersionDecisionInputRecord = CommitExpectedVersionDecisionInput & DataRecord;

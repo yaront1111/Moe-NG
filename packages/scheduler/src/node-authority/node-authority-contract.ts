@@ -32,6 +32,7 @@ import type {
   DependencyContract, DependencyIssueCode, MonotonicPredicateRegistryEntry,
 } from "../dependencies/dependency-contract.js";
 import type { AdmissionAmount, AdmissionGate } from "../budget/budget-reservation.js";
+import { compareStrings } from "../kernel-primitives.js";
 
 /** The wire tag; separate from the digest domain so the two rotate apart. */
 export const NODE_AUTHORITY_SCHEMA_TAG = "MOE-NODE-AUTHORITY/3";
@@ -237,9 +238,7 @@ export function passthrough(
 }
 /** Code-unit comparison, never `localeCompare`: design 255 requires the canonical
  * order to be locale-independent, and collation is the locale-dependent operation. */
-export function compareStrings(left: string, right: string): number {
-  return left < right ? -1 : left > right ? 1 : 0;
-}
+export { compareStrings } from "../kernel-primitives.js";
 export function deepFreeze<T>(value: T): T {
   if (value === null || typeof value !== "object" || ArrayBuffer.isView(value)) return value;
   Object.freeze(value);

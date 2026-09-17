@@ -4,7 +4,7 @@
  * `expansion-request-commit.ts`; this module never writes.
  *
  * WHY THE SECONDARY LEG IS READ FROM STORE EVENTS. `readDurableLedger` materialises only the
- * PRIMARY leg's decision target (`bootstrap-ledger.ts:203-224` records `decision.targetAggregateId`
+ * PRIMARY leg's decision target (`bootstrap-ledger.ts:197-218` records `decision.targetAggregateId`
  * and nothing else), so a `stateOf` lookup of the run aggregate returns `undefined` AFTER a
  * successful two-leg commit. A reader built on it would report a permanent one-sided SPLIT for
  * every healthy pair. Both legs are therefore read through `SqliteEventStore.readEvents`.

@@ -43,6 +43,8 @@ const SERVER_OWNED_ENVIRONMENT = new Set([
   "MOE_NODE_WORKSPACE",
   // Measured by the opener from the CLI's attached console; never taken from a caller.
   "MOE_OPERATOR_CHANNEL",
+  // Bound by the opener to the catalog the manager itself loads; a caller cannot redirect it.
+  "MOE_PROJECT_CATALOG",
   "MOE_PROJECT_ID",
   "MOE_PROJECT_INSTANCE_ID",
   "MOE_STORE_PATH",

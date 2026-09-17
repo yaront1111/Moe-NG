@@ -78,8 +78,6 @@ const READER_CODES = Object.freeze([
 export const FOUNDATION_CAPTURE_CONTEXT_LEDGER_CODES = Object.freeze([
   ...WRITER_CODES, ...READER_CODES,
 ] as const);
-export type FoundationCaptureContextLedgerCode =
-  (typeof FOUNDATION_CAPTURE_CONTEXT_LEDGER_CODES)[number];
 type WriterCode = (typeof WRITER_CODES)[number];
 type ReaderCode = (typeof READER_CODES)[number];
 

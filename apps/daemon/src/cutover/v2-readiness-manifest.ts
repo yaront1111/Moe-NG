@@ -4,6 +4,8 @@ import { decodeBoundedJsonBytes } from "@moe/contracts";
 import { SQLITE_SCHEMA_MANIFEST_VERSION } from "@moe/store";
 import type { StoredEvent } from "@moe/store";
 
+import { sameBytes } from "../byte-equality.js";
+import { exactKeys } from "./cutover-shape.js";
 import { V2_SURFACE_MANIFEST_SHA256 } from "./v2-surface-manifest.js";
 
 export const V2_READINESS_MANIFEST_SCHEMA_VERSION = "moe-v2-readiness-manifest/1" as const;
@@ -89,15 +91,6 @@ function refuse(code: V2ReadinessManifestCode): V2ReadinessManifestRefused {
   return Object.freeze({ code, layer: V2_READINESS_MANIFEST_LAYER, ok: false as const });
 }
 
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
-}
-
-function exactKeys(value: unknown, keys: readonly string[]): value is Readonly<Record<string, unknown>> {
-  return isRecord(value) && Object.keys(value).length === keys.length
-    && keys.every((key) => Object.hasOwn(value, key));
-}
-
 const HEX64 = /^[0-9a-f]{64}$/u;
 const COMMIT40 = /^[0-9a-f]{40}$/u;
 const DIGEST_KEYS = V2_READINESS_MANIFEST_KEYS.filter((key) => key.endsWith("Sha256")
@@ -127,10 +120,6 @@ export function encodeV2ReadinessManifest(manifest: V2ReadinessManifest): Uint8A
 
 export function digestV2ReadinessManifest(manifest: V2ReadinessManifest): string {
   return createHash("sha256").update(encodeV2ReadinessManifest(manifest)).digest("hex");
-}
-
-function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
-  return left.byteLength === right.byteLength && left.every((byte, index) => byte === right[index]);
 }
 
 /**
