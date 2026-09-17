@@ -198,6 +198,47 @@ describe("paired HUMAN principal at the operator fence", () => {
 });
 
 /**
+ * `goal.cancel` — the paired-human widening added 2026-09-17 so a stuck product can be
+ * ABANDONED from the browser.
+ *
+ * WHAT THIS FIXES. The control room's "Abandon" card dispatches `goal.cancel` from the paired
+ * browser session. Before the widening, every click refused 403 OPERATOR_PRINCIPAL_REQUIRED
+ * though the daemon had OFFERED the command — measured live on UnAI, where three products sat
+ * stuck at 0/150 verified with no way to clear them. Abandoning a goal one owns is a paired
+ * human's own act, the same class as answering a clarification or choosing the agent provider.
+ *
+ * WHY THE FENCE IS THE ONLY AUTHORITY THAT CAN ANSWER HERE. `goal.cancel`'s
+ * `requiredCapability` is `GOAL`, which `OPERATOR_CAPABILITIES` holds, so the ingress
+ * capability gate passes for the paired session and the operator fence is reached in
+ * production order. The paired HUMAN's arm therefore proves fence-PASSAGE (a downstream
+ * refusal answers, never `DAEMON_AUTHORIZATION`), and the scoped-session arm is the drill
+ * anchor: dropping `goal.cancel` from the widening reddens the first, widening it to any
+ * minted session reddens the second.
+ */
+describe("paired HUMAN principal may abandon a stuck product (goal.cancel)", () => {
+  it("admits the paired HUMAN session past the fence on goal.cancel", () => {
+    // Past the fence the goal ingress answers with its OWN refusal (the prerequisite or the
+    // absent goalId, a downstream stage); WHICH one is the goal ingress's business, not this
+    // fence's. The claim is only that the operator fence no longer answers.
+    const refused = refusalOf(send("cmd-human-goal-cancel", "goal.cancel", {}, PAIRED_CREDENTIAL));
+    expect(refused.code).not.toBe("OPERATOR_PRINCIPAL_REQUIRED");
+    expect(refused.layer).not.toBe("DAEMON_AUTHORIZATION");
+  });
+
+  it("keeps a scoped non-HUMAN session behind the fence on goal.cancel (the drill anchor)", () => {
+    // A scoped agent session is exactly the browser that never paired: capabilities cannot buy
+    // it past the fence, so the refusal is the fence's own code and layer, before any handler.
+    const secret = openScopedSession(
+      "cmd-open-scoped-cancel", "sess-scoped-agent-cancel", "secret-scoped-agent-cancel",
+      [CAPABILITIES.GOAL, CAPABILITIES.WORK],
+    );
+    expect(refusalOf(send("cmd-agent-goal-cancel", "goal.cancel", {}, secret))).toEqual({
+      code: "OPERATOR_PRINCIPAL_REQUIRED", httpStatus: 403, layer: "DAEMON_AUTHORIZATION",
+    });
+  });
+});
+
+/**
  * Recomputed OUT OF BAND against the landed policy-waiver contract and written here as
  * literals, so a drifted derivation reddens against a constant rather than against itself.
  */
@@ -346,7 +387,10 @@ describe("SOFT_POLICY_WAIVER over the real HTTP ingress", () => {
     const expectedExclusions: readonly string[] = Object.freeze([
       "project.set_agent_provider",
       "criterion_check.approve", "criterion_check.verify", "repository.recover",
-      "approval.decide", "approval.decide_intent", "cutover.activate", "escalation.decide", "goal.close",
+      "approval.decide", "approval.decide_intent", "cutover.activate", "escalation.decide",
+      // Abandoning a stuck product is the operator's act, so writing it over MCP is never
+      // reachable — derived from OPERATOR_PRINCIPAL_KINDS like the rest, never typed here.
+      "goal.cancel", "goal.close",
       "graph.approve", "graph.supersede", "integration.accept_output", "preview.decide",
       "product_contract.answer_clarification", "repository.publish", "resource.confirm_released",
       // Landed by task-a2409cba: writing a production secret is never reachable over MCP.
@@ -372,8 +416,8 @@ describe("SOFT_POLICY_WAIVER over the real HTTP ingress", () => {
       // the exclusion followed by derivation with no edit to the production array.
       "monitoring.retire_environment",
     ]);
-    expect(expectedExclusions).toHaveLength(28);
-    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(28);
+    expect(expectedExclusions).toHaveLength(29);
+    expect(MCP_EXCLUDED_COMMAND_KINDS).toHaveLength(29);
     expect([...MCP_EXCLUDED_COMMAND_KINDS].sort()).toEqual([...expectedExclusions].sort());
     // Direction 1: the production registry SERVES the kind this branch composes into.
     expect(deps.registry.has("approval.decide")).toBe(true);

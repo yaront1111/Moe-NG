@@ -416,28 +416,49 @@ export function createDaemonCommandPorts(options: DaemonCommandPortOptions): Dae
       const byGovernance = kind === "escalation.decide"
         && principal.principalId === GOVERNANCE_PRINCIPAL_ID
         && governanceOpen(options.governance);
+      // The widening is by KIND and never by seat: a session the operator approved
+      // at pairing (durable HUMAN principal, minted under the id it
+      // authenticates as) may dispatch the intent wire, ANSWER a material
+      // clarification, ABANDON a goal it owns, and -- holding ADMIN -- choose the
+      // agent provider; all are the paired human's own acts on the browser.
+      // `goal.cancel` was added 2026-09-17: its "Abandon the product" card is a
+      // paired human's own act, and without this widening every click from a paired
+      // browser session refused OPERATOR_PRINCIPAL_REQUIRED though the daemon offered
+      // the command (measured live on UnAI). (`goal.close` is NOT here yet and its
+      // Close card has the same gap -- a separate owner call.)
+      // Trustworthy on principal identity alone only while each kind stays
+      // MCP-excluded — same contract as `approval.decide` (comment-4d026de3);
+      // operator ruling comment-18dc557c. `MCP_EXCLUDED_COMMAND_KINDS` is DERIVED
+      // from `OPERATOR_PRINCIPAL_KINDS`, so widening HERE is the narrow instrument
+      // and editing that roster would silently open the MCP fence too.
+      const pairedHumanKind = approvalIntent || criterion || kind === "repository.publish"
+        || kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND
+        || kind === "escalation.decide"
+        || kind === "goal.cancel"
+        || providerByPairedAdmin;
       if (OPERATOR_PRINCIPAL_KINDS.has(kind)
         && principal.principalId !== operatorPrincipalId
         && !byGovernance
-        // The widening is by KIND and never by seat: a session the operator approved
-        // at pairing (durable HUMAN principal, minted under the id it
-        // authenticates as) may dispatch the intent wire, ANSWER a material
-        // clarification, and -- holding ADMIN -- choose the agent provider; all are
-        // the paired human's own acts on the browser.
-        // Trustworthy on principal identity alone only while each kind stays
-        // MCP-excluded — same contract as `approval.decide` (comment-4d026de3);
-        // operator ruling comment-18dc557c. `MCP_EXCLUDED_COMMAND_KINDS` is DERIVED
-        // from `OPERATOR_PRINCIPAL_KINDS`, so widening HERE is the narrow instrument
-        // and editing that roster would silently open the MCP fence too.
-        && !((approvalIntent || criterion || kind === "repository.publish"
-          || kind === PRODUCT_CONTRACT_ANSWER_CLARIFICATION_COMMAND_KIND
-          || kind === "escalation.decide"
-          || providerByPairedAdmin)
-          && isDurableHumanPrincipal(store, principal.principalId))) {
+        && !(pairedHumanKind && isDurableHumanPrincipal(store, principal.principalId))) {
+        // An opaque 403 is exactly what made this un-diagnosable in the field, so name the
+        // kind, the principal, and WHICH path it failed. This reaches the daemon's own
+        // stdout/stderr (the wrapper log), never the browser.
+        const durableHuman = isDurableHumanPrincipal(store, principal.principalId);
+        process.stderr.write(
+          `[authorization] OPERATOR_PRINCIPAL_REQUIRED: ${kind} refused for principal `
+          + `${principal.principalId} (isOperator=false, durableHuman=${String(durableHuman)}, `
+          + `pairedHumanKind=${String(pairedHumanKind)})\n`,
+        );
         throw new DomainRefusal(
           "OPERATOR_PRINCIPAL_REQUIRED",
           "DAEMON_AUTHORIZATION",
-          "this command requires the configured operator principal",
+          // The message is a diagnostic the operator reads in the control room's "Details".
+          durableHuman
+            ? `${kind} is not among the actions a paired browser session may take; it needs the`
+              + ` configured operator principal (the terminal that ran 'moe start').`
+            : `${kind} needs the operator. This session is not the configured operator, and its`
+              + ` principal is not a session paired in the control room. Pair this browser (click`
+              + ` Pair this, then type the confirmation label into the 'moe start' window) and retry.`,
           403,
         );
       }
