@@ -7,10 +7,9 @@ import { prepareRuntimeMetadataExcludes } from "../repository/runtime-metadata-e
 import { parseCliArgv } from "./moe-cli-argv.js";
 import type { CliInit, CliRecoverReview, CliRecoverReplan, CliStart } from "./moe-cli-argv.js";
 import { isMainModule } from "./moe-cli-entry.js";
-import { WORKSPACE_LINK_FILENAME, ensureWorkspaceLinks } from "./moe-cli-links.js";
+import { MOE_CLI_CONFIG_ABSENT, preparePackagedLinks, readConfig } from "./moe-cli-project.js";
 import {
-  MOE_CONFIG_FILENAME, MOE_INIT_CONFIG_PRESENT, checkNodeVersion, cryptoRandomHex,
-  parseMoeConfig, planInit,
+  MOE_CONFIG_FILENAME, MOE_INIT_CONFIG_PRESENT, checkNodeVersion, cryptoRandomHex, planInit,
 } from "./moe-init.js";
 import type { InitProbe, MoeConfig } from "./moe-init.js";
 
@@ -23,8 +22,8 @@ import type { InitProbe, MoeConfig } from "./moe-init.js";
  * is the repository checkout's dev composer and is not on this path.)
  */
 
-/** `start` was pointed at a directory `init` has never run in. */
-export const MOE_CLI_CONFIG_ABSENT = "MOE_CLI_CONFIG_ABSENT" as const;
+/** Re-exported: it was declared here before `moe mcp` needed the same reader. */
+export { MOE_CLI_CONFIG_ABSENT };
 /** The target directory could not be created at all. */
 export const MOE_CLI_TARGET_UNUSABLE = "MOE_CLI_TARGET_UNUSABLE" as const;
 
@@ -158,43 +157,6 @@ async function runInit(invocation: CliInit, io: CliIo): Promise<number> {
   return 0;
 }
 
-/**
- * Exported for `moe mcp`, which reads the same config but must never write to
- * stdout: it passes an `io` whose `log` is the diagnostic sink. One reader, one
- * set of refusal codes, two destinations.
- */
-export function readConfig(targetDir: string, io: CliIo): MoeConfig | null {
-  const configPath = resolve(targetDir, MOE_CONFIG_FILENAME);
-  if (!existsSync(configPath)) {
-    io.log(`${MOE_CLI_CONFIG_ABSENT}: ${configPath} — run 'moe init' there first`);
-    return null;
-  }
-  let raw: string;
-  try {
-    raw = readFileSync(configPath, "utf8");
-  } catch (error) {
-    io.log(`${MOE_CLI_CONFIG_ABSENT}: ${(error as Error).message}`);
-    return null;
-  }
-  const parsed = parseMoeConfig(raw);
-  if (!parsed.ok) {
-    io.log(parsed.message);
-    return null;
-  }
-  return parsed.config;
-}
-
-/** Absent in a repository checkout, where pnpm already owns the links. */
-function readLinkManifest(root: string): string | null {
-  const path = resolve(root, WORKSPACE_LINK_FILENAME);
-  if (!existsSync(path)) return null;
-  try {
-    return readFileSync(path, "utf8");
-  } catch {
-    return null;
-  }
-}
-
 async function runStart(invocation: CliStart, io: CliIo): Promise<number> {
   const targetDir = resolve(io.cwd, invocation.targetDir);
   const config = readConfig(targetDir, io);
@@ -249,21 +211,6 @@ async function runRecoverReview(invocation: CliRecoverReview | CliRecoverReplan,
   }
   io.log(`moe ${invocation.command}: existing work preserved; starting the repaired runtime`);
   return runStart({ ...invocation, command: "start" }, io);
-}
-
-export function preparePackagedLinks(
-  io: CliIo,
-  command: "mcp" | "projects" | "recover-review" | "recover-replan" | "start",
-): boolean {
-  const links = ensureWorkspaceLinks(io.artifactRoot, readLinkManifest(io.artifactRoot));
-  if (!links.ok) {
-    io.log(links.message);
-    return false;
-  }
-  if (links.created.length > 0) {
-    io.log(`moe ${command}: linked ${String(links.created.length)} workspace packages`);
-  }
-  return true;
 }
 
 export async function runMoeCli(io: CliIo): Promise<number> {

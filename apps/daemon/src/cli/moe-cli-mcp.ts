@@ -1,8 +1,12 @@
 import { resolve } from "node:path";
 
 import type { CliMcp } from "./moe-cli-argv.js";
-import { preparePackagedLinks, readConfig } from "./moe-cli-main.js";
+// TYPE-ONLY from the entry module, and that is load-bearing: a VALUE import of
+// `./moe-cli-main.js` is a second module record of the entry whose
+// `isMainModule` is still true, so it re-runs the entry's top-level `await` and
+// the process deadlocks. `import type` is erased and creates no such edge.
 import type { CliIo } from "./moe-cli-main.js";
+import { preparePackagedLinks, readConfig } from "./moe-cli-project.js";
 
 /**
  * `moe mcp`: serves ONE already-initialized project to a headless MCP client
