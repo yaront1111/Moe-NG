@@ -7,7 +7,6 @@ import { DAEMON_LANE_RECORD, V0_2_DEFERRED_SCENARIOS } from "./daemon-lane-ledge
 import {
   DAEMON_LANE_OWNER,
   DECLARED_SCENARIO_COUNT,
-  UNCOMPOSED_OWNER,
   coveredScenarios,
   unknownScenarios,
 } from "./journey-coverage.js";
@@ -90,23 +89,31 @@ describe("the daemon-backed lane's ownership and its limits", () => {
   });
 
   /**
-   * The SURFACE_NOT_COMPOSED rows used to share the daemon lane's owner string
-   * while it read UNOWNED. Now that the string names a task, sharing it would claim
-   * that task owns work it never took, so they carry their own owner and this pins
-   * them apart.
+   * The rows whose gap is a SURFACE — absent or unmounted — used to share the daemon
+   * lane's owner string while it read UNOWNED. Now that the string names a task,
+   * sharing it would claim that task owns work it never took, so each carries its
+   * own owner and this pins them apart. On 2026-09-17 the v1 removal moved
+   * CR-J5-002 and CR-S10-001 from SURFACE_NOT_COMPOSED to SURFACE_ABSENT (their v1
+   * components are gone and no v2 module renders the ids), leaving CR-CMD-001 as
+   * the one SURFACE_NOT_COMPOSED row.
    */
-  it("does not hand the uncomposed surfaces to the lane owner", () => {
-    const uncomposedRows = unknownScenarios()
-      .filter((scenario) => scenario.cause === "SURFACE_NOT_COMPOSED");
-    expect(uncomposedRows.map((row) => row.id)).toEqual([
-      "CR-J5-002", "CR-S10-001", "CR-CMD-001",
+  it("does not hand the absent or uncomposed surfaces to the lane owner", () => {
+    const ownerOf = (id: string): string =>
+      unknownScenarios().find((scenario) => scenario.id === id)?.owner ?? "";
+    const surfaceRows = unknownScenarios().filter((scenario) =>
+      scenario.cause === "SURFACE_ABSENT" || scenario.cause === "SURFACE_NOT_COMPOSED");
+    expect(surfaceRows.map((row) => row.id)).toEqual([
+      "CR-J2-001", "CR-J5-002", "CR-S9-001", "CR-S10-001", "CR-S11-001", "CR-CMD-001",
     ]);
-    for (const row of uncomposedRows) {
-      expect(row.owner).not.toBe(DAEMON_LANE_OWNER);
+    for (const row of surfaceRows) {
+      expect(row.owner, `${row.id} owner`).not.toBe(DAEMON_LANE_OWNER);
     }
-    expect(uncomposedRows.slice(0, 2).map((row) => row.owner))
-      .toEqual([UNCOMPOSED_OWNER, UNCOMPOSED_OWNER]);
-    expect(uncomposedRows[2]?.owner).toContain("command-authored action metadata surface");
+    expect(unknownScenarios()
+      .filter((scenario) => scenario.cause === "SURFACE_NOT_COMPOSED")
+      .map((row) => row.id)).toEqual(["CR-CMD-001"]);
+    expect(ownerOf("CR-J5-002")).toContain("v2 runs screen a suspect marker");
+    expect(ownerOf("CR-S10-001")).toContain("circuit-breaker banner");
+    expect(ownerOf("CR-CMD-001")).toContain("command-authored action metadata surface");
   });
 
   /**

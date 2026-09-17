@@ -6,9 +6,10 @@
  * module is the other half — the actual `vite build`, the actual static server,
  * the actual HTTP probe — and is loaded ONLY by the browser lane.
  *
- * WHAT IS SERVED. `apps/control-room` renders COMMITTED FIXTURES through
- * ControlRoomScaffold. No daemon is attached and no transport exists in this
- * repository. Nothing here may be named or reported as a connected system.
+ * WHAT IS SERVED. The built bundle mounts CordumApp (apps/control-room/src/main.tsx),
+ * which renders COMMITTED FIXTURES (v2/workspace/fixtures/*) under `?fixtures=1` and
+ * otherwise fails closed with no daemon attached. This lane attaches no daemon.
+ * Nothing here may be named or reported as a connected system.
  */
 import { spawn } from "node:child_process";
 import { createReadStream } from "node:fs";

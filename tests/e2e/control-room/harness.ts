@@ -3,9 +3,10 @@
  * answer, hand the caller a base URL, and tear the server down on EVERY exit
  * path.
  *
- * WHAT THIS LANE IS. The served application renders COMMITTED FIXTURES through
- * ControlRoomScaffold. There is no daemon, no transport and no live data here,
- * and a green run in this lane certifies nothing about a connected system.
+ * WHAT THIS LANE IS. The served application is CordumApp (apps/control-room/src/main.tsx),
+ * which renders COMMITTED FIXTURES (v2/workspace/fixtures/*) under `?fixtures=1`.
+ * There is no daemon and no live data here, and a green run in this lane certifies
+ * nothing about a connected system.
  * Nothing in this module may be named or reported in a way that suggests
  * otherwise.
  *
