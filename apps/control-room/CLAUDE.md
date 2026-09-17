@@ -90,18 +90,20 @@ its refusals are its own, stamped `CONTROL_ROOM_*`, never a recoded daemon refus
   so no suite here can see a missing bridge.
 - **Neither `pnpm test` nor `pnpm typecheck` sees this folder** (the root vitest include has no
   `apps/**`). Four hand-mirrored censuses elsewhere pin it:
-  - `tests/security/boundary-roster.security.ts` pins `"apps/control-room": 14`. Its scanner is
-    `.ts`-**only**, so `NEW_PRODUCT_LAYER` in `v2/products/live-new-product.tsx` is invisible to
-    it. A new `export const *_LAYER` in a `.ts` file reds `pnpm test:security` alone.
+  - `tests/security/boundary-roster.security.ts` pins `"apps/control-room": 15`. Its scanner
+    reads `.ts` **and** `.tsx` since 2026-09-18, which is what finally rostered
+    `NEW_PRODUCT_LAYER` in `v2/products/live-new-product.tsx`. A new `export const *_LAYER` in
+    either extension reds `pnpm test:security` alone.
   - `tests/security/layer-visibility-cases.ts` is a *second* roster: a layer stamp whose refusal
     never reaches a wire is enrolled in its `UNSCANNED_PRIVATE_LAYERS` /
-    `EXPECTED_PRIVATE_COUNT = 82` instead of the boundary roster.
+    `EXPECTED_PRIVATE_COUNT = 83` instead of the boundary roster.
   - `apps/daemon/src/gates-roster-coherence.test.ts` walks `apps/control-room/src` for
     hand-transcribed `contractSchemaHash: "<64 hex>"` and `CONTRACT_DIGEST = "..."`. Three live
     in `.tsx` here (`approve-plan.test.tsx`, `approve-plan-reject.test.tsx`,
     `plan-run-resolution.test.tsx`) and a regeneration means editing all three by hand.
-  - `tests/integration/release/release-version-surfaces.test.ts` pins the literal
-    `className="cr2-brand-version">v0.1</span>` in `nav-rail.tsx` against the release series.
+  - `tests/integration/release/release-version-surfaces.test.ts` pins the `cr2-brand-version`
+    span in `nav-rail.tsx` — it carries the release string as a literal — against the release
+    series. Prose here must not quote that literal, or the census discovers this file too.
 - `http-listener-read-dispatch.test.ts` keeps an **empty** census of daemon JSON routes the dev
   server does not proxy: adding a route without its `DEV_PROXY_PATHS` pin reds there, and so does
   adding a pin without retiring its census entry. A route missing from `DEV_PROXY_PATHS` is

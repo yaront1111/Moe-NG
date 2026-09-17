@@ -90,8 +90,8 @@ imports this folder; only `tests/**`, `scripts/release/**` and CI do.
   `.mjs` release scripts) and `pack-source-test-fixtures.ts`.
 - **A version literal in a *comment* here is pinned.**
   `tests/integration/release/release-version-surfaces.test.ts` pins `pack-docs.ts`
-  (`exclusions are what v0.1 genuinely omits`), `smoke-windows-artifact.ps1`, and the historical
-  `shipping v0.1 once carried 25…` sentence in `pack-inventory.ts` with
+  (the exclusions comment naming what the release genuinely omits), `smoke-windows-artifact.ps1`, and the historical
+  the `shipping … once carried 25…` sentence in `pack-inventory.ts` with
   `expectedCurrentCaptureCount: 1`. Rewording that prose reds the release lane.
 - **`PACK_SOURCE_PACKER_DRIFT` fires on your own working tree.** `assertPackRuntimeMatchesCommit`
   diffs `package.json` and `tools/packaging` against `HEAD` and also refuses *untracked* files

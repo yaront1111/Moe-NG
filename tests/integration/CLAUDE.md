@@ -116,7 +116,8 @@ compare bytes.
   stripping; there is no build step.
 - `distribution/pack-artifact-sweep.test.ts` judges the prune rules against the REAL workspace
   tree with a `TEST_VOCABULARY` matcher deliberately broader than, and not derived from, the
-  production suffix list — v0.1 shipped 25 test artifacts past a gate whose single case passed.
+  production suffix list — the first release shipped 25 test artifacts past a gate whose
+  single case passed.
 
 ## Testing
 
