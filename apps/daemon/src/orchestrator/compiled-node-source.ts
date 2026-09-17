@@ -31,6 +31,7 @@ import type { DurableLedger } from "../bootstrap/bootstrap-ledger.js";
 import { createCompilerLanePort } from "../http/affordance-compiler-lane.js";
 import type { NodeSpec } from "../http/affordance-contract.js";
 import { dataRecord } from "../json-record-shape.js";
+import { resolveGoalSourceAggregateId } from "../documents/document-source-full-read.js";
 import { graphBodyAggregateId, readGraphBody } from "../planning/graph-body-record.js";
 import { foldCurrentRun } from "../planning/current-planning-run.js";
 import { readApprovedRunWitness } from "../planning/planning-authority-reader-witness.js";
@@ -197,34 +198,75 @@ function sealedNodesOf(projectId: string, graphs: readonly ActiveCompiledGraph[]
   return nodes;
 }
 
-/** The approved revision's statements for the cited criterion ids, resolved
- *  through the goal's own compiler lane — empty when the join does not hold
- *  (a brief with the objective alone is honest; an invented statement is not). */
-function criterionStatements(
-  options: CompiledNodeSourceOptions, goalRef: string, criterionIds: readonly string[],
-): readonly string[] {
+interface CriterionStatement {
+  readonly criterionId: string;
+  readonly statement: string;
+}
+
+/**
+ * WHY THIS WALK IS MEMOISED. It reads the goal's source PRD (up to 128KiB) through the compiler
+ * lane and parses the approved contract revision, and the wrapper calls it once PER NODE while
+ * building each mission. Measured on UnAI 2026-09-17, after the ledger and identity walks were
+ * memoised: the last shape still holding the wrapper at ~28% of a core while nothing staffed,
+ * `criterionStatements` 8.8% inclusive with the bounded-JSON parser under it.
+ *
+ * WHY THE KEY TOUCHES THE SOURCE AGGREGATE. The gate approval and the contract revision are
+ * ledger state (the marker covers them), but the goal's source document is INGESTED AS ITS OWN
+ * LEG — a raw event on `documentSourceAggregateId`, which need not move the decision marker. So
+ * the source's absent-then-present transition is invisible to a marker-only key, which would
+ * then serve an empty brief for ever after the PRD landed. The walk records the goal aggregate
+ * and its source aggregate by version; `resolveGoalSourceAggregateId` finds the latter from the
+ * goal's small immutable first event, without paying for the PRD text the memo exists to avoid.
+ */
+const criterionMemos: DurableWalkMemos<readonly CriterionStatement[]> = new WeakMap();
+
+function allCriterionStatements(
+  options: CompiledNodeSourceOptions, goalRef: string, touch: (aggregateId: string) => void,
+): readonly CriterionStatement[] {
+  touch(goalRef);
+  const sourceAggregateId = resolveGoalSourceAggregateId(options.store, options.projectId, goalRef);
+  if (sourceAggregateId !== null) touch(sourceAggregateId);
   const ledger = readDurableLedger(options.store, options.projectId);
   const facts = createCompilerLanePort({
     ledger, projectId: options.projectId, store: options.store,
   }).factsFor(goalRef);
   if (facts.lane !== "COMPILER" || facts.approvedGateRef === null) return [];
+  touch(deriveProductContractRevisionAggregateId(
+    options.projectId, facts.approvedGateRef.contractId, facts.approvedGateRef.revisionId,
+  ));
   const revision = dataRecord(stateOf(ledger, deriveProductContractRevisionAggregateId(
     options.projectId, facts.approvedGateRef.contractId, facts.approvedGateRef.revisionId,
   )));
   const criteria = revision?.["criteria"];
   if (!Array.isArray(criteria)) return [];
-  const wanted = new Set(criterionIds);
-  const lines: string[] = [];
+  const statements: CriterionStatement[] = [];
   for (const entry of criteria) {
     const criterion = dataRecord(entry);
     const criterionId = criterion?.["criterionId"];
     const statement = criterion?.["statement"];
-    if (typeof criterionId === "string" && typeof statement === "string"
-      && wanted.has(criterionId)) {
-      lines.push(`- [${criterionId}] ${statement}`);
+    if (typeof criterionId === "string" && typeof statement === "string") {
+      statements.push(Object.freeze({ criterionId, statement }));
     }
   }
-  return lines;
+  return Object.freeze(statements);
+}
+
+/** The approved revision's statements for the cited criterion ids, resolved
+ *  through the goal's own compiler lane — empty when the join does not hold
+ *  (a brief with the objective alone is honest; an invented statement is not).
+ *  The full per-goal statement set is memoised; the per-node filter is not the cost.
+ *  Exported for the memo test; production reaches it through `createCompiledNodeSource`. */
+export function criterionStatements(
+  options: CompiledNodeSourceOptions, goalRef: string, criterionIds: readonly string[],
+): readonly string[] {
+  const all = durableWalkMemoisable(options.store)
+    ? memoisedDurableWalk(options.store, criterionMemos, goalRef,
+      (touch) => allCriterionStatements(options, goalRef, touch))
+    : allCriterionStatements(options, goalRef, () => undefined);
+  const wanted = new Set(criterionIds);
+  return all
+    .filter((entry) => wanted.has(entry.criterionId))
+    .map((entry) => `- [${entry.criterionId}] ${entry.statement}`);
 }
 
 export function createCompiledNodeSource(options: CompiledNodeSourceOptions): CompiledNodeSource {

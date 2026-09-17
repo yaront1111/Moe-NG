@@ -47,6 +47,27 @@ export interface GoalSourceReadPort {
   read(goalRef: unknown): GoalSourceReadResult;
 }
 
+/**
+ * The source aggregate a goal binds, WITHOUT reading the source document itself. It decodes only
+ * the goal's own first event — small and immutable — so a caller can record the source
+ * aggregate's version as a freshness dependency without paying for the up-to-128KiB PRD text
+ * that `read` decodes. The binding's `sourceAggregateId` is content-addressed and re-derived by
+ * the catalog decoder, so this is exact: it is the aggregate `read` would go on to consult.
+ * Null when the goal is unknown here or carries no source binding.
+ */
+export function resolveGoalSourceAggregateId(
+  store: SqliteEventStore, projectId: string, goalRef: string,
+): string | null {
+  if (goalRef.length === 0 || goalRef.length > 512) return null;
+  const event = firstAggregateEvent(store, goalRef);
+  if (event === null) return null;
+  const decoded = decodeGoalCatalogEntry(
+    event as Parameters<typeof decodeGoalCatalogEntry>[0], projectId,
+  );
+  if (!decoded.ok || decoded.entry.goalId !== goalRef || decoded.entry.binding === null) return null;
+  return decoded.entry.binding.sourceAggregateId;
+}
+
 function refused(code: GoalSourceReadCode): GoalSourceReadRefused {
   return Object.freeze({ code, layer: LAYER, ok: false });
 }

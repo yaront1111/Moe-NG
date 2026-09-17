@@ -9,7 +9,7 @@
  */
 import { decodeGraphContent } from "@moe/scheduler";
 import { SqliteEventStore } from "@moe/store";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   GOAL_CREATE_COMMAND_ID,
@@ -21,15 +21,24 @@ import {
   openStore,
   send,
 } from "../bootstrap/bootstrap-test-fixtures.js";
-import { createGoalSourceReadPort } from "../documents/document-source-full-read.js";
+import { decisionsOf, enrollDecisionLedgerMemo } from "../decision-ledger-memo.js";
+import { createGoalSourceReadPort, resolveGoalSourceAggregateId }
+  from "../documents/document-source-full-read.js";
 import { compiledPlanAuthority } from "../planning/compiled-authority-bodies.js";
 import type { ActiveCompiledGraph } from "./compiled-node-source.js";
 import { deriveProductContractRevisionAggregateId }
   from "../product-contract/product-contract-revision-store.js";
-import { createCompiledNodeSource } from "./compiled-node-source.js";
+import { createCompiledNodeSource, criterionStatements } from "./compiled-node-source.js";
 import { compiledExecutionRef } from "./compiled-execution-ref.js";
 import { codeMission } from "./agent-mission-text.js";
 import type { DesignBrief } from "./agent-mission-text.js";
+
+// The memo below counts walks by spying on the one cheap read every walk makes. The rest of the
+// module (including the fixtures' own `createGoalSourceReadPort`) passes straight through.
+vi.mock("../documents/document-source-full-read.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../documents/document-source-full-read.js")>();
+  return { ...actual, resolveGoalSourceAggregateId: vi.fn(actual.resolveGoalSourceAggregateId) };
+});
 
 const PRD = "# Compile me\n\nA PRD whose approved plan must build itself.\n";
 const CONTRACT_ID = "contract-source-1";
@@ -246,5 +255,90 @@ describe("createCompiledNodeSource", () => {
     expect(mission?.instructions).toContain(`- [crit-1] ${STATEMENT}`);
     // Only the criteria THIS node cites: the uncited one stays out of the brief.
     expect(mission?.instructions).not.toContain("crit-other");
+  });
+});
+
+/**
+ * The statement join reads the goal's source PRD and parses the approved contract revision, and
+ * the wrapper runs it once per node per pass — the last shape holding the wrapper at ~28% of a
+ * core with nothing to staff (UnAI 2026-09-17, after the ledger and identity walks were
+ * memoised). The whole per-goal statement set is memoised; the per-node filter is not the cost.
+ */
+describe("criterionStatements memo", () => {
+  const OTHER = "A criterion no node here cites.";
+  const options = (store: SqliteEventStore) => ({
+    projectId: PROJECT_ID, store, testCommand: "pnpm test", workspace: "D:/projects/unai",
+  });
+  const spy = () => vi.mocked(resolveGoalSourceAggregateId);
+
+  function approvedWorld(): SqliteEventStore {
+    const { sha, store } = boundWorld();
+    commitRow(store, "revision",
+      deriveProductContractRevisionAggregateId(PROJECT_ID, CONTRACT_ID, REVISION_ID),
+      { contractId: CONTRACT_ID,
+        criteria: [
+          { criterionId: "crit-1", statement: STATEMENT },
+          { criterionId: "crit-other", statement: OTHER },
+        ],
+        revisionId: REVISION_ID, sourceDocumentDigests: [sha] });
+    commitRow(store, "gate", "product-contract-gate-1-sourcetest", {
+      contractId: CONTRACT_ID, gateId: "gate-1", grant: {},
+      revisionDigest: "e".repeat(64), revisionId: REVISION_ID, workRef: "work-source-1" });
+    return store;
+  }
+
+  it("walks once for an enrolled handle, then filters each node's citation cheaply", () => {
+    const store = approvedWorld();
+    enrollDecisionLedgerMemo(store);
+    spy().mockClear();
+
+    // Three nodes of one goal, three different citation sets — one walk serves all.
+    expect(criterionStatements(options(store), GOAL_ID, ["crit-1"])).toEqual([`- [crit-1] ${STATEMENT}`]);
+    expect(criterionStatements(options(store), GOAL_ID, ["crit-other"])).toEqual([`- [crit-other] ${OTHER}`]);
+    expect(criterionStatements(options(store), GOAL_ID, [])).toEqual([]);
+
+    expect(spy()).toHaveBeenCalledTimes(1);
+  });
+
+  it("walks every call for a handle nobody enrolled", () => {
+    const store = approvedWorld();
+    spy().mockClear();
+
+    criterionStatements(options(store), GOAL_ID, ["crit-1"]);
+    criterionStatements(options(store), GOAL_ID, ["crit-1"]);
+    criterionStatements(options(store), GOAL_ID, ["crit-1"]);
+
+    expect(spy()).toHaveBeenCalledTimes(3);
+  });
+
+  it("walks again when the goal's source aggregate changes by event alone, no decision recorded", () => {
+    // The gate and the revision are ledger state, but the PRD is ingested as its own leg — a RAW
+    // event on the source aggregate that does not move the decision marker. A marker-only key
+    // would serve the old brief for ever after the source changed. So the change here is a raw
+    // `commit` (not a decision): the marker stays put, only the source aggregate's version moves,
+    // and the memo must still re-walk — which the source-aggregate touch is the sole thing that
+    // catches. The new tail is not a source record, so the join now yields none.
+    const store = approvedWorld();
+    enrollDecisionLedgerMemo(store);
+    const sourceAggregateId = resolveGoalSourceAggregateId(store, PROJECT_ID, GOAL_ID);
+    if (sourceAggregateId === null) throw new Error("fixture goal has no source binding");
+    expect(criterionStatements(options(store), GOAL_ID, ["crit-1"])).toEqual([`- [crit-1] ${STATEMENT}`]);
+    spy().mockClear();
+    const decisionsBefore = decisionsOf(store, 200).length;
+
+    const payload = new TextEncoder().encode(JSON.stringify({ not: "a source record" }));
+    store.commit({
+      aggregateId: sourceAggregateId,
+      commandBytes: new TextEncoder().encode(JSON.stringify({ eventType: "SourceProbe" })),
+      commandId: "source-probe-raw-1",
+      committedAt: "2026-08-31T12:00:00.000Z",
+      events: [{ eventId: "source-probe-raw-1-e1", eventType: "SourceProbe", payload }],
+      expectedVersion: store.getAggregateVersion(sourceAggregateId),
+    });
+
+    // The decision ledger did not move — only the source aggregate's version did.
+    expect(decisionsOf(store, 200).length).toBe(decisionsBefore);
+    expect(criterionStatements(options(store), GOAL_ID, ["crit-1"])).toEqual([]);
+    expect(spy()).toHaveBeenCalledTimes(1);
   });
 });
