@@ -23,6 +23,12 @@ export const CUTOVER_V2_AUTHORITY_LAYER = "DAEMON_CUTOVER_V2_AUTHORITY" as const
 export const CUTOVER_V2_AUTHORITY_CODES = Object.freeze([
   "CUTOVER_V2_NOT_ACTIVE",
   "CUTOVER_V2_COMMAND_UNKNOWN",
+  // The marker's STATE could not be established — a store throw, a duplicated or misplaced
+  // marker event, a payload that will not decode, or a readiness manifest that cannot be read.
+  // Never NOT_ACTIVE: that code claims the installation was never activated, and an operator
+  // reading it goes looking for a re-cutover that cannot help. The fence is identical; only the
+  // name is honest. See the lockout this file already records under `markerBindsCurrentReadiness`.
+  "CUTOVER_V2_STATUS_UNKNOWN",
 ] as const);
 
 export type CutoverV2AuthorityCode = (typeof CUTOVER_V2_AUTHORITY_CODES)[number];
@@ -45,9 +51,15 @@ export interface CutoverV2NotActiveRefusal {
   readonly layer: typeof CUTOVER_V2_AUTHORITY_LAYER;
   readonly ok: false;
 }
+export interface CutoverV2StatusUnknownRefusal {
+  readonly code: "CUTOVER_V2_STATUS_UNKNOWN";
+  readonly layer: typeof CUTOVER_V2_AUTHORITY_LAYER;
+  readonly ok: false;
+}
 export type CutoverV2ActivationResult =
   | Readonly<{ marker: CutoverActivationMarker; ok: true }>
-  | CutoverV2NotActiveRefusal;
+  | CutoverV2NotActiveRefusal
+  | CutoverV2StatusUnknownRefusal;
 
 export const V1_AUTHORITY_RETIRED_CODE = "V1_AUTHORITY_RETIRED" as const;
 export const V1_AUTHORITY_STATUS_UNKNOWN_CODE = "V1_AUTHORITY_STATUS_UNKNOWN" as const;
@@ -101,6 +113,13 @@ function notActive(): CutoverV2NotActiveRefusal {
   });
 }
 
+/** Grants exactly as little as `notActive`, and sends the operator to the store instead. */
+function statusUnknown(): CutoverV2StatusUnknownRefusal {
+  return Object.freeze({
+    code: "CUTOVER_V2_STATUS_UNKNOWN", layer: CUTOVER_V2_AUTHORITY_LAYER, ok: false as const,
+  });
+}
+
 /** Reads exactly one `/2` marker event. No `/1` namespace or decoder is reachable here. */
 export function readCutoverActivationMarker(
   store: CutoverMarkerStore,
@@ -138,8 +157,27 @@ function markerBindsCurrentReadiness(
   projectId: string,
   marker: CutoverActivationMarker,
 ): boolean {
+  return readinessBinding(store, projectId, marker) === "BOUND";
+}
+
+/**
+ * The same comparison, with its THREE answers kept apart. A readiness manifest that cannot be
+ * read is not a manifest that disagrees: flattening both to `false` sent an unreadable manifest
+ * down the NOT_ACTIVE arm, which is the second route into the lockout described above.
+ */
+function readinessBinding(
+  store: CutoverMarkerStore,
+  projectId: string,
+  marker: CutoverActivationMarker,
+): "BOUND" | "DIVERGED" | "UNREADABLE" {
   const readiness = readV2ReadinessManifest(store, { pins: "RECORDED", projectId });
-  return readiness.ok && cutoverMarkerBindsReadiness(marker, readiness);
+  // ONLY the unreadable code. The manifest's other four refusals — ABSENT, INVALID,
+  // NONCANONICAL, STATIC_PIN_MISMATCH — are facts about CONTENT that was successfully read, and
+  // each of them genuinely leaves the installation un-activated.
+  if (!readiness.ok) {
+    return readiness.code === "V2_READINESS_MANIFEST_UNREADABLE" ? "UNREADABLE" : "DIVERGED";
+  }
+  return cutoverMarkerBindsReadiness(marker, readiness) ? "BOUND" : "DIVERGED";
 }
 
 export function admitV2AuthoritativeCommand(
@@ -161,11 +199,15 @@ export function admitV2ActiveInstallation(
   store: CutoverMarkerStore,
   input: Readonly<{ projectId: string }>,
 ): CutoverV2ActivationResult {
-  const marker = readCutoverActivationMarker(store, input);
-  if (marker === null || !markerBindsCurrentReadiness(store, input.projectId, marker)) {
-    return notActive();
-  }
-  return Object.freeze({ marker, ok: true as const });
+  // READ THE STATE, not the collapsed marker: `readCutoverActivationMarker` folds ABSENT and
+  // UNKNOWN into one null, and those are opposite facts about whether a cutover ever happened.
+  const state = readMarkerState(store, input);
+  if (state.kind === "UNKNOWN") return statusUnknown();
+  if (state.kind === "ABSENT") return notActive();
+  const bound = readinessBinding(store, input.projectId, state.marker);
+  if (bound === "UNREADABLE") return statusUnknown();
+  if (bound === "DIVERGED") return notActive();
+  return Object.freeze({ marker: state.marker, ok: true as const });
 }
 
 /**

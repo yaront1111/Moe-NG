@@ -724,7 +724,9 @@ describe("the first v2 authoritative command waits for the marker", () => {
   it("pins the gate's roster as exact, nonzero and frozen", () => {
     expect(Object.isFrozen(CUTOVER_V2_AUTHORITY_CODES)).toBe(true);
     expect([...CUTOVER_V2_AUTHORITY_CODES].sort())
-      .toEqual(["CUTOVER_V2_COMMAND_UNKNOWN", "CUTOVER_V2_NOT_ACTIVE"]);
+      .toEqual([
+        "CUTOVER_V2_COMMAND_UNKNOWN", "CUTOVER_V2_NOT_ACTIVE", "CUTOVER_V2_STATUS_UNKNOWN",
+      ]);
     expect(CUTOVER_V2_AUTHORITY_CODES.length).toBeGreaterThan(0);
   });
 });
