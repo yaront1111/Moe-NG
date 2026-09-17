@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { describeThrown } from "@moe/contracts";
+
 import { agentEnvironment,
   trustedMcpOrigin } from "./agent-spawn-environment.js";
 import { agentRoleForWorkspace } from "./agent-role-contract.js";
@@ -35,6 +37,16 @@ const DAEMON_DIR = fileURLToPath(new URL("../..", import.meta.url));
  *  than its claim's reap horizon rather than holding a maxAgents slot forever. */
 const DEFAULT_AGENT_TIMEOUT_MS = 30 * 60 * 1000;
 const DEFAULT_KILL_GRACE_MS = 5_000;
+/**
+ * How often a LIVE seat that has printed nothing says so.
+ *
+ * A seat used to be observed exactly once in its whole life — the lifetime `setTimeout` below,
+ * 30 minutes by default. A hung seat therefore spent half an hour in total silence and then
+ * produced one line saying it had timed out, which is the recorded live symptom. `outputSeen`
+ * was computed on every chunk and read only at settlement, so the silence was knowable at every
+ * instant and observed at none.
+ */
+const DEFAULT_QUIET_NOTICE_MS = 60_000;
 /** The env var a codex seat reads its scoped MCP bearer from (never argv, never
  *  a file); injected per child, invisible to the claude seat's config path. */
 export const CODEX_BEARER_VARIABLE = "MOE_AGENT_MCP_BEARER";
@@ -57,6 +69,9 @@ function spawnRuntime(
     ?? (Number.isSafeInteger(envTimeout) && envTimeout > 0 ? envTimeout : DEFAULT_AGENT_TIMEOUT_MS);
   const platform = options.platform ?? process.platform;
   const killGraceMs = options.killGraceMs ?? DEFAULT_KILL_GRACE_MS;
+  // INJECTED so the quiet notice is testable without waiting a real minute.
+  const now = options.now ?? ((): number => Date.now());
+  const quietNoticeMs = options.quietNoticeMs ?? DEFAULT_QUIET_NOTICE_MS;
   const killProcessGroup = options.killProcessGroup ?? process.kill.bind(process);
   const active = new Set<{
     readonly done: Promise<SeatExitReport | void>;
@@ -207,6 +222,13 @@ function spawnRuntime(
         });
       } catch (error) {
         rmSync(mcpConfigPath, { force: true });
+        // NAMED, NOT SWALLOWED. A mistyped MOE_AGENT_COMMAND or a missing claude.cmd reached the
+        // operator as `AGENT_SPAWN_FAILED:UNADMITTED` and then wedged the wrapper through its
+        // halt latch, with the word ENOENT appearing nowhere. ENOENT (not installed), EACCES
+        // (not executable) and EMFILE (out of handles) are three different repairs.
+        const facts = describeThrown(error);
+        log(`[wrapper] ${request.workItemId} spawn failed: ${facts.code ?? facts.name}`
+          + ` ${invocation.file} (cwd ${String(request.workspace ?? DAEMON_DIR)}): ${facts.message}`);
         denyStart(error);
         reject(error);
         return;
@@ -219,8 +241,15 @@ function spawnRuntime(
       // Set on the first byte from either stream, so the exit facts state directly whether
       // the seat ever spoke rather than inferring it from a bounded tail.
       let outputSeen = false;
+      // The instants the quiet notice is computed from. Never used to settle anything: a silent
+      // seat is reported, never killed early — the lifetime timer alone owns that decision.
+      const startedAt = now();
+      let lastOutputAt = startedAt;
+      let outputBytes = 0;
       const tee = (sink: NodeJS.WritableStream) => (chunk: Buffer): void => {
         outputSeen = true;
+        lastOutputAt = now();
+        outputBytes += chunk.length;
         sink.write(chunk);
         tail.push(chunk);
       };
@@ -238,8 +267,10 @@ function spawnRuntime(
       let killHelper: ChildProcess | undefined;
       let killTimer: ReturnType<typeof setTimeout> | undefined;
       let timer: ReturnType<typeof setTimeout> | undefined;
+      let quietTimer: ReturnType<typeof setInterval> | undefined;
       const cleanup = (): void => {
         if (timer !== undefined) clearTimeout(timer);
+        if (quietTimer !== undefined) clearInterval(quietTimer);
         if (killTimer !== undefined) clearTimeout(killTimer);
         if (killHelper !== undefined) {
           try { killHelper.kill("SIGKILL"); } catch { /* already gone */ }
@@ -370,6 +401,18 @@ function spawnRuntime(
         beginTermination();
       }, timeoutMs);
       if (typeof timer.unref === "function") timer.unref();
+      if (quietNoticeMs > 0) {
+        quietTimer = setInterval(() => {
+          const silentMs = now() - lastOutputAt;
+          // Only when it has actually been silent for a whole interval. A seat producing output
+          // says nothing here, so these lines mean exactly one thing when they do appear.
+          if (silentMs < quietNoticeMs) return;
+          log(`[wrapper] ${request.workItemId} seat quiet: ${String(silentMs)}ms since last`
+            + ` output (age ${String(now() - startedAt)}ms, ${String(timeoutMs - (now() - startedAt))}ms`
+            + ` to timeout, pid ${String(child.pid ?? "none")}, ${String(outputBytes)} bytes seen)`);
+        }, quietNoticeMs);
+        if (typeof quietTimer.unref === "function") quietTimer.unref();
+      }
       // A child can exit after spawn() succeeds but before stdin is written.
       // Writable streams surface that race as an asynchronous EPIPE; without
       // a listener it escapes the promise and crashes the whole wrapper.

@@ -210,7 +210,12 @@ async function main(): Promise<void> {
     // before. Collisions stay environment-delivery.ts's call: the allowlisted runtime wins.
     verifierRunner = createVerifierDatabaseRunner({
       ...(verifierDelivered === undefined ? {} : { delivered: verifierDelivered }),
-      onFatalContainment: () => { stop.request(); },
+      // Same drop as the spawner's handler below, for the verifier's own child.
+      onFatalContainment: (error: { readonly reason?: string }) => {
+        process.stderr.write("[verifier] fatal containment failure: "
+          + `${error.reason ?? "UNNAMED"}; stopping the fleet\n`);
+        stop.request();
+      },
     });
     delivery = createRepositoryDeliveryRuntime({
       publisher: provider.releasePublisher(), runtimeBrokerPid: await resolveRuntimeBrokerPid(process.ppid),
@@ -346,7 +351,15 @@ async function main(): Promise<void> {
     // The lifetime the bearer TTL above was derived from, handed over rather
     // than re-read from the environment, so the two cannot drift apart.
     agentSpawner = claudeSpawnStarter(mcpStarted.origin, {
-      onFatalContainment: () => { stop.request(); },
+      // THE REASON WAS ALWAYS ON THE ARGUMENT AND ALWAYS DROPPED. This handler begins shutting
+      // the whole fleet down; without naming PID_UNAVAILABLE / TREE_KILL_FAILED /
+      // CLOSE_NOT_OBSERVED the operator's only clue was the absence of further activity, and the
+      // reason surfaced much later, reduced to a message, through the shutdown AggregateError.
+      onFatalContainment: (error) => {
+        process.stderr.write(`[wrapper] fatal containment failure: ${error.reason};`
+          + " stopping the fleet\n");
+        stop.request();
+      },
       timeoutMs: knobs.agentTimeoutMs,
     });
     secureSpawn = agentSpawner;

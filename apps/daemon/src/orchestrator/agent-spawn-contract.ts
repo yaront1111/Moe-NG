@@ -26,6 +26,13 @@ export interface AgentSpawnerOptions {
   /** Maximum wait for process close after requesting tree termination. */
   readonly killGraceMs?: number;
   readonly log?: (line: string) => void;
+  /** INJECTED monotonic-ish instant source for the quiet notice; production uses `Date.now`. */
+  readonly now?: () => number;
+  /**
+   * How often a LIVE seat that has printed nothing reports its silence. 0 turns the notice off
+   * and restores the old behaviour, where a hung seat was observed only at its 30-minute timeout.
+   */
+  readonly quietNoticeMs?: number;
   /** Fatal containment failures halt the owning runtime; they are never ordinary agent exits. */
   readonly onFatalContainment?: ((error: AgentProcessContainmentError) => void) | undefined;
   /**
